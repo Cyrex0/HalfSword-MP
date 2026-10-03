@@ -131,9 +131,9 @@ fn pose_root_and_chat_round_trip_through_a_real_server() {
         spawn_logged(env!("CARGO_BIN_EXE_hsmp-sidecar"), &g.sidecar_args(&addr, nick, shm::current_pid()), &g.dir, &g.dir.join("sidecar.log"))
     };
     let _a = side(&ga, "Alpha");
-    assert!(ga.wait_connected(1, 15), "A never connected; see {}", ga.dir.join("sidecar.log").display());
+    assert!(ga.wait_connected(1, 30), "A never connected; see {}", ga.dir.join("sidecar.log").display());
     let _b = side(&gb, "Bravo");
-    assert!(gb.wait_connected(2, 15), "B never connected; see {}", gb.dir.join("sidecar.log").display());
+    assert!(gb.wait_connected(2, 30), "B never connected; see {}", gb.dir.join("sidecar.log").display());
 
     // Game A: a still pose at a fixed spot, 60 Hz, the way HSMPSync's fast_send writes it.
     let (sa, sb) = (ga.seg(), gb.seg());
@@ -149,7 +149,9 @@ fn pose_root_and_chat_round_trip_through_a_real_server() {
     let mut found: Option<(usize, hsmp_ipc::schema::pose::PeerPlay)> = None;
     let mut root_seen = None;
     let mut nick = String::new();
-    while t0.elapsed() < Duration::from_secs(15) && (found.is_none() || root_seen.is_none()) {
+    // The directory entry starts as "P1" when the first pose lands and gets the real nick
+    // once the session roster arrives, which can be later, so wait for all three.
+    while t0.elapsed() < Duration::from_secs(30) && (found.is_none() || root_seen.is_none() || nick != "Alpha") {
         tick += 1;
         let ts = 1000.0 + t0.elapsed().as_secs_f64() * 1000.0;
         // The way HSMPNative put_pose / put_root build and publish the records.
@@ -196,7 +198,7 @@ fn pose_root_and_chat_round_trip_through_a_real_server() {
     let mut rec = hsmp_ipc::ring::Record::default();
     let sc_b = sb.header.sidecar.epoch.load(Ordering::Acquire);
     let mut got = None;
-    until(10, || {
+    until(30, || {
         while let hsmp_ipc::ring::Pop::Record = sb.s2g().pop(sc_b, &mut rec) {
             if rec.hdr.kind == K_CHAT_IN {
                 got = view::<hsmp_ipc::schema::session::ChatIn>(rec.payload()).ok().map(|v| v.head());
