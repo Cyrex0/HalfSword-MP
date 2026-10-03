@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "channel": "beta",
   "rust_toolchain": "1.98.1",
   "master_urls": [
