@@ -39,7 +39,7 @@ eframe = { version = "0.31", optional = true }
 rfd = { version = "0.15", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.52"
+winreg = "0.56"
 windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_System_Console",
