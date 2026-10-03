@@ -385,7 +385,7 @@ mod tests {
     use crate::record::{to_payload, view, Invalid};
 
     fn root() -> Root {
-        Root { tick: 7, ts: 1000, send_wall_ms: 1_700_000_000_000, pos: [100.0, -50.0, 95.0], rot: [0.0, 0.0, 0.7071, 0.7071], vel: [300.0, 0.0, 0.0] }
+        Root { tick: 7, ts: 1000, send_wall_ms: 1_700_000_000_000, pos: [100.0, -50.0, 95.0], rot: [0.0, 0.0, std::f32::consts::FRAC_1_SQRT_2, std::f32::consts::FRAC_1_SQRT_2], vel: [300.0, 0.0, 0.0] }
     }
 
     #[test]

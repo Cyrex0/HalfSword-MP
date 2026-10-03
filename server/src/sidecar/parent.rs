@@ -181,17 +181,50 @@ mod sys {
     }
 }
 
+// The game only runs on Windows (natively or under Proton, where the sidecar is a
+// Windows build too), so this side exists for the Linux test job and the career
+// guard's owner check. No parent-chain snapshot here: nothing to find.
 #[cfg(not(windows))]
 mod sys {
     use super::ProcInfo;
     pub fn snapshot() -> Vec<ProcInfo> { Vec::new() }
-    pub struct Proc(u32);
+
+    /// `/proc` times are in USER_HZ, which the kernel fixes at 100 for userspace.
+    const USER_HZ: u64 = 100;
+
+    /// Start time in clock ticks since boot, and whether the process is a zombie.
+    fn stat(pid: u32) -> Option<(u64, bool)> {
+        let s = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        // comm (field 2) is in parens and may hold spaces or parens itself.
+        let rest = &s[s.rfind(')')? + 1..];
+        let mut f = rest.split_ascii_whitespace();
+        let state = f.next()?;
+        let start = f.nth(18)?.parse().ok()?; // field 22
+        Some((start, state == "Z" || state == "X"))
+    }
+
+    fn boot_ms() -> Option<u64> {
+        let s = std::fs::read_to_string("/proc/stat").ok()?;
+        let secs: u64 = s.lines().find_map(|l| l.strip_prefix("btime "))?.trim().parse().ok()?;
+        Some(secs * 1000)
+    }
+
+    /// A pid plus its start time: a later process with the same pid is not this one.
+    pub struct Proc { pid: u32, start: u64 }
+
     impl Proc {
         pub fn open(pid: u32) -> Option<Proc> {
-            (pid != 0 && std::path::Path::new(&format!("/proc/{pid}")).exists()).then_some(Proc(pid))
+            if pid == 0 { return None; }
+            let (start, _) = stat(pid)?;
+            Some(Proc { pid, start })
         }
-        pub fn alive(&self) -> bool { std::path::Path::new(&format!("/proc/{}", self.0)).exists() }
-        pub fn created_ms(&self) -> Option<u64> { Some(0) }
+        pub fn alive(&self) -> bool {
+            stat(self.pid).is_some_and(|(start, dead)| start == self.start && !dead)
+        }
+        /// Creation time, unix ms (btime is whole seconds, so this errs early by < 1 s).
+        pub fn created_ms(&self) -> Option<u64> {
+            Some(boot_ms()? + self.start * 1000 / USER_HZ)
+        }
     }
 }
 
@@ -302,10 +335,12 @@ mod tests {
     }
 
     /// A real child: wait_game_exit returns once it exits, through a handle.
-    #[cfg(windows)]
     #[tokio::test]
     async fn wait_returns_when_the_watched_process_exits() {
+        #[cfg(windows)]
         let mut child = std::process::Command::new("cmd").args(["/c", "ping -n 2 127.0.0.1 >nul"]).spawn().unwrap();
+        #[cfg(not(windows))]
+        let mut child = std::process::Command::new("sleep").arg("1").spawn().unwrap();
         let pid = child.id();
         let start = std::time::Instant::now();
         tokio::time::timeout(Duration::from_secs(15), wait_game_exit(Target::Explicit(pid))).await

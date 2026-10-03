@@ -14,7 +14,8 @@
 //!   gate_selftest the gate evaluator on scripts/fixtures
 //!   ipc_schema    generated IPC files current (gen-ipc --check) + header compiles (cl /W4 /WX)
 //!   state_files   check_no_state_files: Lua names + server/src file writers vs state_files.allow
-//!   cargo        cargo test --workspace (skipped with --quick)
+//!   cargo         cargo test --workspace (skipped with --quick)
+//!   clippy        the CI clippy command; deny-level lints fail (skipped with --quick)
 //! The game dir is HSMP_GAME_DIR, else <repo>/game, else the main worktree's game/ (see
 //! hsmp_tools::paths::game_dir). Without the game's UE4SS object dump, bp_names and the dump
 //! rules of `unsafe` (U1/U2) are reported as SKIP; `--strict` turns that into a failure.
@@ -130,7 +131,8 @@ fn check_wg(repo: &Path) -> (&'static str, String) {
         last_lines(&out, if code == 0 { 1 } else { 6 }), last_lines(&sout, if scode == 0 { 1 } else { 6 }), dt + sdt))
 }
 
-/// The checks a full G0 runs (DoD-13 rejects a g0.json that lacks any of them).
+/// The checks a full G0 runs (DoD-13 rejects a g0.json that lacks any of them). `clippy` also
+/// runs in a full G0 but is not required here, so the recorded fixtures and earlier stamps stay valid.
 pub const REQUIRED_CHECKS: &[&str] = &[
     "bp_names", "lua_check", "lua_test", "travel", "wg", "unsafe", "image_kill", "instant_sub", "events", "gate_selftest",
     "ipc_schema", "state_files", "cargo",
@@ -210,6 +212,19 @@ fn check_cargo(repo: &Path) -> (&'static str, String) {
     }
 }
 
+/// clippy: the CI clippy job, verbatim (`cargo clippy --workspace --all-targets --locked`).
+/// Fails on what fails CI: a compile error or a deny-level lint. Warnings are counted only.
+fn check_clippy(repo: &Path) -> (&'static str, String) {
+    let (code, out, dt) = run(Command::new(cargo()).current_dir(repo).args(["clippy", "--workspace", "--all-targets", "--locked"]));
+    let warnings = out.lines().filter(|l| l.starts_with("warning: ") && !l.contains("generated") && !l.contains("build failed")).count();
+    if code == 0 {
+        ("pass", format!("no errors, {warnings} warnings ({dt:.0}s)"))
+    } else {
+        let errs: Vec<&str> = out.lines().filter(|l| l.starts_with("error") || l.trim_start().starts_with("--> ")).take(8).collect();
+        ("fail", format!("{} ({dt:.0}s)", errs.join(" | ")))
+    }
+}
+
 pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
     type CheckFn = Box<dyn Fn(&Path) -> (&'static str, String)>;
     let strict = o.strict;
@@ -281,6 +296,7 @@ pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
         // no state-dir files outside the allow-list: the IPC is shared memory (statefiles.rs)
         ("state_files", Box::new(crate::statefiles::g0)),
         ("cargo", Box::new(check_cargo)),
+        ("clippy", Box::new(check_clippy)),
     ];
     let mut res = Map::new();
     let mut failed = vec![];
@@ -291,7 +307,7 @@ pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
                 continue;
             }
         }
-        let (st, summary) = if o.quick && *name == "cargo" { ("skip", "--quick".to_string()) } else { f(repo) };
+        let (st, summary) = if o.quick && (*name == "cargo" || *name == "clippy") { ("skip", "--quick".to_string()) } else { f(repo) };
         println!("[G0] {name:13} {:5} {summary}", st.to_uppercase());
         match st {
             "fail" => failed.push(name.to_string()),

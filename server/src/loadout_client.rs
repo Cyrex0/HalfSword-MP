@@ -285,7 +285,7 @@ mod kit_client_tests {
     fn due_never_sent_is_due_without_instant_underflow() {
         assert!(due(None, Duration::from_secs(3600)));
         assert!(!due(Some(Instant::now()), KIT_RETRY));
-        assert!(Instant::now().checked_sub(Duration::from_secs(u64::MAX / 4)).is_none());
+        assert!(due(None, Duration::MAX), "None is due without any Instant arithmetic");
     }
 
     /// No `Instant::now() - <Duration>` anywhere in the sidecar sources.

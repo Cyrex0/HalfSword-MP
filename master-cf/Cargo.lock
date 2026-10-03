@@ -309,7 +309,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-master-core"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "ed25519-dalek",
  "hex",

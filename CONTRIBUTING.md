@@ -51,6 +51,8 @@ give each its own `CARGO_TARGET_DIR`.
 - `state_files`: no new state-dir files outside the allow-list (the game and the sidecar talk over
   shared memory)
 - `cargo`: `cargo test --workspace --locked`
+- `clippy`: `cargo clippy --workspace --all-targets --locked`, the same command as the CI clippy job;
+  a compile error or a deny-level lint fails, warnings do not (`--quick` skips it and `cargo`)
 
 Without Half Sword (no `HSMP_GAME_DIR`, no `<repo>/game`), the checks that need the game's
 `UE4SS_ObjectDump.txt` report **SKIP** and G0 still passes; `hsmp-gate g0 --strict` turns those skips into

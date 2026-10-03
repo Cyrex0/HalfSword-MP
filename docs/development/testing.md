@@ -12,7 +12,7 @@ cargo build --release -p hsmp-tools
 
 | Gate | When | What | Command |
 |---|---|---|---|
-| G0 | every push (pre-push hook) | bp names, Lua compile, Lua suites, travel lint, world guard, unsafe API, kill-by-name grep, `Instant` underflow grep, event contract, gate self-test, generated IPC files, state-dir allow-list, `cargo test --workspace --locked` (§5) | `hsmp-gate g0` (`--quick` skips cargo, `--strict` fails instead of skipping the game-dump checks) |
+| G0 | every push (pre-push hook) | bp names, Lua compile, Lua suites, travel lint, world guard, unsafe API, kill-by-name grep, `Instant` underflow grep, event contract, gate self-test, generated IPC files, state-dir allow-list, `cargo test --workspace --locked`, the CI clippy command (§5) | `hsmp-gate g0` (`--quick` skips cargo and clippy, `--strict` fails instead of skipping the game-dump checks) |
 | G1 | before a merge to main | `scripts/e2e-test.sh` + G0 | |
 | G2 | before a release | `scripts/mp_test.ps1` gate scenarios, green twice | see §4 |
 
@@ -442,6 +442,7 @@ so the hook refuses a dirty tree and a push of any commit other than HEAD. The c
 | `ipc_schema` | `hsmp-gate` | the committed generated IPC files equal `hsmp-tools gen-ipc` output, and `hsmp_ipc.h` compiles under `cl /W4 /WX` as C11 and C++17 (every size/offset `static_assert`); without MSVC the compile is noted, not failed |
 | `state_files` | `hsmp-gate state-files [--verbose] [--update]` | the lint `check_no_state_files`: every state-dir name a Lua mod names (string literals in `mods/**/*.lua`, the generated schema skipped) must be in `tools/hsmp-tools/src/bin/hsmp-gate/state_files.allow`, and in `server/src` (outside test modules) `std::fs` / `tokio::fs` writes may only appear in its `fs:` modules (logs, panic guard, career guard, identity, the tap, hsmp-server / master persistence). The list is categorised, and the only categories allowed are config, identity and log (plus `runtime:` globs, `fs:` writers and `debt: <owner>` for a contract not yet moved to shared memory; the list has none): any other category fails, so plumbing, tool-output and knob files cannot come back. Unused entries are notes; `--update` drops them (the list only shrinks) |
 | `cargo` | `cargo test --workspace --locked` | one run over the root workspace: `server`, `launcher`, `crates/*`, `tools/*` and the mlua Lua harnesses in `tests/` (HUD, interact, save guard, HSMPWorld). Skipped with `--quick` |
+| `clippy` | `cargo clippy --workspace --all-targets --locked` | the CI clippy job's command, verbatim: a compile error or a deny-level lint (`approx_constant` and other `clippy::correctness` lints) fails, warnings are counted only. Skipped with `--quick`. Not in `REQUIRED_CHECKS`, so older stamps and the recorded fixtures stay valid |
 
 A full pass with nothing skipped, on a clean tree, writes `<git-common-dir>/hsmp-g0/<commit>.json` (and the
 legacy `<git-common-dir>/hsmp-g0.json`). A run that skipped a check (no game dump, `--quick`, `--only`) writes no
@@ -456,6 +457,23 @@ Do not skip the hook with `--no-verify`.
 
 ---
 
+
+### CI (`.github/workflows/ci.yml`) and what G0 does not cover
+
+CI runs four jobs: Windows (`hsmp-gate g0 --no-stamp`, then `scripts/e2e-test.sh`), Clippy (the
+same command as the G0 `clippy` check), Linux (`cargo test --locked -p hsmp-net -p hsmp-server
+-p hsmp-modes`, then a release build of `hsmp-server`, `hsmp-master` and `hsmp-query`) and a
+Docker image smoke test. A full local G0 plus `scripts/e2e-test.sh` covers the first two. The Linux job cannot be reproduced on Windows:
+the `cfg(not(windows))` code (the sidecar's `/proc` process checks, for one) only compiles and runs
+there. With WSL and a distro, run the job's test command in the distro on a copy of the tree
+(rustup picks up `rust-toolchain.toml`):
+
+```sh
+rsync -a --delete --exclude target --exclude .git /mnt/d/<worktree>/ ~/hsmp-linux/
+cd ~/hsmp-linux && cargo test --locked -p hsmp-net -p hsmp-server -p hsmp-modes
+```
+
+Without WSL, the Linux job is first seen on the push.
 ## 6. Deploy and release profile
 
 `scripts/build-and-deploy.ps1 [-SkipBuild] [-Dev] [-GamePath ..] [-BinDir ..] [-WriteCfg] [-Template ..] [-RequireG0] [-SkipG0] [-SkipNative] [-UE4SSSrc ..] [-DryRun]`
