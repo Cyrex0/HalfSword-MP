@@ -84,8 +84,8 @@ the menu Willie's first request:
 
 | Where | What |
 |---|---|
-| Launcher, before every launch | writes `r.HairStrands.Streaming=0` under `[SystemSettings]` in `%LOCALAPPDATA%\HalfSwordUE5\Saved\Config\Windows\Engine.ini` (`launcher/src/ini.rs`). The uninstaller removes the line, or puts back the player's own value |
-| Launcher, launch arguments | `-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0` (`launcher/src/launch.rs`) |
+| Launcher, at start and after install | writes `r.HairStrands.Streaming=0` under `[SystemSettings]` in `%LOCALAPPDATA%\HalfSwordUE5\Saved\Config\Windows\Engine.ini` (`launcher/src/ini.rs`). The uninstaller removes the line, or puts back the player's own value |
+| Steam launch option (optional, set by the player) | `-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0` (the release manifest's `launch_args`; see the player install guide) |
 | HSMPMatch, at runtime | the Director sets the cvar at boot and on every new world through `KismetSystemLibrary.ExecuteConsoleCommand` (`D.RUNTIME_CVARS` in `mods/HSMPMatch/Scripts/director.lua`). The log line is `[HSMPMatch] hair-strand streaming workaround: r.HairStrands.Streaming=0 (runtime)` |
 
 To apply it by hand without the launcher, add the line to `Engine.ini`:

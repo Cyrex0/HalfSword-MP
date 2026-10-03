@@ -262,6 +262,11 @@ pub fn build(o: &BuildOpts, key: &ed25519_dalek::SigningKey) -> Result<Built, St
             &commit[..10]
         ));
     }
+    // A list on another machine is only trusted over TLS: plain HTTP lets anyone on the path
+    // rewrite it and send players to another server.
+    if let Some(u) = cfg.master_urls.iter().find(|u| !is_loopback(u) && !u.starts_with("https://")) {
+        return Err(format!("release.json master_urls: '{u}' is not https:// (only this-machine masters may use http)"));
+    }
     if cfg.master_urls.iter().all(|u| is_loopback(u)) {
         if !o.allow_loopback_master && cfg.channel != "dev" {
             return Err("release.json master_urls only lists this-machine addresses, so players would see no internet servers. Set the public master URL, or pass --allow-loopback-master (LAN-only test build).".into());
@@ -314,6 +319,24 @@ pub fn build(o: &BuildOpts, key: &ed25519_dalek::SigningKey) -> Result<Built, St
         return Err("mods.release.txt enables no HSMP mod".into());
     }
 
+    // The build identity of this payload: hsmp_build_id.lua in every Lua mod (checked against
+    // `hsmp-sidecar --build-info` at startup) and hsmp/build.json (the installed version, for
+    // the launcher). The content hash comes from the git objects, like every shipped file.
+    let identity = build_identity(repo, &commit, &cfg.version, protocol)?;
+    let lua_mods: Vec<String> = items
+        .keys()
+        .filter_map(|k| k.strip_prefix("payload/Win64/ue4ss/Mods/")?.strip_suffix("/Scripts/main.lua").map(str::to_string))
+        .filter(|m| m.starts_with("HSMP"))
+        .collect();
+    for m in lua_mods {
+        let rel = format!("ue4ss/Mods/{m}/Scripts/hsmp_build_id.lua");
+        items.insert(format!("payload/Win64/{rel}"), Item { bytes: identity.to_lua().into_bytes(), role: Role::Mod, install: Some(format!("{WIN64}/{rel}")) });
+    }
+    items.insert(
+        "payload/Win64/hsmp/build.json".into(),
+        Item { bytes: format!("{}\n", identity.to_json()).into_bytes(), role: Role::Bin, install: Some(format!("{WIN64}/hsmp/build.json")) },
+    );
+
     collect_ue4ss(&cfg.ue4ss, &o.ue4ss_dir, &mut items)?;
 
     for b in &cfg.binaries {
@@ -325,7 +348,7 @@ pub fn build(o: &BuildOpts, key: &ed25519_dalek::SigningKey) -> Result<Built, St
     items.insert("hsmp-launcher.exe".into(), Item { bytes: launcher, role: Role::Launcher, install: None });
     items.insert("INSTALL.md".into(), Item { bytes: git_file(repo, &commit, "docs/players/install.md")?, role: Role::Doc, install: None });
     // Licence and notice texts travel with the binaries (MIT / Apache-2.0 / third-party notices).
-    for doc in ["LICENSE-MIT", "LICENSE-APACHE", "NOTICE"] {
+    for doc in ["LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "THIRD-PARTY-NOTICES.html"] {
         items.insert(doc.into(), Item { bytes: git_file(repo, &commit, doc)?, role: Role::Doc, install: None });
     }
 
@@ -349,6 +372,41 @@ pub fn build(o: &BuildOpts, key: &ed25519_dalek::SigningKey) -> Result<Built, St
     let (manifest_bytes, sig_bytes) = pack::seal(manifest, &items, key)?;
     let manifest = Manifest::parse(&manifest_bytes)?;
     Ok(Built { manifest, items, manifest_bytes, sig_bytes, warnings })
+}
+
+/// Content-hash source over the git objects of one commit.
+struct GitSource<'a> {
+    repo: &'a Path,
+    commit: &'a str,
+}
+
+impl hsmp_net::build::content::Source for GitSource<'_> {
+    fn files(&self, dir: &str) -> Vec<String> {
+        git_ls(self.repo, self.commit, dir)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|p| p.len() > dir.len() + 1 && p.starts_with(dir) && !p[dir.len() + 1..].contains('/'))
+            .collect()
+    }
+    fn read(&self, path: &str) -> Option<Vec<u8>> {
+        git_file(self.repo, self.commit, path).ok()
+    }
+}
+
+/// The identity of the mods in `commit`: release version, protocol and IPC ABI of this
+/// tree, content hash of the commit's files.
+pub fn build_identity(repo: &Path, commit: &str, version: &str, protocol: u32) -> Result<hsmp_net::build::Identity, String> {
+    let (content_hash, _) = hsmp_net::build::content::content_hash(&GitSource { repo, commit }).ok_or("mods/mods.release.txt missing from the commit")?;
+    Ok(hsmp_net::build::Identity {
+        version: version.to_string(),
+        protocol: protocol as u16,
+        proto_min: hsmp_net::net::VERSION_MIN,
+        proto_max: hsmp_net::net::VERSION_MAX,
+        ipc_abi_major: hsmp_ipc::ABI_MAJOR,
+        ipc_abi_minor: hsmp_ipc::ABI_MINOR,
+        ipc_layout: hsmp_ipc::segment::LAYOUT_HASH,
+        content_hash,
+    })
 }
 
 /// A path as rustc and cargo see it: absolute, canonical, without `\\?\`.
@@ -514,7 +572,7 @@ mod tests {
         w(&repo.join("crates/hsmp-net/src/net/mod.rs"), b"pub const PROTOCOL_VERSION: u16 = 5;\n");
         w(&repo.join("launcher/trusted_keys.txt"), format!("{} test\n", hex::encode(key.verifying_key().as_bytes())).as_bytes());
         w(&repo.join("docs/players/install.md"), b"# install\n");
-        for doc in ["LICENSE-MIT", "LICENSE-APACHE", "NOTICE"] {
+        for doc in ["LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "THIRD-PARTY-NOTICES.html"] {
             w(&repo.join(doc), doc.as_bytes());
         }
         w(&repo.join("mods/mods.release.txt"), b"BPModLoaderMod : 1\nHSMPMenu : 1\nHSMPDiag : dev\nHSMPOff : 0\nKeybinds : dev\n");
@@ -604,6 +662,16 @@ mod tests {
         let settings = String::from_utf8(a.items["payload/Win64/ue4ss/UE4SS-settings.ini"].bytes.clone()).unwrap();
         assert_eq!(settings, "[Debug]\r\nConsoleEnabled = 0\r\nGuiConsoleEnabled = 1\r\nGuiConsoleVisible = 0\r\n");
 
+        // the payload's build identity: one per Lua mod, plus hsmp/build.json for the launcher
+        let lua = String::from_utf8(a.items["payload/Win64/ue4ss/Mods/HSMPMenu/Scripts/hsmp_build_id.lua"].bytes.clone()).unwrap();
+        let fs_hash = hsmp_net::build::content::content_hash_of_dir(&o.repo).unwrap();
+        let hex_hash: String = fs_hash.iter().map(|b| format!("{b:02x}")).collect();
+        assert!(lua.contains("version = \"0.9.0\"") && lua.contains("protocol = 5") && lua.contains(&hex_hash), "{lua}");
+        let json = String::from_utf8(a.items["payload/Win64/hsmp/build.json"].bytes.clone()).unwrap();
+        assert!(json.contains(&format!("\"content_hash\":\"{hex_hash}\"")), "{json}");
+        assert_eq!(a.items["payload/Win64/hsmp/build.json"].install.as_deref(), Some("HalfswordUE5/Binaries/Win64/hsmp/build.json"));
+        assert!(!paths.iter().any(|p| p.contains("BPModLoaderMod") && p.ends_with("hsmp_build_id.lua")), "only HSMP mods carry it");
+
         // the launcher accepts what we wrote (dir and zip)
         let out = tmp.0.join("dist");
         let (dir, zip, sha) = write_outputs(&a, &out).unwrap();
@@ -689,6 +757,12 @@ mod tests {
     }
 
     #[test]
+    fn real_config_version_is_the_workspace_version() {
+        let c = load_config(&std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("release.json")).unwrap()).unwrap();
+        assert_eq!(c.version, hsmp_net::build::RELEASE_VERSION, "release.json and the workspace version (Cargo.toml) must agree: the binaries report the workspace one");
+    }
+
+    #[test]
     fn real_config_pins_the_toolchain() {
         let c = load_config(&std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("release.json")).unwrap()).unwrap();
         let t = c.rust_toolchain.expect("release.json must pin rust_toolchain (reproducible binaries)");
@@ -721,5 +795,25 @@ mod tests {
         assert!(is_loopback("http://127.0.0.1:7778"));
         assert!(is_loopback("http://localhost/x"));
         assert!(!is_loopback("https://master.example.net"));
+    }
+
+    #[test]
+    fn shipped_master_list_is_https_with_a_local_fallback() {
+        let cfg = load_config(include_bytes!("../release.json")).unwrap();
+        assert!(cfg.master_urls.first().is_some_and(|u| u.starts_with("https://")), "{:?}", cfg.master_urls);
+        assert!(cfg.master_urls.iter().all(|u| is_loopback(u) || u.starts_with("https://")));
+    }
+
+    #[test]
+    fn plain_http_internet_master_is_refused() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[42; 32]);
+        let (_tmp, o) = fixture(&key);
+        let cfg_path = o.repo.join(CONFIG_PATH);
+        let mut cfg: serde_json::Value = serde_json::from_slice(&std::fs::read(&cfg_path).unwrap()).unwrap();
+        cfg["master_urls"] = serde_json::json!(["http://master.example.net:7778"]);
+        w(&cfg_path, serde_json::to_string_pretty(&cfg).unwrap().as_bytes());
+        run(&o.repo, &["-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-qam", "http master"]);
+        let err = build(&o, &key).err().expect("plain http master must be refused");
+        assert!(err.contains("not https"), "{err}");
     }
 }

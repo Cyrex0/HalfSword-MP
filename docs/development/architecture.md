@@ -338,8 +338,6 @@ validate) would remove these effects; it has not been done.
 - **Large Lua modules.** HSMPAvatars, HSMPMenu and HSMPWorld are each about 3,000 lines or more,
   and some chunks are at Lua's 200-local limit. The Director and `spawn_place.lua` (pure logic
   over an `env`, tested offline) are the model for splitting them.
-- **Mismatched installs can join each other.** `hsmp-server --content-hash` and
-  `hsmp-sidecar --content-hash` exist, but nothing computes or passes a hash yet.
 - **Remote-pose fidelity on heavy maps.** On arenas with many physics bodies, remote players'
   arms and weapons can trail or snap more than on light maps. The pose pipeline is described in
   [subsystems/replication.md](subsystems/replication.md).

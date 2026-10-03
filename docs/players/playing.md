@@ -24,7 +24,7 @@ On this page:
 
 ## The HSMP buttons
 
-Start the game with **Play** in the launcher. On the main menu, next to the game's own buttons,
+Start Half Sword from Steam as usual. On the main menu, next to the game's own buttons,
 HSMP adds a column of five buttons:
 
 | Button | What it does |
@@ -43,15 +43,18 @@ characters: letters, digits, spaces and `. _ -`, starting with a letter or digit
 
 ## Joining a game
 
-### There is no public server list yet
+### The public server list
 
-This release has no public internet server list. Out of the box, the server browser shows:
+The server browser lists:
 
+* internet games from the public server list (`https://master.halfswordmp.workers.dev`),
 * games on your **local network (LAN)**, and
 * a game hosted on **this PC**.
 
-To join a game over the internet, ask the host for their address and use **DIRECT CONNECT**
-(below). If a community server list exists, you can add its address under
+When you host a game, it is added to the public list too. Players on the internet can join it
+only if your router forwards the game's UDP port to your PC (see
+[Ports and firewall](../hosting/ports-and-firewall.md)). You can always join a game by its
+address with **DIRECT CONNECT** (below), and add another server list under
 **SETTINGS > SERVER LISTS** (see [Settings](#settings)).
 
 ### Using the server browser

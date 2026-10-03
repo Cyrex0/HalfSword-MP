@@ -72,12 +72,13 @@ copy are verified against keys the player already has.
    and on pull requests; it does not replace the live gate. Releases come from `main`.
 2. **Version.** Bump `version` in `tools/release/release.json` and the workspace `version` in the
    root `Cargo.toml` (§1). If the wire protocol changed, check `PROTOCOL_VERSION`.
-3. **Server list.** `master_urls` in `release.json` must hold the public master, primary first.
-   It is `http://127.0.0.1:7778` today. The tool **refuses** a list that only points at this
-   machine (`localhost`, `127.*`, `0.0.0.0`; `is_loopback` in `tools/release/src/lib.rs`) unless
-   the channel is `dev` or you pass `--allow-loopback-master`, and then it warns that the browser
-   shows LAN servers only. So the current `beta` config cannot produce an internet release until
-   a public master URL is set.
+3. **Server list.** `master_urls` in `release.json` must hold the public master, primary first:
+   `https://master.halfswordmp.workers.dev` (the Cloudflare Worker,
+   [master-server.md](../hosting/master-server.md)), then `http://127.0.0.1:7778` as the fallback.
+   The tool **refuses** a list that only points at this machine (`localhost`, `127.*`, `0.0.0.0`;
+   `is_loopback` in `tools/release/src/lib.rs`) unless the channel is `dev` or you pass
+   `--allow-loopback-master`, and then it warns that the browser shows LAN servers only. It also
+   refuses any master on another machine that is not `https://`.
 4. **Supported game builds.** For each Half Sword build you tested, add
    `{label, steam_buildid, exe_sha256, exe_size}` under `game.builds`. `hsmp-launcher status`
    prints the exe hash of an unknown build; the Steam build id is in
@@ -154,13 +155,20 @@ copy are verified against keys the player already has.
 
     It checks the signature against `launcher/trusted_keys.txt` and every file's hash.
 11. **Smoke test on a clean PC or VM** (Steam with Half Sword, no developer tools). Extract,
-    install, and play one match with **Play** (Steam running) and one with **Launch through
-    Steam**. Both times `Win64\hsmp_state\` must appear and the HSMP log must show `hsmp.cfg`
-    being read; the Steam route relies on the engine switching its working directory to `Win64`,
-    which no automated test checks. Then uninstall and check that `Win64` is back to the Steam
+    install, start Half Sword from Steam and play one match. `Win64\hsmp_state\` must appear and
+    the HSMP log must show `hsmp.cfg` being read; starting from Steam relies on the engine
+    switching its working directory to `Win64`, which no automated test checks. Then uninstall and check that `Win64` is back to the Steam
     files (Steam's "Verify integrity" should re-acquire 0 files, or compare the folder before and
     after).
-12. **Publish** the zip and its `.sha256` on the release page, and tag the commit `v<version>`.
+12. **Publish** on the GitHub release page of `Cyrex0/HalfSword-MP`. The launcher's update check
+    depends on these names exactly:
+    * the tag is `v<version>` (e.g. `v0.2.0`, `v0.2.0-beta.1`), with `<version>` the manifest's;
+    * the assets are `hsmp-<version>.zip` and `hsmp-<version>.zip.sha256`, as `hsmp-release`
+      writes them;
+    * a beta is marked **pre-release** (a `-` in the version also counts as one). Players on
+      "Stable releases only" never see it. Drafts are never offered.
+
+    A release without both assets, or with another tag form, is skipped by the update check.
 
 ## 5. What is in the package
 
@@ -174,19 +182,26 @@ copy are verified against keys the player already has.
 | `payload/Win64/dwmapi.dll`, `payload/Win64/ue4ss/...` | `.../Win64/` | the UE4SS `include` list, with `settings_overrides` applied to `UE4SS-settings.ini` |
 | `payload/mods.release.txt` | merged into `ue4ss/Mods/mods.txt` | `mods/mods.release.txt` |
 | `INSTALL.md` | (not installed) | `docs/players/install.md` at the release commit |
-| `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` | (not installed) | the repo root at the release commit |
+| `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE`, `THIRD-PARTY-NOTICES.html` | (not installed) | the repo root at the release commit |
 
 Developer mods (`mods/dev/`), Lua in subfolders, and test files never ship.
 
-**Licence files.** The zip carries HSMP's `LICENSE-MIT`, `LICENSE-APACHE` and `NOTICE`, and
-UE4SS's own MIT licence as `ue4ss/LICENSE` (part of the UE4SS `include` list). `NOTICE` refers to
-`THIRD-PARTY-NOTICES.html` for the full licence texts of the statically linked Rust crates, the
-fonts embedded in the launcher and the components bundled inside `UE4SS.dll`. **TODO:** that file
-does not exist yet. Generate it with `cargo-about` for the shipped binaries (`hsmp-server`
-package and `hsmp-launcher`), add a section by hand for the components bundled inside
-`UE4SS.dll` and for the Rust crates and Lua sources linked into HSMPNative, and add it to the package in
-`tools/release/src/lib.rs` next to the other licence files. Until then the package is missing
-notices that MIT, Apache-2.0, BSD, ISC, Zlib, OFL and the Ubuntu Font Licence require.
+**Licence files.** The zip carries HSMP's `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` and
+`THIRD-PARTY-NOTICES.html`, and UE4SS's own MIT licence as `ue4ss/LICENSE` (part of the UE4SS
+`include` list). `THIRD-PARTY-NOTICES.html` is committed at the repository root and holds the full
+licence texts of the statically linked Rust crates, Lua 5.4.7 (linked into HSMPNative), the fonts
+embedded in the launcher, and the list of components bundled inside `UE4SS.dll`. It is generated
+by `cargo-about` from `about.toml` (accepted licences, Windows target, no dev-dependencies) and
+`about.hbs` (the template, with the hand-kept Lua, font and UE4SS sections). Regenerate and
+commit it whenever `Cargo.lock` changes:
+
+```powershell
+cargo install cargo-about --version 0.9.2 --locked --features cli
+cargo about generate --workspace --locked --fail -o THIRD-PARTY-NOTICES.html about.hbs
+```
+
+The scan covers the whole workspace, a superset of the shipped binaries. `--fail` stops on a
+crate whose licence is not in `about.toml`'s `accepted` list.
 
 ### The manifest
 
@@ -201,7 +216,9 @@ contains:
 
 `launch_args` and `ini_settings` carry the workaround for the IoDispatcher pak-read crash
 (`r.HairStrands.Streaming=0`: hair strands load whole instead of through paged streaming; see
-[halfsword/io-dispatcher-crash.md](halfsword/io-dispatcher-crash.md)).
+[halfsword/io-dispatcher-crash.md](halfsword/io-dispatcher-crash.md)). The launcher does not
+start the game, so `launch_args` is only recorded in the install state; the player docs offer it
+as an optional Steam launch option.
 
 ## 6. Launcher internals
 
@@ -218,8 +235,9 @@ behind the default `gui` feature; `hsmp-release` depends on the launcher library
 | `install` | journaled install, update, uninstall and status; the `Engine.ini` merge |
 | `modstxt`, `cfgfile`, `ini` | merging `mods.txt`, `hsmp.cfg` and ini files |
 | `saves` | career save backup and restore (never deletes a backup) |
-| `careerguard` | recovers career-guard sessions a crash left open, before Play and Uninstall (`hsmp-sidecar --career-recover`) |
-| `launch`, `procs` | start the game (Steam or direct); read-only process checks |
+| `careerguard` | recovers career-guard sessions a crash left open, at launcher start, after install/update and before Uninstall (`hsmp-sidecar --career-recover`; `ops::startup_check`) |
+| `procs` | read-only process checks (the launcher never starts the game; players start it from Steam) |
+| `update` | update check (GitHub releases API), resumable download, SHA-256 + signature check, then the normal install |
 | `crash` | crash-report consent and redaction (interface only, no network) |
 | `ops` | the operations shared by the CLI and the GUI |
 
@@ -228,6 +246,22 @@ signature are read with fixed size caps), then the size and SHA-256 of every fil
 more than the signed size. It installs only from those verified in-memory bytes, and only to
 targets under `HalfswordUE5/Binaries/Win64/`. `hsmp.cfg`, `mods.txt`, `hsmp_install.json` and the
 game exe are reserved targets.
+
+**Updates** (`update.rs`). At start and on "Check for updates" the launcher asks
+`api.github.com/repos/Cyrex0/HalfSword-MP/releases` (or `/releases/latest` with "Stable releases
+only"), unauthenticated, with a `User-Agent`, over rustls (`ureq`, HTTPS only). The answer is
+cached with its ETag in `%LOCALAPPDATA%\HSMP\launcher\update_check.json`, so a repeat check is a
+`304` that does not count against GitHub's 60 requests per hour; a used-up limit is reported with
+its reset time. The newest non-draft `v<version>` release wins by semver order (pre-releases
+before their release). The zip is downloaded to `%LOCALAPPDATA%\HSMP\downloads\` through a `.part`
+file (resumed with `Range`, 4 attempts, capped at 512 MB and at the asset's listed size), checked
+against the `.zip.sha256`, then opened with `Package::open` against the compiled-in keys. A
+downgrade (unless allowed under Advanced) and a release that does not support the game build are
+refused; the game, sidecar or server running from the folder refuses the update; the career guard
+recovers first; then `ops::install_with` runs the journaled install. The new launcher is copied to
+`%LOCALAPPDATA%\HSMP\bin\` (renaming a running copy away first) and "Restart the launcher" starts
+it; at start that copy opens `downloads\hsmp-<its version>.zip` when no release sits next to it.
+Tests use a local HTTP server, never the network.
 
 **Journaled install and rollback** (`install.rs`):
 
@@ -258,7 +292,8 @@ status        [--game DIR] [--package DIR|ZIP]   game, package, build check, ins
 verify        [--package DIR|ZIP]                signature + SHA-256 of every file
 install       [--game DIR] [--package DIR|ZIP] [--allow-unsupported] [--no-save-backup] [--allow-downgrade]
 uninstall     [--game DIR] [--forget-missing]
-launch        [--game DIR] [--direct | --steam]
+check-update  [--stable-only]
+update        [--game DIR] [--stable-only] [--allow-downgrade]
 backup-saves | list-backups | restore-saves <id> | find-game
 ```
 
@@ -277,10 +312,6 @@ on uninstall.
 
 ## 7. Not done yet
 
-- **`THIRD-PARTY-NOTICES.html`** (§5).
-- **A public master URL** in `release.json` (§4 step 3).
-- **Online updates.** The master has no release endpoint; updating means downloading the new zip
-  and opening it with the installed launcher.
 - **Crash upload.** Consent, detection, redaction and local export exist
   (`launcher/src/crash.rs`, the `CrashSink` trait); nothing uploads.
 - **Code signing** (Authenticode) of the launcher and the binaries, which would remove the

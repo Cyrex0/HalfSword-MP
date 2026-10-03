@@ -10,9 +10,10 @@
 //!   DELETE /v1/servers/{id}  — explicit deregistration
 //!
 //! Listing schema (additive; old readers keep working): every entry carries
-//! `name, host, port, mode, map, players, max_players, proto_ver,
-//! pwd_protected, version, region, reachable, ping_ms, last_seen_utc_ms,
-//! age_s`. `ping_ms` is master→server, NOT client→server — the in-game
+//! `name, host, port, mode, map, players, max_players, proto_ver, proto_min,
+//! proto_max, pwd_protected, version, content_hash, region, reachable, ping_ms,
+//! last_seen_utc_ms, age_s`. `content_hash` is the 64-hex hash the server enforces
+//! ("" = any). `ping_ms` is master→server, NOT client→server — the in-game
 //! browser measures its own RTT with the UDP query (query.rs).
 //!
 //! - In-memory `DashMap`, no DB. Capacity enforced; LRU-ish evict on insert.
@@ -149,9 +150,19 @@ struct ServerEntry {
     max_players: u32,
     proto_ver: u32,
     pwd_protected: bool,
+    /// Lowest / highest wire protocol the server accepts; 0 = an older server (only
+    /// `proto_ver` known).
+    #[serde(default)]
+    proto_min: u32,
+    #[serde(default)]
+    proto_max: u32,
     /// Server build version ("0.1.0"); empty for pre-browser servers.
     #[serde(default)]
     version: String,
+    /// The content hash (64 lowercase hex) the server enforces in the handshake; "" =
+    /// it accepts any mod files, or an older server.
+    #[serde(default)]
+    content_hash: String,
     /// Free-form region tag ("EU", "NA-East"); empty = unknown.
     #[serde(default)]
     region: String,
@@ -259,10 +270,16 @@ struct RegisterReq {
     max_players: u32,
     #[serde(default)]
     proto_ver: u32,
+    #[serde(default)]
+    proto_min: u32,
+    #[serde(default)]
+    proto_max: u32,
     #[serde(default, alias = "password_required")]
     pwd_protected: bool,
     #[serde(default)]
     version: String,
+    #[serde(default)]
+    content_hash: String,
     #[serde(default)]
     region: String,
     /// 16 hex bytes.
@@ -333,6 +350,22 @@ fn clean(s: &str, max: usize) -> Option<String> {
     let c: String = s.chars().filter(|c| !c.is_control()).collect();
     let c = c.trim().to_string();
     if c.len() > max { None } else { Some(c) }
+}
+
+/// "" or 64 hex chars (stored lower case); anything else is refused.
+fn clean_content_hash(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Some(String::new());
+    }
+    (s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit())).then(|| s.to_ascii_lowercase())
+}
+
+/// The accepted protocol range: missing ends default to `proto_ver`; versions are u16.
+fn proto_range(ver: u32, min: u32, max: u32) -> Option<(u32, u32)> {
+    let min = if min == 0 { ver } else { min };
+    let max = if max == 0 { ver } else { max };
+    (min <= max && max <= u16::MAX as u32).then_some((min, max))
 }
 
 /// Real browser query against host:port. `Some(rtt_ms)` iff it answered.
@@ -549,6 +582,12 @@ async fn register(
     let Some(version) = clean(&req.version, MAX_VERSION) else {
         return (StatusCode::BAD_REQUEST, "version too long").into_response();
     };
+    let Some(content_hash) = clean_content_hash(&req.content_hash) else {
+        return (StatusCode::BAD_REQUEST, "content_hash must be 64 hex chars or empty").into_response();
+    };
+    let Some((proto_min, proto_max)) = proto_range(req.proto_ver, req.proto_min, req.proto_max) else {
+        return (StatusCode::BAD_REQUEST, "bad protocol range").into_response();
+    };
 
     // Authoritative host = remote IP. Never trust client-sent host.
     let host = ip.to_string();
@@ -590,8 +629,11 @@ async fn register(
         players: req.players.min(max_players),
         max_players,
         proto_ver: req.proto_ver,
+        proto_min,
+        proto_max,
         pwd_protected: req.pwd_protected,
         version,
+        content_hash,
         region,
         ping_ms,
         reachable,
@@ -930,6 +972,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn listing_carries_build_identity() {
+        let (base, _st) = spawn_master().await;
+        let c = reqwest::Client::new();
+        let mut b = reg_body("Versioned", 17778);
+        b["proto_ver"] = json!(6);
+        b["proto_min"] = json!(6);
+        b["proto_max"] = json!(7);
+        b["content_hash"] = json!("AB".repeat(32));
+        b["future_field"] = json!("ignored");
+        assert_eq!(c.post(format!("{base}/v1/register")).json(&b).send().await.unwrap().status(), 201);
+        let l = list(&c, &base).await;
+        let e = l.iter().find(|e| e["name"] == "Versioned").unwrap();
+        assert_eq!((e["proto_ver"].as_u64(), e["proto_min"].as_u64(), e["proto_max"].as_u64()), (Some(6), Some(6), Some(7)));
+        assert_eq!(e["content_hash"], "ab".repeat(32));
+        // An older server: the range defaults to proto_ver, no content hash.
+        let mut old = reg_body("Old", 17779);
+        old["nonce"] = json!("n2");
+        let r = c.post(format!("{base}/v1/register")).json(&old).send().await.unwrap();
+        assert!(r.status() == 201 || r.status() == 429, "{}", r.status());
+        assert_eq!(clean_content_hash(""), Some(String::new()));
+        assert_eq!(clean_content_hash("abc"), None);
+        assert_eq!(clean_content_hash(&"zz".repeat(32)), None);
+        assert_eq!(proto_range(5, 0, 0), Some((5, 5)));
+        assert_eq!(proto_range(6, 7, 6), None);
+        assert_eq!(proto_range(6, 6, 70_000), None);
+        // A malformed hash is refused, not stored.
+        let mut bad = reg_body("Bad", 17780);
+        bad["content_hash"] = json!("not-a-hash");
+        let st2 = spawn_master().await.0;
+        assert_eq!(c.post(format!("{st2}/v1/register")).json(&bad).send().await.unwrap().status(), 400);
+    }
+
+    #[tokio::test]
     async fn legacy_register_body_still_accepted() {
         // Exactly what pre-browser servers / e2e-test.sh send.
         let (base, _st) = spawn_master().await;
@@ -941,6 +1016,7 @@ mod tests {
         assert_eq!(r.status(), 201);
         let l = list(&c, &base).await;
         assert_eq!(l[0]["version"], "");
+        assert_eq!(l[0]["content_hash"], "");
         assert_eq!(l[0]["region"], "");
     }
 

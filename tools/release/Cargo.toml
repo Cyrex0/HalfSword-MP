@@ -23,6 +23,8 @@ path = "src/main.rs"
 
 [dependencies]
 hsmp-launcher = { path = "../../launcher", default-features = false }
+hsmp-net = { path = "../../crates/hsmp-net" }
+hsmp-ipc = { path = "../../crates/hsmp-ipc" }
 ed25519-dalek = "2"
 getrandom = "0.2"
 hex = "0.4"

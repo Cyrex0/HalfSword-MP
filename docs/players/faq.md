@@ -49,7 +49,7 @@ It is designed not to. Half Sword saves your career automatically, also during f
 
 1. redirects the game's saves to separate `HSMP_*` slots during a multiplayer session;
 2. backs up your saves when you host or join, and puts back anything that changed when you leave;
-3. repeats that check before the launcher's **Play** and **Uninstall**, in case a session crashed.
+3. repeats that check when the launcher opens, after an install or update, and before **Uninstall**, in case a session crashed.
 
 The launcher also backs up your saves before the first install, and you can make more backups
 with **Back up now**. Changes to the game's own settings made during a multiplayer session may be
@@ -57,7 +57,7 @@ undone when you leave. Details: [Career saves](career-saves.md).
 
 ### Can I still play my single-player career with HSMP installed?
 
-Yes. Start the game with **Play** in the launcher and use the game's own menu buttons as usual.
+Yes. Start Half Sword from Steam as usual and use the game's own menu buttons as usual.
 HSMP only adds its own buttons next to them. A few HSMP changes are always on, for example cutscenes
 or videos that start while you are idle are skipped. To play the game exactly as it ships,
 [uninstall HSMP](uninstall.md).
@@ -84,10 +84,13 @@ HSMP handles short connection drops: you get about 35 seconds to reconnect durin
 
 ### Is there a server list?
 
-Not a public one yet. The server browser shows games on your local network (LAN) and a game hosted
-on your own PC. For internet games, use **DIRECT CONNECT**.
+Yes. The server browser shows internet games from the public server list
+(`https://master.halfswordmp.workers.dev`), games on your local network (LAN) and a game hosted
+on your own PC. A game you host is added to the public list too; players on the internet can join
+it only if your router forwards its UDP port. You can always join by address with
+**DIRECT CONNECT**.
 
-Anyone can run a server list ("master server"). If a community list exists, add its address under
+Anyone can also run a server list ("master server") and add it under
 **SETTINGS > SERVER LISTS**. For server operators: [Master server](../hosting/master-server.md).
 
 ### Do I need to run a server?
@@ -120,7 +123,7 @@ Server operators can run the dedicated server on Linux. See
 
 Each HSMP release is tested against specific Half Sword builds. HSMP 0.1.0 supports Steam build
 24185754. When Steam updates the game, the launcher shows a red line, and Install and Update are
-blocked until an HSMP release supports the new build. **Play** still works, but menus or matches
+blocked until an HSMP release supports the new build. The game still starts, but menus or matches
 may break. Wait for an HSMP update. Everybody in a game should use the same HSMP version.
 
 ### Why does my antivirus complain?
@@ -132,8 +135,9 @@ The launcher is also not code-signed yet, which is why Windows SmartScreen warns
 
 ### Does HSMP send data anywhere?
 
-The launcher sends nothing over the internet. It does not even save a crash report unless you
-click **Save a redacted report**, and it never uploads one.
+The launcher only asks GitHub for the list of HSMP releases (when it opens and when you click
+**Check for updates**) and downloads the release you choose. It sends nothing about you. It does
+not even save a crash report unless you click **Save a redacted report**, and it never uploads one.
 
 In the game, HSMP talks to the game server you join, to the server lists you set, and to servers
 in your browser list (to measure their ping). The server sees your nickname, your IP address, your

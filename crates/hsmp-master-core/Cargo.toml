@@ -1,0 +1,23 @@
+[package]
+name = "hsmp-master-core"
+description = "HSMP server list: request signing, field validation and the registry logic shared by hsmp-master, hsmp-server and the Cloudflare Worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# No I/O, no clock, no randomness: everything here also builds for wasm32-unknown-unknown
+# (master-cf/, the Cloudflare Worker).
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "zeroize"] }
+hkdf = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+
+[lints]
+workspace = true

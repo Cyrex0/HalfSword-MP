@@ -46,6 +46,7 @@ mod net;
 mod events;
 mod proc_util;
 mod ipkey; // per-IP limits key IPv6 by /64
+mod build_id;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -118,11 +119,31 @@ struct Args {
     #[arg(long)]
     key_file: Option<PathBuf>,
 
-    /// Enforce this content hash (64 hex chars: catalogue + arena list + mod
-    /// manifest). Clients with other content get a readable reject before
-    /// the cookie. Omit on dev servers.
+    /// Enforce this content hash instead of the built-in one (64 hex chars, see
+    /// `--build-info`). Clients with other mod files or server data get a readable
+    /// reject before the cookie.
     #[arg(long)]
     content_hash: Option<String>,
+
+    /// Development only: accept clients whose mod files or server data differ from
+    /// this build's (no content check). The protocol version is still checked.
+    #[arg(long, env = "HSMP_ALLOW_MISMATCHED_CONTENT", action = clap::ArgAction::SetTrue,
+          value_parser = clap::builder::BoolishValueParser::new())]
+    allow_mismatched_content: bool,
+
+    /// Print this build's identity (version, protocol, IPC ABI, content hash) as JSON and exit.
+    #[arg(long)]
+    build_info: bool,
+
+    /// Print the identity of the mod files in the checkout at this path (this build's
+    /// version, protocol and IPC ABI, the checkout's content hash) as JSON and exit.
+    /// Deploy writes it as hsmp/build.json.
+    #[arg(long, value_name = "REPO")]
+    mods_identity: Option<PathBuf>,
+
+    /// As --mods-identity, as the Lua module deploy writes into every mod (hsmp_build_id.lua).
+    #[arg(long, value_name = "REPO")]
+    mods_identity_lua: Option<PathBuf>,
 
     /// Enable the RCON debug verbs for the test gate (`DEBUG KILL <seat>`).
     /// Never on a public server.
@@ -264,6 +285,17 @@ async fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
+    if args.build_info {
+        println!("{}", build_id::identity().to_json());
+        return Ok(());
+    }
+    if let Some((repo, lua)) = args.mods_identity.as_ref().map(|r| (r, false)).or(args.mods_identity_lua.as_ref().map(|r| (r, true))) {
+        let mut id = build_id::identity();
+        id.content_hash = hsmp_net::build::content::content_hash_of_dir(repo)
+            .with_context(|| format!("{} not found under {}", hsmp_net::build::content::TEMPLATE, repo.display()))?;
+        if lua { print!("{}", id.to_lua()) } else { println!("{}", id.to_json()) }
+        return Ok(());
+    }
     info!(bind = %args.bind, tick_hz = args.tick_hz, max_peers = args.max_peers, "hsmp-server starting");
 
     // Windows quantises tokio timers to the 15.6 ms system tick, which made a
@@ -289,13 +321,12 @@ async fn main() -> Result<()> {
     let key_path = args.key_file.clone().unwrap_or_else(net::default_key_path);
     let static_key = net::load_or_create_key(&key_path)
         .with_context(|| format!("server key {}", key_path.display()))?;
-    let content_hash = match args.content_hash.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        Some(h) => {
-            let b = hex::decode(h).context("--content-hash: hex")?;
-            Some(<[u8; 32]>::try_from(b.as_slice()).map_err(|_| anyhow::anyhow!("--content-hash: 32 bytes"))?)
-        }
-        None => None,
-    };
+    let content_hash = resolve_content_hash(args.content_hash.as_deref(), args.allow_mismatched_content)?;
+    match content_hash {
+        Some(h) => info!(version = build_id::VERSION, content_hash = %hex::encode(h), "content check on: clients must run the same mod files"),
+        None => warn!(version = build_id::VERSION, built_with = build_id::CONTENT_HASH_HEX,
+                      "content check OFF (--allow-mismatched-content): clients with other mod files can join"),
+    }
     let transport = net::Net::new(static_key, content_hash);
     let server_key_hex = hex::encode(transport.static_public());
     info!(key_file = %key_path.display(), server_key = %server_key_hex, fingerprint = %transport.fingerprint(),
@@ -335,6 +366,7 @@ async fn main() -> Result<()> {
         max_players: args.max_peers as u32,
         password: false, // join passwords are not implemented server-side yet
         server_key: server_key_hex.clone(),
+        content_hash: content_hash.map(hex::encode).unwrap_or_default(),
     });
 
     server::seed_arena(&state, &env_or(&args.map, "", "HSMP_LOBBY_MAP")).await;
@@ -348,16 +380,20 @@ async fn main() -> Result<()> {
     ));
 
     // Register with master if HSMP_MASTER_URL set.
-    if let Ok(master_url) = std::env::var("HSMP_MASTER_URL") {
-        let port = args.bind
-            .rsplit(':')
-            .next()
-            .and_then(|s| s.parse::<u16>().ok())
-            .unwrap_or(7777);
+    let mut master = None;
+    if let Some(master_url) = std::env::var("HSMP_MASTER_URL").ok().filter(|u| !u.trim().is_empty()) {
+        let bind = socket.local_addr()?;
         info!(master = %master_url, "registering with master");
-        // Runs forever: retries registration with backoff, re-registers if
-        // the master forgets us, heartbeats live player count + map.
-        tokio::spawn(master_client::run(master_url, port, state.clone()));
+        match master_client::MasterClient::new(master_url, bind, &static_key) {
+            Ok(c) => {
+                let c = Arc::new(c);
+                // Runs forever: retries registration with backoff, re-registers if
+                // the master forgets us, heartbeats live player count + map.
+                tokio::spawn(c.clone().run(state.clone()));
+                master = Some(c);
+            }
+            Err(e) => warn!(error = %e, "master client disabled"),
+        }
     }
 
     // Optional RCON admin TCP listener.
@@ -396,6 +432,9 @@ async fn main() -> Result<()> {
     } else {
         server::shutdown(&socket, &state, hsmp_net::proto_v5::ClosingReason::SHUTDOWN, "Server shut down").await;
     }
+    if let Some(m) = &master {
+        m.deregister().await;
+    }
     events::emit("server_stop", serde_json::json!({}));
     Ok(())
 }
@@ -408,4 +447,32 @@ fn env_or_mode(flag: &str) -> String {
         }
     }
     flag.to_string()
+}
+
+/// The content hash the handshake enforces: `--content-hash`, else the one this build
+/// embeds; `None` with `--allow-mismatched-content`.
+fn resolve_content_hash(flag: Option<&str>, allow_mismatched: bool) -> Result<Option<[u8; 32]>> {
+    if allow_mismatched {
+        return Ok(None);
+    }
+    match flag.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(h) => Ok(Some(hsmp_net::build::parse_hash(h).context("--content-hash: expected 64 hex chars")?)),
+        None => Ok(Some(build_id::content_hash())),
+    }
+}
+
+#[cfg(test)]
+mod content_check_tests {
+    #[test]
+    fn content_check_is_on_by_default() {
+        use clap::Parser;
+        let a = super::Args::try_parse_from(["hsmp-server"]).unwrap();
+        let h = super::resolve_content_hash(a.content_hash.as_deref(), a.allow_mismatched_content).unwrap();
+        assert_eq!(h, Some(super::build_id::content_hash()));
+        let a = super::Args::try_parse_from(["hsmp-server", "--allow-mismatched-content"]).unwrap();
+        assert_eq!(super::resolve_content_hash(a.content_hash.as_deref(), a.allow_mismatched_content).unwrap(), None);
+        let x = "ab".repeat(32);
+        assert_eq!(super::resolve_content_hash(Some(&x), false).unwrap(), Some([0xab; 32]));
+        assert!(super::resolve_content_hash(Some("abc"), false).is_err());
+    }
 }

@@ -26,7 +26,7 @@ On this page:
 What Uninstall does:
 
 * Before it removes anything, it finishes the career save check of any multiplayer session that
-  crashed (see [Career saves](career-saves.md#3-the-crash-check-before-play-and-uninstall)). If
+  crashed (see [Career saves](career-saves.md#3-the-crash-check)). If
   that check fails, Uninstall is refused, so your career is not changed further.
 * Every file HSMP changed goes back to exactly how it was, byte for byte and under its original
   name. That includes UE4SS files and `mods.txt` if you had them before.
@@ -53,7 +53,7 @@ exactly what is left.
    of that file is removed. If it was a game file, Steam's "Verify integrity of game files" puts it
    back.
 
-**Play** stays disabled until the uninstall has finished, or until you install HSMP again.
+Finish the uninstall, or install HSMP again, before you start Half Sword.
 
 ## By hand, without the launcher
 

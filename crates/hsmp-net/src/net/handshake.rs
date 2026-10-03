@@ -527,6 +527,8 @@ pub struct ServerHsConfig {
     pub caps: u64,
     /// `None` disables the content check (dev servers).
     pub content_hash: Option<[u8; 32]>,
+    /// This server's release version, named in version and content rejects.
+    pub release: String,
     pub needs_password: bool,
     pub pwd_salt: [u8; 16],
     /// Ephemeral key and cookie key rotation period.
@@ -543,6 +545,7 @@ impl ServerHsConfig {
             version_max: super::VERSION_MAX,
             caps: super::caps::SUPPORTED,
             content_hash: None,
+            release: crate::build::RELEASE_VERSION.to_string(),
             needs_password: false,
             pwd_salt: [0; 16],
             rotate_ms: 120_000,
@@ -721,24 +724,15 @@ impl ServerHandshake {
             };
             HelloOutcome::Reject(pre_reject_datagram(&p, dg.len()))
         };
+        use crate::build::{reject_text, Mismatch};
         let Some(version) = negotiate_version(core.version_min, core.version_max, self.cfg.version_min, self.cfg.version_max) else {
-            let text = format!(
-                "version mismatch: server speaks HSMP protocol v{}..=v{}, your client v{}..=v{}. {}",
-                self.cfg.version_min,
-                self.cfg.version_max,
-                core.version_min,
-                core.version_max,
-                if core.version_max < self.cfg.version_min {
-                    "Your mod is OUTDATED: update it."
-                } else {
-                    "The SERVER is outdated: ask the host to update."
-                }
-            );
+            let client_older = core.version_max < self.cfg.version_min;
+            let text = reject_text(Mismatch::Protocol { client_older }, &self.cfg.release, &core.build);
             return Ok(reject(reject_code::VERSION, text));
         };
         if let Some(h) = self.cfg.content_hash {
             if h != core.content_hash {
-                return Ok(reject(reject_code::CONTENT, "mods differ from the server: update HSMP".into()));
+                return Ok(reject(reject_code::CONTENT, reject_text(Mismatch::Content, &self.cfg.release, &core.build)));
             }
         }
         let cookie = self.make_cookie(&from, core_bytes, now);
@@ -1022,7 +1016,14 @@ mod tests {
         let HelloOutcome::Reject(r) = s.on_hello(0, a, &hello_datagram(&f.hello), &mut f.rng).unwrap() else {
             panic!()
         };
-        assert_eq!(parse_pre_reject(&r).unwrap().code, reject_code::CONTENT);
+        let pr = parse_pre_reject(&r).unwrap();
+        assert_eq!(pr.code, reject_code::CONTENT);
+        assert!(pr.text.starts_with("Server runs HalfSword-MP "), "{}", pr.text);
+        // The same hash is let through.
+        let mut cfg = ServerHsConfig::new([9; 32]);
+        cfg.content_hash = Some(f.hello.content_hash);
+        let mut s = ServerHandshake::new(cfg, 0, &mut f.rng);
+        assert!(matches!(s.on_hello(0, a, &hello_datagram(&f.hello), &mut f.rng).unwrap(), HelloOutcome::Challenge(_)));
         // Short hellos get nothing at all.
         let mut short = hello_datagram(&f.hello);
         short.truncate(HELLO_LEN - 1);

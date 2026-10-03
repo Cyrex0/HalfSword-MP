@@ -397,11 +397,47 @@ local GAME_PID = rawget(_G, "HSMP_IPC") and HSMP_IPC.current_pid() or nil
 if GAME_PID then Log("game pid %d: passed as --parent-pid", GAME_PID)
 else Log("game pid unknown (no native module): the sidecar cannot be started") end
 
+-- Career-guard crash recovery at boot (`hsmp-sidecar --career-recover`, the launcher's
+-- step too): a session a crash left open is restored before the game writes its first save,
+-- also when the game was started from Steam. It touches nothing when no session is open, a
+-- live sidecar's session, or a career file written after that session ended. Waits up to
+-- 3 s; a slower run finishes in the background (MX.career_poll).
+MX.career = { started = os.clock() }
+function MX.career_done(code, out)
+    MX.career.h = nil
+    for line in tostring(out or ""):gmatch("[^\r\n]+") do Log("career recover: %s", line) end
+    Log("career recover: exit %s after %.0f ms", tostring(code), (os.clock() - MX.career.started) * 1000)
+    ev("x_career_recover", { code = tonumber(code), ms = math.floor((os.clock() - MX.career.started) * 1000) })
+end
+function MX.career_poll(wait_ms)
+    local ipc, h = rawget(_G, "HSMP_IPC"), MX.career.h
+    if not (ipc and h) then return end
+    local done, code, out = ipc.capture_poll(h, wait_ms)
+    if done == true then MX.career_done(code, out)
+    elseif done == nil then MX.career.h = nil; Log("career recover: lost (%s)", tostring(code)) end
+end
+do
+    local ipc = rawget(_G, "HSMP_IPC")
+    if ipc and ipc.N then
+        local h, err = ipc.spawn_capture(win(tostring(SIDECAR_EXE)), { "--career-recover" })
+        if h then
+            MX.career.h = h
+            MX.career_poll(3000)
+            if MX.career.h then Log("career recover: still running after 3 s, finishing in the background") end
+        else
+            Log("career recover: could not start %s (%s)", tostring(SIDECAR_EXE), tostring(err))
+        end
+    else
+        Log("career recover: skipped (no native module); the launcher runs it before Play")
+    end
+end
+
 local kill_role
 
 -- The role's extra args (an array) or nil, reason (sidecar only).
 local function proc_args(role)
     if role == "sidecar" then
+        if MX.build_block then return nil, "build mismatch: " .. MX.build_block end
         -- Shared memory is the sidecar's ONLY link to the
         -- game. The game creates the segment; the sidecar attaches to it and
         -- verifies the segment's game pid against --parent-pid, so both are
@@ -424,8 +460,43 @@ end
 -- lobby note shows the reason (a broken install: reinstall HSMP).
 function MX.ipc_fail(why)
     local ipc = rawget(_G, "HSMP_IPC")
-    MX.ipc_error = (ipc and ipc.ui_error) or "Helper program did not start - reinstall HSMP"
+    MX.ipc_error = MX.build_block or (ipc and ipc.ui_error) or "Helper program did not start - reinstall HSMP"
     Log("sidecar NOT started: shared-memory IPC unavailable (%s)", tostring(why))
+end
+
+-- Build identity check (shared/hsmp_build.lua): these mod files against
+-- `hsmp-sidecar --build-info`, once at startup. A mismatch sets MX.build_block,
+-- which refuses HOST / JOIN with the launcher hint.
+MX.Build = load_module("hsmp_build", true)
+MX.build_id = MX.Build and MX.Build.load(load_module) or nil
+function MX.build_poll()
+    local B = MX.Build
+    if not B or MX.build_done then return end
+    local ipc = rawget(_G, "HSMP_IPC")
+    if not MX.build_id then
+        MX.build_done, MX.build_block = true, B.MSG_MISSING
+        Log("build check: %s (hsmp_build_id.lua missing): multiplayer is off", B.MSG_MISSING)
+        return
+    end
+    if not ipc or not ipc.spawn_capture then return end
+    if not MX.build_h then
+        MX.build_tries = (MX.build_tries or 0) + 1
+        if MX.build_tries > 3 then MX.build_done = true; Log("build check: hsmp-sidecar --build-info did not start; skipped"); return end
+        MX.build_h = ipc.spawn_capture(win(tostring(SIDECAR_EXE)), { "--build-info" })
+        return
+    end
+    local done, code, out = ipc.capture_poll(MX.build_h)
+    if done == false then return end
+    MX.build_h = nil
+    if done == nil then return end   -- lost: started again on the next poll
+    MX.build_done = true
+    local bad = B.check(MX.build_id, code == 0 and B.parse_info(out) or nil)
+    if bad then
+        MX.build_block = bad.msg
+        Log("build check FAILED: %s (%s): multiplayer is off", bad.msg, bad.detail)
+    else
+        Log("build check: mods and sidecar are HalfSword-MP %s (content %s)", MX.build_id.version, B.content_tag(MX.build_id))
+    end
 end
 
 -- Start `exe args` as `role` (a previous child of that role is stopped first).
@@ -1125,6 +1196,11 @@ function MX.host_click()
         enter_screen("lobby")
         return
     end
+    if MX.build_block then   -- the browser shows the launcher hint
+        Log("HOST GAME refused: %s", MX.build_block)
+        enter_screen("browser")
+        return
+    end
     if MX.start_latched() then Log("HOST GAME: a session is already starting - ignored"); return end
     spawn_server_and_sidecar()
 end
@@ -1139,6 +1215,7 @@ function MX.update_host_label(sstat)
     if not e or not e.text then return end
     local want = TOP_LABELS[1]
     if lobby.active then want = (sstat == "connected") and "BACK TO LOBBY" or "RECONNECTING..." end
+    if MX.build_block and not lobby.active then want = "UPDATE HSMP" end
     if e.label_cur == want or (e.label_cur == nil and want == TOP_LABELS[1]) then return end
     e.label_cur = want
     pcall(function() e.text:SetText(FText(want)) end)
@@ -1298,6 +1375,8 @@ do
             kit = Kit, map_display_name = map_display_name,
             my_region = function() return settings.region or "" end,
             join = function(addr, map, label) MX.join_click(addr, map, label) end,
+            build = MX.Build, build_id = function() return MX.build_id end,
+            blocked = function() return MX.build_block end,
             exit_screen = function() exit_screen() end,
         })
         table.insert(forget_hooks, function() Browser.forget() end)
@@ -2904,6 +2983,8 @@ LoopAsync(500, function()
     pcall(function()
         ExecuteInGameThread(function()
             if LocalMaster then pcall(LocalMaster.tick) end      -- touches no widget
+            pcall(MX.build_poll)                                 -- startup build check (no widget)
+            pcall(MX.career_poll)                                -- boot career recovery, if slow
             CTL.flush()                                          -- command records held until connected
             if not lobby.active then MX.update_host_label(nil); return end
             lobby_tick = lobby_tick + 1

@@ -8,7 +8,52 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
-## [0.1.0] - initial public release
+## [0.1.0-beta.2] - 2026-10-03
+
+### Server list
+
+- There is now a public server list, run on Cloudflare at `https://master.halfswordmp.workers.dev`.
+  Servers show up in the in-game browser without anyone running their own list.
+- Listings are signed. Each server signs its register, heartbeat and delete requests with a key
+  derived from its identity, so nobody else can take over or remove its entry. A server removes its
+  listing when it shuts down cleanly.
+
+### Launcher
+
+- The launcher updates itself. It checks the GitHub releases at start and on "Check for updates",
+  shows what is new, downloads the zip, checks its SHA-256 and signature, and installs it. Betas are
+  offered by default; "Stable releases only" turns them off. On the command line: `check-update`
+  and `update`.
+- No more Play button. Install with the launcher, then start Half Sword from Steam as usual. The
+  checks Play used to do now run when the launcher opens and after every install or update.
+
+### Compatibility checks
+
+- Players and servers compare versions and mod files before a match. Joining a server that runs a
+  different HalfSword-MP version, or different mod files, is refused with a message that says which
+  version the server runs and what to do.
+- The server browser greys out servers you cannot join ("needs vX") and has a COMPATIBLE filter.
+
+### Career saves
+
+- Career-save recovery now runs when the game boots, before the game can save. If a crash left an
+  MP session open, your single-player career save is put back first.
+
+### Dedicated servers
+
+- `run-dedicated-server.ps1` and `install-service.ps1` take admin keys, an admins file, region, map
+  and RCON settings. Servers join the public server list by default; `-NoMaster` (or
+  `master_url = off`) keeps a server LAN-only. `install-service.ps1` replaces an existing service
+  when run again and has `-DryRun`.
+- The Docker image gets `HSMP_ADMIN_KEYS`, `HSMP_MAP`, `HSMP_REGION` and the same server-list
+  default (`HSMP_MASTER_URL=off` for LAN-only).
+
+### Licences
+
+- The release zip now includes `THIRD-PARTY-NOTICES.html` with the licences of the Rust crates,
+  Lua, the launcher fonts and the components bundled in UE4SS.
+
+## [0.1.0-beta.1] - 2026-10-03
 
 First public beta.
 
@@ -57,5 +102,6 @@ First public beta.
 - Career-save protection: the single-player career save is backed up before a session and
   restored after it.
 
-[Unreleased]: https://github.com/Cyrex0/HalfSword-MP/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Cyrex0/HalfSword-MP/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Cyrex0/HalfSword-MP/compare/v0.1.0-beta.2...HEAD
+[0.1.0-beta.2]: https://github.com/Cyrex0/HalfSword-MP/compare/v0.1.0-beta.1...v0.1.0-beta.2
+[0.1.0-beta.1]: https://github.com/Cyrex0/HalfSword-MP/releases/tag/v0.1.0-beta.1

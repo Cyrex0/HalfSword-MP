@@ -1,0 +1,25 @@
+[package]
+name = "hsmp-master-cf"
+description = "HSMP public server list as a Cloudflare Worker with a SQLite-backed Durable Object"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Not part of the repository workspace: it builds for wasm32-unknown-unknown with worker-build
+# (wrangler.toml [build]). The registry logic and its tests are in crates/hsmp-master-core.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+worker = "0.8.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hsmp-master-core = { path = "../crates/hsmp-master-core" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

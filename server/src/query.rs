@@ -66,6 +66,24 @@ pub struct QueryInfo {
     /// (`hsmp-sidecar --server-key`).
     #[serde(rename = "k", default)]
     pub server_key: String,
+    /// The first 16 hex chars of the content hash the server enforces (`content_tag`);
+    /// "" = it accepts any content, or an older server.
+    #[serde(rename = "h", default)]
+    pub content_tag: String,
+}
+
+/// The content tag of a full content hash: its first 16 hex chars, lower case
+/// ("" unless `hex` is 64 hex chars). Enough to tell builds apart in the browser; the
+/// handshake checks the full hash.
+pub fn content_tag(hex: &str) -> String {
+    let h = hex.trim();
+    if h.len() == 64 && h.bytes().all(|c| c.is_ascii_hexdigit()) { h[..16].to_ascii_lowercase() } else { String::new() }
+}
+
+/// A content tag as received (16 hex chars, lower-cased); anything else = "".
+pub fn content_tag_of_tag(tag: &str) -> String {
+    let t = tag.trim();
+    if t.len() == 16 && t.bytes().all(|c| c.is_ascii_hexdigit()) { t.to_ascii_lowercase() } else { String::new() }
 }
 
 pub fn build_request(nonce: u64) -> Vec<u8> {
@@ -113,6 +131,7 @@ pub fn build_reply(nonce: u64, info: &QueryInfo) -> Vec<u8> {
         info.mode = clip(&info.mode, caps[2]);
         info.region = clip(&info.region, caps[3]);
         info.build = clip(&info.build, 16);
+        info.content_tag = clip(&info.content_tag, 16);
         let json = serde_json::to_vec(&info).unwrap_or_default();
         if 16 + json.len() <= REQ_LEN {
             let mut v = Vec::with_capacity(16 + json.len());
@@ -215,7 +234,10 @@ mod tests {
             proto_min: 5,
             proto_max: 5,
             server_key: "ab".repeat(32),
+            content_tag: content_tag(&"Cd".repeat(32)),
         };
+        assert_eq!(info.content_tag, "cdcdcdcdcdcdcdcd");
+        assert_eq!(content_tag("abc"), "");
         let p = build_reply(77, &info);
         assert!(p.len() <= REQ_LEN);
         let (n, got) = parse_reply(&p).unwrap();
@@ -224,6 +246,7 @@ mod tests {
         assert_eq!(got.name, info.name);
         assert_eq!(got.players, 3);
         assert!(got.password);
+        assert_eq!(got.content_tag, info.content_tag, "the tag survives a full-size reply");
     }
 
     #[test]

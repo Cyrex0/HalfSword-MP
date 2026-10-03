@@ -342,10 +342,11 @@ function IPC.spawn_capture(exe, args, opts)
     if not IPC.N then return nil, "unavailable" end
     return call(IPC.N.spawn_capture, exe, args, opts)
 end
--- capture_poll(h) -> false (running) | true, exit_code, output (then released) | nil, "bad".
-function IPC.capture_poll(h)
+-- capture_poll(h, wait_ms?) -> false (running) | true, exit_code, output (then released) | nil, "bad".
+-- wait_ms > 0 blocks up to that long (native cap 5 s) for the child to exit.
+function IPC.capture_poll(h, wait_ms)
     if not IPC.N then return nil, "unavailable" end
-    return call(IPC.N.capture_poll, h)
+    return call(IPC.N.capture_poll, h, wait_ms)
 end
 function IPC.current_pid()
     if not IPC.N then return nil end

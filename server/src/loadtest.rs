@@ -21,6 +21,7 @@
 
 mod proto;
 mod query;
+mod build_id;
 
 use hsmp_net::net::{Client, ClientConfig, ClientEvent, ConnConfig};
 use proto::PeerId;
@@ -167,6 +168,9 @@ struct Bot {
 impl Bot {
     fn new(server: SocketAddr, seed: [u8; 32], nick: &str, versions: Option<(u16, u16)>) -> anyhow::Result<Arc<Bot>> {
         let mut cfg = ClientConfig::new(seed, nick);
+        // Same build as the server under test: its content check lets the bots in.
+        cfg.content_hash = build_id::content_hash();
+        cfg.build = build_id::build_tag("hsmp-loadtest");
         if let Some((lo, hi)) = versions {
             cfg.version_min = lo;
             cfg.version_max = hi;

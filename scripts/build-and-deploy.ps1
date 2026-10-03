@@ -363,12 +363,39 @@ foreach ($m in $mods) {
         $names[$s.Name] = $true
         $fileCount++
     }
+    $names["hsmp_build_id.lua"] = $true   # written below (2b)
     if (Test-Path $dstScripts) {
-        $stale = @(Get-ChildItem -File $dstScripts -Filter "*.lua" | Where-Object { -not $names.ContainsKey($_.Name) })
+        $stale =@(Get-ChildItem -File $dstScripts -Filter "*.lua" | Where-Object { -not $names.ContainsKey($_.Name) })
         if ($stale.Count) { Say "  $($m.Name): deployed files not in source (left in place): $(($stale | ForEach-Object { $_.Name }) -join ', ')" Yellow }
     }
     $deployed += $m.Name
     Say "  deployed: $($m.Name) ($($names.Count) files)" Green
+}
+
+# ----- 2b. Build identity of these mod files ----------------------------------
+# hsmp_build_id.lua in every mod (HSMPMenu compares it with `hsmp-sidecar --build-info` and
+# refuses multiplayer on a mismatch) and hsmp\build.json (the installed version, for the
+# launcher). The content hash is computed from this checkout, not taken from the binary.
+$IdExe = Join-Path $(if ($BinDir) { $BinDir } else { $ShipDir }) "hsmp-server.exe"
+if (Test-Path -LiteralPath $IdExe) {
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $idLua = (& $IdExe --mods-identity-lua $Repo 2>$null) -join "`n"
+    $luaCode = $LASTEXITCODE
+    $idJson = (& $IdExe --mods-identity $Repo 2>$null) -join ""
+    $jsonCode = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
+    if ($luaCode -ne 0 -or $jsonCode -ne 0 -or -not $idLua.Contains("content_hash")) {
+        Fail "build identity: $IdExe --mods-identity failed (exit $luaCode/$jsonCode); rebuild the binaries"
+    }
+    foreach ($n in $deployed) {
+        $sd = Join-Path $ModsDst "$n\Scripts"
+        if ($DryRun -or (Test-Path $sd)) { Write-Text (Join-Path $sd "hsmp_build_id.lua") ($idLua + "`n") }
+    }
+    $IdDir = if ($BinDir) { $BinDir } else { $ShipDir }
+    if ($DryRun -or (Test-Path $IdDir)) { Write-Text (Join-Path $IdDir "build.json") ($idJson + "`n") }
+    Say "build identity: $idJson" Green
+} else {
+    Say "build identity NOT written: $IdExe missing (multiplayer stays off until a deploy with binaries)" Yellow
 }
 
 # ----- 3. mods.txt from the release template -------------------------------

@@ -259,8 +259,11 @@ pub fn explain_io(e: &io::Error) -> String {
 }
 
 /// Compare release versions like "0.3.1" / "0.3.1-beta.2" (semver order:
-/// numeric parts compared as numbers, a pre-release sorts before its release).
+/// numeric parts compared as numbers, a pre-release sorts before its release, `+build`
+/// metadata ignored).
 pub fn cmp_version(a: &str, b: &str) -> std::cmp::Ordering {
+    let strip = |s: &str| s.trim().split('+').next().unwrap_or("").to_string();
+    let (a, b) = (&strip(a), &strip(b));
     use std::cmp::Ordering;
     fn parts(s: &str) -> Vec<&str> {
         s.split(['.', '-', '+']).collect()

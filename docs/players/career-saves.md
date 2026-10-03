@@ -64,31 +64,34 @@ session may be undone when you leave.
 HSMP keeps the newest **5** of these session backups and deletes older ones. A backup from a
 session that never finished its check is never deleted.
 
-### 3. The crash check before Play and Uninstall
+### 3. The crash check
 
 If the game or the network helper crashes during a match, the "check after" in layer 2 does not
-run. To catch that, the launcher runs the same check before every **Play** and before
-**Uninstall**. Any career file the crashed session changed is put back from that session's
+run. To catch that, the game runs the same check each time it starts (also when you start it from
+Steam), before it can save anything. The launcher runs it too, each time it opens, after every
+install or update, and before **Uninstall** (not while Half Sword is running). Any career file the crashed session changed is put back from that session's
 backup, and the Messages panel says so, for example:
 
 > career guard: restored GameProgress.sav from the MP backup ... (an earlier multiplayer session
 > ended without its save check)
 
-If you played your career *after* the crash (with the game started some other way), the check
-sees that the file is newer than the crashed session and leaves it alone.
+A career file written *after* the crashed session ended (for example by a Half Sword started without
+HSMP) is newer than that session, and the check leaves it alone.
 
-The same check also runs the next time you host or join.
+The game protects the save on its own too: the same check runs at the start of every multiplayer
+session, when you host or join, before the new session's backup is taken.
 
 #### If the crash check fails
 
-The launcher refuses **Play** and **Uninstall** with a message like "the career save check after
-an earlier multiplayer crash failed (...)". This protects your career from being changed further.
+The launcher shows a red message like "the career save check after an earlier multiplayer crash
+failed (...)" and refuses **Uninstall**, so your career is not changed further. Do not play your
+career until it is fixed.
 
 1. Close Half Sword.
 2. In the launcher, look at the **Career saves** list. Pick the newest backup that says
    "career guard: ..." or one of your own backups from before the problem.
 3. Click **Restore selected...**, then **Yes, restore**.
-4. Try **Play** again. If it is still refused, [report a bug](troubleshooting.md#reporting-a-bug)
+4. Close and reopen the launcher. If the message comes back, [report a bug](troubleshooting.md#reporting-a-bug)
    with `launcher.log`.
 
 ## Backups
@@ -152,8 +155,9 @@ If the launcher is not available:
 * **Do not copy `HSMP_*.sav` files over your career.** They hold multiplayer session data, not
   your career.
 * **Do not end `hsmp-sidecar.exe` in Task Manager during a match.** It runs the save check when
-  you leave. (If it happens anyway, the crash check before the next **Play** catches it.)
-* **Prefer starting the game with the launcher's Play.** That is what runs the crash check before
-  you play your career again.
+  you leave. (If it happens anyway, the crash check catches it the next time you start the game, open the launcher, or
+  host or join.)
+* **After a multiplayer crash, start the game with HSMP installed before you play your career.**
+  The game runs the crash check at start, before your career is saved again.
 
 See also: [Installing HSMP](install.md), [Uninstall](uninstall.md), [FAQ](faq.md).

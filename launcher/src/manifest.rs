@@ -155,6 +155,9 @@ impl Manifest {
             if !safe_url(u) {
                 return Err(format!("master url '{u}' is not a plain http(s) URL"));
             }
+            if !u.starts_with("https://") && !loopback_url(u) {
+                return Err(format!("master url '{u}' must use https (plain http only for this machine)"));
+            }
         }
         for a in &self.launch_args {
             if a.is_empty() || a.contains('"') || a.contains(char::is_whitespace) || !a.starts_with('-') {
@@ -209,6 +212,13 @@ impl Manifest {
         }
         Ok(())
     }
+}
+
+/// http(s)://localhost or 127.x (a master on this machine).
+fn loopback_url(u: &str) -> bool {
+    let rest = u.split_once("://").map(|(_, r)| r).unwrap_or(u);
+    let host = rest.split(['/', ':']).next().unwrap_or("");
+    host.eq_ignore_ascii_case("localhost") || host.starts_with("127.")
 }
 
 /// Same rule as shared/hsmp_cfg.lua `safe_url`: plain http(s)://host[:port][/path]
@@ -280,6 +290,7 @@ pub(crate) mod tests {
             ("template install", Box::new(|m| m.files[0].install = Some("HalfswordUE5/Binaries/Win64/x".into()))),
             ("no template", Box::new(|m| m.mods_template = "payload/none".into())),
             ("bad url", Box::new(|m| m.master_urls = vec!["http://x & calc".into()])),
+            ("http internet master", Box::new(|m| m.master_urls = vec!["http://master.example.net:7778".into()])),
             ("bad arg", Box::new(|m| m.launch_args = vec!["-a b".into()])),
             ("ini file", Box::new(|m| m.ini_settings[0].file = "Game".into())),
             ("ini value", Box::new(|m| m.ini_settings[0].value = "0\n[X]".into())),

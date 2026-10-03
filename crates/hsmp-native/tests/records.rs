@@ -539,6 +539,10 @@ fn records_dev_proc_conformance_and_bench() {
         h = assert(N.spawn_capture("{bat}", {{"a b", "c&d"}}, {{env = {{HSMP_T = "v1"}}}}))
         d, c, o = wait_capture(h)
         assert(d == true and c == 4 and o == '["a b"] ["c&d"] [v1]\r\n', "batch: " .. tostring(c) .. " " .. tostring(o))
+        -- capture_poll(h, wait_ms) blocks until the child exits.
+        h = assert(N.spawn_capture(H.comspec, {{"/c", "echo", "waited"}}))
+        d, c, o = N.capture_poll(h, 5000)
+        assert(d == true and c == 0 and o == "waited\r\n", "blocking capture: " .. tostring(d) .. " " .. tostring(o))
         local r, e = N.spawn("C:/definitely/not/here.exe", {{}})
         assert(r == nil and e:match("^spawn: "), tostring(e))
     "#, bat = bat_s));

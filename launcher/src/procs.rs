@@ -98,11 +98,6 @@ pub fn game_running() -> bool {
     list().iter().any(|p| GAME_EXES.iter().any(|g| g.eq_ignore_ascii_case(&p.name)))
 }
 
-/// steam.exe is running (Direct launches need it; the game talks to Steam).
-pub fn steam_running() -> bool {
-    list().iter().any(|p| p.name.eq_ignore_ascii_case("steam.exe"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

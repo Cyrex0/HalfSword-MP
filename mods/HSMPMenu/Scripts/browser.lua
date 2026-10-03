@@ -78,7 +78,7 @@ B.servers  = {}        -- last good list (rows from hsmp-query)
 B.view     = {}        -- filtered + sorted
 B.page     = 1
 B.sel      = nil       -- "host:port"
-B.f        = { search = "", hide_full = false, hide_empty = false, hide_locked = false, max_ping = 0 }
+B.f        = { search = "", hide_full = false, hide_empty = false, hide_locked = false, compat_only = false, max_ping = 0 }
 B.sort     = { key = "players", desc = true }
 B.direct   = {}        -- recent direct-connect addresses, newest first (max DIRECT_MAX)
 B.q        = {
@@ -128,9 +128,23 @@ local function flash(text, color, secs)
     Log("browser: %s", text)
 end
 
+-- true, or false + a short note ("needs v0.2.0"). With the mods' build identity
+-- (ctx.build / ctx.build_id, shared/hsmp_build.lua): protocol range and content tag;
+-- without it, the query helper's protocol number.
 local function compatible(s)
+    local Bld, mine = ctx and ctx.build, ctx and ctx.build_id and ctx.build_id()
+    if Bld and mine then return Bld.server_compat(mine, s) end
     if not B.q.my_proto or not s.proto or s.proto == 0 then return true end
-    return s.proto == B.q.my_proto
+    if s.proto == B.q.my_proto then return true end
+    return false, string.format("needs protocol v%d", s.proto)
+end
+
+-- "Server runs HalfSword-MP X, you have Y" + what to do.
+local function mismatch_text(s)
+    local mine = ctx and ctx.build_id and ctx.build_id()
+    local theirs = (s.version ~= "" and s.version) or ("protocol v" .. tostring(s.proto))
+    local have = (mine and mine.version) or ("protocol v" .. tostring(B.q.my_proto or "?"))
+    return string.format("Server runs HalfSword-MP %s, you have %s. Update via the launcher, or the server is outdated.", theirs, have)
 end
 
 local function safe_url(u)
@@ -155,6 +169,7 @@ local function save_prefs()
     f:write("hide_full=", tostring(B.f.hide_full), "\n")
     f:write("hide_empty=", tostring(B.f.hide_empty), "\n")
     f:write("hide_locked=", tostring(B.f.hide_locked), "\n")
+    f:write("compat_only=", tostring(B.f.compat_only), "\n")
     f:write("max_ping=", tostring(B.f.max_ping), "\n")
     f:write("sort_key=", B.sort.key, "\n")
     f:write("sort_desc=", tostring(B.sort.desc), "\n")
@@ -172,6 +187,7 @@ local function load_prefs()
             elseif k == "hide_full" then B.f.hide_full = (v == "true")
             elseif k == "hide_empty" then B.f.hide_empty = (v == "true")
             elseif k == "hide_locked" then B.f.hide_locked = (v == "true")
+            elseif k == "compat_only" then B.f.compat_only = (v == "true")
             elseif k == "max_ping" then
                 local n = tonumber(v) or 0
                 B.f.max_ping = PING_OK[n] and n or 0      -- old prefs may hold 250
@@ -338,6 +354,7 @@ local function parse_tool_text(raw)
                     pwd = (t[9] == "1"), proto = tonumber(t[10]) or 0,
                     version = t[11], region = t[12], ping = tonumber(t[13]) or -2,
                     source = t[14], live = (t[15] == "1"),
+                    content = t[16] or "", proto_min = tonumber(t[17]) or 0, proto_max = tonumber(t[18]) or 0,
                 })
             else
                 r.skipped = r.skipped + 1
@@ -376,6 +393,9 @@ local function parse_curl_text(raw, idx)
                 proto = tonumber(obj:match('"proto_ver"%s*:%s*(%d+)')) or 0,
                 version = obj:match('"version"%s*:%s*"([^"]*)"') or "",
                 region = obj:match('"region"%s*:%s*"([^"]*)"') or "",
+                content = (obj:match('"content_hash"%s*:%s*"(%x+)"') or ""):sub(1, 16):lower(),
+                proto_min = tonumber(obj:match('"proto_min"%s*:%s*(%d+)')) or 0,
+                proto_max = tonumber(obj:match('"proto_max"%s*:%s*(%d+)')) or 0,
                 ping = -3, source = "master", live = false,
             })
         else
@@ -493,6 +513,7 @@ local function passes(s)
     if f.hide_full and s.max > 0 and s.players >= s.max then return false end
     if f.hide_empty and s.players == 0 then return false end
     if f.hide_locked and s.pwd then return false end
+    if f.compat_only and not compatible(s) then return false end
     if f.max_ping > 0 then
         -- pending pings stay visible until measured
         if s.ping == -2 then return false end
@@ -584,8 +605,10 @@ end
 function B.join_selected()
     local s = find_server(B.sel)
     if not s then flash("Select a server first (click a row).", C.warn); return end
+    local blocked = ctx.blocked and ctx.blocked()
+    if blocked then flash(blocked, C.bad, 3600); return end
     if not compatible(s) then
-        flash(string.format("Version mismatch: server protocol v%d, yours v%d. Update HSMP.", s.proto, B.q.my_proto or 0), C.bad, 5)
+        flash(mismatch_text(s), C.bad, 6)
         return
     end
     if s.max > 0 and s.players >= s.max then
@@ -681,12 +704,12 @@ function B.build()
     local y = L.top
     local ffs = F(Kit.TS.label)
     Kit.group("filters")
-    local sw = math.floor(iw * 0.24)
+    local sw = math.floor(iw * 0.18)
     W.search_box = Kit.input("Search server / map / mode...", B.f.search, x0, y, sw, filt_h, F(Kit.TS.body),
         { fkey = "browser:search", help = "Type part of a server, map or mode name" })
     W.search_last = B.f.search
     local bx = x0 + sw + gap
-    local tw = math.floor(iw * 0.105)
+    local tw = math.floor(iw * 0.095)
     W.f_full = Kit.button("HIDE FULL", set_filter(function() B.f.hide_full = not B.f.hide_full end), bx, y, tw, filt_h,
         { fs = ffs, help = "Hide servers with no free slot" })
     bx = bx + tw + gap
@@ -695,6 +718,9 @@ function B.build()
     bx = bx + tw + gap
     W.f_locked = Kit.button("HIDE LOCKED", set_filter(function() B.f.hide_locked = not B.f.hide_locked end), bx, y, tw, filt_h,
         { fs = ffs, help = "Hide password-protected servers" })
+    bx = bx + tw + gap
+    W.f_compat = Kit.button("COMPATIBLE", set_filter(function() B.f.compat_only = not B.f.compat_only end), bx, y, tw, filt_h,
+        { fs = ffs, help = "Only servers this install can join (same version and mod files)" })
     bx = bx + tw + gap * 3
     local plw = math.floor(iw * 0.045)
     Kit.text("PING", bx, y, plw, filt_h, F(Kit.TS.small), 0, Kit.C.dim)
@@ -706,7 +732,7 @@ function B.build()
     bx = bx + 4 * pcw + 3 * gap + gap * 3
     W.f_clear = Kit.button("CLEAR", set_filter(function()
         B.f.search = ""; B.f.hide_full = false; B.f.hide_empty = false
-        B.f.hide_locked = false; B.f.max_ping = 0
+        B.f.hide_locked = false; B.f.compat_only = false; B.f.max_ping = 0
         if W.search_box then Kit.input_set(W.search_box, "") end
         W.search_last = ""
     end), bx, y, x0 + iw - bx, filt_h, { fs = ffs, help = "Reset every filter" })
@@ -850,6 +876,9 @@ function B.build()
     Log("browser build #%d: canvas %.0fx%.0f scale %.2f panel %dx%d rows=%d rh=%d widgets=%d",
         bld.serial, L.cw, L.ch, s, L.pw, L.ph, ROWS, rh, bld.n)
 
+    -- these mod files do not match the helper programs: say so for as long as the screen is open
+    local blocked = ctx.blocked and ctx.blocked()
+    if blocked then flash(blocked, C.bad, 3600) end
     B.render()
     Kit.focus_default(W.rows[1].btn)
     if not B.q.inflight and (not B.q.last_ok or os.time() - B.q.last_ok >= AUTO_REFRESH_S) then
@@ -947,8 +976,9 @@ function B.render()
     Kit.set_state(W.f_full, B.f.hide_full, false)
     Kit.set_state(W.f_empty, B.f.hide_empty, false)
     Kit.set_state(W.f_locked, B.f.hide_locked, false)
+    Kit.set_state(W.f_compat, B.f.compat_only, false)
     Kit.chip_group_set(W.f_ping, B.f.max_ping, false)
-    local any = B.f.hide_full or B.f.hide_empty or B.f.hide_locked or B.f.max_ping > 0 or trim(B.f.search) ~= ""
+    local any = B.f.hide_full or B.f.hide_empty or B.f.hide_locked or B.f.compat_only or B.f.max_ping > 0 or trim(B.f.search) ~= ""
     Kit.set_state(W.f_clear, false, not any)
 
     -- headers with sort arrow
@@ -982,7 +1012,7 @@ function B.render()
                 Kit.set_color(cells[2], Kit.C.head)
             elseif s then
                 local sel = (B.sel == key_of(s))
-                local compat = compatible(s)
+                local compat, why = compatible(s)
                 Kit.set_state(row.btn, sel, false)
                 local base = (not compat) and C.dim or (sel and Kit.C.on_text or C.text)
                 local cells = row.cells
@@ -1000,7 +1030,7 @@ function B.render()
                 local reg = (s.region ~= "" and s.region) or ((s.source == "lan") and "LAN") or "--"
                 local ver = (s.version ~= "" and ("v" .. s.version)) or ""
                 if not compat then
-                    Kit.set_text(cells[7], string.format("%s  INCOMPATIBLE p%d", reg, s.proto)); Kit.set_color(cells[7], C.bad)
+                    Kit.set_text(cells[7], reg .. "  " .. clip(why or "incompatible", 22)); Kit.set_color(cells[7], C.bad)
                 else
                     Kit.set_text(cells[7], reg .. "  " .. ver)
                     local mine = my_region ~= "" and tostring(s.region):upper() == my_region:upper()
@@ -1114,7 +1144,8 @@ end
 -- --- init ------------------------------------------------------------------------------
 
 -- ctx fields: state, Log, STATE_DIR, MASTER_URL, MASTER_URLS, QUERY_EXE, LAN, LAN_PORTS, kit,
--- map_display_name, my_region(), join(addr, map, label), exit_screen
+-- map_display_name, my_region(), join(addr, map, label), exit_screen, build (shared/hsmp_build.lua),
+-- build_id() (the mods' identity or nil), blocked() (the build-check message or nil)
 function B.init(c)
     ctx = c
     Kit = c.kit

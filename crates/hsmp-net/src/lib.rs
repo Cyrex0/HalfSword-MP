@@ -15,6 +15,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod build;
 pub mod fuzz;
 pub mod net;
 pub mod proto_v5;

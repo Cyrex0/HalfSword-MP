@@ -19,6 +19,9 @@ pub struct Advertised {
     pub password: bool,
     /// Hex X25519 public key of the server identity (v5 pinning).
     pub server_key: String,
+    /// The content hash the server enforces (64 hex), or "" when it accepts any
+    /// (`--allow-mismatched-content`).
+    pub content_hash: String,
 }
 
 static ADVERTISED: OnceLock<Advertised> = OnceLock::new();
@@ -81,6 +84,7 @@ pub fn snapshot(state: &ServerState) -> QueryInfo {
         proto_min: hsmp_net::net::VERSION_MIN as u32,
         proto_max: hsmp_net::net::VERSION_MAX as u32,
         server_key: a.server_key,
+        content_tag: query::content_tag(&a.content_hash),
     }
 }
 
@@ -114,7 +118,7 @@ mod tests {
         init(Advertised {
             name: "Test Srv".into(), mode: "Free Fight".into(),
             default_map: "Map_Arena_Pit".into(), region: "EU".into(),
-            max_players: 8, password: false, server_key: "cd".repeat(32),
+            max_players: 8, password: false, server_key: "cd".repeat(32), content_hash: "ef".repeat(32),
         });
         let sock = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
         let addr = sock.local_addr().unwrap();
@@ -137,6 +141,7 @@ mod tests {
         // Lobby arena is still "default" → advertised map.
         assert_eq!(info.map, "Map_Arena_Pit");
         assert_eq!(info.proto_ver, crate::proto::PROTOCOL_VERSION);
+        assert_eq!(info.content_tag, "efefefefefefefef");
     }
 
     #[test]

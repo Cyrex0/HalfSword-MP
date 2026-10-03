@@ -62,14 +62,22 @@ hosted or joined once, the same key is also in `<game dir>\HalfswordUE5\Binaries
    ```powershell
    cd C:\HSMP\server
    $env:HSMP_STATE_DIR = "C:\HSMP\server"
-   .\hsmp-server.exe --bind 0.0.0.0:7777 --name "My HSMP server" --bans-file .\bans.txt --admins-file .\admins.txt
+   $env:HSMP_MASTER_URL = "https://master.halfswordmp.workers.dev"   # leave out for a LAN-only server
+   .\hsmp-server.exe --bind 0.0.0.0:7777 --name "My HSMP server" --region EU --bans-file .\bans.txt --admins-file .\admins.txt
    ```
 
-6. Players open **SERVER BROWSER** in the game, type `<your public IP>:7777` into the address box
-   and press **CONNECT**. Stop the server with Ctrl+C.
+6. Players find it on the public server list in **SERVER BROWSER**, or type `<your public IP>:7777`
+   into the address box and press **CONNECT**. Stop the server with Ctrl+C.
 
-To start it at boot as a Windows service, use `scripts\install-service.ps1` and add
-`--admins-file` with NSSM afterwards (see
+The same with the helper script, which writes a `dedicated-server.conf` and registers with the
+public list unless you pass `-NoMaster`:
+
+```powershell
+.\scripts\run-dedicated-server.ps1 -BinDir C:\HSMP\server -AdminKey <Alice's key> -Region EU
+```
+
+To start it at boot as a Windows service, use `scripts\install-service.ps1`, which takes the same
+`-AdminKey`, `-AdminsFile`, `-Region`, `-Map`, `-NoMaster` and RCON parameters (see
 [Configuration](configuration.md#windows-service-install-serviceps1)).
 
 ### Step 2b: Linux
@@ -162,8 +170,10 @@ The arena, rounds and kit rules are then whatever the server was started with (`
 - Keeps a player's seat and wins for 30 seconds after a connection drop, so they can reconnect.
 - Answers server-browser queries on its game port (name, map, mode, players, ping), so players can
   check it by address and find it by LAN discovery, even without a server list.
-- Registers with a master server (server list) if you set `HSMP_MASTER_URL`
-  (see [Master server](master-server.md)).
+- Registers with a master server (server list) if you set `HSMP_MASTER_URL`, for example the
+  public list `https://master.halfswordmp.workers.dev` (see [Master server](master-server.md)).
+  `run-dedicated-server.ps1`, `install-service.ps1` and the Docker image use the public list by
+  default; `-NoMaster` (Docker: `HSMP_MASTER_URL=off`) keeps a server LAN-only.
 - Keeps a persistent IP ban list (`--bans-file`) and a persistent identity key
   (see [Configuration](configuration.md#server-identity-key)).
 - Offers optional remote administration over [RCON](rcon.md).
@@ -176,17 +186,14 @@ Players identify themselves with an Ed25519 key, which is the player key above.
 - **No NAT traversal.** The server must be reachable on its UDP port: forward the port on your
   router, or run it on a host with a public IP. If your ISP uses carrier-grade NAT, port
   forwarding cannot work; use a VPS (see [Ports and firewall](ports-and-firewall.md#cgnat)).
-- **No public server list yet.** The release points the in-game browser at a master on the
-  player's own machine (`http://127.0.0.1:7778`), which only lists games hosted on that PC. Share
-  your address directly, or run your own master and give players its URL
-  (see [Master server](master-server.md)).
 - **One rule set.** `--mode` (and `HSMP_SERVER_MODE`) changes the label in the browser and the lobby.
   Every match is played as rounds with the last fighter standing winning the round, best of N.
 - **No join password.** Anyone who can reach the port can join. To restrict a server to known
   players, allow only their IP addresses in your firewall
   (see [Ports and firewall](ports-and-firewall.md#allow-only-known-players)).
-- **No content check yet.** `--content-hash` exists, but no release computes the hash yet. Leave it
-  unset.
+- **Same build only.** The server refuses clients whose mod files or server data differ from its
+  own build (the content hash `hsmp-server --build-info` prints). Update the server with every
+  release; `--allow-mismatched-content` turns the check off for development.
 - No voice relay, no asset downloads (players install the mod themselves), no statistics or
   accounts.
 

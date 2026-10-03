@@ -214,7 +214,9 @@ else fail "hsmp-master --help failed"; fi
 # ============================================================================
 hdr "T2: Lua mods syntax-lint"
 
-if command -v luac >/dev/null 2>&1; then
+# UE4SS runs Lua 5.4 (bitwise operators, //), so an older luac on PATH would
+# reject valid mods. Only a 5.4 luac counts; G0's lua_check covers the rest.
+if command -v luac >/dev/null 2>&1 && luac -v 2>&1 | grep -q "Lua 5\.4"; then
   for mod in "$MODS_SRC"/HSMP*/Scripts/main.lua "$MODS_SRC"/dev/HSMP*/Scripts/main.lua; do
     name=$(basename "$(dirname "$(dirname "$mod")")")
     if luac -p "$mod" 2>"$SCRATCH/lua_$name.err"; then
@@ -530,6 +532,88 @@ else
 fi
 
 kill $SV3 $MP2 2>/dev/null
+wait 2>/dev/null
+
+# ============================================================================
+hdr "V1-V5: Build identity (protocol / content checks, listing fields)"
+
+V_HASH=$("$BINS/hsmp-server.exe" --build-info | grep -o '"content_hash":"[0-9a-f]*"' | cut -d'"' -f4)
+V_VER=$("$BINS/hsmp-server.exe" --build-info | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+V_OTHER=$(printf '%064d' 7)
+e2e_port VMPORT
+e2e_port VPORT
+e2e_port VPORT2
+"$BINS/hsmp-master.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$VMPORT" > "$SCRATCH/v_mp.log" 2>&1 &
+VMP=$!
+e2e_wait_bound $VMPORT $VMP
+# the default server: content check on, registered with the master
+HSMP_MASTER_URL="http://127.0.0.1:$VMPORT" "$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" \
+  --bind "127.0.0.1:$VPORT" --tick-hz 30 --name "Versioned Server" > "$SCRATCH/v_sv.log" 2>&1 &
+VSV=$!
+# a development server: --allow-mismatched-content
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$VPORT2" --tick-hz 30 \
+  --allow-mismatched-content > "$SCRATCH/v_sv2.log" 2>&1 &
+VSV2=$!
+e2e_wait_bound $VPORT $VSV && e2e_wait_bound $VPORT2 $VSV2
+DIRV_P="$SCRATCH/sideVp"; DIRV_C="$SCRATCH/sideVc"; DIRV_A="$SCRATCH/sideVa"; DIRV_OK="$SCRATCH/sideVok"
+mkdir -p "${DIRV_P:?}" "${DIRV_C:?}" "${DIRV_A:?}" "${DIRV_OK:?}"
+
+# V1: an older protocol (v5) is refused with VERSION (1) and both versions named, not a hang
+sc_launch "$DIRV_P" --parent-pid "$E2E_WINPID" --server "127.0.0.1:$VPORT" --state-dir "$DIRV_P" --nick "OldProto" \
+  --proto-min 5 --proto-max 5 > "$SCRATCH/v_scP.log" 2>&1 &
+VS1=$!
+wait_link 5 "$DIRV_P" rejected
+if link_is "$DIRV_P" rejected && [[ "$(link_get "$DIRV_P" reason_code)" == "1" ]] \
+   && link_get "$DIRV_P" reason | grep -q "Server runs HalfSword-MP $V_VER, you have $V_VER" \
+   && link_get "$DIRV_P" reason | grep -q "OUTDATED: update via the launcher"; then
+  pass "V1 protocol mismatch refused: code 1, \"$(link_get "$DIRV_P" reason)\""
+else
+  fail "V1 protocol mismatch" "$(link_show "$DIRV_P") code=$(link_get "$DIRV_P" reason_code)"
+fi
+
+# V2: other mod files are refused by default with CONTENT (2)
+sc_launch "$DIRV_C" --parent-pid "$E2E_WINPID" --server "127.0.0.1:$VPORT" --state-dir "$DIRV_C" --nick "OtherMods" \
+  --content-hash "$V_OTHER" > "$SCRATCH/v_scC.log" 2>&1 &
+VS2=$!
+wait_link 5 "$DIRV_C" rejected
+if link_is "$DIRV_C" rejected && [[ "$(link_get "$DIRV_C" reason_code)" == "2" ]] \
+   && link_get "$DIRV_C" reason | grep -q "mod files differ: repair via the launcher" \
+   && nocolor "$SCRATCH/v_sv.log" | grep -q "content check on"; then
+  pass "V2 content mismatch refused when enforced: code 2, \"$(link_get "$DIRV_C" reason)\""
+else
+  fail "V2 content mismatch" "$(link_show "$DIRV_C") code=$(link_get "$DIRV_C" reason_code)"
+fi
+
+# V3: the same build joins the enforcing server
+sc_launch "$DIRV_OK" --parent-pid "$E2E_WINPID" --server "127.0.0.1:$VPORT" --state-dir "$DIRV_OK" --nick "SameBuild" \
+  > "$SCRATCH/v_scOK.log" 2>&1 &
+VS3=$!
+wait_link 5 "$DIRV_OK" connected
+if link_is "$DIRV_OK" connected; then pass "V3 same build joins the enforcing server"
+else fail "V3 same build" "$(link_show "$DIRV_OK")"; fi
+
+# V4: the escape hatch lets other mod files in
+sc_launch "$DIRV_A" --parent-pid "$E2E_WINPID" --server "127.0.0.1:$VPORT2" --state-dir "$DIRV_A" --nick "DevMods" \
+  --content-hash "$V_OTHER" > "$SCRATCH/v_scA.log" 2>&1 &
+VS4=$!
+wait_link 5 "$DIRV_A" connected
+if link_is "$DIRV_A" connected && nocolor "$SCRATCH/v_sv2.log" | grep -q "content check OFF"; then
+  pass "V4 --allow-mismatched-content admits other mod files"
+else
+  fail "V4 escape hatch" "$(link_show "$DIRV_A")"
+fi
+
+# V5: the listing carries version, protocol range and the enforced content hash; hsmp-query passes them on
+V_LIST=$(curl -s "http://127.0.0.1:$VMPORT/v1/servers")
+V_Q=$("$BINS/hsmp-query.exe" --master "http://127.0.0.1:$VMPORT" --timeout-ms 800 2>/dev/null | grep "^S" | head -1)
+if echo "$V_LIST" | grep -q "\"content_hash\":\"$V_HASH\"" && echo "$V_LIST" | grep -q '"proto_min":6' \
+   && echo "$V_LIST" | grep -q '"proto_max":6' && echo "$V_LIST" | grep -q "\"version\":\"$V_VER\"" \
+   && [[ "$(echo "$V_Q" | cut -f16-18)" == "${V_HASH:0:16}"$'\t'"6"$'\t'"6" ]]; then
+  pass "V5 listing: version $V_VER, proto 6..6, content_hash ${V_HASH:0:16}..."
+else
+  fail "V5 listing fields" "list: $V_LIST | query: $V_Q"
+fi
+kill $VS1 $VS2 $VS3 $VS4 $VSV $VSV2 $VMP 2>/dev/null
 wait 2>/dev/null
 
 # ============================================================================
@@ -1376,6 +1460,11 @@ source "$REPO/scripts/e2e-conn.sh"
 # Shared-memory section: the shared-memory contracts checked directly (ipc-put / view), with
 # `hsmp-tools ipc-game` as the game (docs/development/ipc-shared-memory.md).
 source "$REPO/scripts/e2e-shm.sh"
+
+# ============================================================================
+# Cloudflare Worker server list (master-cf/) under wrangler dev, with the real server and
+# hsmp-query; skipped without Node.js 22+, worker-build or the wasm32 target.
+source "$REPO/scripts/e2e-master-cf.sh"
 
 # ============================================================================
 hdr "T15: Deploy script output artifacts in place"

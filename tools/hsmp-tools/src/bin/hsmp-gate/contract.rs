@@ -85,6 +85,7 @@ pub const CONTRACT: &[Entry] = &[
     e("willie_census", L, &["visible", "expected", "at"], &["extras", "missing", "round", "detail"]),
     e("save_redirected", L, &["fn", "slot", "to_slot", "op", "ok"], &["how"]),
     e("x_save_guard", L, &["active"], &["why", "session", "ok"]),
+    e("x_career_recover", L, &["code", "ms"], &[]),   // HSMPMenu boot-time career-guard recovery
     e("native_travel_rewritten", L, &["from", "to", "soft"], &["phase", "n"]),
     // shared/hsmp_rvp.lua let a travel go while the Runtime Vertex Paint queue was still busy
     // (MAX_HOLD_S elapsed): that travel carries the RVP crash risk (docs/development/crash-rr.md).

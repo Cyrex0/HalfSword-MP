@@ -10,7 +10,7 @@
 //! | `proc_exit_code(pid)` | `code` \| `nil, "running"` \| `nil, "not_ours"` |
 //! | `proc_kill(pid)` | `true` \| `nil, "not_ours"` \| `nil, "gone"` |
 //! | `spawn_capture(exe, args, opts?)` | `h` (= the child's pid) \| `nil, err` |
-//! | `capture_poll(h)` | `false` (running) \| `true, exit_code, output` (then released) \| `nil, "bad"` |
+//! | `capture_poll(h, wait_ms?)` | `false` (running) \| `true, exit_code, output` (then released) \| `nil, "bad"` |
 //! | `current_pid()` | the game's pid |
 //!
 //! `args` is a Lua array of strings (numbers are converted), quoted per the MSVCRT /
@@ -33,6 +33,10 @@
 //! two polls simply waits. Output is capped at [`CAPTURE_MAX`] bytes (the rest is drained
 //! and dropped). Handles are closed when a capture is reported done, and otherwise live in
 //! the process-global state until the game exits (a few processes per session).
+//!
+//! `capture_poll(h, wait_ms)` first waits up to `wait_ms` (at most [`WAIT_MAX_MS`]) for the
+//! child to exit, draining the pipe meanwhile. The boot-time career recovery uses it, since
+//! it has to finish before the game can write a save.
 
 use std::collections::HashMap;
 use std::ffi::c_int;
@@ -42,6 +46,8 @@ use crate::native::Native;
 
 /// Largest captured output kept.
 pub const CAPTURE_MAX: usize = 1 << 20;
+/// Longest blocking `capture_poll` wait.
+pub const WAIT_MAX_MS: u64 = 5000;
 
 /// One process we spawned.
 pub struct ProcEnt {
@@ -303,6 +309,16 @@ impl Native {
             let Some(pid) = arg_int(L, 1).and_then(|v| u32::try_from(v).ok()) else { return nil_err(L, "bad") };
             let ps = &mut self.procs;
             let Some(p) = ps.procs.get_mut(&pid).filter(|p| p.pipe != 0) else { return nil_err(L, "bad") };
+            let wait_ms = arg_int(L, 2).unwrap_or(0).clamp(0, WAIT_MAX_MS as i64) as u64;
+            if wait_ms > 0 {
+                let end = std::time::Instant::now() + std::time::Duration::from_millis(wait_ms);
+                while std::time::Instant::now() < end {
+                    sys::drain(p, &mut ps.tmp);
+                    if sys::wait_exit(p.handle, 10) {
+                        break;
+                    }
+                }
+            }
             let code = sys::exit_code(p.handle);
             sys::drain(p, &mut ps.tmp);
             let Some(code) = code else {
@@ -587,6 +603,12 @@ mod sys {
         }
     }
 
+    /// Wait up to `ms` for the process to exit.
+    pub fn wait_exit(h: isize, ms: u32) -> bool {
+        // SAFETY: our own process handle.
+        unsafe { WaitForSingleObject(h as HANDLE, ms) == WAIT_OBJECT_0 }
+    }
+
     pub fn kill(p: &ProcEnt) -> bool {
         // SAFETY: our own handles.
         unsafe {
@@ -657,6 +679,9 @@ mod sys {
     }
     pub fn exit_code(_h: isize) -> Option<u32> {
         Some(0)
+    }
+    pub fn wait_exit(_h: isize, _ms: u32) -> bool {
+        true
     }
     pub fn kill(_p: &ProcEnt) -> bool {
         false

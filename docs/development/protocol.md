@@ -143,7 +143,7 @@ client                                          server
 | 3 | 2 | `version_max` |
 | 5 | 8 | `caps`: the client's capability bits (§7.2) |
 | 13 | 32 | `c_eph`: the client ephemeral X25519 public key, fresh per handshake |
-| 45 | 32 | `content_hash` (sidecar `--content-hash`; zero when not set) |
+| 45 | 32 | `content_hash` (the build's, embedded by `server/build.rs`; sidecar `--content-hash` overrides) |
 | 77 | 1 | `build_len`, at most 32 |
 | 78 | n | `build`: UTF-8, informational |
 | 78+n | … | zero padding up to **at least 1200 bytes in total** |
@@ -178,7 +178,7 @@ The cookie is valid when the MAC verifies under the current or the previous `coo
 ### 3.3 `S2CPreReject` (type `0xA4`)
 
 Sent instead of a Challenge when there is no common version, or when `content_hash` differs and
-the server enforces one (`hsmp-server --content-hash`).
+the server enforces one (on by default: its own build's hash; `--allow-mismatched-content` turns it off). The text names both releases: "Server runs HalfSword-MP X, you have Y" plus what to do.
 
 | Offset | Size | Field |
 |---|---|---|

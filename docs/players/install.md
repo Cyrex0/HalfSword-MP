@@ -1,7 +1,7 @@
 # Installing HSMP
 
-HalfSword-MP (HSMP) is an unofficial multiplayer mod for Half Sword. This page shows you how to install it,
-start it, and update it.
+HalfSword-MP (HSMP) is an unofficial multiplayer mod for Half Sword. Install it with the launcher, then
+start Half Sword from Steam as usual. This page also shows how to update it.
 
 > **Unofficial mod. Use at your own risk.**
 >
@@ -78,25 +78,30 @@ It takes about a minute.
 7. **Section "2. Multiplayer mod".** Leave **"Back up my career saves first (recommended)"**
    ticked and click **Install**. The Messages panel at the bottom shows what happens. At the end
    it says "HSMP ... is installed".
-8. **Section "3. Play".** Click **Play**.
+8. **Start Half Sword from Steam as usual.** The launcher does not start the game.
 
 You never need to edit a file by hand.
 
-### How Play starts the game
+### What happens when the launcher opens
 
-* **Play**, when Steam is running: the launcher starts the game itself, from the game folder,
-  with the HSMP launch option.
-* **Play**, when Steam is not running: the launcher starts the game through Steam
-  (`steam -applaunch`). Steam may ask once whether to allow the extra launch option. Allow it:
-  it is a crash workaround (see the table below).
-* **Launch through Steam** always uses the Steam route.
+Each time the launcher opens, and after every install or update, it:
 
-The Steam route always starts *Steam's own* copy of Half Sword. If you picked a different copy
-with **Browse...**, start Steam first and use **Play**. The launcher refuses to start the wrong
-copy.
+* finishes the career save check of any multiplayer session that crashed (see
+  [Career saves](career-saves.md#3-the-crash-check));
+* puts the `Engine.ini` crash-workaround line back if the game removed it.
 
-Before every Play, the launcher also finishes the career save check of any multiplayer session
-that crashed. See [Career saves](career-saves.md#3-the-crash-check-before-play-and-uninstall).
+Both are skipped while Half Sword is running. The game also protects your career save itself:
+HSMP backs it up and checks it at the start of every multiplayer session.
+
+### Optional: the Steam launch option
+
+The `Engine.ini` line is enough on its own, but the game sometimes rewrites that file while it
+runs. For the same workaround on every start, add this in Steam > Half Sword > Properties >
+General > **Launch Options**:
+
+```text
+-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0
+```
 
 ## First launch
 
@@ -123,8 +128,7 @@ Every change is recorded before it is made, and **Uninstall** reverses all of it
 | HSMP programs | `Win64\hsmp\` (`hsmp-sidecar.exe`, `hsmp-server.exe`, `hsmp-query.exe`, `hsmp-master.exe`) | networking, the server browser, and hosting from the menu |
 | `hsmp.cfg` | `Win64\hsmp.cfg` | tells the mods where the programs are and which server list to use |
 | `hsmp_install.json` | `Win64\hsmp_install.json` | an install id, so the launcher finds its records again if you move the game |
-| One line in `Engine.ini` | `%LOCALAPPDATA%\HalfSwordUE5\Saved\Config\Windows\Engine.ini`, section `[SystemSettings]`: `r.HairStrands.Streaming=0` | works around an engine crash in hair streaming while an arena loads ([details](../development/halfsword/io-dispatcher-crash.md)). The game sometimes rewrites this file, so the launcher puts the line back before every launch |
-| Launch option | `-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0` | the same crash workaround, passed on every launch from the launcher |
+| One line in `Engine.ini` | `%LOCALAPPDATA%\HalfSwordUE5\Saved\Config\Windows\Engine.ini`, section `[SystemSettings]`: `r.HairStrands.Streaming=0` | works around an engine crash in hair streaming while an arena loads ([details](../development/halfsword/io-dispatcher-crash.md)). The game sometimes rewrites this file, so the launcher puts the line back each time it opens |
 
 While you play, HSMP also creates `Win64\hsmp_state\`. It holds your HSMP settings (`.settings.json`),
 your character stats, a copy of your player key (`.player_key`) and HSMP's logs. Uninstall moves it out of the game folder instead of deleting it.
@@ -133,8 +137,9 @@ Outside the game folder, the launcher keeps:
 
 | Folder | What is in it |
 |---|---|
-| `%LOCALAPPDATA%\HSMP\launcher\` | its install records, backed-up original files, `settings.json`, and `launcher.log` |
+| `%LOCALAPPDATA%\HSMP\launcher\` | its install records, backed-up original files, `settings.json`, `launcher.log`, and the last update check (`update_check.json`) |
 | `%LOCALAPPDATA%\HSMP\bin\hsmp-launcher.exe` | a verified copy of the launcher, for updates |
+| `%LOCALAPPDATA%\HSMP\downloads\` | the newest downloaded release zip |
 | `%LOCALAPPDATA%\HSMP\save_backups\` | your career save backups |
 | `%LOCALAPPDATA%\HSMP\crash_reports\` | crash reports you chose to save |
 
@@ -151,7 +156,7 @@ The launcher **never**:
 * edits your career save (it only copies it);
 * changes game files outside `HalfswordUE5\Binaries\Win64` (apart from the one `Engine.ini` line);
 * kills a process (if the game is running, it asks you to close it);
-* sends anything over the internet;
+* sends anything about you over the internet (it only asks GitHub for the list of releases and downloads the one you choose);
 * adds a Windows Firewall rule. If you host games, see
   [Hosting from the menu](playing.md#hosting-from-the-menu).
 
@@ -167,7 +172,43 @@ The launcher **never**:
 
 ## Updating
 
-There is no automatic update yet. To update:
+**Coming from 0.1.0-beta.1?** That launcher cannot update itself. Download the new zip once,
+extract it, run its `hsmp-launcher.exe` and click **Update 0.1.0-beta.1 -> <new>**. From then on
+the launcher updates itself as described below.
+
+The launcher checks for updates each time it opens, and when you click **Check for updates**.
+The check asks GitHub for the [HalfSword-MP releases](https://github.com/Cyrex0/HalfSword-MP/releases);
+nothing else is sent. When a newer release exists, the **Updates** section says
+**Update available: <old> -> <new>** and shows the release notes.
+
+1. Close Half Sword. The update is refused while the game, `hsmp-sidecar.exe` or
+   `hsmp-server.exe` from this game folder runs.
+2. Click **Update to <new>**. A progress bar shows the download. A broken-off download is resumed
+   (also on the next try).
+3. If the update brought a new launcher, click **Restart the launcher**.
+
+Before anything is installed, the launcher checks, in this order:
+
+* the zip against the SHA-256 published with the release (a mismatch deletes the download);
+* the release signature against the keys built into the launcher you already have, so a zip
+  signed by somebody else is refused;
+* that the release is not **older** than the installed HSMP;
+* that the release supports your Half Sword build.
+
+Then it finishes the career save check of any multiplayer session that crashed, and installs.
+
+* **Stable releases only**: by default the launcher also offers pre-releases (betas). Tick this
+  to get stable releases only.
+* **Advanced > Allow installing an older release (downgrade)**: to go back to an older release
+  on purpose.
+* GitHub answers at most 60 update checks per hour from one network. When that is used up, the
+  launcher says when it resets. Nothing else breaks.
+* Downloads are kept in `%LOCALAPPDATA%\HSMP\downloads\` (only the newest one). The launcher
+  copy in `%LOCALAPPDATA%\HSMP\bin\` uses it when it starts.
+
+### Updating by hand
+
+If the update check cannot reach GitHub:
 
 1. Download the new zip, check its SHA-256 (see [Install](#install)), and extract it.
 2. Close Half Sword.
@@ -177,11 +218,11 @@ There is no automatic update yet. To update:
 5. Wait for the game-version line. The game build is checked against the *new* release.
 6. Click **Update <old> -> <new>**.
 
-This way the new release is checked with the keys of a launcher you already trust, so a zip
-signed by somebody else is refused. Starting the new zip's own `hsmp-launcher.exe` also works,
-but then you rely on the release page's checksum again, as on a first install.
+This way the new release is checked with the keys of a launcher you already trust. Starting the
+new zip's own `hsmp-launcher.exe` also works, but then you rely on the release page's checksum
+again, as on a first install.
 
-What Update does:
+### What an update does
 
 * It replaces only the files that changed, and removes files the new version no longer ships.
 * Your original, pre-HSMP files stay backed up for uninstall.
@@ -189,8 +230,8 @@ What Update does:
   kept in `%LOCALAPPDATA%\HSMP\changed_by_you\<date_time>\` before it is replaced.
 * If you changed `master_url` in `hsmp.cfg` by hand, your value is kept.
 * If an update fails part-way, everything rolls back to the previous version.
-* It refuses a release that is **older** than the installed one, unless you tick
-  **Yes, downgrade to it**.
+* It refuses a release that is **older** than the installed one, unless you allow it (by hand:
+  tick **Yes, downgrade to it**; from the update check: **Advanced**).
 * It waits while Steam is still downloading or updating Half Sword.
 
 ## Repair
@@ -233,7 +274,8 @@ status        [--game DIR] [--package DIR|ZIP]   game, package, build check, ins
 verify        [--package DIR|ZIP]                signature + SHA-256 of every file
 install       [--game DIR] [--package DIR|ZIP] [--allow-unsupported] [--no-save-backup] [--allow-downgrade]
 uninstall     [--game DIR] [--forget-missing]
-launch        [--game DIR] [--direct | --steam]  default: direct if Steam runs, else through Steam
+check-update  [--stable-only]                    is a newer release published?
+update        [--game DIR] [--stable-only] [--allow-downgrade]   download, verify and install it
 backup-saves | list-backups | restore-saves <id> | find-game
 ```
 

@@ -222,26 +222,6 @@ pub fn discover() -> Vec<FoundGame> {
     found
 }
 
-/// steam.exe: HKCU SteamExe, else <root>/steam.exe of the first registry root.
-#[cfg(windows)]
-pub fn steam_exe() -> Option<PathBuf> {
-    use winreg::enums::HKEY_CURRENT_USER;
-    use winreg::RegKey;
-    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    if let Ok(s) = hkcu.open_subkey("Software\\Valve\\Steam").and_then(|k| k.get_value::<String, _>("SteamExe")) {
-        let p = PathBuf::from(s.replace('/', "\\"));
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    registry_steam_roots().into_iter().map(|r| r.join("steam.exe")).find(|p| p.is_file())
-}
-
-#[cfg(not(windows))]
-pub fn steam_exe() -> Option<PathBuf> {
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

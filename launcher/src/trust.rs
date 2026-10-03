@@ -80,6 +80,11 @@ pub fn install_launcher_copy(hsmp_home: &Path, manifest: &Manifest, files: &File
     Ok(Some(dst))
 }
 
+/// Remove the copy a self-update renamed away (it was still running then).
+pub fn cleanup_old_copy(hsmp_home: &Path) {
+    let _ = std::fs::remove_file(installed_launcher_path(hsmp_home).with_file_name("hsmp-launcher.old.exe"));
+}
+
 /// SHA-256 of the running launcher (shown so it can be compared with the
 /// hash published on the release page).
 pub fn self_sha256() -> Option<String> {

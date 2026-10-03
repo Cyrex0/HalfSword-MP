@@ -138,7 +138,7 @@ if mode ~= "case" then
     for n = 1, 5 do T.isolated(T.script, "case", { kind = "nav", n = n }) end
     for n = 1, 2 do T.isolated(T.script, "case", { kind = "settings", n = n }) end
     for n = 1, 12 do T.isolated(T.script, "case", { kind = "lobby", n = n }) end
-    for n = 1, 2 do T.isolated(T.script, "case", { kind = "proc", n = n }) end
+    for n = 1, 3 do T.isolated(T.script, "case", { kind = "proc", n = n }) end
     T.isolated(T.script, "case", { kind = "perf" })
     return
 end
@@ -384,6 +384,9 @@ end
 -- scripts_dir: load HSMPMenu from a copy (isolated: no shared/ dir next to it).
 -- boot_extra: mock knobs (gvc_broken = the real game's C++-only GameViewportClient path).
 local boot_extra = {}
+-- The mods' build identity in every boot (shared/hsmp_build.lua; deploy writes it).
+local MENU_BUILD_ID = { version = "0.0.0-test", protocol = 6, proto_min = 6, proto_max = 6, ipc_abi_major = 2,
+                        ipc_abi_minor = 0, ipc_layout = "00000000000000aa", content_hash = string.rep("ab", 32) }
 -- The menu starts its binaries through the native module (HSMPNative = the
 -- per-state mock; lib/hsmp_native_records.lua). Every spawn / capture / kill is also
 -- recorded in M.execs as one readable line, so the checks see processes in order:
@@ -448,6 +451,9 @@ local function boot(vw, vh, scale, env, pre_lua, extra_path, scripts_dir)
     local ep = extra_path and (extra_path .. "/?.lua;") or ""
     package.path = ep .. dir .. "/?.lua;" .. LOADOUT .. "/?.lua;" .. package.path
     if pre_lua then assert(load(pre_lua, "=pre_lua"))() end
+    -- deploy writes hsmp_build_id.lua next to main.lua; the repo has none (boot_extra.build_id
+    -- = false leaves it out, a table replaces it)
+    package.loaded.hsmp_build_id = (boot_extra.build_id ~= false) and (boot_extra.build_id or MENU_BUILD_ID) or nil
     local f, err = load(T.read(dir .. "/main.lua"), "@" .. dir .. "/main.lua")
     if not f then error(err) end
     f()
@@ -2977,6 +2983,56 @@ lobby_t[12] = function(tag)
 end
 
 local proc = {}
+-- Build check: mods vs `hsmp-sidecar --build-info` at startup; a mismatch refuses HOST
+-- with the launcher hint, a match lets it through.
+proc[3] = function(tag)
+    local function info(over)
+        local t = { version = "0.0.0-test", content = string.rep("ab", 32) }
+        for k2, v in pairs(over or {}) do t[k2] = v end
+        return string.format('{"product":"HalfSword-MP","version":"%s","protocol":6,"proto_min":6,"proto_max":6,"ipc_abi_major":2,"ipc_abi_minor":0,"ipc_layout":"00000000000000aa","content_hash":"%s"}\n', t.version, t.content)
+    end
+    local function answer(out)
+        NM()._proc.responder = function(exe, args)
+            if contains(tostring(exe), "hsmp-sidecar") and args[1] == "--build-info" then return 0, out end
+        end
+    end
+    local function booted_with(out)
+        boot(1920, 1080, 1.0)
+        answer(out)
+        M.run(1200)
+    end
+    local MSG = "Mod files are out of date, run the launcher to update"
+    -- an older sidecar next to newer mods
+    booted_with(info({ version = "0.0.0-old" }))
+    check(T.any(M.execs, function(e) return contains(tostring(e), 'capture "') and contains(tostring(e), "--build-info") end),
+        tag .. ": the sidecar's identity is asked once at startup")
+    check(contains(logtext(), "build check FAILED: " .. MSG) and contains(logtext(), "version mods=0.0.0-test sidecar=0.0.0-old"),
+        tag .. ": the mismatch is logged with the field")
+    M.execs = {}
+    host_lobby()
+    check(#spawned("hsmp-server.exe") == 0 and #spawned("hsmp-sidecar.exe") == 0, tag .. ": HOST starts nothing")
+    local L = kit().cur and kit().cur.L
+    check(L and contains(L.msg.last, MSG), tag .. ": HOST opens the browser with the launcher hint (" .. tostring(L and L.msg.last) .. ")")
+    check(contains(logtext(), "HOST GAME refused"), tag .. ": the refusal is logged")
+    -- other mod files, same version
+    booted_with(info({ content = string.rep("cd", 32) }))
+    check(contains(logtext(), "build check FAILED") and contains(logtext(), "content mods=abababababababab"), tag .. ": a content mismatch blocks too")
+    -- matching identity: HOST runs
+    booted_with(info())
+    check(contains(logtext(), "build check: mods and sidecar are HalfSword-MP 0.0.0-test"), tag .. ": a match is logged")
+    host_lobby()
+    check(#spawned("hsmp-server.exe") == 1 and #spawned("hsmp-sidecar.exe") == 1, tag .. ": a match lets HOST start server and sidecar")
+    -- no identity file deployed: refused with the repair hint
+    boot_extra.build_id = false
+    boot(1920, 1080, 1.0)
+    boot_extra.build_id = nil
+    M.run(1200)
+    local n_sc = #spawned("hsmp-sidecar.exe")
+    host_lobby()
+    local L2 = kit().cur and kit().cur.L
+    check(#spawned("hsmp-sidecar.exe") == n_sc and L2 and contains(L2.msg.last, "Mod files are incomplete, run the launcher to repair"),
+        tag .. ": missing hsmp_build_id.lua -> repair hint (" .. tostring(L2 and L2.msg.last) .. ")")
+end
 -- --parent-pid always (the game pid from the native module); the listen host's owner key + env
 proc[1] = function(tag)
     boot(1920, 1080, 1.0)

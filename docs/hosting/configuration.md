@@ -26,7 +26,8 @@ prints the same list as the table below.
 | `--rcon-allow-remote` | off | `HSMP_RCON_ALLOW_REMOTE` | Accept a non-loopback `--rcon-bind`. Requires a password of at least 16 characters. Needed in Docker (see [RCON](rcon.md#docker)); otherwise use an SSH tunnel. |
 | `--client-budget-kbps <n>` | `128` | | Downstream budget per player for replicated streams, in KB/s. Streams are thinned by distance to fit. 128 KB/s fits 8 players; raise it only on a well-connected host with more players. |
 | `--tick-hz <n>` | `30` | | Server tick rate. **Leave it at 30.** Many game timers are counted in ticks and assume 30 Hz, so another value changes timeouts and countdowns, and `0` breaks the server. |
-| `--content-hash <64 hex>` | off | | Reserved: rejects clients whose content differs. Nothing computes the hash yet; leave it unset. |
+| `--content-hash <64 hex>` | built in | | The content hash to enforce instead of the one this build embeds (`hsmp-server --build-info` prints it). Clients with other mod files or server data are refused with "Server runs HalfSword-MP X, you have Y". |
+| `--allow-mismatched-content` | off | `HSMP_ALLOW_MISMATCHED_CONTENT` | Development only: no content check. The protocol version is still checked. |
 | `--debug-verbs` | off | | Enables the RCON test verb `DEBUG KILL <seat>`. **Never on a public server.** |
 | `--events <path>` | off | | Appends structured JSONL match events to a file (used by the test tools). |
 | `--pid-file <path>` | off | | Writes a small JSON file with the process id at start and removes it on a clean exit. |
@@ -42,7 +43,7 @@ flag with any other value wins. `HSMP_RCON_PASSWORD` is used only when `--rcon-p
 | Variable | Default | What it does |
 |---|---|---|
 | `HSMP_STATE_DIR` | unset | Folder for the identity key (`server_identity.key`). Set it on every server you run as a service. The Docker image sets `/hsmp/data`. |
-| `HSMP_MASTER_URL` | unset | Register with this master server, for example `http://203.0.113.5:7778`. Unset means the server is not listed anywhere. See [Master server](master-server.md). |
+| `HSMP_MASTER_URL` | unset | Register with this master server, for example the public list `https://master.halfswordmp.workers.dev` or `http://203.0.113.5:7778`. Unset means the server is not listed anywhere. The helper scripts and the Docker image set the public list by default (opt out with `-NoMaster` or `HSMP_MASTER_URL=off`). See [Master server](master-server.md). |
 | `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSMP_LOBBY_MAP`, `HSMP_REGION` | unset | Fallbacks for `--name`, `--mode`, `--map`, `--region` (see above). |
 | `HSMP_RCON_PASSWORD` | unset | RCON password (fallback for `--rcon-password`). |
 | `HSMP_RCON_ALLOW_REMOTE` | unset | `1`, `true`, `yes` or `on` act like `--rcon-allow-remote`; `0`, `false`, `no` or `off` leave it off. Leave it unset unless you need it. |
@@ -179,13 +180,21 @@ The master keeps everything in memory and has no other settings. `RUST_LOG` defa
 ### dedicated-server.conf (`run-dedicated-server.ps1`)
 
 `scripts\run-dedicated-server.ps1` starts `hsmp-server.exe` (and optionally `hsmp-master.exe`) from
-a small `key = value` file.
+a small `key = value` file. Parameters given on the command line override the file.
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `-Config <path>` | `dedicated-server.conf` in the repository root, or in `-BinDir` when given | Config file. Written with defaults on first run. |
 | `-BinDir <folder>` | `$env:CARGO_TARGET_DIR\release`, else `<repo>\target\release` | Folder with `hsmp-server.exe` (and `hsmp-master.exe`), for example the `hsmp\` folder of a release. |
-| `-WithMaster` | off | Also start `hsmp-master.exe` on `master_bind` and register the server with it. |
+| `-AdminKey <key>` | none | Admin player key (`--admin-key`). Repeatable: `-AdminKey k1,k2`. Added to `admin_keys`. |
+| `-AdminsFile <path>` | config `admins_file` | `--admins-file` |
+| `-MasterUrl <url>` | config `master_url` | Server list to register with; `off` = not listed. |
+| `-NoMaster` | off | LAN-only: register with no server list (same as `master_url = off`). |
+| `-Region <tag>` | config `region` | `--region` |
+| `-Map <arena>` | config `map` | `--map` |
+| `-RconBind <ip:port>` | config `rcon_bind` | `--rcon-bind` |
+| `-RconPassword <text>` | config `rcon_password` | Turns RCON on. Passed to the server as `HSMP_RCON_PASSWORD`, not on its command line. |
+| `-WithMaster` | off | Also start `hsmp-master.exe` on `master_bind` and register the server with it instead. |
 | `-DebugLog` | off | `RUST_LOG=debug` for the server and master. |
 
 Config keys and their defaults:
@@ -197,16 +206,28 @@ Config keys and their defaults:
 | `max_peers` | `8` | `--max-peers` |
 | `name` | `HSMP Dedicated` | `--name` (write it without quotes: the value is everything after `=`, trimmed) |
 | `mode` | `duel` | `--mode` |
-| `master_url` | empty | `HSMP_MASTER_URL` (ignored with `-WithMaster`, which uses the local master) |
+| `map` | empty | `--map` (when set) |
+| `region` | empty | `--region` (when set) |
+| `master_url` | `https://master.halfswordmp.workers.dev` | `HSMP_MASTER_URL`. `off` (or empty) = LAN-only. Ignored with `-WithMaster`, which uses the local master. |
 | `master_bind` | `0.0.0.0:7778` | `hsmp-master --bind` (only with `-WithMaster`) |
 | `bans_file` | `bans.txt` | `--bans-file` (a relative path is next to the config file) |
+| `admins_file` | `admins.txt` | `--admins-file` (a relative path is next to the config file; a missing file is an empty list) |
+| `admin_keys` | empty | `--admin-key` per key, comma-separated |
+| `rcon_bind` | `127.0.0.1:2345` | `--rcon-bind`, only when a password is set |
+| `rcon_password` | empty | `HSMP_RCON_PASSWORD`; RCON stays off without it (or without `$env:HSMP_RCON_PASSWORD`) |
 
-Lines starting with `#` are comments. The script knows only these keys: it does not pass
-`--admins-file`, `--admin-key`, `--map`, `--region` or any RCON flag. For those, run
-`hsmp-server.exe` directly (see [Running a dedicated server](dedicated-server.md#step-2a-windows)).
-The script also does not set
-`HSMP_STATE_DIR`, so the identity key goes to
-`%LOCALAPPDATA%\HSMP\`. A master started with `-WithMaster` lists the server as `127.0.0.1` (see
+Lines starting with `#` are comments. A config written by an older version has an empty
+`master_url`, which still means LAN-only: set it to the public URL to be listed.
+
+```powershell
+# Public server in Europe, you as admin, RCON on localhost
+.\scripts\run-dedicated-server.ps1 -BinDir C:\HSMP\server -AdminKey <your player key> -Region EU -RconPassword "<16+ characters>"
+# LAN-only
+.\scripts\run-dedicated-server.ps1 -BinDir C:\HSMP\server -NoMaster
+```
+
+The script does not set `HSMP_STATE_DIR`, so the identity key goes to `%LOCALAPPDATA%\HSMP\`
+unless you set it first. A master started with `-WithMaster` lists the server as `127.0.0.1` (see
 [Master server](master-server.md#a-master-on-the-same-machine)), so it is only useful on that machine
 or for testing.
 
@@ -215,19 +236,30 @@ or for testing.
 
 `scripts\install-service.ps1` installs `hsmp-server.exe` as a Windows service with
 [NSSM](https://nssm.cc). Run it in an **administrator** PowerShell. NSSM must be on `PATH`; if it is
-not and Chocolatey is installed, the script installs NSSM with `choco install nssm`.
+not and Chocolatey is installed, the script installs NSSM with `choco install nssm`. Running it again
+replaces the service with the new settings.
 
 | Parameter | Default | Meaning |
 |---|---|---|
 | `-BinDir <folder>` | `$env:CARGO_TARGET_DIR\release`, else `<repo>\target\release` | Folder with `hsmp-server.exe`. |
-| `-StateDir <folder>` | `%ProgramData%\HSMP\server` | Identity key, `bans.txt` and `logs\`. Set as `HSMP_STATE_DIR`. |
+| `-StateDir <folder>` | `%ProgramData%\HSMP\server` | Identity key, `bans.txt`, `admins.txt` and `logs\`. Set as `HSMP_STATE_DIR`. |
 | `-Bind <ip:port>` | `0.0.0.0:7777` | `--bind` |
 | `-Name <text>` | `HSMP Dedicated` | `--name` |
+| `-Mode <mode>` | `duel` | `--mode` |
+| `-Map <arena>` | none | `--map` |
+| `-Region <tag>` | none | `--region` |
+| `-AdminKey <key>` | none | `--admin-key`. Repeatable: `-AdminKey k1,k2`. |
+| `-AdminsFile <path>` | `<StateDir>\admins.txt` | `--admins-file` |
+| `-MasterUrl <url>` | `https://master.halfswordmp.workers.dev` | `HSMP_MASTER_URL`; `off` = not listed. |
+| `-NoMaster` | off | LAN-only. |
+| `-RconBind <ip:port>` | `127.0.0.1:2345` | `--rcon-bind`, only with `-RconPassword` |
+| `-RconPassword <text>` | none | Turns RCON on; stored in the service environment as `HSMP_RCON_PASSWORD`. |
 | `-ServiceName <name>` | `HsmpDedicatedServer` | Windows service name. |
+| `-DryRun` | | Print the command line and environment; install nothing (no administrator needed). |
 | `-Uninstall` | | Stop and remove the service. The state folder is kept. |
 
 ```powershell
-.\scripts\install-service.ps1 -BinDir C:\HSMP\server
+.\scripts\install-service.ps1 -BinDir C:\HSMP\server -AdminKey <your player key> -Region EU
 nssm status HsmpDedicatedServer
 nssm restart HsmpDedicatedServer
 .\scripts\install-service.ps1 -Uninstall
@@ -237,14 +269,16 @@ The service runs as LocalSystem, starts at boot, uses `--max-peers 8` and
 `--bans-file <StateDir>\bans.txt`, and writes `logs\hsmp-server.stdout.log` and
 `hsmp-server.stderr.log` under the state folder, rotated at 10 MB. Rotated files are kept until you
 delete them. The script does **not** add a firewall rule (see [Ports and firewall](ports-and-firewall.md#windows-firewall))
-and does not turn on RCON or name any admin.
+and turns on RCON only with `-RconPassword`. The admins file is always passed, so admins can also be
+added later by editing `<StateDir>\admins.txt` (re-read when it changes) or with RCON `ADMIN ADD`.
 
-To change flags or environment variables afterwards, use NSSM. This example adds an admin list and
-RCON. `AppEnvironmentExtra` replaces the whole list, so always repeat `HSMP_STATE_DIR`:
+To change settings, run the script again with the new parameters (it replaces the service). You can
+also edit them with NSSM; `AppEnvironmentExtra` replaces the whole list, so always repeat
+`HSMP_STATE_DIR` and `HSMP_MASTER_URL`:
 
 ```powershell
 nssm set HsmpDedicatedServer AppParameters --bind 0.0.0.0:7777 --name MyServer --max-peers 8 --bans-file C:\ProgramData\HSMP\server\bans.txt --admins-file C:\ProgramData\HSMP\server\admins.txt --rcon-bind 127.0.0.1:2345
-nssm set HsmpDedicatedServer AppEnvironmentExtra HSMP_STATE_DIR=C:\ProgramData\HSMP\server HSMP_RCON_PASSWORD=<a long random password> NO_COLOR=1
+nssm set HsmpDedicatedServer AppEnvironmentExtra HSMP_STATE_DIR=C:\ProgramData\HSMP\server HSMP_MASTER_URL=https://master.halfswordmp.workers.dev HSMP_RCON_PASSWORD=<a long random password> NO_COLOR=1
 nssm restart HsmpDedicatedServer
 ```
 

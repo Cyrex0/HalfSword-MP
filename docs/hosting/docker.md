@@ -22,11 +22,15 @@ Game server only:
 docker run -d --name hsmp --restart unless-stopped --stop-signal SIGINT \
   -p 7777:7777/udp \
   -v hsmp-data:/hsmp/data \
-  -e HSMP_NAME="My HSMP server" \
+  -e HSMP_NAME="My HSMP server" -e HSMP_REGION=EU \
+  -e HSMP_ADMIN_KEYS=<your player key> \
   hsmp-server
 ```
 
 - `-p 7777:7777/udp`: the game port. Remember `/udp`.
+- The server registers with the public server list. Add `-e HSMP_MASTER_URL=off` for a LAN-only server.
+- `HSMP_ADMIN_KEYS`: admin player keys (see [Admins](dedicated-server.md#admins)). Keys in
+  `/hsmp/data/admins.txt` work too.
 - `-v hsmp-data:/hsmp/data`: a named volume for the identity key and the ban list. **Always mount
   it.** Without it, a new container gets a new identity and an empty ban list.
 - `--stop-signal SIGINT`: the server shuts down cleanly (and tells players) on SIGINT. The image already sets `STOPSIGNAL SIGINT`; the flag keeps it explicit. With Docker's
@@ -46,6 +50,10 @@ The entry script (`scripts/docker-entry.sh`) turns these into flags:
 | `HSMP_MODE` | `duel` | `--mode` (a label only) |
 | `HSMP_BANS_FILE` | `/hsmp/data/bans.txt` | `--bans-file` |
 | `HSMP_ADMINS_FILE` | `/hsmp/data/admins.txt` | `--admins-file`: admin player keys, one per line (see [Admins](dedicated-server.md#admins)); RCON `ADMIN ADD` appends to it |
+| `HSMP_ADMIN_KEYS` | unset | `--admin-key` per key (comma or space separated) |
+| `HSMP_MAP` | unset | `--map` |
+| `HSMP_REGION` | unset | `--region` |
+| `HSMP_MASTER_URL` | `https://master.halfswordmp.workers.dev` | the server list to register with; `off` (or empty) = LAN-only. Replaced by the local master with `HSMP_WITH_MASTER=1` |
 | `HSMP_STATE_DIR` | `/hsmp/data` | read by the server: folder of `server_identity.key` |
 | `HSMP_RCON_BIND` | unset | `--rcon-bind` (RCON off when unset) |
 | `HSMP_RCON_PASSWORD` | unset | read by the server |
@@ -55,8 +63,7 @@ The entry script (`scripts/docker-entry.sh`) turns these into flags:
 | `RUST_LOG` | `hsmp_server=info,hsmp_master=info` | log filter |
 
 Every other server variable from [Configuration](configuration.md#environment-variables) is passed
-through as is, for example `HSMP_REGION`, `HSMP_LOBBY_MAP`, `HSMP_KIT_MODE`, `HSMP_KIT_BUDGET`,
-`HSMP_MASTER_URL`, `HSMP_PERF`. Use `HSMP_NAME` for the name: `HSMP_SERVER_NAME` has no effect in the
+through as is, for example `HSMP_KIT_MODE`, `HSMP_KIT_BUDGET`, `HSMP_PERF`. Use `HSMP_NAME` for the name: `HSMP_SERVER_NAME` has no effect in the
 image, because the entry script always passes `--name`. `--tick-hz` is not exposed; it stays at 30.
 
 To pass flags the entry script does not know, override the entry point:
@@ -106,7 +113,8 @@ lists it as `127.0.0.1:7777`. That is only useful on the same machine, for testi
 list, run the master on another host, or natively (see
 [Master server](master-server.md#a-master-on-the-same-machine)).
 
-To register a containerised server with a master elsewhere, set
+The image registers with the public server list by default. For a LAN-only server pass
+`-e HSMP_MASTER_URL=off`; to register with a master elsewhere, set
 `-e HSMP_MASTER_URL=http://<master address>:7778` and leave `HSMP_WITH_MASTER` at 0.
 
 ## Compose

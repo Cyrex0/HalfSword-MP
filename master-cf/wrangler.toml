@@ -1,0 +1,30 @@
+# HSMP public server list on Cloudflare Workers (free plan).
+# Build and deploy from this folder: docs/hosting/master-server.md, "Cloudflare Worker".
+name = "master"
+main = "build/index.js"
+compatibility_date = "2026-09-01"
+account_id = "0b37fbc54b90c7a5cc44a7d26d90950a"
+workers_dev = true
+# https://master.halfswordmp.workers.dev
+
+[build]
+command = "worker-build --release"
+
+# One SQLite-backed Durable Object holds the whole list (SQLite is the only Durable Object
+# backend on the free plan). The migration creates the class on the first deploy.
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "Registry"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Registry"]
+
+[vars]
+# Servers heartbeat this often (told to them at registration); a listing is dropped after
+# TTL_S without one. 120 / 360 keeps 50 servers at ~36k requests a day (free plan: 100k).
+HEARTBEAT_S = "120"
+TTL_S = "360"
+# Discord announcements (only when the DISCORD_WEBHOOK_URL secret is set): include the
+# server's ip:port in "server up" messages. "0" leaves it out.
+DISCORD_SHOW_ADDRESS = "1"

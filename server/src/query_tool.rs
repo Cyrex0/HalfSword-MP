@@ -31,11 +31,13 @@
 //!   master <url> <index 1..n> <n>      (only when a master answered)
 //!   lan    <0|1> <servers found>        (only with --lan)
 //!   done   <0|1>
-//!   S host port name map mode players max pwd proto version region ping_ms source live
+//!   S host port name map mode players max pwd proto version region ping_ms source live content proto_min proto_max
 //!
 //! ping_ms: -1 = pending, -2 = no answer. live: 1 if the server answered
 //! (fields then come from the server itself, fresher than the master).
 //! source: master | direct | lan.
+//! content: the first 16 hex chars of the content hash the server enforces ("" = any or
+//! unknown); proto_min / proto_max: its protocol range (0 = unknown, use proto).
 
 // Only needed for PROTOCOL_VERSION; kept out of this binary's test build so
 // proto.rs's own tests (run by hsmp-server / hsmp-sidecar) aren't duplicated.
@@ -100,6 +102,11 @@ struct Row {
     ping: i64,
     source: &'static str,
     live: bool,
+    /// `query::content_tag` of the hash the server enforces; "" = any / unknown.
+    content: String,
+    /// Accepted protocol range; 0 = unknown (only `proto`).
+    proto_min: u32,
+    proto_max: u32,
 }
 
 fn tsv(s: &str) -> String {
@@ -157,6 +164,9 @@ fn row_from_json(v: &serde_json::Value) -> Option<Row> {
         ping: -1,
         source: "master",
         live: false,
+        content: query::content_tag(o.get("content_hash").and_then(|x| x.as_str()).unwrap_or("")),
+        proto_min: n("proto_min").min(65_535),
+        proto_max: n("proto_max").min(65_535),
     })
 }
 
@@ -207,10 +217,10 @@ fn render(gen: &str, st: &Status, meta: &Meta, rows: &[Row], done: bool) -> Stri
     out.push_str(&format!("done\t{}\n", if done { 1 } else { 0 }));
     for r in rows {
         out.push_str(&format!(
-            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             tsv(&r.host), r.port, tsv(&r.name), tsv(&r.map), tsv(&r.mode),
             r.players, r.max, r.pwd as u8, r.proto, tsv(&r.version), tsv(&r.region),
-            r.ping, r.source, r.live as u8,
+            r.ping, r.source, r.live as u8, r.content, r.proto_min, r.proto_max,
         ));
     }
     out
@@ -400,6 +410,9 @@ fn apply_info(r: &mut Row, ms: u64, info: &query::QueryInfo) {
     r.players = info.players.min(info.max_players.max(info.players));
     r.pwd = info.password;
     r.proto = info.proto_ver;
+    r.proto_min = info.proto_min;
+    r.proto_max = info.proto_max;
+    r.content = query::content_tag_of_tag(&info.content_tag);
 }
 
 /// "7777" / "7777-7786" -> ports (at most 64). None = malformed.
@@ -617,6 +630,22 @@ mod tests {
     }
 
     #[test]
+    fn master_rows_carry_the_build_identity() {
+        let h = "AB".repeat(32);
+        let body = format!(r#"[{{"host":"1.2.3.4","port":7777,"proto_ver":6,"proto_min":6,"proto_max":7,"content_hash":"{h}"}},{{"host":"1.2.3.4","port":7778,"content_hash":"junk"}}]"#);
+        let (rows, _) = parse_master_list(&body).unwrap();
+        assert_eq!((rows[0].content.as_str(), rows[0].proto_min, rows[0].proto_max), ("abababababababab", 6, 7));
+        assert_eq!(rows[1].content, "", "a malformed hash is dropped");
+        let st = Status { code: "ok", msg: String::new(), listed: 2, skipped: 0 };
+        let out = render("g", &st, &Meta::default(), &rows, true);
+        let s: Vec<&str> = out.lines().find(|l| l.starts_with("S\t")).unwrap().split('\t').collect();
+        assert_eq!(&s[15..], &["abababababababab", "6", "7"]);
+        let mut r = rows[1].clone();
+        apply_info(&mut r, 5, &query::QueryInfo { content_tag: "CDCDCDCDCDCDCDCD".into(), proto_min: 6, proto_max: 6, ..Default::default() });
+        assert_eq!((r.content.as_str(), r.proto_min), ("cdcdcdcdcdcdcdcd", 6));
+    }
+
+    #[test]
     fn master_list_non_array_is_error() {
         assert!(parse_master_list("{\"a\":1}").is_err());
         assert!(parse_master_list("<html>").is_err());
@@ -631,7 +660,7 @@ mod tests {
         let out = render("g", &st, &Meta::default(), &rows, true);
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines.iter().filter(|l| l.starts_with("S\t")).count(), 1);
-        assert_eq!(lines.last().unwrap().split('\t').count(), 15);
+        assert_eq!(lines.last().unwrap().split('\t').count(), 18);
     }
 
     #[test]

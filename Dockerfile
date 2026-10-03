@@ -9,6 +9,8 @@
 # Run with a local master server (server list) on TCP 7778:
 #   docker run -d --name hsmp -p 7777:7777/udp -p 7778:7778 -e HSMP_WITH_MASTER=1 \
 #     -v hsmp-data:/hsmp/data hsmp-server
+# The server registers with the public server list unless -e HSMP_MASTER_URL=off (LAN-only).
+# Admins: -e HSMP_ADMIN_KEYS=<key>,<key> or keys in /hsmp/data/admins.txt.
 # RCON stays off unless HSMP_RCON_BIND is set. It is plain text: publish it on the host's
 # loopback only and reach it over SSH (see docs/hosting/rcon.md):
 #   docker run ... -p 127.0.0.1:2345:2345 -e HSMP_RCON_BIND=0.0.0.0:2345 \
@@ -24,6 +26,8 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY server ./server
+# server/build.rs hashes the shipped mod files (the content check against clients)
+COPY mods ./mods
 COPY launcher/Cargo.toml launcher/Cargo.toml
 COPY tools/hsmp-tools/Cargo.toml tools/hsmp-tools/Cargo.toml
 COPY tools/release/Cargo.toml tools/release/Cargo.toml
@@ -57,6 +61,7 @@ ENV HSMP_BIND=0.0.0.0:7777 \
     HSMP_STATE_DIR=/hsmp/data \
     HSMP_BANS_FILE=/hsmp/data/bans.txt \
     HSMP_ADMINS_FILE=/hsmp/data/admins.txt \
+    HSMP_MASTER_URL=https://master.halfswordmp.workers.dev \
     HSMP_WITH_MASTER=0 \
     HSMP_MASTER_BIND=0.0.0.0:7778 \
     RUST_LOG=hsmp_server=info,hsmp_master=info

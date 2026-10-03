@@ -995,7 +995,8 @@ pub fn enabled_txt_warnings(env: &Env, template: &[modstxt::Entry]) -> Vec<Strin
 }
 
 /// Re-apply the manifest's ini settings (the game may rewrite Engine.ini).
-/// Called before every launch; journaled into the install state.
+/// Called at launcher start and after install (`ops::startup_check`); journaled into the
+/// install state.
 pub fn reapply_ini(env: &Env, log: &mut dyn FnMut(String)) -> Result<(), String> {
     let _lock = lock(&env.hsmp_home)?;
     let Some(mut st) = load_state(env)? else { return Ok(()) };
@@ -1227,19 +1228,19 @@ pub fn status(env: &Env) -> Result<Status, String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::manifest::{tests::sample, FileEntry, Role};
     use crate::testutil::{snapshot, TempDir};
 
     const W: &str = "HalfswordUE5/Binaries/Win64";
 
-    struct Fake {
+    pub(crate) struct Fake {
         _t: TempDir,
-        env: Env,
+        pub(crate) env: Env,
     }
 
-    fn fake(with_ue4ss: bool) -> Fake {
+    pub(crate) fn fake(with_ue4ss: bool) -> Fake {
         let t = TempDir::new("install");
         let root = t.path().join("Half Sword");
         let env = Env::new(&root, t.path().join("LocalAppData/HSMP"), t.path().join("LocalAppData/HalfSwordUE5/Saved"));
@@ -1268,7 +1269,7 @@ mod tests {
     }
 
     /// A manifest + verified file set. `variant` changes the payload a bit (for updates).
-    fn package(variant: u8) -> (Manifest, Files) {
+    pub(crate) fn package(variant: u8) -> (Manifest, Files) {
         let mut m = sample();
         let mut files = Files::new();
         let mut add = |m: &mut Manifest, path: &str, bytes: &[u8], role: Role, install: Option<&str>| {

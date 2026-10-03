@@ -50,6 +50,8 @@ mod panic_guard; // any panic is fatal (log + career restore + exit)
 mod ipc_shm; // HSMP-SHM: the shared-memory backend
 mod records_in; // ABI 2: typed G2S records -> their domain
 mod parent; // which game process we belong to
+#[path = "../build_id.rs"]
+mod build_id;
 
 // Siblings share each other's items through `use super::*`.
 use net::*;
@@ -164,8 +166,8 @@ struct Args {
     #[arg(long)]
     server_key: Option<String>,
 
-    /// Content hash to present (64 hex chars); servers that enforce one
-    /// refuse other content before the cookie.
+    /// Content hash to present (64 hex chars) instead of the one this build embeds;
+    /// servers that enforce one refuse other content before the cookie.
     #[arg(long)]
     content_hash: Option<String>,
 
@@ -200,6 +202,11 @@ struct Args {
     /// `--admins-file` to make that player an admin of a dedicated server.
     #[arg(long)]
     print_player_key: bool,
+
+    /// Print this build's identity (version, protocol, IPC ABI, content hash) as one
+    /// JSON line and exit. HSMPMenu compares it with the mods' own at startup.
+    #[arg(long)]
+    build_info: bool,
 
     /// The game link: `shm:<name>`, the game's shared segment (HSMP-SHM). Required for a
     /// session (with --parent-pid); without it the sidecar exits with code 64.
@@ -314,6 +321,10 @@ fn attach_ipc(args: &Args) -> &'static ipc_shm::ShmLink {
 #[tokio::main(flavor = "multi_thread", worker_threads = 3)]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    if args.build_info {
+        println!("{}", build_id::identity().to_json());
+        std::process::exit(0)
+    }
     // Before the log subscriber: stdout carries only the key.
     if args.print_player_key {
         match net::player_key_hex() {

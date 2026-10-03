@@ -9,6 +9,11 @@ set -euo pipefail
 umask 077
 mkdir -p "${HSMP_STATE_DIR:-/hsmp/data}"
 
+# Server list: the public one by default; off / none / lan (or empty) = LAN-only.
+case "${HSMP_MASTER_URL:-}" in
+    ""|off|none|lan) unset HSMP_MASTER_URL ;;
+esac
+
 if [[ "${HSMP_WITH_MASTER:-0}" == "1" ]]; then
     /usr/local/bin/hsmp-master --bind "${HSMP_MASTER_BIND}" &
     # Point the server at the local master so it auto-registers.
@@ -16,6 +21,7 @@ if [[ "${HSMP_WITH_MASTER:-0}" == "1" ]]; then
     export HSMP_MASTER_URL="http://127.0.0.1:${PORT_PART}"
     echo "[docker-entry] master up on ${HSMP_MASTER_BIND}, auto-register via ${HSMP_MASTER_URL}"
 fi
+echo "[docker-entry] server list: ${HSMP_MASTER_URL:-none (LAN-only)}"
 
 CMD=(/usr/local/bin/hsmp-server
      --bind "${HSMP_BIND}"
@@ -24,6 +30,15 @@ CMD=(/usr/local/bin/hsmp-server
      --mode "${HSMP_MODE}"
      --bans-file "${HSMP_BANS_FILE}"
      --admins-file "${HSMP_ADMINS_FILE}")
+
+if [[ -n "${HSMP_MAP:-}" ]]; then CMD+=(--map "$HSMP_MAP"); fi
+if [[ -n "${HSMP_REGION:-}" ]]; then CMD+=(--region "$HSMP_REGION"); fi
+
+# HSMP_ADMIN_KEYS: admin player keys, comma or space separated.
+keys="${HSMP_ADMIN_KEYS:-}"
+for k in ${keys//,/ }; do
+    CMD+=(--admin-key "$k")
+done
 
 # RCON: off unless HSMP_RCON_BIND is set (password from HSMP_RCON_PASSWORD; a non-loopback
 # bind also needs HSMP_RCON_ALLOW_REMOTE=1, which the server reads itself).

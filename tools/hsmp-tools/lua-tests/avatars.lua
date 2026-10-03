@@ -412,7 +412,7 @@ if opts.kind == "bodies3" then
     local me = M.new_obj("Willie_BP_C", "Willie_BP_C_ME"); rawset(me, "__addr", 7001)
     me.__props.Health = 100
     -- our pawn away from the peers' poses: the fallback never spawns a body
-    -- within 250 uu of our own pawn (gate2 DoD-7, PX.spawn_spot)
+    -- within 250 uu of our own pawn (PX.spawn_spot)
     rawset(me, "loc", { X = -2000, Y = 0, Z = 100 })
     M.pc.__props.Pawn = me
     local bodies, calls, nb = { me }, {}, 0

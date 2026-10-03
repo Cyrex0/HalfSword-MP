@@ -2,7 +2,6 @@
 
 use crate::game::{self, BuildCheck};
 use crate::install::{self, Env, InstallOpts, InstallReport, Status};
-use crate::launch::{self, Via};
 use crate::package::{self, Package};
 use crate::steam;
 use crate::util;
@@ -11,8 +10,11 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     pub game_root: Option<String>,
+    /// update from stable releases only (default: pre-releases too)
+    pub stable_only: bool,
 }
 
 /// %LOCALAPPDATA%\HSMP
@@ -33,6 +35,13 @@ pub fn save_settings(s: &Settings) {
         let _ = std::fs::create_dir_all(p.parent().unwrap());
         let _ = util::atomic_write(&p, &serde_json::to_vec_pretty(s).unwrap_or_default());
     }
+}
+
+/// Change one setting, keeping the others.
+pub fn update_settings(f: impl FnOnce(&mut Settings)) {
+    let mut s = load_settings();
+    f(&mut s);
+    save_settings(&s);
 }
 
 /// Append a line to %LOCALAPPDATA%\HSMP\launcher\launcher.log (best effort).
@@ -77,7 +86,20 @@ pub fn open_package(path: Option<&Path>) -> Result<Package, String> {
     // only keys compiled into THIS launcher (+ a key file pinned outside any
     // package) are trusted; nothing inside the package is
     let keys = crate::trust::effective_keys(hsmp_home().ok().as_deref())?;
-    Package::open(&p, &keys)
+    match Package::open(&p, &keys) {
+        // the launcher copy in HSMP\bin has no release next to it: use the downloaded one
+        Err(e) if path.is_none() => match downloaded_release(hsmp_home().ok().as_deref()) {
+            Some(z) => Package::open(&z, &keys),
+            None => Err(e),
+        },
+        r => r,
+    }
+}
+
+/// The downloaded zip of this launcher's own release, if an update brought it.
+fn downloaded_release(hsmp_home: Option<&Path>) -> Option<PathBuf> {
+    let z = crate::update::download_dir(hsmp_home?).join(format!("hsmp-{}.zip", crate::LAUNCHER_VERSION));
+    z.is_file().then_some(z)
 }
 
 pub fn check_build(root: &Path, pkg: &Package) -> Result<BuildCheck, String> {
@@ -98,9 +120,6 @@ pub fn install_ex(
     allow_downgrade: bool,
     log: &mut dyn FnMut(String),
 ) -> Result<InstallReport, String> {
-    log(format!("verifying {} package files...", pkg.manifest.files.len()));
-    let files = pkg.load_files(true)?;
-    log("package verified (signature and SHA-256 of every file)".into());
     let opts = InstallOpts {
         backup_saves,
         allow_unsupported,
@@ -110,52 +129,56 @@ pub fn install_ex(
         exe_sha256: Some(build.sha256().to_string()),
         fail_after_writes: None,
     };
-    let r = install::install(env, &pkg.manifest, &files, &opts, log)?;
+    install_with(env, pkg, opts, log)
+}
+
+/// Verify every package file, install, keep the launcher copy, then run the start-up check.
+pub fn install_with(env: &Env, pkg: &Package, opts: InstallOpts, log: &mut dyn FnMut(String)) -> Result<InstallReport, String> {
+    log(format!("verifying {} package files...", pkg.manifest.files.len()));
+    let files = pkg.load_files(true)?;
+    log("package verified (signature and SHA-256 of every file)".into());
+    let mut r = install::install(env, &pkg.manifest, &files, &opts, log)?;
     // keep the verified launcher of this release outside the package: later
     // updates are checked by a launcher you already trust
     match crate::trust::install_launcher_copy(&env.hsmp_home, &pkg.manifest, &files) {
-        Ok(Some(p)) => log(format!("for updates, start {} and choose \"Open another release...\"", p.display())),
+        Ok(Some(p)) => log(format!("launcher for updates: {}", p.display())),
         Ok(None) => {}
         Err(e) => log(format!("note: could not keep a launcher copy for updates: {e}")),
+    }
+    // the freshly installed sidecar recovers what an older one left open
+    if let Err(e) = startup_check(env, log) {
+        r.notes.push(e);
     }
     Ok(r)
 }
 
-/// Launch arguments of the installed release.
-pub fn launch_args(env: &Env) -> Result<Vec<String>, String> {
-    Ok(install::load_state(env)?.map(|s| s.launch_args).unwrap_or_default())
+/// Runs at launcher start and after every install/update (players start the game from
+/// Steam, so there is no launch step to hang this on): finish the career save check of an
+/// MP session that crashed, and put back ini settings the game dropped. Skipped while the
+/// game or an HSMP binary from this folder runs: a live session's guard backup is open,
+/// not crashed. The game's own sidecar repeats the check at every MP session start.
+pub fn startup_check(env: &Env, log: &mut dyn FnMut(String)) -> Result<(), String> {
+    let running = crate::procs::blocking_processes(&env.game_root);
+    if !running.is_empty() {
+        log(format!("career save check skipped while {} runs; it runs the next time the launcher opens", running.join(", ")));
+        return Ok(());
+    }
+    let rec = crate::careerguard::recover(env, log);
+    if let Err(e) = install::reapply_ini(env, log) {
+        log(format!("note: ini settings not re-applied: {e}"));
+    }
+    startup_verdict(rec)
 }
 
-pub fn launch(env: &Env, via: Via, log: &mut dyn FnMut(String)) -> Result<u32, String> {
-    match install::status(env)? {
-        Status::Installed { modified, missing, .. } => {
-            if !missing.is_empty() {
-                return Err(format!("{} HSMP file(s) are missing ({}...). Run Repair first.", missing.len(), missing[0]));
-            }
-            if !modified.is_empty() {
-                log(format!("note: {} HSMP file(s) differ from the release ({}); Repair restores them", modified.len(), modified.join(", ")));
-            }
-        }
-        Status::Interrupted => return Err("an install was interrupted; run Install again first".into()),
-        Status::UninstallIncomplete { .. } => return Err("an uninstall has not finished; run Uninstall again (or Install to repair)".into()),
-        Status::NotInstalled { .. } => return Err("HSMP is not installed in this game folder yet".into()),
+fn startup_verdict(rec: Result<Option<crate::careerguard::Recovery>, String>) -> Result<(), String> {
+    match rec {
+        Ok(Some(r)) if !r.ok => Err(format!(
+            "{}. Do not play your career until this is fixed: restore it from Saves > Restore (the guard's MP backups are listed there), or reopen the launcher to try again.",
+            crate::careerguard::check_failed_text(&r)
+        )),
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("the career save check could not run: {e}. Check Saves > Restore for the career guard's MP backups.")),
     }
-    if crate::procs::game_running() {
-        return Err("Half Sword is already running".into());
-    }
-    // An MP session that crashed left its career-guard backup open; recover it now,
-    // BEFORE any career play could make the damaged file look like newer legitimate play
-    match crate::careerguard::recover(env, log)? {
-        Some(r) if !r.ok => return Err(crate::careerguard::failure_text(&r, "Play")),
-        _ => {}
-    }
-    install::reapply_ini(env, log)?;
-    let args = launch_args(env)?;
-    let via = launch::resolve_for(via, crate::procs::steam_running(), launch::is_steam_install(&steam::discover(), &env.game_root))?;
-    let steam_exe = steam::steam_exe();
-    let (exe, a) = launch::command_line(via, steam_exe.as_deref(), &env.game_root, steam::HALF_SWORD_APPID, &args)?;
-    log(format!("starting: \"{}\" {}", exe.display(), a.join(" ")));
-    launch::launch(via, steam_exe.as_deref(), &env.game_root, steam::HALF_SWORD_APPID, &args)
 }
 
 /// Uninstall, after recovering any career-guard session a crash left open (the
@@ -244,5 +267,27 @@ mod tests {
             assert!(!e.contains("career save check"), "{e}");
         }
         assert!(logs.iter().any(|l| l.contains("cannot start x")), "{logs:?}");
+    }
+
+    /// At launcher start a failed or unrunnable recovery is reported; a clean one or a
+    /// missing sidecar is not.
+    #[test]
+    fn startup_check_verdicts() {
+        let failed = crate::careerguard::parse("{\"ev\":\"career_guard\",\"action\":\"error\",\"file\":null,\"why\":\"restore failed: denied\",\"kind\":\"recover\",\"backup\":\"B\"}\n", Some(1));
+        let e = startup_verdict(Ok(Some(failed))).unwrap_err();
+        assert!(e.contains("restore failed: denied") && e.contains("Do not play your career"), "{e}");
+        assert!(startup_verdict(Err("cannot start x".into())).unwrap_err().contains("cannot start x"));
+        assert!(startup_verdict(Ok(None)).is_ok());
+        assert!(startup_verdict(Ok(Some(crate::careerguard::parse("", Some(0))))).is_ok());
+    }
+
+    /// Nothing installed: the start-up check is a quiet no-op.
+    #[test]
+    fn startup_check_without_install() {
+        let t = TempDir::new("ops_startup_none");
+        let env = Env::new(&t.path().join("game"), t.path().join("la/HSMP"), t.path().join("la/HalfSwordUE5/Saved"));
+        let mut logs = vec![];
+        startup_check(&env, &mut |s| logs.push(s)).unwrap();
+        assert!(logs.iter().all(|l| !l.contains("not re-applied")), "{logs:?}");
     }
 }

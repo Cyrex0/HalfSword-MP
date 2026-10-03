@@ -1,9 +1,9 @@
-//! Career-guard crash recovery before Play and Uninstall.
+//! Career-guard crash recovery at launcher start, after install/update, and before Uninstall.
 //!
 //! The sidecar's career guard (server/src/sidecar/career_guard.rs) backs up the career saves
 //! when an MP session starts and checks them when it ends. A session that crashed is left
 //! `open`; the guard itself recovers it only at the next sidecar start (Host/Join). Without
-//! this module, a player who crashed in MP and then clicked Play for career would make the
+//! this module, a player who crashed in MP and then played career would make the
 //! MP-damaged career file look like legitimate post-crash play (`skipped_newer`), and
 //! Uninstall would remove the sidecar without ever recovering. So the launcher runs the
 //! installed sidecar's recover-only mode
@@ -138,12 +138,20 @@ pub fn recover_with(exe: &Path, env: &Env, timeout: Duration, log: &mut dyn FnMu
     Ok(Some(r))
 }
 
-/// The refusal text when recovery did not succeed.
-pub fn failure_text(r: &Recovery, what: &str) -> String {
+/// What went wrong, when recovery did not succeed.
+pub fn check_failed_text(r: &Recovery) -> String {
     let errs: Vec<String> = r.errors().iter().map(|a| a.why.clone()).collect();
     format!(
-        "the career save check after an earlier multiplayer crash failed ({}). {what} is blocked so your career is not changed further; restore your career from Saves > Restore (the guard's MP backups are listed there), or try again.",
+        "the career save check after an earlier multiplayer crash failed ({})",
         if errs.is_empty() { "the check exited with an error".to_string() } else { errs.join("; ") }
+    )
+}
+
+/// The refusal text of an operation blocked by a failed recovery.
+pub fn failure_text(r: &Recovery, what: &str) -> String {
+    format!(
+        "{}. {what} is blocked so your career is not changed further; restore your career from Saves > Restore (the guard's MP backups are listed there), or try again.",
+        check_failed_text(r)
     )
 }
 
@@ -165,7 +173,8 @@ mod tests {
         assert!(!parse(out, None).ok, "killed is a failure");
         let e = parse("{\"ev\":\"career_guard\",\"action\":\"error\",\"file\":null,\"why\":\"startup_check: denied\",\"kind\":\"recover\",\"backup\":\"\"}\n", Some(0));
         assert!(!e.ok);
-        assert!(failure_text(&e, "Play").contains("startup_check: denied"));
+        assert!(failure_text(&e, "Uninstall").contains("startup_check: denied"));
+        assert!(check_failed_text(&e).contains("startup_check: denied"));
     }
 
     fn env(t: &TempDir) -> Env {

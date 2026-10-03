@@ -124,7 +124,7 @@ impl NetClient {
         cfg.version_min = self.params.version_min;
         cfg.version_max = self.params.version_max;
         cfg.content_hash = self.params.content_hash;
-        cfg.build = format!("hsmp-sidecar {}", env!("CARGO_PKG_VERSION"));
+        cfg.build = super::build_id::build_tag("hsmp-sidecar");
         cfg.pinned_server_key = self.params.explicit_key.or(self.learned_key);
         // Interaction channel (docs/development/subsystems/interact.md), offered on top of the base set.
         cfg.caps |= hsmp_net::net::caps::INTERACT;
@@ -235,7 +235,7 @@ pub(super) fn init(args: &Args) -> Result<()> {
     };
     let content_hash = match args.content_hash.as_deref().filter(|s| !s.trim().is_empty()) {
         Some(h) => parse_key(h).context("--content-hash")?,
-        None => [0; 32],
+        None => super::build_id::content_hash(),
     };
     let params = Params {
         seed,

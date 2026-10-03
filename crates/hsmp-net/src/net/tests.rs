@@ -532,7 +532,7 @@ fn version_mismatch_is_reported_before_the_cookie() {
         ClientEvent::Rejected { code, text, authenticated } => {
             assert_eq!(*code, reject_code::VERSION);
             assert!(!authenticated);
-            assert!(text.contains(&format!("v{0}..=v{0}", crate::net::PROTOCOL_VERSION)), "{text}");
+            assert!(text.starts_with("Server runs HalfSword-MP ") && text.contains("OUTDATED"), "{text}");
         }
         e => panic!("unexpected {e:?}"),
     }

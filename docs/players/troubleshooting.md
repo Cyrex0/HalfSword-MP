@@ -19,14 +19,10 @@ On this page:
 |---|---|---|
 | "Windows protected your PC" when you start the launcher | The launcher is not code-signed yet, so SmartScreen does not know it. | Click **More info**, then **Run anyway**. Only do this for a zip whose SHA-256 matches the release page (see [Install](install.md#install)). |
 | Your antivirus deletes or quarantines `dwmapi.dll`, or warns about it | `dwmapi.dll` is the UE4SS mod loader. Antivirus programs often flag it. It is a false positive. | Restore the file from quarantine and allow it, then click **Repair** in the launcher. |
-| The red line **"Half Sword was updated. HSMP ... does not support this game build yet"** | Steam updated Half Sword after this HSMP release came out. | Wait for an HSMP update that supports the new build. **Install** and **Update** are blocked until then, unless you tick **Try anyway**. **Play** still works, but menus or matches may break. |
-| The HSMP buttons do not appear on the main menu | The game was not started with HSMP installed, or a file is missing. | Open the launcher. If the status line says files are changed or missing, click **Repair**. Then start the game with **Play**. |
-| Play is greyed out | HSMP is not installed in this game folder, files are missing, or an uninstall did not finish. | Read the status line in section 2 and do what it says (**Install**, **Repair** or **Uninstall**). |
-| "Half Sword is already running" | The game is still open, maybe in the background. | Close Half Sword (check Task Manager), then click **Play** again. |
-| The game crashes while an arena loads | An engine crash in hair streaming. HSMP works around it with a setting, but only when the game starts through the launcher. | Start the game with **Play** or **Launch through Steam** in the launcher. If it still happens, [report it](#reporting-a-bug) with a crash report. |
+| The red line **"Half Sword was updated. HSMP ... does not support this game build yet"** | Steam updated Half Sword after this HSMP release came out. | Wait for an HSMP update that supports the new build. **Install** and **Update** are blocked until then, unless you tick **Try anyway**. The game still starts from Steam, but menus or matches may break. |
+| The HSMP buttons do not appear on the main menu | The game was not started with HSMP installed, or a file is missing. | Open the launcher. If the status line says files are changed or missing, click **Repair**. Then start Half Sword from Steam. |
+| The game crashes while an arena loads | An engine crash in hair streaming. HSMP works around it with an `Engine.ini` line, which the game sometimes removes. | Open the launcher once (it puts the line back), or add the Steam launch option from [Install](install.md#optional-the-steam-launch-option). If it still happens, [report it](#reporting-a-bug) with a crash report. |
 | The game crashes about a second after a round ends, while the arena reloads | A bug in the game's blood and wound painting: paint work still queued for the old arena runs after that arena is gone. Before every level change HSMP stops new paint work and waits (at most 2.5 seconds) until the queue is empty, which prevents this crash in normal cases. | [Report it](#reporting-a-bug) with a crash report from the launcher. |
-| "this Half Sword folder is not Steam's own install ..." | You picked a copy of the game with **Browse...**, and the launcher would have started Steam's copy instead. | Start Steam first, then click **Play**. |
-| "Steam was not found on this PC" | Steam is not installed where the launcher looks, or is not running. | Start Steam, then click **Play** again. |
 
 ## Launcher messages
 
@@ -44,14 +40,14 @@ On this page:
 | "...enabled.txt makes UE4SS load ..." | Delete that `enabled.txt`. UE4SS loads such mods whatever `mods.txt` says. |
 | "HSMP's install record ... does not match it" | The game folder changed under the launcher, for example a move that did not finish. Nothing was changed. Finish or undo the move, otherwise install HSMP again. |
 | "HSMP was partly removed ..." / "Uninstall did not finish" | See [Uninstall](uninstall.md#if-uninstall-stops-part-way). |
-| "the career save check after an earlier multiplayer crash failed ..." | Play and Uninstall are blocked so your career is not changed further. Restore your career from the backup list. See [Career saves](career-saves.md#if-the-crash-check-fails). |
+| "the career save check after an earlier multiplayer crash failed ..." | Uninstall is blocked so your career is not changed further. Do not play your career until it is fixed. Restore your career from the backup list. See [Career saves](career-saves.md#if-the-crash-check-fails). |
 | "the Half Sword exe changed since it was checked" | Steam probably updated the game a moment ago. Wait for the game-version line to update, then try again. |
 
 ## Finding and joining games
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| The server browser is empty, or says **"Server list unavailable (...). Use DIRECT CONNECT or LAN"** | This release has no public internet server list. The browser only finds LAN games and games on your own PC. | Ask the host for their address and use **DIRECT CONNECT**. See [Joining a game](playing.md#joining-a-game). |
+| The server browser is empty, or says **"Server list unavailable (...). Use DIRECT CONNECT or LAN"** | The public server list could not be reached (no internet, a firewall, or the list is down), or nobody is hosting right now. LAN games and games on your own PC still show. | Ask the host for their address and use **DIRECT CONNECT**. See [Joining a game](playing.md#joining-a-game). |
 | A friend's game on the same network does not show under **LAN** | The host uses a port outside 7777 to 7786, or a firewall blocks it. | The host sets **HOST PORT** between 7777 and 7786. Or use **DIRECT CONNECT** with the host's local IP and port. Press **REFRESH** (F5). |
 | "Cannot reach the server at ..." in the lobby | Nothing answered. Wrong address, the host's port is not forwarded, or a firewall blocks it. | Check the address and port. The host forwards the UDP port on the router and allows `hsmp-server.exe` in Windows Firewall. See [Hosting from the menu](playing.md#hosting-from-the-menu) and [Ports and firewall](../hosting/ports-and-firewall.md). Then **LEAVE** and try again. |
 | "Version mismatch: server protocol vN, yours vM" or **CONNECTION REJECTED** | You and the server run different HSMP versions. | Everybody updates to the same HSMP release. |

@@ -89,10 +89,10 @@ is still changing quickly.
 | Area | State |
 |---|---|
 | Duel-style matches, 2 to 8 players | Works |
-| Join from the LAN list or by DIRECT CONNECT `ip:port` | Works |
+| Join from the server list, the LAN list or by DIRECT CONNECT `ip:port` | Works |
 | Hosting from the in-game menu (listen server) | Works; forward the UDP port for internet play |
 | Dedicated server (Windows, Linux, Docker) | Works |
-| Public internet server list | **Not yet**: no public master server is running. Run your own `hsmp-master`, or use DIRECT CONNECT |
+| Public internet server list | Works: `https://master.halfswordmp.workers.dev`, with signed listings |
 | Game modes other than duel (FFA, teams, zone) | Written and tested, **not wired into the server yet** |
 | NAT traversal | Not shipped: the host must forward the port |
 | Voice chat | Not shipped |
@@ -109,8 +109,6 @@ other game builds until HSMP is updated for them.
   Hits are still judged on the server's data, but what you see may not match it exactly.
 - **A player is occasionally knocked down or nudged at round start.** In rare rounds a fighter
   spawns slightly off its spawn point, falls, or has to re-arm right after the round begins.
-- **Mismatched installs can join each other.** The content check exists in the protocol but no hash
-  is computed yet, so make sure everyone runs the same HSMP version.
 - Without a named admin, a dedicated server's lobby starts the match by itself when every player is
   ready. See [admins](docs/hosting/dedicated-server.md).
 - `--tick-hz` changes game timers that are counted in ticks. Leave it at the default of 30.
@@ -135,16 +133,17 @@ See [troubleshooting](docs/players/troubleshooting.md) for fixes to common probl
 2. Unzip it anywhere and run `hsmp-launcher.exe`. Windows SmartScreen may warn about an unsigned
    program: choose **More info**, then **Run anyway**.
 3. The launcher finds Half Sword, checks the game build and backs up your saves. Click **Install**.
-4. Click **Play**. Half Sword's main menu now shows the HSMP buttons next to the game's own.
+4. Start Half Sword from Steam as usual. Its main menu now shows the HSMP buttons next to the game's own.
 
+The launcher checks GitHub for a new HSMP release each time it opens and installs it with one click.
 To remove HSMP, click **Uninstall** in the launcher. Full guides: [install](docs/players/install.md),
 [career saves](docs/players/career-saves.md), [uninstall](docs/players/uninstall.md),
 [FAQ](docs/players/faq.md).
 
 ## Host and join
 
-- **Join:** open SERVER BROWSER. Servers on your LAN appear on their own; for an internet server,
-  type its `ip:port` into DIRECT CONNECT.
+- **Join:** open SERVER BROWSER. Internet servers from the public server list and servers on your
+  LAN appear on their own; you can also type a server's `ip:port` into DIRECT CONNECT.
 - **Host:** click HOST GAME. Your PC starts a server and you land in its lobby, as its owner
   (admin): you pick the arena and start the match. Friends on the internet need you to forward
   the UDP host port (7777 by default) on your router; LAN players can join directly.

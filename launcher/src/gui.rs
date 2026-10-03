@@ -6,11 +6,10 @@ use eframe::egui::{self, Color32, RichText};
 use hsmp_launcher::crash::{self, Consent, ConsentFile, Crash};
 use hsmp_launcher::game::{self, BuildCheck};
 use hsmp_launcher::install::{self, Env, Status};
-use hsmp_launcher::launch::Via;
 use hsmp_launcher::package::Package;
 use hsmp_launcher::saves::{self, Backup};
 use hsmp_launcher::steam::{self, FoundGame};
-use hsmp_launcher::{ops, util, LAUNCHER_VERSION};
+use hsmp_launcher::{ops, update, util, LAUNCHER_VERSION};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -32,6 +31,22 @@ enum Msg {
     /// (game root, build-check generation, result)
     Build(PathBuf, u64, Result<BuildCheck, String>),
     Done(Result<String, String>),
+    UpdateCheck(Result<Option<update::Available>, String>),
+    /// download progress (bytes so far, total)
+    Progress(u64, u64),
+    /// an update was installed from this zip
+    Updated(PathBuf),
+}
+
+#[derive(Default)]
+struct Updates {
+    checking: bool,
+    result: Option<Result<Option<update::Available>, String>>,
+    progress: Option<(u64, u64)>,
+    stable_only: bool,
+    allow_downgrade: bool,
+    /// the new launcher copy to restart into after a self-update
+    restart: Option<PathBuf>,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -67,6 +82,7 @@ struct App {
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
     log: Vec<(Level, String)>,
+    updates: Updates,
     frames: u64,
     shot_requested: bool,
 }
@@ -110,9 +126,11 @@ impl App {
             tx,
             rx,
             log: vec![],
+            updates: Updates { stable_only: ops::load_settings().stable_only, ..Default::default() },
             frames: 0,
             shot_requested: false,
         };
+        hsmp_launcher::trust::cleanup_old_copy(&app.hsmp_home);
         match &app.pkg {
             Ok(p) => app.push(Level::Ok, format!("release HSMP {} verified (signed by {})", p.manifest.version, p.signed_by)),
             Err(e) => app.push(Level::Err, format!("release package: {e}")),
@@ -128,6 +146,11 @@ impl App {
             app.set_game(p);
         }
         app.refresh_saves();
+        app.start_check();
+        // the smoke test renders offline
+        if std::env::var_os("HSMP_LAUNCHER_SMOKE_FRAMES").is_none() {
+            app.check_updates();
+        }
         app.crashes = crash::new_crashes(&[app.ue_saved.join("Crashes")], &app.consent);
         app
     }
@@ -149,7 +172,7 @@ impl App {
         self.manual = root.display().to_string();
         self.build = None;
         self.allow_unsupported = false;
-        ops::save_settings(&ops::Settings { game_root: Some(root.to_string_lossy().to_string()) });
+        ops::update_settings(|s| s.game_root = Some(root.to_string_lossy().to_string()));
         self.refresh_status();
         self.start_build_check();
     }
@@ -218,10 +241,150 @@ impl App {
                             }
                         }
                     }
+                    self.updates.progress = None;
                     self.refresh_status();
                     self.refresh_saves();
                 }
+                Msg::UpdateCheck(r) => {
+                    self.updates.checking = false;
+                    match &r {
+                        Ok(Some(a)) if a.ordering() == std::cmp::Ordering::Greater => self.push(Level::Ok, format!("update available: HSMP {} -> {}", a.current, a.version)),
+                        Ok(_) => {}
+                        Err(e) => self.push(Level::Warn, format!("update check: {e}")),
+                    }
+                    self.updates.result = Some(r);
+                }
+                Msg::Progress(got, total) => self.updates.progress = Some((got, total)),
+                Msg::Updated(zip) => {
+                    self.pkg = ops::open_package(Some(&zip)).map(Arc::new);
+                    self.start_build_check();
+                    self.updates.result = None;
+                    self.updates.restart = update::restart_target(&self.hsmp_home);
+                }
             }
+        }
+    }
+
+    /// Current version for the update check: the installed HSMP, else this launcher's.
+    fn current_version(&self) -> String {
+        match &self.status {
+            Some(Ok(Status::Installed { version, .. })) => version.clone(),
+            _ => LAUNCHER_VERSION.to_string(),
+        }
+    }
+
+    fn check_updates(&mut self) {
+        if self.updates.checking {
+            return;
+        }
+        self.updates.checking = true;
+        let (tx, cur, stable, cache) = (self.tx.clone(), self.current_version(), self.updates.stable_only, update::cache_path(&self.hsmp_home));
+        std::thread::spawn(move || {
+            let r = update::Client::new().check(&cur, stable, Some(&cache));
+            let _ = tx.send(Msg::UpdateCheck(r));
+        });
+    }
+
+    fn start_update(&mut self, rel: update::Release) {
+        let Some(env) = self.env() else { return };
+        let (tx, home, allow) = (self.tx.clone(), self.hsmp_home.clone(), self.updates.allow_downgrade);
+        self.updates.progress = Some((0, 0));
+        self.work("Updating HSMP", move |log| {
+            let dir = update::download_dir(&home);
+            let mut shown = u64::MAX;
+            let zip = update::Client::new().fetch_verified(&rel, &dir, &mut |got, total| {
+                if got >> 20 != shown {
+                    shown = got >> 20;
+                    let _ = tx.send(Msg::Progress(got, total));
+                }
+            })?;
+            log(format!("downloaded {} (SHA-256 matches the release)", zip.display()));
+            let keys = hsmp_launcher::trust::effective_keys(Some(&home))?;
+            let r = update::apply(&env, &zip, &keys, allow, update::default_opts(&env), log)?;
+            for n in &r.notes {
+                log(format!("note: {n}"));
+            }
+            update::prune_downloads(&dir, &zip);
+            let _ = tx.send(Msg::Updated(zip));
+            Ok(match r.updated_from {
+                Some(v) if v != r.version => format!("updated HSMP {v} -> {}", r.version),
+                _ => format!("HSMP {} is installed", r.version),
+            })
+        });
+    }
+
+    fn ui_updates(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Updates");
+        let idle = self.busy.is_none();
+        ui.horizontal(|ui| {
+            if ui.add_enabled(idle && !self.updates.checking, egui::Button::new("Check for updates")).clicked() {
+                self.check_updates();
+            }
+            if ui.checkbox(&mut self.updates.stable_only, "Stable releases only").changed() {
+                let v = self.updates.stable_only;
+                ops::update_settings(|s| s.stable_only = v);
+                self.updates.result = None;
+                self.check_updates();
+            }
+            if self.updates.checking {
+                ui.spinner();
+            }
+        });
+        if let Some((got, total)) = self.updates.progress {
+            let frac = if total > 0 { got as f32 / total as f32 } else { 0.0 };
+            ui.add(egui::ProgressBar::new(frac).text(format!("{:.1} / {:.1} MB", got as f64 / 1048576.0, total as f64 / 1048576.0)));
+        }
+        if let Some(p) = self.updates.restart.clone() {
+            ui.colored_label(OK, "The update brought a new launcher.");
+            if ui.button(RichText::new("Restart the launcher").strong()).clicked() {
+                match update::relaunch(&p) {
+                    Ok(()) => std::process::exit(0),
+                    Err(e) => self.push(Level::Err, e),
+                }
+            }
+        }
+        let mut go: Option<update::Release> = None;
+        match &self.updates.result {
+            None => {}
+            Some(Err(e)) => {
+                ui.colored_label(WARN, e);
+            }
+            Some(Ok(None)) => {
+                ui.label("No HSMP release is published for this channel yet.");
+            }
+            Some(Ok(Some(a))) => {
+                use std::cmp::Ordering::*;
+                match a.ordering() {
+                    Greater => {
+                        ui.colored_label(OK, RichText::new(format!("Update available: {} -> {}", a.current, a.version)).strong());
+                    }
+                    Equal => {
+                        ui.label(format!("HSMP {} is the latest release.", a.version));
+                    }
+                    Less => {
+                        ui.label(format!("HSMP {} is newer than the latest release ({}).", a.current, a.version));
+                    }
+                }
+                let notes = a.notes();
+                if a.ordering() == Greater && !notes.trim().is_empty() {
+                    egui::CollapsingHeader::new("Release notes").default_open(true).show(ui, |ui| {
+                        egui::ScrollArea::vertical().id_salt("notes").max_height(140.0).show(ui, |ui| ui.label(notes));
+                    });
+                }
+                let can = idle && self.game_root.is_some();
+                if a.ordering() == Greater && ui.add_enabled(can, egui::Button::new(RichText::new(format!("Update to {}", a.version)).strong()).fill(Color32::from_rgb(40, 90, 60))).on_hover_text("Close Half Sword first. Downloads the release, checks its SHA-256 and signature, then installs it").clicked() {
+                    go = Some(a.release.clone());
+                }
+                egui::CollapsingHeader::new("Advanced").show(ui, |ui| {
+                    ui.checkbox(&mut self.updates.allow_downgrade, "Allow installing an older release (downgrade)");
+                    if a.ordering() == Less && self.updates.allow_downgrade && ui.add_enabled(can, egui::Button::new(format!("Install {} (downgrade)", a.version))).clicked() {
+                        go = Some(a.release.clone());
+                    }
+                });
+            }
+        }
+        if let Some(r) = go {
+            self.start_update(r);
         }
     }
 
@@ -390,6 +553,9 @@ impl App {
         if !pkg_ok {
             ui.colored_label(BAD, "Install is disabled: the release files could not be verified (see above).");
         }
+        if installed {
+            ui.label(RichText::new("Start Half Sword from Steam as usual. The main menu's Multiplayer ribbon opens the server browser.").small());
+        }
         if self.confirm == Confirm::Uninstall {
             ui.group(|ui| {
                 ui.label("Uninstall puts back every file HSMP changed (UE4SS, mods.txt, Engine.ini) and removes everything it added. Your career saves are NOT touched. HSMP settings and logs are moved to %LOCALAPPDATA%\\HSMP\\uninstalled.");
@@ -419,25 +585,13 @@ impl App {
         }
     }
 
-    fn ui_play(&mut self, ui: &mut egui::Ui) {
-        ui.heading("3. Play");
-        let ok = matches!(&self.status, Some(Ok(Status::Installed { missing, .. })) if missing.is_empty()) && self.busy.is_none();
-        ui.horizontal(|ui| {
-            let play = egui::Button::new(RichText::new("  Play  ").strong());
-            let play = if ok { play.fill(Color32::from_rgb(40, 70, 110)) } else { play };
-            if ui.add_enabled(ok, play).clicked() {
-                self.start(Via::Auto);
-            }
-            if ui.add_enabled(ok, egui::Button::new("Launch through Steam")).on_hover_text("steam -applaunch with the HSMP launch options. Play does this by itself when Steam is not running.").clicked() {
-                self.start(Via::Steam);
-            }
-        });
-        ui.label(RichText::new("In the game: the main menu's Multiplayer ribbon opens the server browser. Play starts the game with the HSMP launch options (a crash workaround for hair streaming); if Steam is not running it starts the game through Steam, which may ask once to allow those options.").small());
-    }
-
-    fn start(&mut self, via: Via) {
+    /// Career save check of a crashed MP session (and the ini re-apply) at launcher start.
+    fn start_check(&mut self) {
+        if !matches!(&self.status, Some(Ok(Status::Installed { .. }))) {
+            return;
+        }
         if let Some(env) = self.env() {
-            self.work("Launch", move |log| ops::launch(&env, via, log).map(|pid| format!("Half Sword is starting (pid {pid}). Have fun.")));
+            self.work("Checking career saves", move |log| ops::startup_check(&env, log).map(|_| "career saves checked".to_string()));
         }
     }
 
@@ -660,11 +814,11 @@ impl eframe::App for App {
                 ui.label(RichText::new("Half Sword Multiplayer").size(24.0).strong());
                 self.ui_release(ui);
                 ui.separator();
+                self.ui_updates(ui);
+                ui.separator();
                 self.ui_game(ui);
                 ui.separator();
                 self.ui_install(ui);
-                ui.separator();
-                self.ui_play(ui);
                 ui.separator();
                 self.ui_saves(ui);
                 ui.separator();
