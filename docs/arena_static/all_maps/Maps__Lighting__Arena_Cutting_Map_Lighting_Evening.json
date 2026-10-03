@@ -1,0 +1,1911 @@
+{
+  "map": "Arena_Cutting_Map_Lighting_Evening",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+  "kind": "persistent_or_standalone",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "BP_Candle_C_10",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        65.999,
+        -1356.024,
+        198.038
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle8",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_10.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_10.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 6.612445712089539,
+        "InitialFlameSize": {
+          "X": 0.45969307,
+          "Y": 0.40421632
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_11",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        82.59,
+        -1365.81,
+        197.032
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle9",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_11.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_11.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 5.609301924705505,
+        "InitialFlameSize": {
+          "X": 0.67543554,
+          "Y": 0.72167426
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_12",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        88.244,
+        -1356.087,
+        199.234
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle10",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_12.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_12.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 6.496475338935852,
+        "InitialFlameSize": {
+          "X": 0.59807366,
+          "Y": 0.7154632
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_13",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        82.602,
+        -1346.538,
+        194.427
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle11",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_13.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_13.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 8.932157158851624,
+        "InitialFlameSize": {
+          "X": 0.67747205,
+          "Y": 0.6173105
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_14",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        71.269,
+        -1346.469,
+        198.074
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle12",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_14.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_14.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 6.1445969343185425,
+        "InitialFlameSize": {
+          "X": 0.4476186,
+          "Y": 0.45305714
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_15",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -126.965,
+        1325.848,
+        196.491
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle13",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_15.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_15.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 0.7712027430534363,
+        "InitialFlameSize": {
+          "X": 0.46043772,
+          "Y": 0.4940135
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_16",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -132.515,
+        1316.321,
+        198.038
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle14",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_16.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_16.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 2.9865413904190063,
+        "InitialFlameSize": {
+          "X": 0.51705635,
+          "Y": 0.4782288
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_17",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -132.502,
+        1335.583,
+        197.032
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle15",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_17.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_17.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 3.725394308567047,
+        "InitialFlameSize": {
+          "X": 0.55971116,
+          "Y": 0.53858227
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_18",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -143.582,
+        1335.617,
+        199.234
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle16",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_18.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_18.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 0.8160649240016937,
+        "InitialFlameSize": {
+          "X": 0.5785036,
+          "Y": 0.6690046
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_19",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -149.031,
+        1325.957,
+        194.427
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle17",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_19.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_19.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 0.8389538526535034,
+        "InitialFlameSize": {
+          "X": 0.60168594,
+          "Y": 0.678697
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_20",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -143.617,
+        1316.328,
+        198.074
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle18",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_20.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_20.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 4.516434073448181,
+        "InitialFlameSize": {
+          "X": 0.3575576,
+          "Y": 0.3211802
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_21",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        76.351,
+        1316.265,
+        196.491
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle19",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_21.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_21.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 8.453932404518127,
+        "InitialFlameSize": {
+          "X": 0.54430753,
+          "Y": 0.6831239
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_22",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        70.923,
+        1325.917,
+        198.038
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle20",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_22.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_22.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 1.037629321217537,
+        "InitialFlameSize": {
+          "X": 0.63169736,
+          "Y": 0.69583166
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_23",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        87.573,
+        1316.266,
+        197.032
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle21",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_23.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_23.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 5.309915542602539,
+        "InitialFlameSize": {
+          "X": 0.42182395,
+          "Y": 0.3923217
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_24",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        93.08,
+        1325.956,
+        199.234
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle22",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_24.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_24.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 6.623126864433289,
+        "InitialFlameSize": {
+          "X": 0.35764578,
+          "Y": 0.42066267
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_25",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        87.438,
+        1335.504,
+        194.427
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle23",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_25.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_25.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 7.897884845733643,
+        "InitialFlameSize": {
+          "X": 0.41498196,
+          "Y": 0.4748122
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_26",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        76.567,
+        1335.524,
+        198.074
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle24",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_26.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_26.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 0.2856532484292984,
+        "InitialFlameSize": {
+          "X": 0.58477134,
+          "Y": 0.5815208
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_28",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -137.984,
+        -1355.563,
+        207.255
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.2,
+        1.2,
+        0.8
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle25",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_28.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_28.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "ScaleWidth": 1.2,
+        "RandomCandleID": 2.059999406337738,
+        "InitialFlameSize": {
+          "X": 0.66515553,
+          "Y": 0.72770745
+        },
+        "FlameScale": 1.2
+      }
+    },
+    {
+      "name": "BP_Candle_C_29",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        76.94,
+        -1356.289,
+        207.255
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.2,
+        1.2,
+        0.8
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle26",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_29.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_29.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "ScaleWidth": 1.2,
+        "RandomCandleID": 3.5355693101882935,
+        "InitialFlameSize": {
+          "X": 0.93903697,
+          "Y": 1.1249939
+        },
+        "FlameScale": 1.2
+      }
+    },
+    {
+      "name": "BP_Candle_C_3",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -127.084,
+        -1355.935,
+        196.491
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_3.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_3.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 6.407361030578613,
+        "InitialFlameSize": {
+          "X": 0.56252563,
+          "Y": 0.537879
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_30",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -137.984,
+        1325.82,
+        207.255
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.2,
+        1.2,
+        0.8
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle27",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_30.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_30.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "ScaleWidth": 1.2,
+        "RandomCandleID": 0.8420056849718094,
+        "InitialFlameSize": {
+          "X": 0.7029281,
+          "Y": 0.7382478
+        },
+        "FlameScale": 1.2
+      }
+    },
+    {
+      "name": "BP_Candle_C_31",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        82.066,
+        1325.978,
+        207.255
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.2,
+        1.2,
+        0.8
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle28",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_31.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_31.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "ScaleWidth": 1.2,
+        "RandomCandleID": 6.35425865650177,
+        "InitialFlameSize": {
+          "X": 0.7479994,
+          "Y": 0.83468735
+        },
+        "FlameScale": 1.2
+      }
+    },
+    {
+      "name": "BP_Candle_C_4",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -132.504,
+        -1365.531,
+        198.038
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle2",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_4.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_4.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 2.4414807558059692,
+        "InitialFlameSize": {
+          "X": 0.5464945,
+          "Y": 0.4666396
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_5",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -132.325,
+        -1346.27,
+        197.032
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle3",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_5.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_5.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 2.548600733280182,
+        "InitialFlameSize": {
+          "X": 0.3642825,
+          "Y": 0.44386974
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_6",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -143.571,
+        -1346.235,
+        199.234
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle4",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_6.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_6.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 3.6252936720848083,
+        "InitialFlameSize": {
+          "X": 0.43886605,
+          "Y": 0.4577934
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_7",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -149.02,
+        -1355.895,
+        194.427
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle5",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_7.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_7.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 2.9844051599502563,
+        "InitialFlameSize": {
+          "X": 0.5437193,
+          "Y": 0.5141329
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_8",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        -143.414,
+        -1365.744,
+        198.074
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle6",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_8.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_8.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 6.94936990737915,
+        "InitialFlameSize": {
+          "X": 0.32988867,
+          "Y": 0.3432044
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_C_9",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "location": [
+        71.6,
+        -1365.516,
+        196.491
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -120.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.55,
+        0.55,
+        0.44
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle7",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_9.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_Cutting_Map_Lighting_Evening:PersistentLevel.BP_Candle_C_9.Candle.CandleWickMat'",
+        "ScaleHeight": 0.8,
+        "GlobalScale": 0.55,
+        "RandomCandleID": 2.047486752271652,
+        "InitialFlameSize": {
+          "X": 0.4679267,
+          "Y": 0.4208074
+        }
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -34.344,
+        -0.058,
+        503.605
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_0",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere",
+      "location": [
+        -10.1,
+        -20.312,
+        -1026.175
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_10",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere10",
+      "location": [
+        -888.806,
+        112.712,
+        287.609
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_2",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere2",
+      "location": [
+        -885.213,
+        -1265.949,
+        93.921
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_3",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere3",
+      "location": [
+        -885.213,
+        -1265.949,
+        93.921
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_4",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere4",
+      "location": [
+        -5.313,
+        -1265.949,
+        93.921
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_5",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere5",
+      "location": [
+        867.061,
+        -1265.949,
+        93.921
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_6",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere6",
+      "location": [
+        867.061,
+        -17.491,
+        279.817
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_7",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere7",
+      "location": [
+        809.422,
+        1217.438,
+        145.304
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_8",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere8",
+      "location": [
+        -28.668,
+        1315.49,
+        145.304
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_9",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "BP_LightDetectionCollider_Sphere9",
+      "location": [
+        -877.036,
+        1180.623,
+        145.304
+      ]
+    },
+    {
+      "name": "DecalActor_0",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "MI_Leakage_tdlodebc_2K64",
+      "location": [
+        1088.702,
+        -1.918,
+        417.141
+      ]
+    },
+    {
+      "name": "DecalActor_1",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "MI_Leakage_tdlodebc_2K65",
+      "location": [
+        1088.702,
+        842.401,
+        417.141
+      ]
+    },
+    {
+      "name": "DecalActor_2",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "MI_Leakage_tdlodebc_2K66",
+      "location": [
+        1088.702,
+        -827.942,
+        417.141
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "MI_Leakage_tdlodebc_2K67",
+      "location": [
+        -1121.177,
+        -1.918,
+        417.141
+      ]
+    },
+    {
+      "name": "DecalActor_4",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "MI_Leakage_tdlodebc_2K68",
+      "location": [
+        -1121.177,
+        842.401,
+        417.141
+      ]
+    },
+    {
+      "name": "DecalActor_5",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "MI_Leakage_tdlodebc_2K69",
+      "location": [
+        -1121.177,
+        -827.942,
+        417.141
+      ]
+    },
+    {
+      "name": "DirectionalLight_1",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -170.0,
+        -170.0,
+        50.0
+      ]
+    },
+    {
+      "name": "dynamic_hdri_C_2",
+      "class": "dynamic_hdri_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "dynamic_hdri",
+      "location": [
+        -65.068,
+        -64.067,
+        -5.008
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_1",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        0.0,
+        -120.0,
+        80.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_27",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "N_Fire9",
+      "location": [
+        812.278,
+        1238.466,
+        111.888
+      ]
+    },
+    {
+      "name": "NiagaraActor_29",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "N_Fire10",
+      "location": [
+        -926.129,
+        1231.184,
+        111.888
+      ]
+    },
+    {
+      "name": "NiagaraActor_30",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "N_Fire11",
+      "location": [
+        -879.891,
+        -1260.885,
+        111.888
+      ]
+    },
+    {
+      "name": "NiagaraActor_31",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "N_Fire12",
+      "location": [
+        858.515,
+        -1253.604,
+        111.888
+      ]
+    },
+    {
+      "name": "NiagaraActor_32",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "N_Fire13",
+      "location": [
+        850.417,
+        -8.793,
+        111.888
+      ]
+    },
+    {
+      "name": "NiagaraActor_33",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "N_Fire14",
+      "location": [
+        -899.752,
+        -19.091,
+        111.888
+      ]
+    },
+    {
+      "name": "PointLight_10",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "PointLight11",
+      "location": [
+        -1080.669,
+        840.483,
+        265.492
+      ]
+    },
+    {
+      "name": "PointLight_11",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "PointLight12",
+      "location": [
+        -1080.669,
+        -829.86,
+        265.492
+      ]
+    },
+    {
+      "name": "PointLight_6",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "PointLight7",
+      "location": [
+        1049.898,
+        0.0,
+        265.492
+      ]
+    },
+    {
+      "name": "PointLight_7",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "PointLight8",
+      "location": [
+        1049.898,
+        844.32,
+        265.492
+      ]
+    },
+    {
+      "name": "PointLight_8",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "PointLight9",
+      "location": [
+        1049.898,
+        -826.024,
+        265.492
+      ]
+    },
+    {
+      "name": "PointLight_9",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "PointLight10",
+      "location": [
+        -1080.669,
+        -3.836,
+        265.492
+      ]
+    },
+    {
+      "name": "PostProcessVolume_1",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "PostProcessVolume",
+      "location": [
+        100.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_1",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        100.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyLight_1",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SkyLight",
+      "location": [
+        -30.0,
+        0.0,
+        590.0
+      ]
+    },
+    {
+      "name": "SpotLight_0",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight5",
+      "location": [
+        1077.872,
+        960.396,
+        715.703
+      ]
+    },
+    {
+      "name": "SpotLight_11",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight19",
+      "location": [
+        -1077.445,
+        -830.931,
+        291.187
+      ]
+    },
+    {
+      "name": "SpotLight_15",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight16",
+      "location": [
+        798.35,
+        1217.257,
+        150.823
+      ]
+    },
+    {
+      "name": "SpotLight_16",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight17",
+      "location": [
+        -1077.445,
+        840.483,
+        291.187
+      ]
+    },
+    {
+      "name": "SpotLight_19",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight3",
+      "location": [
+        -22.696,
+        1356.602,
+        245.469
+      ]
+    },
+    {
+      "name": "SpotLight_2",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight2",
+      "location": [
+        -22.696,
+        -1373.398,
+        245.469
+      ]
+    },
+    {
+      "name": "SpotLight_20",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight18",
+      "location": [
+        1048.77,
+        -3.836,
+        291.187
+      ]
+    },
+    {
+      "name": "SpotLight_21",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight20",
+      "location": [
+        1048.77,
+        840.483,
+        291.187
+      ]
+    },
+    {
+      "name": "SpotLight_22",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight21",
+      "location": [
+        1048.77,
+        -830.931,
+        291.187
+      ]
+    },
+    {
+      "name": "SpotLight_24",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight23",
+      "location": [
+        826.68,
+        1245.587,
+        123.12
+      ]
+    },
+    {
+      "name": "SpotLight_25",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight22",
+      "location": [
+        -904.92,
+        1217.257,
+        150.823
+      ]
+    },
+    {
+      "name": "SpotLight_26",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight24",
+      "location": [
+        -933.25,
+        1245.587,
+        123.12
+      ]
+    },
+    {
+      "name": "SpotLight_27",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight25",
+      "location": [
+        -865.964,
+        -1239.676,
+        150.823
+      ]
+    },
+    {
+      "name": "SpotLight_28",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight26",
+      "location": [
+        -894.294,
+        -1268.006,
+        123.12
+      ]
+    },
+    {
+      "name": "SpotLight_29",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight27",
+      "location": [
+        837.306,
+        -1239.676,
+        150.823
+      ]
+    },
+    {
+      "name": "SpotLight_30",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight28",
+      "location": [
+        865.636,
+        -1268.006,
+        123.12
+      ]
+    },
+    {
+      "name": "SpotLight_31",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight29",
+      "location": [
+        825.572,
+        -13.942,
+        150.823
+      ]
+    },
+    {
+      "name": "SpotLight_32",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight30",
+      "location": [
+        865.636,
+        -13.942,
+        123.12
+      ]
+    },
+    {
+      "name": "SpotLight_33",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight31",
+      "location": [
+        -874.907,
+        -13.942,
+        150.823
+      ]
+    },
+    {
+      "name": "SpotLight_34",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight32",
+      "location": [
+        -914.971,
+        -13.942,
+        123.12
+      ]
+    },
+    {
+      "name": "SpotLight_35",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight4",
+      "location": [
+        -136.387,
+        -1355.277,
+        207.613
+      ]
+    },
+    {
+      "name": "SpotLight_36",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight11",
+      "location": [
+        -136.387,
+        -1355.277,
+        262.67
+      ]
+    },
+    {
+      "name": "SpotLight_37",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight12",
+      "location": [
+        78.005,
+        -1355.277,
+        207.613
+      ]
+    },
+    {
+      "name": "SpotLight_38",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight13",
+      "location": [
+        78.005,
+        -1355.277,
+        262.67
+      ]
+    },
+    {
+      "name": "SpotLight_39",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight14",
+      "location": [
+        -136.387,
+        1324.295,
+        207.613
+      ]
+    },
+    {
+      "name": "SpotLight_40",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight15",
+      "location": [
+        -136.387,
+        1324.295,
+        262.67
+      ]
+    },
+    {
+      "name": "SpotLight_41",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight33",
+      "location": [
+        78.005,
+        1324.295,
+        207.613
+      ]
+    },
+    {
+      "name": "SpotLight_42",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight34",
+      "location": [
+        78.005,
+        1324.295,
+        262.67
+      ]
+    },
+    {
+      "name": "SpotLight_5",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight6",
+      "location": [
+        1077.872,
+        131.609,
+        715.703
+      ]
+    },
+    {
+      "name": "SpotLight_6",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight7",
+      "location": [
+        1077.872,
+        -691.323,
+        715.703
+      ]
+    },
+    {
+      "name": "SpotLight_7",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight8",
+      "location": [
+        1077.872,
+        -219.822,
+        715.703
+      ]
+    },
+    {
+      "name": "SpotLight_8",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight9",
+      "location": [
+        1077.872,
+        616.095,
+        715.703
+      ]
+    },
+    {
+      "name": "SpotLight_9",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+      "label": "SpotLight10",
+      "location": [
+        -1111.024,
+        -691.323,
+        715.703
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 16,
+  "errors": [],
+  "warnings": []
+}

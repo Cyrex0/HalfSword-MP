@@ -1,0 +1,356 @@
+{
+  "map": "Arena_Cutting_Ground_F_001",
+  "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+  "kind": "level_instance",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "BP_Prop_Training_Dummy_001_C_1",
+      "class": "BP_Prop_Training_Dummy_001_C",
+      "class_path": "/Game/Assets/Props/Training/Models/BP_Prop_Training_Dummy_001.BP_Prop_Training_Dummy_001_C",
+      "class_chain": [
+        "BP_Prop_Training_Dummy_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "tags": [
+        "Add Weapon Skill"
+      ],
+      "location": [
+        -958.291,
+        725.32,
+        -4.798
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -155.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "training_dummy",
+      "label": "BP_Prop_Training_Dummy_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "SM_Dummy",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Training/Models/SM_Prop_Training_Dummy_001.SM_Prop_Training_Dummy_001'"
+        },
+        {
+          "component": "SM_Helm",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Armor/Head/Sallets/Meshes/SM_Armor_Head_Sallet_Solid_D_001.SM_Armor_Head_Sallet_Solid_D_001'"
+        },
+        {
+          "component": "SM_Shield",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Weapons/Shields/Targe/Meshes/SM_Weapon_Shield_Targe_Straps_A_001.SM_Weapon_Shield_Targe_Straps_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "TextRenderActor_0",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor",
+      "location": [
+        -768.291,
+        1395.538,
+        232.413
+      ]
+    },
+    {
+      "name": "TextRenderActor_1",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor2",
+      "location": [
+        992.07,
+        1047.934,
+        158.888
+      ]
+    },
+    {
+      "name": "TextRenderActor_10",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor11",
+      "location": [
+        -607.724,
+        -245.009,
+        302.213
+      ]
+    },
+    {
+      "name": "TextRenderActor_11",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor12",
+      "location": [
+        -885.197,
+        -1321.811,
+        302.213
+      ]
+    },
+    {
+      "name": "TextRenderActor_12",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor13",
+      "location": [
+        -607.724,
+        -191.251,
+        263.716
+      ]
+    },
+    {
+      "name": "TextRenderActor_13",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor14",
+      "location": [
+        -885.197,
+        -801.999,
+        210.15
+      ]
+    },
+    {
+      "name": "TextRenderActor_14",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor15",
+      "location": [
+        -216.694,
+        -59.143,
+        162.641
+      ]
+    },
+    {
+      "name": "TextRenderActor_15",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor16",
+      "location": [
+        -537.512,
+        -265.164,
+        162.641
+      ]
+    },
+    {
+      "name": "TextRenderActor_16",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor17",
+      "location": [
+        -222.427,
+        -1295.125,
+        217.377
+      ]
+    },
+    {
+      "name": "TextRenderActor_17",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor18",
+      "location": [
+        -172.515,
+        -1295.125,
+        180.359
+      ]
+    },
+    {
+      "name": "TextRenderActor_18",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor19",
+      "location": [
+        -172.515,
+        -1295.125,
+        144.715
+      ]
+    },
+    {
+      "name": "TextRenderActor_19",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor20",
+      "location": [
+        -172.515,
+        -1295.125,
+        105.768
+      ]
+    },
+    {
+      "name": "TextRenderActor_2",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor3",
+      "location": [
+        813.399,
+        562.248,
+        248.675
+      ]
+    },
+    {
+      "name": "TextRenderActor_20",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor21",
+      "location": [
+        -222.427,
+        903.07,
+        217.377
+      ]
+    },
+    {
+      "name": "TextRenderActor_21",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor24",
+      "location": [
+        -376.533,
+        -1346.02,
+        150.369
+      ]
+    },
+    {
+      "name": "TextRenderActor_22",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor25",
+      "location": [
+        496.945,
+        -637.903,
+        150.369
+      ]
+    },
+    {
+      "name": "TextRenderActor_23",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor26",
+      "location": [
+        443.5,
+        -1338.019,
+        150.369
+      ]
+    },
+    {
+      "name": "TextRenderActor_3",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor4",
+      "location": [
+        838.261,
+        878.618,
+        103.997
+      ]
+    },
+    {
+      "name": "TextRenderActor_4",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor5",
+      "location": [
+        -1011.482,
+        992.849,
+        190.531
+      ]
+    },
+    {
+      "name": "TextRenderActor_5",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor6",
+      "location": [
+        813.399,
+        172.564,
+        210.447
+      ]
+    },
+    {
+      "name": "TextRenderActor_6",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor7",
+      "location": [
+        -884.194,
+        453.651,
+        252.367
+      ]
+    },
+    {
+      "name": "TextRenderActor_7",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor8",
+      "location": [
+        -884.194,
+        453.651,
+        211.044
+      ]
+    },
+    {
+      "name": "TextRenderActor_8",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor9",
+      "location": [
+        -216.694,
+        496.963,
+        131.068
+      ]
+    },
+    {
+      "name": "TextRenderActor_9",
+      "class": "TextRenderActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+      "label": "TextRenderActor10",
+      "location": [
+        -300.015,
+        1419.671,
+        175.154
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 194,
+  "errors": [],
+  "warnings": []
+}

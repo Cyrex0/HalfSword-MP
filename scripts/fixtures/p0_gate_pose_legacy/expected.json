@@ -1,0 +1,11 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-1": "pass",
+    "DoD-3": "pass",
+    "POSE-1": "incomplete"
+  },
+  "messages": [
+    "pose_quality lacks foot_slide_p95, idle_rms, jitter_ratio"
+  ]
+}

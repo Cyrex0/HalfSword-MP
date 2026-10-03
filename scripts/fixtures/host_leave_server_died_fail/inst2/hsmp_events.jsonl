@@ -1,0 +1,4 @@
+{"v":1,"ev":"frame_hb","inst":"2","mod":"HSMPMatch","seq":3,"t_ms":5000,"wall_ms":1790880000000,"n":1,"max_ms":43}
+{"v":1,"ev":"x_save_guard","inst":"2","mod":"HSMPMatch","seq":2,"t_ms":5250,"wall_ms":1790880000250,"active":true,"why":"session","session":1}
+{"v":1,"ev":"lobby_ready","inst":"2","mod":"HSMPMenu","seq":1,"t_ms":5400,"wall_ms":1790880000400,"epoch":1,"peer_id":2,"notice":null,"role":"join","arena":""}
+{"v":1,"ev":"travel","inst":"2","mod":"HSMPMatch","seq":4,"t_ms":9000,"wall_ms":1790880004000,"from":"Map_Arena_Alley","to":"Map_Menu_Startup","by":"director","reason":"Host closed the server"}

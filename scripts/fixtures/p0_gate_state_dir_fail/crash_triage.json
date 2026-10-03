@@ -1,0 +1,12 @@
+{
+  "crashes": [],
+  "since": "2026-10-01T18:39:50.000Z",
+  "summary": {
+    "new": 0,
+    "total": 0,
+    "triaged": 0
+  },
+  "tool": "hsmp-tools crash-triage",
+  "until": "2026-10-01T18:43:30.000Z",
+  "version": 1
+}

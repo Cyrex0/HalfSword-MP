@@ -1,0 +1,35 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"C:\\Program Files (x86)\\Steam"
+		"label"		""
+		"contentid"		"3703651827614267601"
+		"totalsize"		"0"
+		"update_clean_bytes_tally"		"839582615"
+		"time_last_update_verified"		"1790731926"
+		"apps"
+		{
+			"228980"		"157818239"
+		}
+	}
+	"1"
+	{
+		"path"		"D:\\SteamLibrary"
+		"label"		""
+		"contentid"		"531091298403178505"
+		"totalsize"		"1048575995904"
+		"apps"
+		{
+			"730"		"71618803465"
+		}
+	}
+	"2"
+	{
+		"path"		"R:\\Games\\Steam Lib"
+		"label"		"my \"fast\" disk"
+		"apps"
+		{
+		}
+	}
+}

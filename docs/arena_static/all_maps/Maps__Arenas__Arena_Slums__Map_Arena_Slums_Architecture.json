@@ -1,0 +1,422 @@
+{
+  "map": "Map_Arena_Slums_Architecture",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_002.umap",
+      "via": "level_instance:LevelInstance_0 (LI_Env_Fortification_House_A_002)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          2487.493,
+          589.63,
+          725.171
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": -77.502,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_004.umap",
+      "via": "level_instance:LevelInstance_1 (LI_Env_Fortification_House_A_004)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          1431.732,
+          1237.783,
+          825.431
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 3.501,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_F_001.umap",
+      "via": "level_instance:LevelInstance_10 (LI_Env_Alley_House_Common_F_3)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          4048.234,
+          995.945,
+          879.85
+        ],
+        "rotation": {
+          "pitch": -0.121,
+          "yaw": 165.0,
+          "roll": 0.033
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_A_001.umap",
+      "via": "level_instance:LevelInstance_11 (LI_Env_Alley_House_Common_A_001)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          4898.178,
+          408.389,
+          892.16
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 145.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Poor_B_001.umap",
+      "via": "level_instance:LevelInstance_12 (LI_Env_Alley_House_Poor_B_2)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          4546.593,
+          47.966,
+          898.511
+        ],
+        "rotation": {
+          "pitch": -0.089,
+          "yaw": 135.092,
+          "roll": 0.089
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_H_001.umap",
+      "via": "level_instance:LevelInstance_13 (LI_Env_Alley_House_Common_H_001)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          1647.781,
+          2757.363,
+          844.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 95.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_E_001.umap",
+      "via": "level_instance:LevelInstance_3 (LI_Env_Alley_House_Common_E_001)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          3445.626,
+          1138.945,
+          924.139
+        ],
+        "rotation": {
+          "pitch": -0.126,
+          "yaw": -180.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_001.umap",
+      "via": "level_instance:LevelInstance_5 (LI_Env_Fortification_House_A_001)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          2143.952,
+          31.425,
+          787.347
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": -170.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_003.umap",
+      "via": "level_instance:LevelInstance_8 (LI_Env_Fortification_House_A_003)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap"
+      ],
+      "level_transform": {
+        "location": [
+          1920.656,
+          1156.738,
+          843.182
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "LevelInstance_0",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Fortification_House_A_002",
+      "location": [
+        2487.493,
+        589.63,
+        725.171
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_002.LI_Env_Fortification_House_A_002"
+    },
+    {
+      "name": "LevelInstance_1",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Fortification_House_A_004",
+      "location": [
+        1431.732,
+        1237.783,
+        825.431
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_004.LI_Env_Fortification_House_A_004"
+    },
+    {
+      "name": "LevelInstance_10",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Alley_House_Common_F_3",
+      "location": [
+        4048.234,
+        995.945,
+        879.85
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_F_001.LI_Env_Alley_House_Common_F_001"
+    },
+    {
+      "name": "LevelInstance_11",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Alley_House_Common_A_001",
+      "location": [
+        4898.178,
+        408.389,
+        892.16
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_A_001.LI_Env_Alley_House_Common_A_001"
+    },
+    {
+      "name": "LevelInstance_12",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Alley_House_Poor_B_2",
+      "location": [
+        4546.593,
+        47.966,
+        898.511
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Poor_B_001.LI_Env_Alley_House_Poor_B_001"
+    },
+    {
+      "name": "LevelInstance_13",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Alley_House_Common_H_001",
+      "location": [
+        1647.781,
+        2757.363,
+        844.0
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_H_001.LI_Env_Alley_House_Common_H_001"
+    },
+    {
+      "name": "LevelInstance_2",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Alley_House_Poor_B_001",
+      "location": [
+        2357.181,
+        1238.735,
+        893.706
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Poor_B_001.LI_Env_Alley_House_Poor_B_001"
+    },
+    {
+      "name": "LevelInstance_3",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Alley_House_Common_E_001",
+      "location": [
+        3445.626,
+        1138.945,
+        924.139
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_E_001.LI_Env_Alley_House_Common_E_001"
+    },
+    {
+      "name": "LevelInstance_4",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Alley_House_Common_F_001",
+      "location": [
+        1751.96,
+        2121.956,
+        888.878
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_F_001.LI_Env_Alley_House_Common_F_001"
+    },
+    {
+      "name": "LevelInstance_5",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Fortification_House_A_001",
+      "location": [
+        2143.952,
+        31.425,
+        787.347
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_001.LI_Env_Fortification_House_A_001"
+    },
+    {
+      "name": "LevelInstance_6",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Fortification_House_A_2",
+      "location": [
+        2628.712,
+        11669.475,
+        521.335
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_001.LI_Env_Fortification_House_A_001"
+    },
+    {
+      "name": "LevelInstance_7",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Fortification_House_A_3",
+      "location": [
+        2195.293,
+        12155.482,
+        521.335
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_001.LI_Env_Fortification_House_A_001"
+    },
+    {
+      "name": "LevelInstance_8",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Fortification_House_A_003",
+      "location": [
+        1920.656,
+        1156.738,
+        843.182
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_003.LI_Env_Fortification_House_A_003"
+    },
+    {
+      "name": "LevelInstance_9",
+      "class": "LevelInstance",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+      "label": "LI_Env_Alley_House_Common_F_2",
+      "location": [
+        771.298,
+        1319.015,
+        839.932
+      ],
+      "note": "level_instance -> /Game/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_F_001.LI_Env_Alley_House_Common_F_001"
+    }
+  ],
+  "static_mesh_actors_static_count": 776,
+  "errors": [],
+  "warnings": []
+}

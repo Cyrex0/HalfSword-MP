@@ -1,0 +1,504 @@
+{
+  "map": "Map_Arena_Slums_Props",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_72",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "location": [
+        1140.574,
+        1185.51,
+        875.039
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Bucket_004",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Bucket_004.SM_Prop_Container_Bucket_004'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Bucket_004.SM_Prop_Container_Bucket_004'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_79",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "location": [
+        1168.242,
+        763.273,
+        880.851
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 36.827,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_003",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_003.SM_Prop_Furniture_Bench_003'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_003.SM_Prop_Furniture_Bench_003'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_80",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "location": [
+        1261.125,
+        627.777,
+        889.137
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 10.294,
+        "roll": 0.974
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_4",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_003.SM_Prop_Furniture_Bench_003'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_003.SM_Prop_Furniture_Bench_003'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_81",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "location": [
+        1093.045,
+        831.997,
+        880.39
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Stool_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Stool_001.SM_Prop_Furniture_Stool_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Stool_001.SM_Prop_Furniture_Stool_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "DecalActor_0",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K156",
+      "location": [
+        845.886,
+        1322.889,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_1",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K157",
+      "location": [
+        1161.7,
+        1351.759,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_10",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K165",
+      "location": [
+        2353.674,
+        1295.62,
+        1505.071
+      ]
+    },
+    {
+      "name": "DecalActor_11",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K166",
+      "location": [
+        633.681,
+        2021.11,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_12",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K167",
+      "location": [
+        626.561,
+        2078.477,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_13",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K168",
+      "location": [
+        571.014,
+        2592.543,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_14",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K169",
+      "location": [
+        599.434,
+        2363.573,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_15",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K170",
+      "location": [
+        583.141,
+        2073.087,
+        1189.39
+      ]
+    },
+    {
+      "name": "DecalActor_16",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K171",
+      "location": [
+        561.765,
+        2245.302,
+        1189.39
+      ]
+    },
+    {
+      "name": "DecalActor_17",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K172",
+      "location": [
+        540.195,
+        2489.092,
+        1189.39
+      ]
+    },
+    {
+      "name": "DecalActor_18",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K173",
+      "location": [
+        545.053,
+        2449.954,
+        1442.318
+      ]
+    },
+    {
+      "name": "DecalActor_19",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K174",
+      "location": [
+        568.87,
+        2258.077,
+        1445.865
+      ]
+    },
+    {
+      "name": "DecalActor_2",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K158",
+      "location": [
+        837.952,
+        1322.164,
+        1232.146
+      ]
+    },
+    {
+      "name": "DecalActor_20",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K175",
+      "location": [
+        2209.286,
+        1426.939,
+        1856.827
+      ]
+    },
+    {
+      "name": "DecalActor_21",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K176",
+      "location": [
+        2201.642,
+        1488.527,
+        1856.827
+      ]
+    },
+    {
+      "name": "DecalActor_22",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K177",
+      "location": [
+        1302.63,
+        1868.304,
+        1872.609
+      ]
+    },
+    {
+      "name": "DecalActor_23",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K178",
+      "location": [
+        1348.711,
+        1834.592,
+        1832.561
+      ]
+    },
+    {
+      "name": "DecalActor_24",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K179",
+      "location": [
+        1399.439,
+        1840.889,
+        1832.561
+      ]
+    },
+    {
+      "name": "DecalActor_25",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K180",
+      "location": [
+        2517.065,
+        1921.591,
+        2102.339
+      ]
+    },
+    {
+      "name": "DecalActor_26",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K181",
+      "location": [
+        5029.245,
+        861.751,
+        2657.832
+      ]
+    },
+    {
+      "name": "DecalActor_27",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K182",
+      "location": [
+        5023.098,
+        946.662,
+        2623.146
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K159",
+      "location": [
+        930.051,
+        1330.583,
+        1232.146
+      ]
+    },
+    {
+      "name": "DecalActor_4",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K160",
+      "location": [
+        1045.89,
+        1341.173,
+        1232.146
+      ]
+    },
+    {
+      "name": "DecalActor_5",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K161",
+      "location": [
+        1218.85,
+        1367.986,
+        1232.146
+      ]
+    },
+    {
+      "name": "DecalActor_6",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K162",
+      "location": [
+        1986.937,
+        1326.453,
+        1581.713
+      ]
+    },
+    {
+      "name": "DecalActor_7",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K163",
+      "location": [
+        2113.897,
+        1334.036,
+        1581.713
+      ]
+    },
+    {
+      "name": "DecalActor_8",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+      "label": "MI_Leakage_tdfeddkc_2K164",
+      "location": [
+        2361.784,
+        1206.904,
+        1505.071
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 172,
+  "errors": [],
+  "warnings": []
+}

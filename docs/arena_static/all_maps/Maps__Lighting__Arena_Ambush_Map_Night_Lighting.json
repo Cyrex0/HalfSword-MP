@@ -1,0 +1,319 @@
+{
+  "map": "Arena_Ambush_Map_Night_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -241.974,
+        -717.177,
+        391.653
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_1",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere",
+      "location": [
+        2402.31,
+        -2624.255,
+        749.327
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_11",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere6",
+      "location": [
+        98.044,
+        -622.182,
+        558.508
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_13",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere7",
+      "location": [
+        1188.839,
+        -859.942,
+        564.344
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_16",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere8",
+      "location": [
+        -439.964,
+        -1071.097,
+        548.387
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_18",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere9",
+      "location": [
+        96.497,
+        -619.423,
+        558.972
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_20",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere10",
+      "location": [
+        1200.346,
+        -855.719,
+        550.321
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_3",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere2",
+      "location": [
+        1045.404,
+        1558.413,
+        457.322
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_5",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere3",
+      "location": [
+        480.693,
+        655.536,
+        316.099
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_7",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere4",
+      "location": [
+        -2425.341,
+        -858.113,
+        362.702
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_9",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere5",
+      "location": [
+        -429.717,
+        -1067.062,
+        540.498
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "DirectionalLight0",
+      "location": [
+        376.001,
+        -695.446,
+        508.688
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "ExponentialHeightFog0",
+      "location": [
+        -161.136,
+        -722.013,
+        469.446
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "PointLight_1",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "PointLight",
+      "location": [
+        111.499,
+        -624.546,
+        606.815
+      ]
+    },
+    {
+      "name": "PointLight_10",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "PointLight8",
+      "location": [
+        -432.731,
+        -1072.071,
+        558.645
+      ]
+    },
+    {
+      "name": "PointLight_2",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "PointLight2",
+      "location": [
+        104.528,
+        -616.666,
+        563.122
+      ]
+    },
+    {
+      "name": "PointLight_5",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "PointLight3",
+      "location": [
+        1185.794,
+        -855.45,
+        606.815
+      ]
+    },
+    {
+      "name": "PointLight_6",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "PointLight4",
+      "location": [
+        1196.245,
+        -856.656,
+        563.122
+      ]
+    },
+    {
+      "name": "PointLight_7",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "PointLight5",
+      "location": [
+        -1794.829,
+        60.904,
+        603.552
+      ]
+    },
+    {
+      "name": "PointLight_8",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "PointLight6",
+      "location": [
+        -1785.906,
+        68.784,
+        560.216
+      ]
+    },
+    {
+      "name": "PointLight_9",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "PointLight7",
+      "location": [
+        -429.126,
+        -1069.358,
+        603.303
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "Half Sword Graphics v2.5",
+      "location": [
+        0.0,
+        -300.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        300.0,
+        -1000.0,
+        600.0
+      ]
+    },
+    {
+      "name": "SkyLight_0",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        351.074,
+        -925.747,
+        724.214
+      ]
+    },
+    {
+      "name": "SpotLight_1",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+      "label": "SpotLight",
+      "location": [
+        -4056.338,
+        -1118.248,
+        227.018
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 9,
+  "errors": [],
+  "warnings": []
+}

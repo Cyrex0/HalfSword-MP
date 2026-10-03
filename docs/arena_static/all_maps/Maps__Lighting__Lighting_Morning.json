@@ -1,0 +1,82 @@
+{
+  "map": "Lighting_Morning",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Lighting_Morning.umap",
+  "kind": "persistent_or_standalone",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Lighting_Morning.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Morning.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -34.344,
+        -0.058,
+        503.605
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_0",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Morning.umap",
+      "label": "BP_LightDetectionCollider_Sphere",
+      "location": [
+        -10.1,
+        -20.312,
+        -1026.175
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Morning.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        -110.0,
+        280.0,
+        740.0
+      ]
+    },
+    {
+      "name": "Ultra_Dynamic_Sky_C_0",
+      "class": "Ultra_Dynamic_Sky_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Morning.umap",
+      "label": "Ultra_Dynamic_Sky",
+      "location": [
+        -320.0,
+        370.0,
+        280.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

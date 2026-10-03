@@ -1,0 +1,30 @@
+{
+  "verdict": "pass",
+  "rules": {
+    "DoD-1": "pass",
+    "DoD-2": "pass",
+    "DoD-3": "pass",
+    "DoD-4": "pass",
+    "DoD-5": "pass",
+    "DoD-6": "pass",
+    "DoD-7": "pass",
+    "DoD-8": "pass",
+    "DoD-10": "pass",
+    "DoD-12": "pass",
+    "DoD-13": "pass",
+    "POSE-1": "pass",
+    "NETSIM": "pass",
+    "PAWN-1": "pass",
+    "WORLD-1": "pass",
+    "COMBAT-1": "pass"
+  },
+  "messages": [
+    "full G0 passed for the deployed commit",
+    "proxy ran typical",
+    "game traffic through the proxy",
+    "server answered",
+    "clean spawn",
+    "career guard: 1 backup(s), 1 clean check(s)",
+    "games quit through the menu path"
+  ]
+}

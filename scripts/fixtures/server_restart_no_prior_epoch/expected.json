@@ -1,0 +1,9 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-11": "incomplete"
+  },
+  "messages": [
+    "no lobby_ready with an epoch before the restart"
+  ]
+}

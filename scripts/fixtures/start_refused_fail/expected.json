@@ -1,0 +1,9 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-4": "fail"
+  },
+  "messages": [
+    "1 client travels"
+  ]
+}

@@ -1,0 +1,565 @@
+
+=== FUNCTION Create Pre-Made Weapon  (BP_GameManager_C)
+       0: NewLocalVar = 0.0
+      27: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     130: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, Str_Passport_Weapon.WeaponClass_54_B478ECF7499977809745A3973AD678EC, CallFunc_MakeTransform_ReturnValue, 0, None, 1)
+     183: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     286: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_MakeTransform_ReturnValue, 1)
+     326: CallFunc_RandomFloatInRange_ReturnValue = RandomFloatInRange(-0.1, 0.1)
+     372: CallFunc_Add_DoubleDouble_ReturnValue = Add_DoubleDouble(CallFunc_FinishSpawningActor_ReturnValue.self.Price, CallFunc_RandomFloatInRange_ReturnValue)
+     440: NewLocalVar = CallFunc_Add_DoubleDouble_ReturnValue
+     467: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+     503: K2Node_MakeStruct_Str_Passport_Weapon1.WeaponClass_54_B478ECF7499977809745A3973AD678EC = Str_Passport_Weapon.WeaponClass_54_B478ECF7499977809745A3973AD678EC
+     540: K2Node_MakeStruct_Str_Passport_Weapon1.ID_70_C02CF656483647A1933EEA96314B78A6 = 0
+     572: K2Node_MakeStruct_Str_Passport_Weapon1.Name_57_3729B51148E846FE8DD336B9419BCEE1 = Str_Passport_Weapon.Name_57_3729B51148E846FE8DD336B9419BCEE1
+     617: K2Node_MakeStruct_Str_Passport_Weapon1.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D = Str_Passport_Weapon.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D
+     654: K2Node_MakeStruct_Str_Passport_Weapon1.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9 = Str_Passport_Weapon.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9
+     691: K2Node_MakeStruct_Str_Passport_Weapon1.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139 = Str_Passport_Weapon.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139
+     728: K2Node_MakeStruct_Str_Passport_Weapon1.GuardModule_13_6DD2B06245505E53B529D090333012F0 = Str_Passport_Weapon.GuardModule_13_6DD2B06245505E53B529D090333012F0
+     765: K2Node_MakeStruct_Str_Passport_Weapon1.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6 = Str_Passport_Weapon.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6
+     802: K2Node_MakeStruct_Str_Passport_Weapon1.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4 = Str_Passport_Weapon.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4
+     839: K2Node_MakeStruct_Str_Passport_Weapon1.HeadSize_21_2D425E61473B8F64FBAB51B223459D57 = Str_Passport_Weapon.HeadSize_21_2D425E61473B8F64FBAB51B223459D57
+     884: K2Node_MakeStruct_Str_Passport_Weapon1.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704 = Str_Passport_Weapon.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704
+     929: K2Node_MakeStruct_Str_Passport_Weapon1.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF = Str_Passport_Weapon.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF
+     974: K2Node_MakeStruct_Str_Passport_Weapon1.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E = Str_Passport_Weapon.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E
+    1019: K2Node_MakeStruct_Str_Passport_Weapon1.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7 = Str_Passport_Weapon.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7
+    1064: K2Node_MakeStruct_Str_Passport_Weapon1.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927 = Str_Passport_Weapon.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927
+    1109: K2Node_MakeStruct_Str_Passport_Weapon1.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10 = Str_Passport_Weapon.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10
+    1154: K2Node_MakeStruct_Str_Passport_Weapon1.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173 = Str_Passport_Weapon.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173
+    1199: K2Node_MakeStruct_Str_Passport_Weapon1.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36 = Str_Passport_Weapon.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36
+    1244: K2Node_MakeStruct_Str_Passport_Weapon1.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2 = Str_Passport_Weapon.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2
+    1289: K2Node_MakeStruct_Str_Passport_Weapon1.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A = Str_Passport_Weapon.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A
+    1334: K2Node_MakeStruct_Str_Passport_Weapon1.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB = Str_Passport_Weapon.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB
+    1379: K2Node_MakeStruct_Str_Passport_Weapon1.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743 = Str_Passport_Weapon.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743
+    1424: K2Node_MakeStruct_Str_Passport_Weapon1.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638 = Str_Passport_Weapon.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638
+    1469: K2Node_MakeStruct_Str_Passport_Weapon1.Price_60_83FE5A624EA188485BBE4E9C8606AEE5 = NewLocalVar
+    1505: K2Node_MakeStruct_Str_Passport_Weapon1.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461 = Str_Passport_Weapon.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461
+    1550: Weapon Passport = K2Node_MakeStruct_Str_Passport_Weapon1
+    1577: return _
+
+=== FUNCTION ExecuteUbergraph_BP_GameManager  (BP_GameManager_C)
+       0: push_flow 4250
+       5: goto computed EntryPoint
+      15: push_flow 515
+      20: Temp_int_Loop_Counter_Variable_1 = 0
+      43: Temp_int_Array_Index_Variable_1 = 0
+      66: CallFunc_Array_Length_ReturnValue_6 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Nemesis Opponents)
+     147: CallFunc_Less_IntInt_ReturnValue_4 = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue_6)
+     185: if not (CallFunc_Less_IntInt_ReturnValue_4) goto 1244
+     199: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable_1
+     226: push_flow 1645
+     231: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Nemesis Opponents, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_3)
+     312: CallFunc_EqualEqual_IntInt_ReturnValue_1 = EqualEqual_IntInt(CallFunc_Array_Get_Item_3.ID_30_34ACE6474D440109A9E2A7A6273471AD, 0)
+     355: pop_flow_if_not (CallFunc_EqualEqual_IntInt_ReturnValue_1)
+     365: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Nemesis Opponents, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_3)
+     446: CallFunc_Array_Add_ReturnValue = Default__KismetArrayLibrary.Array_Add(self.Nemesis Opponents to Purge, CallFunc_Array_Get_Item_3)
+     514: pop_flow
+     515: Temp_int_Loop_Counter_Variable_4 = 0
+     538: Temp_int_Array_Index_Variable_2 = 0
+     561: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Combat Events)
+     642: CallFunc_Less_IntInt_ReturnValue_2 = Less_IntInt(Temp_int_Loop_Counter_Variable_4, CallFunc_Array_Length_ReturnValue_3)
+     680: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_2)
+     690: Temp_int_Array_Index_Variable_2 = Temp_int_Loop_Counter_Variable_4
+     717: push_flow 1170
+     722: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Available Combat Events, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item)
+     803: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Nemesis Opponents)
+     884: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(CallFunc_Array_Length_ReturnValue_2, 0)
+     918: CallFunc_EqualEqual_ByteByte_ReturnValue_3 = EqualEqual_ByteByte(CallFunc_Array_Get_Item.CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7, 7)
+     958: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_EqualEqual_ByteByte_ReturnValue_3, CallFunc_EqualEqual_IntInt_ReturnValue)
+     996: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue)
+    1006: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Available Combat Events, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item)
+    1087: CallFunc_Array_RemoveItem_ReturnValue = Default__KismetArrayLibrary.Array_RemoveItem(self.As GI Settings.self.Available Combat Events, CallFunc_Array_Get_Item)
+    1169: pop_flow
+    1170: CallFunc_Add_IntInt_ReturnValue_4 = Add_IntInt(Temp_int_Loop_Counter_Variable_4, 1)
+    1212: Temp_int_Loop_Counter_Variable_4 = CallFunc_Add_IntInt_ReturnValue_4
+    1239: goto 561
+    1244: Temp_int_Loop_Counter_Variable_2 = 0
+    1267: Temp_int_Array_Index_Variable_3 = 0
+    1290: CallFunc_Array_Length_ReturnValue_7 = Default__KismetArrayLibrary.Array_Length(self.Nemesis Opponents to Purge)
+    1349: CallFunc_Less_IntInt_ReturnValue_5 = Less_IntInt(Temp_int_Loop_Counter_Variable_2, CallFunc_Array_Length_ReturnValue_7)
+    1387: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_5)
+    1397: Temp_int_Array_Index_Variable_3 = Temp_int_Loop_Counter_Variable_2
+    1424: push_flow 1571
+    1429: Default__KismetArrayLibrary.Array_Get(self.Nemesis Opponents to Purge, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_4)
+    1488: CallFunc_Array_RemoveItem_ReturnValue_2 = Default__KismetArrayLibrary.Array_RemoveItem(self.As GI Settings.self.Nemesis Opponents, CallFunc_Array_Get_Item_4)
+    1570: pop_flow
+    1571: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_2, 1)
+    1613: Temp_int_Loop_Counter_Variable_2 = CallFunc_Add_IntInt_ReturnValue_2
+    1640: goto 1290
+    1645: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+    1687: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_1
+    1714: goto 66
+    1719: Temp_int_Array_Index_Variable = 0
+    1742: CallFunc_Array_Length_ReturnValue_5 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Combat Events)
+    1823: CallFunc_Less_IntInt_ReturnValue_3 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_5)
+    1861: if not (CallFunc_Less_IntInt_ReturnValue_3) goto 2124
+    1875: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable
+    1902: push_flow 2050
+    1907: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Available Combat Events, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    1988: CallFunc_EqualEqual_ByteByte_ReturnValue_4 = EqualEqual_ByteByte(CallFunc_Array_Get_Item_1.CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7, 7)
+    2028: pop_flow_if_not (CallFunc_EqualEqual_ByteByte_ReturnValue_4)
+    2038: self.Nemesis Combat Event Spawned = true
+    2049: pop_flow
+    2050: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    2092: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+    2119: goto 1742
+    2124: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(self.Nemesis Combat Event Spawned)
+    2153: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue)
+    2163: Generate Random Combat Event(1)
+    2182: pop_flow
+    2183: Temp_int_Loop_Counter_Variable = 0
+    2206: goto 1719
+    2211: self.As GI Settings.Load Game()
+    2247: pop_flow
+    2248: push_flow 3084
+    2253: push_flow 3047
+    2258: push_flow 2467
+    2263: push_flow 2482
+    2268: push_flow 2927
+    2273: CallFunc_GetGameMode_ReturnValue = GetGameMode(self)
+    2294: K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode = Cast<BP_HalfSwordGameMode_C>(CallFunc_GetGameMode_ReturnValue)
+    2330: K2Node_DynamicCast_bSuccess_1 = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode)
+    2359: pop_flow_if_not (K2Node_DynamicCast_bSuccess_1)
+    2369: self.As BP Half Sword Game Mode = K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode
+    2388: self.As BP Half Sword Game Mode.self.Match Won = false
+    2421: self.As BP Half Sword Game Mode.self.Enemy Count = 0
+    2466: pop_flow
+    2467: Generate Random Equipment()
+    2481: pop_flow
+    2482: Temp_int_Loop_Counter_Variable_3 = 0
+    2505: Temp_int_Array_Index_Variable_4 = 0
+    2528: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Spawned Combatants)
+    2609: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable_3, CallFunc_Array_Length_ReturnValue_1)
+    2647: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_1)
+    2657: Temp_int_Array_Index_Variable_4 = Temp_int_Loop_Counter_Variable_3
+    2684: push_flow 2853
+    2689: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Spawned Combatants, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_2)
+    2770: CallFunc_Array_RemoveItem_ReturnValue_1 = Default__KismetArrayLibrary.Array_RemoveItem(self.As GI Settings.self.Available Combatants, CallFunc_Array_Get_Item_2)
+    2852: pop_flow
+    2853: CallFunc_Add_IntInt_ReturnValue_5 = Add_IntInt(Temp_int_Loop_Counter_Variable_3, 1)
+    2895: Temp_int_Loop_Counter_Variable_3 = CallFunc_Add_IntInt_ReturnValue_5
+    2922: goto 2528
+    2927: CallFunc_GetGameInstance_ReturnValue = GetGameInstance(self)
+    2948: K2Node_DynamicCast_AsGI_Settings = Cast<GI_Settings_C>(CallFunc_GetGameInstance_ReturnValue)
+    2984: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsGI_Settings)
+    3013: pop_flow_if_not (K2Node_DynamicCast_bSuccess)
+    3023: self.As GI Settings = K2Node_DynamicCast_AsGI_Settings
+    3042: goto 2211
+    3047: self.As GI Settings.Check Insured Items()
+    3083: pop_flow
+    3084: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 0)
+    3137: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 2)
+    3190: CallFunc_EqualEqual_ByteByte_ReturnValue_2 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 5)
+    3243: CallFunc_BooleanOR_ReturnValue = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue, CallFunc_EqualEqual_ByteByte_ReturnValue_1)
+    3281: CallFunc_BooleanOR_ReturnValue_1 = BooleanOR(CallFunc_BooleanOR_ReturnValue, CallFunc_EqualEqual_ByteByte_ReturnValue_2)
+    3319: pop_flow_if_not (CallFunc_BooleanOR_ReturnValue_1)
+    3329: push_flow 3464
+    3334: CallFunc_GetGameMode_ReturnValue_1 = GetGameMode(self)
+    3355: K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode_1 = Cast<BP_HalfSwordGameMode_C>(CallFunc_GetGameMode_ReturnValue_1)
+    3391: K2Node_DynamicCast_bSuccess_2 = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode_1)
+    3420: pop_flow_if_not (K2Node_DynamicCast_bSuccess_2)
+    3430: K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode_1.self.Local Multiplayer = false
+    3463: pop_flow
+    3464: CallFunc_HasMultipleLocalPlayers_ReturnValue = HasMultipleLocalPlayers(self)
+    3485: pop_flow_if_not (CallFunc_HasMultipleLocalPlayers_ReturnValue)
+    3495: CallFunc_GetPlayerController_ReturnValue = GetPlayerController(self, 1)
+    3521: CallFunc_IsValid_ReturnValue = IsValid(CallFunc_GetPlayerController_ReturnValue)
+    3550: pop_flow_if_not (CallFunc_IsValid_ReturnValue)
+    3560: CallFunc_GetPlayerController_ReturnValue = GetPlayerController(self, 1)
+    3586: RemovePlayer(CallFunc_GetPlayerController_ReturnValue, true)
+    3606: pop_flow
+    3607: CallFunc_Conv_ByteToInt_ReturnValue = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+    3666: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Combat Events)
+    3747: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue, 3)
+    3789: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(CallFunc_Array_Length_ReturnValue, CallFunc_Add_IntInt_ReturnValue_3)
+    3827: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+    3837: CallFunc_Conv_ByteToInt_ReturnValue = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+    3896: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Combat Events)
+    3977: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue, 3)
+    4019: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(CallFunc_Add_IntInt_ReturnValue_3, CallFunc_Array_Length_ReturnValue)
+    4065: Generate Random Combat Event(CallFunc_Subtract_IntInt_ReturnValue)
+    4088: pop_flow
+    4089: push_flow 4104
+    4094: push_flow 3607
+    4099: goto 15
+    4104: CallFunc_Array_Length_ReturnValue_4 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Nemesis Opponents)
+    4185: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Array_Length_ReturnValue_4, 0)
+    4219: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue)
+    4229: self.Nemesis Combat Event Spawned = false
+    4240: goto 2183
+    4245: goto 4089
+    4250: return _
+
+=== FUNCTION Generate Combat Events  (BP_GameManager_C)
+       0: ExecuteUbergraph_BP_GameManager(4245)
+      15: return _
+
+=== FUNCTION Generate Random Characters  (BP_GameManager_C)
+       0: push_flow 1340
+       5: push_flow 57
+      10: pop_flow_if_not (self.As GI Settings.self.Free Mode Activated)
+      42: Generate Random Equipment()
+      56: pop_flow
+      57: Temp_int_Variable_9 = 0
+      80: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(Temp_int_Variable_9, Amount of Characters to Spawn)
+     118: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue)
+     128: push_flow 1266
+     133: CallFunc_NotEqual_IntInt_ReturnValue = NotEqual_IntInt(Temp_int_Variable_9, 0)
+     167: pop_flow_if_not (CallFunc_NotEqual_IntInt_ReturnValue)
+     177: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     280: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, BP_Generator_Characters_Random_C, CallFunc_MakeTransform_ReturnValue, 0, None, 1)
+     324: CallFunc_SelectFloat_ReturnValue = SelectFloat(1.5, 1.0, Champion)
+     379: Temp_int_Variable = 1475
+     402: Temp_int_Variable_1 = 888
+     425: Temp_int_Variable_2 = 666
+     448: Temp_int_Variable_3 = 444
+     471: Temp_int_Variable_4 = 250
+     494: Temp_int_Variable_5 = 100
+     517: Temp_int_Variable_6 = 50
+     540: Temp_int_Variable_7 = 15
+     563: Temp_int_Variable_8 = 0
+     586: Temp_byte_Variable = Tier
+     613: CallFunc_Conv_IntToDouble_ReturnValue = Conv_IntToDouble(switch(Temp_byte_Variable) {0: Temp_int_Variable_8; 1: Temp_int_Variable_7; 2: Temp_int_Variable_6; 3: Temp_int_Variable_5; 4: Temp_int_Variable_4; 5: Temp_int_Variable_3; 6: Temp_int_Variable_2; 7: Temp_int_Variable_1; 8: Temp_int_Variable; default: K2Node_Select_Default})
+     801: CallFunc_Multiply_DoubleDouble_ReturnValue = Multiply_DoubleDouble(CallFunc_Conv_IntToDouble_ReturnValue, CallFunc_SelectFloat_ReturnValue)
+     847: SetDoublePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Equipment Budget", CallFunc_Multiply_DoubleDouble_ReturnValue)
+     888: SetBoolPropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Champion", Champion)
+     929: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    1032: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_MakeTransform_ReturnValue, 1)
+    1072: CallFunc_FinishSpawningActor_ReturnValue.Generate Character(Willie_BP_C, 0, Tier, false, false, CallFunc_Generate_Character_Character_Passport)
+    1139: CallFunc_Array_Add_ReturnValue = Default__KismetArrayLibrary.Array_Add(self.As GI Settings.self.Available Combatants, CallFunc_Generate_Character_Character_Passport)
+    1229: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+    1265: pop_flow
+    1266: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Variable_9, 1)
+    1308: Temp_int_Variable_9 = CallFunc_Add_IntInt_ReturnValue
+    1335: goto 80
+    1340: return _
+
+=== FUNCTION Generate Random Combat Event  (BP_GameManager_C)
+       0: push_flow 2101
+       5: Temp_int_Variable_8 = 0
+      28: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(Amount, 1)
+      70: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(Temp_int_Variable_8, CallFunc_Subtract_IntInt_ReturnValue)
+     108: if not (CallFunc_LessEqual_IntInt_ReturnValue) goto 2012
+     122: push_flow 2027
+     127: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     230: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, BP_Generator_CombatEvent_Random_C, CallFunc_MakeTransform_ReturnValue, 0, None, 1)
+     274: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     377: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_MakeTransform_ReturnValue, 1)
+     417: Temp_int_Variable = 1000
+     440: Temp_int_Variable_1 = 750
+     463: Temp_int_Variable_2 = 500
+     486: Temp_int_Variable_3 = 400
+     509: Temp_int_Variable_4 = 300
+     532: Temp_int_Variable_5 = 200
+     555: Temp_int_Variable_6 = 100
+     578: Temp_int_Variable_7 = 50
+     601: Temp_int_Variable_9 = 1500
+     624: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Combat Events)
+     705: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(CallFunc_Array_Length_ReturnValue, 0)
+     739: Temp_byte_Variable = self.As GI Settings.self.Player Tier
+     788: CallFunc_GreaterEqual_IntInt_ReturnValue = GreaterEqual_IntInt(self.As GI Settings.self.Reputation on Rank, switch(Temp_byte_Variable) {0: Temp_int_Variable_7; 1: Temp_int_Variable_6; 2: Temp_int_Variable_5; 3: Temp_int_Variable_4; 4: Temp_int_Variable_3; 5: Temp_int_Variable_2; 6: Temp_int_Variable_1; 7: Temp_int_Variable; 8: Temp_int_Variable_9; default: K2Node_Select_Default})
+     999: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_GreaterEqual_IntInt_ReturnValue, CallFunc_EqualEqual_IntInt_ReturnValue)
+    1037: CallFunc_FinishSpawningActor_ReturnValue.Generate Combat Event(CallFunc_BooleanAND_ReturnValue, CallFunc_Generate_Combat_Event_Passport)
+    1091: CallFunc_Conv_TextToString_ReturnValue = Conv_TextToString(CallFunc_Generate_Combat_Event_Passport.Name_33_80AE82094EAE943B065BE3B5C7F1C41B)
+    1137: PrintString(self, CallFunc_Conv_TextToString_ReturnValue, true, true, LinearColor{0.0, 0.66, 1.0, 1.0}, 2.0, "None")
+    1211: Temp_int_Variable = 1000
+    1234: Temp_int_Variable_1 = 750
+    1257: Temp_int_Variable_2 = 500
+    1280: Temp_int_Variable_3 = 400
+    1303: Temp_int_Variable_4 = 300
+    1326: Temp_int_Variable_5 = 200
+    1349: Temp_int_Variable_6 = 100
+    1372: Temp_int_Variable_7 = 50
+    1395: Temp_int_Variable_9 = 1500
+    1418: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Combat Events)
+    1499: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(CallFunc_Array_Length_ReturnValue, 0)
+    1533: Temp_byte_Variable = self.As GI Settings.self.Player Tier
+    1582: CallFunc_GreaterEqual_IntInt_ReturnValue = GreaterEqual_IntInt(self.As GI Settings.self.Reputation on Rank, switch(Temp_byte_Variable) {0: Temp_int_Variable_7; 1: Temp_int_Variable_6; 2: Temp_int_Variable_5; 3: Temp_int_Variable_4; 4: Temp_int_Variable_3; 5: Temp_int_Variable_2; 6: Temp_int_Variable_1; 7: Temp_int_Variable; 8: Temp_int_Variable_9; default: K2Node_Select_Default})
+    1793: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_GreaterEqual_IntInt_ReturnValue, CallFunc_EqualEqual_IntInt_ReturnValue)
+    1831: CallFunc_FinishSpawningActor_ReturnValue.Generate Combat Event(CallFunc_BooleanAND_ReturnValue, CallFunc_Generate_Combat_Event_Passport)
+    1885: CallFunc_Array_AddUnique_ReturnValue = Default__KismetArrayLibrary.Array_AddUnique(self.As GI Settings.self.Available Combat Events, CallFunc_Generate_Combat_Event_Passport)
+    1975: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+    2011: pop_flow
+    2012: Rearrange Combat Events()
+    2026: pop_flow
+    2027: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Variable_8, 1)
+    2069: Temp_int_Variable_8 = CallFunc_Add_IntInt_ReturnValue
+    2096: goto 28
+    2101: return _
+
+=== FUNCTION Generate Random Equipment  (BP_GameManager_C)
+       0: push_flow 9143
+       5: push_flow 3100
+      10: push_flow 52
+      15: self.As GI Settings.Clear Equipment Pool()
+      51: pop_flow
+      52: push_flow 1622
+      57: push_flow 6381
+      62: push_flow 4761
+      67: push_flow 3137
+      72: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Weapons 1H)
+     153: CallFunc_Subtract_IntInt_ReturnValue_1 = Subtract_IntInt(25, CallFunc_Array_Length_ReturnValue_1)
+     195: Amount of 1H Weapons to Spawn = CallFunc_Subtract_IntInt_ReturnValue_1
+     222: Temp_int_Variable_2 = 0
+     245: CallFunc_LessEqual_IntInt_ReturnValue_2 = LessEqual_IntInt(Temp_int_Variable_2, Amount of 1H Weapons to Spawn)
+     283: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue_2)
+     293: push_flow 9069
+     298: CallFunc_MakeTransform_ReturnValue_2 = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     401: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2 = BeginDeferredActorSpawnFromClass(self, BP_Generator_Weapons_Random_C, CallFunc_MakeTransform_ReturnValue_2, 0, None, 1)
+     445: CallFunc_MakeTransform_ReturnValue_2 = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     548: CallFunc_FinishSpawningActor_ReturnValue_2 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2, CallFunc_MakeTransform_ReturnValue_2, 1)
+     588: CallFunc_RandomBoolWithWeight_ReturnValue_12 = RandomBoolWithWeight(0.1)
+     613: CallFunc_SelectInt_ReturnValue_12 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_12)
+     660: CallFunc_RandomBoolWithWeight_ReturnValue_13 = RandomBoolWithWeight(0.1)
+     685: CallFunc_SelectInt_ReturnValue_13 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_13)
+     732: CallFunc_RandomBoolWithWeight_ReturnValue_14 = RandomBoolWithWeight(0.1)
+     757: CallFunc_SelectInt_ReturnValue_14 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_14)
+     804: CallFunc_Add_IntInt_ReturnValue_14 = Add_IntInt(CallFunc_SelectInt_ReturnValue_14, CallFunc_SelectInt_ReturnValue_13)
+     850: CallFunc_Add_IntInt_ReturnValue_15 = Add_IntInt(CallFunc_Add_IntInt_ReturnValue_14, CallFunc_SelectInt_ReturnValue_12)
+     896: CallFunc_Conv_ByteToInt_ReturnValue_4 = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+     955: CallFunc_Add_IntInt_ReturnValue_16 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue_4, CallFunc_Add_IntInt_ReturnValue_15)
+    1001: CallFunc_RandomIntegerInRange_ReturnValue_4 = RandomIntegerInRange(0, CallFunc_Add_IntInt_ReturnValue_16)
+    1043: CallFunc_Clamp_ReturnValue_4 = Clamp(CallFunc_RandomIntegerInRange_ReturnValue_4, 0, 7)
+    1090: CallFunc_Conv_IntToByte_ReturnValue_4 = Conv_IntToByte(CallFunc_Clamp_ReturnValue_4)
+    1127: CallFunc_GetValidValue_ReturnValue_4 = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue_4)
+    1173: CallFunc_FinishSpawningActor_ReturnValue_2.Generate Weapon(0, CallFunc_GetValidValue_ReturnValue_4, false, None, Str_Passport_Weapon1{None, 0, "None", None, None, None, None, None, None, VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), 0.0, 0.0, 0.0, 0.0, 1, 4, 14, 10, LinearColor{1.0, 1.0, 1.0, 1.0}, LinearColor{0.186343, 0.074751, 0.06444, 1.0}, 0.0, 0}, 0, CallFunc_Generate_Weapon_Weapon_Passport_2)
+    1495: CallFunc_Array_Add_ReturnValue_2 = Default__KismetArrayLibrary.Array_Add(self.As GI Settings.self.Available Weapons 1H, CallFunc_Generate_Weapon_Weapon_Passport_2)
+    1585: CallFunc_FinishSpawningActor_ReturnValue_2.K2_DestroyActor()
+    1621: pop_flow
+    1622: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Custom Armor)
+    1703: CallFunc_Subtract_IntInt_ReturnValue_2 = Subtract_IntInt(100, CallFunc_Array_Length_ReturnValue_2)
+    1745: Amount of Armor to Spawn = CallFunc_Subtract_IntInt_ReturnValue_2
+    1772: Temp_int_Variable = 0
+    1795: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(Temp_int_Variable, Amount of Armor to Spawn)
+    1833: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue)
+    1843: push_flow 3026
+    1848: CallFunc_MakeTransform_ReturnValue_3 = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    1951: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_3 = BeginDeferredActorSpawnFromClass(self, BP_Generator_Armor_Random_C, CallFunc_MakeTransform_ReturnValue_3, 0, None, 1)
+    1995: CallFunc_MakeTransform_ReturnValue_3 = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    2098: CallFunc_FinishSpawningActor_ReturnValue_3 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_3, CallFunc_MakeTransform_ReturnValue_3, 1)
+    2138: CallFunc_RandomBoolWithWeight_ReturnValue_3 = RandomBoolWithWeight(0.1)
+    2163: CallFunc_SelectInt_ReturnValue_3 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_3)
+    2210: CallFunc_RandomBoolWithWeight_ReturnValue_4 = RandomBoolWithWeight(0.1)
+    2235: CallFunc_SelectInt_ReturnValue_4 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_4)
+    2282: CallFunc_RandomBoolWithWeight_ReturnValue_5 = RandomBoolWithWeight(0.1)
+    2307: CallFunc_SelectInt_ReturnValue_5 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_5)
+    2354: CallFunc_Add_IntInt_ReturnValue_5 = Add_IntInt(CallFunc_SelectInt_ReturnValue_5, CallFunc_SelectInt_ReturnValue_4)
+    2400: CallFunc_Add_IntInt_ReturnValue_6 = Add_IntInt(CallFunc_Add_IntInt_ReturnValue_5, CallFunc_SelectInt_ReturnValue_3)
+    2446: CallFunc_Conv_ByteToInt_ReturnValue_1 = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+    2505: CallFunc_Add_IntInt_ReturnValue_7 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue_1, CallFunc_Add_IntInt_ReturnValue_6)
+    2551: CallFunc_RandomIntegerInRange_ReturnValue_1 = RandomIntegerInRange(0, CallFunc_Add_IntInt_ReturnValue_7)
+    2593: CallFunc_Clamp_ReturnValue_1 = Clamp(CallFunc_RandomIntegerInRange_ReturnValue_1, 0, 7)
+    2640: CallFunc_Conv_IntToByte_ReturnValue_1 = Conv_IntToByte(CallFunc_Clamp_ReturnValue_1)
+    2677: CallFunc_GetValidValue_ReturnValue_1 = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue_1)
+    2723: K2Node_MakeArray_Array = [0, 5, 4, 12, 10, 9, 7, 6, 1, 13, 16, 11, 14, 15]
+    2762: Default__KismetArrayLibrary.Array_Random(K2Node_MakeArray_Array, CallFunc_Array_Random_OutItem, CallFunc_Array_Random_OutIndex)
+    2821: CallFunc_FinishSpawningActor_ReturnValue_3.Generate Armor(CallFunc_GetValidValue_ReturnValue_1, CallFunc_Array_Random_OutItem, 0.5, false, false, 0, 0, CallFunc_Generate_Armor_Armor_Passport)
+    2899: CallFunc_Array_Add_ReturnValue_3 = Default__KismetArrayLibrary.Array_Add(self.As GI Settings.self.Available Custom Armor, CallFunc_Generate_Armor_Armor_Passport)
+    2989: CallFunc_FinishSpawningActor_ReturnValue_3.K2_DestroyActor()
+    3025: pop_flow
+    3026: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Variable, 1)
+    3068: Temp_int_Variable = CallFunc_Add_IntInt_ReturnValue
+    3095: goto 1795
+    3100: self.As GI Settings.Save Game()
+    3136: pop_flow
+    3137: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Weapons 2H)
+    3218: CallFunc_Subtract_IntInt_ReturnValue_3 = Subtract_IntInt(25, CallFunc_Array_Length_ReturnValue_3)
+    3260: Amount of 2H Weapons to Spawn = CallFunc_Subtract_IntInt_ReturnValue_3
+    3287: Temp_int_Variable_1 = 0
+    3310: CallFunc_LessEqual_IntInt_ReturnValue_1 = LessEqual_IntInt(Temp_int_Variable_1, Amount of 2H Weapons to Spawn)
+    3348: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue_1)
+    3358: push_flow 4687
+    3363: CallFunc_MakeTransform_ReturnValue_4 = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    3466: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_4 = BeginDeferredActorSpawnFromClass(self, BP_Generator_Weapons_Random_C, CallFunc_MakeTransform_ReturnValue_4, 0, None, 1)
+    3510: CallFunc_MakeTransform_ReturnValue_4 = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    3613: CallFunc_FinishSpawningActor_ReturnValue_4 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_4, CallFunc_MakeTransform_ReturnValue_4, 1)
+    3653: CallFunc_RandomBoolWithWeight_ReturnValue_9 = RandomBoolWithWeight(0.1)
+    3678: CallFunc_SelectInt_ReturnValue_9 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_9)
+    3725: CallFunc_RandomBoolWithWeight_ReturnValue_10 = RandomBoolWithWeight(0.1)
+    3750: CallFunc_SelectInt_ReturnValue_10 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_10)
+    3797: CallFunc_RandomBoolWithWeight_ReturnValue_11 = RandomBoolWithWeight(0.1)
+    3822: CallFunc_SelectInt_ReturnValue_11 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_11)
+    3869: CallFunc_Add_IntInt_ReturnValue_11 = Add_IntInt(CallFunc_SelectInt_ReturnValue_11, CallFunc_SelectInt_ReturnValue_10)
+    3915: CallFunc_Add_IntInt_ReturnValue_12 = Add_IntInt(CallFunc_Add_IntInt_ReturnValue_11, CallFunc_SelectInt_ReturnValue_9)
+    3961: CallFunc_Conv_ByteToInt_ReturnValue_3 = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+    4020: CallFunc_Add_IntInt_ReturnValue_13 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue_3, CallFunc_Add_IntInt_ReturnValue_12)
+    4066: CallFunc_RandomIntegerInRange_ReturnValue_3 = RandomIntegerInRange(0, CallFunc_Add_IntInt_ReturnValue_13)
+    4108: CallFunc_Clamp_ReturnValue_3 = Clamp(CallFunc_RandomIntegerInRange_ReturnValue_3, 0, 7)
+    4155: CallFunc_Conv_IntToByte_ReturnValue_3 = Conv_IntToByte(CallFunc_Clamp_ReturnValue_3)
+    4192: CallFunc_GetValidValue_ReturnValue_3 = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue_3)
+    4238: CallFunc_FinishSpawningActor_ReturnValue_4.Generate Weapon(1, CallFunc_GetValidValue_ReturnValue_3, false, None, Str_Passport_Weapon1{None, 0, "None", None, None, None, None, None, None, VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), 0.0, 0.0, 0.0, 0.0, 1, 4, 14, 10, LinearColor{1.0, 1.0, 1.0, 1.0}, LinearColor{0.186343, 0.074751, 0.06444, 1.0}, 0.0, 0}, 0, CallFunc_Generate_Weapon_Weapon_Passport_3)
+    4560: CallFunc_Array_Add_ReturnValue_4 = Default__KismetArrayLibrary.Array_Add(self.As GI Settings.self.Available Weapons 2H, CallFunc_Generate_Weapon_Weapon_Passport_3)
+    4650: CallFunc_FinishSpawningActor_ReturnValue_4.K2_DestroyActor()
+    4686: pop_flow
+    4687: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Variable_1, 1)
+    4729: Temp_int_Variable_1 = CallFunc_Add_IntInt_ReturnValue_1
+    4756: goto 3310
+    4761: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Shields)
+    4842: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(25, CallFunc_Array_Length_ReturnValue)
+    4884: Amount of Shields to Spawn = CallFunc_Subtract_IntInt_ReturnValue
+    4911: Temp_int_Variable_3 = 0
+    4934: CallFunc_LessEqual_IntInt_ReturnValue_3 = LessEqual_IntInt(Temp_int_Variable_3, 25)
+    4968: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue_3)
+    4978: push_flow 6307
+    4983: CallFunc_MakeTransform_ReturnValue_1 = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    5086: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1 = BeginDeferredActorSpawnFromClass(self, BP_Generator_Weapons_Random_C, CallFunc_MakeTransform_ReturnValue_1, 0, None, 1)
+    5130: CallFunc_MakeTransform_ReturnValue_1 = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    5233: CallFunc_FinishSpawningActor_ReturnValue_1 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, CallFunc_MakeTransform_ReturnValue_1, 1)
+    5273: CallFunc_RandomBoolWithWeight_ReturnValue_6 = RandomBoolWithWeight(0.1)
+    5298: CallFunc_SelectInt_ReturnValue_6 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_6)
+    5345: CallFunc_RandomBoolWithWeight_ReturnValue_7 = RandomBoolWithWeight(0.1)
+    5370: CallFunc_SelectInt_ReturnValue_7 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_7)
+    5417: CallFunc_RandomBoolWithWeight_ReturnValue_8 = RandomBoolWithWeight(0.1)
+    5442: CallFunc_SelectInt_ReturnValue_8 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_8)
+    5489: CallFunc_Add_IntInt_ReturnValue_8 = Add_IntInt(CallFunc_SelectInt_ReturnValue_8, CallFunc_SelectInt_ReturnValue_7)
+    5535: CallFunc_Add_IntInt_ReturnValue_9 = Add_IntInt(CallFunc_Add_IntInt_ReturnValue_8, CallFunc_SelectInt_ReturnValue_6)
+    5581: CallFunc_Conv_ByteToInt_ReturnValue_2 = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+    5640: CallFunc_Add_IntInt_ReturnValue_10 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue_2, CallFunc_Add_IntInt_ReturnValue_9)
+    5686: CallFunc_RandomIntegerInRange_ReturnValue_2 = RandomIntegerInRange(0, CallFunc_Add_IntInt_ReturnValue_10)
+    5728: CallFunc_Clamp_ReturnValue_2 = Clamp(CallFunc_RandomIntegerInRange_ReturnValue_2, 0, 7)
+    5775: CallFunc_Conv_IntToByte_ReturnValue_2 = Conv_IntToByte(CallFunc_Clamp_ReturnValue_2)
+    5812: CallFunc_GetValidValue_ReturnValue_2 = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue_2)
+    5858: CallFunc_FinishSpawningActor_ReturnValue_1.Generate Weapon(2, CallFunc_GetValidValue_ReturnValue_2, false, None, Str_Passport_Weapon1{None, 0, "None", None, None, None, None, None, None, VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), 0.0, 0.0, 0.0, 0.0, 1, 4, 14, 10, LinearColor{1.0, 1.0, 1.0, 1.0}, LinearColor{0.186343, 0.074751, 0.06444, 1.0}, 0.0, 0}, 0, CallFunc_Generate_Weapon_Weapon_Passport_1)
+    6180: CallFunc_Array_Add_ReturnValue_1 = Default__KismetArrayLibrary.Array_Add(self.As GI Settings.self.Available Shields, CallFunc_Generate_Weapon_Weapon_Passport_1)
+    6270: CallFunc_FinishSpawningActor_ReturnValue_1.K2_DestroyActor()
+    6306: pop_flow
+    6307: CallFunc_Add_IntInt_ReturnValue_18 = Add_IntInt(Temp_int_Variable_3, 1)
+    6349: Temp_int_Variable_3 = CallFunc_Add_IntInt_ReturnValue_18
+    6376: goto 4934
+    6381: pop_flow_if_not (true)
+    6383: Temp_int_Variable_4 = 0
+    6406: CallFunc_LessEqual_IntInt_ReturnValue_4 = LessEqual_IntInt(Temp_int_Variable_4, 5)
+    6440: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue_4)
+    6450: push_flow 8995
+    6455: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    6558: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, BP_Generator_Weapons_Random_C, CallFunc_MakeTransform_ReturnValue, 0, None, 1)
+    6602: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    6705: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_MakeTransform_ReturnValue, 1)
+    6745: push_flow 8958
+    6750: CallFunc_RandomBoolWithWeight_ReturnValue = RandomBoolWithWeight(0.1)
+    6775: CallFunc_RandomBoolWithWeight_ReturnValue_1 = RandomBoolWithWeight(0.1)
+    6800: CallFunc_SelectInt_ReturnValue = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue)
+    6847: CallFunc_SelectInt_ReturnValue_1 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_1)
+    6894: CallFunc_RandomBoolWithWeight_ReturnValue_2 = RandomBoolWithWeight(0.1)
+    6919: CallFunc_SelectInt_ReturnValue_2 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_2)
+    6966: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(CallFunc_SelectInt_ReturnValue_2, CallFunc_SelectInt_ReturnValue_1)
+    7012: CallFunc_Conv_ByteToInt_ReturnValue = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+    7071: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(CallFunc_Add_IntInt_ReturnValue_2, CallFunc_SelectInt_ReturnValue)
+    7117: CallFunc_Add_IntInt_ReturnValue_4 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue, CallFunc_Add_IntInt_ReturnValue_3)
+    7163: CallFunc_RandomIntegerInRange_ReturnValue = RandomIntegerInRange(0, CallFunc_Add_IntInt_ReturnValue_4)
+    7205: CallFunc_Clamp_ReturnValue = Clamp(CallFunc_RandomIntegerInRange_ReturnValue, 0, 7)
+    7252: CallFunc_Conv_IntToByte_ReturnValue = Conv_IntToByte(CallFunc_Clamp_ReturnValue)
+    7289: CallFunc_GetValidValue_ReturnValue = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue)
+    7335: CallFunc_FinishSpawningActor_ReturnValue.Generate Weapon(3, CallFunc_GetValidValue_ReturnValue, false, None, Str_Passport_Weapon1{None, 0, "None", None, None, None, None, None, None, VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), 0.0, 0.0, 0.0, 0.0, 1, 4, 14, 10, LinearColor{1.0, 1.0, 1.0, 1.0}, LinearColor{0.186343, 0.074751, 0.06444, 1.0}, 0.0, 0}, 0, CallFunc_Generate_Weapon_Weapon_Passport)
+    7657: CallFunc_NotEqual_DoubleDouble_ReturnValue = NotEqual_DoubleDouble(CallFunc_Generate_Weapon_Weapon_Passport.Price_60_83FE5A624EA188485BBE4E9C8606AEE5, 0.0)
+    7704: CallFunc_NotEqual_NameName_ReturnValue = NotEqual_NameName(CallFunc_Generate_Weapon_Weapon_Passport.Name_57_3729B51148E846FE8DD336B9419BCEE1, "None")
+    7755: CallFunc_NotEqual_IntInt_ReturnValue = NotEqual_IntInt(CallFunc_Generate_Weapon_Weapon_Passport.ID_70_C02CF656483647A1933EEA96314B78A6, 0)
+    7798: CallFunc_IsValidClass_ReturnValue = IsValidClass(CallFunc_Generate_Weapon_Weapon_Passport.WeaponClass_54_B478ECF7499977809745A3973AD678EC)
+    7836: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_IsValidClass_ReturnValue, CallFunc_NotEqual_NameName_ReturnValue)
+    7874: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_BooleanAND_ReturnValue, CallFunc_NotEqual_DoubleDouble_ReturnValue)
+    7912: CallFunc_BooleanAND_ReturnValue_2 = BooleanAND(CallFunc_BooleanAND_ReturnValue_1, CallFunc_NotEqual_IntInt_ReturnValue)
+    7950: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_2)
+    7960: CallFunc_RandomBoolWithWeight_ReturnValue = RandomBoolWithWeight(0.1)
+    7985: CallFunc_RandomBoolWithWeight_ReturnValue_1 = RandomBoolWithWeight(0.1)
+    8010: CallFunc_SelectInt_ReturnValue = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue)
+    8057: CallFunc_SelectInt_ReturnValue_1 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_1)
+    8104: CallFunc_RandomBoolWithWeight_ReturnValue_2 = RandomBoolWithWeight(0.1)
+    8129: CallFunc_SelectInt_ReturnValue_2 = SelectInt(1, 0, CallFunc_RandomBoolWithWeight_ReturnValue_2)
+    8176: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(CallFunc_SelectInt_ReturnValue_2, CallFunc_SelectInt_ReturnValue_1)
+    8222: CallFunc_Conv_ByteToInt_ReturnValue = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+    8281: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(CallFunc_Add_IntInt_ReturnValue_2, CallFunc_SelectInt_ReturnValue)
+    8327: CallFunc_Add_IntInt_ReturnValue_4 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue, CallFunc_Add_IntInt_ReturnValue_3)
+    8373: CallFunc_RandomIntegerInRange_ReturnValue = RandomIntegerInRange(0, CallFunc_Add_IntInt_ReturnValue_4)
+    8415: CallFunc_Clamp_ReturnValue = Clamp(CallFunc_RandomIntegerInRange_ReturnValue, 0, 7)
+    8462: CallFunc_Conv_IntToByte_ReturnValue = Conv_IntToByte(CallFunc_Clamp_ReturnValue)
+    8499: CallFunc_GetValidValue_ReturnValue = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue)
+    8545: CallFunc_FinishSpawningActor_ReturnValue.Generate Weapon(3, CallFunc_GetValidValue_ReturnValue, false, None, Str_Passport_Weapon1{None, 0, "None", None, None, None, None, None, None, VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), 0.0, 0.0, 0.0, 0.0, 1, 4, 14, 10, LinearColor{1.0, 1.0, 1.0, 1.0}, LinearColor{0.186343, 0.074751, 0.06444, 1.0}, 0.0, 0}, 0, CallFunc_Generate_Weapon_Weapon_Passport)
+    8867: CallFunc_Array_Add_ReturnValue = Default__KismetArrayLibrary.Array_Add(self.As GI Settings.self.Available Weapons 1H, CallFunc_Generate_Weapon_Weapon_Passport)
+    8957: pop_flow
+    8958: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+    8994: pop_flow
+    8995: CallFunc_Add_IntInt_ReturnValue_19 = Add_IntInt(Temp_int_Variable_4, 1)
+    9037: Temp_int_Variable_4 = CallFunc_Add_IntInt_ReturnValue_19
+    9064: goto 6406
+    9069: CallFunc_Add_IntInt_ReturnValue_17 = Add_IntInt(Temp_int_Variable_2, 1)
+    9111: Temp_int_Variable_2 = CallFunc_Add_IntInt_ReturnValue_17
+    9138: goto 245
+    9143: return _
+
+=== FUNCTION Rearrange Combat Events  (BP_GameManager_C)
+       0: push_flow 2197
+       5: push_flow 750
+      10: Temp_bool_True_if_break_was_hit_Variable = false
+      21: Temp_int_Loop_Counter_Variable_1 = 0
+      44: Temp_int_Array_Index_Variable = 0
+      67: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(Temp_bool_True_if_break_was_hit_Variable)
+      96: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Combat Events)
+     177: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue)
+     215: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_Not_PreBool_ReturnValue, CallFunc_Less_IntInt_ReturnValue)
+     253: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_1)
+     263: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable_1
+     290: push_flow 1489
+     295: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Available Combat Events, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item)
+     376: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(CallFunc_Array_Get_Item.CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7, 8)
+     416: pop_flow_if_not (CallFunc_EqualEqual_ByteByte_ReturnValue)
+     426: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Available Combat Events, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item)
+     507: CallFunc_Array_Add_ReturnValue = Default__KismetArrayLibrary.Array_Add(Rearranged Combat Events, CallFunc_Array_Get_Item)
+     575: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Available Combat Events, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item)
+     656: CallFunc_Array_RemoveItem_ReturnValue = Default__KismetArrayLibrary.Array_RemoveItem(self.As GI Settings.self.Available Combat Events, CallFunc_Array_Get_Item)
+     738: Temp_bool_True_if_break_was_hit_Variable = true
+     749: pop_flow
+     750: Temp_bool_Variable = false
+     761: Temp_int_Variable = 0
+     784: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(Temp_int_Variable, 99)
+     818: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(Temp_bool_Variable)
+     847: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_Not_PreBool_ReturnValue_1, CallFunc_LessEqual_IntInt_ReturnValue)
+     885: if not (CallFunc_BooleanAND_ReturnValue) goto 1403
+     899: push_flow 1563
+     904: Temp_int_Loop_Counter_Variable = 0
+     927: Temp_int_Array_Index_Variable_1 = 0
+     950: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Combat Events)
+    1031: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_1)
+    1069: if not (CallFunc_Less_IntInt_ReturnValue_1) goto 1680
+    1083: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable
+    1110: push_flow 2123
+    1115: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Available Combat Events, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_1)
+    1196: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(CallFunc_Array_Get_Item_1.Tier_38_C21E98C34F256B9DCAA0628D037308BC, Current Tier)
+    1243: pop_flow_if_not (CallFunc_EqualEqual_ByteByte_ReturnValue_1)
+    1253: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Available Combat Events, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_1)
+    1334: CallFunc_Array_Add_ReturnValue_1 = Default__KismetArrayLibrary.Array_Add(Rearranged Combat Events, CallFunc_Array_Get_Item_1)
+    1402: pop_flow
+    1403: self.As GI Settings.self.Available Combat Events = Rearranged Combat Events
+    1452: self.As GI Settings.Save Game()
+    1488: pop_flow
+    1489: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+    1531: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_2
+    1558: goto 67
+    1563: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(Temp_bool_Variable)
+    1592: if not (CallFunc_Not_PreBool_ReturnValue_1) goto 1403
+    1606: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Variable, 1)
+    1648: Temp_int_Variable = CallFunc_Add_IntInt_ReturnValue
+    1675: goto 784
+    1680: CallFunc_NotEqual_ByteByte_ReturnValue = NotEqual_ByteByte(Current Tier, 8)
+    1711: if not (CallFunc_NotEqual_ByteByte_ReturnValue) goto 2111
+    1725: Temp_byte_Variable = 8
+    1745: Temp_byte_Variable_1 = 7
+    1765: Temp_byte_Variable_2 = 6
+    1785: Temp_byte_Variable_3 = 5
+    1805: Temp_byte_Variable_4 = 4
+    1825: Temp_byte_Variable_5 = 3
+    1845: Temp_byte_Variable_6 = 2
+    1865: Temp_byte_Variable_7 = 1
+    1885: Temp_byte_Variable_8 = 8
+    1905: Temp_byte_Variable_9 = Current Tier
+    1932: Current Tier = switch(Temp_byte_Variable_9) {0: Temp_byte_Variable_7; 1: Temp_byte_Variable_6; 2: Temp_byte_Variable_5; 3: Temp_byte_Variable_4; 4: Temp_byte_Variable_3; 5: Temp_byte_Variable_2; 6: Temp_byte_Variable_1; 7: Temp_byte_Variable; 8: Temp_byte_Variable_8; default: K2Node_Select_Default}
+    2110: pop_flow
+    2111: Temp_bool_Variable = true
+    2122: pop_flow
+    2123: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    2165: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue_1
+    2192: goto 950
+    2197: return _
+
+=== FUNCTION ReceiveBeginPlay  (BP_GameManager_C)
+       0: ExecuteUbergraph_BP_GameManager(2248)
+      15: return _

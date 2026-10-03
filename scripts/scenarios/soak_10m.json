@@ -1,0 +1,35 @@
+{
+ "_spec": [
+  "Quick soak for iteration (~10 min): soak_60m's round loop (steps shared by reference) on Alley + Pit x 7 rounds,",
+  "memory sampled every 15 s with a 3 min warm-up. Same SOAK-* rules and limits as soak_60m (see soak_60m.json).",
+  "Compiled into hsmp-gate scenarios.json; keep both identical (cargo test scenario_spec_files_match_compiled_data).",
+  "Run: .\\scripts\\mp_test.ps1 -Instances 2 -Scenario soak_10m"
+ ],
+ "scenarios": {
+  "soak_10m": {
+   "doc": "Quick soak (~10 min): soak_60m's round loop on Alley + Pit x 7 rounds; same rules, 3 min memory warm-up, 15 s samples",
+   "dod": [1, 2, 3, 6, 12],
+   "extra_rules": ["SOAK-CRASH", "SOAK-MEM", "SOAK-LUAERR", "SOAK-HITCH"],
+   "topology": "dedicated",
+   "netsim": "wifi",
+   "arenas": ["Alley", "Pit"],
+   "rounds": 7,
+   "requires": ["debug_verbs", "mem_sampler", "crash_triage"],
+   "soak": {
+    "duration_min": 10,
+    "mem_sample_s": 15,
+    "mem_warmup_min": 3,
+    "mem_min_samples": 12,
+    "mem_slope_max_mb_per_h": 150,
+    "mem_growth_max_mb": 400,
+    "handle_slope_max_per_h": 500,
+    "aux_mem_slope_max_mb_per_h": 20,
+    "hitch_max_ms": 2000,
+    "lua_errors_max": 0,
+    "lua_error_allow": [],
+    "crashes_max": 0
+   },
+   "steps": "soak_60m"
+  }
+ }
+}

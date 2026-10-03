@@ -1,0 +1,25 @@
+{
+  "messages": [
+    "no inst1/state_dir_listing.txt"
+  ],
+  "rules": {
+    "COMBAT-1": "pass",
+    "DoD-1": "pass",
+    "DoD-10": "pass",
+    "DoD-12": "pass",
+    "DoD-13": "pass",
+    "DoD-2": "pass",
+    "DoD-3": "pass",
+    "DoD-4": "pass",
+    "DoD-5": "pass",
+    "DoD-6": "pass",
+    "DoD-7": "pass",
+    "DoD-8": "pass",
+    "NETSIM": "pass",
+    "PAWN-1": "pass",
+    "POSE-1": "pass",
+    "STATE-1": "incomplete",
+    "WORLD-1": "pass"
+  },
+  "verdict": "incomplete"
+}

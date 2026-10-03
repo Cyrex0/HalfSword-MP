@@ -1,0 +1,11 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-13": "incomplete"
+  },
+  "messages": [
+    "the deploy stamp has no file hashes (old build-and-deploy.ps1)",
+    "deployed with -SkipBuild",
+    "deploy profile dev differs from the release mod set: cannot compare (the stamp has no mods table)"
+  ]
+}

@@ -1,0 +1,26 @@
+[package]
+name = "hsmp-pose-truth"
+description = "Same-machine pose ground-truth probe: sender bones vs stand-in bones at the same sender time"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# Build / run:
+#   cargo run --release -p hsmp-pose-truth -- \
+#       <sender .probe_send.txt> <receiver .probe_recv<id>.txt> [--phases phases.txt]
+#   cargo test -p hsmp-pose-truth
+# The tests also run HSMPAvatars' pure Lua (velocity servo, v2 play parser) in Lua 5.4.
+
+[[bin]]
+name = "hsmp-pose-truth"
+path = "src/main.rs"
+
+[dev-dependencies]
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+
+[lints]
+workspace = true

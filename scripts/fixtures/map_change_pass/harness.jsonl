@@ -1,0 +1,9 @@
+{"ev":"mark","wall_ms":1790880002000,"name":"pick1"}
+{"ev":"client_cmd","wall_ms":1790880002010,"inst":"1","cmd":"pick_arena","arg":"Yard","pick":"Yard"}
+{"ev":"mark","wall_ms":1790880003000,"name":"pick2"}
+{"ev":"client_cmd","wall_ms":1790880003010,"inst":"1","cmd":"pick_arena","arg":"Slums","pick":"Slums"}
+{"ev":"mark","wall_ms":1790880004000,"name":"pick3"}
+{"ev":"client_cmd","wall_ms":1790880004010,"inst":"1","cmd":"pick_arena","arg":"Cellar","pick":"Cellar"}
+{"ev":"mark","wall_ms":1790880005000,"name":"start","arena":"Cellar"}
+{"ev":"rcon","wall_ms":1790880024500,"cmd":"DEBUG KILL 1","ok":true,"reply":"OK killed"}
+{"ev":"mark","wall_ms":1790880025100,"name":"round_end","round":1}

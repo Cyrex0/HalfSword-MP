@@ -1,0 +1,47 @@
+[package]
+name = "hsmp-combat-sim"
+description = "Deterministic combat simulator: drives the REAL server combat code (lagcomp + combat + validate) with synthetic 2-8 player fights over netsim-like links"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# Run with
+#   cargo test -p hsmp-combat-sim
+#   cargo test -p hsmp-combat-sim -- --nocapture        (prints the report table)
+#   cargo run --release -p hsmp-combat-sim -- [--seeds N] [--profile NAME]
+#
+# The server sources are compiled INTO this crate (src/lib.rs `#[path]` includes of
+# server/src/{proto,lagcomp,combat}.rs and server/src/validate/), so the simulator
+# always exercises the code that ships; build.rs lifts `loadout::catalog` out of
+# server/src/loadout.rs. See docs/development/architecture.md ("Shared source files").
+
+[lib]
+path = "src/lib.rs"
+# The included server modules carry their own #[cfg(test)] suites (run by the server
+# crate); the simulator's assertions are the integration tests. No lib test/bench target:
+# compiling the lib under cfg(test) would pull in those suites (and their dev-dependencies
+# and `mod tests;` files), which breaks `cargo clippy --all-targets`.
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "hsmp-combat-sim"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+hsmp-net = { path = "../hsmp-net" }
+hsmp-ipc = { path = "../hsmp-ipc" }
+hsmp-pose = { path = "../hsmp-pose" }
+
+[lints]
+workspace = true

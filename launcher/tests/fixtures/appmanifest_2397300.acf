@@ -1,0 +1,24 @@
+"AppState"
+{
+	"appid"		"2397300"
+	"universe"		"1"
+	"LauncherPath"		"C:\\Program Files (x86)\\Steam\\steam.exe"
+	"name"		"Half Sword"
+	"StateFlags"		"4"
+	"installdir"		"Half Sword"
+	"LastUpdated"		"1790816317"
+	"SizeOnDisk"		"10186731845"
+	"buildid"		"24185754"
+	"InstalledDepots"
+	{
+		"2397301"
+		{
+			"manifest"		"2093926066177713714"
+			"size"		"10186731845"
+		}
+	}
+	"UserConfig"
+	{
+		"language"		"english"
+	}
+}

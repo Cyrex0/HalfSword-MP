@@ -1,0 +1,22 @@
+[package]
+name = "hsmpworld-tests"
+description = "Mocked-UE4SS tests for the HSMPWorld Lua mod (Rust + mlua, Lua 5.4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# Test-only crate. Run with  cargo test -p hsmpworld-tests
+# Loads mods/HSMPWorld/Scripts/main.lua and mods/shared against ue4ss_mock.lua.
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+
+[lints]
+workspace = true

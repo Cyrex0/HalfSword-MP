@@ -1,0 +1,34 @@
+HalfSword-MP (HSMP) - an unofficial multiplayer mod for Half Sword
+Copyright (c) 2026 Cyrex0 and the HalfSword-MP contributors
+
+HalfSword-MP is licensed under either of
+  * Apache License, Version 2.0 (LICENSE-APACHE), or
+  * MIT license (LICENSE-MIT)
+at your option.
+
+HalfSword-MP is an unofficial, fan-made project. It is not affiliated with, endorsed by,
+sponsored by, or approved by Half Sword Games or Game Seer Publishing. "Half Sword"
+is a trademark of its respective owner and is used here only to identify the game
+this mod works with. HalfSword-MP ships no Half Sword game code or assets; you need your
+own legitimate copy of Half Sword from Steam.
+
+This distribution includes third-party software:
+
+  * UE4SS (RE-UE4SS), https://github.com/UE4SS-RE/RE-UE4SS
+    Copyright (c) 2022 Narknon. MIT License (see ue4ss/LICENSE).
+    UE4SS.dll and dwmapi.dll are the unmodified upstream release binaries.
+    UE4SS bundles further open-source components; see THIRD-PARTY-NOTICES.html.
+
+  * Rust crates statically linked into hsmp-launcher.exe and hsmp-*.exe,
+    under MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Zlib, BSL-1.0,
+    Unicode-3.0 and CDLA-Permissive-2.0 terms; full texts in
+    THIRD-PARTY-NOTICES.html.
+
+  * Fonts embedded in hsmp-launcher.exe via egui (epaint_default_fonts):
+    Ubuntu-Light (Ubuntu Font Licence 1.0), Hack (MIT / Bitstream Vera),
+    Noto Emoji (SIL Open Font License 1.1), emoji-icon-font (OFL 1.1 / MIT);
+    full texts in THIRD-PARTY-NOTICES.html.
+
+Thanks to massclown (HalfSwordTrainerMod, HalfSwordSplitScreenMod,
+HalfSwordModInstaller; MIT) whose public work informed this project.
+No code from those projects is included.

@@ -1,0 +1,12 @@
+[package]
+name = "ue4ss_pins"
+description = "Pins HSMPNative to one exact UE4SS.dll: generates cpp/abi/UE4SS.def and cpp/abi/ue4ss_pins.h from the DLL + PDB"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "ue4ss_pins"
+path = "main.rs"
+
+[dependencies]

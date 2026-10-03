@@ -1,0 +1,756 @@
+{
+ "arenas_all": [
+  "Alley",
+  "Pit",
+  "Yard",
+  "Slums",
+  "Cellar",
+  "LordsHall",
+  "EastTower"
+ ],
+ "stopgap_for": {
+  "p0_gate": "p0_smoke_autotest",
+  "p0_wifi": "p0_smoke_autotest"
+ },
+ "scenarios": {
+  "p0_gate": {
+   "doc": "DoD-1..8, 10, 12, 13: R rounds on each arena, RCON-driven kills alternating seats",
+   "extra_rules": ["POSE-1", "PAWN-1", "WORLD-1", "COMBAT-1"],
+   "dod": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    10,
+    12,
+    13
+   ],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "arenas": "all",
+   "rounds": 10,
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    {
+     "do": "mark",
+     "name": "boot"
+    },
+    {
+     "do": "wait",
+     "ev": "lobby_ready",
+     "who": "each",
+     "timeout_s": 150
+    },
+    {
+     "do": "wait",
+     "ev": "cmd_result",
+     "who": "each",
+     "where": {
+      "cmd": "ready",
+      "ok": "true"
+     },
+     "timeout_s": 30
+    },
+    {
+     "foreach_arena": [
+      {
+       "do": "mark",
+       "name": "arena:{arena}"
+      },
+      {
+       "do": "rcon",
+       "cmd": "BESTOF {best_of}",
+       "optional": true
+      },
+      {
+       "do": "rcon",
+       "cmd": "MAP {arena}",
+       "pick": "{arena}"
+      },
+      {
+       "do": "mark",
+       "name": "start",
+       "arena": "{arena}"
+      },
+      {
+       "do": "rcon",
+       "cmd": "START"
+      },
+      {
+       "foreach_round": [
+        {
+         "do": "wait",
+         "ev": "ready_report",
+         "who": "each",
+         "timeout_s": 120
+        },
+        {
+         "do": "wait",
+         "ev": "phase",
+         "who": "server",
+         "where": {
+          "to": "Live"
+         },
+         "timeout_s": 60
+        },
+        {
+         "do": "client_cmd",
+         "inst": 1,
+         "cmd": "move",
+         "arg": "10"
+        },
+        {
+         "do": "client_cmd",
+         "inst": 2,
+         "cmd": "move",
+         "arg": "10"
+        },
+        {
+         "do": "hold",
+         "s": 12,
+         "why": "a real Live window: both fighters walk + swing for 10 s (POSE-1 under motion), DoD-6 census every 5 s, WORLD-1/COMBAT-1 (>= 10 s of Live)"
+        },
+        {
+         "do": "rcon",
+         "cmd": "DEBUG KILL {seat}"
+        },
+        {
+         "do": "wait",
+         "ev": "phase",
+         "who": "server",
+         "where": {
+          "to": "RoundOver"
+         },
+         "timeout_s": 30
+        },
+        {
+         "do": "mark",
+         "name": "round_end",
+         "round": "{round}"
+        }
+       ]
+      },
+      {
+       "do": "rcon",
+       "cmd": "ABORT"
+      },
+      {
+       "do": "wait",
+       "ev": "phase",
+       "who": "server",
+       "where": {
+        "to": "Lobby"
+       },
+       "timeout_s": 60
+      },
+      {
+       "do": "wait",
+       "ev": "lobby_ready",
+       "who": "each",
+       "timeout_s": 120
+      },
+      {
+       "do": "wait",
+       "ev": "cmd_result",
+       "who": "each",
+       "where": {
+        "cmd": "ready",
+        "ok": "true"
+       },
+       "timeout_s": 30
+      }
+     ]
+    },
+    {
+     "do": "quit_all"
+    }
+   ]
+  },
+  "p0_wifi": {
+   "doc": "DoD-14: DoD-1..7 on Alley+Pit x 10 rounds under the wifi profile",
+   "extra_rules": ["POSE-1", "PAWN-1", "WORLD-1", "COMBAT-1"],
+   "dod": [
+    14,
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "wifi",
+   "arenas": [
+    "Alley",
+    "Pit"
+   ],
+   "rounds": 10,
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": "p0_gate"
+  },
+  "map_change": {
+   "doc": "DoD-4/10: host picks 3 maps in the lobby, START, everyone loads the last pick",
+   "dod": [
+    4,
+    10,
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    {
+     "do": "wait",
+     "ev": "lobby_ready",
+     "who": "each",
+     "timeout_s": 150
+    },
+    {
+     "do": "mark",
+     "name": "picks"
+    },
+    {
+     "do": "client_cmd",
+     "inst": 1,
+     "cmd": "pick_arena",
+     "arg": "Yard",
+     "pick": "Yard"
+    },
+    {
+     "do": "wait",
+     "ev": "cmd_result",
+     "who": 1,
+     "where": {
+      "cmd": "pick_arena"
+     },
+     "timeout_s": 20
+    },
+    {
+     "do": "mark",
+     "name": "pick2"
+    },
+    {
+     "do": "client_cmd",
+     "inst": 1,
+     "cmd": "pick_arena",
+     "arg": "Slums",
+     "pick": "Slums"
+    },
+    {
+     "do": "wait",
+     "ev": "cmd_result",
+     "who": 1,
+     "where": {
+      "cmd": "pick_arena"
+     },
+     "timeout_s": 20
+    },
+    {
+     "do": "mark",
+     "name": "pick3"
+    },
+    {
+     "do": "client_cmd",
+     "inst": 1,
+     "cmd": "pick_arena",
+     "arg": "Cellar",
+     "pick": "Cellar"
+    },
+    {
+     "do": "wait",
+     "ev": "cmd_result",
+     "who": 1,
+     "where": {
+      "cmd": "pick_arena"
+     },
+     "timeout_s": 20
+    },
+    {
+     "do": "mark",
+     "name": "start",
+     "arena": "Cellar"
+    },
+    {
+     "do": "client_cmd",
+     "inst": 1,
+     "cmd": "start"
+    },
+    {
+     "do": "wait",
+     "ev": "world_ready",
+     "who": "each",
+     "where": {
+      "arena": "Cellar"
+     },
+     "timeout_s": 150
+    },
+    {
+     "do": "rcon",
+     "cmd": "ABORT"
+    },
+    {
+     "do": "quit_all"
+    }
+   ]
+  },
+  "start_refused": {
+   "doc": "DoD-4: START with one unready player -> no instance travels",
+   "dod": [
+    4,
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "requires": [
+    "debug_verbs"
+   ],
+   "env": {
+    "last": {
+     "HSMP_AUTOTEST_READY": "0"
+    }
+   },
+   "steps": [
+    {
+     "do": "wait",
+     "ev": "lobby_ready",
+     "who": "each",
+     "timeout_s": 150
+    },
+    {
+     "do": "rcon",
+     "cmd": "MAP Pit",
+     "pick": "Pit"
+    },
+    {
+     "do": "mark",
+     "name": "start_refused"
+    },
+    {
+     "do": "rcon",
+     "cmd": "START",
+     "expect": "ERR"
+    },
+    {
+     "do": "expect_none",
+     "ev": [
+      "travel",
+      "world_ready"
+     ],
+     "who": "any",
+     "window_s": 20
+    },
+    {
+     "do": "quit_all"
+    }
+   ]
+  },
+  "combat_probe": {
+   "doc": "Combat in-game probe: one Live round on a dedicated server held 12 min; hits, screenshots and checks are driven from inside the games (-Dev deploy; the HSMPDiag Lua-from-file console was removed: drive it through `hsmp-tools ipc-ctl` dev_cmd records, e.g. autotest move). Not a gate.",
+   "dod": [
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150 },
+    { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 60 },
+    { "do": "rcon", "cmd": "MAP Alley", "pick": "Alley" },
+    { "do": "mark", "name": "start", "arena": "Alley" },
+    { "do": "rcon", "cmd": "START" },
+    { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Live" }, "timeout_s": 180 },
+    { "do": "hold", "s": 720, "why": "combat probe: hits driven from inside the games (ipc-ctl)" },
+    { "do": "quit_all" }
+   ]
+  },
+  "admin_probe": {
+   "doc": "Admin assignment in game: dedicated server, instance 1 admin by its player key. Both READY: no auto start while an admin is connected; instance 1's network dies 10 s and it reconnects as admin (sidecar is_admin, server admin_changed). Not a gate.",
+   "dod": [
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150 },
+    { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 60 },
+    { "do": "hold", "s": 15, "why": "admin present + all ready: must NOT auto start" },
+    { "do": "netsim", "inst": "1", "mode": "blackout" },
+    { "do": "hold", "s": 10, "why": "admin's link down" },
+    { "do": "netsim", "inst": "1", "mode": "normal" },
+    { "do": "hold", "s": 30, "why": "admin reconnects; is_admin must come back" },
+    { "do": "quit_all" }
+   ]
+  },
+  "autostart_probe": {
+   "doc": "Admin assignment in game: a dedicated server with NO admin starts the match by itself once every player is READY (auto_start). Not a gate.",
+   "dod": [
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "env": { "server": { "HSMP_TEST_NO_ADMINS": "1" } },
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150 },
+    { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 60 },
+    { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Live" }, "timeout_s": 120 },
+    { "do": "hold", "s": 10, "why": "the auto-started round is live" },
+    { "do": "quit_all" }
+   ]
+  },
+  "reconnect": {
+   "doc": "DoD-11: joiner's network dies 8 s mid-Live; same seat and wins afterwards",
+   "dod": [
+    11,
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    {
+     "do": "wait",
+     "ev": "lobby_ready",
+     "who": "each",
+     "timeout_s": 150
+    },
+    {
+     "do": "rcon",
+     "cmd": "MAP Alley",
+     "pick": "Alley"
+    },
+    {
+     "do": "mark",
+     "name": "start",
+     "arena": "Alley"
+    },
+    {
+     "do": "rcon",
+     "cmd": "START"
+    },
+    {
+     "do": "wait",
+     "ev": "phase",
+     "who": "server",
+     "where": {
+      "to": "Live"
+     },
+     "timeout_s": 180
+    },
+    {
+     "do": "mark",
+     "name": "blackout",
+     "inst": "last"
+    },
+    {
+     "do": "netsim",
+     "inst": "last",
+     "mode": "blackout"
+    },
+    {
+     "do": "hold",
+     "s": 8,
+     "why": "impairment duration (DoD-11), not a sync point"
+    },
+    {
+     "do": "netsim",
+     "inst": "last",
+     "mode": "normal"
+    },
+    {
+     "do": "mark",
+     "name": "blackout_end"
+    },
+    {
+     "do": "wait",
+     "ev": "phase",
+     "who": "server",
+     "where": {
+      "to": "Live"
+     },
+     "timeout_s": 90
+    },
+    {
+     "do": "quit_all"
+    }
+   ]
+  },
+  "host_leave": {
+   "doc": "DoD-11: listen host presses CANCEL; joiner in the menu with a message within 5 s",
+   "dod": [
+    11,
+    12
+   ],
+   "topology": "listen",
+   "netsim": "typical",
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    {
+     "do": "wait",
+     "ev": "lobby_ready",
+     "who": "each",
+     "timeout_s": 150
+    },
+    {
+     "do": "rcon",
+     "cmd": "MAP Alley",
+     "pick": "Alley"
+    },
+    {
+     "do": "mark",
+     "name": "start",
+     "arena": "Alley"
+    },
+    {
+     "do": "rcon",
+     "cmd": "START"
+    },
+    {
+     "do": "wait",
+     "ev": "phase",
+     "who": "server",
+     "where": {
+      "to": "Live"
+     },
+     "timeout_s": 180
+    },
+    {
+     "do": "mark",
+     "name": "host_leave"
+    },
+    {
+     "do": "client_cmd",
+     "inst": 1,
+     "cmd": "leave",
+     "expect_exit": ["server"]
+    },
+    {
+     "do": "wait",
+     "ev": "travel",
+     "who": "others",
+     "where": {
+      "to": "~menu"
+     },
+     "timeout_s": 15
+    },
+    {
+     "do": "quit_all"
+    }
+   ]
+  },
+  "server_restart": {
+   "doc": "DoD-11: kill + restart the server; clients see a new epoch and return to the lobby",
+   "dod": [
+    11,
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    {
+     "do": "wait",
+     "ev": "lobby_ready",
+     "who": "each",
+     "timeout_s": 150
+    },
+    {
+     "do": "rcon",
+     "cmd": "MAP Alley",
+     "pick": "Alley"
+    },
+    {
+     "do": "mark",
+     "name": "start",
+     "arena": "Alley"
+    },
+    {
+     "do": "rcon",
+     "cmd": "START"
+    },
+    {
+     "do": "wait",
+     "ev": "phase",
+     "who": "server",
+     "where": {
+      "to": "Live"
+     },
+     "timeout_s": 180
+    },
+    {
+     "do": "mark",
+     "name": "server_restart"
+    },
+    {
+     "do": "restart",
+     "role": "server"
+    },
+    {
+     "do": "wait",
+     "ev": "lobby_ready",
+     "who": "each",
+     "timeout_s": 120
+    },
+    {
+     "do": "quit_all"
+    }
+   ]
+  },
+  "soak_60m": {
+   "doc": "Soak: 2 instances, ~60 min, 9 arena blocks x 10 rounds via RCON DEBUG KILL, every arena, netsim wifi + a 3 s blackout per round; 0 crashes, memory slope/growth bounded, 0 Lua errors, no hitch > 2 s",
+   "dod": [1, 2, 3, 6, 12],
+   "extra_rules": ["SOAK-CRASH", "SOAK-MEM", "SOAK-LUAERR", "SOAK-HITCH"],
+   "topology": "dedicated",
+   "netsim": "wifi",
+   "arenas": ["Alley", "Pit", "Yard", "Slums", "Cellar", "LordsHall", "EastTower", "Alley", "Pit"],
+   "rounds": 10,
+   "requires": ["debug_verbs", "mem_sampler", "crash_triage"],
+   "soak": {
+    "duration_min": 60,
+    "mem_sample_s": 30,
+    "mem_warmup_min": 10,
+    "mem_min_samples": 20,
+    "mem_slope_max_mb_per_h": 150,
+    "mem_growth_max_mb": 400,
+    "handle_slope_max_per_h": 500,
+    "aux_mem_slope_max_mb_per_h": 20,
+    "hitch_max_ms": 2000,
+    "lua_errors_max": 0,
+    "lua_error_allow": [],
+    "crashes_max": 0
+   },
+   "steps": [
+    { "do": "mark", "name": "boot" },
+    { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150 },
+    { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 30 },
+    {
+     "foreach_arena": [
+      { "do": "mark", "name": "arena:{arena}" },
+      { "do": "rcon", "cmd": "BESTOF {best_of}", "optional": true },
+      { "do": "rcon", "cmd": "MAP {arena}", "pick": "{arena}" },
+      { "do": "mark", "name": "start", "arena": "{arena}" },
+      { "do": "rcon", "cmd": "START" },
+      {
+       "foreach_round": [
+        { "do": "wait", "ev": "ready_report", "who": "each", "timeout_s": 120 },
+        { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Live" }, "timeout_s": 60 },
+        { "do": "hold", "s": 12, "why": "soak: fight under wifi" },
+        { "do": "netsim", "inst": "{seat}", "mode": "blackout" },
+        { "do": "hold", "s": 3, "why": "soak: blackout burst" },
+        { "do": "netsim", "inst": "{seat}", "mode": "normal" },
+        { "do": "hold", "s": 12, "why": "soak: recover + fight" },
+        { "do": "rcon", "cmd": "DEBUG KILL {seat}" },
+        { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "RoundOver" }, "timeout_s": 30 },
+        { "do": "mark", "name": "round_end", "round": "{round}" }
+       ]
+      },
+      { "do": "rcon", "cmd": "ABORT" },
+      { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Lobby" }, "timeout_s": 60 },
+      { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 120 },
+      { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 30 }
+     ]
+    },
+    { "do": "quit_all" }
+   ]
+  },
+  "soak_10m": {
+   "doc": "Quick soak (~10 min): soak_60m's round loop on Alley + Pit x 7 rounds; same rules, 3 min memory warm-up, 15 s samples",
+   "dod": [1, 2, 3, 6, 12],
+   "extra_rules": ["SOAK-CRASH", "SOAK-MEM", "SOAK-LUAERR", "SOAK-HITCH"],
+   "topology": "dedicated",
+   "netsim": "wifi",
+   "arenas": ["Alley", "Pit"],
+   "rounds": 7,
+   "requires": ["debug_verbs", "mem_sampler", "crash_triage"],
+   "soak": {
+    "duration_min": 10,
+    "mem_sample_s": 15,
+    "mem_warmup_min": 3,
+    "mem_min_samples": 12,
+    "mem_slope_max_mb_per_h": 150,
+    "mem_growth_max_mb": 400,
+    "handle_slope_max_per_h": 500,
+    "aux_mem_slope_max_mb_per_h": 20,
+    "hitch_max_ms": 2000,
+    "lua_errors_max": 0,
+    "lua_error_allow": [],
+    "crashes_max": 0
+   },
+   "steps": "soak_60m"
+  },
+  "p0_smoke_autotest": {
+   "doc": "STOPGAP: legacy HSMP_AUTOTEST host/join, one match observed (no RCON driving)",
+   "extra_rules": ["POSE-1"],
+   "dod": [
+    1,
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    12
+   ],
+   "topology": "listen",
+   "netsim": "typical",
+   "stopgap": true,
+   "requires": [],
+   "env": {
+    "1": {
+     "HSMP_AUTOTEST": "1",
+     "HSMP_AUTOTEST_WAIT_MS": "45000"
+    },
+    "others": {
+     "HSMP_AUTOTEST": "join"
+    }
+   },
+   "steps": [
+    {
+     "do": "wait",
+     "ev": "lobby_ready",
+     "who": "each",
+     "timeout_s": 150
+    },
+    {
+     "do": "wait",
+     "ev": "phase",
+     "who": "server",
+     "where": {
+      "to": "Live"
+     },
+     "timeout_s": 240
+    },
+    {
+     "do": "mark",
+     "name": "live"
+    },
+    {
+     "do": "hold",
+     "s": 60,
+     "why": "STOPGAP observation window (no RCON to end rounds)"
+    },
+    {
+     "do": "quit_all"
+    }
+   ]
+  }
+ }
+}

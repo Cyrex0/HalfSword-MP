@@ -1,0 +1,76 @@
+# HSMP: one Cargo workspace for every Rust package in the repository.
+#
+#   cargo build --release -p hsmp-server          server, sidecar, master, loadtest, query
+#   cargo build --release -p hsmp-launcher        the player launcher
+#   cargo build --release -p hsmp-tools           hsmp-tools, hsmp-gate and the lints
+#   cargo test --workspace                        every test suite (what G0's `cargo` check runs)
+#
+# The toolchain is pinned in rust-toolchain.toml. Build output goes to <repo>/target
+# (or $CARGO_TARGET_DIR).
+
+[workspace]
+resolver = "2"
+members = [
+    # libraries
+    "crates/hsmp-net",
+    "crates/hsmp-modes",
+    "crates/hsmp-combat-sim",
+    "crates/hsmp-ipc",
+    "crates/hsmp-pose",
+    "crates/hsmp-native",
+    "crates/hsmp-native/fake-sidecar",
+    # products
+    "server",
+    "launcher",
+    # developer tools
+    "tools/hsmp-tools",
+    "tools/release",
+    "tools/pose-truth",
+    # offline Lua test harnesses (mlua, Lua 5.4)
+    "tests/hsmp-hud-test",
+    "tests/hsmp-interact-test",
+    "tests/hsmp-saveguard-test",
+    "tests/hsmpworld-tests",
+]
+# The native-transport spike is its own workspace (C/C++ + staticlibs built by CMake).
+exclude = ["experimental/native-spike"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+authors = ["HSMP contributors"]
+repository = "https://github.com/Cyrex0/HalfSword-MP"
+homepage = "https://github.com/Cyrex0/HalfSword-MP"
+
+[workspace.lints.clippy]
+# `cargo clippy --workspace --all-targets` must compile and must not hit a deny-level lint.
+# The style lints below are noisy across the existing code and are allowed until they are
+# cleaned up crate by crate; everything else stays a warning.
+unnecessary_map_or = "allow"
+needless_range_loop = "allow"
+manual_is_multiple_of = "allow"
+field_reassign_with_default = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"
+collapsible_if = "allow"
+collapsible_else_if = "allow"
+new_without_default = "allow"
+
+# One release profile for every binary. The release tool (tools/release) builds the shipped
+# binaries reproducibly from this profile.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+# The deterministic combat simulator and the transport are CPU-bound in their tests; keep
+# the G0 gate's `cargo test` fast.
+[profile.dev.package.hsmp-combat-sim]
+opt-level = 2
+debug = 1
+
+[profile.dev.package.hsmp-net]
+opt-level = 2

@@ -1,0 +1,57 @@
+{
+  "scenario": "p0_gate",
+  "mode": "rcon",
+  "instances": 2,
+  "arenas": [
+    "Alley"
+  ],
+  "rounds": 2,
+  "fixture": true,
+  "topology": "dedicated",
+  "netsim": {
+    "1": "typical",
+    "2": "typical"
+  },
+  "deploy": {
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "dirty": false,
+    "profile": "dev",
+    "g0_ok": true,
+    "g0": {
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "ok": true
+    },
+    "skip_build": false,
+    "bins_commit": "0123456789abcdef0123456789abcdef01234567",
+    "bins_match_commit": true,
+    "bin_dir": "hsmp",
+    "hashes": {
+      "hsmp/hsmp-server.exe": "A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1",
+      "hsmp/hsmp-sidecar.exe": "B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2",
+      "hsmp/hsmp-master.exe": "C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3",
+      "ue4ss/Mods/HSMPMatch/Scripts/main.lua": "D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4D4"
+    },
+    "mods": {
+      "HSMPMatch": "1",
+      "HSMPWorld": "1",
+      "HSMPDiag": "1",
+      "HSMPLobby": "0",
+      "Keybinds": "1"
+    }
+  },
+  "deploy_check": {
+    "checked": 4,
+    "mismatched": [],
+    "missing": [],
+    "bin_dir": "C:/game/HalfswordUE5/Binaries/Win64/hsmp",
+    "bins_used": {
+      "hsmp-server.exe": "A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1",
+      "hsmp-sidecar.exe": "B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2",
+      "hsmp-master.exe": "C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3C3"
+    }
+  },
+  "fixture_gate": {
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "dirty": "0"
+  }
+}

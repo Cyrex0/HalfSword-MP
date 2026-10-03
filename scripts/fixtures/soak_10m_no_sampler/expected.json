@@ -1,0 +1,14 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "SOAK-MEM": "incomplete",
+    "SOAK-HITCH": "incomplete",
+    "SOAK-CRASH": "pass",
+    "SOAK-LUAERR": "pass",
+    "DoD-2": "incomplete"
+  },
+  "messages": [
+    "mem.jsonl missing",
+    "no frame_hb heartbeat"
+  ]
+}

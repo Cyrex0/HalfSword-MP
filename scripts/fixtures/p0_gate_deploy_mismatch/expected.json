@@ -1,0 +1,10 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-13": "fail"
+  },
+  "messages": [
+    "deployed files changed since the deploy stamp: 1 changed [\"hsmp/hsmp-server.exe\"]",
+    "the run executed binaries that are not the deployed ones: [\"hsmp-server.exe\"]"
+  ]
+}

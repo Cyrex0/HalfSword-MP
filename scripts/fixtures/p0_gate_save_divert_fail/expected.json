@@ -1,0 +1,11 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-8": "fail"
+  },
+  "messages": [
+    "1 failed",
+    "ok=false (NOT diverted)",
+    "changed/added/removed: none"
+  ]
+}

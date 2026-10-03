@@ -1,0 +1,14 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-11": "pass",
+    "DoD-12": "fail",
+    "CRASH": "fail"
+  },
+  "messages": [
+    "game(s) dead before quit_all (crashed or exited on their own; no scenario step ended them): game2",
+    "new crash dirs: [\"UECC-Windows-DEAD_0000\"]",
+    "1 new dump(s): EXCEPTION_ACCESS_VIOLATION [GameThread]",
+    "processes dead before teardown: [\"game2\"]"
+  ]
+}

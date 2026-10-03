@@ -1,0 +1,9 @@
+{
+  "verdict": "pass",
+  "rules": {
+    "DoD-14": "pass",
+    "DoD-12": "pass",
+    "NETSIM": "pass",
+    "POSE-1": "pass"
+  }
+}

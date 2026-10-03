@@ -1,0 +1,343 @@
+{
+  "map": "Map_Arena_Slums_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_1",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "location": [
+        -376.96,
+        0.0,
+        892.165
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        400.0,
+        400.0,
+        400.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_SkySphere",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'Engine/Content/EngineSky/SM_SkySphere.SM_SkySphere'",
+      "instance_properties": {
+        "bEnableAutoLODGeneration": false
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box",
+      "location": [
+        2036.834,
+        -73.406,
+        947.505
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_1",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box2",
+      "location": [
+        1683.882,
+        1573.536,
+        965.891
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_2",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box3",
+      "location": [
+        2052.537,
+        1721.806,
+        896.578
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_3",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box4",
+      "location": [
+        1110.754,
+        2331.032,
+        916.556
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_4",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -47.544,
+        123.172,
+        815.54
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_5",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box5",
+      "location": [
+        2036.834,
+        304.162,
+        947.505
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_6",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box6",
+      "location": [
+        3127.919,
+        769.881,
+        947.505
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_7",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box7",
+      "location": [
+        2237.117,
+        1684.956,
+        947.505
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_8",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box8",
+      "location": [
+        69.482,
+        -902.439,
+        947.505
+      ]
+    },
+    {
+      "name": "BP_LightingScalabilityManager_C_1",
+      "class": "BP_LightingScalabilityManager_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_LightingScalabilityManager",
+      "location": [
+        -411.043,
+        -11.707,
+        803.893
+      ]
+    },
+    {
+      "name": "BP_UltraVolumetrics-Spline_C_1",
+      "class": "BP_UltraVolumetrics-Spline_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "BP_UltraVolumetrics-Spline2",
+      "location": [
+        -800.0,
+        1930.0,
+        -194.259
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -376.96,
+        0.0,
+        1292.165
+      ]
+    },
+    {
+      "name": "DirectionalLight_2",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "DirectionalLightLowMediumDay",
+      "location": [
+        -376.96,
+        0.0,
+        1292.165
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        -39.741,
+        23.761,
+        905.671
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_2",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "ExponentialHeightFogLowMediumDay",
+      "location": [
+        -39.741,
+        23.761,
+        905.671
+      ]
+    },
+    {
+      "name": "LocalFogVolume_1",
+      "class": "LocalFogVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "LocalFogVolume",
+      "location": [
+        2803.83,
+        812.33,
+        1007.486
+      ]
+    },
+    {
+      "name": "Map_Arena_Slums_Lighting_C_0",
+      "class": "Map_Arena_Slums_Lighting_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "Map_Arena_Slums_Lighting0"
+    },
+    {
+      "name": "PostProcessVolume_1",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "PostProcessVolume",
+      "location": [
+        25.055,
+        -41.795,
+        1197.193
+      ]
+    },
+    {
+      "name": "PostProcessVolume_2",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "PostProcessVolumeLowMediumDay",
+      "location": [
+        25.055,
+        -41.795,
+        1197.193
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        -376.96,
+        0.0,
+        1071.904
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_2",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "SkyAtmosphereLowMediumDay",
+      "location": [
+        -376.96,
+        0.0,
+        1071.904
+      ]
+    },
+    {
+      "name": "SkyLight_0",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        -39.741,
+        23.761,
+        1074.453
+      ]
+    },
+    {
+      "name": "SkyLight_2",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "SkyLightLowMediumDay",
+      "location": [
+        -39.741,
+        23.761,
+        1074.453
+      ]
+    },
+    {
+      "name": "VolumetricCloud_0",
+      "class": "VolumetricCloud",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "VolumetricCloud",
+      "location": [
+        -376.96,
+        0.0,
+        1592.165
+      ]
+    },
+    {
+      "name": "VolumetricCloud_2",
+      "class": "VolumetricCloud",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+      "label": "VolumetricCloudLowMediumDay",
+      "location": [
+        -376.96,
+        0.0,
+        1592.165
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

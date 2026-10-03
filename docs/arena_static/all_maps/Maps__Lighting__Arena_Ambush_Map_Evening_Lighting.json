@@ -1,0 +1,110 @@
+{
+  "map": "Arena_Ambush_Map_Evening_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -241.974,
+        -717.177,
+        391.653
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+      "label": "DirectionalLight0",
+      "location": [
+        376.001,
+        -695.446,
+        508.688
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+      "label": "ExponentialHeightFog0",
+      "location": [
+        -161.136,
+        -722.013,
+        469.446
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+      "label": "Half Sword Graphics v2.5",
+      "location": [
+        0.0,
+        -300.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        300.0,
+        -1000.0,
+        600.0
+      ]
+    },
+    {
+      "name": "SkyLight_0",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        351.074,
+        -925.747,
+        724.214
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 1,
+  "errors": [],
+  "warnings": []
+}

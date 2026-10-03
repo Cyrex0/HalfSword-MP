@@ -1,0 +1,2872 @@
+[
+  {
+    "map": "Map_Arena_Alley",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley.umap",
+    "json": "Map_Arena_Alley.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 20,
+    "spawn_points": 12,
+    "world_objects": 70,
+    "world_object_categories": {
+      "character": 1,
+      "container": 3,
+      "destructible": 22,
+      "quiver": 1,
+      "static_mesh_actor_movable": 35,
+      "trap": 5,
+      "weapon": 3
+    },
+    "spawners": 6,
+    "other_actors": 399,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "BP_SpawnerPoint_Willies_C_0",
+        "location": [
+          1310.194,
+          176.365,
+          406.203
+        ],
+        "yaw": 42.672
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_1",
+        "location": [
+          815.313,
+          280.419,
+          319.162
+        ],
+        "yaw": -128.041
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_10",
+        "location": [
+          -2092.19,
+          235.663,
+          43.108
+        ],
+        "yaw": -84.035
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_11",
+        "location": [
+          -2727.697,
+          99.29,
+          33.578
+        ],
+        "yaw": -5.396
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_12",
+        "location": [
+          -93.227,
+          138.73,
+          184.012
+        ],
+        "yaw": -94.953
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_2",
+        "location": [
+          -541.24,
+          160.005,
+          173.361
+        ],
+        "yaw": -109.044
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_3",
+        "location": [
+          -2459.688,
+          -218.613,
+          35.158
+        ],
+        "yaw": 70.105
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_4",
+        "location": [
+          1388.172,
+          0.0,
+          410.785
+        ],
+        "yaw": -177.265
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_5",
+        "location": [
+          247.773,
+          -247.27,
+          184.012
+        ],
+        "yaw": 100.047
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_6",
+        "location": [
+          1485.707,
+          570.147,
+          416.407
+        ],
+        "yaw": -120.496
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_7",
+        "location": [
+          -472.007,
+          -631.543,
+          166.749
+        ],
+        "yaw": 79.837
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_8",
+        "location": [
+          -1246.293,
+          226.254,
+          98.695
+        ],
+        "yaw": -60.168
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/BP_CombatEvent_Alley",
+      "/Game/UI/UI_NextFIght",
+      "/Game/UI/Tavern/Dialogs/Innkeeper/UI_Dialog_Widget_Innkeeper_Errand_DrunkEscort",
+      "/Game/UI/Tavern/Dialogs/Jester/UI_Jester_FreeMode"
+    ]
+  },
+  {
+    "map": "Map_Arena_Pit",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Pit.umap",
+    "json": "Map_Arena_Pit.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 8,
+    "spawn_points": 14,
+    "world_objects": 152,
+    "world_object_categories": {
+      "destructible": 1,
+      "light_prop": 56,
+      "static_mesh_actor_movable": 60,
+      "trap": 35
+    },
+    "spawners": 3,
+    "other_actors": 406,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "BP_SpawnerPoint_Willies_C_0",
+        "location": [
+          1.833,
+          509.476,
+          1.36
+        ],
+        "yaw": -90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_1",
+        "location": [
+          -390.674,
+          -393.677,
+          1.011
+        ],
+        "yaw": 45.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_10",
+        "location": [
+          355.784,
+          -358.927,
+          1.53
+        ],
+        "yaw": 135.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_11",
+        "location": [
+          645.784,
+          -624.927,
+          1.53
+        ],
+        "yaw": 140.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_12",
+        "location": [
+          650.784,
+          651.073,
+          1.53
+        ],
+        "yaw": -130.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_13",
+        "location": [
+          -634.216,
+          629.073,
+          1.53
+        ],
+        "yaw": -40.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_14",
+        "location": [
+          -628.216,
+          -669.927,
+          1.53
+        ],
+        "yaw": 40.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_2",
+        "location": [
+          1.833,
+          -583.512,
+          1.36
+        ],
+        "yaw": 90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_4",
+        "location": [
+          346.149,
+          333.942,
+          1.36
+        ],
+        "yaw": -135.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_5",
+        "location": [
+          -337.757,
+          334.198,
+          -1.234
+        ],
+        "yaw": -45.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_6",
+        "location": [
+          526.765,
+          9.474,
+          1.36
+        ],
+        "yaw": 180.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_7",
+        "location": [
+          -524.438,
+          -6.866,
+          1.36
+        ],
+        "yaw": 0.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_8",
+        "location": [
+          1.156,
+          218.102,
+          1.36
+        ],
+        "yaw": -90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_9",
+        "location": [
+          1.833,
+          -274.558,
+          1.36
+        ],
+        "yaw": 90.0
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/BP_CombatEvent_Pit",
+      "/Game/UI/UI_NextFIght",
+      "/Game/UI/Tavern/Dialogs/Jester/UI_Jester_FreeMode"
+    ]
+  },
+  {
+    "map": "Map_Arena_Yard",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Yard.umap",
+    "json": "Map_Arena_Yard.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 6,
+    "spawn_points": 12,
+    "world_objects": 114,
+    "world_object_categories": {
+      "light_prop": 56,
+      "static_mesh_actor_movable": 58
+    },
+    "spawners": 3,
+    "other_actors": 397,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "BP_SpawnerPoint_Willies_C_0",
+        "location": [
+          1.156,
+          438.476,
+          1.36
+        ],
+        "yaw": -90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_1",
+        "location": [
+          -324.351,
+          -314.677,
+          1.011
+        ],
+        "yaw": 45.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_10",
+        "location": [
+          660.107,
+          -595.927,
+          1.53
+        ],
+        "yaw": 135.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_11",
+        "location": [
+          -624.351,
+          -645.677,
+          1.011
+        ],
+        "yaw": 45.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_2",
+        "location": [
+          1.156,
+          -471.512,
+          1.36
+        ],
+        "yaw": 90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_3",
+        "location": [
+          329.107,
+          -323.927,
+          1.53
+        ],
+        "yaw": 135.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_4",
+        "location": [
+          315.472,
+          291.942,
+          1.36
+        ],
+        "yaw": -135.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_5",
+        "location": [
+          -299.433,
+          327.198,
+          -1.234
+        ],
+        "yaw": -45.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_6",
+        "location": [
+          468.088,
+          1.474,
+          1.36
+        ],
+        "yaw": 180.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_7",
+        "location": [
+          -435.115,
+          3.134,
+          1.36
+        ],
+        "yaw": 0.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_8",
+        "location": [
+          -637.433,
+          625.198,
+          -1.234
+        ],
+        "yaw": -45.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_9",
+        "location": [
+          643.567,
+          614.198,
+          -1.234
+        ],
+        "yaw": -130.0
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/BP_CombatEvent_Yard",
+      "/Game/Blueprints/DataAssets/CombatScenarios/Tourneys/BP_CombatEvent_Tourney",
+      "/Game/UI/UI_NextFIght",
+      "/Game/UI/Tavern/UI_Tavern_Mercenaries",
+      "/Game/UI/Tavern/Dialogs/Fencer/UI_Dialog_Widget_Fencer_Progression",
+      "/Game/UI/Tavern/Dialogs/Jester/UI_Jester_FreeMode"
+    ]
+  },
+  {
+    "map": "Map_Arena_Slums",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Slums.umap",
+    "json": "Map_Arena_Slums.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 24,
+    "spawn_points": 13,
+    "world_objects": 52,
+    "world_object_categories": {
+      "container": 3,
+      "destructible": 5,
+      "fence": 18,
+      "static_mesh_actor_movable": 18,
+      "trap": 2,
+      "weapon": 6
+    },
+    "spawners": 6,
+    "other_actors": 316,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "BP_SpawnerPoint_Willies_C_0",
+        "location": [
+          42.247,
+          567.919,
+          828.569
+        ],
+        "yaw": -91.377
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_1",
+        "location": [
+          -408.374,
+          163.081,
+          811.203
+        ],
+        "yaw": -42.582
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_10",
+        "location": [
+          1590.716,
+          648.495,
+          901.942
+        ],
+        "yaw": 166.839
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_11",
+        "location": [
+          1045.533,
+          1063.006,
+          901.942
+        ],
+        "yaw": -93.161
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_12",
+        "location": [
+          1418.793,
+          946.005,
+          901.942
+        ],
+        "yaw": -138.161
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_2",
+        "location": [
+          -489.648,
+          -86.413,
+          833.461
+        ],
+        "yaw": -4.451
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_3",
+        "location": [
+          -82.804,
+          -433.912,
+          866.594
+        ],
+        "yaw": 91.702
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_4",
+        "location": [
+          516.999,
+          250.387,
+          855.254
+        ],
+        "yaw": -153.161
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_5",
+        "location": [
+          256.533,
+          414.553,
+          853.322
+        ],
+        "yaw": -125.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_6",
+        "location": [
+          622.599,
+          16.72,
+          885.529
+        ],
+        "yaw": -169.477
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_7",
+        "location": [
+          -561.323,
+          -516.111,
+          886.13
+        ],
+        "yaw": 41.133
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_8",
+        "location": [
+          557.583,
+          465.281,
+          895.256
+        ],
+        "yaw": 46.839
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_9",
+        "location": [
+          865.344,
+          832.104,
+          906.822
+        ],
+        "yaw": -133.161
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/BP_CombatEvent_Slums",
+      "/Game/UI/UI_NextFIght",
+      "/Game/UI/Tavern/UI_List_MapSelect",
+      "/Game/UI/Tavern/Dialogs/Jester/UI_Jester_FreeMode"
+    ]
+  },
+  {
+    "map": "Map_Arena_Cellar",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Cellar.umap",
+    "json": "Map_Arena_Cellar.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 5,
+    "spawn_points": 11,
+    "world_objects": 151,
+    "world_object_categories": {
+      "chain": 4,
+      "container": 2,
+      "light_prop": 29,
+      "static_mesh_actor_movable": 108,
+      "training_dummy": 1,
+      "trap": 2,
+      "weapon": 5
+    },
+    "spawners": 6,
+    "other_actors": 132,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "BP_SpawnerPoint_Willies_C_0",
+        "location": [
+          1009.886,
+          708.0,
+          13.0
+        ],
+        "yaw": 180.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_1",
+        "location": [
+          432.798,
+          708.0,
+          13.0
+        ],
+        "yaw": 0.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_10",
+        "location": [
+          1853.652,
+          713.163,
+          13.0
+        ],
+        "yaw": 175.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_2",
+        "location": [
+          722.0,
+          1000.987,
+          13.0
+        ],
+        "yaw": -90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_3",
+        "location": [
+          722.0,
+          442.113,
+          13.0
+        ],
+        "yaw": 90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_4",
+        "location": [
+          481.559,
+          958.028,
+          13.0
+        ],
+        "yaw": -40.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_5",
+        "location": [
+          459.568,
+          477.125,
+          13.0
+        ],
+        "yaw": 50.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_6",
+        "location": [
+          1676.652,
+          396.163,
+          13.0
+        ],
+        "yaw": 140.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_7",
+        "location": [
+          923.128,
+          927.393,
+          13.0
+        ],
+        "yaw": -130.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_8",
+        "location": [
+          944.652,
+          490.163,
+          13.0
+        ],
+        "yaw": 140.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_9",
+        "location": [
+          1739.652,
+          1078.163,
+          13.0
+        ],
+        "yaw": -140.0
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/BP_CombatEvent_Cellar",
+      "/Game/UI/UI_Forge_Old",
+      "/Game/UI/UI_NextFIght",
+      "/Game/UI/Tavern/UI_CharacterCreation",
+      "/Game/UI/Tavern/Dialogs/Fencer/UI_Dialog_Widget_Fencer_Progression",
+      "/Game/UI/Tavern/Dialogs/Innkeeper/UI_Dialog_Widget_Innkeeper_Errand_Barrel",
+      "/Game/UI/Tavern/Dialogs/Jester/UI_Jester_FreeMode"
+    ]
+  },
+  {
+    "map": "Map_Arena_LordsHall",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_LordsHall.umap",
+    "json": "Map_Arena_LordsHall.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 5,
+    "spawn_points": 6,
+    "world_objects": 115,
+    "world_object_categories": {
+      "container": 2,
+      "light_prop": 72,
+      "physics_other": 2,
+      "static_mesh_actor_movable": 30,
+      "weapon": 9
+    },
+    "spawners": 6,
+    "other_actors": 255,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "BP_SpawnerPoint_Willies_C_0",
+        "location": [
+          -796.128,
+          233.139,
+          5.0
+        ],
+        "yaw": 90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_1",
+        "location": [
+          -796.128,
+          2047.505,
+          5.0
+        ],
+        "yaw": -90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_2",
+        "location": [
+          -401.327,
+          1562.583,
+          5.0
+        ],
+        "yaw": 180.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_3",
+        "location": [
+          -1204.458,
+          1572.158,
+          5.0
+        ],
+        "yaw": 0.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_4",
+        "location": [
+          -401.327,
+          742.208,
+          5.0
+        ],
+        "yaw": 180.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_5",
+        "location": [
+          -1204.457,
+          741.783,
+          5.0
+        ],
+        "yaw": 0.0
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/Tourneys/BP_CombatEvent_Tourney_Baron"
+    ]
+  },
+  {
+    "map": "Map_Arena_EastTower",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_EastTower.umap",
+    "json": "Map_Arena_EastTower.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 8,
+    "spawn_points": 12,
+    "world_objects": 89,
+    "world_object_categories": {
+      "lever": 12,
+      "light_prop": 56,
+      "static_mesh_actor_movable": 4,
+      "trap": 12,
+      "weapon": 5
+    },
+    "spawners": 10,
+    "other_actors": 253,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "BP_SpawnerPoint_Willies_C_0",
+        "location": [
+          3.872,
+          2117.505,
+          5.0
+        ],
+        "yaw": -90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_1",
+        "location": [
+          408.673,
+          1801.583,
+          5.0
+        ],
+        "yaw": 180.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_10",
+        "location": [
+          -353.128,
+          540.139,
+          5.0
+        ],
+        "yaw": 55.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_11",
+        "location": [
+          384.872,
+          603.139,
+          5.0
+        ],
+        "yaw": 130.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_2",
+        "location": [
+          3.872,
+          603.139,
+          5.0
+        ],
+        "yaw": 90.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_3",
+        "location": [
+          -434.457,
+          1798.158,
+          5.0
+        ],
+        "yaw": 0.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_4",
+        "location": [
+          408.673,
+          1394.208,
+          5.0
+        ],
+        "yaw": 180.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_5",
+        "location": [
+          -434.457,
+          977.783,
+          5.0
+        ],
+        "yaw": 0.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_6",
+        "location": [
+          408.673,
+          970.208,
+          5.0
+        ],
+        "yaw": 180.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_7",
+        "location": [
+          -434.457,
+          1398.783,
+          5.0
+        ],
+        "yaw": 0.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_8",
+        "location": [
+          359.872,
+          2243.505,
+          5.0
+        ],
+        "yaw": -125.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_9",
+        "location": [
+          -347.128,
+          2203.505,
+          5.0
+        ],
+        "yaw": -50.0
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/BP_CombatEvent_Hall",
+      "/Game/UI/UI_NextFIght",
+      "/Game/UI/Tavern/Dialogs/Jester/UI_Jester_FreeMode"
+    ]
+  },
+  {
+    "map": "Entry",
+    "package": "Engine/Content/Maps/Entry.umap",
+    "json": "all_maps/Engine__Content__Maps__Entry.json",
+    "kind": "persistent_or_standalone",
+    "sources": 1,
+    "spawn_points": 1,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 5,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "PlayerStart0",
+        "location": [
+          54.656,
+          79.013,
+          208.0
+        ],
+        "yaw": 0.0
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_Beginning_Complex_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_Beginning_Complex_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_Beginning_Complex_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley",
+      "Map_Arena_EastTower"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Bridge_A_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Bridge_A_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Bridge_A_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Common_A_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_A_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Common_A_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley",
+      "Map_Arena_Slums",
+      "Map_Arena_EastTower",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Common_B_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_B_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Common_B_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley",
+      "Map_Arena_EastTower"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Common_C_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_C_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Common_C_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley",
+      "Map_Arena_EastTower"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Common_E_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_E_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Common_E_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley",
+      "Map_Arena_Slums",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Common_F_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_F_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Common_F_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley",
+      "Map_Arena_Slums",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Common_G_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_G_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Common_G_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Common_H_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Common_H_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Common_H_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley",
+      "Map_Arena_Slums",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Fine_A_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Fine_A_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Fine_A_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Poor_A_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Poor_A_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Poor_A_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Alley_House_Poor_B_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Arena/Alley/LevelInstances/LI_Env_Alley_House_Poor_B_001.umap",
+    "json": "all_maps/Assets__Environments__Arena__Alley__LevelInstances__LI_Env_Alley_House_Poor_B_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley",
+      "Map_Arena_Slums",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Fortification_House_A_001",
+    "package": "HalfswordUE5/Content/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_001.umap",
+    "json": "all_maps/Assets__Environments__Fortification__LevelInstances__LI_Env_Fortification_House_A_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Fortification_House_A_002",
+    "package": "HalfswordUE5/Content/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_002.umap",
+    "json": "all_maps/Assets__Environments__Fortification__LevelInstances__LI_Env_Fortification_House_A_002.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Fortification_House_A_003",
+    "package": "HalfswordUE5/Content/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_003.umap",
+    "json": "all_maps/Assets__Environments__Fortification__LevelInstances__LI_Env_Fortification_House_A_003.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "LI_Env_Fortification_House_A_004",
+    "package": "HalfswordUE5/Content/Assets/Environments/Fortification/LevelInstances/LI_Env_Fortification_House_A_004.umap",
+    "json": "all_maps/Assets__Environments__Fortification__LevelInstances__LI_Env_Fortification_House_A_004.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums",
+      "Map_Arena_Slums_Architecture"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Abyss_Map_Open_EA",
+    "package": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+    "json": "all_maps/Maps__Abyss__Abyss_Map_Open_EA.json",
+    "kind": "persistent_or_standalone",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 2,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 2
+    },
+    "spawners": 1,
+    "other_actors": 8,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/UI/UI_DeathDoor",
+      "/Game/UI/UI_Startup_Menu",
+      "/Game/UI/Tavern/Dialogs/Seer/UI_Dialog_Widget_Seer_GoToHell",
+      "/Game/UI/Tavern/Dialogs/Seer/UI_Dialog_Widget_Seer_Greeting"
+    ]
+  },
+  {
+    "map": "Arena_Cellar_Details",
+    "package": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+    "json": "all_maps/Maps__Arena_Cellar__Arena_Cellar_Details.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 71,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Cellar"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cellar_Geometry",
+    "package": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Geometry.umap",
+    "json": "all_maps/Maps__Arena_Cellar__Arena_Cellar_Geometry.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 2,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Cellar"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cellar_PhysicsProps",
+    "package": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_PhysicsProps.umap",
+    "json": "all_maps/Maps__Arena_Cellar__Arena_Cellar_PhysicsProps.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 104,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 104
+    },
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Cellar"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Map",
+    "package": "HalfswordUE5/Content/Maps/Arena_Cutting_Map.umap",
+    "json": "all_maps/Maps__Arena_Cutting_Map.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 11,
+    "spawn_points": 0,
+    "world_objects": 6,
+    "world_object_categories": {
+      "character": 1,
+      "destructible": 1,
+      "static_mesh_actor_movable": 2,
+      "training_dummy": 1,
+      "trap": 1
+    },
+    "spawners": 3,
+    "other_actors": 344,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/UI/UI_Pause"
+    ]
+  },
+  {
+    "map": "Arena_LordsHall_Details",
+    "package": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+    "json": "all_maps/Maps__Arena_LordsHall__Arena_LordsHall_Details.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 143,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_LordsHall"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_LordsHall_Geometry",
+    "package": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+    "json": "all_maps/Maps__Arena_LordsHall__Arena_LordsHall_Geometry.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 2,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 2
+    },
+    "spawners": 0,
+    "other_actors": 50,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_LordsHall"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_LordsHall_PhysicsProps",
+    "package": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+    "json": "all_maps/Maps__Arena_LordsHall__Arena_LordsHall_PhysicsProps.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 26,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 26
+    },
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_LordsHall"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Alley_Details",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Alley__Map_Arena_Alley_Details.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 13,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 13
+    },
+    "spawners": 0,
+    "other_actors": 172,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Alley_PhysicsProps",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Alley__Map_Arena_Alley_PhysicsProps.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 8,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 8
+    },
+    "spawners": 0,
+    "other_actors": 9,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Alley_VFX",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Alley__VFX__Map_Arena_Alley_VFX.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 48,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Ambush_Map_Foliage",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Ambush/Arena_Ambush_Map_Foliage.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Ambush__Arena_Ambush_Map_Foliage.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 2,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Ambush_Test"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Ambush_Map_Rocks",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Ambush/Arena_Ambush_Map_Rocks.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Ambush__Arena_Ambush_Map_Rocks.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 39,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 39
+    },
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Ambush_Test"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Pit_NarrowPassage_Spikes",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Pit__Arena_Pit_NarrowPassage_Spikes.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 12,
+    "world_object_categories": {
+      "trap": 12
+    },
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Pit"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Architecture",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Architecture.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_Architecture.json",
+    "kind": "sublevel",
+    "sources": 10,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 14,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Details",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_Details.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 99,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Foliage",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Foliage.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_Foliage.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 1,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Geometry",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Geometry.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_Geometry.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_NarrowPassage_Spikes",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_NarrowPassage_Spikes.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_NarrowPassage_Spikes.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 2,
+    "world_object_categories": {
+      "trap": 2
+    },
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_PhysicsProps",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_PhysicsProps.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 23,
+    "world_object_categories": {
+      "destructible": 5,
+      "fence": 18
+    },
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Props",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Props.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_Props.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 4,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 4
+    },
+    "spawners": 0,
+    "other_actors": 27,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Terrain",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Terrain.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_Terrain.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 2,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_VFX",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_VFX.umap",
+    "json": "all_maps/Maps__Arenas__Arena_Slums__Map_Arena_Slums_VFX.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 24,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Alley_Evening_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Evening_Lighting.umap",
+    "json": "all_maps/Maps__Arenas__Map_Arena_Alley_Evening_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 2,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 2
+    },
+    "spawners": 0,
+    "other_actors": 38,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Alley_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+    "json": "all_maps/Maps__Arenas__Map_Arena_Alley_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 27,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Alley_Morning_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+    "json": "all_maps/Maps__Arenas__Map_Arena_Alley_Morning_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 37,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Alley_Night_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Night_Lighting.umap",
+    "json": "all_maps/Maps__Arenas__Map_Arena_Alley_Night_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 2,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 2
+    },
+    "spawners": 0,
+    "other_actors": 37,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Alley"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Ambush_Test",
+    "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Ambush_Test.umap",
+    "json": "all_maps/Maps__Arenas__Map_Arena_Ambush_Test.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 8,
+    "spawn_points": 29,
+    "world_objects": 62,
+    "world_object_categories": {
+      "container": 4,
+      "physics_other": 4,
+      "quiver": 1,
+      "static_mesh_actor_movable": 51,
+      "weapon": 2
+    },
+    "spawners": 7,
+    "other_actors": 87,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [
+      {
+        "name": "BP_SpawnerPoint_Willies_C_0",
+        "location": [
+          -1219.168,
+          -441.531,
+          407.971
+        ],
+        "yaw": -15.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_1",
+        "location": [
+          -1062.551,
+          -1213.165,
+          403.099
+        ],
+        "yaw": 25.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_10",
+        "location": [
+          2599.822,
+          -1203.774,
+          604.648
+        ],
+        "yaw": 165.591
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_11",
+        "location": [
+          272.12,
+          -2422.39,
+          249.487
+        ],
+        "yaw": 80.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_12",
+        "location": [
+          261.412,
+          217.335,
+          396.784
+        ],
+        "yaw": -65.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_13",
+        "location": [
+          1744.825,
+          -187.781,
+          242.611
+        ],
+        "yaw": -156.572
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_14",
+        "location": [
+          1473.892,
+          57.411,
+          238.858
+        ],
+        "yaw": -130.05
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_15",
+        "location": [
+          388.451,
+          329.691,
+          381.772
+        ],
+        "yaw": -83.226
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_16",
+        "location": [
+          -25.606,
+          259.798,
+          399.332
+        ],
+        "yaw": -110.949
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_17",
+        "location": [
+          -1366.601,
+          767.697,
+          392.147
+        ],
+        "yaw": -33.04
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_18",
+        "location": [
+          942.058,
+          1934.657,
+          519.513
+        ],
+        "yaw": -63.148
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_19",
+        "location": [
+          -984.155,
+          944.186,
+          363.595
+        ],
+        "yaw": -74.237
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_2",
+        "location": [
+          461.857,
+          -2513.418,
+          272.118
+        ],
+        "yaw": 96.329
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_20",
+        "location": [
+          -1241.537,
+          -647.976,
+          408.584
+        ],
+        "yaw": -33.557
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_21",
+        "location": [
+          -1142.16,
+          -220.218,
+          400.409
+        ],
+        "yaw": -5.935
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_22",
+        "location": [
+          -978.028,
+          -1394.427,
+          406.792
+        ],
+        "yaw": 15.863
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_23",
+        "location": [
+          -1147.075,
+          -1031.904,
+          402.776
+        ],
+        "yaw": 44.352
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_24",
+        "location": [
+          970.12,
+          -2551.39,
+          345.595
+        ],
+        "yaw": 115.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_25",
+        "location": [
+          -639.117,
+          -2232.577,
+          345.47
+        ],
+        "yaw": 35.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_26",
+        "location": [
+          -625.88,
+          198.61,
+          408.347
+        ],
+        "yaw": -75.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_27",
+        "location": [
+          1709.524,
+          943.825,
+          139.589
+        ],
+        "yaw": -120.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_28",
+        "location": [
+          110.412,
+          1221.814,
+          272.502
+        ],
+        "yaw": -65.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_3",
+        "location": [
+          -1147.985,
+          829.471,
+          384.076
+        ],
+        "yaw": -55.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_4",
+        "location": [
+          67.668,
+          -2421.798,
+          252.407
+        ],
+        "yaw": 55.179
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_5",
+        "location": [
+          1550.524,
+          -113.175,
+          270.742
+        ],
+        "yaw": -140.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_6",
+        "location": [
+          2219.406,
+          -1501.631,
+          627.001
+        ],
+        "yaw": 115.948
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_7",
+        "location": [
+          1143.14,
+          1893.518,
+          512.603
+        ],
+        "yaw": -100.0
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_8",
+        "location": [
+          1322.068,
+          1924.721,
+          505.346
+        ],
+        "yaw": -112.942
+      },
+      {
+        "name": "BP_SpawnerPoint_Willies_C_9",
+        "location": [
+          2449.601,
+          -1416.612,
+          635.285
+        ],
+        "yaw": 150.0
+      }
+    ],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/BP_CombatEvent_Forest",
+      "/Game/UI/UI_NextFIght",
+      "/Game/UI/Tavern/Dialogs/Jester/UI_Jester_FreeMode"
+    ]
+  },
+  {
+    "map": "Arena_Cutting_Ground_A_001",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Cutting_Ground_A_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 2,
+    "world_object_categories": {
+      "destructible": 1,
+      "trap": 1
+    },
+    "spawners": 0,
+    "other_actors": 7,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Pit",
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Ground_B_001",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_B_001.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Cutting_Ground_B_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 1,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Ground_C_001",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_C_001.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Cutting_Ground_C_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Ground_D_001",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_D_001.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Cutting_Ground_D_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Ground_E_001",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_E_001.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Cutting_Ground_E_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Ground_F_001",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_F_001.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Cutting_Ground_F_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "training_dummy": 1
+    },
+    "spawners": 0,
+    "other_actors": 24,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Ground_G_001",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Cutting_Ground_G_001.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 1,
+    "other_actors": 55,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Pit_Rocks",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Pit_Rocks.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 16,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 16
+    },
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Pit"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Yard_Rocks",
+    "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Yard_Rocks.umap",
+    "json": "all_maps/Maps__LevelInstances__Arenas__Cutting__Arena_Yard_Rocks.json",
+    "kind": "level_instance",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 14,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 14
+    },
+    "spawners": 0,
+    "other_actors": 0,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Yard"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Ambush_Map_Evening_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Evening_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Arena_Ambush_Map_Evening_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 6,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Ambush_Test"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Ambush_Map_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Arena_Ambush_Map_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 15,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Ambush_Test"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Ambush_Map_Morning_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Arena_Ambush_Map_Morning_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 23,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Ambush_Test"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Ambush_Map_Night_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Night_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Arena_Ambush_Map_Night_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 25,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Ambush_Test"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cellar_Map_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Cellar_Map_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Arena_Cellar_Map_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 13,
+    "world_object_categories": {
+      "light_prop": 13
+    },
+    "spawners": 0,
+    "other_actors": 35,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Cellar"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Map_Lighting_Evening",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.umap",
+    "json": "all_maps/Maps__Lighting__Arena_Cutting_Map_Lighting_Evening.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 28,
+    "world_object_categories": {
+      "light_prop": 28
+    },
+    "spawners": 0,
+    "other_actors": 68,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Pit",
+      "Map_Arena_Yard"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Map_Lighting_Night",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting_Night.umap",
+    "json": "all_maps/Maps__Lighting__Arena_Cutting_Map_Lighting_Night.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 28,
+    "world_object_categories": {
+      "light_prop": 28
+    },
+    "spawners": 0,
+    "other_actors": 70,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Pit",
+      "Map_Arena_Yard"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Cutting_Map_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Arena_Cutting_Map_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 8,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Pit",
+      "Map_Arena_Yard",
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_LordsHall_Map_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Arena_LordsHall_Map_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 74,
+    "world_object_categories": {
+      "light_prop": 72,
+      "static_mesh_actor_movable": 2
+    },
+    "spawners": 0,
+    "other_actors": 51,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_LordsHall"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Lighting_Morning",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Lighting_Morning.umap",
+    "json": "all_maps/Maps__Lighting__Lighting_Morning.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 4,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Pit",
+      "Map_Arena_Yard"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Lighting_Overcast_001",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Lighting_Overcast_001.umap",
+    "json": "all_maps/Maps__Lighting__Lighting_Overcast_001.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 4,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_EastTower_Dawn_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Dawn_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Map_Arena_EastTower_Dawn_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 30,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_EastTower"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_EastTower_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Map_Arena_EastTower_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 28,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_EastTower"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_EastTower_Night_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Map_Arena_EastTower_Night_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 29,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_EastTower"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Evening_Lighting_2",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Evening_Lighting_2.umap",
+    "json": "all_maps/Maps__Lighting__Map_Arena_Slums_Evening_Lighting_2.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 32,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Map_Arena_Slums_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 25,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Morning_Lighting_Cloud_Hack",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Morning_Lighting_Cloud_Hack.umap",
+    "json": "all_maps/Maps__Lighting__Map_Arena_Slums_Morning_Lighting_Cloud_Hack.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 21,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Morning_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Morning_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Map_Arena_Slums_Morning_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 20,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Arena_Slums_Night_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_Slums_Night_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Map_Arena_Slums_Night_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 1,
+    "world_object_categories": {
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 0,
+    "other_actors": 44,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Slums"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Workshop_Smithery_Map_Lighting",
+    "package": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+    "json": "all_maps/Maps__Lighting__Workshop_Smithery_Map_Lighting.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 14,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Hub_Tavern_Frank",
+      "Workshop_Smithery_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Hub_Tavern_Frank",
+    "package": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+    "json": "all_maps/Maps__Map_Hub_Tavern_Frank.json",
+    "kind": "persistent_with_sublevels",
+    "sources": 4,
+    "spawn_points": 0,
+    "world_objects": 23,
+    "world_object_categories": {
+      "character": 2,
+      "light_prop": 16,
+      "physics_other": 3,
+      "static_mesh_actor_movable": 1,
+      "weapon": 1
+    },
+    "spawners": 6,
+    "other_actors": 148,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/GameInstances/GI_Settings",
+      "/Game/UI/UI_DeathDoor",
+      "/Game/UI/UI_DED",
+      "/Game/UI/UI_FadeToLife",
+      "/Game/UI/UI_GiveUp",
+      "/Game/UI/UI_Lose",
+      "/Game/UI/UI_NextFIght",
+      "/Game/UI/UI_Startup_Menu",
+      "/Game/UI/UI_Video_Intro",
+      "/Game/UI/Tavern/Dialogs/UI_Jester",
+      "/Game/UI/Tavern/UI_Mercenaries_Expired",
+      "/Game/UI/Tavern/UI_Tevern_LowerPanel",
+      "/Game/UI/Tavern/Dialogs/Fencer/UI_Dialog_Widget_Fencer_FreeMode",
+      "/Game/UI/Tavern/Dialogs/Fencer/UI_Dialog_Widget_Fencer_Progression",
+      "/Game/UI/Tavern/Dialogs/Jester/UI_Jester_FreeMode"
+    ]
+  },
+  {
+    "map": "Map_Menu_SplashScreens",
+    "package": "HalfswordUE5/Content/Maps/Menus/Map_Menu_SplashScreens.umap",
+    "json": "all_maps/Maps__Menus__Map_Menu_SplashScreens.json",
+    "kind": "persistent_or_standalone",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 1,
+    "other_actors": 1,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Map_Menu_Startup",
+    "package": "HalfswordUE5/Content/Maps/Menus/Map_Menu_Startup.umap",
+    "json": "all_maps/Maps__Menus__Map_Menu_Startup.json",
+    "kind": "persistent_or_standalone",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 1,
+    "other_actors": 1,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/UI/UI_DED",
+      "/Game/UI/UI_GiveUp",
+      "/Game/UI/UI_Lose",
+      "/Game/UI/UI_Pause_Eng",
+      "/Game/UI/UI_StartUpScreen_6",
+      "/Game/UI/Tavern/UI_DeleteSave_Confirm"
+    ]
+  },
+  {
+    "map": "Map_Test_Empty",
+    "package": "HalfswordUE5/Content/Maps/Test/Map_Test_Empty.umap",
+    "json": "all_maps/Maps__Test__Map_Test_Empty.json",
+    "kind": "persistent_or_standalone",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 5,
+    "world_object_categories": {
+      "character": 2,
+      "static_mesh_actor_movable": 3
+    },
+    "spawners": 4,
+    "other_actors": 14,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [],
+    "referenced_by_assets": [
+      "/Game/Blueprints/DataAssets/CombatScenarios/BP_CombatEvent_Master"
+    ]
+  },
+  {
+    "map": "VFX_cutting_Cheap",
+    "package": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+    "json": "all_maps/Maps__VFX_arena_cutting_volumetric_particles__VFX_cutting_Cheap.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 19,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Arena_Cutting_Map"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Arena_Ambush_Map_VFX",
+    "package": "HalfswordUE5/Content/Maps/VFX_Level_Layer/Arena_Ambush_Map_VFX.umap",
+    "json": "all_maps/Maps__VFX_Level_Layer__Arena_Ambush_Map_VFX.json",
+    "kind": "sublevel",
+    "sources": 1,
+    "spawn_points": 0,
+    "world_objects": 0,
+    "world_object_categories": {},
+    "spawners": 0,
+    "other_actors": 4,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Arena_Ambush_Test"
+    ],
+    "referenced_by_assets": []
+  },
+  {
+    "map": "Workshop_Smithery_Map",
+    "package": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+    "json": "all_maps/Maps__Workshop_Smithery_Map.json",
+    "kind": "sublevel",
+    "sources": 2,
+    "spawn_points": 0,
+    "world_objects": 17,
+    "world_object_categories": {
+      "light_prop": 13,
+      "physics_other": 3,
+      "static_mesh_actor_movable": 1
+    },
+    "spawners": 2,
+    "other_actors": 111,
+    "errors": 0,
+    "parse_status": "ok",
+    "spawn_point_list": [],
+    "pulled_in_by": [
+      "Map_Hub_Tavern_Frank"
+    ],
+    "referenced_by_assets": []
+  }
+]

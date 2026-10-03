@@ -1,0 +1,340 @@
+
+=== FUNCTION ExecuteUbergraph_BP_SpawnerPoint_Willies  (BP_SpawnerPoint_Willies_C)
+       0: push_flow 11972
+       5: goto computed EntryPoint
+      15: push_flow 1949
+      20: Default__KismetArrayLibrary.Array_Clear(self.Spawn Locations)
+      61: Temp_bool_Variable_12 = false
+      72: Temp_int_Variable = 0
+      95: CallFunc_Multiply_DoubleDouble_A_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=self.Sphere.self.SphereRadius)
+     146: CallFunc_Multiply_DoubleDouble_ReturnValue = Multiply_DoubleDouble(CallFunc_Multiply_DoubleDouble_A_ImplicitCast, 2.0)
+     192: CallFunc_Divide_DoubleDouble_ReturnValue = Divide_DoubleDouble(CallFunc_Multiply_DoubleDouble_ReturnValue, 10.0)
+     238: CallFunc_Add_DoubleDouble_ReturnValue = Add_DoubleDouble(CallFunc_Divide_DoubleDouble_ReturnValue, 10.0)
+     284: CallFunc_FTrunc_ReturnValue = FTrunc(CallFunc_Add_DoubleDouble_ReturnValue)
+     321: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(Temp_int_Variable, CallFunc_FTrunc_ReturnValue)
+     359: CallFunc_Not_PreBool_ReturnValue_14 = Not_PreBool(Temp_bool_Variable_12)
+     388: CallFunc_BooleanAND_ReturnValue_22 = BooleanAND(CallFunc_Not_PreBool_ReturnValue_14, CallFunc_LessEqual_IntInt_ReturnValue)
+     426: if not (CallFunc_BooleanAND_ReturnValue_22) goto 3080
+     440: push_flow 3095
+     445: CallFunc_Conv_IntToDouble_ReturnValue = Conv_IntToDouble(Temp_int_Variable)
+     482: CallFunc_Conv_IntToDouble_ReturnValue_1 = Conv_IntToDouble(Temp_int_Variable)
+     519: CallFunc_Multiply_DoubleDouble_ReturnValue_1 = Multiply_DoubleDouble(CallFunc_Conv_IntToDouble_ReturnValue_1, 0.1)
+     565: CallFunc_FFloor_ReturnValue = FFloor(CallFunc_Multiply_DoubleDouble_ReturnValue_1)
+     602: CallFunc_Conv_IntToDouble_ReturnValue_2 = Conv_IntToDouble(CallFunc_FFloor_ReturnValue)
+     639: CallFunc_Conv_IntToDouble_ReturnValue_3 = Conv_IntToDouble(CallFunc_FFloor_ReturnValue)
+     676: CallFunc_Subtract_DoubleDouble_ReturnValue = Subtract_DoubleDouble(CallFunc_Conv_IntToDouble_ReturnValue_2, 0.1)
+     722: CallFunc_Multiply_DoubleDouble_ReturnValue_2 = Multiply_DoubleDouble(100.0, CallFunc_Conv_IntToDouble_ReturnValue_3)
+     768: CallFunc_Multiply_DoubleDouble_ReturnValue_3 = Multiply_DoubleDouble(CallFunc_Subtract_DoubleDouble_ReturnValue, 10.0)
+     814: CallFunc_Subtract_DoubleDouble_ReturnValue_1 = Subtract_DoubleDouble(CallFunc_Conv_IntToDouble_ReturnValue, CallFunc_Multiply_DoubleDouble_ReturnValue_3)
+     860: CallFunc_FTrunc_ReturnValue_1 = FTrunc(CallFunc_Subtract_DoubleDouble_ReturnValue_1)
+     897: CallFunc_Conv_IntToDouble_ReturnValue_4 = Conv_IntToDouble(CallFunc_FTrunc_ReturnValue_1)
+     934: CallFunc_Multiply_DoubleDouble_ReturnValue_4 = Multiply_DoubleDouble(100.0, CallFunc_Conv_IntToDouble_ReturnValue_4)
+     980: CallFunc_MakeVector_ReturnValue_1 = MakeVector(CallFunc_Multiply_DoubleDouble_ReturnValue_2, CallFunc_Multiply_DoubleDouble_ReturnValue_4, 0.0)
+    1035: CallFunc_Subtract_VectorVector_ReturnValue = Subtract_VectorVector(CallFunc_MakeVector_ReturnValue_1, VectorConst({"X": 500.0, "Y": 500.0, "Z": 0.0}))
+    1097: CallFunc_K2_GetComponentLocation_ReturnValue = self.Sphere.K2_GetComponentLocation()
+    1147: CallFunc_Add_VectorVector_ReturnValue = Add_VectorVector(CallFunc_K2_GetComponentLocation_ReturnValue, CallFunc_Subtract_VectorVector_ReturnValue)
+    1193: CallFunc_Add_VectorVector_ReturnValue_1 = Add_VectorVector(CallFunc_Add_VectorVector_ReturnValue, VectorConst({"X": 0.0, "Y": 0.0, "Z": 1000.0}))
+    1255: CallFunc_K2_LineTraceComponent_ReturnValue = self.Sphere.K2_LineTraceComponent(CallFunc_Add_VectorVector_ReturnValue_1, CallFunc_Add_VectorVector_ReturnValue, true, false, true, CallFunc_K2_LineTraceComponent_HitLocation, CallFunc_K2_LineTraceComponent_HitNormal, CallFunc_K2_LineTraceComponent_BoneName, CallFunc_K2_LineTraceComponent_OutHit)
+    1354: pop_flow_if_not (CallFunc_K2_LineTraceComponent_ReturnValue)
+    1364: CallFunc_Subtract_VectorVector_ReturnValue_1 = Subtract_VectorVector(CallFunc_K2_LineTraceComponent_HitLocation, VectorConst({"X": 0.0, "Y": 0.0, "Z": 1000.0}))
+    1426: K2Node_MakeArray_Array = [0]
+    1439: CallFunc_LineTraceSingleForObjects_ReturnValue = LineTraceSingleForObjects(self, CallFunc_K2_LineTraceComponent_HitLocation, CallFunc_Subtract_VectorVector_ReturnValue_1, K2Node_MakeArray_Array, false, Temp_object_Variable, 3, CallFunc_LineTraceSingleForObjects_OutHit, true, LinearColor{1.0, 0.0, 0.0, 1.0}, LinearColor{0.0, 1.0, 0.0, 1.0}, 5.0)
+    1582: BreakHitResult(CallFunc_LineTraceSingleForObjects_OutHit, CallFunc_BreakHitResult_bBlockingHit, CallFunc_BreakHitResult_bInitialOverlap, CallFunc_BreakHitResult_Time, CallFunc_BreakHitResult_Distance, CallFunc_BreakHitResult_Location, CallFunc_BreakHitResult_ImpactPoint, CallFunc_BreakHitResult_Normal, CallFunc_BreakHitResult_ImpactNormal, CallFunc_BreakHitResult_PhysMat, CallFunc_BreakHitResult_HitActor, CallFunc_BreakHitResult_HitComponent, CallFunc_BreakHitResult_HitBoneName, CallFunc_BreakHitResult_BoneName, CallFunc_BreakHitResult_HitItem, CallFunc_BreakHitResult_ElementIndex, CallFunc_BreakHitResult_FaceIndex, CallFunc_BreakHitResult_TraceStart, CallFunc_BreakHitResult_TraceEnd)
+    1763: CallFunc_SelectVector_ReturnValue = SelectVector(CallFunc_BreakHitResult_ImpactPoint, CallFunc_BreakHitResult_TraceEnd, CallFunc_LineTraceSingleForObjects_ReturnValue)
+    1818: CallFunc_Add_VectorVector_ReturnValue_2 = Add_VectorVector(CallFunc_SelectVector_ReturnValue, VectorConst({"X": 0.0, "Y": 0.0, "Z": 100.0}))
+    1880: CallFunc_Array_AddUnique_ReturnValue = Default__KismetArrayLibrary.Array_AddUnique(self.Spawn Locations Pre Purge, CallFunc_Add_VectorVector_ReturnValue_2)
+    1948: pop_flow
+    1949: self.Index = 0
+    1972: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.Spawn Locations)
+    2031: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Array_Length_ReturnValue, 0)
+    2065: if not (CallFunc_Greater_IntInt_ReturnValue) goto 3020
+    2079: Default__KismetArrayLibrary.Array_Random(self.Spawn Locations, CallFunc_Array_Random_OutItem_3, CallFunc_Array_Random_OutIndex_3)
+    2138: self.Latest Spawn Location = CallFunc_Array_Random_OutItem_3
+    2165: CallFunc_EqualEqual_ByteByte_ReturnValue_3 = EqualEqual_ByteByte(self.As GI Settings.self.Current Play Mode, 0)
+    2218: CallFunc_EqualEqual_ByteByte_ReturnValue_4 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 4)
+    2271: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_EqualEqual_ByteByte_ReturnValue_4, CallFunc_EqualEqual_ByteByte_ReturnValue_3)
+    2309: CallFunc_EqualEqual_ByteByte_ReturnValue_6 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 7)
+    2362: Temp_bool_Variable_10 = CallFunc_EqualEqual_ByteByte_ReturnValue_6
+    2381: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(switch(Temp_bool_Variable_10) {false: self.As GI Settings.self.Available Combatants; true: self.As GI Settings.self.Nemesis Opponents; default: K2Node_Select_Default_5})
+    2528: CallFunc_Greater_IntInt_ReturnValue_2 = Greater_IntInt(CallFunc_Array_Length_ReturnValue_1, 0)
+    2562: CallFunc_BooleanOR_ReturnValue_3 = BooleanOR(CallFunc_Greater_IntInt_ReturnValue_2, self.Spawn Mercenary)
+    2600: CallFunc_BooleanOR_ReturnValue_4 = BooleanOR(CallFunc_BooleanOR_ReturnValue_3, self.Spawn Player)
+    2638: CallFunc_BooleanOR_ReturnValue_5 = BooleanOR(CallFunc_BooleanOR_ReturnValue_4, self.As GI Settings.self.Free Mode Activated)
+    2698: CallFunc_BooleanOR_ReturnValue_6 = BooleanOR(CallFunc_BooleanOR_ReturnValue_5, CallFunc_BooleanAND_ReturnValue)
+    2736: pop_flow_if_not (CallFunc_BooleanOR_ReturnValue_6)
+    2746: push_flow 3445
+    2751: push_flow 3212
+    2756: pop_flow_if_not (self.Spawn Mercenary)
+    2766: Default__KismetArrayLibrary.Array_Random(self.As GI Settings.self.Available Mercenaries IDs, CallFunc_Array_Random_OutItem_1, CallFunc_Array_Random_OutIndex_1)
+    2847: self.Currently Spawned Mercenary ID = CallFunc_Array_Random_OutItem_1
+    2874: CallFunc_Map_Find_ReturnValue = Default__BlueprintMapLibrary.Map_Find(self.As GI Settings.self.Hired Characters, self.Currently Spawned Mercenary ID, CallFunc_Map_Find_Value)
+    2965: self.Spawned mercenary = CallFunc_Map_Find_Value
+    2992: self.Spawned Character = self.Spawned mercenary
+    3019: pop_flow
+    3020: CallFunc_K2_GetActorLocation_ReturnValue = K2_GetActorLocation()
+    3048: self.Latest Spawn Location = CallFunc_K2_GetActorLocation_ReturnValue
+    3075: goto 2165
+    3080: Purge Locations()
+    3094: pop_flow
+    3095: CallFunc_Not_PreBool_ReturnValue_14 = Not_PreBool(Temp_bool_Variable_12)
+    3124: if not (CallFunc_Not_PreBool_ReturnValue_14) goto 3080
+    3138: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Variable, 1)
+    3180: Temp_int_Variable = CallFunc_Add_IntInt_ReturnValue
+    3207: goto 95
+    3212: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 4)
+    3265: pop_flow_if_not (CallFunc_EqualEqual_ByteByte_ReturnValue)
+    3275: CallFunc_Map_Keys_Keys = []
+    3286: Default__BlueprintMapLibrary.Map_Keys(self.As GI Settings.self.Mercenaries for Hire, CallFunc_Map_Keys_Keys)
+    3358: Default__KismetArrayLibrary.Array_Random(CallFunc_Map_Keys_Keys, CallFunc_Array_Random_OutItem, CallFunc_Array_Random_OutIndex)
+    3417: self.Random Sparring Partner ID = CallFunc_Array_Random_OutItem
+    3444: pop_flow
+    3445: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 7)
+    3498: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(self.Level Manager.self.P2 Spawned)
+    3549: CallFunc_BooleanAND_ReturnValue_4 = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.FreeMode Multiplayer)
+    3631: CallFunc_BooleanAND_ReturnValue_5 = BooleanAND(CallFunc_BooleanAND_ReturnValue_4, CallFunc_Not_PreBool_ReturnValue_1)
+    3669: Temp_bool_Variable_4 = self.Spawn Mercenary
+    3688: Temp_bool_Variable_6 = CallFunc_BooleanAND_ReturnValue_5
+    3707: CallFunc_NotEqual_IntInt_ReturnValue_2 = NotEqual_IntInt(self.As GI Settings.self.Sparring Partner ID, 0)
+    3763: Temp_bool_Variable_8 = CallFunc_NotEqual_IntInt_ReturnValue_2
+    3782: CallFunc_Map_Find_ReturnValue_2 = Default__BlueprintMapLibrary.Map_Find(self.As GI Settings.self.Mercenaries for Hire, self.Random Sparring Partner ID, CallFunc_Map_Find_Value_2)
+    3873: CallFunc_Map_Find_ReturnValue_3 = Default__BlueprintMapLibrary.Map_Find(self.As GI Settings.self.Hired Characters, self.As GI Settings.self.Sparring Partner ID, CallFunc_Map_Find_Value_3)
+    3986: CallFunc_EqualEqual_ByteByte_ReturnValue_7 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 4)
+    4039: Temp_bool_Variable_1 = CallFunc_EqualEqual_ByteByte_ReturnValue_7
+    4058: Temp_bool_Variable_2 = self.As GI Settings.self.Free Mode Activated
+    4099: Temp_bool_Variable_3 = self.Spawn Player
+    4118: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Nemesis Opponents)
+    4199: Default__KismetArrayLibrary.Array_Random(self.As GI Settings.self.Available Combatants, CallFunc_Array_Random_OutItem_2, CallFunc_Array_Random_OutIndex_2)
+    4280: CallFunc_Subtract_IntInt_ReturnValue_2 = Subtract_IntInt(CallFunc_Array_Length_ReturnValue_2, 1)
+    4322: Temp_bool_Variable_11 = CallFunc_EqualEqual_ByteByte_ReturnValue_1
+    4341: self.Spawned Character = switch(Temp_bool_Variable_3) {false: switch(Temp_bool_Variable_1) {false: switch(Temp_bool_Variable_4) {false: switch(Temp_bool_Variable_6) {false: switch(Temp_bool_Variable_11) {false: CallFunc_Array_Random_OutItem_2; true: self.As GI Settings.self.Nemesis Opponents[CallFunc_Subtract_IntInt_ReturnValue_2]; default: K2Node_Select_Default_8}; true: self.As GI Settings.self.Free Mode Player Character 2; default: K2Node_Select_Default_9}; true: self.Spawned mercenary; default: K2Node_Select_Default_10}; true: switch(Temp_bool_Variable_8) {false: CallFunc_Map_Find_Value_2; true: CallFunc_Map_Find_Value_3; default: K2Node_Select_Default_3}; default: K2Node_Select_Default_11}; true: switch(Temp_bool_Variable_2) {false: self.As GI Settings.self.Player Character; true: self.As GI Settings.self.Free Mode Player Character 1; default: K2Node_Select_Default_6}; default: K2Node_Select_Default_12}
+    4774: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(self.Level Manager.self.P2 Spawned)
+    4825: CallFunc_BooleanAND_ReturnValue_4 = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.FreeMode Multiplayer)
+    4907: CallFunc_BooleanAND_ReturnValue_5 = BooleanAND(CallFunc_BooleanAND_ReturnValue_4, CallFunc_Not_PreBool_ReturnValue_1)
+    4945: CallFunc_Not_PreBool_ReturnValue_4 = Not_PreBool(CallFunc_BooleanAND_ReturnValue_5)
+    4974: CallFunc_Not_PreBool_ReturnValue_12 = Not_PreBool(self.Spawn Player)
+    5003: CallFunc_BooleanAND_ReturnValue_18 = BooleanAND(self.As GI Settings.self.Free Mode Activated, CallFunc_Not_PreBool_ReturnValue_12)
+    5063: CallFunc_BooleanAND_ReturnValue_19 = BooleanAND(CallFunc_BooleanAND_ReturnValue_18, CallFunc_Not_PreBool_ReturnValue_4)
+    5101: if not (CallFunc_BooleanAND_ReturnValue_19) goto 5860
+    5115: CallFunc_GetTransform_ReturnValue = GetTransform()
+    5143: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, BP_Generator_Characters_Random_C, CallFunc_GetTransform_ReturnValue, 0, None, 1)
+    5187: SetDoublePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Equipment Budget", 0.0)
+    5228: CallFunc_GetTransform_ReturnValue = GetTransform()
+    5256: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_GetTransform_ReturnValue, 1)
+    5296: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(self.As GI Settings.self.Free Mode Foes Amount, 1)
+    5360: CallFunc_Conv_ByteToInt_ReturnValue = Conv_ByteToInt(self.As GI Settings.self.Free Mode Tier)
+    5419: CallFunc_Divide_IntInt_ReturnValue = Divide_IntInt(CallFunc_Conv_ByteToInt_ReturnValue, 2)
+    5461: CallFunc_Clamp_ReturnValue = Clamp(CallFunc_Subtract_IntInt_ReturnValue, 0, CallFunc_Divide_IntInt_ReturnValue)
+    5512: CallFunc_RandomIntegerInRange_ReturnValue = RandomIntegerInRange(0, CallFunc_Clamp_ReturnValue)
+    5554: CallFunc_Subtract_IntInt_ReturnValue_1 = Subtract_IntInt(CallFunc_Conv_ByteToInt_ReturnValue, CallFunc_RandomIntegerInRange_ReturnValue)
+    5600: CallFunc_Clamp_ReturnValue_1 = Clamp(CallFunc_Subtract_IntInt_ReturnValue_1, 0, 7)
+    5647: CallFunc_Conv_IntToByte_ReturnValue = Conv_IntToByte(CallFunc_Clamp_ReturnValue_1)
+    5684: CallFunc_GetValidValue_ReturnValue = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue)
+    5730: CallFunc_FinishSpawningActor_ReturnValue.Generate Character(Willie_BP_C, 0, CallFunc_GetValidValue_ReturnValue, false, false, CallFunc_Generate_Character_Character_Passport)
+    5797: self.Spawned Character = CallFunc_Generate_Character_Character_Passport
+    5824: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+    5860: CallFunc_Greater_IntInt_ReturnValue_1 = Greater_IntInt(self.Level Manager.self.Amount of Characters to Spawn, 2)
+    5916: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(self.Level Manager.self.P2 Spawned)
+    5967: CallFunc_BooleanAND_ReturnValue_4 = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.FreeMode Multiplayer)
+    6049: CallFunc_BooleanAND_ReturnValue_5 = BooleanAND(CallFunc_BooleanAND_ReturnValue_4, CallFunc_Not_PreBool_ReturnValue_1)
+    6087: CallFunc_NotEqual_ByteByte_ReturnValue = NotEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 4)
+    6140: CallFunc_BooleanAND_ReturnValue_11 = BooleanAND(self.Spawn Mercenary, CallFunc_NotEqual_ByteByte_ReturnValue)
+    6178: CallFunc_BooleanOR_ReturnValue_2 = BooleanOR(CallFunc_BooleanAND_ReturnValue_11, self.Spawn Player)
+    6216: CallFunc_EqualEqual_ByteByte_ReturnValue_10 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 3)
+    6269: CallFunc_Not_PreBool_ReturnValue_13 = Not_PreBool(CallFunc_EqualEqual_ByteByte_ReturnValue_10)
+    6298: CallFunc_BooleanAND_ReturnValue_20 = BooleanAND(CallFunc_Not_PreBool_ReturnValue_13, CallFunc_Greater_IntInt_ReturnValue_1)
+    6336: CallFunc_SelectInt_ReturnValue_1 = SelectInt(0, 2, CallFunc_EqualEqual_ByteByte_ReturnValue_10)
+    6383: CallFunc_BooleanAND_ReturnValue_21 = BooleanAND(CallFunc_BooleanAND_ReturnValue_20, CallFunc_BooleanAND_ReturnValue_5)
+    6421: CallFunc_BooleanOR_ReturnValue_7 = BooleanOR(CallFunc_BooleanOR_ReturnValue_2, CallFunc_BooleanAND_ReturnValue_21)
+    6459: CallFunc_SelectInt_ReturnValue_2 = SelectInt(1, CallFunc_SelectInt_ReturnValue_1, CallFunc_BooleanOR_ReturnValue_7)
+    6510: self.NewVar_0 = CallFunc_SelectInt_ReturnValue_2
+    6537: CallFunc_MakeLiteralDouble_ReturnValue = MakeLiteralDouble(self.Spawned Character.Height_21_0EB204DF4978B92AD0ED188FD32EEC7B)
+    6583: CallFunc_MapRangeUnclamped_ReturnValue = MapRangeUnclamped(CallFunc_MakeLiteralDouble_ReturnValue, 0.0, 1.0, 0.0, 10.0)
+    6656: CallFunc_MapRangeUnclamped_ReturnValue_1 = MapRangeUnclamped(CallFunc_MakeLiteralDouble_ReturnValue, 0.0, 1.0, 0.875, 1.0)
+    6729: CallFunc_MakeVector_ReturnValue = MakeVector(0.0, 0.0, CallFunc_MapRangeUnclamped_ReturnValue)
+    6784: CallFunc_Conv_DoubleToVector_ReturnValue = Conv_DoubleToVector(CallFunc_MapRangeUnclamped_ReturnValue_1)
+    6821: CallFunc_Multiply_VectorVector_ReturnValue = Multiply_VectorVector(VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}), CallFunc_Conv_DoubleToVector_ReturnValue)
+    6883: CallFunc_K2_GetActorLocation_ReturnValue_1 = K2_GetActorLocation()
+    6911: CallFunc_FindLookAtRotation_ReturnValue = FindLookAtRotation(self.Latest Spawn Location, CallFunc_K2_GetActorLocation_ReturnValue_1)
+    6957: CallFunc_K2_GetActorLocation_ReturnValue_2 = K2_GetActorLocation()
+    6985: BreakRotator(CallFunc_FindLookAtRotation_ReturnValue, CallFunc_BreakRotator_Roll, CallFunc_BreakRotator_Pitch, CallFunc_BreakRotator_Yaw)
+    7031: CallFunc_FindLookAtRotation_ReturnValue_1 = FindLookAtRotation(self.Latest Spawn Location, CallFunc_K2_GetActorLocation_ReturnValue_2)
+    7077: Temp_byte_Variable = self.Spawn Face Rotation
+    7104: BreakRotator(CallFunc_FindLookAtRotation_ReturnValue_1, CallFunc_BreakRotator_Roll_1, CallFunc_BreakRotator_Pitch_1, CallFunc_BreakRotator_Yaw_1)
+    7150: CallFunc_K2_GetActorRotation_ReturnValue = K2_GetActorRotation()
+    7178: BreakRotator(CallFunc_K2_GetActorRotation_ReturnValue, CallFunc_BreakRotator_Roll_2, CallFunc_BreakRotator_Pitch_2, CallFunc_BreakRotator_Yaw_2)
+    7224: CallFunc_Add_VectorVector_ReturnValue_3 = Add_VectorVector(self.Latest Spawn Location, CallFunc_MakeVector_ReturnValue)
+    7270: CallFunc_MakeRotator_ReturnValue = MakeRotator(0.0, 0.0, switch(Temp_byte_Variable) {0: CallFunc_BreakRotator_Yaw_2; 1: CallFunc_BreakRotator_Yaw_1; 2: CallFunc_BreakRotator_Yaw; default: K2Node_Select_Default_7})
+    7378: CallFunc_MakeTransform_ReturnValue = MakeTransform(CallFunc_Add_VectorVector_ReturnValue_3, CallFunc_MakeRotator_ReturnValue, CallFunc_Multiply_VectorVector_ReturnValue)
+    7433: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1 = BeginDeferredActorSpawnFromClass(self, Willie_BP_C, CallFunc_MakeTransform_ReturnValue, 0, None, 1)
+    7477: SetIntPropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Team Int", self.NewVar_0)
+    7518: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Character Passport", self.Spawned Character)
+    7581: SetBoolPropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Spawn in Pants", self.Start in Pants)
+    7622: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(self.Blossfechten Gear)
+    7651: CallFunc_Not_PreBool_ReturnValue_10 = Not_PreBool(self.Start in Pants)
+    7680: CallFunc_BooleanAND_ReturnValue_12 = BooleanAND(CallFunc_Not_PreBool_ReturnValue, CallFunc_Not_PreBool_ReturnValue_10)
+    7718: CallFunc_BooleanAND_ReturnValue_13 = BooleanAND(CallFunc_BooleanAND_ReturnValue_12, self.Spawn Player)
+    7756: CallFunc_EqualEqual_ByteByte_ReturnValue_8 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 1)
+    7809: CallFunc_EqualEqual_ByteByte_ReturnValue_9 = EqualEqual_ByteByte(self.As GI Settings.self.Current Play Mode, 0)
+    7862: CallFunc_BooleanAND_ReturnValue_14 = BooleanAND(CallFunc_BooleanAND_ReturnValue_13, CallFunc_EqualEqual_ByteByte_ReturnValue_9)
+    7900: CallFunc_BooleanAND_ReturnValue_15 = BooleanAND(CallFunc_BooleanAND_ReturnValue_14, CallFunc_EqualEqual_ByteByte_ReturnValue_8)
+    7938: CallFunc_SelectInt_ReturnValue = SelectInt(self.As GI Settings.self.Carried Bolt Count, 0, CallFunc_BooleanAND_ReturnValue_15)
+    8011: SetIntPropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Bolts in Quiver", CallFunc_SelectInt_ReturnValue)
+    8052: Temp_struct_Variable = Str_Character_Body_Condition{100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0}
+    8156: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(self.NewVar_0, 1)
+    8190: Temp_bool_Variable_5 = CallFunc_EqualEqual_IntInt_ReturnValue
+    8209: CallFunc_Map_Find_ReturnValue_1 = Default__BlueprintMapLibrary.Map_Find(self.As GI Settings.self.Mercenaries Health, self.Currently Spawned Mercenary ID, CallFunc_Map_Find_Value_1)
+    8300: CallFunc_NotEqual_ByteByte_ReturnValue_1 = NotEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 4)
+    8353: CallFunc_Not_PreBool_ReturnValue_11 = Not_PreBool(self.As GI Settings.self.Free Mode Activated)
+    8404: CallFunc_BooleanAND_ReturnValue_16 = BooleanAND(self.Spawn Player, CallFunc_Not_PreBool_ReturnValue_11)
+    8442: CallFunc_BooleanAND_ReturnValue_17 = BooleanAND(CallFunc_BooleanAND_ReturnValue_16, CallFunc_NotEqual_ByteByte_ReturnValue_1)
+    8480: Temp_bool_Variable = CallFunc_BooleanAND_ReturnValue_17
+    8499: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Start Body Condition", switch(Temp_bool_Variable) {false: switch(Temp_bool_Variable_5) {false: Temp_struct_Variable; true: CallFunc_Map_Find_Value_1; default: K2Node_Select_Default}; true: self.As GI Settings.self.Player Body Condition; default: K2Node_Select_Default_4})
+    8672: SetBoolPropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Blossfechten Gear", self.Blossfechten Gear)
+    8713: CallFunc_MakeLiteralDouble_ReturnValue = MakeLiteralDouble(self.Spawned Character.Height_21_0EB204DF4978B92AD0ED188FD32EEC7B)
+    8759: CallFunc_MapRangeUnclamped_ReturnValue = MapRangeUnclamped(CallFunc_MakeLiteralDouble_ReturnValue, 0.0, 1.0, 0.0, 10.0)
+    8832: CallFunc_MapRangeUnclamped_ReturnValue_1 = MapRangeUnclamped(CallFunc_MakeLiteralDouble_ReturnValue, 0.0, 1.0, 0.875, 1.0)
+    8905: CallFunc_MakeVector_ReturnValue = MakeVector(0.0, 0.0, CallFunc_MapRangeUnclamped_ReturnValue)
+    8960: CallFunc_Conv_DoubleToVector_ReturnValue = Conv_DoubleToVector(CallFunc_MapRangeUnclamped_ReturnValue_1)
+    8997: CallFunc_Multiply_VectorVector_ReturnValue = Multiply_VectorVector(VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}), CallFunc_Conv_DoubleToVector_ReturnValue)
+    9059: CallFunc_K2_GetActorLocation_ReturnValue_1 = K2_GetActorLocation()
+    9087: CallFunc_FindLookAtRotation_ReturnValue = FindLookAtRotation(self.Latest Spawn Location, CallFunc_K2_GetActorLocation_ReturnValue_1)
+    9133: CallFunc_K2_GetActorLocation_ReturnValue_2 = K2_GetActorLocation()
+    9161: BreakRotator(CallFunc_FindLookAtRotation_ReturnValue, CallFunc_BreakRotator_Roll, CallFunc_BreakRotator_Pitch, CallFunc_BreakRotator_Yaw)
+    9207: CallFunc_FindLookAtRotation_ReturnValue_1 = FindLookAtRotation(self.Latest Spawn Location, CallFunc_K2_GetActorLocation_ReturnValue_2)
+    9253: Temp_byte_Variable = self.Spawn Face Rotation
+    9280: BreakRotator(CallFunc_FindLookAtRotation_ReturnValue_1, CallFunc_BreakRotator_Roll_1, CallFunc_BreakRotator_Pitch_1, CallFunc_BreakRotator_Yaw_1)
+    9326: CallFunc_K2_GetActorRotation_ReturnValue = K2_GetActorRotation()
+    9354: BreakRotator(CallFunc_K2_GetActorRotation_ReturnValue, CallFunc_BreakRotator_Roll_2, CallFunc_BreakRotator_Pitch_2, CallFunc_BreakRotator_Yaw_2)
+    9400: CallFunc_Add_VectorVector_ReturnValue_3 = Add_VectorVector(self.Latest Spawn Location, CallFunc_MakeVector_ReturnValue)
+    9446: CallFunc_MakeRotator_ReturnValue = MakeRotator(0.0, 0.0, switch(Temp_byte_Variable) {0: CallFunc_BreakRotator_Yaw_2; 1: CallFunc_BreakRotator_Yaw_1; 2: CallFunc_BreakRotator_Yaw; default: K2Node_Select_Default_7})
+    9554: CallFunc_MakeTransform_ReturnValue = MakeTransform(CallFunc_Add_VectorVector_ReturnValue_3, CallFunc_MakeRotator_ReturnValue, CallFunc_Multiply_VectorVector_ReturnValue)
+    9609: CallFunc_FinishSpawningActor_ReturnValue_1 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, CallFunc_MakeTransform_ReturnValue, 1)
+    9649: CallFunc_Array_RemoveItem_ReturnValue_1 = Default__KismetArrayLibrary.Array_RemoveItem(self.As GI Settings.self.Available Combatants, self.Spawned Character)
+    9731: if not (self.Spawn Player) goto 9857
+    9745: self.Spawn Player = false
+    9756: CallFunc_GetPlayerController_ReturnValue_1 = GetPlayerController(self, 0)
+    9782: CallFunc_GetPlayerController_ReturnValue_1.Possess(CallFunc_FinishSpawningActor_ReturnValue_1)
+    9823: self.Level Manager.self.Player Spawned = true
+    9856: pop_flow
+    9857: push_flow 10658
+    9862: push_flow 10755
+    9867: push_flow 11439
+    9872: CallFunc_Not_PreBool_ReturnValue_5 = Not_PreBool(self.Spawn Player)
+    9901: CallFunc_Not_PreBool_ReturnValue_6 = Not_PreBool(self.Spawn Mercenary)
+    9930: CallFunc_NotEqual_IntInt_ReturnValue_1 = NotEqual_IntInt(self.NewVar_0, 1)
+    9964: CallFunc_BooleanAND_ReturnValue_6 = BooleanAND(CallFunc_NotEqual_IntInt_ReturnValue_1, CallFunc_Not_PreBool_ReturnValue_6)
+   10002: CallFunc_BooleanAND_ReturnValue_7 = BooleanAND(CallFunc_BooleanAND_ReturnValue_6, CallFunc_Not_PreBool_ReturnValue_5)
+   10040: Temp_bool_Variable_9 = self.As GI Settings.self.Free Mode Activated
+   10081: CallFunc_BooleanAND_ReturnValue_9 = BooleanAND(switch(Temp_bool_Variable_9) {false: self.As GI Settings.self.Progression Multiplayer; true: self.As GI Settings.self.FreeMode Multiplayer; default: K2Node_Select_Default_2}, self.As BP Half Sword Game Mode.self.Local Multiplayer)
+   10229: CallFunc_Not_PreBool_ReturnValue_9 = Not_PreBool(CallFunc_BooleanAND_ReturnValue_9)
+   10258: CallFunc_BooleanOR_ReturnValue_1 = BooleanOR(self.Level Manager.self.P2 Spawned, CallFunc_Not_PreBool_ReturnValue_9)
+   10318: CallFunc_BooleanAND_ReturnValue_10 = BooleanAND(CallFunc_BooleanAND_ReturnValue_7, CallFunc_BooleanOR_ReturnValue_1)
+   10356: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_10)
+   10366: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(self.As BP Half Sword Game Mode.self.Enemy Count, 1)
+   10430: Temp_int_Variable_1 = CallFunc_Add_IntInt_ReturnValue_1
+   10457: self.As BP Half Sword Game Mode.self.Enemy Count = Temp_int_Variable_1
+   10506: CallFunc_Not_PreBool_ReturnValue_8 = Not_PreBool(self.As GI Settings.self.Free Mode Activated)
+   10557: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_8)
+   10567: CallFunc_Array_AddUnique_ReturnValue_1 = Default__KismetArrayLibrary.Array_AddUnique(self.As GI Settings.self.Spawned Combatants, self.Spawned Character)
+   10657: pop_flow
+   10658: CallFunc_EqualEqual_ByteByte_ReturnValue_2 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 7)
+   10711: pop_flow_if_not (CallFunc_EqualEqual_ByteByte_ReturnValue_2)
+   10721: CallFunc_FinishSpawningActor_ReturnValue_1.self.Nemesis = true
+   10754: pop_flow
+   10755: CallFunc_NotEqual_IntInt_ReturnValue = NotEqual_IntInt(self.As GI Settings.self.Sparring Partner ID, 0)
+   10811: CallFunc_EqualEqual_ByteByte_ReturnValue_5 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 4)
+   10864: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_EqualEqual_ByteByte_ReturnValue_5, CallFunc_NotEqual_IntInt_ReturnValue)
+   10902: CallFunc_Not_PreBool_ReturnValue_2 = Not_PreBool(self.Level Manager.self.P2 Spawned)
+   10953: CallFunc_BooleanOR_ReturnValue = BooleanOR(self.Spawn Mercenary, CallFunc_BooleanAND_ReturnValue_1)
+   10991: CallFunc_BooleanAND_ReturnValue_2 = BooleanAND(self.As GI Settings.self.Progression Multiplayer, CallFunc_BooleanOR_ReturnValue)
+   11051: CallFunc_Not_PreBool_ReturnValue_3 = Not_PreBool(self.Spawn Player)
+   11080: CallFunc_BooleanAND_ReturnValue_3 = BooleanAND(CallFunc_Not_PreBool_ReturnValue_2, CallFunc_Not_PreBool_ReturnValue_3)
+   11118: Temp_bool_Variable_7 = self.As GI Settings.self.Free Mode Activated
+   11159: CallFunc_BooleanAND_ReturnValue_8 = BooleanAND(switch(Temp_bool_Variable_7) {false: CallFunc_BooleanAND_ReturnValue_2; true: self.As GI Settings.self.FreeMode Multiplayer; default: K2Node_Select_Default_1}, CallFunc_BooleanAND_ReturnValue_3)
+   11263: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_8)
+   11273: CallFunc_GetPlayerController_ReturnValue = GetPlayerController(self, 1)
+   11299: CallFunc_IsValid_ReturnValue = IsValid(CallFunc_GetPlayerController_ReturnValue)
+   11328: pop_flow_if_not (CallFunc_IsValid_ReturnValue)
+   11338: CallFunc_GetPlayerController_ReturnValue = GetPlayerController(self, 1)
+   11364: CallFunc_GetPlayerController_ReturnValue.Possess(CallFunc_FinishSpawningActor_ReturnValue_1)
+   11405: self.Level Manager.self.P2 Spawned = true
+   11438: pop_flow
+   11439: CallFunc_Not_PreBool_ReturnValue_7 = Not_PreBool(self.Spawn Player)
+   11468: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_7)
+   11478: CallFunc_EqualEqual_IntInt_ReturnValue_1 = EqualEqual_IntInt(self.NewVar_0, 1)
+   11512: pop_flow_if_not (CallFunc_EqualEqual_IntInt_ReturnValue_1)
+   11522: CallFunc_Array_RemoveItem_ReturnValue = Default__KismetArrayLibrary.Array_RemoveItem(self.As GI Settings.self.Available Mercenaries IDs, self.Currently Spawned Mercenary ID)
+   11604: pop_flow
+   11605: self.Spawned Amount = K2Node_CustomEvent_NPC_Amount
+   11632: Delay(self, 0.0, LatentActionInfo{SkipOffsetConst(Value=15), 972302210, "ExecuteUbergraph_BP_SpawnerPoint_Willies", self})
+   11686: pop_flow
+   11687: CallFunc_GetGameInstance_ReturnValue = GetGameInstance(self)
+   11708: K2Node_DynamicCast_AsGI_Settings = Cast<GI_Settings_C>(CallFunc_GetGameInstance_ReturnValue)
+   11744: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsGI_Settings)
+   11773: pop_flow_if_not (K2Node_DynamicCast_bSuccess)
+   11783: self.As GI Settings = K2Node_DynamicCast_AsGI_Settings
+   11802: CallFunc_GetGameMode_ReturnValue = GetGameMode(self)
+   11823: K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode = Cast<BP_HalfSwordGameMode_C>(CallFunc_GetGameMode_ReturnValue)
+   11859: K2Node_DynamicCast_bSuccess_1 = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode)
+   11888: pop_flow_if_not (K2Node_DynamicCast_bSuccess_1)
+   11898: self.As BP Half Sword Game Mode = K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode
+   11917: CallFunc_GetActorOfClass_ReturnValue = GetActorOfClass(self, BP_LevelManager_C)
+   11947: self.Level Manager = CallFunc_GetActorOfClass_ReturnValue
+   11966: pop_flow
+   11967: goto 11687
+   11972: return _
+
+=== FUNCTION Purge Locations  (BP_SpawnerPoint_Willies_C)
+       0: push_flow 1004
+       5: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.Spawn Locations Pre Purge)
+      64: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(CallFunc_Array_Length_ReturnValue, 0)
+      98: if not (CallFunc_EqualEqual_IntInt_ReturnValue) goto 271
+     112: CallFunc_K2_GetActorLocation_ReturnValue = K2_GetActorLocation()
+     140: CallFunc_Add_VectorVector_ReturnValue = Add_VectorVector(CallFunc_K2_GetActorLocation_ReturnValue, VectorConst({"X": 0.0, "Y": 0.0, "Z": 100.0}))
+     202: CallFunc_Array_AddUnique_ReturnValue = Default__KismetArrayLibrary.Array_AddUnique(self.Spawn Locations, CallFunc_Add_VectorVector_ReturnValue)
+     270: pop_flow
+     271: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(self.Spawn Locations Pre Purge)
+     330: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(CallFunc_Array_Length_ReturnValue_1, 1)
+     372: Amount of Loops = CallFunc_Subtract_IntInt_ReturnValue
+     399: Temp_bool_Variable = false
+     410: Temp_int_Variable = 0
+     433: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(Temp_bool_Variable)
+     462: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(Temp_int_Variable, Amount of Loops)
+     500: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_Not_PreBool_ReturnValue, CallFunc_LessEqual_IntInt_ReturnValue)
+     538: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue)
+     548: push_flow 879
+     553: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(self.Spawn Locations)
+     612: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(CallFunc_Array_Length_ReturnValue_2, self.Spawned Amount)
+     650: if not (CallFunc_Less_IntInt_ReturnValue) goto 992
+     664: Default__KismetArrayLibrary.Array_Random(self.Spawn Locations Pre Purge, CallFunc_Array_Random_OutItem, CallFunc_Array_Random_OutIndex)
+     723: Transferred Location = CallFunc_Array_Random_OutItem
+     750: CallFunc_Array_AddUnique_ReturnValue_1 = Default__KismetArrayLibrary.Array_AddUnique(self.Spawn Locations, Transferred Location)
+     818: CallFunc_Array_RemoveItem_ReturnValue = Default__KismetArrayLibrary.Array_RemoveItem(self.Spawn Locations Pre Purge, Transferred Location)
+     878: pop_flow
+     879: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(Temp_bool_Variable)
+     908: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue)
+     918: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Variable, 1)
+     960: Temp_int_Variable = CallFunc_Add_IntInt_ReturnValue
+     987: goto 433
+     992: Temp_bool_Variable = true
+    1003: pop_flow
+    1004: return _
+
+=== FUNCTION ReceiveBeginPlay  (BP_SpawnerPoint_Willies_C)
+       0: ExecuteUbergraph_BP_SpawnerPoint_Willies(11967)
+      15: return _
+
+=== FUNCTION Spawn Willies  (BP_SpawnerPoint_Willies_C)
+       0: K2Node_CustomEvent_NPC_Amount = _
+      18: ExecuteUbergraph_BP_SpawnerPoint_Willies(11605)
+      33: return _
+
+=== FUNCTION UserConstructionScript  (BP_SpawnerPoint_Willies_C)
+       0: CallFunc_SetSphereRadius_InSphereRadius_ImplicitCast = Cast(ConversionType=CST_DoubleToFloat, Target=self.Spawn Sphere Radius)
+      29: self.Sphere.SetSphereRadius(CallFunc_SetSphereRadius_InSphereRadius_ImplicitCast, true)
+      71: CallFunc_GetGameInstance_ReturnValue = GetGameInstance(self)
+      92: K2Node_DynamicCast_AsGI_Settings = Cast<GI_Settings_C>(CallFunc_GetGameInstance_ReturnValue)
+     128: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsGI_Settings)
+     157: if not (K2Node_DynamicCast_bSuccess) goto 190
+     171: self.As GI Settings = K2Node_DynamicCast_AsGI_Settings
+     190: return _

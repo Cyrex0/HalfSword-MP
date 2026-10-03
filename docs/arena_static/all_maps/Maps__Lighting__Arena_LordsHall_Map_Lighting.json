@@ -1,0 +1,3747 @@
+{
+  "map": "Arena_LordsHall_Map_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "BP_Candle_C_0",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -764.0,
+        2065.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.964,
+        0.964,
+        0.99
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle7",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_0.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_0.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9898373654339316,
+        "ScaleWidth": 0.9640553263475269,
+        "RandomCandleID": 8.312326669692993,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.6367572,
+          "Y": 0.67541724
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_1",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        2075.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.033,
+        1.033,
+        1.159
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle8",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_1.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_1.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.158739014751223,
+        "ScaleWidth": 1.0333079427457967,
+        "RandomCandleID": 0.49470502883195877,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.59528595,
+          "Y": 0.5540291
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_10",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -724.0,
+        1200.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.173,
+        1.173,
+        1.049
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle17",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_10.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_10.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0487502916530005,
+        "ScaleWidth": 1.1725700115475028,
+        "RandomCandleID": 6.575518250465393,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.9314199,
+          "Y": 1.0410173
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_11",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        1240.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.976,
+        0.976,
+        1.064
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle18",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_11.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_11.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0644978640524592,
+        "ScaleWidth": 0.9755669035524317,
+        "RandomCandleID": 1.8588824570178986,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.8472083,
+          "Y": 0.91354287
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_12",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -764.0,
+        1265.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.988,
+        0.988,
+        0.902
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle19",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_12.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_12.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9018463941079116,
+        "ScaleWidth": 0.9882015754164648,
+        "RandomCandleID": 2.077089697122574,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.69850147,
+          "Y": 0.5869513
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_13",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        1275.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.022,
+        1.022,
+        1.13
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle20",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_13.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_13.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.1300271925354437,
+        "ScaleWidth": 1.0221625645902037,
+        "RandomCandleID": 0.9738456457853317,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 1.2488021,
+          "Y": 1.2828891
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_14",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -862.0,
+        1165.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.171,
+        1.171,
+        1.151
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle21",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_14.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_14.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.1509140686017894,
+        "ScaleWidth": 1.171117327015157,
+        "RandomCandleID": 8.188421130180359,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.6484853,
+          "Y": 0.66726625
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_15",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -874.0,
+        1200.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.906,
+        0.906,
+        0.885
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle22",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_15.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_15.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.8853175656781387,
+        "ScaleWidth": 0.9064852094488014,
+        "RandomCandleID": 1.4392529428005219,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.8659139,
+          "Y": 0.9400827
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_16",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -864.0,
+        1236.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.892,
+        0.892,
+        0.957
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle23",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_16.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_16.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9573534629362914,
+        "ScaleWidth": 0.891579964004154,
+        "RandomCandleID": 8.412732481956482,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 1.2670877,
+          "Y": 1.1833565
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_17",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        1265.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.128,
+        1.128,
+        0.939
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle24",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_17.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_17.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9388836627200519,
+        "ScaleWidth": 1.1278542930949556,
+        "RandomCandleID": 4.503921568393707,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.93066,
+          "Y": 0.9844704
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_18",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        335.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.014,
+        1.014,
+        0.961
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle25",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_18.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_18.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9605640078095181,
+        "ScaleWidth": 1.0140202355998937,
+        "RandomCandleID": 4.692220687866211,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.63157976,
+          "Y": 0.617144
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_19",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        324.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.808,
+        0.808,
+        0.959
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle26",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_19.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_19.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9593554758449301,
+        "ScaleWidth": 0.8082766324230987,
+        "RandomCandleID": 9.796746969223022,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.7710496,
+          "Y": 0.80021304
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_2",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -862.0,
+        1965.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.943,
+        0.943,
+        0.807
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle9",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_2.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_2.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.8073976992724258,
+        "ScaleWidth": 0.9433393606548908,
+        "RandomCandleID": 0.0277718435972929,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 1.101087,
+          "Y": 1.3679605
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_20",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -762.0,
+        335.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.888,
+        0.888,
+        0.864
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle27",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_20.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_20.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.8642475841266721,
+        "ScaleWidth": 0.8881008524984866,
+        "RandomCandleID": 5.438398122787476,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 1.1269839,
+          "Y": 1.1598128
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_21",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        365.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.95,
+        0.95,
+        0.973
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle28",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_21.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_21.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9730521833645245,
+        "ScaleWidth": 0.9498337045163225,
+        "RandomCandleID": 2.4280525743961334,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.94653374,
+          "Y": 0.849774
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_22",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -724.0,
+        400.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.931,
+        0.931,
+        1.092
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle29",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_22.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_22.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0921720408355,
+        "ScaleWidth": 0.931363892379153,
+        "RandomCandleID": 6.3176363706588745,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.5775467,
+          "Y": 0.57190907
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_23",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        440.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.827,
+        0.827,
+        0.95
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle30",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_23.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_23.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9499435678073951,
+        "ScaleWidth": 0.8268318885712511,
+        "RandomCandleID": 7.692800760269165,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.6984407,
+          "Y": 0.6651351
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_24",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -764.0,
+        465.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.141,
+        1.141,
+        1.001
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle31",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_24.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_24.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0010681689740544,
+        "ScaleWidth": 1.140623230393814,
+        "RandomCandleID": 9.726859331130981,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.81452966,
+          "Y": 0.8798097
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_25",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        475.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.951,
+        0.951,
+        0.865
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle32",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_25.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_25.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.8652363835486501,
+        "ScaleWidth": 0.9509445683012494,
+        "RandomCandleID": 1.8042543530464172,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.7074263,
+          "Y": 0.6523429
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_26",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -862.0,
+        365.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.07,
+        1.07,
+        1.138
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle33",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_26.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_26.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.13796202581781,
+        "ScaleWidth": 1.0698935153985154,
+        "RandomCandleID": 3.898129165172577,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.78129923,
+          "Y": 0.741588
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_27",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -874.0,
+        400.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.046,
+        1.046,
+        0.824
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle34",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_27.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_27.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.8243904075971598,
+        "ScaleWidth": 1.0462355714650933,
+        "RandomCandleID": 2.1054719388484955,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.6362675,
+          "Y": 0.6958473
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_28",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -864.0,
+        436.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.012,
+        1.012,
+        0.83
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle35",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_28.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_28.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.8295907613269162,
+        "ScaleWidth": 1.0121769260326232,
+        "RandomCandleID": 7.5725579261779785,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.7150764,
+          "Y": 0.7145102
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_29",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        465.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.872,
+        0.872,
+        1.039
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle36",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_29.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_29.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0388134812247856,
+        "ScaleWidth": 0.8720114951143989,
+        "RandomCandleID": 5.185399651527405,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.7993843,
+          "Y": 0.6915881
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_3",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -874.0,
+        2000.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.83,
+        0.83,
+        1.083
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle10",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_3.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_3.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0833094730951878,
+        "ScaleWidth": 0.8302011308253809,
+        "RandomCandleID": 0.11749626137316227,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.6513333,
+          "Y": 0.7700026
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_30",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        1935.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.123,
+        1.123,
+        0.991
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_30.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_30.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9913754991926673,
+        "ScaleWidth": 1.122666137456843,
+        "RandomCandleID": 1.1728262901306152,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.7210873,
+          "Y": 0.7308435
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_31",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        1924.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.131,
+        1.131,
+        0.84
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle2",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_31.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_31.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.8398816025151241,
+        "ScaleWidth": 1.1308328805118357,
+        "RandomCandleID": 6.34754478931427,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.83234465,
+          "Y": 0.85111773
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_32",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -762.0,
+        1935.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.021,
+        1.021,
+        1.043
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle3",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_32.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_32.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.04331799536806,
+        "ScaleWidth": 1.0207831460937662,
+        "RandomCandleID": 0.4229865223169327,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.9241224,
+          "Y": 0.87973267
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_33",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        1965.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.099,
+        1.099,
+        0.919
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle4",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_33.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_33.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9187536465007327,
+        "ScaleWidth": 1.0990081935234208,
+        "RandomCandleID": 8.86074423789978,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 1.2202442,
+          "Y": 1.0533043
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_34",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -724.0,
+        2000.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.009,
+        1.009,
+        1.021
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle5",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_34.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_34.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0205511886374197,
+        "ScaleWidth": 1.0087710448000742,
+        "RandomCandleID": 3.342387080192566,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.69931823,
+          "Y": 0.64975834
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_35",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        2040.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.017,
+        1.017,
+        1.179
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle6",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_35.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_35.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.1794427853324478,
+        "ScaleWidth": 1.017499335184631,
+        "RandomCandleID": 6.432996392250061,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.64978576,
+          "Y": 0.71029127
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_4",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -864.0,
+        2036.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.833,
+        0.833,
+        0.906
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle11",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_4.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_4.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9064607953841186,
+        "ScaleWidth": 0.832740271038436,
+        "RandomCandleID": 4.975432455539703,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.9103734,
+          "Y": 0.8500126
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_5",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        2065.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.845,
+        0.845,
+        1.095
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle12",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_5.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_5.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0951872731912644,
+        "ScaleWidth": 0.8451185803221373,
+        "RandomCandleID": 0.631427988409996,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.7604337,
+          "Y": 0.65696037
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_6",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        1135.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.925,
+        0.925,
+        0.944
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle13",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_6.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_6.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9439863572108447,
+        "ScaleWidth": 0.9252479903621644,
+        "RandomCandleID": 4.1691336035728455,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.8543832,
+          "Y": 0.84322625
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_7",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        1124.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.016,
+        1.016,
+        1.002
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle14",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_7.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_7.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.001580888174253,
+        "ScaleWidth": 1.015546162326288,
+        "RandomCandleID": 2.6447340846061707,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 1.1047882,
+          "Y": 1.0900587
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_8",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -762.0,
+        1135.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.911,
+        0.911,
+        0.904
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle15",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_8.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_8.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.903994891404647,
+        "ScaleWidth": 0.9107333759129066,
+        "RandomCandleID": 0.4031495004892349,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 1.0185423,
+          "Y": 1.0742756
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_Candle_C_9",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        1165.0,
+        430.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.131,
+        1.131,
+        0.944
+      ],
+      "category": "light_prop",
+      "label": "BP_Candle16",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_9.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Arena_LordsHall_Map_Lighting:PersistentLevel.BP_Candle_C_9.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.9435102591076703,
+        "ScaleWidth": 1.1307352242531046,
+        "RandomCandleID": 8.281807899475098,
+        "FlameSpawnParticleLight": true,
+        "LightFallOff": 25.913333,
+        "InitialFlameSize": {
+          "X": 0.9985008,
+          "Y": 0.9781229
+        },
+        "RandomWindTurbulence": true
+      }
+    },
+    {
+      "name": "BP_CandleLight_C_0",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -764.0,
+        2065.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight7",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_0'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_1",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        2075.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight8",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_1'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_10",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -724.0,
+        1200.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight17",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_2'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_11",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        1240.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight18",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_3'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_12",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -764.0,
+        1265.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight19",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_4'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_13",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        1275.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight20",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_5'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_14",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -862.0,
+        1165.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight21",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_6'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_15",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -874.0,
+        1200.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight22",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_7'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_16",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -864.0,
+        1236.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight23",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_8'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_17",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        1265.0,
+        446.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight24",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_9'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_178",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        1935.0,
+        446.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_10'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_179",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        1924.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight2",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_11'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_18",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        335.0,
+        446.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight25",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_12'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_180",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -762.0,
+        1935.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight3",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_13'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_181",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        1965.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight4",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_14'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_182",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -724.0,
+        2000.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight5",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_15'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_183",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        2040.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight6",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_16'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_19",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        324.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight26",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_17'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_2",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -862.0,
+        1965.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight9",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_18'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_20",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -762.0,
+        335.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight27",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_19'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_21",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        365.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight28",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_20'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_22",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -724.0,
+        400.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight29",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_21'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_23",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        440.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight30",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_22'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_24",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -764.0,
+        465.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight31",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_23'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_25",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        475.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight32",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_24'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_26",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -862.0,
+        365.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight33",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_25'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_27",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -874.0,
+        400.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight34",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_26'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_28",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -864.0,
+        436.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight35",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_27'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_29",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        465.0,
+        446.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight36",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_28'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_3",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -874.0,
+        2000.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight10",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_29'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_4",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -864.0,
+        2036.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight11",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_30'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_5",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        2065.0,
+        446.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight12",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_31'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_6",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -838.0,
+        1135.0,
+        446.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight13",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_32'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_7",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -798.0,
+        1124.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight14",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_33'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_8",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -762.0,
+        1135.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight15",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_34'"
+        }
+      ]
+    },
+    {
+      "name": "BP_CandleLight_C_9",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -734.0,
+        1165.0,
+        449.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_CandleLight16",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 150.0,
+        "Attenuation Radius": 600.0,
+        "Wiggle": 7.0
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Arena_LordsHall_Map_Lighting:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_35'"
+        }
+      ]
+    },
+    {
+      "name": "StaticMeshActor_3",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -950.0,
+        50.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Light_Brazier_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Brazier_001.SM_Prop_Light_Brazier_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Brazier_001.SM_Prop_Light_Brazier_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_4",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -650.0,
+        50.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Light_Brazier_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Brazier_001.SM_Prop_Light_Brazier_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Brazier_001.SM_Prop_Light_Brazier_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_InteractionController_C_0",
+      "class": "BP_InteractionController_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "BP_InteractionController",
+      "location": [
+        -810.0,
+        1240.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -1255.801,
+        1924.933,
+        503.605
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_2",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box",
+      "location": [
+        -866.698,
+        1124.97,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_3",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box2",
+      "location": [
+        -922.565,
+        762.27,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_4",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box3",
+      "location": [
+        -1016.421,
+        430.22,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_5",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box4",
+      "location": [
+        -941.852,
+        1600.358,
+        0.0
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_0",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -763.822,
+        2065.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_1",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -797.822,
+        2075.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_10",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -837.822,
+        1935.0,
+        447.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_11",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -797.822,
+        1924.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_12",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -837.822,
+        335.0,
+        447.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_13",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -761.822,
+        1935.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_14",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -733.822,
+        1965.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_15",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -723.822,
+        2000.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_16",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -733.822,
+        2040.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_17",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -797.822,
+        324.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_18",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -861.822,
+        1965.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_19",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -761.822,
+        335.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_2",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -723.822,
+        1200.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_20",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -733.822,
+        365.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_21",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -723.822,
+        400.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_22",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -733.822,
+        440.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_23",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -763.822,
+        465.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_24",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -797.822,
+        475.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_25",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -861.822,
+        365.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_26",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -873.822,
+        400.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_27",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -863.822,
+        436.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_28",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -837.822,
+        465.0,
+        447.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_29",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -873.822,
+        2000.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_3",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -733.822,
+        1240.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_30",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -863.822,
+        2036.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_31",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -837.822,
+        2065.0,
+        447.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_32",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -837.822,
+        1135.0,
+        447.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_33",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -797.822,
+        1124.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_34",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -761.822,
+        1135.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_35",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -733.822,
+        1165.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_4",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -763.822,
+        1265.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_5",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -797.822,
+        1275.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_6",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -861.822,
+        1165.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_7",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -873.822,
+        1200.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_8",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -863.822,
+        1236.0,
+        450.817
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_9",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "location": [
+        -837.822,
+        1265.0,
+        447.817
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -730.0,
+        780.0,
+        90.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "Half Sword Graphics v2.7 (Lord_Hall)",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_1",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        -690.0,
+        980.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyLight_1",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        -810.0,
+        1450.0,
+        198.0
+      ]
+    },
+    {
+      "name": "SpotLight_10",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "GI_Fake4",
+      "location": [
+        176.116,
+        1606.284,
+        340.208
+      ]
+    },
+    {
+      "name": "SpotLight_5",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "GI_Fake",
+      "location": [
+        153.81,
+        400.532,
+        260.148
+      ]
+    },
+    {
+      "name": "SpotLight_6",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "GI_Fake2",
+      "location": [
+        148.538,
+        770.237,
+        301.812
+      ]
+    },
+    {
+      "name": "SpotLight_7",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "GI_Fake3",
+      "location": [
+        176.116,
+        1202.225,
+        340.208
+      ]
+    },
+    {
+      "name": "SpotLight_9",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_LordsHall_Map_Lighting.umap",
+      "label": "GI_Fake5",
+      "location": [
+        148.205,
+        1969.329,
+        289.238
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 6,
+  "errors": [],
+  "warnings": []
+}

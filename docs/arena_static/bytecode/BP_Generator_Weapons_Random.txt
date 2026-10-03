@@ -1,0 +1,685 @@
+
+=== FUNCTION Add Weapon Module to Array  (BP_Generator_Weapons_Random_C)
+       0: Price = 0.0
+      27: Current Tier = 0
+      47: CallFunc_IsValidClass_ReturnValue = IsValidClass(Weapon Module)
+      76: if not (CallFunc_IsValidClass_ReturnValue) goto 1589
+      90: Current Tier = Tier In
+     117: CallFunc_GetTransform_ReturnValue = GetTransform()
+     145: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, Weapon Module, CallFunc_GetTransform_ReturnValue, 0, None, 1)
+     189: SetBytePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Custom Material Steel", self.Custom Material Steel)
+     230: SetBytePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Custom Material Colored Metal", self.Custom Material Colored Metal)
+     271: SetBytePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Custom Material Colored Wood", self.Custom Material Colored Wood)
+     312: SetBytePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Custom Material Colored Leather", self.Custom Material Colored Leather)
+     353: CallFunc_GetTransform_ReturnValue = GetTransform()
+     381: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_GetTransform_ReturnValue, 1)
+     421: Temp_real_Variable = 0.75
+     448: Temp_real_Variable_1 = 1.0
+     475: Temp_real_Variable_2 = 1.25
+     502: Temp_real_Variable_3 = 1.0
+     529: Temp_real_Variable_4 = 0.75
+     556: Temp_real_Variable_5 = 1.0
+     583: Temp_real_Variable_6 = 50.0
+     610: Temp_real_Variable_7 = 1.75
+     637: Temp_real_Variable_8 = 1.5
+     664: Temp_real_Variable_9 = 1.25
+     691: Temp_real_Variable_10 = 2.0
+     718: Temp_real_Variable_11 = 0.75
+     745: Temp_real_Variable_12 = 1.0
+     772: Temp_real_Variable_13 = 0.5
+     799: Temp_real_Variable_14 = 1.0
+     826: Temp_real_Variable_15 = 1.5
+     853: Temp_byte_Variable = CallFunc_FinishSpawningActor_ReturnValue.self.Custom Material
+     902: CallFunc_Multiply_DoubleDouble_ReturnValue = Multiply_DoubleDouble(CallFunc_FinishSpawningActor_ReturnValue.self.Price, switch(Temp_byte_Variable) {0: Temp_real_Variable_15; 1: Temp_real_Variable_14; 2: Temp_real_Variable_13; 3: Temp_real_Variable_12; 4: Temp_real_Variable_11; 5: Temp_real_Variable_10; 6: Temp_real_Variable_9; 7: Temp_real_Variable_8; 8: Temp_real_Variable_7; 9: Temp_real_Variable_6; 10: Temp_real_Variable_5; 11: Temp_real_Variable_4; 12: Temp_real_Variable_3; 13: Temp_real_Variable_2; 14: Temp_real_Variable_1; 15: Temp_real_Variable; default: K2Node_Select_Default})
+    1226: Price = CallFunc_Multiply_DoubleDouble_ReturnValue
+    1253: CallFunc_Conv_ByteToInt_ReturnValue = Conv_ByteToInt(Current Tier)
+    1290: CallFunc_Conv_ByteToInt_ReturnValue_1 = Conv_ByteToInt(CallFunc_FinishSpawningActor_ReturnValue.self.Module Tier)
+    1349: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Conv_ByteToInt_ReturnValue_1, CallFunc_Conv_ByteToInt_ReturnValue)
+    1387: Temp_bool_Variable = CallFunc_Greater_IntInt_ReturnValue
+    1406: Current Tier = switch(Temp_bool_Variable) {false: Current Tier; true: CallFunc_FinishSpawningActor_ReturnValue.self.Module Tier; default: K2Node_Select_Default_1}
+    1499: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+    1535: Module Price = Price
+    1562: Tier Out = Current Tier
+    1589: return _
+
+=== FUNCTION ExecuteUbergraph_BP_Generator_Weapons_Random  (BP_Generator_Weapons_Random_C)
+       0: goto computed EntryPoint
+      10: CallFunc_GetGameInstance_ReturnValue = GetGameInstance(self)
+      31: K2Node_DynamicCast_AsGI_Settings = Cast<GI_Settings_C>(CallFunc_GetGameInstance_ReturnValue)
+      67: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsGI_Settings)
+      96: if not (K2Node_DynamicCast_bSuccess) goto 139
+     110: self.As GI Settings = K2Node_DynamicCast_AsGI_Settings
+     129: goto 139
+     134: goto 10
+     139: return _
+
+=== FUNCTION Generate Weapon  (BP_Generator_Weapons_Random_C)
+       0: push_flow 24668
+       5: Scale Rate = 0.0
+      32: Weapon Tier = 0
+      52: Generate Greatsword = false
+      63: Greatsword Size = 0.0
+      90: push_flow 2508
+      95: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(Spawn Specific Weapon)
+     124: if not (CallFunc_Not_PreBool_ReturnValue) goto 2540
+     138: Tier Before Changes = Tier
+     165: CallFunc_Conv_ByteToInt_ReturnValue = Conv_ByteToInt(Tier)
+     202: CallFunc_Clamp_ReturnValue = Clamp(CallFunc_Conv_ByteToInt_ReturnValue, 3, 6)
+     249: CallFunc_Conv_IntToByte_ReturnValue = Conv_IntToByte(CallFunc_Clamp_ReturnValue)
+     286: CallFunc_GetValidValue_ReturnValue = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue)
+     332: CallFunc_EqualEqual_ByteByte_ReturnValue_3 = EqualEqual_ByteByte(Weapon Type Specific, 0)
+     363: Temp_bool_Variable_2 = CallFunc_EqualEqual_ByteByte_ReturnValue_3
+     382: Weapon Tier = switch(Temp_bool_Variable_2) {false: CallFunc_GetValidValue_ReturnValue; true: Tier; default: K2Node_Select_Default}
+     453: push_flow 5531
+     458: Temp_object_Variable_28 = DA_Equipment_Weapons_Modules_Tier_Militia
+     477: Temp_object_Variable_29 = DA_Equipment_Weapons_Modules_Tier_Knight
+     496: Temp_object_Variable_30 = DA_Equipment_Weapons_Modules_Tier_ManAtArms
+     515: Temp_object_Variable_31 = DA_Equipment_Weapons_Modules_Tier_Veteran
+     534: Temp_object_Variable_32 = DA_Equipment_Weapons_Modules_Tier_Soldier
+     553: Temp_object_Variable_33 = DA_Equipment_Weapons_Modules_Tier_Militia
+     572: Temp_object_Variable_34 = DA_Equipment_Weapons_Modules_Tier_Commoner
+     591: Temp_object_Variable_35 = DA_Equipment_Weapons_Modules_Tier_Peasant
+     610: Temp_object_Variable_36 = DA_Equipment_Weapons_Modules_Tier_Beggar
+     629: Temp_byte_Variable_4 = Weapon Tier
+     656: DA Modules Tiers = switch(Temp_byte_Variable_4) {0: Temp_object_Variable_36; 1: Temp_object_Variable_35; 2: Temp_object_Variable_34; 3: Temp_object_Variable_33; 4: Temp_object_Variable_32; 5: Temp_object_Variable_31; 6: Temp_object_Variable_30; 7: Temp_object_Variable_29; 8: Temp_object_Variable_28; default: K2Node_Select_Default_7}
+     826: Temp_object_Variable_19 = DA_Equipment_Weapons_Types_Tiers_Lord
+     845: Temp_object_Variable_20 = DA_Equipment_Weapons_Types_Tiers_Knight
+     864: Temp_object_Variable_21 = DA_Equipment_Weapons_Types_Tiers_ManAtArms
+     883: Temp_object_Variable_22 = DA_Equipment_Weapons_Types_Tiers_Veteran
+     902: Temp_object_Variable_23 = DA_Equipment_Weapons_Types_Tiers_Soldier
+     921: Temp_object_Variable_24 = DA_Equipment_Weapons_Types_Tiers_Militia
+     940: Temp_object_Variable_25 = DA_Equipment_Weapons_Types_Tiers_Commoner
+     959: Temp_object_Variable_26 = DA_Equipment_Weapons_Types_Tiers_Peasant
+     978: Temp_object_Variable_27 = DA_Equipment_Weapons_Types_Tiers_Beggar
+     997: Temp_byte_Variable_3 = Weapon Tier
+    1024: DA Weapon Types Tiers = switch(Temp_byte_Variable_3) {0: Temp_object_Variable_27; 1: Temp_object_Variable_26; 2: Temp_object_Variable_25; 3: Temp_object_Variable_24; 4: Temp_object_Variable_23; 5: Temp_object_Variable_22; 6: Temp_object_Variable_21; 7: Temp_object_Variable_20; 8: Temp_object_Variable_19; default: K2Node_Select_Default_6}
+    1194: Temp_object_Variable = DA_Equipment_Weapons_Types_Shields
+    1213: Temp_object_Variable_1 = DA_Equipment_Weapons_Types_Secondary
+    1232: Temp_object_Variable_2 = DA_Equipment_Weapons_Types_Shields
+    1251: Temp_object_Variable_3 = DA_Equipment_Weapons_Types_2H
+    1270: Temp_object_Variable_4 = DA_Equipment_Weapons_Types_1H
+    1289: CallFunc_EqualEqual_ByteByte_ReturnValue_4 = EqualEqual_ByteByte(Weapon Type Specific, 0)
+    1320: Temp_bool_Variable_3 = CallFunc_EqualEqual_ByteByte_ReturnValue_4
+    1339: Temp_object_Variable_37 = DA_Equipment_Weapons_Types_Swords_1H
+    1358: Temp_object_Variable_38 = DA_Equipment_Weapons_Types_Swords_2H
+    1377: Temp_object_Variable_39 = DA_Equipment_Weapons_Types_Maces_1H
+    1396: Temp_object_Variable_40 = DA_Equipment_Weapons_Types_Maces_2H
+    1415: Temp_object_Variable_41 = DA_Equipment_Weapons_Types_Hafted_1H
+    1434: Temp_object_Variable_42 = DA_Equipment_Weapons_Types_Hafted_2H
+    1453: Temp_byte_Variable = Weapon Type Enum
+    1480: Temp_object_Variable_43 = DA_Equipment_Weapons_Types_Polearms
+    1499: Temp_byte_Variable_21 = Weapon Type Specific
+    1526: DA Weapon Types = switch(Temp_bool_Variable_3) {false: switch(Temp_byte_Variable_21) {0: switch(Temp_byte_Variable) {0: Temp_object_Variable_4; 1: Temp_object_Variable_3; 2: Temp_object_Variable_2; 3: Temp_object_Variable_1; 4: Temp_object_Variable; default: K2Node_Select_Default_1}; 1: Temp_object_Variable_37; 2: Temp_object_Variable_38; 3: Temp_object_Variable_39; 4: Temp_object_Variable_40; 5: Temp_object_Variable_41; 6: Temp_object_Variable_42; 7: Temp_object_Variable_43; default: K2Node_Select_Default_2}; true: switch(Temp_byte_Variable) {0: Temp_object_Variable_4; 1: Temp_object_Variable_3; 2: Temp_object_Variable_2; 3: Temp_object_Variable_1; 4: Temp_object_Variable; default: K2Node_Select_Default_1}; default: K2Node_Select_Default_3}
+    1907: Temp_object_Variable_10 = DA_Equipment_Weapons_PreMade_Lord
+    1926: Temp_object_Variable_11 = DA_Equipment_Weapons_PreMade_Knight
+    1945: Temp_object_Variable_12 = DA_Equipment_Weapons_PreMade_ManAtArms
+    1964: Temp_object_Variable_13 = DA_Equipment_Weapons_PreMade_Veteran
+    1983: Temp_object_Variable_14 = DA_Equipment_Weapons_PreMade_Soldier
+    2002: Temp_object_Variable_15 = DA_Equipment_Weapons_PreMade_Militia
+    2021: Temp_object_Variable_16 = DA_Equipment_Weapons_PreMade_Commoner
+    2040: Temp_object_Variable_17 = DA_Equipment_Weapons_PreMade_Peasant
+    2059: Temp_object_Variable_18 = DA_Equipment_Weapons_PreMade_Beggar
+    2078: Temp_byte_Variable_2 = Weapon Tier
+    2105: DA PreMade Weapons Tiers = switch(Temp_byte_Variable_2) {0: Temp_object_Variable_18; 1: Temp_object_Variable_17; 2: Temp_object_Variable_16; 3: Temp_object_Variable_15; 4: Temp_object_Variable_14; 5: Temp_object_Variable_13; 6: Temp_object_Variable_12; 7: Temp_object_Variable_11; 8: Temp_object_Variable_10; default: K2Node_Select_Default_5}
+    2275: Temp_object_Variable_5 = DA_Equipment_Weapons_PreMade_Types_Treasure
+    2294: Temp_object_Variable_6 = DA_Equipment_Weapons_PreMade_Types_Secondary
+    2313: Temp_object_Variable_7 = DA_Equipment_Weapons_PreMade_Types_Shields
+    2332: Temp_object_Variable_8 = DA_Equipment_Weapons_PreMade_Types_2H
+    2351: Temp_object_Variable_9 = DA_Equipment_Weapons_PreMade_Types_1H
+    2370: Temp_byte_Variable_1 = Weapon Type Enum
+    2397: DA PreMade Weapons Types = switch(Temp_byte_Variable_1) {0: Temp_object_Variable_9; 1: Temp_object_Variable_8; 2: Temp_object_Variable_7; 3: Temp_object_Variable_6; 4: Temp_object_Variable_5; default: K2Node_Select_Default_4}
+    2507: pop_flow
+    2508: Weapon Passport = Passport Output
+    2535: goto 24668
+    2540: K2Node_MakeStruct_Str_Passport_Weapon1.WeaponClass_54_B478ECF7499977809745A3973AD678EC = Specific Class
+    2568: K2Node_MakeStruct_Str_Passport_Weapon1.ID_70_C02CF656483647A1933EEA96314B78A6 = Specific Passport.ID_70_C02CF656483647A1933EEA96314B78A6
+    2613: K2Node_MakeStruct_Str_Passport_Weapon1.Name_57_3729B51148E846FE8DD336B9419BCEE1 = Specific Passport.Name_57_3729B51148E846FE8DD336B9419BCEE1
+    2658: K2Node_MakeStruct_Str_Passport_Weapon1.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D = Specific Passport.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D
+    2695: K2Node_MakeStruct_Str_Passport_Weapon1.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9 = Specific Passport.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9
+    2732: K2Node_MakeStruct_Str_Passport_Weapon1.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139 = Specific Passport.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139
+    2769: K2Node_MakeStruct_Str_Passport_Weapon1.GuardModule_13_6DD2B06245505E53B529D090333012F0 = Specific Passport.GuardModule_13_6DD2B06245505E53B529D090333012F0
+    2806: K2Node_MakeStruct_Str_Passport_Weapon1.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6 = Specific Passport.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6
+    2843: K2Node_MakeStruct_Str_Passport_Weapon1.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4 = Specific Passport.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4
+    2880: K2Node_MakeStruct_Str_Passport_Weapon1.HeadSize_21_2D425E61473B8F64FBAB51B223459D57 = Specific Passport.HeadSize_21_2D425E61473B8F64FBAB51B223459D57
+    2925: K2Node_MakeStruct_Str_Passport_Weapon1.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704 = Specific Passport.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704
+    2970: K2Node_MakeStruct_Str_Passport_Weapon1.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF = Specific Passport.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF
+    3015: K2Node_MakeStruct_Str_Passport_Weapon1.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E = Specific Passport.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E
+    3060: K2Node_MakeStruct_Str_Passport_Weapon1.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7 = Specific Passport.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7
+    3105: K2Node_MakeStruct_Str_Passport_Weapon1.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927 = Specific Passport.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927
+    3150: K2Node_MakeStruct_Str_Passport_Weapon1.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10 = Specific Passport.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10
+    3195: K2Node_MakeStruct_Str_Passport_Weapon1.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173 = Specific Passport.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173
+    3240: K2Node_MakeStruct_Str_Passport_Weapon1.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36 = Specific Passport.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36
+    3285: K2Node_MakeStruct_Str_Passport_Weapon1.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2 = Specific Passport.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2
+    3330: K2Node_MakeStruct_Str_Passport_Weapon1.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A = Specific Passport.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A
+    3375: K2Node_MakeStruct_Str_Passport_Weapon1.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB = Specific Passport.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB
+    3420: K2Node_MakeStruct_Str_Passport_Weapon1.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743 = Specific Passport.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743
+    3465: K2Node_MakeStruct_Str_Passport_Weapon1.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638 = Specific Passport.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638
+    3510: K2Node_MakeStruct_Str_Passport_Weapon1.Price_60_83FE5A624EA188485BBE4E9C8606AEE5 = Specific Passport.Price_60_83FE5A624EA188485BBE4E9C8606AEE5
+    3555: K2Node_MakeStruct_Str_Passport_Weapon1.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461 = Specific Passport.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461
+    3600: Passport Output = K2Node_MakeStruct_Str_Passport_Weapon1
+    3627: CallFunc_GetTransform_ReturnValue = GetTransform()
+    3655: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, ModularWeaponBP_C, CallFunc_GetTransform_ReturnValue, 0, None, 1)
+    3699: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Weapon Passport", Passport Output)
+    3762: CallFunc_GetTransform_ReturnValue = GetTransform()
+    3790: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_GetTransform_ReturnValue, 1)
+    3830: Total Weapon Price = CallFunc_FinishSpawningActor_ReturnValue.self.Price
+    3879: K2Node_MakeStruct_Str_Passport_Weapon1_2.WeaponClass_54_B478ECF7499977809745A3973AD678EC = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.WeaponClass_54_B478ECF7499977809745A3973AD678EC
+    3938: K2Node_MakeStruct_Str_Passport_Weapon1_2.ID_70_C02CF656483647A1933EEA96314B78A6 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.ID_70_C02CF656483647A1933EEA96314B78A6
+    4005: K2Node_MakeStruct_Str_Passport_Weapon1_2.Name_57_3729B51148E846FE8DD336B9419BCEE1 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.Name_57_3729B51148E846FE8DD336B9419BCEE1
+    4072: K2Node_MakeStruct_Str_Passport_Weapon1_2.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D
+    4131: K2Node_MakeStruct_Str_Passport_Weapon1_2.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9
+    4190: K2Node_MakeStruct_Str_Passport_Weapon1_2.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139
+    4249: K2Node_MakeStruct_Str_Passport_Weapon1_2.GuardModule_13_6DD2B06245505E53B529D090333012F0 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.GuardModule_13_6DD2B06245505E53B529D090333012F0
+    4308: K2Node_MakeStruct_Str_Passport_Weapon1_2.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6
+    4367: K2Node_MakeStruct_Str_Passport_Weapon1_2.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4
+    4426: K2Node_MakeStruct_Str_Passport_Weapon1_2.HeadSize_21_2D425E61473B8F64FBAB51B223459D57 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.HeadSize_21_2D425E61473B8F64FBAB51B223459D57
+    4493: K2Node_MakeStruct_Str_Passport_Weapon1_2.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704
+    4560: K2Node_MakeStruct_Str_Passport_Weapon1_2.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF
+    4627: K2Node_MakeStruct_Str_Passport_Weapon1_2.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E
+    4694: K2Node_MakeStruct_Str_Passport_Weapon1_2.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7
+    4761: K2Node_MakeStruct_Str_Passport_Weapon1_2.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927
+    4828: K2Node_MakeStruct_Str_Passport_Weapon1_2.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10
+    4895: K2Node_MakeStruct_Str_Passport_Weapon1_2.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173
+    4962: K2Node_MakeStruct_Str_Passport_Weapon1_2.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36
+    5029: K2Node_MakeStruct_Str_Passport_Weapon1_2.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2
+    5096: K2Node_MakeStruct_Str_Passport_Weapon1_2.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A
+    5163: K2Node_MakeStruct_Str_Passport_Weapon1_2.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB
+    5230: K2Node_MakeStruct_Str_Passport_Weapon1_2.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743
+    5297: K2Node_MakeStruct_Str_Passport_Weapon1_2.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638
+    5364: K2Node_MakeStruct_Str_Passport_Weapon1_2.Price_60_83FE5A624EA188485BBE4E9C8606AEE5 = Total Weapon Price
+    5400: K2Node_MakeStruct_Str_Passport_Weapon1_2.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461 = CallFunc_FinishSpawningActor_ReturnValue.self.Weapon Passport.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461
+    5467: Passport Output = K2Node_MakeStruct_Str_Passport_Weapon1_2
+    5494: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+    5530: pop_flow
+    5531: push_flow 6999
+    5536: push_flow 6270
+    5541: CallFunc_Array_Length_ReturnValue_5 = Default__KismetArrayLibrary.Array_Length(DA Weapon Types Tiers.self.Types)
+    5622: CallFunc_Greater_IntInt_ReturnValue_2 = Greater_IntInt(CallFunc_Array_Length_ReturnValue_5, 0)
+    5656: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue_2)
+    5666: Temp_int_Loop_Counter_Variable_7 = 0
+    5689: Temp_int_Array_Index_Variable_6 = 0
+    5712: CallFunc_Array_Length_ReturnValue_4 = Default__KismetArrayLibrary.Array_Length(DA Weapon Types Tiers.self.Types)
+    5793: CallFunc_Less_IntInt_ReturnValue_7 = Less_IntInt(Temp_int_Loop_Counter_Variable_7, CallFunc_Array_Length_ReturnValue_4)
+    5831: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_7)
+    5841: Temp_int_Array_Index_Variable_6 = Temp_int_Loop_Counter_Variable_7
+    5868: push_flow 6196
+    5873: Default__KismetArrayLibrary.Array_Get(DA Weapon Types Tiers.self.Types, Temp_int_Array_Index_Variable_6, CallFunc_Array_Get_Item)
+    5954: CallFunc_Array_Contains_ReturnValue = Default__KismetArrayLibrary.Array_Contains(DA Weapon Types.self.Types, CallFunc_Array_Get_Item)
+    6036: pop_flow_if_not (CallFunc_Array_Contains_ReturnValue)
+    6046: Default__KismetArrayLibrary.Array_Get(DA Weapon Types Tiers.self.Types, Temp_int_Array_Index_Variable_6, CallFunc_Array_Get_Item)
+    6127: CallFunc_Array_AddUnique_ReturnValue = Default__KismetArrayLibrary.Array_AddUnique(Custom Weapon Types Array, CallFunc_Array_Get_Item)
+    6195: pop_flow
+    6196: CallFunc_Add_IntInt_ReturnValue_7 = Add_IntInt(Temp_int_Loop_Counter_Variable_7, 1)
+    6238: Temp_int_Loop_Counter_Variable_7 = CallFunc_Add_IntInt_ReturnValue_7
+    6265: goto 5712
+    6270: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(DA PreMade Weapons Tiers.self.Weapons)
+    6351: CallFunc_Greater_IntInt_ReturnValue_1 = Greater_IntInt(CallFunc_Array_Length_ReturnValue_3, 0)
+    6385: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue_1)
+    6395: Temp_int_Loop_Counter_Variable_6 = 0
+    6418: Temp_int_Array_Index_Variable_7 = 0
+    6441: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(DA PreMade Weapons Tiers.self.Weapons)
+    6522: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable_6, CallFunc_Array_Length_ReturnValue_2)
+    6560: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+    6570: Temp_int_Array_Index_Variable_7 = Temp_int_Loop_Counter_Variable_6
+    6597: push_flow 6925
+    6602: Default__KismetArrayLibrary.Array_Get(DA PreMade Weapons Tiers.self.Weapons, Temp_int_Array_Index_Variable_7, CallFunc_Array_Get_Item_7)
+    6683: CallFunc_Array_Contains_ReturnValue_7 = Default__KismetArrayLibrary.Array_Contains(DA PreMade Weapons Types.self.Weapons, CallFunc_Array_Get_Item_7)
+    6765: pop_flow_if_not (CallFunc_Array_Contains_ReturnValue_7)
+    6775: Default__KismetArrayLibrary.Array_Get(DA PreMade Weapons Tiers.self.Weapons, Temp_int_Array_Index_Variable_7, CallFunc_Array_Get_Item_7)
+    6856: CallFunc_Array_AddUnique_ReturnValue_7 = Default__KismetArrayLibrary.Array_AddUnique(PreMade Weapons Array, CallFunc_Array_Get_Item_7)
+    6924: pop_flow
+    6925: CallFunc_Add_IntInt_ReturnValue_6 = Add_IntInt(Temp_int_Loop_Counter_Variable_6, 1)
+    6967: Temp_int_Loop_Counter_Variable_6 = CallFunc_Add_IntInt_ReturnValue_6
+    6994: goto 6441
+    6999: CallFunc_EqualEqual_ByteByte_ReturnValue_2 = EqualEqual_ByteByte(Weapon Type Specific, 0)
+    7030: CallFunc_EqualEqual_ByteByte_ReturnValue_7 = EqualEqual_ByteByte(Weapon Type Enum, 2)
+    7061: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(PreMade Weapons Array)
+    7120: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Array_Length_ReturnValue, 0)
+    7154: CallFunc_Conv_IntToDouble_ReturnValue = Conv_IntToDouble(CallFunc_Array_Length_ReturnValue)
+    7191: CallFunc_Multiply_DoubleDouble_ReturnValue_8 = Multiply_DoubleDouble(CallFunc_Conv_IntToDouble_ReturnValue, 0.25)
+    7237: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(Custom Weapon Types Array)
+    7296: CallFunc_Conv_IntToDouble_ReturnValue_1 = Conv_IntToDouble(CallFunc_Array_Length_ReturnValue_1)
+    7333: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(CallFunc_Array_Length_ReturnValue_1, 0)
+    7367: CallFunc_Divide_DoubleDouble_ReturnValue = Divide_DoubleDouble(CallFunc_Conv_IntToDouble_ReturnValue_1, CallFunc_Multiply_DoubleDouble_ReturnValue_8)
+    7413: CallFunc_BooleanOR_ReturnValue_3 = BooleanOR(CallFunc_EqualEqual_IntInt_ReturnValue, CallFunc_EqualEqual_ByteByte_ReturnValue_7)
+    7451: CallFunc_Divide_DoubleDouble_ReturnValue_1 = Divide_DoubleDouble(1.0, CallFunc_Divide_DoubleDouble_ReturnValue)
+    7497: CallFunc_FClamp_ReturnValue_1 = FClamp(CallFunc_Divide_DoubleDouble_ReturnValue_1, 0.25, 0.75)
+    7552: CallFunc_RandomBoolWithWeight_Weight_ImplicitCast = Cast(ConversionType=CST_DoubleToFloat, Target=CallFunc_FClamp_ReturnValue_1)
+    7581: CallFunc_RandomBoolWithWeight_ReturnValue = RandomBoolWithWeight(CallFunc_RandomBoolWithWeight_Weight_ImplicitCast)
+    7610: CallFunc_BooleanOR_ReturnValue_4 = BooleanOR(CallFunc_BooleanOR_ReturnValue_3, CallFunc_RandomBoolWithWeight_ReturnValue)
+    7648: CallFunc_BooleanAND_ReturnValue_5 = BooleanAND(CallFunc_BooleanOR_ReturnValue_4, CallFunc_Greater_IntInt_ReturnValue)
+    7686: CallFunc_BooleanAND_ReturnValue_6 = BooleanAND(CallFunc_BooleanAND_ReturnValue_5, CallFunc_EqualEqual_ByteByte_ReturnValue_2)
+    7724: Output Premade Weapon = CallFunc_BooleanAND_ReturnValue_6
+    7743: CallFunc_Not_PreBool_ReturnValue_2 = Not_PreBool(Output Premade Weapon)
+    7772: if not (CallFunc_Not_PreBool_ReturnValue_2) goto 12262
+    7786: Default__KismetArrayLibrary.Array_Random(Custom Weapon Types Array, CallFunc_Array_Random_OutItem_1, CallFunc_Array_Random_OutIndex_1)
+    7845: self.Customizable Modules = CallFunc_Array_Random_OutItem_1
+    7864: push_flow 8570
+    7869: push_flow 10256
+    7874: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 10)
+    7927: CallFunc_BooleanAND_ReturnValue = BooleanAND(self.As GI Settings.self.Free Mode Blossfechten, self.As GI Settings.self.Free Mode Activated)
+    8009: CallFunc_BooleanOR_ReturnValue = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue, CallFunc_BooleanAND_ReturnValue)
+    8047: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(CallFunc_BooleanOR_ReturnValue)
+    8076: CallFunc_BooleanOR_ReturnValue_1 = BooleanOR(self.As GI Settings.self.Greatswords in Blossfechten, CallFunc_Not_PreBool_ReturnValue_1)
+    8136: CallFunc_Conv_ByteToInt_ReturnValue_1 = Conv_ByteToInt(Tier Before Changes)
+    8173: CallFunc_GreaterEqual_IntInt_ReturnValue = GreaterEqual_IntInt(CallFunc_Conv_ByteToInt_ReturnValue_1, 7)
+    8207: CallFunc_GreaterEqual_IntInt_ReturnValue_1 = GreaterEqual_IntInt(CallFunc_Conv_ByteToInt_ReturnValue_1, 5)
+    8241: CallFunc_RandomBool_ReturnValue = RandomBool()
+    8261: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_GreaterEqual_IntInt_ReturnValue_1, CallFunc_RandomBool_ReturnValue)
+    8299: CallFunc_BooleanOR_ReturnValue_2 = BooleanOR(CallFunc_BooleanAND_ReturnValue_1, CallFunc_GreaterEqual_IntInt_ReturnValue)
+    8337: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 1)
+    8390: CallFunc_BooleanAND_ReturnValue_2 = BooleanAND(CallFunc_BooleanOR_ReturnValue_2, CallFunc_EqualEqual_ByteByte_ReturnValue_1)
+    8428: CallFunc_BooleanAND_ReturnValue_3 = BooleanAND(CallFunc_BooleanAND_ReturnValue_2, CallFunc_BooleanOR_ReturnValue_1)
+    8466: Generate Greatsword = CallFunc_BooleanAND_ReturnValue_3
+    8485: pop_flow_if_not (Generate Greatsword)
+    8495: CallFunc_RandomFloat_ReturnValue = RandomFloat()
+    8523: Greatsword Size = CallFunc_RandomFloat_ReturnValue
+    8550: self.Customizable Modules = BP_GameWeapon_Customizable_Sword_Great_C
+    8569: pop_flow
+    8570: push_flow 16165
+    8575: push_flow 9465
+    8580: Temp_byte_Variable_12 = 0
+    8600: Temp_byte_Variable_13 = 0
+    8620: Temp_byte_Variable_14 = 0
+    8640: Temp_byte_Variable_15 = 1
+    8660: Temp_byte_Variable_16 = 1
+    8680: Temp_byte_Variable_17 = 2
+    8700: Temp_byte_Variable_18 = 2
+    8720: Temp_byte_Variable_19 = 2
+    8740: Temp_byte_Variable_20 = 2
+    8760: Temp_byte_Variable_11 = Weapon Tier
+    8787: self.Custom Material Steel = switch(Temp_byte_Variable_11) {0: Temp_byte_Variable_20; 1: Temp_byte_Variable_19; 2: Temp_byte_Variable_18; 3: Temp_byte_Variable_17; 4: Temp_byte_Variable_16; 5: Temp_byte_Variable_15; 6: Temp_byte_Variable_14; 7: Temp_byte_Variable_13; 8: Temp_byte_Variable_12; default: K2Node_Select_Default_9}
+    8965: Temp_byte_Variable_6 = 3
+    8985: Temp_byte_Variable_7 = 3
+    9005: Temp_byte_Variable_8 = 4
+    9025: Temp_byte_Variable_9 = 4
+    9045: Temp_byte_Variable_10 = 4
+    9065: K2Node_MakeArray_Array = [3, 6, 7, 8]
+    9084: K2Node_MakeArray_Array_1 = [3, 5, 8]
+    9101: Default__KismetArrayLibrary.Array_Random(K2Node_MakeArray_Array, CallFunc_Array_Random_OutItem_8, CallFunc_Array_Random_OutIndex_8)
+    9160: Default__KismetArrayLibrary.Array_Random(K2Node_MakeArray_Array_1, CallFunc_Array_Random_OutItem_9, CallFunc_Array_Random_OutIndex_9)
+    9219: Temp_byte_Variable_5 = Weapon Tier
+    9246: self.Custom Material Colored Metal = switch(Temp_byte_Variable_5) {0: Temp_byte_Variable_10; 1: Temp_byte_Variable_9; 2: Temp_byte_Variable_8; 3: Temp_byte_Variable_7; 4: Temp_byte_Variable_6; 5: CallFunc_Array_Random_OutItem_8; 6: CallFunc_Array_Random_OutItem_8; 7: CallFunc_Array_Random_OutItem_9; 8: CallFunc_Array_Random_OutItem_9; default: K2Node_Select_Default_8}
+    9424: self.Custom Material Colored Wood = 14
+    9444: self.Custom Material Colored Leather = 10
+    9464: pop_flow
+    9465: push_flow 22283
+    9470: push_flow 22027
+    9475: push_flow 21771
+    9480: push_flow 21515
+    9485: push_flow 9873
+    9490: Temp_class_Variable_7 = None
+    9501: Default__KismetArrayLibrary.Array_Random(Sub 1 Array, CallFunc_Array_Random_OutItem_7, CallFunc_Array_Random_OutIndex_7)
+    9560: CallFunc_EqualEqual_ByteByte_ReturnValue_8 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 2)
+    9613: Temp_bool_Variable_1 = CallFunc_EqualEqual_ByteByte_ReturnValue_8
+    9632: Head Sub Module 1 = switch(Temp_bool_Variable_1) {false: Temp_class_Variable_7; true: CallFunc_Array_Random_OutItem_7; default: K2Node_Select_Default_11}
+    9695: Add Weapon Module to Array(Head Sub Module 1, Tier Before Changes, CallFunc_Add_Weapon_Module_to_Array_Module_Price_5, CallFunc_Add_Weapon_Module_to_Array_Tier_Out_5)
+    9745: CallFunc_Add_DoubleDouble_ReturnValue_5 = Add_DoubleDouble(Total Weapon Price, CallFunc_Add_Weapon_Module_to_Array_Module_Price_5)
+    9791: Total Weapon Price = CallFunc_Add_DoubleDouble_ReturnValue_5
+    9818: Weapon Tier = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_5
+    9845: Tier Before Changes = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_5
+    9872: pop_flow
+    9873: Temp_class_Variable_6 = None
+    9884: Default__KismetArrayLibrary.Array_Random(Sub 2 Array, CallFunc_Array_Random_OutItem_6, CallFunc_Array_Random_OutIndex_6)
+    9943: CallFunc_EqualEqual_ByteByte_ReturnValue_8 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 2)
+    9996: Temp_bool_Variable = CallFunc_EqualEqual_ByteByte_ReturnValue_8
+   10015: Head Sub Module 2 = switch(Temp_bool_Variable) {false: Temp_class_Variable_6; true: CallFunc_Array_Random_OutItem_6; default: K2Node_Select_Default_10}
+   10078: Add Weapon Module to Array(Head Sub Module 2, Tier Before Changes, CallFunc_Add_Weapon_Module_to_Array_Module_Price_4, CallFunc_Add_Weapon_Module_to_Array_Tier_Out_4)
+   10128: CallFunc_Add_DoubleDouble_ReturnValue_3 = Add_DoubleDouble(Total Weapon Price, CallFunc_Add_Weapon_Module_to_Array_Module_Price_4)
+   10174: Total Weapon Price = CallFunc_Add_DoubleDouble_ReturnValue_3
+   10201: Weapon Tier = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_4
+   10228: Tier Before Changes = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_4
+   10255: pop_flow
+   10256: push_flow 23909
+   10261: push_flow 23224
+   10266: push_flow 22539
+   10271: push_flow 10892
+   10276: push_flow 11577
+   10281: Temp_int_Loop_Counter_Variable_1 = 0
+   10304: Temp_int_Array_Index_Variable_1 = 0
+   10327: Temp_class_Variable_5 = self.Customizable Modules.Module Heads Array
+   10376: CallFunc_Array_Length_ReturnValue_11 = Default__KismetArrayLibrary.Array_Length(Temp_class_Variable_5)
+   10435: CallFunc_Less_IntInt_ReturnValue_6 = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue_11)
+   10473: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_6)
+   10483: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable_1
+   10510: push_flow 24594
+   10515: Temp_class_Variable_5 = self.Customizable Modules.Module Heads Array
+   10564: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_5, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_6)
+   10623: CallFunc_Array_Contains_ReturnValue_6 = Default__KismetArrayLibrary.Array_Contains(DA Modules Tiers.self.Modules, CallFunc_Array_Get_Item_6)
+   10705: pop_flow_if_not (CallFunc_Array_Contains_ReturnValue_6)
+   10715: Temp_class_Variable_5 = self.Customizable Modules.Module Heads Array
+   10764: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_5, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_6)
+   10823: CallFunc_Array_AddUnique_ReturnValue_6 = Default__KismetArrayLibrary.Array_AddUnique(Heads Array, CallFunc_Array_Get_Item_6)
+   10891: pop_flow
+   10892: Temp_int_Loop_Counter_Variable_5 = 0
+   10915: Temp_int_Array_Index_Variable_4 = 0
+   10938: Temp_class_Variable_3 = self.Customizable Modules.Head Sub Module 2 Array
+   10987: CallFunc_Array_Length_ReturnValue_10 = Default__KismetArrayLibrary.Array_Length(Temp_class_Variable_3)
+   11046: CallFunc_Less_IntInt_ReturnValue_5 = Less_IntInt(Temp_int_Loop_Counter_Variable_5, CallFunc_Array_Length_ReturnValue_10)
+   11084: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_5)
+   11094: Temp_int_Array_Index_Variable_4 = Temp_int_Loop_Counter_Variable_5
+   11121: push_flow 11503
+   11126: Temp_class_Variable_3 = self.Customizable Modules.Head Sub Module 2 Array
+   11175: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_3, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_4)
+   11234: CallFunc_Array_Contains_ReturnValue_5 = Default__KismetArrayLibrary.Array_Contains(DA Modules Tiers.self.Modules, CallFunc_Array_Get_Item_4)
+   11316: pop_flow_if_not (CallFunc_Array_Contains_ReturnValue_5)
+   11326: Temp_class_Variable_3 = self.Customizable Modules.Head Sub Module 2 Array
+   11375: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_3, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_4)
+   11434: CallFunc_Array_AddUnique_ReturnValue_4 = Default__KismetArrayLibrary.Array_AddUnique(Sub 2 Array, CallFunc_Array_Get_Item_4)
+   11502: pop_flow
+   11503: CallFunc_Add_IntInt_ReturnValue_5 = Add_IntInt(Temp_int_Loop_Counter_Variable_5, 1)
+   11545: Temp_int_Loop_Counter_Variable_5 = CallFunc_Add_IntInt_ReturnValue_5
+   11572: goto 10938
+   11577: Temp_int_Loop_Counter_Variable_4 = 0
+   11600: Temp_int_Array_Index_Variable = 0
+   11623: Temp_class_Variable_4 = self.Customizable Modules.Head Sub Module 1 Array
+   11672: CallFunc_Array_Length_ReturnValue_9 = Default__KismetArrayLibrary.Array_Length(Temp_class_Variable_4)
+   11731: CallFunc_Less_IntInt_ReturnValue_4 = Less_IntInt(Temp_int_Loop_Counter_Variable_4, CallFunc_Array_Length_ReturnValue_9)
+   11769: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_4)
+   11779: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable_4
+   11806: push_flow 12188
+   11811: Temp_class_Variable_4 = self.Customizable Modules.Head Sub Module 1 Array
+   11860: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_4, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_5)
+   11919: CallFunc_Array_Contains_ReturnValue_4 = Default__KismetArrayLibrary.Array_Contains(DA Modules Tiers.self.Modules, CallFunc_Array_Get_Item_5)
+   12001: pop_flow_if_not (CallFunc_Array_Contains_ReturnValue_4)
+   12011: Temp_class_Variable_4 = self.Customizable Modules.Head Sub Module 1 Array
+   12060: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_4, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_5)
+   12119: CallFunc_Array_AddUnique_ReturnValue_5 = Default__KismetArrayLibrary.Array_AddUnique(Sub 1 Array, CallFunc_Array_Get_Item_5)
+   12187: pop_flow
+   12188: CallFunc_Add_IntInt_ReturnValue_4 = Add_IntInt(Temp_int_Loop_Counter_Variable_4, 1)
+   12230: Temp_int_Loop_Counter_Variable_4 = CallFunc_Add_IntInt_ReturnValue_4
+   12257: goto 11623
+   12262: CallFunc_RandomFloat_ReturnValue_4 = RandomFloat()
+   12290: CallFunc_Multiply_DoubleDouble_ReturnValue_6 = Multiply_DoubleDouble(CallFunc_RandomFloat_ReturnValue_4, 1000000000.0)
+   12336: CallFunc_Round_ReturnValue = Round(CallFunc_Multiply_DoubleDouble_ReturnValue_6)
+   12373: CallFunc_Conv_IntToString_ReturnValue = Conv_IntToString(CallFunc_Round_ReturnValue)
+   12410: CallFunc_Concat_StrStr_ReturnValue = Concat_StrStr("2", CallFunc_Conv_IntToString_ReturnValue)
+   12450: CallFunc_Conv_StringToInt_ReturnValue = Conv_StringToInt(CallFunc_Concat_StrStr_ReturnValue)
+   12487: Default__KismetArrayLibrary.Array_Random(PreMade Weapons Array, CallFunc_Array_Random_OutItem, CallFunc_Array_Random_OutIndex)
+   12546: K2Node_MakeStruct_Str_Passport_Weapon1_1.WeaponClass_54_B478ECF7499977809745A3973AD678EC = CallFunc_Array_Random_OutItem
+   12574: K2Node_MakeStruct_Str_Passport_Weapon1_1.ID_70_C02CF656483647A1933EEA96314B78A6 = CallFunc_Conv_StringToInt_ReturnValue
+   12610: K2Node_MakeStruct_Str_Passport_Weapon1_1.Name_57_3729B51148E846FE8DD336B9419BCEE1 = "None"
+   12650: K2Node_MakeStruct_Str_Passport_Weapon1_1.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D = None
+   12670: K2Node_MakeStruct_Str_Passport_Weapon1_1.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9 = None
+   12690: K2Node_MakeStruct_Str_Passport_Weapon1_1.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139 = None
+   12710: K2Node_MakeStruct_Str_Passport_Weapon1_1.GuardModule_13_6DD2B06245505E53B529D090333012F0 = None
+   12730: K2Node_MakeStruct_Str_Passport_Weapon1_1.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6 = None
+   12750: K2Node_MakeStruct_Str_Passport_Weapon1_1.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4 = None
+   12770: K2Node_MakeStruct_Str_Passport_Weapon1_1.HeadSize_21_2D425E61473B8F64FBAB51B223459D57 = VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0})
+   12822: K2Node_MakeStruct_Str_Passport_Weapon1_1.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704 = VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0})
+   12874: K2Node_MakeStruct_Str_Passport_Weapon1_1.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF = VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0})
+   12926: K2Node_MakeStruct_Str_Passport_Weapon1_1.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E = VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0})
+   12978: K2Node_MakeStruct_Str_Passport_Weapon1_1.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7 = 0.0
+   13014: K2Node_MakeStruct_Str_Passport_Weapon1_1.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927 = 0.0
+   13050: K2Node_MakeStruct_Str_Passport_Weapon1_1.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10 = 0.0
+   13086: K2Node_MakeStruct_Str_Passport_Weapon1_1.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173 = 0.0
+   13122: K2Node_MakeStruct_Str_Passport_Weapon1_1.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36 = 1
+   13151: K2Node_MakeStruct_Str_Passport_Weapon1_1.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2 = 4
+   13180: K2Node_MakeStruct_Str_Passport_Weapon1_1.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A = 14
+   13209: K2Node_MakeStruct_Str_Passport_Weapon1_1.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB = 10
+   13238: K2Node_MakeStruct_Str_Passport_Weapon1_1.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743 = LinearColor{1.0, 1.0, 1.0, 1.0}
+   13299: K2Node_MakeStruct_Str_Passport_Weapon1_1.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638 = LinearColor{0.186343, 0.074751, 0.06444, 1.0}
+   13360: K2Node_MakeStruct_Str_Passport_Weapon1_1.Price_60_83FE5A624EA188485BBE4E9C8606AEE5 = 0.0
+   13396: K2Node_MakeStruct_Str_Passport_Weapon1_1.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461 = 0
+   13425: Passport Output = K2Node_MakeStruct_Str_Passport_Weapon1_1
+   13452: CallFunc_GetTransform_ReturnValue_1 = GetTransform()
+   13480: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1 = BeginDeferredActorSpawnFromClass(self, ModularWeaponBP_C, CallFunc_GetTransform_ReturnValue_1, 0, None, 1)
+   13524: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Weapon Passport", Passport Output)
+   13587: CallFunc_GetTransform_ReturnValue_1 = GetTransform()
+   13615: CallFunc_FinishSpawningActor_ReturnValue_1 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, CallFunc_GetTransform_ReturnValue_1, 1)
+   13655: Total Weapon Price = CallFunc_FinishSpawningActor_ReturnValue_1.self.Price
+   13704: CallFunc_RandomFloat_ReturnValue_1 = RandomFloat()
+   13732: CallFunc_Conv_ByteToDouble_ReturnValue = Conv_ByteToDouble(Weapon Tier)
+   13769: CallFunc_Multiply_DoubleDouble_ReturnValue = Multiply_DoubleDouble(CallFunc_Conv_ByteToDouble_ReturnValue, 0.1)
+   13815: CallFunc_Subtract_DoubleDouble_ReturnValue = Subtract_DoubleDouble(0.8, CallFunc_Multiply_DoubleDouble_ReturnValue)
+   13861: CallFunc_Multiply_DoubleDouble_ReturnValue_1 = Multiply_DoubleDouble(CallFunc_Subtract_DoubleDouble_ReturnValue, 0.25)
+   13907: CallFunc_Multiply_DoubleDouble_ReturnValue_2 = Multiply_DoubleDouble(CallFunc_Multiply_DoubleDouble_ReturnValue_1, CallFunc_RandomFloat_ReturnValue_1)
+   13953: CallFunc_RandomFloat_ReturnValue_2 = RandomFloat()
+   13981: CallFunc_Conv_ByteToDouble_ReturnValue_1 = Conv_ByteToDouble(Weapon Tier)
+   14018: CallFunc_Multiply_DoubleDouble_ReturnValue_3 = Multiply_DoubleDouble(CallFunc_Conv_ByteToDouble_ReturnValue_1, 0.1)
+   14064: CallFunc_RandomFloat_ReturnValue_3 = RandomFloat()
+   14092: CallFunc_Multiply_DoubleDouble_ReturnValue_4 = Multiply_DoubleDouble(CallFunc_Multiply_DoubleDouble_ReturnValue_3, CallFunc_RandomFloat_ReturnValue_2)
+   14138: CallFunc_Add_DoubleDouble_ReturnValue_6 = Add_DoubleDouble(CallFunc_RandomFloat_ReturnValue_3, CallFunc_Multiply_DoubleDouble_ReturnValue_2)
+   14184: CallFunc_Multiply_DoubleDouble_ReturnValue_5 = Multiply_DoubleDouble(CallFunc_Multiply_DoubleDouble_ReturnValue_4, 0.25)
+   14230: CallFunc_Subtract_DoubleDouble_ReturnValue_1 = Subtract_DoubleDouble(CallFunc_Add_DoubleDouble_ReturnValue_6, CallFunc_Multiply_DoubleDouble_ReturnValue_5)
+   14276: CallFunc_FClamp_ReturnValue = FClamp(CallFunc_Subtract_DoubleDouble_ReturnValue_1, 0.0, 1.0)
+   14331: CallFunc_MakeColor_A_ImplicitCast = Cast(ConversionType=CST_DoubleToFloat, Target=CallFunc_FClamp_ReturnValue)
+   14360: CallFunc_MakeColor_ReturnValue = MakeColor(CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638.R, CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638.G, CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638.B, CallFunc_MakeColor_A_ImplicitCast)
+   14544: K2Node_MakeStruct_Str_Passport_Weapon1_3.WeaponClass_54_B478ECF7499977809745A3973AD678EC = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.WeaponClass_54_B478ECF7499977809745A3973AD678EC
+   14603: K2Node_MakeStruct_Str_Passport_Weapon1_3.ID_70_C02CF656483647A1933EEA96314B78A6 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.ID_70_C02CF656483647A1933EEA96314B78A6
+   14670: K2Node_MakeStruct_Str_Passport_Weapon1_3.Name_57_3729B51148E846FE8DD336B9419BCEE1 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.Name_57_3729B51148E846FE8DD336B9419BCEE1
+   14737: K2Node_MakeStruct_Str_Passport_Weapon1_3.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D
+   14796: K2Node_MakeStruct_Str_Passport_Weapon1_3.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9
+   14855: K2Node_MakeStruct_Str_Passport_Weapon1_3.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139
+   14914: K2Node_MakeStruct_Str_Passport_Weapon1_3.GuardModule_13_6DD2B06245505E53B529D090333012F0 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.GuardModule_13_6DD2B06245505E53B529D090333012F0
+   14973: K2Node_MakeStruct_Str_Passport_Weapon1_3.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6
+   15032: K2Node_MakeStruct_Str_Passport_Weapon1_3.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4
+   15091: K2Node_MakeStruct_Str_Passport_Weapon1_3.HeadSize_21_2D425E61473B8F64FBAB51B223459D57 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.HeadSize_21_2D425E61473B8F64FBAB51B223459D57
+   15158: K2Node_MakeStruct_Str_Passport_Weapon1_3.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704
+   15225: K2Node_MakeStruct_Str_Passport_Weapon1_3.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF
+   15292: K2Node_MakeStruct_Str_Passport_Weapon1_3.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E
+   15359: K2Node_MakeStruct_Str_Passport_Weapon1_3.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7
+   15426: K2Node_MakeStruct_Str_Passport_Weapon1_3.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927
+   15493: K2Node_MakeStruct_Str_Passport_Weapon1_3.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10
+   15560: K2Node_MakeStruct_Str_Passport_Weapon1_3.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173
+   15627: K2Node_MakeStruct_Str_Passport_Weapon1_3.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36
+   15694: K2Node_MakeStruct_Str_Passport_Weapon1_3.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2
+   15761: K2Node_MakeStruct_Str_Passport_Weapon1_3.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A
+   15828: K2Node_MakeStruct_Str_Passport_Weapon1_3.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB
+   15895: K2Node_MakeStruct_Str_Passport_Weapon1_3.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743
+   15962: K2Node_MakeStruct_Str_Passport_Weapon1_3.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638 = CallFunc_MakeColor_ReturnValue
+   15998: K2Node_MakeStruct_Str_Passport_Weapon1_3.Price_60_83FE5A624EA188485BBE4E9C8606AEE5 = Total Weapon Price
+   16034: K2Node_MakeStruct_Str_Passport_Weapon1_3.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461 = CallFunc_FinishSpawningActor_ReturnValue_1.self.Weapon Passport.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461
+   16101: Passport Output = K2Node_MakeStruct_Str_Passport_Weapon1_3
+   16128: CallFunc_FinishSpawningActor_ReturnValue_1.K2_DestroyActor()
+   16164: pop_flow
+   16165: CallFunc_RandomFloatInRange_ReturnValue = RandomFloatInRange(0.0, 1.0)
+   16211: Scale Rate = CallFunc_RandomFloatInRange_ReturnValue
+   16238: CallFunc_Conv_NameToString_ReturnValue = Conv_NameToString(self.Customizable Modules.Custom Name)
+   16297: CallFunc_Contains_ReturnValue = Contains(CallFunc_Conv_NameToString_ReturnValue, "long", false, false)
+   16334: CallFunc_SelectVector_ReturnValue = SelectVector(VectorConst({"X": 1.0, "Y": 0.6, "Z": 1.0}), VectorConst({"X": 1.0, "Y": 0.5, "Z": 1.0}), CallFunc_Contains_ReturnValue)
+   16421: CallFunc_VLerp_Alpha_ImplicitCast = Cast(ConversionType=CST_DoubleToFloat, Target=Greatsword Size)
+   16450: CallFunc_VLerp_ReturnValue = VLerp(VectorConst({"X": 1.1, "Y": 1.1, "Z": 1.1}), VectorConst({"X": 1.2, "Y": 1.2, "Z": 1.2}), CallFunc_VLerp_Alpha_ImplicitCast)
+   16537: CallFunc_SelectVector_ReturnValue_1 = SelectVector(CallFunc_VLerp_ReturnValue, VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}), Generate Greatsword)
+   16608: CallFunc_VLerp_Alpha_ImplicitCast_1 = Cast(ConversionType=CST_DoubleToFloat, Target=Greatsword Size)
+   16637: CallFunc_VLerp_ReturnValue_1 = VLerp(VectorConst({"X": 1.125, "Y": 1.125, "Z": 1.75}), VectorConst({"X": 1.5, "Y": 1.5, "Z": 2.5}), CallFunc_VLerp_Alpha_ImplicitCast_1)
+   16724: CallFunc_SelectVector_ReturnValue_2 = SelectVector(CallFunc_VLerp_ReturnValue_1, VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}), Generate Greatsword)
+   16795: CallFunc_VLerp_Alpha_ImplicitCast_2 = Cast(ConversionType=CST_DoubleToFloat, Target=Greatsword Size)
+   16824: CallFunc_VLerp_ReturnValue_2 = VLerp(VectorConst({"X": 1.25, "Y": 1.25, "Z": 1.25}), VectorConst({"X": 1.5, "Y": 1.5, "Z": 1.5}), CallFunc_VLerp_Alpha_ImplicitCast_2)
+   16911: CallFunc_SelectVector_ReturnValue_3 = SelectVector(CallFunc_VLerp_ReturnValue_2, VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}), Generate Greatsword)
+   16982: CallFunc_VLerp_Alpha_ImplicitCast_3 = Cast(ConversionType=CST_DoubleToFloat, Target=Greatsword Size)
+   17011: CallFunc_VLerp_ReturnValue_3 = VLerp(VectorConst({"X": 1.25, "Y": 1.0, "Z": 0.9}), VectorConst({"X": 1.125, "Y": 0.8, "Z": 1.1}), CallFunc_VLerp_Alpha_ImplicitCast_3)
+   17098: CallFunc_SelectVector_ReturnValue_4 = SelectVector(CallFunc_VLerp_ReturnValue_3, VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}), Generate Greatsword)
+   17169: CallFunc_EqualEqual_ByteByte_ReturnValue_5 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 1)
+   17222: CallFunc_EqualEqual_ByteByte_ReturnValue_6 = EqualEqual_ByteByte(Weapon Type Enum, 1)
+   17253: CallFunc_BooleanAND_ReturnValue_4 = BooleanAND(CallFunc_EqualEqual_ByteByte_ReturnValue_6, CallFunc_EqualEqual_ByteByte_ReturnValue_5)
+   17291: CallFunc_SelectFloat_ReturnValue = SelectFloat(1.125, 1.0, CallFunc_BooleanAND_ReturnValue_4)
+   17346: CallFunc_Conv_DoubleToVector_ReturnValue = Conv_DoubleToVector(CallFunc_SelectFloat_ReturnValue)
+   17383: CallFunc_SelectFloat_ReturnValue_1 = SelectFloat(1.125, 1.0, CallFunc_BooleanAND_ReturnValue_4)
+   17438: CallFunc_SelectFloat_ReturnValue_2 = SelectFloat(1.125, 1.0, CallFunc_BooleanAND_ReturnValue_4)
+   17493: CallFunc_SelectFloat_ReturnValue_3 = SelectFloat(1.125, 1.0, CallFunc_BooleanAND_ReturnValue_4)
+   17548: CallFunc_RandomFloat_ReturnValue_5 = RandomFloat()
+   17576: CallFunc_Multiply_DoubleDouble_ReturnValue_7 = Multiply_DoubleDouble(CallFunc_RandomFloat_ReturnValue_5, 1000000000.0)
+   17622: CallFunc_Round_ReturnValue_1 = Round(CallFunc_Multiply_DoubleDouble_ReturnValue_7)
+   17659: CallFunc_Conv_IntToString_ReturnValue_1 = Conv_IntToString(CallFunc_Round_ReturnValue_1)
+   17696: CallFunc_Concat_StrStr_ReturnValue_1 = Concat_StrStr("2", CallFunc_Conv_IntToString_ReturnValue_1)
+   17736: CallFunc_Conv_StringToInt_ReturnValue_1 = Conv_StringToInt(CallFunc_Concat_StrStr_ReturnValue_1)
+   17773: CallFunc_SelectName_ReturnValue = SelectName("Greatsword", self.Customizable Modules.Custom Name, Generate Greatsword)
+   17854: CallFunc_EqualEqual_ByteByte_ReturnValue_9 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 4)
+   17907: CallFunc_EqualEqual_ByteByte_ReturnValue_10 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 3)
+   17960: CallFunc_EqualEqual_ByteByte_ReturnValue_11 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 4)
+   18013: CallFunc_EqualEqual_ByteByte_ReturnValue_12 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 2)
+   18066: CallFunc_SelectFloat_ReturnValue_4 = SelectFloat(0.85, 1.0, CallFunc_EqualEqual_ByteByte_ReturnValue_11)
+   18121: CallFunc_BooleanOR_ReturnValue_5 = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_9, CallFunc_EqualEqual_ByteByte_ReturnValue_12)
+   18159: CallFunc_Conv_DoubleToVector_ReturnValue_1 = Conv_DoubleToVector(CallFunc_SelectFloat_ReturnValue_4)
+   18196: CallFunc_SelectFloat_ReturnValue_5 = SelectFloat(2.0, 1.0, CallFunc_BooleanOR_ReturnValue_5)
+   18251: CallFunc_SelectFloat_ReturnValue_6 = SelectFloat(0.85, 1.0, CallFunc_EqualEqual_ByteByte_ReturnValue_11)
+   18306: CallFunc_EqualEqual_ByteByte_ReturnValue_13 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 1)
+   18359: CallFunc_Conv_DoubleToVector_ReturnValue_2 = Conv_DoubleToVector(CallFunc_SelectFloat_ReturnValue_6)
+   18396: CallFunc_SelectFloat_ReturnValue_7 = SelectFloat(0.8, 1.0, CallFunc_EqualEqual_ByteByte_ReturnValue_13)
+   18451: CallFunc_SelectFloat_ReturnValue_8 = SelectFloat(0.25, 0.7, CallFunc_EqualEqual_ByteByte_ReturnValue_13)
+   18506: CallFunc_SelectFloat_ReturnValue_9 = SelectFloat(0.2125, CallFunc_SelectFloat_ReturnValue_7, Generate Greatsword)
+   18561: CallFunc_BooleanOR_ReturnValue_6 = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_13, CallFunc_EqualEqual_ByteByte_ReturnValue_10)
+   18599: CallFunc_BooleanOR_ReturnValue_7 = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_13, CallFunc_EqualEqual_ByteByte_ReturnValue_10)
+   18637: CallFunc_SelectFloat_ReturnValue_10 = SelectFloat(1.0, 1.25, CallFunc_BooleanOR_ReturnValue_6)
+   18692: CallFunc_SelectVector_ReturnValue_5 = SelectVector(CallFunc_SelectVector_ReturnValue, VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}), CallFunc_BooleanOR_ReturnValue_7)
+   18763: CallFunc_SelectFloat_ReturnValue_11 = SelectFloat(2.25, CallFunc_SelectFloat_ReturnValue_10, CallFunc_BooleanOR_ReturnValue_5)
+   18818: CallFunc_SelectFloat_ReturnValue_12 = SelectFloat(0.75, CallFunc_SelectFloat_ReturnValue_5, CallFunc_EqualEqual_ByteByte_ReturnValue_13)
+   18873: CallFunc_Multiply_DoubleDouble_ReturnValue_9 = Multiply_DoubleDouble(CallFunc_SelectFloat_ReturnValue_11, CallFunc_SelectFloat_ReturnValue_1)
+   18919: CallFunc_Multiply_DoubleDouble_ReturnValue_10 = Multiply_DoubleDouble(CallFunc_SelectFloat_ReturnValue_12, CallFunc_SelectFloat_ReturnValue_3)
+   18965: CallFunc_SelectFloat_ReturnValue_13 = SelectFloat(0.75, 1.0, CallFunc_EqualEqual_ByteByte_ReturnValue_13)
+   19020: CallFunc_Multiply_DoubleDouble_ReturnValue_11 = Multiply_DoubleDouble(CallFunc_Multiply_DoubleDouble_ReturnValue_10, CallFunc_SelectFloat_ReturnValue_9)
+   19066: CallFunc_Multiply_DoubleDouble_ReturnValue_12 = Multiply_DoubleDouble(CallFunc_SelectFloat_ReturnValue_13, CallFunc_SelectFloat_ReturnValue_2)
+   19112: CallFunc_EqualEqual_ByteByte_ReturnValue_14 = EqualEqual_ByteByte(self.Customizable Modules.Customization Type, 2)
+   19165: CallFunc_VLerp_Alpha_ImplicitCast_4 = Cast(ConversionType=CST_DoubleToFloat, Target=Scale Rate)
+   19194: CallFunc_VLerp_ReturnValue_4 = VLerp(VectorConst({"X": 0.975, "Y": 0.975, "Z": 0.975}), VectorConst({"X": 1.05, "Y": 1.05, "Z": 1.05}), CallFunc_VLerp_Alpha_ImplicitCast_4)
+   19281: CallFunc_VLerp_Alpha_ImplicitCast_5 = Cast(ConversionType=CST_DoubleToFloat, Target=Scale Rate)
+   19310: CallFunc_VLerp_ReturnValue_5 = VLerp(VectorConst({"X": 0.795, "Y": 0.795, "Z": 0.795}), VectorConst({"X": 0.8125, "Y": 0.8125, "Z": 0.8125}), CallFunc_VLerp_Alpha_ImplicitCast_5)
+   19397: CallFunc_SelectVector_ReturnValue_6 = SelectVector(CallFunc_VLerp_ReturnValue_5, CallFunc_VLerp_ReturnValue_4, CallFunc_EqualEqual_ByteByte_ReturnValue_14)
+   19452: CallFunc_Multiply_VectorVector_ReturnValue = Multiply_VectorVector(CallFunc_SelectVector_ReturnValue_6, CallFunc_Conv_DoubleToVector_ReturnValue)
+   19498: CallFunc_Multiply_VectorVector_ReturnValue_1 = Multiply_VectorVector(CallFunc_SelectVector_ReturnValue_6, CallFunc_SelectVector_ReturnValue_5)
+   19544: CallFunc_Multiply_VectorVector_ReturnValue_2 = Multiply_VectorVector(CallFunc_Multiply_VectorVector_ReturnValue, CallFunc_SelectVector_ReturnValue_1)
+   19590: CallFunc_Multiply_VectorVector_ReturnValue_3 = Multiply_VectorVector(CallFunc_Multiply_VectorVector_ReturnValue_1, CallFunc_Conv_DoubleToVector_ReturnValue_1)
+   19636: CallFunc_Multiply_VectorVector_ReturnValue_4 = Multiply_VectorVector(CallFunc_Multiply_VectorVector_ReturnValue, CallFunc_SelectVector_ReturnValue_3)
+   19682: CallFunc_Multiply_VectorVector_ReturnValue_5 = Multiply_VectorVector(CallFunc_Multiply_VectorVector_ReturnValue_3, CallFunc_SelectVector_ReturnValue_4)
+   19728: CallFunc_SelectVector_ReturnValue_7 = SelectVector(VectorConst({"X": 0.85, "Y": 0.666, "Z": 1.0}), CallFunc_SelectVector_ReturnValue_6, CallFunc_EqualEqual_ByteByte_ReturnValue_13)
+   19799: CallFunc_Multiply_VectorVector_ReturnValue_6 = Multiply_VectorVector(CallFunc_SelectVector_ReturnValue_7, CallFunc_Conv_DoubleToVector_ReturnValue_2)
+   19845: CallFunc_Multiply_VectorVector_ReturnValue_7 = Multiply_VectorVector(CallFunc_Multiply_VectorVector_ReturnValue_6, CallFunc_SelectVector_ReturnValue_2)
+   19891: CallFunc_RandomFloatInRange_ReturnValue_1 = RandomFloatInRange(0.0, 1.0)
+   19937: CallFunc_RandomFloatInRange_ReturnValue_2 = RandomFloatInRange(0.0, 1.0)
+   19983: CallFunc_RandomFloatInRange_ReturnValue_3 = RandomFloatInRange(0.0, 1.0)
+   20029: CallFunc_LinearColorLerp_Alpha_ImplicitCast_1 = Cast(ConversionType=CST_DoubleToFloat, Target=CallFunc_RandomFloatInRange_ReturnValue_2)
+   20058: CallFunc_LinearColorLerp_ReturnValue = LinearColorLerp(LinearColor{0.494213, 0.308102, 0.16531, 1.0}, LinearColor{0.005787, 0.004149, 0.001412, 1.0}, CallFunc_LinearColorLerp_Alpha_ImplicitCast_1)
+   20163: CallFunc_LinearColorLerp_Alpha_ImplicitCast_2 = Cast(ConversionType=CST_DoubleToFloat, Target=CallFunc_RandomFloatInRange_ReturnValue_3)
+   20192: CallFunc_LinearColorLerp_ReturnValue_1 = LinearColorLerp(LinearColor{0.436343, 0.172719, 0.145447, 1.0}, LinearColor{0.052662, 0.005959, 0.001128, 1.0}, CallFunc_LinearColorLerp_Alpha_ImplicitCast_2)
+   20297: CallFunc_RandomFloatInRange_ReturnValue_4 = RandomFloatInRange(0.0, 1.0)
+   20343: CallFunc_LinearColorLerp_Alpha_ImplicitCast = Cast(ConversionType=CST_DoubleToFloat, Target=CallFunc_RandomFloatInRange_ReturnValue_1)
+   20372: CallFunc_LinearColorLerp_ReturnValue_2 = LinearColorLerp(CallFunc_LinearColorLerp_ReturnValue_1, CallFunc_LinearColorLerp_ReturnValue, CallFunc_LinearColorLerp_Alpha_ImplicitCast)
+   20427: CallFunc_LinearColorLerp_Alpha_ImplicitCast_3 = Cast(ConversionType=CST_DoubleToFloat, Target=CallFunc_RandomFloatInRange_ReturnValue_4)
+   20456: CallFunc_LinearColorLerp_ReturnValue_3 = LinearColorLerp(LinearColor{1.0, 1.0, 1.0, 1.0}, LinearColor{0.008681, 0.003436, 0.002894, 1.0}, CallFunc_LinearColorLerp_Alpha_ImplicitCast_3)
+   20561: K2Node_MakeStruct_Str_Passport_Weapon1_4.WeaponClass_54_B478ECF7499977809745A3973AD678EC = ModularWeaponBP_C
+   20589: K2Node_MakeStruct_Str_Passport_Weapon1_4.ID_70_C02CF656483647A1933EEA96314B78A6 = CallFunc_Conv_StringToInt_ReturnValue_1
+   20625: K2Node_MakeStruct_Str_Passport_Weapon1_4.Name_57_3729B51148E846FE8DD336B9419BCEE1 = CallFunc_SelectName_ReturnValue
+   20661: K2Node_MakeStruct_Str_Passport_Weapon1_4.HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D = Head Sub Module 1
+   20689: K2Node_MakeStruct_Str_Passport_Weapon1_4.HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9 = Head Sub Module 2
+   20717: K2Node_MakeStruct_Str_Passport_Weapon1_4.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139 = Head Module
+   20745: K2Node_MakeStruct_Str_Passport_Weapon1_4.GuardModule_13_6DD2B06245505E53B529D090333012F0 = Guard Module
+   20773: K2Node_MakeStruct_Str_Passport_Weapon1_4.PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6 = Pommel Module
+   20801: K2Node_MakeStruct_Str_Passport_Weapon1_4.GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4 = Grip Module
+   20829: K2Node_MakeStruct_Str_Passport_Weapon1_4.HeadSize_21_2D425E61473B8F64FBAB51B223459D57 = CallFunc_Multiply_VectorVector_ReturnValue_5
+   20865: K2Node_MakeStruct_Str_Passport_Weapon1_4.GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704 = CallFunc_Multiply_VectorVector_ReturnValue_4
+   20901: K2Node_MakeStruct_Str_Passport_Weapon1_4.GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF = CallFunc_Multiply_VectorVector_ReturnValue_7
+   20937: K2Node_MakeStruct_Str_Passport_Weapon1_4.PommelSize_27_660CC00C49C26D503E16B2BC58CE115E = CallFunc_Multiply_VectorVector_ReturnValue_2
+   20973: K2Node_MakeStruct_Str_Passport_Weapon1_4.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7 = CallFunc_Multiply_DoubleDouble_ReturnValue_9
+   21009: K2Node_MakeStruct_Str_Passport_Weapon1_4.CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927 = CallFunc_Multiply_DoubleDouble_ReturnValue_12
+   21045: K2Node_MakeStruct_Str_Passport_Weapon1_4.CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10 = CallFunc_SelectFloat_ReturnValue_8
+   21081: K2Node_MakeStruct_Str_Passport_Weapon1_4.CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173 = CallFunc_Multiply_DoubleDouble_ReturnValue_11
+   21117: K2Node_MakeStruct_Str_Passport_Weapon1_4.MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36 = self.Custom Material Steel
+   21153: K2Node_MakeStruct_Str_Passport_Weapon1_4.MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2 = self.Custom Material Colored Metal
+   21189: K2Node_MakeStruct_Str_Passport_Weapon1_4.MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A = self.Custom Material Colored Wood
+   21225: K2Node_MakeStruct_Str_Passport_Weapon1_4.MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB = self.Custom Material Colored Leather
+   21261: K2Node_MakeStruct_Str_Passport_Weapon1_4.ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743 = CallFunc_LinearColorLerp_ReturnValue_3
+   21297: K2Node_MakeStruct_Str_Passport_Weapon1_4.ColorLeather_48_DC45F07E4C0C3280278212A7158EE638 = CallFunc_LinearColorLerp_ReturnValue_2
+   21333: K2Node_MakeStruct_Str_Passport_Weapon1_4.Price_60_83FE5A624EA188485BBE4E9C8606AEE5 = Total Weapon Price
+   21369: K2Node_MakeStruct_Str_Passport_Weapon1_4.Tier_67_05026E6F43B7300AA8BACC9D9F9AB461 = Weapon Tier
+   21405: Passport Output = K2Node_MakeStruct_Str_Passport_Weapon1_4
+   21432: pop_flow_if_not (Generate Greatsword)
+   21442: PrintString(self, "Hello", true, true, LinearColor{0.0, 0.66, 1.0, 1.0}, 2.0, "None")
+   21514: pop_flow
+   21515: Default__KismetArrayLibrary.Array_Random(Heads Array, CallFunc_Array_Random_OutItem_5, CallFunc_Array_Random_OutIndex_5)
+   21574: Head Module = CallFunc_Array_Random_OutItem_5
+   21593: Add Weapon Module to Array(Head Module, Tier Before Changes, CallFunc_Add_Weapon_Module_to_Array_Module_Price_3, CallFunc_Add_Weapon_Module_to_Array_Tier_Out_3)
+   21643: CallFunc_Add_DoubleDouble_ReturnValue_4 = Add_DoubleDouble(Total Weapon Price, CallFunc_Add_Weapon_Module_to_Array_Module_Price_3)
+   21689: Total Weapon Price = CallFunc_Add_DoubleDouble_ReturnValue_4
+   21716: Weapon Tier = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_3
+   21743: Tier Before Changes = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_3
+   21770: pop_flow
+   21771: Default__KismetArrayLibrary.Array_Random(Guards Array, CallFunc_Array_Random_OutItem_4, CallFunc_Array_Random_OutIndex_4)
+   21830: Guard Module = CallFunc_Array_Random_OutItem_4
+   21849: Add Weapon Module to Array(Guard Module, Tier Before Changes, CallFunc_Add_Weapon_Module_to_Array_Module_Price_2, CallFunc_Add_Weapon_Module_to_Array_Tier_Out_2)
+   21899: CallFunc_Add_DoubleDouble_ReturnValue_1 = Add_DoubleDouble(Total Weapon Price, CallFunc_Add_Weapon_Module_to_Array_Module_Price_2)
+   21945: Total Weapon Price = CallFunc_Add_DoubleDouble_ReturnValue_1
+   21972: Weapon Tier = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_2
+   21999: Tier Before Changes = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_2
+   22026: pop_flow
+   22027: Default__KismetArrayLibrary.Array_Random(Pommels Array, CallFunc_Array_Random_OutItem_2, CallFunc_Array_Random_OutIndex_2)
+   22086: Pommel Module = CallFunc_Array_Random_OutItem_2
+   22105: Add Weapon Module to Array(Pommel Module, Tier Before Changes, CallFunc_Add_Weapon_Module_to_Array_Module_Price_1, CallFunc_Add_Weapon_Module_to_Array_Tier_Out_1)
+   22155: CallFunc_Add_DoubleDouble_ReturnValue_2 = Add_DoubleDouble(Total Weapon Price, CallFunc_Add_Weapon_Module_to_Array_Module_Price_1)
+   22201: Total Weapon Price = CallFunc_Add_DoubleDouble_ReturnValue_2
+   22228: Weapon Tier = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_1
+   22255: Tier Before Changes = CallFunc_Add_Weapon_Module_to_Array_Tier_Out_1
+   22282: pop_flow
+   22283: Default__KismetArrayLibrary.Array_Random(Grips Array, CallFunc_Array_Random_OutItem_3, CallFunc_Array_Random_OutIndex_3)
+   22342: Grip Module = CallFunc_Array_Random_OutItem_3
+   22361: Add Weapon Module to Array(Grip Module, Tier Before Changes, CallFunc_Add_Weapon_Module_to_Array_Module_Price, CallFunc_Add_Weapon_Module_to_Array_Tier_Out)
+   22411: CallFunc_Add_DoubleDouble_ReturnValue = Add_DoubleDouble(Total Weapon Price, CallFunc_Add_Weapon_Module_to_Array_Module_Price)
+   22457: Total Weapon Price = CallFunc_Add_DoubleDouble_ReturnValue
+   22484: Weapon Tier = CallFunc_Add_Weapon_Module_to_Array_Tier_Out
+   22511: Tier Before Changes = CallFunc_Add_Weapon_Module_to_Array_Tier_Out
+   22538: pop_flow
+   22539: Temp_int_Loop_Counter_Variable = 0
+   22562: Temp_int_Array_Index_Variable_5 = 0
+   22585: Temp_class_Variable_2 = self.Customizable Modules.Module Guards Array
+   22634: CallFunc_Array_Length_ReturnValue_7 = Default__KismetArrayLibrary.Array_Length(Temp_class_Variable_2)
+   22693: CallFunc_Less_IntInt_ReturnValue_2 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_7)
+   22731: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_2)
+   22741: Temp_int_Array_Index_Variable_5 = Temp_int_Loop_Counter_Variable
+   22768: push_flow 23150
+   22773: Temp_class_Variable_2 = self.Customizable Modules.Module Guards Array
+   22822: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_2, Temp_int_Array_Index_Variable_5, CallFunc_Array_Get_Item_3)
+   22881: CallFunc_Array_Contains_ReturnValue_3 = Default__KismetArrayLibrary.Array_Contains(DA Modules Tiers.self.Modules, CallFunc_Array_Get_Item_3)
+   22963: pop_flow_if_not (CallFunc_Array_Contains_ReturnValue_3)
+   22973: Temp_class_Variable_2 = self.Customizable Modules.Module Guards Array
+   23022: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_2, Temp_int_Array_Index_Variable_5, CallFunc_Array_Get_Item_3)
+   23081: CallFunc_Array_AddUnique_ReturnValue_2 = Default__KismetArrayLibrary.Array_AddUnique(Guards Array, CallFunc_Array_Get_Item_3)
+   23149: pop_flow
+   23150: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+   23192: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+   23219: goto 22585
+   23224: Temp_int_Loop_Counter_Variable_2 = 0
+   23247: Temp_int_Array_Index_Variable_3 = 0
+   23270: Temp_class_Variable_1 = self.Customizable Modules.Module Grips Array
+   23319: CallFunc_Array_Length_ReturnValue_8 = Default__KismetArrayLibrary.Array_Length(Temp_class_Variable_1)
+   23378: CallFunc_Less_IntInt_ReturnValue_3 = Less_IntInt(Temp_int_Loop_Counter_Variable_2, CallFunc_Array_Length_ReturnValue_8)
+   23416: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_3)
+   23426: Temp_int_Array_Index_Variable_3 = Temp_int_Loop_Counter_Variable_2
+   23453: push_flow 23835
+   23458: Temp_class_Variable_1 = self.Customizable Modules.Module Grips Array
+   23507: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_1, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_2)
+   23566: CallFunc_Array_Contains_ReturnValue_2 = Default__KismetArrayLibrary.Array_Contains(DA Modules Tiers.self.Modules, CallFunc_Array_Get_Item_2)
+   23648: pop_flow_if_not (CallFunc_Array_Contains_ReturnValue_2)
+   23658: Temp_class_Variable_1 = self.Customizable Modules.Module Grips Array
+   23707: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable_1, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_2)
+   23766: CallFunc_Array_AddUnique_ReturnValue_3 = Default__KismetArrayLibrary.Array_AddUnique(Grips Array, CallFunc_Array_Get_Item_2)
+   23834: pop_flow
+   23835: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_2, 1)
+   23877: Temp_int_Loop_Counter_Variable_2 = CallFunc_Add_IntInt_ReturnValue_2
+   23904: goto 23270
+   23909: Temp_int_Loop_Counter_Variable_3 = 0
+   23932: Temp_int_Array_Index_Variable_2 = 0
+   23955: Temp_class_Variable = self.Customizable Modules.Module Pommels Array
+   24004: CallFunc_Array_Length_ReturnValue_6 = Default__KismetArrayLibrary.Array_Length(Temp_class_Variable)
+   24063: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable_3, CallFunc_Array_Length_ReturnValue_6)
+   24101: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_1)
+   24111: Temp_int_Array_Index_Variable_2 = Temp_int_Loop_Counter_Variable_3
+   24138: push_flow 24520
+   24143: Temp_class_Variable = self.Customizable Modules.Module Pommels Array
+   24192: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_1)
+   24251: CallFunc_Array_Contains_ReturnValue_1 = Default__KismetArrayLibrary.Array_Contains(DA Modules Tiers.self.Modules, CallFunc_Array_Get_Item_1)
+   24333: pop_flow_if_not (CallFunc_Array_Contains_ReturnValue_1)
+   24343: Temp_class_Variable = self.Customizable Modules.Module Pommels Array
+   24392: Default__KismetArrayLibrary.Array_Get(Temp_class_Variable, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_1)
+   24451: CallFunc_Array_AddUnique_ReturnValue_1 = Default__KismetArrayLibrary.Array_AddUnique(Pommels Array, CallFunc_Array_Get_Item_1)
+   24519: pop_flow
+   24520: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(Temp_int_Loop_Counter_Variable_3, 1)
+   24562: Temp_int_Loop_Counter_Variable_3 = CallFunc_Add_IntInt_ReturnValue_3
+   24589: goto 23955
+   24594: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+   24636: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_1
+   24663: goto 10327
+   24668: return _
+
+=== FUNCTION ReceiveBeginPlay  (BP_Generator_Weapons_Random_C)
+       0: ExecuteUbergraph_BP_Generator_Weapons_Random(134)
+      15: return _

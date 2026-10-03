@@ -1,0 +1,12 @@
+{
+  "verdict": "pass",
+  "rules": {
+    "DoD-13": "pass"
+  },
+  "messages": [
+    "deploy profile: dev (release mods + the template's dev-only diagnostics)",
+    "4 deployed files re-hashed at run start",
+    "the run executed the stamped binaries",
+    "judged by hsmp-gate built from the deployed commit"
+  ]
+}

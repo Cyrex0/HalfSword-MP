@@ -1,0 +1,10 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-11": "fail",
+    "NETSIM": "pass"
+  },
+  "messages": [
+    "after 8000 ms"
+  ]
+}

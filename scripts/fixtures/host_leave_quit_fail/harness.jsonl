@@ -1,0 +1,2 @@
+{"ev":"mark","wall_ms":1790880002000,"name":"host_leave"}
+{"ev":"game_force_killed","wall_ms":1790880032000,"role":"game2","pid":7002,"why":"no exit within 30 s of the menu quit nor 15 s of WM_CLOSE"}

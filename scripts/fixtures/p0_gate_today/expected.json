@@ -1,0 +1,29 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-1": "pass",
+    "DoD-2": "incomplete",
+    "DoD-3": "pass",
+    "DoD-4": "pass",
+    "DoD-5": "incomplete",
+    "DoD-6": "incomplete",
+    "DoD-7": "incomplete",
+    "DoD-8": "pass",
+    "DoD-10": "pass",
+    "DoD-12": "pass",
+    "DoD-13": "pass",
+    "POSE-1": "incomplete",
+    "NETSIM": "pass",
+    "PAWN-1": "pass",
+    "WORLD-1": "pass",
+    "COMBAT-1": "incomplete"
+  },
+  "messages": [
+    "no frame_hb heartbeat",
+    "spawn_verified lacks snap_z",
+    "no kit_verified{who=\"peer:<id>\"}",
+    "only at=\"ready\" willie_census",
+    "no pose_quality events",
+    "no combat_quality events"
+  ]
+}

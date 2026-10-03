@@ -1,0 +1,14 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-1": "pass",
+    "DoD-2": "incomplete",
+    "POSE-1": "incomplete",
+    "DoD-3": "incomplete",
+    "DoD-5": "incomplete",
+    "DoD-6": "incomplete",
+    "DoD-7": "incomplete",
+    "DoD-8": "incomplete",
+    "DoD-10": "incomplete"
+  }
+}

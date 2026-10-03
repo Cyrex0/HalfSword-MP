@@ -1,0 +1,4 @@
+[2m2026-10-01T18:39:55.000000Z[0m [32m INFO[0m [2mhsmp_server[0m[2m:[0m hsmp-server starting [3mbind[0m[2m=[0m127.0.0.1:7777
+2026-10-01T18:40:50.000000Z  INFO hsmp_server::server: match start: arena locked arena=Map_Arena_Alley
+[2m2026-10-01T18:40:50.000000Z[0m [32m INFO[0m [2mhsmp_server::server[0m[2m:[0m match: countdown begins (waiting for clients to load) round=1
+[2m2026-10-01T18:40:59.000000Z[0m [32m INFO[0m [2mhsmp_server::server[0m[2m:[0m match: live round=1

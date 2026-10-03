@@ -1,0 +1,69 @@
+# The state-dir allow-list: G0 `state_files` (the lint check_no_state_files, see
+# docs/development/ipc-shared-memory.md) and gate rule STATE-1.
+#
+# Every game<->sidecar and Lua<->Lua contract lives in shared memory; the native module spawns
+# and stops our processes by handle and reads tool output through pipes; dev control is the
+# DevCtl ring (hsmp-tools ipc-ctl). So a state dir holds ONLY:
+#   [config ...]    persistent config
+#   [identity ...]  the player / server identity
+#   [log ...]       logs and dev output (diagnostic dumps)
+# plus [runtime: <config|identity|log>] globs written at run time (STATE-1 only, never Lua
+# literals), [fs: ...] server/src modules allowed to write files (std::fs / tokio::fs), and
+# [debt: <owner>] contracts not yet moved to shared memory (delete the names once moved). Any
+# other category fails G0 `state_files`, as does a Lua literal naming an unlisted file.
+# A bare name is a state-dir file name (or name prefix / `{}` / `<id>` pattern) that
+# mods/**/*.lua may name in a string literal; STATE-1 also accepts it in a run's listing.
+# The list only ever SHRINKS: `hsmp-gate state-files --update` drops unused entries.
+
+[log] the event log (hsmp_log.lua) and its rotation marker
+.rotating
+
+[config] persistent config, not IPC (design D9)
+.settings.json
+.my_character.json
+.gi_backup.txt
+.browser_prefs.txt
+
+[log: dev output] diagnostic dumps and probe logs (HSMP_DEV / gate only; written, never read back)
+.tdiag_recv.txt
+.tdiag_send.txt
+.probe_recv
+.probe_send.txt
+.diag_
+.state_dump_
+.willie_dump_
+.world_scan.txt
+
+[runtime: log] logs written at run time by the game, the sidecar and the harness (STATE-1 only)
+hsmp_events*.jsonl
+hsmp_events*.jsonl.rotating
+.career_guard.jsonl
+.sidecar_panic.log
+sidecar*.jsonl
+
+[identity] the player key file (the listen host passes it to its server as --owner-key-file)
+.player_key
+
+[runtime: identity] the player identity and pinned server keys (STATE-1 only)
+identity
+known_servers.json
+
+[fs: logs] event logs and the panic log
+fs:server/src/events.rs
+fs:server/src/sidecar/panic_guard.rs
+
+[fs: career guard] career-save backups and the guard log (+ the state dir itself at start)
+fs:server/src/sidecar/career_guard.rs
+fs:server/src/sidecar/main.rs
+
+[fs: identity] the player / server identity keys and pinned server keys
+fs:server/src/net/mod.rs
+fs:server/src/sidecar/net.rs
+
+[fs: tap] the dev/gate IPC tap (a log, not IPC)
+fs:server/src/sidecar/ipc_shm.rs
+
+[fs: hsmp-server] the dedicated server's / master's own files (ban list, admin, the hosting --pid-file; not a game state dir)
+fs:server/src/proc_util.rs
+fs:server/src/server/admin.rs
+fs:server/src/server/tick.rs

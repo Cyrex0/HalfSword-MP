@@ -1,0 +1,1127 @@
+{
+  "map": "Map_Arena_Slums_Details",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "DecalActor_0",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Env_Decal_ExcrementSmear_A_001",
+      "location": [
+        813.878,
+        -498.405,
+        1952.746
+      ]
+    },
+    {
+      "name": "DecalActor_1",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Env_Decal_ExcrementSmear_A_2",
+      "location": [
+        813.878,
+        -498.405,
+        1840.938
+      ]
+    },
+    {
+      "name": "DecalActor_10",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K75",
+      "location": [
+        213.609,
+        -768.846,
+        1731.08
+      ]
+    },
+    {
+      "name": "DecalActor_11",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K76",
+      "location": [
+        -646.154,
+        -1032.942,
+        1731.08
+      ]
+    },
+    {
+      "name": "DecalActor_12",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K77",
+      "location": [
+        -1581.643,
+        -1320.3,
+        1731.08
+      ]
+    },
+    {
+      "name": "DecalActor_13",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K78",
+      "location": [
+        -2276.272,
+        -1628.507,
+        1740.876
+      ]
+    },
+    {
+      "name": "DecalActor_14",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K79",
+      "location": [
+        746.42,
+        -231.27,
+        1559.964
+      ]
+    },
+    {
+      "name": "DecalActor_15",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K80",
+      "location": [
+        757.952,
+        -324.177,
+        2100.695
+      ]
+    },
+    {
+      "name": "DecalActor_16",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K81",
+      "location": [
+        828.361,
+        -615.59,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_17",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K82",
+      "location": [
+        795.214,
+        -348.541,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_18",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K83",
+      "location": [
+        809.686,
+        -465.132,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_19",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K84",
+      "location": [
+        822.177,
+        -565.767,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_2",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Env_Decal_ExcrementSmear_A_3",
+      "location": [
+        813.878,
+        -498.405,
+        1824.867
+      ]
+    },
+    {
+      "name": "DecalActor_20",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K85",
+      "location": [
+        776.274,
+        -238.046,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_21",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K86",
+      "location": [
+        747.869,
+        -107.486,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_22",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K87",
+      "location": [
+        834.126,
+        -662.035,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_23",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K88",
+      "location": [
+        867.845,
+        -760.624,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_24",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K89",
+      "location": [
+        880.74,
+        -864.514,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_25",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K90",
+      "location": [
+        893.217,
+        -965.032,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_26",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K91",
+      "location": [
+        905.314,
+        -1062.492,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_27",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K92",
+      "location": [
+        766.135,
+        -59.515,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_28",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K93",
+      "location": [
+        867.768,
+        -42.398,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_29",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K94",
+      "location": [
+        967.538,
+        -21.054,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Env_Decal_ExcrementSmear_A_4",
+      "location": [
+        813.878,
+        -498.405,
+        1384.54
+      ]
+    },
+    {
+      "name": "DecalActor_30",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K95",
+      "location": [
+        1014.618,
+        -10.982,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_31",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K96",
+      "location": [
+        1060.726,
+        -1.118,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_32",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K97",
+      "location": [
+        1154.134,
+        18.866,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_33",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K98",
+      "location": [
+        1238.357,
+        36.884,
+        2423.157
+      ]
+    },
+    {
+      "name": "DecalActor_34",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K99",
+      "location": [
+        1014.618,
+        -10.982,
+        2063.156
+      ]
+    },
+    {
+      "name": "DecalActor_35",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K100",
+      "location": [
+        1014.618,
+        -10.982,
+        1463.266
+      ]
+    },
+    {
+      "name": "DecalActor_36",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K101",
+      "location": [
+        1014.618,
+        -10.982,
+        1188.229
+      ]
+    },
+    {
+      "name": "DecalActor_37",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K102",
+      "location": [
+        788.221,
+        -226.082,
+        1111.147
+      ]
+    },
+    {
+      "name": "DecalActor_38",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K103",
+      "location": [
+        820.02,
+        -482.265,
+        1111.147
+      ]
+    },
+    {
+      "name": "DecalActor_39",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K104",
+      "location": [
+        798.674,
+        -310.297,
+        1111.147
+      ]
+    },
+    {
+      "name": "DecalActor_4",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Env_Decal_ExcrementSmear_A_5",
+      "location": [
+        -359.011,
+        805.548,
+        311.748
+      ]
+    },
+    {
+      "name": "DecalActor_40",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K105",
+      "location": [
+        817.8,
+        -336.872,
+        2371.62
+      ]
+    },
+    {
+      "name": "DecalActor_41",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K106",
+      "location": [
+        851.256,
+        -606.412,
+        2371.62
+      ]
+    },
+    {
+      "name": "DecalActor_42",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K107",
+      "location": [
+        722.155,
+        -685.514,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_43",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K108",
+      "location": [
+        301.496,
+        -775.508,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_44",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K109",
+      "location": [
+        -46.305,
+        -849.915,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_45",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K110",
+      "location": [
+        -562.615,
+        -1002.602,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_46",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K111",
+      "location": [
+        -907.068,
+        -1108.409,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_47",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K112",
+      "location": [
+        -1239.125,
+        -1210.408,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_48",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K113",
+      "location": [
+        -1531.157,
+        -1300.113,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_49",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K114",
+      "location": [
+        -1840.024,
+        -1438.61,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_5",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K70",
+      "location": [
+        -325.223,
+        -893.76,
+        1432.049
+      ]
+    },
+    {
+      "name": "DecalActor_50",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K115",
+      "location": [
+        -2281.527,
+        -1659.859,
+        1740.954
+      ]
+    },
+    {
+      "name": "DecalActor_51",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K116",
+      "location": [
+        742.798,
+        -515.654,
+        2230.005
+      ]
+    },
+    {
+      "name": "DecalActor_52",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K117",
+      "location": [
+        -2551.094,
+        -1597.992,
+        1546.257
+      ]
+    },
+    {
+      "name": "DecalActor_53",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K118",
+      "location": [
+        -2574.897,
+        -1577.172,
+        964.019
+      ]
+    },
+    {
+      "name": "DecalActor_54",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K119",
+      "location": [
+        -2526.623,
+        -1671.494,
+        2214.184
+      ]
+    },
+    {
+      "name": "DecalActor_55",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K120",
+      "location": [
+        -2306.795,
+        -2022.261,
+        2214.184
+      ]
+    },
+    {
+      "name": "DecalActor_56",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K121",
+      "location": [
+        -2796.35,
+        -1630.307,
+        2214.184
+      ]
+    },
+    {
+      "name": "DecalActor_57",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K122",
+      "location": [
+        -3073.936,
+        -1788.761,
+        2214.184
+      ]
+    },
+    {
+      "name": "DecalActor_58",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K123",
+      "location": [
+        -2828.524,
+        -1634.96,
+        1744.676
+      ]
+    },
+    {
+      "name": "DecalActor_59",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K124",
+      "location": [
+        -2828.216,
+        -1551.598,
+        658.633
+      ]
+    },
+    {
+      "name": "DecalActor_6",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K71",
+      "location": [
+        -1280.459,
+        -1194.482,
+        1432.049
+      ]
+    },
+    {
+      "name": "DecalActor_60",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K125",
+      "location": [
+        -2864.521,
+        -1569.85,
+        920.573
+      ]
+    },
+    {
+      "name": "DecalActor_61",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K126",
+      "location": [
+        -2850.583,
+        -1601.042,
+        1559.366
+      ]
+    },
+    {
+      "name": "DecalActor_62",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K127",
+      "location": [
+        -3200.598,
+        -1505.656,
+        985.567
+      ]
+    },
+    {
+      "name": "DecalActor_63",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K128",
+      "location": [
+        -3429.174,
+        -1140.93,
+        985.567
+      ]
+    },
+    {
+      "name": "DecalActor_64",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K129",
+      "location": [
+        -3434.628,
+        -1132.227,
+        1369.885
+      ]
+    },
+    {
+      "name": "DecalActor_65",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K130",
+      "location": [
+        -3172.661,
+        -1550.234,
+        1369.885
+      ]
+    },
+    {
+      "name": "DecalActor_66",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K131",
+      "location": [
+        -3979.639,
+        -1233.089,
+        1408.953
+      ]
+    },
+    {
+      "name": "DecalActor_67",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K132",
+      "location": [
+        825.703,
+        -437.21,
+        1211.639
+      ]
+    },
+    {
+      "name": "DecalActor_68",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K133",
+      "location": [
+        599.013,
+        -660.576,
+        1213.84
+      ]
+    },
+    {
+      "name": "DecalActor_69",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K134",
+      "location": [
+        179.553,
+        -749.863,
+        1118.972
+      ]
+    },
+    {
+      "name": "DecalActor_7",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K72",
+      "location": [
+        -73.438,
+        -839.358,
+        1538.106
+      ]
+    },
+    {
+      "name": "DecalActor_70",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K135",
+      "location": [
+        -246.732,
+        -874.818,
+        1080.207
+      ]
+    },
+    {
+      "name": "DecalActor_71",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K136",
+      "location": [
+        -1655.953,
+        -1320.309,
+        933.823
+      ]
+    },
+    {
+      "name": "DecalActor_72",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K137",
+      "location": [
+        -2245.173,
+        -1584.498,
+        955.675
+      ]
+    },
+    {
+      "name": "DecalActor_73",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K138",
+      "location": [
+        1040.652,
+        -17.757,
+        782.463
+      ]
+    },
+    {
+      "name": "DecalActor_74",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K139",
+      "location": [
+        2720.219,
+        64.506,
+        1462.179
+      ]
+    },
+    {
+      "name": "DecalActor_75",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K140",
+      "location": [
+        2720.89,
+        8.939,
+        2240.522
+      ]
+    },
+    {
+      "name": "DecalActor_76",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K141",
+      "location": [
+        2722.718,
+        -386.297,
+        2240.522
+      ]
+    },
+    {
+      "name": "DecalActor_77",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K142",
+      "location": [
+        -2978.783,
+        -60.58,
+        495.096
+      ]
+    },
+    {
+      "name": "DecalActor_78",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K143",
+      "location": [
+        748.982,
+        1617.667,
+        1157.8
+      ]
+    },
+    {
+      "name": "DecalActor_79",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K144",
+      "location": [
+        748.982,
+        1617.667,
+        896.273
+      ]
+    },
+    {
+      "name": "DecalActor_8",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K73",
+      "location": [
+        -1476.481,
+        -1291.936,
+        1538.642
+      ]
+    },
+    {
+      "name": "DecalActor_80",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K145",
+      "location": [
+        604.054,
+        2352.189,
+        896.273
+      ]
+    },
+    {
+      "name": "DecalActor_81",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K146",
+      "location": [
+        571.215,
+        2348.71,
+        1161.258
+      ]
+    },
+    {
+      "name": "DecalActor_82",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K147",
+      "location": [
+        571.215,
+        2348.71,
+        1408.259
+      ]
+    },
+    {
+      "name": "DecalActor_83",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K148",
+      "location": [
+        571.215,
+        2348.71,
+        1599.038
+      ]
+    },
+    {
+      "name": "DecalActor_84",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K149",
+      "location": [
+        725.241,
+        1639.175,
+        1599.038
+      ]
+    },
+    {
+      "name": "DecalActor_85",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K150",
+      "location": [
+        749.241,
+        1618.994,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_86",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K151",
+      "location": [
+        731.516,
+        1761.802,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_87",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K152",
+      "location": [
+        769.816,
+        1392.687,
+        930.009
+      ]
+    },
+    {
+      "name": "DecalActor_88",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K153",
+      "location": [
+        770.132,
+        1390.137,
+        1188.758
+      ]
+    },
+    {
+      "name": "DecalActor_89",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K154",
+      "location": [
+        746.116,
+        1583.619,
+        1587.707
+      ]
+    },
+    {
+      "name": "DecalActor_9",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K74",
+      "location": [
+        -2083.144,
+        -1536.559,
+        1533.768
+      ]
+    },
+    {
+      "name": "DecalActor_90",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K155",
+      "location": [
+        712.605,
+        1853.601,
+        1188.399
+      ]
+    },
+    {
+      "name": "DecalActor_91",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K183",
+      "location": [
+        -2515.047,
+        -1667.189,
+        2289.924
+      ]
+    },
+    {
+      "name": "DecalActor_92",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K184",
+      "location": [
+        -2410.062,
+        -1839.324,
+        2289.973
+      ]
+    },
+    {
+      "name": "DecalActor_93",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K185",
+      "location": [
+        -2620.7,
+        -1498.479,
+        2289.858
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_0",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "SK_Prop_Banner_Flag_AD_001",
+      "location": [
+        -1848.444,
+        7401.248,
+        1057.139
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_1",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "SK_Prop_Banner_Flag_AC_001",
+      "location": [
+        -1056.753,
+        7442.232,
+        1172.889
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_2",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "SK_Prop_Banner_Flag_AB_001",
+      "location": [
+        -303.062,
+        7441.834,
+        1147.043
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_3",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "SK_Prop_Banner_Pole_AD_001",
+      "location": [
+        -2643.937,
+        6967.085,
+        266.916
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_4",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Details.umap",
+      "label": "SK_Prop_Banner_Pole_AA_001",
+      "location": [
+        -2339.215,
+        7119.028,
+        299.317
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 120,
+  "errors": [],
+  "warnings": []
+}

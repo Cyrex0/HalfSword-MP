@@ -1,0 +1,63 @@
+{
+  "map": "Arena_Ambush_Map_Foliage",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Ambush/Arena_Ambush_Map_Foliage.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Ambush/Arena_Ambush_Map_Foliage.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BPP_PLA_Arena_Ambush_Trees_01_C_0",
+      "class": "BPP_PLA_Arena_Ambush_Trees_01_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Ambush/Arena_Ambush_Map_Foliage.umap",
+      "label": "PLA_Arena_Ambush_Trees_01",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "note": "level_instance -> None"
+    },
+    {
+      "name": "InstancedFoliageActor_2",
+      "class": "InstancedFoliageActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Ambush/Arena_Ambush_Map_Foliage.umap",
+      "label": "InstancedFoliageActor2",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": [
+    "empty LevelInstance BPP_PLA_Arena_Ambush_Trees_01_C_0 (label 'PLA_Arena_Ambush_Trees_01') in HalfswordUE5/Content/Maps/Arenas/Arena_Ambush/Arena_Ambush_Map_Foliage.umap: no CookedWorldAsset (nothing to load at runtime)"
+  ]
+}

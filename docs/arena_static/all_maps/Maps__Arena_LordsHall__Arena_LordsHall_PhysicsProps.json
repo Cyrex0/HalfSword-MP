@@ -1,0 +1,1130 @@
+{
+  "map": "Arena_LordsHall_PhysicsProps",
+  "package": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_0",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1550.294,
+        2760.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 5.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Construction_Ladder_C_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Construction/Meshes/SM_Prop_Construction_Ladder_C_001.SM_Prop_Construction_Ladder_C_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Construction/Meshes/SM_Prop_Construction_Ladder_C_001.SM_Prop_Construction_Ladder_C_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_1",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -33.87,
+        1198.432,
+        0.442
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_Long_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_10",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -10.948,
+        2661.705,
+        62.14
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 180.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Chest_Medium_AB_003",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Chest_Medium_AB_003.SM_Prop_Container_Chest_Medium_AB_003'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Chest_Medium_AB_003.SM_Prop_Container_Chest_Medium_AB_003'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_11",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1057.748,
+        2760.518,
+        52.919
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -130.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Smithing_Bellows_Small_A_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Smithing/Meshes/SM_Prop_Smithing_Bellows_Small_A_001.SM_Prop_Smithing_Bellows_Small_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Smithing/Meshes/SM_Prop_Smithing_Bellows_Small_A_001.SM_Prop_Smithing_Bellows_Small_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_12",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1633.164,
+        343.657,
+        115.059
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 180.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Pillow_B_4",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Pillow_B_001.SM_Prop_Furniture_Pillow_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Pillow_B_001.SM_Prop_Furniture_Pillow_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_13",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1628.937,
+        456.278,
+        115.059
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 180.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Pillow_B_6",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Pillow_B_001.SM_Prop_Furniture_Pillow_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Pillow_B_001.SM_Prop_Furniture_Pillow_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_14",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1510.0,
+        2700.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 10.0
+      },
+      "scale": [
+        0.943,
+        0.943,
+        0.943
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Construction_Ladder_D_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Construction/Meshes/SM_Prop_Construction_Ladder_D_001.SM_Prop_Construction_Ladder_D_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Construction/Meshes/SM_Prop_Construction_Ladder_D_001.SM_Prop_Construction_Ladder_D_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_15",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1433.967,
+        2772.938,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 95.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_002.SM_Prop_Furniture_Bench_002'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_002.SM_Prop_Furniture_Bench_002'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_16",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -810.837,
+        2399.571,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -90.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Chair_007",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_17",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -50.0,
+        2330.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Chair_006",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_006.SM_Prop_Furniture_Chair_006'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_006.SM_Prop_Furniture_Chair_006'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_18",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -40.0,
+        2210.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 95.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Lectern_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Lectern_001.SM_Prop_Furniture_Lectern_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Lectern_001.SM_Prop_Furniture_Lectern_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_19",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -670.837,
+        2399.571,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -100.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Chair_8",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_2",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -33.87,
+        403.594,
+        0.442
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_Long_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_20",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -540.837,
+        2399.571,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -85.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Chair_9",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_21",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1100.236,
+        2392.699,
+        2.862
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -85.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Chair_10",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_22",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -960.837,
+        2399.571,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -95.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Chair_11",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Chair_007.SM_Prop_Furniture_Chair_007'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_23",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1390.0,
+        2775.95,
+        52.653
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Smithing_Rug_B_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Smithing/Meshes/SM_Prop_Smithing_Rug_B_001.SM_Prop_Smithing_Rug_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Smithing/Meshes/SM_Prop_Smithing_Rug_B_001.SM_Prop_Smithing_Rug_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_24",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1516.56,
+        2654.56,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Smithing_WoodenHorseStand_B_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Smithing/Meshes/SM_Prop_Smithing_WoodenHorseStand_B_001.SM_Prop_Smithing_WoodenHorseStand_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Smithing/Meshes/SM_Prop_Smithing_WoodenHorseStand_B_001.SM_Prop_Smithing_WoodenHorseStand_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_25",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -32.097,
+        2722.555,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Barrel_AH_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Barrels/Meshes/SM_Prop_Barrel_AH_001.SM_Prop_Barrel_AH_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Barrels/Meshes/SM_Prop_Barrel_AH_001.SM_Prop_Barrel_AH_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_26",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1564.792,
+        1198.432,
+        -0.023
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_Long_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_27",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1564.792,
+        1598.432,
+        -0.023
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_Long_5",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_3",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1096.442,
+        2762.917,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 85.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_002",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_002.SM_Prop_Furniture_Bench_002'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_002.SM_Prop_Furniture_Bench_002'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_4",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1624.709,
+        2455.491,
+        115.059
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Pillow_B_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Pillow_B_001.SM_Prop_Furniture_Pillow_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Pillow_B_001.SM_Prop_Furniture_Pillow_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_5",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -1628.937,
+        2343.184,
+        115.059
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Pillow_B_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Pillow_B_001.SM_Prop_Furniture_Pillow_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Pillow_B_001.SM_Prop_Furniture_Pillow_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_6",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -33.87,
+        1598.432,
+        0.576
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_Long_4",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_9",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_PhysicsProps.umap",
+      "location": [
+        -30.948,
+        2661.705,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -180.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Chest_Medium_AA_003",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Chest_Medium_AA_003.SM_Prop_Container_Chest_Medium_AA_003'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Chest_Medium_AA_003.SM_Prop_Container_Chest_Medium_AA_003'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

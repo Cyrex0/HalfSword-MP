@@ -1,0 +1,2 @@
+{"action":"backup","file":null,"why":"2 career file(s), 20480 bytes backed up","kind":"enter","backup":"C:/Users/x/AppData/Local/HSMP/save_backups/20261002-000000-002","ev":"career_guard","wall_ms":1790880000300,"pid":6002}
+{"action":"clean","file":null,"why":"2 career file(s) unchanged","kind":"leave","backup":"C:/Users/x/AppData/Local/HSMP/save_backups/20261002-000000-002","ev":"career_guard","wall_ms":1790880128000,"pid":6002}

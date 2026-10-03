@@ -1,0 +1,33 @@
+{
+  "save_hashes": {
+    "GameProgress.sav": "aa11",
+    "Settings.sav": "bb22"
+  },
+  "save_files": {
+    "GameProgress.sav": {
+      "size": 18432,
+      "mtime_ms": 1790793600000,
+      "sha256": "aa11"
+    },
+    "Settings.sav": {
+      "size": 2048,
+      "mtime_ms": 1790794000000,
+      "sha256": "bb22"
+    }
+  },
+  "new_crashes": [
+    "UECC-Windows-SOAK_0000"
+  ],
+  "alive_at_end": {
+    "game1": true,
+    "game2": false,
+    "server": true
+  },
+  "orphans": [],
+  "restarted": {},
+  "quit_path": {
+    "game1": "menu_quit",
+    "game2": "menu_quit"
+  },
+  "game_force_killed": []
+}

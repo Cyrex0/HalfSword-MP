@@ -1,0 +1,11 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-13": "incomplete"
+  },
+  "messages": [
+    "deployed with -SkipBuild: the binaries (built from fedcba9876) are not proven to match the deployed commit",
+    "HSMPWorld (shipped) was off",
+    "HSMPLobby (not shipped) was on"
+  ]
+}

@@ -1,0 +1,474 @@
+{
+  "map": "Map_Arena_Alley_PhysicsProps",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_0",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "location": [
+        647.311,
+        441.211,
+        301.525
+      ],
+      "rotation": {
+        "pitch": 64.395,
+        "yaw": -138.79,
+        "roll": 59.161
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Firewood_StickBundle_B_7",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Firewood/Meshes/SM_Prop_Firewood_StickBundle_B_001.SM_Prop_Firewood_StickBundle_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Firewood/Meshes/SM_Prop_Firewood_StickBundle_B_001.SM_Prop_Firewood_StickBundle_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_20",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "location": [
+        -2423.82,
+        291.795,
+        11.164
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Bucket_004",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Bucket_004.SM_Prop_Container_Bucket_004'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Bucket_004.SM_Prop_Container_Bucket_004'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_22",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "location": [
+        -2000.594,
+        -174.962,
+        32.366
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -150.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Bucket_A_005",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Bucket_A_005.SM_Prop_Container_Bucket_A_005'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Bucket_A_005.SM_Prop_Container_Bucket_A_005'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_28",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "location": [
+        -2198.412,
+        329.131,
+        62.932
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Cup_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Cup_001.SM_Prop_Container_Cup_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Cup_001.SM_Prop_Container_Cup_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_34",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "location": [
+        -1159.501,
+        399.827,
+        68.02
+      ],
+      "rotation": {
+        "pitch": 1.761,
+        "yaw": 83.798,
+        "roll": -7.221
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Construction_Ladder_B_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Construction/Meshes/SM_Prop_Construction_Ladder_B_001.SM_Prop_Construction_Ladder_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Construction/Meshes/SM_Prop_Construction_Ladder_B_001.SM_Prop_Construction_Ladder_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_35",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "location": [
+        -2209.21,
+        322.095,
+        62.932
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Cup_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Cup_001.SM_Prop_Container_Cup_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Cup_001.SM_Prop_Container_Cup_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_47",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "location": [
+        -2416.322,
+        -238.322,
+        24.973
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Bucket_C_005",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Bucket_C_005.SM_Prop_Container_Bucket_C_005'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Bucket_C_005.SM_Prop_Container_Bucket_C_005'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_8",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "location": [
+        -2272.534,
+        321.703,
+        12.89
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -92.61,
+        "roll": -0.036
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bench_Long_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bench_Long_001.SM_Prop_Furniture_Bench_Long_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "DecalActor_10",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K62",
+      "location": [
+        -666.582,
+        -452.303,
+        853.322
+      ]
+    },
+    {
+      "name": "DecalActor_11",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K63",
+      "location": [
+        -677.886,
+        -576.578,
+        853.322
+      ]
+    },
+    {
+      "name": "DecalActor_12",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K64",
+      "location": [
+        -688.665,
+        -695.077,
+        853.322
+      ]
+    },
+    {
+      "name": "DecalActor_13",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K65",
+      "location": [
+        -720.856,
+        -1048.966,
+        853.322
+      ]
+    },
+    {
+      "name": "DecalActor_14",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K66",
+      "location": [
+        -868.61,
+        -960.094,
+        1448.235
+      ]
+    },
+    {
+      "name": "DecalActor_15",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K67",
+      "location": [
+        -863.648,
+        -905.549,
+        1448.235
+      ]
+    },
+    {
+      "name": "DecalActor_16",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K68",
+      "location": [
+        -873.388,
+        -1012.62,
+        1448.235
+      ]
+    },
+    {
+      "name": "DecalActor_8",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K60",
+      "location": [
+        -647.845,
+        -246.326,
+        831.281
+      ]
+    },
+    {
+      "name": "DecalActor_9",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_PhysicsProps.umap",
+      "label": "MI_Leakage_tdfdfebc_2K61",
+      "location": [
+        -655.26,
+        -327.839,
+        805.707
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 5,
+  "errors": [],
+  "warnings": []
+}

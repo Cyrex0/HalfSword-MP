@@ -1,0 +1,6 @@
+# The Rust toolchain every build uses (contributors, CI, Docker and the release tool).
+# tools/release/release.json "rust_toolchain" must name the same version (a test checks it).
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

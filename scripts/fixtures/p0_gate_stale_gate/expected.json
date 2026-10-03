@@ -1,0 +1,9 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-13": "incomplete"
+  },
+  "messages": [
+    "hsmp-gate was built from 1111111111 but the deployed build is 0123456789"
+  ]
+}

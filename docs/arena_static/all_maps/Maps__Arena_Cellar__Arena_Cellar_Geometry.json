@@ -1,0 +1,60 @@
+{
+  "map": "Arena_Cellar_Geometry",
+  "package": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Geometry.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Geometry.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_Env_Arena_Church_Door_A_002_C_0",
+      "class": "BP_Env_Arena_Church_Door_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Geometry.umap",
+      "label": "BP_Env_Arena_Church_Door_A_4",
+      "location": [
+        1995.892,
+        755.554,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_Church_Door_A_002_C_1",
+      "class": "BP_Env_Arena_Church_Door_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Geometry.umap",
+      "label": "BP_Env_Arena_Church_Door_A_3",
+      "location": [
+        2565.0,
+        645.0,
+        280.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 313,
+  "errors": [],
+  "warnings": []
+}

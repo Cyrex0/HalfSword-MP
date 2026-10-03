@@ -1,0 +1,10 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-6": "incomplete",
+    "DoD-5": "pass"
+  },
+  "messages": [
+    "without visible/expected (not judged)"
+  ]
+}

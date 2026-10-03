@@ -1,0 +1,25 @@
+{
+  "save_hashes": {
+    "HSMP_1_GameProgress.sav": "cc33"
+  },
+  "save_files": {
+    "HSMP_1_GameProgress.sav": {
+      "size": 10,
+      "mtime_ms": 1790880005000,
+      "sha256": "cc33"
+    }
+  },
+  "new_crashes": [],
+  "alive_at_end": {
+    "game1": true,
+    "game2": true,
+    "server": true
+  },
+  "orphans": [],
+  "restarted": {},
+  "quit_path": {
+    "game1": "menu_quit",
+    "game2": "menu_quit"
+  },
+  "game_force_killed": []
+}

@@ -1,0 +1,146 @@
+# Ports and firewall
+
+## Port table
+
+| What | Protocol and port | Direction on the host | Open to the internet? |
+|---|---|---|---|
+| Dedicated game server (`hsmp-server --bind`) | **UDP 7777** (default) | inbound | **Yes.** Players and the master's reachability check use it. Server-browser queries arrive on the same port. |
+| Listen host (hosting from the in-game menu) | UDP, the **HOST PORT** in the multiplayer SETTINGS screen (default 7777, 1024-65535) | inbound | Yes, if players outside your LAN should join |
+| LAN discovery (in-game browser) | UDP 7777-7786 (`lan_ports` in `hsmp.cfg`) | the browser sends broadcast queries out; servers answer from their game port | No. LAN only. A LAN server is only found if its port is in this range. |
+| Master server (`hsmp-master --bind`) | **TCP 7778** (default) | inbound | Only if you run a master for other people (see [Master server](master-server.md)) |
+| Master registration from a game server | TCP to the master's URL | outbound | Outbound only |
+| RCON (`hsmp-server --rcon-bind`) | TCP, no default; these docs use **2345** | inbound, **loopback only** | **Never.** Bind `127.0.0.1:2345` and use an SSH tunnel (see [RCON](rcon.md)) |
+| Local master of a listen host | TCP 7778 on `127.0.0.1` | loopback | No |
+
+Notes:
+
+- The master needs **no inbound UDP port**. To check that a registering server is reachable it sends
+  one browser query from a temporary UDP socket to the server's game port and waits up to 500 ms for
+  the answer on that same socket. The game server's UDP port must therefore be reachable from the
+  master; a stateful firewall on the master lets the reply in.
+- Players need no inbound ports. Their sidecar talks to the server from an ordinary outbound UDP socket.
+- If you change `--bind` (for example to run two servers on one host), open and forward that port instead.
+
+## Linux firewall
+
+### ufw (Debian, Ubuntu)
+
+```bash
+sudo ufw allow 7777/udp comment 'HSMP game server'
+# Only if you run a master server for others:
+sudo ufw allow 7778/tcp comment 'HSMP master server'
+# Make sure SSH stays open before you enable ufw, then:
+sudo ufw allow OpenSSH
+sudo ufw enable
+sudo ufw status verbose
+```
+
+### firewalld (Fedora, RHEL, Rocky, Alma)
+
+```bash
+sudo firewall-cmd --permanent --add-port=7777/udp
+# Only if you run a master server for others:
+sudo firewall-cmd --permanent --add-port=7778/tcp
+sudo firewall-cmd --reload
+sudo firewall-cmd --list-ports
+```
+
+Do **not** add a rule for the RCON port. It listens on `127.0.0.1` and is reached through SSH.
+
+Cloud providers (AWS security groups, Hetzner, OVH, Oracle Cloud, Google Cloud and so on) often run
+a firewall in front of the VPS as well. Allow UDP 7777 there too.
+
+## Windows firewall
+
+Run in an **administrator** PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "HSMP game server (UDP 7777)" `
+  -Direction Inbound -Protocol UDP -LocalPort 7777 -Action Allow -Profile Any
+
+# Only if you run a master server for others:
+New-NetFirewallRule -DisplayName "HSMP master server (TCP 7778)" `
+  -Direction Inbound -Protocol TCP -LocalPort 7778 -Action Allow -Profile Any
+
+# Check, and remove later:
+Get-NetFirewallRule -DisplayName "HSMP*" | Format-Table DisplayName, Enabled, Direction, Action
+Remove-NetFirewallRule -DisplayName "HSMP game server (UDP 7777)"
+```
+
+To limit the rule to the program, add `-Program "C:\HSMP\server\hsmp-server.exe"` (use your path).
+`scripts\install-service.ps1` does not add a firewall rule; add it yourself.
+
+When you host from the in-game menu, Windows may ask once whether `hsmp-server.exe` may use the
+network. Allow it for the network types you play on, or add the rule above with your HOST PORT.
+
+## Allow only known players
+
+The server has no join password. To keep a server private, allow the game port only from your
+players' IP addresses:
+
+```bash
+# ufw: replace the open rule with per-player rules
+sudo ufw delete allow 7777/udp
+sudo ufw allow from 203.0.113.10 to any port 7777 proto udp
+sudo ufw allow from 198.51.100.20 to any port 7777 proto udp
+```
+
+```bash
+# firewalld
+sudo firewall-cmd --permanent --remove-port=7777/udp
+sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="203.0.113.10" port port="7777" protocol="udp" accept'
+sudo firewall-cmd --reload
+```
+
+```powershell
+# Windows
+Set-NetFirewallRule -DisplayName "HSMP game server (UDP 7777)" -RemoteAddress 203.0.113.10,198.51.100.20
+```
+
+Home IP addresses change from time to time; update the list when a player cannot connect.
+
+## Router port forwarding (home hosting)
+
+If the server runs on a PC at home, forward the port on your router:
+
+1. Give the server PC a fixed LAN address (a DHCP reservation in the router, or a static IP).
+2. In the router's "Port forwarding" (or "Virtual server", "NAT") page, forward **UDP 7777** from the
+   WAN to that LAN address, port 7777. TCP is not needed for the game.
+3. Allow the port in the PC's firewall (above).
+4. Test from **outside** your network (a friend, or a phone hotspot). Many routers cannot reach their
+   own public address from inside ("NAT loopback"), so a test from inside proves nothing.
+
+UPnP is not used: the server never opens router ports by itself.
+
+### Testing reachability
+
+`hsmp-query` (shipped next to `hsmp-server`) sends the same query the in-game browser sends. From a
+machine outside your network:
+
+```powershell
+.\hsmp-query.exe --direct 203.0.113.5:7777
+```
+
+It prints its result when it finishes (a few seconds).
+
+A reachable server shows up as a line starting with `S` whose `ping_ms` column is 0 or more and whose
+last column (`live`) is `1`. A `ping_ms` of `-2` means no answer: check the port forward, the
+firewalls and CGNAT.
+
+## CGNAT
+
+Some ISPs (often mobile, fibre and cable providers) put customers behind carrier-grade NAT. You then
+share a public IP address with other customers, and port forwarding on your router cannot work.
+
+Signs: the WAN address shown in your router is in `100.64.0.0/10` (100.64.x.x to 100.127.x.x) or
+another private range, or it differs from the address a "what is my IP" site shows.
+
+What you can do:
+
+- Ask your ISP for a public IPv4 address (some do this free or for a small fee).
+- Rent a small VPS and run the server there (see [Linux](linux.md) or [Docker](docker.md)).
+- If you and your players all have IPv6, bind the server to IPv6 (`--bind [::]:7777`) and open the
+  port for IPv6 in your router's firewall. Whether an IPv6 socket also accepts IPv4 depends on the
+  operating system (Linux usually yes, Windows no), so test both.
+
+HSMP has no relay or NAT punching for this case.

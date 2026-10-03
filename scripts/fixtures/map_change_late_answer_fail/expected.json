@@ -1,0 +1,10 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-4": "pass",
+    "DoD-10": "fail"
+  },
+  "messages": [
+    "pick_arena #1790881790: the server answered, but the menu resolved it by timeout first (answer arrived 2000 ms after the menu gave up)"
+  ]
+}

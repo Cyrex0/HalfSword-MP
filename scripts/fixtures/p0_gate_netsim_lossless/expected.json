@@ -1,0 +1,11 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "NETSIM": "incomplete"
+  },
+  "messages": [
+    "measured loss 0.00 % over",
+    "below half the profile's 1 %",
+    "measured loss 1.00 % over"
+  ]
+}

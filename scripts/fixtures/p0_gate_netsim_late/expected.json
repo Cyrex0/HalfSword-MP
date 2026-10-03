@@ -1,0 +1,11 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "NETSIM": "incomplete"
+  },
+  "messages": [
+    "the proxy's own scheduling error exceeded the profile: late_p99_ms > 2 in",
+    "worst p99 3.5 ms",
+    "proxy scheduling error p99 <= 0.40 ms"
+  ]
+}

@@ -1,0 +1,46 @@
+name: Server hosting problem
+description: Running hsmp-server, hsmp-master, Docker or a Windows service.
+labels: [hosting]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Server version
+      description: Output of `hsmp-server --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How do you run it?
+      options:
+        - Docker
+        - Linux (native / systemd)
+        - Windows (run-dedicated-server.ps1)
+        - Windows service (install-service.ps1)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Ubuntu 24.04 / Windows Server 2022
+  - type: textarea
+    id: config
+    attributes:
+      label: Command line or configuration
+      description: Leave out passwords. Say which ports are forwarded or open.
+      render: shell
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server log
+      description: The relevant part of the server's output. Player IPs and nicknames may appear in it; redact them if you like.
+      render: text

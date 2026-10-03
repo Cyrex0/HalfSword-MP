@@ -1,0 +1,6 @@
+# Release signing keys this launcher trusts (compiled in via include_str!).
+# One line per key: <64 hex ed25519 public key> <label>
+# Get the line for a key with:  hsmp-release pubkey   (reads HSMP_RELEASE_SIGNING_KEY)
+# The PRIVATE key never goes into the repo. Rotation: add the new key, ship a
+# launcher that trusts both, sign with the new key, then drop the old line.
+b30a73291952602556981df16ab094106214cbe8175dcc0a03544af6e686310b hsmp-release key 1 (created 2026-10-02; private key outside the repo)

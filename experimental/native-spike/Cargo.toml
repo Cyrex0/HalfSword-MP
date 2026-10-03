@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/hsmp_core_stub", "crates/hsmp_lua_e", "tools/ue4ss_pins"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+# Both artefacts are linked into DLLs that live inside the game process.
+# Unwinding stays enabled so every FFI entry point can catch_unwind; a panic
+# never crosses into C/C++/Lua frames.
+[profile.release]
+opt-level = 3
+debug = 1          # keep line tables -> symbolised crash dumps
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+
+[profile.dev]
+panic = "unwind"

@@ -1,0 +1,25 @@
+{
+  "tool": "hsmp-tools crash-triage",
+  "version": 1,
+  "since": "2026-10-01T18:39:50.000Z",
+  "until": "2026-10-01T18:41:32.000Z",
+  "crashes": [
+    {
+      "dir": "UECC-Windows-DEAD_0000",
+      "time": "2026-10-01T18:40:59.000Z",
+      "time_ms": 1790880059000,
+      "new": true,
+      "thread": "GameThread",
+      "signature": {
+        "id": "EXCEPTION_ACCESS_VIOLATION",
+        "title": "fixture",
+        "confidence": "high"
+      }
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "triaged": 1,
+    "new": 1
+  }
+}

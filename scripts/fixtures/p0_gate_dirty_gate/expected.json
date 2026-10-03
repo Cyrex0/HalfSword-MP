@@ -1,0 +1,9 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-13": "incomplete"
+  },
+  "messages": [
+    "with uncommitted tools changes (dirty=1)"
+  ]
+}

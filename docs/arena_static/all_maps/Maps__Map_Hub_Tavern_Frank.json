@@ -1,0 +1,3410 @@
+{
+  "map": "Map_Hub_Tavern_Frank",
+  "package": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+  "kind": "persistent_with_sublevels",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap"
+      ],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "via": "streaming:LevelStreamingDynamic_0 (LevelStreamingDynamic)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+        "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap"
+      ],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_1 (LevelStreamingAlwaysLoaded)",
+      "parent_chain": [
+        "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap"
+      ],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_7378",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -454.648,
+        -177.697,
+        112.44
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 79.357,
+        "roll": 5.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Holder_Medium_C_2_C_5.BP_Candle",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_7378.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_7378.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator2 (Tall Fat)",
+        "RandomCandleID": 1.8103580176830292,
+        "InitialFlameSize": {
+          "X": 0.97892314,
+          "Y": 0.99749833
+        },
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Workshop_Smithery_Map:PersistentLevel.BP_Prop_Light_Candle_Holder_Medium_C_2_C_5.BP_Candle'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_7645",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -251.859,
+        -670.41,
+        103.115
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -150.692,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Lantern_A_001_C_1.BP_Candle",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_7645.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_7645.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator7 (Short Thin)",
+        "RandomCandleID": 9.5760977268219,
+        "InitialFlameSize": {
+          "X": 0.815072,
+          "Y": 0.8379237
+        },
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Workshop_Smithery_Map:PersistentLevel.BP_Prop_Light_Candle_Lantern_A_001_C_1.BP_Candle'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_9519",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -73.281,
+        -646.163,
+        114.774
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 48.43,
+        "roll": 5.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Holder_Medium_C_2_C_0.BP_Candle",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_9519.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_9519.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator2 (Tall Fat)",
+        "RandomCandleID": 6.048768758773804,
+        "InitialFlameSize": {
+          "X": 1.2298359,
+          "Y": 1.0431559
+        },
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Workshop_Smithery_Map:PersistentLevel.BP_Prop_Light_Candle_Holder_Medium_C_2_C_0.BP_Candle'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_474",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -863.205,
+        -246.096,
+        155.074
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 133.17,
+        "roll": 0.0
+      },
+      "scale": [
+        1.118,
+        1.118,
+        0.871
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Holder_Large_A_001_C_0.BP_CandleMoveable",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_474.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_474.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 0.8706930938982733,
+        "ScaleWidth": 1.1181127713423429,
+        "RandomRotation": true,
+        "Rotation": -142.75521039962769,
+        "RandomCandleID": 0.2294991910457611,
+        "InitialFlameSize": {
+          "X": 1.1461018,
+          "Y": 1.2295827
+        },
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Workshop_Smithery_Map:PersistentLevel.BP_Prop_Light_Candle_Holder_Large_A_001_C_0.BP_CandleMoveable'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_6595",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        11.537,
+        105.572,
+        148.497
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -136.712,
+        "roll": 0.0
+      },
+      "scale": [
+        1.098,
+        1.098,
+        1.047
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Holder_Large_A_001_C_3.BP_CandleMoveable",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_6595.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_6595.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.0468581539563644,
+        "ScaleWidth": 1.0976287511851233,
+        "RandomRotation": true,
+        "Rotation": -63.79405617713928,
+        "RandomCandleID": 6.772972941398621,
+        "InitialFlameSize": {
+          "X": 1.0608321,
+          "Y": 1.2693807
+        },
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Workshop_Smithery_Map:PersistentLevel.BP_Prop_Light_Candle_Holder_Large_A_001_C_3.BP_CandleMoveable'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_9596",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -582.225,
+        -623.156,
+        155.074
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 150.775,
+        "roll": 0.0
+      },
+      "scale": [
+        0.899,
+        0.899,
+        1.023
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Holder_Large_A_001_C_2.BP_CandleMoveable",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_9596.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_9596.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator5 (Average Fat)",
+        "RandomScale": true,
+        "ScaleHeight": 1.02300487366362,
+        "ScaleWidth": 0.8992462127726846,
+        "RandomRotation": true,
+        "Rotation": 49.66521978378296,
+        "RandomCandleID": 1.5958128869533539,
+        "InitialFlameSize": {
+          "X": 1.1594539,
+          "Y": 1.1677214
+        },
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Workshop_Smithery_Map:PersistentLevel.BP_Prop_Light_Candle_Holder_Large_A_001_C_2.BP_CandleMoveable'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Light_GEN_VARIABLE_BP_CandleLight_C_CAT_418",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -251.069,
+        -669.846,
+        118.745
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -150.692,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Lantern_A_001_C_1.Light",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 25.0,
+        "Attenuation Radius": 500.0,
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Workshop_Smithery_Map:PersistentLevel.BP_Prop_Light_Candle_Lantern_A_001_C_1.Light'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Workshop_Smithery_Map:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_0'"
+        }
+      ]
+    },
+    {
+      "name": "BP_Prop_Furniture_Stool_001_C_1",
+      "class": "BP_Prop_Furniture_Stool_001_C",
+      "class_path": "/Game/Assets/Props/Furniture/Meshes/BP_Prop_Furniture_Stool_001.BP_Prop_Furniture_Stool_001_C",
+      "class_chain": [
+        "BP_Prop_Furniture_Stool_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -572.266,
+        70.324,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 180.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "physics_other",
+      "label": "BP_Prop_Furniture_Stool_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "SM_Prop",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Stool_001.SM_Prop_Furniture_Stool_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Prop_Furniture_Stool_001_C_2",
+      "class": "BP_Prop_Furniture_Stool_001_C",
+      "class_path": "/Game/Assets/Props/Furniture/Meshes/BP_Prop_Furniture_Stool_001.BP_Prop_Furniture_Stool_001_C",
+      "class_chain": [
+        "BP_Prop_Furniture_Stool_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -563.479,
+        -9.557,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 180.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "physics_other",
+      "label": "BP_Prop_Furniture_Stool_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "SM_Prop",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Stool_001.SM_Prop_Furniture_Stool_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Prop_Light_Candle_Holder_Large_A_001_C_0",
+      "class": "BP_Prop_Light_Candle_Holder_Large_A_001_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_Prop_Light_Candle_Holder_Large_A_001.BP_Prop_Light_Candle_Holder_Large_A_001_C",
+      "class_chain": [
+        "BP_Prop_Light_Candle_Holder_Large_A_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -863.205,
+        -246.096,
+        6.577
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 133.17,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_Prop_Light_Candle_Holder_Large_A_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Holder",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Candle_Holder_Large_A_001.SM_Prop_Light_Candle_Holder_Large_A_001'"
+        }
+      ],
+      "instance_properties": {},
+      "child_actor_components": [
+        {
+          "component": "BP_CandleMoveable",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C'",
+          "child_actor": "BP_Candle_C'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_474'"
+        },
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Workshop_Smithery_Map:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_1'"
+        }
+      ]
+    },
+    {
+      "name": "BP_Prop_Light_Candle_Holder_Large_A_001_C_2",
+      "class": "BP_Prop_Light_Candle_Holder_Large_A_001_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_Prop_Light_Candle_Holder_Large_A_001.BP_Prop_Light_Candle_Holder_Large_A_001_C",
+      "class_chain": [
+        "BP_Prop_Light_Candle_Holder_Large_A_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -582.225,
+        -623.156,
+        6.577
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 150.775,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_Prop_Light_Candle_Holder_Large_A_4",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Holder",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Candle_Holder_Large_A_001.SM_Prop_Light_Candle_Holder_Large_A_001'"
+        }
+      ],
+      "instance_properties": {},
+      "child_actor_components": [
+        {
+          "component": "BP_CandleMoveable",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C'",
+          "child_actor": "BP_Candle_C'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_9596'"
+        },
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Workshop_Smithery_Map:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_4'"
+        }
+      ]
+    },
+    {
+      "name": "BP_Prop_Light_Candle_Holder_Large_A_001_C_3",
+      "class": "BP_Prop_Light_Candle_Holder_Large_A_001_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_Prop_Light_Candle_Holder_Large_A_001.BP_Prop_Light_Candle_Holder_Large_A_001_C",
+      "class_chain": [
+        "BP_Prop_Light_Candle_Holder_Large_A_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        11.537,
+        105.572,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -136.712,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_Prop_Light_Candle_Holder_Large_A_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Holder",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Candle_Holder_Large_A_001.SM_Prop_Light_Candle_Holder_Large_A_001'"
+        }
+      ],
+      "instance_properties": {},
+      "child_actor_components": [
+        {
+          "component": "BP_CandleMoveable",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C'",
+          "child_actor": "BP_Candle_C'Workshop_Smithery_Map:PersistentLevel.BP_CandleMoveable_GEN_VARIABLE_BP_Candle_C_CAT_6595'"
+        },
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Workshop_Smithery_Map:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_2'"
+        }
+      ]
+    },
+    {
+      "name": "BP_Prop_Light_Candle_Holder_Medium_C_2_C_0",
+      "class": "BP_Prop_Light_Candle_Holder_Medium_C_2_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_Prop_Light_Candle_Holder_Medium_C_2.BP_Prop_Light_Candle_Holder_Medium_C_2_C",
+      "class_chain": [
+        "BP_Prop_Light_Candle_Holder_Medium_C_2_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -73.282,
+        -646.162,
+        83.96
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 48.43,
+        "roll": 0.0
+      },
+      "scale": [
+        1.121,
+        1.121,
+        1.121
+      ],
+      "category": "light_prop",
+      "label": "BP_Prop_Light_Candle_Holder_Medium_C_4",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Holder",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Candle_Holder_Medium_C_001.SM_Prop_Light_Candle_Holder_Medium_C_001'"
+        }
+      ],
+      "instance_properties": {},
+      "child_actor_components": [
+        {
+          "component": "BP_Candle",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C'",
+          "child_actor": "BP_Candle_C'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_9519'"
+        },
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Workshop_Smithery_Map:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_3'"
+        }
+      ]
+    },
+    {
+      "name": "BP_Prop_Light_Candle_Holder_Medium_C_2_C_5",
+      "class": "BP_Prop_Light_Candle_Holder_Medium_C_2_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_Prop_Light_Candle_Holder_Medium_C_2.BP_Prop_Light_Candle_Holder_Medium_C_2_C",
+      "class_chain": [
+        "BP_Prop_Light_Candle_Holder_Medium_C_2_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -454.65,
+        -177.697,
+        81.984
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 79.357,
+        "roll": 0.0
+      },
+      "scale": [
+        1.108,
+        1.108,
+        1.108
+      ],
+      "attached_to": "StaticMeshActor_215.StaticMeshComponent0",
+      "category": "light_prop",
+      "label": "BP_Prop_Light_Candle_Holder_Medium_C_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Holder",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Candle_Holder_Medium_C_001.SM_Prop_Light_Candle_Holder_Medium_C_001'"
+        }
+      ],
+      "instance_properties": {},
+      "child_actor_components": [
+        {
+          "component": "BP_Candle",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C'",
+          "child_actor": "BP_Candle_C'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_7378'"
+        },
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Workshop_Smithery_Map:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_7'"
+        }
+      ]
+    },
+    {
+      "name": "BP_Prop_Light_Candle_Lantern_A_001_C_1",
+      "class": "BP_Prop_Light_Candle_Lantern_A_001_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_Prop_Light_Candle_Lantern_A_001.BP_Prop_Light_Candle_Lantern_A_001_C",
+      "class_chain": [
+        "BP_Prop_Light_Candle_Lantern_A_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -252.118,
+        -670.721,
+        101.126
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -150.692,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "light_prop",
+      "label": "BP_Prop_Light_Candle_Lantern_A_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Holder",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Candle_Lantern_A_001.SM_Prop_Light_Candle_Lantern_A_001'"
+        }
+      ],
+      "instance_properties": {},
+      "child_actor_components": [
+        {
+          "component": "BP_Candle",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C'",
+          "child_actor": "BP_Candle_C'Workshop_Smithery_Map:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_7645'"
+        },
+        {
+          "component": "Light",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C'",
+          "child_actor": "BP_CandleLight_C'Workshop_Smithery_Map:PersistentLevel.Light_GEN_VARIABLE_BP_CandleLight_C_CAT_418'"
+        }
+      ]
+    },
+    {
+      "name": "BP_Prop_Storage_Bucket_002_C_1",
+      "class": "BP_Prop_Storage_Bucket_002_C",
+      "class_path": "/Game/Assets/Props/Storage/Meshes/BP_Prop_Storage_Bucket_002.BP_Prop_Storage_Bucket_002_C",
+      "class_chain": [
+        "BP_Prop_Storage_Bucket_002_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        -866.576,
+        -37.269,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -101.158,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "attached_to": "StaticMeshActor_212.StaticMeshComponent0",
+      "category": "physics_other",
+      "label": "BP_Prop_Storage_Bucket_002",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "SM_Prop",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Storage/Meshes/SM_Prop_Storage_Bucket_002.SM_Prop_Storage_Bucket_002'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "StaticMeshActor_22",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "via": "streaming:LevelStreamingAlwaysLoaded_0 (LevelStreamingAlwaysLoaded)",
+      "location": [
+        103.295,
+        -62.836,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 180.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Env_Workshop_Smithery_Window_B_001",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Workshop/Smithery/Meshes/SM_Env_Workshop_Smithery_Window_B_001.SM_Env_Workshop_Smithery_Window_B_001'",
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_132",
+      "class": "BP_Candle_C",
+      "class_path": "/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C",
+      "class_chain": [
+        "BP_Candle_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "location": [
+        -142.912,
+        -313.643,
+        84.051
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 53.626,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Lantern_A_001_C_0.BP_Candle",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "CandleMatInst": "MaterialInstanceDynamic'Map_Hub_Tavern_Frank:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_132.Candle.CandleMat'",
+        "WickMatInst": "MaterialInstanceDynamic'Map_Hub_Tavern_Frank:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_132.Candle.CandleWickMat'",
+        "MeshChoice": "E_CandleMeshes::NewEnumerator7 (Short Thin)",
+        "RandomCandleID": 6.646625995635986,
+        "InitialFlameSize": {
+          "X": 0.7442092,
+          "Y": 0.7887597
+        },
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Map_Hub_Tavern_Frank:PersistentLevel.BP_Prop_Light_Candle_Lantern_A_001_C_0.BP_Candle'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Light_GEN_VARIABLE_BP_CandleLight_C_CAT_0",
+      "class": "BP_CandleLight_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C",
+      "class_chain": [
+        "BP_CandleLight_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "location": [
+        -143.278,
+        -314.272,
+        95.773
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 53.626,
+        "roll": 0.0
+      },
+      "scale": [
+        0.75,
+        0.75,
+        0.75
+      ],
+      "attached_to": "BP_Prop_Light_Candle_Lantern_A_001_C_0.Light",
+      "category": "light_prop",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Light Inensity": 25.0,
+        "Attenuation Radius": 500.0,
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Map_Hub_Tavern_Frank:PersistentLevel.BP_Prop_Light_Candle_Lantern_A_001_C_0.Light'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      },
+      "child_actor_components": [
+        {
+          "component": "LightDetectorCollider",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Blueprints/Detection/BP_LightDetectionCollider_Sphere.BP_LightDetectionCollider_Sphere_C'",
+          "child_actor": "BP_LightDetectionCollider_Sphere_C'Map_Hub_Tavern_Frank:PersistentLevel.LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_0'"
+        }
+      ]
+    },
+    {
+      "name": "BP_Prop_Light_Candle_Lantern_A_001_C_0",
+      "class": "BP_Prop_Light_Candle_Lantern_A_001_C",
+      "class_path": "/Game/Assets/Props/Lights/Blueprints/BP_Prop_Light_Candle_Lantern_A_001.BP_Prop_Light_Candle_Lantern_A_001_C",
+      "class_chain": [
+        "BP_Prop_Light_Candle_Lantern_A_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "location": [
+        -142.831,
+        -313.35,
+        82.559
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 53.626,
+        "roll": 0.0
+      },
+      "scale": [
+        0.75,
+        0.75,
+        0.75
+      ],
+      "category": "light_prop",
+      "label": "BP_Prop_Light_Candle_Lantern_A_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Holder",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Lights/Meshes/SM_Prop_Light_Candle_Lantern_A_001.SM_Prop_Light_Candle_Lantern_A_001'"
+        }
+      ],
+      "instance_properties": {},
+      "child_actor_components": [
+        {
+          "component": "BP_Candle",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Candle/Blueprints/BP_Candle.BP_Candle_C'",
+          "child_actor": "BP_Candle_C'Map_Hub_Tavern_Frank:PersistentLevel.BP_Candle_GEN_VARIABLE_BP_Candle_C_CAT_132'"
+        },
+        {
+          "component": "Light",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Props/Lights/Blueprints/BP_CandleLight.BP_CandleLight_C'",
+          "child_actor": "BP_CandleLight_C'Map_Hub_Tavern_Frank:PersistentLevel.Light_GEN_VARIABLE_BP_CandleLight_C_CAT_0'"
+        }
+      ]
+    },
+    {
+      "name": "ForgedWeapon_GEN_VARIABLE_ModularWeaponBP_Customizable_C_CAT_306",
+      "class": "ModularWeaponBP_Customizable_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/ModularWeaponBP_Customizable.ModularWeaponBP_Customizable_C",
+      "class_chain": [
+        "ModularWeaponBP_Customizable_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "tags": [
+        "Weapon",
+        "Throat Threat",
+        "Add Weapon Skill"
+      ],
+      "location": [
+        -221.732,
+        -59.982,
+        119.415
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 90.0,
+        "roll": 90.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "weapon",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Guard",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": null
+        },
+        {
+          "component": "Head",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": null
+        },
+        {
+          "component": "Pommel",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": null
+        },
+        {
+          "component": "Sub Module 1 Mesh",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": null
+        },
+        {
+          "component": "SubModule 2 Mesh",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": null
+        }
+      ],
+      "instance_properties": {
+        "Weapon Length": 2.000000000000001,
+        "Length to Bottom": 1.0,
+        "Length to Bottom (From Pivot)": 1.0,
+        "Length to Top R Default": 1.0,
+        "AI Balance Point (temp)": 0.4999999701976776,
+        "My Class": "BlueprintGeneratedClass'/Game/Assets/Weapons/Blueprints/ModularWeaponBP_Customizable.ModularWeaponBP_Customizable_C'",
+        "R Hand Stamina Burn Rate": 0.016465179733422007,
+        "L Hand Stamina Burn Rate": 0.016465179733422007,
+        "2H Default Stamina Burn Rate": 0.016465179733422007,
+        "2H Alt Stamina Burn Rate": 0.016465179733422007,
+        "Length to Top 2H": 1.0,
+        "Length to Top Alt": 1.0,
+        "Length to Top L Default": 1.0,
+        "Grip Module": null,
+        "Grip Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Head Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Guard Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Pommel Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Initial Spawn": false,
+        "Custom Color Wood": {
+          "R": 1.0,
+          "G": 1.0,
+          "B": 1.0,
+          "A": 1.0,
+          "Hex": "FFFFFF"
+        },
+        "Custom Color Leather": {
+          "R": 0.186343,
+          "G": 0.074751,
+          "B": 0.06444,
+          "A": 1.0,
+          "Hex": "784D48"
+        },
+        "Custom Material Steel": "Enum_MaterialLayer::NewEnumerator11 (Brushed Steel 2)",
+        "Custom Material Colored Metal": "Enum_MaterialLayer::NewEnumerator4 (Iron)",
+        "Custom Material Wood": "Enum_MaterialLayer::NewEnumerator3 (Wood)",
+        "Custom Material Leather": "Enum_MaterialLayer::NewEnumerator2 (Leather)",
+        "Custom Mass Scale Head": 0.0,
+        "Custom Mass Scale Guard": 0.0,
+        "Custom Mass Scale Grip": 0.0,
+        "Custom Mass Scale Pommel": 0.0,
+        "OnDestroyed": {
+          "InvocationList": [
+            {
+              "Object": "ChildActorComponent'Map_Hub_Tavern_Frank:PersistentLevel.Weapon_Forge_BP_C_1.ForgedWeapon'",
+              "FunctionName": "OnChildActorDestroyed"
+            }
+          ]
+        }
+      },
+      "weapon_overrides": {
+        "Weapon Length": 2.000000000000001,
+        "My Class": "BlueprintGeneratedClass'/Game/Assets/Weapons/Blueprints/ModularWeaponBP_Customizable.ModularWeaponBP_Customizable_C'",
+        "Guard Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Pommel Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Custom Material Steel": "Enum_MaterialLayer::NewEnumerator11 (Brushed Steel 2)",
+        "Custom Material Colored Metal": "Enum_MaterialLayer::NewEnumerator4 (Iron)",
+        "Custom Material Wood": "Enum_MaterialLayer::NewEnumerator3 (Wood)",
+        "Custom Material Leather": "Enum_MaterialLayer::NewEnumerator2 (Leather)",
+        "Custom Mass Scale Guard": 0.0,
+        "Custom Mass Scale Pommel": 0.0
+      },
+      "bp_simulates_physics": true
+    },
+    {
+      "name": "NewBlueprint_C_1",
+      "class": "NewBlueprint_C",
+      "class_path": "/Game/Character/Blueprints/NewBlueprint.NewBlueprint_C",
+      "class_chain": [
+        "NewBlueprint_C",
+        "Character",
+        "Pawn",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "location": [
+        -64.629,
+        0.0,
+        92.253
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "character",
+      "label": "NewBlueprint",
+      "simulate_physics": false,
+      "instance_properties": {
+        "AutoPossessPlayer": "EAutoReceiveInput::Player0"
+      }
+    },
+    {
+      "name": "Willie_BP_DressUp_C_1",
+      "class": "Willie_BP_DressUp_C",
+      "class_path": "/Game/Character/Blueprints/Willie_BP_DressUp.Willie_BP_DressUp_C",
+      "class_chain": [
+        "Willie_BP_DressUp_C",
+        "Willie_BP_C",
+        "Character",
+        "Pawn",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "tags": [
+        "Inventory"
+      ],
+      "location": [
+        -500.944,
+        -567.47,
+        77.971
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 90.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.938,
+        0.938,
+        0.938
+      ],
+      "category": "character",
+      "label": "Willie_BP_DressUp",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Box1",
+          "type": "BoxComponent",
+          "mobility": null,
+          "mesh": null
+        }
+      ],
+      "instance_properties": {
+        "BPC_PhotoMode": "BPC_PhotoMode_C'Map_Hub_Tavern_Frank:PersistentLevel.Willie_BP_DressUp_C_1.BPC_PhotoMode'",
+        "Rigid Bones": [
+          "pelvis",
+          "spine_02",
+          "spine_03",
+          "spine_04",
+          "spine_05",
+          "neck_01",
+          "neck_02",
+          "head",
+          "clavicle_l",
+          "upperarm_l",
+          "lowerarm_l",
+          "hand_l",
+          "clavicle_r",
+          "upperarm_r",
+          "lowerarm_r",
+          "hand_r",
+          "thigh_r",
+          "calf_r",
+          "foot_r",
+          "thigh_l",
+          "calf_l",
+          "foot_l"
+        ],
+        "Default Transform": {
+          "Rotation": {
+            "X": 0.0,
+            "Y": -0.0,
+            "Z": 0.70710677,
+            "W": 0.70710677,
+            "IsNormalized": true,
+            "Size": 0.99999994,
+            "SizeSquared": 0.99999994
+          },
+          "Translation": {
+            "X": -500.9443,
+            "Y": -567.4698,
+            "Z": 77.97098
+          },
+          "Scale3D": {
+            "X": 0.9375,
+            "Y": 0.9375,
+            "Z": 0.9375
+          }
+        },
+        "Dismembered Map": [
+          {
+            "Key": "pelvis",
+            "Value": false
+          },
+          {
+            "Key": "spine_02",
+            "Value": false
+          },
+          {
+            "Key": "spine_03",
+            "Value": false
+          },
+          {
+            "Key": "spine_04",
+            "Value": false
+          },
+          {
+            "Key": "spine_05",
+            "Value": false
+          },
+          {
+            "Key": "neck_01",
+            "Value": false
+          },
+          {
+            "Key": "neck_02",
+            "Value": false
+          },
+          {
+            "Key": "head",
+            "Value": false
+          },
+          {
+            "Key": "clavicle_l",
+            "Value": false
+          },
+          {
+            "Key": "upperarm_l",
+            "Value": false
+          },
+          {
+            "Key": "lowerarm_l",
+            "Value": false
+          },
+          {
+            "Key": "hand_l",
+            "Value": false
+          },
+          {
+            "Key": "clavicle_r",
+            "Value": false
+          },
+          {
+            "Key": "upperarm_r",
+            "Value": false
+          },
+          {
+            "Key": "lowerarm_r",
+            "Value": false
+          },
+          {
+            "Key": "hand_r",
+            "Value": false
+          },
+          {
+            "Key": "thigh_r",
+            "Value": false
+          },
+          {
+            "Key": "calf_r",
+            "Value": false
+          },
+          {
+            "Key": "foot_r",
+            "Value": false
+          },
+          {
+            "Key": "thigh_l",
+            "Value": false
+          },
+          {
+            "Key": "calf_l",
+            "Value": false
+          },
+          {
+            "Key": "foot_l",
+            "Value": false
+          }
+        ],
+        "R Foot Dislocation X": -0.24728288709750137,
+        "L Foot Dislocation X": -0.2473261195011685,
+        "AI Invincibility Rate": 0.0,
+        "AI Armor Invincibility Rate": 0.0,
+        "Muscle Rate": 0.0,
+        "Character Passport": {
+          "Weight_23_65E4C6534D14653F96EB739F159E58CD": 0.0,
+          "Skill_43_4CF5DCC248424BFADCCD6AB9F5F39CC9": 0.0,
+          "Equipment_26_741A2FC641801842FE691295645C604F": {
+            "ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358": [
+              {
+                "Key": "ArmorSlots_Enum::NewEnumerator1 (Body 1)",
+                "Value": {
+                  "ArmorCore_3_F6B7C69C4BD7D9720DB91EB635EE2B43": "BlueprintGeneratedClass'/Game/Assets/Armor/Blueprints/Modular_Armor/BP_Armor_Modular_Core_Body_Doublet_Arming.BP_Armor_Modular_Core_Body_Doublet_Arming_C'",
+                  "ID_54_C6BBB1A64A3828B5AB1D8E804EC7C8F7": 0,
+                  "CoreRemoved_12_5CFF8F6D4A05C15812594CAF6771C66B": false,
+                  "Module1_5_46B7198E4341C93CBF6AE989EF9898E4": 0,
+                  "Module2_7_5B7940B84CFD673B25103D96E0AFEEB0": 0,
+                  "Module3_9_E282C465414F6D4EF2A8039FBA847AD2": 0,
+                  "BackgroundColor_58_CD7AE55B4C46E5A79F8448BB9CDB3B82": {
+                    "R": 1.0,
+                    "G": 1.0,
+                    "B": 1.0,
+                    "A": 1.0,
+                    "Hex": "FFFFFF"
+                  },
+                  "LeatherColor_67_A8A17E654ED0341E58247C9B39D29597": {
+                    "R": 0.14902,
+                    "G": 0.07451,
+                    "B": 0.027451,
+                    "A": 1.0,
+                    "Hex": "6C4D2E"
+                  },
+                  "FabricColor1_15_4C7C24744C4F50FFAFB62DB50DE29393": {
+                    "R": 0.584314,
+                    "G": 0.584314,
+                    "B": 0.584314,
+                    "A": 1.0,
+                    "Hex": "C9C9C9"
+                  },
+                  "FabricColor2_17_4199336A482894E5BC99E69E52B50B1C": {
+                    "R": 0.584314,
+                    "G": 0.584314,
+                    "B": 0.584314,
+                    "A": 1.0,
+                    "Hex": "C9C9C9"
+                  },
+                  "FabricColor3_89_167D399343950DE18CC2F9AC76D99042": {
+                    "R": 0.247059,
+                    "G": 0.262745,
+                    "B": 0.196078,
+                    "A": 1.0,
+                    "Hex": "888C7A"
+                  },
+                  "SteelType_84_7BA6626740476C2CD69648847A1E592F": "Steel_Type::NewEnumerator11 (Blued)",
+                  "MetalPiecesType_81_203BFD454D41FA24B0B5C5838898AA60": "SecondaryMetal_Type::NewEnumerator0 (Iron)",
+                  "RustToggle_73_E4F1415F4A1E7AD75CAFD68BBA632FEF": false,
+                  "DirtToggle_74_A166ACBE4A95555CCA980F98495E364A": false,
+                  "Price_27_8E3ADD54484EFC4A59FE9381485AC192": 0.0,
+                  "Slot_30_7561CB484566A4512003EA96ED44F88D": "ArmorSlots_Enum::NewEnumerator1 (Body 1)",
+                  "ProvidesUpperAP_34_A85C3E3B4E4EF35DA44FFA960797B6C6": false,
+                  "ProvidesLowerAP_36_FFA5916240E32AC30239D58BCDD69D62": false,
+                  "RequiresUpperAP_38_079BBCD74D92FB832584E8B776EC8A6E": false,
+                  "RequiresLowerAP_40_BF13845C4B210380A7A569A912A6F614": false,
+                  "SlotsBlocked_45_0807340240E57ACE5A59D39F5E998F51": [],
+                  "RequiresModuleHirarchy_47_9ED58E2C48514BE5153606977BE68B6A": false,
+                  "Tier_50_E497AE434B01B84C559DEE8A863BB42E": "Enum_Ranks::NewEnumerator0 (Beggar)"
+                }
+              },
+              {
+                "Key": "ArmorSlots_Enum::NewEnumerator2 (Legs 1)",
+                "Value": {
+                  "ArmorCore_3_F6B7C69C4BD7D9720DB91EB635EE2B43": "BlueprintGeneratedClass'/Game/Assets/Armor/Blueprints/Modular_Armor/BP_Armor_Legs_Panties.BP_Armor_Legs_Panties_C'",
+                  "ID_54_C6BBB1A64A3828B5AB1D8E804EC7C8F7": 0,
+                  "CoreRemoved_12_5CFF8F6D4A05C15812594CAF6771C66B": false,
+                  "Module1_5_46B7198E4341C93CBF6AE989EF9898E4": 0,
+                  "Module2_7_5B7940B84CFD673B25103D96E0AFEEB0": 0,
+                  "Module3_9_E282C465414F6D4EF2A8039FBA847AD2": 0,
+                  "BackgroundColor_58_CD7AE55B4C46E5A79F8448BB9CDB3B82": {
+                    "R": 1.0,
+                    "G": 1.0,
+                    "B": 1.0,
+                    "A": 1.0,
+                    "Hex": "FFFFFF"
+                  },
+                  "LeatherColor_67_A8A17E654ED0341E58247C9B39D29597": {
+                    "R": 0.14902,
+                    "G": 0.07451,
+                    "B": 0.027451,
+                    "A": 1.0,
+                    "Hex": "6C4D2E"
+                  },
+                  "FabricColor1_15_4C7C24744C4F50FFAFB62DB50DE29393": {
+                    "R": 0.247059,
+                    "G": 0.262745,
+                    "B": 0.196078,
+                    "A": 1.0,
+                    "Hex": "888C7A"
+                  },
+                  "FabricColor2_17_4199336A482894E5BC99E69E52B50B1C": {
+                    "R": 0.247059,
+                    "G": 0.262745,
+                    "B": 0.196078,
+                    "A": 1.0,
+                    "Hex": "888C7A"
+                  },
+                  "FabricColor3_89_167D399343950DE18CC2F9AC76D99042": {
+                    "R": 0.247059,
+                    "G": 0.262745,
+                    "B": 0.196078,
+                    "A": 1.0,
+                    "Hex": "888C7A"
+                  },
+                  "SteelType_84_7BA6626740476C2CD69648847A1E592F": "Steel_Type::NewEnumerator11 (Blued)",
+                  "MetalPiecesType_81_203BFD454D41FA24B0B5C5838898AA60": "SecondaryMetal_Type::NewEnumerator0 (Iron)",
+                  "RustToggle_73_E4F1415F4A1E7AD75CAFD68BBA632FEF": false,
+                  "DirtToggle_74_A166ACBE4A95555CCA980F98495E364A": false,
+                  "Price_27_8E3ADD54484EFC4A59FE9381485AC192": 0.0,
+                  "Slot_30_7561CB484566A4512003EA96ED44F88D": "ArmorSlots_Enum::NewEnumerator2 (Legs 1)",
+                  "ProvidesUpperAP_34_A85C3E3B4E4EF35DA44FFA960797B6C6": false,
+                  "ProvidesLowerAP_36_FFA5916240E32AC30239D58BCDD69D62": false,
+                  "RequiresUpperAP_38_079BBCD74D92FB832584E8B776EC8A6E": false,
+                  "RequiresLowerAP_40_BF13845C4B210380A7A569A912A6F614": false,
+                  "SlotsBlocked_45_0807340240E57ACE5A59D39F5E998F51": [],
+                  "RequiresModuleHirarchy_47_9ED58E2C48514BE5153606977BE68B6A": false,
+                  "Tier_50_E497AE434B01B84C559DEE8A863BB42E": "Enum_Ranks::NewEnumerator0 (Beggar)"
+                }
+              }
+            ],
+            "WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05": []
+          },
+          "HairColor_38_CBDC51B043E6816A062799A9A96EB232": {
+            "R": 0.0,
+            "G": 0.0,
+            "B": 0.0,
+            "A": 0.0,
+            "Hex": "000000"
+          },
+          "HairLength_41_9295B3CF41DF9BED0FEDB9AE02E7FC16": 0.0
+        },
+        "Tags": [
+          "Inventory"
+        ]
+      },
+      "child_actor_components": [
+        {
+          "component": "ChildActor",
+          "child_actor_class": null,
+          "child_actor": null
+        }
+      ]
+    }
+  ],
+  "spawners": [
+    {
+      "name": "BP_MeshBloodSimManager_C_0",
+      "class": "BP_MeshBloodSimManager_C",
+      "class_path": "/Game/Tests/VFXBloodTest/BP_MeshBloodSimManager.BP_MeshBloodSimManager_C",
+      "class_chain": [
+        "BP_MeshBloodSimManager_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "location": [
+        573.295,
+        -1672.836,
+        0.0
+      ],
+      "instance_properties": {
+        "SlowFlowSpeed": 0.01,
+        "DryoutSpeed": 0.005,
+        "IntensityMultiplier": 0.05,
+        "Tags": [
+          "BloodSim"
+        ]
+      },
+      "effective_properties": {
+        "SlowFlowSpeed": 0.01,
+        "DryoutSpeed": 0.005,
+        "IntensityMultiplier": 0.05,
+        "Tags": [
+          "BloodSim"
+        ],
+        "BloodSimRef": "BlueprintGeneratedClass'/Game/Tests/VFXBloodTest/BP_MeshBloodSim.BP_MeshBloodSim_C'",
+        "FastFlowSpeed": 0.005,
+        "MaxSimTime": 15.0,
+        "VelocityDecrement": 0.026
+      }
+    },
+    {
+      "name": "BP_Prop_Smithing_ToolRack_A_001_C_1",
+      "class": "BP_Prop_Smithing_ToolRack_A_001_C",
+      "class_path": "/Game/Assets/Props/Smithing/Blueprints/BP_Prop_Smithing_ToolRack_A_001.BP_Prop_Smithing_ToolRack_A_001_C",
+      "class_chain": [
+        "BP_Prop_Smithing_ToolRack_A_001_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "location": [
+        -68.487,
+        108.029,
+        0.0
+      ],
+      "instance_properties": {},
+      "effective_properties": {}
+    },
+    {
+      "name": "BP_GameManager_C_1",
+      "class": "BP_GameManager_C",
+      "class_path": "/Game/Blueprints/Managers/BP_GameManager.BP_GameManager_C",
+      "class_chain": [
+        "BP_GameManager_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "location": [
+        49.0,
+        -260.0,
+        86.0
+      ],
+      "instance_properties": {},
+      "effective_properties": {}
+    },
+    {
+      "name": "BP_MerchantMenu_C_1",
+      "class": "BP_MerchantMenu_C",
+      "class_path": "/Game/Blueprints/GameLogic/CharacterCustomization/BP_MerchantMenu.BP_MerchantMenu_C",
+      "class_chain": [
+        "BP_MerchantMenu_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "location": [
+        496.746,
+        -181.02,
+        14.177
+      ],
+      "instance_properties": {},
+      "effective_properties": {
+        "ShopItems": "BlueprintGeneratedClass'/Game/Blueprints/GameLogic/Shops/BP_TestTraderItemsList.BP_TestTraderItemsList_C'",
+        "AutoReceiveInput": "EAutoReceiveInput::Player0"
+      }
+    },
+    {
+      "name": "Map_Hub_Tavern_Frank_C_1",
+      "class": "Map_Hub_Tavern_Frank_C",
+      "class_path": "/Game/Maps/Map_Hub_Tavern_Frank.Map_Hub_Tavern_Frank_C",
+      "class_chain": [
+        "Map_Hub_Tavern_Frank_C",
+        "LevelScriptActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "instance_properties": {},
+      "effective_properties": {
+        "PrimaryActorTick": {
+          "bCanEverTick": true
+        }
+      }
+    },
+    {
+      "name": "Weapon_Forge_BP_C_1",
+      "class": "Weapon_Forge_BP_C",
+      "class_path": "/Game/Blueprints/GameLogic/Forge/Weapon_Forge_BP.Weapon_Forge_BP_C",
+      "class_chain": [
+        "Weapon_Forge_BP_C",
+        "Pawn",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "location": [
+        -221.732,
+        -59.982,
+        119.415
+      ],
+      "instance_properties": {
+        "Customized Weapon": "ModularWeaponBP_Customizable_C'Map_Hub_Tavern_Frank:PersistentLevel.ForgedWeapon_GEN_VARIABLE_ModularWeaponBP_Customizable_C_CAT_306'"
+      },
+      "effective_properties": {
+        "Customized Weapon": "ModularWeaponBP_Customizable_C'Map_Hub_Tavern_Frank:PersistentLevel.ForgedWeapon_GEN_VARIABLE_ModularWeaponBP_Customizable_C_CAT_306'",
+        "Customizable Modules": "BlueprintGeneratedClass'/Game/Blueprints/GameLogic/Forge/BP_GameWeapon_Customizable_Mace.BP_GameWeapon_Customizable_Mace_C'",
+        "Head Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Guard Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Grip Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Pommel Size": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0
+        },
+        "Custom Color Head": {
+          "R": 0.0,
+          "G": 0.0,
+          "B": 0.0,
+          "A": 0.0,
+          "Hex": "000000"
+        },
+        "Custom Color Guard": {
+          "R": 0.0,
+          "G": 0.0,
+          "B": 0.0,
+          "A": 0.0,
+          "Hex": "000000"
+        },
+        "Custom Color Grip": {
+          "R": 0.0,
+          "G": 0.0,
+          "B": 0.0,
+          "A": 0.0,
+          "Hex": "000000"
+        },
+        "Custom Color Pommel": {
+          "R": 0.0,
+          "G": 0.0,
+          "B": 0.0,
+          "A": 0.0,
+          "Hex": "000000"
+        }
+      },
+      "child_actor_components": [
+        {
+          "component": "ChildActor",
+          "child_actor_class": null,
+          "child_actor": null
+        },
+        {
+          "component": "ForgedWeapon",
+          "child_actor_class": "BlueprintGeneratedClass'/Game/Assets/Weapons/Blueprints/ModularWeaponBP_Customizable.ModularWeaponBP_Customizable_C'",
+          "child_actor": "ModularWeaponBP_Customizable_C'Map_Hub_Tavern_Frank:PersistentLevel.ForgedWeapon_GEN_VARIABLE_ModularWeaponBP_Customizable_C_CAT_306'"
+        }
+      ]
+    }
+  ],
+  "other_actors": [
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -96.705,
+        -191.335,
+        112.622
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        -415.115,
+        -145.024,
+        217.981
+      ]
+    },
+    {
+      "name": "PointLight_1",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight",
+      "location": [
+        -238.723,
+        83.069,
+        103.415
+      ]
+    },
+    {
+      "name": "PointLight_2",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight2",
+      "location": [
+        -854.943,
+        -454.438,
+        103.415
+      ]
+    },
+    {
+      "name": "PointLight_3",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight3",
+      "location": [
+        -200.082,
+        -329.548,
+        213.545
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "Half Sword Graphics v2.5",
+      "location": [
+        903.295,
+        -212.836,
+        0.0
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_0",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "Sk_Armor_Neck_Bevor_2",
+      "location": [
+        -362.908,
+        -557.644,
+        -51.335
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        553.295,
+        37.164,
+        100.0
+      ]
+    },
+    {
+      "name": "SkyLight_2",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        -366.754,
+        -290.03,
+        221.072
+      ]
+    },
+    {
+      "name": "SpotLight_1",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight",
+      "location": [
+        -73.842,
+        -644.639,
+        134.925
+      ]
+    },
+    {
+      "name": "SpotLight_2",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight2",
+      "location": [
+        -581.866,
+        -622.766,
+        172.196
+      ]
+    },
+    {
+      "name": "SpotLight_3",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight3",
+      "location": [
+        11.717,
+        105.496,
+        160.126
+      ]
+    },
+    {
+      "name": "SpotLight_4",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight4",
+      "location": [
+        -204.292,
+        -794.026,
+        230.104
+      ]
+    },
+    {
+      "name": "SpotLight_5",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight5",
+      "location": [
+        -518.352,
+        418.582,
+        430.645
+      ]
+    },
+    {
+      "name": "AmbientSound_2",
+      "class": "AmbientSound",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "Ambient_Hall_Small_Cue",
+      "location": [
+        464.967,
+        -15.619,
+        0.0
+      ]
+    },
+    {
+      "name": "AudioVolume_1",
+      "class": "AudioVolume",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "AudioVolume",
+      "location": [
+        -116.04,
+        25.075,
+        100.0
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_0",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "location": [
+        -251.224,
+        -669.934,
+        120.562
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_1",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "location": [
+        -863.205,
+        -246.096,
+        197.894
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_2",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "location": [
+        11.537,
+        105.572,
+        191.317
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_3",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "location": [
+        -73.282,
+        -646.162,
+        156.567
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_4",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "location": [
+        -582.225,
+        -623.156,
+        197.894
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_7",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "location": [
+        -454.65,
+        -177.697,
+        153.749
+      ]
+    },
+    {
+      "name": "BP_Prop_Construction_WaterWheel_A_001_C_1",
+      "class": "BP_Prop_Construction_WaterWheel_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BP_Prop_Construction_WaterWheel_A_001",
+      "location": [
+        -664.778,
+        359.31,
+        75.27
+      ]
+    },
+    {
+      "name": "SM_Prop_Furniture_Cabinet_A_006_C_1",
+      "class": "BP_Prop_Furniture_Cabinet_A_006_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "SM_Prop_Furniture_Cabinet_A_006",
+      "location": [
+        -896.689,
+        -329.906,
+        164.918
+      ]
+    },
+    {
+      "name": "SM_Prop_Furniture_Cabinet_C_006_C_1",
+      "class": "BP_Prop_Furniture_Cabinet_C_006_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "SM_Prop_Furniture_Cabinet_C_006",
+      "location": [
+        -8.76,
+        -662.819,
+        112.948
+      ]
+    },
+    {
+      "name": "BP_Prop_Smithing_Barrel_A_001_C_2",
+      "class": "BP_Prop_Smithing_Barrel_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BP_Prop_Smithing_Barrel_A_001",
+      "location": [
+        -683.976,
+        -144.303,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Prop_Smithing_Barrel_A_001_C_3",
+      "class": "BP_Prop_Smithing_Barrel_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BP_Prop_Smithing_Barrel_A_2",
+      "location": [
+        -6.853,
+        45.662,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Prop_Smithing_Barrel_A_002_C_1",
+      "class": "BP_Prop_Smithing_Barrel_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BP_Prop_Smithing_Barrel_A_002",
+      "location": [
+        -425.92,
+        -86.392,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Prop_Smithing_Barrel_B_002_C_3",
+      "class": "BP_Prop_Smithing_Barrel_B_002_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BP_Prop_Smithing_Barrel_B_002",
+      "location": [
+        -474.914,
+        -115.272,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Prop_Smithing_Furnace_A_001_C_6",
+      "class": "BP_Prop_Smithing_Furnace_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BP_Prop_Smithing_Furnace_A_001",
+      "location": [
+        -901.549,
+        -452.279,
+        -9.921
+      ]
+    },
+    {
+      "name": "BP_Prop_Smithing_Furnace_A_002_C_3",
+      "class": "BP_Prop_Smithing_Furnace_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BP_Prop_Smithing_Furnace_A_002",
+      "location": [
+        -238.137,
+        143.178,
+        -9.921
+      ]
+    },
+    {
+      "name": "BP_Prop_Smithing_GrindStone_A_003_C_1",
+      "class": "BP_Prop_Smithing_GrindStone_A_003_C",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BP_Prop_Smithing_GrindStone_A_003",
+      "location": [
+        -665.669,
+        123.875,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_0",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K2",
+      "location": [
+        -186.044,
+        -11.067,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_1",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_C_6",
+      "location": [
+        -495.043,
+        -713.514,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_10",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_C_001",
+      "location": [
+        -1.548,
+        13.655,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_104",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K",
+      "location": [
+        -513.278,
+        -31.39,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_12",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Env_Workshop_Smithery_Decal_A_001",
+      "location": [
+        -548.675,
+        -638.892,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_14",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_C_2",
+      "location": [
+        -22.57,
+        -132.577,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_15",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_C_3",
+      "location": [
+        -288.421,
+        47.872,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_16",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_C_4",
+      "location": [
+        -278.973,
+        -18.069,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_17",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_C_5",
+      "location": [
+        -504.049,
+        -12.111,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_18",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K52",
+      "location": [
+        -495.429,
+        -662.836,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_19",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K53",
+      "location": [
+        -242.992,
+        -662.836,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_2",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_B_001",
+      "location": [
+        -225.805,
+        -50.955,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_20",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K54",
+      "location": [
+        14.077,
+        -662.836,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_21",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K55",
+      "location": [
+        -744.827,
+        137.164,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_216",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Environment_Decal_Religious_A_009",
+      "location": [
+        -897.576,
+        -163.803,
+        290.245
+      ]
+    },
+    {
+      "name": "DecalActor_22",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K56",
+      "location": [
+        -495.429,
+        137.164,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_23",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K57",
+      "location": [
+        -242.992,
+        137.164,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_24",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K59",
+      "location": [
+        14.077,
+        137.164,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_25",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K60",
+      "location": [
+        -599.742,
+        137.164,
+        135.267
+      ]
+    },
+    {
+      "name": "DecalActor_26",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K61",
+      "location": [
+        -599.742,
+        137.164,
+        339.476
+      ]
+    },
+    {
+      "name": "DecalActor_27",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K62",
+      "location": [
+        -896.705,
+        -574.156,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_28",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K63",
+      "location": [
+        -896.705,
+        -295.542,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_29",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K64",
+      "location": [
+        -896.705,
+        -32.807,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_B_2",
+      "location": [
+        -82.74,
+        -38.195,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_30",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K65",
+      "location": [
+        103.295,
+        -22.339,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_31",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K66",
+      "location": [
+        103.295,
+        -308.235,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_32",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K68",
+      "location": [
+        103.295,
+        -582.703,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_33",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K69",
+      "location": [
+        -744.827,
+        -662.836,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_34",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K70",
+      "location": [
+        -495.429,
+        -662.836,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_35",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K71",
+      "location": [
+        -242.992,
+        -662.836,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_36",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K72",
+      "location": [
+        14.077,
+        -662.836,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_37",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K73",
+      "location": [
+        -744.828,
+        137.162,
+        25.35
+      ]
+    },
+    {
+      "name": "DecalActor_38",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K74",
+      "location": [
+        -495.429,
+        137.164,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_39",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K75",
+      "location": [
+        -242.992,
+        137.164,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_4",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_B_3",
+      "location": [
+        -152.982,
+        90.991,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_40",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K76",
+      "location": [
+        14.077,
+        137.164,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_41",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K77",
+      "location": [
+        -896.705,
+        -574.156,
+        25.364
+      ]
+    },
+    {
+      "name": "DecalActor_42",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K78",
+      "location": [
+        -896.705,
+        -295.542,
+        25.366
+      ]
+    },
+    {
+      "name": "DecalActor_43",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K79",
+      "location": [
+        -896.704,
+        -32.807,
+        25.366
+      ]
+    },
+    {
+      "name": "DecalActor_44",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K80",
+      "location": [
+        103.295,
+        -22.339,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_45",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K81",
+      "location": [
+        103.295,
+        -308.235,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_46",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K82",
+      "location": [
+        103.295,
+        -582.703,
+        25.36
+      ]
+    },
+    {
+      "name": "DecalActor_47",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K84",
+      "location": [
+        -896.705,
+        -164.16,
+        223.339
+      ]
+    },
+    {
+      "name": "DecalActor_48",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K85",
+      "location": [
+        -495.429,
+        -662.836,
+        223.447
+      ]
+    },
+    {
+      "name": "DecalActor_49",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K86",
+      "location": [
+        -443.835,
+        -662.836,
+        109.067
+      ]
+    },
+    {
+      "name": "DecalActor_5",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K3",
+      "location": [
+        -443.347,
+        -719.784,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_50",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K87",
+      "location": [
+        -572.317,
+        -662.836,
+        91.394
+      ]
+    },
+    {
+      "name": "DecalActor_51",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K88",
+      "location": [
+        -896.705,
+        -111.382,
+        108.624
+      ]
+    },
+    {
+      "name": "DecalActor_52",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K89",
+      "location": [
+        -896.705,
+        -234.229,
+        108.624
+      ]
+    },
+    {
+      "name": "DecalActor_53",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K90",
+      "location": [
+        -194.626,
+        -662.836,
+        71.578
+      ]
+    },
+    {
+      "name": "DecalActor_54",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Env_Workshop_Smithery_Decal_A_002",
+      "location": [
+        -666.289,
+        137.146,
+        75.24
+      ]
+    },
+    {
+      "name": "DecalActor_55",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K91",
+      "location": [
+        -321.948,
+        -662.836,
+        204.395
+      ]
+    },
+    {
+      "name": "DecalActor_56",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K92",
+      "location": [
+        -92.19,
+        -662.836,
+        204.395
+      ]
+    },
+    {
+      "name": "DecalActor_57",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K93",
+      "location": [
+        103.295,
+        -273.153,
+        65.998
+      ]
+    },
+    {
+      "name": "DecalActor_58",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K94",
+      "location": [
+        103.295,
+        -491.678,
+        197.701
+      ]
+    },
+    {
+      "name": "DecalActor_59",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K95",
+      "location": [
+        103.295,
+        -61.633,
+        197.701
+      ]
+    },
+    {
+      "name": "DecalActor_6",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_C_7",
+      "location": [
+        -909.443,
+        -478.536,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_60",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K96",
+      "location": [
+        -321.802,
+        137.164,
+        98.193
+      ]
+    },
+    {
+      "name": "DecalActor_61",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K97",
+      "location": [
+        -181.225,
+        137.164,
+        98.193
+      ]
+    },
+    {
+      "name": "DecalActor_62",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K98",
+      "location": [
+        -896.705,
+        -390.106,
+        124.659
+      ]
+    },
+    {
+      "name": "DecalActor_63",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K99",
+      "location": [
+        -896.705,
+        -532.65,
+        121.666
+      ]
+    },
+    {
+      "name": "DecalActor_64",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K83",
+      "location": [
+        -240.183,
+        47.012,
+        10.121
+      ]
+    },
+    {
+      "name": "DecalActor_65",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K100",
+      "location": [
+        -240.183,
+        38.933,
+        -0.314
+      ]
+    },
+    {
+      "name": "DecalActor_66",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Environment_Decal_Animal_A_006",
+      "location": [
+        -364.816,
+        -662.84,
+        184.74
+      ]
+    },
+    {
+      "name": "DecalActor_67",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K101",
+      "location": [
+        -308.597,
+        121.393,
+        10.121
+      ]
+    },
+    {
+      "name": "DecalActor_68",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K51",
+      "location": [
+        -744.827,
+        -662.836,
+        354.757
+      ]
+    },
+    {
+      "name": "DecalActor_69",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K102",
+      "location": [
+        -317.323,
+        110.31,
+        -0.314
+      ]
+    },
+    {
+      "name": "DecalActor_7",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Misc_Decal_Coal_C_8",
+      "location": [
+        -947.734,
+        -172.203,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_70",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K103",
+      "location": [
+        -805.588,
+        -458.051,
+        10.121
+      ]
+    },
+    {
+      "name": "DecalActor_71",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K104",
+      "location": [
+        -796.455,
+        -451.331,
+        -0.314
+      ]
+    },
+    {
+      "name": "DecalActor_8",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K4",
+      "location": [
+        -818.994,
+        -521.344,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_84",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K67",
+      "location": [
+        -328.372,
+        -664.037,
+        -74.812
+      ]
+    },
+    {
+      "name": "DecalActor_9",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "MI_Env_Workshop_Smithery_Decal_A_2",
+      "location": [
+        -862.805,
+        -109.58,
+        0.0
+      ]
+    },
+    {
+      "name": "NavMeshBoundsVolume_0",
+      "class": "NavMeshBoundsVolume",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "NavMeshBoundsVolume",
+      "location": [
+        -91.773,
+        -5.693,
+        20.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_0",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "BloodDrawSystem2",
+      "location": [
+        1233.295,
+        -212.836,
+        490.0
+      ],
+      "tags": [
+        "RTDraw"
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_10",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "SK_Armor_Head_Barbute_A_001",
+      "location": [
+        -319.94,
+        -638.436,
+        -35.696
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_37",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "Sk_Armor_Neck_Bevor_001",
+      "location": [
+        -655.364,
+        -562.113,
+        -49.53
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_48",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "Sk_Armor_Head_Armet_A_PhysicsAsset",
+      "location": [
+        -363.505,
+        -557.396,
+        -49.269
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_50",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Workshop_Smithery_Map.umap",
+      "label": "Sk_Armor_Head_Armet_Visor_A_PhysicsAsset",
+      "location": [
+        -363.505,
+        -557.396,
+        -49.269
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -96.705,
+        -191.335,
+        112.622
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        -415.115,
+        -145.024,
+        217.981
+      ]
+    },
+    {
+      "name": "PointLight_1",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight",
+      "location": [
+        -238.723,
+        83.069,
+        103.415
+      ]
+    },
+    {
+      "name": "PointLight_2",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight2",
+      "location": [
+        -854.943,
+        -454.438,
+        103.415
+      ]
+    },
+    {
+      "name": "PointLight_3",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight3",
+      "location": [
+        -200.082,
+        -329.548,
+        213.545
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "Half Sword Graphics v2.5",
+      "location": [
+        903.295,
+        -212.836,
+        0.0
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_0",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "Sk_Armor_Neck_Bevor_2",
+      "location": [
+        -362.908,
+        -557.644,
+        -51.335
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        553.295,
+        37.164,
+        100.0
+      ]
+    },
+    {
+      "name": "SkyLight_2",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        -366.754,
+        -290.03,
+        221.072
+      ]
+    },
+    {
+      "name": "SpotLight_1",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight",
+      "location": [
+        -73.842,
+        -644.639,
+        134.925
+      ]
+    },
+    {
+      "name": "SpotLight_2",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight2",
+      "location": [
+        -581.866,
+        -622.766,
+        172.196
+      ]
+    },
+    {
+      "name": "SpotLight_3",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight3",
+      "location": [
+        11.717,
+        105.496,
+        160.126
+      ]
+    },
+    {
+      "name": "SpotLight_4",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight4",
+      "location": [
+        -204.292,
+        -794.026,
+        230.104
+      ]
+    },
+    {
+      "name": "SpotLight_5",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight5",
+      "location": [
+        -518.352,
+        418.582,
+        430.645
+      ]
+    },
+    {
+      "name": "ChaosDebugDrawActor_0",
+      "class": "Actor",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "Actor2"
+    },
+    {
+      "name": "AmbientSound_0",
+      "class": "AmbientSound",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "Ambient_Hall_Small_Cue",
+      "location": [
+        138.328,
+        52.784,
+        0.0
+      ]
+    },
+    {
+      "name": "AudioVolume_0",
+      "class": "AudioVolume",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "AudioVolume",
+      "location": [
+        19.335,
+        12.089,
+        100.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Alley_C_0",
+      "class": "BP_CombatEvent_Alley_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Alley0",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Cellar_C_0",
+      "class": "BP_CombatEvent_Cellar_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Cellar0",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Cellar_C_1",
+      "class": "BP_CombatEvent_Cellar_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Cellar1",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Cellar_C_2",
+      "class": "BP_CombatEvent_Cellar_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Cellar2",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Cellar_C_3",
+      "class": "BP_CombatEvent_Cellar_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Cellar3",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Forest_C_0",
+      "class": "BP_CombatEvent_Forest_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Forest0",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Forest_C_1",
+      "class": "BP_CombatEvent_Forest_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Forest1",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Forest_C_2",
+      "class": "BP_CombatEvent_Forest_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Forest2",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Hall_C_0",
+      "class": "BP_CombatEvent_Hall_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Hall0",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Hall_C_1",
+      "class": "BP_CombatEvent_Hall_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Hall1",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Hall_C_2",
+      "class": "BP_CombatEvent_Hall_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Hall2",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_CombatEvent_Hall_C_3",
+      "class": "BP_CombatEvent_Hall_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_CombatEvent_Hall3",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_FreeCamera_C_0",
+      "class": "BP_FreeCamera_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_FreeCamera2",
+      "location": [
+        -59.944,
+        29.0,
+        128.165
+      ],
+      "tags": [
+        "Merc"
+      ]
+    },
+    {
+      "name": "BP_FreeCamera_C_1",
+      "class": "BP_FreeCamera_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_FreeCamera",
+      "location": [
+        -500.944,
+        -314.694,
+        114.27
+      ],
+      "tags": [
+        "Inventory"
+      ]
+    },
+    {
+      "name": "LightDetectorCollider_GEN_VARIABLE_BP_LightDetectionCollider_Sphere_C_CAT_0",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "location": [
+        -143.199,
+        -314.165,
+        97.136
+      ]
+    },
+    {
+      "name": "BP_PlayerInventory_C_1",
+      "class": "BP_PlayerInventory_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "BP_PlayerInventory",
+      "location": [
+        431.975,
+        123.434,
+        -0.5
+      ],
+      "tags": [
+        "Inventory"
+      ]
+    },
+    {
+      "name": "MerchantTable_BP_C_1",
+      "class": "MerchantTable_BP_C",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "MerchantTable_BP",
+      "location": [
+        -218.863,
+        -332.418,
+        2.71
+      ]
+    },
+    {
+      "name": "NavMeshBoundsVolume_0",
+      "class": "NavMeshBoundsVolume",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "NavMeshBoundsVolume",
+      "location": [
+        -4.932,
+        42.858,
+        20.0
+      ]
+    },
+    {
+      "name": "PointLight_4",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "PointLight5",
+      "location": [
+        -497.821,
+        -397.392,
+        160.857
+      ]
+    },
+    {
+      "name": "RecastNavMesh-Default",
+      "class": "RecastNavMesh",
+      "source": "HalfswordUE5/Content/Maps/Map_Hub_Tavern_Frank.umap",
+      "label": "RecastNavMesh-Default",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 337,
+  "errors": [],
+  "warnings": []
+}

@@ -1,0 +1,65 @@
+{
+  "version": "0.1.0",
+  "channel": "beta",
+  "rust_toolchain": "1.98.1",
+  "master_urls": [
+    "http://127.0.0.1:7778"
+  ],
+  "game": {
+    "steam_appid": 2397300,
+    "builds": [
+      {
+        "label": "Half Sword (Steam build 24185754, UE 5.4.4-2705)",
+        "steam_buildid": "24185754",
+        "exe_sha256": "367dfccf1aaca3bbf6824c9bb616f2f31bc30e7ac70c5fa8657e212dbb2c2e03",
+        "exe_size": 154116608
+      }
+    ]
+  },
+  "ue4ss": {
+    "version": "RE-UE4SS experimental e3ba1016 (self-reports v3.0.1 Beta), dwmapi proxy, ue4ss/ layout",
+    "dll_sha256": "680a026890abb4d0df2211251f8defc1681a584275f1521dcc0fe30af480006f",
+    "proxy_sha256": "cf440b9eb8643bb7c434acfda696aee57fd981d185dca5e57fb8dbb18f8fc1cd",
+    "include": [
+      "dwmapi.dll",
+      "ue4ss/UE4SS.dll",
+      "ue4ss/UE4SS-settings.ini",
+      "ue4ss/LICENSE",
+      "ue4ss/Mods/BPModLoaderMod/",
+      "ue4ss/Mods/BPML_GenericFunctions/",
+      "ue4ss/Mods/shared/Types.lua",
+      "ue4ss/Mods/shared/UEHelpers/"
+    ],
+    "settings_overrides": [
+      { "section": "General", "key": "EnableHotReloadSystem", "value": "0" },
+      { "section": "General", "key": "EnableAutoReloadingLuaMods", "value": "0" },
+      { "section": "Debug", "key": "ConsoleEnabled", "value": "0" },
+      { "section": "Debug", "key": "GuiConsoleEnabled", "value": "0" },
+      { "section": "Debug", "key": "GuiConsoleVisible", "value": "0" },
+      { "section": "Debug", "key": "GraphicsAPI", "value": "dx11" },
+      { "section": "CrashDump", "key": "EnableDumping", "value": "1" },
+      { "section": "CrashDump", "key": "FullMemoryDump", "value": "0" }
+    ]
+  },
+  "native_mods": [
+    { "name": "HSMPNative", "files": ["dlls/main.dll", "dlls/hsmp_lua.dll"] }
+  ],
+  "binaries": [
+    "hsmp-server",
+    "hsmp-sidecar",
+    "hsmp-master",
+    "hsmp-query"
+  ],
+  "launch_args": [
+    "-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0"
+  ],
+  "ini_settings": [
+    {
+      "file": "Engine",
+      "section": "SystemSettings",
+      "key": "r.HairStrands.Streaming",
+      "value": "0",
+      "reason": "IoDispatcher pak-read crash workaround: load hair strands whole instead of paged streaming (docs/development/halfsword/io-dispatcher-crash.md)"
+    }
+  ]
+}

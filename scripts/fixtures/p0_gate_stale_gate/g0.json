@@ -1,0 +1,61 @@
+{
+  "commit": "0123456789abcdef0123456789abcdef01234567",
+  "tree_dirty": false,
+  "time": "2026-10-01T18:39:00.000Z",
+  "quick": true,
+  "ok": true,
+  "checks": {
+    "bp_names": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "lua_check": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "lua_test": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "travel": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "wg": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "unsafe": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "image_kill": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "instant_sub": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "events": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "gate_selftest": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "ipc_schema": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "state_files": {
+      "status": "pass",
+      "summary": "fixture"
+    },
+    "cargo": {
+      "status": "skip",
+      "summary": "--quick"
+    }
+  }
+}

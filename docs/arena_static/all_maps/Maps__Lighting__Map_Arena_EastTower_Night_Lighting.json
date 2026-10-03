@@ -1,0 +1,410 @@
+{
+  "map": "Map_Arena_EastTower_Night_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_0",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "tags": [
+        "AcousticsGeometry"
+      ],
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        100.0,
+        100.0,
+        100.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_SkySphere",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'Engine/Content/EngineSky/SM_SkySphere.SM_SkySphere'",
+      "instance_properties": {
+        "bEnableAutoLODGeneration": false,
+        "Tags": [
+          "AcousticsGeometry"
+        ]
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box",
+      "location": [
+        -11.509,
+        1157.977,
+        0.977
+      ]
+    },
+    {
+      "name": "BP_UltraVolumetrics_C_1",
+      "class": "BP_UltraVolumetrics_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "BP_UltraVolumetrics",
+      "location": [
+        -6.974,
+        2195.317,
+        183.249
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "DirectionalLight2",
+      "location": [
+        -45.921,
+        1450.72,
+        310.884
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        -220.254,
+        1401.036,
+        80.489
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "Half Sword Graphics v2.7 (East_TowerHall)",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        0.0,
+        0.0,
+        500.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "SkyLight_0",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        -23.107,
+        1425.021,
+        310.884
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "SpotLight_0",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight15",
+      "location": [
+        -188.453,
+        1999.349,
+        274.422
+      ]
+    },
+    {
+      "name": "SpotLight_1",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight",
+      "location": [
+        -46.236,
+        996.371,
+        335.488
+      ]
+    },
+    {
+      "name": "SpotLight_10",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight10",
+      "location": [
+        591.541,
+        1709.841,
+        149.503
+      ]
+    },
+    {
+      "name": "SpotLight_11",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight11",
+      "location": [
+        593.629,
+        1900.798,
+        128.919
+      ]
+    },
+    {
+      "name": "SpotLight_13",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight13",
+      "location": [
+        -594.784,
+        1900.798,
+        128.919
+      ]
+    },
+    {
+      "name": "SpotLight_14",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight14",
+      "location": [
+        -585.128,
+        699.78,
+        149.503
+      ]
+    },
+    {
+      "name": "SpotLight_15",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight16",
+      "location": [
+        188.745,
+        1999.349,
+        274.422
+      ]
+    },
+    {
+      "name": "SpotLight_16",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight17",
+      "location": [
+        -188.453,
+        1605.2,
+        274.422
+      ]
+    },
+    {
+      "name": "SpotLight_17",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight18",
+      "location": [
+        188.745,
+        1605.2,
+        274.422
+      ]
+    },
+    {
+      "name": "SpotLight_18",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight19",
+      "location": [
+        -188.453,
+        1202.991,
+        274.422
+      ]
+    },
+    {
+      "name": "SpotLight_19",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight20",
+      "location": [
+        188.745,
+        1202.991,
+        274.422
+      ]
+    },
+    {
+      "name": "SpotLight_2",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight2",
+      "location": [
+        -46.236,
+        1809.578,
+        335.488
+      ]
+    },
+    {
+      "name": "SpotLight_20",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight21",
+      "location": [
+        -188.453,
+        803.869,
+        274.422
+      ]
+    },
+    {
+      "name": "SpotLight_21",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight22",
+      "location": [
+        188.745,
+        803.869,
+        274.422
+      ]
+    },
+    {
+      "name": "SpotLight_22",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight23",
+      "location": [
+        -594.784,
+        1712.638,
+        128.919
+      ]
+    },
+    {
+      "name": "SpotLight_3",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight3",
+      "location": [
+        -208.036,
+        726.05,
+        301.589
+      ]
+    },
+    {
+      "name": "SpotLight_4",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight4",
+      "location": [
+        203.225,
+        726.05,
+        301.589
+      ]
+    },
+    {
+      "name": "SpotLight_5",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight5",
+      "location": [
+        -208.036,
+        1565.429,
+        301.589
+      ]
+    },
+    {
+      "name": "SpotLight_6",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight6",
+      "location": [
+        203.225,
+        1565.429,
+        301.589
+      ]
+    },
+    {
+      "name": "SpotLight_7",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight7",
+      "location": [
+        -208.036,
+        1228.302,
+        301.943
+      ]
+    },
+    {
+      "name": "SpotLight_8",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight8",
+      "location": [
+        203.225,
+        1228.302,
+        301.943
+      ]
+    },
+    {
+      "name": "SpotLight_9",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Map_Arena_EastTower_Night_Lighting.umap",
+      "label": "SpotLight9",
+      "location": [
+        591.541,
+        699.78,
+        149.503
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

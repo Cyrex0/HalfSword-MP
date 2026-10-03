@@ -1,0 +1,252 @@
+# Configuration
+
+`hsmp-server` is configured with command-line flags and a few environment variables. There is no
+config file for the server itself; the Windows helper script has one (see
+[`dedicated-server.conf`](#dedicated-serverconf-run-dedicated-serverps1)). `hsmp-server --help`
+prints the same list as the table below.
+
+## hsmp-server flags
+
+| Flag | Default | Environment fallback | What it does |
+|---|---|---|---|
+| `--bind <ip:port>` | `0.0.0.0:7777` | | UDP address for players and browser queries. Use `[::]:7777` for IPv6. The port is also what the server advertises to the master. |
+| `--max-peers <n>` | `8` | | Most players at once. Further joins are refused. |
+| `--name <text>` | `Half Sword MP` | `HSMP_SERVER_NAME` | Server name in the browser and on the master. Control characters are removed; cut to 48 characters. |
+| `--mode <text>` | `duel` | `HSMP_SERVER_MODE` | Mode **label** in the browser (cut to 32 characters). It does not change the rules: every match is duel-style rounds. A label starting with "Best of" is rewritten to the live best-of value. |
+| `--map <arena>` | empty | `HSMP_LOBBY_MAP` | Starting arena, also advertised so joiners load the same arena, for example `Map_Arena_Pit`. Arenas: `Map_Arena_Alley`, `Map_Arena_Pit`, `Map_Arena_Yard`, `Map_Arena_Slums`, `Map_Arena_Cellar`, `Map_Arena_LordsHall`, `Map_Arena_EastTower`. Empty or unknown means Alley. |
+| `--region <tag>` | empty | `HSMP_REGION` | Region tag in the browser, for example `EU` or `NA-East` (cut to 16 characters). |
+| `--bans-file <path>` | `bans.txt` | | Persistent ban list. A relative path is relative to the **working directory**. See [Ban list](#ban-list). |
+| `--key-file <path>` | see [identity key](#server-identity-key) | `HSMP_STATE_DIR` (folder) | Server identity key. Created on first run. |
+| `--admin-key <64 hex>` | none | | Dedicated server: a player key (`hsmp-sidecar --print-player-key`) that is admin. Repeatable or comma-separated. See [Admins](dedicated-server.md#admins). |
+| `--admins-file <path>` | off | | Dedicated server: admin player keys, one per line (`#` comments). Re-read when it changes; RCON `ADMIN ADD` appends to it. |
+| `--owner-key <64 hex>` | off | | Listen server: the host's player key; that player is the owner (admin) whenever connected. |
+| `--owner-key-file <path>` | off | | Listen server: a file holding the host's player key (the in-game HOST menu passes `<state>/.player_key`). |
+| `--rcon-bind <ip:port>` | off | | Turns RCON on. Must be an IP address and port, for example `127.0.0.1:2345` (not a host name). See [RCON](rcon.md). |
+| `--rcon-password <text>` | none | `HSMP_RCON_PASSWORD` | RCON password; required with `--rcon-bind`. Must not be blank or start or end with whitespace. Prefer the environment variable: command lines are visible to other local users. |
+| `--rcon-allow-remote` | off | `HSMP_RCON_ALLOW_REMOTE` | Accept a non-loopback `--rcon-bind`. Requires a password of at least 16 characters. Needed in Docker (see [RCON](rcon.md#docker)); otherwise use an SSH tunnel. |
+| `--client-budget-kbps <n>` | `128` | | Downstream budget per player for replicated streams, in KB/s. Streams are thinned by distance to fit. 128 KB/s fits 8 players; raise it only on a well-connected host with more players. |
+| `--tick-hz <n>` | `30` | | Server tick rate. **Leave it at 30.** Many game timers are counted in ticks and assume 30 Hz, so another value changes timeouts and countdowns, and `0` breaks the server. |
+| `--content-hash <64 hex>` | off | | Reserved: rejects clients whose content differs. Nothing computes the hash yet; leave it unset. |
+| `--debug-verbs` | off | | Enables the RCON test verb `DEBUG KILL <seat>`. **Never on a public server.** |
+| `--events <path>` | off | | Appends structured JSONL match events to a file (used by the test tools). |
+| `--pid-file <path>` | off | | Writes a small JSON file with the process id at start and removes it on a clean exit. |
+| `--parent-pid <pid>` | off | | Exit when that process exits (used when hosting from the game). |
+| `-V`, `--version` | | | Print the version. |
+
+How the environment fallbacks work: `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSMP_LOBBY_MAP` and
+`HSMP_REGION` are used only when the matching flag is absent (or given with its default value). A
+flag with any other value wins. `HSMP_RCON_PASSWORD` is used only when `--rcon-password` is absent.
+
+### Environment variables
+
+| Variable | Default | What it does |
+|---|---|---|
+| `HSMP_STATE_DIR` | unset | Folder for the identity key (`server_identity.key`). Set it on every server you run as a service. The Docker image sets `/hsmp/data`. |
+| `HSMP_MASTER_URL` | unset | Register with this master server, for example `http://203.0.113.5:7778`. Unset means the server is not listed anywhere. See [Master server](master-server.md). |
+| `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSMP_LOBBY_MAP`, `HSMP_REGION` | unset | Fallbacks for `--name`, `--mode`, `--map`, `--region` (see above). |
+| `HSMP_RCON_PASSWORD` | unset | RCON password (fallback for `--rcon-password`). |
+| `HSMP_RCON_ALLOW_REMOTE` | unset | `1`, `true`, `yes` or `on` act like `--rcon-allow-remote`; `0`, `false`, `no` or `off` leave it off. Leave it unset unless you need it. |
+| `HSMP_KIT_MODE` | `free` | Initial kit rules: `free` (`0`), `classes` (`1`) or `custom` (`2`). Anything else means `free`. Can be changed in the lobby (RCON `KIT`). |
+| `HSMP_KIT_BUDGET` | `30` | Initial point budget for `custom` kits, 1 to 200. |
+| `HSMP_PERF` | unset | `1` logs performance counters (tick time, packet rates, bandwidth drops) every 5 seconds. |
+| `HSMP_LISTEN_HOST` | unset | Set to `1` by HOST GAME in the menu: the server closes when the hosting player leaves. Do not set it on a dedicated server. |
+| `RUST_LOG` | `hsmp_server=info` | Log filter, for example `hsmp_server=debug` or `hsmp_server=warn`. For the master the default is `hsmp_master=info`. |
+| `NO_COLOR` | unset | Any non-empty value turns off colour codes in the log. Useful for log files and journald. |
+
+### Examples
+
+A public duel server in Europe, listed on your own master:
+
+```bash
+HSMP_STATE_DIR=/var/lib/hsmp \
+HSMP_MASTER_URL=http://203.0.113.5:7778 \
+hsmp-server --bind 0.0.0.0:7777 --name "EU Duels" --region EU --map Map_Arena_Pit \
+  --bans-file /var/lib/hsmp/bans.txt
+```
+
+Two servers on one host need different ports, ban files and identity keys:
+
+```bash
+HSMP_STATE_DIR=/var/lib/hsmp/a hsmp-server --bind 0.0.0.0:7777 --bans-file /var/lib/hsmp/a/bans.txt --name "Server A"
+HSMP_STATE_DIR=/var/lib/hsmp/b hsmp-server --bind 0.0.0.0:7779 --bans-file /var/lib/hsmp/b/bans.txt --name "Server B"
+```
+
+LAN discovery only finds servers on ports 7777 to 7786, so keep LAN servers in that range (and away
+from 7778 if a master runs on the same machine, which is why the example skips it).
+
+## Server identity key
+
+Each server has a long-term identity: an X25519 key pair. The private key is a 32-byte file,
+`server_identity.key`. Players' clients remember the public half the first time they connect to an
+address ("trust on first use", stored in their `%LOCALAPPDATA%\HSMP\known_servers.json`). Within
+one session the key is pinned: a reconnect to a server with another key fails. If the key changes
+between visits, the server looks like a **different server** at the same address, and the
+player's log shows `SERVER IDENTITY CHANGED since the last visit`. So:
+
+- **Keep the key** across restarts, updates and reinstalls.
+- **Back it up**, and copy it along when you move the server to a new machine.
+- **Keep it private.** Whoever has it can impersonate your server. On Linux, `chmod 600` it and make
+  it owned by the user the server runs as.
+
+Where the key lives:
+
+1. `--key-file <path>` if given.
+2. Else `$HSMP_STATE_DIR/server_identity.key` if `HSMP_STATE_DIR` is set.
+3. Else `%LOCALAPPDATA%\HSMP\server_identity.key` (Windows; for a service running as LocalSystem that
+   is the system profile, which is why `install-service.ps1` sets `HSMP_STATE_DIR`).
+4. Else `server_identity.key` in the working directory (Linux without `HSMP_STATE_DIR`).
+
+The server creates the key (and its folder) on the first start. If the file exists but is not exactly
+32 bytes, the server logs a warning and **replaces it with a new key**, so never edit it.
+
+At every start the server logs its identity, for example (timestamp left out):
+
+```
+INFO hsmp_server: server identity key_file=/var/lib/hsmp/server_identity.key server_key=<64 hex> fingerprint=<short id> proto=v6..=v6
+```
+
+Note the fingerprint: after a restore it must be the same.
+
+Backup and restore:
+
+```bash
+# Linux
+sudo cp -p /var/lib/hsmp/server_identity.key /root/hsmp-identity-backup.key
+sudo systemctl stop hsmp-server
+sudo install -o hsmp -g hsmp -m 600 /root/hsmp-identity-backup.key /var/lib/hsmp/server_identity.key
+sudo systemctl start hsmp-server
+```
+
+```powershell
+# Windows service (StateDir default)
+Copy-Item "$env:ProgramData\HSMP\server\server_identity.key" "D:\Backup\hsmp-identity.key"
+```
+
+For Docker, see [Docker](docker.md#backup-and-restore).
+
+## Ban list
+
+`--bans-file` (default `bans.txt` in the working directory) holds banned IP addresses, one per line.
+`#` starts a comment and blank lines are ignored. IPv4 and IPv6 addresses are accepted; invalid lines
+are skipped with a warning.
+
+- The file is read once, at startup. A missing file means an empty list.
+- It is rewritten (atomically) on every ban or unban, whether from RCON or the in-game admin. A
+  rewrite keeps only a header line and the addresses, so your own comments are lost.
+- A ban covers one exact IP address. It is permanent until you remove it.
+- To unban while the server runs, use RCON `UNBAN <ip>`. To edit the file by hand, stop the server
+  first, edit, then start it (otherwise the next ban overwrites your edit).
+
+```
+# hsmp-server banlist — one IP per line
+198.51.100.9
+2001:db8::5
+```
+
+The ban list is personal data (IP addresses); see [Logs and privacy](dedicated-server.md#logs-and-privacy).
+
+## Admin list
+
+`--admins-file <path>` holds the player keys of a dedicated server's admins, one 64-hex key per
+line. `#` starts a comment; blank lines are ignored. A player prints their key with
+`hsmp-sidecar --print-player-key` (see [Admins](dedicated-server.md#admins)).
+
+- A missing file means no admins from the file. The server starts anyway.
+- The file is checked again before every join and re-read when it changed, so you can edit it
+  while the server runs.
+- RCON `ADMIN ADD` appends a key to it. `ADMIN REMOVE` takes a key out of it.
+- `--admin-key` adds keys on the command line; both sources count.
+
+```
+# HSMP admins
+# Alice
+<64-hex player key>
+```
+
+## hsmp-master flags
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--bind <ip:port>` | `0.0.0.0:7778` | HTTP address of the master. |
+| `--pid-file <path>` | off | Writes a small JSON file with the process id once the port is bound; removed on a clean exit. |
+| `--parent-pid <pid>` | off | Exit when that process exits (used when hosting from the game). |
+
+The master keeps everything in memory and has no other settings. `RUST_LOG` defaults to
+`hsmp_master=info`. See [Master server](master-server.md).
+
+## Windows helper scripts
+
+### dedicated-server.conf (`run-dedicated-server.ps1`)
+
+`scripts\run-dedicated-server.ps1` starts `hsmp-server.exe` (and optionally `hsmp-master.exe`) from
+a small `key = value` file.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `-Config <path>` | `dedicated-server.conf` in the repository root, or in `-BinDir` when given | Config file. Written with defaults on first run. |
+| `-BinDir <folder>` | `$env:CARGO_TARGET_DIR\release`, else `<repo>\target\release` | Folder with `hsmp-server.exe` (and `hsmp-master.exe`), for example the `hsmp\` folder of a release. |
+| `-WithMaster` | off | Also start `hsmp-master.exe` on `master_bind` and register the server with it. |
+| `-DebugLog` | off | `RUST_LOG=debug` for the server and master. |
+
+Config keys and their defaults:
+
+| Key | Default | Passed as |
+|---|---|---|
+| `bind` | `0.0.0.0:7777` | `--bind` |
+| `tick_hz` | `30` | `--tick-hz` (leave at 30) |
+| `max_peers` | `8` | `--max-peers` |
+| `name` | `HSMP Dedicated` | `--name` (write it without quotes: the value is everything after `=`, trimmed) |
+| `mode` | `duel` | `--mode` |
+| `master_url` | empty | `HSMP_MASTER_URL` (ignored with `-WithMaster`, which uses the local master) |
+| `master_bind` | `0.0.0.0:7778` | `hsmp-master --bind` (only with `-WithMaster`) |
+| `bans_file` | `bans.txt` | `--bans-file` (a relative path is next to the config file) |
+
+Lines starting with `#` are comments. The script knows only these keys: it does not pass
+`--admins-file`, `--admin-key`, `--map`, `--region` or any RCON flag. For those, run
+`hsmp-server.exe` directly (see [Running a dedicated server](dedicated-server.md#step-2a-windows)).
+The script also does not set
+`HSMP_STATE_DIR`, so the identity key goes to
+`%LOCALAPPDATA%\HSMP\`. A master started with `-WithMaster` lists the server as `127.0.0.1` (see
+[Master server](master-server.md#a-master-on-the-same-machine)), so it is only useful on that machine
+or for testing.
+
+
+### Windows service (`install-service.ps1`)
+
+`scripts\install-service.ps1` installs `hsmp-server.exe` as a Windows service with
+[NSSM](https://nssm.cc). Run it in an **administrator** PowerShell. NSSM must be on `PATH`; if it is
+not and Chocolatey is installed, the script installs NSSM with `choco install nssm`.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `-BinDir <folder>` | `$env:CARGO_TARGET_DIR\release`, else `<repo>\target\release` | Folder with `hsmp-server.exe`. |
+| `-StateDir <folder>` | `%ProgramData%\HSMP\server` | Identity key, `bans.txt` and `logs\`. Set as `HSMP_STATE_DIR`. |
+| `-Bind <ip:port>` | `0.0.0.0:7777` | `--bind` |
+| `-Name <text>` | `HSMP Dedicated` | `--name` |
+| `-ServiceName <name>` | `HsmpDedicatedServer` | Windows service name. |
+| `-Uninstall` | | Stop and remove the service. The state folder is kept. |
+
+```powershell
+.\scripts\install-service.ps1 -BinDir C:\HSMP\server
+nssm status HsmpDedicatedServer
+nssm restart HsmpDedicatedServer
+.\scripts\install-service.ps1 -Uninstall
+```
+
+The service runs as LocalSystem, starts at boot, uses `--max-peers 8` and
+`--bans-file <StateDir>\bans.txt`, and writes `logs\hsmp-server.stdout.log` and
+`hsmp-server.stderr.log` under the state folder, rotated at 10 MB. Rotated files are kept until you
+delete them. The script does **not** add a firewall rule (see [Ports and firewall](ports-and-firewall.md#windows-firewall))
+and does not turn on RCON or name any admin.
+
+To change flags or environment variables afterwards, use NSSM. This example adds an admin list and
+RCON. `AppEnvironmentExtra` replaces the whole list, so always repeat `HSMP_STATE_DIR`:
+
+```powershell
+nssm set HsmpDedicatedServer AppParameters --bind 0.0.0.0:7777 --name MyServer --max-peers 8 --bans-file C:\ProgramData\HSMP\server\bans.txt --admins-file C:\ProgramData\HSMP\server\admins.txt --rcon-bind 127.0.0.1:2345
+nssm set HsmpDedicatedServer AppEnvironmentExtra HSMP_STATE_DIR=C:\ProgramData\HSMP\server HSMP_RCON_PASSWORD=<a long random password> NO_COLOR=1
+nssm restart HsmpDedicatedServer
+```
+
+NSSM stores these settings in the registry, readable by administrators. `nssm edit HsmpDedicatedServer`
+opens the same settings in a window.

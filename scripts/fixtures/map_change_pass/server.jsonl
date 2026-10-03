@@ -1,0 +1,10 @@
+{"v":1,"ev":"cmd_result","inst":"server","seq":1,"t_ms":2140,"wall_ms":1790880002140,"player":"HSMP1","seat":1,"peer_id":1,"source":"command","cmd":"pick_arena","cmd_id":1790880001,"ok":true,"reason":null,"code":"OK","config_rev":3}
+{"v":1,"ev":"cmd_result","inst":"server","seq":2,"t_ms":3140,"wall_ms":1790880003140,"player":"HSMP1","seat":1,"peer_id":1,"source":"command","cmd":"pick_arena","cmd_id":1790880002,"ok":true,"reason":null,"code":"OK","config_rev":3}
+{"v":1,"ev":"cmd_result","inst":"server","seq":3,"t_ms":4140,"wall_ms":1790880004140,"player":"HSMP1","seat":1,"peer_id":1,"source":"command","cmd":"pick_arena","cmd_id":1790880003,"ok":true,"reason":null,"code":"OK","config_rev":3}
+{"v":1,"ev":"arena_picked","inst":"server","seq":5,"t_ms":5100,"wall_ms":1790880005100,"arena":"Map_Arena_Cellar","by":"rcon"}
+{"v":1,"ev":"cmd_result","inst":"server","seq":4,"t_ms":5140,"wall_ms":1790880005140,"player":"HSMP1","seat":1,"peer_id":1,"source":"command","cmd":"start","cmd_id":1790880004,"ok":true,"reason":null,"code":"OK","config_rev":3}
+{"v":1,"ev":"phase","inst":"server","seq":6,"t_ms":5300,"wall_ms":1790880005300,"from":"Lobby","to":"Loading","match_id":1,"round":1,"arena":"Map_Arena_Cellar","frozen_arena":"Map_Arena_Cellar","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":7,"t_ms":11000,"wall_ms":1790880011000,"from":"Loading","to":"Countdown","match_id":1,"round":1,"arena":"Map_Arena_Cellar","frozen_arena":"Map_Arena_Cellar","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":8,"t_ms":14000,"wall_ms":1790880014000,"from":"Countdown","to":"Live","match_id":1,"round":1,"arena":"Map_Arena_Cellar","frozen_arena":"Map_Arena_Cellar","epoch":1}
+{"v":1,"ev":"debug_kill","inst":"server","seq":9,"t_ms":24510,"wall_ms":1790880024510,"seat":1,"ok":true,"detail":"killed"}
+{"v":1,"ev":"phase","inst":"server","seq":10,"t_ms":25000,"wall_ms":1790880025000,"from":"Live","to":"RoundOver","match_id":1,"round":1,"arena":"Map_Arena_Cellar","frozen_arena":"Map_Arena_Cellar","epoch":1}

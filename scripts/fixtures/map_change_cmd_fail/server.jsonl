@@ -1,0 +1,2 @@
+{"v":1,"ev":"cmd_result","inst":"server","seq":1,"t_ms":22120,"wall_ms":1790880022120,"player":"HSMP1","seat":1,"peer_id":1,"source":"command","cmd":"pick_arena","cmd_id":1790880001,"ok":true,"reason":null,"code":"OK","config_rev":3}
+{"v":1,"ev":"cmd_result","inst":"server","seq":2,"t_ms":22500,"wall_ms":1790880022500,"player":"HSMP1","seat":1,"peer_id":1,"source":"command","cmd":"pick_arena","cmd_id":1790880001,"ok":true,"reason":null,"code":"OK","config_rev":4}

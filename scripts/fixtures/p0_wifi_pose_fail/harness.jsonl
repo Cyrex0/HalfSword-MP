@@ -1,0 +1,16 @@
+{"ev":"rcon","wall_ms":1790880002000,"cmd":"MAP Alley","ok":true,"reply":"OK","pick":"Alley"}
+{"ev":"mark","wall_ms":1790880002050,"name":"start","arena":"Alley"}
+{"ev":"rcon","wall_ms":1790880002060,"cmd":"START","ok":true,"reply":"OK"}
+{"ev":"rcon","wall_ms":1790880021500,"cmd":"DEBUG KILL 1","ok":true,"reply":"OK killed"}
+{"ev":"mark","wall_ms":1790880022100,"name":"round_end","round":1}
+{"ev":"rcon","wall_ms":1790880044500,"cmd":"DEBUG KILL 2","ok":true,"reply":"OK killed"}
+{"ev":"mark","wall_ms":1790880045100,"name":"round_end","round":2}
+{"ev":"rcon","wall_ms":1790880048000,"cmd":"ABORT","ok":true,"reply":"OK"}
+{"ev":"rcon","wall_ms":1790880053000,"cmd":"MAP Pit","ok":true,"reply":"OK","pick":"Pit"}
+{"ev":"mark","wall_ms":1790880053050,"name":"start","arena":"Pit"}
+{"ev":"rcon","wall_ms":1790880053060,"cmd":"START","ok":true,"reply":"OK"}
+{"ev":"rcon","wall_ms":1790880072500,"cmd":"DEBUG KILL 1","ok":true,"reply":"OK killed"}
+{"ev":"mark","wall_ms":1790880073100,"name":"round_end","round":1}
+{"ev":"rcon","wall_ms":1790880095500,"cmd":"DEBUG KILL 2","ok":true,"reply":"OK killed"}
+{"ev":"mark","wall_ms":1790880096100,"name":"round_end","round":2}
+{"ev":"rcon","wall_ms":1790880099000,"cmd":"ABORT","ok":true,"reply":"OK"}

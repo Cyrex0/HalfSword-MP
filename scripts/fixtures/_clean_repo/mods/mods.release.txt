@@ -1,0 +1,6 @@
+# fixture release template (hsmp-gate make-fixtures)
+HSMPMatch : 1
+HSMPWorld : 1
+HSMPDiag : dev
+HSMPLobby : 0
+Keybinds : dev

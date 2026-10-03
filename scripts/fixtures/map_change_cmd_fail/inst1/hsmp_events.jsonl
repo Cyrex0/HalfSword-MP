@@ -1,0 +1,9 @@
+{"v":1,"ev":"frame_hb","inst":"1","mod":"HSMPMatch","seq":3,"t_ms":5000,"wall_ms":1790880000000,"n":1,"max_ms":43}
+{"v":1,"ev":"lobby_ready","inst":"1","mod":"HSMPMenu","seq":1,"t_ms":5200,"wall_ms":1790880000200,"epoch":1,"peer_id":1,"notice":null,"role":"host","arena":""}
+{"v":1,"ev":"x_save_guard","inst":"1","mod":"HSMPMatch","seq":2,"t_ms":5250,"wall_ms":1790880000250,"active":true,"why":"session","session":1}
+{"v":1,"ev":"cmd_sent","inst":"1","mod":"HSMPMenu","seq":4,"t_ms":7000,"wall_ms":1790880002000,"cmd":"pick_arena","cmd_id":1790881111,"arg":"Map_Arena_Yard","backend":"legacy","via":"autotest"}
+{"v":1,"ev":"frame_hb","inst":"1","mod":"HSMPMatch","seq":8,"t_ms":15000,"wall_ms":1790880010000,"n":2,"max_ms":46}
+{"v":1,"ev":"cmd_result","inst":"1","mod":"HSMPMenu","seq":5,"t_ms":25000,"wall_ms":1790880020000,"cmd":"pick_arena","cmd_id":1790881111,"ok":false,"reason":"no answer from the server","state":"refused","source":"timeout","ms":18000,"tries":6}
+{"v":1,"ev":"frame_hb","inst":"1","mod":"HSMPMatch","seq":9,"t_ms":25000,"wall_ms":1790880020000,"n":3,"max_ms":49}
+{"v":1,"ev":"cmd_sent","inst":"1","mod":"HSMPMenu","seq":6,"t_ms":27000,"wall_ms":1790880022000,"cmd":"pick_arena","cmd_id":1790880001,"arg":"Map_Arena_Slums","backend":"legacy","via":"autotest"}
+{"v":1,"ev":"cmd_result","inst":"1","mod":"HSMPMenu","seq":7,"t_ms":27300,"wall_ms":1790880022300,"cmd":"pick_arena","cmd_id":1790880001,"ok":true,"reason":null,"state":"accepted","source":"server","ms":300,"tries":1}

@@ -1,0 +1,207 @@
+{
+ "schema": "hsmp-mapdata/1",
+ "map": "Map_Arena_LordsHall",
+ "label": "Lord's Hall",
+ "source": "docs/arena_static/Map_Arena_LordsHall.json",
+ "centre": [
+  -800.6,
+  1149.9,
+  5.0
+ ],
+ "bounds": {
+  "min": [
+   -1633.2,
+   50.0,
+   -0.0
+  ],
+  "max": [
+   -10.9,
+   2790.4,
+   449.0
+  ]
+ },
+ "kill_z": -1495.0,
+ "spawns": [
+  {
+   "id": "sp0",
+   "pos": [
+    -796.1,
+    233.1,
+    5.0
+   ],
+   "yaw": 90.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp1",
+   "pos": [
+    -796.1,
+    2047.5,
+    5.0
+   ],
+   "yaw": -90.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp2",
+   "pos": [
+    -401.3,
+    1562.6,
+    5.0
+   ],
+   "yaw": 180.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp3",
+   "pos": [
+    -1204.5,
+    1572.2,
+    5.0
+   ],
+   "yaw": 0.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp4",
+   "pos": [
+    -401.3,
+    742.2,
+    5.0
+   ],
+   "yaw": 180.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp5",
+   "pos": [
+    -1204.5,
+    741.8,
+    5.0
+   ],
+   "yaw": 0.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  }
+ ],
+ "overflow": [
+  {
+   "id": "mid(sp0,sp4)",
+   "pos": [
+    -598.7,
+    487.7,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp0,sp5)",
+   "pos": [
+    -1000.3,
+    487.4,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp1,sp2)",
+   "pos": [
+    -598.7,
+    1805.0,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp1,sp3)",
+   "pos": [
+    -1000.3,
+    1809.8,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp2,sp3)",
+   "pos": [
+    -802.9,
+    1567.4,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp2,sp4)",
+   "pos": [
+    -401.3,
+    1152.4,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp3,sp5)",
+   "pos": [
+    -1204.5,
+    1157.0,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp4,sp5)",
+   "pos": [
+    -802.9,
+    742.0,
+    5.0
+   ]
+  }
+ ],
+ "max_players": 8
+}

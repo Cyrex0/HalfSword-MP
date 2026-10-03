@@ -1,0 +1,9 @@
+{
+  "verdict": "pass",
+  "rules": {
+    "DoD-8": "pass"
+  },
+  "messages": [
+    "pre-session native write by inst 2 (SaveGameToSlot with its guard off"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-11": "pass",
+    "DoD-12": "fail",
+    "CRASH": "pass"
+  },
+  "messages": [
+    "no scenario step ended them): game2"
+  ]
+}

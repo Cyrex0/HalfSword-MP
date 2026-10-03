@@ -1,0 +1,10 @@
+[package]
+name = "hsmp_lua_e"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+hsmp_core_stub = { path = "../hsmp_core_stub" }

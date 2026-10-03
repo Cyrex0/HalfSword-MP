@@ -1,0 +1,12 @@
+{
+  "verdict": "pass",
+  "rules": {
+    "DoD-11": "pass",
+    "DoD-12": "pass",
+    "CRASH": "pass",
+    "NETSIM": "pass"
+  },
+  "messages": [
+    "ended on purpose by a scenario step: [\"server\"]"
+  ]
+}

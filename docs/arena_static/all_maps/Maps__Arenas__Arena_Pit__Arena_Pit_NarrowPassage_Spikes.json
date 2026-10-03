@@ -1,0 +1,590 @@
+{
+  "map": "Arena_Pit_NarrowPassage_Spikes",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "BP_Weapon_Trap2_C_0",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        -113.012,
+        533.475,
+        -11.022
+      ],
+      "rotation": {
+        "pitch": 0.528,
+        "yaw": -155.005,
+        "roll": -1.133
+      },
+      "scale": [
+        1.05,
+        1.05,
+        1.05
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap2",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_1",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        182.99,
+        530.378,
+        -10.155
+      ],
+      "rotation": {
+        "pitch": -0.559,
+        "yaw": 178.469,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap3",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_10",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        492.379,
+        -266.314,
+        -7.84
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 72.027,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap33",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_11",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        -541.15,
+        -200.725,
+        -15.805
+      ],
+      "rotation": {
+        "pitch": 0.965,
+        "yaw": -63.675,
+        "roll": -0.351
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap34",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_2",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        123.798,
+        -603.253,
+        -8.149
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 35.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.01,
+        1.01,
+        1.01
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap4",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_3",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        -170.176,
+        -568.669,
+        -8.149
+      ],
+      "rotation": {
+        "pitch": -0.881,
+        "yaw": -9.989,
+        "roll": -0.73
+      },
+      "scale": [
+        0.9,
+        0.9,
+        0.9
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap5",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_4",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        444.149,
+        297.521,
+        -5.411
+      ],
+      "rotation": {
+        "pitch": 0.544,
+        "yaw": 134.997,
+        "roll": -0.545
+      },
+      "scale": [
+        1.01,
+        1.01,
+        1.01
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap6",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_5",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        -391.614,
+        -491.699,
+        -14.114
+      ],
+      "rotation": {
+        "pitch": 0.965,
+        "yaw": -20.003,
+        "roll": -0.351
+      },
+      "scale": [
+        1.03,
+        1.03,
+        1.03
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap7",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_6",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        365.162,
+        -471.267,
+        -7.84
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 60.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.03,
+        1.03,
+        1.03
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap8",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_7",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        -413.764,
+        370.802,
+        -8.149
+      ],
+      "rotation": {
+        "pitch": -1.851,
+        "yaw": -120.017,
+        "roll": 1.069
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap30",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_8",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        -563.488,
+        42.797,
+        -15.919
+      ],
+      "rotation": {
+        "pitch": 0.807,
+        "yaw": -74.533,
+        "roll": -2.464
+      },
+      "scale": [
+        1.02,
+        1.02,
+        1.02
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap31",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_9",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        535.011,
+        6.976,
+        -8.149
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 103.463,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap32",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    }
+  ],
+  "spawners": [],
+  "other_actors": [],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

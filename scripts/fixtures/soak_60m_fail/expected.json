@@ -1,0 +1,21 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-2": "fail",
+    "SOAK-CRASH": "fail",
+    "SOAK-MEM": "fail",
+    "SOAK-LUAERR": "fail",
+    "SOAK-HITCH": "fail"
+  },
+  "messages": [
+    "1 new dump(s) (max 0): PAK_ASYNC_READ_OOB [IoDispatcher]",
+    "game2 was dead before quit_all",
+    "game1: private bytes slope +200.0 MB/h",
+    "growth +500 MB",
+    "game1: handle slope +1000/h",
+    "sidecar1: private bytes slope +40.0 MB/h",
+    "attempt to index a nil value",
+    "UE4SS.log Lua errors: 2",
+    "> 2000 ms outside travel: 1"
+  ]
+}

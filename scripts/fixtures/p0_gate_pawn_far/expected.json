@@ -1,0 +1,11 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "PAWN-1": "fail",
+    "WORLD-1": "pass",
+    "COMBAT-1": "pass"
+  },
+  "messages": [
+    "dist_cm=140 (> 100 from the placement)"
+  ]
+}

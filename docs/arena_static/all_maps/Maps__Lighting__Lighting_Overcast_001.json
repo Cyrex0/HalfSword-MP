@@ -1,0 +1,117 @@
+{
+  "map": "Lighting_Overcast_001",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Lighting_Overcast_001.umap",
+  "kind": "persistent_or_standalone",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Lighting_Overcast_001.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_0",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Overcast_001.umap",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        15000.0,
+        15000.0,
+        15000.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_SkySphere",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'Engine/Content/EngineSky/SM_SkySphere.SM_SkySphere'",
+      "instance_properties": {
+        "bEnableAutoLODGeneration": false
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Overcast_001.umap",
+      "label": "DirectionalLight",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Overcast_001.umap",
+      "label": "PostProcessVolume",
+      "location": [
+        -380.0,
+        3000.0,
+        580.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_1",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Overcast_001.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        -1280.0,
+        250.0,
+        160.0
+      ]
+    },
+    {
+      "name": "SkyLight_0",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Lighting_Overcast_001.umap",
+      "label": "SkyLight",
+      "location": [
+        -320.0,
+        150.0,
+        110.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 1,
+  "errors": [],
+  "warnings": []
+}

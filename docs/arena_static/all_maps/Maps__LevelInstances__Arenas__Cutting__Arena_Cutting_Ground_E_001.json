@@ -1,0 +1,37 @@
+{
+  "map": "Arena_Cutting_Ground_E_001",
+  "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_E_001.umap",
+  "kind": "level_instance",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_E_001.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [],
+  "static_mesh_actors_static_count": 248,
+  "errors": [],
+  "warnings": []
+}

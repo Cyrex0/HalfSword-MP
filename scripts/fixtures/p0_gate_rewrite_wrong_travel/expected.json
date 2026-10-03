@@ -1,0 +1,9 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-3": "fail"
+  },
+  "messages": [
+    "native_travel_rewritten Map_Menu_Startup->Map_Arena_Pit (in place): has NO world_ready in (or a travel to) the rewritten arena"
+  ]
+}

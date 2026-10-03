@@ -1,0 +1,235 @@
+{
+ "schema": "hsmp-mapdata/1",
+ "map": "Map_Arena_Cellar",
+ "label": "Cellar",
+ "source": "docs/arena_static/Map_Arena_Cellar.json",
+ "centre": [
+  712.0,
+  714.0,
+  13.0
+ ],
+ "bounds": {
+  "min": [
+   -88.7,
+   -85.2,
+   0.0
+  ],
+  "max": [
+   1987.6,
+   1467.2,
+   360.0
+  ]
+ },
+ "kill_z": -1487.0,
+ "spawns": [
+  {
+   "id": "sp0",
+   "pos": [
+    1009.9,
+    708.0,
+    13.0
+   ],
+   "yaw": 180.0,
+   "team": 1,
+   "game_modes": [
+    "Errand",
+    "Training",
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp1",
+   "pos": [
+    432.8,
+    708.0,
+    13.0
+   ],
+   "yaw": 0.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp2",
+   "pos": [
+    722.0,
+    1001.0,
+    13.0
+   ],
+   "yaw": -90.0,
+   "team": 1,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp3",
+   "pos": [
+    722.0,
+    442.1,
+    13.0
+   ],
+   "yaw": 90.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp4",
+   "pos": [
+    481.6,
+    958.0,
+    13.0
+   ],
+   "yaw": -40.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": true,
+   "why": "mp: arena-floor spawner (native play-mode flags off)"
+  },
+  {
+   "id": "sp5",
+   "pos": [
+    459.6,
+    477.1,
+    13.0
+   ],
+   "yaw": 50.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": true,
+   "why": "mp: arena-floor spawner (native play-mode flags off)"
+  },
+  {
+   "id": "sp6",
+   "pos": [
+    1676.7,
+    396.2,
+    13.0
+   ],
+   "yaw": 140.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp7",
+   "pos": [
+    923.1,
+    927.4,
+    13.0
+   ],
+   "yaw": -130.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": true,
+   "why": "mp: arena-floor spawner (native play-mode flags off)"
+  },
+  {
+   "id": "sp8",
+   "pos": [
+    944.7,
+    490.2,
+    13.0
+   ],
+   "yaw": 140.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": true,
+   "why": "mp: arena-floor spawner (native play-mode flags off)"
+  },
+  {
+   "id": "sp9",
+   "pos": [
+    1739.7,
+    1078.2,
+    13.0
+   ],
+   "yaw": -140.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp10",
+   "pos": [
+    1853.7,
+    713.2,
+    13.0
+   ],
+   "yaw": 175.0,
+   "team": 2,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  }
+ ],
+ "overflow": [
+  {
+   "id": "mid(sp0,sp1)",
+   "pos": [
+    721.4,
+    708.0,
+    13.0
+   ]
+  },
+  {
+   "id": "mid(sp1,sp3)",
+   "pos": [
+    577.4,
+    575.0,
+    13.0
+   ]
+  }
+ ],
+ "max_players": 4
+}

@@ -1,0 +1,12 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "NETSIM": "fail",
+    "DoD-1": "pass"
+  },
+  "messages": [
+    "the proxy carried no game traffic (in +0, out +0, clients max 0",
+    "proxy ran typical",
+    "growing across 2 round(s)"
+  ]
+}

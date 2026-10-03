@@ -1,0 +1,2457 @@
+{
+  "map": "Map_Arena_Alley_Details",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_200",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -341.885,
+        210.063,
+        232.534
+      ],
+      "rotation": {
+        "pitch": -60.0,
+        "yaw": -90.0,
+        "roll": 90.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_201",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -403.904,
+        200.1,
+        215.276
+      ],
+      "rotation": {
+        "pitch": -58.543,
+        "yaw": -109.311,
+        "roll": 106.642
+      },
+      "scale": [
+        0.876,
+        1.0,
+        0.876
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_202",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -274.836,
+        200.218,
+        225.932
+      ],
+      "rotation": {
+        "pitch": -59.224,
+        "yaw": -49.818,
+        "roll": 82.529
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_203",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -2528.0,
+        329.328,
+        29.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -5.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_4",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_204",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -2671.025,
+        300.595,
+        29.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 19.303,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_5",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_205",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -2692.218,
+        280.894,
+        91.435
+      ],
+      "rotation": {
+        "pitch": 40.548,
+        "yaw": 72.6,
+        "roll": 28.737
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_6",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_266",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -2633.786,
+        297.041,
+        89.169
+      ],
+      "rotation": {
+        "pitch": 34.867,
+        "yaw": 89.627,
+        "roll": 53.308
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_7",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_267",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -2558.676,
+        306.912,
+        86.755
+      ],
+      "rotation": {
+        "pitch": 28.146,
+        "yaw": 90.737,
+        "roll": -106.966
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_8",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_268",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -2482.587,
+        309.598,
+        84.469
+      ],
+      "rotation": {
+        "pitch": 37.06,
+        "yaw": 103.086,
+        "roll": 6.772
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_9",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_269",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -2753.015,
+        350.352,
+        32.953
+      ],
+      "rotation": {
+        "pitch": 5.495,
+        "yaw": -5.142,
+        "roll": -0.464
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_10",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_270",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -2834.497,
+        307.814,
+        89.307
+      ],
+      "rotation": {
+        "pitch": 63.378,
+        "yaw": 128.545,
+        "roll": 117.725
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Hay_Bundle_A_11",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Hay/Meshes/SM_Prop_Hay_Bundle_A_001.SM_Prop_Hay_Bundle_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_7",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -1937.652,
+        307.471,
+        29.858
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 90.0,
+        "roll": 5.0
+      },
+      "scale": [
+        2.591,
+        2.591,
+        2.591
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Firewood_StickBundle_A_7",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Firewood/Meshes/SM_Prop_Firewood_StickBundle_A_001.SM_Prop_Firewood_StickBundle_A_001'",
+      "instance_properties": {}
+    },
+    {
+      "name": "StaticMeshActor_8",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "location": [
+        -1937.652,
+        315.379,
+        46.466
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -90.0,
+        "roll": -10.0
+      },
+      "scale": [
+        2.591,
+        2.591,
+        2.591
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Firewood_StickBundle_A_8",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Firewood/Meshes/SM_Prop_Firewood_StickBundle_A_001.SM_Prop_Firewood_StickBundle_A_001'",
+      "instance_properties": {}
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "DecalActor_0",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K",
+      "location": [
+        988.985,
+        78.088,
+        305.876
+      ]
+    },
+    {
+      "name": "DecalActor_1",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K2",
+      "location": [
+        707.642,
+        -321.97,
+        620.556
+      ]
+    },
+    {
+      "name": "DecalActor_10",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K8",
+      "location": [
+        -2293.224,
+        365.11,
+        309.977
+      ]
+    },
+    {
+      "name": "DecalActor_100",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K26",
+      "location": [
+        1102.387,
+        365.202,
+        1805.426
+      ]
+    },
+    {
+      "name": "DecalActor_101",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K27",
+      "location": [
+        827.871,
+        525.337,
+        1805.426
+      ]
+    },
+    {
+      "name": "DecalActor_102",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K28",
+      "location": [
+        1492.589,
+        -320.592,
+        1625.425
+      ]
+    },
+    {
+      "name": "DecalActor_103",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K29",
+      "location": [
+        1584.005,
+        -373.918,
+        1412.744
+      ]
+    },
+    {
+      "name": "DecalActor_104",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K30",
+      "location": [
+        1609.767,
+        -388.946,
+        1121.094
+      ]
+    },
+    {
+      "name": "DecalActor_105",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K31",
+      "location": [
+        2130.617,
+        -692.776,
+        1114.715
+      ]
+    },
+    {
+      "name": "DecalActor_106",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K32",
+      "location": [
+        1860.428,
+        -535.165,
+        1524.551
+      ]
+    },
+    {
+      "name": "DecalActor_107",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K33",
+      "location": [
+        1531.706,
+        -122.871,
+        1452.281
+      ]
+    },
+    {
+      "name": "DecalActor_108",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K34",
+      "location": [
+        1646.771,
+        74.383,
+        756.763
+      ]
+    },
+    {
+      "name": "DecalActor_109",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K35",
+      "location": [
+        1682.754,
+        136.067,
+        417.312
+      ]
+    },
+    {
+      "name": "DecalActor_11",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K9",
+      "location": [
+        -2668.786,
+        381.676,
+        42.453
+      ]
+    },
+    {
+      "name": "DecalActor_110",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K36",
+      "location": [
+        2040.118,
+        748.69,
+        419.465
+      ]
+    },
+    {
+      "name": "DecalActor_111",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K37",
+      "location": [
+        1480.29,
+        760.482,
+        407.218
+      ]
+    },
+    {
+      "name": "DecalActor_112",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K38",
+      "location": [
+        887.961,
+        482.342,
+        316.064
+      ]
+    },
+    {
+      "name": "DecalActor_113",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K",
+      "location": [
+        -2523.639,
+        -134.366,
+        11.826
+      ]
+    },
+    {
+      "name": "DecalActor_114",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K2",
+      "location": [
+        -2639.49,
+        -449.689,
+        -66.687
+      ]
+    },
+    {
+      "name": "DecalActor_115",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K3",
+      "location": [
+        -2655.936,
+        -451.525,
+        -26.633
+      ]
+    },
+    {
+      "name": "DecalActor_116",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K73",
+      "location": [
+        -2665.099,
+        -447.77,
+        17.209
+      ]
+    },
+    {
+      "name": "DecalActor_117",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K5",
+      "location": [
+        -2622.771,
+        380.244,
+        -39.923
+      ]
+    },
+    {
+      "name": "DecalActor_118",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K6",
+      "location": [
+        -2106.922,
+        342.192,
+        -53.357
+      ]
+    },
+    {
+      "name": "DecalActor_119",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Tileable_Red_Soil_shdlqmn_2K",
+      "location": [
+        -2318.993,
+        -457.078,
+        29.746
+      ]
+    },
+    {
+      "name": "DecalActor_12",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K10",
+      "location": [
+        -2263.296,
+        360.961,
+        42.453
+      ]
+    },
+    {
+      "name": "DecalActor_120",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Tileable_Red_Soil_shdlqmn_2K2",
+      "location": [
+        -1818.182,
+        -197.497,
+        29.746
+      ]
+    },
+    {
+      "name": "DecalActor_121",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K7",
+      "location": [
+        -2281.128,
+        355.874,
+        7.786
+      ]
+    },
+    {
+      "name": "DecalActor_122",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Tileable_Red_Soil_shdlqmn_2K4",
+      "location": [
+        -1046.022,
+        266.066,
+        186.392
+      ]
+    },
+    {
+      "name": "DecalActor_123",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Tileable_Red_Soil_shdlqmn_2K5",
+      "location": [
+        -794.039,
+        267.703,
+        233.868
+      ]
+    },
+    {
+      "name": "DecalActor_124",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Tileable_Red_Soil_shdlqmn_2K6",
+      "location": [
+        -630.533,
+        271.244,
+        279.364
+      ]
+    },
+    {
+      "name": "DecalActor_125",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Tileable_Red_Soil_shdlqmn_2K7",
+      "location": [
+        -1336.065,
+        357.375,
+        186.392
+      ]
+    },
+    {
+      "name": "DecalActor_126",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Tileable_Red_Soil_shdlqmn_2K8",
+      "location": [
+        -1708.743,
+        381.332,
+        184.8
+      ]
+    },
+    {
+      "name": "DecalActor_127",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K74",
+      "location": [
+        -2422.794,
+        365.206,
+        63.445
+      ]
+    },
+    {
+      "name": "DecalActor_128",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K75",
+      "location": [
+        -2309.519,
+        -333.207,
+        -3.348
+      ]
+    },
+    {
+      "name": "DecalActor_129",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K76",
+      "location": [
+        -2175.273,
+        -196.351,
+        -5.932
+      ]
+    },
+    {
+      "name": "DecalActor_13",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K11",
+      "location": [
+        -2010.16,
+        341.551,
+        297.585
+      ]
+    },
+    {
+      "name": "DecalActor_130",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K8",
+      "location": [
+        -2875.901,
+        264.269,
+        358.195
+      ]
+    },
+    {
+      "name": "DecalActor_131",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K9",
+      "location": [
+        -2884.836,
+        336.256,
+        841.537
+      ]
+    },
+    {
+      "name": "DecalActor_132",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K10",
+      "location": [
+        -2921.895,
+        634.819,
+        1234.093
+      ]
+    },
+    {
+      "name": "DecalActor_133",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K11",
+      "location": [
+        -2886.259,
+        347.721,
+        1316.752
+      ]
+    },
+    {
+      "name": "DecalActor_134",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K12",
+      "location": [
+        -2892.597,
+        398.785,
+        241.663
+      ]
+    },
+    {
+      "name": "DecalActor_135",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K14",
+      "location": [
+        -2866.601,
+        189.349,
+        476.42
+      ]
+    },
+    {
+      "name": "DecalActor_136",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K16",
+      "location": [
+        -2635.919,
+        -445.093,
+        785.819
+      ]
+    },
+    {
+      "name": "DecalActor_137",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K17",
+      "location": [
+        -3103.313,
+        -501.419,
+        785.819
+      ]
+    },
+    {
+      "name": "DecalActor_138",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K77",
+      "location": [
+        -2136.654,
+        -198.443,
+        307.344
+      ]
+    },
+    {
+      "name": "DecalActor_139",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K78",
+      "location": [
+        -1835.811,
+        -198.443,
+        40.676
+      ]
+    },
+    {
+      "name": "DecalActor_14",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K12",
+      "location": [
+        -2955.977,
+        -227.545,
+        315.427
+      ]
+    },
+    {
+      "name": "DecalActor_140",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K79",
+      "location": [
+        -2309.519,
+        -211.032,
+        169.033
+      ]
+    },
+    {
+      "name": "DecalActor_141",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K80",
+      "location": [
+        -2309.519,
+        -381.29,
+        291.903
+      ]
+    },
+    {
+      "name": "DecalActor_142",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K81",
+      "location": [
+        -2616.207,
+        381.277,
+        296.174
+      ]
+    },
+    {
+      "name": "DecalActor_143",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K82",
+      "location": [
+        -2283.695,
+        364.29,
+        296.174
+      ]
+    },
+    {
+      "name": "DecalActor_144",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K15",
+      "location": [
+        -2300.971,
+        -264.701,
+        52.095
+      ]
+    },
+    {
+      "name": "DecalActor_145",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K39",
+      "location": [
+        1563.007,
+        -69.213,
+        433.887
+      ]
+    },
+    {
+      "name": "DecalActor_146",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K40",
+      "location": [
+        1705.857,
+        175.672,
+        627.65
+      ]
+    },
+    {
+      "name": "DecalActor_147",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K41",
+      "location": [
+        1567.379,
+        -61.718,
+        764.69
+      ]
+    },
+    {
+      "name": "DecalActor_148",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K42",
+      "location": [
+        1739.177,
+        232.792,
+        1007.265
+      ]
+    },
+    {
+      "name": "DecalActor_149",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K43",
+      "location": [
+        1527.156,
+        -140.653,
+        1260.147
+      ]
+    },
+    {
+      "name": "DecalActor_15",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K13",
+      "location": [
+        -2705.483,
+        -452.782,
+        702.592
+      ]
+    },
+    {
+      "name": "DecalActor_150",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K44",
+      "location": [
+        1670.728,
+        105.47,
+        1260.147
+      ]
+    },
+    {
+      "name": "DecalActor_151",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K45",
+      "location": [
+        1845.956,
+        405.861,
+        1193.777
+      ]
+    },
+    {
+      "name": "DecalActor_152",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K46",
+      "location": [
+        1517.042,
+        -148.011,
+        639.868
+      ]
+    },
+    {
+      "name": "DecalActor_153",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K47",
+      "location": [
+        1654.795,
+        88.137,
+        513.226
+      ]
+    },
+    {
+      "name": "DecalActor_154",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K48",
+      "location": [
+        1934.488,
+        567.611,
+        510.105
+      ]
+    },
+    {
+      "name": "DecalActor_155",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K49",
+      "location": [
+        1491.139,
+        785.688,
+        555.622
+      ]
+    },
+    {
+      "name": "DecalActor_156",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K51",
+      "location": [
+        1069.279,
+        384.371,
+        453.388
+      ]
+    },
+    {
+      "name": "DecalActor_157",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K52",
+      "location": [
+        1124.343,
+        350.835,
+        1717.595
+      ]
+    },
+    {
+      "name": "DecalActor_158",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K50",
+      "location": [
+        1571.333,
+        -54.94,
+        984.637
+      ]
+    },
+    {
+      "name": "DecalActor_159",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K53",
+      "location": [
+        1719.687,
+        199.38,
+        986.88
+      ]
+    },
+    {
+      "name": "DecalActor_16",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K14",
+      "location": [
+        -3061.563,
+        -496.98,
+        489.674
+      ]
+    },
+    {
+      "name": "DecalActor_160",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K54",
+      "location": [
+        1891.765,
+        494.371,
+        806.374
+      ]
+    },
+    {
+      "name": "DecalActor_161",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K55",
+      "location": [
+        1645.76,
+        72.649,
+        1151.351
+      ]
+    },
+    {
+      "name": "DecalActor_162",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K56",
+      "location": [
+        1470.78,
+        758.973,
+        1449.968
+      ]
+    },
+    {
+      "name": "DecalActor_163",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K57",
+      "location": [
+        -749.732,
+        -272.57,
+        187.235
+      ]
+    },
+    {
+      "name": "DecalActor_164",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K58",
+      "location": [
+        -1006.432,
+        -232.201,
+        182.363
+      ]
+    },
+    {
+      "name": "DecalActor_165",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K59",
+      "location": [
+        -642.779,
+        -374.467,
+        201.924
+      ]
+    },
+    {
+      "name": "DecalActor_166",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K18",
+      "location": [
+        -2855.713,
+        101.628,
+        55.176
+      ]
+    },
+    {
+      "name": "DecalActor_167",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K19",
+      "location": [
+        -2903.265,
+        30.691,
+        56.648
+      ]
+    },
+    {
+      "name": "DecalActor_168",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K20",
+      "location": [
+        -2708.527,
+        -450.659,
+        68.089
+      ]
+    },
+    {
+      "name": "DecalActor_169",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Environment_Decal_Civil_A_004",
+      "location": [
+        -846.925,
+        -257.605,
+        360.57
+      ]
+    },
+    {
+      "name": "DecalActor_17",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K15",
+      "location": [
+        -3477.361,
+        -548.591,
+        489.674
+      ]
+    },
+    {
+      "name": "DecalActor_170",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K69",
+      "location": [
+        492.923,
+        721.405,
+        394.979
+      ]
+    },
+    {
+      "name": "DecalActor_171",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K70",
+      "location": [
+        684.317,
+        620.638,
+        306.504
+      ]
+    },
+    {
+      "name": "DecalActor_18",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K16",
+      "location": [
+        -3901.203,
+        -601.199,
+        489.674
+      ]
+    },
+    {
+      "name": "DecalActor_19",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K17",
+      "location": [
+        -2666.212,
+        -447.908,
+        950.62
+      ]
+    },
+    {
+      "name": "DecalActor_2",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K3",
+      "location": [
+        933.442,
+        -309.021,
+        620.556
+      ]
+    },
+    {
+      "name": "DecalActor_20",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K18",
+      "location": [
+        -3004.356,
+        -489.88,
+        832.692
+      ]
+    },
+    {
+      "name": "DecalActor_21",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K19",
+      "location": [
+        -3490.446,
+        -550.215,
+        832.692
+      ]
+    },
+    {
+      "name": "DecalActor_22",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K20",
+      "location": [
+        -3913.24,
+        -602.694,
+        832.692
+      ]
+    },
+    {
+      "name": "DecalActor_23",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K21",
+      "location": [
+        -2351.246,
+        -690.321,
+        832.692
+      ]
+    },
+    {
+      "name": "DecalActor_24",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K22",
+      "location": [
+        -2297.003,
+        -1127.332,
+        832.692
+      ]
+    },
+    {
+      "name": "DecalActor_25",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K23",
+      "location": [
+        -2297.003,
+        -1127.332,
+        486.886
+      ]
+    },
+    {
+      "name": "DecalActor_26",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K24",
+      "location": [
+        -2352.867,
+        -677.262,
+        486.886
+      ]
+    },
+    {
+      "name": "DecalActor_27",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K25",
+      "location": [
+        -3077.35,
+        11.834,
+        1280.326
+      ]
+    },
+    {
+      "name": "DecalActor_28",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K26",
+      "location": [
+        -3429.007,
+        -31.815,
+        1280.326
+      ]
+    },
+    {
+      "name": "DecalActor_29",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K27",
+      "location": [
+        -3599.735,
+        -53.007,
+        1280.326
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K",
+      "location": [
+        989.521,
+        435.677,
+        1726.538
+      ]
+    },
+    {
+      "name": "DecalActor_30",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K28",
+      "location": [
+        -2324.758,
+        -903.72,
+        934.486
+      ]
+    },
+    {
+      "name": "DecalActor_31",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K29",
+      "location": [
+        -2304.498,
+        -376.152,
+        106.02
+      ]
+    },
+    {
+      "name": "DecalActor_32",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K30",
+      "location": [
+        -2302.089,
+        -376.152,
+        466.292
+      ]
+    },
+    {
+      "name": "DecalActor_33",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K31",
+      "location": [
+        -2124.942,
+        -205.603,
+        368.948
+      ]
+    },
+    {
+      "name": "DecalActor_34",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K32",
+      "location": [
+        -2144.412,
+        -200.784,
+        106.68
+      ]
+    },
+    {
+      "name": "DecalActor_35",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K33",
+      "location": [
+        -1892.047,
+        -205.603,
+        368.948
+      ]
+    },
+    {
+      "name": "DecalActor_36",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K34",
+      "location": [
+        -661.824,
+        -443.022,
+        218.923
+      ]
+    },
+    {
+      "name": "DecalActor_37",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K35",
+      "location": [
+        -683.871,
+        -685.396,
+        218.923
+      ]
+    },
+    {
+      "name": "DecalActor_38",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K36",
+      "location": [
+        -704.728,
+        -914.68,
+        218.923
+      ]
+    },
+    {
+      "name": "DecalActor_39",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K37",
+      "location": [
+        593.357,
+        -323.016,
+        366.214
+      ]
+    },
+    {
+      "name": "DecalActor_4",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K2",
+      "location": [
+        688.747,
+        604.413,
+        1726.538
+      ]
+    },
+    {
+      "name": "DecalActor_40",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K38",
+      "location": [
+        1134.786,
+        -298.723,
+        366.214
+      ]
+    },
+    {
+      "name": "DecalActor_41",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K39",
+      "location": [
+        590.008,
+        -323.167,
+        617.181
+      ]
+    },
+    {
+      "name": "DecalActor_42",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K40",
+      "location": [
+        1264.319,
+        -292.911,
+        684.4
+      ]
+    },
+    {
+      "name": "DecalActor_43",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K41",
+      "location": [
+        -917.511,
+        266.802,
+        553.61
+      ]
+    },
+    {
+      "name": "DecalActor_44",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K42",
+      "location": [
+        -1120.563,
+        447.841,
+        464.831
+      ]
+    },
+    {
+      "name": "DecalActor_45",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K43",
+      "location": [
+        -326.99,
+        -591.478,
+        219.071
+      ]
+    },
+    {
+      "name": "DecalActor_46",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K44",
+      "location": [
+        -344.617,
+        -918.193,
+        219.071
+      ]
+    },
+    {
+      "name": "DecalActor_47",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K45",
+      "location": [
+        -365.448,
+        -1304.298,
+        219.071
+      ]
+    },
+    {
+      "name": "DecalActor_48",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K46",
+      "location": [
+        -377.812,
+        -548.251,
+        584.551
+      ]
+    },
+    {
+      "name": "DecalActor_49",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K47",
+      "location": [
+        436.924,
+        -507.731,
+        366.214
+      ]
+    },
+    {
+      "name": "DecalActor_5",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K3",
+      "location": [
+        468.385,
+        728.038,
+        1726.538
+      ]
+    },
+    {
+      "name": "DecalActor_50",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K48",
+      "location": [
+        438.897,
+        -502.647,
+        617.181
+      ]
+    },
+    {
+      "name": "DecalActor_51",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K",
+      "location": [
+        -655.167,
+        -372.561,
+        299.793
+      ]
+    },
+    {
+      "name": "DecalActor_52",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K2",
+      "location": [
+        -655.167,
+        -305.928,
+        299.793
+      ]
+    },
+    {
+      "name": "DecalActor_53",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K3",
+      "location": [
+        -655.167,
+        -490.449,
+        299.793
+      ]
+    },
+    {
+      "name": "DecalActor_54",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K4",
+      "location": [
+        -679.623,
+        -645.325,
+        299.601
+      ]
+    },
+    {
+      "name": "DecalActor_55",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K5",
+      "location": [
+        -685.76,
+        -739.585,
+        299.601
+      ]
+    },
+    {
+      "name": "DecalActor_56",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K6",
+      "location": [
+        -675.258,
+        -272.018,
+        299.404
+      ]
+    },
+    {
+      "name": "DecalActor_57",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K7",
+      "location": [
+        -722.143,
+        -272.018,
+        299.404
+      ]
+    },
+    {
+      "name": "DecalActor_58",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K8",
+      "location": [
+        -995.081,
+        -253.788,
+        299.258
+      ]
+    },
+    {
+      "name": "DecalActor_59",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K9",
+      "location": [
+        -897.614,
+        -261.743,
+        299.258
+      ]
+    },
+    {
+      "name": "DecalActor_6",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K4",
+      "location": [
+        -2879.561,
+        305.32,
+        1280.326
+      ]
+    },
+    {
+      "name": "DecalActor_60",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K10",
+      "location": [
+        -654.679,
+        -329.487,
+        570.32
+      ]
+    },
+    {
+      "name": "DecalActor_61",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K11",
+      "location": [
+        -669.271,
+        -511.384,
+        573.117
+      ]
+    },
+    {
+      "name": "DecalActor_62",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K12",
+      "location": [
+        -686.222,
+        -697.735,
+        573.117
+      ]
+    },
+    {
+      "name": "DecalActor_63",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K13",
+      "location": [
+        -700.99,
+        -860.086,
+        573.117
+      ]
+    },
+    {
+      "name": "DecalActor_64",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K14",
+      "location": [
+        -716.952,
+        -1035.568,
+        573.117
+      ]
+    },
+    {
+      "name": "DecalActor_65",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K15",
+      "location": [
+        -690.648,
+        -189.162,
+        592.486
+      ]
+    },
+    {
+      "name": "DecalActor_66",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K16",
+      "location": [
+        -835.67,
+        -180.063,
+        592.486
+      ]
+    },
+    {
+      "name": "DecalActor_67",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K17",
+      "location": [
+        -973.967,
+        -166.346,
+        592.486
+      ]
+    },
+    {
+      "name": "DecalActor_68",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K18",
+      "location": [
+        -671.013,
+        -189.162,
+        824.552
+      ]
+    },
+    {
+      "name": "DecalActor_69",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K19",
+      "location": [
+        -835.576,
+        -178.985,
+        822.878
+      ]
+    },
+    {
+      "name": "DecalActor_7",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K5",
+      "location": [
+        -2937.174,
+        769.48,
+        1280.326
+      ]
+    },
+    {
+      "name": "DecalActor_70",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K20",
+      "location": [
+        -771.805,
+        -184.564,
+        822.878
+      ]
+    },
+    {
+      "name": "DecalActor_71",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K21",
+      "location": [
+        -1007.945,
+        -163.905,
+        822.878
+      ]
+    },
+    {
+      "name": "DecalActor_72",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K49",
+      "location": [
+        -2853.512,
+        72.532,
+        1141.023
+      ]
+    },
+    {
+      "name": "DecalActor_73",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K50",
+      "location": [
+        -2858.105,
+        109.536,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_74",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K51",
+      "location": [
+        -2864.167,
+        158.381,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_75",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K52",
+      "location": [
+        -2871.992,
+        221.417,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_76",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K53",
+      "location": [
+        -2878.946,
+        277.443,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_77",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K54",
+      "location": [
+        -2886.191,
+        335.815,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_78",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K55",
+      "location": [
+        -2892.607,
+        387.504,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_79",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K56",
+      "location": [
+        -2900.84,
+        453.835,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_8",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K6",
+      "location": [
+        -2901.887,
+        485.196,
+        335.51
+      ]
+    },
+    {
+      "name": "DecalActor_80",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K57",
+      "location": [
+        -2907.313,
+        505.98,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_81",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K58",
+      "location": [
+        -2914.014,
+        559.966,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_82",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K59",
+      "location": [
+        -2920.467,
+        611.953,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_83",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K60",
+      "location": [
+        -2928.284,
+        674.932,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_84",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K61",
+      "location": [
+        -2934.714,
+        726.734,
+        1137.7
+      ]
+    },
+    {
+      "name": "DecalActor_85",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K62",
+      "location": [
+        -2855.624,
+        89.545,
+        703.522
+      ]
+    },
+    {
+      "name": "DecalActor_86",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K63",
+      "location": [
+        -2861.68,
+        138.336,
+        650.535
+      ]
+    },
+    {
+      "name": "DecalActor_87",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K64",
+      "location": [
+        -2868.867,
+        196.241,
+        703.522
+      ]
+    },
+    {
+      "name": "DecalActor_88",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K65",
+      "location": [
+        -2875.068,
+        246.198,
+        703.522
+      ]
+    },
+    {
+      "name": "DecalActor_89",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K66",
+      "location": [
+        -2883.286,
+        312.41,
+        703.522
+      ]
+    },
+    {
+      "name": "DecalActor_9",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K7",
+      "location": [
+        -2917.809,
+        386.84,
+        335.51
+      ]
+    },
+    {
+      "name": "DecalActor_90",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K67",
+      "location": [
+        -2889.723,
+        364.27,
+        703.522
+      ]
+    },
+    {
+      "name": "DecalActor_91",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K68",
+      "location": [
+        -2896.731,
+        420.732,
+        703.522
+      ]
+    },
+    {
+      "name": "DecalActor_92",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K69",
+      "location": [
+        -2984.493,
+        -14.58,
+        495.096
+      ]
+    },
+    {
+      "name": "DecalActor_93",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K70",
+      "location": [
+        -2978.783,
+        -60.58,
+        495.096
+      ]
+    },
+    {
+      "name": "DecalActor_94",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K71",
+      "location": [
+        -2938.438,
+        -385.618,
+        495.096
+      ]
+    },
+    {
+      "name": "DecalActor_95",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K72",
+      "location": [
+        -2932.729,
+        -431.618,
+        495.096
+      ]
+    },
+    {
+      "name": "DecalActor_96",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K22",
+      "location": [
+        -915.397,
+        273.468,
+        331.312
+      ]
+    },
+    {
+      "name": "DecalActor_97",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K23",
+      "location": [
+        1031.798,
+        406.379,
+        738.762
+      ]
+    },
+    {
+      "name": "DecalActor_98",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K24",
+      "location": [
+        859.744,
+        506.745,
+        1622.107
+      ]
+    },
+    {
+      "name": "DecalActor_99",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/Map_Arena_Alley_Details.umap",
+      "label": "MI_Leakage_tdfdfebc_2K25",
+      "location": [
+        515.781,
+        707.39,
+        1548.641
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 305,
+  "errors": [],
+  "warnings": []
+}

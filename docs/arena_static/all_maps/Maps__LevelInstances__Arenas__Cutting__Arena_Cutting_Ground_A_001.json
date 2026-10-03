@@ -1,0 +1,229 @@
+{
+  "map": "Arena_Cutting_Ground_A_001",
+  "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+  "kind": "level_instance",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "BP_Structure_Board_Destructible_1X6M_C_0",
+      "class": "BP_Structure_Board_Destructible_1X6M_C",
+      "class_path": "/Game/Structures/Planks/BP_Structure_Board_Destructible_1X6M.BP_Structure_Board_Destructible_1X6M_C",
+      "class_chain": [
+        "BP_Structure_Board_Destructible_1X6M_C",
+        "BP_Structure_Plank_Destructible_Master_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "tags": [
+        "Block Navigation On Break",
+        "Respawn"
+      ],
+      "location": [
+        2.335,
+        -28.646,
+        -11.154
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 90.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "destructible",
+      "label": "BP_Structure_Board_Destructible_1X6M2",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Default Planks Dislocation": {
+          "X": 1.523226E-13,
+          "Y": -300.0,
+          "Z": 0.0
+        },
+        "Block Navigation On Break": true,
+        "Tags": [
+          "Block Navigation On Break",
+          "Respawn"
+        ]
+      }
+    },
+    {
+      "name": "BP_Weapon_Trap_C_1",
+      "class": "BP_Weapon_Trap_Spikes_Pit_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Pit.BP_Weapon_Trap_Spikes_Pit_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Pit_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent",
+        "Respawn"
+      ],
+      "location": [
+        5.25,
+        -13.142,
+        -1028.496
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Tags": [
+          "Weapon",
+          "Trap",
+          "Persistent",
+          "Respawn"
+        ]
+      },
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_NavigationBlocker_C_1",
+      "class": "BP_NavigationBlocker_C",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "label": "BP_NavigationBlocker",
+      "location": [
+        -286.134,
+        58.995,
+        -6.0
+      ],
+      "tags": [
+        "Persistent"
+      ]
+    },
+    {
+      "name": "BP_NavigationBlocker_C_3",
+      "class": "BP_NavigationBlocker_C",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "label": "BP_NavigationBlocker3",
+      "location": [
+        -176.229,
+        207.018,
+        -6.0
+      ],
+      "tags": [
+        "Persistent"
+      ]
+    },
+    {
+      "name": "BP_NavigationBlocker_C_4",
+      "class": "BP_NavigationBlocker_C",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "label": "BP_NavigationBlocker2",
+      "location": [
+        -295.19,
+        -105.978,
+        -6.0
+      ],
+      "tags": [
+        "Persistent"
+      ]
+    },
+    {
+      "name": "BP_NavigationBlocker_C_5",
+      "class": "BP_NavigationBlocker_C",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "label": "BP_NavigationBlocker4",
+      "location": [
+        -185.696,
+        -271.588,
+        -6.0
+      ],
+      "tags": [
+        "Persistent"
+      ]
+    },
+    {
+      "name": "BP_NavigationBlocker_C_6",
+      "class": "BP_NavigationBlocker_C",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "label": "BP_NavigationBlocker5",
+      "location": [
+        204.936,
+        -245.099,
+        -6.0
+      ],
+      "tags": [
+        "Persistent"
+      ]
+    },
+    {
+      "name": "BP_NavigationBlocker_C_7",
+      "class": "BP_NavigationBlocker_C",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "label": "BP_NavigationBlocker6",
+      "location": [
+        270.749,
+        -100.066,
+        -6.0
+      ],
+      "tags": [
+        "Persistent"
+      ]
+    },
+    {
+      "name": "BP_NavigationBlocker_C_8",
+      "class": "BP_NavigationBlocker_C",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_A_001.umap",
+      "label": "BP_NavigationBlocker7",
+      "location": [
+        214.016,
+        171.247,
+        -6.0
+      ],
+      "tags": [
+        "Persistent"
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 194,
+  "errors": [],
+  "warnings": []
+}

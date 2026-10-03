@@ -1,0 +1,264 @@
+
+=== FUNCTION Collision Bug Check Event  (BP_Container_Master_C)
+       0: K2Node_CustomEvent_Target = _
+      18: ExecuteUbergraph_BP_Container_Master(6212)
+      33: return _
+
+=== FUNCTION Event Spawn Sound Detector  (BP_Container_Master_C)
+       0: K2Node_CustomEvent_Sound_Volume = _
+      18: K2Node_CustomEvent_Last_Hit_Part = _
+      36: ExecuteUbergraph_BP_Container_Master(6451)
+      51: return _
+
+=== FUNCTION ExecuteUbergraph_BP_Container_Master  (BP_Container_Master_C)
+       0: push_flow 6575
+       5: goto computed EntryPoint
+      15: RetriggerableDelay(self, 0.2, LatentActionInfo{SkipOffsetConst(Value=70), -615777514, "ExecuteUbergraph_BP_Container_Master", self})
+      69: pop_flow
+      70: CallFunc_IsValid_ReturnValue = IsValid(K2Node_CustomEvent_Last_Hit_Part)
+      99: pop_flow_if_not (CallFunc_IsValid_ReturnValue)
+     109: CallFunc_K2_GetComponentLocation_ReturnValue = K2Node_CustomEvent_Last_Hit_Part.K2_GetComponentLocation()
+     159: CallFunc_Conv_VectorToTransform_ReturnValue = Conv_VectorToTransform(CallFunc_K2_GetComponentLocation_ReturnValue)
+     196: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_8 = BeginDeferredActorSpawnFromClass(self, BP_SoundDetection_Sphere_C, CallFunc_Conv_VectorToTransform_ReturnValue, 0, None, 1)
+     240: SetDoublePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_8, "Sound Amount", self.Accumulated Noise)
+     281: CallFunc_K2_GetComponentLocation_ReturnValue = K2Node_CustomEvent_Last_Hit_Part.K2_GetComponentLocation()
+     331: CallFunc_Conv_VectorToTransform_ReturnValue = Conv_VectorToTransform(CallFunc_K2_GetComponentLocation_ReturnValue)
+     368: CallFunc_FinishSpawningActor_ReturnValue_8 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_8, CallFunc_Conv_VectorToTransform_ReturnValue, 1)
+     408: self.Accumulated Noise = 0.0
+     435: pop_flow
+     436: self.Collision Bug Int = 0
+     459: pop_flow
+     460: Delay(self, 0.0, LatentActionInfo{SkipOffsetConst(Value=515), 932838894, "ExecuteUbergraph_BP_Container_Master", self})
+     514: pop_flow
+     515: push_flow 2611
+     520: push_flow 1598
+     525: push_flow 4675
+     530: push_flow 4039
+     535: Temp_bool_Variable = false
+     546: Temp_int_Variable = 0
+     569: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(Temp_bool_Variable)
+     598: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(Temp_int_Variable, 5)
+     632: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_Not_PreBool_ReturnValue, CallFunc_LessEqual_IntInt_ReturnValue)
+     670: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue)
+     680: push_flow 5194
+     685: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     788: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, BP_Generator_Armor_Random_C, CallFunc_MakeTransform_ReturnValue, 0, None, 1)
+     832: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     935: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_MakeTransform_ReturnValue, 1)
+     975: K2Node_MakeArray_Array = [0, 5, 4, 7, 1, 14, 15]
+    1000: K2Node_MakeArray_Array_1 = [12, 10, 9, 6, 13, 16, 11]
+    1025: Temp_bool_Variable_1 = self.Spawn Armor L
+    1044: Default__KismetArrayLibrary.Array_Random(switch(Temp_bool_Variable_1) {false: K2Node_MakeArray_Array; true: K2Node_MakeArray_Array_1; default: K2Node_Select_Default}, CallFunc_Array_Random_OutItem, CallFunc_Array_Random_OutIndex)
+    1147: CallFunc_FinishSpawningActor_ReturnValue.Generate Armor(self.Tier, CallFunc_Array_Random_OutItem, 0.5, false, false, 0, 0, CallFunc_Generate_Armor_Armor_Passport)
+    1225: CallFunc_IsValidClass_ReturnValue_1 = IsValidClass(CallFunc_Generate_Armor_Armor_Passport.ArmorCore_3_F6B7C69C4BD7D9720DB91EB635EE2B43)
+    1263: pop_flow_if_not (CallFunc_IsValidClass_ReturnValue_1)
+    1273: K2Node_MakeArray_Array = [0, 5, 4, 7, 1, 14, 15]
+    1298: K2Node_MakeArray_Array_1 = [12, 10, 9, 6, 13, 16, 11]
+    1323: Temp_bool_Variable_1 = self.Spawn Armor L
+    1342: Default__KismetArrayLibrary.Array_Random(switch(Temp_bool_Variable_1) {false: K2Node_MakeArray_Array; true: K2Node_MakeArray_Array_1; default: K2Node_Select_Default}, CallFunc_Array_Random_OutItem, CallFunc_Array_Random_OutIndex)
+    1445: CallFunc_FinishSpawningActor_ReturnValue.Generate Armor(self.Tier, CallFunc_Array_Random_OutItem, 0.5, false, false, 0, 0, CallFunc_Generate_Armor_Armor_Passport)
+    1523: self.Armor Passport = CallFunc_Generate_Armor_Armor_Passport
+    1550: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+    1586: Temp_bool_Variable = true
+    1597: pop_flow
+    1598: push_flow 5307
+    1603: push_flow 2155
+    1608: CallFunc_RandomBool_ReturnValue = RandomBool()
+    1628: pop_flow_if_not (CallFunc_RandomBool_ReturnValue)
+    1638: CallFunc_IsValidClass_ReturnValue = IsValidClass(self.Armor Passport.ArmorCore_3_F6B7C69C4BD7D9720DB91EB635EE2B43)
+    1676: pop_flow_if_not (CallFunc_IsValidClass_ReturnValue)
+    1686: CallFunc_K2_GetComponentToWorld_ReturnValue = self.Armor Spawn Point.K2_GetComponentToWorld()
+    1736: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2 = BeginDeferredActorSpawnFromClass(self, self.Armor Passport.ArmorCore_3_F6B7C69C4BD7D9720DB91EB635EE2B43, CallFunc_K2_GetComponentToWorld_ReturnValue, 2, None, 1)
+    1789: CallFunc_K2_GetComponentToWorld_ReturnValue = self.Armor Spawn Point.K2_GetComponentToWorld()
+    1839: SetTransformPropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2, "World Transform", CallFunc_K2_GetComponentToWorld_ReturnValue)
+    1880: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2, "Armor Passport", self.Armor Passport)
+    1943: CallFunc_K2_GetComponentToWorld_ReturnValue = self.Armor Spawn Point.K2_GetComponentToWorld()
+    1993: CallFunc_FinishSpawningActor_ReturnValue_2 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2, CallFunc_K2_GetComponentToWorld_ReturnValue, 1)
+    2033: Temp_name_Variable_1 = "Persistent"
+    2064: CallFunc_Array_Add_ReturnValue = Default__KismetArrayLibrary.Array_Add(CallFunc_FinishSpawningActor_ReturnValue_2.self.Tags, Temp_name_Variable_1)
+    2154: pop_flow
+    2155: CallFunc_RandomBool_ReturnValue_1 = RandomBool()
+    2175: pop_flow_if_not (CallFunc_RandomBool_ReturnValue_1)
+    2185: CallFunc_IsValidClass_ReturnValue_2 = IsValidClass(self.Weapon Passport.WeaponClass_54_B478ECF7499977809745A3973AD678EC)
+    2223: pop_flow_if_not (CallFunc_IsValidClass_ReturnValue_2)
+    2233: CallFunc_K2_GetComponentToWorld_ReturnValue_1 = self.Weapon Spawn Point.K2_GetComponentToWorld()
+    2283: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_3 = BeginDeferredActorSpawnFromClass(self, self.Weapon Passport.WeaponClass_54_B478ECF7499977809745A3973AD678EC, CallFunc_K2_GetComponentToWorld_ReturnValue_1, 2, None, 1)
+    2336: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_3, "Weapon Passport", self.Weapon Passport)
+    2399: CallFunc_K2_GetComponentToWorld_ReturnValue_1 = self.Weapon Spawn Point.K2_GetComponentToWorld()
+    2449: CallFunc_FinishSpawningActor_ReturnValue_3 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_3, CallFunc_K2_GetComponentToWorld_ReturnValue_1, 1)
+    2489: Temp_name_Variable = "Persistent"
+    2520: CallFunc_Array_Add_ReturnValue_1 = Default__KismetArrayLibrary.Array_Add(CallFunc_FinishSpawningActor_ReturnValue_3.self.Tags, Temp_name_Variable)
+    2610: pop_flow
+    2611: Temp_int_Loop_Counter_Variable = 0
+    2634: Temp_int_Array_Index_Variable = 0
+    2657: CallFunc_GetChildrenComponents_Children = []
+    2668: self.DefaultSceneRoot.GetChildrenComponents(true, CallFunc_GetChildrenComponents_Children)
+    2710: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(CallFunc_GetChildrenComponents_Children)
+    2769: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue)
+    2807: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+    2817: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable
+    2844: push_flow 3965
+    2849: CallFunc_GetChildrenComponents_Children = []
+    2860: self.DefaultSceneRoot.GetChildrenComponents(true, CallFunc_GetChildrenComponents_Children)
+    2902: Default__KismetArrayLibrary.Array_Get(CallFunc_GetChildrenComponents_Children, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item)
+    2961: K2Node_DynamicCast_AsChild_Actor_Component = Cast<ChildActorComponent>(CallFunc_Array_Get_Item)
+    2997: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsChild_Actor_Component)
+    3026: pop_flow_if_not (K2Node_DynamicCast_bSuccess)
+    3036: K2Node_DynamicCast_AsModular_Weapon_BP = Cast<ModularWeaponBP_C>(K2Node_DynamicCast_AsChild_Actor_Component.self.ChildActor)
+    3094: K2Node_DynamicCast_bSuccess_1 = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsModular_Weapon_BP)
+    3123: pop_flow_if_not (K2Node_DynamicCast_bSuccess_1)
+    3133: CallFunc_GetTransform_ReturnValue_1 = GetTransform()
+    3161: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_4 = BeginDeferredActorSpawnFromClass(self, BP_Generator_Weapons_Random_C, CallFunc_GetTransform_ReturnValue_1, 0, None, 1)
+    3205: CallFunc_GetTransform_ReturnValue_1 = GetTransform()
+    3233: CallFunc_FinishSpawningActor_ReturnValue_4 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_4, CallFunc_GetTransform_ReturnValue_1, 1)
+    3273: CallFunc_GetTransform_ReturnValue_2 = K2Node_DynamicCast_AsModular_Weapon_BP.GetTransform()
+    3323: CallFunc_GetObjectClass_ReturnValue = GetObjectClass(K2Node_DynamicCast_AsModular_Weapon_BP)
+    3352: CallFunc_FinishSpawningActor_ReturnValue_4.Generate Weapon(0, 0, true, CallFunc_GetObjectClass_ReturnValue, K2Node_DynamicCast_AsModular_Weapon_BP.self.Weapon Passport, 0, CallFunc_Generate_Weapon_Weapon_Passport_1)
+    3444: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_5 = BeginDeferredActorSpawnFromClass(self, CallFunc_Generate_Weapon_Weapon_Passport_1.WeaponClass_54_B478ECF7499977809745A3973AD678EC, CallFunc_GetTransform_ReturnValue_2, 0, None, 1)
+    3497: CallFunc_GetObjectClass_ReturnValue = GetObjectClass(K2Node_DynamicCast_AsModular_Weapon_BP)
+    3526: CallFunc_FinishSpawningActor_ReturnValue_4.Generate Weapon(0, 0, true, CallFunc_GetObjectClass_ReturnValue, K2Node_DynamicCast_AsModular_Weapon_BP.self.Weapon Passport, 0, CallFunc_Generate_Weapon_Weapon_Passport_1)
+    3618: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_5, "Weapon Passport", CallFunc_Generate_Weapon_Weapon_Passport_1)
+    3681: CallFunc_GetTransform_ReturnValue_2 = K2Node_DynamicCast_AsModular_Weapon_BP.GetTransform()
+    3731: CallFunc_FinishSpawningActor_ReturnValue_5 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_5, CallFunc_GetTransform_ReturnValue_2, 1)
+    3771: Temp_name_Variable_2 = "Persistent"
+    3802: CallFunc_Array_Add_ReturnValue_2 = Default__KismetArrayLibrary.Array_Add(CallFunc_FinishSpawningActor_ReturnValue_5.self.Tags, Temp_name_Variable_2)
+    3892: CallFunc_FinishSpawningActor_ReturnValue_4.K2_DestroyActor()
+    3928: K2Node_DynamicCast_AsModular_Weapon_BP.K2_DestroyActor()
+    3964: pop_flow
+    3965: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    4007: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue_1
+    4034: goto 2657
+    4039: CallFunc_GetTransform_ReturnValue = GetTransform()
+    4067: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1 = BeginDeferredActorSpawnFromClass(self, BP_Generator_Weapons_Random_C, CallFunc_GetTransform_ReturnValue, 0, None, 1)
+    4111: CallFunc_GetTransform_ReturnValue = GetTransform()
+    4139: CallFunc_FinishSpawningActor_ReturnValue_1 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, CallFunc_GetTransform_ReturnValue, 1)
+    4179: Temp_byte_Variable_1 = 0
+    4199: Temp_byte_Variable_2 = 1
+    4219: Temp_bool_Variable_2 = self.Spawn Weapon L
+    4238: CallFunc_FinishSpawningActor_ReturnValue_1.Generate Weapon(switch(Temp_bool_Variable_2) {false: Temp_byte_Variable_1; true: Temp_byte_Variable_2; default: K2Node_Select_Default_1}, self.Tier, false, None, Str_Passport_Weapon1{None, 0, "None", None, None, None, None, None, None, VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), 0.0, 0.0, 0.0, 0.0, 1, 4, 14, 10, LinearColor{1.0, 1.0, 1.0, 1.0}, LinearColor{0.186343, 0.074751, 0.06444, 1.0}, 0.0, 0}, 0, CallFunc_Generate_Weapon_Weapon_Passport)
+    4611: self.Weapon Passport = CallFunc_Generate_Weapon_Weapon_Passport
+    4638: CallFunc_FinishSpawningActor_ReturnValue_1.K2_DestroyActor()
+    4674: pop_flow
+    4675: CallFunc_GetTransform_ReturnValue_3 = GetTransform()
+    4703: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_6 = BeginDeferredActorSpawnFromClass(self, BP_Generator_Weapons_Random_C, CallFunc_GetTransform_ReturnValue_3, 0, None, 1)
+    4747: CallFunc_GetTransform_ReturnValue_3 = GetTransform()
+    4775: CallFunc_FinishSpawningActor_ReturnValue_6 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_6, CallFunc_GetTransform_ReturnValue_3, 1)
+    4815: CallFunc_FinishSpawningActor_ReturnValue_6.Generate Weapon(4, 8, false, None, Str_Passport_Weapon1{None, 0, "None", None, None, None, None, None, None, VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), 0.0, 0.0, 0.0, 0.0, 1, 4, 14, 10, LinearColor{1.0, 1.0, 1.0, 1.0}, LinearColor{0.186343, 0.074751, 0.06444, 1.0}, 0.0, 0}, 0, CallFunc_Generate_Weapon_Weapon_Passport_2)
+    5130: self.Treasure Passport = CallFunc_Generate_Weapon_Weapon_Passport_2
+    5157: CallFunc_FinishSpawningActor_ReturnValue_6.K2_DestroyActor()
+    5193: pop_flow
+    5194: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(Temp_bool_Variable)
+    5223: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue)
+    5233: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Variable, 1)
+    5275: Temp_int_Variable = CallFunc_Add_IntInt_ReturnValue
+    5302: goto 569
+    5307: Temp_real_Variable = 0.9
+    5330: Temp_real_Variable_1 = 0.8
+    5353: Temp_real_Variable_2 = 0.7
+    5376: Temp_real_Variable_3 = 0.6
+    5399: Temp_real_Variable_4 = 0.5
+    5422: Temp_real_Variable_5 = 0.4
+    5445: Temp_real_Variable_6 = 0.3
+    5468: Temp_real_Variable_7 = 0.2
+    5491: Temp_real_Variable_8 = 0.1
+    5514: Temp_byte_Variable = self.Tier
+    5541: CallFunc_RandomBoolWithWeight_ReturnValue = RandomBoolWithWeight(switch(Temp_byte_Variable) {0: Temp_real_Variable_8; 1: Temp_real_Variable_7; 2: Temp_real_Variable_6; 3: Temp_real_Variable_5; 4: Temp_real_Variable_4; 5: Temp_real_Variable_3; 6: Temp_real_Variable_2; 7: Temp_real_Variable_1; 8: Temp_real_Variable; default: K2Node_Select_Default_2})
+    5721: pop_flow_if_not (CallFunc_RandomBoolWithWeight_ReturnValue)
+    5731: CallFunc_IsValidClass_ReturnValue_3 = IsValidClass(self.Treasure Passport.WeaponClass_54_B478ECF7499977809745A3973AD678EC)
+    5769: pop_flow_if_not (CallFunc_IsValidClass_ReturnValue_3)
+    5779: CallFunc_K2_GetComponentToWorld_ReturnValue_2 = self.Weapon Spawn Point.K2_GetComponentToWorld()
+    5829: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_7 = BeginDeferredActorSpawnFromClass(self, self.Treasure Passport.WeaponClass_54_B478ECF7499977809745A3973AD678EC, CallFunc_K2_GetComponentToWorld_ReturnValue_2, 2, None, 1)
+    5882: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_7, "Weapon Passport", self.Treasure Passport)
+    5945: CallFunc_K2_GetComponentToWorld_ReturnValue_2 = self.Weapon Spawn Point.K2_GetComponentToWorld()
+    5995: CallFunc_FinishSpawningActor_ReturnValue_7 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_7, CallFunc_K2_GetComponentToWorld_ReturnValue_2, 1)
+    6035: Temp_name_Variable_3 = "Persistent"
+    6066: CallFunc_Array_Add_ReturnValue_3 = Default__KismetArrayLibrary.Array_Add(CallFunc_FinishSpawningActor_ReturnValue_7.self.Tags, Temp_name_Variable_3)
+    6156: pop_flow
+    6157: Delay(self, 0.0, LatentActionInfo{SkipOffsetConst(Value=460), 1889690614, "ExecuteUbergraph_BP_Container_Master", self})
+    6211: pop_flow
+    6212: CallFunc_GreaterEqual_IntInt_ReturnValue = GreaterEqual_IntInt(self.Collision Bug Int, 25)
+    6246: if not (CallFunc_GreaterEqual_IntInt_ReturnValue) goto 6299
+    6260: K2Node_CustomEvent_Target.SetCollisionResponseToAllChannels(0)
+    6298: pop_flow
+    6299: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(self.Collision Bug Int, 1)
+    6341: Temp_int_Variable_1 = CallFunc_Add_IntInt_ReturnValue_2
+    6368: self.Collision Bug Int = Temp_int_Variable_1
+    6395: RetriggerableDelay(self, 0.1, LatentActionInfo{SkipOffsetConst(Value=436), 1620931762, "ExecuteUbergraph_BP_Container_Master", self})
+    6449: pop_flow
+    6450: pop_flow
+    6451: CallFunc_Multiply_DoubleDouble_ReturnValue = Multiply_DoubleDouble(K2Node_CustomEvent_Sound_Volume, 10.0)
+    6497: CallFunc_Add_DoubleDouble_ReturnValue = Add_DoubleDouble(self.Accumulated Noise, CallFunc_Multiply_DoubleDouble_ReturnValue)
+    6543: self.Accumulated Noise = CallFunc_Add_DoubleDouble_ReturnValue
+    6570: goto 15
+    6575: return _
+
+=== FUNCTION ReceiveBeginPlay  (BP_Container_Master_C)
+       0: ExecuteUbergraph_BP_Container_Master(6157)
+      15: return _
+
+=== FUNCTION ReceiveTick  (BP_Container_Master_C)
+       0: K2Node_Event_DeltaSeconds = _
+      18: ExecuteUbergraph_BP_Container_Master(6450)
+      33: return _
+
+=== FUNCTION UserConstructionScript  (BP_Container_Master_C)
+       0: push_flow 1746
+       5: push_flow 288
+      10: Temp_int_Loop_Counter_Variable_1 = 0
+      33: Temp_int_Array_Index_Variable = 0
+      56: CallFunc_GetChildrenComponents_Children = []
+      67: self.Random Spawn.GetChildrenComponents(false, CallFunc_GetChildrenComponents_Children)
+     109: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(CallFunc_GetChildrenComponents_Children)
+     168: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue)
+     206: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+     216: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable_1
+     243: push_flow 1380
+     248: CallFunc_RandomBoolWithWeight_ReturnValue = RandomBoolWithWeight(0.25)
+     273: if not (CallFunc_RandomBoolWithWeight_ReturnValue) goto 1454
+     287: pop_flow
+     288: Temp_int_Loop_Counter_Variable = 0
+     311: Temp_int_Array_Index_Variable_1 = 0
+     334: CallFunc_GetChildrenComponents_Children_1 = []
+     345: self.Random Spawn And Location.GetChildrenComponents(false, CallFunc_GetChildrenComponents_Children_1)
+     387: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetChildrenComponents_Children_1)
+     446: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_1)
+     484: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_1)
+     494: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable
+     521: push_flow 1306
+     526: CallFunc_RandomBoolWithWeight_ReturnValue_1 = RandomBoolWithWeight(0.25)
+     551: if not (CallFunc_RandomBoolWithWeight_ReturnValue_1) goto 1600
+     565: CallFunc_RandomUnitVector_ReturnValue = RandomUnitVector()
+     593: CallFunc_Multiply_VectorVector_ReturnValue = Multiply_VectorVector(CallFunc_RandomUnitVector_ReturnValue, VectorConst({"X": 5.0, "Y": 5.0, "Z": 0.0}))
+     655: CallFunc_GetChildrenComponents_Children_1 = []
+     666: self.Random Spawn And Location.GetChildrenComponents(false, CallFunc_GetChildrenComponents_Children_1)
+     708: Default__KismetArrayLibrary.Array_Get(CallFunc_GetChildrenComponents_Children_1, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_1)
+     767: CallFunc_K2_GetComponentLocation_ReturnValue = CallFunc_Array_Get_Item_1.K2_GetComponentLocation()
+     817: CallFunc_Add_VectorVector_ReturnValue = Add_VectorVector(CallFunc_K2_GetComponentLocation_ReturnValue, CallFunc_Multiply_VectorVector_ReturnValue)
+     863: CallFunc_Array_Get_Item_1.K2_SetWorldLocation(CallFunc_Add_VectorVector_ReturnValue, false, CallFunc_K2_SetWorldLocation_SweepHitResult, false)
+     915: CallFunc_RandomFloatInRange_ReturnValue = RandomFloatInRange(-189.0, 180.0)
+     961: CallFunc_GetChildrenComponents_Children_1 = []
+     972: self.Random Spawn And Location.GetChildrenComponents(false, CallFunc_GetChildrenComponents_Children_1)
+    1014: Default__KismetArrayLibrary.Array_Get(CallFunc_GetChildrenComponents_Children_1, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_1)
+    1073: CallFunc_K2_GetComponentRotation_ReturnValue = CallFunc_Array_Get_Item_1.K2_GetComponentRotation()
+    1123: BreakRotator(CallFunc_K2_GetComponentRotation_ReturnValue, CallFunc_BreakRotator_Roll, CallFunc_BreakRotator_Pitch, CallFunc_BreakRotator_Yaw)
+    1169: CallFunc_MakeRotator_Yaw_ImplicitCast = Cast(ConversionType=CST_DoubleToFloat, Target=CallFunc_RandomFloatInRange_ReturnValue)
+    1198: CallFunc_MakeRotator_ReturnValue = MakeRotator(CallFunc_BreakRotator_Roll, CallFunc_BreakRotator_Pitch, CallFunc_MakeRotator_Yaw_ImplicitCast)
+    1253: CallFunc_Array_Get_Item_1.K2_SetWorldRotation(CallFunc_MakeRotator_ReturnValue, false, CallFunc_K2_SetWorldRotation_SweepHitResult, false)
+    1305: pop_flow
+    1306: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    1348: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+    1375: goto 334
+    1380: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+    1422: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_1
+    1449: goto 56
+    1454: CallFunc_GetChildrenComponents_Children = []
+    1465: self.Random Spawn.GetChildrenComponents(false, CallFunc_GetChildrenComponents_Children)
+    1507: Default__KismetArrayLibrary.Array_Get(CallFunc_GetChildrenComponents_Children, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item)
+    1566: CallFunc_Array_Get_Item.K2_DestroyComponent(self)
+    1599: pop_flow
+    1600: CallFunc_GetChildrenComponents_Children_1 = []
+    1611: self.Random Spawn And Location.GetChildrenComponents(false, CallFunc_GetChildrenComponents_Children_1)
+    1653: Default__KismetArrayLibrary.Array_Get(CallFunc_GetChildrenComponents_Children_1, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_1)
+    1712: CallFunc_Array_Get_Item_1.K2_DestroyComponent(self)
+    1745: pop_flow
+    1746: return _

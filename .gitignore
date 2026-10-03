@@ -1,0 +1,88 @@
+# ---------------------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------------------
+/target/
+target/
+target-*/
+/dist/
+*.pdb
+**/bin/Debug/
+**/bin/Release/
+**/obj/
+/experimental/native-spike/build/
+/experimental/native-spike/out/
+
+# ---------------------------------------------------------------------------------------
+# Local game install, scratch space and third-party checkouts (large, not ours)
+# ---------------------------------------------------------------------------------------
+/game/
+/workspace/
+/third_party/
+/mod/RE-UE4SS/
+/ida-pro-mcp-main/
+
+# ---------------------------------------------------------------------------------------
+# Secrets and identities: never commit
+# ---------------------------------------------------------------------------------------
+*.key
+*.pem
+*.p12
+*.pfx
+**/release-signing/
+server_identity.key
+.env
+.env.*
+dedicated-server.conf
+
+# ---------------------------------------------------------------------------------------
+# Player data, saves and runtime state
+# ---------------------------------------------------------------------------------------
+*.sav
+*.sav.bak
+SaveGames/
+hsmp_state*/
+bans.txt
+known_servers.json
+hsmp_events*.jsonl
+/history.jsonl
+*.dmp
+*.log
+!/scripts/fixtures/**/*.log
+logs/
+
+# gate / harness run output (never part of the tree)
+/test-results/
+test-results/
+
+# ---------------------------------------------------------------------------------------
+# Game-derived binaries and dumps (generated locally from your own copy of the game)
+# ---------------------------------------------------------------------------------------
+*.pak
+*.utoc
+*.ucas
+*.uasset
+*.uexp
+*.umap
+*.usmap
+*.jmap
+**/CXXHeaderDump/
+**/UHTHeaderDump/
+**/UE4SS_ObjectDump.txt
+heap_dump*
+extracted_pak/
+oo2core_*.dll
+
+# ---------------------------------------------------------------------------------------
+# Editor / OS noise
+# ---------------------------------------------------------------------------------------
+.vs/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+
+# The gate's recorded fixture runs are test data: keep them whatever they are named.
+!/scripts/fixtures/**

@@ -1,0 +1,33 @@
+[package]
+name = "hsmp-release"
+description = "Builds the signed, reproducible HSMP release package (zip + manifest + ed25519 signature)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# Shares the manifest/signature/packing code with the launcher (single source of truth)
+# without pulling in the GUI:
+#   cargo run --release -p hsmp-release -- build
+# See docs/development/releasing.md.
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hsmp-release"
+path = "src/main.rs"
+
+[dependencies]
+hsmp-launcher = { path = "../../launcher", default-features = false }
+ed25519-dalek = "2"
+getrandom = "0.2"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true

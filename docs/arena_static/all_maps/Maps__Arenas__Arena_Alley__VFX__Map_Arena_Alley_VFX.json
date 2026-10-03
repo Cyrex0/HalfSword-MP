@@ -1,0 +1,488 @@
+{
+  "map": "Map_Arena_Alley_VFX",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_CloudMask_Object_C_1",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_10",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_11",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_12",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_2",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_3",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_4",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_5",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_6",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_7",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_8",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMask_Object_C_9",
+      "class": "BP_CloudMask_Object_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_CloudMaskGenerator_C_1",
+      "class": "BP_CloudMaskGenerator_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap"
+    },
+    {
+      "name": "BP_InteractionController_0",
+      "class": "BP_InteractionController_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "BP_InteractionController",
+      "location": [
+        2330.24,
+        874.246,
+        594.012
+      ]
+    },
+    {
+      "name": "DecalActor_11",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "Wound_Decal_Mat2",
+      "location": [
+        1542.0,
+        1272.0,
+        772.0
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "Wound_Decal_Mat",
+      "location": [
+        -326.0,
+        -1490.0,
+        242.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_1",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR",
+      "location": [
+        140.0,
+        750.0,
+        2080.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_10",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Hanging_Particles",
+      "location": [
+        -540.0,
+        -810.0,
+        370.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_11",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Hanging_Particles2",
+      "location": [
+        -390.0,
+        -70.0,
+        560.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_12",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Hanging_Particles3",
+      "location": [
+        -1020.0,
+        80.0,
+        560.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_13",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Hanging_Particles4",
+      "location": [
+        420.0,
+        -70.0,
+        700.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_14",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeS",
+      "location": [
+        -860.0,
+        -900.0,
+        1520.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_15",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeS2",
+      "location": [
+        -860.0,
+        -960.0,
+        1530.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_16",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeS3",
+      "location": [
+        -990.0,
+        -1010.0,
+        1520.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_17",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeS4",
+      "location": [
+        -5070.0,
+        -770.0,
+        1910.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_18",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeS5",
+      "location": [
+        -4950.0,
+        -770.0,
+        1910.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_19",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR10",
+      "location": [
+        -1350.0,
+        1180.0,
+        1250.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_2",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR2",
+      "location": [
+        140.0,
+        800.0,
+        2080.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_20",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR11",
+      "location": [
+        -1350.0,
+        1230.0,
+        1250.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_21",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR12",
+      "location": [
+        -1350.0,
+        1280.0,
+        1250.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_22",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeS6",
+      "location": [
+        -870.0,
+        -2540.0,
+        2040.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_23",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Hanging_Particles5",
+      "location": [
+        1090.0,
+        120.0,
+        700.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_28",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Hanging_Particles6",
+      "location": [
+        -2010.0,
+        80.0,
+        410.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_3",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR3",
+      "location": [
+        140.0,
+        850.0,
+        2080.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_33",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Flies_I",
+      "location": [
+        1220.0,
+        -20.0,
+        360.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_34",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Flies_I2",
+      "location": [
+        850.0,
+        -60.0,
+        280.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_35",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Flies_I3",
+      "location": [
+        850.0,
+        0.0,
+        280.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_36",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Flies_I4",
+      "location": [
+        510.0,
+        -40.0,
+        210.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_38",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Flies_I5",
+      "location": [
+        -50.0,
+        -70.0,
+        150.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_4",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR4",
+      "location": [
+        640.0,
+        -990.0,
+        2210.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_40",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Flies_I6",
+      "location": [
+        -1220.0,
+        410.0,
+        150.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_42",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Flies_I7",
+      "location": [
+        -2360.0,
+        -320.0,
+        120.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_43",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_Flies_I8",
+      "location": [
+        -2410.0,
+        -170.0,
+        130.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_5",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR5",
+      "location": [
+        640.0,
+        -940.0,
+        2210.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_6",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR6",
+      "location": [
+        640.0,
+        -890.0,
+        2210.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_7",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR7",
+      "location": [
+        1300.0,
+        -990.0,
+        2210.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_8",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR8",
+      "location": [
+        1300.0,
+        -940.0,
+        2210.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_9",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Alley/VFX/Map_Arena_Alley_VFX.umap",
+      "label": "N_ChimneySmokeSR9",
+      "location": [
+        1300.0,
+        -890.0,
+        2210.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

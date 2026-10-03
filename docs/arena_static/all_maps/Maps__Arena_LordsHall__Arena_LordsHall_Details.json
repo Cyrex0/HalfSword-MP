@@ -1,0 +1,1653 @@
+{
+  "map": "Arena_LordsHall_Details",
+  "package": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "DecalActor_0",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K56",
+      "location": [
+        -196.795,
+        0.307,
+        549.284
+      ]
+    },
+    {
+      "name": "DecalActor_1",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K57",
+      "location": [
+        4.373,
+        0.307,
+        385.947
+      ]
+    },
+    {
+      "name": "DecalActor_10",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K66",
+      "location": [
+        -1201.392,
+        0.307,
+        644.775
+      ]
+    },
+    {
+      "name": "DecalActor_100",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K6",
+      "location": [
+        -310.167,
+        2162.382,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_101",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K7",
+      "location": [
+        -251.498,
+        2582.57,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_102",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K8",
+      "location": [
+        -587.86,
+        1619.834,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_103",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K9",
+      "location": [
+        -219.36,
+        1366.442,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_104",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K10",
+      "location": [
+        -534.395,
+        1082.271,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_105",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K11",
+      "location": [
+        -213.529,
+        537.253,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_106",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K12",
+      "location": [
+        -1316.763,
+        915.239,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_107",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K13",
+      "location": [
+        -1064.396,
+        339.983,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_108",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K14",
+      "location": [
+        -1443.887,
+        178.78,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_109",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K151",
+      "location": [
+        -223.049,
+        0.307,
+        245.381
+      ]
+    },
+    {
+      "name": "DecalActor_11",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K67",
+      "location": [
+        -261.529,
+        0.307,
+        -12.067
+      ]
+    },
+    {
+      "name": "DecalActor_110",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K152",
+      "location": [
+        -626.13,
+        0.307,
+        160.572
+      ]
+    },
+    {
+      "name": "DecalActor_111",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K153",
+      "location": [
+        -598.19,
+        0.307,
+        568.076
+      ]
+    },
+    {
+      "name": "DecalActor_112",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Leakage_tdlodebc_2K",
+      "location": [
+        -796.863,
+        2880.55,
+        176.141
+      ]
+    },
+    {
+      "name": "DecalActor_113",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Leakage_tdlodebc_2K2",
+      "location": [
+        -700.118,
+        2882.714,
+        176.141
+      ]
+    },
+    {
+      "name": "DecalActor_114",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Leakage_tdlodebc_2K3",
+      "location": [
+        -896.856,
+        2891.502,
+        176.141
+      ]
+    },
+    {
+      "name": "DecalActor_115",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K",
+      "location": [
+        -798.681,
+        4.702,
+        519.187
+      ]
+    },
+    {
+      "name": "DecalActor_116",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K2",
+      "location": [
+        -798.681,
+        4.702,
+        729.571
+      ]
+    },
+    {
+      "name": "DecalActor_117",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K154",
+      "location": [
+        1.188,
+        794.262,
+        15.607
+      ]
+    },
+    {
+      "name": "DecalActor_118",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Misc_Decal_Coal_B_3",
+      "location": [
+        -783.965,
+        2765.359,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_119",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Misc_Decal_Coal_B_4",
+      "location": [
+        -819.485,
+        2706.626,
+        2.227
+      ]
+    },
+    {
+      "name": "DecalActor_12",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K68",
+      "location": [
+        5.176,
+        0.307,
+        14.312
+      ]
+    },
+    {
+      "name": "DecalActor_120",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K15",
+      "location": [
+        -1382.658,
+        1272.93,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_121",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K155",
+      "location": [
+        -1001.13,
+        0.307,
+        160.572
+      ]
+    },
+    {
+      "name": "DecalActor_122",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Misc_Decal_Coal_B_5",
+      "location": [
+        -1281.693,
+        2859.776,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_123",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Leakage_tdlodebc_2K4",
+      "location": [
+        -1303.96,
+        2892.075,
+        26.67
+      ]
+    },
+    {
+      "name": "DecalActor_124",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Misc_Decal_Coal_B_6",
+      "location": [
+        -791.764,
+        2001.727,
+        -4.021
+      ]
+    },
+    {
+      "name": "DecalActor_125",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Misc_Decal_Coal_B_7",
+      "location": [
+        -791.764,
+        794.706,
+        -4.097
+      ]
+    },
+    {
+      "name": "DecalActor_126",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K7",
+      "location": [
+        -406.784,
+        1801.469,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_127",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K9",
+      "location": [
+        -395.764,
+        996.651,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_128",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K10",
+      "location": [
+        -394.111,
+        598.004,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_129",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K11",
+      "location": [
+        -394.19,
+        199.388,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_13",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K69",
+      "location": [
+        -509.575,
+        0.307,
+        14.312
+      ]
+    },
+    {
+      "name": "DecalActor_130",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K12",
+      "location": [
+        -394.809,
+        2197.029,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_131",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K13",
+      "location": [
+        -394.19,
+        2595.677,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_132",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K14",
+      "location": [
+        -1204.77,
+        1801.469,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_133",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K15",
+      "location": [
+        -1203.617,
+        1395.089,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_134",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K16",
+      "location": [
+        -1194.77,
+        991.469,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_135",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K17",
+      "location": [
+        -1193.126,
+        595.301,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_136",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K18",
+      "location": [
+        -1192.177,
+        199.388,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_137",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K19",
+      "location": [
+        -1192.177,
+        2198.392,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_138",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K20",
+      "location": [
+        -1192.177,
+        2595.677,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_139",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Env_Workshop_Smithery_Decal_A_002",
+      "location": [
+        -808.427,
+        2.444,
+        -0.303
+      ]
+    },
+    {
+      "name": "DecalActor_14",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K70",
+      "location": [
+        -1013.675,
+        0.307,
+        14.312
+      ]
+    },
+    {
+      "name": "DecalActor_140",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Env_Workshop_Smithery_Decal_A_3",
+      "location": [
+        -792.143,
+        2.444,
+        -0.337
+      ]
+    },
+    {
+      "name": "DecalActor_141",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Leakage_tdfgahvc_2K",
+      "location": [
+        -798.203,
+        2757.099,
+        788.741
+      ]
+    },
+    {
+      "name": "DecalActor_142",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Debris_phluybp2_2K8",
+      "location": [
+        -406.134,
+        1397.361,
+        0.0
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DecalActor_15",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K71",
+      "location": [
+        -1391.349,
+        0.307,
+        14.312
+      ]
+    },
+    {
+      "name": "DecalActor_16",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K72",
+      "location": [
+        -451.455,
+        0.307,
+        776.348
+      ]
+    },
+    {
+      "name": "DecalActor_17",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K73",
+      "location": [
+        -1129.677,
+        0.307,
+        745.772
+      ]
+    },
+    {
+      "name": "DecalActor_18",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K74",
+      "location": [
+        -1420.221,
+        0.307,
+        546.193
+      ]
+    },
+    {
+      "name": "DecalActor_19",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K75",
+      "location": [
+        -1198.608,
+        0.307,
+        447.066
+      ]
+    },
+    {
+      "name": "DecalActor_2",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K58",
+      "location": [
+        -20.77,
+        0.307,
+        139.155
+      ]
+    },
+    {
+      "name": "DecalActor_20",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K76",
+      "location": [
+        -1196.314,
+        0.307,
+        144.062
+      ]
+    },
+    {
+      "name": "DecalActor_21",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K77",
+      "location": [
+        -1575.058,
+        0.307,
+        88.696
+      ]
+    },
+    {
+      "name": "DecalActor_22",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K78",
+      "location": [
+        -1603.394,
+        0.307,
+        376.721
+      ]
+    },
+    {
+      "name": "DecalActor_23",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K79",
+      "location": [
+        -898.169,
+        0.307,
+        885.562
+      ]
+    },
+    {
+      "name": "DecalActor_24",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K80",
+      "location": [
+        -702.577,
+        0.307,
+        887.409
+      ]
+    },
+    {
+      "name": "DecalActor_25",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K81",
+      "location": [
+        -1599.725,
+        28.079,
+        126.243
+      ]
+    },
+    {
+      "name": "DecalActor_26",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K82",
+      "location": [
+        -1599.725,
+        28.574,
+        420.672
+      ]
+    },
+    {
+      "name": "DecalActor_27",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K83",
+      "location": [
+        -1599.725,
+        109.435,
+        15.607
+      ]
+    },
+    {
+      "name": "DecalActor_28",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K84",
+      "location": [
+        -1599.725,
+        444.262,
+        15.607
+      ]
+    },
+    {
+      "name": "DecalActor_29",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K85",
+      "location": [
+        -1599.725,
+        733.338,
+        -12.38
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K59",
+      "location": [
+        -391.913,
+        0.307,
+        139.155
+      ]
+    },
+    {
+      "name": "DecalActor_30",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K86",
+      "location": [
+        -1599.725,
+        983.038,
+        10.317
+      ]
+    },
+    {
+      "name": "DecalActor_31",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K87",
+      "location": [
+        -1599.725,
+        1243.319,
+        -10.167
+      ]
+    },
+    {
+      "name": "DecalActor_32",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K88",
+      "location": [
+        -1599.725,
+        1492.435,
+        -10.25
+      ]
+    },
+    {
+      "name": "DecalActor_33",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K89",
+      "location": [
+        -1599.726,
+        1738.378,
+        15.195
+      ]
+    },
+    {
+      "name": "DecalActor_34",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K90",
+      "location": [
+        -1599.726,
+        2014.371,
+        -12.035
+      ]
+    },
+    {
+      "name": "DecalActor_35",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K91",
+      "location": [
+        -1599.726,
+        2447.768,
+        15.086
+      ]
+    },
+    {
+      "name": "DecalActor_36",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K92",
+      "location": [
+        -1599.726,
+        2725.458,
+        -14.139
+      ]
+    },
+    {
+      "name": "DecalActor_37",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K93",
+      "location": [
+        -1599.726,
+        2175.173,
+        -14.139
+      ]
+    },
+    {
+      "name": "DecalActor_38",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K94",
+      "location": [
+        1.188,
+        109.435,
+        15.607
+      ]
+    },
+    {
+      "name": "DecalActor_39",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K95",
+      "location": [
+        1.188,
+        444.262,
+        15.607
+      ]
+    },
+    {
+      "name": "DecalActor_4",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K60",
+      "location": [
+        -366.771,
+        0.307,
+        438.958
+      ]
+    },
+    {
+      "name": "DecalActor_40",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K96",
+      "location": [
+        1.188,
+        983.038,
+        10.317
+      ]
+    },
+    {
+      "name": "DecalActor_41",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K97",
+      "location": [
+        1.188,
+        1243.319,
+        -10.167
+      ]
+    },
+    {
+      "name": "DecalActor_42",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K98",
+      "location": [
+        1.188,
+        1738.378,
+        15.195
+      ]
+    },
+    {
+      "name": "DecalActor_43",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K99",
+      "location": [
+        1.188,
+        2014.371,
+        -12.035
+      ]
+    },
+    {
+      "name": "DecalActor_44",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K101",
+      "location": [
+        0.069,
+        2706.426,
+        -16.065
+      ]
+    },
+    {
+      "name": "DecalActor_45",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K102",
+      "location": [
+        1.188,
+        2277.222,
+        -13.041
+      ]
+    },
+    {
+      "name": "DecalActor_46",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K100",
+      "location": [
+        -1599.725,
+        403.791,
+        496.126
+      ]
+    },
+    {
+      "name": "DecalActor_47",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K103",
+      "location": [
+        -1599.725,
+        795.445,
+        471.457
+      ]
+    },
+    {
+      "name": "DecalActor_48",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K104",
+      "location": [
+        -1599.725,
+        1213.138,
+        469.863
+      ]
+    },
+    {
+      "name": "DecalActor_49",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K105",
+      "location": [
+        -1599.726,
+        1601.314,
+        498.068
+      ]
+    },
+    {
+      "name": "DecalActor_5",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K61",
+      "location": [
+        -397.048,
+        0.307,
+        635.625
+      ]
+    },
+    {
+      "name": "DecalActor_50",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K106",
+      "location": [
+        -1599.726,
+        2008.957,
+        494.191
+      ]
+    },
+    {
+      "name": "DecalActor_51",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K107",
+      "location": [
+        -1599.726,
+        2487.378,
+        469.632
+      ]
+    },
+    {
+      "name": "DecalActor_52",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K108",
+      "location": [
+        -1599.726,
+        2688.81,
+        469.632
+      ]
+    },
+    {
+      "name": "DecalActor_53",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K109",
+      "location": [
+        -1599.725,
+        1370.074,
+        384.609
+      ]
+    },
+    {
+      "name": "DecalActor_54",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K110",
+      "location": [
+        -1599.725,
+        1404.511,
+        382.839
+      ]
+    },
+    {
+      "name": "DecalActor_55",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K111",
+      "location": [
+        -1599.725,
+        1005.248,
+        402.532
+      ]
+    },
+    {
+      "name": "DecalActor_56",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K112",
+      "location": [
+        -1599.725,
+        967.195,
+        386.154
+      ]
+    },
+    {
+      "name": "DecalActor_57",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K113",
+      "location": [
+        -1599.725,
+        631.57,
+        382.851
+      ]
+    },
+    {
+      "name": "DecalActor_58",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K114",
+      "location": [
+        -1599.725,
+        591.526,
+        382.438
+      ]
+    },
+    {
+      "name": "DecalActor_59",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K115",
+      "location": [
+        -1599.725,
+        169.406,
+        381.822
+      ]
+    },
+    {
+      "name": "DecalActor_6",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K62",
+      "location": [
+        -423.869,
+        0.307,
+        314.41
+      ]
+    },
+    {
+      "name": "DecalActor_60",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K116",
+      "location": [
+        -1599.725,
+        229.605,
+        388.568
+      ]
+    },
+    {
+      "name": "DecalActor_61",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K117",
+      "location": [
+        -1599.726,
+        1830.961,
+        378.994
+      ]
+    },
+    {
+      "name": "DecalActor_62",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K118",
+      "location": [
+        -1599.726,
+        1793.807,
+        379.697
+      ]
+    },
+    {
+      "name": "DecalActor_63",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K119",
+      "location": [
+        -1599.726,
+        2166.194,
+        400.738
+      ]
+    },
+    {
+      "name": "DecalActor_64",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K120",
+      "location": [
+        -1599.726,
+        2234.132,
+        405.397
+      ]
+    },
+    {
+      "name": "DecalActor_65",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K121",
+      "location": [
+        -1599.726,
+        2567.139,
+        401.207
+      ]
+    },
+    {
+      "name": "DecalActor_66",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K122",
+      "location": [
+        -1599.726,
+        2604.143,
+        401.25
+      ]
+    },
+    {
+      "name": "DecalActor_67",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K123",
+      "location": [
+        -1599.726,
+        2778.138,
+        293.331
+      ]
+    },
+    {
+      "name": "DecalActor_68",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K124",
+      "location": [
+        -1599.726,
+        2773.974,
+        51.706
+      ]
+    },
+    {
+      "name": "DecalActor_69",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K125",
+      "location": [
+        -200.738,
+        2799.743,
+        -14.117
+      ]
+    },
+    {
+      "name": "DecalActor_7",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K63",
+      "location": [
+        -405.019,
+        0.307,
+        98.016
+      ]
+    },
+    {
+      "name": "DecalActor_70",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K126",
+      "location": [
+        -1116.408,
+        2799.743,
+        -14.117
+      ]
+    },
+    {
+      "name": "DecalActor_71",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K127",
+      "location": [
+        -1424.047,
+        2799.743,
+        -14.117
+      ]
+    },
+    {
+      "name": "DecalActor_72",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K128",
+      "location": [
+        -0.251,
+        29.007,
+        420.672
+      ]
+    },
+    {
+      "name": "DecalActor_73",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K129",
+      "location": [
+        -0.243,
+        403.792,
+        496.126
+      ]
+    },
+    {
+      "name": "DecalActor_74",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K130",
+      "location": [
+        -0.243,
+        795.445,
+        471.457
+      ]
+    },
+    {
+      "name": "DecalActor_75",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K131",
+      "location": [
+        -0.241,
+        1191.941,
+        472.445
+      ]
+    },
+    {
+      "name": "DecalActor_76",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K132",
+      "location": [
+        -0.243,
+        1601.314,
+        498.068
+      ]
+    },
+    {
+      "name": "DecalActor_77",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K133",
+      "location": [
+        -0.244,
+        2008.957,
+        494.191
+      ]
+    },
+    {
+      "name": "DecalActor_78",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K134",
+      "location": [
+        -0.245,
+        2487.379,
+        469.632
+      ]
+    },
+    {
+      "name": "DecalActor_79",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K135",
+      "location": [
+        -0.245,
+        2688.81,
+        469.632
+      ]
+    },
+    {
+      "name": "DecalActor_8",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K64",
+      "location": [
+        -1170.449,
+        0.307,
+        98.016
+      ]
+    },
+    {
+      "name": "DecalActor_80",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K136",
+      "location": [
+        -0.251,
+        1370.074,
+        384.609
+      ]
+    },
+    {
+      "name": "DecalActor_81",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K137",
+      "location": [
+        -0.251,
+        1404.511,
+        382.839
+      ]
+    },
+    {
+      "name": "DecalActor_82",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K138",
+      "location": [
+        -0.251,
+        1005.248,
+        402.532
+      ]
+    },
+    {
+      "name": "DecalActor_83",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K139",
+      "location": [
+        -0.251,
+        967.195,
+        386.154
+      ]
+    },
+    {
+      "name": "DecalActor_84",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K140",
+      "location": [
+        -0.251,
+        631.57,
+        382.851
+      ]
+    },
+    {
+      "name": "DecalActor_85",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K141",
+      "location": [
+        -0.251,
+        591.526,
+        382.438
+      ]
+    },
+    {
+      "name": "DecalActor_86",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K142",
+      "location": [
+        -0.251,
+        169.406,
+        381.822
+      ]
+    },
+    {
+      "name": "DecalActor_87",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K143",
+      "location": [
+        -0.251,
+        229.605,
+        388.569
+      ]
+    },
+    {
+      "name": "DecalActor_88",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K144",
+      "location": [
+        -0.251,
+        1830.961,
+        378.994
+      ]
+    },
+    {
+      "name": "DecalActor_89",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K145",
+      "location": [
+        -0.251,
+        1793.807,
+        379.698
+      ]
+    },
+    {
+      "name": "DecalActor_9",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K65",
+      "location": [
+        -1201.741,
+        0.307,
+        360.77
+      ]
+    },
+    {
+      "name": "DecalActor_90",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K146",
+      "location": [
+        -0.26,
+        2166.194,
+        400.738
+      ]
+    },
+    {
+      "name": "DecalActor_91",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K147",
+      "location": [
+        -0.259,
+        2234.132,
+        405.397
+      ]
+    },
+    {
+      "name": "DecalActor_92",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K148",
+      "location": [
+        -0.254,
+        2567.139,
+        401.207
+      ]
+    },
+    {
+      "name": "DecalActor_93",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K149",
+      "location": [
+        -0.251,
+        2779.776,
+        293.331
+      ]
+    },
+    {
+      "name": "DecalActor_94",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K150",
+      "location": [
+        -0.251,
+        2778.507,
+        51.706
+      ]
+    },
+    {
+      "name": "DecalActor_95",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K2",
+      "location": [
+        -1210.661,
+        2448.231,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_96",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Misc_Decal_Coal_B_2",
+      "location": [
+        -813.965,
+        2875.359,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_97",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K3",
+      "location": [
+        -1450.224,
+        2178.77,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_98",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K4",
+      "location": [
+        -1209.212,
+        1859.532,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_99",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Details.umap",
+      "label": "MI_Road_Dust_sg1no3n_2K5",
+      "location": [
+        -1442.187,
+        2631.362,
+        0.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

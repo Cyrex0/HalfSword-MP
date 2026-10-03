@@ -1,0 +1,10 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-8": "fail"
+  },
+  "messages": [
+    "Settings.sav: written during the run (size 2048 -> 2048",
+    "changed/added/removed: none"
+  ]
+}

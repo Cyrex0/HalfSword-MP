@@ -1,0 +1,52 @@
+{
+  "map": "Arena_Cutting_Ground_B_001",
+  "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_B_001.umap",
+  "kind": "level_instance",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_B_001.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [
+    {
+      "name": "Arena_Cutting_Ground_B_001_C_0",
+      "class": "Arena_Cutting_Ground_B_001_C",
+      "class_path": "/Game/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_B_001.Arena_Cutting_Ground_B_001_C",
+      "class_chain": [
+        "Arena_Cutting_Ground_B_001_C",
+        "LevelScriptActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_B_001.umap",
+      "instance_properties": {},
+      "effective_properties": {}
+    }
+  ],
+  "other_actors": [],
+  "static_mesh_actors_static_count": 205,
+  "errors": [],
+  "warnings": []
+}

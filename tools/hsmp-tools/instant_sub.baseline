@@ -1,0 +1,5 @@
+# G0 `instant_sub` baseline (hsmp-gate lint::instant_sub_hits): known `Instant::now() - <Duration>`
+# hits, keyed `path: trimmed line` (no line numbers). Each line covers ONE hit in that file (a
+# count). A baselined hit is reported, not failed; a NEW hit fails G0, and so does a STALE entry
+# (a left-over entry would silently re-admit the same line). Remove an entry when the hit is
+# fixed. No entries are left.

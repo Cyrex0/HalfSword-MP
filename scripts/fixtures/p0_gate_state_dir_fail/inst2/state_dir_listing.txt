@@ -1,0 +1,8 @@
+.career_guard.jsonl
+.player_key
+.settings.json
+hsmp_events.jsonl
+hsmp_events.1.jsonl
+identity
+known_servers.json
+.pid.sidecar.json

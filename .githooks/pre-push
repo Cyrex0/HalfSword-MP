@@ -1,0 +1,42 @@
+#!/bin/sh
+# HSMP G0 gate. Blocks the push when a check fails.
+# Enable once per clone/worktree:   git config core.hooksPath .githooks
+# Quick local loop (no cargo test): <target>/release/hsmp-gate g0 --quick
+# Everything is Rust (no Python): hsmp-gate g0 runs check-bp-names, lua-check, lua-test,
+# the travel lint, the kill-by-image-name grep, the gate self-test and cargo test --workspace.
+# Without the game (HSMP_GAME_DIR / <repo>/game) the checks that need its UE4SS object dump
+# are reported as SKIP; they do not block the push.
+#
+# G0 checks the working tree. It only certifies the push when the tree is clean and every
+# pushed commit is HEAD (pushing another branch / an older commit is refused: check it out first).
+repo=$(git rev-parse --show-toplevel) || exit 1
+head=$(git rev-parse HEAD) || exit 1
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ -z "$local_sha" ] && continue
+    [ "$local_sha" = "$zero" ] && continue          # deleting a remote ref: nothing to test
+    if [ "$local_sha" != "$head" ]; then
+        echo "[G0] $local_ref ($local_sha) is not HEAD ($head): G0 tests the working tree, so it cannot vouch for it." >&2
+        echo "[G0] check that commit out and push from there." >&2
+        exit 1
+    fi
+done
+if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
+    echo "[G0] the working tree has uncommitted changes: G0 would test them, not the pushed commit. Commit them first." >&2
+    exit 1
+fi
+if command -v cargo >/dev/null 2>&1; then CARGO=cargo
+elif [ -x "$HOME/.cargo/bin/cargo" ] || [ -x "$HOME/.cargo/bin/cargo.exe" ]; then CARGO="$HOME/.cargo/bin/cargo"
+elif [ -n "$USERPROFILE" ]; then CARGO="$USERPROFILE/.cargo/bin/cargo"
+else echo "[G0] cargo not found; cannot run the gate" >&2; exit 1
+fi
+"$CARGO" build --release --locked --quiet -p hsmp-tools --manifest-path "$repo/Cargo.toml" || {
+    echo "[G0] building hsmp-tools / hsmp-gate failed" >&2; exit 1; }
+# cargo honours CARGO_TARGET_DIR (per-worktree target dirs)
+target="${CARGO_TARGET_DIR:-$repo/target}"
+gate="$target/release/hsmp-gate"
+[ -x "$gate.exe" ] && gate="$gate.exe"
+HSMP_ROOT="$repo" "$gate" --repo "$repo" g0
+status=$?
+[ $status -ne 0 ] && echo "[G0] push blocked. Fix the failures above (docs/development/testing.md, section G0)." >&2
+exit $status

@@ -1,0 +1,82 @@
+{
+  "map": "Arena_Ambush_Map_VFX",
+  "package": "HalfswordUE5/Content/Maps/VFX_Level_Layer/Arena_Ambush_Map_VFX.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/VFX_Level_Layer/Arena_Ambush_Map_VFX.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_InteractionController_0",
+      "class": "BP_InteractionController_C",
+      "source": "HalfswordUE5/Content/Maps/VFX_Level_Layer/Arena_Ambush_Map_VFX.umap",
+      "label": "BP_InteractionController",
+      "location": [
+        2368.308,
+        874.246,
+        210.524
+      ]
+    },
+    {
+      "name": "BP_UltraVolumetrics19_0",
+      "class": "BP_UltraVolumetrics_C",
+      "source": "HalfswordUE5/Content/Maps/VFX_Level_Layer/Arena_Ambush_Map_VFX.umap",
+      "label": "BP_UltraVolumetrics19",
+      "location": [
+        -470.116,
+        -292.369,
+        463.392
+      ]
+    },
+    {
+      "name": "BP_UltraVolumetrics19_1",
+      "class": "BP_UltraVolumetrics_C",
+      "source": "HalfswordUE5/Content/Maps/VFX_Level_Layer/Arena_Ambush_Map_VFX.umap",
+      "label": "BP_UltraVolumetrics20",
+      "location": [
+        -1556.877,
+        -292.369,
+        444.708
+      ]
+    },
+    {
+      "name": "BP_UltraVolumetrics19_2",
+      "class": "BP_UltraVolumetrics_C",
+      "source": "HalfswordUE5/Content/Maps/VFX_Level_Layer/Arena_Ambush_Map_VFX.umap",
+      "label": "BP_UltraVolumetrics21",
+      "location": [
+        2283.123,
+        357.631,
+        224.708
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

@@ -1,0 +1,192 @@
+{
+  "map": "Workshop_Smithery_Map_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -96.705,
+        -191.335,
+        112.622
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        -415.115,
+        -145.024,
+        217.981
+      ]
+    },
+    {
+      "name": "PointLight_1",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight",
+      "location": [
+        -238.723,
+        83.069,
+        103.415
+      ]
+    },
+    {
+      "name": "PointLight_2",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight2",
+      "location": [
+        -854.943,
+        -454.438,
+        103.415
+      ]
+    },
+    {
+      "name": "PointLight_3",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "PointLight3",
+      "location": [
+        -200.082,
+        -329.548,
+        213.545
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "Half Sword Graphics v2.5",
+      "location": [
+        903.295,
+        -212.836,
+        0.0
+      ]
+    },
+    {
+      "name": "SkeletalMeshActor_0",
+      "class": "SkeletalMeshActor",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "Sk_Armor_Neck_Bevor_2",
+      "location": [
+        -362.908,
+        -557.644,
+        -51.335
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        553.295,
+        37.164,
+        100.0
+      ]
+    },
+    {
+      "name": "SkyLight_2",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        -366.754,
+        -290.03,
+        221.072
+      ]
+    },
+    {
+      "name": "SpotLight_1",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight",
+      "location": [
+        -73.842,
+        -644.639,
+        134.925
+      ]
+    },
+    {
+      "name": "SpotLight_2",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight2",
+      "location": [
+        -581.866,
+        -622.766,
+        172.196
+      ]
+    },
+    {
+      "name": "SpotLight_3",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight3",
+      "location": [
+        11.717,
+        105.496,
+        160.126
+      ]
+    },
+    {
+      "name": "SpotLight_4",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight4",
+      "location": [
+        -204.292,
+        -794.026,
+        230.104
+      ]
+    },
+    {
+      "name": "SpotLight_5",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Workshop_Smithery_Map_Lighting.umap",
+      "label": "SpotLight5",
+      "location": [
+        -518.352,
+        418.582,
+        430.645
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 7,
+  "errors": [],
+  "warnings": []
+}

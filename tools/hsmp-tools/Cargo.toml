@@ -1,0 +1,43 @@
+[package]
+name = "hsmp-tools"
+description = "HSMP developer tools: the G0 gate, lints, netsim, generators and the Lua test harness"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# One CLI binary, `hsmp-tools <subcommand>` (see docs/development/tools.md), plus the
+# gate (`hsmp-gate`) and the lints in src/bin/. The library half
+# (`hsmp_tools::{luatest, lint, lualex, paths}`) is shared by all of them.
+#
+#   cargo build --release -p hsmp-tools
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "hsmp-tools"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+hsmp-ipc = { path = "../../crates/hsmp-ipc", features = ["json"] }
+hsmp-pose = { path = "../../crates/hsmp-pose" }
+bytemuck = "1"
+clap = { version = "4", features = ["derive"] }
+mlua = { version = "0.10", features = ["lua54", "vendored", "serialize"] }
+rand = "0.8"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+socket2 = "0.5"
+tokio = { version = "1", features = ["rt", "net", "time", "macros", "sync", "signal"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_Media", "Win32_Security", "Win32_System_ProcessStatus", "Win32_System_Threading"] }
+
+[lints]
+workspace = true

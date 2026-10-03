@@ -1,0 +1,161 @@
+{
+  "map": "Arena_Cutting_Map_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_2",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "location": [
+        110.0,
+        10.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        15000.0,
+        15000.0,
+        15000.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_SkySphere",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'Engine/Content/EngineSky/SM_SkySphere.SM_SkySphere'",
+      "instance_properties": {
+        "bEnableAutoLODGeneration": false
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_1",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -34.344,
+        -0.058,
+        503.605
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_3",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box2",
+      "location": [
+        -16.456,
+        -1257.208,
+        40.034
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_4",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box3",
+      "location": [
+        -940.609,
+        316.897,
+        40.034
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_1",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere",
+      "location": [
+        -10.1,
+        -20.312,
+        -1026.175
+      ]
+    },
+    {
+      "name": "DirectionalLight_1",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -170.0,
+        -170.0,
+        50.0
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_1",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        0.0,
+        -120.0,
+        80.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_1",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        100.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyLight_1",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Cutting_Map_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        -30.0,
+        0.0,
+        400.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

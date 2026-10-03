@@ -1,0 +1,106 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # Keep in step with rust-toolchain.toml.
+  RUST_TOOLCHAIN: "1.98.1"
+
+jobs:
+  # The G0 gate without the game: lints, Lua suites, the gate self-test and
+  # `cargo test --workspace`. bp_names and the dump rules of `unsafe` report SKIP.
+  # Then the end-to-end suite: real server, sidecars and master over UDP/HTTP.
+  windows:
+    name: Windows (G0 + e2e)
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build hsmp-tools and the server
+        run: cargo build --release --locked -p hsmp-tools -p hsmp-server
+      - name: G0 (no game)
+        shell: bash
+        run: target/release/hsmp-gate.exe --repo "$PWD" g0 --no-stamp
+      - name: End-to-end tests
+        shell: bash
+        run: |
+          HSMP_TOOLS="$PWD/target/release/hsmp-tools.exe" \
+          HSMP_BINS="$PWD/target/release" \
+          bash scripts/e2e-test.sh
+
+  # Clippy must compile and must not hit a deny-level lint. Style lints that are noisy
+  # across the existing code are allowed in the root Cargo.toml ([workspace.lints]);
+  # the remaining warnings are reported, not fatal, until they are cleaned up.
+  clippy:
+    name: Clippy
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets --locked
+
+  # The dedicated server and master build and pass their tests on Linux.
+  linux:
+    name: Linux (server)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p hsmp-net -p hsmp-server -p hsmp-modes
+      - run: cargo build --release --locked -p hsmp-server --bin hsmp-server --bin hsmp-master --bin hsmp-query
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hsmp-server-linux-x86_64
+          path: |
+            target/release/hsmp-server
+            target/release/hsmp-master
+            target/release/hsmp-query
+
+  # The Docker image builds, starts, answers through the master and keeps its identity key
+  # in the data volume.
+  docker:
+    name: Docker image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build -t hsmp-server:ci .
+      - name: Smoke test
+        run: |
+          docker run -d --name hsmp -p 7777:7777/udp -p 7778:7778 -e HSMP_WITH_MASTER=1 hsmp-server:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:7778/v1/health && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:7778/v1/health
+          docker exec hsmp test -f /hsmp/data/server_identity.key
+          docker logs hsmp
+      - name: Clean up
+        if: always()
+        run: docker rm -f hsmp || true

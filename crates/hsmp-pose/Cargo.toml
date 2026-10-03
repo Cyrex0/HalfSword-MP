@@ -1,0 +1,16 @@
+[package]
+name = "hsmp-pose"
+description = "HSMP pose codec (v1 + codec v2), the game-side pose sample encoder and the receiver jitter buffer (poseplay): pure Rust, no IO"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+hsmp-ipc = { path = "../hsmp-ipc" }
+
+[lints]
+workspace = true

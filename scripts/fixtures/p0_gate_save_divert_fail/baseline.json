@@ -1,0 +1,22 @@
+{
+  "save_hashes": {
+    "GameProgress.sav": "aa11",
+    "Settings.sav": "bb22"
+  },
+  "save_files": {
+    "GameProgress.sav": {
+      "size": 18432,
+      "mtime_ms": 1790793600000,
+      "sha256": "aa11"
+    },
+    "Settings.sav": {
+      "size": 2048,
+      "mtime_ms": 1790794000000,
+      "sha256": "bb22"
+    }
+  },
+  "crash_dirs": [
+    "UECC-old"
+  ],
+  "wall_ms": 1790879980000
+}

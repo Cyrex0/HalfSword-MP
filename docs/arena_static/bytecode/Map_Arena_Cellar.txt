@@ -1,0 +1,113 @@
+
+=== FUNCTION ExecuteUbergraph_Map_Arena_Cellar  (Map_Arena_Cellar_C)
+       0: push_flow 3326
+       5: goto computed EntryPoint
+      15: CallFunc_EqualEqual_ByteByte_ReturnValue_2 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 2)
+      68: pop_flow_if_not (CallFunc_EqualEqual_ByteByte_ReturnValue_2)
+      78: CallFunc_IsValid_ReturnValue = IsValid(self.Boss Barrel)
+     107: pop_flow_if_not (CallFunc_IsValid_ReturnValue)
+     117: CallFunc_LessEqual_DoubleDouble_ReturnValue = LessEqual_DoubleDouble(self.Boss Barrel.self.Health, 0.0)
+     177: pop_flow_if_not (CallFunc_LessEqual_DoubleDouble_ReturnValue)
+     187: push_flow 207
+     192: if not (Temp_bool_Has_Been_Initd_Variable) goto 324
+     206: pop_flow
+     207: if not (Temp_bool_IsClosed_Variable) goto 222
+     221: pop_flow
+     222: Temp_bool_IsClosed_Variable = true
+     233: CallFunc_Create_ReturnValue_2 = Default__WidgetBlueprintLibrary.Create(self, UI_WinScreen_C, None)
+     286: CallFunc_Create_ReturnValue_2.AddToViewport(0)
+     323: pop_flow
+     324: Temp_bool_Has_Been_Initd_Variable = true
+     335: pop_flow_if_not (false)
+     337: Temp_bool_IsClosed_Variable = true
+     348: pop_flow
+     349: CallFunc_Create_ReturnValue_3 = Default__WidgetBlueprintLibrary.Create(self, UI_Widget_HUD_HealthBar_C, None)
+     402: SetObjectPropertyByName(CallFunc_Create_ReturnValue_3, "My Barrel", self.Boss Barrel)
+     443: CallFunc_Create_ReturnValue_3.AddToViewport(0)
+     480: pop_flow
+     481: self.Forged Weapon Pass = self.As GI Settings.self.Forged Weapon Passport
+     530: CallFunc_MakeTransform_ReturnValue_2 = MakeTransform(VectorConst({"X": 1000.0, "Y": 600.0, "Z": 125.0}), RotationConst({"Pitch": 0.0, "Yaw": 90.0, "Roll": 90.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     633: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2 = BeginDeferredActorSpawnFromClass(self, self.Forged Weapon Pass.WeaponClass_54_B478ECF7499977809745A3973AD678EC, CallFunc_MakeTransform_ReturnValue_2, 2, None, 1)
+     686: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2, "Weapon Passport", self.Forged Weapon Pass)
+     749: CallFunc_MakeTransform_ReturnValue_2 = MakeTransform(VectorConst({"X": 1000.0, "Y": 600.0, "Z": 125.0}), RotationConst({"Pitch": 0.0, "Yaw": 90.0, "Roll": 90.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+     852: CallFunc_FinishSpawningActor_ReturnValue_2 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2, CallFunc_MakeTransform_ReturnValue_2, 1)
+     892: CallFunc_FinishSpawningActor_ReturnValue_2.self.SearchBeacon.SetCollisionEnabled(0)
+     952: pop_flow
+     953: CallFunc_MakeTransform_ReturnValue_1 = MakeTransform(VectorConst({"X": 679.0, "Y": 699.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    1056: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1 = BeginDeferredActorSpawnFromClass(self, BP_Barrel_Destructable_Constraits_C, CallFunc_MakeTransform_ReturnValue_1, 0, None, 1)
+    1100: SetBoolPropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Respawn Self (Collisions Hack)", false)
+    1133: CallFunc_MakeTransform_ReturnValue_1 = MakeTransform(VectorConst({"X": 679.0, "Y": 699.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    1236: CallFunc_FinishSpawningActor_ReturnValue_1 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, CallFunc_MakeTransform_ReturnValue_1, 1)
+    1276: self.Boss Barrel = CallFunc_FinishSpawningActor_ReturnValue_1
+    1295: CallFunc_Create_ReturnValue_1 = Default__WidgetBlueprintLibrary.Create(self, UI_Briefing_Text_Fade_C, None)
+    1348: Temp_text_Variable = {"Token": "EX_StringConst", "Value": "Destroy the barrel"}
+    1424: SetTextPropertyByName(CallFunc_Create_ReturnValue_1, "Text to write", Temp_text_Variable)
+    1465: CallFunc_Create_ReturnValue_1.AddToViewport(99)
+    1502: Delay(self, 1.0, LatentActionInfo{SkipOffsetConst(Value=349), 1821486750, "ExecuteUbergraph_Map_Arena_Cellar", self})
+    1556: pop_flow
+    1557: CallFunc_Create_ReturnValue = Default__WidgetBlueprintLibrary.Create(self, UI_Tutorial_HUD_C, None)
+    1610: CallFunc_Create_ReturnValue.AddToViewport(0)
+    1647: pop_flow
+    1648: push_flow 3071
+    1653: push_flow 2912
+    1658: push_flow 2598
+    1663: push_flow 1789
+    1668: push_flow 2021
+    1673: CallFunc_GetGameInstance_ReturnValue = GetGameInstance(self)
+    1694: K2Node_DynamicCast_AsGI_Settings = Cast<GI_Settings_C>(CallFunc_GetGameInstance_ReturnValue)
+    1730: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsGI_Settings)
+    1759: pop_flow_if_not (K2Node_DynamicCast_bSuccess)
+    1769: self.As GI Settings = K2Node_DynamicCast_AsGI_Settings
+    1788: pop_flow
+    1789: push_flow 1912
+    1794: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 2)
+    1847: pop_flow_if_not (CallFunc_EqualEqual_ByteByte_ReturnValue)
+    1857: Delay(self, 2.5, LatentActionInfo{SkipOffsetConst(Value=953), 12351889, "ExecuteUbergraph_Map_Arena_Cellar", self})
+    1911: pop_flow
+    1912: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 3)
+    1965: if not (CallFunc_EqualEqual_ByteByte_ReturnValue_1) goto 1984
+    1979: goto 1557
+    1984: self.BP_Prop_Training_Dummy_001_C_0_ExecuteUbergraph_Map_Arena_Cellar_RefProperty.K2_DestroyActor()
+    2020: pop_flow
+    2021: CallFunc_EqualEqual_ByteByte_ReturnValue_3 = EqualEqual_ByteByte(self.As GI Settings.self.Current Lose Condition, 3)
+    2074: CallFunc_EqualEqual_ByteByte_ReturnValue_4 = EqualEqual_ByteByte(self.As GI Settings.self.Current Play Mode, 0)
+    2127: CallFunc_EqualEqual_ByteByte_ReturnValue_5 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 1)
+    2180: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_EqualEqual_ByteByte_ReturnValue_3, CallFunc_EqualEqual_ByteByte_ReturnValue_5)
+    2218: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_BooleanAND_ReturnValue, CallFunc_EqualEqual_ByteByte_ReturnValue_4)
+    2256: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_1)
+    2266: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 724.0, "Y": 709.0, "Z": 2.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    2369: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, BP_Fence_Bags_C, CallFunc_MakeTransform_ReturnValue, 0, None, 1)
+    2413: SetDoublePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Radius", 400.0)
+    2454: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 724.0, "Y": 709.0, "Z": 2.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    2557: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_MakeTransform_ReturnValue, 1)
+    2597: pop_flow
+    2598: Temp_object_Variable = Cue_Music_Barrel
+    2617: Temp_object_Variable_1 = Sound_Music_Cellar_Cue
+    2636: Temp_object_Variable_2 = Sound_Music_Cellar_Cue
+    2655: Temp_object_Variable_3 = Sound_Music_Drunk_Cue
+    2674: Temp_object_Variable_4 = None
+    2685: Temp_object_Variable_5 = None
+    2696: Temp_byte_Variable = self.As GI Settings.self.Current Game Mode enum
+    2745: Default__GameplayStatics.PlaySound2D(self, switch(Temp_byte_Variable) {0: Temp_object_Variable_2; 1: Temp_object_Variable_1; 2: Temp_object_Variable; 3: Temp_object_Variable_3; 4: Temp_object_Variable_4; 5: Temp_object_Variable_5; default: K2Node_Select_Default}, 1.0, 1.0, 0.0, None, None, true)
+    2911: pop_flow
+    2912: CallFunc_LoadLevelInstanceBySoftObjectPtr_ReturnValue = LoadLevelInstanceBySoftObjectPtr(self, "/Game/Maps/Lighting/Arena_Cellar_Map_Lighting.Arena_Cellar_Map_Lighting", VectorConst({"X": 0.0, "Y": 0.0, "Z": 0.0}), RotationConst({"Pitch": 0.0, "Yaw": 0.0, "Roll": 0.0}), CallFunc_LoadLevelInstanceBySoftObjectPtr_bOutSuccess, "", None, false)
+    3070: pop_flow
+    3071: if not (self.As GI Settings.self.Currently Customized Weapon Testing) goto 3162
+    3107: Delay(self, 3.0, LatentActionInfo{SkipOffsetConst(Value=481), 2061373179, "ExecuteUbergraph_Map_Arena_Cellar", self})
+    3161: pop_flow
+    3162: self.StaticMeshActor_2_ExecuteUbergraph_Map_Arena_Cellar_RefProperty.K2_DestroyActor()
+    3198: self.StaticMeshActor_8_ExecuteUbergraph_Map_Arena_Cellar_RefProperty.K2_DestroyActor()
+    3234: self.StaticMeshActor_1_ExecuteUbergraph_Map_Arena_Cellar_RefProperty.K2_DestroyActor()
+    3270: pop_flow
+    3271: Delay(self, 2.0, LatentActionInfo{SkipOffsetConst(Value=15), 545681854, "ExecuteUbergraph_Map_Arena_Cellar", self})
+    3325: pop_flow
+    3326: return _
+
+=== FUNCTION ReceiveBeginPlay  (Map_Arena_Cellar_C)
+       0: ExecuteUbergraph_Map_Arena_Cellar(1648)
+      15: return _
+
+=== FUNCTION ReceiveTick  (Map_Arena_Cellar_C)
+       0: K2Node_Event_DeltaSeconds = _
+      18: ExecuteUbergraph_Map_Arena_Cellar(3271)
+      33: return _

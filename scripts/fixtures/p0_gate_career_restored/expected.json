@@ -1,0 +1,10 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-8": "fail"
+  },
+  "messages": [
+    "career guard touched career saves (layer 1 missed a write): restored GameProgress.sav (leave)",
+    "changed/added/removed: none"
+  ]
+}

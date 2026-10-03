@@ -1,0 +1,1094 @@
+
+=== FUNCTION Check Availabe Mercenaries  (BP_LevelManager_C)
+       0: push_flow 4084
+       5: CallFunc_Divide_IntInt_ReturnValue = Divide_IntInt(self.As GI Settings.self.Rounds Won, 2)
+      69: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(CallFunc_Divide_IntInt_ReturnValue, 1)
+     111: CallFunc_Clamp_ReturnValue = Clamp(CallFunc_Add_IntInt_ReturnValue_1, 0, 3)
+     158: CallFunc_EqualEqual_ByteByte_ReturnValue_8 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 4)
+     211: CallFunc_EqualEqual_ByteByte_ReturnValue_9 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 8)
+     264: CallFunc_SelectInt_ReturnValue_2 = SelectInt(CallFunc_Clamp_ReturnValue, self.As GI Settings.self.Combatants Amount, CallFunc_EqualEqual_ByteByte_ReturnValue_9)
+     341: CallFunc_SelectInt_ReturnValue_3 = SelectInt(self.As GI Settings.self.Free Mode Foes Amount, CallFunc_SelectInt_ReturnValue_2, self.As GI Settings.self.Free Mode Activated)
+     440: CallFunc_SelectInt_ReturnValue_4 = SelectInt(1, CallFunc_SelectInt_ReturnValue_3, CallFunc_EqualEqual_ByteByte_ReturnValue_8)
+     491: self.Amount of Characters to Spawn = CallFunc_SelectInt_ReturnValue_4
+     518: CallFunc_EqualEqual_ByteByte_ReturnValue_2 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 1)
+     571: CallFunc_EqualEqual_ByteByte_ReturnValue_3 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 6)
+     624: CallFunc_EqualEqual_ByteByte_ReturnValue_4 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 2)
+     677: CallFunc_EqualEqual_ByteByte_ReturnValue_5 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 8)
+     730: CallFunc_EqualEqual_ByteByte_ReturnValue_6 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 5)
+     783: CallFunc_EqualEqual_ByteByte_ReturnValue_7 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 4)
+     836: CallFunc_BooleanOR_ReturnValue = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_7, CallFunc_EqualEqual_ByteByte_ReturnValue_6)
+     874: CallFunc_BooleanOR_ReturnValue_1 = BooleanOR(CallFunc_BooleanOR_ReturnValue, CallFunc_EqualEqual_ByteByte_ReturnValue_5)
+     912: CallFunc_BooleanOR_ReturnValue_2 = BooleanOR(CallFunc_BooleanOR_ReturnValue_1, CallFunc_EqualEqual_ByteByte_ReturnValue_4)
+     950: CallFunc_BooleanOR_ReturnValue_3 = BooleanOR(CallFunc_BooleanOR_ReturnValue_2, CallFunc_EqualEqual_ByteByte_ReturnValue_3)
+     988: CallFunc_BooleanAND_ReturnValue_2 = BooleanAND(CallFunc_BooleanOR_ReturnValue_3, CallFunc_EqualEqual_ByteByte_ReturnValue_2)
+    1026: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_2)
+    1036: push_flow 2216
+    1041: CallFunc_Array_Length_ReturnValue_7 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Assigned Mercenaries IDs)
+    1122: CallFunc_Greater_IntInt_ReturnValue_1 = Greater_IntInt(CallFunc_Array_Length_ReturnValue_7, 0)
+    1156: if not (CallFunc_Greater_IntInt_ReturnValue_1) goto 2371
+    1170: Temp_bool_True_if_break_was_hit_Variable_1 = false
+    1181: Temp_int_Loop_Counter_Variable = 0
+    1204: Temp_int_Array_Index_Variable_1 = 0
+    1227: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(Temp_bool_True_if_break_was_hit_Variable_1)
+    1256: CallFunc_Array_Length_ReturnValue_6 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Assigned Mercenaries IDs)
+    1337: CallFunc_Less_IntInt_ReturnValue_4 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_6)
+    1375: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_Not_PreBool_ReturnValue_1, CallFunc_Less_IntInt_ReturnValue_4)
+    1413: if not (CallFunc_BooleanAND_ReturnValue_1) goto 2371
+    1427: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable
+    1454: push_flow 3998
+    1459: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 6)
+    1512: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 2)
+    1565: CallFunc_SelectInt_ReturnValue = SelectInt(0, 1, CallFunc_EqualEqual_ByteByte_ReturnValue_1)
+    1612: CallFunc_SelectInt_ReturnValue_1 = SelectInt(2, self.Amount of Characters to Spawn, CallFunc_EqualEqual_ByteByte_ReturnValue)
+    1663: CallFunc_Subtract_IntInt_ReturnValue_1 = Subtract_IntInt(CallFunc_SelectInt_ReturnValue_1, CallFunc_SelectInt_ReturnValue)
+    1709: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Mercenaries IDs)
+    1790: CallFunc_Less_IntInt_ReturnValue_2 = Less_IntInt(CallFunc_Array_Length_ReturnValue_3, CallFunc_Subtract_IntInt_ReturnValue_1)
+    1828: if not (CallFunc_Less_IntInt_ReturnValue_2) goto 4072
+    1842: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Assigned Mercenaries IDs, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_1)
+    1923: CallFunc_Array_Contains_ReturnValue_1 = Default__KismetArrayLibrary.Array_Contains(self.As GI Settings.self.Wounded Mercenaries IDs, CallFunc_Array_Get_Item_1)
+    2005: CallFunc_Not_PreBool_ReturnValue_3 = Not_PreBool(CallFunc_Array_Contains_ReturnValue_1)
+    2034: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_3)
+    2044: Default__KismetArrayLibrary.Array_Get(self.As GI Settings.self.Assigned Mercenaries IDs, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_1)
+    2125: CallFunc_Array_AddUnique_ReturnValue_1 = Default__KismetArrayLibrary.Array_AddUnique(self.As GI Settings.self.Available Mercenaries IDs, CallFunc_Array_Get_Item_1)
+    2215: pop_flow
+    2216: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Mercenaries IDs)
+    2297: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(self.Amount of Characters to Spawn, CallFunc_Array_Length_ReturnValue)
+    2343: self.Amount of Characters to Spawn = CallFunc_Add_IntInt_ReturnValue_3
+    2370: pop_flow
+    2371: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 6)
+    2424: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 2)
+    2477: CallFunc_SelectInt_ReturnValue = SelectInt(0, 1, CallFunc_EqualEqual_ByteByte_ReturnValue_1)
+    2524: CallFunc_SelectInt_ReturnValue_1 = SelectInt(2, self.Amount of Characters to Spawn, CallFunc_EqualEqual_ByteByte_ReturnValue)
+    2575: CallFunc_Subtract_IntInt_ReturnValue_2 = Subtract_IntInt(CallFunc_SelectInt_ReturnValue_1, CallFunc_SelectInt_ReturnValue)
+    2621: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Mercenaries IDs)
+    2702: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(CallFunc_Array_Length_ReturnValue_1, CallFunc_Subtract_IntInt_ReturnValue_2)
+    2740: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+    2750: CallFunc_Map_Keys_Keys = []
+    2761: Default__BlueprintMapLibrary.Map_Keys(self.As GI Settings.self.Hired Characters, CallFunc_Map_Keys_Keys)
+    2833: CallFunc_Array_Length_ReturnValue_5 = Default__KismetArrayLibrary.Array_Length(CallFunc_Map_Keys_Keys)
+    2892: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Array_Length_ReturnValue_5, 0)
+    2926: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue)
+    2936: Temp_bool_True_if_break_was_hit_Variable = false
+    2947: Temp_int_Loop_Counter_Variable_1 = 0
+    2970: Temp_int_Array_Index_Variable = 0
+    2993: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(Temp_bool_True_if_break_was_hit_Variable)
+    3022: CallFunc_Array_Length_ReturnValue_4 = Default__KismetArrayLibrary.Array_Length(CallFunc_Map_Keys_Keys)
+    3081: CallFunc_Less_IntInt_ReturnValue_3 = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue_4)
+    3119: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_Not_PreBool_ReturnValue, CallFunc_Less_IntInt_ReturnValue_3)
+    3157: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue)
+    3167: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable_1
+    3194: push_flow 3924
+    3199: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 6)
+    3252: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 2)
+    3305: CallFunc_SelectInt_ReturnValue = SelectInt(0, 1, CallFunc_EqualEqual_ByteByte_ReturnValue_1)
+    3352: CallFunc_SelectInt_ReturnValue_1 = SelectInt(2, self.Amount of Characters to Spawn, CallFunc_EqualEqual_ByteByte_ReturnValue)
+    3403: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(CallFunc_SelectInt_ReturnValue_1, CallFunc_SelectInt_ReturnValue)
+    3449: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Mercenaries IDs)
+    3530: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(CallFunc_Array_Length_ReturnValue_2, CallFunc_Subtract_IntInt_ReturnValue)
+    3568: if not (CallFunc_Less_IntInt_ReturnValue_1) goto 3912
+    3582: Default__KismetArrayLibrary.Array_Get(CallFunc_Map_Keys_Keys, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item)
+    3641: CallFunc_Array_Contains_ReturnValue = Default__KismetArrayLibrary.Array_Contains(self.As GI Settings.self.Wounded Mercenaries IDs, CallFunc_Array_Get_Item)
+    3723: CallFunc_Not_PreBool_ReturnValue_2 = Not_PreBool(CallFunc_Array_Contains_ReturnValue)
+    3752: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_2)
+    3762: Default__KismetArrayLibrary.Array_Get(CallFunc_Map_Keys_Keys, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item)
+    3821: CallFunc_Array_AddUnique_ReturnValue = Default__KismetArrayLibrary.Array_AddUnique(self.As GI Settings.self.Available Mercenaries IDs, CallFunc_Array_Get_Item)
+    3911: pop_flow
+    3912: Temp_bool_True_if_break_was_hit_Variable = true
+    3923: pop_flow
+    3924: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+    3966: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_2
+    3993: goto 2993
+    3998: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    4040: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+    4067: goto 1227
+    4072: Temp_bool_True_if_break_was_hit_Variable_1 = true
+    4083: pop_flow
+    4084: return _
+
+=== FUNCTION Clean Up and Spawn Actors  (BP_LevelManager_C)
+       0: push_flow 2194
+       5: push_flow 1795
+      10: push_flow 935
+      15: push_flow 374
+      20: push_flow 350
+      25: push_flow 335
+      30: push_flow 320
+      35: pop_flow_if_not (self.As GI Settings.self.Free Mode Activated)
+      67: Temp_byte_Variable = 1
+      87: Temp_byte_Variable_1 = 3
+     107: Temp_bool_Variable = self.As GI Settings.self.Free Mode Carnage
+     148: self.As GI Settings.self.Current Combat Mode = switch(Temp_bool_Variable) {false: Temp_byte_Variable; true: Temp_byte_Variable_1; default: K2Node_Select_Default}
+     241: self.As GI Settings.self.Current Lose Condition = 0
+     283: self.As GI Settings.Save Game()
+     319: pop_flow
+     320: Clean Up Map()
+     334: pop_flow
+     335: Spawn Combatants()
+     349: pop_flow
+     350: Fade Out Event(1.0)
+     373: pop_flow
+     374: CallFunc_GetAllActorsOfClass_OutActors = []
+     385: GetAllActorsOfClass(self, BP_Fence_Bags_C, CallFunc_GetAllActorsOfClass_OutActors)
+     414: Temp_int_Loop_Counter_Variable_1 = 0
+     437: Temp_int_Array_Index_Variable_1 = 0
+     460: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors)
+     519: CallFunc_Less_IntInt_ReturnValue_2 = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue_2)
+     557: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_2)
+     567: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable_1
+     594: push_flow 861
+     599: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_2)
+     658: CallFunc_IsValid_ReturnValue = IsValid(CallFunc_Array_Get_Item_2)
+     687: pop_flow_if_not (CallFunc_IsValid_ReturnValue)
+     697: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Lose Condition, 3)
+     750: if not (CallFunc_EqualEqual_ByteByte_ReturnValue) goto 765
+     764: pop_flow
+     765: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_2)
+     824: CallFunc_Array_Get_Item_2.K2_DestroyActor()
+     860: pop_flow
+     861: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+     903: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_1
+     930: goto 460
+     935: CallFunc_GetAllActorsWithTag_OutActors_1 = []
+     946: GetAllActorsWithTag(self, "Respawn", CallFunc_GetAllActorsWithTag_OutActors_1)
+     979: Temp_int_Loop_Counter_Variable = 0
+    1002: Temp_int_Array_Index_Variable = 0
+    1025: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsWithTag_OutActors_1)
+    1084: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_1)
+    1122: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_1)
+    1132: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable
+    1159: push_flow 1721
+    1164: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors_1, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    1223: CallFunc_GetTransform_ReturnValue = CallFunc_Array_Get_Item_1.GetTransform()
+    1273: CallFunc_GetObjectClass_ReturnValue = GetObjectClass(CallFunc_Array_Get_Item_1)
+    1302: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, CallFunc_GetObjectClass_ReturnValue, CallFunc_GetTransform_ReturnValue, 0, None, 1)
+    1346: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors_1, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    1405: CallFunc_GetTransform_ReturnValue = CallFunc_Array_Get_Item_1.GetTransform()
+    1455: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_GetTransform_ReturnValue, 1)
+    1495: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors_1, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    1554: CallFunc_FinishSpawningActor_ReturnValue.self.Tags = CallFunc_Array_Get_Item_1.self.Tags
+    1625: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors_1, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    1684: CallFunc_Array_Get_Item_1.K2_DestroyActor()
+    1720: pop_flow
+    1721: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    1763: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+    1790: goto 1025
+    1795: CallFunc_GetAllActorsWithTag_OutActors = []
+    1806: GetAllActorsWithTag(self, "ForCleaan", CallFunc_GetAllActorsWithTag_OutActors)
+    1839: Temp_int_Loop_Counter_Variable_2 = 0
+    1862: Temp_int_Array_Index_Variable_2 = 0
+    1885: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsWithTag_OutActors)
+    1944: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable_2, CallFunc_Array_Length_ReturnValue)
+    1982: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+    1992: Temp_int_Array_Index_Variable_2 = Temp_int_Loop_Counter_Variable_2
+    2019: push_flow 2120
+    2024: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item)
+    2083: CallFunc_Array_Get_Item.K2_DestroyActor()
+    2119: pop_flow
+    2120: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_2, 1)
+    2162: Temp_int_Loop_Counter_Variable_2 = CallFunc_Add_IntInt_ReturnValue_2
+    2189: goto 1885
+    2194: return _
+
+=== FUNCTION Clean Up Map  (BP_LevelManager_C)
+       0: push_flow 8942
+       5: self.As BP Half Sword Game Mode.self.Enemy Count = 0
+      50: self.As BP Half Sword Game Mode.self.All Enemies Dead = false
+      83: self.As BP Half Sword Game Mode.self.Match Won = false
+     116: self.As BP Half Sword Game Mode.self.Player DED = false
+     149: self.Player Spawned = false
+     160: push_flow 8084
+     165: push_flow 7403
+     170: push_flow 2114
+     175: push_flow 1457
+     180: push_flow 535
+     185: push_flow 520
+     190: Default__KismetArrayLibrary.Array_Clear(self.As GI Settings.self.Available Mercenaries IDs)
+     253: Default__KismetArrayLibrary.Array_Clear(self.As GI Settings.self.Spawned Combatants)
+     316: Default__KismetArrayLibrary.Array_Clear(self.As GI Settings.self.Spawned Mercenaries IDs)
+     379: self.As BP Half Sword Game Mode.self.Enemy Count = 0
+     424: self.P2 Spawned = false
+     435: self.As GI Settings.self.Enum Play Condition Player 1 = 0
+     477: self.As GI Settings.self.Enum Play Condition Player 2 = 0
+     519: pop_flow
+     520: Check Availabe Mercenaries()
+     534: pop_flow
+     535: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 4)
+     588: CallFunc_Array_Length_ReturnValue_6 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Mercenaries IDs)
+     669: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Array_Length_ReturnValue_6, 0)
+     703: CallFunc_BooleanOR_ReturnValue = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue, CallFunc_Greater_IntInt_ReturnValue)
+     741: CallFunc_BooleanAND_ReturnValue = BooleanAND(self.As GI Settings.self.Progression Multiplayer, CallFunc_BooleanOR_ReturnValue)
+     801: Temp_bool_Variable = self.As GI Settings.self.Free Mode Activated
+     842: if not (switch(Temp_bool_Variable) {false: CallFunc_BooleanAND_ReturnValue; true: self.As GI Settings.self.FreeMode Multiplayer; default: K2Node_Select_Default_2}) goto 1281
+     922: self.As BP Half Sword Game Mode.self.Local Multiplayer = true
+     955: push_flow 1217
+     960: CallFunc_GetAllWidgetsOfClass_FoundWidgets = []
+     971: Default__WidgetBlueprintLibrary.GetAllWidgetsOfClass(self, CallFunc_GetAllWidgetsOfClass_FoundWidgets, UI_GC_MP_Win_Lose_C, true)
+    1023: CallFunc_Array_Length_ReturnValue_5 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllWidgetsOfClass_FoundWidgets)
+    1082: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(CallFunc_Array_Length_ReturnValue_5, 0)
+    1116: pop_flow_if_not (CallFunc_EqualEqual_IntInt_ReturnValue)
+    1126: CallFunc_Create_ReturnValue = Default__WidgetBlueprintLibrary.Create(self, UI_GC_MP_Win_Lose_C, None)
+    1179: CallFunc_Create_ReturnValue.AddToViewport(0)
+    1216: pop_flow
+    1217: CallFunc_HasMultipleLocalPlayers_ReturnValue_1 = HasMultipleLocalPlayers(self)
+    1238: if not (CallFunc_HasMultipleLocalPlayers_ReturnValue_1) goto 1253
+    1252: pop_flow
+    1253: CallFunc_CreatePlayer_ReturnValue = CreatePlayer(self, -1, true)
+    1280: pop_flow
+    1281: self.As BP Half Sword Game Mode.self.Local Multiplayer = false
+    1314: CallFunc_HasMultipleLocalPlayers_ReturnValue = HasMultipleLocalPlayers(self)
+    1335: pop_flow_if_not (CallFunc_HasMultipleLocalPlayers_ReturnValue)
+    1345: CallFunc_GetPlayerController_ReturnValue = GetPlayerController(self, 1)
+    1371: CallFunc_IsValid_ReturnValue = IsValid(CallFunc_GetPlayerController_ReturnValue)
+    1400: pop_flow_if_not (CallFunc_IsValid_ReturnValue)
+    1410: CallFunc_GetPlayerController_ReturnValue = GetPlayerController(self, 1)
+    1436: RemovePlayer(CallFunc_GetPlayerController_ReturnValue, true)
+    1456: pop_flow
+    1457: CallFunc_GetAllActorsOfClass_OutActors_9 = []
+    1468: GetAllActorsOfClass(self, Willie_BP_C, CallFunc_GetAllActorsOfClass_OutActors_9)
+    1497: Temp_int_Loop_Counter_Variable_6 = 0
+    1520: Temp_int_Array_Index_Variable_9 = 0
+    1543: CallFunc_Array_Length_ReturnValue_11 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_9)
+    1602: CallFunc_Less_IntInt_ReturnValue_9 = Less_IntInt(Temp_int_Loop_Counter_Variable_6, CallFunc_Array_Length_ReturnValue_11)
+    1640: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_9)
+    1650: Temp_int_Array_Index_Variable_9 = Temp_int_Loop_Counter_Variable_6
+    1677: push_flow 2040
+    1682: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_9, Temp_int_Array_Index_Variable_9, CallFunc_Array_Get_Item_9)
+    1741: CallFunc_IsActorBeingDestroyed_ReturnValue_5 = CallFunc_Array_Get_Item_9.IsActorBeingDestroyed()
+    1783: CallFunc_ActorHasTag_ReturnValue_5 = CallFunc_Array_Get_Item_9.ActorHasTag("Persistent")
+    1838: CallFunc_Not_PreBool_ReturnValue_6 = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue_5)
+    1867: CallFunc_Not_PreBool_ReturnValue_7 = Not_PreBool(CallFunc_ActorHasTag_ReturnValue_5)
+    1896: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_Not_PreBool_ReturnValue_7, CallFunc_Not_PreBool_ReturnValue_6)
+    1934: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_1)
+    1944: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_9, Temp_int_Array_Index_Variable_9, CallFunc_Array_Get_Item_9)
+    2003: CallFunc_Array_Get_Item_9.Destroy Willie()
+    2039: pop_flow
+    2040: CallFunc_Add_IntInt_ReturnValue_6 = Add_IntInt(Temp_int_Loop_Counter_Variable_6, 1)
+    2082: Temp_int_Loop_Counter_Variable_6 = CallFunc_Add_IntInt_ReturnValue_6
+    2109: goto 1543
+    2114: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 10)
+    2167: CallFunc_NotEqual_ByteByte_ReturnValue = NotEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 1)
+    2220: CallFunc_EqualEqual_ByteByte_ReturnValue_2 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 0)
+    2273: CallFunc_BooleanOR_ReturnValue_1 = BooleanOR(self.As GI Settings.self.Free Mode Activated, CallFunc_NotEqual_ByteByte_ReturnValue)
+    2333: CallFunc_BooleanOR_ReturnValue_2 = BooleanOR(CallFunc_BooleanOR_ReturnValue_1, CallFunc_EqualEqual_ByteByte_ReturnValue_2)
+    2371: CallFunc_BooleanOR_ReturnValue_3 = BooleanOR(CallFunc_BooleanOR_ReturnValue_2, CallFunc_EqualEqual_ByteByte_ReturnValue_1)
+    2409: if not (CallFunc_BooleanOR_ReturnValue_3) goto 4397
+    2423: push_flow 2792
+    2428: push_flow 3327
+    2433: push_flow 3862
+    2438: CallFunc_GetAllActorsOfClass_OutActors_8 = []
+    2449: GetAllActorsOfClass(self, ModularWeaponBP_C, CallFunc_GetAllActorsOfClass_OutActors_8)
+    2478: Temp_int_Loop_Counter_Variable_5 = 0
+    2501: Temp_int_Array_Index_Variable_6 = 0
+    2524: CallFunc_Array_Length_ReturnValue_10 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_8)
+    2583: CallFunc_Less_IntInt_ReturnValue_8 = Less_IntInt(Temp_int_Loop_Counter_Variable_5, CallFunc_Array_Length_ReturnValue_10)
+    2621: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_8)
+    2631: Temp_int_Array_Index_Variable_6 = Temp_int_Loop_Counter_Variable_5
+    2658: push_flow 8632
+    2663: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_8, Temp_int_Array_Index_Variable_6, CallFunc_Array_Get_Item_8)
+    2722: CallFunc_ActorHasTag_ReturnValue_4 = CallFunc_Array_Get_Item_8.ActorHasTag("Trap")
+    2777: if not (CallFunc_ActorHasTag_ReturnValue_4) goto 8706
+    2791: pop_flow
+    2792: CallFunc_GetAllActorsOfClass_OutActors_3 = []
+    2803: GetAllActorsOfClass(self, BP_Container_Master_C, CallFunc_GetAllActorsOfClass_OutActors_3)
+    2832: Temp_int_Loop_Counter_Variable_1 = 0
+    2855: Temp_int_Array_Index_Variable_1 = 0
+    2878: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_3)
+    2937: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue_3)
+    2975: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_1)
+    2985: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable_1
+    3012: push_flow 3253
+    3017: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_3, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_3)
+    3076: CallFunc_IsActorBeingDestroyed_ReturnValue_1 = CallFunc_Array_Get_Item_3.IsActorBeingDestroyed()
+    3118: CallFunc_Not_PreBool_ReturnValue_2 = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue_1)
+    3147: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_2)
+    3157: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_3, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_3)
+    3216: CallFunc_Array_Get_Item_3.K2_DestroyActor()
+    3252: pop_flow
+    3253: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+    3295: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_1
+    3322: goto 2878
+    3327: CallFunc_GetAllActorsOfClass_OutActors_6 = []
+    3338: GetAllActorsOfClass(self, BP_Quiver_Master_C, CallFunc_GetAllActorsOfClass_OutActors_6)
+    3367: Temp_int_Loop_Counter_Variable_2 = 0
+    3390: Temp_int_Array_Index_Variable_3 = 0
+    3413: CallFunc_Array_Length_ReturnValue_8 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_6)
+    3472: CallFunc_Less_IntInt_ReturnValue_5 = Less_IntInt(Temp_int_Loop_Counter_Variable_2, CallFunc_Array_Length_ReturnValue_8)
+    3510: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_5)
+    3520: Temp_int_Array_Index_Variable_3 = Temp_int_Loop_Counter_Variable_2
+    3547: push_flow 3788
+    3552: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_6, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_6)
+    3611: CallFunc_IsActorBeingDestroyed_ReturnValue_2 = CallFunc_Array_Get_Item_6.IsActorBeingDestroyed()
+    3653: CallFunc_Not_PreBool_ReturnValue_3 = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue_2)
+    3682: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_3)
+    3692: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_6, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_6)
+    3751: CallFunc_Array_Get_Item_6.K2_DestroyActor()
+    3787: pop_flow
+    3788: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_2, 1)
+    3830: Temp_int_Loop_Counter_Variable_2 = CallFunc_Add_IntInt_ReturnValue_2
+    3857: goto 3413
+    3862: CallFunc_GetAllActorsOfClass_OutActors_7 = []
+    3873: GetAllActorsOfClass(self, BP_Armor_Master_C, CallFunc_GetAllActorsOfClass_OutActors_7)
+    3902: Temp_int_Loop_Counter_Variable_3 = 0
+    3925: Temp_int_Array_Index_Variable_5 = 0
+    3948: CallFunc_Array_Length_ReturnValue_9 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_7)
+    4007: CallFunc_Less_IntInt_ReturnValue_7 = Less_IntInt(Temp_int_Loop_Counter_Variable_3, CallFunc_Array_Length_ReturnValue_9)
+    4045: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_7)
+    4055: Temp_int_Array_Index_Variable_5 = Temp_int_Loop_Counter_Variable_3
+    4082: push_flow 4323
+    4087: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_7, Temp_int_Array_Index_Variable_5, CallFunc_Array_Get_Item_7)
+    4146: CallFunc_IsActorBeingDestroyed_ReturnValue_3 = CallFunc_Array_Get_Item_7.IsActorBeingDestroyed()
+    4188: CallFunc_Not_PreBool_ReturnValue_4 = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue_3)
+    4217: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_4)
+    4227: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_7, Temp_int_Array_Index_Variable_5, CallFunc_Array_Get_Item_7)
+    4286: CallFunc_Array_Get_Item_7.K2_DestroyActor()
+    4322: pop_flow
+    4323: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(Temp_int_Loop_Counter_Variable_3, 1)
+    4365: Temp_int_Loop_Counter_Variable_3 = CallFunc_Add_IntInt_ReturnValue_3
+    4392: goto 3948
+    4397: push_flow 5359
+    4402: push_flow 6451
+    4407: CallFunc_GetAllActorsOfClass_OutActors_5 = []
+    4418: GetAllActorsOfClass(self, ModularWeaponBP_C, CallFunc_GetAllActorsOfClass_OutActors_5)
+    4447: Temp_int_Loop_Counter_Variable = 0
+    4470: Temp_int_Array_Index_Variable_2 = 0
+    4493: CallFunc_Array_Length_ReturnValue_7 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_5)
+    4552: CallFunc_Less_IntInt_ReturnValue_3 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_7)
+    4590: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_3)
+    4600: Temp_int_Array_Index_Variable_2 = Temp_int_Loop_Counter_Variable
+    4627: push_flow 5285
+    4632: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_5, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_5)
+    4691: CallFunc_ActorHasTag_ReturnValue_3 = CallFunc_Array_Get_Item_5.ActorHasTag("SpawnChance")
+    4746: pop_flow_if_not (CallFunc_ActorHasTag_ReturnValue_3)
+    4756: Temp_real_Variable_1 = 0.444
+    4779: Temp_real_Variable_2 = 0.75
+    4802: Temp_real_Variable_3 = 0.75
+    4825: Temp_real_Variable_4 = 0.666
+    4848: Temp_byte_Variable = self.As GI Settings.self.Day Time
+    4897: CallFunc_RandomBoolWithWeight_ReturnValue_1 = RandomBoolWithWeight(switch(Temp_byte_Variable) {0: Temp_real_Variable_4; 1: Temp_real_Variable_3; 2: Temp_real_Variable_2; 3: Temp_real_Variable_1; default: K2Node_Select_Default_1})
+    5002: if not (CallFunc_RandomBoolWithWeight_ReturnValue_1) goto 5112
+    5016: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_5, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_5)
+    5075: CallFunc_Array_Get_Item_5.K2_DestroyActor()
+    5111: pop_flow
+    5112: Temp_name_Variable_1 = "SpawnChance"
+    5143: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_5, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_5)
+    5202: CallFunc_Array_RemoveItem_ReturnValue_2 = Default__KismetArrayLibrary.Array_RemoveItem(CallFunc_Array_Get_Item_5.self.Tags, Temp_name_Variable_1)
+    5284: pop_flow
+    5285: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    5327: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+    5354: goto 4493
+    5359: CallFunc_GetAllActorsOfClass_OutActors_1 = []
+    5370: GetAllActorsOfClass(self, BP_Quiver_Master_C, CallFunc_GetAllActorsOfClass_OutActors_1)
+    5399: Temp_int_Loop_Counter_Variable_9 = 0
+    5422: Temp_int_Array_Index_Variable_8 = 0
+    5445: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_1)
+    5504: CallFunc_Less_IntInt_ReturnValue_6 = Less_IntInt(Temp_int_Loop_Counter_Variable_9, CallFunc_Array_Length_ReturnValue_1)
+    5542: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_6)
+    5552: Temp_int_Array_Index_Variable_8 = Temp_int_Loop_Counter_Variable_9
+    5579: push_flow 6377
+    5584: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_1, Temp_int_Array_Index_Variable_8, CallFunc_Array_Get_Item_1)
+    5643: CallFunc_ActorHasTag_ReturnValue_1 = CallFunc_Array_Get_Item_1.ActorHasTag("SpawnChance")
+    5698: pop_flow_if_not (CallFunc_ActorHasTag_ReturnValue_1)
+    5708: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_1, Temp_int_Array_Index_Variable_8, CallFunc_Array_Get_Item_1)
+    5767: CallFunc_IsActorBeingDestroyed_ReturnValue = CallFunc_Array_Get_Item_1.IsActorBeingDestroyed()
+    5809: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue)
+    5838: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_1)
+    5848: Temp_byte_Variable_1 = self.As GI Settings.self.Day Time
+    5897: Temp_real_Variable_8 = 0.666
+    5920: Temp_real_Variable_9 = 0.75
+    5943: Temp_real_Variable_10 = 0.75
+    5966: Temp_real_Variable_11 = 0.444
+    5989: CallFunc_RandomBoolWithWeight_ReturnValue_2 = RandomBoolWithWeight(switch(Temp_byte_Variable_1) {0: Temp_real_Variable_8; 1: Temp_real_Variable_9; 2: Temp_real_Variable_10; 3: Temp_real_Variable_11; default: K2Node_Select_Default_3})
+    6094: if not (CallFunc_RandomBoolWithWeight_ReturnValue_2) goto 6204
+    6108: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_1, Temp_int_Array_Index_Variable_8, CallFunc_Array_Get_Item_1)
+    6167: CallFunc_Array_Get_Item_1.K2_DestroyActor()
+    6203: pop_flow
+    6204: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_1, Temp_int_Array_Index_Variable_8, CallFunc_Array_Get_Item_1)
+    6263: Temp_name_Variable_2 = "SpawnChance"
+    6294: CallFunc_Array_RemoveItem_ReturnValue = Default__KismetArrayLibrary.Array_RemoveItem(CallFunc_Array_Get_Item_1.self.Tags, Temp_name_Variable_2)
+    6376: pop_flow
+    6377: CallFunc_Add_IntInt_ReturnValue_10 = Add_IntInt(Temp_int_Loop_Counter_Variable_9, 1)
+    6419: Temp_int_Loop_Counter_Variable_9 = CallFunc_Add_IntInt_ReturnValue_10
+    6446: goto 5445
+    6451: CallFunc_GetAllActorsOfClass_OutActors_4 = []
+    6462: GetAllActorsOfClass(self, BP_Container_Master_C, CallFunc_GetAllActorsOfClass_OutActors_4)
+    6491: Temp_int_Loop_Counter_Variable_7 = 0
+    6514: Temp_int_Array_Index_Variable = 0
+    6537: CallFunc_Array_Length_ReturnValue_4 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_4)
+    6596: CallFunc_Less_IntInt_ReturnValue_2 = Less_IntInt(Temp_int_Loop_Counter_Variable_7, CallFunc_Array_Length_ReturnValue_4)
+    6634: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_2)
+    6644: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable_7
+    6671: push_flow 7329
+    6676: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_4, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_4)
+    6735: CallFunc_ActorHasTag_ReturnValue_2 = CallFunc_Array_Get_Item_4.ActorHasTag("SpawnChance")
+    6790: pop_flow_if_not (CallFunc_ActorHasTag_ReturnValue_2)
+    6800: Temp_real_Variable = 0.666
+    6823: Temp_real_Variable_5 = 0.75
+    6846: Temp_real_Variable_6 = 0.75
+    6869: Temp_real_Variable_7 = 0.444
+    6892: Temp_byte_Variable_2 = self.As GI Settings.self.Day Time
+    6941: CallFunc_RandomBoolWithWeight_ReturnValue = RandomBoolWithWeight(switch(Temp_byte_Variable_2) {0: Temp_real_Variable; 1: Temp_real_Variable_5; 2: Temp_real_Variable_6; 3: Temp_real_Variable_7; default: K2Node_Select_Default})
+    7046: if not (CallFunc_RandomBoolWithWeight_ReturnValue) goto 7156
+    7060: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_4, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_4)
+    7119: CallFunc_Array_Get_Item_4.K2_DestroyActor()
+    7155: pop_flow
+    7156: Temp_name_Variable = "SpawnChance"
+    7187: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_4, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_4)
+    7246: CallFunc_Array_RemoveItem_ReturnValue_1 = Default__KismetArrayLibrary.Array_RemoveItem(CallFunc_Array_Get_Item_4.self.Tags, Temp_name_Variable)
+    7328: pop_flow
+    7329: CallFunc_Add_IntInt_ReturnValue_8 = Add_IntInt(Temp_int_Loop_Counter_Variable_7, 1)
+    7371: Temp_int_Loop_Counter_Variable_7 = CallFunc_Add_IntInt_ReturnValue_8
+    7398: goto 6537
+    7403: CallFunc_GetAllActorsOfClass_OutActors_2 = []
+    7414: GetAllActorsOfClass(self, BP_Container_Master_C, CallFunc_GetAllActorsOfClass_OutActors_2)
+    7443: Temp_int_Loop_Counter_Variable_4 = 0
+    7466: Temp_int_Array_Index_Variable_4 = 0
+    7489: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors_2)
+    7548: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable_4, CallFunc_Array_Length_ReturnValue_2)
+    7586: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+    7596: Temp_int_Array_Index_Variable_4 = Temp_int_Loop_Counter_Variable_4
+    7623: push_flow 8010
+    7628: CallFunc_RandomIntegerInRange_ReturnValue = RandomIntegerInRange(0, 4)
+    7666: CallFunc_Conv_ByteToInt_ReturnValue = Conv_ByteToInt(self.As GI Settings.self.Player Tier)
+    7725: CallFunc_Add_IntInt_ReturnValue_7 = Add_IntInt(CallFunc_Conv_ByteToInt_ReturnValue, CallFunc_RandomIntegerInRange_ReturnValue)
+    7771: CallFunc_Clamp_ReturnValue = Clamp(CallFunc_Add_IntInt_ReturnValue_7, 0, 7)
+    7818: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_2, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_2)
+    7877: CallFunc_Conv_IntToByte_ReturnValue = Conv_IntToByte(CallFunc_Clamp_ReturnValue)
+    7914: CallFunc_GetValidValue_ReturnValue = GetValidValue(Enum_Ranks, CallFunc_Conv_IntToByte_ReturnValue)
+    7960: CallFunc_Array_Get_Item_2.self.Tier = CallFunc_GetValidValue_ReturnValue
+    8009: pop_flow
+    8010: CallFunc_Add_IntInt_ReturnValue_4 = Add_IntInt(Temp_int_Loop_Counter_Variable_4, 1)
+    8052: Temp_int_Loop_Counter_Variable_4 = CallFunc_Add_IntInt_ReturnValue_4
+    8079: goto 7489
+    8084: CallFunc_GetAllActorsOfClass_OutActors = []
+    8095: GetAllActorsOfClass(self, BP_NavigationBlocker_C, CallFunc_GetAllActorsOfClass_OutActors)
+    8124: Temp_int_Loop_Counter_Variable_8 = 0
+    8147: Temp_int_Array_Index_Variable_7 = 0
+    8170: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors)
+    8229: CallFunc_Less_IntInt_ReturnValue_4 = Less_IntInt(Temp_int_Loop_Counter_Variable_8, CallFunc_Array_Length_ReturnValue)
+    8267: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_4)
+    8277: Temp_int_Array_Index_Variable_7 = Temp_int_Loop_Counter_Variable_8
+    8304: push_flow 8558
+    8309: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable_7, CallFunc_Array_Get_Item)
+    8368: CallFunc_ActorHasTag_ReturnValue = CallFunc_Array_Get_Item.ActorHasTag("Persistent")
+    8423: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(CallFunc_ActorHasTag_ReturnValue)
+    8452: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue)
+    8462: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable_7, CallFunc_Array_Get_Item)
+    8521: CallFunc_Array_Get_Item.K2_DestroyActor()
+    8557: pop_flow
+    8558: CallFunc_Add_IntInt_ReturnValue_9 = Add_IntInt(Temp_int_Loop_Counter_Variable_8, 1)
+    8600: Temp_int_Loop_Counter_Variable_8 = CallFunc_Add_IntInt_ReturnValue_9
+    8627: goto 8170
+    8632: CallFunc_Add_IntInt_ReturnValue_5 = Add_IntInt(Temp_int_Loop_Counter_Variable_5, 1)
+    8674: Temp_int_Loop_Counter_Variable_5 = CallFunc_Add_IntInt_ReturnValue_5
+    8701: goto 2524
+    8706: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_8, Temp_int_Array_Index_Variable_6, CallFunc_Array_Get_Item_8)
+    8765: CallFunc_IsActorBeingDestroyed_ReturnValue_4 = CallFunc_Array_Get_Item_8.IsActorBeingDestroyed()
+    8807: CallFunc_Not_PreBool_ReturnValue_5 = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue_4)
+    8836: pop_flow_if_not (CallFunc_Not_PreBool_ReturnValue_5)
+    8846: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors_8, Temp_int_Array_Index_Variable_6, CallFunc_Array_Get_Item_8)
+    8905: CallFunc_Array_Get_Item_8.K2_DestroyActor()
+    8941: pop_flow
+    8942: return _
+
+=== FUNCTION Event Respawn Respawnable Objects With Delay  (BP_LevelManager_C)
+       0: ExecuteUbergraph_BP_LevelManager(4583)
+      15: return _
+
+=== FUNCTION ExecuteUbergraph_BP_LevelManager  (BP_LevelManager_C)
+       0: push_flow 4588
+       5: goto computed EntryPoint
+      15: Delay(self, 2.5, LatentActionInfo{SkipOffsetConst(Value=70), 711942858, "ExecuteUbergraph_BP_LevelManager", self})
+      69: pop_flow
+      70: CallFunc_GetAllActorsWithTag_OutActors_1 = []
+      81: GetAllActorsWithTag(self, "Respawn", CallFunc_GetAllActorsWithTag_OutActors_1)
+     114: Temp_int_Loop_Counter_Variable_2 = 0
+     137: Temp_int_Array_Index_Variable_2 = 0
+     160: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsWithTag_OutActors_1)
+     219: CallFunc_Less_IntInt_ReturnValue_2 = Less_IntInt(Temp_int_Loop_Counter_Variable_2, CallFunc_Array_Length_ReturnValue_3)
+     257: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_2)
+     267: Temp_int_Array_Index_Variable_2 = Temp_int_Loop_Counter_Variable_2
+     294: push_flow 856
+     299: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors_1, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_2)
+     358: CallFunc_GetTransform_ReturnValue_2 = CallFunc_Array_Get_Item_2.GetTransform()
+     408: CallFunc_GetObjectClass_ReturnValue_1 = GetObjectClass(CallFunc_Array_Get_Item_2)
+     437: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2 = BeginDeferredActorSpawnFromClass(self, CallFunc_GetObjectClass_ReturnValue_1, CallFunc_GetTransform_ReturnValue_2, 0, None, 1)
+     481: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors_1, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_2)
+     540: CallFunc_GetTransform_ReturnValue_2 = CallFunc_Array_Get_Item_2.GetTransform()
+     590: CallFunc_FinishSpawningActor_ReturnValue_2 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_2, CallFunc_GetTransform_ReturnValue_2, 1)
+     630: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors_1, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_2)
+     689: CallFunc_FinishSpawningActor_ReturnValue_2.self.Tags = CallFunc_Array_Get_Item_2.self.Tags
+     760: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors_1, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_2)
+     819: CallFunc_Array_Get_Item_2.K2_DestroyActor()
+     855: pop_flow
+     856: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_2, 1)
+     898: Temp_int_Loop_Counter_Variable_2 = CallFunc_Add_IntInt_ReturnValue_2
+     925: goto 160
+     930: pop_flow_if_not (self.Purge Map)
+     940: CallFunc_GetAllActorsWithTag_OutActors = []
+     951: GetAllActorsWithTag(self, "Random Delete", CallFunc_GetAllActorsWithTag_OutActors)
+     984: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsWithTag_OutActors)
+    1043: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Array_Length_ReturnValue_1, 0)
+    1077: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue)
+    1087: Temp_int_Loop_Counter_Variable_1 = 0
+    1110: Temp_int_Array_Index_Variable_1 = 0
+    1133: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsWithTag_OutActors)
+    1192: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue)
+    1230: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+    1240: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable_1
+    1267: push_flow 1496
+    1272: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item)
+    1331: CallFunc_IsValid_ReturnValue = IsValid(CallFunc_Array_Get_Item)
+    1360: pop_flow_if_not (CallFunc_IsValid_ReturnValue)
+    1370: CallFunc_RandomBool_ReturnValue = RandomBool()
+    1390: pop_flow_if_not (CallFunc_RandomBool_ReturnValue)
+    1400: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsWithTag_OutActors, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item)
+    1459: CallFunc_Array_Get_Item.K2_DestroyActor()
+    1495: pop_flow
+    1496: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+    1538: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_1
+    1565: goto 1133
+    1570: Clean Up and Spawn Actors()
+    1584: pop_flow
+    1585: push_flow 3087
+    1590: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    1649: CallFunc_ActorHasTag_ReturnValue = CallFunc_Array_Get_Item_1.ActorHasTag("NoSpawn")
+    1704: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(CallFunc_ActorHasTag_ReturnValue)
+    1733: CallFunc_ActorHasTag_ReturnValue_1 = CallFunc_Array_Get_Item_1.ActorHasTag("Trap")
+    1788: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(CallFunc_ActorHasTag_ReturnValue_1)
+    1817: CallFunc_ActorHasTag_ReturnValue_2 = CallFunc_Array_Get_Item_1.ActorHasTag("Persistent")
+    1872: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_ActorHasTag_ReturnValue_2, CallFunc_Not_PreBool_ReturnValue_1)
+    1910: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_BooleanAND_ReturnValue, CallFunc_Not_PreBool_ReturnValue)
+    1948: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_1)
+    1958: CallFunc_GetTransform_ReturnValue = GetTransform()
+    1986: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, BP_Generator_Weapons_Random_C, CallFunc_GetTransform_ReturnValue, 0, None, 1)
+    2030: CallFunc_GetTransform_ReturnValue = GetTransform()
+    2058: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_GetTransform_ReturnValue, 1)
+    2098: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    2157: CallFunc_GetTransform_ReturnValue_1 = CallFunc_Array_Get_Item_1.GetTransform()
+    2207: CallFunc_GetObjectClass_ReturnValue = GetObjectClass(CallFunc_Array_Get_Item_1)
+    2236: CallFunc_FinishSpawningActor_ReturnValue.Generate Weapon(0, 0, true, CallFunc_GetObjectClass_ReturnValue, CallFunc_Array_Get_Item_1.self.Weapon Passport, 0, CallFunc_Generate_Weapon_Weapon_Passport)
+    2328: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1 = BeginDeferredActorSpawnFromClass(self, CallFunc_Generate_Weapon_Weapon_Passport.WeaponClass_54_B478ECF7499977809745A3973AD678EC, CallFunc_GetTransform_ReturnValue_1, 0, None, 1)
+    2381: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    2440: CallFunc_GetObjectClass_ReturnValue = GetObjectClass(CallFunc_Array_Get_Item_1)
+    2469: CallFunc_FinishSpawningActor_ReturnValue.Generate Weapon(0, 0, true, CallFunc_GetObjectClass_ReturnValue, CallFunc_Array_Get_Item_1.self.Weapon Passport, 0, CallFunc_Generate_Weapon_Weapon_Passport)
+    2561: Default__KismetSystemLibrary.SetStructurePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, "Weapon Passport", CallFunc_Generate_Weapon_Weapon_Passport)
+    2624: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    2683: CallFunc_GetTransform_ReturnValue_1 = CallFunc_Array_Get_Item_1.GetTransform()
+    2733: CallFunc_FinishSpawningActor_ReturnValue_1 = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue_1, CallFunc_GetTransform_ReturnValue_1, 1)
+    2773: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    2832: CallFunc_FinishSpawningActor_ReturnValue_1.self.Simulates Physics = CallFunc_Array_Get_Item_1.self.Simulates Physics
+    2895: CallFunc_FinishSpawningActor_ReturnValue_1.self.SearchBeacon.SetCollisionEnabled(0)
+    2955: CallFunc_FinishSpawningActor_ReturnValue.K2_DestroyActor()
+    2991: Default__KismetArrayLibrary.Array_Get(CallFunc_GetAllActorsOfClass_OutActors, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_1)
+    3050: CallFunc_Array_Get_Item_1.K2_DestroyActor()
+    3086: pop_flow
+    3087: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    3129: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+    3156: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(CallFunc_GetAllActorsOfClass_OutActors)
+    3215: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_2)
+    3253: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_1)
+    3263: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable
+    3290: goto 1585
+    3295: Temp_int_Loop_Counter_Variable = 0
+    3318: Temp_int_Array_Index_Variable = 0
+    3341: goto 3156
+    3346: CallFunc_Create_ReturnValue = Default__WidgetBlueprintLibrary.Create(self, UI_Briefing_Text_Fade_C, None)
+    3399: Temp_text_Variable = "{'SourceString': ''}"
+    3419: Temp_text_Variable_1 = {"Token": "EX_StringConst", "Value": "Spill first blood"}
+    3494: Temp_byte_Variable = self.As GI Settings.self.Current Lose Condition
+    3543: Temp_text_Variable_2 = {"Token": "EX_StringConst", "Value": "Keep your feet on the ground"}
+    3629: Temp_text_Variable_3 = {"Token": "EX_StringConst", "Value": "Stay inside the circle"}
+    3709: SetTextPropertyByName(CallFunc_Create_ReturnValue, "Text to write", switch(Temp_byte_Variable) {0: Temp_text_Variable; 1: Temp_text_Variable_1; 2: Temp_text_Variable_2; 3: Temp_text_Variable_3; default: K2Node_Select_Default})
+    3826: CallFunc_Create_ReturnValue.AddToViewport(9999)
+    3863: pop_flow
+    3864: push_flow 4351
+    3869: push_flow 4170
+    3874: push_flow 4115
+    3879: push_flow 3346
+    3884: CallFunc_GetGameInstance_ReturnValue = GetGameInstance(self)
+    3905: K2Node_DynamicCast_AsGI_Settings = Cast<GI_Settings_C>(CallFunc_GetGameInstance_ReturnValue)
+    3941: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsGI_Settings)
+    3970: pop_flow_if_not (K2Node_DynamicCast_bSuccess)
+    3980: self.As GI Settings = K2Node_DynamicCast_AsGI_Settings
+    3999: CallFunc_GetGameMode_ReturnValue = GetGameMode(self)
+    4020: K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode = Cast<BP_HalfSwordGameMode_C>(CallFunc_GetGameMode_ReturnValue)
+    4056: K2Node_DynamicCast_bSuccess_1 = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode)
+    4085: pop_flow_if_not (K2Node_DynamicCast_bSuccess_1)
+    4095: self.As BP Half Sword Game Mode = K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode
+    4114: pop_flow
+    4115: Delay(self, 0.1, LatentActionInfo{SkipOffsetConst(Value=930), 1691231764, "ExecuteUbergraph_BP_LevelManager", self})
+    4169: pop_flow
+    4170: push_flow 4218
+    4175: push_flow 4263
+    4180: Clean Up Map()
+    4194: Fade Out Event(self.Level Load Delay)
+    4217: pop_flow
+    4218: CallFunc_GetAllActorsOfClass_OutActors = []
+    4229: GetAllActorsOfClass(self, ModularWeaponBP_C, CallFunc_GetAllActorsOfClass_OutActors)
+    4258: goto 3295
+    4263: CallFunc_Delay_Duration_ImplicitCast = Cast(ConversionType=CST_DoubleToFloat, Target=self.Level Load Delay)
+    4292: Delay(self, CallFunc_Delay_Duration_ImplicitCast, LatentActionInfo{SkipOffsetConst(Value=1570), 79829489, "ExecuteUbergraph_BP_LevelManager", self})
+    4350: pop_flow
+    4351: Default__KismetArrayLibrary.Array_Clear(self.As GI Settings.self.Armor Returned During Match)
+    4414: self.As GI Settings.Save Game()
+    4450: pop_flow
+    4451: CallFunc_Create_ReturnValue_1 = Default__WidgetBlueprintLibrary.Create(self, UI_FadeOut_C, None)
+    4504: SetDoublePropertyByName(CallFunc_Create_ReturnValue_1, "Delay", K2Node_CustomEvent_Delay)
+    4545: CallFunc_Create_ReturnValue_1.AddToViewport(1000)
+    4582: pop_flow
+    4583: goto 15
+    4588: return _
+
+=== FUNCTION Fade Out Event  (BP_LevelManager_C)
+       0: K2Node_CustomEvent_Delay = _
+      18: ExecuteUbergraph_BP_LevelManager(4451)
+      33: return _
+
+=== FUNCTION ReceiveBeginPlay  (BP_LevelManager_C)
+       0: ExecuteUbergraph_BP_LevelManager(3864)
+      15: return _
+
+=== FUNCTION Spawn Combatants  (BP_LevelManager_C)
+       0: push_flow 8949
+       5: NewLocalVar_2 = 0
+      28: CallFunc_GetAllActorsOfClass_OutActors = []
+      39: GetAllActorsOfClass(self, BP_SpawnerPoint_Willies_C, CallFunc_GetAllActorsOfClass_OutActors)
+      68: All Spawners Shuffled = CallFunc_GetAllActorsOfClass_OutActors
+      95: Default__KismetArrayLibrary.Array_Shuffle(All Spawners Shuffled)
+     136: Player Spawner = None
+     147: Default__KismetArrayLibrary.Array_Clear(Filtered Spawners)
+     188: Default__KismetArrayLibrary.Array_Clear(Spawners  Array)
+     229: push_flow 1311
+     234: push_flow 5312
+     239: push_flow 3470
+     244: push_flow 2355
+     249: Temp_int_Loop_Counter_Variable_1 = 0
+     272: Temp_int_Array_Index_Variable = 0
+     295: CallFunc_Array_Length_ReturnValue_7 = Default__KismetArrayLibrary.Array_Length(All Spawners Shuffled)
+     354: CallFunc_Less_IntInt_ReturnValue_4 = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue_7)
+     392: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_4)
+     402: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable_1
+     429: push_flow 7512
+     434: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(self.As GI Settings.self.Free Mode Foes Amount, 1)
+     498: CallFunc_SelectInt_ReturnValue = SelectInt(CallFunc_Add_IntInt_ReturnValue_1, self.As GI Settings.self.Combatants Amount, self.As GI Settings.self.Free Mode Activated)
+     597: Default__KismetArrayLibrary.Array_Get(All Spawners Shuffled, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_3)
+     656: CallFunc_Map_Find_ReturnValue = Default__BlueprintMapLibrary.Map_Find(CallFunc_Array_Get_Item_3.self.Works in these Game Modes, self.As GI Settings.self.Current Game Mode enum, CallFunc_Map_Find_Value)
+     769: CallFunc_GreaterEqual_IntInt_ReturnValue = GreaterEqual_IntInt(CallFunc_SelectInt_ReturnValue, CallFunc_Array_Get_Item_3.self.Required Combatants Amount)
+     829: CallFunc_Map_Find_ReturnValue_1 = Default__BlueprintMapLibrary.Map_Find(CallFunc_Array_Get_Item_3.self.Works in these Combat Modes, self.As GI Settings.self.Current Combat Mode, CallFunc_Map_Find_Value_1)
+     942: CallFunc_Map_Find_ReturnValue_2 = Default__BlueprintMapLibrary.Map_Find(CallFunc_Array_Get_Item_3.self.Works in these Play Modes, self.As GI Settings.self.Current Play Mode, CallFunc_Map_Find_Value_2)
+    1055: CallFunc_BooleanAND_ReturnValue_7 = BooleanAND(CallFunc_Map_Find_Value, CallFunc_Map_Find_Value_2)
+    1093: CallFunc_BooleanAND_ReturnValue_8 = BooleanAND(CallFunc_BooleanAND_ReturnValue_7, CallFunc_Map_Find_Value_1)
+    1131: CallFunc_BooleanAND_ReturnValue_9 = BooleanAND(CallFunc_BooleanAND_ReturnValue_8, CallFunc_GreaterEqual_IntInt_ReturnValue)
+    1169: if not (CallFunc_BooleanAND_ReturnValue_9) goto 7586
+    1183: Default__KismetArrayLibrary.Array_Get(All Spawners Shuffled, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_3)
+    1242: CallFunc_Array_AddUnique_ReturnValue_2 = Default__KismetArrayLibrary.Array_AddUnique(Filtered Spawners, CallFunc_Array_Get_Item_3)
+    1310: pop_flow
+    1311: CallFunc_Array_Length_ReturnValue_9 = Default__KismetArrayLibrary.Array_Length(Spawners  Array)
+    1370: CallFunc_Greater_IntInt_ReturnValue_2 = Greater_IntInt(CallFunc_Array_Length_ReturnValue_9, 0)
+    1404: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue_2)
+    1414: CallFunc_Add_IntInt_ReturnValue_5 = Add_IntInt(self.Amount of Characters to Spawn, 1)
+    1456: self.Amount of Characters to Spawn = CallFunc_Add_IntInt_ReturnValue_5
+    1483: CallFunc_Conv_IntToString_ReturnValue = Conv_IntToString(self.Amount of Characters to Spawn)
+    1520: PrintString(self, CallFunc_Conv_IntToString_ReturnValue, true, true, LinearColor{1.0, 0.020861, 0.0, 1.0}, 10.0, "None")
+    1594: Temp_int_Loop_Counter_Variable = 0
+    1617: Temp_int_Array_Index_Variable_1 = 0
+    1640: CallFunc_Array_Length_ReturnValue_8 = Default__KismetArrayLibrary.Array_Length(Spawners  Array)
+    1699: CallFunc_Less_IntInt_ReturnValue_5 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_8)
+    1737: if not (CallFunc_Less_IntInt_ReturnValue_5) goto 2233
+    1751: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable
+    1778: push_flow 7682
+    1783: CallFunc_Greater_IntInt_ReturnValue_1 = Greater_IntInt(self.Amount of Characters to Spawn, Spawned Amount)
+    1821: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue_1)
+    1831: CallFunc_Add_IntInt_ReturnValue_4 = Add_IntInt(Spawned Amount, 1)
+    1873: Spawned Amount = CallFunc_Add_IntInt_ReturnValue_4
+    1900: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(Temp_int_Array_Index_Variable_1, 0)
+    1934: if not (CallFunc_EqualEqual_IntInt_ReturnValue) goto 7756
+    1948: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    2007: CallFunc_Array_Get_Item_4.self.Spawn Player = true
+    2040: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    2099: CallFunc_Array_Get_Item_4.self.Spawn Mercenary = false
+    2132: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    2191: CallFunc_Array_Get_Item_4.Spawn Willies(1)
+    2232: pop_flow
+    2233: CallFunc_Greater_IntInt_ReturnValue_1 = Greater_IntInt(self.Amount of Characters to Spawn, Spawned Amount)
+    2271: if not (CallFunc_Greater_IntInt_ReturnValue_1) goto 2290
+    2285: goto 1594
+    2290: Spawned Amount = 0
+    2313: Default__KismetArrayLibrary.Array_Clear(Spawners  Array)
+    2354: pop_flow
+    2355: Temp_int_Loop_Counter_Variable_4 = 0
+    2378: Temp_int_Array_Index_Variable_4 = 0
+    2401: CallFunc_Array_Length_ReturnValue_4 = Default__KismetArrayLibrary.Array_Length(Filtered Spawners)
+    2460: CallFunc_Less_IntInt_ReturnValue_3 = Less_IntInt(Temp_int_Loop_Counter_Variable_4, CallFunc_Array_Length_ReturnValue_4)
+    2498: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_3)
+    2508: Temp_int_Array_Index_Variable_4 = Temp_int_Loop_Counter_Variable_4
+    2535: push_flow 3396
+    2540: CallFunc_IsValid_ReturnValue = IsValid(Player Spawner)
+    2569: if not (CallFunc_IsValid_ReturnValue) goto 2584
+    2583: pop_flow
+    2584: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_2)
+    2643: Player Spawner = CallFunc_Array_Get_Item_2
+    2662: CallFunc_BooleanAND_ReturnValue_2 = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.Free Mode Brawling)
+    2744: CallFunc_EqualEqual_ByteByte_ReturnValue_5 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 0)
+    2797: CallFunc_BooleanOR_ReturnValue_5 = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_5, CallFunc_BooleanAND_ReturnValue_2)
+    2835: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_2)
+    2894: CallFunc_Array_Get_Item_2.self.Start in Pants = CallFunc_BooleanOR_ReturnValue_5
+    2935: CallFunc_EqualEqual_ByteByte_ReturnValue_2 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 10)
+    2988: CallFunc_BooleanAND_ReturnValue_3 = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.Free Mode Blossfechten)
+    3070: CallFunc_BooleanOR_ReturnValue_2 = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_2, CallFunc_BooleanAND_ReturnValue_3)
+    3108: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_2)
+    3167: CallFunc_Array_Get_Item_2.self.Blossfechten Gear = CallFunc_BooleanOR_ReturnValue_2
+    3208: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_2)
+    3267: CallFunc_Array_Add_ReturnValue = Default__KismetArrayLibrary.Array_Add(Spawners  Array, CallFunc_Array_Get_Item_2)
+    3335: CallFunc_Array_RemoveItem_ReturnValue_1 = Default__KismetArrayLibrary.Array_RemoveItem(Filtered Spawners, Player Spawner)
+    3395: pop_flow
+    3396: CallFunc_Add_IntInt_ReturnValue_10 = Add_IntInt(Temp_int_Loop_Counter_Variable_4, 1)
+    3438: Temp_int_Loop_Counter_Variable_4 = CallFunc_Add_IntInt_ReturnValue_10
+    3465: goto 2401
+    3470: CallFunc_IsValid_ReturnValue_1 = IsValid(Player Spawner)
+    3499: pop_flow_if_not (CallFunc_IsValid_ReturnValue_1)
+    3509: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(Spawners  Array)
+    3568: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Mercenaries IDs)
+    3649: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(CallFunc_Array_Length_ReturnValue_2, 1)
+    3691: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(CallFunc_Subtract_IntInt_ReturnValue, CallFunc_Array_Length_ReturnValue_3)
+    3729: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue)
+    3739: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(Spawners  Array)
+    3798: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Mercenaries IDs)
+    3879: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(CallFunc_Array_Length_ReturnValue_2, 1)
+    3921: CallFunc_Subtract_IntInt_ReturnValue_1 = Subtract_IntInt(CallFunc_Array_Length_ReturnValue_3, CallFunc_Subtract_IntInt_ReturnValue)
+    3967: CallFunc_Subtract_IntInt_ReturnValue_2 = Subtract_IntInt(CallFunc_Subtract_IntInt_ReturnValue_1, 1)
+    4009: NewLocalVar_1 = CallFunc_Subtract_IntInt_ReturnValue_2
+    4036: Temp_int_Variable = 0
+    4059: CallFunc_LessEqual_IntInt_ReturnValue_1 = LessEqual_IntInt(Temp_int_Variable, NewLocalVar_1)
+    4097: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue_1)
+    4107: push_flow 5238
+    4112: Spawner Distance from Player Spawner = 0.0
+    4135: Current Checked Spawner = None
+    4146: Temp_int_Loop_Counter_Variable_2 = 0
+    4169: Temp_int_Array_Index_Variable_2 = 0
+    4192: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(Filtered Spawners)
+    4251: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable_2, CallFunc_Array_Length_ReturnValue_1)
+    4289: if not (CallFunc_Less_IntInt_ReturnValue_1) goto 4681
+    4303: Temp_int_Array_Index_Variable_2 = Temp_int_Loop_Counter_Variable_2
+    4330: push_flow 4607
+    4335: CallFunc_EqualEqual_IntInt_ReturnValue_1 = EqualEqual_IntInt(Temp_int_Array_Index_Variable_2, 0)
+    4369: if not (CallFunc_EqualEqual_IntInt_ReturnValue_1) goto 8501
+    4383: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item)
+    4442: CallFunc_GetDistanceTo_ReturnValue_1 = CallFunc_Array_Get_Item.GetDistanceTo(Player Spawner)
+    4501: Spawner Distance from Player Spawner = CallFunc_GetDistanceTo_ReturnValue_1
+    4528: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item)
+    4587: Current Checked Spawner = CallFunc_Array_Get_Item
+    4606: pop_flow
+    4607: CallFunc_Add_IntInt_ReturnValue_7 = Add_IntInt(Temp_int_Loop_Counter_Variable_2, 1)
+    4649: Temp_int_Loop_Counter_Variable_2 = CallFunc_Add_IntInt_ReturnValue_7
+    4676: goto 4192
+    4681: CallFunc_Array_RemoveItem_ReturnValue = Default__KismetArrayLibrary.Array_RemoveItem(Filtered Spawners, Current Checked Spawner)
+    4741: CallFunc_Array_AddUnique_ReturnValue = Default__KismetArrayLibrary.Array_AddUnique(Spawners  Array, Current Checked Spawner)
+    4809: CallFunc_EqualEqual_ByteByte_ReturnValue_4 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 0)
+    4862: CallFunc_BooleanAND_ReturnValue_5 = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.Free Mode Brawling)
+    4944: CallFunc_BooleanOR_ReturnValue_4 = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_4, CallFunc_BooleanAND_ReturnValue_5)
+    4982: Current Checked Spawner.self.Start in Pants = CallFunc_BooleanOR_ReturnValue_4
+    5023: CallFunc_EqualEqual_ByteByte_ReturnValue_3 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 10)
+    5076: CallFunc_BooleanAND_ReturnValue_4 = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.Free Mode Blossfechten)
+    5158: CallFunc_BooleanOR_ReturnValue_3 = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_3, CallFunc_BooleanAND_ReturnValue_4)
+    5196: Current Checked Spawner.self.Blossfechten Gear = CallFunc_BooleanOR_ReturnValue_3
+    5237: pop_flow
+    5238: CallFunc_Add_IntInt_ReturnValue_6 = Add_IntInt(Temp_int_Variable, 1)
+    5280: Temp_int_Variable = CallFunc_Add_IntInt_ReturnValue_6
+    5307: goto 4059
+    5312: CallFunc_Array_Length_ReturnValue_5 = Default__KismetArrayLibrary.Array_Length(Filtered Spawners)
+    5371: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Array_Length_ReturnValue_5, 0)
+    5405: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue)
+    5415: CallFunc_Array_Length_ReturnValue_5 = Default__KismetArrayLibrary.Array_Length(Filtered Spawners)
+    5474: NewLocalVar_2 = CallFunc_Array_Length_ReturnValue_5
+    5501: Temp_int_Variable_1 = 0
+    5524: CallFunc_Subtract_IntInt_ReturnValue_3 = Subtract_IntInt(NewLocalVar_2, 1)
+    5566: CallFunc_LessEqual_IntInt_ReturnValue_2 = LessEqual_IntInt(Temp_int_Variable_1, CallFunc_Subtract_IntInt_ReturnValue_3)
+    5604: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue_2)
+    5614: push_flow 7438
+    5619: Spawner Distance from Player Spawner = 0.0
+    5642: Temp_int_Loop_Counter_Variable_3 = 0
+    5665: Temp_int_Array_Index_Variable_3 = 0
+    5688: CallFunc_Array_Length_ReturnValue_6 = Default__KismetArrayLibrary.Array_Length(Filtered Spawners)
+    5747: CallFunc_Less_IntInt_ReturnValue_2 = Less_IntInt(Temp_int_Loop_Counter_Variable_3, CallFunc_Array_Length_ReturnValue_6)
+    5785: if not (CallFunc_Less_IntInt_ReturnValue_2) goto 6881
+    5799: Temp_int_Array_Index_Variable_3 = Temp_int_Loop_Counter_Variable_3
+    5826: push_flow 6807
+    5831: CallFunc_EqualEqual_IntInt_ReturnValue_2 = EqualEqual_IntInt(Temp_int_Array_Index_Variable_3, 0)
+    5865: if not (CallFunc_EqualEqual_IntInt_ReturnValue_2) goto 6103
+    5879: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_1)
+    5938: CallFunc_GetDistanceTo_ReturnValue_3 = CallFunc_Array_Get_Item_1.GetDistanceTo(Player Spawner)
+    5997: Spawner Distance from Player Spawner = CallFunc_GetDistanceTo_ReturnValue_3
+    6024: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_1)
+    6083: Current Checked Spawner = CallFunc_Array_Get_Item_1
+    6102: pop_flow
+    6103: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_1)
+    6162: CallFunc_Less_DoubleDouble_A_ImplicitCast_1 = Cast(ConversionType=CST_FloatToDouble, Target=Spawner Distance from Player Spawner)
+    6191: CallFunc_Less_DoubleDouble_ReturnValue_1 = Less_DoubleDouble(CallFunc_Less_DoubleDouble_A_ImplicitCast_1, 500.0)
+    6229: CallFunc_GetDistanceTo_ReturnValue_2 = CallFunc_Array_Get_Item_1.GetDistanceTo(Player Spawner)
+    6288: CallFunc_Multiply_DoubleDouble_A_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=Spawner Distance from Player Spawner)
+    6317: CallFunc_Multiply_DoubleDouble_ReturnValue = Multiply_DoubleDouble(CallFunc_Multiply_DoubleDouble_A_ImplicitCast, 3.0)
+    6363: CallFunc_Greater_DoubleDouble_A_ImplicitCast_1 = Cast(ConversionType=CST_FloatToDouble, Target=CallFunc_GetDistanceTo_ReturnValue_2)
+    6392: CallFunc_Greater_DoubleDouble_ReturnValue = Greater_DoubleDouble(CallFunc_Greater_DoubleDouble_A_ImplicitCast_1, 500.0)
+    6430: CallFunc_Greater_DoubleDouble_A_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=CallFunc_GetDistanceTo_ReturnValue_2)
+    6459: CallFunc_Greater_DoubleDouble_ReturnValue_1 = Greater_DoubleDouble(CallFunc_Greater_DoubleDouble_A_ImplicitCast, CallFunc_Multiply_DoubleDouble_ReturnValue)
+    6497: CallFunc_BooleanAND_ReturnValue_6 = BooleanAND(CallFunc_Greater_DoubleDouble_ReturnValue, CallFunc_Less_DoubleDouble_ReturnValue_1)
+    6535: CallFunc_BooleanOR_ReturnValue_6 = BooleanOR(CallFunc_Greater_DoubleDouble_ReturnValue_1, CallFunc_BooleanAND_ReturnValue_6)
+    6573: pop_flow_if_not (CallFunc_BooleanOR_ReturnValue_6)
+    6583: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_1)
+    6642: CallFunc_GetDistanceTo_ReturnValue_2 = CallFunc_Array_Get_Item_1.GetDistanceTo(Player Spawner)
+    6701: Spawner Distance from Player Spawner = CallFunc_GetDistanceTo_ReturnValue_2
+    6728: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_1)
+    6787: Current Checked Spawner = CallFunc_Array_Get_Item_1
+    6806: pop_flow
+    6807: CallFunc_Add_IntInt_ReturnValue_8 = Add_IntInt(Temp_int_Loop_Counter_Variable_3, 1)
+    6849: Temp_int_Loop_Counter_Variable_3 = CallFunc_Add_IntInt_ReturnValue_8
+    6876: goto 5688
+    6881: CallFunc_Array_RemoveItem_ReturnValue_2 = Default__KismetArrayLibrary.Array_RemoveItem(Filtered Spawners, Current Checked Spawner)
+    6941: CallFunc_Array_AddUnique_ReturnValue_1 = Default__KismetArrayLibrary.Array_AddUnique(Spawners  Array, Current Checked Spawner)
+    7009: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.Free Mode Brawling)
+    7091: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 0)
+    7144: CallFunc_BooleanOR_ReturnValue_1 = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue_1, CallFunc_BooleanAND_ReturnValue_1)
+    7182: Current Checked Spawner.self.Start in Pants = CallFunc_BooleanOR_ReturnValue_1
+    7223: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 10)
+    7276: CallFunc_BooleanAND_ReturnValue = BooleanAND(self.As GI Settings.self.Free Mode Activated, self.As GI Settings.self.Free Mode Blossfechten)
+    7358: CallFunc_BooleanOR_ReturnValue = BooleanOR(CallFunc_EqualEqual_ByteByte_ReturnValue, CallFunc_BooleanAND_ReturnValue)
+    7396: Current Checked Spawner.self.Blossfechten Gear = CallFunc_BooleanOR_ReturnValue
+    7437: pop_flow
+    7438: CallFunc_Add_IntInt_ReturnValue_9 = Add_IntInt(Temp_int_Variable_1, 1)
+    7480: Temp_int_Variable_1 = CallFunc_Add_IntInt_ReturnValue_9
+    7507: goto 5524
+    7512: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+    7554: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_2
+    7581: goto 295
+    7586: Default__KismetArrayLibrary.Array_Get(All Spawners Shuffled, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_3)
+    7645: CallFunc_Array_Get_Item_3.K2_DestroyActor()
+    7681: pop_flow
+    7682: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    7724: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+    7751: goto 1640
+    7756: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.As GI Settings.self.Available Mercenaries IDs)
+    7837: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(Spawned Amount, -1)
+    7879: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(CallFunc_Add_IntInt_ReturnValue_3, CallFunc_Array_Length_ReturnValue)
+    7917: if not (CallFunc_LessEqual_IntInt_ReturnValue) goto 8216
+    7931: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    7990: CallFunc_Array_Get_Item_4.self.Spawn Player = false
+    8023: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    8082: CallFunc_Array_Get_Item_4.self.Spawn Mercenary = true
+    8115: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    8174: CallFunc_Array_Get_Item_4.Spawn Willies(1)
+    8215: pop_flow
+    8216: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    8275: CallFunc_Array_Get_Item_4.self.Spawn Player = false
+    8308: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    8367: CallFunc_Array_Get_Item_4.self.Spawn Mercenary = false
+    8400: Default__KismetArrayLibrary.Array_Get(Spawners  Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item_4)
+    8459: CallFunc_Array_Get_Item_4.Spawn Willies(1)
+    8500: pop_flow
+    8501: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item)
+    8560: CallFunc_GetDistanceTo_ReturnValue = CallFunc_Array_Get_Item.GetDistanceTo(Player Spawner)
+    8619: CallFunc_Less_DoubleDouble_A_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=CallFunc_GetDistanceTo_ReturnValue)
+    8648: CallFunc_Less_DoubleDouble_B_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=Spawner Distance from Player Spawner)
+    8677: CallFunc_Less_DoubleDouble_ReturnValue = Less_DoubleDouble(CallFunc_Less_DoubleDouble_A_ImplicitCast, CallFunc_Less_DoubleDouble_B_ImplicitCast)
+    8715: pop_flow_if_not (CallFunc_Less_DoubleDouble_ReturnValue)
+    8725: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item)
+    8784: Current Checked Spawner = CallFunc_Array_Get_Item
+    8803: Default__KismetArrayLibrary.Array_Get(Filtered Spawners, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item)
+    8862: CallFunc_GetDistanceTo_ReturnValue = CallFunc_Array_Get_Item.GetDistanceTo(Player Spawner)
+    8921: Spawner Distance from Player Spawner = CallFunc_GetDistanceTo_ReturnValue
+    8948: pop_flow
+    8949: return _
+
+=== FUNCTION Spawn Combatants_Mock  (BP_LevelManager_C)
+       0: push_flow 5847
+       5: K2Node_MakeArray_Array = [6]
+      21: Available Mercenaries (Balls) = K2Node_MakeArray_Array
+      48: Amount of Balls to Spawn = 2
+      71: NewLocalVar_0 = 0
+      94: CallFunc_GetAllActorsOfClass_OutActors = []
+     105: GetAllActorsOfClass(self, BP_Trash_ColoredBall_C, CallFunc_GetAllActorsOfClass_OutActors)
+     134: All Balls Shuffled = CallFunc_GetAllActorsOfClass_OutActors
+     161: Default__KismetArrayLibrary.Array_Shuffle(All Balls Shuffled)
+     202: Player Ball = None
+     213: Default__KismetArrayLibrary.Array_Clear(Filtered Balls)
+     254: Default__KismetArrayLibrary.Array_Clear(Balls Array)
+     295: push_flow 628
+     300: push_flow 3390
+     305: push_flow 1941
+     310: push_flow 1372
+     315: Temp_int_Loop_Counter_Variable = 0
+     338: Temp_int_Array_Index_Variable = 0
+     361: CallFunc_Array_Length_ReturnValue_9 = Default__KismetArrayLibrary.Array_Length(All Balls Shuffled)
+     420: CallFunc_Less_IntInt_ReturnValue_3 = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue_9)
+     458: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_3)
+     468: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable
+     495: push_flow 4906
+     500: Default__KismetArrayLibrary.Array_Get(All Balls Shuffled, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item_4)
+     559: CallFunc_Array_AddUnique_ReturnValue_2 = Default__KismetArrayLibrary.Array_AddUnique(Filtered Balls, CallFunc_Array_Get_Item_4)
+     627: pop_flow
+     628: CallFunc_Array_Length_ReturnValue_2 = Default__KismetArrayLibrary.Array_Length(Balls Array)
+     687: CallFunc_Greater_IntInt_ReturnValue = Greater_IntInt(CallFunc_Array_Length_ReturnValue_2, 0)
+     721: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue)
+     731: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Amount of Balls to Spawn, 1)
+     773: Amount of Balls to Spawn = CallFunc_Add_IntInt_ReturnValue
+     800: Temp_int_Loop_Counter_Variable_2 = 0
+     823: Temp_int_Array_Index_Variable_1 = 0
+     846: CallFunc_Array_Length_ReturnValue_1 = Default__KismetArrayLibrary.Array_Length(Balls Array)
+     905: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable_2, CallFunc_Array_Length_ReturnValue_1)
+     943: if not (CallFunc_Less_IntInt_ReturnValue) goto 1250
+     957: Temp_int_Array_Index_Variable_1 = Temp_int_Loop_Counter_Variable_2
+     984: push_flow 4980
+     989: CallFunc_Greater_IntInt_ReturnValue_2 = Greater_IntInt(Amount of Balls to Spawn, Spawned Amount)
+    1027: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue_2)
+    1037: CallFunc_Add_IntInt_ReturnValue_7 = Add_IntInt(Spawned Amount, 1)
+    1079: Spawned Amount = CallFunc_Add_IntInt_ReturnValue_7
+    1106: CallFunc_EqualEqual_IntInt_ReturnValue = EqualEqual_IntInt(Temp_int_Array_Index_Variable_1, 0)
+    1140: if not (CallFunc_EqualEqual_IntInt_ReturnValue) goto 5054
+    1154: Default__KismetArrayLibrary.Array_Get(Balls Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item)
+    1213: CallFunc_Array_Get_Item.Turn Blue()
+    1249: pop_flow
+    1250: CallFunc_Greater_IntInt_ReturnValue_2 = Greater_IntInt(Amount of Balls to Spawn, Spawned Amount)
+    1288: if not (CallFunc_Greater_IntInt_ReturnValue_2) goto 1307
+    1302: goto 800
+    1307: Spawned Amount = 0
+    1330: Default__KismetArrayLibrary.Array_Clear(Balls Array)
+    1371: pop_flow
+    1372: Temp_int_Loop_Counter_Variable_4 = 0
+    1395: Temp_int_Array_Index_Variable_4 = 0
+    1418: CallFunc_Array_Length_ReturnValue_8 = Default__KismetArrayLibrary.Array_Length(Filtered Balls)
+    1477: CallFunc_Less_IntInt_ReturnValue_5 = Less_IntInt(Temp_int_Loop_Counter_Variable_4, CallFunc_Array_Length_ReturnValue_8)
+    1515: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_5)
+    1525: Temp_int_Array_Index_Variable_4 = Temp_int_Loop_Counter_Variable_4
+    1552: push_flow 1867
+    1557: CallFunc_IsValid_ReturnValue_1 = IsValid(Player Ball)
+    1586: if not (CallFunc_IsValid_ReturnValue_1) goto 1601
+    1600: pop_flow
+    1601: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_3)
+    1660: Player Ball = CallFunc_Array_Get_Item_3
+    1679: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_4, CallFunc_Array_Get_Item_3)
+    1738: CallFunc_Array_Add_ReturnValue = Default__KismetArrayLibrary.Array_Add(Balls Array, CallFunc_Array_Get_Item_3)
+    1806: CallFunc_Array_RemoveItem_ReturnValue_2 = Default__KismetArrayLibrary.Array_RemoveItem(Filtered Balls, Player Ball)
+    1866: pop_flow
+    1867: CallFunc_Add_IntInt_ReturnValue_9 = Add_IntInt(Temp_int_Loop_Counter_Variable_4, 1)
+    1909: Temp_int_Loop_Counter_Variable_4 = CallFunc_Add_IntInt_ReturnValue_9
+    1936: goto 1418
+    1941: CallFunc_IsValid_ReturnValue = IsValid(Player Ball)
+    1970: pop_flow_if_not (CallFunc_IsValid_ReturnValue)
+    1980: CallFunc_Array_Length_ReturnValue_6 = Default__KismetArrayLibrary.Array_Length(Available Mercenaries (Balls))
+    2039: CallFunc_Array_Length_ReturnValue_7 = Default__KismetArrayLibrary.Array_Length(Balls Array)
+    2098: CallFunc_Subtract_IntInt_ReturnValue_1 = Subtract_IntInt(CallFunc_Array_Length_ReturnValue_7, 1)
+    2140: CallFunc_Less_IntInt_ReturnValue_2 = Less_IntInt(CallFunc_Subtract_IntInt_ReturnValue_1, CallFunc_Array_Length_ReturnValue_6)
+    2178: pop_flow_if_not (CallFunc_Less_IntInt_ReturnValue_2)
+    2188: CallFunc_Array_Length_ReturnValue_6 = Default__KismetArrayLibrary.Array_Length(Available Mercenaries (Balls))
+    2247: CallFunc_Array_Length_ReturnValue_7 = Default__KismetArrayLibrary.Array_Length(Balls Array)
+    2306: CallFunc_Subtract_IntInt_ReturnValue_1 = Subtract_IntInt(CallFunc_Array_Length_ReturnValue_7, 1)
+    2348: CallFunc_Subtract_IntInt_ReturnValue_2 = Subtract_IntInt(CallFunc_Array_Length_ReturnValue_6, CallFunc_Subtract_IntInt_ReturnValue_1)
+    2394: CallFunc_Subtract_IntInt_ReturnValue_3 = Subtract_IntInt(CallFunc_Subtract_IntInt_ReturnValue_2, 1)
+    2436: NewLocalVar = CallFunc_Subtract_IntInt_ReturnValue_3
+    2463: Temp_int_Variable = 0
+    2486: CallFunc_LessEqual_IntInt_ReturnValue = LessEqual_IntInt(Temp_int_Variable, NewLocalVar)
+    2524: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue)
+    2534: push_flow 3316
+    2539: Spawner Distance from Player Spawner = 0.0
+    2562: Current Checked Ball = None
+    2573: Temp_int_Loop_Counter_Variable_3 = 0
+    2596: Temp_int_Array_Index_Variable_3 = 0
+    2619: CallFunc_Array_Length_ReturnValue_5 = Default__KismetArrayLibrary.Array_Length(Filtered Balls)
+    2678: CallFunc_Less_IntInt_ReturnValue_4 = Less_IntInt(Temp_int_Loop_Counter_Variable_3, CallFunc_Array_Length_ReturnValue_5)
+    2716: if not (CallFunc_Less_IntInt_ReturnValue_4) goto 3108
+    2730: Temp_int_Array_Index_Variable_3 = Temp_int_Loop_Counter_Variable_3
+    2757: push_flow 3034
+    2762: CallFunc_EqualEqual_IntInt_ReturnValue_2 = EqualEqual_IntInt(Temp_int_Array_Index_Variable_3, 0)
+    2796: if not (CallFunc_EqualEqual_IntInt_ReturnValue_2) goto 5399
+    2810: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_2)
+    2869: CallFunc_GetDistanceTo_ReturnValue_3 = CallFunc_Array_Get_Item_2.GetDistanceTo(Player Ball)
+    2928: Spawner Distance from Player Spawner = CallFunc_GetDistanceTo_ReturnValue_3
+    2955: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_2)
+    3014: Current Checked Ball = CallFunc_Array_Get_Item_2
+    3033: pop_flow
+    3034: CallFunc_Add_IntInt_ReturnValue_8 = Add_IntInt(Temp_int_Loop_Counter_Variable_3, 1)
+    3076: Temp_int_Loop_Counter_Variable_3 = CallFunc_Add_IntInt_ReturnValue_8
+    3103: goto 2619
+    3108: CallFunc_Array_RemoveItem_ReturnValue_1 = Default__KismetArrayLibrary.Array_RemoveItem(Filtered Balls, Current Checked Ball)
+    3168: CallFunc_Array_AddUnique_ReturnValue_1 = Default__KismetArrayLibrary.Array_AddUnique(Balls Array, Current Checked Ball)
+    3236: PrintString(self, "ADD FRIENDLY", true, true, LinearColor{0.0, 0.66, 1.0, 1.0}, 2.0, "None")
+    3315: pop_flow
+    3316: CallFunc_Add_IntInt_ReturnValue_4 = Add_IntInt(Temp_int_Variable, 1)
+    3358: Temp_int_Variable = CallFunc_Add_IntInt_ReturnValue_4
+    3385: goto 2486
+    3390: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(Filtered Balls)
+    3449: CallFunc_Greater_IntInt_ReturnValue_1 = Greater_IntInt(CallFunc_Array_Length_ReturnValue_3, 0)
+    3483: pop_flow_if_not (CallFunc_Greater_IntInt_ReturnValue_1)
+    3493: CallFunc_Array_Length_ReturnValue_3 = Default__KismetArrayLibrary.Array_Length(Filtered Balls)
+    3552: NewLocalVar_0 = CallFunc_Array_Length_ReturnValue_3
+    3579: Temp_int_Variable_1 = 0
+    3602: CallFunc_Subtract_IntInt_ReturnValue = Subtract_IntInt(NewLocalVar_0, 1)
+    3644: CallFunc_LessEqual_IntInt_ReturnValue_2 = LessEqual_IntInt(Temp_int_Variable_1, CallFunc_Subtract_IntInt_ReturnValue)
+    3682: pop_flow_if_not (CallFunc_LessEqual_IntInt_ReturnValue_2)
+    3692: push_flow 4832
+    3697: Spawner Distance from Player Spawner = 0.0
+    3720: Temp_int_Loop_Counter_Variable_1 = 0
+    3743: Temp_int_Array_Index_Variable_2 = 0
+    3766: CallFunc_Array_Length_ReturnValue_4 = Default__KismetArrayLibrary.Array_Length(Filtered Balls)
+    3825: CallFunc_Less_IntInt_ReturnValue_1 = Less_IntInt(Temp_int_Loop_Counter_Variable_1, CallFunc_Array_Length_ReturnValue_4)
+    3863: if not (CallFunc_Less_IntInt_ReturnValue_1) goto 4703
+    3877: Temp_int_Array_Index_Variable_2 = Temp_int_Loop_Counter_Variable_1
+    3904: push_flow 4629
+    3909: CallFunc_EqualEqual_IntInt_ReturnValue_1 = EqualEqual_IntInt(Temp_int_Array_Index_Variable_2, 0)
+    3943: if not (CallFunc_EqualEqual_IntInt_ReturnValue_1) goto 4181
+    3957: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_1)
+    4016: CallFunc_GetDistanceTo_ReturnValue = CallFunc_Array_Get_Item_1.GetDistanceTo(Player Ball)
+    4075: Spawner Distance from Player Spawner = CallFunc_GetDistanceTo_ReturnValue
+    4102: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_1)
+    4161: Current Checked Ball = CallFunc_Array_Get_Item_1
+    4180: pop_flow
+    4181: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_1)
+    4240: CallFunc_GetDistanceTo_ReturnValue_1 = CallFunc_Array_Get_Item_1.GetDistanceTo(Player Ball)
+    4299: CallFunc_Greater_DoubleDouble_A_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=CallFunc_GetDistanceTo_ReturnValue_1)
+    4328: CallFunc_Greater_DoubleDouble_B_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=Spawner Distance from Player Spawner)
+    4357: CallFunc_Greater_DoubleDouble_ReturnValue = Greater_DoubleDouble(CallFunc_Greater_DoubleDouble_A_ImplicitCast, CallFunc_Greater_DoubleDouble_B_ImplicitCast)
+    4395: pop_flow_if_not (CallFunc_Greater_DoubleDouble_ReturnValue)
+    4405: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_1)
+    4464: Current Checked Ball = CallFunc_Array_Get_Item_1
+    4483: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_2, CallFunc_Array_Get_Item_1)
+    4542: CallFunc_GetDistanceTo_ReturnValue_1 = CallFunc_Array_Get_Item_1.GetDistanceTo(Player Ball)
+    4601: Spawner Distance from Player Spawner = CallFunc_GetDistanceTo_ReturnValue_1
+    4628: pop_flow
+    4629: CallFunc_Add_IntInt_ReturnValue_2 = Add_IntInt(Temp_int_Loop_Counter_Variable_1, 1)
+    4671: Temp_int_Loop_Counter_Variable_1 = CallFunc_Add_IntInt_ReturnValue_2
+    4698: goto 3766
+    4703: CallFunc_Array_RemoveItem_ReturnValue = Default__KismetArrayLibrary.Array_RemoveItem(Filtered Balls, Current Checked Ball)
+    4763: CallFunc_Array_AddUnique_ReturnValue = Default__KismetArrayLibrary.Array_AddUnique(Balls Array, Current Checked Ball)
+    4831: pop_flow
+    4832: CallFunc_Add_IntInt_ReturnValue_6 = Add_IntInt(Temp_int_Variable_1, 1)
+    4874: Temp_int_Variable_1 = CallFunc_Add_IntInt_ReturnValue_6
+    4901: goto 3602
+    4906: CallFunc_Add_IntInt_ReturnValue_1 = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    4948: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue_1
+    4975: goto 361
+    4980: CallFunc_Add_IntInt_ReturnValue_3 = Add_IntInt(Temp_int_Loop_Counter_Variable_2, 1)
+    5022: Temp_int_Loop_Counter_Variable_2 = CallFunc_Add_IntInt_ReturnValue_3
+    5049: goto 846
+    5054: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(Available Mercenaries (Balls))
+    5113: CallFunc_Add_IntInt_ReturnValue_5 = Add_IntInt(Spawned Amount, -1)
+    5155: CallFunc_LessEqual_IntInt_ReturnValue_1 = LessEqual_IntInt(CallFunc_Add_IntInt_ReturnValue_5, CallFunc_Array_Length_ReturnValue)
+    5193: if not (CallFunc_LessEqual_IntInt_ReturnValue_1) goto 5303
+    5207: Default__KismetArrayLibrary.Array_Get(Balls Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item)
+    5266: CallFunc_Array_Get_Item.Turn Green()
+    5302: pop_flow
+    5303: Default__KismetArrayLibrary.Array_Get(Balls Array, Temp_int_Array_Index_Variable_1, CallFunc_Array_Get_Item)
+    5362: CallFunc_Array_Get_Item.Turn Red()
+    5398: pop_flow
+    5399: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_2)
+    5458: CallFunc_GetDistanceTo_ReturnValue_2 = CallFunc_Array_Get_Item_2.GetDistanceTo(Player Ball)
+    5517: CallFunc_Less_DoubleDouble_A_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=CallFunc_GetDistanceTo_ReturnValue_2)
+    5546: CallFunc_Less_DoubleDouble_B_ImplicitCast = Cast(ConversionType=CST_FloatToDouble, Target=Spawner Distance from Player Spawner)
+    5575: CallFunc_Less_DoubleDouble_ReturnValue = Less_DoubleDouble(CallFunc_Less_DoubleDouble_A_ImplicitCast, CallFunc_Less_DoubleDouble_B_ImplicitCast)
+    5613: pop_flow_if_not (CallFunc_Less_DoubleDouble_ReturnValue)
+    5623: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_2)
+    5682: Current Checked Ball = CallFunc_Array_Get_Item_2
+    5701: Default__KismetArrayLibrary.Array_Get(Filtered Balls, Temp_int_Array_Index_Variable_3, CallFunc_Array_Get_Item_2)
+    5760: CallFunc_GetDistanceTo_ReturnValue_2 = CallFunc_Array_Get_Item_2.GetDistanceTo(Player Ball)
+    5819: Spawner Distance from Player Spawner = CallFunc_GetDistanceTo_ReturnValue_2
+    5846: pop_flow
+    5847: return _

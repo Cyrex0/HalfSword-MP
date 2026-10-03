@@ -1,0 +1,303 @@
+{
+  "map": "Arena_Ambush_Map_Morning_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -241.974,
+        -717.177,
+        391.653
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_2",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box",
+      "location": [
+        -1340.322,
+        -331.272,
+        386.75
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_1",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere",
+      "location": [
+        256.28,
+        -1428.097,
+        384.366
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_10",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere5",
+      "location": [
+        -1974.338,
+        1075.455,
+        365.31
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_11",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere6",
+      "location": [
+        -1172.016,
+        1431.463,
+        365.31
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_12",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere7",
+      "location": [
+        -1622.747,
+        1783.284,
+        461.53
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_14",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere8",
+      "location": [
+        -2067.914,
+        -1965.715,
+        281.252
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_16",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere9",
+      "location": [
+        887.272,
+        -3072.003,
+        435.735
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_19",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere10",
+      "location": [
+        2984.039,
+        920.596,
+        1.535
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_3",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere2",
+      "location": [
+        471.045,
+        1131.883,
+        317.79
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_6",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere3",
+      "location": [
+        1604.821,
+        419.693,
+        170.602
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_8",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere4",
+      "location": [
+        427.963,
+        2050.092,
+        495.619
+      ]
+    },
+    {
+      "name": "BP_LightingScalabilityManager_C_1",
+      "class": "BP_LightingScalabilityManager_C",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "BP_LightingScalabilityManager",
+      "location": [
+        -1305.625,
+        -506.004,
+        387.52
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "DirectionalLight0",
+      "location": [
+        376.001,
+        -695.446,
+        508.688
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DirectionalLight_1",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "DirectionalLightLowMedium",
+      "location": [
+        376.001,
+        -695.446,
+        508.688
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "ExponentialHeightFog0",
+      "location": [
+        -161.136,
+        -722.013,
+        469.446
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_1",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "ExponentialHeightFogLowMedium",
+      "location": [
+        -161.136,
+        -722.013,
+        469.446
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "Half Sword Graphics v2.5",
+      "location": [
+        0.0,
+        -300.0,
+        0.0
+      ]
+    },
+    {
+      "name": "PostProcessVolume_1",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "Half Sword Graphics v2.6 LowMedium",
+      "location": [
+        0.0,
+        -300.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        300.0,
+        -1000.0,
+        600.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_1",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "SkyAtmosphereLowMedium",
+      "location": [
+        300.0,
+        -1000.0,
+        600.0
+      ]
+    },
+    {
+      "name": "SkyLight_0",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        351.074,
+        -925.747,
+        724.214
+      ]
+    },
+    {
+      "name": "SkyLight_1",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Lighting/Arena_Ambush_Map_Morning_Lighting.umap",
+      "label": "SkyLightLowMedium",
+      "location": [
+        351.074,
+        -925.747,
+        724.214
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 1,
+  "errors": [],
+  "warnings": []
+}

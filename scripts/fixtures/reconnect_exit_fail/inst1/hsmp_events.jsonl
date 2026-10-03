@@ -1,0 +1,6 @@
+{"v":1,"ev":"frame_hb","inst":"1","mod":"HSMPMatch","seq":3,"t_ms":5000,"wall_ms":1790880000000,"n":1,"max_ms":43}
+{"v":1,"ev":"lobby_ready","inst":"1","mod":"HSMPMenu","seq":1,"t_ms":5200,"wall_ms":1790880000200,"epoch":1,"peer_id":1,"notice":null,"role":"host","arena":""}
+{"v":1,"ev":"x_save_guard","inst":"1","mod":"HSMPMatch","seq":2,"t_ms":5250,"wall_ms":1790880000250,"active":true,"why":"session","session":1}
+{"v":1,"ev":"frame_hb","inst":"1","mod":"HSMPMatch","seq":4,"t_ms":15000,"wall_ms":1790880010000,"n":2,"max_ms":46}
+{"v":1,"ev":"frame_hb","inst":"1","mod":"HSMPMatch","seq":5,"t_ms":25000,"wall_ms":1790880020000,"n":3,"max_ms":49}
+{"v":1,"ev":"frame_hb","inst":"1","mod":"HSMPMatch","seq":6,"t_ms":35000,"wall_ms":1790880030000,"n":4,"max_ms":52}

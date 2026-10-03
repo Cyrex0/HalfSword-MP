@@ -1,0 +1,919 @@
+{
+  "map": "Map_Arena_Slums_PhysicsProps",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "BP_Fence_Flimsy_C_3",
+      "class": "BP_Fence_Flimsy_Big_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Big.BP_Fence_Flimsy_Big_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Big_C",
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        676.44,
+        281.112,
+        853.957
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -44.94,
+        "roll": 5.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy10",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_B_001.SM_Prop_Fence_Wattle_B_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Curved_C_0",
+      "class": "BP_Fence_Flimsy_Curved_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Curved.BP_Fence_Flimsy_Curved_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Curved_C",
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        246.82,
+        613.533,
+        828.552
+      ],
+      "rotation": {
+        "pitch": -4.142,
+        "yaw": 164.499,
+        "roll": 1.148
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Curved",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_C_001.SM_Prop_Fence_Wattle_C_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Curved_C_1",
+      "class": "BP_Fence_Flimsy_Curved_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Curved.BP_Fence_Flimsy_Curved_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Curved_C",
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -775.544,
+        -308.107,
+        876.849
+      ],
+      "rotation": {
+        "pitch": 0.388,
+        "yaw": -73.657,
+        "roll": -1.321
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Curved3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_C_001.SM_Prop_Fence_Wattle_C_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_C_0",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        804.089,
+        98.75,
+        857.549
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -66.207,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy13",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_C_1",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        800.888,
+        35.868,
+        859.543
+      ],
+      "rotation": {
+        "pitch": 8.753,
+        "yaw": -60.835,
+        "roll": 4.854
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy16",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_C_2",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        421.156,
+        516.221,
+        844.858
+      ],
+      "rotation": {
+        "pitch": 0.571,
+        "yaw": -39.424,
+        "roll": 9.488
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy25",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_10",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -513.679,
+        467.106,
+        760.967
+      ],
+      "rotation": {
+        "pitch": -7.23,
+        "yaw": 80.631,
+        "roll": 7.871
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small11",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_11",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -648.072,
+        158.779,
+        809.487
+      ],
+      "rotation": {
+        "pitch": -7.29,
+        "yaw": 55.995,
+        "roll": 12.61
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small12",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_12",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -421.627,
+        693.176,
+        691.304
+      ],
+      "rotation": {
+        "pitch": -36.564,
+        "yaw": 48.032,
+        "roll": 31.125
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small13",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_13",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -582.576,
+        314.408,
+        788.295
+      ],
+      "rotation": {
+        "pitch": -9.846,
+        "yaw": 59.641,
+        "roll": 12.234
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_14",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -740.358,
+        9.479,
+        827.157
+      ],
+      "rotation": {
+        "pitch": -7.579,
+        "yaw": 72.917,
+        "roll": 2.321
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_15",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -783.457,
+        -141.064,
+        850.851
+      ],
+      "rotation": {
+        "pitch": -5.646,
+        "yaw": 58.462,
+        "roll": 13.262
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small4",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_3",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -710.534,
+        -508.859,
+        891.31
+      ],
+      "rotation": {
+        "pitch": 4.63,
+        "yaw": -74.323,
+        "roll": -2.872
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small5",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_5",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -673.778,
+        -848.791,
+        917.081
+      ],
+      "rotation": {
+        "pitch": 2.936,
+        "yaw": -96.158,
+        "roll": -8.38
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small7",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_6",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -180.694,
+        771.511,
+        717.5
+      ],
+      "rotation": {
+        "pitch": 14.356,
+        "yaw": -10.726,
+        "roll": 13.091
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_7",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -466.352,
+        612.909,
+        744.552
+      ],
+      "rotation": {
+        "pitch": -2.97,
+        "yaw": 55.143,
+        "roll": 18.989
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small8",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_8",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        42.278,
+        650.121,
+        803.958
+      ],
+      "rotation": {
+        "pitch": 0.923,
+        "yaw": -3.566,
+        "roll": 14.493
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small9",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Fence_Flimsy_Small_C_9",
+      "class": "BP_Fence_Flimsy_Small_C",
+      "class_path": "/Game/Assets/Props/Fence/Blueprints/BP_Fence_Flimsy_Small.BP_Fence_Flimsy_Small_C",
+      "class_chain": [
+        "BP_Fence_Flimsy_Small_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -80.442,
+        717.941,
+        771.428
+      ],
+      "rotation": {
+        "pitch": 11.451,
+        "yaw": -63.615,
+        "roll": 8.79
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "fence",
+      "label": "BP_Fence_Flimsy_Small10",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "Fence",
+          "type": "StaticMeshComponent",
+          "mobility": null,
+          "mesh": "StaticMesh'/Game/Assets/Props/Fence/Meshes/SM_Prop_Fence_Wattle_A_001.SM_Prop_Fence_Wattle_A_001'"
+        }
+      ],
+      "instance_properties": {}
+    },
+    {
+      "name": "BP_Structure_Board_Destructible_1X4M_C_1",
+      "class": "BP_Structure_Board_Destructible_1X4M_C",
+      "class_path": "/Game/Structures/Planks/BP_Structure_Board_Destructible_1X4M.BP_Structure_Board_Destructible_1X4M_C",
+      "class_chain": [
+        "BP_Structure_Board_Destructible_1X4M_C",
+        "BP_Structure_Plank_Destructible_Master_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        -72.347,
+        257.333,
+        800.332
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 38.452,
+        "roll": 0.0
+      },
+      "scale": [
+        0.722,
+        0.722,
+        1.0
+      ],
+      "category": "destructible",
+      "label": "BP_Structure_Board_Destructible_1X4M3",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Default Planks Dislocation": {
+          "X": -7.873715E-14,
+          "Y": -200.0,
+          "Z": 0.0
+        }
+      }
+    },
+    {
+      "name": "BP_Structure_Board_Destructible_1X6M_C_0",
+      "class": "BP_Structure_Board_Destructible_1X6M_C",
+      "class_path": "/Game/Structures/Planks/BP_Structure_Board_Destructible_1X6M.BP_Structure_Board_Destructible_1X6M_C",
+      "class_chain": [
+        "BP_Structure_Board_Destructible_1X6M_C",
+        "BP_Structure_Plank_Destructible_Master_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "tags": [
+        "Block Navigation on Break",
+        "Respawn"
+      ],
+      "location": [
+        710.168,
+        639.54,
+        868.216
+      ],
+      "rotation": {
+        "pitch": 2.188,
+        "yaw": 49.481,
+        "roll": 4.693
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "destructible",
+      "label": "BP_Structure_Board_Destructible_1X6M",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Default Planks Dislocation": {
+          "X": 5.684342E-14,
+          "Y": -300.0,
+          "Z": 6.039613E-14
+        },
+        "Block Navigation On Break": true,
+        "Tags": [
+          "Block Navigation on Break",
+          "Respawn"
+        ]
+      }
+    },
+    {
+      "name": "BP_Structure_Board_Destructible_1X6M_C_1",
+      "class": "BP_Structure_Board_Destructible_1X6M_C",
+      "class_path": "/Game/Structures/Planks/BP_Structure_Board_Destructible_1X6M.BP_Structure_Board_Destructible_1X6M_C",
+      "class_chain": [
+        "BP_Structure_Board_Destructible_1X6M_C",
+        "BP_Structure_Plank_Destructible_Master_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        24.55,
+        192.232,
+        807.453
+      ],
+      "rotation": {
+        "pitch": 1.11,
+        "yaw": 31.008,
+        "roll": 0.0
+      },
+      "scale": [
+        0.665,
+        0.665,
+        1.0
+      ],
+      "category": "destructible",
+      "label": "BP_Structure_Board_Destructible_1X6M2",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Default Planks Dislocation": {
+          "X": -1.7083023E-13,
+          "Y": -300.0,
+          "Z": 8.437695E-15
+        }
+      }
+    },
+    {
+      "name": "BP_Structure_Board_Destructible_1X6M_C_2",
+      "class": "BP_Structure_Board_Destructible_1X6M_C",
+      "class_path": "/Game/Structures/Planks/BP_Structure_Board_Destructible_1X6M.BP_Structure_Board_Destructible_1X6M_C",
+      "class_chain": [
+        "BP_Structure_Board_Destructible_1X6M_C",
+        "BP_Structure_Plank_Destructible_Master_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        222.439,
+        -64.139,
+        847.185
+      ],
+      "rotation": {
+        "pitch": 2.347,
+        "yaw": 28.042,
+        "roll": 5.585
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "destructible",
+      "label": "BP_Structure_Board_Destructible_1X6M3",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Default Planks Dislocation": {
+          "X": -1.7053026E-13,
+          "Y": -300.0,
+          "Z": -6.750156E-14
+        }
+      }
+    },
+    {
+      "name": "BP_Structure_Board_Destructible_1X6M_C_3",
+      "class": "BP_Structure_Board_Destructible_1X6M_C",
+      "class_path": "/Game/Structures/Planks/BP_Structure_Board_Destructible_1X6M.BP_Structure_Board_Destructible_1X6M_C",
+      "class_chain": [
+        "BP_Structure_Board_Destructible_1X6M_C",
+        "BP_Structure_Plank_Destructible_Master_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_PhysicsProps.umap",
+      "location": [
+        81.782,
+        76.728,
+        819.621
+      ],
+      "rotation": {
+        "pitch": 0.87,
+        "yaw": 23.746,
+        "roll": 2.623
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "destructible",
+      "label": "BP_Structure_Board_Destructible_1X6M4",
+      "simulate_physics": false,
+      "instance_properties": {
+        "Default Planks Dislocation": {
+          "X": -1.1368684E-13,
+          "Y": -300.0,
+          "Z": 2.3092639E-14
+        }
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

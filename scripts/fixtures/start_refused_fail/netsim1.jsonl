@@ -1,0 +1,4 @@
+{"ev":"netsim_start","wall_ms":1790879997000,"listen":"127.0.0.1:7791","upstream":"127.0.0.1:7777","profile":"typical","pid":5001,"delay":50,"jitter":12,"loss":1.0,"dup":0.3,"spike_every":0,"spike_ms":0,"spike_len":0}
+{"ev":"netsim_stats","wall_ms":1790879998000,"listen":"127.0.0.1:7791","in":0,"out":0,"lost":0,"dup":0,"blackout_dropped":0,"queued":0,"clients":0,"late_n":0,"late_p50_ms":null,"late_p99_ms":null,"late_max_ms":null}
+{"ev":"netsim_stats","wall_ms":1790880003000,"listen":"127.0.0.1:7791","in":300,"out":297,"lost":3,"dup":1,"blackout_dropped":0,"queued":0,"clients":1,"late_n":300,"late_p50_ms":0.05,"late_p99_ms":0.4,"late_max_ms":1.1}
+{"ev":"netsim_stats","wall_ms":1790880008000,"listen":"127.0.0.1:7791","in":600,"out":594,"lost":6,"dup":2,"blackout_dropped":0,"queued":0,"clients":1,"late_n":300,"late_p50_ms":0.05,"late_p99_ms":0.4,"late_max_ms":1.1}

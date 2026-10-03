@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/Cyrex0/HalfSword-MP/blob/main/docs/players/troubleshooting.md
+    about: Fixes for the most common install and connection problems.
+  - name: Security report
+    url: https://github.com/Cyrex0/HalfSword-MP/security/advisories/new
+    about: Report security problems privately.

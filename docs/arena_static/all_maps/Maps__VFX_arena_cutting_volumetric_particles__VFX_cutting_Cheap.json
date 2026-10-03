@@ -1,0 +1,247 @@
+{
+  "map": "VFX_cutting_Cheap",
+  "package": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+  "kind": "persistent_or_standalone",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "NiagaraActor_0",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmoke7",
+      "location": [
+        1200.0,
+        720.0,
+        1360.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_1",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmoke8",
+      "location": [
+        1200.0,
+        770.0,
+        1360.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_10",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeR11",
+      "location": [
+        1090.0,
+        -940.0,
+        1350.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_11",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeR12",
+      "location": [
+        1090.0,
+        -890.0,
+        1350.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_12",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeS4",
+      "location": [
+        -1170.0,
+        -30.0,
+        1320.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_13",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeS5",
+      "location": [
+        -1210.0,
+        -30.0,
+        1320.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_14",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeS6",
+      "location": [
+        -1260.0,
+        -30.0,
+        1320.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_15",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeSR4",
+      "location": [
+        -1170.0,
+        -130.0,
+        1320.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_16",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeSR5",
+      "location": [
+        -1210.0,
+        -130.0,
+        1320.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_17",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeSR6",
+      "location": [
+        -1260.0,
+        -130.0,
+        1320.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_18",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_Area_Dust_volume",
+      "location": [
+        -70.0,
+        1234.0,
+        270.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_2",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmoke9",
+      "location": [
+        1200.0,
+        810.0,
+        1360.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_3",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeR7",
+      "location": [
+        1080.0,
+        720.0,
+        1360.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_4",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeR8",
+      "location": [
+        1080.0,
+        770.0,
+        1360.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_5",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeR9",
+      "location": [
+        1080.0,
+        820.0,
+        1360.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_6",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmoke10",
+      "location": [
+        1210.0,
+        -990.0,
+        1350.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_7",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmoke11",
+      "location": [
+        1210.0,
+        -940.0,
+        1350.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_8",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmoke12",
+      "location": [
+        1210.0,
+        -900.0,
+        1350.0
+      ]
+    },
+    {
+      "name": "NiagaraActor_9",
+      "class": "NiagaraActor",
+      "source": "HalfswordUE5/Content/Maps/VFX_arena_cutting_volumetric_particles/VFX_cutting_Cheap.umap",
+      "label": "N_ChimneySmokeR10",
+      "location": [
+        1090.0,
+        -990.0,
+        1350.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

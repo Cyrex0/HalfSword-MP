@@ -1,0 +1,25 @@
+{
+  "tool": "hsmp-tools crash-triage",
+  "version": 1,
+  "since": "2026-10-01T18:39:50.000Z",
+  "until": "2026-10-01T18:43:07.000Z",
+  "crashes": [
+    {
+      "dir": "UECC-Windows-NEW_0000",
+      "time": "2026-10-01T18:42:37.000Z",
+      "time_ms": 1790880157000,
+      "new": true,
+      "thread": "IoDispatcher",
+      "signature": {
+        "id": "PAK_ASYNC_READ_OOB",
+        "title": "fixture",
+        "confidence": "high"
+      }
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "triaged": 1,
+    "new": 1
+  }
+}

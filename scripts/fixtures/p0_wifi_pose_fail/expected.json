@@ -1,0 +1,14 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-14": "pass",
+    "DoD-12": "pass",
+    "NETSIM": "pass",
+    "POSE-1": "fail"
+  },
+  "messages": [
+    "arm_p95_uu=11>10",
+    "jitter_ratio=1.6>1.5",
+    "foot_slide_p95=9>8"
+  ]
+}

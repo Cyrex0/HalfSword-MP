@@ -1,0 +1,65 @@
+# HSMP mods.txt template.
+#
+# build-and-deploy.ps1 and the launcher write the game's ue4ss/Mods/mods.txt from this file:
+#   "Name : 1"    enabled in every profile
+#   "Name : 0"    disabled in every profile
+#   "Name : dev"  enabled only with build-and-deploy.ps1 -Dev (developer builds, the gate)
+# '#' lines are dropped. A mod folder that is not listed here is deployed but
+# stays DISABLED (deploy never flips a mod on by itself): add new mods here.
+# Order matters to UE4SS: Keybinds stays last.
+
+# --- UE4SS runtime needed by HSMP ----------------------------------------------
+BPModLoaderMod : 1
+BPML_GenericFunctions : 1
+
+# --- UE4SS developer mods: never in a release ------------------------------------
+ConsoleEnablerMod : 0
+ConsoleCommandsMod : 0
+CheatManagerEnablerMod : 0
+KismetDebuggerMod : 0
+EventViewerMod : 0
+LineTraceMod : 0
+ActorDumperMod : 0
+SplitScreenMod : 0
+jsbLuaProfilerMod : 0
+
+# --- HSMP native module (crates/hsmp-native: the game side of the shared-memory IPC) -----
+# A UE4SS C++ mod (Mods/HSMPNative/dlls/main.dll, no Scripts folder), listed before the Lua
+# mods. build-and-deploy.ps1 writes it as 0 when the native build is absent (the mods then
+# load hsmp_lua.dll instead, if it is deployed); a release ships its files from `hsmp-release build --native-dir`.
+HSMPNative : 1
+# Dev-only in-game IPC probe (crates/hsmp-native/probe/HSMPNativeProbe).
+HSMPNativeProbe : dev
+
+# --- HSMP release set (mods/<Name>) ------------------------------------------------
+HSMPMenu : 1
+HSMPSync : 1
+HSMPAvatars : 1
+HSMPMatch : 1
+HSMPNoCutscene : 1
+HSMPWorld : 1
+HSMPCombat : 1
+HSMPLoadout : 1
+HSMPHud : 1
+HSMPInteract : 1
+
+# --- HSMP developer tools (mods/dev/<Name>) ----------------------------------------
+# HSMPDiag: dev-only property dumps. It emits NO gate events: willie_census comes from the
+# Director, and the stall probe (hitch / frame_hb, docs/development/testing.md "Stall probe")
+# runs in the RELEASE profile, so the gate needs no -Dev deploy.
+HSMPDiag : dev
+# HSMPDump: runs UE4SS's object/header dumpers once (the dump hsmp-tools check-bp-names reads).
+HSMPDump : 0
+
+# --- Removed from the repository ---------------------------------------------------
+# Kept at 0 so copies left in a game folder by an older deploy stay off.
+HSMPBrowser : 0
+HSMPDebug : 0
+HSMPLobby : 0
+HSMPAdmin : 0
+HSMPCharacter : 0
+HSMPSettings : 0
+HSMPChat : 0
+
+# Built-in keybinds (dev hotkeys); UE4SS wants this line last.
+Keybinds : dev

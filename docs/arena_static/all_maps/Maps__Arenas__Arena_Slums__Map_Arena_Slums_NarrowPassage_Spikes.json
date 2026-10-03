@@ -1,0 +1,114 @@
+{
+  "map": "Map_Arena_Slums_NarrowPassage_Spikes",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_NarrowPassage_Spikes.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_NarrowPassage_Spikes.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "BP_Weapon_Trap2_C_0",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent"
+      ],
+      "location": [
+        305.735,
+        323.114,
+        823.342
+      ],
+      "rotation": {
+        "pitch": 2.694,
+        "yaw": -42.114,
+        "roll": -5.623
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap2",
+      "simulate_physics": false,
+      "instance_properties": {},
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    },
+    {
+      "name": "BP_Weapon_Trap2_C_1",
+      "class": "BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_path": "/Game/Assets/Weapons/Blueprints/Built_Weapons/Trap/BP_Weapon_Trap_Spikes_Row_Long.BP_Weapon_Trap_Spikes_Row_Long_C",
+      "class_chain": [
+        "BP_Weapon_Trap_Spikes_Row_Long_C",
+        "ModularWeaponBP_C",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_NarrowPassage_Spikes.umap",
+      "tags": [
+        "Weapon",
+        "Trap",
+        "Persistent"
+      ],
+      "location": [
+        1144.044,
+        951.678,
+        863.536
+      ],
+      "rotation": {
+        "pitch": 0.288,
+        "yaw": 134.95,
+        "roll": -6.07
+      },
+      "scale": [
+        1.01,
+        1.01,
+        1.01
+      ],
+      "category": "trap",
+      "label": "BP_Weapon_Trap3",
+      "simulate_physics": false,
+      "instance_properties": {},
+      "weapon_overrides": {},
+      "bp_simulates_physics": false
+    }
+  ],
+  "spawners": [],
+  "other_actors": [],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

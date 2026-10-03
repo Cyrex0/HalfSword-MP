@@ -1,0 +1,7 @@
+# check_unsafe baseline: known findings in mods listed in check_unsafe's OWNERS table.
+# Format: RULE<TAB>file<TAB>trimmed code line. Delete a line when its finding is fixed.
+# Never add findings in unowned mods (fix them instead). Regenerate: check_unsafe --write-baseline
+U3	mods/HSMPLoadout/Scripts/kit.lua	if api.valid(a) then pcall(function() a:K2_DestroyActor() end) end
+U3	mods/HSMPLoadout/Scripts/main.lua	if not ok then pcall(function() a:K2_DestroyActor() end); return nil end
+U3	mods/HSMPLoadout/Scripts/main.lua	if valid(a) then pcall(function() a:K2_DestroyActor() end) end
+U6	mods/HSMPMenu/Scripts/legacy_travel.lua	pcall(function() pc:ConsoleCommand(FString("open " .. path), false); loaded = true end)

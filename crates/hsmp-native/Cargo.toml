@@ -1,0 +1,31 @@
+[package]
+name = "hsmp-native"
+description = "HSMPNative: the game-side HSMP-SHM client and Lua 5.4 binding (UE4SS C++ mod main.dll, option F; hsmp_lua.dll, option E)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+# staticlib -> linked by CMake into main.dll (F) and hsmp_lua.dll (E) together with the
+# private Lua 5.4.7 copy; rlib -> the cargo tests (Lua from mlua's vendored copy).
+crate-type = ["staticlib", "rlib"]
+# The lib alone has no Lua to link against; tests live in tests/ (mlua provides Lua).
+test = false
+doctest = false
+
+[dependencies]
+hsmp-ipc = { path = "../hsmp-ipc" }
+hsmp-pose = { path = "../hsmp-pose" }
+bytemuck = "1"
+
+[dev-dependencies]
+bytemuck = "1"
+# Tests only: provides the lua_* symbols (vendored Lua 5.4) and a host state.
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,667 @@
+{
+  "map": "Arena_LordsHall_Geometry",
+  "package": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_105",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "location": [
+        -1579.826,
+        2557.651,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Furniture_Bookcase_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bookcase_001.SM_Prop_Furniture_Bookcase_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Furniture/Meshes/SM_Prop_Furniture_Bookcase_001.SM_Prop_Furniture_Bookcase_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_249",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "location": [
+        -643.073,
+        2625.571,
+        119.045
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 90.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Cooking_Pan_A_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Cooking_Utencils/Meshes/SM_Prop_Cooking_Pan_A_001.SM_Prop_Cooking_Pan_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Cooking_Utencils/Meshes/SM_Prop_Cooking_Pan_A_001.SM_Prop_Cooking_Pan_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_Env_Arena_LordHall_Door_A_001_C_0",
+      "class": "BP_Env_Arena_LordHall_Door_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Door_A_2",
+      "location": [
+        -555.256,
+        2842.944,
+        5.437
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Door_A_001_C_1",
+      "class": "BP_Env_Arena_LordHall_Door_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Door_A_001",
+      "location": [
+        42.516,
+        2554.956,
+        5.437
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Door_A_002_C_0",
+      "class": "BP_Env_Arena_LordHall_Door_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Door_A_002",
+      "location": [
+        -704.656,
+        4.118,
+        -0.209
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Wall_Bricks_A_001_C_0",
+      "class": "BP_Env_Arena_LordHall_Wall_Bricks_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Wall_Bricks_A_001",
+      "location": [
+        -441.731,
+        2808.28,
+        -12.002
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Wall_Bricks_A_001_C_1",
+      "class": "BP_Env_Arena_LordHall_Wall_Bricks_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Wall_Bricks_A_2",
+      "location": [
+        8.075,
+        2441.928,
+        -12.002
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_001_C_0",
+      "class": "BP_Env_Arena_LordHall_Window_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_2",
+      "location": [
+        -1688.304,
+        1200.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_001_C_1",
+      "class": "BP_Env_Arena_LordHall_Window_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_001",
+      "location": [
+        -1688.304,
+        1600.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_001_C_2",
+      "class": "BP_Env_Arena_LordHall_Window_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_3",
+      "location": [
+        89.954,
+        1200.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_001_C_3",
+      "class": "BP_Env_Arena_LordHall_Window_A_001_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_4",
+      "location": [
+        89.954,
+        1600.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_002_C_0",
+      "class": "BP_Env_Arena_LordHall_Window_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_7",
+      "location": [
+        -1690.162,
+        800.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_002_C_1",
+      "class": "BP_Env_Arena_LordHall_Window_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_002",
+      "location": [
+        88.725,
+        800.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_002_C_2",
+      "class": "BP_Env_Arena_LordHall_Window_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_5",
+      "location": [
+        88.725,
+        2000.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_002_C_3",
+      "class": "BP_Env_Arena_LordHall_Window_A_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_6",
+      "location": [
+        -1690.162,
+        2000.0,
+        0.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_003_C_0",
+      "class": "BP_Env_Arena_LordHall_Window_A_003_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_9",
+      "location": [
+        -800.0,
+        -89.33,
+        656.945
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_003_C_1",
+      "class": "BP_Env_Arena_LordHall_Window_A_003_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_003",
+      "location": [
+        87.581,
+        400.0,
+        156.945
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_004_C_0",
+      "class": "BP_Env_Arena_LordHall_Window_A_004_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_8",
+      "location": [
+        -1676.447,
+        2329.531,
+        119.941
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_004_C_1",
+      "class": "BP_Env_Arena_LordHall_Window_A_004_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_004",
+      "location": [
+        -1676.447,
+        329.532,
+        119.941
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_0",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_005",
+      "location": [
+        -1200.0,
+        300.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_1",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_10",
+      "location": [
+        -1200.0,
+        100.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_10",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_19",
+      "location": [
+        -400.0,
+        1900.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_11",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_20",
+      "location": [
+        -400.0,
+        1700.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_12",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_21",
+      "location": [
+        -400.0,
+        1500.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_13",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_22",
+      "location": [
+        -400.0,
+        1300.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_14",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_23",
+      "location": [
+        -400.0,
+        1100.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_15",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_24",
+      "location": [
+        -400.0,
+        900.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_16",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_25",
+      "location": [
+        -400.0,
+        700.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_17",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_26",
+      "location": [
+        -400.0,
+        500.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_18",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_27",
+      "location": [
+        -400.0,
+        300.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_19",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_28",
+      "location": [
+        -400.0,
+        100.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_2",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_11",
+      "location": [
+        -1200.0,
+        500.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_3",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_12",
+      "location": [
+        -1200.0,
+        700.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_4",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_13",
+      "location": [
+        -1200.0,
+        2300.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_5",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_14",
+      "location": [
+        -1200.0,
+        2100.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_6",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_15",
+      "location": [
+        -1200.0,
+        2500.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_7",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_16",
+      "location": [
+        -1200.0,
+        2700.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_8",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_17",
+      "location": [
+        -400.0,
+        2700.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_A_005_C_9",
+      "class": "BP_Env_Arena_LordHall_Window_A_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_A_18",
+      "location": [
+        -400.0,
+        2100.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_B_002_C_0",
+      "class": "BP_Env_Arena_LordHall_Window_B_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_B_002",
+      "location": [
+        -1676.056,
+        722.176,
+        101.986
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_B_002_C_1",
+      "class": "BP_Env_Arena_LordHall_Window_B_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_B_3",
+      "location": [
+        -1676.056,
+        1922.176,
+        101.986
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_B_002_C_2",
+      "class": "BP_Env_Arena_LordHall_Window_B_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_B_4",
+      "location": [
+        75.501,
+        2078.561,
+        101.986
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_B_002_C_3",
+      "class": "BP_Env_Arena_LordHall_Window_B_002_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_B_5",
+      "location": [
+        75.501,
+        878.561,
+        101.986
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_B_005_C_0",
+      "class": "BP_Env_Arena_LordHall_Window_B_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_B_005",
+      "location": [
+        -400.0,
+        2500.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_B_005_C_1",
+      "class": "BP_Env_Arena_LordHall_Window_B_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_B_6",
+      "location": [
+        -400.0,
+        2300.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_C_005_C_0",
+      "class": "BP_Env_Arena_LordHall_Window_C_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_C_005",
+      "location": [
+        -1200.0,
+        900.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_C_005_C_1",
+      "class": "BP_Env_Arena_LordHall_Window_C_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_C_6",
+      "location": [
+        -1200.0,
+        1100.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_C_005_C_2",
+      "class": "BP_Env_Arena_LordHall_Window_C_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_C_7",
+      "location": [
+        -1200.0,
+        1300.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_C_005_C_3",
+      "class": "BP_Env_Arena_LordHall_Window_C_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_C_8",
+      "location": [
+        -1200.0,
+        1500.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_C_005_C_4",
+      "class": "BP_Env_Arena_LordHall_Window_C_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_C_9",
+      "location": [
+        -1200.0,
+        1700.0,
+        600.0
+      ]
+    },
+    {
+      "name": "BP_Env_Arena_LordHall_Window_C_005_C_5",
+      "class": "BP_Env_Arena_LordHall_Window_C_005_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap",
+      "label": "BP_Env_Arena_LordHall_Window_C_10",
+      "location": [
+        -1200.0,
+        1900.0,
+        600.0
+      ]
+    },
+    {
+      "name": "HDRIBackdrop_C_0",
+      "class": "HDRIBackdrop_C",
+      "source": "HalfswordUE5/Content/Maps/Arena_LordsHall/Arena_LordsHall_Geometry.umap"
+    }
+  ],
+  "static_mesh_actors_static_count": 260,
+  "errors": [],
+  "warnings": []
+}

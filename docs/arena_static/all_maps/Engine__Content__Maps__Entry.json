@@ -1,0 +1,106 @@
+{
+  "map": "Entry",
+  "package": "Engine/Content/Maps/Entry.umap",
+  "kind": "persistent_or_standalone",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "Engine/Content/Maps/Entry.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [
+    {
+      "name": "PlayerStart0",
+      "class": "PlayerStart",
+      "class_path": "/Script/Engine.PlayerStart",
+      "class_chain": [
+        "PlayerStart",
+        "NavigationObjectBase",
+        "Actor",
+        "Object"
+      ],
+      "source": "Engine/Content/Maps/Entry.umap",
+      "location": [
+        54.656,
+        79.013,
+        208.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "label": "PlayerStart-1",
+      "instance_properties": {
+        "GoodSprite": null,
+        "BadSprite": null
+      },
+      "effective_properties": {
+        "GoodSprite": null,
+        "BadSprite": null
+      }
+    }
+  ],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "InstancedFoliageActor_2",
+      "class": "InstancedFoliageActor",
+      "source": "Engine/Content/Maps/Entry.umap",
+      "label": "InstancedFoliageActor2",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "ModelComponent_4",
+      "class": "ModelComponent",
+      "source": "Engine/Content/Maps/Entry.umap"
+    },
+    {
+      "name": "ModelComponent_5",
+      "class": "ModelComponent",
+      "source": "Engine/Content/Maps/Entry.umap"
+    },
+    {
+      "name": "ModelComponent_6",
+      "class": "ModelComponent",
+      "source": "Engine/Content/Maps/Entry.umap"
+    },
+    {
+      "name": "ModelComponent_7",
+      "class": "ModelComponent",
+      "source": "Engine/Content/Maps/Entry.umap"
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

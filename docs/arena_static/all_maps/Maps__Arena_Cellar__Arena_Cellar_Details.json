@@ -1,0 +1,862 @@
+{
+  "map": "Arena_Cellar_Details",
+  "package": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_152",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "location": [
+        1987.613,
+        587.083,
+        189.936
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 90.0,
+        "roll": 90.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Cooking_Pan_A_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Props/Cooking_Utencils/Meshes/SM_Prop_Cooking_Pan_A_001.SM_Prop_Cooking_Pan_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Cooking_Utencils/Meshes/SM_Prop_Cooking_Pan_A_001.SM_Prop_Cooking_Pan_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "DecalActor_0",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K30",
+      "location": [
+        2002.053,
+        1085.416,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_1",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Road_Dust_sg1nltn_2K7",
+      "location": [
+        1617.275,
+        913.73,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_10",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K6",
+      "location": [
+        680.594,
+        1502.015,
+        384.761
+      ]
+    },
+    {
+      "name": "DecalActor_11",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K48",
+      "location": [
+        1717.639,
+        -500.981,
+        -9.092
+      ]
+    },
+    {
+      "name": "DecalActor_12",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K49",
+      "location": [
+        912.754,
+        -100.981,
+        -9.092
+      ]
+    },
+    {
+      "name": "DecalActor_13",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K50",
+      "location": [
+        502.165,
+        -100.981,
+        -9.092
+      ]
+    },
+    {
+      "name": "DecalActor_14",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K80",
+      "location": [
+        1902.777,
+        1502.012,
+        -5.649
+      ]
+    },
+    {
+      "name": "DecalActor_15",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K81",
+      "location": [
+        1564.616,
+        1502.012,
+        -0.359
+      ]
+    },
+    {
+      "name": "DecalActor_16",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K86",
+      "location": [
+        889.93,
+        1502.012,
+        -3.692
+      ]
+    },
+    {
+      "name": "DecalActor_17",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K87",
+      "location": [
+        504.458,
+        1502.012,
+        -3.692
+      ]
+    },
+    {
+      "name": "DecalActor_18",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K88",
+      "location": [
+        102.033,
+        1502.012,
+        -3.692
+      ]
+    },
+    {
+      "name": "DecalActor_19",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K27",
+      "location": [
+        445.557,
+        -100.606,
+        332.154
+      ]
+    },
+    {
+      "name": "DecalActor_2",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Road_Dust_sg1nltn_2K8",
+      "location": [
+        1665.867,
+        464.358,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_20",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K28",
+      "location": [
+        950.838,
+        -100.606,
+        233.159
+      ]
+    },
+    {
+      "name": "DecalActor_21",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K29",
+      "location": [
+        1317.423,
+        -100.606,
+        342.116
+      ]
+    },
+    {
+      "name": "DecalActor_22",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K89",
+      "location": [
+        1500.189,
+        92.501,
+        -6.473
+      ]
+    },
+    {
+      "name": "DecalActor_23",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K90",
+      "location": [
+        1500.189,
+        96.199,
+        308.434
+      ]
+    },
+    {
+      "name": "DecalActor_24",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K91",
+      "location": [
+        1500.189,
+        1295.797,
+        -6.473
+      ]
+    },
+    {
+      "name": "DecalActor_25",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K95",
+      "location": [
+        1500.189,
+        1299.495,
+        308.434
+      ]
+    },
+    {
+      "name": "DecalActor_26",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K96",
+      "location": [
+        1598.06,
+        110.232,
+        -6.473
+      ]
+    },
+    {
+      "name": "DecalActor_27",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K97",
+      "location": [
+        1598.06,
+        1307.621,
+        -3.564
+      ]
+    },
+    {
+      "name": "DecalActor_28",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K31",
+      "location": [
+        2000.129,
+        1343.584,
+        330.885
+      ]
+    },
+    {
+      "name": "DecalActor_29",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K31",
+      "location": [
+        2002.053,
+        313.066,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Road_Dust_sg1nltn_2K10",
+      "location": [
+        1761.092,
+        1307.846,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_30",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K98",
+      "location": [
+        1598.06,
+        -305.185,
+        -6.473
+      ]
+    },
+    {
+      "name": "DecalActor_31",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K99",
+      "location": [
+        1324.93,
+        1502.012,
+        -3.692
+      ]
+    },
+    {
+      "name": "DecalActor_32",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K100",
+      "location": [
+        -102.479,
+        1312.012,
+        -3.692
+      ]
+    },
+    {
+      "name": "DecalActor_33",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K101",
+      "location": [
+        -102.479,
+        887.012,
+        -3.692
+      ]
+    },
+    {
+      "name": "DecalActor_34",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K102",
+      "location": [
+        -102.479,
+        482.012,
+        -3.692
+      ]
+    },
+    {
+      "name": "DecalActor_35",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K103",
+      "location": [
+        -102.479,
+        87.012,
+        -3.692
+      ]
+    },
+    {
+      "name": "DecalActor_36",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K51",
+      "location": [
+        102.165,
+        -100.981,
+        -9.092
+      ]
+    },
+    {
+      "name": "DecalActor_37",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K52",
+      "location": [
+        1312.754,
+        -100.981,
+        -9.092
+      ]
+    },
+    {
+      "name": "DecalActor_38",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K32",
+      "location": [
+        2000.129,
+        -88.024,
+        330.716
+      ]
+    },
+    {
+      "name": "DecalActor_39",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K33",
+      "location": [
+        115.557,
+        -100.606,
+        247.154
+      ]
+    },
+    {
+      "name": "DecalActor_4",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Road_Dust_sg1nltn_2K11",
+      "location": [
+        1854.796,
+        771.959,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_40",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K34",
+      "location": [
+        1502.423,
+        49.394,
+        132.116
+      ]
+    },
+    {
+      "name": "DecalActor_41",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K35",
+      "location": [
+        1502.423,
+        1304.394,
+        132.115
+      ]
+    },
+    {
+      "name": "DecalActor_42",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K36",
+      "location": [
+        -99.443,
+        24.394,
+        247.154
+      ]
+    },
+    {
+      "name": "DecalActor_43",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K37",
+      "location": [
+        -99.443,
+        684.394,
+        247.154
+      ]
+    },
+    {
+      "name": "DecalActor_44",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K39",
+      "location": [
+        25.557,
+        1499.394,
+        247.154
+      ]
+    },
+    {
+      "name": "DecalActor_45",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K40",
+      "location": [
+        475.557,
+        1499.394,
+        197.154
+      ]
+    },
+    {
+      "name": "DecalActor_46",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K41",
+      "location": [
+        1145.557,
+        1499.394,
+        197.154
+      ]
+    },
+    {
+      "name": "DecalActor_47",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K54",
+      "location": [
+        2002.053,
+        1116.314,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_48",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K55",
+      "location": [
+        2002.053,
+        284.047,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_49",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K56",
+      "location": [
+        2002.053,
+        -85.134,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_5",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K33",
+      "location": [
+        2000.306,
+        1331.556,
+        -8.301
+      ]
+    },
+    {
+      "name": "DecalActor_50",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K57",
+      "location": [
+        1502.498,
+        1119.876,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_51",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K58",
+      "location": [
+        1502.498,
+        1489.217,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_52",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K59",
+      "location": [
+        1512.912,
+        1102.728,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_53",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K60",
+      "location": [
+        1579.395,
+        1102.728,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_54",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K61",
+      "location": [
+        2002.053,
+        1485.862,
+        192.281
+      ]
+    },
+    {
+      "name": "DecalActor_55",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Environment_Decal_Monster_A_4",
+      "location": [
+        1012.831,
+        1505.021,
+        100.482
+      ]
+    },
+    {
+      "name": "DecalActor_56",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Environment_Decal_Monster_A_8",
+      "location": [
+        893.26,
+        1502.368,
+        245.478
+      ]
+    },
+    {
+      "name": "DecalActor_6",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K39",
+      "location": [
+        2002.57,
+        919.876,
+        -2.23
+      ]
+    },
+    {
+      "name": "DecalActor_60",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Environment_Decal_Animal_A_6",
+      "location": [
+        1280.386,
+        -102.289,
+        124.433
+      ]
+    },
+    {
+      "name": "DecalActor_61",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Environment_Decal_Animal_A_5",
+      "location": [
+        -100.827,
+        703.563,
+        269.509
+      ]
+    },
+    {
+      "name": "DecalActor_62",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Environment_Decal_Animal_A_2",
+      "location": [
+        798.966,
+        1502.2,
+        67.818
+      ]
+    },
+    {
+      "name": "DecalActor_63",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "Wound_Decal_Mat",
+      "location": [
+        -60.0,
+        700.0,
+        530.0
+      ]
+    },
+    {
+      "name": "DecalActor_64",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Road_Dust_sg1nltn_2K9",
+      "location": [
+        1331.078,
+        505.242,
+        0.0
+      ]
+    },
+    {
+      "name": "DecalActor_65",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K53",
+      "location": [
+        1488.271,
+        683.112,
+        -1.631
+      ]
+    },
+    {
+      "name": "DecalActor_67",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K42",
+      "location": [
+        95.557,
+        1499.394,
+        137.154
+      ]
+    },
+    {
+      "name": "DecalActor_68",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K43",
+      "location": [
+        95.557,
+        827.492,
+        484.93
+      ]
+    },
+    {
+      "name": "DecalActor_69",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K44",
+      "location": [
+        105.021,
+        1392.117,
+        448.568
+      ]
+    },
+    {
+      "name": "DecalActor_7",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K41",
+      "location": [
+        2001.946,
+        453.416,
+        -4.292
+      ]
+    },
+    {
+      "name": "DecalActor_70",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K45",
+      "location": [
+        -99.443,
+        1265.394,
+        137.154
+      ]
+    },
+    {
+      "name": "DecalActor_71",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K46",
+      "location": [
+        1310.557,
+        1499.394,
+        283.154
+      ]
+    },
+    {
+      "name": "DecalActor_72",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K47",
+      "location": [
+        1502.557,
+        1417.394,
+        283.154
+      ]
+    },
+    {
+      "name": "DecalActor_73",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K48",
+      "location": [
+        1502.557,
+        81.394,
+        283.154
+      ]
+    },
+    {
+      "name": "DecalActor_74",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Leakage_tdfeddkc_2K49",
+      "location": [
+        1550.118,
+        1102.568,
+        201.596
+      ]
+    },
+    {
+      "name": "DecalActor_8",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K46",
+      "location": [
+        2000.306,
+        36.397,
+        -4.292
+      ]
+    },
+    {
+      "name": "DecalActor_9",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/Arena_Cellar/Arena_Cellar_Details.umap",
+      "label": "MI_Concrete_Damage_tdhmahbb_2K47",
+      "location": [
+        2000.306,
+        195.931,
+        0.645
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 134,
+  "errors": [],
+  "warnings": []
+}

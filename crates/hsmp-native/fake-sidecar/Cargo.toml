@@ -1,0 +1,21 @@
+[package]
+name = "hsmp-fake-sidecar"
+description = "Test-only stand-in for hsmp-sidecar's shared-memory side, used by the HSMPNative harness"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "hsmp-fake-sidecar"
+path = "src/main.rs"
+
+[dependencies]
+hsmp-ipc = { path = "../../hsmp-ipc" }
+bytemuck = "1"
+
+[lints]
+workspace = true

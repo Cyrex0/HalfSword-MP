@@ -1,0 +1,15 @@
+[package]
+name = "hsmp_core_stub"
+description = "M1 spike stand-in for crates/hsmp-core: UDP socket on a background thread + lock-free SPSC queues, C ABI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+# staticlib -> linked into HSMPNative main.dll (option F)
+# rlib      -> reused by hsmp_lua_e (option E)
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+# Deliberately none: the spike must build offline and keep the in-process
+# surface minimal.

@@ -1,0 +1,9 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "NETSIM": "incomplete"
+  },
+  "messages": [
+    "no scheduling-lateness fields (late_*): an old netsim"
+  ]
+}

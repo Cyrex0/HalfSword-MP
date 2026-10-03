@@ -1,0 +1,403 @@
+{
+ "schema": "hsmp-mapdata/1",
+ "map": "Map_Arena_EastTower",
+ "label": "East Tower",
+ "source": "docs/arena_static/Map_Arena_EastTower.json",
+ "centre": [
+  -3.8,
+  1220.5,
+  5.0
+ ],
+ "bounds": {
+  "min": [
+   -539.3,
+   508.4,
+   2.3
+  ],
+  "max": [
+   553.8,
+   2343.2,
+   500.0
+  ]
+ },
+ "kill_z": -1495.0,
+ "spawns": [
+  {
+   "id": "sp0",
+   "pos": [
+    3.9,
+    2117.5,
+    5.0
+   ],
+   "yaw": -90.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp1",
+   "pos": [
+    408.7,
+    1801.6,
+    5.0
+   ],
+   "yaw": 180.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp2",
+   "pos": [
+    3.9,
+    603.1,
+    5.0
+   ],
+   "yaw": 90.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp3",
+   "pos": [
+    -434.5,
+    1798.2,
+    5.0
+   ],
+   "yaw": 0.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp4",
+   "pos": [
+    408.7,
+    1394.2,
+    5.0
+   ],
+   "yaw": 180.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp5",
+   "pos": [
+    -434.5,
+    977.8,
+    5.0
+   ],
+   "yaw": 0.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp6",
+   "pos": [
+    408.7,
+    970.2,
+    5.0
+   ],
+   "yaw": 180.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp7",
+   "pos": [
+    -434.5,
+    1398.8,
+    5.0
+   ],
+   "yaw": 0.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp8",
+   "pos": [
+    359.9,
+    2243.5,
+    5.0
+   ],
+   "yaw": -125.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp9",
+   "pos": [
+    -347.1,
+    2203.5,
+    5.0
+   ],
+   "yaw": -50.0,
+   "team": 0,
+   "game_modes": [
+    "Tavern"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp10",
+   "pos": [
+    -353.1,
+    540.1,
+    5.0
+   ],
+   "yaw": 55.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp11",
+   "pos": [
+    384.9,
+    603.1,
+    5.0
+   ],
+   "yaw": 130.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  }
+ ],
+ "overflow": [
+  {
+   "id": "mid(sp0,sp1)",
+   "pos": [
+    206.3,
+    1959.5,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp0,sp3)",
+   "pos": [
+    -215.3,
+    1957.8,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp0,sp4)",
+   "pos": [
+    206.3,
+    1755.8,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp0,sp7)",
+   "pos": [
+    -215.3,
+    1758.2,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp1,sp3)",
+   "pos": [
+    -12.9,
+    1799.9,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp1,sp4)",
+   "pos": [
+    408.7,
+    1597.9,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp2,sp4)",
+   "pos": [
+    206.3,
+    998.7,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp2,sp5)",
+   "pos": [
+    -215.3,
+    790.5,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp2,sp6)",
+   "pos": [
+    206.3,
+    786.7,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp2,sp10)",
+   "pos": [
+    -174.6,
+    571.6,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp2,sp11)",
+   "pos": [
+    194.4,
+    603.1,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp3,sp7)",
+   "pos": [
+    -434.5,
+    1598.5,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp4,sp6)",
+   "pos": [
+    408.7,
+    1182.2,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp4,sp7)",
+   "pos": [
+    -12.9,
+    1396.5,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp5,sp6)",
+   "pos": [
+    -12.9,
+    974.0,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp5,sp7)",
+   "pos": [
+    -434.5,
+    1188.3,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp5,sp10)",
+   "pos": [
+    -393.8,
+    759.0,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp6,sp10)",
+   "pos": [
+    27.8,
+    755.2,
+    5.0
+   ]
+  },
+  {
+   "id": "mid(sp6,sp11)",
+   "pos": [
+    396.8,
+    786.7,
+    5.0
+   ]
+  }
+ ],
+ "max_players": 8
+}

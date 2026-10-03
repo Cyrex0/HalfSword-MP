@@ -1,0 +1,12 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "PAWN-1": "fail",
+    "WORLD-1": "incomplete",
+    "COMBAT-1": "incomplete"
+  },
+  "messages": [
+    "downed=true, consciousness=74 (< 95)",
+    "no round had Live >= 10 s (2 shorter"
+  ]
+}

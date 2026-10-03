@@ -1,0 +1,60 @@
+{
+  "map": "Map_Arena_Slums_Terrain",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Terrain.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Terrain.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "InstancedFoliageActor_0",
+      "class": "InstancedFoliageActor",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Terrain.umap",
+      "label": "InstancedFoliageActor0",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Landscape_0",
+      "class": "Landscape",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Arena_Slums/Map_Arena_Slums_Terrain.umap",
+      "label": "Landscape",
+      "location": [
+        -3476.959,
+        -3100.0,
+        892.165
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 19,
+  "errors": [],
+  "warnings": []
+}

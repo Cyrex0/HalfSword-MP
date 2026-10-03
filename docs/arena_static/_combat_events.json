@@ -1,0 +1,761 @@
+{
+  "BP_CombatEvent_Alley": {
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "9CA4CD0F43BE79E5D08A9D9238DE57B3",
+      "SourceString": "Alley",
+      "LocalizedString": "Alley"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2025-10-02_234329.Screenshot_2025-10-02_234329'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_Alley.Map_Arena_Alley",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator2 (KnockDown)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator1 (First Blood)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator1 (Carnage)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator5 (Champion)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator7 (Doubles)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator8 (Buhurt)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator10 (Riot)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator12 (Blossfechten)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 25,
+    "Combatants Amount": 3,
+    "Reward": 60,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator2 (Commoner)",
+      "Enum_Ranks::NewEnumerator3 (Militia)",
+      "Enum_Ranks::NewEnumerator4 (Soldier)",
+      "Enum_Ranks::NewEnumerator5 (Veteran)"
+    ],
+    "Name": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  },
+  "BP_CombatEvent_Cellar": {
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "9AFF10B24237A3EA19EF29AFF124F5FD",
+      "SourceString": "Cellar",
+      "LocalizedString": "Cellar"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2025-09-20_152614.Screenshot_2025-09-20_152614'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_Cellar.Map_Arena_Cellar",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator3 (Circle)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator2 (KnockDown)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator5 (Champion)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator9 (Nemesis)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 5,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator0 (Beggar)",
+      "Enum_Ranks::NewEnumerator1 (Peasant)",
+      "Enum_Ranks::NewEnumerator2 (Commoner)",
+      "Enum_Ranks::NewEnumerator3 (Militia)"
+    ],
+    "Name": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Combatants Amount": 1,
+    "Reward": 666,
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  },
+  "BP_CombatEvent_Forest": {
+    "Name": {
+      "Namespace": "",
+      "Key": "858025EC4E6B99A1F64FDA9B78C76AC6",
+      "SourceString": "Forest Ambush",
+      "LocalizedString": "Forest Ambush"
+    },
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "52D35DC94DB68ECEB218B58246CD6BF1",
+      "SourceString": "Forest",
+      "LocalizedString": "Forest"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2025-09-20_153616.Screenshot_2025-09-20_153616'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_Ambush_Test.Map_Arena_Ambush_Test",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator5 (Champion)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator1 (Carnage)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator7 (Doubles)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator8 (Buhurt)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator10 (Riot)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 25,
+    "Reward": 100,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator1 (Peasant)",
+      "Enum_Ranks::NewEnumerator2 (Commoner)",
+      "Enum_Ranks::NewEnumerator3 (Militia)",
+      "Enum_Ranks::NewEnumerator4 (Soldier)",
+      "Enum_Ranks::NewEnumerator5 (Veteran)",
+      "Enum_Ranks::NewEnumerator6 (Man at Arms)",
+      "Enum_Ranks::NewEnumerator7 (Knight)"
+    ],
+    "Combatants Amount": 1,
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  },
+  "BP_CombatEvent_Hall": {
+    "Name": {
+      "Namespace": "",
+      "Key": "76CE9D2F4B2CBA18EEFE43826E1B570A",
+      "SourceString": "Slaughter Hall",
+      "LocalizedString": "Slaughter Hall"
+    },
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "07F548B14C48C17B121BE9BDFB5B73EB",
+      "SourceString": "Hall",
+      "LocalizedString": "Hall"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2025-09-20_154123.Screenshot_2025-09-20_154123'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_EastTower.Map_Arena_EastTower",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator2 (KnockDown)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator1 (First Blood)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator5 (Champion)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator7 (Doubles)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator8 (Buhurt)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator9 (Nemesis)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator12 (Blossfechten)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 50,
+    "Combatants Amount": 4,
+    "Reward": 40,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator5 (Veteran)",
+      "Enum_Ranks::NewEnumerator6 (Man at Arms)",
+      "Enum_Ranks::NewEnumerator7 (Knight)"
+    ],
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  },
+  "BP_CombatEvent_Master": {
+    "Name": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Images/YOU_WON.YOU_WON'",
+    "Level": "/Game/Maps/Test/Map_Test_Empty.Map_Test_Empty",
+    "Combatants Amount": 1,
+    "Reward": 666,
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    },
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator0 (Beggar)"
+    ]
+  },
+  "BP_CombatEvent_Pit": {
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "502ADECD4D8227817C09A9B0B0268C3E",
+      "SourceString": "Pit",
+      "LocalizedString": "Pit"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2026-06-10_233848.Screenshot_2026-06-10_233848'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_Pit.Map_Arena_Pit",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator5 (Champion)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator1 (Carnage)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator7 (Doubles)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator8 (Buhurt)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator9 (Nemesis)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator11 (Narrow Passage)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator12 (Blossfechten)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 25,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator2 (Commoner)",
+      "Enum_Ranks::NewEnumerator3 (Militia)",
+      "Enum_Ranks::NewEnumerator4 (Soldier)",
+      "Enum_Ranks::NewEnumerator5 (Veteran)",
+      "Enum_Ranks::NewEnumerator6 (Man at Arms)",
+      "Enum_Ranks::NewEnumerator7 (Knight)"
+    ],
+    "Name": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Combatants Amount": 1,
+    "Reward": 666,
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  },
+  "BP_CombatEvent_Slums": {
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "395BF06340CEEF004624F59CE005698C",
+      "SourceString": "Slums",
+      "LocalizedString": "Slums"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2025-12-06_185029.Screenshot_2025-12-06_185029'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_Slums.Map_Arena_Slums",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator2 (KnockDown)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator5 (Champion)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator7 (Doubles)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator10 (Riot)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator11 (Narrow Passage)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 5,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator0 (Beggar)",
+      "Enum_Ranks::NewEnumerator1 (Peasant)"
+    ],
+    "Name": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Combatants Amount": 1,
+    "Reward": 666,
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  },
+  "BP_CombatEvent_Yard": {
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "EA2E552F423A71922ACF03AEF88893E6",
+      "SourceString": "Yard",
+      "LocalizedString": "Yard"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2025-10-11_200311.Screenshot_2025-10-11_200311'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_Yard.Map_Arena_Yard",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator2 (KnockDown)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator1 (First Blood)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator3 (Circle)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator5 (Champion)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator1 (Carnage)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator7 (Doubles)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator8 (Buhurt)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator9 (Nemesis)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator12 (Blossfechten)",
+        "Value": true
+      },
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 25,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator2 (Commoner)",
+      "Enum_Ranks::NewEnumerator3 (Militia)",
+      "Enum_Ranks::NewEnumerator4 (Soldier)",
+      "Enum_Ranks::NewEnumerator5 (Veteran)",
+      "Enum_Ranks::NewEnumerator6 (Man at Arms)",
+      "Enum_Ranks::NewEnumerator7 (Knight)"
+    ],
+    "Name": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Combatants Amount": 1,
+    "Reward": 666,
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  },
+  "BP_CombatEvent_Tourney_Baron": {
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "147DB0E6406EFBE82638CDBA6EA0FE65",
+      "SourceString": "Baron",
+      "LocalizedString": "Baron"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2026-01-12_221449.Screenshot_2026-01-12_221449'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_LordsHall.Map_Arena_LordsHall",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator6 (Tourney)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 25,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator8 (Lord)"
+    ],
+    "Name": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Combatants Amount": 1,
+    "Reward": 666,
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  },
+  "BP_CombatEvent_Tourney": {
+    "Name Prefix": {
+      "Namespace": "",
+      "Key": "D124C81444AC1E0901B675BDF469D4CE",
+      "SourceString": "Yard",
+      "LocalizedString": "Yard"
+    },
+    "Thumbnail": "Texture2D'/Game/UI/Tavern/Images/Trash/Screenshot_2025-10-11_200311.Screenshot_2025-10-11_200311'",
+    "Level": "/Game/Maps/Arenas/Map_Arena_Yard.Map_Arena_Yard",
+    "Available Lose Conditions": [
+      {
+        "Key": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+        "Value": true
+      }
+    ],
+    "Available Combat Modes": [
+      {
+        "Key": "Enum_CombatEvent_Modes::NewEnumerator6 (Tourney)",
+        "Value": true
+      }
+    ],
+    "NPC Equipment Budget Range": 25,
+    "Available Tiers": [
+      "Enum_Ranks::NewEnumerator0 (Beggar)",
+      "Enum_Ranks::NewEnumerator1 (Peasant)",
+      "Enum_Ranks::NewEnumerator2 (Commoner)",
+      "Enum_Ranks::NewEnumerator3 (Militia)",
+      "Enum_Ranks::NewEnumerator4 (Soldier)",
+      "Enum_Ranks::NewEnumerator5 (Veteran)",
+      "Enum_Ranks::NewEnumerator6 (Man at Arms)",
+      "Enum_Ranks::NewEnumerator7 (Knight)"
+    ],
+    "Name": {
+      "Namespace": "",
+      "Key": "A08F279747B3DB23B200BC85B3EA4405",
+      "SourceString": "Test",
+      "LocalizedString": "Test"
+    },
+    "Combatants Amount": 1,
+    "Reward": 666,
+    "Amount of Rounds": 1,
+    "Combat Mode": "Enum_CombatEvent_Modes::NewEnumerator0 (Duel)",
+    "NPC Equipment Budget (Final)": 666,
+    "Bet": 666,
+    "Passport": {
+      "Name_33_80AE82094EAE943B065BE3B5C7F1C41B": {
+        "CultureInvariantString": null
+      },
+      "ID_41_28B71F884E3E0E8E75C22DBB12DB809E": 0,
+      "Thumbnail_19_195759B240ED112A1BABB0A6408CC99C": null,
+      "BetAmount_20_87517572431AF70989131482829E07E6": 0,
+      "RewardAmount_21_39CBEA0549CBC81CD356EFB5BC1FCC24": 0,
+      "EquipmentBudget_26_4FC29A0544CA0B009EAD408C59D5F8A6": 0,
+      "CombatantsAmount_22_13BCA4574AA06ED5CE62EBA6B312008C": 0,
+      "RoundsAmount_23_0DC99BF14EE3D35571D2AAAE6C1503AD": 0,
+      "LoseCondition_24_E094C6EA4737C2FAB5012D9D3698B9EF": "Enum_CombatEvent_LoseConditions::NewEnumerator0 (Submission)",
+      "CombatMode_25_E0B1EE8946757C4CF058A2AC38196DC7": "Enum_CombatEvent_Modes::NewEnumerator2 (Fisting)",
+      "LevelPath_34_BAD068394946BC2E8C65AA9092DF7B39": "None",
+      "Tier_38_C21E98C34F256B9DCAA0628D037308BC": "Enum_Ranks::NewEnumerator0 (Beggar)"
+    }
+  }
+}

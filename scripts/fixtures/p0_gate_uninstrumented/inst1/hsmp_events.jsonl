@@ -1,0 +1,5 @@
+{"v":1,"ev":"lobby_ready","inst":"1","mod":"HSMPMenu","seq":1,"t_ms":5200,"wall_ms":1790880000200,"epoch":1,"peer_id":1,"notice":null,"role":"host","arena":""}
+{"v":1,"ev":"travel","inst":"1","mod":"HSMPMatch","seq":3,"t_ms":7600,"wall_ms":1790880002600,"from":"Map_Menu_Startup","to":"Map_Arena_Alley","by":"director","reason":"server phase loading"}
+{"v":1,"ev":"travel","inst":"1","mod":"HSMPMatch","seq":16,"t_ms":30600,"wall_ms":1790880025600,"from":"Map_Arena_Alley","to":"Map_Arena_Alley","by":"director","reason":"server phase loading"}
+{"v":1,"ev":"travel","inst":"1","mod":"HSMPMatch","seq":29,"t_ms":53900,"wall_ms":1790880048900,"from":"Map_Arena_Alley","to":"Map_Menu_Startup","by":"director","reason":"match over"}
+{"v":1,"ev":"lobby_ready","inst":"1","mod":"HSMPMenu","seq":30,"t_ms":56200,"wall_ms":1790880051200,"epoch":1,"peer_id":1,"notice":null,"role":"host","arena":""}

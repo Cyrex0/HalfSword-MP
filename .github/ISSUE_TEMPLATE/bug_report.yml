@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in the game or the launcher does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. HSMP is unofficial: please report HSMP problems here, not to the Half Sword developers.
+        Check the [troubleshooting guide](https://github.com/Cyrex0/HalfSword-MP/blob/main/docs/players/troubleshooting.md) first.
+        For security problems, use private reporting instead (see SECURITY.md).
+  - type: input
+    id: hsmp-version
+    attributes:
+      label: HSMP version
+      description: Shown in the launcher, or in the release zip name.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: game-build
+    attributes:
+      label: Half Sword build
+      description: The launcher shows the Steam build id it detected.
+      placeholder: "24185754"
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: How were you playing?
+      options:
+        - Joined a server
+        - Hosted from the in-game menu
+        - Dedicated server
+        - Not in a match (menu, launcher, install)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+      description: Steps to reproduce help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and crash report
+      description: |
+        Attach `UE4SS.log` (in the game's `HalfswordUE5\Binaries\Win64\ue4ss` folder), the launcher log,
+        or a crash-report zip made with the launcher. Remove anything you do not want to share.
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 23H2

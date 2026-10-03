@@ -1,0 +1,492 @@
+{
+  "map": "Map_Arena_Alley_Morning_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_0",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        400.0,
+        400.0,
+        400.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_SkySphere2",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'Engine/Content/EngineSky/SM_SkySphere.SM_SkySphere'",
+      "instance_properties": {
+        "bEnableAutoLODGeneration": false
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -178.422,
+        11.725,
+        150.283
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_1",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box",
+      "location": [
+        897.797,
+        328.113,
+        304.931
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_10",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box9",
+      "location": [
+        -2785.473,
+        -252.395,
+        26.956
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_11",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box11",
+      "location": [
+        -409.054,
+        329.602,
+        166.0
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_13",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box10",
+      "location": [
+        -2037.951,
+        -183.617,
+        28.823
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_3",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box3",
+      "location": [
+        1578.794,
+        569.963,
+        476.63
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_4",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box4",
+      "location": [
+        1278.176,
+        -244.728,
+        534.944
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_5",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box5",
+      "location": [
+        84.318,
+        -544.194,
+        166.0
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_6",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box6",
+      "location": [
+        -414.209,
+        -657.131,
+        222.168
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_7",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box7",
+      "location": [
+        -1189.032,
+        285.906,
+        222.528
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_8",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box8",
+      "location": [
+        -2335.944,
+        230.49,
+        80.625
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_0",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere",
+      "location": [
+        -1964.598,
+        285.981,
+        172.059
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_1",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere2",
+      "location": [
+        -2775.786,
+        94.665,
+        172.059
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_2",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere3",
+      "location": [
+        -761.995,
+        -221.202,
+        299.97
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Sphere_C_3",
+      "class": "BP_LightDetectionCollider_Sphere_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Sphere4",
+      "location": [
+        1717.52,
+        298.302,
+        549.068
+      ]
+    },
+    {
+      "name": "BP_LightingScalabilityManager_C_1",
+      "class": "BP_LightingScalabilityManager_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "BP_LightingScalabilityManager",
+      "location": [
+        -449.494,
+        -335.938,
+        146.105
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "DirectionalLight_HightEpic",
+      "location": [
+        376.001,
+        -695.446,
+        508.688
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "DirectionalLight_1",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "DirectionalLight_MediumLow",
+      "location": [
+        376.001,
+        -695.446,
+        508.688
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "ExponentialHeightFog_HightEpic",
+      "location": [
+        -161.136,
+        -722.013,
+        469.446
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_1",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "ExponentialHeightFog_MediumLow",
+      "location": [
+        -161.136,
+        -722.013,
+        469.446
+      ],
+      "tags": [
+        "AcousticsGeometry"
+      ]
+    },
+    {
+      "name": "LocalFogVolume_1",
+      "class": "LocalFogVolume",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "LocalFogVolume",
+      "location": [
+        -2590.06,
+        123.831,
+        54.808
+      ]
+    },
+    {
+      "name": "LocalFogVolume_2",
+      "class": "LocalFogVolume",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "LocalFogVolume2",
+      "location": [
+        -17.371,
+        123.831,
+        176.309
+      ]
+    },
+    {
+      "name": "PointLight_0",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "PointLight",
+      "location": [
+        -766.197,
+        -225.874,
+        336.462
+      ]
+    },
+    {
+      "name": "PointLight_1",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "PointLight2",
+      "location": [
+        -766.197,
+        -225.874,
+        303.807
+      ]
+    },
+    {
+      "name": "PointLight_2",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "PointLight10",
+      "location": [
+        -2789.438,
+        103.654,
+        197.473
+      ]
+    },
+    {
+      "name": "PointLight_3",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "PointLight11",
+      "location": [
+        -2789.438,
+        103.654,
+        165.196
+      ]
+    },
+    {
+      "name": "PointLight_4",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "PointLight12",
+      "location": [
+        1723.759,
+        299.149,
+        586.842
+      ]
+    },
+    {
+      "name": "PointLight_5",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "PointLight13",
+      "location": [
+        1723.759,
+        299.149,
+        554.566
+      ]
+    },
+    {
+      "name": "PointLight_6",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "PointLight14",
+      "location": [
+        -1960.385,
+        282.395,
+        207.927
+      ]
+    },
+    {
+      "name": "PointLight_7",
+      "class": "PointLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "PointLight15",
+      "location": [
+        -1960.385,
+        282.395,
+        175.651
+      ]
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "Half Sword Graphics_HightEpic",
+      "location": [
+        0.0,
+        -300.0,
+        0.0
+      ]
+    },
+    {
+      "name": "PostProcessVolume_1",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "Half Sword Graphics_MediumLow",
+      "location": [
+        0.0,
+        -300.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "SkyAtmosphere_HightEpic",
+      "location": [
+        300.0,
+        -1000.0,
+        600.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_1",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "SkyAtmosphere_MediumLow",
+      "location": [
+        300.0,
+        -1000.0,
+        600.0
+      ]
+    },
+    {
+      "name": "SkyLight_0",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "SkyLight_HightEpic",
+      "location": [
+        -377.581,
+        -69.052,
+        724.214
+      ]
+    },
+    {
+      "name": "SkyLight_1",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "SkyLight_MediumLow",
+      "location": [
+        -377.581,
+        -69.052,
+        724.214
+      ]
+    },
+    {
+      "name": "SpotLight_0",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.umap",
+      "label": "SpotLight2",
+      "location": [
+        -1950.627,
+        270.167,
+        201.645
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 8,
+  "errors": [],
+  "warnings": []
+}

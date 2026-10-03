@@ -1,0 +1,3 @@
+{"ev":"obs_sidecar","inst":"1","status":"connected","wall_ms":1790880001000}
+{"ev":"obs_sidecar","inst":"2","status":"connected","wall_ms":1790880003000}
+{"ev":"obs_match","inst":"1","state":"live","arena":"Map_Arena_Alley","round":1,"wall_ms":1790880060000}

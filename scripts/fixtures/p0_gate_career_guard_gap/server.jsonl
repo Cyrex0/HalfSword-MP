@@ -1,0 +1,15 @@
+{"v":1,"ev":"arena_picked","inst":"server","seq":1,"t_ms":2100,"wall_ms":1790880002100,"arena":"Map_Arena_Alley","by":"rcon"}
+{"v":1,"ev":"phase","inst":"server","seq":2,"t_ms":2300,"wall_ms":1790880002300,"from":"Lobby","to":"Loading","match_id":1,"round":1,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":3,"t_ms":8000,"wall_ms":1790880008000,"from":"Loading","to":"Countdown","match_id":1,"round":1,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":4,"t_ms":11000,"wall_ms":1790880011000,"from":"Countdown","to":"Live","match_id":1,"round":1,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"debug_kill","inst":"server","seq":5,"t_ms":21510,"wall_ms":1790880021510,"seat":1,"ok":true,"detail":"killed"}
+{"v":1,"ev":"phase","inst":"server","seq":6,"t_ms":22000,"wall_ms":1790880022000,"from":"Live","to":"RoundOver","match_id":1,"round":1,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":7,"t_ms":25000,"wall_ms":1790880025000,"from":"RoundOver","to":"Loading","match_id":1,"round":2,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":8,"t_ms":31000,"wall_ms":1790880031000,"from":"Loading","to":"Countdown","match_id":1,"round":2,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":9,"t_ms":34000,"wall_ms":1790880034000,"from":"Countdown","to":"Live","match_id":1,"round":2,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"debug_kill","inst":"server","seq":10,"t_ms":44510,"wall_ms":1790880044510,"seat":2,"ok":true,"detail":"killed"}
+{"v":1,"ev":"phase","inst":"server","seq":11,"t_ms":45000,"wall_ms":1790880045000,"from":"Live","to":"RoundOver","match_id":1,"round":2,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":12,"t_ms":48400,"wall_ms":1790880048400,"from":"RoundOver","to":"MatchOver","match_id":1,"round":2,"arena":"Map_Arena_Alley","frozen_arena":"Map_Arena_Alley","epoch":1}
+{"v":1,"ev":"phase","inst":"server","seq":13,"t_ms":48500,"wall_ms":1790880048500,"from":"MatchOver","to":"Lobby","match_id":1,"round":2,"arena":"Map_Arena_Alley","frozen_arena":null,"epoch":1}
+{"v":1,"ev":"cmd_result","inst":"server","seq":14,"t_ms":53120,"wall_ms":1790880053120,"player":"HSMP1","seat":1,"peer_id":1,"source":"command","cmd":"ready","cmd_id":1790880001,"ok":true,"reason":null,"code":"OK","config_rev":3}
+{"v":1,"ev":"cmd_result","inst":"server","seq":15,"t_ms":53120,"wall_ms":1790880053120,"player":"HSMP2","seat":2,"peer_id":2,"source":"command","cmd":"ready","cmd_id":1790880002,"ok":true,"reason":null,"code":"OK","config_rev":3}

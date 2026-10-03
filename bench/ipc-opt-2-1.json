@@ -1,0 +1,332 @@
+{
+  "bench_cpu_pct": 0.47,
+  "clients": 2,
+  "connect_s": 0.0,
+  "cpus": 20,
+  "down_bytes_per_s_max_client": 29354.66,
+  "down_bytes_per_s_per_client": 29345.34,
+  "down_pps_per_client": 107.6,
+  "down_wire_bytes_per_s_per_client": 32358.1,
+  "ev": "net_bench",
+  "flows": [
+    {
+      "addr": "127.0.0.1:49997",
+      "down_avg_payload": 272.61,
+      "down_bytes_per_s": 29354.66,
+      "down_pps": 107.68,
+      "down_wire_bytes_per_s": 32369.75,
+      "up_avg_payload": 432.26,
+      "up_bytes_per_s": 34298.2,
+      "up_pps": 79.35,
+      "up_wire_bytes_per_s": 36519.89
+    },
+    {
+      "addr": "127.0.0.1:50060",
+      "down_avg_payload": 272.85,
+      "down_bytes_per_s": 29336.01,
+      "down_pps": 107.52,
+      "down_wire_bytes_per_s": 32346.44,
+      "up_avg_payload": 432.1,
+      "up_bytes_per_s": 34299.56,
+      "up_pps": 79.38,
+      "up_wire_bytes_per_s": 36522.19
+    }
+  ],
+  "game_cpu_pct": {
+    "avg": 0.78,
+    "each": [
+      0.73,
+      0.83
+    ],
+    "max": 0.83
+  },
+  "game_writes": {
+    "doorbell": {
+      "avg_us": 1.943,
+      "max_p99_us": 10.9,
+      "p99_us": 10.05
+    },
+    "local_pose": {
+      "avg_us": 6.58,
+      "max_p99_us": 18.0,
+      "p99_us": 15.2
+    },
+    "local_root": {
+      "avg_us": 0.3695,
+      "max_p99_us": 0.8,
+      "p99_us": 0.7
+    },
+    "local_weapon": {
+      "avg_us": 0.2045,
+      "max_p99_us": 0.4,
+      "p99_us": 0.35
+    },
+    "sample_total": {
+      "avg_us": 9.342,
+      "max_p99_us": 31.0,
+      "p99_us": 26.15
+    },
+    "vitals": {
+      "avg_us": 0.254,
+      "max_p99_us": 0.5,
+      "p99_us": 0.45
+    },
+    "vitals_encode": {
+      "avg_us": 0.8335,
+      "max_p99_us": 8.2,
+      "p99_us": 6.1
+    }
+  },
+  "git": "6c49833",
+  "hz": 60.0,
+  "secs": 30.03,
+  "server_cpu_pct": 0.83,
+  "server_cpu_pct_per_player": 0.42,
+  "server_perf": {
+    "avg": {
+      "budget_drop_per_s": 0.0,
+      "handle_us_p50": 13.67,
+      "handle_us_p99": 37.17,
+      "in_pps": 398.17,
+      "out_kbps": 56.83,
+      "out_pps": 214.83,
+      "thinned_per_s": 67.67,
+      "tick_us_p50": 13.83,
+      "tick_us_p99": 63.5
+    },
+    "reports": [
+      {
+        "budget_drop_per_s": 0,
+        "handle_us_p50": 13,
+        "handle_us_p99": 36,
+        "in_pps": 397,
+        "out_kbps": 57,
+        "out_pps": 213,
+        "thinned_per_s": 69,
+        "tick_us_max": 90,
+        "tick_us_p50": 14,
+        "tick_us_p99": 79,
+        "ticks_5s": 150
+      },
+      {
+        "budget_drop_per_s": 0,
+        "handle_us_p50": 14,
+        "handle_us_p99": 36,
+        "in_pps": 398,
+        "out_kbps": 57,
+        "out_pps": 215,
+        "thinned_per_s": 67,
+        "tick_us_max": 65,
+        "tick_us_p50": 13,
+        "tick_us_p99": 62,
+        "ticks_5s": 150
+      },
+      {
+        "budget_drop_per_s": 0,
+        "handle_us_p50": 13,
+        "handle_us_p99": 38,
+        "in_pps": 399,
+        "out_kbps": 57,
+        "out_pps": 215,
+        "thinned_per_s": 69,
+        "tick_us_max": 69,
+        "tick_us_p50": 14,
+        "tick_us_p99": 54,
+        "ticks_5s": 150
+      },
+      {
+        "budget_drop_per_s": 0,
+        "handle_us_p50": 13,
+        "handle_us_p99": 39,
+        "in_pps": 398,
+        "out_kbps": 56,
+        "out_pps": 210,
+        "thinned_per_s": 71,
+        "tick_us_max": 104,
+        "tick_us_p50": 14,
+        "tick_us_p99": 79,
+        "ticks_5s": 150
+      },
+      {
+        "budget_drop_per_s": 0,
+        "handle_us_p50": 14,
+        "handle_us_p99": 37,
+        "in_pps": 398,
+        "out_kbps": 57,
+        "out_pps": 217,
+        "thinned_per_s": 66,
+        "tick_us_max": 56,
+        "tick_us_p50": 14,
+        "tick_us_p99": 53,
+        "ticks_5s": 150
+      },
+      {
+        "budget_drop_per_s": 0,
+        "handle_us_p50": 15,
+        "handle_us_p99": 37,
+        "in_pps": 399,
+        "out_kbps": 57,
+        "out_pps": 219,
+        "thinned_per_s": 64,
+        "tick_us_max": 59,
+        "tick_us_p50": 14,
+        "tick_us_p99": 54,
+        "ticks_5s": 150
+      }
+    ]
+  },
+  "sidecar_cpu_pct": {
+    "avg": 0.83,
+    "each": [
+      1.09,
+      0.57
+    ],
+    "max": 1.09
+  },
+  "synth_stats": [
+    {
+      "achieved_hz": 60.0,
+      "ev": "synth_stats",
+      "game_pid": 60656,
+      "hz": 60.0,
+      "late": 0,
+      "local_pose_bytes_avg": 341.0,
+      "local_root_bytes": 56,
+      "local_weapon_bytes": 56,
+      "samples": 2120,
+      "secs": 35.331,
+      "seed": 1,
+      "sidecar_pid": 43908,
+      "vitals": 707,
+      "vitals_hz": 20.0,
+      "write": {
+        "doorbell": {
+          "avg_us": 1.93,
+          "max_us": 35.8,
+          "n": 2120,
+          "p50_us": 1.6,
+          "p99_us": 9.2
+        },
+        "local_pose": {
+          "avg_us": 5.907,
+          "max_us": 35.7,
+          "n": 2120,
+          "p50_us": 5.7,
+          "p99_us": 12.4
+        },
+        "local_root": {
+          "avg_us": 0.335,
+          "max_us": 4.3,
+          "n": 2120,
+          "p50_us": 0.3,
+          "p99_us": 0.6
+        },
+        "local_weapon": {
+          "avg_us": 0.168,
+          "max_us": 2.6,
+          "n": 2120,
+          "p50_us": 0.2,
+          "p99_us": 0.3
+        },
+        "sample_total": {
+          "avg_us": 8.583,
+          "max_us": 42.9,
+          "n": 2120,
+          "p50_us": 8.1,
+          "p99_us": 21.3
+        },
+        "vitals": {
+          "avg_us": 0.193,
+          "max_us": 8.7,
+          "n": 707,
+          "p50_us": 0.2,
+          "p99_us": 0.4
+        },
+        "vitals_encode": {
+          "avg_us": 0.775,
+          "max_us": 25.2,
+          "n": 707,
+          "p50_us": 0.7,
+          "p99_us": 4.0
+        }
+      },
+      "write_includes": "record build (rotator->quat, codec v2 encode) + slot put, as HSMPNative"
+    },
+    {
+      "achieved_hz": 60.02,
+      "ev": "synth_stats",
+      "game_pid": 2648,
+      "hz": 60.0,
+      "late": 0,
+      "local_pose_bytes_avg": 341.0,
+      "local_root_bytes": 56,
+      "local_weapon_bytes": 56,
+      "samples": 2122,
+      "secs": 35.352,
+      "seed": 2,
+      "sidecar_pid": 40284,
+      "vitals": 708,
+      "vitals_hz": 20.0,
+      "write": {
+        "doorbell": {
+          "avg_us": 1.956,
+          "max_us": 41.1,
+          "n": 2122,
+          "p50_us": 1.6,
+          "p99_us": 10.9
+        },
+        "local_pose": {
+          "avg_us": 7.253,
+          "max_us": 56.5,
+          "n": 2122,
+          "p50_us": 6.8,
+          "p99_us": 18.0
+        },
+        "local_root": {
+          "avg_us": 0.404,
+          "max_us": 3.7,
+          "n": 2122,
+          "p50_us": 0.4,
+          "p99_us": 0.8
+        },
+        "local_weapon": {
+          "avg_us": 0.241,
+          "max_us": 0.7,
+          "n": 2122,
+          "p50_us": 0.2,
+          "p99_us": 0.4
+        },
+        "sample_total": {
+          "avg_us": 10.101,
+          "max_us": 60.5,
+          "n": 2122,
+          "p50_us": 9.3,
+          "p99_us": 31.0
+        },
+        "vitals": {
+          "avg_us": 0.315,
+          "max_us": 25.3,
+          "n": 708,
+          "p50_us": 0.2,
+          "p99_us": 0.5
+        },
+        "vitals_encode": {
+          "avg_us": 0.892,
+          "max_us": 21.3,
+          "n": 708,
+          "p50_us": 0.7,
+          "p99_us": 8.2
+        }
+      },
+      "write_includes": "record build (rotator->quat, codec v2 encode) + slot put, as HSMPNative"
+    }
+  ],
+  "system_idle_pct_before": 94.18,
+  "system_idle_pct_during": 96.43,
+  "tick_hz": 30,
+  "up_bytes_per_s_per_client": 34298.88,
+  "up_pps_per_client": 79.36,
+  "up_wire_bytes_per_s_per_client": 36521.04,
+  "vitals_hz": 20.0,
+  "warmup": 5.0
+}

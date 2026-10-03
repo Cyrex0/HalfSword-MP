@@ -1,0 +1,23 @@
+{
+  "verdict": "pass",
+  "rules": {
+    "DoD-1": "pass",
+    "DoD-2": "pass",
+    "DoD-3": "pass",
+    "DoD-6": "pass",
+    "DoD-12": "pass",
+    "SOAK-CRASH": "pass",
+    "SOAK-MEM": "pass",
+    "SOAK-LUAERR": "pass",
+    "SOAK-HITCH": "pass",
+    "NETSIM": "pass"
+  },
+  "messages": [
+    "game1: private bytes slope",
+    "growth",
+    "during travel (not failing): 2",
+    "0 new dump(s)",
+    "UE4SS.log Lua errors: 0",
+    "heartbeats"
+  ]
+}

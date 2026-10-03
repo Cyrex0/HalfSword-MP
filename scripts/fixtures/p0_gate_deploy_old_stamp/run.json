@@ -1,0 +1,30 @@
+{
+  "scenario": "p0_gate",
+  "mode": "rcon",
+  "instances": 2,
+  "arenas": [
+    "Alley"
+  ],
+  "rounds": 2,
+  "fixture": true,
+  "topology": "dedicated",
+  "netsim": {
+    "1": "typical",
+    "2": "typical"
+  },
+  "deploy": {
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "dirty": false,
+    "profile": "dev",
+    "g0_ok": true,
+    "g0": {
+      "commit": "0123456789abcdef0123456789abcdef01234567",
+      "ok": true
+    },
+    "skip_build": true
+  },
+  "fixture_gate": {
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "dirty": "0"
+  }
+}

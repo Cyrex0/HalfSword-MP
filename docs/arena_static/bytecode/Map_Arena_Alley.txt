@@ -1,0 +1,109 @@
+
+=== FUNCTION BndEvt__Map_Arena_Alley_TriggerBox_0_K2Node_ActorBoundEvent_1_ActorBeginOverlapSignature__DelegateSignature  (Map_Arena_Alley_C)
+       0: K2Node_ActorBoundEvent_OverlappedActor = _
+      18: K2Node_ActorBoundEvent_OtherActor = _
+      36: ExecuteUbergraph_Map_Arena_Alley(2466)
+      51: return _
+
+=== FUNCTION ExecuteUbergraph_Map_Arena_Alley  (Map_Arena_Alley_C)
+       0: push_flow 2519
+       5: goto computed EntryPoint
+      15: CallFunc_Create_ReturnValue = Default__WidgetBlueprintLibrary.Create(self, UI_Briefing_Text_Fade_C, None)
+      68: Temp_text_Variable = {"Token": "EX_StringConst", "Value": "Take him to other end of the alleyway"}
+     163: SetTextPropertyByName(CallFunc_Create_ReturnValue, "Text to write", Temp_text_Variable)
+     204: CallFunc_Create_ReturnValue.AddToViewport(99)
+     241: Default__GameplayStatics.PlaySound2D(self, Sound_Music_Drunk_Cue, 1.0, 1.0, 0.0, None, None, true)
+     301: pop_flow
+     302: CallFunc_Create_ReturnValue_1 = Default__WidgetBlueprintLibrary.Create(self, UI_WinScreen_C, None)
+     355: CallFunc_Create_ReturnValue_1.AddToViewport(0)
+     392: self.Willie_BP_C_0_ExecuteUbergraph_Map_Arena_Alley_RefProperty.self.Drunk = 1.0
+     441: pop_flow
+     442: Temp_object_Variable = Alley_Night
+     461: Temp_object_Variable_1 = ALLEY
+     480: Temp_object_Variable_2 = ALLEY
+     499: Temp_object_Variable_3 = Alley_morning
+     518: Temp_byte_Variable_1 = self.Day Time
+     545: self.AmbientSound_0_ExecuteUbergraph_Map_Arena_Alley_RefProperty.self.AudioComponent.SetSound(switch(Temp_byte_Variable_1) {0: Temp_object_Variable_3; 1: Temp_object_Variable_2; 2: Temp_object_Variable_1; 3: Temp_object_Variable; default: K2Node_Select_Default_1})
+     684: pop_flow
+     685: Temp_bool_Variable = self.As GI Settings.self.Free Mode Activated
+     726: self.Day Time = switch(Temp_bool_Variable) {false: self.As GI Settings.self.Day Time; true: self.As GI Settings.self.Current FreeMode Time; default: K2Node_Select_Default_2}
+     841: Temp_softobject_Variable = "/Game/Maps/Arenas/Map_Arena_Alley_Night_Lighting.Map_Arena_Alley_Night_Lighting"
+     941: Temp_softobject_Variable_1 = "/Game/Maps/Arenas/Map_Arena_Alley_Evening_Lighting.Map_Arena_Alley_Evening_Lighting"
+    1045: Temp_softobject_Variable_2 = "/Game/Maps/Arenas/Map_Arena_Alley_Lighting.Map_Arena_Alley_Lighting"
+    1133: Temp_softobject_Variable_3 = "/Game/Maps/Arenas/Map_Arena_Alley_Morning_Lighting.Map_Arena_Alley_Morning_Lighting"
+    1237: Temp_byte_Variable = self.Day Time
+    1264: self.Lighting Level = switch(Temp_byte_Variable) {0: Temp_softobject_Variable_3; 1: Temp_softobject_Variable_2; 2: Temp_softobject_Variable_1; 3: Temp_softobject_Variable; default: K2Node_Select_Default}
+    1367: LoadStreamLevelBySoftObjectPtr(self, self.Lighting Level, true, true, LatentActionInfo{SkipOffsetConst(Value=442), -1505526161, "ExecuteUbergraph_Map_Arena_Alley", self})
+    1427: pop_flow
+    1428: Temp_bool_IsClosed_Variable = false
+    1439: Temp_bool_Has_Been_Initd_Variable = true
+    1450: pop_flow
+    1451: self.Map Initiated = true
+    1462: pop_flow
+    1463: push_flow 1483
+    1468: if not (Temp_bool_Has_Been_Initd_Variable_1) goto 1564
+    1482: pop_flow
+    1483: if not (Temp_bool_IsClosed_Variable_1) goto 1498
+    1497: pop_flow
+    1498: Temp_bool_IsClosed_Variable_1 = true
+    1509: Delay(self, 1.0, LatentActionInfo{SkipOffsetConst(Value=302), 949193540, "ExecuteUbergraph_Map_Arena_Alley", self})
+    1563: pop_flow
+    1564: Temp_bool_Has_Been_Initd_Variable_1 = true
+    1575: pop_flow_if_not (false)
+    1577: Temp_bool_IsClosed_Variable_1 = true
+    1588: pop_flow
+    1589: if not (Temp_bool_IsClosed_Variable) goto 1604
+    1603: pop_flow
+    1604: Temp_bool_IsClosed_Variable = true
+    1615: push_flow 1857
+    1620: Temp_bool_Variable_1 = self.As GI Settings.self.Free Mode Activated
+    1661: CallFunc_NotEqual_ByteByte_ReturnValue = NotEqual_ByteByte(self.Day Time, switch(Temp_bool_Variable_1) {false: self.As GI Settings.self.Day Time; true: self.As GI Settings.self.Current FreeMode Time; default: K2Node_Select_Default_3})
+    1787: pop_flow_if_not (CallFunc_NotEqual_ByteByte_ReturnValue)
+    1797: UnloadStreamLevelBySoftObjectPtr(self, self.Lighting Level, LatentActionInfo{SkipOffsetConst(Value=685), -1574972229, "ExecuteUbergraph_Map_Arena_Alley", self}, true)
+    1856: pop_flow
+    1857: Delay(self, 0.2, LatentActionInfo{SkipOffsetConst(Value=1428), -257209251, "ExecuteUbergraph_Map_Arena_Alley", self})
+    1911: pop_flow
+    1912: Temp_bool_Has_Been_Initd_Variable = true
+    1923: pop_flow_if_not (false)
+    1925: Temp_bool_IsClosed_Variable = true
+    1936: pop_flow
+    1937: if not (Temp_bool_Has_Been_Initd_Variable) goto 1912
+    1951: pop_flow
+    1952: push_flow 1589
+    1957: goto 1937
+    1962: push_flow 2197
+    1967: push_flow 685
+    1972: push_flow 2252
+    1977: CallFunc_GetGameInstance_ReturnValue = GetGameInstance(self)
+    1998: K2Node_DynamicCast_AsGI_Settings = Cast<GI_Settings_C>(CallFunc_GetGameInstance_ReturnValue)
+    2034: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsGI_Settings)
+    2063: pop_flow_if_not (K2Node_DynamicCast_bSuccess)
+    2073: self.As GI Settings = K2Node_DynamicCast_AsGI_Settings
+    2092: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 2)
+    2145: if not (CallFunc_EqualEqual_ByteByte_ReturnValue) goto 2313
+    2159: self.BP_LevelManager_C_1_ExecuteUbergraph_Map_Arena_Alley_RefProperty.self.Purge Map = false
+    2192: goto 15
+    2197: Delay(self, 0.2, LatentActionInfo{SkipOffsetConst(Value=1451), 1680879315, "ExecuteUbergraph_Map_Arena_Alley", self})
+    2251: pop_flow
+    2252: Default__GameplayStatics.PlaySound2D(self, Sound_Music_Alley_Cue, 1.0, 1.0, 0.0, None, None, true)
+    2312: pop_flow
+    2313: self.Willie_BP_C_0_ExecuteUbergraph_Map_Arena_Alley_RefProperty.Destroy Willie()
+    2349: pop_flow
+    2350: CallFunc_IsActorBeingDestroyed_ReturnValue = self.IsActorBeingDestroyed()
+    2384: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue)
+    2413: CallFunc_BooleanAND_ReturnValue = BooleanAND(self.Map Initiated, CallFunc_Not_PreBool_ReturnValue)
+    2451: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue)
+    2461: goto 1952
+    2466: CallFunc_EqualEqual_ObjectObject_ReturnValue = EqualEqual_ObjectObject(K2Node_ActorBoundEvent_OtherActor, self.Willie_BP_C_0_ExecuteUbergraph_Map_Arena_Alley_RefProperty)
+    2504: pop_flow_if_not (CallFunc_EqualEqual_ObjectObject_ReturnValue)
+    2514: goto 1463
+    2519: return _
+
+=== FUNCTION ReceiveBeginPlay  (Map_Arena_Alley_C)
+       0: ExecuteUbergraph_Map_Arena_Alley(1962)
+      15: return _
+
+=== FUNCTION ReceiveTick  (Map_Arena_Alley_C)
+       0: K2Node_Event_DeltaSeconds = _
+      18: ExecuteUbergraph_Map_Arena_Alley(2350)
+      33: return _

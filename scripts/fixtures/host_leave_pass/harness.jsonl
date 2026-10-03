@@ -1,0 +1,3 @@
+{"ev":"mark","wall_ms":1790880002000,"name":"host_leave"}
+{"ev":"client_cmd","wall_ms":1790880002010,"inst":"1","cmd":"leave"}
+{"ev":"expected_exit","wall_ms":1790880002011,"role":"server","why":"step 7 client_cmd leave"}

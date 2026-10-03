@@ -1,0 +1,37 @@
+[package]
+name = "hsmp-ipc"
+description = "HSMP-SHM: the shared-memory IPC between the game (Lua mods through HSMPNative) and hsmp-sidecar. Schema, seqlock slots, triple buffers, SPSC rings, the segment header and handshake, the mapping with its ACL, typed records and the C/Lua schema generators."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+# Records as JSON for humans and harnesses only (debug_json: ipc-dump, the tap, e2e inputs).
+json = ["dep:serde_json"]
+
+[dependencies]
+serde_json = { version = "1", optional = true }
+# Zero-copy views of validated records (wire payloads, ring records).
+bytemuck = { version = "1.25", features = ["min_const_generics"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
+    "Win32_System_Memory",
+    "Win32_System_Performance",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+proptest = "1"
+serde_json = "1"
+
+[lints]
+workspace = true

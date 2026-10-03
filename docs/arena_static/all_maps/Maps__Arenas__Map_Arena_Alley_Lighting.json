@@ -1,0 +1,365 @@
+{
+  "map": "Map_Arena_Alley_Lighting",
+  "package": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+  "kind": "sublevel",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_0",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        400.0,
+        400.0,
+        400.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_SkySphere",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'Engine/Content/EngineSky/SM_SkySphere.SM_SkySphere'",
+      "instance_properties": {
+        "bEnableAutoLODGeneration": false
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [
+    {
+      "name": "BP_LightDetectionCollider_Box_C_0",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box_Sky",
+      "location": [
+        -178.422,
+        11.725,
+        150.283
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_10",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box5",
+      "location": [
+        808.445,
+        -138.177,
+        261.292
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_12",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box6",
+      "location": [
+        1671.373,
+        389.882,
+        385.258
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_2",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box",
+      "location": [
+        -1405.332,
+        -54.734,
+        80.287
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_4",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box2",
+      "location": [
+        -2254.458,
+        -85.448,
+        23.175
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_6",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box3",
+      "location": [
+        -2866.112,
+        -426.919,
+        174.873
+      ]
+    },
+    {
+      "name": "BP_LightDetectionCollider_Box_C_8",
+      "class": "BP_LightDetectionCollider_Box_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "BP_LightDetectionCollider_Box4",
+      "location": [
+        -138.895,
+        -545.507,
+        196.331
+      ]
+    },
+    {
+      "name": "BP_LightingScalabilityManager_C_1",
+      "class": "BP_LightingScalabilityManager_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "BP_LightingScalabilityManager",
+      "location": [
+        0.0,
+        0.0,
+        1000.0
+      ]
+    },
+    {
+      "name": "DirectionalLight_0",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -3.71,
+        -18.862,
+        396.567
+      ]
+    },
+    {
+      "name": "DirectionalLight_1",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "DirectionalLightMediumLow",
+      "location": [
+        -3.71,
+        -18.862,
+        396.567
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        -5600.0,
+        -50.0,
+        -6850.0
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_1",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "ExponentialHeightFogMediumLow",
+      "location": [
+        -5600.0,
+        -50.0,
+        -6850.0
+      ]
+    },
+    {
+      "name": "LocalFogVolume_1",
+      "class": "LocalFogVolume",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "LocalFogVolume",
+      "location": [
+        -2590.06,
+        123.831,
+        54.808
+      ]
+    },
+    {
+      "name": "LocalFogVolume_2",
+      "class": "LocalFogVolume",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "LocalFogVolume2",
+      "location": [
+        -17.371,
+        123.831,
+        176.309
+      ]
+    },
+    {
+      "name": "Map_Arena_Alley_Lighting_C_0",
+      "class": "Map_Arena_Alley_Lighting_C",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "Map_Arena_Alley_Lighting0"
+    },
+    {
+      "name": "PostProcessVolume_0",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "Half Sword Graphics v2.5",
+      "location": [
+        0.0,
+        -300.0,
+        0.0
+      ]
+    },
+    {
+      "name": "PostProcessVolume_1",
+      "class": "PostProcessVolume",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "Half Sword Graphics v2.5MediumLow2",
+      "location": [
+        0.0,
+        -300.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_0",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "SkyAtmosphere",
+      "location": [
+        0.0,
+        0.0,
+        500.0
+      ]
+    },
+    {
+      "name": "SkyAtmosphere_1",
+      "class": "SkyAtmosphere",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "SkyAtmosphereMediumLow",
+      "location": [
+        0.0,
+        0.0,
+        500.0
+      ]
+    },
+    {
+      "name": "SkyLight_0",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "SkyLight",
+      "location": [
+        -477.815,
+        -252.239,
+        439.62
+      ]
+    },
+    {
+      "name": "SkyLight_1",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "SkyLightMediumLow",
+      "location": [
+        -477.815,
+        -252.239,
+        439.62
+      ]
+    },
+    {
+      "name": "SpotLight_1",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "SpotLight",
+      "location": [
+        -1761.591,
+        -250.636,
+        280.703
+      ]
+    },
+    {
+      "name": "SpotLight_2",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "SpotLight2",
+      "location": [
+        -2380.975,
+        -323.075,
+        293.674
+      ]
+    },
+    {
+      "name": "SpotLight_4",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "SpotLight4",
+      "location": [
+        -1054.776,
+        369.166,
+        306.374
+      ]
+    },
+    {
+      "name": "SpotLight_5",
+      "class": "SpotLight",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "SpotLight5",
+      "location": [
+        -44.297,
+        -216.478,
+        -2.768
+      ]
+    },
+    {
+      "name": "VolumetricCloud_0",
+      "class": "VolumetricCloud",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "VolumetricCloud",
+      "location": [
+        0.0,
+        0.0,
+        700.0
+      ]
+    },
+    {
+      "name": "VolumetricCloud_1",
+      "class": "VolumetricCloud",
+      "source": "HalfswordUE5/Content/Maps/Arenas/Map_Arena_Alley_Lighting.umap",
+      "label": "VolumetricCloudMediumLow",
+      "location": [
+        0.0,
+        0.0,
+        700.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

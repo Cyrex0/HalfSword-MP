@@ -1,0 +1,340 @@
+{
+ "schema": "hsmp-mapdata/1",
+ "map": "Map_Arena_Pit",
+ "label": "Pit",
+ "source": "docs/arena_static/Map_Arena_Pit.json",
+ "centre": [
+  -2.6,
+  -19.5,
+  -1.2
+ ],
+ "bounds": {
+  "min": [
+   -946.1,
+   -1365.8,
+   -1034.6
+  ],
+  "max": [
+   968.9,
+   1335.6,
+   207.3
+  ]
+ },
+ "kill_z": -1501.2,
+ "spawns": [
+  {
+   "id": "sp0",
+   "pos": [
+    1.8,
+    509.5,
+    1.4
+   ],
+   "yaw": -90.0,
+   "team": 0,
+   "game_modes": [
+    "Sparring",
+    "Tavern"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp1",
+   "pos": [
+    -390.7,
+    -393.7,
+    1.0
+   ],
+   "yaw": 45.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp2",
+   "pos": [
+    1.8,
+    -583.5,
+    1.4
+   ],
+   "yaw": 90.0,
+   "team": 0,
+   "game_modes": [
+    "Sparring"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp4",
+   "pos": [
+    346.1,
+    333.9,
+    1.4
+   ],
+   "yaw": -135.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp5",
+   "pos": [
+    -337.8,
+    334.2,
+    -1.2
+   ],
+   "yaw": -45.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp6",
+   "pos": [
+    526.8,
+    9.5,
+    1.4
+   ],
+   "yaw": 180.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp7",
+   "pos": [
+    -524.4,
+    -6.9,
+    1.4
+   ],
+   "yaw": 0.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [
+    "Free Mode",
+    "Progression"
+   ],
+   "valid": true,
+   "why": ""
+  },
+  {
+   "id": "sp8",
+   "pos": [
+    1.2,
+    218.1,
+    1.4
+   ],
+   "yaw": -90.0,
+   "team": 0,
+   "game_modes": [
+    "Sparring",
+    "Tavern"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp9",
+   "pos": [
+    1.8,
+    -274.6,
+    1.4
+   ],
+   "yaw": 90.0,
+   "team": 0,
+   "game_modes": [
+    "Sparring"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp10",
+   "pos": [
+    355.8,
+    -358.9,
+    1.5
+   ],
+   "yaw": 135.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": true,
+   "why": "mp: arena-floor spawner (native play-mode flags off)"
+  },
+  {
+   "id": "sp11",
+   "pos": [
+    645.8,
+    -624.9,
+    1.5
+   ],
+   "yaw": 140.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp12",
+   "pos": [
+    650.8,
+    651.1,
+    1.5
+   ],
+   "yaw": -130.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp13",
+   "pos": [
+    -634.2,
+    629.1,
+    1.5
+   ],
+   "yaw": -40.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  },
+  {
+   "id": "sp14",
+   "pos": [
+    -628.2,
+    -669.9,
+    1.5
+   ],
+   "yaw": 40.0,
+   "team": 0,
+   "game_modes": [
+    "Arena"
+   ],
+   "play_modes": [],
+   "valid": false,
+   "why": "disabled for every play mode"
+  }
+ ],
+ "overflow": [
+  {
+   "id": "mid(sp0,sp4)",
+   "pos": [
+    174.0,
+    421.7,
+    1.4
+   ]
+  },
+  {
+   "id": "mid(sp0,sp5)",
+   "pos": [
+    -168.0,
+    421.9,
+    1.4
+   ]
+  },
+  {
+   "id": "mid(sp1,sp2)",
+   "pos": [
+    -194.4,
+    -488.6,
+    1.4
+   ]
+  },
+  {
+   "id": "mid(sp1,sp7)",
+   "pos": [
+    -457.5,
+    -200.3,
+    1.4
+   ]
+  },
+  {
+   "id": "mid(sp2,sp10)",
+   "pos": [
+    178.8,
+    -471.2,
+    1.5
+   ]
+  },
+  {
+   "id": "mid(sp4,sp6)",
+   "pos": [
+    436.4,
+    171.7,
+    1.4
+   ]
+  },
+  {
+   "id": "mid(sp5,sp7)",
+   "pos": [
+    -431.1,
+    163.7,
+    1.4
+   ]
+  },
+  {
+   "id": "mid(sp6,sp10)",
+   "pos": [
+    441.3,
+    -174.7,
+    1.5
+   ]
+  }
+ ],
+ "max_players": 8
+}

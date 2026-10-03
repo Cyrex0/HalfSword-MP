@@ -1,0 +1,11 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-11": "pass",
+    "DoD-12": "fail"
+  },
+  "messages": [
+    "force-killed by PID at quit_all (neither the menu quit nor WM_CLOSE ended them): game2",
+    "\"launched_by\":\"game\""
+  ]
+}

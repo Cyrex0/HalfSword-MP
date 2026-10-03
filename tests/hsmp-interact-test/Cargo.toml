@@ -1,0 +1,23 @@
+[package]
+name = "hsmp-interact-test"
+description = "Offline tests (mlua, Lua 5.4) for mods/HSMPInteract (interaction channel)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# Test-only crate: no runtime code. Run with  cargo test -p hsmp-interact-test
+# The Lua under test is loaded from mods/HSMPInteract/Scripts (the files that ship)
+# against the mocked UE4SS / Willies in tests/mock_ue.lua.
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+
+[lints]
+workspace = true

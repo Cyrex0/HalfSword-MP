@@ -1,0 +1,9 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-2": "fail"
+  },
+  "messages": [
+    "no frame_hb for"
+  ]
+}

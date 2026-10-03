@@ -1,0 +1,10 @@
+{
+  "verdict": "fail",
+  "rules": {
+    "DoD-10": "fail"
+  },
+  "messages": [
+    "no server answer; the menu resolved it by timeout",
+    "times (dedup cache missed)"
+  ]
+}

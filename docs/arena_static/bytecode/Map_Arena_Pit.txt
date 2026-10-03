@@ -1,0 +1,183 @@
+
+=== FUNCTION BndEvt__Map_Arena_Pit_TriggerVolume_4_K2Node_ActorBoundEvent_4_ActorBeginOverlapSignature__DelegateSignature  (Map_Arena_Pit_C)
+       0: K2Node_ActorBoundEvent_OverlappedActor = _
+      18: K2Node_ActorBoundEvent_OtherActor = _
+      36: ExecuteUbergraph_Map_Arena_Pit(3516)
+      51: return _
+
+=== FUNCTION BndEvt__Map_Arena_Yard_TriggerVolume_0_K2Node_ActorBoundEvent_0_ActorBeginOverlapSignature__DelegateSignature  (Map_Arena_Pit_C)
+       0: K2Node_ActorBoundEvent_OverlappedActor_4 = _
+      18: K2Node_ActorBoundEvent_OtherActor_4 = _
+      36: ExecuteUbergraph_Map_Arena_Pit(1939)
+      51: return _
+
+=== FUNCTION BndEvt__Map_Arena_Yard_TriggerVolume_1_K2Node_ActorBoundEvent_1_ActorBeginOverlapSignature__DelegateSignature  (Map_Arena_Pit_C)
+       0: K2Node_ActorBoundEvent_OverlappedActor_3 = _
+      18: K2Node_ActorBoundEvent_OtherActor_3 = _
+      36: ExecuteUbergraph_Map_Arena_Pit(1963)
+      51: return _
+
+=== FUNCTION BndEvt__Map_Arena_Yard_TriggerVolume_2_K2Node_ActorBoundEvent_2_ActorBeginOverlapSignature__DelegateSignature  (Map_Arena_Pit_C)
+       0: K2Node_ActorBoundEvent_OverlappedActor_2 = _
+      18: K2Node_ActorBoundEvent_OtherActor_2 = _
+      36: ExecuteUbergraph_Map_Arena_Pit(1987)
+      51: return _
+
+=== FUNCTION BndEvt__Map_Arena_Yard_TriggerVolume_3_K2Node_ActorBoundEvent_3_ActorBeginOverlapSignature__DelegateSignature  (Map_Arena_Pit_C)
+       0: K2Node_ActorBoundEvent_OverlappedActor_1 = _
+      18: K2Node_ActorBoundEvent_OtherActor_1 = _
+      36: ExecuteUbergraph_Map_Arena_Pit(2011)
+      51: return _
+
+=== FUNCTION ExecuteUbergraph_Map_Arena_Pit  (Map_Arena_Pit_C)
+       0: push_flow 3644
+       5: goto computed EntryPoint
+      15: self.Map Initiated = true
+      26: pop_flow
+      27: self.VolumetricCloud_3_ExecuteUbergraph_Map_Arena_Pit_RefProperty.SetActorHiddenInGame(true)
+      64: pop_flow
+      65: Temp_object_Variable = Alley_Night
+      84: Temp_object_Variable_1 = ALLEY
+     103: Temp_object_Variable_2 = ALLEY
+     122: Temp_object_Variable_3 = Alley_morning
+     141: Temp_byte_Variable = self.Day Time
+     168: self.AmbientSound_0_ExecuteUbergraph_Map_Arena_Pit_RefProperty.self.AudioComponent.SetSound(switch(Temp_byte_Variable) {0: Temp_object_Variable_3; 1: Temp_object_Variable_2; 2: Temp_object_Variable_1; 3: Temp_object_Variable; default: K2Node_Select_Default_2})
+     307: pop_flow
+     308: Temp_bool_Variable = self.As GI Settings.self.Free Mode Activated
+     349: self.Day Time = switch(Temp_bool_Variable) {false: self.As GI Settings.self.Day Time; true: self.As GI Settings.self.Current FreeMode Time; default: K2Node_Select_Default_1}
+     464: Temp_softobject_Variable = "/Game/Maps/Lighting/Lighting_Morning.Lighting_Morning"
+     538: Temp_softobject_Variable_1 = "/Game/Maps/Lighting/Arena_Cutting_Map_Lighting.Arena_Cutting_Map_Lighting"
+     632: Temp_softobject_Variable_2 = "/Game/Maps/Lighting/Arena_Cutting_Map_Lighting_Evening.Arena_Cutting_Map_Lighting_Evening"
+     742: Temp_softobject_Variable_3 = "/Game/Maps/Lighting/Arena_Cutting_Map_Lighting_Night.Arena_Cutting_Map_Lighting_Night"
+     848: Temp_byte_Variable_1 = self.Day Time
+     875: self.Lighting Level = switch(Temp_byte_Variable_1) {0: Temp_softobject_Variable; 1: Temp_softobject_Variable_1; 2: Temp_softobject_Variable_2; 3: Temp_softobject_Variable_3; default: K2Node_Select_Default}
+     978: LoadStreamLevelBySoftObjectPtr(self, self.Lighting Level, true, false, LatentActionInfo{SkipOffsetConst(Value=65), 23531895, "ExecuteUbergraph_Map_Arena_Pit", self})
+    1038: pop_flow
+    1039: Temp_bool_IsClosed_Variable = false
+    1050: Temp_bool_Has_Been_Initd_Variable = true
+    1061: pop_flow
+    1062: Temp_int_Loop_Counter_Variable = 0
+    1085: Temp_int_Array_Index_Variable = 0
+    1108: CallFunc_Array_Length_ReturnValue = Default__KismetArrayLibrary.Array_Length(self.Other Actor)
+    1167: CallFunc_Less_IntInt_ReturnValue = Less_IntInt(Temp_int_Loop_Counter_Variable, CallFunc_Array_Length_ReturnValue)
+    1205: if not (CallFunc_Less_IntInt_ReturnValue) goto 1334
+    1219: Temp_int_Array_Index_Variable = Temp_int_Loop_Counter_Variable
+    1246: push_flow 1376
+    1251: Default__KismetArrayLibrary.Array_Get(self.Other Actor, Temp_int_Array_Index_Variable, CallFunc_Array_Get_Item)
+    1310: Trigger Overlap Lose(CallFunc_Array_Get_Item)
+    1333: pop_flow
+    1334: Default__KismetArrayLibrary.Array_Clear(self.Other Actor)
+    1375: pop_flow
+    1376: CallFunc_Add_IntInt_ReturnValue = Add_IntInt(Temp_int_Loop_Counter_Variable, 1)
+    1418: Temp_int_Loop_Counter_Variable = CallFunc_Add_IntInt_ReturnValue
+    1445: goto 1108
+    1450: pop_flow_if_not (false)
+    1452: Temp_bool_IsClosed_Variable = true
+    1463: pop_flow
+    1464: push_flow 1500
+    1469: if not (Temp_bool_Has_Been_Initd_Variable) goto 1484
+    1483: pop_flow
+    1484: Temp_bool_Has_Been_Initd_Variable = true
+    1495: goto 1450
+    1500: if not (Temp_bool_IsClosed_Variable) goto 1515
+    1514: pop_flow
+    1515: Temp_bool_IsClosed_Variable = true
+    1526: push_flow 1768
+    1531: Temp_bool_Variable_1 = self.As GI Settings.self.Free Mode Activated
+    1572: CallFunc_NotEqual_ByteByte_ReturnValue = NotEqual_ByteByte(self.Day Time, switch(Temp_bool_Variable_1) {false: self.As GI Settings.self.Day Time; true: self.As GI Settings.self.Current FreeMode Time; default: K2Node_Select_Default_3})
+    1698: pop_flow_if_not (CallFunc_NotEqual_ByteByte_ReturnValue)
+    1708: UnloadStreamLevelBySoftObjectPtr(self, self.Lighting Level, LatentActionInfo{SkipOffsetConst(Value=308), 436439978, "ExecuteUbergraph_Map_Arena_Pit", self}, true)
+    1767: pop_flow
+    1768: Delay(self, 0.2, LatentActionInfo{SkipOffsetConst(Value=1039), -1378944803, "ExecuteUbergraph_Map_Arena_Pit", self})
+    1822: pop_flow
+    1823: CallFunc_IsActorBeingDestroyed_ReturnValue = self.IsActorBeingDestroyed()
+    1857: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue)
+    1886: CallFunc_BooleanAND_ReturnValue_2 = BooleanAND(self.Map Initiated, CallFunc_Not_PreBool_ReturnValue)
+    1924: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_2)
+    1934: goto 1464
+    1939: Trigger Overlap Lose(K2Node_ActorBoundEvent_OtherActor_4)
+    1962: pop_flow
+    1963: Trigger Overlap Lose(K2Node_ActorBoundEvent_OtherActor_3)
+    1986: pop_flow
+    1987: Trigger Overlap Lose(K2Node_ActorBoundEvent_OtherActor_2)
+    2010: pop_flow
+    2011: Trigger Overlap Lose(K2Node_ActorBoundEvent_OtherActor_1)
+    2034: pop_flow
+    2035: Default__GameplayStatics.PlaySound2D(self, Sound_Music_Yard_Cue, 1.0, 1.0, 0.0, None, None, true)
+    2095: pop_flow
+    2096: CallFunc_GetGameMode_ReturnValue = GetGameMode(self)
+    2117: K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode = Cast<BP_HalfSwordGameMode_C>(CallFunc_GetGameMode_ReturnValue)
+    2153: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode)
+    2182: pop_flow_if_not (K2Node_DynamicCast_bSuccess)
+    2192: self.As BP Half Sword Game Mode = K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode
+    2211: goto 2035
+    2216: push_flow 3383
+    2221: push_flow 2357
+    2226: push_flow 308
+    2231: push_flow 2096
+    2236: push_flow 2412
+    2241: CallFunc_GetGameInstance_ReturnValue = GetGameInstance(self)
+    2262: K2Node_DynamicCast_AsGI_Settings = Cast<GI_Settings_C>(CallFunc_GetGameInstance_ReturnValue)
+    2298: K2Node_DynamicCast_bSuccess_1 = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsGI_Settings)
+    2327: pop_flow_if_not (K2Node_DynamicCast_bSuccess_1)
+    2337: self.As GI Settings = K2Node_DynamicCast_AsGI_Settings
+    2356: pop_flow
+    2357: Delay(self, 0.5, LatentActionInfo{SkipOffsetConst(Value=15), 1548186174, "ExecuteUbergraph_Map_Arena_Pit", self})
+    2411: pop_flow
+    2412: push_flow 2994
+    2417: CallFunc_EqualEqual_ByteByte_ReturnValue = EqualEqual_ByteByte(self.As GI Settings.self.Current Lose Condition, 3)
+    2470: CallFunc_EqualEqual_ByteByte_ReturnValue_1 = EqualEqual_ByteByte(self.As GI Settings.self.Current Play Mode, 0)
+    2523: CallFunc_EqualEqual_ByteByte_ReturnValue_2 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 1)
+    2576: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_EqualEqual_ByteByte_ReturnValue, CallFunc_EqualEqual_ByteByte_ReturnValue_2)
+    2614: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_BooleanAND_ReturnValue, CallFunc_EqualEqual_ByteByte_ReturnValue_1)
+    2652: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_1)
+    2662: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 5.94239, "Y": -19.990967, "Z": -5.518131}), RotationConst({"Pitch": 0.668478, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    2765: CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue = BeginDeferredActorSpawnFromClass(self, BP_Fence_Bags_C, CallFunc_MakeTransform_ReturnValue, 0, None, 1)
+    2809: SetDoublePropertyByName(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, "Radius", 525.0)
+    2850: CallFunc_MakeTransform_ReturnValue = MakeTransform(VectorConst({"X": 5.94239, "Y": -19.990967, "Z": -5.518131}), RotationConst({"Pitch": 0.668478, "Yaw": 0.0, "Roll": 0.0}), VectorConst({"X": 1.0, "Y": 1.0, "Z": 1.0}))
+    2953: CallFunc_FinishSpawningActor_ReturnValue = FinishSpawningActor(CallFunc_BeginDeferredActorSpawnFromClass_ReturnValue, CallFunc_MakeTransform_ReturnValue, 1)
+    2993: pop_flow
+    2994: CallFunc_EqualEqual_ByteByte_ReturnValue_3 = EqualEqual_ByteByte(self.As GI Settings.self.Current Combat Mode, 9)
+    3047: CallFunc_EqualEqual_ByteByte_ReturnValue_4 = EqualEqual_ByteByte(self.As GI Settings.self.Current Play Mode, 0)
+    3100: CallFunc_EqualEqual_ByteByte_ReturnValue_5 = EqualEqual_ByteByte(self.As GI Settings.self.Current Game Mode enum, 1)
+    3153: CallFunc_BooleanAND_ReturnValue_3 = BooleanAND(CallFunc_EqualEqual_ByteByte_ReturnValue_3, CallFunc_EqualEqual_ByteByte_ReturnValue_5)
+    3191: CallFunc_BooleanAND_ReturnValue_4 = BooleanAND(CallFunc_BooleanAND_ReturnValue_3, CallFunc_EqualEqual_ByteByte_ReturnValue_4)
+    3229: pop_flow_if_not (CallFunc_BooleanAND_ReturnValue_4)
+    3239: LoadStreamLevelBySoftObjectPtr(self, "/Game/Maps/Arenas/Arena_Pit/Arena_Pit_NarrowPassage_Spikes.Arena_Pit_NarrowPassage_Spikes", true, false, LatentActionInfo{-1, -1442413380, "ExecuteUbergraph_Map_Arena_Pit", self})
+    3382: pop_flow
+    3383: CallFunc_GetGameMode_ReturnValue_1 = GetGameMode(self)
+    3404: K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode_1 = Cast<BP_HalfSwordGameMode_C>(CallFunc_GetGameMode_ReturnValue_1)
+    3440: K2Node_DynamicCast_bSuccess_2 = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode_1)
+    3469: pop_flow_if_not (K2Node_DynamicCast_bSuccess_2)
+    3479: pop_flow_if_not (K2Node_DynamicCast_AsBP_Half_Sword_Game_Mode_1.self.Local Multiplayer)
+    3511: goto 27
+    3516: CallFunc_Array_AddUnique_ReturnValue = Default__KismetArrayLibrary.Array_AddUnique(self.Other Actor, K2Node_ActorBoundEvent_OtherActor)
+    3584: Delay(self, 5.0, LatentActionInfo{SkipOffsetConst(Value=1062), 931527746, "ExecuteUbergraph_Map_Arena_Pit", self})
+    3638: pop_flow
+    3639: goto 2216
+    3644: return _
+
+=== FUNCTION ReceiveBeginPlay  (Map_Arena_Pit_C)
+       0: ExecuteUbergraph_Map_Arena_Pit(3639)
+      15: return _
+
+=== FUNCTION ReceiveTick  (Map_Arena_Pit_C)
+       0: K2Node_Event_DeltaSeconds = _
+      18: ExecuteUbergraph_Map_Arena_Pit(1823)
+      33: return _
+
+=== FUNCTION Trigger Overlap Lose  (Map_Arena_Pit_C)
+       0: K2Node_DynamicCast_AsWillie_BP = Cast<Willie_BP_C>(Object)
+      36: K2Node_DynamicCast_bSuccess = Cast(ConversionType=CST_ObjectToBool, Target=K2Node_DynamicCast_AsWillie_BP)
+      65: if not (K2Node_DynamicCast_bSuccess) goto 421
+      79: CallFunc_IsValid_ReturnValue = IsValid(K2Node_DynamicCast_AsWillie_BP)
+     108: if not (CallFunc_IsValid_ReturnValue) goto 421
+     122: CallFunc_Not_PreBool_ReturnValue = Not_PreBool(self.As BP Half Sword Game Mode.self.Match Won)
+     173: CallFunc_IsActorBeingDestroyed_ReturnValue = K2Node_DynamicCast_AsWillie_BP.IsActorBeingDestroyed()
+     215: CallFunc_Not_PreBool_ReturnValue_1 = Not_PreBool(CallFunc_IsActorBeingDestroyed_ReturnValue)
+     244: CallFunc_Not_PreBool_ReturnValue_2 = Not_PreBool(K2Node_DynamicCast_AsWillie_BP.self.Being Destroyed)
+     295: CallFunc_BooleanAND_ReturnValue = BooleanAND(CallFunc_Not_PreBool_ReturnValue, CallFunc_Not_PreBool_ReturnValue_2)
+     333: CallFunc_BooleanAND_ReturnValue_1 = BooleanAND(CallFunc_BooleanAND_ReturnValue, CallFunc_Not_PreBool_ReturnValue_1)
+     371: if not (CallFunc_BooleanAND_ReturnValue_1) goto 421
+     385: K2Node_DynamicCast_AsWillie_BP.Event Lose Match()
+     421: return _

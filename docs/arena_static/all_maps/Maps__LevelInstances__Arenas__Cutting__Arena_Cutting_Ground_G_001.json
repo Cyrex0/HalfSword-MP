@@ -1,0 +1,658 @@
+{
+  "map": "Arena_Cutting_Ground_G_001",
+  "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+  "kind": "level_instance",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [],
+  "spawners": [
+    {
+      "name": "Arena_Cutting_Ground_G_001_C_1",
+      "class": "Arena_Cutting_Ground_G_001_C",
+      "class_path": "/Game/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.Arena_Cutting_Ground_G_001_C",
+      "class_chain": [
+        "Arena_Cutting_Ground_G_001_C",
+        "LevelScriptActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "instance_properties": {},
+      "effective_properties": {}
+    }
+  ],
+  "other_actors": [
+    {
+      "name": "DecalActor_10",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K31",
+      "location": [
+        152.408,
+        -433.909,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_11",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K32",
+      "location": [
+        -147.675,
+        -433.909,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_12",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K33",
+      "location": [
+        -147.675,
+        -433.909,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_13",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K34",
+      "location": [
+        -1066.913,
+        -432.952,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_14",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K35",
+      "location": [
+        -1066.913,
+        -432.952,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_15",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K36",
+      "location": [
+        -168.75,
+        -406.122,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_16",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K37",
+      "location": [
+        -168.75,
+        -406.122,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_17",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K38",
+      "location": [
+        127.547,
+        -455.13,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_18",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K39",
+      "location": [
+        125.263,
+        -455.13,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_20",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K40",
+      "location": [
+        130.079,
+        -170.304,
+        -383.327
+      ]
+    },
+    {
+      "name": "DecalActor_21",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K41",
+      "location": [
+        130.079,
+        -220.52,
+        -383.327
+      ]
+    },
+    {
+      "name": "DecalActor_22",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K42",
+      "location": [
+        130.079,
+        -415.53,
+        -383.327
+      ]
+    },
+    {
+      "name": "DecalActor_23",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K43",
+      "location": [
+        130.079,
+        57.513,
+        -383.327
+      ]
+    },
+    {
+      "name": "DecalActor_24",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K44",
+      "location": [
+        130.079,
+        108.52,
+        -383.327
+      ]
+    },
+    {
+      "name": "DecalActor_25",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K45",
+      "location": [
+        130.079,
+        306.503,
+        -383.327
+      ]
+    },
+    {
+      "name": "DecalActor_26",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K46",
+      "location": [
+        339.234,
+        -433.909,
+        -39.886
+      ]
+    },
+    {
+      "name": "DecalActor_27",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K47",
+      "location": [
+        767.918,
+        -430.053,
+        6.544
+      ]
+    },
+    {
+      "name": "DecalActor_28",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K48",
+      "location": [
+        -391.57,
+        -430.053,
+        6.544
+      ]
+    },
+    {
+      "name": "DecalActor_29",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K49",
+      "location": [
+        -839.205,
+        -430.053,
+        6.544
+      ]
+    },
+    {
+      "name": "DecalActor_3",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K24",
+      "location": [
+        1064.384,
+        388.707,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_30",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K50",
+      "location": [
+        -839.205,
+        370.16,
+        6.544
+      ]
+    },
+    {
+      "name": "DecalActor_31",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K51",
+      "location": [
+        -415.147,
+        370.16,
+        6.544
+      ]
+    },
+    {
+      "name": "DecalActor_32",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K52",
+      "location": [
+        425.845,
+        370.16,
+        6.544
+      ]
+    },
+    {
+      "name": "DecalActor_33",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K53",
+      "location": [
+        838.9,
+        370.16,
+        6.544
+      ]
+    },
+    {
+      "name": "DecalActor_34",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K54",
+      "location": [
+        1037.034,
+        373.65,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_35",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K55",
+      "location": [
+        1037.034,
+        373.65,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_36",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K56",
+      "location": [
+        104.628,
+        373.65,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_37",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K57",
+      "location": [
+        104.628,
+        373.65,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_38",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K58",
+      "location": [
+        -195.054,
+        373.65,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_39",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K59",
+      "location": [
+        -195.054,
+        373.65,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_4",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K25",
+      "location": [
+        1064.384,
+        388.707,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_40",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K60",
+      "location": [
+        -1112.748,
+        373.65,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_41",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K61",
+      "location": [
+        -1112.748,
+        373.65,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_42",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K62",
+      "location": [
+        -1112.748,
+        373.65,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_43",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K63",
+      "location": [
+        -1112.748,
+        373.65,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_44",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K64",
+      "location": [
+        -1092.694,
+        344.454,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_45",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K65",
+      "location": [
+        -1092.694,
+        344.454,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_46",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K66",
+      "location": [
+        -1094.479,
+        -452.645,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_47",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K67",
+      "location": [
+        -1094.479,
+        -452.645,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_48",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K68",
+      "location": [
+        -1092.694,
+        183.5,
+        7.864
+      ]
+    },
+    {
+      "name": "DecalActor_49",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K69",
+      "location": [
+        -1092.694,
+        -175.454,
+        7.864
+      ]
+    },
+    {
+      "name": "DecalActor_5",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K26",
+      "location": [
+        1064.384,
+        -403.801,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_50",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K70",
+      "location": [
+        1064.384,
+        196.719,
+        -44.682
+      ]
+    },
+    {
+      "name": "DecalActor_51",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K71",
+      "location": [
+        1064.384,
+        -231.31,
+        -44.682
+      ]
+    },
+    {
+      "name": "DecalActor_52",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K72",
+      "location": [
+        128.846,
+        347.064,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_53",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K73",
+      "location": [
+        125.705,
+        347.064,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_55",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K75",
+      "location": [
+        -166.192,
+        -166.905,
+        -395.242
+      ]
+    },
+    {
+      "name": "DecalActor_56",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K76",
+      "location": [
+        -165.538,
+        -121.944,
+        -359.035
+      ]
+    },
+    {
+      "name": "DecalActor_57",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K77",
+      "location": [
+        -165.538,
+        116.311,
+        -359.035
+      ]
+    },
+    {
+      "name": "DecalActor_58",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K78",
+      "location": [
+        -165.538,
+        160.6,
+        -394.432
+      ]
+    },
+    {
+      "name": "DecalActor_59",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K79",
+      "location": [
+        -165.538,
+        354.647,
+        -396.136
+      ]
+    },
+    {
+      "name": "DecalActor_6",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K27",
+      "location": [
+        1064.384,
+        -403.801,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_7",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K28",
+      "location": [
+        1080.175,
+        -429.662,
+        -209.518
+      ]
+    },
+    {
+      "name": "DecalActor_8",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K29",
+      "location": [
+        1080.175,
+        -429.662,
+        -485.396
+      ]
+    },
+    {
+      "name": "DecalActor_9",
+      "class": "DecalActor",
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Cutting_Ground_G_001.umap",
+      "label": "MI_Concrete_Crack_sfelnxg_2K30",
+      "location": [
+        152.001,
+        -433.918,
+        -209.518
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 182,
+  "errors": [],
+  "warnings": []
+}

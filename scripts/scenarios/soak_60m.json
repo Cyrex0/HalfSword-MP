@@ -1,0 +1,81 @@
+{
+ "_spec": [
+  "Soak scenario (stability). The 'scenarios' entry below is compiled into",
+  "tools/hsmp-tools/src/bin/hsmp-gate/scenarios.json; a cargo test (scenario_spec_files_match_compiled_data)",
+  "fails if the two differ, so edit both together.",
+  "Run: .\\scripts\\build-and-deploy.ps1 -Dev; .\\scripts\\mp_test.ps1 -Instances 2 -Scenario soak_60m",
+  "(netsim wifi, 9 arena blocks x 10 rounds = 90 rounds, ~40 s each => ~60 min). Each round: Live, 12 s fight,",
+  "a 3 s blackout burst on the seat's client (alternating), 12 s fight, DEBUG KILL; then RoundOver + countdown.",
+  "Every arena is visited (Alley..EastTower, then Alley, Pit). Quick variant: soak_10m.json.",
+  "Rules (hsmp-gate rules.rs, data in 'soak'):",
+  "  SOAK-CRASH  hsmp-tools crash-triage over the run window (<run>/crash_triage.json, written by mp_test.ps1 or by",
+  "              the gate itself): new dumps <= crashes_max (0), each reported with its signature; every game alive at quit_all.",
+  "  SOAK-MEM    <run>/mem.jsonl from 'hsmp-gate memwatch' (private bytes / working set / handles per tracked process",
+  "              every mem_sample_s). Per game, samples after mem_warmup_min: least-squares slope < mem_slope_max_mb_per_h,",
+  "              peak - median(first 3 post-warm-up samples) <= mem_growth_max_mb, handle slope <= handle_slope_max_per_h;",
+  "              server/sidecar slope <= aux_mem_slope_max_mb_per_h. Fewer than mem_min_samples post-warm-up samples = incomplete.",
+  "  SOAK-LUAERR UE4SS.log Lua errors (LUA_ERR*, 'attempt to <op>', 'stack traceback', '<file>.lua:<n>:' error text,",
+  "              'bad argument #') and hsmp_log lua_error events <= lua_errors_max (0); lua_error_allow = regexes to ignore.",
+  "  SOAK-HITCH  hitch events with ms > hitch_max_ms outside travel (travel=true, or between a travel and that instance's",
+  "              next world_ready) fail; needs HSMPDiag (dev profile) evidence, else incomplete."
+ ],
+ "scenarios": {
+  "soak_60m": {
+   "doc": "Soak: 2 instances, ~60 min, 9 arena blocks x 10 rounds via RCON DEBUG KILL, every arena, netsim wifi + a 3 s blackout per round; 0 crashes, memory slope/growth bounded, 0 Lua errors, no hitch > 2 s",
+   "dod": [1, 2, 3, 6, 12],
+   "extra_rules": ["SOAK-CRASH", "SOAK-MEM", "SOAK-LUAERR", "SOAK-HITCH"],
+   "topology": "dedicated",
+   "netsim": "wifi",
+   "arenas": ["Alley", "Pit", "Yard", "Slums", "Cellar", "LordsHall", "EastTower", "Alley", "Pit"],
+   "rounds": 10,
+   "requires": ["debug_verbs", "mem_sampler", "crash_triage"],
+   "soak": {
+    "duration_min": 60,
+    "mem_sample_s": 30,
+    "mem_warmup_min": 10,
+    "mem_min_samples": 20,
+    "mem_slope_max_mb_per_h": 150,
+    "mem_growth_max_mb": 400,
+    "handle_slope_max_per_h": 500,
+    "aux_mem_slope_max_mb_per_h": 20,
+    "hitch_max_ms": 2000,
+    "lua_errors_max": 0,
+    "lua_error_allow": [],
+    "crashes_max": 0
+   },
+   "steps": [
+    { "do": "mark", "name": "boot" },
+    { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150 },
+    { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 30 },
+    {
+     "foreach_arena": [
+      { "do": "mark", "name": "arena:{arena}" },
+      { "do": "rcon", "cmd": "BESTOF {best_of}", "optional": true },
+      { "do": "rcon", "cmd": "MAP {arena}", "pick": "{arena}" },
+      { "do": "mark", "name": "start", "arena": "{arena}" },
+      { "do": "rcon", "cmd": "START" },
+      {
+       "foreach_round": [
+        { "do": "wait", "ev": "ready_report", "who": "each", "timeout_s": 120 },
+        { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Live" }, "timeout_s": 60 },
+        { "do": "hold", "s": 12, "why": "soak: fight under wifi" },
+        { "do": "netsim", "inst": "{seat}", "mode": "blackout" },
+        { "do": "hold", "s": 3, "why": "soak: blackout burst" },
+        { "do": "netsim", "inst": "{seat}", "mode": "normal" },
+        { "do": "hold", "s": 12, "why": "soak: recover + fight" },
+        { "do": "rcon", "cmd": "DEBUG KILL {seat}" },
+        { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "RoundOver" }, "timeout_s": 30 },
+        { "do": "mark", "name": "round_end", "round": "{round}" }
+       ]
+      },
+      { "do": "rcon", "cmd": "ABORT" },
+      { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Lobby" }, "timeout_s": 60 },
+      { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 120 },
+      { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 30 }
+     ]
+    },
+    { "do": "quit_all" }
+   ]
+  }
+ }
+}

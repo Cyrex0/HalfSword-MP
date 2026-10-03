@@ -1,0 +1,259 @@
+{
+  "map": "Abyss_Map_Open_EA",
+  "package": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+  "kind": "persistent_or_standalone",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_1",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "location": [
+        -38.753,
+        1.471,
+        0.0
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -90.0,
+        "roll": 0.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Coffin_Base_B_001",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Coffin_Base_B_001.SM_Prop_Container_Coffin_Base_B_001'",
+      "instance_properties": {}
+    },
+    {
+      "name": "StaticMeshActor_3",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "location": [
+        -40.202,
+        2.0,
+        236.879
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": -90.0,
+        "roll": -5.0
+      },
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Prop_Container_Coffin_Lid_B_001",
+      "simulate_physics": false,
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Props/Containers/Meshes/SM_Prop_Container_Coffin_Lid_B_001.SM_Prop_Container_Coffin_Lid_B_001'",
+      "instance_properties": {}
+    }
+  ],
+  "spawners": [
+    {
+      "name": "Abyss_Map_Open_EA_C_0",
+      "class": "Abyss_Map_Open_EA_C",
+      "class_path": "/Game/Maps/Abyss/Abyss_Map_Open_EA.Abyss_Map_Open_EA_C",
+      "class_chain": [
+        "Abyss_Map_Open_EA_C",
+        "LevelScriptActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "instance_properties": {},
+      "effective_properties": {
+        "Last Spawn Location": {
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 90.0
+        },
+        "Level Start": true,
+        "Loot Points Array": [
+          "BlueprintGeneratedClass'/Game/Assets/Props/Blueprints/BP_Container_Chest_001.BP_Container_Chest_001_C'",
+          "BlueprintGeneratedClass'/Game/Assets/Props/Blueprints/BP_Container_Chest_Coffin_001.BP_Container_Chest_Coffin_001_C'",
+          "BlueprintGeneratedClass'/Game/Assets/Props/Blueprints/BP_Container_Chest_Coffin_002.BP_Container_Chest_Coffin_002_C'",
+          "BlueprintGeneratedClass'/Game/Assets/Props/Blueprints/BP_Container_Basket_001.BP_Container_Basket_001_C'",
+          "BlueprintGeneratedClass'/Game/Assets/Props/Blueprints/BP_Container_Clutter_001.BP_Container_Clutter_001_C'",
+          "BlueprintGeneratedClass'/Game/Assets/Props/Blueprints/BP_Container_Skeleton_001.BP_Container_Skeleton_001_C'"
+        ],
+        "NewVar": "BlueprintGeneratedClass'/Game/Assets/Props/Blueprints/BP_Container_Table_001.BP_Container_Table_001_C'",
+        "Max Level": 8,
+        "First Play": true,
+        "Time Until Despawn": 1.0,
+        "Boss Arenas": [
+          {
+            "Key": "0",
+            "Value": "BlueprintGeneratedClass'/Game/Blueprints/Spawner/BossFight_Arena_BP_LVL_1.BossFight_Arena_BP_LVL_1_C'"
+          },
+          {
+            "Key": "1",
+            "Value": "BlueprintGeneratedClass'/Game/Blueprints/Spawner/BossFight_Arena_BP_LVL_2.BossFight_Arena_BP_LVL_2_C'"
+          },
+          {
+            "Key": "2",
+            "Value": "BlueprintGeneratedClass'/Game/Blueprints/Spawner/BossFight_Arena_BP_LVL_3.BossFight_Arena_BP_LVL_3_C'"
+          },
+          {
+            "Key": "3",
+            "Value": "BlueprintGeneratedClass'/Game/Blueprints/Spawner/BossFight_Arena_BP_LVL_4.BossFight_Arena_BP_LVL_4_C'"
+          },
+          {
+            "Key": "4",
+            "Value": "BlueprintGeneratedClass'/Game/Blueprints/Spawner/BossFight_Arena_BP_LVL_5.BossFight_Arena_BP_LVL_5_C'"
+          },
+          {
+            "Key": "5",
+            "Value": "BlueprintGeneratedClass'/Game/Blueprints/Spawner/BossFight_Arena_BP_LVL_6.BossFight_Arena_BP_LVL_6_C'"
+          }
+        ],
+        "Easy Spawn": true,
+        "Fog": true,
+        "PrimaryActorTick": {
+          "bCanEverTick": true
+        },
+        "__omitted_large_defaults": [
+          "Current Boss Passport"
+        ]
+      }
+    }
+  ],
+  "other_actors": [
+    {
+      "name": "AudioVolume_1",
+      "class": "AudioVolume",
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "label": "AudioVolume",
+      "location": [
+        -70.0,
+        90.0,
+        400.0
+      ]
+    },
+    {
+      "name": "BP_Floor_Tile_10x10x_C_4",
+      "class": "BP_Floor_Tile_10x10x_C",
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "label": "BP_Floor_Tile_10x10x",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "DirectionalLight_1",
+      "class": "DirectionalLight",
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "label": "DirectionalLight",
+      "location": [
+        -132.486,
+        169.847,
+        50.0
+      ]
+    },
+    {
+      "name": "ExponentialHeightFog_0",
+      "class": "ExponentialHeightFog",
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "label": "ExponentialHeightFog",
+      "location": [
+        -5600.0,
+        -50.0,
+        -6850.0
+      ]
+    },
+    {
+      "name": "NavMeshBoundsVolume_1",
+      "class": "NavMeshBoundsVolume",
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "label": "NavMeshBoundsVolume",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "RecastNavMesh-Default",
+      "class": "RecastNavMesh",
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "label": "RecastNavMesh-Default",
+      "location": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "SkyLight_1",
+      "class": "SkyLight",
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "label": "SkyLight",
+      "location": [
+        437.42,
+        156.226,
+        -0.5
+      ]
+    },
+    {
+      "name": "TriggerSphere_1",
+      "class": "TriggerSphere",
+      "source": "HalfswordUE5/Content/Maps/Abyss/Abyss_Map_Open_EA.umap",
+      "label": "Trigger Hint",
+      "location": [
+        330.538,
+        -37.173,
+        0.0
+      ]
+    }
+  ],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

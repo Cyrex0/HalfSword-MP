@@ -1,0 +1,710 @@
+{
+  "map": "Arena_Pit_Rocks",
+  "package": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+  "kind": "level_instance",
+  "units": "UE units: cm, degrees (pitch/yaw/roll), world space of the root map",
+  "sources": [
+    {
+      "file": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "via": "persistent",
+      "parent_chain": [],
+      "level_transform": {
+        "location": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": {
+          "pitch": 0.0,
+          "yaw": 0.0,
+          "roll": 0.0
+        },
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "spawn_points": [],
+  "world_objects": [
+    {
+      "name": "StaticMeshActor_0",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        302.626,
+        502.508,
+        9.766
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.079,
+        0.079,
+        0.079
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Big_A_002",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Big_A_002.SM_Environment_Purgatory_Rock_Big_A_002'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Big_A_002.SM_Environment_Purgatory_Rock_Big_A_002'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_1",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        393.929,
+        435.304,
+        3.903
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.137,
+        0.137,
+        0.137
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Medium_A_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_001.SM_Environment_Purgatory_Rock_Medium_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_001.SM_Environment_Purgatory_Rock_Medium_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_10",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        -487.228,
+        -392.267,
+        4.018
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.221,
+        0.221,
+        0.221
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_B_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_B_001.SM_Environment_Purgatory_Rock_Small_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_B_001.SM_Environment_Purgatory_Rock_Small_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_11",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        -244.234,
+        -422.45,
+        6.523
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.154,
+        0.154,
+        0.154
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Medium_B_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_B_001.SM_Environment_Purgatory_Rock_Medium_B_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_B_001.SM_Environment_Purgatory_Rock_Medium_B_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_12",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        452.035,
+        -507.826,
+        15.605
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.172,
+        0.172,
+        0.172
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Medium_A_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_002.SM_Environment_Purgatory_Rock_Medium_A_002'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_002.SM_Environment_Purgatory_Rock_Medium_A_002'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_13",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        295.396,
+        -535.751,
+        5.062
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.336,
+        0.336,
+        0.336
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_C_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_C_001.SM_Environment_Purgatory_Rock_Small_C_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_C_001.SM_Environment_Purgatory_Rock_Small_C_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_14",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        449.575,
+        -156.925,
+        -0.116
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.136,
+        0.136,
+        0.136
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Medium_A_4",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_001.SM_Environment_Purgatory_Rock_Medium_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_001.SM_Environment_Purgatory_Rock_Medium_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_15",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        440.849,
+        120.726,
+        6.44
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.248,
+        0.248,
+        0.248
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_A_3",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_A_001.SM_Environment_Purgatory_Rock_Small_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_A_001.SM_Environment_Purgatory_Rock_Small_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_2",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        447.052,
+        489.572,
+        3.919
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.174,
+        0.174,
+        0.174
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_A_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_A_001.SM_Environment_Purgatory_Rock_Small_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_A_001.SM_Environment_Purgatory_Rock_Small_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_3",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        289.591,
+        337.387,
+        6.207
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.257,
+        0.257,
+        0.257
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_D_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_D_001.SM_Environment_Purgatory_Rock_Small_D_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_D_001.SM_Environment_Purgatory_Rock_Small_D_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_4",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        472.796,
+        344.234,
+        8.801
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.217,
+        0.217,
+        0.217
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_C_001",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_C_001.SM_Environment_Purgatory_Rock_Small_C_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_C_001.SM_Environment_Purgatory_Rock_Small_C_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_5",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        -120.121,
+        418.977,
+        3.321
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.133,
+        0.133,
+        0.133
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Medium_A_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_001.SM_Environment_Purgatory_Rock_Medium_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_001.SM_Environment_Purgatory_Rock_Medium_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_6",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        -275.984,
+        368.807,
+        4.631
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.112,
+        0.112,
+        0.112
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Medium_A_002",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_002.SM_Environment_Purgatory_Rock_Medium_A_002'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Medium_A_002.SM_Environment_Purgatory_Rock_Medium_A_002'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_7",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        -497.49,
+        352.45,
+        2.61
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.248,
+        0.248,
+        0.248
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_D_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_D_001.SM_Environment_Purgatory_Rock_Small_D_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_D_001.SM_Environment_Purgatory_Rock_Small_D_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_8",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        -438.052,
+        89.051,
+        -3.765
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.197,
+        0.197,
+        0.197
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_C_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_C_001.SM_Environment_Purgatory_Rock_Small_C_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_C_001.SM_Environment_Purgatory_Rock_Small_C_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    },
+    {
+      "name": "StaticMeshActor_9",
+      "class": "StaticMeshActor",
+      "class_path": "/Script/Engine.StaticMeshActor",
+      "class_chain": [
+        "StaticMeshActor",
+        "Actor",
+        "Object"
+      ],
+      "source": "HalfswordUE5/Content/Maps/LevelInstances/Arenas/Cutting/Arena_Pit_Rocks.umap",
+      "location": [
+        -486.991,
+        -284.51,
+        1.62
+      ],
+      "rotation": {
+        "pitch": 0.0,
+        "yaw": 0.0,
+        "roll": 0.0
+      },
+      "scale": [
+        0.299,
+        0.299,
+        0.299
+      ],
+      "category": "static_mesh_actor_movable",
+      "label": "SM_Environment_Purgatory_Rock_Small_A_2",
+      "simulate_physics": true,
+      "simulating_components": [
+        {
+          "component": "StaticMeshComponent0",
+          "type": "StaticMeshComponent",
+          "mobility": "EComponentMobility::Movable",
+          "mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_A_001.SM_Environment_Purgatory_Rock_Small_A_001'"
+        }
+      ],
+      "root_mobility": "EComponentMobility::Movable",
+      "static_mesh": "StaticMesh'/Game/Assets/Environments/Natural/Purgatory/Rocks/Meshes/SM_Environment_Purgatory_Rock_Small_A_001.SM_Environment_Purgatory_Rock_Small_A_001'",
+      "instance_properties": {
+        "bCanBeDamaged": true
+      }
+    }
+  ],
+  "spawners": [],
+  "other_actors": [],
+  "static_mesh_actors_static_count": 0,
+  "errors": [],
+  "warnings": []
+}

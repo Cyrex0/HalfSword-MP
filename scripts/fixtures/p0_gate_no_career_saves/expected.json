@@ -1,0 +1,9 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "DoD-8": "incomplete"
+  },
+  "messages": [
+    "the baseline has no career files: nothing was protected, nothing proven"
+  ]
+}

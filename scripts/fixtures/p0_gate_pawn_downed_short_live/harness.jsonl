@@ -1,0 +1,8 @@
+{"ev":"rcon","wall_ms":1790880002000,"cmd":"MAP Alley","ok":true,"reply":"OK","pick":"Alley"}
+{"ev":"mark","wall_ms":1790880002050,"name":"start","arena":"Alley"}
+{"ev":"rcon","wall_ms":1790880002060,"cmd":"START","ok":true,"reply":"OK"}
+{"ev":"rcon","wall_ms":1790880011500,"cmd":"DEBUG KILL 1","ok":true,"reply":"OK killed"}
+{"ev":"mark","wall_ms":1790880012100,"name":"round_end","round":1}
+{"ev":"rcon","wall_ms":1790880034500,"cmd":"DEBUG KILL 2","ok":true,"reply":"OK killed"}
+{"ev":"mark","wall_ms":1790880035100,"name":"round_end","round":2}
+{"ev":"rcon","wall_ms":1790880048000,"cmd":"ABORT","ok":true,"reply":"OK"}

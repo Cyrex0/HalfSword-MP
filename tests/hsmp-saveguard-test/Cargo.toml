@@ -1,0 +1,23 @@
+[package]
+name = "hsmp-saveguard-test"
+description = "Offline tests (mlua, Lua 5.4) for mods/shared/hsmp_saveguard.lua"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# Test-only crate: no runtime code. Run with  cargo test -p hsmp-saveguard-test
+# The Lua under test is embedded with include_str!, so the test always checks the file
+# that ships.
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,9 @@
+{
+  "verdict": "incomplete",
+  "rules": {
+    "NETSIM": "incomplete"
+  },
+  "messages": [
+    "ran under none, weaker than the scenario's typical"
+  ]
+}
