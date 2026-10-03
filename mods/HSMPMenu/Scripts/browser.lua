@@ -121,7 +121,11 @@ local function split_tabs(line)
     return t
 end
 
-local function key_of(s) return s.host .. ":" .. tostring(s.port) end
+local function key_of(s)
+    local h = tostring(s.host)
+    if h:find(":", 1, true) and not h:find("^%[") then h = "[" .. h .. "]" end -- IPv6 literal
+    return h .. ":" .. tostring(s.port)
+end
 
 local function flash(text, color, secs)
     B.flash = { text = text, color = color or C.warn, until_t = now() + (secs or 4) }
@@ -155,7 +159,7 @@ end
 
 local function safe_addr(a)
     a = trim(a)
-    if a:match("^[%w%.%-]+:%d+$") and #a < 260 then return a end
+    if (a:match("^[%w%.%-]+:%d+$") or a:match("^%[[%x:%.]+%]:%d+$")) and #a < 260 then return a end
     return nil
 end
 
@@ -248,7 +252,7 @@ local function master_urls()
     end
     for _, u in ipairs(ctx.MASTER_URLS or {}) do add(u) end
     add(ctx.MASTER_URL)
-    if #list == 0 then list[1] = "http://127.0.0.1:7778" end
+    if #list == 0 then list[1] = "https://master.halfswordmp.workers.dev" end
     return list
 end
 

@@ -5,12 +5,17 @@
 //!     hsmp-launcher verify        [--package DIR|ZIP]
 //!     hsmp-launcher install       [--game DIR] [--package DIR|ZIP] [--allow-unsupported] [--no-save-backup]
 //!     hsmp-launcher uninstall     [--game DIR]
+//!     hsmp-launcher launch        [--game DIR]
 //!     hsmp-launcher check-update  [--stable-only]
 //!     hsmp-launcher update        [--game DIR] [--stable-only] [--allow-downgrade]
 //!     hsmp-launcher backup-saves
 //!     hsmp-launcher list-backups
 //!     hsmp-launcher restore-saves <backup id>
 //!     hsmp-launcher find-game
+//!     hsmp-launcher firewall-status [--game DIR]
+//!
+//! `firewall-allow <exe>` and `firewall-remove [<exe>]` are the helper the launcher starts
+//! through UAC to change Windows Firewall; they are not meant to be typed.
 //!
 //! Exit codes: 0 ok, 1 failed, 2 bad usage.
 
@@ -20,10 +25,10 @@
 mod gui;
 
 use hsmp_launcher::install::{self, Env};
-use hsmp_launcher::{ops, saves, steam, update};
+use hsmp_launcher::{firewall, ops, saves, steam, update};
 use std::path::PathBuf;
 
-const USAGE: &str = "hsmp-launcher [status|verify|install|uninstall|check-update|update|backup-saves|list-backups|restore-saves <id>|find-game]
+const USAGE: &str = "hsmp-launcher [status|verify|install|uninstall|launch|check-update|update|backup-saves|list-backups|restore-saves <id>|find-game|firewall-status]
   --game DIR          Half Sword folder (default: remembered, else found through Steam)
   --package DIR|ZIP   release folder or zip (default: the launcher's own folder)
   --allow-unsupported install on a Half Sword build this release does not list
@@ -32,6 +37,8 @@ const USAGE: &str = "hsmp-launcher [status|verify|install|uninstall|check-update
   --stable-only       check-update / update: stable releases only (default: the saved setting)
   --forget-missing    uninstall: give up on backed-up originals that are gone for good
                       (an antivirus deleted them); HSMP's version of those files is removed
+launch: start Half Sword through Steam (steam -applaunch) with the HSMP launch options
+firewall-status: is hsmp-server.exe allowed through Windows Firewall (install adds the rule)
 Without arguments the launcher window opens.";
 
 #[cfg(windows)]
@@ -159,6 +166,9 @@ fn run_cli(a: Args) -> Result<(), String> {
             for n in r.notes {
                 say(format!("note: {n}"));
             }
+            if let Some(w) = ops::ensure_firewall(&env, &mut log) {
+                say(format!("WARNING: {w}"));
+            }
             Ok(())
         }
         "uninstall" => {
@@ -168,6 +178,15 @@ fn run_cli(a: Args) -> Result<(), String> {
             for n in r.notes {
                 say(format!("note: {n}"));
             }
+            if let Some(w) = ops::remove_firewall(&env, &mut log) {
+                say(format!("note: {w}"));
+            }
+            Ok(())
+        }
+        "launch" => {
+            let env = env_for(&a)?;
+            let pid = ops::launch(&env, &mut log)?;
+            say(format!("started through Steam (pid {pid})"));
             Ok(())
         }
         "check-update" | "update" => {
@@ -209,6 +228,9 @@ fn run_cli(a: Args) -> Result<(), String> {
             for n in r.notes {
                 say(format!("note: {n}"));
             }
+            if let Some(w) = ops::ensure_firewall(&env, &mut log) {
+                say(format!("WARNING: {w}"));
+            }
             if update::restart_target(&home).is_some() {
                 say(format!("the new launcher is {}", hsmp_launcher::trust::installed_launcher_path(&home).display()));
             }
@@ -246,6 +268,29 @@ fn run_cli(a: Args) -> Result<(), String> {
             }
             Ok(())
         }
+        "firewall-status" => {
+            let env = env_for(&a)?;
+            let exe = firewall::server_exe(&env.game_root);
+            say(format!("server:  {}{}", exe.display(), if exe.is_file() { "" } else { " (not installed)" }));
+            say(firewall::status(&exe).describe());
+            Ok(())
+        }
+        // the elevated helper (started through UAC by ops::ensure_firewall / remove_firewall)
+        "firewall-allow" => {
+            let exe = PathBuf::from(a.pos.first().ok_or("firewall-allow needs the path of hsmp-server.exe")?);
+            if !exe.is_file() {
+                return Err(format!("{} does not exist", exe.display()));
+            }
+            firewall::apply(&firewall::allow_commands(&exe)?, &mut log)?;
+            say(format!("firewall: inbound UDP allowed for {}", exe.display()));
+            Ok(())
+        }
+        "firewall-remove" => {
+            let exe = a.pos.first().map(PathBuf::from);
+            firewall::apply(&firewall::remove_commands(exe.as_deref())?, &mut log)?;
+            say(format!("firewall: rule \"{}\" removed", firewall::RULE_NAME));
+            Ok(())
+        }
         other => Err(format!("unknown command '{other}'\n{USAGE}")),
     }
 }
@@ -279,5 +324,24 @@ fn main() {
         eprintln!("ERROR: {e}");
         ops::log_line(&format!("error: {e}"));
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(s: &str) -> Vec<String> {
+        s.split_whitespace().map(String::from).collect()
+    }
+
+    #[test]
+    fn launch_command_parses() {
+        let a = parse(&argv("launch --game D:\\HS")).unwrap();
+        assert_eq!(a.cmd, "launch");
+        assert_eq!(a.game, Some(PathBuf::from("D:\\HS")));
+        assert_eq!(parse(&argv("launch --help")).unwrap().cmd, "help");
+        assert!(parse(&argv("launch --direct")).is_err(), "the direct route is gone");
+        assert!(USAGE.contains("|launch|") && USAGE.contains("steam -applaunch"));
     }
 }

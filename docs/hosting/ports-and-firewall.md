@@ -20,6 +20,11 @@ Notes:
   master; a stateful firewall on the master lets the reply in.
 - Players need no inbound ports. Their sidecar talks to the server from an ordinary outbound UDP socket.
 - If you change `--bind` (for example to run two servers on one host), open and forward that port instead.
+- On a host with more than one address players can reach (a floating or failover IP, a second
+  public IP, two uplinks), bind the address players use: `--bind 203.0.113.7:7777`. With
+  `0.0.0.0` the operating system picks the reply's source address by its routing table, which
+  can be a different address from the one the player sent to. The player's NAT or the sidecar
+  then drops every reply: the join times out, and the browser may show no ping.
 
 ## Linux firewall
 
@@ -52,7 +57,9 @@ a firewall in front of the VPS as well. Allow UDP 7777 there too.
 
 ## Windows firewall
 
-Run in an **administrator** PowerShell:
+Hosting from the game menu needs nothing here: the launcher adds the rule "Half Sword MP server"
+(inbound UDP for the installed `hsmp-server.exe`) at install. For a dedicated server, run in an
+**administrator** PowerShell:
 
 ```powershell
 New-NetFirewallRule -DisplayName "HSMP game server (UDP 7777)" `
@@ -141,6 +148,8 @@ What you can do:
 - Rent a small VPS and run the server there (see [Linux](linux.md) or [Docker](docker.md)).
 - If you and your players all have IPv6, bind the server to IPv6 (`--bind [::]:7777`) and open the
   port for IPv6 in your router's firewall. Whether an IPv6 socket also accepts IPv4 depends on the
-  operating system (Linux usually yes, Windows no), so test both.
+  operating system (Linux usually yes, Windows no), so test both. Players join by a host name
+  with an IPv6 (AAAA) record; the in-game address box takes host names and IPv4 addresses, not
+  IPv6 literals.
 
 HSMP has no relay or NAT punching for this case.

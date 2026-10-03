@@ -53,6 +53,8 @@ local function Log(fmt, ...) print(string.format("[HSMPMenu] " .. fmt .. "\n", .
 
 local function trim(s) return s and s:match("^%s*(.-)%s*$") or nil end
 local function env_get(k) local v = trim(os.getenv(k)); if v == "" then return nil end; return v end
+-- the public server list; dev and test deploys write a local master into hsmp.cfg
+local PUBLIC_MASTER = "https://master.halfswordmp.workers.dev"
 
 -- Sibling modules: require() first, then dofile next to this file, then the
 -- repo's shared/ dir (dev tree; build-and-deploy copies shared libs next to us).
@@ -77,7 +79,7 @@ end
 -- shared/hsmp_cfg.lua (docs/development/testing.md): every path and
 -- URL comes from it (hsmp.cfg next to the game exe + the HSMP_* env overrides).
 -- When the library is not deployed, a built-in fallback with the SAME defaults
--- and env overrides is used (bin_dir "hsmp" next to the game, local master);
+-- and env overrides is used (bin_dir "hsmp" next to the game, the public list);
 -- there is no hard-coded developer path anywhere in this mod.
 local function fallback_cfg()
     local F = { _fallback = true }
@@ -93,7 +95,7 @@ local function fallback_cfg()
         local u = F.safe_url(part)
         if u then urls[#urls + 1] = u end
     end
-    if #urls == 0 then urls = { "http://127.0.0.1:7778" } end
+    if #urls == 0 then urls = { PUBLIC_MASTER } end
     F.master_url = urls[1]
     function F.master_urls() local o = {}; for i, u in ipairs(urls) do o[i] = u end; return o end
     function F.get(_, default) return default end
@@ -127,7 +129,7 @@ local BIN_DIR     = tostring(cfg("bin_dir"))
 local SIDECAR_EXE = cfg("sidecar_exe")
 local SERVER_EXE  = cfg("server_exe")
 local QUERY_EXE   = cfg("query_exe")
-local MASTER_URL  = cfg_safe_url(cfg("master_url")) or "http://127.0.0.1:7778"
+local MASTER_URL  = cfg_safe_url(cfg("master_url")) or PUBLIC_MASTER
 -- Every master to try, primary (MASTER_URL, the one a hosted server registers
 -- with) first. An hsmp_cfg without list support gives just { MASTER_URL }.
 local MASTER_URLS = { MASTER_URL }
@@ -618,7 +620,7 @@ local function spawn_sidecar_only(server, nick, map_name, label)
         Log("JOIN via netsim %s (instead of %s)", netsim, server)
         server = netsim
     end
-    if not tostring(server):match("^[%w%.%-]+:%d+$") then Log("JOIN refused: bad address %s", tostring(server)); return end
+    if not (tostring(server):match("^[%w%.%-]+:%d+$") or tostring(server):match("^%[[%x:%.]+%]:%d+$")) then Log("JOIN refused: bad address %s", tostring(server)); return end
     local sc_args, sc_err = proc_args("sidecar")
     if not sc_args then
         MX.ipc_fail(sc_err)
@@ -2537,6 +2539,20 @@ local function build_lobby_kit()
     end, { fs = F(Kit.TS.label), gap = gap, help = "Points every CUSTOM kit must fit in" })
     my = my + chh + u(Kit.SP.lg)
     w.mode_line = Kit.text("", rx, my, rw, lh, F(Kit.TS.small), 0, Kit.C.dim)
+    if lobby.is_host then
+        -- the server binds 0.0.0.0; internet players still need the router to forward the port
+        local p = host_port()
+        local fs = F(Kit.TS.small)
+        local ny = my + lh
+        local lines = math.min(2, math.floor((L.bottom - ny) / math.ceil(fs * Kit.LINE_H)))
+        if lines >= 1 then
+            w.port_note = Kit.text("", rx, ny, rw, math.ceil(fs * Kit.LINE_H) * lines, fs, 0, Kit.C.dim,
+                { wrap = lines > 1 and lines or nil, valign = "top" })
+            Kit.set_text_fit(w.port_note, { string.format("Players outside your network need UDP %d forwarded to this PC", p),
+                                            string.format("Outside players need UDP %d forwarded here", p),
+                                            string.format("Forward UDP %d for internet players", p) })
+        end
+    end
 
     -- actions: READY | LOADOUT                START | CLOSE LOBBY / LEAVE
     local acts = Kit.actions(L,

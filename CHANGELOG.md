@@ -8,6 +8,43 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+## [0.1.0-beta.3] - 2026-10-03
+
+### Launcher
+
+- **Launch through Steam** is back. It starts Half Sword through Steam with the hair-streaming
+  crash workaround (`r.HairStrands.Streaming=0`) on the command line, after the same career-save
+  and `Engine.ini` checks the launcher runs at start. beta.2 removed it by mistake along with Play.
+  Starting from Steam directly still works. On the command line: `hsmp-launcher launch`.
+
+### Hosting
+
+- The launcher adds a Windows Firewall rule at install and update ("Half Sword MP server": inbound
+  UDP for the installed `hsmp-server.exe`, all network types) through one Windows prompt, and
+  removes it on uninstall. A host whose server was listed but unreachable (the first-run firewall
+  prompt dismissed, or a "Public" network) can now be joined. Declining the prompt shows a warning
+  and a **Fix firewall** button; `hsmp-launcher firewall-status` prints the rule's state.
+- The host lobby says which UDP port players outside your network need forwarded.
+- Without an `hsmp.cfg` (a hand-unzipped install) the mods use the public server list instead of
+  `http://127.0.0.1:7778`. Dev and test deploys still write the local master into `hsmp.cfg`.
+- A listen host adapts what it sends to each player to its own upload. When the connection backs
+  up, the host sends less to that player and grows it back once the path is clear, so a home
+  upload no longer builds up lag for everyone in an 8-player game.
+- A server whose PC clock is wrong stays on the public server list. It used to be refused by the
+  list forever; it now takes the time from the list's answer and registers again.
+- Less log spam when a player quits: the stream of "connection reset" errors Windows reports
+  until the player times out is logged at debug level now.
+
+### Joining
+
+- IPv6 server addresses work. The sidecar connects on the server's address family (IPv4 first
+  when a name has both), and the in-game address box and browser accept `[addr]:port`.
+
+### Fixes for developers
+
+- CI: the clippy job builds again (a deny-level lint in an IPC test), and the Linux sidecar
+  process checks read real process start times from `/proc`.
+
 ## [0.1.0-beta.2] - 2026-10-03
 
 ### Server list
@@ -102,6 +139,7 @@ First public beta.
 - Career-save protection: the single-player career save is backed up before a session and
   restored after it.
 
-[Unreleased]: https://github.com/Cyrex0/HalfSword-MP/compare/v0.1.0-beta.2...HEAD
+[Unreleased]: https://github.com/Cyrex0/HalfSword-MP/compare/v0.1.0-beta.3...HEAD
+[0.1.0-beta.3]: https://github.com/Cyrex0/HalfSword-MP/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/Cyrex0/HalfSword-MP/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/Cyrex0/HalfSword-MP/releases/tag/v0.1.0-beta.1

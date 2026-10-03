@@ -170,6 +170,10 @@ pub struct ConnStats {
     pub key_updates_rx: u64,
     pub srtt_ms: f64,
     pub rttvar_ms: f64,
+    /// Lowest RTT sample (ms, after the peer's ack delay, like `srtt_ms`), 0
+    /// before the first: the path RTT without queueing, so
+    /// `srtt_ms - min_rtt_ms` estimates the standing queue.
+    pub min_rtt_ms: f64,
     pub rto_ms: u64,
     /// Declared losses later acked after all (reordering, not loss).
     pub spurious_lost: u64,
@@ -263,6 +267,8 @@ pub struct Conn {
     /// When the highest-numbered packet so far arrived (ack-delay base).
     largest_rx_at: u64,
     min_rtt: Option<f64>,
+    /// Lowest RTT sample after the ack-delay correction.
+    min_sample: Option<f64>,
     /// Last time an ack-eliciting packet went out (path-dead detection).
     last_eliciting_tx: u64,
     /// Server: the stateless-reset token still to deliver, and the recent
@@ -358,6 +364,7 @@ impl Conn {
             caps: 0,
             largest_rx_at: now,
             min_rtt: None,
+            min_sample: None,
             last_eliciting_tx: now,
             reset_token_tx: None,
             token_pkts: Vec::new(),
@@ -495,6 +502,7 @@ impl Conn {
         s.retransmits = self.out.retransmits;
         s.rto_ms = self.rto();
         s.cc_rate_bps = self.cc_rate;
+        s.min_rtt_ms = self.min_sample.unwrap_or(0.0);
         s
     }
     /// Reliable messages queued or in flight (both reliable channels).
@@ -557,6 +565,7 @@ impl Conn {
 
     fn rtt_sample(&mut self, ms: f64) {
         self.latest_rtt = ms;
+        self.min_sample = Some(self.min_sample.map_or(ms, |m| m.min(ms)));
         match self.srtt {
             None => {
                 self.srtt = Some(ms);

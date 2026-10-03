@@ -379,7 +379,7 @@ bytes out ≤ total bytes in, no connections, no pre-auth state),
 - **Retransmission.** The reliable fragments of a lost packet go back to unsent and are re-sent
   in the next packet. An ack of any copy completes a fragment. Channel-0 data is never
   retransmitted.
-- **Metrics** (`ConnStats`): srtt, rttvar, RTO, packets and bytes sent and received, lost,
+- **Metrics** (`ConnStats`): srtt, rttvar, min RTT (after ack delay; the relay reads `srtt − min` as the standing queue), RTO, packets and bytes sent and received, lost,
   retransmits, duplicate and too-old drops, AEAD failures, key updates, `spurious_lost`,
   `cc_rate_bps`, `paced`, `local_stalls`.
 

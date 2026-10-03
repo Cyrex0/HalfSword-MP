@@ -281,7 +281,8 @@ Players add a master in the game's multiplayer **SETTINGS** screen, in the **SER
 (comma-separated URLs, primary first), or in `master_url` in `hsmp.cfg` next to the game's `Win64`
 binaries. The launcher writes the release's list
 (`https://master.halfswordmp.workers.dev, http://127.0.0.1:7778`) and keeps a `master_url` that was
-changed by hand.
+changed by hand. Without any `hsmp.cfg` (a hand-unzipped install) the mods use the public list
+`https://master.halfswordmp.workers.dev`.
 
 ## HTTP API
 

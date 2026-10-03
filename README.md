@@ -133,7 +133,8 @@ See [troubleshooting](docs/players/troubleshooting.md) for fixes to common probl
 2. Unzip it anywhere and run `hsmp-launcher.exe`. Windows SmartScreen may warn about an unsigned
    program: choose **More info**, then **Run anyway**.
 3. The launcher finds Half Sword, checks the game build and backs up your saves. Click **Install**.
-4. Start Half Sword from Steam as usual. Its main menu now shows the HSMP buttons next to the game's own.
+4. Click **Launch through Steam** (recommended: it applies the crash workaround), or start Half Sword
+   from Steam directly. Its main menu now shows the HSMP buttons next to the game's own.
 
 The launcher checks GitHub for a new HSMP release each time it opens and installs it with one click.
 To remove HSMP, click **Uninstall** in the launcher. Full guides: [install](docs/players/install.md),

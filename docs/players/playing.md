@@ -117,11 +117,9 @@ Your friends join with **DIRECT CONNECT** and your public address. For that to w
 
 1. **Forward the port on your router.** Forward **UDP** port 7777 (or your **HOST PORT**) to your
    PC. Every router is different. Look for "port forwarding" or "virtual server" in its settings.
-2. **Allow it in Windows Firewall.** The launcher does not add a firewall rule. The first time
-   you host, Windows may ask whether `hsmp-server.exe` may use the network. Allow it.
-   If you clicked "Cancel" by mistake, allow `hsmp-server.exe` (in the game's
-   `Binaries\Win64\hsmp\` folder) in Windows Security > Firewall > "Allow an app through
-   firewall".
+2. **Allow it in Windows Firewall.** The launcher adds the rule when it installs HSMP (accept its
+   Windows prompt). If you said no, click **Fix firewall** in the launcher's install section. The
+   host lobby reminds you which UDP port to forward.
 3. **Give your friends your public IP address and port**, for example `203.0.113.5:7777`. You can
    find your public IP by searching "what is my IP" in a web browser.
 

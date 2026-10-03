@@ -69,6 +69,7 @@ pub async fn recv_loop(socket: Arc<UdpSocket>, state: Arc<ServerState>) -> anyho
     loop {
         let (n, from) = match socket.recv_from(&mut buf).await {
             Ok(x) => x,
+            Err(e) if recv_error_is_routine(&e) => { debug!(error = %e, "recv_from: ICMP unreachable from a gone client"); continue; }
             Err(e) => { warn!(error = %e, "recv_from error"); continue; }
         };
         let data = &buf[..n];
@@ -119,6 +120,14 @@ pub async fn recv_loop(socket: Arc<UdpSocket>, state: Arc<ServerState>) -> anyho
             }
         }
     }
+}
+
+/// Windows reports an ICMP port-unreachable for an earlier send as a
+/// ConnectionReset on the next receive. A client that closed its game draws
+/// one per packet we still send it until its connection times out, so these
+/// are routine, not warnings.
+fn recv_error_is_routine(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::ConnectionReset
 }
 
 /// A peer's connection moved from `old` to `new` (validated NAT rebind):
@@ -569,6 +578,31 @@ pub(crate) mod resume_tests {
         use hsmp_ipc::schema::session as rec;
         t.recs(rec::K_ADMIN_STATE).last().and_then(|p| hsmp_ipc::record::view::<rec::AdminStateHead>(p).ok())
             .map(|v| (v.head.admin_peer, v.rows.iter().map(|r| r.entry.lossy().into_owned()).collect()))
+    }
+
+    /// A send to a port nobody listens on comes back, on Windows, as a
+    /// ConnectionReset on the next receive; that error is routine, and the
+    /// socket keeps receiving after it.
+    #[tokio::test]
+    async fn icmp_unreachable_on_receive_is_routine() {
+        assert!(recv_error_is_routine(&std::io::Error::from(std::io::ErrorKind::ConnectionReset)));
+        assert!(!recv_error_is_routine(&std::io::Error::from(std::io::ErrorKind::PermissionDenied)));
+        let s = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let dead = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let dead_addr = dead.local_addr().unwrap();
+        drop(dead);
+        s.send_to(b"x", dead_addr).await.unwrap();
+        let peer = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        peer.send_to(b"live", s.local_addr().unwrap()).await.unwrap();
+        let mut buf = [0u8; 16];
+        let mut got = None;
+        for _ in 0..4 {
+            match tokio::time::timeout(Duration::from_secs(2), s.recv_from(&mut buf)).await.unwrap() {
+                Ok((n, _)) => { got = Some(buf[..n].to_vec()); break; }
+                Err(e) => assert!(recv_error_is_routine(&e), "unexpected receive error {e:?}"),
+            }
+        }
+        assert_eq!(got.as_deref(), Some(&b"live"[..]));
     }
 
     /// Admin assignment through the real admission: on a dedicated server the

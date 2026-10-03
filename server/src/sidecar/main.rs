@@ -444,14 +444,8 @@ async fn main() -> Result<()> {
         })
     };
 
-    let sock = Arc::new(
-        UdpSocket::bind("0.0.0.0:0")
-            .await
-            .context("bind local udp socket")?,
-    );
-    sock.connect(&args.server)
-        .await
-        .with_context(|| format!("connect to {}", args.server))?;
+    // Bound on the server's address family, so an IPv6 server is reachable too.
+    let sock = Arc::new(net::connect_udp(&args.server).await?);
     info!(server = %args.server, local = %sock.local_addr()?, "udp connected");
 
     let shared = Arc::new(Mutex::new(SharedState {

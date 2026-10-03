@@ -518,6 +518,14 @@ if ($WriteCfg -or -not (Test-Path $cfgPath)) {
         Write-Text $cfgPath $cfgText
         Say "hsmp.cfg: bin_dir '$have' -> '$want' (the binaries of this deploy)" Yellow
     }
+    # Without a master_url the mods use the public list; a dev deploy must not register there.
+    $cfgText = if (Test-Path $cfgPath) { [IO.File]::ReadAllText($cfgPath) } else { "" }
+    if ($cfgText -notmatch '(?m)^[ \t]*master_url[ \t]*=') {
+        $cfgText = $cfgText.TrimEnd() + "`r`nmaster_url = http://127.0.0.1:7778`r`n"
+        if (-not $DryRun -and -not (Test-Path "$cfgPath.hsmp_bak")) { Copy-Item $cfgPath "$cfgPath.hsmp_bak" }
+        Write-Text $cfgPath $cfgText
+        Say "hsmp.cfg: master_url = http://127.0.0.1:7778 added (the built-in default is the public list)" Yellow
+    }
 }
 
 # ----- 4b. engine workaround: hair-strand streaming ------------------------------

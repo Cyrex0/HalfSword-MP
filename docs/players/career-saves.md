@@ -69,7 +69,8 @@ session that never finished its check is never deleted.
 If the game or the network helper crashes during a match, the "check after" in layer 2 does not
 run. To catch that, the game runs the same check each time it starts (also when you start it from
 Steam), before it can save anything. The launcher runs it too, each time it opens, after every
-install or update, and before **Uninstall** (not while Half Sword is running). Any career file the crashed session changed is put back from that session's
+install or update, before **Launch through Steam** and before **Uninstall** (not while Half Sword
+is running). Any career file the crashed session changed is put back from that session's
 backup, and the Messages panel says so, for example:
 
 > career guard: restored GameProgress.sav from the MP backup ... (an earlier multiplayer session

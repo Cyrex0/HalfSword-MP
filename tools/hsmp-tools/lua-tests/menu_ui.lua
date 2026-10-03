@@ -428,13 +428,23 @@ local function hook_native()
         return ok, e
     end
 end
+-- A dev deploy's hsmp.cfg: the local master, as build-and-deploy.ps1 writes it (the built-in
+-- default is the public list). A case that passes its own HSMP_CFG replaces it.
+local DEV_CFG
+local function dev_cfg()
+    if not DEV_CFG then
+        DEV_CFG = T.tmpdir("hsmp_devcfg_") .. "/hsmp.cfg"
+        T.write(DEV_CFG, "master_url = http://127.0.0.1:7778\n")
+    end
+    return DEV_CFG
+end
 local function boot(vw, vh, scale, env, pre_lua, extra_path, scripts_dir)
     sd = T.tmpdir(opts.kind == "res" and "hsmp_ui_" or "hsmp_p0_")
     typed_reset()
     -- every HSMP_* knob the menu reads is pinned (false = unset) so the host env never leaks in
     local e = { HSMP_AUTOTEST = false, HSMP_AUTOTEST_MAPS = false, HSMP_MASTER_URL = false, HSMP_SERVER_EXE = false,
                 HSMP_SIDECAR_EXE = false, HSMP_QUERY_EXE = false, HSMP_NETSIM_ADDR = false, HSMP_LOBBY_MAP = false,
-                HSMP_LEGACY_TRAVEL = false, HSMP_BIN_DIR = false, HSMP_CFG = false, HSMP_AUTOTEST_ADDR = false,
+                HSMP_LEGACY_TRAVEL = false, HSMP_BIN_DIR = false, HSMP_CFG = dev_cfg(), HSMP_AUTOTEST_ADDR = false,
                 HSMP_AUTOTEST_EXTERNAL = false, HSMP_AUTOTEST_READY = false, HSMP_AUTOTEST_WAIT_MS = false,
                 HSMP_INST = false, HSMP_DEV = false, HSMP_LOG_ECHO = false }
     for k, v in pairs(env or {}) do e[k] = v end
@@ -1438,7 +1448,7 @@ cfg[3] = function(tag)
     host_lobby()
     local ex = execs()
     check(contains(ex, [[hsmp\hsmp-server.exe]]) and contains(ex, [[hsmp\hsmp-sidecar.exe]])
-        and contains(ex, "HSMP_MASTER_URL=http://127.0.0.1:7778"), tag .. ": fallback = bin_dir hsmp, local master")
+        and contains(ex, "HSMP_MASTER_URL=https://master.halfswordmp.workers.dev"), tag .. ": fallback = bin_dir hsmp, the public list")
     check(not contains(ex, [[D:\]]), tag .. ": no developer path in the fallback")
     check(not T.exists(sd .. "/hsmp_events.jsonl"), tag .. ": the stub logger writes nothing")
     check(contains(logtext(), "enter screen: lobby"), tag .. ": the menu works without the shared libs")
@@ -1452,7 +1462,7 @@ cfg[4] = function(tag)
     host_lobby()
     local ex = execs()
     check(contains(ex, [[F:\bin\hsmp-server.exe]]) and contains(ex, [[G:\s\side.exe]]), tag .. ": fallback honours HSMP_BIN_DIR / HSMP_SIDECAR_EXE")
-    check(contains(ex, "HSMP_MASTER_URL=http://127.0.0.1:7778") and not contains(ex, "calc"), tag .. ": an unsafe master URL is rejected")
+    check(contains(ex, "HSMP_MASTER_URL=https://master.halfswordmp.workers.dev") and not contains(ex, "calc"), tag .. ": an unsafe master URL is rejected")
 end
 
 -- ---- process tracking (docs/development/testing.md) -----------------------------------------
@@ -1483,6 +1493,8 @@ pid[1] = function(tag)
     host_lobby()
     local sv, sc = spawned("hsmp-server.exe"), spawned("hsmp-sidecar.exe")
     check(#sv == 1 and #sc == 1, tag .. ": HOST spawns one server and one sidecar (" .. execs() .. ")")
+    local pn = kit().cur and kit().cur.w.port_note
+    check(pn and contains(pn.last, "UDP 7777 forwarded"), tag .. ": the host lobby tells the host to forward UDP 7777 (" .. tostring(pn and pn.last) .. ")")
     local winsd = sd:gsub("/", "\\")
     if #sv == 1 and #sc == 1 then
         local a = argstr(sv[1])

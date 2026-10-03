@@ -240,7 +240,7 @@ pub async fn tick_loop(
         let t_tick = std::time::Instant::now();
         // Relay ranking + bandwidth plan (every 500 ms), here on the tick and
         // not inside the receive loop's relay path.
-        state.relay.replan_if_due(&state.net.addrs());
+        state.relay.replan_with_paths(&state.net.addrs(), || state.net.path_samples());
         flush_held_hits(&socket, &state).await;
         interact_tick(&socket, &state).await;
         // Kit rules and per-peer kit revisions for the session snapshot

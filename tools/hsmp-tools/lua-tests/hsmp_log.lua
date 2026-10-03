@@ -252,7 +252,7 @@ T.check(C.server_exe() == "D:/x/srv.exe", "legacy HSMP_SERVER_EXE override")
 T.check(C.dev() == true, "HSMP_DEV=1")
 ENV.HSMP_MASTER_URL = "http://evil&calc.exe"
 C._reset()
-T.check(C.master_url == "http://127.0.0.1:7778" and C.get("master_url") == C.master_url, "unsafe URL rejected -> default")
+T.check(C.master_url == "https://master.halfswordmp.workers.dev" and C.get("master_url") == C.master_url, "unsafe URL rejected -> default (the public list)")
 ENV.HSMP_CFG = cd .. "/missing.cfg"
 ENV.HSMP_MASTER_URL, ENV.HSMP_SERVER_EXE, ENV.HSMP_DEV = nil, nil, nil
 if not T.exists("hsmp.cfg") and not T.exists("ue4ss/hsmp.cfg") then

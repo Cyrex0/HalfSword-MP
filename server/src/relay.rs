@@ -16,6 +16,13 @@
 //! * Each forwarded skeletal frame tells the recipient its current relay
 //!   interval (the pose record's `aux`, caps::POSE_RATE) and tells lag
 //!   comp which frames the recipient was actually sent (`note_relayed`).
+//! * Path congestion per recipient: when the connection to a recipient shows
+//!   a standing queue (smoothed RTT well above its minimum), or heavy loss
+//!   together with some queue, that recipient's budget shrinks (x0.7, at most
+//!   once a second, never below a quarter) and grows back by 5 % per plan once
+//!   the path is clear. A listen host on a 2-5 Mbit/s home upload fills its
+//!   own uplink long before the fixed budget is reached; this keeps the
+//!   router queue, and everyone's latency, short.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -30,7 +37,10 @@ use crate::proto::PeerId;
 static BUDGET_BPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(128 * 1024);
 pub fn set_client_budget_kbps(kb: u64) { BUDGET_BPS.store(kb.max(16) * 1024, Ordering::Relaxed); }
 fn budget() -> f64 { BUDGET_BPS.load(Ordering::Relaxed) as f64 }
-fn burst() -> f64 { budget() * 0.375 }
+#[cfg(test)]
+fn burst() -> f64 { budget() * BURST_S }
+/// Bucket depth in seconds of the rate.
+const BURST_S: f64 = 0.375;
 /// Skeletal frames leave this much headroom so root updates keep flowing.
 const SKEL_RESERVE: f64 = 3.0 * 1024.0;
 /// Bytes a v5 datagram adds around one channel-0 body: header 22 + AEAD tag
@@ -70,6 +80,90 @@ struct RelayInner {
     /// Peer id at each address (lag comp, per-peer caps).
     ids: HashMap<SocketAddr, PeerId>,
     srcs_n: usize,
+    /// Congestion state of the path to each recipient.
+    paths: HashMap<SocketAddr, PathCtl>,
+}
+
+/// Transport counters of the connection to one recipient (cumulative).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct PathSample {
+    pub pkts_sent: u64,
+    pub pkts_lost: u64,
+    pub srtt_ms: f64,
+    /// Lowest RTT sample seen (0 = none yet).
+    pub min_rtt_ms: f64,
+}
+
+/// Per-recipient budget scale, driven by queueing delay and loss.
+#[derive(Debug, Clone, Copy)]
+struct PathCtl {
+    scale: f64,
+    sent: u64,
+    lost: u64,
+    /// RTT without queueing: the connection's minimum, drifting up slowly so
+    /// a route change to a longer path is not read as a queue forever.
+    base_ms: f64,
+    last_cut: Option<Instant>,
+}
+
+/// A standing queue this deep (smoothed RTT over the base) is congestion.
+const QUEUE_CONGESTED_MS: f64 = 120.0;
+/// Below this queue (and loss) the budget grows back.
+const QUEUE_CLEAR_MS: f64 = 60.0;
+/// Loss counts only together with some queue: random Wi-Fi loss is not
+/// helped by sending less.
+const LOSS_CONGESTED: f64 = 0.15;
+const LOSS_QUEUE_MS: f64 = 30.0;
+const LOSS_CLEAR: f64 = 0.03;
+/// Fewer packets than this in one plan period say nothing about loss.
+const LOSS_MIN_PKTS: u64 = 20;
+const SCALE_CUT: f64 = 0.7;
+const SCALE_STEP: f64 = 0.05;
+const SCALE_MIN: f64 = 0.25;
+const CUT_EVERY: Duration = Duration::from_millis(1000);
+/// Share of the gap by which the base RTT drifts up per plan (about half
+/// way in 35 s).
+const BASE_DRIFT: f64 = 0.01;
+
+impl PathCtl {
+    fn new(s: &PathSample) -> Self {
+        PathCtl { scale: 1.0, sent: s.pkts_sent, lost: s.pkts_lost, base_ms: 0.0, last_cut: None }
+    }
+
+    /// One plan period's counters: cut on congestion, else recover.
+    fn update(&mut self, s: &PathSample, now: Instant) {
+        let sent = s.pkts_sent.saturating_sub(self.sent);
+        let lost = s.pkts_lost.saturating_sub(self.lost);
+        self.sent = s.pkts_sent;
+        self.lost = s.pkts_lost;
+        if s.srtt_ms <= 0.0 {
+            return;
+        }
+        let floor = if s.min_rtt_ms > 0.0 { s.min_rtt_ms } else { s.srtt_ms };
+        self.base_ms = if self.base_ms <= 0.0 {
+            floor
+        } else {
+            let b = self.base_ms.min(s.srtt_ms);
+            (b + (s.srtt_ms - b) * BASE_DRIFT).max(floor)
+        };
+        let queue = (s.srtt_ms - self.base_ms).max(0.0);
+        let loss = if sent >= LOSS_MIN_PKTS { lost as f64 / sent as f64 } else { 0.0 };
+        let congested = queue > QUEUE_CONGESTED_MS || (loss > LOSS_CONGESTED && queue > LOSS_QUEUE_MS);
+        if congested {
+            if self.last_cut.is_none_or(|t| now.duration_since(t) >= CUT_EVERY) {
+                self.scale = (self.scale * SCALE_CUT).max(SCALE_MIN);
+                self.last_cut = Some(now);
+            }
+        } else if queue < QUEUE_CLEAR_MS && loss < LOSS_CLEAR {
+            self.scale = (self.scale + SCALE_STEP).min(1.0);
+        }
+    }
+}
+
+/// The sustained budget of `dst` (bytes/s): the configured one, scaled down
+/// while its path is congested.
+fn budget_of(r: &RelayInner, dst: &SocketAddr) -> f64 {
+    budget() * r.paths.get(dst).map_or(1.0, |p| p.scale)
 }
 
 /// Share of the per-client budget planned for streams; the rest is headroom
@@ -163,9 +257,10 @@ impl Relay {
     pub fn charge(&self, dst: SocketAddr, bytes: usize) {
         let mut r = self.inner.lock().unwrap();
         *r.other_bytes.entry(dst).or_insert(0.0) += bytes as f64;
-        let b = r.buckets.entry(dst).or_insert(Bucket { tokens: burst(), last: Instant::now() });
-        refill(b);
-        b.tokens = (b.tokens - bytes as f64).max(-burst());
+        let rate = budget_of(&r, &dst);
+        let b = r.buckets.entry(dst).or_insert(Bucket { tokens: rate * BURST_S, last: Instant::now() });
+        refill(b, rate);
+        b.tokens = (b.tokens - bytes as f64).max(-rate * BURST_S);
     }
 
     pub fn forget(&self, addr: &SocketAddr) {
@@ -175,6 +270,7 @@ impl Relay {
         r.other_bytes.remove(addr);
         r.other_rate.remove(addr);
         r.ids.remove(addr);
+        r.paths.remove(addr);
         r.rank.retain(|(d, s), _| d != addr && s != addr);
         r.shares.retain(|(d, s), _| d != addr && s != addr);
         r.counters.retain(|(d, s, _), _| d != addr && s != addr);
@@ -185,11 +281,30 @@ impl Relay {
     /// Every RANK_REFRESH: re-rank everyone by distance, measure the source
     /// stream rates and fit each recipient's plan into its budget. Runs on the
     /// server tick, off the receive loop. O(N² log N) per call.
+    #[cfg(test)]
     pub fn replan_if_due(&self, dsts: &[SocketAddr]) {
+        self.replan_with_paths(dsts, Vec::new);
+    }
+
+    /// `replan_if_due` fed with the transport counters of each recipient's
+    /// connection (`paths` runs only when a plan is due).
+    pub fn replan_with_paths(&self, dsts: &[SocketAddr], paths: impl FnOnce() -> Vec<(SocketAddr, PathSample)>) {
         let now = Instant::now();
+        let due = |r: &RelayInner| r.ranked_at.map_or(true, |p| now.duration_since(p) > RANK_REFRESH);
+        if !due(&self.inner.lock().unwrap()) { return; }
+        // Read outside our lock: the transport has locks of its own.
+        let samples = paths();
         let mut r = self.inner.lock().unwrap();
-        let due = r.ranked_at.map_or(true, |p| now.duration_since(p) > RANK_REFRESH);
-        if !due { return; }
+        if !due(&r) { return; }
+        for (a, s) in &samples {
+            match r.paths.get_mut(a) {
+                Some(p) => p.update(s, now),
+                None => { r.paths.insert(*a, PathCtl::new(s)); }
+            }
+        }
+        if !samples.is_empty() {
+            r.paths.retain(|a, _| samples.iter().any(|(b, _)| b == a));
+        }
         let dt = r.ranked_at.map(|p| now.duration_since(p).as_secs_f64());
         rerank(&mut r, dsts);
         r.srcs_n = dsts.len().saturating_sub(1).max(1);
@@ -213,7 +328,6 @@ impl Relay {
             s.bytes = if s.bytes == 0.0 { wire_bytes as f64 } else { s.bytes * 0.9 + wire_bytes as f64 * 0.1 };
             if s.rate > 0.0 { s.rate } else { DEFAULT_RATE_HZ }
         };
-        let share_rate = budget() * FAIR_SHARE_X / r.srcs_n.max(1) as f64;
         let mut out = Vec::with_capacity(dsts.len());
         for &dst in dsts {
             if dst == src { continue; }
@@ -228,6 +342,8 @@ impl Relay {
                 continue;
             }
             // Fair share of dst's budget per sender (streams only).
+            let rate_dst = budget_of(&r, &dst);
+            let share_rate = rate_dst * FAIR_SHARE_X / r.srcs_n.max(1) as f64;
             let sh = r.shares.entry((dst, src)).or_insert(Bucket { tokens: share_rate * 0.375, last: now });
             let dt = now.duration_since(sh.last).as_secs_f64();
             sh.last = now;
@@ -236,8 +352,8 @@ impl Relay {
                 pf.budget_drops.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
-            let b = r.buckets.entry(dst).or_insert(Bucket { tokens: burst(), last: now });
-            refill(b);
+            let b = r.buckets.entry(dst).or_insert(Bucket { tokens: rate_dst * BURST_S, last: now });
+            refill(b, rate_dst);
             let need = wire_bytes as f64 + if stream == Stream::Skel { SKEL_RESERVE } else { 0.0 };
             if b.tokens < need {
                 pf.budget_drops.fetch_add(1, Ordering::Relaxed);
@@ -281,7 +397,8 @@ fn allocate(r: &mut RelayInner, dsts: &[SocketAddr]) {
     let mut alloc = HashMap::new();
     for &dst in dsts {
         let other = r.other_rate.get(&dst).copied().unwrap_or(0.0);
-        let target = (budget() * STREAM_SHARE - other).max(budget() * MIN_STREAM_SHARE);
+        let b = budget_of(r, &dst);
+        let target = (b * STREAM_SHARE - other).max(b * MIN_STREAM_SHARE);
         // (src, stream, rank, rate, bytes, factor, max_factor)
         let mut items: Vec<(SocketAddr, Stream, u16, f64, f64, u32, u32)> = Vec::new();
         for &src in dsts {
@@ -328,11 +445,11 @@ fn allocate(r: &mut RelayInner, dsts: &[SocketAddr]) {
     r.alloc = alloc;
 }
 
-fn refill(b: &mut Bucket) {
+fn refill(b: &mut Bucket, rate: f64) {
     let now = Instant::now();
     let dt = now.duration_since(b.last).as_secs_f64();
     b.last = now;
-    b.tokens = (b.tokens + dt * budget()).min(burst());
+    b.tokens = (b.tokens + dt * rate).min(rate * BURST_S);
 }
 
 /// Rank every peer's others by distance (nearest = 0). Peers without a known
@@ -465,6 +582,103 @@ mod tests {
         for st in [Stream::Root, Stream::Weapon, Stream::Skel] {
             assert_eq!(relay.select(a[0], &a, st, 100).len(), 1, "{st:?}");
         }
+    }
+
+    fn sample(sent: u64, lost: u64, srtt: f64, min: f64) -> PathSample {
+        PathSample { pkts_sent: sent, pkts_lost: lost, srtt_ms: srtt, min_rtt_ms: min }
+    }
+
+    /// A standing queue on the path (the host's upload is full) cuts that
+    /// recipient's budget to the floor within a few seconds, and it grows
+    /// back once the queue drains.
+    #[test]
+    fn a_queue_on_the_path_shrinks_the_budget_until_it_drains() {
+        let t0 = Instant::now();
+        let mut c = PathCtl::new(&sample(0, 0, 0.0, 0.0));
+        c.update(&sample(100, 0, 60.0, 50.0), t0);
+        assert_eq!(c.scale, 1.0);
+        let mut sent = 100;
+        for i in 1..=8u64 {
+            sent += 100;
+            c.update(&sample(sent, 0, 400.0, 50.0), t0 + Duration::from_millis(500 * i));
+        }
+        assert!(c.scale <= 0.26, "cut to the floor: {}", c.scale);
+        assert!(c.scale >= SCALE_MIN);
+        for i in 9..=40u64 {
+            sent += 100;
+            c.update(&sample(sent, 0, 55.0, 50.0), t0 + Duration::from_millis(500 * i));
+        }
+        assert_eq!(c.scale, 1.0, "recovered");
+    }
+
+    /// Random loss with no queue (Wi-Fi) leaves the budget alone; heavy loss
+    /// together with a queue is congestion.
+    #[test]
+    fn random_loss_alone_is_not_congestion() {
+        let t0 = Instant::now();
+        let mut c = PathCtl::new(&sample(0, 0, 0.0, 0.0));
+        for i in 1..=10u64 {
+            c.update(&sample(i * 100, i * 25, 52.0, 50.0), t0 + Duration::from_secs(i));
+        }
+        assert_eq!(c.scale, 1.0);
+        let mut c = PathCtl::new(&sample(0, 0, 0.0, 0.0));
+        c.update(&sample(100, 0, 50.0, 50.0), t0);
+        c.update(&sample(200, 25, 100.0, 50.0), t0 + Duration::from_secs(1));
+        assert!(c.scale < 1.0, "loss with a queue: {}", c.scale);
+    }
+
+    /// A longer route (a higher RTT that stays) is not a queue forever: the
+    /// base follows it and the budget comes back.
+    #[test]
+    fn a_route_change_is_not_read_as_a_queue_forever() {
+        let t0 = Instant::now();
+        let mut c = PathCtl::new(&sample(0, 0, 0.0, 0.0));
+        c.update(&sample(100, 0, 40.0, 40.0), t0);
+        let mut last = 0.0;
+        for i in 1..=400u64 {
+            c.update(&sample(100 + i * 100, 0, 200.0, 40.0), t0 + Duration::from_millis(500 * i));
+            last = c.scale;
+        }
+        assert_eq!(last, 1.0, "base drifted to the new route");
+    }
+
+    /// End to end through the relay: the recipient whose path is congested
+    /// gets fewer stream bytes, the one on a clear path is unaffected.
+    #[test]
+    fn a_congested_recipient_is_sent_less() {
+        let relay = Relay::default();
+        let a = addrs(4);
+        let mut sent = 0u64;
+        let mut got: HashMap<SocketAddr, usize> = HashMap::new();
+        for step in 0..16 {
+            sent += 200;
+            {
+                let mut r = relay.inner.lock().unwrap();
+                r.ranked_at = Instant::now().checked_sub(RANK_REFRESH + Duration::from_millis(1));
+                for p in r.paths.values_mut() { p.last_cut = None; }
+            }
+            let srtt0 = if step == 0 { 50.0 } else { 400.0 };
+            let paths: Vec<(SocketAddr, PathSample)> = a.iter().enumerate()
+                .map(|(i, x)| (*x, sample(sent, 0, if i == 0 { srtt0 } else { 50.0 }, 50.0))).collect();
+            relay.replan_with_paths(&a, || paths);
+            {
+                let mut r = relay.inner.lock().unwrap();
+                for b in r.buckets.values_mut() { b.last -= Duration::from_millis(500); }
+                for b in r.shares.values_mut() { b.last -= Duration::from_millis(500); }
+            }
+            for _ in 0..30 {
+                for &src in &a {
+                    for p in relay.select(src, &a, Stream::Skel, 392) {
+                        if step >= 8 { *got.entry(p.dst).or_insert(0) += 392; }
+                    }
+                }
+            }
+        }
+        let congested = got.get(&a[0]).copied().unwrap_or(0);
+        let clear = got.get(&a[1]).copied().unwrap_or(0);
+        assert!(congested * 2 < clear, "congested {congested} B vs clear {clear} B");
+        relay.forget(&a[0]);
+        assert!(!relay.inner.lock().unwrap().paths.contains_key(&a[0]));
     }
 
     /// A huge non-stream burst (world sync) cannot drive the

@@ -9,7 +9,7 @@ use hsmp_launcher::install::{self, Env, Status};
 use hsmp_launcher::package::Package;
 use hsmp_launcher::saves::{self, Backup};
 use hsmp_launcher::steam::{self, FoundGame};
-use hsmp_launcher::{ops, update, util, LAUNCHER_VERSION};
+use hsmp_launcher::{firewall, ops, update, util, LAUNCHER_VERSION};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -36,6 +36,8 @@ enum Msg {
     Progress(u64, u64),
     /// an update was installed from this zip
     Updated(PathBuf),
+    /// (game root, firewall rule state)
+    Firewall(PathBuf, firewall::State),
 }
 
 #[derive(Default)]
@@ -72,6 +74,8 @@ struct App {
     forget_missing: bool,
     backup_saves: bool,
     status: Option<Result<Status, String>>,
+    /// the hsmp-server.exe firewall rule (read on a worker thread)
+    firewall: Option<firewall::State>,
     backups: Vec<(PathBuf, Backup)>,
     selected_backup: Option<String>,
     consent_path: PathBuf,
@@ -116,6 +120,7 @@ impl App {
             forget_missing: false,
             backup_saves: true,
             status: None,
+            firewall: None,
             backups: vec![],
             selected_backup: None,
             consent_path,
@@ -196,6 +201,17 @@ impl App {
 
     fn refresh_status(&mut self) {
         self.status = self.env().map(|e| install::status(&e));
+        self.refresh_firewall();
+    }
+
+    fn refresh_firewall(&mut self) {
+        self.firewall = None;
+        let Some(root) = self.game_root.clone() else { return };
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let s = firewall::status(&firewall::server_exe(&root));
+            let _ = tx.send(Msg::Firewall(root, s));
+        });
     }
 
     fn refresh_saves(&mut self) {
@@ -220,7 +236,16 @@ impl App {
     fn poll(&mut self) {
         while let Ok(m) = self.rx.try_recv() {
             match m {
-                Msg::Log(l, s) => self.push(l, s),
+                // the workers' log lines are Info; their warnings say so
+                Msg::Log(l, s) => {
+                    let l = if s.starts_with("WARNING:") { Level::Warn } else { l };
+                    self.push(l, s)
+                }
+                Msg::Firewall(root, s) => {
+                    if self.game_root.as_deref() == Some(root.as_path()) {
+                        self.firewall = Some(s);
+                    }
+                }
                 Msg::Build(root, gen, r) => {
                     if build_result_is_current(gen, self.build_gen, &root, self.game_root.as_deref()) {
                         match &r {
@@ -303,6 +328,9 @@ impl App {
             let r = update::apply(&env, &zip, &keys, allow, update::default_opts(&env), log)?;
             for n in &r.notes {
                 log(format!("note: {n}"));
+            }
+            if let Some(w) = ops::ensure_firewall(&env, log) {
+                log(format!("WARNING: {w}"));
             }
             update::prune_downloads(&dir, &zip);
             let _ = tx.send(Msg::Updated(zip));
@@ -542,6 +570,9 @@ impl App {
                         for n in r.notes {
                             log(format!("note: {n}"));
                         }
+                        if let Some(w) = ops::ensure_firewall(&env, log) {
+                            log(format!("WARNING: {w}"));
+                        }
                         Ok(s)
                     });
                 }
@@ -553,8 +584,8 @@ impl App {
         if !pkg_ok {
             ui.colored_label(BAD, "Install is disabled: the release files could not be verified (see above).");
         }
-        if installed {
-            ui.label(RichText::new("Start Half Sword from Steam as usual. The main menu's Multiplayer ribbon opens the server browser.").small());
+        if installed && cfg!(windows) {
+            self.ui_firewall(ui, idle);
         }
         if self.confirm == Confirm::Uninstall {
             ui.group(|ui| {
@@ -573,6 +604,9 @@ impl App {
                                 for n in &r.notes {
                                     log(n.clone());
                                 }
+                                if let Some(w) = ops::remove_firewall(&env, log) {
+                                    log(format!("WARNING: {w}"));
+                                }
                                 Ok(format!("HSMP removed: {} file(s) restored, {} removed. The game is back to how it was.", r.restored, r.removed))
                             });
                         }
@@ -583,6 +617,46 @@ impl App {
                 });
             });
         }
+    }
+
+    /// The hsmp-server.exe firewall rule, with "Fix firewall" when it is not right.
+    fn ui_firewall(&mut self, ui: &mut egui::Ui, idle: bool) {
+        let Some(s) = self.firewall.clone() else {
+            ui.label(RichText::new("Firewall: checking...").small());
+            return;
+        };
+        if s.is_allowed() {
+            ui.colored_label(OK, s.describe());
+            return;
+        }
+        ui.colored_label(WARN, s.describe());
+        ui.horizontal(|ui| {
+            let fix = ui
+                .add_enabled(idle, egui::Button::new("Fix firewall"))
+                .on_hover_text("Adds an inbound UDP allow rule for hsmp-server.exe (all networks). Windows asks for permission once.");
+            if fix.clicked() {
+                if let Some(env) = self.env() {
+                    self.work("Fix firewall", move |log| match ops::ensure_firewall(&env, log) {
+                        None => Ok("Windows Firewall now allows hsmp-server.exe".into()),
+                        Some(w) => Err(w),
+                    });
+                }
+            }
+            ui.label(RichText::new("Needed to host games for players outside your network (they also need the UDP port forwarded on your router).").small());
+        });
+    }
+
+    fn ui_play(&mut self, ui: &mut egui::Ui) {
+        ui.heading("3. Launch");
+        let ok = matches!(&self.status, Some(Ok(Status::Installed { missing, .. })) if missing.is_empty()) && self.busy.is_none();
+        let b = egui::Button::new(RichText::new("  Launch through Steam  ").strong());
+        let b = if ok { b.fill(Color32::from_rgb(40, 70, 110)) } else { b };
+        if ui.add_enabled(ok, b).on_hover_text("steam -applaunch with the HSMP launch options (starts Steam if it is not running)").clicked() {
+            if let Some(env) = self.env() {
+                self.work("Launch", move |log| ops::launch(&env, log).map(|pid| format!("Half Sword is starting through Steam (pid {pid}). Have fun.")));
+            }
+        }
+        ui.label(RichText::new("Recommended: it checks your career saves first and passes the hair-streaming crash workaround. Steam may ask once to allow these launch options. Starting Half Sword from Steam directly also works. In the game, the main menu's Multiplayer ribbon opens the server browser.").small());
     }
 
     /// Career save check of a crashed MP session (and the ini re-apply) at launcher start.
@@ -819,6 +893,8 @@ impl eframe::App for App {
                 self.ui_game(ui);
                 ui.separator();
                 self.ui_install(ui);
+                ui.separator();
+                self.ui_play(ui);
                 ui.separator();
                 self.ui_saves(ui);
                 ui.separator();

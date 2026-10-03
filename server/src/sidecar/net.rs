@@ -286,6 +286,30 @@ pub(super) fn conn_stats() -> Option<ConnStats> {
     n.client.conn().filter(|_| n.client.is_connected()).map(|c| c.stats())
 }
 
+/// A UDP socket connected to `server` (`host:port`; an IPv4 or `[IPv6]`
+/// literal or a host name), bound on the address family of the address it
+/// connects to. IPv4 addresses are tried first (servers bind 0.0.0.0 by
+/// default), then IPv6.
+pub(super) async fn connect_udp(server: &str) -> Result<UdpSocket> {
+    let mut addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host(server)
+        .await
+        .with_context(|| format!("resolve {server}"))?
+        .collect();
+    addrs.sort_by_key(|a| !a.is_ipv4());
+    let mut last = None;
+    for a in addrs {
+        let local = if a.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
+        match UdpSocket::bind(local).await {
+            Ok(s) => match s.connect(a).await {
+                Ok(()) => return Ok(s),
+                Err(e) => last = Some(anyhow::anyhow!("connect to {a}: {e}")),
+            },
+            Err(e) => last = Some(anyhow::anyhow!("bind {local}: {e}")),
+        }
+    }
+    Err(last.unwrap_or_else(|| anyhow::anyhow!("{server} has no address")))
+}
+
 async fn send_all(sock: &UdpSocket, out: Vec<Vec<u8>>) {
     for dg in out {
         if let Err(e) = sock.send(&dg).await {
@@ -799,6 +823,30 @@ mod tests {
         nc.reconnect_at = None;
         retry_after_unauth_reject(&mut nc);
         assert!(nc.reconnect_at.is_none());
+    }
+
+    /// The sidecar reaches an IPv6 server (it used to bind 0.0.0.0 and fail
+    /// to connect to any IPv6 address) as well as an IPv4 one.
+    #[tokio::test]
+    async fn connects_on_the_server_address_family() {
+        async fn round_trip(server: &UdpSocket, target: &str) {
+            let c = connect_udp(target).await.unwrap();
+            c.send(b"hi").await.unwrap();
+            let mut b = [0u8; 8];
+            let (n, from) = tokio::time::timeout(Duration::from_secs(2), server.recv_from(&mut b)).await.unwrap().unwrap();
+            assert_eq!(&b[..n], b"hi");
+            server.send_to(b"ok", from).await.unwrap();
+            let n = tokio::time::timeout(Duration::from_secs(2), c.recv(&mut b)).await.unwrap().unwrap();
+            assert_eq!(&b[..n], b"ok");
+        }
+        let v4 = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        round_trip(&v4, &format!("127.0.0.1:{}", v4.local_addr().unwrap().port())).await;
+        round_trip(&v4, &format!("localhost:{}", v4.local_addr().unwrap().port())).await;
+        match UdpSocket::bind("[::1]:0").await {
+            Ok(v6) => round_trip(&v6, &format!("[::1]:{}", v6.local_addr().unwrap().port())).await,
+            Err(e) => eprintln!("no IPv6 loopback here ({e}); the IPv6 case is skipped"),
+        }
+        assert!(connect_udp("no-port").await.is_err());
     }
 
     /// Datagrams that queued while the process was stalled are all

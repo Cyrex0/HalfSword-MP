@@ -155,8 +155,9 @@ copy are verified against keys the player already has.
 
     It checks the signature against `launcher/trusted_keys.txt` and every file's hash.
 11. **Smoke test on a clean PC or VM** (Steam with Half Sword, no developer tools). Extract,
-    install, start Half Sword from Steam and play one match. `Win64\hsmp_state\` must appear and
-    the HSMP log must show `hsmp.cfg` being read; starting from Steam relies on the engine
+    install, and play one match started with **Launch through Steam** and one started from Steam
+    directly. Both times `Win64\hsmp_state\` must appear and the HSMP log must show `hsmp.cfg`
+    being read; both routes rely on the engine
     switching its working directory to `Win64`, which no automated test checks. Then uninstall and check that `Win64` is back to the Steam
     files (Steam's "Verify integrity" should re-acquire 0 files, or compare the folder before and
     after).
@@ -216,9 +217,9 @@ contains:
 
 `launch_args` and `ini_settings` carry the workaround for the IoDispatcher pak-read crash
 (`r.HairStrands.Streaming=0`: hair strands load whole instead of through paged streaming; see
-[halfsword/io-dispatcher-crash.md](halfsword/io-dispatcher-crash.md)). The launcher does not
-start the game, so `launch_args` is only recorded in the install state; the player docs offer it
-as an optional Steam launch option.
+[halfsword/io-dispatcher-crash.md](halfsword/io-dispatcher-crash.md)). **Launch through Steam**
+(`ops::launch`) passes `launch_args` to `steam -applaunch`; for players who start from Steam
+directly, the player docs offer it as an optional Steam launch option.
 
 ## 6. Launcher internals
 
@@ -235,8 +236,8 @@ behind the default `gui` feature; `hsmp-release` depends on the launcher library
 | `install` | journaled install, update, uninstall and status; the `Engine.ini` merge |
 | `modstxt`, `cfgfile`, `ini` | merging `mods.txt`, `hsmp.cfg` and ini files |
 | `saves` | career save backup and restore (never deletes a backup) |
-| `careerguard` | recovers career-guard sessions a crash left open, at launcher start, after install/update and before Uninstall (`hsmp-sidecar --career-recover`; `ops::startup_check`) |
-| `procs` | read-only process checks (the launcher never starts the game; players start it from Steam) |
+| `careerguard` | recovers career-guard sessions a crash left open, at launcher start, after install/update, before Launch through Steam and before Uninstall (`hsmp-sidecar --career-recover`; `ops::startup_check`) |
+| `launch`, `procs` | start the game through Steam (`steam -applaunch`, Steam's own install only); read-only process checks |
 | `update` | update check (GitHub releases API), resumable download, SHA-256 + signature check, then the normal install |
 | `crash` | crash-report consent and redaction (interface only, no network) |
 | `ops` | the operations shared by the CLI and the GUI |
@@ -292,6 +293,7 @@ status        [--game DIR] [--package DIR|ZIP]   game, package, build check, ins
 verify        [--package DIR|ZIP]                signature + SHA-256 of every file
 install       [--game DIR] [--package DIR|ZIP] [--allow-unsupported] [--no-save-backup] [--allow-downgrade]
 uninstall     [--game DIR] [--forget-missing]
+launch        [--game DIR]                       steam -applaunch with the release's launch_args
 check-update  [--stable-only]
 update        [--game DIR] [--stable-only] [--allow-downgrade]
 backup-saves | list-backups | restore-saves <id> | find-game
@@ -316,6 +318,4 @@ on uninstall.
   (`launcher/src/crash.rs`, the `CrashSink` trait); nothing uploads.
 - **Code signing** (Authenticode) of the launcher and the binaries, which would remove the
   SmartScreen prompt and most antivirus false positives.
-- **Firewall rule** for hosting from the menu: not added; Windows asks the first time a server is
-  hosted.
 - **Version agreement check** between the tag, `release.json` and the workspace version (§1).

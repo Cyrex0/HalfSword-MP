@@ -566,6 +566,23 @@ impl Net {
             .collect()
     }
 
+    /// Loss and RTT counters of every connection, keyed by peer address: what
+    /// the relay reads to notice a congested path to a recipient.
+    pub fn path_samples(&self) -> Vec<(SocketAddr, crate::relay::PathSample)> {
+        let m: Vec<(SocketAddr, ConnId)> = self.maps().by_addr.iter().map(|(a, c)| (*a, *c)).collect();
+        let ep = self.ep();
+        m.into_iter()
+            .filter_map(|(a, c)| ep.conn(c).map(|cn| (a, cn.stats())))
+            .map(|(a, s)| (a, crate::relay::PathSample {
+                pkts_sent: s.pkts_sent,
+                // Losses later acked after all were reordering, not loss.
+                pkts_lost: s.pkts_lost.saturating_sub(s.spurious_lost),
+                srtt_ms: s.srtt_ms,
+                min_rtt_ms: s.min_rtt_ms,
+            }))
+            .collect()
+    }
+
     /// Addresses with a live connection.
     pub fn addrs(&self) -> Vec<SocketAddr> {
         self.maps().by_addr.keys().copied().collect()
@@ -827,6 +844,26 @@ mod tests {
         assert!(l.allow(1_000, v6(1)));
         assert!(!l.allow(1_001, v6(2)), "same /64 = same host");
         assert!(l.allow(1_002, IpAddr::from(std::net::Ipv6Addr::new(0x2001, 0xdb8, 9, 10, 0, 0, 0, 1))));
+    }
+
+    /// The relay's congestion input: one sample per peer, keyed by its
+    /// address, with the RTT once the client acked something.
+    #[test]
+    fn path_samples_cover_every_peer() {
+        let net = Net::ephemeral();
+        let a: SocketAddr = "198.51.100.20:6000".parse().unwrap();
+        let (mut c, _) = testkit::connect(&net, a, 9);
+        for _ in 0..3 {
+            for (_, d) in net.send_msg(a, test_msg()) { c.handle(net.now_ms(), &d); }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            let _ = testkit::pump(&net, &mut c, a);
+        }
+        let s = net.path_samples();
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].0, a);
+        assert!(s[0].1.pkts_sent >= 3, "{:?}", s[0].1);
+        assert!(s[0].1.srtt_ms > 0.0 && s[0].1.min_rtt_ms > 0.0, "{:?}", s[0].1);
+        assert!(s[0].1.min_rtt_ms <= s[0].1.srtt_ms + 1e-9);
     }
 
     #[test]

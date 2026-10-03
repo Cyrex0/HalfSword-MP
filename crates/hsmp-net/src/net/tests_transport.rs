@@ -544,3 +544,99 @@ fn reliable_latest_never_delivers_an_older_copy_last() {
     assert_eq!(got.len(), 1);
     assert_eq!(got[0].data, big);
 }
+
+/// Every datagram either side can produce fits 1200 bytes (1248 on the wire
+/// over IPv6, under the 1280 minimum MTU, so nothing is ever fragmented or
+/// silently dropped on a PPPoE, VPN or tunnelled path): the handshake with
+/// the longest nick and build, version and content rejects with the longest
+/// text, an admission reject, and data packets that carry the largest
+/// channel-0 message, fragments, a PATH_RESPONSE, the reset token and an
+/// ACK_DELAY at once.
+#[test]
+fn no_datagram_exceeds_the_safe_mtu() {
+    use crate::net::{caps, MAX_DATAGRAM};
+    let addr: std::net::SocketAddr = "198.51.100.77:40000".parse().unwrap();
+    let long = "W".repeat(32); // the nick and build limits
+    let mut biggest = 0usize;
+    let mut kinds = std::collections::BTreeSet::new();
+    let mut seen = |dg: &[u8], what: &'static str| {
+        assert!(dg.len() <= MAX_DATAGRAM, "{what}: {} bytes", dg.len());
+        biggest = biggest.max(dg.len());
+        kinds.insert(what);
+    };
+    // Handshake, accepted.
+    let mut ep = ServerEndpoint::new(ServerConfig::new([42; 32]), ConnConfig::default(), 0, Some(1));
+    let mut cc = ClientConfig::new([7; 32], &long);
+    cc.build = long.clone();
+    let mut c = Client::new(cc, ConnConfig::default(), 0, &mut rand::rngs::OsRng);
+    let mut cid = None;
+    for now in 0..50u64 {
+        while let Some(dg) = c.poll_transmit(now * 10) {
+            seen(&dg, "client handshake");
+            match ep.handle(now * 10, addr, &dg) {
+                Incoming::Reply(r) => { seen(&r, "challenge"); c.handle(now * 10, &r); }
+                Incoming::AuthRequest(p) => {
+                    let id = ep.accept(now * 10, p);
+                    ep.send(id, SendMode::Ordered, b"welcome".to_vec()).unwrap();
+                    cid = Some(id);
+                }
+                _ => {}
+            }
+        }
+        for (_, d) in ep.poll_transmit(now * 10) { seen(&d, "server data"); c.handle(now * 10, &d); }
+        if c.is_connected() { break; }
+    }
+    assert!(c.is_connected());
+    let cid = cid.unwrap();
+    // Admission reject with a long text.
+    let mut c2 = Client::new(ClientConfig::new([8; 32], &long), ConnConfig::default(), 0, &mut rand::rngs::OsRng);
+    let other: std::net::SocketAddr = "198.51.100.78:40000".parse().unwrap();
+    for _ in 0..4 {
+        while let Some(dg) = c2.poll_transmit(0) {
+            match ep.handle(0, other, &dg) {
+                Incoming::Reply(r) => { seen(&r, "challenge"); c2.handle(0, &r); }
+                Incoming::AuthRequest(p) => { let r = ep.reject(0, p, 4, &"x".repeat(2000)); seen(&r, "auth reject"); }
+                _ => {}
+            }
+        }
+    }
+    // Version and content rejects with the longest text.
+    let mut scfg = ServerConfig::new([43; 32]);
+    scfg.content_hash = Some([1; 32]);
+    scfg.release = "R".repeat(400);
+    let mut ep2 = ServerEndpoint::new(scfg, ConnConfig::default(), 0, Some(2));
+    for (vmin, vmax) in [(crate::net::VERSION_MIN, crate::net::VERSION_MAX), (900, 901)] {
+        let mut cc = ClientConfig::new([9; 32], "n");
+        cc.version_min = vmin;
+        cc.version_max = vmax;
+        cc.build = long.clone();
+        let mut c3 = Client::new(cc, ConnConfig::default(), 0, &mut rand::rngs::OsRng);
+        let dg = c3.poll_transmit(0).unwrap();
+        if let Incoming::Reply(r) = ep2.handle(0, other, &dg) { seen(&r, "pre-reject"); } else { panic!("no pre-reject"); }
+    }
+    // Data packets with every optional chunk in play.
+    let conn_caps = caps::SUPPORTED;
+    let probe_from: std::net::SocketAddr = "198.51.100.77:40001".parse().unwrap();
+    c.send(SendMode::Latest { key: 1 }, vec![1; crate::net::channel::MAX_UNRELIABLE]).unwrap();
+    let dg = c.poll_transmit(1_000).unwrap();
+    seen(&dg, "client latest");
+    if let Incoming::Data { probe: Some(p), .. } = ep.handle(1_000, probe_from, &dg) {
+        seen(&p, "path probe");
+        c.handle(1_000, &p);
+    }
+    assert_eq!(ep.conn(cid).unwrap().caps() & conn_caps, conn_caps);
+    for k in 0..4u32 {
+        ep.send(cid, SendMode::Latest { key: k }, vec![2; crate::net::channel::MAX_UNRELIABLE]).unwrap();
+    }
+    ep.send(cid, SendMode::Reliable, vec![3; 60_000]).unwrap();
+    ep.send(cid, SendMode::Ordered, vec![4; crate::net::channel::MAX_SINGLE]).unwrap();
+    for i in 0..200u32 { ep.send(cid, SendMode::ReliableLatest { key: i % 7 }, vec![5; 37 + i as usize]).unwrap(); }
+    c.send(SendMode::Reliable, vec![6; 30_000]).unwrap();
+    for t in 1_001..4_000u64 {
+        for (_, d) in ep.poll_transmit(t) { seen(&d, "server data"); c.handle(t, &d); }
+        while let Some(d) = c.poll_transmit(t) { seen(&d, "client data"); let _ = ep.handle(t, addr, &d); }
+    }
+    assert_eq!(biggest, MAX_DATAGRAM, "the test filled a datagram");
+    let all = ["auth reject", "challenge", "client data", "client handshake", "client latest", "path probe", "pre-reject", "server data"];
+    assert_eq!(kinds.into_iter().collect::<Vec<_>>(), all);
+}

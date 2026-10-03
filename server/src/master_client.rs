@@ -55,6 +55,17 @@ fn hmac_sig(secret: &str, port: u16, name: &str, nonce: &str) -> String {
     hex::encode(Sha256::digest(&v))
 }
 
+fn local_unix_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+/// Offset (ms) from the local clock to an HTTP `Date` header (second precision).
+fn clock_offset(date: &str, local_ms: u64) -> Option<i64> {
+    let t = httpdate::parse_http_date(date.trim()).ok()?;
+    let master = t.duration_since(UNIX_EPOCH).ok()?.as_millis() as i64;
+    Some(master - local_ms as i64)
+}
+
 /// Next backoff delay: 5, 10, 20, 40, 60, 60, ...
 fn next_backoff(prev: u64) -> u64 {
     if prev == 0 { 5 } else { (prev * 2).min(MAX_BACKOFF_SECS) }
@@ -112,6 +123,10 @@ pub struct MasterClient {
     http: reqwest::Client,
     /// Newest `ts` sent; every request uses a larger one even if the clock steps back.
     last_ts: Mutex<u64>,
+    /// Added to the local clock for `ts`: learned from the master's `Date` header when it
+    /// refused a registration for clock skew (a host clock minutes off would otherwise never
+    /// be listed).
+    clock_offset_ms: std::sync::atomic::AtomicI64,
     /// The listing this server holds right now (for the shutdown delete).
     current: Mutex<Option<String>>,
 }
@@ -136,12 +151,14 @@ impl MasterClient {
             key: auth::listing_key(static_secret),
             http: b.build().context("reqwest client")?,
             last_ts: Mutex::new(0),
+            clock_offset_ms: std::sync::atomic::AtomicI64::new(0),
             current: Mutex::new(None),
         })
     }
 
     fn next_ts(&self) -> u64 {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+        let off = self.clock_offset_ms.load(std::sync::atomic::Ordering::Relaxed);
+        let now = local_unix_ms().saturating_add_signed(off);
         let mut last = self.last_ts.lock().unwrap_or_else(|e| e.into_inner());
         *last = now.max(*last + 1);
         *last
@@ -196,7 +213,15 @@ impl MasterClient {
         }
         if !resp.status().is_success() {
             let st = resp.status();
+            let date = resp.headers().get(reqwest::header::DATE).and_then(|v| v.to_str().ok()).map(str::to_string);
             let body = resp.text().await.unwrap_or_default();
+            if st == reqwest::StatusCode::BAD_REQUEST && body.contains("clock skew") {
+                if let Some(off) = date.as_deref().and_then(|d| clock_offset(d, local_unix_ms())) {
+                    self.clock_offset_ms.store(off, std::sync::atomic::Ordering::Relaxed);
+                    warn!(offset_s = off / 1000, "this computer's clock is off; registering with the master's time (sync the clock)");
+                    return RegisterOutcome::Failed("clock skew; retrying with the master's time".into());
+                }
+            }
             return RegisterOutcome::Failed(format!("status {st}: {}", body.chars().take(120).collect::<String>()));
         }
         match resp.json::<RegisterResp>().await {
@@ -317,6 +342,20 @@ mod tests {
         assert!(is_loopback_url("http://localhost:8787/"));
         assert!(is_loopback_url("http://[::1]:7778"));
         assert!(!is_loopback_url("https://master.halfswordmp.workers.dev"));
+    }
+
+    /// A clock far off is corrected from the master's Date header.
+    #[test]
+    fn clock_offset_comes_from_the_date_header() {
+        let local = 784_111_777_000u64; // Sun, 06 Nov 1994 08:49:37 GMT
+        assert_eq!(clock_offset("Sun, 06 Nov 1994 08:49:37 GMT", local), Some(0));
+        assert_eq!(clock_offset("Sun, 06 Nov 1994 09:49:37 GMT", local), Some(3_600_000));
+        assert_eq!(clock_offset("Sun, 06 Nov 1994 08:29:37 GMT", local), Some(-1_200_000));
+        assert_eq!(clock_offset("garbage", local), None);
+        let c = MasterClient::new("https://m.example".into(), "0.0.0.0:7777".parse().unwrap(), &[3; 32]).unwrap();
+        c.clock_offset_ms.store(-3_600_000, std::sync::atomic::Ordering::Relaxed);
+        let ts = c.next_ts();
+        assert!(ts.abs_diff(local_unix_ms() - 3_600_000) < 5_000, "{ts}");
     }
 
     #[test]

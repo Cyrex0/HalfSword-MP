@@ -1,7 +1,7 @@
 # Installing HSMP
 
 HalfSword-MP (HSMP) is an unofficial multiplayer mod for Half Sword. Install it with the launcher, then
-start Half Sword from Steam as usual. This page also shows how to update it.
+start Half Sword with **Launch through Steam** in the launcher, or from Steam directly. This page also shows how to update it.
 
 > **Unofficial mod. Use at your own risk.**
 >
@@ -78,13 +78,28 @@ It takes about a minute.
 7. **Section "2. Multiplayer mod".** Leave **"Back up my career saves first (recommended)"**
    ticked and click **Install**. The Messages panel at the bottom shows what happens. At the end
    it says "HSMP ... is installed".
-8. **Start Half Sword from Steam as usual.** The launcher does not start the game.
+8. **Section "3. Launch".** Click **Launch through Steam** (recommended). You can also start
+   Half Sword from Steam directly.
 
 You never need to edit a file by hand.
 
+### How Launch through Steam starts the game
+
+**Launch through Steam** runs `steam -applaunch` with the HSMP launch option
+`-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0`, a crash workaround (see the table
+below). If Steam is not running, Steam starts first. Steam may ask once whether to allow the
+extra launch option. Allow it.
+
+Before it starts the game, the launcher runs the same checks it runs when it opens (below).
+
+The Steam route always starts *Steam's own* copy of Half Sword. If you picked a different copy
+with **Browse...**, the launcher refuses rather than start the wrong copy: start that copy
+yourself.
+
 ### What happens when the launcher opens
 
-Each time the launcher opens, and after every install or update, it:
+Each time the launcher opens, after every install or update, and before **Launch through
+Steam**, it:
 
 * finishes the career save check of any multiplayer session that crashed (see
   [Career saves](career-saves.md#3-the-crash-check));
@@ -95,9 +110,10 @@ HSMP backs it up and checks it at the start of every multiplayer session.
 
 ### Optional: the Steam launch option
 
-The `Engine.ini` line is enough on its own, but the game sometimes rewrites that file while it
-runs. For the same workaround on every start, add this in Steam > Half Sword > Properties >
-General > **Launch Options**:
+**Launch through Steam** passes this option for you. If you start Half Sword from Steam
+directly, the `Engine.ini` line is usually enough, but the game sometimes rewrites that file
+while it runs. For the same workaround on every start, add this in Steam > Half Sword >
+Properties > General > **Launch Options**:
 
 ```text
 -ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0
@@ -129,6 +145,7 @@ Every change is recorded before it is made, and **Uninstall** reverses all of it
 | `hsmp.cfg` | `Win64\hsmp.cfg` | tells the mods where the programs are and which server list to use |
 | `hsmp_install.json` | `Win64\hsmp_install.json` | an install id, so the launcher finds its records again if you move the game |
 | One line in `Engine.ini` | `%LOCALAPPDATA%\HalfSwordUE5\Saved\Config\Windows\Engine.ini`, section `[SystemSettings]`: `r.HairStrands.Streaming=0` | works around an engine crash in hair streaming while an arena loads ([details](../development/halfsword/io-dispatcher-crash.md)). The game sometimes rewrites this file, so the launcher puts the line back each time it opens |
+| Launch option | `-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0` | the same crash workaround, passed by **Launch through Steam** (or set it yourself as a Steam launch option, see above) |
 
 While you play, HSMP also creates `Win64\hsmp_state\`. It holds your HSMP settings (`.settings.json`),
 your character stats, a copy of your player key (`.player_key`) and HSMP's logs. Uninstall moves it out of the game folder instead of deleting it.
@@ -157,8 +174,19 @@ The launcher **never**:
 * changes game files outside `HalfswordUE5\Binaries\Win64` (apart from the one `Engine.ini` line);
 * kills a process (if the game is running, it asks you to close it);
 * sends anything about you over the internet (it only asks GitHub for the list of releases and downloads the one you choose);
-* adds a Windows Firewall rule. If you host games, see
-  [Hosting from the menu](playing.md#hosting-from-the-menu).
+* runs as administrator. The one change that needs it, the firewall rule below, goes through a
+  single Windows prompt.
+
+### Windows Firewall
+
+Install and update add one inbound rule, **"Half Sword MP server"**: it allows UDP for
+`Win64hsmphsmp-server.exe` on every network type (Domain, Private and Public), so games you host
+are reachable. Windows asks for permission once (a UAC prompt); when the rule is already right,
+nothing is asked. The rule replaces any older rule for that exe, including the block rules Windows
+adds when its own "allow this app?" prompt is dismissed. If you say no, the launcher warns that
+hosting may not be reachable from outside and shows a **Fix firewall** button in the install
+section to try again. `hsmp-launcher firewall-status` prints the rule's state. Uninstall removes
+the rule (another prompt).
 
 ### If you already use UE4SS mods
 
@@ -274,6 +302,7 @@ status        [--game DIR] [--package DIR|ZIP]   game, package, build check, ins
 verify        [--package DIR|ZIP]                signature + SHA-256 of every file
 install       [--game DIR] [--package DIR|ZIP] [--allow-unsupported] [--no-save-backup] [--allow-downgrade]
 uninstall     [--game DIR] [--forget-missing]
+launch        [--game DIR]                       start the game through Steam with the HSMP launch options
 check-update  [--stable-only]                    is a newer release published?
 update        [--game DIR] [--stable-only] [--allow-downgrade]   download, verify and install it
 backup-saves | list-backups | restore-saves <id> | find-game

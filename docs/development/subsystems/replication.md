@@ -95,6 +95,14 @@ world epoch, no Soft* access, exact BP names) are in
   downstream budget (`--client-budget-kbps`, default 128 KB/s), farthest first. Each relayed
   pose carries the pair's current relay interval in `aux`, so the receiver sizes its buffer for
   it.
+- Congested paths: every plan (500 ms) reads the transport counters of each recipient's
+  connection. A standing queue (smoothed RTT more than 120 ms over the path's minimum), or more
+  than 15 % loss together with 30 ms of queue, cuts that recipient's budget ×0.7 (at most once a
+  second, floor ¼ of the budget). Below 60 ms of queue and 3 % loss it grows back 5 % per plan.
+  Random loss alone changes nothing. This is what keeps a listen host on a home upload playable:
+  8 players at the full budget need about 7 Mbit/s of upload, and without it the router queue
+  grows until everyone's latency does. The base RTT drifts up slowly, so a lasting route change
+  is not taken for a queue for more than about a minute.
 
 ## Jitter buffer (`poseplay.rs`)
 

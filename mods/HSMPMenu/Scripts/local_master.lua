@@ -1,6 +1,7 @@
 -- HSMPMenu / local_master.lua — the hosting instance's own hsmp-master.
 --
--- hsmp.cfg's default master_url is http://127.0.0.1:7778, and a normal launch
+-- Without hsmp.cfg the master_url is the public list (https://master.halfswordmp.workers.dev).
+-- Dev and test deploys write master_url = http://127.0.0.1:7778, and a normal launch
 -- starts no hsmp-master by itself; without one the host's server cannot
 -- register and the browser shows "master_unreachable".
 --

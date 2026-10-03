@@ -210,16 +210,19 @@ Offline test: `hsmp-tools lua-test hsmp_log` (`tools/hsmp-tools/lua-tests/hsmp_l
 
 `hsmp.cfg` sits next to `HalfswordUE5-Win64-Shipping.exe` (`Binaries\Win64`). It is plain `key = value`,
 with `#`/`;` comments and optional quotes. `build-and-deploy.ps1` writes it if it is missing
-(`-WriteCfg` overwrites it); the launcher writes it on install:
+(`-WriteCfg` overwrites it, and a kept file without `master_url` gets the local one added). The
+launcher writes it on install with the release's server lists. A deploy writes:
 
 ```
 bin_dir    = hsmp                     # relative to Win64 (the copies deploy/launcher put in Win64\hsmp)
-master_url = http://127.0.0.1:7778
+master_url = http://127.0.0.1:7778    # local master: dev and test runs never register publicly
 ```
 
 The file is looked up in this order: `$HSMP_CFG`, `hsmp.cfg`, `ue4ss/hsmp.cfg`. Env overrides:
 `HSMP_BIN_DIR`, `HSMP_MASTER_URL`, plus the legacy `HSMP_SERVER_EXE` / `HSMP_SIDECAR_EXE` / `HSMP_QUERY_EXE`.
-Defaults are `bin_dir = hsmp` and `master_url = http://127.0.0.1:7778`. Any key works, so later phases can add keys.
+Defaults (no file, e.g. a hand-unzipped install) are `bin_dir = hsmp` and
+`master_url = https://master.halfswordmp.workers.dev` (the public list). `mp_test.ps1`, `spawn_test.ps1`
+and `e2e-test.sh` set `HSMP_MASTER_URL` to their own local master. Any key works, so later phases can add keys.
 
 ```lua
 local cfg = load_shared("hsmp_cfg")

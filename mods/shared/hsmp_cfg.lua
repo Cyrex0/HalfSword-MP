@@ -9,7 +9,8 @@
 --
 --     # hsmp.cfg (next to HalfswordUE5-Win64-Shipping.exe)
 --     bin_dir    = hsmp                       # relative to the game's Win64 dir, or absolute
---     master_url = http://127.0.0.1:7778
+--     master_url = https://master.halfswordmp.workers.dev   # the public list (the default)
+--     # dev / test deploys write master_url = http://127.0.0.1:7778 (a local master)
 --     # or a list: primary first, then fallbacks (comma-separated)
 --     # master_url = https://master.example.net, https://backup.example.net:7778
 --
@@ -43,7 +44,7 @@ local M = {}
 
 M.DEFAULTS = {
     bin_dir    = "hsmp",
-    master_url = "http://127.0.0.1:7778",
+    master_url = "https://master.halfswordmp.workers.dev",
 }
 
 local cache, cache_src = nil, nil

@@ -2,6 +2,7 @@
 
 use crate::game::{self, BuildCheck};
 use crate::install::{self, Env, InstallOpts, InstallReport, Status};
+use crate::launch::{self, Via};
 use crate::package::{self, Package};
 use crate::steam;
 use crate::util;
@@ -152,8 +153,8 @@ pub fn install_with(env: &Env, pkg: &Package, opts: InstallOpts, log: &mut dyn F
     Ok(r)
 }
 
-/// Runs at launcher start and after every install/update (players start the game from
-/// Steam, so there is no launch step to hang this on): finish the career save check of an
+/// Runs at launcher start, after every install/update and before "Launch through Steam"
+/// (players may also start the game from Steam directly): finish the career save check of an
 /// MP session that crashed, and put back ini settings the game dropped. Skipped while the
 /// game or an HSMP binary from this folder runs: a live session's guard backup is open,
 /// not crashed. The game's own sidecar repeats the check at every MP session start.
@@ -181,6 +182,45 @@ fn startup_verdict(rec: Result<Option<crate::careerguard::Recovery>, String>) ->
     }
 }
 
+/// Launch arguments of the installed release.
+pub fn launch_args(env: &Env) -> Result<Vec<String>, String> {
+    Ok(install::load_state(env)?.map(|s| s.launch_args).unwrap_or_default())
+}
+
+/// The `steam -applaunch` command for this game folder.
+pub fn steam_command(args: &[String], steam_exe: Option<&Path>, is_steam_install: bool) -> Result<(PathBuf, Vec<String>), String> {
+    launch::check_route(Via::Steam, is_steam_install)?;
+    launch::command_line(Via::Steam, steam_exe, steam::HALF_SWORD_APPID, args)
+}
+
+/// "Launch through Steam" / `launch`: the start-up check, then `steam -applaunch` with the
+/// release's launch options. Steam starts itself when it is not running.
+pub fn launch(env: &Env, log: &mut dyn FnMut(String)) -> Result<u32, String> {
+    match install::status(env)? {
+        Status::Installed { modified, missing, .. } => {
+            if !missing.is_empty() {
+                return Err(format!("{} HSMP file(s) are missing ({}...). Run Repair first.", missing.len(), missing[0]));
+            }
+            if !modified.is_empty() {
+                log(format!("note: {} HSMP file(s) differ from the release ({}); Repair restores them", modified.len(), modified.join(", ")));
+            }
+        }
+        Status::Interrupted => return Err("an install was interrupted; run Install again first".into()),
+        Status::UninstallIncomplete { .. } => return Err("an uninstall has not finished; run Uninstall again (or Install to repair)".into()),
+        Status::NotInstalled { .. } => return Err("HSMP is not installed in this game folder yet".into()),
+    }
+    if crate::procs::game_running() {
+        return Err("Half Sword is already running".into());
+    }
+    // recover a crashed MP session BEFORE career play could make the damaged file look newer
+    startup_check(env, log)?;
+    let args = launch_args(env)?;
+    let steam_exe = steam::steam_exe();
+    let (exe, a) = steam_command(&args, steam_exe.as_deref(), launch::is_steam_install(&steam::discover(), &env.game_root))?;
+    log(format!("starting: \"{}\" {}", exe.display(), a.join(" ")));
+    launch::launch(Via::Steam, Some(&exe), steam::HALF_SWORD_APPID, &args)
+}
+
 /// Uninstall, after recovering any career-guard session a crash left open (the
 /// sidecar that could recover it is about to be removed). A failed recovery refuses the
 /// uninstall; a sidecar that cannot be found or started does not (its backups stay listed
@@ -202,6 +242,48 @@ fn uninstall_after_recovery(
         Err(e) => log(format!("note: {e}; check Saves > Restore for the career guard's MP backups")),
     }
     install::uninstall_with(env, opts, log)
+}
+
+/// After an install or update: make sure Windows Firewall lets hsmp-server.exe in (one UAC
+/// prompt when it does not). Never fails the install; returns the warning to show, if any.
+pub fn ensure_firewall(env: &Env, log: &mut dyn FnMut(String)) -> Option<String> {
+    use crate::firewall::{self, Outcome};
+    if !cfg!(windows) {
+        return None;
+    }
+    let exe = firewall::server_exe(&env.game_root);
+    match firewall::ensure(&exe) {
+        Outcome::AlreadyAllowed => {
+            log("firewall: hsmp-server.exe is already allowed".into());
+            None
+        }
+        Outcome::Added => {
+            log(format!("firewall: added the inbound UDP rule \"{}\" for {}", firewall::RULE_NAME, exe.display()));
+            None
+        }
+        Outcome::Declined => Some(format!("the Windows prompt was declined. {}", firewall::NOT_ALLOWED_WARNING)),
+        Outcome::Failed(e) => Some(format!("{e}. {}", firewall::NOT_ALLOWED_WARNING)),
+        Outcome::Removed | Outcome::NothingToRemove => None,
+    }
+}
+
+/// After an uninstall: remove the firewall rule (one UAC prompt when there is one). Returns
+/// a note when it stays.
+pub fn remove_firewall(env: &Env, log: &mut dyn FnMut(String)) -> Option<String> {
+    use crate::firewall::{self, Outcome};
+    if !cfg!(windows) {
+        return None;
+    }
+    let left = |why: String| Some(format!("{why}; the firewall rule \"{}\" was left in place (remove it in Windows Defender Firewall, or run hsmp-launcher firewall-remove as administrator)", firewall::RULE_NAME));
+    match firewall::remove(&firewall::server_exe(&env.game_root)) {
+        Outcome::Removed => {
+            log(format!("firewall: removed the rule \"{}\"", firewall::RULE_NAME));
+            None
+        }
+        Outcome::Declined => left("the Windows prompt was declined".into()),
+        Outcome::Failed(e) => left(e),
+        _ => None,
+    }
 }
 
 /// One-line human status.
@@ -289,5 +371,29 @@ mod tests {
         let mut logs = vec![];
         startup_check(&env, &mut |s| logs.push(s)).unwrap();
         assert!(logs.iter().all(|l| !l.contains("not re-applied")), "{logs:?}");
+    }
+
+    /// The shipped release's launch options go to `steam -applaunch` unchanged, hair
+    /// streaming workaround included; a folder that is not Steam's install is refused.
+    #[test]
+    fn steam_launch_command_of_the_release() {
+        let rel: serde_json::Value = serde_json::from_str(include_str!("../../tools/release/release.json")).unwrap();
+        let args: Vec<String> = rel["launch_args"].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect();
+        let steam_exe = Path::new("C:\\Program Files (x86)\\Steam\\steam.exe");
+        let (exe, a) = steam_command(&args, Some(steam_exe), true).unwrap();
+        assert_eq!(exe, steam_exe);
+        assert_eq!(a, vec!["-applaunch", "2397300", "-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0"]);
+        assert!(steam_command(&args, Some(steam_exe), false).unwrap_err().contains("Steam's copy"));
+        assert!(steam_command(&args, None, true).unwrap_err().contains("Steam was not found"));
+    }
+
+    /// Nothing installed: launch refuses before touching Steam.
+    #[test]
+    fn launch_without_install() {
+        let t = TempDir::new("ops_launch_none");
+        let env = Env::new(&t.path().join("game"), t.path().join("la/HSMP"), t.path().join("la/HalfSwordUE5/Saved"));
+        let e = launch(&env, &mut |_| {}).unwrap_err();
+        assert!(e.contains("not installed"), "{e}");
+        assert!(launch_args(&env).unwrap().is_empty());
     }
 }

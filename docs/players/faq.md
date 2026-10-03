@@ -49,7 +49,8 @@ It is designed not to. Half Sword saves your career automatically, also during f
 
 1. redirects the game's saves to separate `HSMP_*` slots during a multiplayer session;
 2. backs up your saves when you host or join, and puts back anything that changed when you leave;
-3. repeats that check when the launcher opens, after an install or update, and before **Uninstall**, in case a session crashed.
+3. repeats that check when the launcher opens, after an install or update, before **Launch through
+   Steam** and before **Uninstall**, in case a session crashed.
 
 The launcher also backs up your saves before the first install, and you can make more backups
 with **Back up now**. Changes to the game's own settings made during a multiplayer session may be
@@ -57,7 +58,8 @@ undone when you leave. Details: [Career saves](career-saves.md).
 
 ### Can I still play my single-player career with HSMP installed?
 
-Yes. Start Half Sword from Steam as usual and use the game's own menu buttons as usual.
+Yes. Start the game with **Launch through Steam** in the launcher (recommended: it applies the
+crash workaround) or from Steam directly, and use the game's own menu buttons as usual.
 HSMP only adds its own buttons next to them. A few HSMP changes are always on, for example cutscenes
 or videos that start while you are idle are skipped. To play the game exactly as it ships,
 [uninstall HSMP](uninstall.md).
@@ -77,7 +79,7 @@ custom kits with a point budget). See [Playing](playing.md#the-lobby).
 
 Yes, with **DIRECT CONNECT**. One player hosts (from the menu, or with a dedicated server), and the
 others type the host's public address, for example `203.0.113.5:7777`, in the server browser. The
-host has to forward a UDP port on their router and allow it in Windows Firewall. See
+host has to forward a UDP port on their router (the launcher adds the Windows Firewall rule). See
 [Hosting from the menu](playing.md#hosting-from-the-menu).
 
 HSMP handles short connection drops: you get about 35 seconds to reconnect during a match.
