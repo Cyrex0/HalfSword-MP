@@ -73,7 +73,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked -p hsmp-net -p hsmp-server -p hsmp-modes
       - run: cargo build --release --locked -p hsmp-server --bin hsmp-server --bin hsmp-master --bin hsmp-query
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: hsmp-server-linux-x86_64
           path: |
