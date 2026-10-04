@@ -652,6 +652,26 @@ do
     ME["Weapon R"], ME.Invulnerable = nil, nil
 end
 
+-- Deathmatch: a peer whose life count goes up in the round (the `mode` record) is alive
+-- again; its earlier death stops holding the stand-in.
+do
+    local GM = ES.game_mode
+    local st = api.state()
+    NAT.sc_put("mode", { seq = 1, mode = GM.DEATHMATCH, round = 3, rows = { { peer_id = 2, seat = 1, life = 1 } } })
+    api.C3.respawns()
+    st.remote_dead[2] = "world#1"
+    api.session().death_shown[2] = "Willie_BP_C_44"
+    api.session().server_dead[2] = api.round_key(3)
+    NAT.sc_put("mode", { seq = 2, mode = GM.DEATHMATCH, round = 3, rows = { { peer_id = 2, seat = 1, life = 1, respawning = true } } })
+    api.C3.respawns()
+    T.check(api.state().remote_dead[2] ~= nil, "waiting for the respawn: still dead")
+    NAT.sc_put("mode", { seq = 3, mode = GM.DEATHMATCH, round = 3, rows = { { peer_id = 2, seat = 1, life = 2, alive = true } } })
+    api.C3.respawns()
+    T.check(api.state().remote_dead[2] == nil and api.session().death_shown[2] == nil and api.session().server_dead[2] == nil,
+        "respawned (life 2): the death no longer holds the stand-in")
+    NAT._rec.slots.mode = nil
+end
+
 -- Seen in game: a stand-in on my Team Int makes every blow of my
 -- weapon "Friendly Fire?" (cutting 0, velocity x0.1). Its own team, unless
 -- the server roster makes us teammates.

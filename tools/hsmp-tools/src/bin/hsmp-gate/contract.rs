@@ -119,6 +119,8 @@ pub const CONTRACT: &[Entry] = &[
     e("conn_state", L, &[], &[]),
     e("travel_reason", L, &[], &[]),
     e("resume", L, &[], &[]),
+    // the Director reloads for a deathmatch respawn order (modes.md). Not judged yet.
+    e("respawn", L, &[], &["round", "spawn_id", "life"]),
     // hsmp_log `lua_error` events are extra SOAK-LUAERR evidence; UE4SS.log is the primary one.
     Entry { ev: "lua_error", src: L, read: &["mod", "error", "msg"], known: &[], optional: true },
     e("_open", L, &[], &[]),
@@ -146,6 +148,11 @@ pub const CONTRACT: &[Entry] = &[
     e("session_resumed", &[Src::Server, Src::Sidecar], &[], &[]),
     e("round_resumed", SV, &[], &[]),
     e("drop_forfeit_round", SV, &[], &[]),
+    // game modes (docs/development/subsystems/modes.md): the lobby's mode changed, a
+    // deathmatch respawn order, the respawned player back in the round. Not judged yet.
+    e("mode_set", SV, &[], &[]),
+    e("respawn_order", SV, &[], &[]),
+    e("respawned", SV, &[], &[]),
     // NAT traversal (server/src/nat): a relayed punch answered with probes. Not judged.
     e("nat_punch", SV, &[], &["to", "nonce"]),
     // --- hsmp-sidecar --events -----------------------------------------------------------------

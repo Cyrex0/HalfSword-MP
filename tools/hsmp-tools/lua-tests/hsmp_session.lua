@@ -100,4 +100,28 @@ T.check(HS.notice_text({ code = 1, args = { "Host", "Mate" } }) == "The host Hos
 T.check(HS.notice_text({ code = 4, args = { "Mate", "rejoined" } }) == "Mate rejoined" and HS.notice_text({ code = 5, args = { "Mate", "x" } }) == "Mate disconnected", "join / leave texts")
 T.check(HS.notice_name({ code = 5 }) == "player_left", "notice names")
 
+-- the game-mode view (slots `mode` / `zone`)
+T.check(HS.mode({ ipc = IPC }) == nil, "no mode record: nil")
+local GM = S.ENUMS.game_mode
+N.sc_put("mode", { seq = 0, mode = GM.DUEL })
+T.check(HS.mode({ ipc = IPC }) == nil, "seq 0 (a server without game modes): nil")
+N.sc_put("mode", { seq = 3, match_id = 9, mode = GM.KING_OF_HILL, round = 2, teams = 2, team_rule = 1, target_s = 60,
+    server_time_ms = 50000, round_end_ms = 80000, team_wins = { 1, 0, 0, 0 }, team_score = { 23000, 5000, 0, 0 },
+    team_alive = { 2, 1, 0, 0 }, kit_label = "", friendly_fire = false,
+    rows = { { peer_id = 10, seat = 1, team = 1, kills = 2, deaths = 1, score = 23000, life = 1, alive = true, in_zone = true },
+             { peer_id = 12, seat = 2, team = 2, deaths = 2, life = 1, respawning = true, respawn_at_ms = 52000 } } })
+N.sc_put("zone", { match_id = 9, center = { 10, 20, 30 }, radius_cm = 400, half_height_cm = 300, holder_seat = 255,
+    holder_team = 1, inside = 1 })
+local m = HS.mode({ ipc = IPC, clock = function() return clk end })
+T.check(m and m.id == "koth" and m.label == "King of the hill" and m.teams == 2 and m.target_s == 60, "mode, teams, target", T.repr(m and m.id))
+T.check(m.round_left_ms == 30000 and m.team_wins[1] == 1 and m.team_score[1] == 23000 and m.team_alive[2] == 1, "clock and team numbers")
+T.check(m.rows[10].kills == 2 and m.rows[10].in_zone and m.by_seat[2].respawn_in_ms == 2000, "rows by peer and seat", T.repr(m.by_seat[2]))
+T.check(m.zone and m.zone.r == 400 and m.zone.x == 10 and m.zone.holder_team == 1 and m.zone.holder_seat == nil, "the hill", T.repr(m.zone))
+clk = clk + 5
+m = HS.mode({ ipc = IPC, clock = function() return clk end })
+T.check(m.round_left_ms == 25000 and m.by_seat[2].respawn_in_ms == 0, "the clocks run from the receipt", tostring(m.round_left_ms))
+N.sc_put("zone", { match_id = 8, center = { 0, 0, 0 }, radius_cm = 400, half_height_cm = 300 })
+m = HS.mode({ ipc = IPC, clock = function() return clk end })
+T.check(m.zone == nil, "a zone of another match is not shown")
+
 T.check(HS.VERSION == 2 and HS.TERMINAL.server_closed, "module surface")

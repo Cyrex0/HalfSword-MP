@@ -516,13 +516,19 @@ fn on_death(payload: &[u8]) {
 }
 
 /// Records the key; false when this death was already pushed.
-fn death_is_new(epoch: u64, match_id: u64, peer_id: u32, round: u32) -> bool {
+pub(crate) fn death_is_new(epoch: u64, match_id: u64, peer_id: u32, round: u32) -> bool {
     let mut seen = deaths_seen().lock().unwrap_or_else(|e| e.into_inner());
     let key = (epoch, match_id, peer_id, round);
     if seen.contains(&key) { return false; }
     seen.push_back(key);
     while seen.len() > 256 { seen.pop_front(); }
     true
+}
+
+/// A deathmatch respawn (the `mode` record's life count of `peer_id` went up): its next
+/// death in the same round is news again.
+pub fn forget_death(peer_id: u32, round: u32) {
+    deaths_seen().lock().unwrap_or_else(|e| e.into_inner()).retain(|k| !(k.2 == peer_id && k.3 == round));
 }
 
 pub fn on_death_ack(death_id: u32) {
@@ -698,6 +704,10 @@ mod tests {
         assert!(death_is_new(e, 100, 2, 2));
         assert!(death_is_new(e, 101, 2, 1));
         assert!(death_is_new(e + 1, 100, 2, 1), "server restart: new epoch");
+        // A respawn in the same round: the next death of that peer is news again.
+        forget_death(2, 1);
+        assert!(death_is_new(e, 100, 2, 1));
+        assert!(!death_is_new(e, 100, 2, 2), "other rounds are kept");
         // A restarted server's vitals seqs start at 1 again.
         let peer = 0x00AB_0000 + (std::process::id() & 0xFFFF);
         assert!(accept_vitals_seq(peer, 500));

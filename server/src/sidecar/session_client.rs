@@ -48,6 +48,8 @@ struct ClientSess {
     /// Last accepted snapshot (epoch, seq).
     last: Option<(u64, u32)>,
     phase: Option<u8>,
+    /// Deathmatch: each peer's life count in the last `mode` record (round, life).
+    lives: HashMap<u32, (u32, u16)>,
     pending: HashMap<u32, Pending>,
     /// Recently answered cmd ids (a late duplicate result is not pushed again).
     answered: VecDeque<u32>,
@@ -295,6 +297,19 @@ pub(super) fn on_mode(kind: u16, payload: &[u8]) -> Result<()> {
     let slot = if kind == rs::K_MODE {
         let v = view::<rs::ModeHead>(payload).map_err(|e| anyhow::anyhow!("mode: {e}"))?;
         debug!(mode = v.head.mode, round = v.head.round, rows = v.rows.len(), "mode state");
+        // A respawned peer (its life count went up in this round) may die again in the
+        // same round: its next `death` record must not be swallowed as a resend.
+        let round = v.head.round;
+        let respawned: Vec<u32> = with(|c| {
+            v.rows.iter().filter(|r| r.peer_id != 0).filter_map(|r| {
+                let prev = c.lives.insert(r.peer_id, (round, r.life));
+                matches!(prev, Some((pr, pl)) if pr == round && r.life > pl).then_some(r.peer_id)
+            }).collect()
+        });
+        for p in respawned {
+            info!(peer_id = p, round, "peer respawned: its next death in this round is news");
+            combat_client::forget_death(p, round);
+        }
         "mode"
     } else {
         view::<rs::ZoneState>(payload).map_err(|e| anyhow::anyhow!("zone: {e}"))?;
@@ -712,6 +727,21 @@ mod tests {
     use super::*;
     use hsmp_ipc::layout::Str;
     use hsmp_ipc::record::to_payload;
+
+    /// Deathmatch: the `mode` record shows a peer's life count going up in the round, so
+    /// its next death record in that round reaches the game (not swallowed as a resend).
+    #[test]
+    fn a_respawn_reopens_the_peers_death_dedup() {
+        let e = 0xD1E7_0000 + std::process::id() as u64;
+        let mode = |life: u16| to_payload(&rs::ModeHead { round: 4, seq: 1, ..Default::default() },
+                                          &[rs::ModeRow { peer_id: 88_001, life, seat: 1, ..Default::default() }]);
+        on_mode(rs::K_MODE, &mode(1)).unwrap();
+        assert!(crate::combat_client::death_is_new(e, 7, 88_001, 4));
+        on_mode(rs::K_MODE, &mode(1)).unwrap();
+        assert!(!crate::combat_client::death_is_new(e, 7, 88_001, 4), "same life: a resend");
+        on_mode(rs::K_MODE, &mode(2)).unwrap();
+        assert!(crate::combat_client::death_is_new(e, 7, 88_001, 4), "the next life's death");
+    }
 
     #[test]
     fn snapshot_order_rule() {

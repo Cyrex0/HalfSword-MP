@@ -2014,6 +2014,27 @@ local function update_standins()
     end
 end
 
+-- Deathmatch respawns (the `mode` record, shared/hsmp_session.lua HS.mode()): a peer whose
+-- life count went up in this round is back in it. Its earlier death no longer holds its
+-- stand-in (HSMPAvatars re-claims a body once standin_dead drops it and the owner's fresh
+-- vitals say alive), and its next death in the same round plays again.
+C3.lives = {}   -- peer -> { round, life }
+function C3.respawns()
+    local m = HSESS and HSESS.mode and HSESS.mode()
+    if not m then return end
+    local changed = false
+    for peer, row in pairs(m.rows) do
+        local prev = C3.lives[peer]
+        if prev and prev.round == m.round and row.life > prev.life then
+            if remote_dead[peer] or death_shown[peer] or server_dead[peer] then changed = true end
+            remote_dead[peer], death_shown[peer], server_dead[peer] = nil, nil, nil
+            Log("peer %d respawned (round %d, life %d): its death no longer holds", peer, m.round, row.life)
+        end
+        C3.lives[peer] = { round = m.round, life = row.life }
+    end
+    if changed then write_standin_dead(true) end
+end
+
 -- --- main tick ----------------------------------------------------------------
 
 -- The typed S2G records this mod reads. Registering this Lua state's event
@@ -2236,6 +2257,7 @@ local function on_tick()
     -- Own vitals: ~15 Hz, and in the SAME tick as any applied hit (the
     -- server ledger counts a hit as reflected by the next vitals).
     if me and (applied > 0 or tick_num % VITALS_TICKS == 0) then publish_own_vitals(me) end
+    C3.respawns()
     update_standins()
     write_standin_dead(false)   -- heartbeat (no write unless changed / 1 s)
     if tick_num % 150 == 0 then
