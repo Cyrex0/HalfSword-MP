@@ -8,6 +8,27 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+### What's new
+
+- **Server mods.** A server can now serve its own Lua mods (`hsmp-server --mods-dir`). When you
+  join one, a warning lists every mod (name, version, author, size) and says plainly that they run
+  with full access to your PC; nothing downloads unless you click ACCEPT & JOIN. DECLINE takes you
+  back to the server browser. The mods download over the game connection, every file is checked
+  against the server's hash, and they start without restarting the game.
+- The server browser marks servers with mods (**[MODS n]**).
+- SETTINGS > SERVER MODS: ASK ME or NEVER, and FORGET REMEMBERED SERVERS. "Remember for this
+  server" asks again whenever the server's mods change.
+- Hosting: [server mods](docs/hosting/server-mods.md): folder layout, `mod.json`, the rules, the
+  download rate limits that keep players in a match unaffected.
+
+### Changed
+
+- New release mod HSMPModHost (runs accepted server mods). Downloaded mods are kept in
+  `Win64\hsmp_mods`, outside the UE4SS mods folder; the launcher's uninstall deletes it.
+- Protocol: capability bit 18 `SERVER_MODS`, records `0x0901`-`0x090A`, reject code 11
+  `MODS_REQUIRED` for clients without server-mods support. The server list and the browser ping
+  carry the mod count and size (older readers ignore them).
+
 ## [0.1.0-beta.5] - 2026-10-04
 
 ### What's new

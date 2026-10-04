@@ -418,3 +418,53 @@ walks the pawn and swings its arm by impulses, with the player's own input disab
 - **Career saves:** in MP the game's saving is diverted by `shared/hsmp_saveguard.lua` (installed
   by the Director). Never call anything that writes the career save; see
   [halfsword/README.md](halfsword/README.md) for the "Reset Player Character" trap.
+
+## 7. Server mods
+
+A server can serve its own Lua mods to its players ([../hosting/server-mods.md](../hosting/server-mods.md)).
+They are ordinary UE4SS Lua mods with a few differences, because they run inside HSMPModHost
+(`mods/HSMPModHost/Scripts/modhost.lua`) instead of as their own UE4SS mod.
+
+**Layout.** `<Name>/Scripts/main.lua` (required), more `.lua` files under `Scripts/`, data files
+(`.json .txt .csv .ini .md`) anywhere in the mod, an optional `mod.json` (`version`, `author`,
+`description`). The name must not start with `HSMP`. The rules and limits are in the hosting page.
+
+**Environment.**
+
+- Each mod has its own globals table: reading a name falls through to the real globals (UE4SS's
+  API, `print`, `string`, ...), writing one stays in the mod. `_G` is the mod's own table.
+- `HSMPNative` and `HSMP_IPC` are hidden (nil): a server mod has no HSMP IPC.
+- `require("a.b")` loads `Scripts/a/b.lua` or `Scripts/a/b/init.lua` of the same mod, and nothing
+  else, except UE4SS's shared `UEHelpers`. Precompiled chunks are refused; `package.cpath` is
+  empty and there is no `package.loadlib`.
+- `LoopAsync`, `ExecuteWithDelay` and key binds already run on the game thread (HSMPModHost's
+  thread-safety shim, §5.1); `ExecuteAsync` is the game-thread `ExecuteInGameThread`. The rules of
+  §5 apply all the same: world guard, no SoftObject reads, Blueprint names with spaces.
+- Every callback a mod passes to UE4SS runs under `xpcall`: an error is logged to the HSMP log
+  with the mod's name (`[HSMPModHost] server mod <name>: error in ...`, at most 20 lines per mod,
+  `x_server_mod_error` events) and never reaches HSMP's own mods, which run in other Lua states.
+  An error in `main.lua` itself unloads that mod; the others keep running.
+
+**This is not a sandbox.** The environment keeps mods from trampling each other's and HSMP's
+globals; it does not limit what a mod can do (`io`, `os`, `debug`, every UE4SS function are
+there). Players are told so before they accept ([../../SECURITY.md](../../SECURITY.md)).
+
+**Unloading.** When the player leaves the server (the sidecar ends, or the session ends as kicked,
+rejected, replaced or closed), when another server offers another set, or when the mods fail,
+HSMPModHost calls the mod's global `OnUnload()` if it has one, then:
+
+| Registration | On unload |
+|---|---|
+| `RegisterHook` | removed (`UnregisterHook` with the ids it returned) |
+| `RegisterCustomEvent` | removed (`UnregisterCustomEvent`) |
+| `LoopAsync`, `LoopInGameThreadWithDelay`, `ExecuteWithDelay`, `ExecuteInGameThreadWithDelay` | cancelled (`CancelDelayedAction`); a loop also stops by itself |
+| `ExecuteInGameThread` | a pending callback does nothing |
+| `NotifyOnNewObject`, `RegisterKeyBind(Async)`, `RegisterConsoleCommand(Global)Handler`, the `Register*PreHook` / `*PostHook` families (LoadMap, InitGameState, BeginPlay, ProcessConsoleExec, CallFunctionByNameWithArguments, ULocalPlayerExec) | **cannot be removed**: they stay registered with UE4SS but their callbacks do nothing (counted as "inert" in the log) |
+| changes to the game (properties written, actors spawned, files written) | stay |
+
+Restart the game for a completely clean state; the players' page says so. Use `OnUnload()` to
+undo what you changed (destroy what you spawned, restore what you wrote).
+
+**Testing a server mod.** Run a local `hsmp-server --mods-dir <folder>` and join it from the
+game; the server log names every rule a mod breaks. HSMPModHost's own behaviour is covered by
+`hsmp-tools lua-test modhost` (a fake UE4SS API).

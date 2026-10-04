@@ -221,6 +221,7 @@ A kind id is `domain << 8 | n`. Kind 0 is never valid. A unit test enforces uniq
 | interact | `0x06` | `schema/interact.rs` |
 | bus | `0x07` | `schema/bus.rs` |
 | dev | `0x08` | `schema/dev.rs` |
+| mods | `0x09` | `schema/mods.rs` (server mods: kinds `0x0901`-`0x090A`; S2G `mod_offer` / `mod_entry` / `mod_progress`, G2S `mod_decision` / `mod_loaded`; data only) |
 
 `RecordInfo` (each domain's `RECORDS`) gives a kind's name, layout, capability bit, `flow`
 (where it may appear: `C2S`, `S2C`, `G2S`, `S2G`, `LOCAL`), `chan` (the hsmp-net channel:

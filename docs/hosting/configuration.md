@@ -39,6 +39,11 @@ prints the same list as the table below.
 | `--port-map <auto, off>` | `auto` | `HSMP_PORT_MAP` | Open the UDP port on the router (UPnP-IGD, PCP, NAT-PMP), renew the lease, remove it on a clean shutdown. Never for a `127.0.0.1` or IPv6 bind. See [Ports and firewall](ports-and-firewall.md#automatic-upnp-pcp-nat-pmp). |
 | `--stun <host:port,...>` | Cloudflare, Google, Nextcloud | `HSMP_STUN_SERVERS` | STUN servers asked from the game port for the public address and NAT type. `off` = no NAT detection and no hole punching. Off by default on a `127.0.0.1` bind. |
 | `--punch <auto, off>` | `auto` | `HSMP_PUNCH` | Take hole-punch requests the server list relays when the router port is not open (needs STUN and `HSMP_MASTER_URL`). |
+| `--mods-dir <dir>` | off | `HSMP_MODS_DIR` | Serve the UE4SS Lua mods in this folder (one sub-folder per mod) to every player, after a warning they accept. An invalid mod stops the server. See [Server mods](server-mods.md). |
+| `--mods-max-mb <n>` | `64` | `HSMP_MODS_MAX_MB` | Server mods: largest total size, 1 to 64 MiB. |
+| `--mods-timeout-s <s>` | `300` | `HSMP_MODS_TIMEOUT_S` | Server mods: time a joining player has to accept, download and load them (30 to 3600). |
+| `--mods-rate-kbps <n>` | `2048` | `HSMP_MODS_RATE_KBPS` | Server mods: download rate per joining player, KiB/s. |
+| `--mods-total-rate-kbps <n>` | `8192` | `HSMP_MODS_TOTAL_RATE_KBPS` | Server mods: download rate of all joining players together, KiB/s. |
 | `-V`, `--version` | | | Print the version. |
 
 How the environment fallbacks work: `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSMP_LOBBY_MAP` and
