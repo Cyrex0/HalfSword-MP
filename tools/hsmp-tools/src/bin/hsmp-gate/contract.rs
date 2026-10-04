@@ -646,8 +646,9 @@ fn rust_emits_in(repo: &Path, path: &Path, callee: &Regex, src: Src) -> Vec<Emit
     let Ok(text) = std::fs::read_to_string(path) else { return vec![] };
     // drop `//` line comments (keeps strings intact enough for event payloads)
     let text: String = text.lines().map(|l| match l.find("//") { Some(i) if !l[..i].contains('"') => &l[..i], _ => l }).collect::<Vec<_>>().join("\n");
-    // the test module is not an emitter
-    let text = match text.find("#[cfg(test)]") { Some(i) => text[..i].to_string(), None => text };
+    // the test module is not an emitter (a lone #[cfg(test)] helper above real code is)
+    let test_mod = Regex::new(r"#\[cfg\(test\)\]\s*(?:pub(?:\([^)]*\))?\s+)?mod\s").unwrap();
+    let text = match test_mod.find(&text) { Some(m) => text[..m.start()].to_string(), None => text };
     let file = rel(repo, path);
     let mut out = vec![];
     let quoted = Regex::new(r#"^"([A-Za-z_]\w*)"$"#).unwrap();
