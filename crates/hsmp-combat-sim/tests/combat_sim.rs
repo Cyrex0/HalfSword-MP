@@ -41,15 +41,19 @@ fn common(s: &Stats, min_accept: f64) {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn honest_acceptance_loopback() { common(&honest("loopback"), 99.0); }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn honest_acceptance_typical() { common(&honest("typical"), 97.0); }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn honest_acceptance_wifi() { common(&honest("wifi"), 93.0); }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn cheats_rejected() {
     let s = suite::cheats("typical", SEEDS, Policy::Dedupe);
     let mut rows = Vec::new();
@@ -73,6 +77,7 @@ fn cheats_rejected() {
 /// Until POSE codec v2 ships: the v1 stream with PhysicsHandle stand-ins
 /// (6–78 uu tracking error, modelled as 20 uu σ) must still clear the bar.
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn honest_acceptance_v1_handle_standins() {
     let s = suite::honest_with("typical", SEEDS, false, Policy::Dedupe, Some(20.0));
     println!("{}", table(std::slice::from_ref(&s)));
@@ -86,6 +91,7 @@ fn honest_acceptance_v1_handle_standins() {
 /// Deal Complex Damage inputs is within ±10 % of what the same contacts did
 /// in solo play (paired Monte Carlo, report::ttk).
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn damage_parity_with_solo() {
     use hsmp_combat_sim::sim::report::{parity_cell, parity_table, TTK_MAX_HITS};
     const MIN_N: usize = 20;
@@ -113,6 +119,7 @@ fn damage_parity_with_solo() {
 /// vitals stream (Lua 15 Hz + sidecar VitalsGate), the REAL server ledger,
 /// deaths from the owner (reliable report / vitals) or the stall rule.
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn health_replication_end_to_end() {
     use hsmp_combat_sim::sim::report::quant;
     println!("{}", suite::HEALTH_HEADER);
@@ -159,6 +166,7 @@ fn health_replication_end_to_end() {
 /// before hits were replayed in bone space, moves the spot by however much the victim turned and leaned
 /// in between (often under a different layer, or deep inside the body).
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn hit_location_survives_the_replay_delay() {
     for p in ["typical", "wifi"] {
         let o = suite::location(p, SEEDS);
@@ -178,6 +186,7 @@ fn hit_location_survives_the_replay_delay() {
 /// ledger sweep: honest acceptance, parries, trades and cheat rejection are
 /// the same at 30, 60 and 100 Hz (docs/development/tick-rate.md).
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn tick_rate_does_not_change_combat_outcomes() {
     let at = |hz: f64| {
         let t = 1000.0 / hz;

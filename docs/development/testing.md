@@ -33,6 +33,11 @@ target\release\hsmp-gate.exe g0              # full G0; bp_names and the U1/U2 r
 HSMP_TOOLS=<target>/release/hsmp-tools.exe HSMP_BINS=<target>/release bash scripts/e2e-test.sh
 ```
 
+`cargo test` skips the slow simulations and mutation fuzzers of systems that rarely change
+(`#[ignore = "slow: ..."]`: the combat sim, the world-sync and netfeel sims, the IPC primitive
+property tests, and the wire, IPC, NAT, master and launcher-manifest fuzzers). Run them with
+`cargo test --workspace -- --ignored` after changing one of those systems or before a release.
+
 Both default to `$CARGO_TARGET_DIR/release`, else `<repo>/target/release`. Every sidecar in the
 suite runs behind a fake game (`hsmp-tools ipc-game`); S1-S12 (`scripts/e2e-shm.sh`) check the
 shared-memory contracts directly. The suite allocates its ports per run and uses a scratch dir

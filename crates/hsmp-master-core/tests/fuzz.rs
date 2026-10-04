@@ -70,6 +70,7 @@ fn body(port: u16, ts: u64, key: &str, name: &str) -> Vec<u8> {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn signed_writes_reject_every_mutation() {
     let sk = auth::listing_key(&[5; 32]);
     let pk = auth::public_hex(&sk);
@@ -132,6 +133,7 @@ fn signed_writes_reject_every_mutation() {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn punch_requests_survive_mutation() {
     let seed = serde_json::to_vec(&serde_json::json!({
         "host": "203.0.113.5", "port": 7777, "endpoint": "198.51.100.20:40000", "nonce": "ab12"
@@ -157,6 +159,7 @@ fn punch_requests_survive_mutation() {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn report_check_survives_mutation() {
     let manifest = br#"{"magic":"hsmp-report","format":1,"launcher":"0.1.0","hsmp":"0.1.0","sessions":["a"],"kind":"client"}"#;
     let good = reports::fixture_zip(&[(reports::MANIFEST_NAME, manifest), ("logs/a.txt", b"hello")]);

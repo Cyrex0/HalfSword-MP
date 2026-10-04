@@ -26,12 +26,14 @@ fn table(seeds: u64, secs: f64) -> Vec<Report> {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn netfeel_table() {
     let _ = table(2, 60.0);
 }
 
 /// One profile, one seed: `NETFEEL_ONE=far FEELSIM_DEBUG=3 cargo test ... netfeel_one -- --nocapture`.
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn netfeel_one() {
     let Ok(p) = std::env::var("NETFEEL_ONE") else { return };
     let r = run(&cfg(&p, 30.0, 1));
