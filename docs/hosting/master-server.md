@@ -91,9 +91,10 @@ between requests. Since SQLite is the only Durable Object storage on the free pl
 The heartbeat interval and expiry are `HEARTBEAT_S` and `TTL_S` in `wrangler.toml`
 (`120` and `360`). The registration answer tells each server the interval, so changing it needs
 no server update. At 120 s, 50 servers use 36,000 of the 100,000 daily requests and leave ~64,000
-for browser refreshes (about 44 a minute). A heartbeat that changes nothing the browser shows (players, map, mode, NAT) is
-kept in memory only, as long as the stored copy would still outlive the next heartbeat after a
-restart of the Durable Object; with 120 / 360 s that writes every other heartbeat. A crashed server disappears after at most 6 minutes;
+for browser refreshes (about 44 a minute). A heartbeat that changes nothing the browser shows
+(players, map, mode, NAT) is kept in memory only, as long as the stored copy would still outlive
+the next heartbeat after a restart of the Durable Object; with 120 / 360 s every other heartbeat
+is written. A crashed server disappears after at most 6 minutes;
 the browser shows it as not answering before that. If a day's quota runs out, Cloudflare refuses
 requests until midnight UTC; games already running are not affected, and the browser falls back
 to `127.0.0.1` and LAN discovery.
