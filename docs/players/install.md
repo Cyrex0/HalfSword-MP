@@ -158,7 +158,8 @@ Outside the game folder, the launcher keeps:
 | `%LOCALAPPDATA%\HSMP\bin\hsmp-launcher.exe` | a verified copy of the launcher, for updates |
 | `%LOCALAPPDATA%\HSMP\downloads\` | the newest downloaded release zip |
 | `%LOCALAPPDATA%\HSMP\save_backups\` | your career save backups |
-| `%LOCALAPPDATA%\HSMP\crash_reports\` | crash reports you chose to save |
+| `%LOCALAPPDATA%\HSMP\logs\` | the logs of your last 10 game runs |
+| `%LOCALAPPDATA%\HSMP\bug_reports\` | bug reports you saved |
 
 The network helper `hsmp-sidecar.exe` also keeps two files in `%LOCALAPPDATA%\HSMP\`: `identity`, your
 player identity (it is created the first time you host or join, and is what makes you the admin of
@@ -274,23 +275,15 @@ launcher finds its install record again through `Win64\hsmp_install.json`. It ch
 HSMP files in the new folder match the record before it changes anything. A *copy* of the game
 folder does not take over the original's record.
 
-## Crash reports
+## Bug reports
 
-When Half Sword has crashed since the launcher last looked, the **Crash reports** section says
-so and offers **Save a redacted report**. The report is a zip in
-`%LOCALAPPDATA%\HSMP\crash_reports\`, which you can attach to a bug report.
-
-Before you choose, the launcher lists what a report contains:
-
-* the crash dump (a snapshot of the game's memory stack, no screenshots);
-* the crash context and the game log, redacted;
-* the last 2000 lines of `UE4SS.log`, redacted (player names and IP addresses removed);
-* the HSMP version, protocol and the game build hash.
-
-It never includes chat logs, your HSMP settings or profile, or your career save.
-
-**This version sends nothing.** The report is only saved to a folder. Choose **never ask** to turn
-the prompt off.
+The launcher keeps the logs of your last 10 game runs in `%LOCALAPPDATA%\HSMP\logs\`. When Half
+Sword has crashed since the launcher last looked, the **Bug report** section says so and ticks
+the run that crashed. **Create bug report** collects that run's logs, removes personal data and
+shows you every file before anything is saved or sent; then **Save report zip**, **Open GitHub
+issue** or **Upload to HSMP...**. See
+[Sending us a bug report](troubleshooting.md#sending-us-a-bug-report) for what a report contains
+and what is removed. Choose **don't** after "After a crash" to stop the crash notice.
 
 ## Command line
 
@@ -306,6 +299,8 @@ launch        [--game DIR]                       start the game through Steam wi
 check-update  [--stable-only]                    is a newer release published?
 update        [--game DIR] [--stable-only] [--allow-downgrade]   download, verify and install it
 backup-saves | list-backups | restore-saves <id> | find-game
+report        [--list] [--session ID|latest|all] [--keep-ips] [--no-dumps] [--show FILE] [--dry-run] [--out ZIP] [--upload]
+                                                 a redacted bug report of your recent game runs
 ```
 
 ## Next steps

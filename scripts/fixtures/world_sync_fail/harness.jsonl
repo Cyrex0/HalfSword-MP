@@ -1,0 +1,8 @@
+{"cmd":"MAP Cellar","ev":"rcon","ok":true,"pick":"Cellar","reply":"OK","wall_ms":1790880002000}
+{"arena":"Cellar","ev":"mark","name":"start","wall_ms":1790880002050}
+{"cmd":"START","ev":"rcon","ok":true,"reply":"OK","wall_ms":1790880002060}
+{"cmd":"DEBUG KILL 1","ev":"rcon","ok":true,"reply":"OK killed","wall_ms":1790880021500}
+{"ev":"mark","name":"round_end","round":1,"wall_ms":1790880022100}
+{"cmd":"DEBUG KILL 2","ev":"rcon","ok":true,"reply":"OK killed","wall_ms":1790880044500}
+{"ev":"mark","name":"round_end","round":2,"wall_ms":1790880045100}
+{"cmd":"ABORT","ev":"rcon","ok":true,"reply":"OK","wall_ms":1790880048000}

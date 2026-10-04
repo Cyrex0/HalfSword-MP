@@ -140,14 +140,15 @@ publishing can bypass host firewalls such as ufw.
 
 ## Commands
 
-Verbs are **upper case**. Every command answers with one line, except `LIST`, `BANS` and `ADMIN LIST`, which end
-with a line `END`. Before `AUTH`, every other command answers `ERR auth required`.
+Verbs are **upper case**. Every command answers with one line, except `LIST`, `BANS`, `ADMIN LIST` and `REPORT`, which
+end with a line `END`. Before `AUTH`, every other command answers `ERR auth required`.
 
 | Command | Reply | Notes |
 |---|---|---|
 | `AUTH <password>` | `OK authenticated` or `ERR bad password` | A wrong password closes the connection. |
 | `HELP` | one line listing the verbs | |
 | `STATUS` | `OK {json}` | Phase, round, match id, arena, best-of, connected peers, and the roster by seat (nick, peer id, ready, alive, wins, admin, role). |
+| `REPORT` | the newest stats report, then `END` | The 10-second `stats:` line and one `stats peer` line per player (see [Logs and diagnostics](logs-and-diagnostics.md#the-stats-lines)). |
 | `LIST` | `<id> <nick> <ip:port>` per player, then `END` | The id is what `KICK` and `BAN` take. |
 | `KICK <id>` | `OK kicked`, `ERR no such peer` or `ERR <reason>` | The player is disconnected and may rejoin. |
 | `BAN <id>` | `OK banned <ip>`, `ERR no such peer` or `ERR <reason>` | Bans the player's IP address permanently, saves the ban list, kicks the player. |

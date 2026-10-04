@@ -76,6 +76,11 @@ The browser has these tools:
 | **REFRESH** (F5) | Asks the server lists and the LAN again. |
 | **< PREV** / **NEXT >** | Turns pages (12 servers per page). |
 
+The **PING** column shows **--** for a server that did not answer, and **NAT** for one that did
+not answer directly but sits behind a router the server list can punch through: joining it tries
+that on its own ("CONNECTING THROUGH YOUR ROUTER..."). The line under the table says the same
+for the selected server: reachable, will try NAT traversal, or unreachable.
+
 You cannot join:
 
 * a **full** server;
@@ -113,20 +118,35 @@ Keep the host port between **7777 and 7786**. The browser only looks for LAN gam
 
 ### Playing with friends over the internet
 
-Your friends join with **DIRECT CONNECT** and your public address. For that to work:
+Your game is listed in the public server browser, and friends can also join with **DIRECT
+CONNECT** and your public address. HSMP tries to make your PC reachable on its own:
 
-1. **Forward the port on your router.** Forward **UDP** port 7777 (or your **HOST PORT**) to your
-   PC. Every router is different. Look for "port forwarding" or "virtual server" in its settings.
+1. **Your router port.** When you host, HSMP asks your router to open the UDP port (UPnP, PCP or
+   NAT-PMP). The host lobby says how that went:
+   * **"Router port opened automatically (UPnP)"**: nothing to do.
+   * **"Couldn't open your router port automatically ... Forward UDP 7777 to this PC."**: your
+     router has UPnP turned off, or does not support it. Either turn UPnP on in the router's
+     settings, or forward **UDP** port 7777 (or your **HOST PORT**) to your PC by hand (look for
+     "port forwarding" or "virtual server"). Until then, many players can still get in through
+     NAT traversal (below), but not all.
+   * You can stop HSMP from touching the router: **SETTINGS > HOSTING > ROUTER PORT: OFF**.
 2. **Allow it in Windows Firewall.** The launcher adds the rule when it installs HSMP (accept its
-   Windows prompt). If you said no, click **Fix firewall** in the launcher's install section. The
-   host lobby reminds you which UDP port to forward.
-3. **Give your friends your public IP address and port**, for example `203.0.113.5:7777`. You can
-   find your public IP by searching "what is my IP" in a web browser.
+   Windows prompt). If you said no, click **Fix firewall** in the launcher's install section.
+3. **For direct connect, give your friends your public IP address and port**, for example
+   `203.0.113.5:7777`. You can find your public IP by searching "what is my IP" in a web browser.
+
+**NAT traversal.** When a joiner gets no answer from you, their game asks the server list to
+"punch" through your router: your server sends a few small packets towards them, which opens
+your router for that player, and the join continues. Their lobby shows **"CONNECTING THROUGH
+YOUR ROUTER..."** meanwhile. This works with most home routers. It does not work when your
+router (or your provider's) gives every connection a different port (a "symmetric" NAT); then
+the joiner sees **"The host's network blocks incoming connections; ask them to forward UDP
+7777"**, and you have to forward the port.
 
 Some internet providers put you behind a shared address (CGNAT), and then port forwarding does
-not work. In that case, someone else has to host, or you can run a dedicated server on a rented
-machine. See [Ports and firewall](../hosting/ports-and-firewall.md) and
-[Dedicated server](../hosting/dedicated-server.md).
+not work. NAT traversal often still does. If it does not, someone else has to host, or you can
+run a dedicated server on a rented machine. See [Ports and firewall](../hosting/ports-and-firewall.md)
+and [Dedicated server](../hosting/dedicated-server.md).
 
 ## The lobby
 
@@ -235,6 +255,7 @@ Click **SETTINGS** on the main menu.
 | **KILL FEED** | "Who slew whom", top right. | ON |
 | **NET INDICATOR** | Ping and packet loss, bottom right: ALWAYS, WHEN BAD, or OFF. | ALWAYS |
 | **PEER AVATARS** | Shows the other players' bodies. Turn it off only to debug. | ON |
+| **ROUTER PORT** | While you host, opens the HOST PORT on your router automatically (UPnP, PCP or NAT-PMP) and closes it again when you stop. OFF: forward the port by hand. | ON |
 
 **SAVE & BACK** checks and saves everything. **BACK** leaves without saving. **RESET DEFAULTS**
 resets everything except your nickname. HUD settings apply from your next match.

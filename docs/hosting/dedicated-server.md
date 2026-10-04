@@ -15,6 +15,7 @@ This page is the quick start. The details live on these pages:
 | [Master server](master-server.md) | Running your own server list (`hsmp-master`) |
 | [Docker](docker.md) | The container image, volumes, backups, compose |
 | [Linux](linux.md) | Building from source, systemd, firewall, logs |
+| [Logs and diagnostics](logs-and-diagnostics.md) | The log files, the stats lines, `hsmp-server --report` |
 
 ## Quick start
 
@@ -230,10 +231,11 @@ protocol (`proto=v6..=v6`) and the key fingerprint, which must not change across
 
 ## Logs and privacy
 
-The server logs to standard output. `RUST_LOG` sets the detail (default `hsmp_server=info`;
-see [Configuration](configuration.md#environment-variables)). Where the log ends up depends on how
-you run it: the console, `journalctl` (systemd), NSSM's log files (Windows service) or
-`docker logs`.
+The server logs to standard output and to daily files in `<state dir>/logs/server/`
+(`server-<day>.log` and `server-events-<day>.jsonl`, kept 14 days and 500 MB). `--log-level`
+or `RUST_LOG` sets the detail (default info). [Logs and diagnostics](logs-and-diagnostics.md)
+explains the files, the 10-second `stats:` lines and how to send us a report
+(`hsmp-server --report`).
 
 What the logs contain:
 
@@ -244,9 +246,10 @@ What the logs contain:
 - The master server logs the IP address of every server that registers.
 - Chat text is **not** logged (only its length).
 
-`bans.txt` keeps banned IP addresses until you remove them. The server does not delete or rotate
-logs. Retention is up to you: decide how long you keep them, rotate them (journald, NSSM rotation,
-Docker `--log-opt max-size`), and tell your players. Depending on where you and they live, IP
+`bans.txt` keeps banned IP addresses until you remove them. The server deletes its own log files
+after 14 days (or when they pass 500 MB); standard output is kept as long as your supervisor
+keeps it (journald, NSSM rotation, Docker `--log-opt max-size`). Tell your players how long you
+keep logs. Depending on where you and they live, IP
 addresses and nicknames can be personal data.
 
 ## Troubleshooting

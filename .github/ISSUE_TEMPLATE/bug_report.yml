@@ -47,8 +47,9 @@ body:
     attributes:
       label: Logs and crash report
       description: |
-        Attach `UE4SS.log` (in the game's `HalfswordUE5\Binaries\Win64\ue4ss` folder), the launcher log,
-        or a crash-report zip made with the launcher. Remove anything you do not want to share.
+        Attach the zip from the launcher's **Create bug report** (it removes personal data and shows
+        you every file first), or give its report id if you uploaded it. Hosting a dedicated server:
+        `hsmp-server --report`.
   - type: input
     id: os
     attributes:

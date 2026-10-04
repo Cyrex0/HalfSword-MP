@@ -19,7 +19,6 @@ local UEHelpers = require("UEHelpers")
 -- userdata). Route every deferred, looped and key-bound callback onto
 -- the game thread.
 if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then
-    local _gt = ExecuteInGameThread
     ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end
     LoopAsync = function(ms, fn)
         local h
@@ -29,14 +28,32 @@ if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedA
         end)
         return h
     end
-    local _rkba = RegisterKeyBindAsync
-    RegisterKeyBindAsync = function(key, mods, fn)
-        return _rkba(key, mods, function() _gt(function() pcall(fn) end) end)
+    -- Key callbacks run on the UE4SS input thread. Native-function hooks run
+    -- on the game thread on this mod's hook state without UE4SS's lock, so an
+    -- ExecuteInGameThread call from a key callback pushed onto that state
+    -- mid-hook (crash in push_structproperty, 2026-10-03). The input thread
+    -- now only appends to a queue (plain Lua, no UE4SS call) and a
+    -- game-thread loop runs what it queued.
+    local kq, kq_w, kq_r, kq_loop = {}, 0, 0, nil
+    local function kq_wrap(fn)
+        if not kq_loop then
+            kq_loop = LoopInGameThreadWithDelay(16, function()
+                while kq_r < kq_w do
+                    kq_r = kq_r + 1
+                    local f = kq[kq_r]
+                    kq[kq_r] = nil
+                    if f then pcall(f) end
+                end
+            end)
+        end
+        return function() local n = kq_w + 1; kq[n] = fn; kq_w = n end
     end
+    local _rkba = RegisterKeyBindAsync
+    RegisterKeyBindAsync = function(key, mods, fn) return _rkba(key, mods, kq_wrap(fn)) end
     local _rkb = RegisterKeyBind
     RegisterKeyBind = function(key, a, b)
-        if b then return _rkb(key, a, function() _gt(function() pcall(b) end) end) end
-        return _rkb(key, function() _gt(function() pcall(a) end) end)
+        if b then return _rkb(key, a, kq_wrap(b)) end
+        return _rkb(key, kq_wrap(a))
     end
 end
 

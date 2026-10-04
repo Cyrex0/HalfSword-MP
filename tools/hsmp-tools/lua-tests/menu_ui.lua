@@ -1494,7 +1494,20 @@ pid[1] = function(tag)
     local sv, sc = spawned("hsmp-server.exe"), spawned("hsmp-sidecar.exe")
     check(#sv == 1 and #sc == 1, tag .. ": HOST spawns one server and one sidecar (" .. execs() .. ")")
     local pn = kit().cur and kit().cur.w.port_note
-    check(pn and contains(pn.last, "UDP 7777 forwarded"), tag .. ": the host lobby tells the host to forward UDP 7777 (" .. tostring(pn and pn.last) .. ")")
+    check(pn and contains(pn.last, "Checking"), tag .. ": until the server reports, the host lobby says it is checking the router (" .. tostring(pn and pn.last) .. ")")
+    -- the server's NET_STATUS notice (code 9) to its owner: the router port could not be opened
+    local function net_status(args, id)
+        local N = NATIVE()
+        hook_events(N)
+        table.insert(N._menu_events, { kind = "notice", data = assert(REC.marshal(SCH, "notice", { code = 9, event_id = id, args = args })) })
+        M.run(1200)
+        return kit().cur and kit().cur.w.port_note
+    end
+    pn = net_status({ "failed", "7777", "203.0.113.5:7777", "cone+punch" }, 901)
+    check(pn and contains(pn.last, "Forward UDP 7777 to this PC") and contains(pn.last, "NAT traversal"),
+        tag .. ": router port not opened: forward UDP 7777, joiners will try NAT traversal (" .. tostring(pn and pn.last) .. ")")
+    pn = net_status({ "upnp", "7777", "203.0.113.5:7777", "cone" }, 902)
+    check(pn and contains(pn.last, "Router port opened automatically (UPnP)"), tag .. ": UPnP opened the port (" .. tostring(pn and pn.last) .. ")")
     local winsd = sd:gsub("/", "\\")
     if #sv == 1 and #sc == 1 then
         local a = argstr(sv[1])
@@ -1641,6 +1654,7 @@ at[2] = function(tag)
     local ex = execs()
     check(contains(ex, "hsmp-sidecar.exe\" --server 10.1.2.3:7777") and not contains(ex, "--bind 0.0.0.0"),
         tag .. ": join mode joins HSMP_AUTOTEST_ADDR and hosts nothing")
+    check(T.re_search([[--master https?://\S+]], ex) ~= nil, tag .. ": the joiner gets the server lists that can relay a NAT punch (" .. ex .. ")")
     write(".sidecar.json", '{"status":"connected","peer_id":2,"is_admin":false,"peers":[{"id":1,"nick":"Willie"},{"id":2,"nick":"Mate"}]}\n')
     write(".match.json", match_json(nil, "Map_Arena_Pit", nil, {}))
     M.run(5000)

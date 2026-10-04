@@ -67,6 +67,11 @@ pub const HISTORY_MS: u32 = 1200;
 pub const MAX_REWIND_MS: i64 = 300;
 /// Rewind cap on servers that explicitly allow high latency.
 pub const HIGH_LATENCY_REWIND_MS: i64 = 400;
+/// The cap grows with the attacker's measured path (`ViewPrediction::honest_lag`)
+/// plus the view tolerance and this slack, never past the ceiling: a 300 ms RTT player with a 150 ms
+/// buffer still lands hits, a lag-switched view far behind does not.
+pub const REWIND_SLACK_MS: i64 = 40;
+pub const REWIND_CEILING_MS: i64 = 600;
 /// A (clamped) view time may lead the newest sample by this much (the claim
 /// can overtake the state stream; receivers extrapolate briefly).
 pub const FUTURE_MS: i64 = 150;
@@ -114,6 +119,11 @@ pub const INTERP_MIN_V2_MS: f32 = 16.0;
 pub const DEGENERATE_BLADE_UU: f32 = 10.0;
 /// Clock-map window (same as poseplay CLOCK_WINDOW_MS).
 pub const CLOCK_WINDOW_MS: i64 = 2000;
+/// Lateness quantile and window of the receivers' buffer (poseplay JITTER_QUANTILE,
+/// JITTER_WINDOW_MS).
+pub const JITTER_QUANTILE: f32 = 0.95;
+pub const JITTER_WINDOW_MS: i64 = 8000;
+const JITTER_CAP: usize = 2048;
 /// A hint further than tolerance + this from the prediction is suspicious.
 pub const VIEW_OUTLIER_MS: i64 = 60;
 /// The claim's mapped attacker time may lead its arrival by this much…
@@ -528,6 +538,9 @@ struct Clock {
     /// `jitter_p90` cache, cleared by every new sample (the relay asks for it
     /// once per relayed frame and viewer).
     j90: std::cell::Cell<Option<f32>>,
+    /// (server rx ms, lateness above the offset at that moment) over
+    /// JITTER_WINDOW_MS: the receivers size their buffers on this (poseplay).
+    late: VecDeque<(i64, i64)>,
 }
 
 impl Clock {
@@ -541,10 +554,12 @@ impl Clock {
         // The rate buckets stay (a path change is a step, not a slope).
         if self.s.back().map_or(false, |b| rx - b.0 > CLOCK_GAP_RESET_MS) {
             self.s.clear();
+            self.late.clear();
         }
         if let Some(l) = self.last_ts {
             if (ts as i64) + RESET_BACKSTEP_MS < l as i64 {
                 self.s.clear();
+                self.late.clear();
                 self.rate.clear();
                 self.flagged = None;
                 self.last_ts = None;
@@ -555,6 +570,11 @@ impl Clock {
         self.s.push_back((rx, d));
         while self.s.len() > CLOCK_CAP || self.s.front().map_or(false, |f| rx - f.0 > CLOCK_WINDOW_MS) {
             self.s.pop_front();
+        }
+        let off = self.s.iter().map(|e| e.1).min().unwrap_or(d);
+        self.late.push_back((rx, d - off));
+        while self.late.len() > JITTER_CAP || self.late.front().map_or(false, |f| rx - f.0 > JITTER_WINDOW_MS) {
+            self.late.pop_front();
         }
         let b = rx.div_euclid(RATE_BUCKET_MS);
         match self.rate.back_mut() {
@@ -621,13 +641,15 @@ impl Clock {
         self.j90.set(Some(j));
         j
     }
+    /// (The name is historical: like poseplay's buffer this is the JITTER_QUANTILE
+    /// (p95) of the lateness over JITTER_WINDOW_MS.)
     fn jitter_p90_uncached(&self) -> f32 {
-        let Some(m) = self.offset() else { return 0.0 };
-        let mut v: Vec<i64> = self.s.iter().map(|e| e.1 - m).collect();
+        if self.offset().is_none() { return 0.0; }
+        let mut v: Vec<i64> = self.late.iter().map(|e| e.1.max(0)).collect();
         if v.is_empty() { return 0.0; }
-        v.sort_unstable();
-        let i = ((v.len() as f32 * 0.9).ceil() as usize).clamp(1, v.len()) - 1;
-        v[i] as f32
+        let i = ((v.len() as f32 * JITTER_QUANTILE).ceil() as usize).clamp(1, v.len()) - 1;
+        let (_, q, _) = v.select_nth_unstable(i);
+        *q as f32
     }
     fn note_rtt(&mut self, at: i64, ms: f32) {
         if !(ms.is_finite() && (0.0..5000.0).contains(&ms)) { return; }
@@ -955,6 +977,10 @@ pub struct ViewPrediction {
     /// explain either (the LagSwitch cheat counter, kept separate from
     /// the absolute cap in `victim_excess`).
     pub unexplained: i64,
+    /// How old an honest viewer's display of `viewed` is on this path (ms): the
+    /// viewer's measured RTT + the transport-explained buffer delay + a frame
+    /// (0 while the RTT is unknown). Sizes the rewind cap for high-ping players.
+    pub honest_lag: i64,
 }
 
 impl ViewPrediction {
@@ -1484,8 +1510,12 @@ impl Store {
         let expected = viewer_ts as i64 + off_a - off_v - rtt.round() as i64 - interp.round() as i64 - FRAME_MS;
         // The window follows the transport-explained jitter only, with a fixed
         // ceiling (never widened by client-controlled lateness).
-        let tol = ((2.0 * jpath_b).round() as i64 + FRAME_MS).clamp(TOL_FLOOR_MS, TOL_MAX_MS) + slack;
-        Some(ViewPrediction { expected, tol, rtt_known: known, victim_excess, unexplained })
+        // (1.8 x the p95 path jitter = the former 2 x p90: the same window width.)
+        let tol = ((1.8 * jpath_b).round() as i64 + FRAME_MS).clamp(TOL_FLOOR_MS, TOL_MAX_MS) + slack;
+        // The viewer's modelled buffer, less what the victim's own excess jitter added.
+        let buf = display_delay(v, jpath_b, iv).max(interp - victim_excess as f32);
+        let honest_lag = if known { rtt.round() as i64 + buf.round() as i64 + FRAME_MS } else { 0 };
+        Some(ViewPrediction { expected, tol, rtt_known: known, victim_excess, unexplained, honest_lag })
     }
 
     /// Transport RTT variation of `id`'s connection (ms), from the connection
@@ -2046,7 +2076,12 @@ impl Store {
         // A victim whose clock runs off (speedhack) is displayed late by everyone
         // (its samples look ever later to their jitter buffers): it forfeits the
         // defender-favouring rewind cap instead of becoming unhittable.
-        let cap = if v.clock.rate_suspect().is_some() { HISTORY_MS as i64 } else { self.max_rewind() };
+        // A high-ping attacker honestly sees the victim RTT + buffer late: the cap
+        // covers that path plus the view-time tolerance and REWIND_SLACK_MS, up to
+        // REWIND_CEILING_MS.
+        let cap = if v.clock.rate_suspect().is_some() { HISTORY_MS as i64 } else {
+            self.max_rewind().max((pred.honest_lag + pred.tol + REWIND_SLACK_MS).min(REWIND_CEILING_MS))
+        };
         // The same for a victim that delays its own stream (lag switch /
         // timestamp noise): the cap only charges the share of the
         // view lag the network and the attacker explain, not the display

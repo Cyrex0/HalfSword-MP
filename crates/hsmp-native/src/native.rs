@@ -597,6 +597,7 @@ impl Native {
             set_num(L, out, "st", p.st as f64);
             set_num(L, out, "iv", p.iv as f64);
             set_num(L, out, "k", p.k as f64);
+            set_num(L, out, "rate", p.rate as f64);
             set_bool(L, out, "v2", p.flags & PEER_PLAY_V2 != 0);
             if p.flags & PEER_PLAY_HAS_ROOT != 0 {
                 subtable(L, out, "_root", 4, 0);

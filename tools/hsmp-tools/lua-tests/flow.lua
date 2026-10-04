@@ -357,6 +357,13 @@ do
     w.IPC.bus_put("spectate", { target = 2, nick = "Bob", round = 1, alive = 1 })
     watch(w, 20, H)
     T.check(H.model.centre.title == "SPECTATING BOB", "Spectating <name>", T.repr(H.model.centre))
+    -- nobody left to watch: HSMPMatch shows the arena overview
+    w.IPC.bus_put("spectate", { target = 0xFFFFFFFF, nick = "", round = 1, alive = 0 })
+    watch(w, 2, H)
+    T.check(H.model.centre.title == "ARENA VIEW", "arena view label", T.repr(H.model.centre))
+    w.IPC.bus_put("spectate", { target = 2, nick = "Bob", round = 1, alive = 2 })
+    watch(w, 2, H)
+    T.check(H.model.centre.title == "SPECTATING BOB" and T.contains(H.model.centre.sub, "Q / E switch"), "back on Bob, Q/E hint", T.repr(H.model.centre))
     H.T.tab = true; watch(w, 1, H)
     T.check(H.model.board ~= nil and H.model.centre == nil, "TAB scoreboard while spectating (centre hidden)")
     H.T.tab = false

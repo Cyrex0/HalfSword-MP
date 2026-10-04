@@ -4,14 +4,21 @@
 //! `CF-Connecting-IP` and forwards writes to one SQLite-backed Durable Object (`Registry`),
 //! which runs the shared registry state machine (crates/hsmp-master-core) and persists its
 //! effects. Same API as hsmp-master: docs/hosting/master-server.md.
+//!
+//! Punch relay: a listed host keeps one WebSocket on the Durable Object, accepted with
+//! hibernation and tagged with its listing id; its "ping"s are answered by the runtime's
+//! auto-response without waking the object. `POST /v1/punch` is checked by the core and
+//! forwarded as one message down that socket.
 
-use hsmp_master_core::{dashboard, discord, Config, Effect, Entry, Listing, Registry as Core, Reply, MAX_BODY_BYTES, SIG_HEADER};
+use hsmp_master_core::{dashboard, discord, punch, Config, Effect, Entry, Listing, Registry as Core, Reply, MAX_BODY_BYTES, SIG_HEADER};
 use hsmp_master_core::registry::{AnnounceState, Announcement};
 use serde::Deserialize;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use worker::*;
+
+mod reports; // bug-report uploads (R2), src/reports.rs
 
 /// Client address, set by the Worker on requests to the Durable Object (which is not
 /// reachable from outside, so the header cannot be forged).
@@ -125,6 +132,7 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     };
 
     match (method.clone(), path.as_str()) {
+        (_, p) if p == "/v1/reports" || p.starts_with("/v1/reports/") => reports::handle(req, &env, ip, &url).await,
         (Method::Get, "/v1/health") => text(200, "ok"),
         (Method::Get, "/v1/myaddr") => {
             let ip = hsmp_master_core::ip::canonical(ip).to_string();
@@ -146,8 +154,27 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 secure(r, "public, max-age=5")
             }
         }
+        // A listed host's punch relay socket (punch.rs): a signed WebSocket upgrade, accepted
+        // by the Durable Object with hibernation.
+        (Method::Get, p) if p.starts_with("/v1/punch/listen/") => {
+            let upgrade = req.headers().get("upgrade")?.unwrap_or_default();
+            if !upgrade.eq_ignore_ascii_case("websocket") {
+                return text(426, "websocket upgrade required");
+            }
+            let h = Headers::new();
+            h.set(IP_HEADER, &ip.to_string())?;
+            h.set("upgrade", "websocket")?;
+            if let Some(sig) = req.headers().get(SIG_HEADER)? {
+                h.set(SIG_HEADER, &sig)?;
+            }
+            let q = url.query().map(|q| format!("?{q}")).unwrap_or_default();
+            let mut init = RequestInit::new();
+            init.with_method(Method::Get).with_headers(h);
+            let inner = Request::new_with_init(&format!("https://registry{path}{q}"), &init)?;
+            registry_stub(&env)?.fetch_with_request(inner).await
+        }
         (Method::Post, "/v1/register") | (Method::Post, _) | (Method::Delete, _)
-            if path == "/v1/register" || path.starts_with("/v1/heartbeat/") || path.starts_with("/v1/servers/") =>
+            if path == "/v1/register" || path == "/v1/punch" || path.starts_with("/v1/heartbeat/") || path.starts_with("/v1/servers/") =>
         {
             if (method == Method::Post) == path.starts_with("/v1/servers/") {
                 return text(405, "method not allowed");
@@ -173,7 +200,7 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
             // A fetched response's headers are immutable: copy it into a new one.
             let mut r = registry_stub(&env)?.fetch_with_request(inner).await?;
             let status = r.status_code();
-            if (200..300).contains(&status) {
+            if (200..300).contains(&status) && path != "/v1/punch" {
                 // this isolate shows the change at once (others within LIST_CACHE_MS)
                 LIST_CACHE.with(|c| *c.borrow_mut() = None);
             }
@@ -243,8 +270,65 @@ impl Registry {
             .filter_map(|r| serde_json::from_str(&r.data).ok())
             .collect();
         let cfg = Config::public(self.var_u64("HEARTBEAT_S", 120), self.var_u64("TTL_S", 360), self.webhook().is_some());
-        *self.core.borrow_mut() = Some(Core::new(cfg, rows, ann, now));
+        let mut core = Core::new(cfg, rows, ann, now);
+        // Listen sockets survive hibernation; the list of who listens does not.
+        for ws in self.state.get_websockets() {
+            for tag in self.state.get_tags(&ws) {
+                core.set_listener(&tag, true);
+            }
+        }
+        *self.core.borrow_mut() = Some(core);
+        // Hosts ping their listen socket; the runtime answers without waking this object
+        // (and without billing it).
+        match worker::WebSocketRequestResponsePair::new(punch::PING, punch::PONG) {
+            Ok(pair) => self.state.set_websocket_auto_response(&pair),
+            Err(e) => console_error!("websocket auto-response: {e:?}"),
+        }
         Ok(())
+    }
+
+    /// `GET /v1/punch/listen/{id}?ts=..`: verify, then accept the host's socket (replacing an
+    /// older one of the same listing).
+    fn accept_listener(&self, path_and_query: &str, sig: Option<&str>, now: u64) -> Result<Response> {
+        let r = self.core.borrow_mut().as_mut().expect("loaded").listen(now, path_and_query, sig);
+        let id = match r {
+            Ok(id) => id,
+            Err(rep) => return reply(rep),
+        };
+        for old in self.state.get_websockets_with_tag(&id) {
+            let _ = old.close(Some(1000), Some("replaced by a newer listen socket"));
+        }
+        let pair = WebSocketPair::new()?;
+        self.state.accept_websocket_with_tags(&pair.server, &[id.as_str()]);
+        self.core.borrow_mut().as_mut().expect("loaded").set_listener(&id, true);
+        Response::from_websocket(pair.client)
+    }
+
+    /// `POST /v1/punch`: checks and rate limits in the core, then one message down the host's
+    /// listen socket.
+    fn relay_punch(&self, ip: IpAddr, body: &[u8], now: u64) -> Result<Response> {
+        let (rep, order) = self.core.borrow_mut().as_mut().expect("loaded").punch(now, ip, body);
+        if let Some(o) = order {
+            let sent = self.state.get_websockets_with_tag(&o.server_id).iter().filter(|ws| ws.send_with_str(&o.msg).is_ok()).count();
+            if sent == 0 {
+                self.core.borrow_mut().as_mut().expect("loaded").set_listener(&o.server_id, false);
+                return reply(Reply { status: 409, body: "this server's link to the list is down".into(), json: false });
+            }
+        }
+        reply(rep)
+    }
+
+    /// A listen socket closed: the listing stops taking punches unless another socket of
+    /// the same listing is still open.
+    fn listener_gone(&self, ws: &WebSocket) {
+        let tags = self.state.get_tags(ws);
+        let mut c = self.core.borrow_mut();
+        let Some(core) = c.as_mut() else { return };
+        for id in tags {
+            if !self.state.get_websockets_with_tag(&id).iter().any(|w| w != ws) {
+                core.set_listener(&id, false);
+            }
+        }
     }
 
     /// Persist the effects, keep a sweep alarm pending while anything is listed, and post
@@ -261,6 +345,9 @@ impl Registry {
                     )?;
                 }
                 Effect::Remove(id) => {
+                    for ws in self.state.get_websockets_with_tag(&id) {
+                        let _ = ws.close(Some(1000), Some("listing removed"));
+                    }
                     sql.exec("DELETE FROM servers WHERE server_id = ?", vec![id.into()])?;
                 }
                 Effect::PutAnnounce(a) => {
@@ -347,6 +434,14 @@ impl DurableObject for Registry {
             None => return Response::error("no client address", 400),
         };
         let sig = req.headers().get(SIG_HEADER)?;
+        if req.method() == Method::Get && path.starts_with("/v1/punch/listen/") {
+            let q = req.url()?.query().map(|q| format!("?{q}")).unwrap_or_default();
+            return self.accept_listener(&format!("{path}{q}"), sig.as_deref(), now);
+        }
+        if req.method() == Method::Post && path == "/v1/punch" {
+            let body = req.bytes().await?;
+            return self.relay_punch(ip, &body, now);
+        }
         let body = req.bytes().await?;
         let sig = sig.as_deref();
         let (r, fx) = match (req.method(), path.as_str()) {
@@ -363,6 +458,29 @@ impl DurableObject for Registry {
         };
         self.apply(fx).await?;
         reply(r)
+    }
+
+    async fn websocket_message(&self, ws: WebSocket, message: WebSocketIncomingMessage) -> Result<()> {
+        // Only pings are expected (normally answered by the auto-response before they get here).
+        if let WebSocketIncomingMessage::String(s) = message {
+            if s == punch::PING {
+                let _ = ws.send_with_str(punch::PONG);
+            }
+        }
+        Ok(())
+    }
+
+    async fn websocket_close(&self, ws: WebSocket, _code: usize, _reason: String, _was_clean: bool) -> Result<()> {
+        self.load(now_ms())?;
+        self.listener_gone(&ws);
+        let _ = ws.close(Some(1000), Some("bye"));
+        Ok(())
+    }
+
+    async fn websocket_error(&self, ws: WebSocket, _error: Error) -> Result<()> {
+        self.load(now_ms())?;
+        self.listener_gone(&ws);
+        Ok(())
     }
 
     async fn alarm(&self) -> Result<Response> {

@@ -50,6 +50,8 @@ HSMPInteract : 1
 HSMPDiag : dev
 # HSMPDump: runs UE4SS's object/header dumpers once (the dump hsmp-tools check-bp-names reads).
 HSMPDump : 0
+# HSMPParity: dev-only in-game damage parity experiments (docs/development/subsystems/combat-parity.md).
+HSMPParity : dev
 
 # --- Removed from the repository ---------------------------------------------------
 # Kept at 0 so copies left in a game folder by an older deploy stay off.

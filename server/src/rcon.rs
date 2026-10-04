@@ -24,6 +24,7 @@
 //!   > BESTOF <n>          → "OK config updated" | "ERR <reason>"   (lobby only, 1..=31)
 //!   > KIT <mode> [budget] → kit rules (0 free, 1 classes, 2 custom; lobby only)
 //!   > STATUS              → "OK {json}": phase, round, match_id, arena, roster by seat
+//!   > REPORT              → the newest 10 s stats report: the `stats:` line, one `stats peer` line per player, "END"
 //!   > DEBUG KILL <seat>   → "OK killed seat N ..." | "ERR <reason>"   (`--debug-verbs` only)
 //!   > ADMIN ADD <peer_id|player_id|key>    → "OK admin <player_id>" (appended to
 //!                           --admins-file when set, else for this run)
@@ -396,6 +397,14 @@ async fn handle_client(
                 };
                 info!(%from, cmd = %cmd_line_for_log(verb, rest), reply = %line.lines().next().unwrap_or("").trim(), "rcon");
                 wr.write_all(line.as_bytes()).await?;
+            }
+            // REPORT: the newest 10 s stats report (stats.rs), its lines, then END.
+            "REPORT" => {
+                let mut out = crate::stats::last_report();
+                out.push_str("
+END
+");
+                wr.write_all(out.as_bytes()).await?;
             }
             "STATUS" => {
                 let s = server::rcon_status(&state).await;

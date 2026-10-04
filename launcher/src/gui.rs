@@ -4,6 +4,7 @@
 
 use eframe::egui::{self, Color32, RichText};
 use hsmp_launcher::crash::{self, Consent, ConsentFile, Crash};
+use hsmp_launcher::report;
 use hsmp_launcher::game::{self, BuildCheck};
 use hsmp_launcher::install::{self, Env, Status};
 use hsmp_launcher::package::Package;
@@ -38,6 +39,37 @@ enum Msg {
     Updated(PathBuf),
     /// (game root, firewall rule state)
     Firewall(PathBuf, firewall::State),
+    /// a bug report was prepared
+    Report(Box<Result<Built, String>>),
+    /// a bug report upload finished (the report id)
+    Uploaded(Result<String, String>),
+}
+
+/// A prepared bug report: what the player previews is `rep`, what is saved or sent is `zip`.
+struct Built {
+    rep: report::Report,
+    facts: report::Facts,
+    zip: Vec<u8>,
+}
+
+struct BugUi {
+    runs: Vec<hsmp_diag::sessions::Session>,
+    selected: Vec<bool>,
+    hide_ips: bool,
+    include_dumps: bool,
+    preparing: bool,
+    built: Option<Built>,
+    view: Option<usize>,
+    saved: Option<PathBuf>,
+    uploading: bool,
+    confirm_upload: bool,
+    upload_id: Option<String>,
+}
+
+impl Default for BugUi {
+    fn default() -> Self {
+        BugUi { runs: vec![], selected: vec![], hide_ips: true, include_dumps: true, preparing: false, built: None, view: None, saved: None, uploading: false, confirm_upload: false, upload_id: None }
+    }
 }
 
 #[derive(Default)]
@@ -81,6 +113,7 @@ struct App {
     consent_path: PathBuf,
     consent: ConsentFile,
     crashes: Vec<Crash>,
+    bug: BugUi,
     confirm: Confirm,
     busy: Option<String>,
     tx: Sender<Msg>,
@@ -126,6 +159,7 @@ impl App {
             consent_path,
             consent,
             crashes: vec![],
+            bug: BugUi::default(),
             confirm: Confirm::None,
             busy: None,
             tx,
@@ -157,6 +191,7 @@ impl App {
             app.check_updates();
         }
         app.crashes = crash::new_crashes(&[app.ue_saved.join("Crashes")], &app.consent);
+        app.refresh_runs();
         app
     }
 
@@ -280,6 +315,26 @@ impl App {
                     self.updates.result = Some(r);
                 }
                 Msg::Progress(got, total) => self.updates.progress = Some((got, total)),
+                Msg::Report(r) => {
+                    self.bug.preparing = false;
+                    match *r {
+                        Ok(b) => {
+                            self.push(Level::Ok, format!("bug report ready: {} files, {} KB; check them below before you save or send it", b.rep.entries.len(), b.zip.len() / 1024));
+                            self.bug.built = Some(b);
+                        }
+                        Err(e) => self.push(Level::Err, format!("bug report: {e}")),
+                    }
+                }
+                Msg::Uploaded(r) => {
+                    self.bug.uploading = false;
+                    match r {
+                        Ok(id) => {
+                            self.push(Level::Ok, format!("bug report uploaded: report id {id}"));
+                            self.bug.upload_id = Some(id);
+                        }
+                        Err(e) => self.push(Level::Err, format!("bug report upload: {e}")),
+                    }
+                }
                 Msg::Updated(zip) => {
                     self.pkg = ops::open_package(Some(&zip)).map(Arc::new);
                     self.start_build_check();
@@ -737,55 +792,220 @@ impl App {
         }
     }
 
-    fn ui_crash(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Crash reports");
+    fn refresh_runs(&mut self) {
+        let runs = hsmp_diag::sessions::list(&ops::logs_root(&self.hsmp_home));
+        let crashed_new = !self.crashes.is_empty();
+        let keep: Vec<String> = self.bug.runs.iter().zip(&self.bug.selected).filter(|(_, s)| **s).map(|(r, _)| r.info.id.clone()).collect();
+        self.bug.selected = runs.iter().map(|r| keep.contains(&r.info.id)).collect();
+        if keep.is_empty() {
+            // default: the newest crashed run (when the game crashed since the launcher last looked), else the newest
+            let pick = if crashed_new { runs.iter().position(|r| r.info.outcome == hsmp_diag::sessions::Outcome::Crashed) } else { None }.or(if runs.is_empty() { None } else { Some(0) });
+            if let Some(i) = pick {
+                self.bug.selected[i] = true;
+            }
+        }
+        self.bug.runs = runs;
+    }
+
+    fn start_report(&mut self) {
+        let chosen: Vec<_> = self.bug.runs.iter().zip(&self.bug.selected).filter(|(_, s)| **s).map(|(r, _)| r.clone()).collect();
+        let (tx, env, pkg) = (self.tx.clone(), self.env(), self.pkg.as_ref().ok().cloned());
+        let opts = report::Options { hide_ips: self.bug.hide_ips, include_dumps: self.bug.include_dumps };
+        let log = self.hsmp_home.join("launcher").join("launcher.log");
+        let saved_dir = self.ue_saved.clone();
+        self.bug.preparing = true;
+        self.bug.built = None;
+        self.bug.view = None;
+        self.bug.saved = None;
+        self.bug.upload_id = None;
+        std::thread::spawn(move || {
+            let facts = report::gather(env.as_ref(), pkg.as_deref(), true);
+            let mut rep = report::build(&chosen, Some(&log), Some(&saved_dir), &facts, &opts);
+            let r = rep.zip_capped(hsmp_master_core::reports::MAX_REPORT_BYTES).map(|zip| Built { rep, facts, zip });
+            let _ = tx.send(Msg::Report(Box::new(r)));
+        });
+    }
+
+    fn save_report(&mut self) -> Option<PathBuf> {
+        if let Some(p) = &self.bug.saved {
+            return Some(p.clone());
+        }
+        let b = self.bug.built.as_ref()?;
+        let out = report::default_out(&self.hsmp_home);
+        match report::save(&b.zip, &out) {
+            Ok(()) => {
+                self.push(Level::Ok, format!("bug report saved: {}", out.display()));
+                self.bug.saved = Some(out.clone());
+                Some(out)
+            }
+            Err(e) => {
+                self.push(Level::Err, format!("bug report not saved: {e}"));
+                None
+            }
+        }
+    }
+
+    fn ui_report(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Bug report");
         let before = self.consent.crash_reports;
         ui.horizontal(|ui| {
             ui.label("After a crash:");
-            ui.radio_value(&mut self.consent.crash_reports, Consent::Ask, "ask me");
-            ui.radio_value(&mut self.consent.crash_reports, Consent::Never, "never ask");
+            ui.radio_value(&mut self.consent.crash_reports, Consent::Ask, "tell me");
+            ui.radio_value(&mut self.consent.crash_reports, Consent::Never, "don't");
         });
         if before != self.consent.crash_reports {
             let _ = crash::save(&self.consent_path, &self.consent);
         }
-        ui.label(RichText::new("Nothing is ever sent from this version: a report can only be saved to a folder for you to attach to a bug report.").small());
-        if self.consent.crash_reports == Consent::Never || self.crashes.is_empty() {
-            return;
+        if self.consent.crash_reports != Consent::Never && !self.crashes.is_empty() {
+            ui.horizontal(|ui| {
+                ui.colored_label(WARN, format!("Half Sword crashed {} time(s) since the launcher last looked. Create a bug report below to send us the logs.", self.crashes.len()));
+                if ui.button("Dismiss").clicked() {
+                    self.dismiss_crashes();
+                }
+            });
         }
-        ui.colored_label(WARN, format!("Half Sword crashed {} time(s) since the launcher last looked.", self.crashes.len()));
-        ui.label("A report would contain:");
-        for c in crash::describe_contents() {
-            ui.label(format!("  - {c}"));
+        ui.label(RichText::new(format!("Your last game runs (newest first), kept in {}:", ops::logs_root(&self.hsmp_home).display())).small());
+        if self.bug.runs.is_empty() {
+            ui.label("No game runs recorded yet. They are recorded from the next time you start Half Sword with HSMP.");
         }
-        ui.horizontal(|ui| {
-            if ui.button("Save a redacted report").clicked() {
-                let out = self.hsmp_home.join("crash_reports");
-                let log = self.game_root.as_ref().map(|r| game::win64(r).join("ue4ss").join("UE4SS.log"));
-                let meta = serde_json::json!({
-                    "hsmp": self.pkg.as_ref().map(|p| p.manifest.version.clone()).unwrap_or_default(),
-                    "protocol": self.pkg.as_ref().map(|p| p.manifest.protocol_version).unwrap_or(0),
-                    "game_exe_sha256": self.build.as_ref().and_then(|b| b.as_ref().ok()).map(|b| b.sha256().to_string()),
-                    "saved_utc": util::iso_utc(util::now_unix()),
+        let mut changed = false;
+        egui::ScrollArea::vertical().id_salt("runs").max_height(120.0).show(ui, |ui| {
+            for (i, r) in self.bug.runs.iter().enumerate() {
+                let o = r.info.outcome;
+                let col = match o {
+                    hsmp_diag::sessions::Outcome::Crashed => BAD,
+                    hsmp_diag::sessions::Outcome::Clean | hsmp_diag::sessions::Outcome::Running => ui.visuals().text_color(),
+                    _ => WARN,
+                };
+                let when = hsmp_diag::time::iso(r.info.started_ms).replace('T', " ").replace('Z', " UTC");
+                let what = match o {
+                    hsmp_diag::sessions::Outcome::Running => "running now".to_string(),
+                    hsmp_diag::sessions::Outcome::Unfinished => "unfinished (logs may be missing)".to_string(),
+                    other => other.as_str().to_string(),
+                };
+                ui.horizontal(|ui| {
+                    changed |= ui.checkbox(&mut self.bug.selected[i], "").changed();
+                    ui.colored_label(col, format!("{when}  -  {what}{}", r.info.crash_dirs.first().map(|c| format!("  ({c})")).unwrap_or_default()));
                 });
-                let mut saved = 0;
-                for c in self.crashes.clone() {
-                    match crash::save_local_report(&c, log.as_deref(), &meta, &out) {
-                        Ok(p) => {
-                            saved += 1;
-                            self.push(Level::Ok, format!("crash report saved: {}", p.display()));
-                        }
-                        Err(e) => self.push(Level::Err, format!("crash report {}: {e}", c.name)),
-                    }
-                }
-                if saved > 0 {
-                    open_folder(&out);
-                }
-                self.dismiss_crashes();
-            }
-            if ui.button("Dismiss").clicked() {
-                self.dismiss_crashes();
             }
         });
+        ui.horizontal(|ui| {
+            changed |= ui.checkbox(&mut self.bug.hide_ips, "Hide other players' IP addresses").on_hover_text("Your own public address is always removed.").changed();
+            changed |= ui.checkbox(&mut self.bug.include_dumps, "Include crash dumps").on_hover_text("A crash dump is a snapshot of the game's memory stack when it crashed. It helps us find the cause. It holds no screenshots.").changed();
+        });
+        if changed {
+            self.bug.built = None;
+        }
+        ui.horizontal(|ui| {
+            let idle = !self.bug.preparing && !self.bug.uploading;
+            if ui.add_enabled(idle, egui::Button::new(RichText::new("Create bug report").strong())).on_hover_text("Collects the chosen runs' logs, removes personal data and shows you every file first. Nothing is sent yet.").clicked() {
+                self.refresh_runs();
+                self.start_report();
+            }
+            if ui.button("Refresh").clicked() {
+                self.refresh_runs();
+            }
+            if self.bug.preparing {
+                ui.spinner();
+                ui.label("collecting and removing personal data...");
+            }
+        });
+        let Some(b) = &self.bug.built else { return };
+        ui.label(format!(
+            "The report is {} KB and contains exactly these {} files (user names, home folders, e-mail addresses, keys, passwords{} removed). Click a file to see it:",
+            b.zip.len() / 1024,
+            b.rep.entries.len(),
+            if self.bug.hide_ips { ", IP addresses" } else { ", your own IP address" }
+        ));
+        let mut view = self.bug.view;
+        egui::ScrollArea::vertical().id_salt("report_files").max_height(120.0).show(ui, |ui| {
+            for (i, e) in b.rep.entries.iter().enumerate() {
+                let label = format!("{}  ({} bytes{})", e.name, e.bytes.len(), if e.redacted { "" } else { ", binary, unchanged" });
+                if ui.selectable_label(view == Some(i), label).clicked() {
+                    view = Some(i);
+                }
+            }
+            for l in &b.rep.left_out {
+                ui.label(RichText::new(format!("left out: {l}")).small());
+            }
+        });
+        self.bug.view = view;
+        if let Some(e) = view.and_then(|i| b.rep.entries.get(i)) {
+            let shown = if e.redacted {
+                let t = String::from_utf8_lossy(&e.bytes);
+                let cut = t.char_indices().nth(200_000).map(|(i, _)| i).unwrap_or(t.len());
+                format!("{}{}", &t[..cut], if cut < t.len() { "\n... (the rest is in the zip)" } else { "" })
+            } else {
+                format!("{} is a binary crash dump ({} bytes). It goes into the zip unchanged.", e.name, e.bytes.len())
+            };
+            egui::ScrollArea::both().id_salt("report_view").max_height(200.0).show(ui, |ui| {
+                ui.add(egui::Label::new(RichText::new(shown).monospace().small()).wrap_mode(egui::TextWrapMode::Extend));
+            });
+        }
+        let mut save = false;
+        let mut issue = false;
+        let mut upload = false;
+        ui.horizontal(|ui| {
+            save = ui.button("Save report zip").on_hover_text("Saves it to %LOCALAPPDATA%\\HSMP\\bug_reports and opens the folder").clicked();
+            issue = ui.button("Open GitHub issue").on_hover_text("Saves the zip and opens a pre-filled bug report on GitHub: attach the zip there (drag it into the page)").clicked();
+            if b.facts.report_upload {
+                let can = !self.bug.uploading && self.bug.upload_id.is_none();
+                upload = ui.add_enabled(can, egui::Button::new("Upload to HSMP...")).on_hover_text("Sends the zip to the HSMP developers (kept about 60 days, never public)").clicked();
+                if self.bug.uploading {
+                    ui.spinner();
+                }
+            }
+        });
+        if upload {
+            self.bug.confirm_upload = true;
+        }
+        if self.bug.confirm_upload {
+            ui.group(|ui| {
+                ui.label("Send this report to the HSMP developers? It goes to the HSMP server list service (Cloudflare), is readable only by the developers, and is deleted after about 60 days. You get a report id to quote.");
+                ui.horizontal(|ui| {
+                    if ui.add(egui::Button::new(RichText::new("Yes, upload").strong()).fill(Color32::from_rgb(40, 70, 110))).clicked() {
+                        self.bug.confirm_upload = false;
+                        self.bug.uploading = true;
+                        let (tx, master, zip) = (self.tx.clone(), b.facts.master.clone(), b.zip.clone());
+                        std::thread::spawn(move || {
+                            let _ = tx.send(Msg::Uploaded(report::upload(&master, &zip)));
+                        });
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.bug.confirm_upload = false;
+                    }
+                });
+            });
+        }
+        if let Some(id) = self.bug.upload_id.clone() {
+            ui.horizontal(|ui| {
+                ui.colored_label(OK, format!("Uploaded. Report id: {id}"));
+                if ui.button("Copy id").clicked() {
+                    ui.ctx().copy_text(id.clone());
+                }
+            });
+        }
+        if save {
+            if let Some(p) = self.save_report() {
+                if let Some(d) = p.parent() {
+                    open_folder(d);
+                }
+            }
+        }
+        if issue {
+            if let Some(p) = self.save_report() {
+                let b = self.bug.built.as_ref().expect("built");
+                let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                let outcome = b.rep.sessions.first().and_then(|id| self.bug.runs.iter().find(|r| &r.info.id == id)).map(|r| r.info.outcome.as_str());
+                let url = report::github_issue_url(&b.facts, &name, self.bug.upload_id.as_deref(), outcome);
+                if let Some(d) = p.parent() {
+                    open_folder(d);
+                }
+                if let Err(e) = report::open_url(&url) {
+                    self.push(Level::Err, e);
+                }
+            }
+        }
     }
 
     fn dismiss_crashes(&mut self) {
@@ -898,7 +1118,7 @@ impl eframe::App for App {
                 ui.separator();
                 self.ui_saves(ui);
                 ui.separator();
-                self.ui_crash(ui);
+                self.ui_report(ui);
             });
         });
     }

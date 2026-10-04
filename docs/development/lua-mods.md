@@ -159,7 +159,7 @@ Suppress a reviewed line with `-- wg: ok <reason>`. G0 runs it twice: over every
 | U1 | `:get()`, `.x` or `[..]` on a `RegisterHook` callback parameter whose UFunction parameter is SoftObject/SoftClass (types from the object dump) | null memcpy in UE4SS `push_softobjectproperty`, an access violation `pcall` cannot catch |
 | U2 | reading or writing a SoftObject/SoftClass property by name (`obj.Name`, `obj["Name"]`, `GetPropertyValue`, `SetPropertyValue`) | the same |
 | U3 | `SetLeaderPoseComponent` / `SetMasterPoseComponent`; every `K2_DestroyActor` unless marked | leader pose on a stand-in's `SK_Skeleton` crashed; destroying a pooled Willie is a no-op that snaps it to the origin |
-| U4 | `ExecuteWithDelay`, `LoopAsync`, `RegisterKeyBindAsync`, `ExecuteAsync` not routed through the mod's game-thread shim | off-thread Lua corrupted the Lua VM |
+| U4 | `ExecuteWithDelay`, `LoopAsync`, `RegisterKeyBind(Async)`, `ExecuteAsync` not routed through the mod's game-thread shim | off-thread Lua corrupted the Lua VM |
 | U5 | a hook callback (`RegisterHook`, `NotifyOnNewObject`, BeginPlay hooks) that uses a module-level UObject cache without a world-guard check | a stale UObject written after `OpenLevel` |
 | U6 | `ProcessConsoleExec`, `ConsoleCommand`, `ExecuteConsoleCommand` outside the Director | travel or quit behind the Director's back |
 
@@ -183,8 +183,8 @@ game patch, regenerate the dump (`mods/dev/HSMPDump`) and run it before trusting
 
 ### 5.1 Game thread only
 
-In the pinned UE4SS build, `LoopAsync`, `ExecuteWithDelay` and the callbacks of async key binds
-run on UE4SS worker threads. Running Lua there alongside game-thread Lua corrupted the mod's Lua
+In the pinned UE4SS build, `LoopAsync`, `ExecuteWithDelay` and the callbacks of all key binds
+(sync and async) run on UE4SS worker threads. Running Lua there alongside game-thread Lua corrupted the mod's Lua
 VM: three symbolised crash dumps all faulted inside UE4SS (`lua_next`, `__index` on garbage).
 Every HSMP mod therefore starts with the same shim, which reroutes those APIs to the game
 thread. Copy it verbatim into a new mod, before any other code:
@@ -192,7 +192,6 @@ thread. Copy it verbatim into a new mod, before any other code:
 ```lua
 -- Thread-safety shim (same as every HSMP mod).
 if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then
-    local _gt = ExecuteInGameThread
     ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end
     LoopAsync = function(ms, fn)
         local h
@@ -202,19 +201,41 @@ if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedA
         end)
         return h
     end
-    local _rkba = RegisterKeyBindAsync
-    RegisterKeyBindAsync = function(key, mods, fn)
-        return _rkba(key, mods, function() _gt(function() pcall(fn) end) end)
+    -- Key callbacks run on the UE4SS input thread. Native-function hooks run
+    -- on the game thread on this mod's hook state without UE4SS's lock, so an
+    -- ExecuteInGameThread call from a key callback pushed onto that state
+    -- mid-hook (crash in push_structproperty, 2026-10-03). The input thread
+    -- now only appends to a queue (plain Lua, no UE4SS call) and a
+    -- game-thread loop runs what it queued.
+    local kq, kq_w, kq_r, kq_loop = {}, 0, 0, nil
+    local function kq_wrap(fn)
+        if not kq_loop then
+            kq_loop = LoopInGameThreadWithDelay(16, function()
+                while kq_r < kq_w do
+                    kq_r = kq_r + 1
+                    local f = kq[kq_r]
+                    kq[kq_r] = nil
+                    if f then pcall(f) end
+                end
+            end)
+        end
+        return function() local n = kq_w + 1; kq[n] = fn; kq_w = n end
     end
+    local _rkba = RegisterKeyBindAsync
+    RegisterKeyBindAsync = function(key, mods, fn) return _rkba(key, mods, kq_wrap(fn)) end
     local _rkb = RegisterKeyBind
     RegisterKeyBind = function(key, a, b)
-        if b then return _rkb(key, a, function() _gt(function() pcall(b) end) end) end
-        return _rkb(key, function() _gt(function() pcall(a) end) end)
+        if b then return _rkb(key, a, kq_wrap(b)) end
+        return _rkb(key, kq_wrap(a))
     end
 end
 ```
 
-`check_unsafe` U4 fails on a delay or loop API that is not routed through it. Code that runs
+`check_unsafe` U4 fails on a delay or loop API that is not routed through it. Key callbacks only
+queue: UE4SS runs native-function hooks on the game thread without its lock, so any UE4SS call
+from the input thread (even `ExecuteInGameThread`, which pushes onto the hook state) can corrupt a
+hook in flight. That crashed a spectating client in `push_structproperty` (Q/E cycling raced the
+`KismetSystemLibrary:Delay` hook); U4 also flags `ExecuteInGameThread` inside the shim. Code that runs
 from `NotifyOnNewObject` must hop to the game thread (`ExecuteInGameThread`) before it touches
 anything, including `hsmp_log`.
 

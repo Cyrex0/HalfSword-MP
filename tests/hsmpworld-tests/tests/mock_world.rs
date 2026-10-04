@@ -26,6 +26,9 @@ fn setup() -> Lua {
     // shared/hsmp_wg.lua (the world guard HSMPWorld requires); deploy copies it into Scripts/
     let shared = dir().join("../../mods/shared").to_string_lossy().replace('\\', "/");
     lua.load(format!("package.path = \"{shared}/?.lua;\" .. package.path")).exec().unwrap();
+    // world_follow.lua sits next to main.lua (deploy copies every Scripts/*.lua)
+    let scripts = dir().join("../../mods/HSMPWorld/Scripts").to_string_lossy().replace('\\', "/");
+    lua.load(format!("package.path = \"{scripts}/?.lua;\" .. package.path")).exec().unwrap();
     // the file-backed HSMPNative mock (tools/hsmp-tools/lua-tests/lib)
     lua.load(format!("HSMP_TEST_LIB = \"{shared}/../../tools/hsmp-tools/lua-tests/lib\"; HSMPNative = dofile(HSMP_TEST_LIB .. \"/hsmp_native_filemock.lua\").new()")).exec().unwrap();
     let t: mlua::Table = lua.load(&main).set_name("@HSMPWorld/Scripts/main.lua").eval()
@@ -50,6 +53,11 @@ fn setup() -> Lua {
             return { id = id, chash = T.fnv1a("ModularWeaponBP_LongSword_T3_C|W"), pos = {X=x,Y=y,Z=z},
                      dyn = dyn, class = LONG }
         end
+        -- game frames from t0 to t1 (ms): the follower blends onto the stream
+        function H.frames(o, t0, t1)
+            W.dt = 16
+            for t = t0, t1, 16 do T.update_body(o, t, false) end
+        end
         function H.no_violations()
             if #M.violations > 0 then error("violations:\n" .. table.concat(M.violations, "\n")) end
         end
@@ -58,7 +66,10 @@ fn setup() -> Lua {
             -- what ingest_remote does with one streamed row
             o.buf_sender = sender
             table.insert(o.buf, { t = ts, pos = {X=x,Y=y,Z=z}, q = {0,0,0,1}, vel = {X=0,Y=0,Z=0}, flags = flags })
-            W.render[sender] = { ms = ts, latest = ts }
+            o.buf[#o.buf].rx = ts
+            local c = W.fclock[sender]
+            if not c then c = T.K.FW.clock_new(); W.fclock[sender] = c end
+            T.K.FW.clock_note(c, ts, ts)
             o.settled = false
         end
     "#).exec().unwrap();
@@ -110,18 +121,20 @@ fn peer_drop_spawns_finished_copy_with_passport_and_follows() {
         -- Peer 1 owns it (touch lease) and streams the fall: we follow kinematically.
         W.owners[id] = { owner = 1, ver = 3, mode = 1 }
         H.sample(o, 1, 600, 130, 10, 30, 8)
-        T.update_body(o, 1100, false)
+        T.update_body(o, 600, false)
         local b = o.body
         H.expect(rawget(b, "_sim") == false, "follower is kinematic")
-        H.expect(rawget(b, "_pos").X == 130 and rawget(b, "_pos").Z == 30, "follows the stream")
+        H.expect(math.abs(rawget(b, "_pos").X - 120) < 0.5, "starts from where it is here (no snap)")
+        H.frames(o, 616, 1100)
+        H.expect(math.abs(rawget(b, "_pos").X - 130) < 0.5 and math.abs(rawget(b, "_pos").Z - 30) < 0.5, "blends onto the stream")
         H.sample(o, 1, 700, 140, 10, 5, 8 | 1)   -- asleep frame
-        T.update_body(o, 1200, false)
-        H.expect(rawget(b, "_pos").X == 140, "reaches the rest frame")
+        H.frames(o, 1116, 1700)
+        H.expect(math.abs(rawget(b, "_pos").X - 140) < 0.5, "reaches the rest frame")
 
         -- Released: physics back on AFTER the rest-frame teleport, then asleep.
         W.owners[id] = { owner = 0, ver = 4, mode = 0 }
         M.events = {}
-        T.update_body(o, 1300, false)
+        T.update_body(o, 1800, false)
         local ev = M.events_of(rawget(b, "_name"))
         local tp, sim, sleep
         for i, e in ipairs(ev) do

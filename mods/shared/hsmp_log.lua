@@ -65,6 +65,12 @@ M.EVENTS = {
     -- every 5 s per remote peer during Live
     -- (also carries jitter_ratio, foot_slide_p95, idle_rms)
     pose_quality            = { "peer", "arm_p95_uu", "tip_p95_uu", "latency_ms" },
+    -- SMOOTH-1: every 5 s per remote peer during Live (HSMPAvatars), and every
+    -- move of the local pawn (HSMPSync spawn_place, HSMPAvatars launch clamp)
+    netfeel                 = { "peer", "snaps_per_min", "window_s" },
+    pawn_correction         = { "why", "live" },
+    -- SPAWN-1: joint stretch after a stand-in starts / is re-posed, and after our spawn
+    spawn_stretch           = { "who", "max_uu" },
     -- emitted by hsmp-server / hsmp-sidecar --events; listed so a mod
     -- mirroring them passes the vocabulary check
     load_failed             = { "round", "error" },
@@ -76,6 +82,8 @@ M.EVENTS = {
     -- every ~5 s while in an arena; also emitted by hsmp-server --events with
     -- peer/other). See docs/development/subsystems/world-replication.md.
     world_consistency       = { "hash_match", "mismatched" },
+    world_track             = { "nid", "t", "x", "y", "z", "mode", "rest" },
+    world_sync_quality      = { "hard_snaps", "max_off_cm" },
     -- the local pawn's state at placement / Ready / every 5 s while
     -- spawn-protected / Live / protection end (HSMPSync spawn_place.lua,
     -- at=placed|ready|protect|live|protect_end) and on a kit weapon drop

@@ -63,6 +63,7 @@ pub(crate) use session_records::{broadcast_msg, chat_to, server_chat_msg};
 pub(crate) use records::refused;
 pub use broadcast::shutdown;
 pub use tick::tick_loop;
+pub use session::net_status_notices;
 // Session layer: typed commands, snapshot, RCON match/debug verbs.
 pub(crate) use session::{configure_session, rcon_debug_kill, rcon_status, run_command, Actor, KitView, SessionOpts};
 #[derive(Debug, Clone)]

@@ -92,7 +92,7 @@ career until it is fixed.
 2. In the launcher, look at the **Career saves** list. Pick the newest backup that says
    "career guard: ..." or one of your own backups from before the problem.
 3. Click **Restore selected...**, then **Yes, restore**.
-4. Close and reopen the launcher. If the message comes back, [report a bug](troubleshooting.md#reporting-a-bug)
+4. Close and reopen the launcher. If the message comes back, [report a bug](troubleshooting.md#sending-us-a-bug-report)
    with `launcher.log`.
 
 ## Backups

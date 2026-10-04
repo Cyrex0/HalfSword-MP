@@ -257,6 +257,9 @@ pub async fn tick_loop(
             let fighting = matches!(inner.match_state.as_str(), "live" | "paused")
                 || (inner.match_state == "roundover" && inner.settle_ticks > 0);
             let ids: Vec<PeerId> = if fighting { inner.peers.values().map(|p| p.id).collect() } else { Vec::new() };
+            // Spectators and the dead watch anyone: the relay ranks every
+            // player nearest for them (their parked body says nothing).
+            state.relay.set_free_viewers(inner.peers.iter().filter(|(_, p)| fighting && !p.alive).map(|(a, _)| *a));
             crate::loadout::set_round_lock(&ids);
 
             // Deaths are final and must reach everyone despite loss: repeat this
@@ -336,5 +339,6 @@ pub async fn tick_loop(
             pings_tick(&socket, &state).await;
         }
         crate::perf::perf().tick(t_tick.elapsed().as_micros() as u32);
+        crate::stats::tick(t_tick.elapsed().as_micros() as u32);
     }
 }

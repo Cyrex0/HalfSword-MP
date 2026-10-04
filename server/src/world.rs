@@ -53,7 +53,7 @@ use crate::proto::PeerId;
 use hsmp_ipc::schema::world as rec;
 pub use hsmp_ipc::schema::world::{
     OwnerRec, WorldObj, WorldSnap, CLAIM_INIT, CLAIM_STATE, HS_ALIVE, HS_SETTLED, HS_STATE, MM_POSE, MM_PRESENCE,
-    MM_STATE, MODE_FREE, MODE_HOLD_L, MODE_HOLD_R, MODE_STATE, MODE_TOUCH, WF_ASLEEP, WF_HELD,
+    MM_STATE, MODE_FREE, MODE_HOLD_L, MODE_HOLD_R, MODE_STATE, MODE_TOUCH, WF_ASLEEP, WF_HELD, WF_LEFT,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
@@ -93,6 +93,15 @@ const MAX_SPEED: f32 = 6000.0;
 const SPEED_SLACK: f32 = 300.0;
 /// A held body must stay within this distance of its holder's root (cm).
 const HOLD_RADIUS: f32 = 600.0;
+/// Touch hand-over: a touch claim takes another peer's touch lease when the claimer's root is
+/// within TAKE_R of the body and at least TAKE_MARGIN nearer than the owner's, and the lease is
+/// at least TAKE_MIN_AGE old (no flip-flopping between two pushers).
+pub const TAKE_R: f32 = 200.0;
+pub const TAKE_MARGIN: f32 = 60.0;
+pub const TAKE_MIN_AGE: Duration = Duration::from_millis(400);
+/// ... and only a body slower than this (cm/s): a body flying or sliding fast stays with its owner
+/// (the new owner would start it from its own, older view of it).
+pub const TAKE_SPEED: f32 = 150.0;
 /// Positions outside ±this (cm) are garbage.
 const WORLD_BOUND: f32 = 2.0e6;
 
@@ -562,6 +571,8 @@ pub struct Lease {
     pub mode: u8,
     pub ver: u32,
     pub renewed: Instant,
+    /// When this owner got the lease (touch hand-over waits TAKE_MIN_AGE).
+    pub since: Instant,
     /// Last accepted position + time (speed check); None until first state.
     pub last: Option<([f32; 3], Instant)>,
 }
@@ -594,7 +605,7 @@ pub struct Level {
     /// Initial-state authority of this (level, epoch) and its accepted count.
     pub init_by: Option<PeerId>,
     init_count: usize,
-    /// Accepted initial anchors not yet fanned out (flushed by tick).
+    /// Accepted initial anchors and release poses not yet fanned out (flushed by tick).
     init_out: Vec<WorldSnap>,
     /// Consistency reports: the latest per peer.
     pub hash_latest: HashMap<PeerId, HashReport>,
@@ -700,6 +711,8 @@ pub struct World {
     statics: Statics,
     /// Consistency verdicts since the glue last drained them (logging).
     pub verdicts: Vec<Verdict>,
+    /// Each peer's root position from the last tick (touch hand-over arbitration).
+    positions: HashMap<PeerId, [f32; 3]>,
 }
 
 /// Owner record (the wire row).
@@ -813,7 +826,7 @@ impl World {
 
     pub fn with_statics(statics: Statics) -> Self {
         World { epoch: 1, ver: 0, levels: HashMap::new(), peers: HashMap::new(),
-                last_heal: None, last_keyframe: None, stats: Stats::default(), statics, verdicts: Vec::new() }
+                last_heal: None, last_keyframe: None, stats: Stats::default(), statics, verdicts: Vec::new(), positions: HashMap::new() }
     }
 
     /// Level bucket, seeded from the server-built manifest when one exists.
@@ -1014,7 +1027,10 @@ impl World {
                 if let Some(mut r) = rest.filter(|r| lv.pos_ok(r.pos)) {
                     r.id = id;
                     r.flags |= WF_ASLEEP;
-                    lv.cache.insert(id, Cached { snap: WorldSnap::new(0, 0, 0, r) });
+                    let snap = WorldSnap::new(0, 0, 0, r);
+                    lv.cache.insert(id, Cached { snap });
+                    // the new anchor goes out with the next tick, not a keyframe round later
+                    lv.init_out.push(snap);
                 }
                 changed = true;
             }
@@ -1022,8 +1038,9 @@ impl World {
             let grant = match cur {
                 None => true,
                 Some(l) if l.owner == peer => true,
-                // Hold beats touch; nobody can rob a holder.
-                Some(l) => l.mode == MODE_TOUCH && mode >= MODE_HOLD_R,
+                // Hold beats touch; nobody can rob a holder; a touch goes to the nearer pusher.
+                Some(l) => (l.mode == MODE_TOUCH && mode >= MODE_HOLD_R)
+                    || (l.mode == MODE_TOUCH && mode == MODE_TOUCH && touch_take(&self.positions, lv, id, &l, peer, now)),
             };
             if grant {
                 match lv.leases.get_mut(&id) {
@@ -1032,7 +1049,7 @@ impl World {
                         if l.mode != mode { l.mode = mode; l.ver = ver; changed = true; }
                     }
                     _ => {
-                        lv.leases.insert(id, Lease { owner: peer, mode, ver, renewed: now, last: None });
+                        lv.leases.insert(id, Lease { owner: peer, mode, ver, renewed: now, since: now, last: None });
                         lv.freed.remove(&id);
                         changed = true;
                     }
@@ -1177,15 +1194,24 @@ impl World {
                 }
             }
             let live = lv.leases.get(&o.id).copied().filter(|l| now.duration_since(l.renewed) <= LEASE);
+            let held_mode = if o.flags & WF_HELD == 0 { MODE_TOUCH } else if o.flags & WF_LEFT != 0 { MODE_HOLD_L } else { MODE_HOLD_R };
             match live {
+                // my touch lease, and I am holding it now: it is a hold from this state on
+                Some(l) if l.owner == peer && l.mode == MODE_TOUCH && held_mode != MODE_TOUCH => {
+                    ver = ver.wrapping_add(1).max(1);
+                    if let Some(m) = lv.leases.get_mut(&o.id) { m.mode = held_mode; m.ver = ver; }
+                    changed.push(OwnerRec::new(o.id, peer, ver, held_mode));
+                }
                 Some(l) if l.owner == peer => {}
                 Some(_) => { self.stats.states_rejected += 1; continue; }
                 None => {
-                    // Implicit touch claim of a free (or lapsed) body.
+                    // Implicit claim of a free (or lapsed) body: a hold if the state says it is
+                    // held (else a later pickup would take it from its first holder), else a touch.
+                    let mode = held_mode;
                     ver = ver.wrapping_add(1).max(1);
-                    lv.leases.insert(o.id, Lease { owner: peer, mode: MODE_TOUCH, ver, renewed: now, last: None });
+                    lv.leases.insert(o.id, Lease { owner: peer, mode, ver, renewed: now, since: now, last: None });
                     lv.freed.remove(&o.id);
-                    changed.push(OwnerRec::new(o.id, peer, ver, MODE_TOUCH));
+                    changed.push(OwnerRec::new(o.id, peer, ver, mode));
                 }
             }
             let l = lv.leases.get_mut(&o.id).unwrap();
@@ -1220,6 +1246,7 @@ impl World {
                 positions: &HashMap<PeerId, [f32; 3]>) -> Vec<Out> {
         let mut out = Vec::new();
         self.peers.retain(|p, _| present.contains(p));
+        self.positions = positions.clone();
 
         // ---- lease expiry (timeout or owner gone) ----
         let mut expired: Vec<(u32, Vec<WorldOwnerRec>)> = Vec::new();
@@ -1301,7 +1328,7 @@ impl World {
                 let mut sent = 0usize;
                 // Invariant: budget ≥ cost of the packet being built.
                 for (_, s, q, t, o) in cand {
-                    let mut add = OBJ_BYTES + if groups.iter().any(|g| g.peer_id == s) { 0 } else { GROUP_BYTES };
+                    let mut add = OBJ_BYTES + if groups.iter().any(|g| g.peer_id == s && g.seq == q) { 0 } else { GROUP_BYTES };
                     if bytes + add > MAX_BODY_BYTES {
                         w.budget -= (bytes + WIRE_OVERHEAD) as f64;
                         out.push((dst, Msg::States { level: lid, epoch, groups: std::mem::take(&mut groups) }));
@@ -1373,8 +1400,22 @@ impl World {
     pub fn peer_count(&self) -> usize { self.peers.len() }
 }
 
+/// A touch claim by `peer` on a body another peer's touch lease `l` holds: the claimer's root
+/// must be near the body and clearly nearer than the owner's (see TAKE_R).
+fn touch_take(pos: &HashMap<PeerId, [f32; 3]>, lv: &Level, id: u32, l: &Lease, peer: PeerId, now: Instant) -> bool {
+    if now.saturating_duration_since(l.since) < TAKE_MIN_AGE { return false; }
+    let Some(obj) = lv.cache.get(&id).map(|c| c.snap.obj) else { return false };
+    let v = obj.vel.map(|x| x as f32);
+    if (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt() > TAKE_SPEED { return false; }
+    let body = obj.pos;
+    let (Some(me), Some(them)) = (pos.get(&peer), pos.get(&l.owner)) else { return false };
+    let (dm, dt) = (dist(*me, body), dist(*them, body));
+    dm <= TAKE_R && dm + TAKE_MARGIN <= dt
+}
+
 fn push_obj(groups: &mut Vec<WorldGroup>, bytes: &mut usize, s: PeerId, q: u32, t: u32, o: WorldObj) {
-    match groups.iter_mut().find(|g| g.peer_id == s) {
+    // one group per sender batch: each row keeps its own sample time
+    match groups.iter_mut().find(|g| g.peer_id == s && g.seq == q) {
         Some(g) => { g.objects.push(o); *bytes += OBJ_BYTES; }
         None => {
             groups.push(WorldGroup { peer_id: s, seq: q, ts: t, objects: vec![o] });
@@ -1556,6 +1597,87 @@ mod tests {
         let (n, _) = w.state(1, 77, e, 4, 150, &[obj(10, [800.0, 0.0, 0.0], WF_HELD)],
                              Some([800.0, 2000.0, 0.0]), t1);
         assert_eq!(n, 0, "held 20 m from the holder");
+    }
+
+    /// Touch hand-over on contact: the nearer pusher gets a slow body; never a fast one,
+    /// never a fresh lease, never a holder's.
+    #[test]
+    fn touch_lease_goes_to_the_nearer_pusher_of_a_slow_body() {
+        let (mut w, t) = setup(2);
+        let e = w.epoch;
+        let pos = |a: [f32; 3], b: [f32; 3]| -> HashMap<PeerId, [f32; 3]> { [(1, a), (2, b)].into_iter().collect() };
+        // peer 1 pushes body 10 (at the origin), then walks off; peer 2 is next to it
+        w.state(1, 77, e, 1, 0, &[obj(10, [5.0, 0.0, 0.0], WF_SIM)], None, t);
+        w.tick(t, &present(&[1, 2]), &pos([400.0, 0.0, 0.0], [80.0, 0.0, 0.0]));
+        let (r, ch) = done(w.claim(2, 77, e, 10, MODE_TOUCH, None, t + Duration::from_millis(100)));
+        assert!(!ch && r.owner == 1, "a lease younger than TAKE_MIN_AGE stays");
+        let t1 = t + TAKE_MIN_AGE + Duration::from_millis(10);
+        w.state(1, 77, e, 2, 50, &[obj(10, [5.0, 0.0, 0.0], WF_SIM)], None, t1);
+        w.tick(t1, &present(&[1, 2]), &pos([400.0, 0.0, 0.0], [80.0, 0.0, 0.0]));
+        let (r, ch) = done(w.claim(2, 77, e, 10, MODE_TOUCH, None, t1));
+        assert!(ch && r.owner == 2 && r.mode == MODE_TOUCH, "the nearer pusher takes it");
+        // a fast body stays with its owner
+        let t2 = t1 + TAKE_MIN_AGE + Duration::from_millis(10);
+        let fast = WorldObj::from_parts(10, [5.0, 0.0, 0.0], [0.0; 3], [400.0, 0.0, 0.0], WF_SIM);
+        w.state(2, 77, e, 3, 100, &[fast], None, t2);
+        w.tick(t2, &present(&[1, 2]), &pos([60.0, 0.0, 0.0], [300.0, 0.0, 0.0]));
+        let (r, ch) = done(w.claim(1, 77, e, 10, MODE_TOUCH, None, t2));
+        assert!(!ch && r.owner == 2, "a body faster than TAKE_SPEED is not handed over");
+        // not nearer by TAKE_MARGIN: no hand-over
+        w.state(2, 77, e, 4, 150, &[obj(10, [5.0, 0.0, 0.0], WF_SIM)], None, t2);
+        w.tick(t2, &present(&[1, 2]), &pos([100.0, 0.0, 0.0], [130.0, 0.0, 0.0]));
+        let (r, ch) = done(w.claim(1, 77, e, 10, MODE_TOUCH, None, t2));
+        assert!(!ch && r.owner == 2, "only a clearly nearer pusher");
+        // a holder is never robbed by a touch
+        done(w.claim(1, 77, e, 11, MODE_HOLD_R, None, t2));
+        w.tick(t2 + TAKE_MIN_AGE * 2, &present(&[1, 2]), &pos([2000.0, 0.0, 0.0], [500.0, 0.0, 0.0]));
+        let (r, ch) = done(w.claim(2, 77, e, 11, MODE_TOUCH, None, t2 + TAKE_MIN_AGE * 2));
+        assert!(!ch && r.owner == 1, "holds are never taken by a touch");
+    }
+
+    /// A held state takes (or upgrades to) a hold lease, so a later pickup by someone else
+    /// cannot take the item from its first holder ("hold beats touch").
+    #[test]
+    fn held_states_claim_a_hold_not_a_touch() {
+        let (mut w, t) = setup(2);
+        let e = w.epoch;
+        let (_, ch) = w.state(1, 77, e, 1, 0, &[obj(10, [5.0, 0.0, 0.0], WF_HELD)], Some([0.0; 3]), t);
+        assert_eq!((ch[0].owner, ch[0].mode), (1, MODE_HOLD_R), "implicit claim from a held state is a hold");
+        let (r, chg) = done(w.claim(2, 77, e, 10, MODE_HOLD_L, None, t));
+        assert!(!chg && r.owner == 1, "the second pickup loses");
+        // my touch lease, then I pick it up: the first held state upgrades it
+        done(w.claim(1, 77, e, 11, MODE_TOUCH, None, t));
+        let (_, ch) = w.state(1, 77, e, 2, 50, &[obj(11, [500.0, 0.0, 0.0], WF_HELD | WF_LEFT)], Some([500.0, 0.0, 0.0]), t);
+        assert_eq!((ch.len(), ch[0].mode), (1, MODE_HOLD_L));
+        let (r, chg) = done(w.claim(2, 77, e, 11, MODE_HOLD_R, None, t));
+        assert!(!chg && r.owner == 1);
+    }
+
+    /// A release fans its rest pose out with the next tick (late joiners and every follower get
+    /// the new anchor at once, not a keyframe round later); a relayed packet keeps one group per
+    /// sender batch, so each row carries its own sample time.
+    #[test]
+    fn release_anchor_goes_out_next_tick_and_groups_keep_their_ts() {
+        let (mut w, t) = setup(2);
+        let e = w.epoch;
+        done(w.claim(1, 77, e, 10, MODE_TOUCH, None, t));
+        let rest = obj(10, [30.0, 0.0, 0.0], WF_SIM);
+        let (r, ch) = done(w.claim(1, 77, e, 10, MODE_FREE, Some(rest), t));
+        assert!(ch && r.owner == 0);
+        let out = w.tick(t, &present(&[1, 2]), &HashMap::new());
+        for p in [1, 2] {
+            assert!(out.iter().any(|(d, m)| *d == p && matches!(m, Msg::Snapshot { objects, .. }
+                if objects.iter().any(|s| s.sender == 0 && s.obj.id == 10 && s.obj.pos[0] == 30.0))), "peer {p} gets the anchor");
+        }
+        // two batches of one sender in one flush: two groups, each with its own ts
+        w.state(1, 77, e, 5, 100, &[obj(11, [500.0, 0.0, 0.0], WF_SIM)], None, t);
+        w.state(1, 77, e, 6, 133, &[obj(12, [0.0, 900.0, 0.0], WF_SIM)], None, t);
+        let out = w.tick(t + Duration::from_millis(40), &present(&[1, 2]), &HashMap::new());
+        let g: Vec<(u32, u32, u32)> = out.iter().filter(|(d, _)| *d == 2).flat_map(|(_, m)| match m {
+            Msg::States { groups, .. } => groups.iter().map(|g| (g.seq, g.ts, g.objects[0].id)).collect(),
+            _ => Vec::new(),
+        }).collect();
+        assert!(g.contains(&(5, 100, 11)) && g.contains(&(6, 133, 12)), "{g:?}");
     }
 
     #[test]

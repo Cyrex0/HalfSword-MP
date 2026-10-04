@@ -95,7 +95,7 @@ These folders are not removed by Uninstall. Delete them by hand only if you are 
 | `%LOCALAPPDATA%\HSMP\save_backups\` | **Your career save backups.** Keep them until you are sure your career is fine. |
 | `%LOCALAPPDATA%\HSMP\uninstalled\` | HSMP settings and logs moved out of the game folder. |
 | `%LOCALAPPDATA%\HSMP\changed_by_you\` | Your versions of HSMP files you had edited. |
-| `%LOCALAPPDATA%\HSMP\crash_reports\` | Crash reports you saved. |
+| `%LOCALAPPDATA%\HSMP\logs\`, `%LOCALAPPDATA%\HSMP\bug_reports\` | The logs of your last game runs, and bug reports you saved. |
 | `%LOCALAPPDATA%\HSMP\launcher\` | The launcher's records and `launcher.log`. |
 | `%LOCALAPPDATA%\HSMP\bin\` | The launcher copy used for updates. |
 | `%LOCALAPPDATA%\HSMP\identity` | Your player identity. Keep it if you want the same player key after a reinstall (server admins name admins by that key). |

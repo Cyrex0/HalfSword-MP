@@ -1,0 +1,13 @@
+{"arena":"Map_Arena_Cellar","by":"rcon","ev":"arena_picked","inst":"server","seq":1,"t_ms":2100,"v":1,"wall_ms":1790880002100}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"Lobby","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":1,"seq":2,"t_ms":2300,"to":"Loading","v":1,"wall_ms":1790880002300}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"Loading","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":1,"seq":3,"t_ms":8000,"to":"Countdown","v":1,"wall_ms":1790880008000}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"Countdown","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":1,"seq":4,"t_ms":11000,"to":"Live","v":1,"wall_ms":1790880011000}
+{"detail":"killed","ev":"debug_kill","inst":"server","ok":true,"seat":1,"seq":5,"t_ms":21510,"v":1,"wall_ms":1790880021510}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"Live","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":1,"seq":6,"t_ms":22000,"to":"RoundOver","v":1,"wall_ms":1790880022000}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"RoundOver","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":2,"seq":7,"t_ms":25000,"to":"Loading","v":1,"wall_ms":1790880025000}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"Loading","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":2,"seq":8,"t_ms":31000,"to":"Countdown","v":1,"wall_ms":1790880031000}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"Countdown","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":2,"seq":9,"t_ms":34000,"to":"Live","v":1,"wall_ms":1790880034000}
+{"detail":"killed","ev":"debug_kill","inst":"server","ok":true,"seat":2,"seq":10,"t_ms":44510,"v":1,"wall_ms":1790880044510}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"Live","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":2,"seq":11,"t_ms":45000,"to":"RoundOver","v":1,"wall_ms":1790880045000}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"RoundOver","frozen_arena":"Map_Arena_Cellar","inst":"server","match_id":1,"round":2,"seq":12,"t_ms":48400,"to":"MatchOver","v":1,"wall_ms":1790880048400}
+{"arena":"Map_Arena_Cellar","epoch":1,"ev":"phase","from":"MatchOver","frozen_arena":null,"inst":"server","match_id":1,"round":2,"seq":13,"t_ms":48500,"to":"Lobby","v":1,"wall_ms":1790880048500}

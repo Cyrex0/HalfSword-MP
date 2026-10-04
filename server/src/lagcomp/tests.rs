@@ -197,17 +197,22 @@ fn forged_attacker_ts_rejected() {
 }
 
 #[test]
-fn rewind_cap_300_and_high_latency_400() {
-    // RTT 300: the honest view is ~360 ms behind the victim's newest sample.
-    let mut sc = Scene::new(150, 2000, still, |_| None, |_| [-60.0, 0.0, 140.0]);
+fn rewind_cap_follows_the_attackers_path_up_to_the_ceiling() {
+    // RTT 300: the honest view is ~360 ms behind the victim's newest sample. The
+    // cap follows the attacker's measured path, so the hit lands.
+    let sc = Scene::new(150, 2000, still, |_| None, |_| [-60.0, 0.0, 140.0]);
     let h = 2000 - 150;
-    let honest = sc.honest_view(h, 31);
     let c = [0.0, 0.0, 130.0];
-    let r = reason(sc.eval(&hit(VIC, c, sc.ats(h), honest)));
-    assert!(r.contains("cap 300"), "{}", r);
-    sc.s.set_max_rewind(400);
-    assert!(accepted(&sc.eval(&hit(VIC, c, sc.ats(h), honest))), "{:?}", sc.eval(&hit(VIC, c, sc.ats(h), honest)));
-    sc.s.set_max_rewind(10_000); // clamped to the high-latency cap
+    let e = sc.eval(&hit(VIC, c, sc.ats(h), sc.honest_view(h, 31)));
+    assert!(accepted(&e), "{:?}", e);
+    // RTT 700: past REWIND_CEILING_MS even for an honest view (favour the defender).
+    let sc = Scene::new(350, 3000, still, |_| None, |_| [-60.0, 0.0, 140.0]);
+    let h = 3000 - 350;
+    let r = reason(sc.eval(&hit(VIC, c, sc.ats(h), sc.honest_view(h, 31))));
+    assert!(r.contains("cap 600"), "{}", r);
+    // The configured floor stays clamped to the high-latency cap.
+    let mut sc = sc;
+    sc.s.set_max_rewind(10_000);
     assert_eq!(sc.s.max_rewind(), HIGH_LATENCY_REWIND_MS);
 }
 

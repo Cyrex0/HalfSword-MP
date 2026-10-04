@@ -20,7 +20,7 @@
 --   * Spectates a living opponent's puppet after you die (auto-advance,
 --     Q / E cycle), published in the bus key spectate.
 --   * Slow motion fully disabled and the world never paused in MP sessions.
---   * r.HairStrands.Streaming 0 at boot and on every world change (pak read
+--   * the IO-1 hair cvars at boot and on every world change (pak read
 --     crash workaround).
 --
 -- Session facts: the sidecar's typed records in shared memory (link: status,
@@ -36,7 +36,6 @@ local UEHelpers = require("UEHelpers")
 -- userdata). Route every deferred, looped and key-bound callback onto
 -- the game thread.
 if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then
-    local _gt = ExecuteInGameThread
     ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end
     LoopAsync = function(ms, fn)
         local h
@@ -46,14 +45,32 @@ if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedA
         end)
         return h
     end
-    local _rkba = RegisterKeyBindAsync
-    RegisterKeyBindAsync = function(key, mods, fn)
-        return _rkba(key, mods, function() _gt(function() pcall(fn) end) end)
+    -- Key callbacks run on the UE4SS input thread. Native-function hooks run
+    -- on the game thread on this mod's hook state without UE4SS's lock, so an
+    -- ExecuteInGameThread call from a key callback pushed onto that state
+    -- mid-hook (crash in push_structproperty, 2026-10-03). The input thread
+    -- now only appends to a queue (plain Lua, no UE4SS call) and a
+    -- game-thread loop runs what it queued.
+    local kq, kq_w, kq_r, kq_loop = {}, 0, 0, nil
+    local function kq_wrap(fn)
+        if not kq_loop then
+            kq_loop = LoopInGameThreadWithDelay(16, function()
+                while kq_r < kq_w do
+                    kq_r = kq_r + 1
+                    local f = kq[kq_r]
+                    kq[kq_r] = nil
+                    if f then pcall(f) end
+                end
+            end)
+        end
+        return function() local n = kq_w + 1; kq[n] = fn; kq_w = n end
     end
+    local _rkba = RegisterKeyBindAsync
+    RegisterKeyBindAsync = function(key, mods, fn) return _rkba(key, mods, kq_wrap(fn)) end
     local _rkb = RegisterKeyBind
     RegisterKeyBind = function(key, a, b)
-        if b then return _rkb(key, a, function() _gt(function() pcall(b) end) end) end
-        return _rkb(key, function() _gt(function() pcall(a) end) end)
+        if b then return _rkb(key, a, kq_wrap(b)) end
+        return _rkb(key, kq_wrap(a))
     end
 end
 
@@ -451,13 +468,29 @@ end
 -- HSMPMatch only logs the server's results below.
 
 -- --- spectate after death ------------------------------------------------------------
--- Dead while the round plays out: the camera follows a living opponent's
--- stand-in (bus key puppets: peer id -> Willie FName). The target advances by
+-- Dead while the round plays out: our own camera (spectate_cam.lua) follows a
+-- living opponent's stand-in (bus key puppets: peer id -> Willie FName), or
+-- shows the whole arena when nobody is left to watch. The target advances by
 -- itself when it dies; Q / E cycle while spectating. The choice is published
--- in the bus key spectate for HSMPHud's "Spectating <name>" label:
---   {target = <peer id>, nick, round, alive}   or   {target = 0} (not spectating)
+-- in the bus key spectate for HSMPHud's label:
+--   {target = <peer id>, nick, round, alive}, {target = ARENA_VIEW} (arena
+--   overview) or {target = 0} (not spectating)
+-- Viewing through the stand-in itself showed black: its active camera is
+-- whichever the shared game settings picked, the first-person one sits
+-- inside its head and helmet.
 
-local spec = { on = false, target = nil, written = nil }
+local SCAM, scam_err = load_module("spectate_cam")
+if not SCAM then Log("WARNING: spectate_cam.lua missing (%s): spectating disabled", tostring(scam_err)) end
+local ARENAS = load_module("hsmp_arenas")
+local ARENA_VIEW = 0xFFFFFFFF
+-- Native death / lose screens that cover the view while a dead player spectates.
+-- UI_HUD_C's images that cover a dead player's view: the blackout and vignettes,
+-- the full-screen blood (HPDmg*) and the own-body damage overlays.
+local HUD_BLACKOUT = { "Black", "Vignette", "Vignette_Pain", "Vignette_WakeUp", "HPDmg1", "HPDmg2", "HPDmg3",
+                       "HeadDmg", "ArmLDmg", "ArmRDmg", "LegLDmg", "LegRDmg", "TextHurt", "TextDisabled", "TextDisabled_1" }
+local DEATH_SCREENS = { "UI_DED_C", "UI_DeathDoor_C", "UI_Lose_C", "UI_GiveUp_C", "UI_NextFIght_C", "UI_FadeOut_C" }
+
+local spec = { on = false, target = nil, written = nil, lost = {} }
 
 -- Bus key `spectate` (typed record; target 0 = not spectating). Written on change only.
 local function write_spectate(target, nick, alive_n)
@@ -470,9 +503,239 @@ local function write_spectate(target, nick, alive_n)
     if ipc and ipc.bus_put then ipc.bus_put("spectate", t) end
 end
 
--- Hand the camera back to the own pawn (fresh lookup; the view
--- target was a stand-in of THIS world, the world guard clears spec.on on a
--- level change, so a new world never gets here with spec.on set).
+-- The watched stand-in, cached for this world only (dropped by the world
+-- guard, re-found at most twice a second by FName).
+local standin = { name = nil, actor = nil, find_at = -1e9, diag = {} }
+local function find_standin(fname)
+    if standin.name == fname and standin.actor then
+        local ok, live = pcall(function() return standin.actor:IsValid() end)
+        if ok and live then return standin.actor end
+        standin.actor = nil
+    end
+    local now = os.clock()
+    if standin.name == fname and now - standin.find_at < 0.5 then return nil end
+    standin.name, standin.find_at, standin.actor = fname, now, nil
+    if not WG.settled() then return nil end
+    pcall(function()
+        for _, w in pairs(FindAllOf("Willie_BP_C") or {}) do
+            if w and w:IsValid() and w:GetFName():ToString() == fname then standin.actor = w; return end
+        end
+    end)
+    return standin.actor
+end
+
+local function vec_of(l) return l and { x = l.X, y = l.Y, z = l.Z } or nil end
+
+local function standin_pos(fname)
+    local w = fname and find_standin(fname)
+    if not w then return nil end
+    local hidden = false
+    pcall(function() hidden = w.bHidden == true end)
+    if hidden then return nil end   -- a pooled, parked Willie
+    local p
+    pcall(function() p = vec_of(w.Mesh:GetSocketLocation(FName("pelvis"))) end)
+    if not p or (p.x == 0 and p.y == 0 and p.z == 0) then
+        pcall(function() p = vec_of(w:K2_GetActorLocation()) end)
+    end
+    -- Once per stand-in: what its own camera would have shown (the black-screen cause).
+    if not standin.diag[fname] then
+        standin.diag[fname] = true
+        local fp, tp = "?", "?"
+        pcall(function() fp = tostring(w["First Person Camera"]:IsActive()) end)
+        pcall(function() tp = tostring(w.FollowCamera:IsActive()) end)
+        Log("spectate: stand-in %s own cameras: first-person active=%s, follow active=%s", fname, fp, tp)
+    end
+    return p
+end
+
+local function arena_frame()
+    local d = ARENAS and ARENAS[short_name(WG.name) or ""]
+    if type(d) ~= "table" or type(d.centre) ~= "table" then return nil end
+    local c = { x = d.centre[1], y = d.centre[2], z = d.centre[3] }
+    local r = 0
+    for _, s in ipairs(d.spawns or {}) do
+        if s.valid ~= false then r = math.max(r, math.sqrt((s.x - c.x) ^ 2 + (s.y - c.y) ^ 2)) end
+    end
+    return { centre = c, radius = r * 1.1 }
+end
+
+-- What is on screen besides our camera: view target, camera fade, widgets in
+-- the viewport (the black-screen evidence; logged at entry and 2.5 s later).
+local function spectate_census(cm, why)
+    local vt, loc, fade, fading = "?", "?", "?", "?"
+    pcall(function() vt = cm:GetViewTarget():GetFName():ToString() end)
+    pcall(function() local l = cm:GetCameraLocation(); loc = string.format("%.0f,%.0f,%.0f", l.X, l.Y, l.Z) end)
+    pcall(function() fade = tostring(cm.FadeAmount) end)
+    pcall(function() fading = tostring(cm.bEnableFading) end)
+    local ws = {}
+    pcall(function()
+        for _, w in pairs(FindAllOf("UserWidget") or {}) do
+            local inv = false
+            pcall(function() inv = w:IsInViewport() end)
+            if inv then
+                local cls, vis = "?", "?"
+                pcall(function() cls = w:GetClass():GetFName():ToString() end)
+                pcall(function() vis = tostring(w:GetVisibility()) end)
+                ws[#ws + 1] = cls .. "/" .. vis
+            end
+        end
+    end)
+    Log("spectate census (%s): view target %s at %s, fade %s enabled %s | widgets in viewport: %s",
+        why, vt, loc, fade, fading, table.concat(ws, " "))
+end
+
+local cam_env = {
+    world_key = function() return WG.key end,
+    spawn_camera = function()
+        local cls = StaticFindObject("/Script/Engine.CameraActor")
+        local world, gs
+        pcall(function() world = UEHelpers.GetWorld() end)
+        pcall(function() gs = UEHelpers.GetGameplayStatics() end)
+        if not (cls and cls:IsValid() and world and gs) then return nil end
+        local t = { Translation = { X = 0, Y = 0, Z = 0 }, Rotation = { X = 0, Y = 0, Z = 0, W = 1 }, Scale3D = { X = 1, Y = 1, Z = 1 } }
+        local a
+        pcall(function() a = gs:BeginDeferredActorSpawnFromClass(world, cls, t, 1, nil, 1) end)
+        if not (a and a:IsValid()) then return nil end
+        if not pcall(function() gs:FinishSpawningActor(a, t, 1) end) or not a:IsValid() then return nil end
+        pcall(function() a.CameraComponent.bConstrainAspectRatio = false end)
+        pcall(function() a.CameraComponent:SetFieldOfView(90) end)
+        return a
+    end,
+    cam_ok = function(cam) local ok, live = pcall(function() return cam:IsValid() end); return ok and live end,
+    place = function(cam, p, r)
+        pcall(function()
+            cam:K2_SetActorLocationAndRotation({ X = p.x, Y = p.y, Z = p.z }, { Pitch = r.pitch, Yaw = r.yaw, Roll = 0 }, false, {}, true)
+        end)
+    end,
+    view = function(cam, blend)
+        local _, pc = local_pawn()
+        if pc then pcall(function() pc:SetViewTargetWithBlend(cam, blend, 0, 0, false) end) end
+    end,
+    clear_fade = function()
+        local _, pc = local_pawn()
+        local cm
+        pcall(function() cm = pc and pc.PlayerCameraManager end)
+        if not (cm and cm:IsValid()) then return end
+        local fade
+        pcall(function() fade = tonumber(cm.FadeAmount) end)
+        pcall(function() cm:StopCameraFade() end)
+        if fade and fade > 0 then
+            pcall(function() cm:SetManualCameraFade(0, { R = 0, G = 0, B = 0, A = 1 }, false) end)
+        end
+        Log("spectate: camera fade was %s; cleared", tostring(fade))
+        if spec.census_key ~= WG.key then
+            spec.census_key, spec.census_at = WG.key, os.clock()
+            spectate_census(cm, "entry")
+        end
+    end,
+    enforce = function(cam)
+        local _, pc = local_pawn()
+        if not pc then return end
+        local cm
+        pcall(function() cm = pc.PlayerCameraManager end)
+        if cm and cm:IsValid() then
+            pcall(function() cm:StopCameraFade() end)
+            -- The native death flow points the view elsewhere again: take it back.
+            local vt, vname
+            pcall(function() vt = pc:GetViewTarget() end)
+            pcall(function() vname = vt:GetFName():ToString() end)
+            if vname and vname ~= cam:GetFName():ToString() then
+                local was = vname
+                spec.vt_fights = (spec.vt_fights or 0) + 1
+                if spec.vt_fights <= 3 or spec.vt_fights % 50 == 0 then
+                    Log("spectate: view target was %s, back on our camera (x%d)", was, spec.vt_fights)
+                end
+                pcall(function() pc:SetViewTargetWithBlend(cam, 0, 0, 0, false) end)
+            end
+        end
+        if spec.census_at and os.clock() - spec.census_at >= 2.5 then
+            spec.census_at = nil
+            if cm and cm:IsValid() then spectate_census(cm, "+2.5 s") end
+        end
+        -- The death screens (UI_DED's "Black" image fades in about a second
+        -- after death): hidden, never destroyed (native widgets), twice a second.
+        local now = os.clock()
+        -- The native in-game HUD (UI_HUD_C): its "Black" and "Vignette*" images
+        -- follow the OWN pawn's consciousness, so they fade to opaque black
+        -- over the view a second or two after death, whatever the camera.
+        -- Only those images are collapsed (HSMPHud lives inside UI_HUD_C),
+        -- every 100 ms in case its Tick shows them again; stop_spectating
+        -- restores them (same world only).
+        pcall(function()
+            for _, h in pairs(FindAllOf("UI_HUD_C") or {}) do
+                if h:IsValid() and h:IsInViewport() then
+                    for _, prop in ipairs(HUD_BLACKOUT) do
+                        local img
+                        pcall(function() img = h[prop] end)
+                        if img and img:IsValid() then
+                            local vis = img:GetVisibility()
+                            if vis ~= 1 then
+                                if not spec.hud or spec.hud.key ~= WG.key then spec.hud = { key = WG.key, list = {}, seen = {} } end
+                                local id = h:GetFName():ToString() .. "." .. prop
+                                if not spec.hud.seen[id] then
+                                    spec.hud.seen[id] = true
+                                    table.insert(spec.hud.list, { w = img, vis = vis })
+                                    Log("spectate: native UI_HUD_C.%s collapsed (the death blackout)", prop)
+                                end
+                                img:SetVisibility(1)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        if now - (spec.screens_at or 0) < 0.5 then return end
+        spec.screens_at = now
+        for _, cls in ipairs(DEATH_SCREENS) do
+            pcall(function()
+                for _, w in pairs(FindAllOf(cls) or {}) do
+                    if w:IsValid() and w:IsInViewport() and w:GetVisibility() ~= 1 then
+                        w:SetVisibility(1)   -- Collapsed
+                        spec.hidden = spec.hidden or {}
+                        if not spec.hidden[cls] then
+                            spec.hidden[cls] = true
+                            Log("spectate: hid native %s (it covered the view)", cls)
+                        end
+                    end
+                end
+            end)
+        end
+    end,
+    -- World-static geometry only (object type 0): players never push the camera.
+    trace = function(a, b)
+        local ksl = UEHelpers.GetKismetSystemLibrary()
+        local world
+        pcall(function() world = UEHelpers.GetWorld() end)
+        if not (ksl and ksl:IsValid() and world) then return nil end
+        local hit, was = {}, false
+        local clr = { R = 0, G = 0, B = 0, A = 0 }
+        pcall(function()
+            was = ksl:LineTraceSingleForObjects(world, { X = a.x, Y = a.y, Z = a.z }, { X = b.x, Y = b.y, Z = b.z },
+                { 0 }, false, {}, 0, hit, true, clr, clr, 0.0)
+        end)
+        if not was then return nil end
+        local ip
+        pcall(function() ip = hit.ImpactPoint end)
+        if not ip then return nil end
+        local d = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2 + (b.z - a.z) ^ 2)
+        if d < 1 then return nil end
+        return math.sqrt((ip.X - a.x) ^ 2 + (ip.Y - a.y) ^ 2 + (ip.Z - a.z) ^ 2) / d
+    end,
+    target_pos = standin_pos,
+    arena = arena_frame,
+    players = function()
+        local out = {}
+        for _, e in ipairs(spec.cands or {}) do
+            local p = standin_pos(e.fname)
+            if p then out[#out + 1] = p end
+        end
+        return out
+    end,
+    log = Log,
+}
+local scam = SCAM and SCAM.new(cam_env)
+
+-- Hand the camera back to the own pawn (fresh lookup).
 local function view_own()
     local p, pc = local_pawn()
     if not (p and pc) then return false end
@@ -484,53 +747,61 @@ local function stop_spectating(why)
     if spec.on then
         Log("spectating off (%s)%s", why, view_own() and "; camera back on the own pawn" or "")
     end
-    spec.on, spec.target = false, nil
+    spec.on, spec.target, spec.lost = false, nil, {}
+    spec.vt_fights, spec.hidden = 0, nil
+    -- The native HUD comes back (this world only: after a level change the
+    -- old widgets are freed and the new world has its own HUD).
+    if spec.hud and spec.hud.key == WG.key then
+        for _, e in ipairs(spec.hud.list) do
+            pcall(function() if e.w:IsValid() then e.w:SetVisibility(e.vis) end end)
+        end
+    end
+    spec.hud = nil
+    if scam then scam:off() end
     write_spectate(nil)
 end
 
--- Living opponents with a stand-in, in roster order.
+-- Living opponents with a stand-in, in roster order. A target the camera
+-- lost (no visible stand-in) sits out for a few seconds.
+local LOST_HOLD_S = 3.0
 local function spectate_candidates()
     local pt = IPC and IPC.bus_table("puppets")
     local names = {}
     for _, r in ipairs(type(pt) == "table" and pt.rows or {}) do
         if r.peer and r.peer ~= 0 and type(r.name) == "string" and r.name ~= "" then names[r.peer] = r.name end
     end
-    local out = {}
+    local now, out = os.clock(), {}
     for _, id in ipairs(session.order) do
-        if id ~= session.my_id and session.alive[id] and names[id] then
+        local lost = spec.lost[id]
+        if id ~= session.my_id and session.alive[id] and names[id] and not (lost and now - lost < LOST_HOLD_S) then
             out[#out + 1] = { id = id, fname = names[id] }
         end
     end
+    spec.cands = out
     return out
 end
 
--- Fresh lookup of the stand-in by FName; nothing is cached.
-local function view_target(fname)
-    local _, pc = local_pawn()
-    if not pc then return false end
-    -- No FindAllOf over Willies in the first seconds of a world
-    if not WG.settled() then return false end
-    local ok = false
-    pcall(function()
-        for _, w in pairs(FindAllOf("Willie_BP_C") or {}) do
-            if w and w:IsValid() and w:GetFName():ToString() == fname then
-                pc:SetViewTargetWithBlend(w, 0.6, 0, 0, false)
-                ok = true
-                return
-            end
-        end
-    end)
-    return ok
+local function arena_view(why)
+    if not scam then return end
+    local was = spec.on and spec.target == nil and scam.mode == "sky"
+    spec.on, spec.target = true, nil
+    scam:sky()
+    if not was then Log("spectating: arena view (%s)", why) end
+    write_spectate(ARENA_VIEW, "", 0)
 end
 
 -- step 0: keep the current target while it lives (else take the next one);
 -- step +1 / -1: cycle.
 local function spectate_step(step)
-    local c = spectate_candidates()
-    if #c == 0 then
-        if spec.on then write_spectate(spec.target, nick_of(spec.target), 0) end
-        return
+    if not scam then return end
+    -- The camera gave up on its target (stand-in gone): let it sit out.
+    if spec.target and scam.mode == "sky" then
+        spec.lost[spec.target] = os.clock()
+        spec.target = nil
     end
+    local c = spectate_candidates()
+    if #c == 0 then arena_view("nobody to watch"); return end
+    if step == 0 and spec.dev_arena_until and os.clock() < spec.dev_arena_until then return end
     local idx
     for i, e in ipairs(c) do if e.id == spec.target then idx = i end end
     if idx and step == 0 then
@@ -539,18 +810,35 @@ local function spectate_step(step)
     end
     idx = idx and (((idx - 1 + step) % #c) + 1) or 1
     local e = c[idx]
-    if view_target(e.fname) then
-        local was = spec.target
-        spec.on, spec.target = true, e.id
-        Log("spectating %s (peer %d)%s", nick_of(e.id), e.id,
-            (step ~= 0 and " [cycled]") or (was and " [previous target died]") or "")
-        write_spectate(e.id, nick_of(e.id), #c)
-    end
+    local was = spec.target
+    spec.on, spec.target = true, e.id
+    scam:follow(e.fname)
+    Log("spectating %s (peer %d)%s", nick_of(e.id), e.id,
+        (step ~= 0 and " [cycled]") or (was and " [previous target died]") or "")
+    write_spectate(e.id, nick_of(e.id), #c)
 end
+
+-- The camera moves every frame while spectating (game thread via the shim).
+local cam_last = nil
+LoopAsync(16, function()
+    if not (spec.on and scam) then cam_last = nil; return false end
+    if not WG.check() then return false end
+    local now = os.clock()
+    local dt = cam_last and math.min(0.1, math.max(0, now - cam_last)) or 0
+    cam_last = now
+    local ok, err = pcall(scam.frame, scam, now, dt)
+    if not ok then log_err("spectate cam", err) end
+    return false
+end)
 
 local function on_cycle(step)
     if spec.on then pcall(spectate_step, step) end
 end
+-- Dev / soak (HSMP_DEV_SPECTATE_CYCLE_MS): while spectating, cycle the target
+-- on a timer in place of Q/E (tests never send OS input).
+local DEV_CYCLE_MS = tonumber(os.getenv("HSMP_DEV_SPECTATE_CYCLE_MS") or "")
+if DEV_CYCLE_MS and DEV_CYCLE_MS < 100 then DEV_CYCLE_MS = 100 end
+local dev_cycle = { at = 0, n = 0 }
 pcall(function()
     if Key and Key.Q then RegisterKeyBind(Key.Q, function() on_cycle(-1) end) end
     if Key and Key.E then RegisterKeyBind(Key.E, function() on_cycle(1) end) end
@@ -574,23 +862,23 @@ local function keep_world_running()
     end)
 end
 
--- --- hair-strands streaming workaround ------------------------------------------------
--- r.HairStrands.Streaming 0 at runtime (PAK_ASYNC_READ_OOB at the first arena
--- load; docs/development/halfsword/io-dispatcher-crash.md). Engine.ini is
--- reset by the game; applied at boot and on
--- every world change (Director env.apply_cvars, the only console use here).
+-- --- IO-1 hair cvars ------------------------------------------------------------------
+-- r.HairStrands.UseCardsInsteadOfStrands 1 and r.HairStrands.Streaming 0 at
+-- runtime (PAK_ASYNC_READ_OOB, docs/development/halfsword/io-dispatcher-crash.md).
+-- Engine.ini is reset by the game; applied at boot and on every world change
+-- (Director env.apply_cvars, the only console use here).
 local io1 = { logged = false, fails = 0 }
 local function apply_io1(why)
     local okc, ok, back = pcall(denv.apply_cvars)
     if okc and ok then
         if not io1.logged then
             io1.logged = true
-            Log("hair-strand streaming workaround: r.HairStrands.Streaming=0 (runtime)%s",
+            Log("IO-1 hair cvars applied (runtime)%s",
                 back ~= nil and string.format(" [read back %s, %s]", tostring(back), why) or (" [" .. why .. "]"))
         end
     else
         io1.fails = io1.fails + 1
-        if io1.fails <= 3 and why ~= "boot" then Log("hair-strand streaming workaround: cvar not applied yet (%s)", why) end
+        if io1.fails <= 3 and why ~= "boot" then Log("IO-1 hair cvars: not applied yet (%s)", why) end
     end
 end
 apply_io1("boot")
@@ -785,7 +1073,10 @@ local last_world_key  = nil
 wg_on_drop(function()
     native_widgets = {}
     native_widgets_rescan = true
-    spec.on, spec.target = false, nil
+    spec.on, spec.target, spec.cands = false, nil, nil
+    standin.actor, standin.name, standin.diag = nil, nil, {}
+    spec.hud = nil   -- the old world's HUD widgets are never touched again
+    if scam then scam:drop("world guard"); scam:off() end
 end, "native_widgets+spectate")
 
 local function tick()
@@ -856,6 +1147,20 @@ local function tick()
         local hp = p and pawn_health(p)
         local dead = session.alive[session.my_id] == false or (hp ~= nil and hp <= 0)
         if dead then pcall(spectate_step, 0) elseif spec.on then stop_spectating("alive") end
+        if dead and spec.on and DEV_CYCLE_MS then
+            local now = os.clock() * 1000
+            local holding = spec.dev_arena_until and os.clock() < spec.dev_arena_until
+            if not holding and now - dev_cycle.at >= DEV_CYCLE_MS then
+                dev_cycle.at, dev_cycle.n = now, dev_cycle.n + 1
+                if dev_cycle.n % 4 == 0 then
+                    -- every 4th: the arena view for 3 s (shows it with fighters alive)
+                    spec.dev_arena_until = os.clock() + 3
+                    arena_view("dev cycle")
+                else
+                    on_cycle(dev_cycle.n % 3 == 0 and -1 or 1)
+                end
+            end
+        end
     elseif spec.on and not round_on then
         stop_spectating("phase " .. tostring(session.phase))
     end

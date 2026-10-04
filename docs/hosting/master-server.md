@@ -117,7 +117,51 @@ to `127.0.0.1` and LAN discovery.
   an `Origin` header (a web page) is refused.
 
 `ping_ms` is always 0 and `reachable` always false in its listing (a Worker cannot send UDP);
-the browser measures both itself. `/v1/rendezvous` is not implemented (no HSMP client uses it).
+the browser measures both itself. `/v1/rendezvous` is not implemented (no HSMP client uses it; the
+punch relay replaces it).
+
+### Punch relay (NAT traversal)
+
+A server behind a home router that could not open its port (see
+[Ports and firewall](ports-and-firewall.md#no-forwarded-port-nat-traversal)) keeps one
+WebSocket to the list: `GET /v1/punch/listen/{id}?ts=<unix ms>`, signed with its listing key over
+an empty body (same scheme as the writes; `ts` within 5 minutes and newer than the last listen of
+that listing). A joiner that gets no answer posts `POST /v1/punch` with the listing's `host` and
+`port` and its own public UDP endpoint as STUN saw it from its game socket. The list sends one
+message down the host's socket, `{"t":"punch","to":"<ip:port>","nonce":".."}`, and the host's
+server sends 4 probes of 16 bytes to that endpoint from its game port. That opens the host's NAT
+for the joiner, whose next handshake gets through.
+
+What keeps this from being a traffic cannon:
+
+- the endpoint's IP must be the address the request comes from (`CF-Connecting-IP`), and its port
+  at least 1024: a requester can only make a host send probes to itself;
+- per requester (IPv4 address or IPv6 /64) 6 requests, then one per 10 s; per listing 12, then one
+  per 2 s; 60 at once globally, then 10 a second;
+- the host sends at most one burst per endpoint per 2 s and 30 bursts a minute, whatever the
+  list asks, and a burst is 64 bytes in all, less than the HTTPS request that caused it.
+
+Listings say how they are reachable: `nat` is `open`, `upnp`, `pcp`, `natpmp`, `double` (mapped,
+but behind another NAT), `cone` (punchable), `symmetric` or `unknown`, and `punch` is true while
+the host's relay socket is open. Older servers send neither.
+
+On the Worker the socket is accepted by the Durable Object with the hibernation API and tagged
+with the listing id; the host's `ping` every 45 s is answered by `setWebSocketAutoResponse`, which
+does not wake the object and is not billed. The cost per day for 50 listed servers, on top of the
+table above:
+
+| | Requests (Worker and Durable Object each) | Why |
+|---|---|---|
+| Listen sockets | ~1,200 | one per server start, plus reconnects (a deploy or network change); assume one an hour per server |
+| Pings | 0 | auto-response: no wake, not billed (even billed as messages they would be 96,000 / 20 = 4,800) |
+| Punch requests | ~1,000 | one per request, 1-2 per join that needs one; assume 1,000 a day. The message down the socket is free (outgoing WebSocket messages are not billed) |
+| Total with the heartbeats | ~38,000-43,000 of 100,000 | |
+
+Duration does not grow: a hibernatable socket does not keep the object in memory, and the
+heartbeats (one every 2.4 s at 50 servers) already keep it warm, which is at most 128 MB × 24 h
+= ~11,000 of the 13,000 GB-s a day. A long-poll instead of the socket would cost a request every
+time it times out (50 servers × 90 s = 48,000 a day), and faster heartbeats while a punch is
+pending would still leave the host up to one interval late.
 
 ### Discord announcements (optional)
 
@@ -298,17 +342,21 @@ All responses are JSON except `/`, `/dashboard` and `/v1/health`. Request bodies
 | `POST /v1/heartbeat/{id}` | Keep-alive with players, map and mode | 204; 400; 403 bad or missing signature (hsmp-master: not from the registering IP); 409 stale `ts` or nonce replay; 410 unknown, expired or new source address (register again); 429 too soon |
 | `DELETE /v1/servers/{id}` | Remove an entry | 204; 400; 403; 404 unknown; 409 stale `ts` |
 | `GET /v1/myaddr` | The caller's address as the master sees it: `{ip, port, addr}` | 200 |
+| `GET /v1/punch/listen/{id}?ts=..` | A listed host's punch relay WebSocket (signed; hsmp-master: also from the listing's address) | 101; 400 bad path or clock skew; 403 bad signature or not the owner; 404 unknown or expired; 409 stale `ts`; 426 not a WebSocket upgrade (Worker) |
+| `POST /v1/punch` | A joiner asks a host to punch: `{host, port, endpoint, nonce}` | 202 `{sent: true}`; 400 bad body, endpoint port below 1024; 403 the endpoint is not the requester's address; 404 not listed; 409 the host has no relay socket; 429 throttled |
 | `POST /v1/rendezvous/{room}` | NAT rendezvous helper (hsmp-master only) | not used by any HSMP client |
+| `POST /v1/reports` | A bug-report zip from the launcher or `hsmp-server --report` (Worker only; up to 25 MB) | 201 `{id, retention_days}`; 400 not a report; 411; 413; 429 burst or daily cap; 503 not enabled. Admin routes and setup: [Bug reports](../development/bug-reports.md) |
 
 Register body: `name`, `port` (required), `mode`, `map`, `players`, `max_players`, `proto_ver`,
 `proto_min`, `proto_max`, `server_key`, `pwd_protected`, `version`, `region`, `listing_key`, `ts`,
-and the legacy `host` (ignored), `nonce` and `hmac`. Heartbeat body: `players`, `map`, `mode`, `ts`,
-`nonce`, `hmac`. Delete body: `ts`, `nonce`, `hmac`. Signed requests carry `x-hsmp-sig`.
+`nat`, `punch`, and the legacy `host` (ignored), `nonce` and `hmac`. Heartbeat body: `players`, `map`,
+`mode`, `nat`, `ts`, `nonce`, `hmac`. Delete body: `ts`, `nonce`, `hmac`. Signed requests carry `x-hsmp-sig`.
 
 Each entry of `GET /v1/servers` has these fields: `server_id`, `name`, `host`, `port`, `mode`, `map`,
 `players`, `max_players`, `proto_ver`, `pwd_protected`, `version`, `region`, `ping_ms` (master to
 server at registration, not the player's ping), `reachable`, `last_seen_utc_ms`, `age_s` (seconds
-since the last heartbeat); the Worker adds `proto_min`, `proto_max` and `server_key`.
+since the last heartbeat), `nat` and `punch` (see [Punch relay](#punch-relay-nat-traversal)); the Worker
+adds `proto_min`, `proto_max` and `server_key`.
 
 ```bash
 curl -s https://master.halfswordmp.workers.dev/v1/servers

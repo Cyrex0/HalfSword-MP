@@ -1,0 +1,40 @@
+[package]
+name = "hsmpworld-sim"
+description = "World-sync simulator: N real HSMPWorld Lua VMs over netsim-like links, the real server world rules and sidecar tables, mocked physics; measures divergence between instances"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# Run with
+#   cargo test -p hsmpworld-sim                      (the G0 thresholds)
+#   cargo test -p hsmpworld-sim -- --nocapture       (prints the report table)
+#   cargo run --release -p hsmpworld-sim -- [--profile NAME] [--seeds N] [--scenario NAME]
+#
+# server/src/world.rs (rules) and server/src/world_rx.rs (the sidecar's tables) are compiled
+# INTO this crate (src/lib.rs `#[path]` includes), and every client runs
+# mods/HSMPWorld/Scripts/main.lua itself, so the simulator exercises the code that ships.
+
+[lib]
+path = "src/lib.rs"
+# The included server module carries its own #[cfg(test)] suite (run by the server crate).
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "hsmpworld-sim"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+hsmp-ipc = { path = "../../crates/hsmp-ipc" }
+mlua = { version = "0.10", features = ["lua54", "vendored"] }
+tracing = "0.1"
+
+[lints]
+workspace = true

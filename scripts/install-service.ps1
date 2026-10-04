@@ -24,6 +24,9 @@
     Default: $env:CARGO_TARGET_DIR\release, else <repo>\target\release.
 .PARAMETER StateDir
     Server state folder (identity key, bans, admins). Default: $env:ProgramData\HSMP\server.
+.PARAMETER LogLevel
+    Server log level: error, warn, info (default), debug, trace, or a RUST_LOG-style filter. The
+    server writes <StateDir>ogsserverserver-<day>.log (+ server-events-<day>.jsonl), 14 days.
 .PARAMETER Mode
     Game mode (duel, ffa, ...). Default duel.
 .PARAMETER Map
@@ -64,6 +67,7 @@ param(
     [string]$RconPassword = "",
     [string]$BinDir = "",
     [string]$StateDir = "",
+    [string]$LogLevel = "",
     [switch]$DryRun,
     [switch]$Uninstall
 )
@@ -106,6 +110,7 @@ if ($Map)    { $svArgs += @("--map", $Map) }
 if ($Region) { $svArgs += @("--region", $Region) }
 foreach ($k in $adminKeys) { $svArgs += @("--admin-key", $k) }
 if ($RconPassword) { $svArgs += @("--rcon-bind", $RconBind) }
+if ($LogLevel)     { $svArgs += @("--log-level", $LogLevel) }
 
 $envExtra = @("HSMP_STATE_DIR=$StateDir")
 if ($master) { $envExtra += "HSMP_MASTER_URL=$master" }

@@ -9,7 +9,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let get = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1)).cloned();
     let seeds: u64 = get("--seeds").and_then(|s| s.parse().ok()).unwrap_or(3);
-    let profiles = get("--profiles").unwrap_or_else(|| "loopback,good,typical,wifi,bad".into());
+    let profiles = get("--profiles").unwrap_or_else(|| "loopback,good,typical,wifi,intl,bad,far".into());
     let policy = if args.iter().any(|a| a == "--legacy") { Policy::Legacy } else { Policy::Dedupe };
     let v2 = !args.iter().any(|a| a == "--v1");
     if let Some(p) = get("--parrystats") {

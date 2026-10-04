@@ -73,6 +73,11 @@ pub async fn recv_loop(socket: Arc<UdpSocket>, state: Arc<ServerState>) -> anyho
             Err(e) => { warn!(error = %e, "recv_from error"); continue; }
         };
         let data = &buf[..n];
+        // NAT traversal (nat/): the test NAT emulation, STUN answers to this socket's own
+        // requests, and punch probes (never answered).
+        if !crate::nat::emu::inbound_ok(from) { continue; }
+        if hsmp_nat::stun::is_stun(data) { crate::nat::on_stun(from, data); continue; }
+        if hsmp_nat::probe::is_probe(data) { continue; }
         // Server-browser ping/info query (query.rs) — answered before decode.
         if crate::query::is_request(data) {
             crate::server_info::answer(&socket, &state, from, data).await;
@@ -209,8 +214,15 @@ async fn transport_timer(socket: Arc<UdpSocket>, state: Arc<ServerState>) {
     loop {
         iv.tick().await;
         if last_report.elapsed() >= STATS_EVERY {
+            let secs = last_report.elapsed().as_secs_f64();
             last_report = std::time::Instant::now();
             log_transport_stats(&state);
+            // Pose relay health per sender: frames in vs refused vs relayed
+            // to each recipient (a host stuck at 4 Hz shows here).
+            for line in state.relay.pose_report(secs) {
+                info!("{line}");
+            }
+            log_peer_links(&state).await;
         }
         let (out, dead) = state.net.tick();
         send_out(&socket, &state, out).await;
@@ -241,6 +253,21 @@ pub(crate) fn log_transport_stats(state: &ServerState) {
           unknown_conn = c.dropped_unknown_conn, handshake_dropped = c.dropped_handshake,
           garbage = c.dropped_garbage, legacy_v4 = c.dropped_legacy, v4_rejects = c.v4_rejects,
           backpressure = c.backpressure, "v5 transport stats");
+}
+
+/// One line per connected peer every STATS_EVERY: RTT and loss (bug-report logs read these).
+/// By peer id, never by address.
+pub(crate) async fn log_peer_links(state: &ServerState) {
+    let samples = state.net.path_samples();
+    if samples.is_empty() {
+        return;
+    }
+    let ids: std::collections::HashMap<std::net::SocketAddr, PeerId> = state.inner.lock().await.peers.iter().map(|(a, p)| (*a, p.id)).collect();
+    for (addr, s) in samples {
+        let loss = if s.pkts_sent > 0 { 100.0 * s.pkts_lost as f64 / s.pkts_sent as f64 } else { 0.0 };
+        info!(peer_id = ?ids.get(&addr), srtt_ms = s.srtt_ms.round() as u64, min_rtt_ms = s.min_rtt_ms.round() as u64,
+              loss_pct = %format!("{loss:.2}"), pkts_sent = s.pkts_sent, pkts_lost = s.pkts_lost, "peer link");
+    }
 }
 
 /// Display nick: control characters stripped, at most 32 bytes, made unique
@@ -297,6 +324,7 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
     };
     if banned {
         info!(%from, player = %fp, "banned IP tried to join");
+        crate::stats::refused("banned");
         let out = state.net.reject(p, reject_code::BANNED, "banned");
         send_out(socket, state, out).await;
         return;
@@ -326,6 +354,7 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
     if !per_ip_ok(from.ip(), same_ip, state.max_peers) {
         drop(inner);
         info!(%from, player = %fp, same_ip, "join rejected: too many players from this address");
+        crate::stats::refused("rate_limited");
         let out = state.net.reject(p, reject_code::RATE_LIMITED, "too many players from this address");
         send_out(socket, state, out).await;
         return;
@@ -334,6 +363,7 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
         let max = state.max_peers;
         drop(inner);
         info!(%from, player = %fp, "join rejected: server full");
+        crate::stats::refused("full");
         let out = state.net.reject(p, reject_code::FULL, &format!("server full ({} peers)", max));
         send_out(socket, state, out).await;
         return;
@@ -394,6 +424,7 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
     // Late joiner / reconnect: replay everyone's newest complete loadout.
     crate::loadout::replay_to(socket, state, from).await;
     info!(%from, peer_id = id, nick = %nick, player = %fp, is_admin, role, "peer joined");
+    crate::stats::joined(state.net.addrs().len());
 }
 
 /// The peer belongs to the player holding `key` (a real v5 identity; the

@@ -8,7 +8,9 @@
 | Listen host (hosting from the in-game menu) | UDP, the **HOST PORT** in the multiplayer SETTINGS screen (default 7777, 1024-65535) | inbound | Yes, if players outside your LAN should join |
 | LAN discovery (in-game browser) | UDP 7777-7786 (`lan_ports` in `hsmp.cfg`) | the browser sends broadcast queries out; servers answer from their game port | No. LAN only. A LAN server is only found if its port is in this range. |
 | Master server (`hsmp-master --bind`) | **TCP 7778** (default) | inbound | Only if you run a master for other people (see [Master server](master-server.md)) |
-| Master registration from a game server | TCP to the master's URL | outbound | Outbound only |
+| Master registration from a game server | TCP to the master's URL (HTTPS, and one WebSocket for the punch relay) | outbound | Outbound only |
+| Router port mapping (UPnP, PCP, NAT-PMP) | UDP multicast 239.255.255.250:1900, HTTP to the router, UDP 5351 to the gateway | outbound, LAN only | No |
+| STUN (public address of the game port) | UDP from the game port to the STUN servers (3478, 19302, 443) | outbound | Outbound only |
 | RCON (`hsmp-server --rcon-bind`) | TCP, no default; these docs use **2345** | inbound, **loopback only** | **Never.** Bind `127.0.0.1:2345` and use an SSH tunnel (see [RCON](rcon.md)) |
 | Local master of a listen host | TCP 7778 on `127.0.0.1` | loopback | No |
 
@@ -108,7 +110,31 @@ Home IP addresses change from time to time; update the list when a player cannot
 
 ## Router port forwarding (home hosting)
 
-If the server runs on a PC at home, forward the port on your router:
+### Automatic: UPnP, PCP, NAT-PMP
+
+`hsmp-server` asks your router to open its UDP port when it starts: UPnP-IGD first, then PCP,
+then NAT-PMP (most home routers speak at least one of them when "UPnP" is enabled in their
+settings). The mapping has a one-hour lease that the server renews while it runs and removes
+when it shuts down cleanly. A router that only accepts permanent mappings gets one; a port that
+another device already holds moves the mapping to the next free port (7778, 7779, ...), and the
+server lists the port it actually got.
+
+When you host from the menu, the lobby shows the result:
+
+| The lobby says | What it means |
+|---|---|
+| Router port opened automatically (UPnP) (or PCP, NAT-PMP) | Players outside your network can join. |
+| This PC has a public address | No NAT in front of the PC; only the firewall matters. |
+| Router port opened, but your router is behind another NAT | Your router's own WAN address is private (CGNAT, or a router behind another router): see [CGNAT](#cgnat). |
+| Couldn't open your router port automatically ... Forward UDP 7777 to this PC | The router has UPnP off or does not support it. Forward the port by hand (below). |
+
+Turn it off with **SETTINGS > HOSTING > ROUTER PORT: OFF** (menu hosting), or `--port-map off`
+(`HSMP_PORT_MAP=off`) for `hsmp-server`. A server bound to `127.0.0.1` or to IPv6 never maps.
+A datacenter VPS has no router to ask: the attempt fails quietly after a few seconds.
+
+### By hand
+
+If the server runs on a PC at home and the router port was not opened automatically:
 
 1. Give the server PC a fixed LAN address (a DHCP reservation in the router, or a static IP).
 2. In the router's "Port forwarding" (or "Virtual server", "NAT") page, forward **UDP 7777** from the
@@ -117,7 +143,21 @@ If the server runs on a PC at home, forward the port on your router:
 4. Test from **outside** your network (a friend, or a phone hotspot). Many routers cannot reach their
    own public address from inside ("NAT loopback"), so a test from inside proves nothing.
 
-UPnP is not used: the server never opens router ports by itself.
+### No forwarded port: NAT traversal
+
+Even without a forwarded port many players can still join a listen host: the server learns its
+public address with STUN (from its own game port), keeps its NAT's mapping alive, and holds a
+relay socket to the server list. A joiner whose handshake gets no answer asks the list for a
+"punch"; the host's server then sends a few small probes to the joiner's public address, which
+opens the host's NAT for that joiner, and the normal handshake follows. The browser shows such a
+server with **NAT** in the PING column.
+
+This works when the host's NAT maps the port the same way for every destination (most home
+routers). It does not work behind a symmetric NAT (some corporate networks, some mobile
+providers, some CGNAT): the listing then says `symmetric`, and a forwarded port, a public IPv4
+address or a VPS is needed. STUN goes to public servers (Cloudflare, Google, Nextcloud; change
+them with `--stun host:port,...`, turn STUN and punching off with `--stun off`, punching alone
+with `--punch off`).
 
 ### Testing reachability
 
@@ -131,8 +171,13 @@ machine outside your network:
 It prints its result when it finishes (a few seconds).
 
 A reachable server shows up as a line starting with `S` whose `ping_ms` column is 0 or more and whose
-last column (`live`) is `1`. A `ping_ms` of `-2` means no answer: check the port forward, the
-firewalls and CGNAT.
+`live` column (the 15th) is `1`. A `ping_ms` of `-2` means no answer: check the port forward, the
+firewalls and CGNAT. With `--master <url>` the last two columns are the listing's `nat` and
+`punch` (`1` = the list can relay a NAT punch to it right now).
+
+To see what the server itself found, read its log at startup: `router port opened automatically`
+(method, external port), `STUN: public endpoint of the game port` (address, `nat=cone` /
+`symmetric` / `open`) and `punch relay connected`.
 
 ## CGNAT
 
@@ -152,4 +197,7 @@ What you can do:
   with an IPv6 (AAAA) record; the in-game address box takes host names and IPv4 addresses, not
   IPv6 literals.
 
-HSMP has no relay or NAT punching for this case.
+Behind CGNAT the router port cannot be forwarded, but NAT traversal (above) still works when the
+provider's NAT maps ports the same way for every destination; the server list shows the server
+with `nat` = `cone` (or `double` when your router mapped the port behind it). HSMP has no relay that
+carries game traffic: behind a symmetric CGNAT, use one of the options above.

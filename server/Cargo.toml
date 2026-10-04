@@ -40,7 +40,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
-axum = "0.7"
+axum = { version = "0.7", features = ["ws"] }
 tower-http = { version = "0.5", features = ["cors", "timeout"] }
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio", "service"] }
@@ -57,6 +57,10 @@ hsmp-net = { path = "../crates/hsmp-net" }
 hsmp-ipc = { path = "../crates/hsmp-ipc", features = ["json"] }
 hsmp-pose = { path = "../crates/hsmp-pose" }
 hsmp-master-core = { path = "../crates/hsmp-master-core" }
+hsmp-diag = { path = "../crates/hsmp-diag" }
+hsmp-nat = { path = "../crates/hsmp-nat" }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 ed25519-dalek = "2"
 bytemuck = "1"
 

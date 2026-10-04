@@ -66,7 +66,6 @@ local UEHelpers = require("UEHelpers")
 -- garbage userdata). Route every deferred, looped and key-bound callback onto
 -- the game thread.
 if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then
-    local _gt = ExecuteInGameThread
     ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end
     LoopAsync = function(ms, fn)
         local h
@@ -76,14 +75,32 @@ if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedA
         end)
         return h
     end
-    local _rkba = RegisterKeyBindAsync
-    RegisterKeyBindAsync = function(key, mods, fn)
-        return _rkba(key, mods, function() _gt(function() pcall(fn) end) end)
+    -- Key callbacks run on the UE4SS input thread. Native-function hooks run
+    -- on the game thread on this mod's hook state without UE4SS's lock, so an
+    -- ExecuteInGameThread call from a key callback pushed onto that state
+    -- mid-hook (crash in push_structproperty, 2026-10-03). The input thread
+    -- now only appends to a queue (plain Lua, no UE4SS call) and a
+    -- game-thread loop runs what it queued.
+    local kq, kq_w, kq_r, kq_loop = {}, 0, 0, nil
+    local function kq_wrap(fn)
+        if not kq_loop then
+            kq_loop = LoopInGameThreadWithDelay(16, function()
+                while kq_r < kq_w do
+                    kq_r = kq_r + 1
+                    local f = kq[kq_r]
+                    kq[kq_r] = nil
+                    if f then pcall(f) end
+                end
+            end)
+        end
+        return function() local n = kq_w + 1; kq[n] = fn; kq_w = n end
     end
+    local _rkba = RegisterKeyBindAsync
+    RegisterKeyBindAsync = function(key, mods, fn) return _rkba(key, mods, kq_wrap(fn)) end
     local _rkb = RegisterKeyBind
     RegisterKeyBind = function(key, a, b)
-        if b then return _rkb(key, a, function() _gt(function() pcall(b) end) end) end
-        return _rkb(key, function() _gt(function() pcall(a) end) end)
+        if b then return _rkb(key, a, kq_wrap(b)) end
+        return _rkb(key, kq_wrap(a))
     end
 end
 
@@ -101,19 +118,27 @@ local GET_DAMAGE    = "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Get Dama
 -- the victim replays it on its own pawn: the victim's armour, solo parity.
 local DEAL_COMPLEX  = "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Deal Complex Damage"
 local FLAG_COMPLEX  = 32       -- claim flags bit 5: impact fields carry Deal Complex Damage inputs
+-- More claim flags and limits live in the BF table below (the main chunk is
+-- at Lua's 200-locals limit):
+--   BF.LOCAL (bit 6): offset / normal / velocity / impulse are in the hit
+--     bone's frame (rotation removed, offset divided by the bone scale). Deal
+--     Complex Damage maps the hit point into bone space and traces the armour
+--     layers from there, so a world-space point re-added to a victim that
+--     turned since the attacker saw it lands somewhere else (helmet vs face).
+--   BF.WEAPON (bit 7): the striking component was a weapon, not a body part.
+--     The replay passes the attacker's weapon as Collided Component; Get
+--     Damage reads its 'Weapon' tag (consciousness on light blows).
+--   BF.GD_GATE_MS: Get Damage's per-bone gate (Last Damage Taken) resets
+--     0.2 s after the last blow that passed it. Replays of blows further apart
+--     than that on the attacker's clock must not gate each other.
+--   BF.MAX_PER_BONE_TICK: armour-stage calls per bone and tick that become claims.
 local DEATH_FN      = "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Death"
 local DYING_FN      = "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dying"
 local WEAPON_HIT    ="/Game/Assets/Weapons/Blueprints/ModularWeaponBP.ModularWeaponBP_C:Collision Hit"
 local CLASH_GAP_MS  = 100      -- per-peer clash report rate limit (a long blade-on-blade
                                -- contact is reported every 100 ms: server bucket 5 / 10 per s)
--- One claim per real contact (server/src/combat.rs, crates/hsmp-combat-sim):
--- the Get Damage calls a contact produces on one stand-in (several bodies,
--- several frames, sword plus hand) are ONE claim when the contact starts
--- (that tick's calls merged: measured deltas summed, params of the call on
--- the most damaging part), then at most one continuation per CONT_MS while
--- it lasts; the episode ends EPISODE_GAP_MS after the last call.
-local EPISODE_GAP_MS = 120
-local CONT_MS        = 150
+-- Claims: every armour-stage call on a stand-in that passed the game's own
+-- contact gate (see flush_claims), at most BF.MAX_PER_BONE_TICK per bone and tick.
 -- FIELDS (1-based) that are Get Damage's own bookkeeping, not damage:
 -- #15 "Sustained Damage" and #17 "Last Damage Taken" hold the hit's DRS
 -- (thousands). Never sent (the server drops them too).
@@ -349,6 +374,73 @@ local function bone_pos(mesh, bone)
     local ok, l = pcall(function() return mesh:GetSocketLocation(FName(bone)) end)
     if ok and l then return { l.X, l.Y, l.Z } end
     return nil
+end
+
+-- Bone frames: { p = world position, q = unit quaternion {x, y, z, w}, s = scale }.
+local BF = { LOCAL = 64, WEAPON = 128, GD_GATE_MS = 200, MAX_PER_BONE_TICK = 4 }
+function BF.of(mesh, bone)
+    if not mesh or not bone or bone == "" then return nil end
+    local f
+    pcall(function()
+        local t = mesh:GetSocketTransform(FName(bone), 0)
+        local p, q = t.Translation, t.Rotation
+        local s = 1
+        pcall(function() s = tonumber(t.Scale3D.X) or 1 end)
+        local x, y, z, w = tonumber(q.X), tonumber(q.Y), tonumber(q.Z), tonumber(q.W)
+        local n = x and y and z and w and math.sqrt(x * x + y * y + z * z + w * w) or 0
+        if n > 1e-6 and s > 1e-3 then
+            f = { p = { p.X, p.Y, p.Z }, q = { x / n, y / n, z / n, w / n }, s = s }
+        end
+    end)
+    return f
+end
+-- v rotated by q (FQuat::RotateVector); inv = by its conjugate.
+function BF.rot(q, v, inv)
+    local qx, qy, qz, qw = q[1], q[2], q[3], q[4]
+    if inv then qx, qy, qz = -qx, -qy, -qz end
+    local tx = 2 * (qy * v[3] - qz * v[2])
+    local ty = 2 * (qz * v[1] - qx * v[3])
+    local tz = 2 * (qx * v[2] - qy * v[1])
+    return { v[1] + qw * tx + (qy * tz - qz * ty),
+             v[2] + qw * ty + (qz * tx - qx * tz),
+             v[3] + qw * tz + (qx * ty - qy * tx) }
+end
+function BF.to_local(f, loc)
+    local d = BF.rot(f.q, { loc[1] - f.p[1], loc[2] - f.p[2], loc[3] - f.p[3] }, true)
+    return { d[1] / f.s, d[2] / f.s, d[3] / f.s }
+end
+function BF.to_world(f, off)
+    local d = BF.rot(f.q, { off[1] * f.s, off[2] * f.s, off[3] * f.s })
+    return { f.p[1] + d[1], f.p[2] + d[2], f.p[3] + d[3] }
+end
+
+-- After a Deal Complex Damage call on `w`: did it pass the function's contact
+-- gate (|Hit Impulse|·(Cutting Power + 1) >= Last Complex Damage Impulse, or
+-- a new bone)? A pass stores this call's value and bone; a stopped call
+-- leaves a stronger value on the same bone. nil = gate state unreadable.
+function BF.gate_passed(w, bone, imp, cp)
+    local last, lbone
+    pcall(function() last = tonumber(w["Last Complex Damage Impulse"]) end)
+    pcall(function() lbone = w["Last Complex Damage Bone"]:ToString() end)
+    if last == nil or type(lbone) ~= "string" then return nil end
+    local b = ""
+    pcall(function() b = bone:ToString() end)
+    if lbone:lower() ~= b:lower() then return true end
+    local v = vec(imp)
+    local g = math.sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3]) * (num(cp) + 1)
+    return last <= g * (1 + 1e-6) + 1e-6
+end
+
+-- A striking component whose owner is not a Willie (a weapon actor), or one
+-- tagged 'Weapon'.
+function BF.is_weapon(comp)
+    if not comp then return false end
+    local tagged = false
+    pcall(function() tagged = comp:ComponentHasTag(FName("Weapon")) == true end)
+    if tagged then return true end
+    local cls
+    pcall(function() cls = comp:GetOwner():GetClass():GetFName():ToString() end)
+    return cls ~= nil and cls ~= "Willie_BP_C"
 end
 
 -- Blueprint call by its REAL name (BP names keep their spaces, e.g.
@@ -893,27 +985,44 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         return
     end
     if not (nm and puppet_peer[nm]) then return end
+    -- Did this call pass the stand-in's own contact gate? (Read before the
+    -- backstop, which may put the gate back.) The gate runs natively and
+    -- exactly as in solo; a call it stopped never reached Get Damage there.
+    local gate = BF.gate_passed(w, pv(HitBone), pv(HitImpulse), pv(CuttingPower))
     C3.standin_hit(w)   -- backstop (the nested Get Damage callback did it too)
     if not combat_window then return end
     if WG.travel_from ~= nil or WG.key == nil or not WG.settled() then return end
-    local src = hit_source(pv(CollidedComponent))
+    if gate == false then return end
+    local coll = pv(CollidedComponent)
+    local src = hit_source(coll)
     if not (me and src and same(src, me)) then return end
     local peer = puppet_peer[nm]
     local bname = ""
     pcall(function() bname = pv(HitBone):ToString() end)
     bname = bname:gsub("[^%w_]", "")
     local loc = vec(pv(Location))
-    local bp = bone_pos(pv(HitComponent), bname) or bone_pos(body_mesh(w), bname)
+    local nrm, vel, imp = vec(pv(Normal)), vec(pv(HitVelocity)), vec(pv(HitImpulse))
+    local hmesh = pv(HitComponent)
+    local fr = BF.of(hmesh, bname) or BF.of(body_mesh(w), bname)
+    local off, flags = { 0, 0, 0 }, FLAG_COMPLEX
+    if fr then
+        off = BF.to_local(fr, loc)
+        nrm, vel, imp = BF.rot(fr.q, nrm, true), BF.rot(fr.q, vel, true), BF.rot(fr.q, imp, true)
+        flags = flags + BF.LOCAL
+    else
+        local bp = bone_pos(hmesh, bname) or bone_pos(body_mesh(w), bname)
+        if bp then off = { loc[1] - bp[1], loc[2] - bp[2], loc[3] - bp[3] } end
+    end
+    if BF.is_weapon(coll) then flags = flags + BF.WEAPON end
     local vts, vats = playback_ts(peer)
     local rec = {
-        at = os.clock(), vel = vec(pv(HitVelocity)), imp = vec(pv(HitImpulse)),
-        vrel = C3.vrel(pv(CollidedComponent), pv(HitComponent), pv(HitBone)),
+        at = os.clock(), vel = vel, imp = imp,
+        vrel = C3.vrel(coll, hmesh, pv(HitBone)),
         cut = num(pv(CuttingPower)), stab = num(pv(StabRate)), rig = num(pv(Rigidity)),
         dism = math.floor(num(pv(BluntInt))), lower = pv(LowerThreshold) == true,
         kick = num(pv(KickPower)), xhv = pv(ExtraHigh) == true, draw = num(pv(DrawCut)),
-        nm = nm, peer = peer, bone = bname,
-        ats = now_ms(), vts = vts, vats = vats, loc = loc, nrm = vec(pv(Normal)),
-        off = bp and { loc[1] - bp[1], loc[2] - bp[2], loc[3] - bp[3] } or { 0, 0, 0 },
+        nm = nm, peer = peer, bone = bname, gate = gate, flags = flags,
+        ats = now_ms(), vts = vts, vats = vats, loc = loc, nrm = nrm, off = off,
     }
     local list = CX.pending[nm] or {}
     CX.pending[nm] = list
@@ -1077,7 +1186,7 @@ local function send_claim(peer, r)
         dism_blunt = dism, raw_damage = r.vrel or 0, cutting_power = r.cut, pain_rate = r.stab,
         draw_cut = r.draw, damage_out = r.rig,
         offset = r.off, location = r.loc, impulse = r.imp, velocity = r.vel, normal = r.nrm,
-        bone = r.bone, flags = FLAG_COMPLEX,
+        bone = r.bone, flags = r.flags or FLAG_COMPLEX,
     })
     if not sent then
         quality.refused = (quality.refused or 0) + 1
@@ -1097,45 +1206,55 @@ local function send_claim(peer, r)
     return true
 end
 
-local episodes = {}        -- "peer:bone" -> { peer, last_ev, last_sent, main }
+local episodes = {}        -- (kept for the test api; claims follow the game's own gate)
 
--- This tick's armour-stage calls, per stand-in and bone: the strongest one
--- (the game gates repeated contacts per bone the same way). One claim when a
--- contact starts, then at most one continuation per CONT_MS while it lasts;
--- the episode ends EPISODE_GAP_MS after its last call.
+-- This tick's armour-stage calls, per stand-in and bone. Every call that
+-- passed the stand-in's Deal Complex Damage gate is a claim, in order: that
+-- gate runs natively on my screen exactly as it would on the victim in solo,
+-- so these are the calls that reach Get Damage in solo (a graze followed by
+-- a harder frame is two applications there, and two here). The victim's
+-- replay then applies Get Damage's own per-bone gate as solo would. Calls
+-- whose gate state could not be read fall back to the strongest per bone.
 local function flush_claims()
-    local now = now_ms()
-    local work = {}   -- { peer, groups = { bone -> strongest record } }
+    local work = {}
     for nm, list in pairs(CX.pending) do
-        local g = {}
-        for _, r in ipairs(list) do g[r.bone] = stronger(g[r.bone], r) end
-        if list[1] then work[nm] = { peer = list[1].peer, groups = g } end
+        local g, order = {}, {}
+        for _, r in ipairs(list) do
+            local b = g[r.bone]
+            if not b then b = {}; g[r.bone] = b; order[#order + 1] = r.bone end
+            b[#b + 1] = r
+        end
+        if list[1] then work[#work + 1] = { peer = list[1].peer, groups = g, order = order } end
     end
     CX.pending = {}
-    if combat_window then
-        for _, wk in pairs(work) do
-            for bone, r in pairs(wk.groups) do
-                local key = wk.peer .. ":" .. bone
-                local ep = episodes[key]
-                if not ep or now - ep.last_ev > EPISODE_GAP_MS then
-                    if ep and ep.main then send_claim(ep.peer, ep.main) end
-                    episodes[key] = { peer = wk.peer, last_ev = now, last_sent = now, main = nil }
-                    send_claim(wk.peer, r)
-                else
-                    ep.last_ev = now
-                    ep.main = stronger(ep.main, r)
-                    if now - ep.last_sent >= CONT_MS then
-                        send_claim(wk.peer, ep.main)
-                        ep.main, ep.last_sent = nil, now
-                    end
-                end
+    if not combat_window then return end
+    for _, wk in ipairs(work) do
+        for _, bone in ipairs(wk.order) do
+            local rs = wk.groups[bone]
+            local known = true
+            for _, r in ipairs(rs) do if r.gate == nil then known = false end end
+            if not known then
+                local best
+                for _, r in ipairs(rs) do best = stronger(best, r) end
+                rs = { best }
+            elseif #rs > BF.MAX_PER_BONE_TICK then
+                -- keep the first call and the strongest of the rest, in order
+                local idx = {}
+                for i = 2, #rs do idx[#idx + 1] = i end
+                table.sort(idx, function(a, b)
+                    local ga, ra = strength(rs[a])
+                    local gb, rb = strength(rs[b])
+                    if ra ~= rb then return ra > rb end
+                    if ga ~= gb then return ga > gb end
+                    return a < b
+                end)
+                local keep = { [1] = true }
+                for k = 1, BF.MAX_PER_BONE_TICK - 1 do keep[idx[k]] = true end
+                local out = {}
+                for i, r in ipairs(rs) do if keep[i] then out[#out + 1] = r end end
+                rs = out
             end
-        end
-    end
-    for key, ep in pairs(episodes) do
-        if now - ep.last_ev > EPISODE_GAP_MS then
-            if ep.main and combat_window then send_claim(ep.peer, ep.main) end
-            episodes[key] = nil
+            for _, r in ipairs(rs) do send_claim(wk.peer, r) end
         end
     end
 end
@@ -1351,29 +1470,99 @@ function C3.v3(d, k)
 end
 
 -- Deal Complex Damage arguments of an armour-stage hit record (the `damage`
--- layout, see send_claim) on mesh `mesh` at world point `at`: 17 inputs + the
--- 6 out-param slots (inside the table: `f(table.unpack(t), x)` would truncate
--- the unpack).
-function C3.dcd_args(d, mesh, at)
+-- layout, see send_claim) on mesh `mesh` with geometry `g` (C3.hit_geo) and
+-- striking component `coll` (nil when unknown): 17 inputs + the 6 out-param
+-- slots (inside the table: `f(table.unpack(t), x)` would truncate the unpack).
+function C3.dcd_args(d, mesh, g, coll)
     local function V(t) return { X = t[1], Y = t[2], Z = t[3] } end
     local bone = type(d.bone) == "string" and d.bone or ""
     local dism_all = math.floor(num(d.dism_blunt))
     local kick = (math.floor(dism_all / 256) % 256) / 10   -- 0 stays 0
     return {
-        mesh, nil, FName(bone ~= "" and bone or "pelvis"), V(at), V(C3.v3(d, "normal")),
-        V(C3.v3(d, "velocity")), V(C3.v3(d, "impulse")), num(d.cutting_power), num(d.pain_rate),
+        mesh, coll, FName(bone ~= "" and bone or "pelvis"), V(g.at), V(g.nrm),
+        V(g.vel), V(g.imp), num(d.cutting_power), num(d.pain_rate),
         num(d.damage_out), dism_all % 256, math.floor(dism_all / 65536) % 2 == 1, false,
         kick, nil, math.floor(dism_all / 131072) % 2 == 1, num(d.draw_cut),
         {}, {}, {}, {}, {}, {},
     }
 end
 
--- The hit point on `w`: the hit record's offset from the bone, on w's own bone.
-function C3.hit_point(w, mesh, d)
+-- The blow's geometry on `w`: the hit point at the record's offset on w's own
+-- bone, and normal / velocity / impulse turned with that bone (BF.LOCAL
+-- records), so the blow lands where it landed on the attacker's screen
+-- relative to the body, however w has moved or turned since.
+function C3.hit_geo(w, mesh, d)
     local bone = type(d.bone) == "string" and d.bone or ""
-    local bp = bone_pos(mesh, bone) or bone_pos(body_mesh(w), bone)
     local off, loc = C3.v3(d, "offset"), C3.v3(d, "location")
-    return bp and { bp[1] + off[1], bp[2] + off[2], bp[3] + off[3] } or loc
+    local g = { at = loc, nrm = C3.v3(d, "normal"), vel = C3.v3(d, "velocity"), imp = C3.v3(d, "impulse") }
+    if math.floor(num(d.flags) / BF.LOCAL) % 2 == 1 then
+        local fr = BF.of(mesh, bone) or BF.of(body_mesh(w), bone)
+        if fr then
+            g.at = BF.to_world(fr, off)
+            g.nrm, g.vel, g.imp = BF.rot(fr.q, g.nrm), BF.rot(fr.q, g.vel), BF.rot(fr.q, g.imp)
+            g.frame = true
+        else
+            g.local_lost = true   -- magnitudes still right, directions not
+        end
+        return g
+    end
+    local bp = bone_pos(mesh, bone) or bone_pos(body_mesh(w), bone)
+    if bp then g.at = { bp[1] + off[1], bp[2] + off[2], bp[3] + off[3] } end
+    return g
+end
+function C3.hit_point(w, mesh, d) return C3.hit_geo(w, mesh, d).at end
+
+-- The component that struck, as this screen has it: the attacker's weapon
+-- (its first collision component) for BF.WEAPON records, else its body mesh.
+-- The attacker is my own pawn or its stand-in here. nil when not found.
+function C3.hitter(attacker, d)
+    local a
+    if attacker and attacker == C3.me_id then a = local_pawn() else a = puppet_actor[attacker] end
+    if not (a and a:IsValid()) then return nil end
+    if math.floor(num(d.flags) / BF.WEAPON) % 2 == 1 then
+        for _, k in ipairs({ "Weapon R", "Weapon L" }) do
+            local c
+            pcall(function()
+                local wp = a[k]
+                if not (wp and wp:IsValid()) then return end
+                local arr = wp["Collision Components Array"]
+                if arr then arr:ForEach(function(_, e) if not c then c = e:get() end end) end
+                if not (c and c:IsValid()) then c = wp:K2_GetRootComponent() end
+            end)
+            if c and c:IsValid() then return c end
+        end
+        return nil
+    end
+    local m; pcall(function() m = a.Mesh end)
+    if m and m:IsValid() then return m end
+    return nil
+end
+
+-- Get Damage's gate: a blow on the bone of the last blow that passed it, while
+-- Last Damage Taken is still set (RetriggerableDelay 0.2 s), needs DRS >= that
+-- value × (Draw Cut + 1). C3.gd_last is the last replayed blow that passed:
+-- { attacker, ats (its clock), bone }. Returns the gate state before the call.
+C3.gd_last = nil
+function C3.gd_gate_open(me, attacker, d, bone)
+    local ats = math.tointeger(tonumber(d.attacker_ts)) or 0
+    local b = bone:lower()
+    local gl = C3.gd_last
+    local keep = gl ~= nil and gl.attacker == attacker and gl.bone == b and ats > 0
+        and ats >= gl.ats and ats - gl.ats < BF.GD_GATE_MS
+    if not keep then pcall(function() me["Last Damage Taken"] = 0 end) end
+    local s = {}
+    pcall(function() s.ldt = tonumber(me["Last Damage Taken"]) end)
+    pcall(function() s.ldb = me["Last Damaged Bone"]:ToString():lower() end)
+    return s
+end
+function C3.gd_gate_note(me, attacker, d, bone, s0)
+    local ldt, ldb
+    pcall(function() ldt = tonumber(me["Last Damage Taken"]) end)
+    pcall(function() ldb = me["Last Damaged Bone"]:ToString():lower() end)
+    local b = bone:lower()
+    if ldb == b and (ldt ~= s0.ldt or s0.ldb ~= b) then
+        C3.gd_last = { attacker = attacker, ats = math.tointeger(tonumber(d.attacker_ts)) or 0, bone = b }
+    end
 end
 
 -- A hit on MY pawn (`damage_in` record `d`; the attacker is the entry's peer).
@@ -1391,7 +1580,8 @@ local function apply_hit(d, _attacker)
     if is_dead(me) then return "already dead" end
     local bone = type(d.bone) == "string" and d.bone or ""
     local mesh = C3.hit_mesh(me)
-    local at = C3.hit_point(me, mesh, d)
+    local geo = C3.hit_geo(me, mesh, d)
+    local at = geo.at
     local flags = math.floor(num(d.flags))
     local function bit(n) return math.floor(flags / n) % 2 == 1 end
     local function V(t) return { X = t[1], Y = t[2], Z = t[3] } end
@@ -1403,13 +1593,15 @@ local function apply_hit(d, _attacker)
     replaying = true
     local ok, err, via = false, nil, "Get Damage"
     if complex then
-        -- Deal Complex Damage's per-bone gate (|Hit Impulse|·(CP+1) ≥ the
-        -- last one within 0.1 s) is a CONTACT-time rule the attacker's
-        -- episodes already applied; replays arrive bunched (parry grace
-        -- releases, jitter), so a later, weaker blow on the same bone would be
-        -- swallowed here. Open it for this replay (the replay re-arms it).
+        -- Deal Complex Damage's own contact gate already ran on the attacker's
+        -- screen (only calls that passed it are claimed): open it here.
         pcall(function() me["Last Complex Damage Impulse"] = 0 end)
-        ok, err = bp_call(me, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, at), 1, 23))
+        -- Get Damage's per-bone gate as solo would see it: kept between blows
+        -- of one attacker less than 0.2 s apart on ITS clock, reset otherwise
+        -- (replays arrive bunched: parry holds, jitter, resends).
+        local gate0 = C3.gd_gate_open(me, _attacker, d, bone)
+        ok, err = bp_call(me, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, C3.hitter(_attacker, d)), 1, 23))
+        C3.gd_gate_note(me, _attacker, d, bone, gate0)
         via = "Deal Complex Damage"
         -- Never a second application. A call that errored AFTER the
         -- BP ran (e.g. copying out-params) already applied the hit: keep it.
@@ -1804,12 +1996,14 @@ function C3.apply_fx(d, _attacker)
     if not (w and w:IsValid()) then return "fx: no stand-in for peer " .. target end
     if remote_dead[target] then return "fx: stand-in dead" end
     local mesh = C3.hit_mesh(w)
-    local at = C3.hit_point(w, mesh, d)
+    local geo = C3.hit_geo(w, mesh, d)
     local s = C3.snap_all(w)
     local inv; pcall(function() inv = w.Invulnerable end)
     pcall(function() w.Invulnerable = false end)
+    -- (gates open: this is the blow's look, its damage is the owner's replay)
+    pcall(function() w["Last Complex Damage Impulse"] = 0; w["Last Damage Taken"] = 0 end)
     replaying = true
-    local ok, err = bp_call(w, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, at), 1, 23))
+    local ok, err = bp_call(w, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, C3.hitter(_attacker, d)), 1, 23))
     replaying = false
     C3.put_all(w, s)
     pcall(function() w.Invulnerable = (inv == nil) and C3.STANDIN_INVULNERABLE or inv end)
@@ -1858,6 +2052,7 @@ local function refresh_session()
             CX.discard_outbox("new peer id")
         end
         my_peer_id = id
+        C3.me_id = id
     end
     if SESSION_END[status] then
         clear_death_state("sidecar status " .. tostring(status))
@@ -2032,7 +2227,7 @@ if rawget(_G, "HSMP_COMBAT_TEST") then
                                       death_shown = death_shown } end,
         flush_claims = flush_claims, on_weapon_hit = on_weapon_hit, on_native_death = function(s) on_native_death(s) end,
         read_feedback = read_feedback, emit_quality = emit_quality, REACT = REACT, REACT_VEC = REACT_VEC,
-        C3 = C3, CX = CX, SEND = SEND, discard_outbox = C3.discard_outbox, set_my_peer_id = function(id) my_peer_id = id end,
+        C3 = C3, CX = CX, SEND = SEND, discard_outbox = C3.discard_outbox, set_my_peer_id = function(id) my_peer_id = id; C3.me_id = id end,
         own = function() return own end, wg_drop = function(why) WG.drop(why) end,
         own_pawn_tick = function(me) own_pawn_tick(me) end,
         quality = function() return quality end,

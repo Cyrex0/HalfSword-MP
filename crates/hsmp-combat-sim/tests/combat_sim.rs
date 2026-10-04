@@ -152,3 +152,24 @@ fn health_replication_end_to_end() {
     let h = suite::health("typical", 1, true, false, true);
     assert!(h.echo_damage > 100.0, "echo-leak fault not detected ({:.1})", h.echo_damage);
 }
+
+/// Hit location survives the replay delay: the victim replays the blow on the
+/// same body-relative spot the blade touched (bone-local offsets), so the same
+/// armour layers apply as in solo. Re-adding a world offset, as HSMPCombat did
+/// before hits were replayed in bone space, moves the spot by however much the victim turned and leaned
+/// in between (often under a different layer, or deep inside the body).
+#[test]
+fn hit_location_survives_the_replay_delay() {
+    for p in ["typical", "wifi"] {
+        let o = suite::location(p, SEEDS);
+        let mut turn = o.turn.clone();
+        turn.sort_by(|a, b| a.total_cmp(b));
+        let q = |f: f64| turn.get(((turn.len() as f64 - 1.0) * f) as usize).copied().unwrap_or(0.0);
+        println!("| {p} | {} blows | victim turn p50 {:.1}° p90 {:.1}° | world offset: other layer {:.1} %, inside {:.1} % | bone-local: other layer {:.2} %, inside {:.2} % |",
+            o.n, q(0.5), q(0.9), o.pct(o.world_off), o.pct(o.world_inside), o.pct(o.local_off), o.pct(o.local_inside));
+        assert!(o.n >= 300, "{p}: too few replayed blade blows ({})", o.n);
+        assert!(o.pct(o.local_off) <= 0.5, "{p}: bone-local replay under another layer {:.2} %", o.pct(o.local_off));
+        assert!(o.local_inside == 0, "{p}: bone-local replay inside the body {}", o.local_inside);
+        assert!(o.world_off > 2 * o.local_off.max(1), "{p}: the world-offset baseline should be worse ({} vs {})", o.world_off, o.local_off);
+    }
+}

@@ -505,3 +505,79 @@ do
     T.check(T.contains(T.read(WORLD), "o.kin, o.pin_kin, o.pinned_at = false, nil, nil"),
         "restore_all clears the pin as well")
 end
+
+-- ---- world_follow.lua: timelines, dead reckoning, blending -----------------------------
+T.log("== world_follow: a body somebody else simulates")
+do
+    local FW = dofile(MODS .. "/HSMPWorld/Scripts/world_follow.lua")
+    local function v(x, y, z) return { X = x, Y = y, Z = z } end
+    local Q0 = { 0, 0, 0, 1 }
+    local function smp(t, x, z, vx, vz, flags) return { t = t, pos = v(x, 0, z), q = Q0, vel = v(vx, 0, vz), flags = flags or 8 } end
+
+    -- clock: offset = the fastest packet; the playout delay grows at once with lateness and
+    -- shrinks slowly
+    local c = FW.clock_new()
+    for k = 0, 9 do FW.clock_note(c, 1000 + 50 * k, 5000 + 50 * k + 40) end
+    T.check(c.off == 4040 and c.delay >= FW.D_MIN and c.delay <= FW.SEND_MS + 20, "steady stream: offset = path, delay ~ one interval",
+        string.format("off=%s delay=%.1f", tostring(c.off), c.delay))
+    FW.clock_note(c, 1500, 5500 + 40 + 120)   -- two packets 120 ms late (above the p90)
+    FW.clock_note(c, 1550, 5550 + 40 + 120)
+    T.check(c.delay >= FW.SEND_MS + 100, "late packets raise the delay at once", tostring(c.delay))
+    local d0 = c.delay
+    for k = 11, 20 do FW.clock_note(c, 1000 + 50 * k, 5000 + 50 * k + 40) end
+    T.check(c.delay < d0 and c.delay > d0 - 40, "and it shrinks back slowly", tostring(c.delay))
+    T.check(c.delay_fast < c.delay, "held / contact bodies play closer to the owner (stand-in timeline)")
+    local c2 = FW.clock_new()
+    FW.clock_note(c2, 100, 5000); FW.clock_note(c2, 150, 9000)
+    T.check(c2.off == 8850, "a clock jump (reload, new session) starts the window over", tostring(c2.off))
+
+    -- dead reckoning: ballistic in the air, clamped at the floor; friction on the ground
+    local p = FW.extrapolate(smp(0, 0, 100, 500, 300), 200, nil, nil, 0)
+    T.check(math.abs(p.X - 100) < 1e-6 and math.abs(p.Z - (100 + 60 - 0.5 * FW.G * 0.04)) < 1e-6, "airborne: ballistic", T.repr(p))
+    p = FW.extrapolate(smp(0, 0, 20, 0, -600), 300, nil, nil, 5)
+    T.check(p.Z == 5, "a landing is clamped at the floor estimate, never through it", T.repr(p))
+    p = FW.extrapolate(smp(0, 0, 20, 200, 0), 1000, nil, nil, 0)
+    T.check(math.abs(p.X - 200 * 200 / FW.SLIDE_DECEL / 2) < 1e-6 and p.Z == 20, "sliding: friction stops it", T.repr(p))
+    p = FW.extrapolate(smp(0, 0, 20, 200, 0, 9), 500)
+    T.check(p.X == 0, "an asleep sample is not extrapolated")
+
+    -- blending: a new sample never makes the shown pose jump; the correction decays
+    local cc = { off = 0, delay = 100, delay_fast = 60 }
+    local st, buf = {}, { smp(0, 0, 0, 0, 0), smp(50, 10, 0, 0, 0) }
+    local function show(now, dist) return FW.pose(st, buf, cc, { now = now, dt = 0.016, lead = 0, owner_dist = dist or 50 }) end
+    local a = show(100)
+    FW.before_change(st, buf)
+    buf[#buf + 1] = smp(100, 80, 0, 0, 0)     -- a correction: the body is 60 cm further than the old stream said
+    local b = show(116)
+    T.check(math.abs(b.X - a.X) < 5, "a new sample shifts the target, not the screen", string.format("%.1f -> %.1f", a.X, b.X))
+    for k = 1, 60 do b = show(116 + 16 * k) end
+    T.check(math.abs(b.X - 80) < 0.5, "the correction blends away", tostring(b.X))
+    T.check(st.u == 0, "a body at its owner stays in the owner's timeline")
+
+    -- free flight: catch up to the present without a jump (at most 1.5x the speed)
+    local st2, b2 = {}, {}
+    for k = 0, 6 do b2[#b2 + 1] = smp(k * 50, k * 30, 100, 600, 0) end
+    local cf = { off = 0, delay = 100, delay_fast = 60 }
+    local last, maxstep = nil, 0
+    for k = 0, 40 do
+        local now = 300 + 16 * k
+        local q = FW.pose(st2, b2, cf, { now = now, dt = 0.016, lead = 150, owner_dist = 1000 })
+        if last then maxstep = math.max(maxstep, q.X - last.X) end
+        last = q
+    end
+    T.check(st2.u == 1, "flying free of its owner: shown in the present")
+    T.check(maxstep <= 600 * 0.016 * 1.6, "catch-up is continuous (no snap)", tostring(maxstep))
+    -- held again: back to the owner's timeline (blended)
+    FW.before_change(st2, b2)
+    b2[#b2 + 1] = smp(400, 240, 100, 0, 0, 8 | 2)
+    local h = FW.pose(st2, b2, cf, { now = 950, dt = 0.016, lead = 150, owner_dist = 1000 })
+    T.check(st2.u == 0 and math.abs(h.X - last.X) < 15, "a held body returns to the owner's timeline without a jump", T.repr(h))
+
+    -- a new owner: blend from what is on screen
+    local st3 = {}
+    FW.pose(st3, { smp(0, 0, 0, 0, 0) }, cc, { now = 100, dt = 0.016, owner_dist = 50 })
+    FW.rebase(st3)
+    local r = FW.pose(st3, { smp(1000, 100, 0, 0, 0) }, { off = -900, delay = 100, delay_fast = 60 }, { now = 100, dt = 0.016, owner_dist = 50 })
+    T.check(math.abs(r.X) < 1e-6, "rebased onto another sender: no jump", T.repr(r))
+    T.check(T.contains(T.read(WORLD), "K.FW = load_module(\"world_follow\")"), "main.lua uses world_follow.lua")
+end

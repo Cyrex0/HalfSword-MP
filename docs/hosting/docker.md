@@ -56,6 +56,7 @@ The entry script (`scripts/docker-entry.sh`) turns these into flags:
 | `HSMP_MASTER_URL` | `https://master.halfswordmp.workers.dev` | the server list to register with; `off` (or empty) = LAN-only. Replaced by the local master with `HSMP_WITH_MASTER=1` |
 | `HSMP_STATE_DIR` | `/hsmp/data` | read by the server: folder of `server_identity.key` |
 | `HSMP_RCON_BIND` | unset | `--rcon-bind` (RCON off when unset) |
+| `HSMP_LOG_LEVEL` | unset (info) | `--log-level`: error, warn, info, debug, trace or a `RUST_LOG`-style filter |
 | `HSMP_RCON_PASSWORD` | unset | read by the server |
 | `HSMP_RCON_ALLOW_REMOTE` | unset | read by the server; must be `1` (or `true`) for RCON in a container (see [RCON](rcon.md#docker)) |
 | `HSMP_WITH_MASTER` | `0` | `1` also starts `hsmp-master` in the container |
@@ -211,6 +212,11 @@ sudo mkdir -p /srv/hsmp && sudo chown 1000:1000 /srv/hsmp && sudo chmod 700 /srv
 docker logs -f hsmp
 docker logs --since 1h hsmp
 ```
+
+The server also writes daily log files to the data volume, `/hsmp/data/logs/server/` (14 days,
+500 MB; `-e HSMP_LOG_LEVEL=debug` for more detail). A bug report for us:
+`docker exec hsmp hsmp-server --report --log-dir /hsmp/data/logs/server` (see
+[Logs and diagnostics](logs-and-diagnostics.md)).
 
 The log contains player IP addresses and nicknames (see
 [Logs and privacy](dedicated-server.md#logs-and-privacy)). Docker's default `json-file` driver keeps

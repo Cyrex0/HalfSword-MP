@@ -16,7 +16,7 @@ These are the UE4SS Lua mods that run inside Half Sword. Each mod keeps the layo
 | `HSMPInteract` | Grabs and shoves between players |
 | `HSMPNoCutscene` | Skips cutscenes that would break a session |
 | `shared/` | Libraries copied into every mod's `Scripts/` at deploy (`hsmp_cfg`, `hsmp_log`, `hsmp_wg` world guard, `hsmp_saveguard`, `hsmp_arenas`, ...) |
-| `dev/` | Developer-only mods: `HSMPDiag` (property dumps), `HSMPDump` (UE4SS object/header dumps) |
+| `dev/` | Developer-only mods: `HSMPDiag` (property dumps), `HSMPDump` (UE4SS object/header dumps), `HSMPParity` (in-game damage parity experiments) |
 
 `mods.release.txt` is the template for the game's `ue4ss/Mods/mods.txt`: `1` = enabled, `0` =
 disabled, `dev` = enabled only in a developer deploy. A mod that is not listed stays disabled.

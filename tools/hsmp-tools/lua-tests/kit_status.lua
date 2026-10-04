@@ -596,3 +596,98 @@ do
     clk = clk + 1.1; S2:poll(true)
     T.check(w.Kit.menu_cleanup_ok(S2, clk), "absent for >= 2 s -> clean")
 end
+
+T.log("== IO-1: a pawn already visible (safety reveal) is dressed only after the hair settles")
+do
+    local w = new_env()
+    w:new_pawn(1)
+    local settle_until = w.clock + 2.5
+    w.api.dress_wait = function() return math.max(0, settle_until - w.clock) end
+    w:kit("man_at_arms", 3)
+    w:tick(10)
+    T.check(w.applies == 0, "no Set Up Armor while the hair is settling", tostring(w.applies))
+    T.check(w:status().ok == false and w:status().error == "dressing", "status says dressing meanwhile", T.repr(w:status()))
+    T.check(#T.filter(w.logs, function(l) return T.contains(l, "hair settle") end) == 1, "one log line, not one per tick", w:logtext())
+    w:tick(20)
+    T.check(w.applies >= 1 and w:status().ok == true, "dressed and verified once the window passed", T.repr(w:status()))
+end
+
+T.log("== IO-1: a hidden pawn is dressed at once (the normal path is not slowed down)")
+do
+    local w = new_env()
+    w:new_pawn(1)
+    w.api.dress_wait = function() return 0 end
+    w:kit("man_at_arms", 3)
+    w:tick(1)
+    T.check(w.applies == 1, "applied on the first tick", tostring(w.applies))
+end
+
+T.log("== dev kit delay: the kit is held back until the pawn has been hidden that long")
+do
+    local w = new_env()
+    w:new_pawn(1)
+    local born = w.clock
+    w.api.dress_age = function() return w.clock - born end
+    w.Kit.DEV_KIT_DELAY_S = 3.2
+    w:kit("man_at_arms", 3)
+    w:tick(30)
+    T.check(w.applies == 0 and w:status().error == "no kit yet", "no dress before the delay", T.repr(w:status()))
+    w:tick(5)
+    T.check(w.applies == 1, "dressed after the delay", tostring(w.applies))
+    w.Kit.DEV_KIT_DELAY_S = 0
+end
+-- The own-pawn re-dress paths, each with the pawn already visible
+-- (dress_wait > 0) when the re-dress is due.
+local function settle_env()
+    local w = new_env()
+    w:new_pawn(1)
+    w.settle_until = 0
+    w.api.dress_wait = function() return math.max(0, w.settle_until - w.clock) end
+    return w
+end
+
+T.log("== IO-1: a late kit update (new rev during the countdown) waits for the hair")
+do
+    local w = settle_env()
+    w:kit("man_at_arms", 3)
+    w:tick(6)
+    local n = w.applies
+    T.check(n >= 1 and w:status().ok == true, "first kit on while hidden", T.repr(w:status()))
+    w.settle_until = w.clock + 2.5           -- revealed just now
+    w:kit("duelist", 4)
+    w:tick(10)
+    T.check(w.applies == n, "no Set Up Armor for the new rev inside the window", tostring(w.applies - n))
+    w:tick(25)
+    T.check(w.applies > n and w:status().rev == "4" and w:status().ok == true, "re-dressed after the window", T.repr(w:status()))
+end
+
+T.log("== IO-1: round reset with the new pawn visible on the first look")
+do
+    local w = settle_env()
+    w:kit("man_at_arms", 3)
+    w:tick(6)
+    local n = w.applies
+    w.Kit.on_world_change()
+    w:new_pawn(2)
+    w.settle_until = w.clock + 2.5
+    w:tick(10)
+    T.check(w.applies == n, "new world: no Set Up Armor while the new pawn's hair settles", tostring(w.applies - n))
+    w:tick(25)
+    T.check(w.applies > n and w:status().pawn == "Willie_BP_C_2" and w:status().ok == true, "dressed after the window",
+        T.repr(w:status()))
+end
+
+T.log("== IO-1: the re-dress after a native re-arm (stability window) waits too")
+do
+    local w = settle_env()
+    w:kit("man_at_arms", 3)
+    w:tick(6)
+    local n = w.applies
+    w.settle_until = w.clock + 2.5
+    w.pawn.props["Weapon R"] = nil           -- the game re-armed from the passport: fists
+    w:tick(10)
+    T.check(w.applies == n and T.contains(w:logtext(), "re-dressing"), "re-dress decided but not run inside the window",
+        tostring(w.applies - n))
+    w:tick(25)
+    T.check(w.applies > n, "re-dressed after the window", tostring(w.applies - n))
+end

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Build + deploy the HSMP stack into the game folder (developer tool; players use the launcher).
@@ -528,32 +528,37 @@ if ($WriteCfg -or -not (Test-Path $cfgPath)) {
     }
 }
 
-# ----- 4b. engine workaround: hair-strand streaming ------------------------------
-# PAK_ASYNC_READ_OOB: the shipping pak reader reads past the end of the hair
-# .ubulk while streaming hair LODs and crashes on the IoDispatcher thread.
-# Loading hair whole avoids the paged reads. Merged into the user's Engine.ini.
+# ----- 4b. engine workaround: the IO-1 hair crash --------------------------------
+# PAK_ASYNC_READ_OOB (docs/development/halfsword/io-dispatcher-crash.md): the
+# shipping pak reader reads past the end of the hair strands .ubulk and crashes
+# on the IoDispatcher thread. Hair cards instead of strands: the strands data is
+# never read. Streaming=0 is the earlier workaround, kept. Each line is merged
+# into the user's Engine.ini only if the key is missing.
 $engineIni = Join-Path $env:LOCALAPPDATA "HalfSwordUE5\Saved\Config\Windows\Engine.ini"
+$engineLines = @(@("r.HairStrands.Streaming", "0"), @("r.HairStrands.UseCardsInsteadOfStrands", "1"))
 try {
     $ini = if (Test-Path $engineIni) { [IO.File]::ReadAllText($engineIni) } else { "" }
     if ($null -eq $ini) { $ini = "" }
-    if ($ini -notmatch '(?m)^\s*r\.HairStrands\.Streaming\s*=' -and $DryRun) {
+    $missing = @($engineLines | Where-Object { $ini -notmatch ('(?m)^\s*' + [regex]::Escape($_[0]) + '\s*=') })
+    if ($missing.Count -gt 0 -and $DryRun) {
         # -DryRun promises to write nothing (the user's Engine.ini included)
-        Say "  (dry run) would add r.HairStrands.Streaming=0 to $engineIni" DarkGray
-    } elseif ($ini -notmatch '(?m)^\s*r\.HairStrands\.Streaming\s*=') {
+        Say "  (dry run) would add $(($missing | ForEach-Object { $_[0] + '=' + $_[1] }) -join ', ') to $engineIni" DarkGray
+    } elseif ($missing.Count -gt 0) {
         New-Item -ItemType Directory -Force (Split-Path $engineIni) | Out-Null
         # keep the first backup (the user's own Engine.ini)
         if ((Test-Path $engineIni) -and -not (Test-Path "$engineIni.hsmp_bak")) { Copy-Item $engineIni "$engineIni.hsmp_bak" }
+        $add = ($missing | ForEach-Object { $_[0] + "=" + $_[1] + "`r`n" }) -join ""
         if ($ini -match '(?m)^\[SystemSettings\]') {
-            $ini = [regex]::Replace($ini, '(?m)^\[SystemSettings\]\r?\n?', "[SystemSettings]`r`nr.HairStrands.Streaming=0`r`n", 1)
+            $ini = [regex]::Replace($ini, '(?m)^\[SystemSettings\]\r?\n?', "[SystemSettings]`r`n$add", 1)
         } else {
-            $ini = $ini.TrimEnd() + $(if ($ini.Trim()) { "`r`n`r`n" } else { "" }) + "[SystemSettings]`r`nr.HairStrands.Streaming=0`r`n"
+            $ini = $ini.TrimEnd() + $(if ($ini.Trim()) { "`r`n`r`n" } else { "" }) + "[SystemSettings]`r`n$add"
         }
         [IO.File]::WriteAllText($engineIni, $ini)
-        Say "Engine.ini: r.HairStrands.Streaming=0 (IoDispatcher crash workaround)" Green
+        Say "Engine.ini: $(($missing | ForEach-Object { $_[0] + '=' + $_[1] }) -join ', ') (IoDispatcher crash workaround)" Green
     } else {
-        Say "Engine.ini: hair streaming setting already present"
+        Say "Engine.ini: hair crash settings already present"
     }
-} catch { Say "Engine.ini: could not apply the hair-strand streaming workaround: $_" Yellow }
+} catch { Say "Engine.ini: could not apply the hair crash settings: $_" Yellow }
 
 # ----- 4c. IPC backend setting ---------------------------------------------------
 # Shared memory is the only IPC. An "ipc" key in the game's default

@@ -95,12 +95,20 @@ pub const CONTRACT: &[Entry] = &[
     e("frame_hb", L, &["max_ms"], &["n"]),
     e("ready_report", L, &[], &["round", "arena", "load_error"]),
     e("pose_quality", L, &["peer", "arm_p95_uu", "tip_p95_uu", "latency_ms", "jitter_ratio", "foot_slide_p95", "idle_rms"], &["round"]),
+    // SMOOTH-1 (replication.md "Rubber banding"): HSMPAvatars per stand-in every 5 s; HSMPSync spawn_place / HSMPAvatars launch clamp
+    e("netfeel", L, &["peer", "snaps_per_min", "rigid_snaps", "clock_resets", "jump_max_uu", "window_s"], &["frames", "buffer_ms", "jitter_ms", "round"]),
+    e("pawn_correction", L, &["why", "live", "dist_cm"], &["speed", "round"]),
+    // SPAWN-1: HSMPAvatars, 3 s after a stand-in starts being driven / is re-posed, and after our pawn spawns
+    e("spawn_stretch", L, &["who", "peer", "max_uu", "bone", "why"], &["frames", "round"]),
     // PAWN-1 (docs/development/subsystems/spawns.md): HSMPSync spawn_place emit_state + HSMPLoadout kit.lua
     e("pawn_state", L, &["at", "protected", "downed", "consciousness", "dist_cm", "weapon_r", "weapon_l", "reason"],
       &["round", "pawn", "fallen", "health", "live", "who"]),
     // WORLD-1 (docs/development/subsystems/world-replication.md): HSMPWorld (Lua) and the server's pairing
     e("world_consistency", &[Src::Lua, Src::Server], &["compared", "mismatched", "hash_match", "level"],
       &["mismatched_n", "hash_equal", "peer", "other", "epoch", "world", "kinds", "f_seq"]),
+    // WORLD-2 (world-replication.md "Measuring sync"): HSMPWorld, harness runs (tracks) and every 5 s (quality)
+    e("world_track", L, &["nid", "t", "x", "y", "z", "rest", "level", "epoch"], &["qx", "qy", "qz", "qw", "mode", "owner"]),
+    e("world_sync_quality", L, &["hard_snaps"], &["max_off_cm", "lost_races", "takeovers", "poked", "follow_ticks", "window_s", "level", "epoch"]),
     // COMBAT-1 (docs/development/subsystems/combat.md): HSMPCombat every 5 s of combat during Live
     e("combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s"]),
     e("x_combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s"]),
@@ -138,6 +146,8 @@ pub const CONTRACT: &[Entry] = &[
     e("session_resumed", &[Src::Server, Src::Sidecar], &[], &[]),
     e("round_resumed", SV, &[], &[]),
     e("drop_forfeit_round", SV, &[], &[]),
+    // NAT traversal (server/src/nat): a relayed punch answered with probes. Not judged.
+    e("nat_punch", SV, &[], &["to", "nonce"]),
     // --- hsmp-sidecar --events -----------------------------------------------------------------
     e("cmd_sent", SC, &[], &[]),
     e("cmd_timeout", SC, &["cmd", "cmd_id", "tries"], &[]),
@@ -149,6 +159,10 @@ pub const CONTRACT: &[Entry] = &[
     e("link_resumed", SC, &[], &[]),
     e("parent_exit", SC, &[], &[]),
     e("sidecar_exit", SC, &[], &[]),
+    // NAT traversal on join (sidecar/traversal.rs): start, relayed, connected, blocked; the
+    // host's first probe arriving. Not judged.
+    e("nat_traversal", SC, &[], &["server", "step", "try", "tries"]),
+    e("nat_probe_rx", SC, &[], &["from"]),
     // attach / refusal of the game's segment (docs/development/ipc-shared-memory.md).
     e("ipc_attached", SC, &["name", "abi", "caps"], &[]),
     e("ipc_refused", SC, &["code", "detail"], &[]),

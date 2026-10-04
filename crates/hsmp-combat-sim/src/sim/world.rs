@@ -206,6 +206,8 @@ pub struct ClaimRec {
     pub pcell: Option<(damage::WeaponClass, damage::Armour, u8, f32, bool)>,
     /// Debug: true relative speed, stand-in one, server estimate.
     pub rel_dbg: Option<(f32, f32, Option<f32>, f32)>,
+    /// Honest blade contacts: (capsule segment, true time of the victim pose shown, contact point).
+    pub geo: Option<(usize, f64, V3)>,
 }
 
 #[derive(Clone, Copy)]
@@ -274,6 +276,9 @@ struct GdEvent {
     /// Solo Health loss of the same contact (true relative motion).
     solo: f32,
     solo_vrel: f32,
+    /// Capsule segment touched and the true time of the victim pose shown.
+    seg: usize,
+    shown_t: f64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -838,7 +843,7 @@ impl World {
                     self.clients[c].events[p].push(GdEvent {
                         t, ats, vts, bone, loc, raw: native * 40.0, loss: native, stab, contact: cid,
                         view_lag, kind: kind_e, effective, native, age_forge: 0, hand: is_hand, bound, gated, lie: if reach_cheat { min_true } else { 0.0 }, speed, s_blade,
-                        dcd, solo, solo_vrel,
+                        dcd, solo, solo_vrel, seg, shown_t,
                     });
                 }
                 let _ = honest_contact;
@@ -875,7 +880,7 @@ impl World {
             *w.cheat_attempts.entry(ch).or_insert(0) += 1;
             w.clients[c].events[p].push(GdEvent {
                 t, ats, vts, bone, loc, raw: 800.0, loss: 20.0, stab: false, contact: cid, view_lag: lag,
-                kind: ClaimKind::Cheat(ch), effective: true, native: 0.0, age_forge: 0, hand: false, bound: 0.0, gated: false, lie, speed: 0.0, s_blade: 0.0, dcd: None, solo: 0.0, solo_vrel: 0.0,
+                kind: ClaimKind::Cheat(ch), effective: true, native: 0.0, age_forge: 0, hand: false, bound: 0.0, gated: false, lie, speed: 0.0, s_blade: 0.0, dcd: None, solo: 0.0, solo_vrel: 0.0, seg: 0, shown_t: 0.0,
             });
         };
         match cheat {
@@ -1135,6 +1140,7 @@ impl World {
             booked_loss: None, outcome: None, confirm_t: None, applied_t: None, arrived_t: None, forwarded_t: None, effective: eff, hand: main.hand, n_events: evs.len(), bound_sum, lie: evs.iter().map(|e| e.lie).fold(0.0, f32::max), speed: main.speed, bone: main.bone, server_speed: None, parry_d: None, s_blade: main.s_blade,
             solo: if main.dcd.is_some() { Some(main.solo) } else { None }, mp: None,
             rel_dbg: main.dcd.map(|x| (main.solo_vrel, x.vrel_s, None, main.speed)),
+            geo: if kind == ClaimKind::Honest && !main.hand { Some((main.seg, main.shown_t, main.loc)) } else { None },
             pcell: main.dcd.map(|x| (w_class(&self.plan.fighters[c]), x.armour, game::part_rank(main.bone), x.k.hm, main.stab)),
         });
         self.base_age.push(hit.age_ms);

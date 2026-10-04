@@ -6,6 +6,7 @@
 //! The canonical pose record is the codec-v2 frame produced once at the source
 //! (docs/development/ipc-shared-memory.md): nobody re-encodes it.
 
+pub mod feelsim;
 pub mod posecodec;
 pub mod poseplay;
 pub mod sample;

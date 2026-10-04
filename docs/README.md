@@ -25,6 +25,7 @@ audience. Start with the [project README](../README.md) for an overview.
 | [Master server](hosting/master-server.md) | Running `hsmp-master`, the server list |
 | [Docker](hosting/docker.md) | The container image, volumes, the identity key |
 | [Linux](hosting/linux.md) | Native Linux build and a systemd unit |
+| [Logs and diagnostics](hosting/logs-and-diagnostics.md) | Server log files, the 10-second stats lines, sending us a report |
 
 ## Contributors
 
@@ -38,6 +39,7 @@ audience. Start with the [project README](../README.md) for an overview.
 | [Round-reset crash guard](development/crash-rr.md) | The Runtime Vertex Paint crash on level change and how HSMP avoids it |
 | [Testing and the gate](development/testing.md) | Event log, G0, e2e, the in-game gate |
 | [Developer tools](development/tools.md) | `hsmp-tools`, `hsmp-gate` and the lints |
+| [Bug reports](development/bug-reports.md) | Session logs, the report zip, the `/v1/reports` endpoint, fetching reports |
 | [Releasing](development/releasing.md) | Building, signing and publishing a release |
 | [UE4SS](development/ue4ss.md) | Which UE4SS build HSMP uses and how to get it |
 | [Half Sword modding notes](development/halfsword/README.md) | What is known about the game's internals |

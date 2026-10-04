@@ -64,6 +64,7 @@ async fn on_weapon(state: &Arc<ServerState>, from: SocketAddr, payload: &[u8]) -
 async fn on_pose(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: SocketAddr, payload: &[u8]) -> anyhow::Result<()> {
     let v = view::<PoseHead>(payload).map_err(super::records::refused)?;
     if !super::dispatch::stream_ok(state, from, StreamKind::Skel) {
+        state.relay.note_pose_in(from, false);
         return Ok(());
     }
     // The structural check is the decode lag compensation needs anyway: done once.
@@ -71,10 +72,13 @@ async fn on_pose(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: Socket
         return Err(super::records::refused(hsmp_ipc::record::Invalid::Range("frame")));
     };
     let Some(sid) = touch_peer(state, from).await else { return Ok(()) };
+    crate::stats::pose_in(sid);
     // A frame lag comp rejects (pose not tied to the root) is not relayed either.
     if !crate::lagcomp::record_skeletal_v2(sid, &full) {
+        state.relay.note_pose_in(from, false);
         return Ok(());
     }
+    state.relay.note_pose_in(from, true);
     // Codec v2 frames carry the exact blade (grip, tip, tip velocity) and capsules for all 22
     // bodies.
     let x = crate::posecodec::v2::extras_of(&full);

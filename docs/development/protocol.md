@@ -51,7 +51,9 @@ server-browser query (`\xFF HSMPQ1 \0`, `server/src/query.rs`), so one UDP port 
 | `0xA5` | `S2CAuthReject` | S→C | sealed with `s2c` | ≤ the Auth |
 | `0xA6` | `S2CReset` (stateless reset, §4.7) | S→C | no (carries a token) | 25 |
 | `0xB0` | data packet | both | sealed with the direction key | ≤ 1200 |
-| `0xFF` | browser query | both | no | — |
+| `0xFF` | browser query (`\xFF HSMPQ1 \0`) | both | no | — |
+| `0xFF` | punch probe (`\xFF HSMPP1 \0` + nonce u64; §11) | S→C | no | 16 |
+| `0x00`/`0x01` + `21 12 A4 42` at bytes 4..8 | STUN Binding (RFC 5389; §11) | the game socket ↔ STUN servers | no | ≥ 20 |
 | `0x00`/`0x01` + `00 00 00` | v4 datagram | — | — | dropped (§7.3) |
 
 `MAX_DATAGRAM = 1200` bytes for every packet type in both directions. It stays below every
@@ -609,7 +611,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0214` | `cmd_result` | S→C | ordered | Exactly one result per `cmd_id` |
 | `0x0215` | `game_status` | C→S | rel_latest | The game's state report, about 1 Hz and on change: `match_id`, `round`, `world_key`, `flags` (LOADED, READY, DEAD, IN_MENU, SPECTATING, BACKGROUND), `spawn_id`, `load_error`, `arena`. The server counts a player as loaded only if `match_id`, `round` and `arena` match the frozen config |
 | `0x0216` | `spawned` | C→S | ordered | The pawn was placed on its spawn order (`round`, `slot`, `pos`, `clear`) |
-| `0x0217` | `notice` | S→C | reliable | `notice` code with up to 4 string args; idempotent by `event_id` |
+| `0x0217` | `notice` | S→C | reliable | `notice` code with up to 4 string args; idempotent by `event_id` (`NET_STATUS` = 9, §11) |
 | `0x0218` | `kill_feed` | S→C | reliable | Killer and victim seats, cause, weapon |
 | `0x0219` | `kicked` | S→C | reliable | Terminal: no automatic rejoin before `retry_after_s`; followed by close `KICKED` |
 | `0x021A` | `server_closing` | S→C | ordered | `closing_reason`, text, `reconnect_after_ms` (0 = do not); followed by close `SERVER_CLOSING` |
@@ -865,3 +867,66 @@ a header, random and mutated, through `schema::check_payload` and the domain han
   resume flag are reserved.
 - **Password proof:** the wire field and the transcript binding are defined; password servers
   (`caps::PASSWORD`) are not enabled.
+
+## 11. NAT traversal
+
+A listen host behind a home router is often not reachable: the router drops every inbound UDP
+datagram it did not ask for. Three things work around that without a relay for game traffic and
+without changing §3: the handshake, the cookie (bound to the address and port it was sent to)
+and the connection are exactly the same on a punched path.
+
+**Router port mapping (host).** `hsmp-server` asks the router for a UDP mapping of its game port
+(`crates/hsmp-nat`, `portmap`): UPnP-IGD (SSDP, then `AddPortMapping` on WANIPConnection or
+WANPPPConnection), else PCP `MAP`, else NAT-PMP, all with a 1 h lease renewed at half-life and
+removed on a clean shutdown. A conflict (UPnP 718) moves the mapping to the next ports; a router
+that only takes permanent leases (725) gets lease 0; a private WAN address in the answer is a
+double NAT.
+
+**STUN on the game socket.** Both ends send RFC 5389 Binding requests (20 bytes, no
+attributes) from the socket the game traffic uses, so the answer is the real mapping. Receivers
+demultiplex them before the transport: two zero bits at the top of byte 0, the magic cookie
+`21 12 A4 42` at bytes 4..8, and a length field that matches the datagram. Two answers from STUN
+servers on different addresses with the same endpoint mean endpoint-independent mapping
+(punchable, listed as `cone`); different ports mean symmetric (`symmetric`, not punchable). The
+host keeps its NAT's mapping alive with a STUN refresh every 25 s when the router port is not
+mapped, and lists the port that works: the router's mapped port, else the NAT's mapped port when
+the mapping is endpoint-independent, else the bound port.
+
+**The punch.**
+
+```
+joiner sidecar                  server list                         host hsmp-server
+  Hello ... (3 s, no answer)                                         (relay WebSocket open:
+  STUN from the game socket -> J                                      GET /v1/punch/listen/{id})
+  POST /v1/punch {host, port,   --> check: J.ip == requester,
+        endpoint: J}                port >= 1024, rate limits
+                                    {"t":"punch","to":J}  ---------->  probe x4 to J
+                                                                       (opens the host NAT for J)
+  Hello  ------------------------------------------------------------>  normal handshake (§3)
+```
+
+The probe is `\xFF HSMPP1 \0` followed by a random u64 (16 bytes), sent at 0, 150, 400 and
+1000 ms. The joiner's NAT already has a mapping towards the host (its Hellos), so the probes and
+the host's answers get in; the host's NAT has one towards J after the first probe, so the next
+Hello gets in. Nobody answers a probe. The sidecar starts a new handshake 300 ms after the list
+accepted the request, and repeats the request 4 times 4 s apart, then every 20 s.
+
+Bounds: a requester can only aim probes at its own address (the list checks it); the list
+limits requests per requester, per listing and globally (docs/hosting/master-server.md); the host
+sends at most one burst per target per 2 s and 30 a minute, 64 bytes per burst. Both ends punch
+only when the direct path stayed silent: LAN and loopback servers are never punched.
+
+What it does not do: a symmetric NAT on the host side (or on the joiner side when the host's NAT
+filters by port) defeats it; the player is then told to forward the port. There is no TURN-style
+relay of game traffic.
+
+The listen host's own game hears the outcome through the `notice` code `NET_STATUS` (9) sent to
+its owner on joining and on every change: args `state` (`upnp`, `pcp`, `natpmp`, `open`,
+`double`, `trying`, `failed`, `off`), the listed port, the public address, and the NAT kind
+(`cone`, `cone+punch` while the relay socket is open, `symmetric`, `unknown`).
+
+Tests: `crates/hsmp-nat` (STUN against the RFC 5769 sample, SOAP bodies, PCP / NAT-PMP layouts,
+mock routers), `hsmp-master-core` (listen signature and replay, the endpoint check, rate limits),
+`scripts/e2e-nat.sh` (an emulated NAT in front of the host, `hsmp-server --emulate-nat`: a direct
+join fails, a punched join succeeds) and `scripts/e2e-master-cf.sh` CF6-CF8 (the same through the
+Worker under `wrangler dev`).

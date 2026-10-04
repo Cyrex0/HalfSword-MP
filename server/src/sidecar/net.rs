@@ -286,11 +286,23 @@ pub(super) fn conn_stats() -> Option<ConnStats> {
     n.client.conn().filter(|_| n.client.is_connected()).map(|c| c.stats())
 }
 
-/// A UDP socket connected to `server` (`host:port`; an IPv4 or `[IPv6]`
-/// literal or a host name), bound on the address family of the address it
-/// connects to. IPv4 addresses are tried first (servers bind 0.0.0.0 by
-/// default), then IPv6.
-pub(super) async fn connect_udp(server: &str) -> Result<UdpSocket> {
+/// The server's address (set once by `bind_for`). The game socket is not connected: it
+/// also talks to STUN servers (traversal.rs), so the receive path keeps only the server's
+/// datagrams for the transport.
+static SERVER_ADDR: OnceLock<std::net::SocketAddr> = OnceLock::new();
+
+pub(super) fn server_addr() -> Option<std::net::SocketAddr> {
+    SERVER_ADDR.get().copied()
+}
+
+/// Datagrams from the server have arrived (any; the traversal waits for none).
+pub(super) static HEARD_SERVER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A UDP socket for `server` (`host:port`; an IPv4 or `[IPv6]` literal or a host name),
+/// bound on the address family of the address it resolves to. IPv4 addresses are tried
+/// first (servers bind 0.0.0.0 by default), then IPv6. Returns the socket and the server
+/// address it sends to.
+pub(super) async fn bind_for(server: &str) -> Result<(UdpSocket, std::net::SocketAddr)> {
     let mut addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host(server)
         .await
         .with_context(|| format!("resolve {server}"))?
@@ -300,19 +312,45 @@ pub(super) async fn connect_udp(server: &str) -> Result<UdpSocket> {
     for a in addrs {
         let local = if a.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
         match UdpSocket::bind(local).await {
-            Ok(s) => match s.connect(a).await {
-                Ok(()) => return Ok(s),
-                Err(e) => last = Some(anyhow::anyhow!("connect to {a}: {e}")),
-            },
+            Ok(s) => return Ok((s, a)),
             Err(e) => last = Some(anyhow::anyhow!("bind {local}: {e}")),
         }
     }
     Err(last.unwrap_or_else(|| anyhow::anyhow!("{server} has no address")))
 }
 
+/// `bind_for`, and remember the server address for every send and receive.
+pub(super) async fn connect_udp(server: &str) -> Result<UdpSocket> {
+    let (s, a) = bind_for(server).await?;
+    let _ = SERVER_ADDR.set(a);
+    Ok(s)
+}
+
+/// Where a datagram from `from` goes: the transport (the server), traversal (STUN answers,
+/// punch probes) or nowhere.
+fn from_server(from: std::net::SocketAddr, data: &[u8]) -> bool {
+    // the host's punch probes come from the server's own address
+    if hsmp_nat::probe::is_probe(data) {
+        super::traversal::on_datagram(from, data);
+        return false;
+    }
+    match server_addr() {
+        Some(s) if s == from => {
+            HEARD_SERVER.store(true, std::sync::atomic::Ordering::Relaxed);
+            true
+        }
+        Some(_) => {
+            super::traversal::on_datagram(from, data);
+            false
+        }
+        None => true,
+    }
+}
+
 async fn send_all(sock: &UdpSocket, out: Vec<Vec<u8>>) {
+    let Some(to) = server_addr() else { return };
     for dg in out {
-        if let Err(e) = sock.send(&dg).await {
+        if let Err(e) = sock.send_to(&dg, to).await {
             debug!(error = %e, "udp send");
         }
     }
@@ -409,8 +447,8 @@ static EVRX: OnceLock<std::sync::Mutex<Option<tokio::sync::mpsc::UnboundedReceiv
 pub(super) fn drain_socket(sock: &UdpSocket, buf: &mut [u8], max: usize, mut f: impl FnMut(&[u8])) -> usize {
     let (mut n, mut errs) = (0, 0);
     while n < max {
-        match sock.try_recv(buf) {
-            Ok(len) => { f(&buf[..len]); n += 1; }
+        match sock.try_recv_from(buf) {
+            Ok((len, from)) => { if from_server(from, &buf[..len]) { f(&buf[..len]); } n += 1; }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
             // Windows reports an ICMP port-unreachable from an earlier send
             // as a recv error (server down): skip it, a few per call.
@@ -439,8 +477,9 @@ pub(super) fn spawn_recv_task(sock: &Arc<UdpSocket>, shared: &Arc<Mutex<SharedSt
     tokio::spawn(async move {
         let mut buf = vec![0u8; 65536];
         loop {
-            match sock_rx.recv(&mut buf).await {
-                Ok(n) => {
+            match sock_rx.recv_from(&mut buf).await {
+                Ok((n, from)) => {
+                    if !from_server(from, &buf[..n]) { continue; }
                     let out = net().ingest(&buf[..n]);
                     send_all(&sock_rx, out).await;
                 }
@@ -693,6 +732,24 @@ pub(super) fn set_terminal() {
     net().terminal = true;
 }
 
+/// (connected, terminal) right now.
+pub(super) fn link_now() -> (bool, bool) {
+    if NET.get().is_none() { return (false, false); }
+    let n = net();
+    (n.client.is_connected(), n.terminal)
+}
+
+/// A punch was just relayed to the host (traversal.rs): start a fresh handshake shortly,
+/// after the host's first probes, instead of waiting out the backoff.
+pub(super) fn retry_soon(after: Duration) {
+    if NET.get().is_none() { return; }
+    let mut n = net();
+    if n.terminal || n.client.is_connected() { return; }
+    let at = Instant::now() + after;
+    n.reconnect_at = Some(n.reconnect_at.map_or(at, |r| r.min(at)));
+    n.backoff_s = 1;
+}
+
 /// TOFU record: `known_servers.json` maps "host:port" to the hex key. A
 /// changed key is reported loudly (the browser's `--server-key` pin is the
 /// enforced path).
@@ -830,13 +887,13 @@ mod tests {
     #[tokio::test]
     async fn connects_on_the_server_address_family() {
         async fn round_trip(server: &UdpSocket, target: &str) {
-            let c = connect_udp(target).await.unwrap();
-            c.send(b"hi").await.unwrap();
+            let (c, to) = bind_for(target).await.unwrap();
+            c.send_to(b"hi", to).await.unwrap();
             let mut b = [0u8; 8];
             let (n, from) = tokio::time::timeout(Duration::from_secs(2), server.recv_from(&mut b)).await.unwrap().unwrap();
             assert_eq!(&b[..n], b"hi");
             server.send_to(b"ok", from).await.unwrap();
-            let n = tokio::time::timeout(Duration::from_secs(2), c.recv(&mut b)).await.unwrap().unwrap();
+            let (n, _) = tokio::time::timeout(Duration::from_secs(2), c.recv_from(&mut b)).await.unwrap().unwrap();
             assert_eq!(&b[..n], b"ok");
         }
         let v4 = UdpSocket::bind("127.0.0.1:0").await.unwrap();
@@ -846,7 +903,7 @@ mod tests {
             Ok(v6) => round_trip(&v6, &format!("[::1]:{}", v6.local_addr().unwrap().port())).await,
             Err(e) => eprintln!("no IPv6 loopback here ({e}); the IPv6 case is skipped"),
         }
-        assert!(connect_udp("no-port").await.is_err());
+        assert!(bind_for("no-port").await.is_err());
     }
 
     /// Datagrams that queued while the process was stalled are all

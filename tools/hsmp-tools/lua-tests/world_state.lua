@@ -29,7 +29,7 @@ local real_getenv = os.getenv
 os.getenv = function(k) if k == "HSMP_STATE_DIR" then return STATE end return real_getenv(k) end
 
 package.preload["UEHelpers"] = function() return {} end
-package.path = MODS .. "/shared/?.lua;" .. package.path
+package.path = MODS .. "/shared/?.lua;" .. MODS .. "/HSMPWorld/Scripts/?.lua;" .. package.path
 HSMP_WORLD_TEST = true
 function FName(s) return s end
 local H = assert(load(T.read(WORLD), "@HSMPWorld/Scripts/main.lua"))()
@@ -274,11 +274,14 @@ local q0, q1 = rq(0, 0, 0), rq(0, 10, 0)
 door.buf = { { t = 1000, pos = v3(500, 0, 100), q = q0, vel = v3(0, 0, 0), flags = 8 },
              { t = 1100, pos = v3(500, 0, 100), q = q1, vel = v3(0, 0, 0), flags = 8 } }
 door.buf_sender = 2
-L.render[2] = { ms = 1050, latest = 1100 }
-H.update_body(door, 5000, false)
+-- the sender's clock puts the delayed timeline at 1050 for now = 5000; the follower starts
+-- from the local pose and blends onto the stream (frames at a standing clock)
+L.fclock[2] = { off = 5000 - 1050 - 80, delay = 80, delay_fast = 80, hist = {} }
+L.dt = 16
+for _ = 1, 40 do H.update_body(door, 5000, false) end
 r = doorb:K2_GetComponentRotation()
 T.check(door.kin and not rawget(doorb, "_sim") and math.abs(r.Yaw - 5) < 0.05,
-    "peer-owned hinge: physics off, hinge angle interpolated (5 deg at mid-sample)", "yaw " .. tostring(r.Yaw))
+    "peer-owned hinge: physics off, hinge angle interpolated (5 deg at mid-sample, blended in)", "yaw " .. tostring(r.Yaw))
 L.owners[201] = { owner = 0, ver = 6, mode = 0 }
 door.settled = false
 H.update_body(door, 5100, false)

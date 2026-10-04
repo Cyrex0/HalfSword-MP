@@ -558,6 +558,15 @@ end
 local VERIFY_AFTER, MAX_TRIES, STABLE_S, BUSY_WAIT = 0.3, 6, 3.0, 0.5
 Kit.VERIFY_AFTER, Kit.MAX_TRIES, Kit.STABLE_S = VERIFY_AFTER, MAX_TRIES, STABLE_S
 
+-- Dev only (HSMP_DEV=1): HSMP_DEV_KIT_DELAY_S=<s> holds our kit back until the
+-- pawn has been hidden that long, so the safety reveal always comes first:
+-- the late-kit path of a slow link, on every arena load (IO-1 soak).
+local function env_num(k)
+    local v = os.getenv(k)
+    return v and tonumber((v:gsub("%s", ""))) or nil
+end
+Kit.DEV_KIT_DELAY_S = ((os.getenv("HSMP_DEV") or ""):match("^%s*1%s*$") and env_num("HSMP_DEV_KIT_DELAY_S")) or 0
+
 local function nm(x) local n = "-"; if x then pcall(function() n = x:GetFName():ToString() end) end; return n end
 local function clock() return (api and api.now or os.clock)() end
 
@@ -780,6 +789,10 @@ function Kit.tick_local()
     if not pawn then return end
     local pid = Kit.my_peer_id()
     local kit = Kit.read(pid)
+    if kit and Kit.DEV_KIT_DELAY_S > 0 and api.dress_age then
+        local age = api.dress_age(pawn)
+        if age and age < Kit.DEV_KIT_DELAY_S then kit = nil end
+    end
     if not kit then
         -- Connected but our kit has not arrived yet: not done. The
         -- Director's kit step waits (and reports kit_error after kit_s) instead
@@ -887,6 +900,17 @@ function Kit.tick_local()
         p.verify_at, p.due = nil, now
     end
     if now < p.due then return end
+    -- IO-1: a pawn that is already visible (safety reveal: the kit came late)
+    -- waits until its hair has settled (main.lua dress_wait).
+    local wait = api.dress_wait and api.dress_wait(pawn) or 0
+    if wait > 0 then
+        if not p.hair_note then
+            p.hair_note = true
+            Log("own kit %s: pawn is visible undressed; dressing in %.1f s (hair settle)", tostring(p.kit.class), wait)
+        end
+        p.due = now + wait
+        return
+    end
     -- The game's own armour setup may still be running; wait only briefly.
     if p.tries > 0 and api.busy(pawn) and now - p.due < BUSY_WAIT then return end
     p.tries = p.tries + 1

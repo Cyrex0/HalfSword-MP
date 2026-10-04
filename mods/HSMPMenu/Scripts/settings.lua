@@ -15,6 +15,8 @@
 --   hud_killfeed   bool    HSMPHud kill feed
 --   hud_net        string  HSMPHud net indicator: always | bad | off
 --   avatars        bool    HSMPAvatars: show peer avatars
+--   upnp           bool    a hosted server opens its port on the router (UPnP / PCP / NAT-PMP);
+--                          false = hsmp-server --port-map off
 --   lobby_map, lobby_mode  the next HOST's boot arena / rounds ("Best of N", re-sent on connect)
 --   host_kit_mode, host_kit_budget  the HOST's last KIT RULES pick (-1 = none), re-sent
 --                  on connect as host
@@ -39,12 +41,12 @@ S.MAX_URLS = 4
 S.DEFAULTS = {
     nick = "Willie", server = "127.0.0.1:7777", send_hz = 60,
     region = "", master_url = "",
-    hud = true, hud_killfeed = true, hud_net = "always", avatars = true,
+    hud = true, hud_killfeed = true, hud_net = "always", avatars = true, upnp = true,
     lobby_map = "Map_Arena_Alley", lobby_mode = "Best of 3",
     host_kit_mode = -1, host_kit_budget = 0,
 }
 local ORDER = { "nick", "server", "send_hz", "hud", "avatars", "lobby_map", "lobby_mode",
-                "region", "master_url", "hud_killfeed", "hud_net", "host_kit_mode", "host_kit_budget" }
+                "region", "master_url", "hud_killfeed", "hud_net", "host_kit_mode", "host_kit_budget", "upnp" }
 
 S.data = {}          -- the live settings (main.lua keeps a reference: never replace the table)
 S.extra = {}         -- keys owned by other mods, written back unchanged
@@ -201,7 +203,7 @@ local edit             -- staged copy of S.data
 local test = nil       -- master URL TEST: { gen, urls, started, done, results = { {url, state, n} } }
 local TEST_DEADLINE_S = 8
 
-local FIELDS = { "nick", "server", "send_hz", "region", "master_url", "hud", "hud_killfeed", "hud_net", "avatars" }
+local FIELDS = { "nick", "server", "send_hz", "region", "master_url", "hud", "hud_killfeed", "hud_net", "avatars", "upnp" }
 
 local function dirty()
     if not edit then return false end
@@ -353,6 +355,7 @@ function S.render()
     Kit.chip_group_reason(w.feed, "The HUD is OFF - turn HUD ON first")
     Kit.chip_group_reason(w.net, "The HUD is OFF - turn HUD ON first")
     Kit.chip_group_set(w.av, edit.avatars, false)
+    Kit.chip_group_set(w.upnp, edit.upnp, false)
     -- save state
     local bad = first_invalid(v)
     local d = dirty()
@@ -512,6 +515,14 @@ function S.build()
     w.av = onoff(L, rcx, ry, rcw, ch_, "avatars", "hud", "Show the other players' bodies (turn off only to debug)")
     ry = ry + ch_ + u(Kit.SP.xl)
     Kit.text("HUD settings apply from your next match.", rx, ry, rw, u(26), F(Kit.TS.small), 0, Kit.C.dim)
+    ry = ry + u(26) + u(Kit.SP.lg)
+
+    -- right column: hosting
+    Kit.group("hosting")
+    ry = section("HOSTING", rx, ry, rw)
+    rlabel("ROUTER PORT")
+    w.upnp = onoff(L, rcx, ry, rcw, ch_, "upnp", "hosting",
+        "Open the HOST PORT on your router automatically while you host (UPnP / NAT-PMP / PCP). OFF = forward it by hand")
 
     -- actions + keys
     local acts = Kit.actions(L,

@@ -125,13 +125,25 @@ for _, n in ipairs(api.REACT) do if not real[n] then missing[#missing + 1] = n e
 for _, n in ipairs(api.REACT_VEC) do if not real[n] then missing[#missing + 1] = n end end
 T.check(#missing == 0, "every REACT name is a real Willie_BP_C property", T.repr(missing))
 
-local SI = mk_willie("Willie_BP_C_7", { Health = 1000 })
+local SI = mk_willie("Willie_BP_C_7", { Health = 1000, ["Last Complex Damage Impulse"] = 0 })
 api.set_puppets({ ["Willie_BP_C_7"] = 2 }, { [2] = SI }, nil)
 local zero = { X = 0, Y = 0, Z = 0 }
 local function comp_owned_by(actor) return { GetOwner = function() return actor end } end
 -- UE4SS calls a Blueprint hook back AFTER the body: this is the callback of a
--- Deal Complex Damage my weapon made on the stand-in.
+-- Deal Complex Damage my weapon made on the stand-in. The body's contact gate
+-- runs first, as in game: |Hit Impulse|·(CP+1) >= Last Complex Damage Impulse
+-- or a new bone; a pass stores both and arms the 0.1 s reset (Delay).
+local GATE_RESET_AT = nil
+local function dcd_gate(w, bone, imp, cut)
+    if GATE_RESET_AT and CLOCK >= GATE_RESET_AT then w["Last Complex Damage Impulse"], GATE_RESET_AT = 0, nil end
+    local g = math.abs(imp) * ((cut or 50.0) + 1)
+    local lb = w["Last Complex Damage Bone"] and w["Last Complex Damage Bone"]:ToString() or "None"
+    if not (g >= w["Last Complex Damage Impulse"] or lb ~= bone) then return end
+    w["Last Complex Damage Impulse"], w["Last Complex Damage Bone"] = g, FName(bone)
+    GATE_RESET_AT = GATE_RESET_AT or (CLOCK + 0.1)
+end
 local function hit_si(bone, vel, cut)
+    dcd_gate(SI, bone, vel * 0.6, cut)
     api.on_complex(SI, SI.Mesh, comp_owned_by(ME), FName(bone), { X = 1, Y = 2, Z = 3 }, { X = 0, Y = 1, Z = 0 },
         { X = vel, Y = 0, Z = 0 }, { X = vel * 0.6, Y = 0, Z = 0 }, cut or 50.0, 0.0, 0.85, 0, false, false, 1.0, nil, false, 0.0)
 end
@@ -180,17 +192,27 @@ T.check(l1.flags == 32 and l1.n == 0 and empty(l1.rows), "armour-stage claim, no
 T.check(SI.Health == si0[1] and SI.Pain == si0[2] and SI["All Body Tonus"] == si0[3] and SI["Flinch Index"] == si0[4],
     "the stand-in is not touched by claiming (nothing buffered or measured)")
 
--- ---- same contact continues: continuation, not one claim per frame ---------------
+-- ---- later frames: every call the game's own contact gate lets through ------------
+-- (on the victim in solo exactly these reach Get Damage; weaker frames on the
+-- same bone inside the gate window never do)
 CLOCK = 10.050; hit_si("spine_03", 1300); api.set_tick(101); api.flush_claims()
-CLOCK = 10.083; hit_si("spine_03", 1300); api.set_tick(102); api.flush_claims()
-T.check(#damage_lines() == 3, "calls within the episode are accumulated", #damage_lines())
-CLOCK = 10.170; hit_si("spine_03", 1400); api.set_tick(103); api.flush_claims()
-T.check(#damage_lines() == 4, "one continuation after CONT_MS", #damage_lines())
+T.check(#damage_lines() == 4, "a harder frame of the same contact passes the gate: claimed", #damage_lines())
+CLOCK = 10.060; hit_si("spine_03", 1000); api.set_tick(102); api.flush_claims()
+T.check(#damage_lines() == 4, "a weaker frame on the same bone is stopped by the gate: no claim", #damage_lines())
+CLOCK = 10.170; hit_si("spine_03", 1000); api.set_tick(103); api.flush_claims()
+T.check(#damage_lines() == 5, "after the gate's 0.1 s reset a weaker frame is a blow again", #damage_lines())
 CLOCK = 10.300; api.set_tick(104); api.flush_claims()
-T.check(#damage_lines() == 4, "episodes close without an empty claim", #damage_lines())
-T.check(next(api.state().episodes) == nil, "all bone episodes closed")
+T.check(#damage_lines() == 5, "no claim without a call", #damage_lines())
 CLOCK = 11.000; hit_si("spine_03", 1200); api.set_tick(105); api.flush_claims()
-T.check(#damage_lines() == 5, "a new contact after the gap -> new claim", #damage_lines())
+T.check(#damage_lines() == 6, "a new contact -> new claim", #damage_lines())
+do  -- two frames passing the gate in one tick: both, in order (solo applies both)
+    CLOCK = 11.500; hit_si("thigh_l", 400); CLOCK = 11.516; hit_si("thigh_l", 900)
+    api.set_tick(106); api.flush_claims()
+    local dl2 = damage_lines()
+    T.check(#dl2 == 8 and dl2[7].bone == "thigh_l" and v3is(dl2[7].velocity, 400, 0, 0) and v3is(dl2[8].velocity, 900, 0, 0),
+        "a graze then a harder frame in one tick: two claims in order", T.repr({ dl2[7], dl2[8] }))
+end
+local NCLAIMS = #damage_lines()
 
 -- ---- a Get Damage callback never makes a claim ------------------------------------
 -- (claiming it too would make two claims per blow, one with -99900 deltas)
@@ -198,7 +220,7 @@ CLOCK = 12.000
 api.on_get_damage(SI, zero, zero, { X = 1, Y = 2, Z = 3 }, zero, FName("spine_03"), 700, 0.5, false, SI.Mesh, 0,
     false, false, comp_owned_by(ME))
 api.set_tick(106); api.flush_claims(); CLOCK = 13.0; api.set_tick(107); api.flush_claims()
-T.check(#damage_lines() == 5, "Get Damage on a stand-in is not a claim (Deal Complex Damage is)", #damage_lines())
+T.check(#damage_lines() == NCLAIMS, "Get Damage on a stand-in is not a claim (Deal Complex Damage is)", #damage_lines())
 -- ...and if native damage leaked onto the stand-in, it is put back from its baseline
 api.C3.baseline(SI)
 SI.Health, SI["Head Health"] = 990, 70
@@ -252,7 +274,7 @@ N.sc_rec_event("damage_verdict", { kind = VK.FINAL, cid = 3, ok = false, code = 
 N.sc_rec_event("damage_verdict", { kind = VK.CLASH, peer = 2, code = DR.CLASH })
 api.read_feedback()
 local q = api.quality()
-T.check(q.claims == 5 and q.accepted == 1 and q.confirmed == 1 and q.clashes == 1, "quality counters", T.repr(q))
+T.check(q.claims == NCLAIMS and q.accepted == 1 and q.confirmed == 1 and q.clashes == 1, "quality counters", T.repr(q))
 T.check(q.rejected.parried == 1 and q.rejected.body_miss == 1, "rejects counted by reason code", T.repr(q.rejected))
 local cues = read(".combat_cue.jsonl")
 T.check(cues == nil or cues == "", "no .combat_cue.jsonl (written, never read) any more", cues)
@@ -262,7 +284,7 @@ CLOCK = 20.0
 api.emit_quality(true)
 local ev = read("hsmp_events.jsonl")
 T.check((T.contains(ev, '"ev":"combat_quality"') or T.contains(ev, '"ev":"x_combat_quality"')) and T.contains(ev, '"rejected_by_reason":{')
-    and T.contains(ev, '"claims":5'), "combat_quality event written (hsmp_log)", ev)
+    and T.contains(ev, string.format('"claims":%d', NCLAIMS)), "combat_quality event written (hsmp_log)", ev)
 
 -- ---- solo parity: armour-stage capture on the stand-in, replay on the victim -------
 CLOCK = 30.0

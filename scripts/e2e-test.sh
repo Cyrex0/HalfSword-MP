@@ -1457,9 +1457,18 @@ fi
 source "$REPO/scripts/e2e-conn.sh"
 
 # ============================================================================
+# NAT traversal (N1-N6): an emulated NAT in front of the host, a local STUN server and server
+# list; a direct join fails, a punched join succeeds. Also runs on its own: scripts/e2e-nat.sh
+source "$REPO/scripts/e2e-nat.sh"
+
+# ============================================================================
 # Shared-memory section: the shared-memory contracts checked directly (ipc-put / view), with
 # `hsmp-tools ipc-game` as the game (docs/development/ipc-shared-memory.md).
 source "$REPO/scripts/e2e-shm.sh"
+
+# ============================================================================
+# Server diagnostics: log files, the stats lines, RCON REPORT, --report.
+source "$REPO/scripts/e2e-logs.sh"
 
 # ============================================================================
 # Cloudflare Worker server list (master-cf/) under wrangler dev, with the real server and

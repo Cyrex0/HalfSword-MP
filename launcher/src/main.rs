@@ -13,6 +13,7 @@
 //!     hsmp-launcher restore-saves <backup id>
 //!     hsmp-launcher find-game
 //!     hsmp-launcher firewall-status [--game DIR]
+//!     hsmp-launcher report        [--list] [--session ID|latest|all]... [--keep-ips] [--no-dumps] [--show FILE] [--dry-run] [--out ZIP] [--upload]
 //!
 //! `firewall-allow <exe>` and `firewall-remove [<exe>]` are the helper the launcher starts
 //! through UAC to change Windows Firewall; they are not meant to be typed.
@@ -25,10 +26,10 @@
 mod gui;
 
 use hsmp_launcher::install::{self, Env};
-use hsmp_launcher::{firewall, ops, saves, steam, update};
+use hsmp_launcher::{firewall, ops, report, saves, steam, update};
 use std::path::PathBuf;
 
-const USAGE: &str = "hsmp-launcher [status|verify|install|uninstall|launch|check-update|update|backup-saves|list-backups|restore-saves <id>|find-game|firewall-status]
+const USAGE: &str = "hsmp-launcher [status|verify|install|uninstall|launch|check-update|update|backup-saves|list-backups|restore-saves <id>|find-game|firewall-status|report]
   --game DIR          Half Sword folder (default: remembered, else found through Steam)
   --package DIR|ZIP   release folder or zip (default: the launcher's own folder)
   --allow-unsupported install on a Half Sword build this release does not list
@@ -39,6 +40,15 @@ const USAGE: &str = "hsmp-launcher [status|verify|install|uninstall|launch|check
                       (an antivirus deleted them); HSMP's version of those files is removed
 launch: start Half Sword through Steam (steam -applaunch) with the HSMP launch options
 firewall-status: is hsmp-server.exe allowed through Windows Firewall (install adds the rule)
+report: a bug report zip of your recent game runs (%LOCALAPPDATA%\\HSMP\\logs), redacted:
+  --list              list the runs (newest first) and how each ended
+  --session ID        a run to include (repeatable; also latest or all; default: the newest crash, else the newest run)
+  --keep-ips          keep other players' IP addresses (your own public address is still removed)
+  --no-dumps          leave the crash dumps out
+  --show FILE         print one file of the report exactly as it would be sent
+  --dry-run           list what the report would contain, write nothing
+  --out ZIP           where to save it (default %LOCALAPPDATA%\\HSMP\\bug_reports)
+  --upload            also upload it to the HSMP master and print the report id
 Without arguments the launcher window opens.";
 
 #[cfg(windows)]
@@ -62,10 +72,37 @@ struct Args {
     forget_missing: bool,
     no_save_backup: bool,
     stable_only: bool,
+    // report
+    sessions: Vec<String>,
+    list: bool,
+    keep_ips: bool,
+    no_dumps: bool,
+    show: Option<String>,
+    dry_run: bool,
+    out: Option<PathBuf>,
+    upload: bool,
 }
 
 fn parse(argv: &[String]) -> Result<Args, String> {
-    let mut a = Args { cmd: String::new(), pos: vec![], game: None, package: None, allow_unsupported: false, allow_downgrade: false, forget_missing: false, no_save_backup: false, stable_only: false };
+    let mut a = Args {
+        cmd: String::new(),
+        pos: vec![],
+        game: None,
+        package: None,
+        allow_unsupported: false,
+        allow_downgrade: false,
+        forget_missing: false,
+        no_save_backup: false,
+        stable_only: false,
+        sessions: vec![],
+        list: false,
+        keep_ips: false,
+        no_dumps: false,
+        show: None,
+        dry_run: false,
+        out: None,
+        upload: false,
+    };
     let mut it = argv.iter();
     while let Some(x) = it.next() {
         match x.as_str() {
@@ -76,6 +113,14 @@ fn parse(argv: &[String]) -> Result<Args, String> {
             "--forget-missing" => a.forget_missing = true,
             "--no-save-backup" => a.no_save_backup = true,
             "--stable-only" => a.stable_only = true,
+            "--session" => a.sessions.push(it.next().ok_or("--session needs a run id (see report --list), latest or all")?.clone()),
+            "--list" => a.list = true,
+            "--keep-ips" => a.keep_ips = true,
+            "--no-dumps" => a.no_dumps = true,
+            "--show" => a.show = Some(it.next().ok_or("--show needs a file name of the report")?.clone()),
+            "--dry-run" => a.dry_run = true,
+            "--out" => a.out = Some(PathBuf::from(it.next().ok_or("--out needs a file")?)),
+            "--upload" => a.upload = true,
             "-h" | "--help" | "help" => a.cmd = "help".into(),
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             s if a.cmd.is_empty() => a.cmd = s.to_string(),
@@ -291,8 +336,97 @@ fn run_cli(a: Args) -> Result<(), String> {
             say(format!("firewall: rule \"{}\" removed", firewall::RULE_NAME));
             Ok(())
         }
+        "report" => run_report(&a),
         other => Err(format!("unknown command '{other}'\n{USAGE}")),
     }
+}
+
+/// The runs `--session` names (ids or a unique prefix, `latest`, `all`); none = the default.
+fn pick_sessions(all: &[hsmp_diag::sessions::Session], want: &[String]) -> Result<Vec<hsmp_diag::sessions::Session>, String> {
+    if want.is_empty() {
+        return Ok(report::default_sessions(all));
+    }
+    let mut out: Vec<hsmp_diag::sessions::Session> = vec![];
+    for w in want {
+        let hits: Vec<_> = match w.as_str() {
+            "all" => all.to_vec(),
+            "latest" => all.first().cloned().into_iter().collect(),
+            id => all.iter().filter(|s| s.info.id.starts_with(id)).cloned().collect(),
+        };
+        if hits.is_empty() {
+            return Err(format!("no game run {w} (see report --list)"));
+        }
+        if hits.len() > 1 && !matches!(w.as_str(), "all") {
+            return Err(format!("{w} matches {} runs; give more of the id", hits.len()));
+        }
+        for h in hits {
+            if !out.iter().any(|o| o.info.id == h.info.id) {
+                out.push(h);
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn run_report(a: &Args) -> Result<(), String> {
+    let home = ops::hsmp_home()?;
+    let root = ops::logs_root(&home);
+    let all = hsmp_diag::sessions::list(&root);
+    if a.list {
+        if all.is_empty() {
+            say(format!("no game runs recorded yet in {}", root.display()));
+        }
+        for s in &all {
+            let crash = s.info.crash_dirs.first().map(|c| format!("  {c}")).unwrap_or_default();
+            say(format!("{}  {:<10} {:>7} KB{crash}", s.info.id, s.info.outcome.as_str(), s.size() / 1024));
+        }
+        return Ok(());
+    }
+    let chosen = pick_sessions(&all, &a.sessions)?;
+    let env = env_for(a).ok();
+    let pkg = ops::open_package(a.package.as_deref()).ok();
+    let facts = report::gather(env.as_ref(), pkg.as_ref(), true);
+    let opts = report::Options { hide_ips: !a.keep_ips, include_dumps: !a.no_dumps };
+    let ue_saved = env.as_ref().map(|e| e.ue_saved.clone());
+    let mut rep = report::build(&chosen, Some(&home.join("launcher").join("launcher.log")), ue_saved.as_deref(), &facts, &opts);
+    if let Some(name) = &a.show {
+        let e = rep.entries.iter().find(|e| &e.name == name || e.name.ends_with(&format!("/{name}"))).ok_or_else(|| format!("the report has no file {name}"))?;
+        if e.redacted {
+            println!("{}", String::from_utf8_lossy(&e.bytes));
+        } else {
+            println!("({} bytes, binary: sent unchanged)", e.bytes.len());
+        }
+        return Ok(());
+    }
+    if chosen.is_empty() {
+        say("no game runs recorded yet: the report has the system facts and the launcher log only".into());
+    }
+    let zip = rep.zip_capped(hsmp_master_core::reports::MAX_REPORT_BYTES)?;
+    say(format!("the report ({} KB zipped) contains:", zip.len() / 1024));
+    for e in &rep.entries {
+        say(format!("  {:<70} {:>8} bytes  {}", e.name, e.bytes.len(), if e.redacted { "redacted" } else { "unchanged (binary)" }));
+    }
+    for l in &rep.left_out {
+        say(format!("  left out: {l}"));
+    }
+    if a.dry_run {
+        return Ok(());
+    }
+    let out = a.out.clone().unwrap_or_else(|| report::default_out(&home));
+    report::save(&zip, &out)?;
+    say(format!("saved {}", out.display()));
+    let mut id = None;
+    if a.upload && !facts.report_upload {
+        say(report::UPLOAD_UNAVAILABLE.into());
+    } else if a.upload {
+        let got = report::upload(&facts.master, &zip)?;
+        say(format!("uploaded: report id {got} (give us this id; the report is deleted after about 60 days)"));
+        id = Some(got);
+    }
+    let outcome = chosen.first().map(|s| s.info.outcome.as_str());
+    let name = out.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    say(format!("open a GitHub issue and attach the zip: {}", report::github_issue_url(&facts, &name, id.as_deref(), outcome)));
+    Ok(())
 }
 
 fn main() {

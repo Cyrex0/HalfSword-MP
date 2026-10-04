@@ -193,7 +193,7 @@ pub fn run(a: Args) -> Result<i32> {
     procs.spawn(&work, &mut side(&db, "B", &host_b), "sidecarB")?;
     // Both sidecars attached with POSE, and B sees A in its peer directory.
     let deadline = Instant::now() + Duration::from_secs(10);
-    let slot = loop {
+    let mut slot = loop {
         host_a.pump();
         host_b.pump();
         if host_a.has(CAP_POSE) && host_b.has(CAP_POSE) {
@@ -233,6 +233,13 @@ pub fn run(a: Args) -> Result<i32> {
             let w = [1.0, 1.0, wpn.0, wpn.1, wpn.2, q.0, q.1, q.2, q.3, 300.0, 0.0, 0.0, 0.0, 0.0, 0.0, wpn.0, wpn.1, wpn.2, wpn.0, wpn.1, wpn.2];
             host_a.put("local_pose", &json!({"tick": seq, "ts": ts, "dt": period, "b": bones(pel, hand, q), "w": [w]}))?;
             host_a.pump();
+        }
+        // The slot can be (re)assigned after the first sighting: look it up again, as
+        // HSMPAvatars does through the peer directory.
+        if reads % 64 == 0 {
+            if let Ok((dir, _)) = host_b.seg().peers.dir.read() {
+                if let Some(s) = dir.slot_of(1) { if s != slot { slot = s; last_seq = 0; } }
+            }
         }
         // Game-frame read (~240 fps), as HSMPAvatars peer_play.
         reads += 1;

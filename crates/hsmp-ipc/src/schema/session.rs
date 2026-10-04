@@ -710,6 +710,8 @@ pub mod notice {
     pub const ADMIN_CHANGED: u16 = 6;
     pub const CONFIG_QUEUED: u16 = 7;
     pub const SUDDEN_DEATH: u16 = 8;
+    /// Listen host only: how reachable the server is (args: state, port, public address, NAT kind).
+    pub const NET_STATUS: u16 = 9;
 }
 
 /// `Link.status`.
@@ -764,7 +766,8 @@ pub const ENUMS: &[super::EnumInfo] = &[
         ("NO_PAWN", 3), ("VITALS", 4), ("SPAWN_PLACE", 5), ("DRESS", 6), ("STAND_INS", 7), ("TIMEOUT", 8),
         ("OTHER", 9)] },
     super::EnumInfo { name: "notice", values: &[("HOST_LEFT", 1), ("ROLE_CHANGED", 2), ("LOAD_FAILED", 3),
-        ("PLAYER_JOINED", 4), ("PLAYER_LEFT", 5), ("ADMIN_CHANGED", 6), ("CONFIG_QUEUED", 7), ("SUDDEN_DEATH", 8)] },
+        ("PLAYER_JOINED", 4), ("PLAYER_LEFT", 5), ("ADMIN_CHANGED", 6), ("CONFIG_QUEUED", 7), ("SUDDEN_DEATH", 8),
+        ("NET_STATUS", 9)] },
     super::EnumInfo { name: "closing_reason", values: &[("SHUTDOWN", 0), ("HOST_LEFT", 1), ("RESTART", 2), ("IDLE", 3)] },
     super::EnumInfo { name: "leave_reason", values: &[("USER", 0), ("GAME_EXITED", 1), ("SWITCH_SERVER", 2)] },
     super::EnumInfo { name: "sidecar_status", values: &[("CONNECTING", 0), ("CONNECTED", 1), ("RECONNECTING", 2),

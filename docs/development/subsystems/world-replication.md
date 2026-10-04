@@ -8,10 +8,12 @@ whoever touches or holds a body simulates it, everyone else follows.
 | Part | Where |
 |---|---|
 | Discovery, ids, binding, leases, follow, dynamic items, actor states, consistency report | `mods/HSMPWorld/Scripts/main.lua` |
+| How a body somebody else simulates is shown (clocks, interpolation, dead reckoning, blending) | `mods/HSMPWorld/Scripts/world_follow.lua` |
 | Records (one binary form game → server → game) | `crates/hsmp-ipc/src/schema/world.rs` |
-| Sidecar (slots ↔ wire, scope and epoch gating, resends) | `server/src/world_client.rs` |
+| Sidecar (slots ↔ wire, scope and epoch gating, resends) | `server/src/world_client.rs`; its tables (pure) `server/src/world_rx.rs` |
 | Server rules (pure logic) | `server/src/world.rs`, static arena table `server/src/world_static_table.rs` |
 | Server glue and the 30 Hz world task | `server/src/server/world_glue.rs` |
+| World-sync simulator and measurement | `tests/hsmpworld-sim`; gate rule WORLD-2 in `tools/hsmp-tools/src/bin/hsmp-gate/rules.rs` |
 
 ## What is replicated
 
@@ -88,39 +90,82 @@ spaces, so `UE4SS_ObjectDump.txt` is the reference (see [../halfsword/](../halfs
 ## Authority: leases
 
 ```
-FREE ──claim touch / first state──► TOUCH(peer) ──claim hold──► HOLD R/L(peer)
-  ▲                                    │   ▲                         │
-  └──── release(rest pose) ◄── at rest 1.5 s   └── let go (drop/disarm)┘
+FREE ──claim touch / first state──► TOUCH(peer) ──claim hold / held state──► HOLD R/L(peer)
+  ▲                                    │   ▲  └─ nearer pusher, slow body ─► TOUCH(other)  │
+  └──── release(rest pose) ◄── at rest 1.5 s   └────────── let go (drop/disarm) ───────────┘
   └──── lease lapse: 3 s without a state, or owner disconnects
 ```
+
+Every movable body has exactly one authority at a time: the server (free: it keeps the rest pose)
+or the peer whose lease it is (that peer's game simulates it, everyone else shows its stream).
 
 **Server rules** (`server/src/world.rs`, unit-tested):
 
 - The first claim processed wins.
 - A hold claim beats a touch lease, so a pickup steals a pushed object.
 - Nobody can rob a holder.
+- **Hand-over on contact:** a touch claim takes another peer's touch lease when the claimer's root
+  is within `TAKE_R` (200 cm) of the body and at least `TAKE_MARGIN` (60 cm) nearer than the
+  owner's, the body is slower than `TAKE_SPEED` (150 cm/s) and the lease is at least
+  `TAKE_MIN_AGE` (400 ms) old. The positions are the server's (last tick), so both clients
+  agree on the outcome and two pushers cannot flip a body back and forth. A fast body stays with
+  its owner: the new owner would start it from its own, older view.
 - An owner re-claiming renews its lease without bumping the version.
 - A non-owner's release does nothing.
-- A state for a free body is an implicit touch claim, which saves a round trip when someone knocks
-  something over. States are accepted only from the lease holder and are sanity-checked (speed,
-  distance of a held body from its holder) before the implicit claim.
+- A state for a free body is an implicit claim, which saves a round trip when someone knocks
+  something over. It is a **hold** when the state says the body is held (`WF_HELD`, `WF_LEFT`), a
+  touch otherwise; a held state on its owner's touch lease upgrades it to a hold. Without that, a
+  second player's pickup claim arriving between the first player's first held state and its hold
+  claim would take the item from its first holder. States are accepted only from the lease holder
+  and are sanity-checked (speed, distance of a held body from its holder) before the implicit claim.
+- A release with a rest pose is fanned out to the level on the next world tick (not a keyframe
+  round later), and the sidecar drops a leased body's old anchor, so nobody re-applies a stale one.
 - Claims are limited to 20/s per peer, burst 40.
 
-**Owner.** The owner's game simulates the body and streams it. The body counts as awake while
-held, while moving faster than 8 cm/s, while it moved more than 1.5 cm or turned more than 1°
-since the last read, or until it has been still for 400 ms. Then it sends the final "asleep"
-frame 3 times, and after 1.5 s at rest it releases the body with the rest pose. The server keeps
-that pose as the body's **anchor**.
+**Owner.** The owner's game simulates the body and streams it: held bodies and bodies moving at
+its pawn (within 3 m) every 2nd tick (~30 Hz, the server's flush rate), the rest every 3rd
+(~20 Hz). The body counts as awake while held, while moving faster than 8 cm/s, while it moved
+more than 1.5 cm or turned more than 1° since the last read, or until it has been still for
+400 ms. Then it sends the final "asleep" frame 3 times, and after 1.5 s at rest it releases the
+body with the rest pose. The server keeps that pose as the body's **anchor**; the releaser never
+applies the anchor it superseded.
 
 **Everyone else:**
 
-- **Owned by another peer:** physics is off and the body follows the owner's stream kinematically
-  (teleport sweep off), so two simulations never fight.
+- **Owned by another peer:** physics is off and the copy follows the owner's stream kinematically
+  (teleport sweep off), so two simulations never fight. How it is shown is
+  `mods/HSMPWorld/Scripts/world_follow.lua` (pure, unit-tested):
+  - **Per-sender clock.** `off` = the smallest `rx - ts` over the last 3 s (clock difference plus
+    the fastest path); the playout delay = one send interval + the p90 lateness + 10 ms, growing at
+    once and shrinking slowly. Held bodies and bodies within 3 m of their owner's stand-in use a
+    shorter one (the 33 ms interval + p90 + 6, poseplay's rule), so they play in the same timeline
+    as the owner's stand-in: a sword stays in its hand, a pushed crate at its body.
+  - **Delayed vs present.** Held and pushed bodies interpolate in that delayed timeline. A body
+    flying free of its owner (not held, faster than 80 cm/s, more than 160 cm from the owner's
+    stand-in) is dead-reckoned to the owner's present (`now - off + lead`, lead = half of my
+    round trip plus half of the owner's, from the link record and the peer directory, + 20 ms):
+    ballistic with gravity while airborne, floor friction while sliding, never below a floor
+    estimate (its spawn / anchor height). It catches up by playing at most 1.5 times faster,
+    never by a jump, and goes back to the delayed timeline only when it is held again.
+  - **Blending.** Whatever changes the target (a new sample, the clock, a timeline switch, a new
+    owner) is kept as a visual offset and blended away over 110 ms, at most 4 m/s; only a
+    correction above 4 m is applied at once (a hard snap, counted).
+  - **Gaps and leases.** It never interpolates across a pause of more than 400 ms in a sender's
+    stream (a body that slept, or a new lease of the same peer), and starts following a new lease
+    only with a sample received after the lease changed.
+  - **My pawn pushes it:** when its touch lease's owner is not touching it any more, my game claims
+    it (`contact`) and the server decides (hand-over above).
 - **Free:** physics runs locally and the body sits at its anchor.
   - If it moves and my pawn is the nearest Willie within 3 m, or one of my moving bodies is within
     1.5 m, I claim it.
   - If it moves and nobody claims it within 1.2 s (for example, a stand-in's body nudged it), it
     snaps back to the anchor.
+  - If a copy that follows another player's stream shoves it, it is held on its anchor at once
+    (kinematic until a Willie comes near): the owner's game simulates that hit and claims what it
+    really hit; the copy's path here is not the owner's body.
+  - A body that moves on its own within 3 s of the end of a follow (it rested leaning on
+    something on the owner's screen, and this solver lets it slide) is held on the owner's rest
+    pose the same way.
 - **Lost frames:** the server re-sends the anchors of free bodies in rotation every 250 ms and the
   owner table every 2 s, so lost final frames and lost owner updates heal.
 
@@ -128,11 +173,13 @@ that pose as the body's **anchor**.
 
 | Event | Owner's client | Server | Other clients |
 |---|---|---|---|
-| A picks up a scene weapon | its own hand weapon (`"Weapon R"` / `"Weapon L"`) is the body → claim HOLD R/L, stream with `held` (+ `left`) at 20 Hz | grants HOLD (steals a touch lease) | their copy turns kinematic and follows the stream into A's stand-in hand; the `world_held` bus key lists it |
-| A drops it or is disarmed | hand empty → claim TOUCH, stream the fall → asleep → release | frees the body, stores the anchor | the copy follows the fall; physics comes back at the final rest frame |
+| A picks up a scene weapon | its own hand weapon (`"Weapon R"` / `"Weapon L"`) is the body → claim HOLD R/L, stream with `held` (+ `left`) at ~30 Hz | grants HOLD (steals a touch lease; a held state is a hold claim too) | their copy turns kinematic and follows the stream into A's stand-in hand; the `world_held` bus key lists it |
+| A and B grab the same item within a round trip | both claim HOLD | the first claim processed wins; the other is refused | the loser's game, once its claim is refused (≈ 1.5 RTT + 100 ms, at most 600 ms), lets go of its copy the way the kit strips a hand weapon (the actor is retired) and shows the item with a fresh copy (same class, same passport) following the winner's stream (`lost the pickup race ...` in the log) |
+| A drops it or is disarmed | hand empty → claim TOUCH, stream the fall → asleep → release | frees the body, stores the anchor, fans it out | the copy follows the fall (dead-reckoned when it flies free); physics comes back at the final rest frame |
 | A drops a **loadout** weapon | it becomes a dynamic item (manifest entry + optimistic stream) | validates the namespace | spawns a local copy of the class, which follows the fall |
 | B picks up A's dropped item | normal hold claim | grants | normal |
 | A grabs a prop with a hand (`"Grab Component R/L"` + `"Grabbed R/L"`) | claims HOLD | grants | the prop follows |
+| B pushes a body A pushed before | `contact` touch claim | hands a slow body over to the clearly nearer pusher | normal |
 
 **`world_held` (bus key, HSMPWorld → HSMPLoadout).** Rows `{peer, nid, hand (0 R, 1 L), actor}`
 for every world item another peer holds, with `actor` the local actor's FName. If a row exists for
@@ -193,18 +240,83 @@ recipient every 33 ms (≤ 1000 B per message). Each recipient has its own 16 KB
 weighted ×0.5; bodies that do not fit are dropped, which is safe because states are latest-wins
 and anchors heal.
 
-**Owner rate.** Sends go out every 3rd tick (~20 Hz), at most 24 bodies per send. Each body
-accumulates priority each send (held 8, faster than 3 m/s 4, awake 2, asleep repeat 6, halved
-beyond 10 m) and the top 24 go out, so busy scenes round-robin fairly.
+**Owner rate.** Held bodies and bodies moving within 3 m of the owner's pawn go out every 2nd tick
+(~30 Hz, the server's 33 ms flush), everything else every 3rd tick (~20 Hz), at most 24 bodies per
+send. Each body accumulates priority each send (held 8, faster than 3 m/s 4, awake 2, asleep
+repeat 6, halved beyond 10 m) and the top 24 go out, so busy scenes round-robin fairly. Resting
+bodies send nothing (only their 3 final asleep frames).
 
-**Rough cost.** A held world item costs its holder about 20 Hz × 32 B ≈ 0.7 KB/s up, plus headers.
-A recipient that sees 15 players each holding one item gets about 10 KB/s. The worst case
-(everyone holding two items plus a falling destructible) hits the 16 KB/s cap; far bodies degrade
-first.
+**Rough cost.** A held world item costs its holder about 30 Hz × 32 B ≈ 1 KB/s up, plus headers.
+A recipient that sees 15 players each holding one item gets about 15 KB/s, at the 16 KB/s cap; far
+bodies degrade first. In the simulator's mixed scenario a client averages 1.2 KB/s down and
+0.35 KB/s up. Positions travel as f32 rounded to 0.1 cm, orientations as smallest-three i16,
+velocities as i16 cm/s (32 B per body).
 
-**Interpolation.** Each sender has its own render clock 110 ms behind its newest `ts`, with nlerp
-on quaternions and at most 150 ms of extrapolation. Samples are ordered by `ts`, so reordered or
-duplicate packets are harmless.
+**Timestamps.** Every row of a relayed state packet keeps its own sample time: the server groups a
+sender's rows per batch (`seq`), not per sender.
+
+## Measuring sync
+
+**Offline: `tests/hsmpworld-sim`.** N real HSMPWorld Lua states (each on a mocked UE4SS whose
+bodies are stepped by a small rigid-body world with that client's own frame times and contact
+noise, so free bodies drift apart like unsynchronised solvers), the real sidecar tables
+(`world_rx.rs`) and server rules (`world.rs`) byte for byte, over netsim-like links. The mixed
+scenario uses mod-side actions only: a push and a chain push, a carry and a throw, a kick, a
+contested pickup, a hand-over while moving, a late joiner, three bodies thrown by `world_poke`
+and a round reset. `cargo test -p hsmpworld-sim` (G0) holds the thresholds;
+`cargo run --release -p hsmpworld-sim -- --seeds 6` prints the table. Its stand-ins show a peer's
+pawn one pose path late (both links + poseplay's buffer).
+
+| Metric | What it is |
+|---|---|
+| moving p50 / p95 | distance between two screens' copies of a moving body at the same instant (latency included) |
+| path p95 | a follower's distance to the owner's own trajectory over the last 700 ms (shape, latency removed) |
+| at rest | the same between resting copies; "same world" checks after the pushes, after the late join and after the reset |
+| snaps | a copy's jump in one 20 ms frame of at least 15 cm beyond, and twice, the owner's own motion |
+| fights | ownership returning to the previous owner within 1 s |
+| hold conflict | time two pawns hold the same item |
+
+Before (main 7b66606) and after this work, 6 seeds, phases 12–50 s (far = ~300 ms RTT, 50 ms
+jitter, 2 % loss; bad = netsim's bad: 220 ms RTT, 5 % loss, 200 ms spikes):
+
+| Profile | moving p50 | moving p95 | free-moving p95 | path p95 | snaps / run | hold conflict | rest / checks |
+|---|---|---|---|---|---|---|---|
+| lan | 40.6 → 12.8 cm | 119 → 53 | 119 → 46 | 111 → 10.5 | 4.0 → 0 | 1640 → 0 ms | ≤ 0.13 cm both |
+| typical | 57.6 → 25.3 | 188 → 91 | 185 → 85 | 111 → 13.7 | 11.0 → 0.2 | 1640 → 0 | ≤ 0.12 cm both |
+| intl | 67.3 → 37.2 | 228 → 119 | 233 → 116 | 111 → 25.2 | 13.7 → 0 | 1640 → 77 | ≤ 0.15 cm both |
+| far | 81.1 → 56.7 | 306 → 198 | 316 → 191 | 111 → 36.7 | 14.2 → 0.2 | 1640 → 320 | ≤ 0.52 cm |
+| bad | 78.1 → 45.9 | 256 → 154 | 264 → 148 | 111 → 23.2 | 13.2 → 0.2 | 1640 → 157 | ≤ 0.10 cm |
+
+Also before → after: hand-overs while moving 0 → 4 per run with 0 fights; a held item's distance
+to its holder's stand-in hand p95 63 → 43 cm (lan), 53 → 37 (typical), 44 → 35 (intl),
+54 → 63 (far). The free-flight path error grows slightly (5–9 → 7–17 cm) because a body flying
+free is now dead-reckoned to the present instead of replayed late. The thrown bodies (poke phase,
+after only) stay below 106 cm p95 up to intl.
+
+**In game: WORLD-2** (`hsmp-gate`, [../testing.md](../testing.md)). Under the harness
+(`HSMP_AUTOTEST`), HSMPWorld emits `world_track` every 100 ms for each owned or recently moving
+body: its pose on the host clock (`t`: HSMPNative `now_us`, the performance counter every game
+process on the machine shares), mode (own / follow / free),
+owner, and `rest` samples when it stops and 3 s later. `world_sync_quality` (every 5 s, always)
+counts hard snaps, the largest blended correction, lost pickup races, hand-overs and pokes. The
+gate pairs every two instances' tracks of a body at the same host-clock time; the `world_sync`
+scenario makes both players throw props with `world_poke` (a touch claim and an impulse, as if
+their pawn kicked them) every round. The simulator pairs its own `world_track` events the same way
+in its G0 test.
+
+In-game results (2026-10-04, `world_sync` on Cellar, 2 rounds, 3 pokes per round, two instances on
+one PC; p50 / p95 of moving bodies between the two screens):
+
+| Profile | Round 1 | Round 2 | Rest poses | Hard snaps |
+|---|---|---|---|---|
+| typical | 9 / 54 cm (266 pairs) | 7 / 54 cm (387 pairs) | all within 5 cm | 0 |
+| intl (before the copy-shove fix) | 10 / 32 cm (228 pairs) | (round reload failed: load_failed) | all within 5 cm | 0 |
+| far | 16 / 100 cm (356 pairs) | 16 / 83 cm (234 pairs) | all within 5 cm | 0 |
+
+The first runs found two real divergences, both fixed: a prop released resting against another
+body slid off on the follower's screen (27 cm apart), and a followed copy knocked a free prop the
+owner's body never touched (3 m apart until the snap-back). The kettle trap (chained) rests 4–5 cm
+apart: the anchor pin cannot hold a constrained body exactly, within WORLD-1's tolerance.
 
 ## Identical worlds
 
@@ -302,8 +414,16 @@ judged.
 
 ## Known limitations
 
-- **Simultaneous pickup of one item:** the server grants one player. The loser's game still shows
-  it in their hand; HSMPWorld logs `conflict:` and stops driving it until they drop it.
+- **Simultaneous pickup of one item:** the server grants one player; for about one round trip both
+  pawns hold it until the loser's game lets go (only weapons: a prop grabbed by hand stays in the
+  loser's hand, logged as `conflict:`).
+- **Held items follow a stream, not the stand-in's hand.** They play in the stand-in's timeline,
+  but the pose stream has its own buffer, so a held item can sit a few cm to tens of cm off the
+  hand (more under heavy jitter). Attaching it to the stand-in's hand bone would remove that.
+- **Hand-over is for slow bodies only** (TAKE_SPEED): a body still flying fast stays with the
+  player who threw it until it slows down.
+- **Knocked-off armour pieces are not replicated** (`BP_Armor_Master_C` actors leaving a pawn); they
+  are not world bodies yet.
 - **Disarming a stand-in on my screen** (a native hit knocks its loadout weapon loose) is decided
   locally.
 - **Push attribution is by proximity**, so a thrown weapon of mine hitting a far prop is claimed
@@ -326,6 +446,9 @@ judged.
 - `hsmp-tools lua-test world_state`: codec golden vectors, initial-state forcing and ready, hinge
   lease hand-off, actor states, world-guard safety, consistency report and verdict, barricade
   discovery.
+- `cargo test -p hsmpworld-sim`: the world-sync simulator (see "Measuring sync"); `hsmp-tools
+  lua-test hsmpworld` also unit-tests `world_follow.lua` (clocks, dead reckoning, blending, catch-up).
+- `hsmp-gate selftest`: the WORLD-2 rule on the `world_sync_pass` / `world_sync_fail` fixtures.
 - `hsmp-tools check-bp-names`.
 
 ## In-game checks
@@ -353,5 +476,9 @@ loss.
 8. **Late join mid-round:** the late joiner sees moved and dropped items where the others see them.
 9. **Every 10 s**, each client logs `stats 10s: ... snap-backs`. A steadily climbing snap-back count
    means stand-ins are nudging props.
-10. **Never expected:** `tick error`, `update error on ...`, repeated `conflict:` lines, or a
-    `WORLD MISMATCH vs peer` that repeats for the same body.
+10. **Push a body the other player pushed:** the second pusher logs `claim mode 1 ... (contact N cm;
+    owner was A)`; once it is granted it moves under that player's pawn on both screens.
+11. **Both grab one weapon:** the loser logs `lost the pickup race for ... to peer N: let go here`.
+12. **Never expected:** `tick error`, `update error on ...`, repeated `conflict:` lines, a
+    `WORLD MISMATCH vs peer` that repeats for the same body, or `hard_snaps` > 0 in
+    `world_sync_quality` on a healthy link.

@@ -109,6 +109,14 @@ pub struct Manifest {
     /// Package path of the mods.txt template.
     pub mods_template: String,
     pub files: Vec<FileEntry>,
+    /// The master accepts bug reports (`/v1/reports`): only then does the launcher offer
+    /// "Upload to HSMP". Left out of the JSON when false, so older launchers read the same schema.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub report_upload: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 impl Manifest {
@@ -265,6 +273,7 @@ pub(crate) mod tests {
                 FileEntry { path: "payload/mods.release.txt".into(), sha256: h(b"t"), size: 1, role: Role::Template, install: None },
                 FileEntry { path: "payload/Win64/dwmapi.dll".into(), sha256: h(b"proxy"), size: 5, role: Role::Ue4ss, install: Some("HalfswordUE5/Binaries/Win64/dwmapi.dll".into()) },
             ],
+            report_upload: false,
         }
     }
 
@@ -273,6 +282,21 @@ pub(crate) mod tests {
         let m = sample();
         m.validate().unwrap();
         assert_eq!(Manifest::parse(&m.to_bytes()).unwrap(), m);
+    }
+
+    /// `report_upload` is off unless a manifest says so, and an off flag is not written, so a
+    /// manifest without it (older releases) and launchers that do not know it agree.
+    #[test]
+    fn report_upload_flag_defaults_off_and_is_omitted() {
+        let m = sample();
+        let bytes = m.to_bytes();
+        assert!(!String::from_utf8_lossy(&bytes).contains("report_upload"));
+        assert!(!Manifest::parse(&bytes).unwrap().report_upload);
+        let mut on = sample();
+        on.report_upload = true;
+        let bytes = on.to_bytes();
+        assert!(String::from_utf8_lossy(&bytes).contains("\"report_upload\": true"));
+        assert!(Manifest::parse(&bytes).unwrap().report_upload);
     }
 
     #[test]

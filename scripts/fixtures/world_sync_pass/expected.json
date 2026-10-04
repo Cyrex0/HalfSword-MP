@@ -1,0 +1,10 @@
+{
+  "messages": [
+    "paired samples p50 30 / p95 30 cm (limit 130, typical)"
+  ],
+  "rules": {
+    "WORLD-1": "pass",
+    "WORLD-2": "pass"
+  },
+  "verdict": "pass"
+}

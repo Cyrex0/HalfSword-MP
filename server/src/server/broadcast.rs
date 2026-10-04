@@ -52,6 +52,8 @@ pub(crate) async fn send_out(socket: &UdpSocket, state: &ServerState, out: crate
 /// Tell `addr` it is kicked (reliable event) and close its connection with
 /// `KICKED`. The caller still removes the peer (`peer_leave`).
 pub(crate) async fn kick(socket: &UdpSocket, state: &Arc<ServerState>, addr: SocketAddr, reason: &str, retry_after_s: u32) {
+    info!(%addr, peer_id = ?state.relay.peer_id(&addr), reason, retry_after_s, "peer kicked");
+    crate::stats::kicked();
     let code = if reason == "banned" { hsmp_net::net::handshake::reject_code::BANNED } else { 0 };
     let ev = kicked_msg(rand::random::<u32>() | 1, code, reason, retry_after_s);
     // The event is flushed in its own packet before the close starts: a
@@ -91,6 +93,7 @@ pub(super) async fn relay_pose(socket: &UdpSocket, state: &Arc<ServerState>, src
     let dsts = state.net.addrs();
     let wire = msg.len() + crate::relay::SEAL_OVERHEAD;
     let chosen = state.relay.select(src, &dsts, crate::relay::Stream::Skel, wire);
+    crate::stats::pose_relayed(sid, chosen.len());
     let pf = crate::perf::perf();
     for crate::relay::Pick { dst, interval_ms } in chosen {
         if let Some(v) = state.relay.peer_id(&dst) {

@@ -52,6 +52,10 @@ enum Cmd {
     MapdumpSummary(cmd::mapdump_summary::Args),
     /// Symbolise + classify game crash dumps (Saved/Crashes) -> JSON; exit 1 on new crashes
     CrashTriage(cmd::crash_triage::Args),
+    /// Write a bug-report zip in the launcher's upload format (Worker e2e test)
+    ReportFixture(cmd::report_fixture::Args),
+    /// NAT traversal test stand-ins: a local STUN server, a punch-probe catcher
+    Natlab(cmd::natlab::Args),
 }
 
 fn main() {
@@ -76,6 +80,8 @@ fn main() {
         Cmd::KismetPp(a) => cmd::kismet_pp::run(a),
         Cmd::MapdumpSummary(a) => cmd::mapdump_summary::run(a),
         Cmd::CrashTriage(a) => cmd::crash_triage::run(a),
+        Cmd::ReportFixture(a) => cmd::report_fixture::run(a),
+        Cmd::Natlab(a) => cmd::natlab::run(a),
     };
     match r {
         Ok(code) => std::process::exit(code),

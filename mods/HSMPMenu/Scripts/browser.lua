@@ -359,6 +359,7 @@ local function parse_tool_text(raw)
                     version = t[11], region = t[12], ping = tonumber(t[13]) or -2,
                     source = t[14], live = (t[15] == "1"),
                     content = t[16] or "", proto_min = tonumber(t[17]) or 0, proto_max = tonumber(t[18]) or 0,
+                    nat = t[19] or "", punch = (t[20] == "1"),
                 })
             else
                 r.skipped = r.skipped + 1
@@ -400,6 +401,8 @@ local function parse_curl_text(raw, idx)
                 content = (obj:match('"content_hash"%s*:%s*"(%x+)"') or ""):sub(1, 16):lower(),
                 proto_min = tonumber(obj:match('"proto_min"%s*:%s*(%d+)')) or 0,
                 proto_max = tonumber(obj:match('"proto_max"%s*:%s*(%d+)')) or 0,
+                nat = obj:match('"nat"%s*:%s*"([%w]*)"') or "",
+                punch = (obj:match('"punch"%s*:%s*(%a+)') == "true"),
                 ping = -3, source = "master", live = false,
             })
         else
@@ -597,6 +600,29 @@ local function find_server(key)
     return nil
 end
 
+-- --- reachability ----------------------------------------------------------------
+-- "reachable": it answered the ping. "nat": it did not, but its router is behind a NAT the
+-- server list can punch through (the join tries that on its own). "unreachable": it did not
+-- answer and nothing can be punched (forwarded port needed, or the host is gone).
+-- "pending" / "unknown": no ping yet / no ping possible (curl fallback).
+local PUNCHABLE = { cone = true, unknown = true, double = true }
+local function reach(s)
+    if s.ping == nil or s.ping == -1 then return "pending" end
+    if s.ping == -3 then return "unknown" end
+    if s.ping >= 0 then return "reachable" end
+    if s.punch or PUNCHABLE[s.nat or ""] then return "nat" end
+    return "unreachable"
+end
+B._reach = reach
+
+local REACH_TEXT = {
+    reachable = "reachable",
+    nat = "no direct answer - will try NAT traversal",
+    unreachable = "unreachable - the host must forward its UDP port",
+    pending = "measuring ping...",
+    unknown = "not measured",
+}
+
 -- --- joining ------------------------------------------------------------------------
 
 local function do_join(addr, map, label)
@@ -623,7 +649,7 @@ function B.join_selected()
         flash("That server needs a password, which HSMP cannot send yet. Pick another server.", C.bad, 5); return
     end
     if s.ping == -2 then
-        Log("browser: joining %s although it did not answer the ping", key_of(s))
+        Log("browser: joining %s although it did not answer the ping (%s, nat=%s punch=%s)", key_of(s), reach(s), tostring(s.nat), tostring(s.punch))
     end
     do_join(key_of(s), s.map, s.name)
 end
@@ -895,7 +921,10 @@ end
 local function ping_cell(s)
     if s.ping == -3 then return "n/a", C.dim end
     if s.ping == -1 or s.ping == nil then return "...", C.dim end
-    if s.ping < 0 then return "--", C.bad end
+    if s.ping < 0 then
+        if reach(s) == "nat" then return "NAT", C.warn end
+        return "--", C.bad
+    end
     local c = (s.ping < 80 and C.good) or (s.ping < 150 and C.ok) or (s.ping < 250 and C.warn) or C.bad
     return tostring(math.floor(s.ping)), c
 end
@@ -1062,7 +1091,9 @@ function B.render()
     Kit.set_text(W.status, st); Kit.set_color(W.status, sc)
     local s = find_server(B.sel)
     if s then
+        local rt = REACH_TEXT[reach(s)]
         Kit.set_text_fit(W.selinfo, {
+            string.format("SELECTED: %s (%s)  -  %s", ascii(s.name), key_of(s), rt),
             string.format("SELECTED: %s (%s)  -  ENTER, double-click or JOIN", ascii(s.name), key_of(s)),
             string.format("SELECTED: %s (%s)", ascii(s.name), key_of(s)),
             string.format("SELECTED: %s", ascii(s.name)) })
@@ -1081,7 +1112,11 @@ function B.render()
     elseif B.flash and now() < B.flash.until_t then
         Kit.msg(B.flash.text, B.flash.color)
     else
-        Kit.msg(s and "ENTER or JOIN to join the selected server." or "Arrows pick a server, ENTER joins. Or type an address below.", Kit.C.dim)
+        local r = s and reach(s)
+        Kit.msg((r == "nat" and "ENTER or JOIN: the host did not answer directly, so the join goes through its router (NAT traversal).")
+            or (r == "unreachable" and "The host does not answer and its router cannot be punched: it must forward its UDP port.")
+            or (s and "ENTER or JOIN to join the selected server.") or "Arrows pick a server, ENTER joins. Or type an address below.",
+            (r == "unreachable" and Kit.C.warn) or Kit.C.dim)
     end
 end
 

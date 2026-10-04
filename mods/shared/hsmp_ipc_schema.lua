@@ -3,7 +3,7 @@
 local S = {}
 S.ABI_MAJOR = 2
 S.ABI_MINOR = 0
-S.LAYOUT_HASH = "eb9a00a6a80b45ec"
+S.LAYOUT_HASH = "e3c1b55babd38c1a"
 S.SEGMENT_SIZE = 3743744
 
 -- kind name -> { id, cap, dir, form, replaces }
@@ -145,7 +145,7 @@ S.STRUCTS = {
         { "st", "f32" },
         { "iv", "f32" },
         { "k", "f32" },
-        { "_r", "u32" },
+        { "rate", "f32" },
         { "mask", "u32" },
         { "vmask", "u32" },
         { "root", { "f32", 4 } },
@@ -1057,7 +1057,7 @@ S.ENUMS.cfg = { ARENA = 1, MODE = 2, BEST_OF = 4, ROUND_TIME = 8, TEAM_RULE = 16
 S.ENUMS.cmd_reason = { OK = 0, NOT_ADMIN = 1, WRONG_PHASE = 2, NOT_ALL_READY = 3, REV_MISMATCH = 4, UNKNOWN_ARENA = 5, INVALID_VALUE = 6, UNKNOWN_PLAYER = 7, NOT_ENOUGH_PLAYERS = 8, RATE_LIMITED = 9, UNSUPPORTED = 10, }
 S.ENUMS.status_flag = { LOADED = 1, READY = 2, DEAD = 4, IN_MENU = 8, SPECTATING = 16, BACKGROUND = 32, }
 S.ENUMS.load_error = { NONE = 0, TRAVEL_FAILED = 1, WRONG_WORLD = 2, NO_PAWN = 3, VITALS = 4, SPAWN_PLACE = 5, DRESS = 6, STAND_INS = 7, TIMEOUT = 8, OTHER = 9, }
-S.ENUMS.notice = { HOST_LEFT = 1, ROLE_CHANGED = 2, LOAD_FAILED = 3, PLAYER_JOINED = 4, PLAYER_LEFT = 5, ADMIN_CHANGED = 6, CONFIG_QUEUED = 7, SUDDEN_DEATH = 8, }
+S.ENUMS.notice = { HOST_LEFT = 1, ROLE_CHANGED = 2, LOAD_FAILED = 3, PLAYER_JOINED = 4, PLAYER_LEFT = 5, ADMIN_CHANGED = 6, CONFIG_QUEUED = 7, SUDDEN_DEATH = 8, NET_STATUS = 9, }
 S.ENUMS.closing_reason = { SHUTDOWN = 0, HOST_LEFT = 1, RESTART = 2, IDLE = 3, }
 S.ENUMS.leave_reason = { USER = 0, GAME_EXITED = 1, SWITCH_SERVER = 2, }
 S.ENUMS.sidecar_status = { CONNECTING = 0, CONNECTED = 1, RECONNECTING = 2, REJECTED = 3, KICKED = 4, REPLACED = 5, SERVER_CLOSED = 6, ENDED = 7, }

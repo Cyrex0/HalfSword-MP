@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "channel": "beta",
   "rust_toolchain": "1.98.1",
   "master_urls": [
@@ -42,6 +42,7 @@
       { "section": "CrashDump", "key": "FullMemoryDump", "value": "0" }
     ]
   },
+  "report_upload": false,
   "native_mods": [
     { "name": "HSMPNative", "files": ["dlls/main.dll", "dlls/hsmp_lua.dll"] }
   ],
@@ -52,7 +53,8 @@
     "hsmp-query"
   ],
   "launch_args": [
-    "-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0"
+    "-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0",
+    "-ini:Engine:[SystemSettings]:r.HairStrands.UseCardsInsteadOfStrands=1"
   ],
   "ini_settings": [
     {
@@ -61,6 +63,13 @@
       "key": "r.HairStrands.Streaming",
       "value": "0",
       "reason": "IoDispatcher pak-read crash workaround: load hair strands whole instead of paged streaming (docs/development/halfsword/io-dispatcher-crash.md)"
+    },
+    {
+      "file": "Engine",
+      "section": "SystemSettings",
+      "key": "r.HairStrands.UseCardsInsteadOfStrands",
+      "value": "1",
+      "reason": "IoDispatcher pak-read crash fix (IO-1): draw the groom's hair cards, so the strands bulk data is never read (docs/development/halfsword/io-dispatcher-crash.md)"
     }
   ]
 }

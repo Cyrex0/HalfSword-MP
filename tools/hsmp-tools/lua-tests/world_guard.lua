@@ -304,21 +304,54 @@ do
     -- camera goes back to the own pawn
     local standin = M.new_obj("Willie_BP_C", "Willie_BP_C_9")
     local real_fao = _G.FindAllOf
-    _G.FindAllOf = function(c) if c == "Willie_BP_C" then return { standin } end return nil end
+    -- the native in-game HUD, whose "Black" image fades in over a dead player's view
+    local native_hud = M.new_obj("UI_HUD_C", "UI_HUD_C_0")
+    rawset(native_hud, "vis", 4)
+    local black = M.new_obj("Image", "Black")
+    rawset(black, "vis", 4)
+    native_hud.__props.Black = black
+    M.Methods.IsInViewport = function() return true end
+    M.Methods.GetVisibility = function(self) return rawget(self, "vis") or 0 end
+    _G.FindAllOf = function(c)
+        if c == "Willie_BP_C" then return { standin } end
+        if c == "UI_HUD_C" then return { native_hud } end
+        return nil
+    end
     M.Methods.SetViewTargetWithBlend = function(self, t) M.view_target = t end
+    -- our spectator camera: a CameraActor spawned in this world, moved every frame
+    rawset(standin, "K2_GetActorLocation", function() return { X = 400, Y = 0, Z = 90 } end)
+    local real_sfo = _G.StaticFindObject
+    _G.StaticFindObject = function(p) if p == "/Script/Engine.CameraActor" then return M.new_obj("Class", "CameraActor") end return real_sfo(p) end
+    M.Methods.BeginDeferredActorSpawnFromClass = function()
+        local a = M.new_obj("CameraActor", "CameraActor_" .. (#M.objs))
+        a.__props.CameraComponent = M.new_obj("CameraComponent", "CameraComponent")
+        M.cams = M.cams or {}
+        M.cams[#M.cams + 1] = a
+        return a
+    end
+    M.Methods.FinishSpawningActor = function() end
+    M.Methods.K2_SetActorLocationAndRotation = function(self, l) rawset(self, "at", l) end
     M.N.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })   -- HSMPAvatars' bus key (its own contract)
     snapshot("LIVE", 1, { 1 })
     pawn.__props.Health = 0
     for i = 1, 4 do beat(sd, 100 + i); M.run(250) end
-    T.check(M.view_target == standin and T.contains(M.logtext(), "spectating B"), "dead: the camera follows the opponent's stand-in", M.logtext())
+    local cam = M.cams and M.cams[1]
+    T.check(cam and M.view_target == cam and #M.cams == 1 and T.contains(M.logtext(), "spectating B"),
+        "dead: our camera actor follows the opponent's stand-in (never the stand-in's own camera)", M.logtext())
+    local at = cam and rawget(cam, "at")
+    T.check(at and math.abs(math.sqrt((at.X - 400) ^ 2 + at.Y ^ 2) - 320) < 40 and at.Z > 90, "placed behind and above the stand-in", T.repr(at))
+    T.check(rawget(black, "vis") == 1 and rawget(native_hud, "vis") == 4,
+        "spectating: the native HUD's Black image is collapsed, the HUD itself (HSMPHud's host) stays", tostring(rawget(black, "vis")))
     local sp = M.N.sc_get("spectate")
     T.check(sp and sp.target == 2 and sp.nick == "B" and sp.round == 1, "bus spectate {target, nick, round}", T.repr(sp))
     snapshot("LIVE", 1)
     pawn.__props.Health = 100
     for i = 1, 4 do beat(sd, 110 + i); M.run(250) end
     T.check(M.view_target == pawn, "alive again: the camera is handed back to the own pawn", tostring(M.view_target))
+    T.check(rawget(black, "vis") == 4, "alive again: the Black image is restored as it was", tostring(rawget(black, "vis")))
     T.check(M.N.sc_get("spectate").target == 0, "bus spectate cleared (target 0)")
     _G.FindAllOf = real_fao
+    _G.StaticFindObject = real_sfo
     -- the old world is freed: nothing may touch it any more
     M.kill_all()
     for i = 23, 30 do beat(sd, i); M.run(250) end

@@ -10,7 +10,7 @@
 
 #define HSMP_IPC_ABI_MAJOR 2u
 #define HSMP_IPC_ABI_MINOR 0u
-#define HSMP_IPC_LAYOUT_HASH 0xeb9a00a6a80b45ecull
+#define HSMP_IPC_LAYOUT_HASH 0xe3c1b55babd38c1aull
 #define HSMP_IPC_SEGMENT_SIZE 0x392000u
 
 #pragma pack(push, 8)
@@ -127,7 +127,7 @@ typedef struct hsmp_PeerPlay {
     float st;
     float iv;
     float k;
-    uint32_t _r;
+    float rate;
     uint32_t mask;
     uint32_t vmask;
     float root[4];
@@ -151,7 +151,7 @@ HSMP_SA(offsetof(hsmp_PeerPlay, lead) == 76, "hsmp_PeerPlay.lead offset");
 HSMP_SA(offsetof(hsmp_PeerPlay, st) == 80, "hsmp_PeerPlay.st offset");
 HSMP_SA(offsetof(hsmp_PeerPlay, iv) == 84, "hsmp_PeerPlay.iv offset");
 HSMP_SA(offsetof(hsmp_PeerPlay, k) == 88, "hsmp_PeerPlay.k offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, _r) == 92, "hsmp_PeerPlay._r offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, rate) == 92, "hsmp_PeerPlay.rate offset");
 HSMP_SA(offsetof(hsmp_PeerPlay, mask) == 96, "hsmp_PeerPlay.mask offset");
 HSMP_SA(offsetof(hsmp_PeerPlay, vmask) == 100, "hsmp_PeerPlay.vmask offset");
 HSMP_SA(offsetof(hsmp_PeerPlay, root) == 104, "hsmp_PeerPlay.root offset");
@@ -1883,6 +1883,7 @@ HSMP_SA(offsetof(hsmp_DevCmd, arg) == 48, "hsmp_DevCmd.arg offset");
 #define HSMP_NOTICE_ADMIN_CHANGED 6u
 #define HSMP_NOTICE_CONFIG_QUEUED 7u
 #define HSMP_NOTICE_SUDDEN_DEATH 8u
+#define HSMP_NOTICE_NET_STATUS 9u
 #define HSMP_CLOSING_REASON_SHUTDOWN 0u
 #define HSMP_CLOSING_REASON_HOST_LEFT 1u
 #define HSMP_CLOSING_REASON_RESTART 2u
@@ -2447,7 +2448,7 @@ HSMP_SA(offsetof(hsmp_DevCmd, arg) == 48, "hsmp_DevCmd.arg offset");
 #define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_ST 0x5da90u
 #define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_IV 0x5da94u
 #define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_K 0x5da98u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA__R 0x5da9cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_RATE 0x5da9cu
 #define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_MASK 0x5daa0u
 #define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_VMASK 0x5daa4u
 #define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_ROOT 0x5daa8u

@@ -15,7 +15,7 @@
  "scenarios": {
   "p0_gate": {
    "doc": "DoD-1..8, 10, 12, 13: R rounds on each arena, RCON-driven kills alternating seats",
-   "extra_rules": ["POSE-1", "PAWN-1", "WORLD-1", "COMBAT-1"],
+   "extra_rules": ["POSE-1", "SMOOTH-1", "SPAWN-1", "PAWN-1", "WORLD-1", "COMBAT-1"],
    "dod": [
     1,
     2,
@@ -172,9 +172,50 @@
     }
    ]
   },
+  "world_sync": {
+   "doc": "WORLD-1/2: props and items in sync under latency. Each Live round both players throw nearby props with mod-side impulses (autotest world_poke) while the other watches; HSMPWorld's world_track pairs the screens. Use -Netsim typical|intl|bad for the profiles",
+   "extra_rules": ["WORLD-1", "WORLD-2"],
+   "dod": [1, 2, 3, 12, 13],
+   "topology": "dedicated",
+   "netsim": "typical",
+   "arenas": ["Cellar", "Alley"],
+   "rounds": 2,
+   "requires": ["debug_verbs"],
+   "steps": [
+    {"do": "mark", "name": "boot"},
+    {"do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150},
+    {"do": "wait", "ev": "cmd_result", "who": "each", "where": {"cmd": "ready", "ok": "true"}, "timeout_s": 30},
+    {"foreach_arena": [
+      {"do": "mark", "name": "arena:{arena}"},
+      {"do": "rcon", "cmd": "BESTOF {best_of}", "optional": true},
+      {"do": "rcon", "cmd": "MAP {arena}", "pick": "{arena}"},
+      {"do": "mark", "name": "start", "arena": "{arena}"},
+      {"do": "rcon", "cmd": "START"},
+      {"foreach_round": [
+        {"do": "wait", "ev": "ready_report", "who": "each", "timeout_s": 120},
+        {"do": "wait", "ev": "phase", "who": "server", "where": {"to": "Live"}, "timeout_s": 60},
+        {"do": "hold", "s": 2, "why": "HSMPWorld Ready on both screens before the first throw"},
+        {"do": "client_cmd", "inst": 1, "cmd": "world_poke", "arg": "450,3"},
+        {"do": "hold", "s": 4, "why": "the bodies fly, land and come to rest on both screens"},
+        {"do": "client_cmd", "inst": 2, "cmd": "world_poke", "arg": "450,3"},
+        {"do": "hold", "s": 4, "why": "the other player's throw"},
+        {"do": "client_cmd", "inst": 1, "cmd": "world_poke", "arg": "700,2"},
+        {"do": "hold", "s": 8, "why": "rest, release (1.5 s at rest) and the final rest poses (3 s later)"},
+        {"do": "rcon", "cmd": "DEBUG KILL {seat}"},
+        {"do": "wait", "ev": "phase", "who": "server", "where": {"to": "RoundOver"}, "timeout_s": 30},
+        {"do": "mark", "name": "round_end", "round": "{round}"}
+      ]},
+      {"do": "rcon", "cmd": "ABORT"},
+      {"do": "wait", "ev": "phase", "who": "server", "where": {"to": "Lobby"}, "timeout_s": 60},
+      {"do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 120},
+      {"do": "wait", "ev": "cmd_result", "who": "each", "where": {"cmd": "ready", "ok": "true"}, "timeout_s": 30}
+    ]},
+    {"do": "quit_all"}
+   ]
+  },
   "p0_wifi": {
    "doc": "DoD-14: DoD-1..7 on Alley+Pit x 10 rounds under the wifi profile",
-   "extra_rules": ["POSE-1", "PAWN-1", "WORLD-1", "COMBAT-1"],
+   "extra_rules": ["POSE-1", "SMOOTH-1", "SPAWN-1", "PAWN-1", "WORLD-1", "COMBAT-1"],
    "dod": [
     14,
     12
@@ -367,6 +408,92 @@
     { "do": "rcon", "cmd": "START" },
     { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Live" }, "timeout_s": 180 },
     { "do": "hold", "s": 720, "why": "combat probe: hits driven from inside the games (ipc-ctl)" },
+    { "do": "quit_all" }
+   ]
+  },
+  "spectate_soak": {
+   "doc": "The first public-server join: a listen host, a remote fighter and a spectator (seat 3 killed each round) on the intl path (~176 ms RTT). The dead seat cycles its spectate target every 0.7 s (HSMP_DEV_SPECTATE_CYCLE_MS, in place of Q/E). Checks: no crash, the spectator gets every fighter at full rate (server 'pose relay' lines, client iv). Not a gate.",
+   "dod": [
+    12
+   ],
+   "topology": "listen",
+   "netsim": "intl",
+   "rounds": 6,
+   "requires": [
+    "debug_verbs"
+   ],
+   "env": {
+    "1": { "HSMP_DEV_SPECTATE_CYCLE_MS": "700" },
+    "2": { "HSMP_DEV_SPECTATE_CYCLE_MS": "700" },
+    "3": { "HSMP_DEV_SPECTATE_CYCLE_MS": "700" }
+   },
+   "steps": [
+    { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150 },
+    { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 60 },
+    { "do": "rcon", "cmd": "BESTOF 15", "optional": true },
+    { "do": "rcon", "cmd": "MAP Alley", "pick": "Alley" },
+    { "do": "mark", "name": "start", "arena": "Alley" },
+    { "do": "rcon", "cmd": "START" },
+    {
+     "foreach_round": [
+      { "do": "wait", "ev": "ready_report", "who": "each", "timeout_s": 120 },
+      { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Live" }, "timeout_s": 60 },
+      { "do": "rcon", "cmd": "DEBUG KILL 3" },
+      { "do": "client_cmd", "inst": 1, "cmd": "move", "arg": "10" },
+      { "do": "client_cmd", "inst": 2, "cmd": "move", "arg": "10" },
+      { "do": "hold", "s": 12, "why": "spectator cycles while both fighters move" },
+      { "do": "client_cmd", "inst": 1, "cmd": "move", "arg": "10" },
+      { "do": "client_cmd", "inst": 2, "cmd": "move", "arg": "10" },
+      { "do": "hold", "s": 12, "why": "spectator cycles while both fighters move" },
+      { "do": "client_cmd", "inst": 1, "cmd": "move", "arg": "10" },
+      { "do": "client_cmd", "inst": 2, "cmd": "move", "arg": "10" },
+      { "do": "hold", "s": 12, "why": "spectator cycles while both fighters move" },
+      { "do": "client_cmd", "inst": 1, "cmd": "move", "arg": "10" },
+      { "do": "client_cmd", "inst": 2, "cmd": "move", "arg": "10" },
+      { "do": "hold", "s": 12, "why": "spectator cycles while both fighters move" },
+      { "do": "rcon", "cmd": "DEBUG KILL 2" },
+      { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "RoundOver" }, "timeout_s": 30 },
+      { "do": "mark", "name": "round_end", "round": "{round}" }
+     ]
+    },
+    { "do": "rcon", "cmd": "ABORT" },
+    { "do": "quit_all" }
+   ]
+  },
+  "netfeel": {
+   "doc": "High ping: two fighters on a dedicated server over the far path (~300 ms RTT, 50 ms jitter, 2 % loss; -Netsim intl / bad for the others), moving every round. Checks SMOOTH-1 (no local-pawn correction, stand-in snaps / rigid snaps / clock resets per minute), SPAWN-1 (no stretched body after a spawn) and POSE-1.",
+   "extra_rules": ["SMOOTH-1", "SPAWN-1", "POSE-1"],
+   "dod": [
+    12
+   ],
+   "topology": "dedicated",
+   "netsim": "far",
+   "rounds": 3,
+   "requires": [
+    "debug_verbs"
+   ],
+   "steps": [
+    { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150 },
+    { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 60 },
+    { "do": "rcon", "cmd": "MAP Pit", "pick": "Pit" },
+    { "do": "mark", "name": "start", "arena": "Pit" },
+    { "do": "rcon", "cmd": "START" },
+    {
+     "foreach_round": [
+      { "do": "wait", "ev": "ready_report", "who": "each", "timeout_s": 120 },
+      { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Live" }, "timeout_s": 60 },
+      { "do": "client_cmd", "inst": 1, "cmd": "move", "arg": "10" },
+      { "do": "client_cmd", "inst": 2, "cmd": "move", "arg": "10" },
+      { "do": "hold", "s": 12, "why": "both fighters move" },
+      { "do": "client_cmd", "inst": 1, "cmd": "move", "arg": "10" },
+      { "do": "client_cmd", "inst": 2, "cmd": "move", "arg": "10" },
+      { "do": "hold", "s": 12, "why": "both fighters move" },
+      { "do": "rcon", "cmd": "DEBUG KILL {seat}" },
+      { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "RoundOver" }, "timeout_s": 30 },
+      { "do": "mark", "name": "round_end", "round": "{round}" }
+     ]
+    },
+    { "do": "rcon", "cmd": "ABORT" },
     { "do": "quit_all" }
    ]
   },

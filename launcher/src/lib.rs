@@ -12,7 +12,8 @@
 //! | `careerguard` | recovers career-guard sessions a crash left open, at launcher start, after install, before Launch through Steam and before Uninstall (sidecar `--career-recover`) |
 //! | `launch`, `procs` | start the game through Steam; read-only process checks |
 //! | `update` | update check, download and verified install from the GitHub releases |
-//! | `crash` | crash-report consent and redaction (interface only, no network) |
+//! | `crash` | crash-report consent and redaction (`Redactor`) |
+//! | `report`, `sysinfo` | bug reports: the session logs, redacted, zipped, saved / opened as a GitHub issue / uploaded to the master |
 //! | `firewall` | the Windows Firewall allow rule for the installed hsmp-server.exe (added through UAC) |
 //! | `ops` | high-level operations shared by the CLI and the GUI |
 
@@ -30,9 +31,11 @@ pub mod ops;
 pub mod pack;
 pub mod package;
 pub mod procs;
+pub mod report;
 pub mod saves;
 pub mod sign;
 pub mod steam;
+pub mod sysinfo;
 pub mod trust;
 pub mod update;
 pub mod util;

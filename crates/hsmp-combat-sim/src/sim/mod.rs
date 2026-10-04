@@ -16,9 +16,11 @@
 //!              sidecar resend/ack path), the server (real `lagcomp::Store` +
 //!              `combat::Engine` + glue), cheats, and metrics.
 //! * `report` — aggregation and the report table.
+//! * `frame`  — hit location across the replay delay (armour layer by body-relative spot).
 
 pub mod body;
 pub mod core;
+pub mod frame;
 pub mod game;
 pub mod net;
 pub mod report;

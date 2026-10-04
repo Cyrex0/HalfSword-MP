@@ -26,6 +26,9 @@ path = "src/main.rs"
 anyhow = "1"
 hsmp-ipc = { path = "../../crates/hsmp-ipc", features = ["json"] }
 hsmp-pose = { path = "../../crates/hsmp-pose" }
+hsmp-diag = { path = "../../crates/hsmp-diag" }
+hsmp-master-core = { path = "../../crates/hsmp-master-core" }
+hsmp-nat = { path = "../../crates/hsmp-nat" }
 bytemuck = "1"
 clap = { version = "4", features = ["derive"] }
 mlua = { version = "0.10", features = ["lua54", "vendored", "serialize"] }

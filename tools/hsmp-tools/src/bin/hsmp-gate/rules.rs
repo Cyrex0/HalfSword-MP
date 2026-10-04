@@ -999,6 +999,8 @@ fn profile_one_way(p: &str) -> Option<f64> {
         "typical" => 50.0,
         "wifi" => 35.0,
         "bad" => 110.0,
+        "intl" => 88.0,
+        "far" => 150.0,
         "awful" => 180.0,
         _ => return None,
     })
@@ -1016,7 +1018,7 @@ fn pose1(c: &mut Checks, x: &Ctx) {
     }
     // A peer's pose crosses both instances' links (a listen host has none of its own), so the
     // limits come from the most impaired profile in the run.
-    const ORDER: [&str; 7] = ["none", "lan", "good", "typical", "wifi", "bad", "awful"];
+    const ORDER: [&str; 9] = ["none", "lan", "good", "typical", "wifi", "intl", "bad", "far", "awful"];
     let worst = x.insts
         .iter()
         .filter_map(|i| x.cfg["netsim"].get(i.as_str()).and_then(|v| v.as_str()))
@@ -1033,7 +1035,7 @@ fn pose1(c: &mut Checks, x: &Ctx) {
         let (jit_max, foot_max, idle_max): (f64, f64, Option<f64>) = if prof == "wifi" { (1.5, 8.0, None) } else { (1.2, 5.0, Some(0.5)) };
         let (arm_max, tip_max) = match prof.as_str() {
             "wifi" => (10.0, None),
-            "bad" | "awful" => {
+            "intl" | "bad" | "far" | "awful" => {
                 c.add("POSE-1", INCOMPLETE, format!("POSE-1 limits are defined for typical and wifi, not {prof}"), None, Some(i));
                 continue;
             }
@@ -1126,9 +1128,93 @@ fn pose1(c: &mut Checks, x: &Ctx) {
     }
 }
 
+
+/// SMOOTH-1 limits per netsim profile: stand-in snaps (frames whose motion
+/// jumps > 3 uu beyond its targets') and rigid snaps per minute of Live, per peer.
+/// From the netfeel model (hsmp-pose feelsim) with headroom; awful is not specified.
+fn netfeel_limits(p: &str) -> Option<(f64, f64)> {
+    Some(match p {
+        "none" | "lan" | "good" | "typical" => (10.0, 0.5),
+        "intl" => (20.0, 0.5),
+        "far" => (30.0, 0.5),
+        "wifi" => (40.0, 1.0),
+        "bad" => (80.0, 1.0),
+        _ => return None,
+    })
+}
+
+/// SMOOTH-1 (docs/development/subsystems/replication.md "Rubber banding"):
+/// - no correction of an honest local pawn during Live (`pawn_correction` with
+///   live = true, other than a fall below the floor);
+/// - per peer, stand-in snaps and rigid snaps per minute of Live within the
+///   profile's limits, and at most one playback-clock reset per minute.
+fn netfeel1(c: &mut Checks, x: &Ctx) {
+    let prof = worst_profile(x);
+    let Some((snap_max, rigid_max)) = netfeel_limits(&prof) else {
+        c.add("SMOOTH-1", INCOMPLETE, format!("SMOOTH-1 has no limits for netsim profile {prof:?}"), None, None);
+        return;
+    };
+    for i in &x.insts {
+        let corr: Vec<&Ev> = client(x.evs, "pawn_correction", Some(i)).into_iter()
+            .filter(|e| e.get("live").and_then(|v| v.as_bool()) == Some(true) && s(e, "why") != Some("fell")).collect();
+        if corr.is_empty() {
+            c.add("SMOOTH-1", PASS, "no correction of the local pawn during Live", None, Some(i));
+        } else {
+            let list: Vec<String> = corr.iter().take(8).map(|e| format!("{} {:.0} cm", s(e, "why").unwrap_or("?"), f64v(e, "dist_cm").unwrap_or(-1.0))).collect();
+            c.add("SMOOTH-1", FAIL, format!("{} correction(s) of the local pawn during Live: {}", corr.len(), list.join(", ")), None, Some(i));
+        }
+        let nf = client(x.evs, "netfeel", Some(i));
+        let live: Vec<&&Ev> = nf.iter().filter(|e| x.rounds.iter().any(|r| r.live_ms <= wall(e) && wall(e) <= r.end_ms.unwrap_or(i64::MAX))).collect();
+        if live.is_empty() {
+            c.add("SMOOTH-1", INCOMPLETE, "no netfeel samples during Live", None, Some(i));
+            continue;
+        }
+        let mut per: std::collections::BTreeMap<String, (f64, f64, f64, f64, f64)> = Default::default();
+        for e in &live {
+            let w = f64v(e, "window_s").unwrap_or(5.0) / 60.0;
+            let a = per.entry(sv(e, "peer").unwrap_or_default()).or_default();
+            a.0 += w;
+            a.1 += f64v(e, "snaps_per_min").unwrap_or(0.0) * w;
+            a.2 += f64v(e, "rigid_snaps").unwrap_or(0.0);
+            a.3 += f64v(e, "clock_resets").unwrap_or(0.0);
+            a.4 = a.4.max(f64v(e, "jump_max_uu").unwrap_or(0.0));
+        }
+        for (peer, (mins, snaps, rigid, clk, jmax)) in per {
+            let m = mins.max(1e-6);
+            let (sr, rr, cr) = (snaps / m, rigid / m, clk / m);
+            let ok = sr <= snap_max && rr <= rigid_max && cr <= 1.0;
+            c.add("SMOOTH-1", if ok { PASS } else { FAIL },
+                format!("peer {peer}: {sr:.1} snaps/min (<= {snap_max}), {rr:.2} rigid snaps/min (<= {rigid_max}), {cr:.2} clock resets/min (<= 1), max jump {jmax:.1} uu over {:.1} min of Live ({prof})", mins),
+                None, Some(i));
+        }
+    }
+}
+
+/// SPAWN-1: the largest joint stretch (bone length vs the reference skeleton) of
+/// every stand-in in the 3 s after it starts being driven or is re-posed after a
+/// teleport, and of the local pawn after it spawns, is at most SPAWN_STRETCH_MAX_UU.
+const SPAWN_STRETCH_MAX_UU: f64 = 10.0;
+fn spawn1(c: &mut Checks, x: &Ctx) {
+    for i in &x.insts {
+        let ev = client(x.evs, "spawn_stretch", Some(i));
+        if ev.is_empty() {
+            c.add("SPAWN-1", INCOMPLETE, "no spawn_stretch samples", None, Some(i));
+            continue;
+        }
+        let bad: Vec<String> = ev.iter().filter(|e| f64v(e, "max_uu").unwrap_or(f64::INFINITY) > SPAWN_STRETCH_MAX_UU)
+            .take(8).map(|e| format!("{} {} {:.1} uu ({}, {})", s(e, "who").unwrap_or("?"), sv(e, "peer").unwrap_or_default(),
+                f64v(e, "max_uu").unwrap_or(-1.0), s(e, "bone").unwrap_or("?"), s(e, "why").unwrap_or("?"))).collect();
+        let worst = ev.iter().filter_map(|e| f64v(e, "max_uu")).fold(0.0, f64::max);
+        if bad.is_empty() {
+            c.add("SPAWN-1", PASS, format!("{} spawn(s), worst stretch {worst:.1} uu (<= {SPAWN_STRETCH_MAX_UU})", ev.len()), None, Some(i));
+        } else {
+            c.add("SPAWN-1", FAIL, format!("stretched on spawn (> {SPAWN_STRETCH_MAX_UU} uu): {}", bad.join("; ")), None, Some(i));
+        }
+    }
+}
 /// The most impaired netsim profile among the run's instances (a peer's traffic crosses both links).
 fn worst_profile(x: &Ctx) -> String {
-    const ORDER: [&str; 7] = ["none", "lan", "good", "typical", "wifi", "bad", "awful"];
+    const ORDER: [&str; 9] = ["none", "lan", "good", "typical", "wifi", "intl", "bad", "far", "awful"];
     x.insts
         .iter()
         .filter_map(|i| x.cfg["netsim"].get(i.as_str()).and_then(|v| v.as_str()))
@@ -1306,6 +1392,131 @@ fn world1(c: &mut Checks, x: &Ctx) {
         c.add("WORLD-1", INCOMPLETE, format!("no round had Live >= {} s ({short} shorter: the scenario ends Live at once), so no world_consistency verdict could be judged", LIVE_JUDGE_MIN_MS / 1000), None, None);
     } else if short > 0 {
         c.add("WORLD-1", PASS, format!("{short} round(s) with Live < {} s not judged", LIVE_JUDGE_MIN_MS / 1000), None, None);
+    }
+}
+
+/// WORLD-2's limit on the p95 divergence of moving bodies between two screens (cm), by the
+/// most impaired profile: the world-sync simulator's results with margin
+/// (tests/hsmpworld-sim, world_sync.rs `world2_limit`). None: no limit defined (incomplete).
+fn world2_limit(profile: &str) -> Option<f64> {
+    match profile {
+        "none" | "lan" | "good" => Some(80.0),
+        "typical" | "wifi" => Some(130.0),
+        "intl" => Some(170.0),
+        "bad" | "far" => Some(260.0),
+        _ => None,
+    }
+}
+
+/// Two screens' final rest poses of a body may differ by this much (cm): WORLD-1's pose tolerance
+/// (world.rs POS_TOL; a hinged or chained body is not pinned exactly).
+const REST_TOL_CM: f64 = 5.0;
+
+/// One instance's world_track of one body: (server ms, position, rest).
+type Track = Vec<(f64, [f64; 3], bool)>;
+
+/// `b`'s position at host-clock time t: linear between its samples (at most 250 ms apart).
+fn track_at(b: &Track, t: f64) -> Option<[f64; 3]> {
+    let i = b.iter().position(|s| s.0 >= t)?;
+    if i == 0 {
+        return (b[0].0 - t < 1.0).then_some(b[0].1);
+    }
+    let (p, q) = (b[i - 1], b[i]);
+    if q.0 - p.0 > 250.0 {
+        return None;
+    }
+    let k = (t - p.0) / (q.0 - p.0).max(1e-9);
+    Some([p.1[0] + (q.1[0] - p.1[0]) * k, p.1[1] + (q.1[1] - p.1[1]) * k, p.1[2] + (q.1[2] - p.1[2]) * k])
+}
+
+fn dist3(a: [f64; 3], b: [f64; 3]) -> f64 {
+    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+}
+
+/// WORLD-2 (docs/development/subsystems/world-replication.md, "Measuring sync"): per round
+/// whose Live lasted >= 10 s, HSMPWorld's world_track samples (host clock: one machine) of every two
+/// instances are paired per body (same nid, level, epoch): (1) the p95 distance of moving
+/// samples to the other screen's track at the same moment <= world2_limit(profile); (2) every
+/// body both screens tracked ends at the same rest pose (last rest samples within REST_TOL_CM);
+/// (3) no hard snap (world_sync_quality hard_snaps) during Live. Nothing paired in a judged
+/// round (nothing moved: the scenario pokes props) is incomplete.
+fn world2(c: &mut Checks, x: &Ctx) {
+    let tr = client(x.evs, "world_track", None);
+    if tr.is_empty() || x.rounds.is_empty() {
+        c.add("WORLD-2", INCOMPLETE, if tr.is_empty() { "no world_track events (HSMPWorld tracks only in harness runs: HSMP_AUTOTEST)" } else { "no rounds" }, None, None);
+        return;
+    }
+    let profile = worst_profile(x);
+    let Some(limit) = world2_limit(&profile) else {
+        c.add("WORLD-2", INCOMPLETE, format!("no WORLD-2 limit for profile {profile}"), None, None);
+        return;
+    };
+    let quality = client(x.evs, "world_sync_quality", None);
+    let mut judged = 0;
+    for r in x.rounds {
+        let Some(end) = r.end_ms else { continue };
+        if end - r.live_ms < LIVE_JUDGE_MIN_MS {
+            continue;
+        }
+        judged += 1;
+        // (instance, level, epoch, nid) -> track
+        let mut tracks: BTreeMap<(String, String, String, String), Track> = BTreeMap::new();
+        for e in tr.iter().filter(|e| r.live_ms <= wall(e) && wall(e) <= end) {
+            let (Some(t), Some(px), Some(py), Some(pz)) = (f64v(e, "t"), f64v(e, "x"), f64v(e, "y"), f64v(e, "z")) else { continue };
+            let key = (inst(e).to_string(), sv(e, "level").unwrap_or_default(), sv(e, "epoch").unwrap_or_default(), sv(e, "nid").unwrap_or_default());
+            tracks.entry(key).or_default().push((t, [px, py, pz], bv(e, "rest") == Some(true)));
+        }
+        for v in tracks.values_mut() {
+            v.sort_by(|a, b| a.0.total_cmp(&b.0));
+        }
+        let (mut moving, mut rest_bad, mut rest_n) = (Vec::new(), Vec::new(), 0);
+        let keys: Vec<_> = tracks.keys().cloned().collect();
+        for a in &keys {
+            for b in &keys {
+                if !(a.0 < b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3) {
+                    continue;
+                }
+                let (ta, tb) = (&tracks[a], &tracks[b]);
+                for s in ta.iter().filter(|s| !s.2) {
+                    if let Some(p) = track_at(tb, s.0) {
+                        moving.push(dist3(s.1, p));
+                    }
+                }
+                if let (Some(la), Some(lb)) = (ta.iter().rev().find(|s| s.2), tb.iter().rev().find(|s| s.2)) {
+                    rest_n += 1;
+                    let d = dist3(la.1, lb.1);
+                    if d > REST_TOL_CM {
+                        rest_bad.push(format!("body {} rests {d:.1} cm apart (inst {} vs {})", a.3, a.0, b.0));
+                    }
+                }
+            }
+        }
+        if moving.is_empty() {
+            c.add("WORLD-2", INCOMPLETE, format!("{}: no body moved on two screens at once (no paired world_track samples)", rl(r)), Some(r.idx), None);
+            continue;
+        }
+        moving.sort_by(|a, b| a.total_cmp(b));
+        let p95 = moving[((moving.len() - 1) as f64 * 0.95).round() as usize];
+        let p50 = moving[(moving.len() - 1) / 2];
+        let snaps: f64 = quality.iter().filter(|e| r.live_ms <= wall(e) && wall(e) <= end).filter_map(|e| f64v(e, "hard_snaps")).sum();
+        let mut probs = Vec::new();
+        if p95 > limit {
+            probs.push(format!("moving bodies p95 {p95:.0} cm apart > {limit:.0} ({profile})"));
+        }
+        probs.extend(rest_bad.iter().take(4).cloned());
+        if snaps > 0.0 {
+            probs.push(format!("{snaps:.0} hard snap(s)"));
+        }
+        let msg = format!("{}: {} paired samples p50 {p50:.0} / p95 {p95:.0} cm (limit {limit:.0}, {profile}), {rest_n} rest poses compared, {snaps:.0} hard snaps",
+                          rl(r), moving.len());
+        if probs.is_empty() {
+            c.add("WORLD-2", PASS, msg, Some(r.idx), None);
+        } else {
+            c.add("WORLD-2", FAIL, format!("{msg}: {}", probs.join("; ")), Some(r.idx), None);
+        }
+    }
+    if judged == 0 {
+        c.add("WORLD-2", INCOMPLETE, format!("no round had Live >= {} s", LIVE_JUDGE_MIN_MS / 1000), None, None);
     }
 }
 
@@ -1592,7 +1803,7 @@ fn short(c: &str) -> &str {
 /// proxy must have started with that profile (`netsim<i>.jsonl` netsim_start). The listen host
 /// talks to its own server (no proxy by design).
 fn netsim_rule(c: &mut Checks, x: &Ctx) {
-    const ORDER: [&str; 7] = ["none", "lan", "good", "typical", "wifi", "bad", "awful"];
+    const ORDER: [&str; 9] = ["none", "lan", "good", "typical", "wifi", "intl", "bad", "far", "awful"];
     let rank = |p: &str| ORDER.iter().position(|o| *o == p);
     let want_spec = x.sc["netsim"].as_str().unwrap_or("typical").to_string();
     let wants: Vec<&str> = want_spec.split(',').map(str::trim).collect();
@@ -1824,8 +2035,11 @@ pub fn evaluate(run: &Path, repo: &Path, scenario_override: Option<&str>) -> any
     for extra in sc["extra_rules"].as_array().into_iter().flatten().filter_map(|v| v.as_str()) {
         let judged = match extra {
             "POSE-1" => { pose1(&mut c, &x); true }
+            "SMOOTH-1" => { netfeel1(&mut c, &x); true }
+            "SPAWN-1" => { spawn1(&mut c, &x); true }
             "PAWN-1" => { pawn1(&mut c, &x); true }
             "WORLD-1" => { world1(&mut c, &x); true }
+            "WORLD-2" => { world2(&mut c, &x); true }
             "COMBAT-1" => { combat1(&mut c, &x); true }
             _ => false,
         };

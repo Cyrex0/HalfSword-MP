@@ -30,6 +30,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "native_neutralise" })
     T.isolated(T.script, "case", { kind = "native_wservo" })
     T.isolated(T.script, "case", { kind = "wpn_status" })
+    T.isolated(T.script, "case", { kind = "skeleton_ref" })
     return
 end
 
@@ -634,4 +635,33 @@ if opts.kind == "wpn_status" then
     T.check(calls == 3, "a new entry (weapon change) reads the new weapon at once", calls)
     T.check(PX.wpn_status(nil, nil, 2300) == "-", "no weapon: no call")
     T.check(#M.dead_touch == 0, "the freed weapon was never touched", T.repr(M.dead_touch))
+end
+
+if opts.kind == "skeleton_ref" then
+    -- Parent offsets measured on a stretched stand-in are replaced by the reference
+    -- skeleton (scaled to the character); the stretch measure sees a pulled joint.
+    local api = boot(true)
+    local P = api.PURE
+    local k = 1.06
+    local loc = {}
+    for i = 2, #P.V2_REF_T do local r = P.V2_REF_T[i]; loc[i] = { r[1] * k, r[2] * k, r[3] * k } end
+    local out, fixed, ks = P.ref_loc(loc)
+    T.check(fixed == 0 and math.abs(ks - k) < 1e-6, "an intact body keeps its own offsets", T.repr({ fixed, ks }))
+    loc[17] = { 60, 0, 0 }   -- hand_r 60 uu from the forearm (reference 27.25 x k)
+    loc[19] = nil            -- calf_l not measured
+    out, fixed = P.ref_loc(loc)
+    T.check(fixed == 2 and math.abs(P.len3(out[17]) - 27.25 * k) < 1e-3 and out[19] ~= nil,
+        "a stretched and a missing offset come from the reference", T.repr({ fixed, out[17], out[19] }))
+    -- a pose built from the reference, then one joint pulled 12 uu
+    local pos, len = { { 0, 0, 100 } }, {}
+    for i = 2, #P.V2_REF_T do
+        local par, r = pos[P.V2_PARENT[i]], P.V2_REF_T[i]
+        pos[i] = { par[1] + r[1], par[2] + r[2], par[3] + r[3] }
+        len[i] = P.len3(r)
+    end
+    local d0 = P.stretch(pos, len)
+    T.check(d0 < 1e-6, "no stretch on the reference pose", d0)
+    pos[13] = { pos[13][1] + 12, pos[13][2], pos[13][3] }   -- hand_l pulled off the forearm
+    local d, b = P.stretch(pos, len)
+    T.check(d > 10 and (b == 13 or b == 12), "a pulled joint is measured", T.repr({ d, b }))
 end

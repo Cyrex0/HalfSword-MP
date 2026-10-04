@@ -12,6 +12,7 @@
 //!       LIST
 //!       SAY <text>
 //!       SHUTDOWN
+//!       REPORT            the newest 10 s stats report (lines, then END)
 //!       ADMIN ADD|REMOVE <peer_id|player_id|key>, ADMIN LIST
 //!     Each command answers with a one-line text status.
 //!   • Admins: never the first joiner. Listen host:
@@ -35,6 +36,7 @@ mod validate;
 pub(crate) use hsmp_pose::posecodec;
 mod loadout;
 mod master_client;
+mod nat; // NAT traversal: router port mapping, STUN, punch probes
 mod rcon;
 mod perf;
 mod relay;
@@ -47,6 +49,9 @@ mod events;
 mod proc_util;
 mod ipkey; // per-IP limits key IPv6 by /64
 mod build_id;
+mod log_init; // stdout + the --log-dir files
+mod server_report; // --report: the redacted bug-report zip of this server's logs
+mod stats; // the 10 s stats line, the shutdown summary, RCON REPORT
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -160,6 +165,43 @@ struct Args {
     #[arg(long)]
     pid_file: Option<PathBuf>,
 
+    /// Log files: `server-<YYYYMMDD>.log` and `server-events-<YYYYMMDD>.jsonl` (one JSON object
+    /// per log event), kept 14 days / 500 MB. Default: HSMP_LOG_DIR, else
+    /// `<state dir>/logs/server` (`$HSMP_STATE_DIR`, else %LOCALAPPDATA%\HSMP). A listen host
+    /// (HSMP_LISTEN_HOST=1) logs to the folder the game passes (`server.log`), else stdout only.
+    #[arg(long)]
+    log_dir: Option<PathBuf>,
+
+    /// No log files (stdout only).
+    #[arg(long)]
+    no_log_file: bool,
+
+    /// Log level: error, warn, info (default), debug, trace, or a full RUST_LOG-style filter
+    /// (`hsmp_server=debug,hsmp_net=info`). Default: RUST_LOG, else info.
+    #[arg(long)]
+    log_level: Option<String>,
+
+    /// Write a bug-report zip of this server's recent logs (redacted: user names, keys,
+    /// passwords; player IP addresses numbered) and exit. See --report-out / --report-upload.
+    #[arg(long)]
+    report: bool,
+
+    /// `--report`: where to write the zip (default `<log dir>/hsmp-server-report-<stamp>.zip`).
+    #[arg(long, requires = "report")]
+    report_out: Option<PathBuf>,
+
+    /// `--report`: also upload it to the HSMP master (`/v1/reports`) and print the report id.
+    #[arg(long, requires = "report")]
+    report_upload: bool,
+
+    /// `--report`: keep player IP addresses (the server's own public address is still removed).
+    #[arg(long, requires = "report")]
+    report_keep_ips: bool,
+
+    /// `--report`: how many days of logs to include.
+    #[arg(long, default_value_t = 2, requires = "report")]
+    report_days: u64,
+
     /// Exit cleanly when this process (e.g. the listen host's game) exits.
     #[arg(long)]
     parent_pid: Option<u32>,
@@ -186,6 +228,30 @@ struct Args {
     /// Re-read when it changes; RCON `ADMIN ADD` appends to it.
     #[arg(long)]
     admins_file: Option<PathBuf>,
+
+    /// Open the UDP port on the router automatically (UPnP-IGD, PCP, NAT-PMP), renew the
+    /// lease and remove it on a clean shutdown: auto | off.
+    #[arg(long, env = "HSMP_PORT_MAP", default_value = "auto")]
+    port_map: String,
+
+    /// STUN servers (host:port, comma-separated) asked from the game port for the public
+    /// endpoint; "" = the public defaults (Cloudflare, Google), "off" = none (no NAT
+    /// detection, no hole punching).
+    #[arg(long, env = "HSMP_STUN_SERVERS", default_value = "")]
+    stun: String,
+
+    /// Take hole-punch requests relayed by the server list when the router port is not
+    /// open: auto | off.
+    #[arg(long, env = "HSMP_PUNCH", default_value = "auto")]
+    punch: String,
+
+    /// Test only: behave as if behind a NAT that drops unsolicited inbound UDP.
+    #[arg(long, hide = true)]
+    emulate_nat: bool,
+}
+
+fn switch_on(v: &str) -> bool {
+    !matches!(v.trim().to_ascii_lowercase().as_str(), "off" | "0" | "false" | "no")
 }
 
 #[cfg(windows)]
@@ -277,13 +343,6 @@ mod json_key_order_tests {
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "hsmp_server=info".into()),
-        )
-        .init();
-
     let args = Args::parse();
     if args.build_info {
         println!("{}", build_id::identity().to_json());
@@ -295,6 +354,25 @@ async fn main() -> Result<()> {
             .with_context(|| format!("{} not found under {}", hsmp_net::build::content::TEMPLATE, repo.display()))?;
         if lua { print!("{}", id.to_lua()) } else { println!("{}", id.to_json()) }
         return Ok(());
+    }
+    let listen_host = std::env::var("HSMP_LISTEN_HOST").is_ok_and(|v| v.trim() == "1");
+    let log_dir = server_log_dir(args.log_dir.as_deref(), listen_host, args.no_log_file);
+    let filter = log_init::filter_spec(args.log_level.as_deref(), std::env::var("RUST_LOG").ok().as_deref(), "hsmp_server", "hsmp_server=info");
+    if args.report {
+        log_init::init_with(&filter, None);
+        let dir = log_dir.clone().unwrap_or_else(|| state_base().join("logs").join("server"));
+        return server_report::run(&dir, &server_report::Opts {
+            out: args.report_out.clone(),
+            upload: args.report_upload,
+            keep_ips: args.report_keep_ips,
+            days: args.report_days,
+        }).await;
+    }
+    let _log_guard = log_init::init_with(&filter, log_dir.as_deref().map(|dir| log_init::FileOpts { dir, name: "server", daily: !listen_host, events: true }));
+    install_panic_log();
+    stats::start();
+    if let Some(d) = &log_dir {
+        info!(dir = %d.display(), daily = !listen_host, filter = %filter, "log files");
     }
     info!(bind = %args.bind, tick_hz = args.tick_hz, max_peers = args.max_peers, "hsmp-server starting");
 
@@ -369,9 +447,16 @@ async fn main() -> Result<()> {
         content_hash: content_hash.map(hex::encode).unwrap_or_default(),
     });
 
+    info!(version = build_id::VERSION, protocol = %format!("v{}..=v{}", hsmp_net::net::VERSION_MIN, hsmp_net::net::VERSION_MAX),
+          bind = %args.bind, local = %socket.local_addr()?, listen_host, max_peers = args.max_peers, tick_hz = args.tick_hz,
+          name = %server_info::advertised().name, mode = %server_info::advertised().mode, region = %server_info::advertised().region,
+          map = %server_info::advertised().default_map, content_check = content_hash.is_some(),
+          master = %std::env::var("HSMP_MASTER_URL").unwrap_or_default(), rcon = ?args.rcon_bind, client_budget_kbps = args.client_budget_kbps,
+          "server config");
     server::seed_arena(&state, &env_or(&args.map, "", "HSMP_LOBBY_MAP")).await;
     relay::set_client_budget_kbps(args.client_budget_kbps);
     perf::spawn_reporter();
+    stats::spawn(state.clone());
     let rx = tokio::spawn(server::recv_loop(socket.clone(), state.clone()));
     let tick = tokio::spawn(server::tick_loop(
         socket.clone(),
@@ -379,17 +464,31 @@ async fn main() -> Result<()> {
         args.tick_hz,
     ));
 
+    // NAT traversal: router port mapping, STUN from this socket, punch probes (nat/).
+    let bound = socket.local_addr()?;
+    // A loopback-bound server cannot reach public STUN servers: only an explicit list.
+    let stun = if args.stun.trim().is_empty() && bound.ip().is_loopback() { Vec::new() } else { nat::stun_servers(&args.stun) };
+    let nat = nat::spawn(socket.clone(), bound, nat::Opts {
+        port_map: switch_on(&args.port_map),
+        stun,
+        punch: switch_on(&args.punch),
+        emulate: args.emulate_nat,
+    });
+    // The listen host's owner hears how reachable the server is (NET_STATUS notice).
+    tokio::spawn(server::net_status_notices(state.clone()));
+
     // Register with master if HSMP_MASTER_URL set.
     let mut master = None;
     if let Some(master_url) = std::env::var("HSMP_MASTER_URL").ok().filter(|u| !u.trim().is_empty()) {
         let bind = socket.local_addr()?;
         info!(master = %master_url, "registering with master");
+        stats::master_url(&master_url);
         match master_client::MasterClient::new(master_url, bind, &static_key) {
             Ok(c) => {
                 let c = Arc::new(c);
                 // Runs forever: retries registration with backoff, re-registers if
                 // the master forgets us, heartbeats live player count + map.
-                tokio::spawn(c.clone().run(state.clone()));
+                tokio::spawn(c.clone().run(state.clone(), socket.clone()));
                 master = Some(c);
             }
             Err(e) => warn!(error = %e, "master client disabled"),
@@ -435,8 +534,42 @@ async fn main() -> Result<()> {
     if let Some(m) = &master {
         m.deregister().await;
     }
+    stats::shutdown_summary();
+    nat.shutdown().await;
     events::emit("server_stop", serde_json::json!({}));
     Ok(())
+}
+
+/// `$HSMP_STATE_DIR`, else %LOCALAPPDATA%\HSMP, else the working directory (as the identity key).
+fn state_base() -> PathBuf {
+    net::default_key_path().parent().map(PathBuf::from).unwrap_or_default()
+}
+
+/// `--log-dir` / HSMP_LOG_DIR; a listen host without one logs to stdout only; a dedicated
+/// server defaults to `<state dir>/logs/server`.
+fn server_log_dir(arg: Option<&std::path::Path>, listen_host: bool, off: bool) -> Option<PathBuf> {
+    if off {
+        return None;
+    }
+    match log_init::dir_from(arg) {
+        Some(d) => Some(d),
+        None if listen_host => None,
+        None => Some(state_base().join("logs").join("server")),
+    }
+}
+
+/// A panic anywhere is logged with its backtrace (and the file flushed) before the default
+/// hook runs.
+fn install_panic_log() {
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let bt = std::backtrace::Backtrace::force_capture();
+        tracing::error!(thread = std::thread::current().name().unwrap_or("?"), "panic: {info}
+backtrace:
+{bt}");
+        log_init::flush();
+        prev(info);
+    }));
 }
 
 /// The advertised mode (flag, else HSMP_SERVER_MODE), as main() resolves it.

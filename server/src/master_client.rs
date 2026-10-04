@@ -103,7 +103,7 @@ impl reqwest::dns::Resolve for Ipv4Only {
 }
 
 enum RegisterOutcome {
-    Ok { server_id: String, secret: String, heartbeat_s: u64 },
+    Ok { server_id: String, secret: String, heartbeat_s: u64, port: u16, punch: bool },
     Throttled,
     Failed(String),
 }
@@ -114,6 +114,19 @@ enum Beat {
     Forgotten,
     Failed(String),
 }
+
+/// Why the heartbeat loop ended.
+#[derive(Debug, PartialEq, Eq)]
+enum End {
+    /// The master forgot the listing.
+    Forgotten,
+    /// The port players must use, or whether we take punches, changed (nat/): the old
+    /// listing is removed and a new one registered.
+    Moved,
+}
+
+/// A NAT change re-registers at most this often (a flapping STUN answer must not churn the list).
+const MOVE_MIN_GAP: Duration = Duration::from_secs(60);
 
 /// One registration with one master.
 pub struct MasterClient {
@@ -129,6 +142,8 @@ pub struct MasterClient {
     clock_offset_ms: std::sync::atomic::AtomicI64,
     /// The listing this server holds right now (for the shutdown delete).
     current: Mutex<Option<String>>,
+    /// The game socket is IPv4: the punch relay connects over IPv4 too.
+    v4: bool,
 }
 
 impl MasterClient {
@@ -153,6 +168,7 @@ impl MasterClient {
             last_ts: Mutex::new(0),
             clock_offset_ms: std::sync::atomic::AtomicI64::new(0),
             current: Mutex::new(None),
+            v4: bind.is_ipv4(),
         })
     }
 
@@ -177,12 +193,20 @@ impl MasterClient {
 
     async fn register_once(&self, state: &ServerState) -> RegisterOutcome {
         let a = server_info::advertised();
+        // The port that works from outside (a router mapping, the NAT's own mapping) and how.
+        let nat = crate::nat::status();
+        let port = nat.advertised_port();
+        let port = if port == 0 { self.port } else { port };
+        let punch = nat.wants_punch();
+        if port != self.port {
+            info!(bind_port = self.port, listed_port = port, "listing the router / NAT port, not the bound one");
+        }
         let (players, map) = server_info::live(state);
         let nonce = gen_nonce();
         let req = RegisterReq {
             name: a.name.clone(),
             host: Some(String::new()),
-            port: self.port,
+            port,
             mode: server_info::live_mode(state),
             map,
             players,
@@ -199,6 +223,8 @@ impl MasterClient {
             nonce,
             listing_key: Some(auth::public_hex(&self.key)),
             ts: Some(self.next_ts()),
+            nat: Some(nat.nat_kind().to_string()).filter(|k| !k.is_empty()),
+            punch: Some(punch),
         };
         let body = match serde_json::to_vec(&req) {
             Ok(b) => b,
@@ -225,7 +251,7 @@ impl MasterClient {
             return RegisterOutcome::Failed(format!("status {st}: {}", body.chars().take(120).collect::<String>()));
         }
         match resp.json::<RegisterResp>().await {
-            Ok(b) => RegisterOutcome::Ok { server_id: b.server_id, secret: b.secret, heartbeat_s: heartbeat_secs(b.heartbeat_s) },
+            Ok(b) => RegisterOutcome::Ok { server_id: b.server_id, secret: b.secret, heartbeat_s: heartbeat_secs(b.heartbeat_s), port, punch },
             Err(e) => RegisterOutcome::Failed(format!("parse: {e}")),
         }
     }
@@ -241,6 +267,7 @@ impl MasterClient {
             hmac: hmac_sig(secret, self.port, &server_info::advertised().name, &nonce),
             nonce,
             ts: Some(self.next_ts()),
+            nat: Some(crate::nat::status().nat_kind().to_string()).filter(|k| !k.is_empty()),
         };
         let body = serde_json::to_vec(&hb).unwrap_or_default();
         match self.send(reqwest::Method::POST, &format!("/v1/heartbeat/{server_id}"), body).await {
@@ -251,56 +278,111 @@ impl MasterClient {
         }
     }
 
-    /// Heartbeat until the master forgets us (returns) — transient errors are logged and
-    /// retried on the next tick.
-    async fn heartbeat_loop(&self, state: &ServerState, server_id: &str, secret: &str, every_s: u64) {
+    /// Heartbeat until the master forgets us or the NAT state the listing describes changes
+    /// (returns why); transient errors are logged and retried on the next tick.
+    async fn heartbeat_loop(&self, state: &ServerState, server_id: &str, secret: &str, every_s: u64, port: u16, punch: bool) -> End {
         let mut ticker = time::interval(Duration::from_secs(every_s));
         ticker.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
         ticker.tick().await; // skip the immediate first tick
+        let mut nat = crate::nat::subscribe();
+        let mut nat_live = true;
+        let since = std::time::Instant::now();
+        let moved = || {
+            let s = crate::nat::status();
+            (s.advertised_port() != port || s.wants_punch() != punch).then(|| (s.advertised_port(), s.wants_punch()))
+        };
         let mut fails = 0u32;
         loop {
-            ticker.tick().await;
+            let beat_now = tokio::select! {
+                _ = ticker.tick() => true,
+                r = nat.changed(), if nat_live => {
+                    if r.is_err() { nat_live = false; }
+                    false
+                }
+            };
+            // a listing younger than MOVE_MIN_GAP moves at a later tick
+            if let Some((new_port, new_punch)) = moved().filter(|_| since.elapsed() >= MOVE_MIN_GAP) {
+                info!(old_port = port, port = new_port, punch = new_punch, "reachability changed; listing again");
+                return End::Moved;
+            }
+            if !beat_now {
+                continue;
+            }
             match self.beat(state, server_id, secret).await {
                 Beat::Ok => {
+                    crate::stats::master_ok();
                     if fails > 0 {
                         info!(after = fails, "master heartbeat recovered");
                     }
                     fails = 0;
                 }
                 Beat::Forgotten => {
+                    crate::stats::master_unlisted();
                     warn!("master forgot us (expired / restarted); re-registering");
-                    return;
+                    return End::Forgotten;
                 }
                 Beat::Failed(why) => {
                     fails += 1;
+                    crate::stats::master_failed(&why);
                     warn!(error = %why, fails, "heartbeat failed (master unreachable?)");
                 }
             }
         }
     }
 
-    /// Register + heartbeat forever.
-    pub async fn run(self: Arc<Self>, state: Arc<ServerState>) {
+    /// Register + heartbeat forever. While the listing wants punches (nat::Status::wants_punch)
+    /// the punch relay socket to the master is held open (nat/listen.rs).
+    pub async fn run(self: Arc<Self>, state: Arc<ServerState>, socket: Arc<tokio::net::UdpSocket>) {
+        // The first registration lists the port the router / NAT really uses.
+        crate::nat::settled(Duration::from_secs(10)).await;
         let mut backoff = 0u64;
         loop {
             match self.register_once(&state).await {
-                RegisterOutcome::Ok { server_id, secret, heartbeat_s } => {
-                    info!(server_id = %server_id, master = %self.url, heartbeat_s, "registered with master");
+                RegisterOutcome::Ok { server_id, secret, heartbeat_s, port, punch } => {
+                    info!(server_id = %server_id, master = %self.url, heartbeat_s, port, punch, "registered with master");
+                    crate::stats::master_ok();
+                    self.note_public_addr().await;
                     backoff = 0;
                     *self.current.lock().unwrap_or_else(|e| e.into_inner()) = Some(server_id.clone());
-                    self.heartbeat_loop(&state, &server_id, &secret, heartbeat_s).await;
+                    let relay = punch.then(|| {
+                        let me = self.clone();
+                        let ts: Arc<dyn Fn() -> u64 + Send + Sync> = Arc::new(move || me.next_ts());
+                        tokio::spawn(crate::nat::listen::run(self.url.clone(), server_id.clone(), self.key.clone(), ts, socket.clone(), self.v4))
+                    });
+                    let end = self.heartbeat_loop(&state, &server_id, &secret, heartbeat_s, port, punch).await;
+                    if let Some(h) = relay {
+                        h.abort();
+                        crate::nat::set_listening(false);
+                    }
+                    if end == End::Moved {
+                        self.deregister().await;
+                    }
                     *self.current.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 }
                 RegisterOutcome::Throttled => {
+                    crate::stats::master_failed("register throttled (429)");
                     warn!(retry_s = THROTTLED_RETRY_SECS, "master register throttled (429)");
                     time::sleep(Duration::from_secs(THROTTLED_RETRY_SECS)).await;
                 }
                 RegisterOutcome::Failed(why) => {
                     backoff = next_backoff(backoff);
+                    crate::stats::master_failed(&why);
                     warn!(error = %why, retry_s = backoff, url = %self.url, "master register failed");
                     time::sleep(Duration::from_secs(backoff)).await;
                 }
             }
+        }
+    }
+
+    /// The address the master lists us under (what `/v1/myaddr` sees), for the log and the
+    /// stats line. Best effort.
+    async fn note_public_addr(&self) {
+        let Ok(r) = self.http.get(format!("{}/v1/myaddr", self.url)).send().await else { return };
+        let Ok(v) = r.json::<serde_json::Value>().await else { return };
+        if let Some(ip) = v["ip"].as_str() {
+            let addr = if ip.contains(':') { format!("[{ip}]:{}", self.port) } else { format!("{ip}:{}", self.port) };
+            info!(listed = %addr, "listed address (as the master sees this server)");
+            crate::stats::master_public(&addr);
         }
     }
 
@@ -310,7 +392,10 @@ impl MasterClient {
         let req = DeleteReq { nonce: gen_nonce(), hmac: "0".repeat(64), ts: Some(self.next_ts()) };
         let body = serde_json::to_vec(&req).unwrap_or_default();
         match self.send(reqwest::Method::DELETE, &format!("/v1/servers/{id}"), body).await {
-            Ok(r) if r.status().is_success() => info!(server_id = %id, "removed from master"),
+            Ok(r) if r.status().is_success() => {
+                crate::stats::master_unlisted();
+                info!(server_id = %id, "removed from master")
+            }
             Ok(r) => warn!(status = %r.status(), "master delete refused"),
             Err(e) => warn!(error = %e, "master delete failed"),
         }

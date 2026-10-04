@@ -227,7 +227,21 @@ impl Net {
         let now = self.now_ms();
         let inc = self.ep().handle(now, from, dg);
         match inc {
-            Incoming::Reply(r) => (Action::None, vec![(from, r)]),
+            Incoming::Reply(r) => {
+                // a Hello refused before any state (protocol or content mismatch)
+                if let Ok(p) = hn::handshake::parse_pre_reject(&r) {
+                    let why = match p.code {
+                        hn::handshake::reject_code::VERSION => "version",
+                        hn::handshake::reject_code::CONTENT => "content",
+                        _ => "other",
+                    };
+                    crate::stats::refused(why);
+                    if crate::validate::rate::log_ok("join_refused") {
+                        tracing::info!(%from, code = p.code, why, text = %p.text, "join refused: {why} mismatch");
+                    }
+                }
+                (Action::None, vec![(from, r)])
+            }
             Incoming::AuthRequest(p) => (Action::Auth(p), Vec::new()),
             Incoming::Data { cid, deliveries, migrated_from, probe } => {
                 // The peer key of this connection (the address admission
@@ -581,6 +595,13 @@ impl Net {
                 min_rtt_ms: s.min_rtt_ms,
             }))
             .collect()
+    }
+
+    /// Every connection's transport counters, keyed by peer address (the 10 s stats line).
+    pub fn conn_stats_by_addr(&self) -> Vec<(SocketAddr, hn::ConnStats)> {
+        let m: Vec<(SocketAddr, ConnId)> = self.maps().by_addr.iter().map(|(a, c)| (*a, *c)).collect();
+        let ep = self.ep();
+        m.into_iter().filter_map(|(a, c)| ep.conn(c).map(|cn| (a, cn.stats()))).collect()
     }
 
     /// Addresses with a live connection.

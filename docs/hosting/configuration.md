@@ -9,7 +9,7 @@ prints the same list as the table below.
 
 | Flag | Default | Environment fallback | What it does |
 |---|---|---|---|
-| `--bind <ip:port>` | `0.0.0.0:7777` | | UDP address for players and browser queries. Use `[::]:7777` for IPv6. The port is also what the server advertises to the master. |
+| `--bind <ip:port>` | `0.0.0.0:7777` | | UDP address for players and browser queries. Use `[::]:7777` for IPv6. The master lists this port, unless the router or the NAT maps it to another one (see `--port-map`, `--stun`). |
 | `--max-peers <n>` | `8` | | Most players at once. Further joins are refused. |
 | `--name <text>` | `Half Sword MP` | `HSMP_SERVER_NAME` | Server name in the browser and on the master. Control characters are removed; cut to 48 characters. |
 | `--mode <text>` | `duel` | `HSMP_SERVER_MODE` | Mode **label** in the browser (cut to 32 characters). It does not change the rules: every match is duel-style rounds. A label starting with "Best of" is rewritten to the live best-of value. |
@@ -32,6 +32,13 @@ prints the same list as the table below.
 | `--events <path>` | off | | Appends structured JSONL match events to a file (used by the test tools). |
 | `--pid-file <path>` | off | | Writes a small JSON file with the process id at start and removes it on a clean exit. |
 | `--parent-pid <pid>` | off | | Exit when that process exits (used when hosting from the game). |
+| `--log-dir <folder>` | `<state dir>/logs/server` | `HSMP_LOG_DIR` | Daily log files and the JSON-lines events file, kept 14 days / 500 MB ([Logs and diagnostics](logs-and-diagnostics.md)). |
+| `--no-log-file` | off | | Standard output only. |
+| `--log-level <level>` | info | `RUST_LOG` | `error`, `warn`, `info`, `debug`, `trace`, or a `RUST_LOG`-style filter. |
+| `--report` | | | Write a redacted bug-report zip of the recent logs and exit (`--report-out`, `--report-upload`, `--report-keep-ips`, `--report-days`). |
+| `--port-map <auto, off>` | `auto` | `HSMP_PORT_MAP` | Open the UDP port on the router (UPnP-IGD, PCP, NAT-PMP), renew the lease, remove it on a clean shutdown. Never for a `127.0.0.1` or IPv6 bind. See [Ports and firewall](ports-and-firewall.md#automatic-upnp-pcp-nat-pmp). |
+| `--stun <host:port,...>` | Cloudflare, Google, Nextcloud | `HSMP_STUN_SERVERS` | STUN servers asked from the game port for the public address and NAT type. `off` = no NAT detection and no hole punching. Off by default on a `127.0.0.1` bind. |
+| `--punch <auto, off>` | `auto` | `HSMP_PUNCH` | Take hole-punch requests the server list relays when the router port is not open (needs STUN and `HSMP_MASTER_URL`). |
 | `-V`, `--version` | | | Print the version. |
 
 How the environment fallbacks work: `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSMP_LOBBY_MAP` and

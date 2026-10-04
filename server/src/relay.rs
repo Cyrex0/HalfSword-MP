@@ -6,7 +6,11 @@
 //!   target rate by relevance (the two nearest players' skeletons at the
 //!   sender's full rate, never below 30 Hz; root 30/20 Hz; weapon 5 Hz, it
 //!   has no in-game reader) and the plan is fitted into the recipient's
-//!   budget farthest-first, never below each stream's floor.
+//!   budget farthest-first, never below each stream's floor. The two nearest
+//!   are never far-thinned, a slow sender is never thinned below a floor, and
+//!   a recipient with no body in play (spectator, dead) ranks everyone
+//!   nearest. The bucket keeps room for the nearest players' floors even
+//!   under a congestion cut.
 //! * Per-recipient bandwidth budget — token bucket over everything sent to a
 //!   peer; stream frames are dropped (never reliable events) when it runs dry,
 //!   skeletal before root. The bucket never goes below −burst, the
@@ -17,12 +21,13 @@
 //!   interval (the pose record's `aux`, caps::POSE_RATE) and tells lag
 //!   comp which frames the recipient was actually sent (`note_relayed`).
 //! * Path congestion per recipient: when the connection to a recipient shows
-//!   a standing queue (smoothed RTT well above its minimum), or heavy loss
-//!   together with some queue, that recipient's budget shrinks (x0.7, at most
-//!   once a second, never below a quarter) and grows back by 5 % per plan once
-//!   the path is clear. A listen host on a 2-5 Mbit/s home upload fills its
-//!   own uplink long before the fixed budget is reached; this keeps the
-//!   router queue, and everyone's latency, short.
+//!   a standing queue (smoothed RTT well above its minimum for two plans in a
+//!   row; a jitter spike is not one), or heavy loss together with some queue,
+//!   that recipient's budget shrinks (x0.7, at most once a second, never
+//!   below a quarter) and grows back by 5 % per plan once the path is clear.
+//!   A listen host on a 2-5 Mbit/s home upload fills its own uplink long
+//!   before the fixed budget is reached; this keeps the router queue, and
+//!   everyone's latency, short.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -82,6 +87,16 @@ struct RelayInner {
     srcs_n: usize,
     /// Congestion state of the path to each recipient.
     paths: HashMap<SocketAddr, PathCtl>,
+    /// Recipients with no body in play (spectators, the dead): every player
+    /// is relevant to them, wherever their parked body is.
+    free: std::collections::HashSet<SocketAddr>,
+    /// Bandwidth the two nearest players' streams need at their floors
+    /// (bytes/s): a congestion cut never takes a budget below it.
+    floor_bps: HashMap<SocketAddr, f64>,
+    /// Per sender since the last report: pose frames in, and refused before
+    /// the relay (rate gate, lag comp); skeletal frames relayed per pair.
+    diag_in: HashMap<SocketAddr, (u32, u32)>,
+    diag_out: HashMap<(SocketAddr, SocketAddr), u32>,
 }
 
 /// Transport counters of the connection to one recipient (cumulative).
@@ -104,6 +119,8 @@ struct PathCtl {
     /// a route change to a longer path is not read as a queue forever.
     base_ms: f64,
     last_cut: Option<Instant>,
+    /// Consecutive plans that saw congestion.
+    over: u8,
 }
 
 /// A standing queue this deep (smoothed RTT over the base) is congestion.
@@ -121,13 +138,15 @@ const SCALE_CUT: f64 = 0.7;
 const SCALE_STEP: f64 = 0.05;
 const SCALE_MIN: f64 = 0.25;
 const CUT_EVERY: Duration = Duration::from_millis(1000);
+/// Plans in a row that must see the queue before the first cut.
+const CONGESTED_PLANS: u8 = 2;
 /// Share of the gap by which the base RTT drifts up per plan (about half
 /// way in 35 s).
 const BASE_DRIFT: f64 = 0.01;
 
 impl PathCtl {
     fn new(s: &PathSample) -> Self {
-        PathCtl { scale: 1.0, sent: s.pkts_sent, lost: s.pkts_lost, base_ms: 0.0, last_cut: None }
+        PathCtl { scale: 1.0, sent: s.pkts_sent, lost: s.pkts_lost, base_ms: 0.0, last_cut: None, over: 0 }
     }
 
     /// One plan period's counters: cut on congestion, else recover.
@@ -149,8 +168,11 @@ impl PathCtl {
         let queue = (s.srtt_ms - self.base_ms).max(0.0);
         let loss = if sent >= LOSS_MIN_PKTS { lost as f64 / sent as f64 } else { 0.0 };
         let congested = queue > QUEUE_CONGESTED_MS || (loss > LOSS_CONGESTED && queue > LOSS_QUEUE_MS);
+        // A queue must stand for two plans (about a second): a jitter spike
+        // (Wi-Fi, a long jittery route) decays within one, a full uplink does not.
+        self.over = if congested { self.over.saturating_add(1) } else { 0 };
         if congested {
-            if self.last_cut.is_none_or(|t| now.duration_since(t) >= CUT_EVERY) {
+            if self.over >= CONGESTED_PLANS && self.last_cut.is_none_or(|t| now.duration_since(t) >= CUT_EVERY) {
                 self.scale = (self.scale * SCALE_CUT).max(SCALE_MIN);
                 self.last_cut = Some(now);
             }
@@ -163,6 +185,11 @@ impl PathCtl {
 /// The sustained budget of `dst` (bytes/s): the configured one, scaled down
 /// while its path is congested.
 fn budget_of(r: &RelayInner, dst: &SocketAddr) -> f64 {
+    scaled_budget(r, dst).max(r.floor_bps.get(dst).copied().unwrap_or(0.0))
+}
+
+/// The configured budget times the path's congestion scale.
+fn scaled_budget(r: &RelayInner, dst: &SocketAddr) -> f64 {
     budget() * r.paths.get(dst).map_or(1.0, |p| p.scale)
 }
 
@@ -194,11 +221,13 @@ fn target_hz(stream: Stream, rank: u16, dist: f32) -> f64 {
     match stream {
         // The skeleton carries the pelvis: root only steers the stand-in
         // between frames and feeds relevance.
-        Stream::Root => if rank < NEAR && !far { 30.0 } else { 20.0 },
+        Stream::Root => if rank < NEAR { 30.0 } else { 20.0 },
         // No in-game reader (`.weapon_remote`): diagnostics only.
         Stream::Weapon => 5.0,
+        // The two nearest are who you fight or watch: never far-thinned
+        // (a spectator's parked body can be anywhere).
         Stream::Skel => {
-            if far { 15.0 } else if rank < NEAR { f64::INFINITY } else if rank < 4 { 30.0 } else { 15.0 }
+            if rank < NEAR { f64::INFINITY } else if far { 15.0 } else if rank < 4 { 30.0 } else { 15.0 }
         }
         Stream::Vitals => f64::INFINITY,
     }
@@ -217,19 +246,25 @@ fn floor_hz(stream: Stream, rank: u16) -> f64 {
 /// Send every `factor`-th frame of a `rate_hz` stream to get ≤ `hz`.
 fn factor_for(rate_hz: f64, hz: f64) -> u32 {
     if !hz.is_finite() || hz <= 0.0 { return 1; }
-    (rate_hz / hz).ceil().clamp(1.0, 64.0) as u32
+    (rate_hz / hz - FACTOR_SLACK).ceil().clamp(1.0, 64.0) as u32
 }
+
+/// Measurement noise a factor ignores: a sender measured at 61 Hz aimed at
+/// 30 Hz is 1 in 2 (not 1 in 3, 20 Hz), one at 59.8 Hz keeps a 30 Hz floor
+/// at 1 in 2.
+const FACTOR_SLACK: f64 = 0.15;
 
 /// Largest factor that keeps a `rate_hz` stream at or above `floor` Hz.
 fn max_factor(rate_hz: f64, floor: f64) -> u32 {
     if !floor.is_finite() { return 1; }
-    ((rate_hz / floor).floor() as u32).clamp(1, 64)
+    ((rate_hz / floor + FACTOR_SLACK).floor() as u32).clamp(1, 64)
 }
 
-/// The unfitted factor of a stream.
+/// The unfitted factor of a stream. A slow sender (a low frame rate) is
+/// never thinned below the stream's floor.
 fn factor(stream: Stream, rank: u16, dist: f32, rate_hz: f64) -> u32 {
     let rate = if rate_hz > 0.0 { rate_hz } else { DEFAULT_RATE_HZ };
-    factor_for(rate, target_hz(stream, rank, dist))
+    factor_for(rate, target_hz(stream, rank, dist)).min(max_factor(rate, floor_hz(stream, rank)))
 }
 
 /// One recipient chosen for a frame, and the pair's relay interval (ms).
@@ -244,6 +279,47 @@ impl Relay {
     /// The peer id at `addr` (admission, resume, migration).
     pub fn set_peer(&self, addr: SocketAddr, id: PeerId) {
         self.inner.lock().unwrap().ids.insert(addr, id);
+    }
+
+    /// The recipients with no body in play this round (spectators, the dead).
+    pub fn set_free_viewers(&self, free: impl IntoIterator<Item = SocketAddr>) {
+        self.inner.lock().unwrap().free = free.into_iter().collect();
+    }
+
+    /// A pose frame from `src` arrived; `relayed` = it passed the rate gate
+    /// and lag comp and went to the rate plan.
+    pub fn note_pose_in(&self, src: SocketAddr, relayed: bool) {
+        let mut r = self.inner.lock().unwrap();
+        let e = r.diag_in.entry(src).or_insert((0, 0));
+        e.0 += 1;
+        if !relayed { e.1 += 1; }
+    }
+
+    /// One line per pose sender since the last call: frames in and refused,
+    /// the measured rate the plan uses, and per recipient the frames relayed,
+    /// the planned factor and the pair's rank.
+    pub fn pose_report(&self, secs: f64) -> Vec<String> {
+        let mut r = self.inner.lock().unwrap();
+        let ids = r.ids.clone();
+        let name = |a: &SocketAddr| ids.get(a).map_or_else(|| a.to_string(), |id| format!("peer {id}"));
+        let secs = secs.max(1e-3);
+        let din = std::mem::take(&mut r.diag_in);
+        let dout = std::mem::take(&mut r.diag_out);
+        let mut srcs: Vec<SocketAddr> = din.keys().copied().collect();
+        srcs.sort();
+        srcs.into_iter().map(|src| {
+            let (n, refused) = din[&src];
+            let rate = r.src.get(&(src, Stream::Skel)).map_or(0.0, |s| s.rate);
+            let mut to: Vec<String> = dout.iter().filter(|((_, s), _)| *s == src).map(|((d, _), k)| {
+                let f = r.alloc.get(&(*d, src, Stream::Skel)).copied().unwrap_or(0);
+                let (rank, dist) = r.rank.get(&(*d, src)).copied().unwrap_or((0, 0.0));
+                let free = if r.free.contains(d) { " free" } else { "" };
+                format!("{} {:.0} Hz f={f} rank={rank} {dist:.0}uu{free}", name(d), *k as f64 / secs)
+            }).collect();
+            to.sort();
+            format!("pose relay {}: in {:.1} Hz, refused {:.1} Hz (rate gate / lag comp), planned rate {rate:.1} Hz | {}",
+                name(&src), n as f64 / secs, refused as f64 / secs, to.join(", "))
+        }).collect()
     }
 
     pub fn peer_id(&self, addr: &SocketAddr) -> Option<PeerId> {
@@ -276,6 +352,10 @@ impl Relay {
         r.counters.retain(|(d, s, _), _| d != addr && s != addr);
         r.alloc.retain(|(d, s, _), _| d != addr && s != addr);
         r.src.retain(|(s, _), _| s != addr);
+        r.free.remove(addr);
+        r.floor_bps.remove(addr);
+        r.diag_in.remove(addr);
+        r.diag_out.retain(|(d, s), _| d != addr && s != addr);
     }
 
     /// Every RANK_REFRESH: re-rank everyone by distance, measure the source
@@ -362,6 +442,7 @@ impl Relay {
             b.tokens -= wire_bytes as f64;
             if let Some(sh) = r.shares.get_mut(&(dst, src)) { sh.tokens -= wire_bytes as f64; }
             let interval_ms = (1000.0 / rate * f as f64).round().clamp(1.0, u16::MAX as f64) as u16;
+            if stream == Stream::Skel { *r.diag_out.entry((dst, src)).or_insert(0) += 1; }
             out.push(Pick { dst, interval_ms });
         }
         out
@@ -395,9 +476,10 @@ fn measure_rates(r: &mut RelayInner, dt_s: f64) {
 /// players' skeletons (never below 30 Hz), then their root.
 fn allocate(r: &mut RelayInner, dsts: &[SocketAddr]) {
     let mut alloc = HashMap::new();
+    let mut floor_bps = HashMap::new();
     for &dst in dsts {
         let other = r.other_rate.get(&dst).copied().unwrap_or(0.0);
-        let b = budget_of(r, &dst);
+        let b = scaled_budget(r, &dst);
         let target = (b * STREAM_SHARE - other).max(b * MIN_STREAM_SHARE);
         // (src, stream, rank, rate, bytes, factor, max_factor)
         let mut items: Vec<(SocketAddr, Stream, u16, f64, f64, u32, u32)> = Vec::new();
@@ -438,11 +520,19 @@ fn allocate(r: &mut RelayInner, dsts: &[SocketAddr]) {
                 if !changed { break; }
             }
         }
+        // The nearest players' root and skeleton at their floors: the bucket
+        // keeps room for them even under a congestion cut, or it would drop
+        // frames the plan (and the interval each frame carries) promised.
+        let near_floor: f64 = items.iter().filter(|x| x.2 < NEAR && x.1 != Stream::Weapon).map(|x| x.3 / x.6 as f64 * x.4).sum();
+        if near_floor > 0.0 {
+            floor_bps.insert(dst, ((near_floor + SKEL_RESERVE) / STREAM_SHARE + other).min(budget()));
+        }
         for (src, stream, _, _, _, f, _) in items {
             alloc.insert((dst, src, stream), f);
         }
     }
     r.alloc = alloc;
+    r.floor_bps = floor_bps;
 }
 
 fn refill(b: &mut Bucket, rate: f64) {
@@ -458,7 +548,10 @@ fn rerank(r: &mut RelayInner, dsts: &[SocketAddr]) {
     let all: Vec<SocketAddr> = dsts.to_vec();
     r.rank.clear();
     for &dst in &all {
-        let dp = r.pos.get(&dst).copied();
+        // A recipient with no body in play (a spectator watching anyone, the
+        // dead) ranks every player nearest: its parked body says nothing.
+        let free = r.free.contains(&dst);
+        let dp = if free { None } else { r.pos.get(&dst).copied() };
         let mut others: Vec<(SocketAddr, f32)> = all.iter().filter(|a| **a != dst).map(|&a| {
             let d = match (dp, r.pos.get(&a)) {
                 (Some(p), Some(q)) => ((p[0]-q[0]).powi(2) + (p[1]-q[1]).powi(2) + (p[2]-q[2]).powi(2)).sqrt(),
@@ -468,8 +561,16 @@ fn rerank(r: &mut RelayInner, dsts: &[SocketAddr]) {
         }).collect();
         others.sort_by(|x, y| x.1.partial_cmp(&y.1).unwrap_or(std::cmp::Ordering::Equal));
         for (i, (a, d)) in others.into_iter().enumerate() {
-            r.rank.insert((dst, a), (i as u16, d));
+            r.rank.insert((dst, a), (if free { 0 } else { i as u16 }, d));
         }
+    }
+}
+
+impl Relay {
+    /// Diagnostics (the 10 s stats line): the budget the plan gives `dst` now, in bytes/s
+    /// (congestion scale applied).
+    pub fn budget_bps(&self, dst: &SocketAddr) -> f64 {
+        budget_of(&self.inner.lock().unwrap(), dst)
     }
 }
 
@@ -624,6 +725,8 @@ mod tests {
         let mut c = PathCtl::new(&sample(0, 0, 0.0, 0.0));
         c.update(&sample(100, 0, 50.0, 50.0), t0);
         c.update(&sample(200, 25, 100.0, 50.0), t0 + Duration::from_secs(1));
+        assert_eq!(c.scale, 1.0, "one plan is not a standing queue");
+        c.update(&sample(300, 50, 100.0, 50.0), t0 + Duration::from_millis(1500));
         assert!(c.scale < 1.0, "loss with a queue: {}", c.scale);
     }
 
@@ -766,5 +869,204 @@ mod tests {
         }
         println!("replan at 64 players: {:?}", took);
         assert!(took < Duration::from_millis(250), "replan took {took:?}");
+    }
+
+    /// Skeletal frames per second `dst` got from `src` over a `run`.
+    fn skel_hz(got: &HashMap<(SocketAddr, SocketAddr, Stream), u32>, dst: SocketAddr, src: SocketAddr, secs: f64) -> f64 {
+        got.get(&(dst, src, Stream::Skel)).copied().unwrap_or(0) as f64 / secs
+    }
+
+    /// The Rhinus join (beta.2): a late joiner spectates with its own body
+    /// parked far from the fight. Its two nearest players are never
+    /// far-thinned, and as a free viewer it gets every player at the
+    /// sender's full rate, with the interval its frames carry saying so.
+    #[test]
+    fn a_spectator_with_a_far_parked_body_gets_the_fight_at_full_rate() {
+        let a = addrs(4);
+        let place = |relay: &Relay| {
+            relay.update_pos(a[0], [40_000.0, 0.0, 0.0]); // the spectator's parked body
+            for (i, x) in a[1..].iter().enumerate() { relay.update_pos(*x, [i as f32 * 300.0, 0.0, 0.0]); }
+        };
+        // Not marked free: the two nearest at full rate although far.
+        let relay = Relay::default();
+        place(&relay);
+        let got = run(&relay, &a, 60, 6);
+        let mut hz: Vec<f64> = a[1..].iter().map(|s| skel_hz(&got, a[0], *s, 6.0)).collect();
+        hz.sort_by(|x, y| y.partial_cmp(x).unwrap());
+        assert!(hz[0] >= 55.0 && hz[1] >= 55.0, "nearest two of a far viewer: {hz:?}");
+        // Marked free (no body in play): everyone at full rate.
+        let relay = Relay::default();
+        place(&relay);
+        relay.set_free_viewers([a[0]]);
+        let got = run(&relay, &a, 60, 6);
+        for s in &a[1..] {
+            let h = skel_hz(&got, a[0], *s, 6.0);
+            assert!(h >= 55.0, "free viewer gets {s} at {h:.1} Hz");
+        }
+        for p in relay.select(a[1], &a, Stream::Skel, 392).into_iter().filter(|p| p.dst == a[0]) {
+            assert!(p.interval_ms <= 20, "{p:?}");
+        }
+        // The fighters still rank each other by distance.
+        let r = relay.inner.lock().unwrap();
+        assert_eq!(r.rank[&(a[1], a[2])].0, 0);
+        assert_eq!(r.rank[&(a[1], a[0])].0, 2, "the parked spectator is far for the fighters");
+    }
+
+    /// A slow sender (a listen host at 16 fps) is never thinned below the
+    /// floor: near it goes at its own rate, far it keeps 7.5 Hz.
+    #[test]
+    fn a_slow_sender_is_not_thinned_below_the_floor() {
+        for rank in [0u16, 1, 2, 5] {
+            for dist in [100.0f32, 9000.0] {
+                for rate in [8.0, 16.0, 24.0, 30.0, 45.0, 60.0, 61.0, 120.0] {
+                    let f = factor(Stream::Skel, rank, dist, rate);
+                    let hz = rate / f as f64;
+                    let floor = floor_hz(Stream::Skel, rank).min(rate);
+                    assert!(hz >= floor - 0.5, "rank {rank} {dist}uu {rate} Hz: f={f} -> {hz:.1} Hz < {floor}");
+                    if rank < NEAR { assert_eq!(f, 1, "nearest at the sender's rate ({rate} Hz, {dist}uu)"); }
+                }
+            }
+        }
+        // Rate-measurement noise does not cost a whole step.
+        assert_eq!(factor_for(61.0, 30.0), 2);
+        assert_eq!(factor_for(60.0, 15.0), 4);
+        assert_eq!(max_factor(59.8, 30.0), 2);
+    }
+
+    /// What a transport reports over `plans` plan periods of 500 ms: one RTT
+    /// sample per 16 ms frame, 1/8 smoothing and a running minimum;
+    /// `rtt(t_ms, seed)` is the path's RTT at time t.
+    fn path_samples(plans: u64, rtt: impl Fn(u64, &mut u64) -> f64) -> Vec<PathSample> {
+        let (mut srtt, mut min, mut seed, mut out) = (0.0f64, f64::INFINITY, 0x9e37_79b9_7f4a_7c15u64, vec![]);
+        for p in 0..plans {
+            for k in 0..31u64 {
+                let s = rtt(p * 500 + k * 16, &mut seed);
+                srtt = if srtt == 0.0 { s } else { srtt + (s - srtt) / 8.0 };
+                min = min.min(s);
+            }
+            out.push(sample((p + 1) * 31, 0, srtt, min));
+        }
+        out
+    }
+
+    fn rnd(seed: &mut u64) -> f64 {
+        *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (*seed >> 11) as f64 / (1u64 << 53) as f64
+    }
+
+    /// A healthy but long, jittery internet path (the ~179 ms route to the
+    /// Rhinus host: 60 ms of jitter, a 300 ms spike every 7 s, no loss) is not
+    /// congestion: the budget stays whole and two 60 Hz players reach the
+    /// recipient at full rate.
+    #[test]
+    fn a_long_jittery_path_without_loss_keeps_the_full_rate() {
+        let samples = path_samples(240, |t, s| {
+            let spike = if t % 7000 >= 6700 { 250.0 } else { 0.0 };
+            150.0 + 60.0 * rnd(s) + spike
+        });
+        let t0 = Instant::now();
+        let mut c = PathCtl::new(&sample(0, 0, 0.0, 0.0));
+        let mut lowest: f64 = 1.0;
+        for (i, s) in samples.iter().enumerate() {
+            c.update(s, t0 + Duration::from_millis(500 * i as u64));
+            lowest = lowest.min(c.scale);
+        }
+        assert_eq!(lowest, 1.0, "jitter read as a queue");
+        // Through the relay: 3 peers, the recipient on that path.
+        let relay = Relay::default();
+        let a = addrs(3);
+        for (i, x) in a.iter().enumerate() { relay.update_pos(*x, [i as f32 * 200.0, 0.0, 0.0]); }
+        let mut got: HashMap<SocketAddr, u32> = HashMap::new();
+        for (i, s) in samples.iter().take(60).enumerate() {
+            {
+                let mut r = relay.inner.lock().unwrap();
+                r.ranked_at = Instant::now().checked_sub(RANK_REFRESH + Duration::from_millis(1));
+                for b in r.buckets.values_mut() { b.last -= Duration::from_millis(500); }
+                for b in r.shares.values_mut() { b.last -= Duration::from_millis(500); }
+            }
+            let clear = sample(s.pkts_sent, 0, 40.0, 40.0);
+            let paths = vec![(a[0], *s), (a[1], clear), (a[2], clear)];
+            relay.replan_with_paths(&a, || paths);
+            for _ in 0..30 {
+                for &src in &a[1..] {
+                    for p in relay.select(src, &a, Stream::Skel, 700) {
+                        if p.dst == a[0] && i >= 10 { *got.entry(src).or_insert(0) += 1; }
+                    }
+                }
+            }
+        }
+        for src in &a[1..] {
+            let hz = got.get(src).copied().unwrap_or(0) as f64 / 25.0;
+            assert!(hz >= 58.0, "{src}: {hz:.1} Hz on a healthy 179 ms path");
+        }
+    }
+
+    /// The far path (~300 ms RTT, 50 ms of jitter each way): the RTT minimum sits
+    /// ~100 ms under the mean, which is jitter, not a queue.
+    #[test]
+    fn a_far_jittery_path_is_not_a_queue() {
+        // netsim far: AR(1) jitter per direction (tau 50 ms, sd 50/sqrt 3, clipped to 50)
+        let st = std::cell::Cell::new((0.0f64, 0.0f64));
+        let samples = path_samples(240, |_, s| {
+            let rho = (-16.0f64 / 50.0).exp();
+            let g = |s: &mut u64| (-2.0 * rnd(s).max(1e-12).ln()).sqrt() * (std::f64::consts::TAU * rnd(s)).cos();
+            let (a, b) = st.get();
+            let (a, b) = (rho * a + (1.0 - rho * rho).sqrt() * g(s), rho * b + (1.0 - rho * rho).sqrt() * g(s));
+            st.set((a, b));
+            let j = |x: f64| (x * 50.0 / 3f64.sqrt()).clamp(-50.0, 50.0);
+            300.0 + j(a) + j(b)
+        });
+        let t0 = Instant::now();
+        let mut c = PathCtl::new(&sample(0, 0, 0.0, 0.0));
+        let mut lowest: f64 = 1.0;
+        for (i, s) in samples.iter().enumerate() {
+            c.update(s, t0 + Duration::from_millis(500 * i as u64));
+            lowest = lowest.min(c.scale);
+        }
+        assert_eq!(lowest, 1.0, "jitter read as a queue");
+    }
+
+    /// With the path really congested (budget cut to the minimum, a low
+    /// configured budget) the two nearest players keep their 30 Hz floor:
+    /// the bucket leaves room for the floors, so it never drops frames the
+    /// plan's interval promised.
+    #[test]
+    fn a_congestion_cut_keeps_the_nearest_floors() {
+        let relay = Relay::default();
+        let a = addrs(3);
+        for (i, x) in a.iter().enumerate() { relay.update_pos(*x, [i as f32 * 200.0, 0.0, 0.0]); }
+        relay.inner.lock().unwrap().ranked_at = None;
+        let mut got: HashMap<SocketAddr, u32> = HashMap::new();
+        for step in 0..30u64 {
+            {
+                let mut r = relay.inner.lock().unwrap();
+                r.ranked_at = Instant::now().checked_sub(RANK_REFRESH + Duration::from_millis(1));
+                for p in r.paths.values_mut() { p.last_cut = None; }
+            }
+            let srtt = if step == 0 { 50.0 } else { 600.0 };
+            let paths: Vec<(SocketAddr, PathSample)> = a.iter().map(|x| (*x, sample(step * 100, 0, srtt, 50.0))).collect();
+            relay.replan_with_paths(&a, || paths);
+            // Half a second of 60 Hz frames, spread as wall time spreads them.
+            for k in 0..30 {
+                if k % 6 == 0 {
+                    let mut r = relay.inner.lock().unwrap();
+                    for b in r.buckets.values_mut() { b.last -= Duration::from_millis(100); }
+                    for b in r.shares.values_mut() { b.last -= Duration::from_millis(100); }
+                }
+                for &src in &a[1..] {
+                    // 1.5 KB frames: two 60 Hz players need 180 KB/s, far over
+                    // the cut budget (32 KB/s); their 30 Hz floors need 90.
+                    for p in relay.select(src, &a, Stream::Skel, 1500) {
+                        if p.dst == a[0] && step >= 15 { *got.entry(src).or_insert(0) += 1; }
+                    }
+                }
+            }
+        }
+        let scale = relay.inner.lock().unwrap().paths[&a[0]].scale;
+        assert!(scale <= 0.26, "the path was cut: {scale}");
+        for src in &a[1..] {
+            let hz = got.get(src).copied().unwrap_or(0) as f64 / 7.5;
+            assert!(hz >= 29.0, "{src}: {hz:.1} Hz under a congestion cut");
+        }
     }
 }

@@ -160,9 +160,9 @@ try {
 Write-Host ""
 Write-Host "============================================================"
 if ($script:fail -eq 0) {
-    Write-Host "DIAG OK - $script:pass checks passed. Ready to play." -ForegroundColor Green
+    Write-Host "Diagnostics OK - $script:pass checks passed. Ready to play." -ForegroundColor Green
 } else {
-    Write-Host "DIAG FAILED - $script:fail of $($script:pass + $script:fail) checks failed." -ForegroundColor Red
+    Write-Host "Diagnostics FAILED - $script:fail of $($script:pass + $script:fail) checks failed." -ForegroundColor Red
 }
 Write-Host "============================================================"
 exit $script:fail

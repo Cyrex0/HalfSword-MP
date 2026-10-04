@@ -122,3 +122,18 @@ pub fn health_table(label: &str, h: &health::HealthStats) -> String {
 }
 
 pub const HEALTH_HEADER: &str = "| scenario | replays | double applied | HUD HP lost beyond replays | HP lost after 5 hits MP/solo p10/p50/p90 | viewer behind victim HUD ms p95/p99/max | viewer showed a value never held | ledger cut frames | server / native deaths | false deaths | missed deaths | stall-rule deaths | death declared after native p50/max ms |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|";
+
+/// Hit location across the replay delay on `profile` (honest fights, every shape).
+pub fn location(name: &str, seeds: u64) -> super::frame::LocParity {
+    let mut o = super::frame::LocParity::default();
+    for seed in 0..seeds {
+        for (k, &(n, dur)) in SHAPES.iter().enumerate() {
+            let mut cfg = Config::new(profile(name), n, 1000 * seed + k as u64 + 17);
+            cfg.dur_ms = dur;
+            let mut w = World::new(cfg);
+            w.run();
+            o.add(&super::frame::location_parity(&w));
+        }
+    }
+    o
+}

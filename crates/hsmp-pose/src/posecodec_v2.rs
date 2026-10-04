@@ -731,3 +731,22 @@ pub(crate) mod tests {
         assert_eq!(v1.bones[16].0 as usize, super::super::WEAPON);
     }
 }
+
+#[cfg(test)]
+mod lua_ref_tests {
+    /// HSMPAvatars keeps a copy of REF_T (PURE.V2_REF_T: spawn stretch watch and the
+    /// stand-in's checked parent offsets); it must stay equal.
+    #[test]
+    fn lua_reference_skeleton_matches() {
+        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/HSMPAvatars/Scripts/main.lua");
+        let src = std::fs::read_to_string(&p).expect("HSMPAvatars main.lua");
+        let at = src.find("PURE.V2_REF_T = {").expect("PURE.V2_REF_T in main.lua");
+        let body = &src[at + "PURE.V2_REF_T = {".len()..];
+        let body = &body[..body.find("\n}").expect("end of PURE.V2_REF_T")];
+        let nums: Vec<f32> = body.split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+            .filter(|s| !s.is_empty()).map(|s| s.parse().expect("number")).collect();
+        let want: Vec<f32> = super::REF_T.iter().flatten().copied().collect();
+        assert_eq!(nums.len(), want.len());
+        for (a, b) in nums.iter().zip(&want) { assert!((a - b).abs() < 1e-4, "{a} vs {b}"); }
+    }
+}

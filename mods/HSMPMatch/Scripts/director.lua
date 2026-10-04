@@ -155,9 +155,12 @@ D.VITALS_RESET_FUNCS = {
     "Reset Sustained Damage", "Reset Last Damage Taken", "Reset Blood Bleed", "Reset Latest Complex Damage",
 }
 
--- Engine cvars forced at runtime (env.apply_cvars; hair-strands streaming
--- workaround, docs/development/halfsword/io-dispatcher-crash.md).
-D.RUNTIME_CVARS = { { "r.HairStrands.Streaming", "0" } }
+-- Engine cvars forced at runtime (env.apply_cvars; the IO-1 hair crash,
+-- docs/development/halfsword/io-dispatcher-crash.md). Hair cards instead of
+-- strands: the strands bulk data is never read. Engine.ini and the launch
+-- argument set both before the first groom loads; this is the backstop.
+D.RUNTIME_CVARS = { { "r.HairStrands.Streaming", "0" }, { "r.HairStrands.UseCardsInsteadOfStrands", "1" } }
+D.IO1_CVARS = 2   -- the first entries of RUNTIME_CVARS that are read back
 -- Test rigs only: HSMP_TEST_CVARS="r.VSync=0;t.MaxFPS=60" (set by mp_test.ps1).
 -- Two game instances on one GPU with VSync on drop to exactly 30 fps on the
 -- heavier arenas (VSync halves a missed 16.7 ms frame): the pose sender then
@@ -2160,7 +2163,7 @@ function D.make_ue_env(ctx)
     -- PAK_ASYNC_READ_OOB at the first arena load). Engine.ini overrides get
     -- reset by the game, so they are set at runtime: at boot and on every new
     -- world. Not a travel: only the listed cvars ever go through here.
-    -- Returns ok, read-back value (nil when the engine does not expose it).
+    -- Returns ok, the read-back values ("name=value ...", "?" where the engine does not expose one).
     function env.apply_cvars()
         local ok, back = false, nil
         pcall(function()
@@ -2171,7 +2174,13 @@ function D.make_ue_env(ctx)
                 ksl:ExecuteConsoleCommand(world, FString(cv[1] .. " " .. cv[2]), nil)
                 ok = true
             end
-            pcall(function() back = ksl:GetConsoleVariableIntValue(FString(D.RUNTIME_CVARS[1][1])) end)
+            local parts = {}
+            for i = 1, D.IO1_CVARS do
+                local name, v = D.RUNTIME_CVARS[i][1], "?"
+                pcall(function() v = tostring(ksl:GetConsoleVariableIntValue(FString(name))) end)
+                parts[#parts + 1] = name .. "=" .. v
+            end
+            back = table.concat(parts, " ")
         end)
         return ok, back
     end

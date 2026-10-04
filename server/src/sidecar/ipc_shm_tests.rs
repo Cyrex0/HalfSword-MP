@@ -297,7 +297,7 @@ fn peer_play_slot_carries_the_play_line_fields() {
     let mut s = hsmp_pose::poseplay::Sample {
         pt: 1500.25, lead: 3.0, mode: hsmp_pose::poseplay::Mode::Extrap, age: 12.0, delay: 40.0, jitter: 2.5, interval: 16.7,
         cut: 4, mask: 0b11 | (1 << hsmp_pose::poseplay::WPN_R), bones: [[0.0; 7]; hsmp_pose::poseplay::SLOTS], root: Some(([1.0, 2.0, 3.0], 90.0)),
-        vmask: 0b1, vel: [[0.0; 6]; hsmp_pose::poseplay::SLOTS], v2: true,
+        vmask: 0b1, vel: [[0.0; 6]; hsmp_pose::poseplay::SLOTS], v2: true, rate: 1.0,
         extra: Some(std::sync::Arc::new(hsmp_pose::poseplay::Extra {
             weapons: [Some((1, 77, [0.0, 0.0, 1.0], [0.0, 0.0, 90.0])), None],
             control: Some(hsmp_pose::posecodec::v2::Control { flags: 9, grip_r: 2, ik_world: [true, false, false, false], ..Default::default() }),

@@ -76,7 +76,7 @@ mod tests {
             server_id: "a".into(), name: "<script>alert(1)</script>".into(), host: "2001:db8::1".into(), port: 7777,
             mode: "\"m\"".into(), map: "Map".into(), players: 1, max_players: 8, proto_ver: 5, proto_min: 5, proto_max: 5,
             server_key: String::new(), pwd_protected: false, version: "1".into(), region: "&".into(), content_hash: String::new(), ping_ms: 0,
-            reachable: false, last_seen_utc_ms: 0, age_s: 0,
+            reachable: false, last_seen_utc_ms: 0, age_s: 0, nat: String::new(), punch: false,
         };
         let h = render(&[e]);
         assert!(!h.contains("<script>"));

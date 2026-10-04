@@ -1,15 +1,14 @@
-//! Crash-report consent. Interface only:
-//! this build makes no network calls. It
+//! Crash notices and redaction. This file
 //!
-//! 1. notices NEW crash folders under `Saved\Crashes` since the last run,
-//! 2. asks once per crash, as the player chose (`Consent`),
-//! 3. can build a REDACTED report and save it locally, so the player can
-//!    attach it to a bug report themselves.
+//! 1. notices NEW crash folders under `Saved\Crashes` since the last run (the launcher's
+//!    Bug report section says so and ticks the run that crashed),
+//! 2. keeps the player's choice (`Consent`: tell me / don't) and the folders already seen,
+//! 3. re-exports the `Redactor` (crates/hsmp-diag) and keeps `redact()`, its all-IPs form,
+//!    and the older single-crash zip (`save_local_report`).
 //!
-//! The upload half is the `CrashSink` trait. A future `/v1/crash` uploader on
-//! the HSMP master implements it; the launcher must only ever send to the
-//! master URL from the signed manifest, and only with `Consent::Always` or an
-//! explicit per-crash "Send". Nothing in this file talks to the network.
+//! The upload half is the `CrashSink` trait; report.rs implements it (`MasterSink`, the
+//! master's `/v1/reports`), used only on the player's explicit click. Nothing in this file
+//! talks to the network.
 //!
 //! Consent file: %LOCALAPPDATA%\HSMP\consent.json
 //! `{ "crash_reports": "ask" | "never" | "always", "seen": ["UECC-...", ...] }`
@@ -71,83 +70,17 @@ pub fn new_crashes(crash_roots: &[PathBuf], c: &ConsentFile) -> Vec<Crash> {
     out
 }
 
-/// Remove player-identifying data from log text: `nick=...` values,
-/// IPv4 addresses (with or without port) and the Windows user name in paths.
+pub use hsmp_diag::redact::{IpMode, Redactor};
+
+/// Remove player-identifying data from log text (every IP address, player names, the user
+/// name, secrets). The crash-report path; bug reports use a [`Redactor`] with
+/// [`IpMode::Public`].
 pub fn redact(text: &str, user_name: Option<&str>) -> String {
-    let mut s = String::with_capacity(text.len());
-    let b = text.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        // nick=<value> / "nick":"<value>"
-        let rest = &text[i..];
-        // `get` (not `[..n]`): byte n may fall inside a non-ASCII character
-        let lower_starts = |p: &str| rest.get(..p.len()).is_some_and(|x| x.eq_ignore_ascii_case(p));
-        if lower_starts("nick=") || lower_starts("\"nick\":\"") || lower_starts("name=") {
-            let key_len = if lower_starts("nick=") || lower_starts("name=") { 5 } else { 8 };
-            s.push_str(&rest[..key_len]);
-            s.push_str("<redacted>");
-            let mut j = i + key_len;
-            while j < b.len() && !matches!(b[j], b' ' | b'\t' | b'\r' | b'\n' | b',' | b'"' | b'}' | b';') {
-                j += 1;
-            }
-            i = j;
-            continue;
-        }
-        // IPv4: four dot-separated 1-3 digit groups (optional :port)
-        if b[i].is_ascii_digit() && (i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'.')) {
-            let mut j = i;
-            let mut groups = 0;
-            loop {
-                let start = j;
-                while j < b.len() && b[j].is_ascii_digit() && j - start < 3 {
-                    j += 1;
-                }
-                if j == start {
-                    break;
-                }
-                groups += 1;
-                if groups == 4 || j >= b.len() || b[j] != b'.' {
-                    break;
-                }
-                j += 1;
-            }
-            if groups == 4 && (j >= b.len() || !(b[j].is_ascii_alphanumeric() || b[j] == b'.')) {
-                if j < b.len() && b[j] == b':' {
-                    let mut k = j + 1;
-                    while k < b.len() && b[k].is_ascii_digit() {
-                        k += 1;
-                    }
-                    if k > j + 1 {
-                        j = k;
-                    }
-                }
-                s.push_str("<ip>");
-                i = j;
-                continue;
-            }
-        }
-        let ch = rest.chars().next().unwrap();
-        s.push(ch);
-        i += ch.len_utf8();
-    }
-    match user_name.filter(|u| u.len() >= 2) {
-        Some(u) => s.replace(&format!("\\Users\\{u}\\"), "\\Users\\<user>\\").replace(&format!("/Users/{u}/"), "/Users/<user>/"),
-        None => s,
-    }
+    let r = Redactor { user: user_name.map(String::from), ip: Some(IpMode::All), ..Default::default() };
+    r.redact(text)
 }
 
-/// What a report would contain (shown to the player BEFORE anything happens).
-pub fn describe_contents() -> &'static [&'static str] {
-    &[
-        "the crash dump (UEMinidump.dmp: a snapshot of the game's memory stack, no screenshots)",
-        "the crash context (CrashContext.runtime-xml) and the game log, redacted",
-        "the last 2000 lines of UE4SS.log, redacted (player names and IP addresses removed)",
-        "the HSMP version, protocol and the game build hash",
-        "never: chat logs, .settings.json, your HSMP profile or your career save",
-    ]
-}
-
-/// Where uploads would go. Not implemented in this build (no endpoint).
+/// Where uploads go (report::MasterSink: `<master>/v1/reports`).
 pub trait CrashSink {
     fn submit(&self, report_zip: &[u8], meta: &serde_json::Value) -> Result<String, String>;
 }
@@ -206,6 +139,59 @@ mod tests {
         assert!(r.contains("5.4.4.2705"), "version numbers are not IPs: {r}");
         assert!(r.contains("1.2.3.4.5"), "five groups is not an IPv4: {r}");
         assert!(r.contains("\\Users\\<user>\\"), "{r}");
+    }
+
+    fn bug_report_redactor() -> Redactor {
+        Redactor {
+            user: Some("alice".into()),
+            home: Some("C:\\Users\\alice".into()),
+            computer: Some("ALICE-PC".into()),
+            secrets: vec!["ab".repeat(32)],
+            ..Default::default()
+        }
+        .with_ips(IpMode::Public, vec!["198.51.100.9".into()])
+    }
+
+    /// Bug reports: user names and home paths (every slash style), e-mails, keys, passwords
+    /// and tokens go; peer IPs are numbered consistently, LAN / loopback addresses and version
+    /// numbers stay, the player's own address is always removed.
+    #[test]
+    fn report_redaction_of_paths_keys_and_ips() {
+        let r = bug_report_redactor();
+        let t = [
+            r"C:\Users\alice\AppData\Local\HSMP\logs",
+            "C:/Users/alice/AppData/Local",
+            r#"{"path":"C:\\Users\\alice\\x","nick":"Zed"}"#,
+            r"D:\Users\bob\Documents (another account)",
+            "machine ALICE-PC user alice is_admin=true",
+            "mail me: alice.smith+hs@example.co.uk",
+            "player key abababababababababababababababababababababababababababababababab",
+            "server_key=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef content_hash=feedfeed",
+            r#"args=Args { server: "203.0.113.7:7777", nick: "Bob", server_key: Some("c0ffee"), rcon_password: Some("hunter2") }"#,
+            "--rcon-password cfpw --rcon-bind 127.0.0.1:27015",
+            r#"{"admin_token":"t0k3n","password":"pw","x-hsmp-sig":"s"}"#,
+            "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig",
+            "JOIN: 203.0.113.7:7777 then 203.0.113.8:7777 then 203.0.113.7:7778",
+            "lan 192.168.1.20:7777 loop 127.0.0.1 cgnat 100.70.1.2 my 198.51.100.9:5000",
+            "v6 [2001:db8:85a3::8a2e:370:7334]:7777 lo [::1]:7777 ll fe80::1%12 time 12:34:56 path std::fs::write",
+            "UE 5.4.4.2705 driver 32.0.15.6094 build 10.0.26100.1",
+            "steam 76561198012345678",
+        ]
+        .join("\n");
+        let out = r.redact(&t);
+        for gone in ["alice", "ALICE-PC", "bob", "Zed", "Bob", "example.co.uk", "abababab", "0123456789abcdef", "c0ffee", "hunter2", "cfpw", "t0k3n", "\"pw\"", "eyJhbGci", "203.0.113", "198.51.100.9", "2001:db8", "76561198012345678"] {
+            assert!(!out.contains(gone), "{gone} survived:\n{out}");
+        }
+        for kept in ["%USERPROFILE%\\AppData\\Local\\HSMP\\logs", "%USERPROFILE%/AppData/Local", "\\Users\\<user>\\Documents", "is_admin=true", "<email>", "content_hash=feedfeed",
+            "192.168.1.20:7777", "127.0.0.1", "100.70.1.2", "<my-ip>:5000", "[::1]:7777", "fe80::1%12", "12:34:56", "std::fs::write", "5.4.4.2705", "32.0.15.6094", "10.0.26100.1", "<steam-id>", "--rcon-bind 127.0.0.1:27015"] {
+            assert!(out.contains(kept), "{kept} missing:\n{out}");
+        }
+        assert!(out.contains("JOIN: <ip-1>:7777 then <ip-2>:7777 then <ip-1>:7778"), "{out}");
+        assert!(out.contains("[<ip-3>]:7777"), "{out}");
+        // OwnOnly: peers stay, the own address still goes
+        let keep = Redactor::default().with_ips(IpMode::OwnOnly, vec!["198.51.100.9".into()]);
+        let o = keep.redact("peer 203.0.113.7:7777 me 198.51.100.9");
+        assert_eq!(o, "peer 203.0.113.7:7777 me <my-ip>");
     }
 
     #[test]

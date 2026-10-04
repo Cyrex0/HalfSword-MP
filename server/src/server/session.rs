@@ -59,6 +59,7 @@ pub(crate) async fn peer_leave(
         broadcast_admin_state(socket, state, &addrs).await;
     }
     info!(peer_id = removed_id, %from, "peer left");
+    crate::stats::left();
     Ok(())
 }
 
@@ -672,6 +673,41 @@ pub(crate) fn host_closes_on_leave(inner: &Inner, from: SocketAddr) -> bool {
     listen && inner.peers.get(&from).map_or(false, |p| inner.admins.role(&peer_key(p)) == AdminRole::OWNER)
 }
 
+/// The owner's (the listen host's) NET_STATUS notice: is the router port open, what is the
+/// public address (nat/). Sent to `only` (a joining owner) or to every connected owner.
+pub(crate) fn push_net_status(inner: &mut Inner, only: Option<SocketAddr>) {
+    let owners: Vec<SocketAddr> = inner
+        .peers
+        .iter()
+        .filter(|(a, p)| only.map_or(true, |o| o == **a) && inner.admins.role(&peer_key(p)) == AdminRole::OWNER)
+        .map(|(a, _)| *a)
+        .collect();
+    if owners.is_empty() {
+        return;
+    }
+    let args = crate::nat::status().notice_args();
+    let a: Vec<&str> = args.iter().map(String::as_str).collect();
+    for o in owners {
+        let event_id = inner.sess.next_event_id();
+        let m = super::session_records::notice_msg(event_id, inner.sess.match_id, v5::Notice::NET_STATUS, &a);
+        inner.out_msgs.push((Some(o), m));
+    }
+}
+
+/// Re-send NET_STATUS to the owner whenever what it says changes.
+pub async fn net_status_notices(state: Arc<ServerState>) {
+    let mut rx = crate::nat::subscribe();
+    let mut last = crate::nat::status().notice_args();
+    while rx.changed().await.is_ok() {
+        let now = crate::nat::status().notice_args();
+        if now == last {
+            continue;
+        }
+        last = now;
+        push_net_status(&mut *state.inner.lock().await, None);
+    }
+}
+
 /// A player arrived: notice for everyone else (HUD toast "<nick> joined").
 fn notice_joined(inner: &mut Inner, nick: &str, rejoined: bool) {
     push_notice(inner, v5::Notice::PLAYER_JOINED, &[nick, if rejoined { "rejoined" } else { "joined" }]);
@@ -706,6 +742,7 @@ pub(super) fn on_joined(inner: &mut Inner, from: SocketAddr) {
     if let Some(nick) = inner.peers.get(&from).map(|p| p.nick.clone()) {
         if inner.peers.len() > 1 { notice_joined(inner, &nick, had.is_some()); }
     }
+    push_net_status(inner, Some(from));
     if let Some(old) = had {
         let seat = inner.sess.seats.get(&key).copied().unwrap_or(0);
         let wins = inner.peers.get(&from).map(|p| p.wins).unwrap_or(0);

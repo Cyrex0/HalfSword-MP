@@ -1,0 +1,11 @@
+{
+  "messages": [
+    "moving bodies p95 270 cm apart > 130 (typical)",
+    "rests 10.0 cm apart",
+    "2 hard snap(s)"
+  ],
+  "rules": {
+    "WORLD-2": "fail"
+  },
+  "verdict": "fail"
+}

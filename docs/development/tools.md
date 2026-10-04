@@ -32,6 +32,7 @@ In the order `hsmp-tools --help` lists them (`src/main.rs`; implementations in `
 | command | what |
 |---|---|
 | `hsmp-tools netsim ...` | UDP impairment proxy (latency, jitter, loss, duplication, spikes, profiles); `--self-test` measures it |
+| `hsmp-tools natlab stun --bind <addr>` / `natlab catch --bind <addr>` | NAT traversal test stand-ins: a local STUN server (answers Binding requests with the source address) and a punch-probe catcher (prints `probes <n> from <addr>`). Used by `scripts/e2e-nat.sh` and `e2e-master-cf.sh` |
 | `hsmp-tools check-bp-names [--dump F]` | CamelCase use of a space-named Blueprint function or property; reads `UE4SS_ObjectDump.txt` (+ SDK headers); exits 2 if no dump is found |
 | `hsmp-tools lua-check [paths]` | compile every `*.lua` under `mods/` (or the given paths) under Lua 5.4 |
 | `hsmp-tools lua-test [suite...] [--verbose] [--list] [-- args]` | the Lua suites in `lua-tests/` (below) |
@@ -49,7 +50,8 @@ In the order `hsmp-tools --help` lists them (`src/main.rs`; implementations in `
 | `hsmp-tools rcon ADDR "LINE[@ms]"...` | send lines to the server's RCON port, print the last reply |
 | `hsmp-tools kismet-pp` | Kismet bytecode pretty-printer for CUE4Parse JSON dumps |
 | `hsmp-tools mapdump-summary` | build `docs/arena_static/_summary.md` from MapDump output |
-| `hsmp-tools crash-triage [--dir D] [--since T] [--until T] [--all] [--out F] [--cdb EXE] [--sympath P] [--symsrv] [--no-symbolise] ...` | symbolise and classify new minidumps in `%LOCALAPPDATA%\HalfSwordUE5\Saved\Crashes`; JSON report; exit 1 on new crashes (gate rule DoD-2). Known signatures include the RVP round-reset crash ([crash-rr.md](crash-rr.md)) |
+| `hsmp-tools crash-triage [--dir D] [--since T] [--until T] [--all] [--out F] [--cdb EXE] [--sympath P] [--symsrv] [--no-symbolise] ...` | symbolise and classify new minidumps in `%LOCALAPPDATA%\HalfSwordUE5\Saved\Crashes`; JSON report; exit 1 on new crashes (gate rule DoD-2). Known signatures (crates/hsmp-diag/src/triage.rs, shared with the launcher's bug reports) include the RVP round-reset crash ([crash-rr.md](crash-rr.md)) |
+| `hsmp-tools report-fixture --out F [--magic M] [--pad-mb N]` | a minimal bug-report zip in the launcher's upload format (or a broken one) for the Worker's `/v1/reports` tests (CF10-CF13); see [bug-reports.md](bug-reports.md) |
 
 Standalone binaries in `src/bin/` (same package):
 

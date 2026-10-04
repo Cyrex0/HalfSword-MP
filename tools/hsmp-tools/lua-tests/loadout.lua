@@ -16,6 +16,14 @@ local LO = T.path("mods/HSMPLoadout/Scripts/main.lua")
 
 if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "m15" })
+    T.isolated(T.script, "case", { kind = "hair_settle", standin_visible = true })
+    T.isolated(T.script, "case", { kind = "hair_settle_off", standin_visible = true, settle = "0" })
+    T.isolated(T.script, "case", { kind = "hair_late_update" })
+    T.isolated(T.script, "case", { kind = "hair_round_reset" })
+    T.isolated(T.script, "case", { kind = "hair_kit_change" })
+    T.isolated(T.script, "case", { kind = "hair_warm", standin_visible = true })
+    T.isolated(T.script, "case", { kind = "hair_warm_world_gone", standin_visible = true })
+    T.isolated(T.script, "case", { kind = "hair_warm_off", standin_visible = true, warm = "0" })
     T.isolated(T.script, "case", { kind = "strip" })
     T.isolated(T.script, "case", { kind = "strip_world_held" })
     T.isolated(T.script, "case", { kind = "publish" })
@@ -34,7 +42,7 @@ local la = T.tmpdir("hsmp_lo_la_")
 
 local setup_armor, destroyed = 0, {}
 local function boot(world)
-    M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7" }, strict = true })
+    M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_HAIR_SETTLE_S = opts.settle, HSMP_HAIR_WARM_S = opts.warm }, strict = true })
     local wname = world or "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     local Mt = M.Methods
     Mt.GetFullName = function(self)
@@ -60,16 +68,32 @@ local function boot(world)
         return isvalid(self)
     end
     Mt.K2_GetActorLocation = function() return { X = 0, Y = 0, Z = 0 } end
-    Mt.SetActorHiddenInGame = function() end
+    Mt.SetActorHiddenInGame = function(self, h) self.__props.bHidden = (h == true) end
     _G.RegisterHook = function() return 1, 2 end
     M.own = M.new_obj("Willie_BP_C", "Willie_BP_C_3"); rawset(M.own, "__addr", 1003)
     M.standin = M.new_obj("Willie_BP_C", "Willie_BP_C_9"); rawset(M.standin, "__addr", 1009)
+    M.standin.__props.bHidden = (opts.standin_visible ~= true)   -- in game the BeginPlay hook hides it
     M.pc.__props.Pawn = M.own
     _G.FindAllOf = function(c)
         if c == "Willie_BP_C" then return { M.own, M.standin } end
         return nil
     end
+    _G.RegisterBeginPlayPostHook = function(fn) M.bp_hook = fn end
     dofile(LO)
+end
+
+-- A Willie of the arena world goes through BeginPlay (the hook HSMPLoadout registers).
+local function begin_play(w)
+    local Mt = M.Methods
+    local full = Mt.GetFullName
+    Mt.GetFullName = function(self)
+        if rawget(self, "__cls") == "Willie_BP_C" then
+            return "Willie_BP_C /Game/Maps/Arenas/Map_Arena_Pit.Map_Arena_Pit:PersistentLevel." .. tostring(rawget(self, "__name"))
+        end
+        return full(self)
+    end
+    M.bp_hook({ get = function() return w end })
+    Mt.GetFullName = full
 end
 
 local function weapon(name, addr, clspath)
@@ -104,6 +128,12 @@ local function remote(v, R)
 end
 -- The own `loadout` record the writer put (nil = never written).
 local function own_loadout() return HSMPNative.sc_get("loadout") end
+-- Peer 2's loadout with armour pieces ({slot, class path} rows).
+local function remote_armour(v, pieces)
+    local rows = {}
+    for i, p in ipairs(pieces) do rows[i] = { flags = 1, slot = p[1], class = p[2] } end
+    HSMPNative.sc_put("peer_loadout", { version = v, flags = 0, rows = rows }, 2)
+end
 
 if opts.kind == "m15" then
     boot()
@@ -117,6 +147,115 @@ if opts.kind == "m15" then
     T.check(setup_armor == n, "a held-item change never re-runs Set Up Armor", setup_armor - n)
     T.check(T.contains(M.logtext(), "hands only on Willie_BP_C_9"), "the hands are updated alone", M.logtext())
     T.check(#M.dead_touch == 0, "nothing freed touched", T.repr(M.dead_touch))
+
+elseif opts.kind == "hair_settle" then
+    -- IO-1: a stand-in that is already visible (census unhide, safety reveal)
+    -- is dressed only once its hair has been visible for the settle time.
+    boot()
+    HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
+    remote(1, "@Weapons/Sword")
+    run(3000, true)
+    T.check(setup_armor == 0, "no Set Up Armor while the hair settles (the control dresses by 2.5 s)", setup_armor)
+    run(3000, true)
+    T.check(T.contains(M.logtext(), "became visible undressed"), "the wait is logged", M.logtext())
+    T.check(setup_armor >= 1 and T.contains(M.logtext(), "applied loadout v=1"), "dressed after the settle", M.logtext())
+
+elseif opts.kind == "hair_settle_off" then
+    -- Control for the case above: with the wait off the same stand-in is
+    -- dressed by 2.5 s.
+    boot()
+    HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
+    remote(1, "@Weapons/Sword")
+    run(2500, true)
+    T.check(setup_armor >= 1, "HSMP_HAIR_SETTLE_S=0: dressed as soon as the world settle allows", setup_armor)
+
+elseif opts.kind == "hair_late_update" then
+    -- IO-1: the owner's armour changes right after the stand-in was dressed
+    -- and revealed. The re-dress waits until its hair has settled.
+    boot()
+    HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
+    remote(1, "@Weapons/Sword")
+    run(3000, true)
+    T.check(setup_armor >= 1, "dressed while hidden", setup_armor)
+    M.standin:SetActorHiddenInGame(false)   -- revealed (the mock has no BeginPlay hook to track it)
+    run(100, true)
+    local n = setup_armor
+    remote_armour(2, { { 3, "@Armor/Blueprints/Built_Armor/BP_Armor_Head_Helmet_A" } })
+    run(1500, true)
+    T.check(setup_armor == n, "no re-dress inside the settle window after the reveal", setup_armor - n)
+    run(3000, true)
+    T.check(setup_armor > n and T.contains(M.logtext(), "applied loadout v=2"), "re-dressed once the hair settled", M.logtext())
+
+elseif opts.kind == "hair_warm" then
+    -- IO-1: in the first arena world the BeginPlay hide waits HAIR_WARM_S (the
+    -- groom renders first); in later worlds it is immediate.
+    boot()
+    run(500, true)
+    begin_play(M.standin)
+    T.check(M.standin.__props.bHidden == false, "first arena: not hidden at BeginPlay")
+    run(300, true)
+    T.check(M.standin.__props.bHidden == false, "still visible 0.3 s in")
+    run(400, true)
+    T.check(M.standin.__props.bHidden == true, "hidden once the groom had 0.5 s")
+    M.premap()
+    M.standin.__props.bHidden = false
+    begin_play(M.standin)
+    T.check(M.standin.__props.bHidden == true, "next world: hidden at BeginPlay")
+    T.check(#M.dead_touch == 0, "nothing freed touched", T.repr(M.dead_touch))
+
+elseif opts.kind == "hair_warm_world_gone" then
+    -- The world changes before the delayed hide: the old actor is never
+    -- touched, and the next world still warms up first.
+    boot()
+    run(500, true)
+    begin_play(M.standin)
+    run(100, true)
+    M.premap()
+    run(600, true)
+    T.check(M.standin.__props.bHidden == false, "the old world's actor was not touched")
+    begin_play(M.standin)
+    T.check(M.standin.__props.bHidden == false, "the next world warms up too (the first never did)")
+    run(700, true)
+    T.check(M.standin.__props.bHidden == true, "hidden after its own warm-up")
+
+elseif opts.kind == "hair_warm_off" then
+    boot()
+    run(500, true)
+    begin_play(M.standin)
+    T.check(M.standin.__props.bHidden == true, "HSMP_HAIR_WARM_S=0: hidden at BeginPlay (the old hide)")
+
+elseif opts.kind == "hair_kit_change" then
+    -- IO-1: peer 2's validated kit arrives / changes after their stand-in
+    -- was revealed: the re-dress for the new kit waits for the hair.
+    boot()
+    HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
+    remote(1, "@Weapons/Sword")
+    run(3000, true)
+    T.check(setup_armor >= 1, "dressed while hidden", setup_armor)
+    M.standin:SetActorHiddenInGame(false)
+    run(100, true)
+    local n = setup_armor
+    HSMPNative.sc_put("peer_kit", { rev = 5, seq = 1, class = "man_at_arms", r = "", l = "", rows = {} }, 2)
+    run(1500, true)
+    T.check(setup_armor == n, "no re-dress for the new kit inside the window", setup_armor - n)
+    run(3000, true)
+    T.check(setup_armor > n, "re-dressed for the new kit after the window", setup_armor - n)
+
+elseif opts.kind == "hair_round_reset" then
+    -- IO-1: a round reset with a pooled stand-in the BeginPlay hook did not
+    -- hide again: visible on the first look, so it waits like a revealed one.
+    boot()
+    HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
+    remote(1, "@Weapons/Sword")
+    run(3000, true)
+    T.check(setup_armor >= 1, "dressed in the first world", setup_armor)
+    M.premap()
+    M.standin.__props.bHidden = false
+    local n = setup_armor
+    run(3000, true)
+    T.check(setup_armor == n, "new world, visible stand-in: no Set Up Armor in the first 3 s", setup_armor - n)
+    run(4000, true)
+    T.check(setup_armor > n, "dressed after the settle", setup_armor - n)
 
 elseif opts.kind == "strip" then
     boot()

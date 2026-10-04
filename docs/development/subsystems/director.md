@@ -209,8 +209,12 @@ LOBBY on the result screen). `travel_request` accepts the same wants.
 
 ### 3.3 HSMPMatch → HSMPHud: `spectate`
 
-`spectate {target, nick, round, alive}`; `target` 0 means not spectating. After the player's death
-the camera follows a living opponent's stand-in (Q / E cycle). HSMPHud shows "SPECTATING <NAME>".
+`spectate {target, nick, round, alive}`; `target` 0 means not spectating, `0xFFFFFFFF` the arena view.
+After the player's death HSMPMatch's own camera (`spectate_cam.lua`, one CameraActor per world)
+follows a living opponent's stand-in from behind (Q / E cycle), or orbits high over the arena when
+nobody is left to watch or the stand-in is gone. It never views through the stand-in itself: the
+stand-in's active camera may be the first-person one inside its head, which showed black. Entering
+clears any camera fade. HSMPHud shows "SPECTATING <NAME>" or "ARENA VIEW".
 
 ### 3.4 HSMPSync ↔ Director: `spawn_status` and `spawn_request`
 

@@ -34,7 +34,6 @@ local UEHelpers = require("UEHelpers")
 -- garbage userdata). Route every deferred, looped and key-bound callback onto
 -- the game thread.
 if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then
-    local _gt = ExecuteInGameThread
     ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end
     LoopAsync = function(ms, fn)
         local h
@@ -44,14 +43,32 @@ if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedA
         end)
         return h
     end
-    local _rkba = RegisterKeyBindAsync
-    RegisterKeyBindAsync = function(key, mods, fn)
-        return _rkba(key, mods, function() _gt(function() pcall(fn) end) end)
+    -- Key callbacks run on the UE4SS input thread. Native-function hooks run
+    -- on the game thread on this mod's hook state without UE4SS's lock, so an
+    -- ExecuteInGameThread call from a key callback pushed onto that state
+    -- mid-hook (crash in push_structproperty, 2026-10-03). The input thread
+    -- now only appends to a queue (plain Lua, no UE4SS call) and a
+    -- game-thread loop runs what it queued.
+    local kq, kq_w, kq_r, kq_loop = {}, 0, 0, nil
+    local function kq_wrap(fn)
+        if not kq_loop then
+            kq_loop = LoopInGameThreadWithDelay(16, function()
+                while kq_r < kq_w do
+                    kq_r = kq_r + 1
+                    local f = kq[kq_r]
+                    kq[kq_r] = nil
+                    if f then pcall(f) end
+                end
+            end)
+        end
+        return function() local n = kq_w + 1; kq[n] = fn; kq_w = n end
     end
+    local _rkba = RegisterKeyBindAsync
+    RegisterKeyBindAsync = function(key, mods, fn) return _rkba(key, mods, kq_wrap(fn)) end
     local _rkb = RegisterKeyBind
     RegisterKeyBind = function(key, a, b)
-        if b then return _rkb(key, a, function() _gt(function() pcall(b) end) end) end
-        return _rkb(key, function() _gt(function() pcall(a) end) end)
+        if b then return _rkb(key, a, kq_wrap(b)) end
+        return _rkb(key, kq_wrap(a))
     end
 end
 -- U4: the shim comes before kit.lua is loaded, so nothing kit.lua captures at load time can be the raw worker-thread LoopAsync / ExecuteWithDelay.
@@ -920,7 +937,44 @@ local function unlocks_ap(path)
     return u == true or l == true
 end
 
+-- IO-1 (docs/development/halfsword/io-dispatcher-crash.md). In the first arena
+-- of a process, a Willie hidden from BeginPlay and shown later makes the
+-- engine read past the end of Hair_M_SideSweptFringe.ubulk (IoDispatcher
+-- crash, ~60% of such loads in single-player). Letting the groom render for
+-- HAIR_WARM_S before hiding it avoids that, so in the first arena world the
+-- BeginPlay hide is delayed (the pawn shows undressed that long). Later worlds
+-- hide at once. HSMP_HAIR_WARM_S=0 restores the old hide (A/B runs only).
+local HAIR_WARM_S = tonumber(trim(os.getenv("HSMP_HAIR_WARM_S")) or "") or 0.5
+local hair_warm_done = false     -- a groom rendered unhidden for HAIR_WARM_S in this process
+local hair_warmed_here = false   -- ... in the current world
+local hair_world = 0              -- bumped only by the LoadMap pre-hook (BeginPlay runs before the post-hook)
+local function hair_warm_pending() return HAIR_WARM_S > 0 and not hair_warm_done end
+
+-- Also: a visible Willie is re-dressed only HAIR_SETTLE_S after we first saw it
+-- visible (own pawn after a safety reveal, stand-ins). A hidden one at once.
+-- HSMP_HAIR_SETTLE_S=0 turns that wait off.
+local HAIR_SETTLE_S = tonumber(trim(os.getenv("HSMP_HAIR_SETTLE_S")) or "") or 2.5
+local seen_vis = {}          -- Willie FName -> { hidden = bool, shown_t = os.clock() }
+
+local function mark_shown(n) seen_vis[n] = { hidden = false, shown_t = os.clock() } end
+
+-- Seconds to wait before `w` may be dressed (0 = now).
+local function dress_wait(w)
+    if HAIR_SETTLE_S <= 0 then return 0 end
+    local n = obj_name(w)
+    local hidden = false
+    pcall(function() hidden = w.bHidden == true end)
+    if hidden then seen_vis[n] = { hidden = true }; return 0 end
+    local s = seen_vis[n]
+    if not s or s.hidden then mark_shown(n); s = seen_vis[n] end
+    return math.max(0, HAIR_SETTLE_S - (os.clock() - s.shown_t))
+end
+
 local function call_setup(puppet, no_check)
+    -- Every "Set Up Armor" goes through here: the backstop for a caller that
+    -- did not wait (the callers wait first so they keep their retry budget).
+    local wait = dress_wait(puppet)
+    if wait > 0 then return false, string.format("hair settle (%.1f s left)", wait) end
     -- "Spawn in Pants" (set by the arena for the player / fresh foes) makes
     -- "Set Up Armor" skip every slot except the legs; "Blossfechten Gear"
     -- limits it to body/feet/legs. Both are per-pawn display flags.
@@ -1240,6 +1294,12 @@ end
 local DRESS_SAFETY_S = 3.0
 local dressing = {}          -- Willie FName -> { t0, revealed }
 
+-- Seconds since BeginPlay hid `w` (nil if we did not hide it).
+local function dress_age(w)
+    local d = dressing[obj_name(w)]
+    return d and (os.clock() - d.t0) or nil
+end
+
 -- A live MP session is the one shared rule (shared/hsmp_session:
 -- status "connected" AND a heartbeat observed within FRESH_S; the first read
 -- only seeds). State left over from an earlier session (a quit, a crash: the
@@ -1378,6 +1438,7 @@ local function reveal(w, why)
     if not d or d.revealed then return nil end
     d.revealed = true
     pcall(function() w:SetActorHiddenInGame(false) end)
+    mark_shown(n)
     return math.floor((os.clock() - d.t0) * 1000 + 0.5)
 end
 
@@ -1392,8 +1453,24 @@ pcall(function()
         if not full:find("Map_Arena_") then return end
         local n = obj_name(a)
         if n == "Willie_BP_C_0" then return end   -- the level's pooled proxy (HSMPAvatars census)
-        pcall(function() a:SetActorHiddenInGame(true) end)
         dressing[n] = { t0 = os.clock() }
+        if hair_warm_pending() then
+            -- First arena of this process: let the groom render before hiding.
+            local gen = hair_world
+            dressing[n].warming = true
+            ExecuteWithDelay(math.floor(HAIR_WARM_S * 1000), function()
+                if hair_world ~= gen then return end   -- that world is gone: never touch its actors
+                local d = dressing[n]
+                if not d or d.revealed then return end
+                pcall(function() if a:IsValid() then a:SetActorHiddenInGame(true) end end)
+                d.warming = nil
+                seen_vis[n] = { hidden = true }
+                hair_warmed_here = true
+            end)
+            return
+        end
+        pcall(function() a:SetActorHiddenInGame(true) end)
+        seen_vis[n] = { hidden = true }
     end)
 end)
 
@@ -1500,7 +1577,14 @@ local function apply_remote()
                     local w = find_willie(name)
                     local hp = 1
                     if w then pcall(function() hp = tonumber(w.Health) or 1 end) end
-                    if w and not same(w, me) and hp > 0 then
+                    local wait = (w and hp > 0) and dress_wait(w) or 0
+                    if wait > 0 then
+                        if t.hair_note ~= key then
+                            t.hair_note = key
+                            Log("[kit] stand-in peer %s: %s became visible undressed; dressing in %.1f s (hair settle)",
+                                id, name, wait)
+                        end
+                    elseif w and not same(w, me) and hp > 0 then
                         t.n = t.n + 1
                         t.next_at = now + 0.5
                         local ok, res = apply_loadout(w, L, id, st)
@@ -1673,7 +1757,7 @@ Kit.init({
     enc_struct = enc_struct, dec_struct = dec_struct, WEAPON_FIELDS = WEAPON_FIELDS,
     set_hand_passport = set_hand_passport, weapon_passport_for = weapon_passport_for,
     destroy_hand_weapon = destroy_hand_weapon, weapon_shown = weapon_shown,
-    reveal = reveal,
+    reveal = reveal, dress_wait = dress_wait, dress_age = dress_age,
     apply_armour = apply_armour, read_pieces = read_pieces, read_source = read_source,
     worn_count = worn_count, in_arena = in_arena, local_pawn = local_pawn, busy = busy,
     mp_live = mp_live,
@@ -1685,7 +1769,10 @@ Kit.init({
 -- safe inside the LoadMap hook.
 local function drop_world_caches()
     applied, tries, dumped_this_arena = {}, {}, false
-    dressing, applied_at, puppet_names = {}, {}, {}
+    dressing, applied_at, puppet_names, seen_vis = {}, {}, {}, {}
+    if hair_warmed_here then hair_warm_done = true end
+    hair_warmed_here = false
+    hair_world = hair_world + 1
     for k in pairs(class_cache) do class_cache[k] = nil end
     base_pass = {}
     SI.reset()

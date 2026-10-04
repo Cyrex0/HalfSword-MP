@@ -15,10 +15,15 @@
 //! - Rate limits: registrations per host and globally (token buckets), heartbeats per listing.
 //!   They live in memory only; losing them on a restart is harmless.
 //! - Optional announcements (server up / down) are debounced per listing and capped globally.
+//! - Punch relay (punch.rs): the host of a listing may hold a signed listen socket; a punch
+//!   request reaches it only for the requester's own endpoint, rate-limited per requester,
+//!   per listing and globally. `Entry::punch` is true only while that socket is open.
 
 use crate::auth;
+use crate::bucket::Bucket;
 use crate::fields::{self, DeleteReq, HeartbeatReq, RegisterReq, RegisterResp, MAX_BODY_BYTES, MIN_PORT};
 use crate::ip;
+use crate::punch;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
@@ -98,6 +103,12 @@ pub struct Listing {
     pub registered_ms: u64,
     pub last_seen_ms: u64,
     pub last_ts: u64,
+    /// `fields::NAT_KINDS`, "" = not reported.
+    #[serde(default)]
+    pub nat: String,
+    /// The server said it takes punch requests.
+    #[serde(default)]
+    pub punch: bool,
 }
 
 /// One `GET /v1/servers` entry. Same fields as hsmp-master's, plus `server_key`,
@@ -126,6 +137,12 @@ pub struct Entry {
     pub reachable: bool,
     pub last_seen_utc_ms: u64,
     pub age_s: u64,
+    /// How the server is reachable (`fields::NAT_KINDS`, "" = not reported).
+    #[serde(default)]
+    pub nat: String,
+    /// A punch request reaches this server right now (its listen socket is open).
+    #[serde(default)]
+    pub punch: bool,
 }
 
 /// Announcement bookkeeping for one listing (persisted so a restart does not repeat "up").
@@ -179,32 +196,6 @@ impl Reply {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Bucket {
-    tokens: f64,
-    at: u64,
-}
-
-impl Bucket {
-    fn full(cap: f64, now: u64) -> Bucket {
-        Bucket { tokens: cap, at: now }
-    }
-    fn take(&mut self, now: u64, cap: f64, every_ms: u64) -> bool {
-        let dt = now.saturating_sub(self.at) as f64;
-        self.tokens = (self.tokens + dt / every_ms.max(1) as f64).min(cap);
-        self.at = now;
-        if self.tokens >= 1.0 {
-            self.tokens -= 1.0;
-            true
-        } else {
-            false
-        }
-    }
-    fn is_full(&self, now: u64, cap: f64, every_ms: u64) -> bool {
-        self.tokens + now.saturating_sub(self.at) as f64 / every_ms.max(1) as f64 >= cap
-    }
-}
-
 /// Bound for the in-memory rate-limit maps (a flood of addresses resets them, never grows them).
 const MAX_BUCKETS: usize = 20_000;
 /// Announcement states for listings that went away are forgotten after this.
@@ -230,6 +221,19 @@ pub struct Registry {
     global_rate: Bucket,
     announce_rate: Bucket,
     last_hb: HashMap<String, u64>,
+    /// Listings whose host holds a punch listen socket right now (the Worker rebuilds this
+    /// from its hibernated WebSockets on wake).
+    listeners: std::collections::HashSet<String>,
+    /// Newest accepted listen `ts` per listing (replay guard for the listen request).
+    listen_ts: HashMap<String, u64>,
+    punch_rate: punch::Limiter,
+}
+
+/// A punch request the master accepted: send `msg` down `server_id`'s listen socket.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PunchOrder {
+    pub server_id: String,
+    pub msg: String,
 }
 
 impl Registry {
@@ -241,8 +245,84 @@ impl Registry {
             announce: announce.into_iter().map(|a| (a.key.clone(), a)).collect(),
             reg_rate: HashMap::new(),
             last_hb: HashMap::new(),
+            listeners: Default::default(),
+            listen_ts: HashMap::new(),
+            punch_rate: punch::Limiter::new(punch::Limits::default(), now),
             cfg,
         }
+    }
+
+    /// The host of `server_id` opened (`true`) or lost (`false`) its listen socket.
+    pub fn set_listener(&mut self, server_id: &str, live: bool) {
+        if live {
+            if self.rows.contains_key(server_id) {
+                self.listeners.insert(server_id.to_string());
+            }
+        } else {
+            self.listeners.remove(server_id);
+        }
+    }
+
+    pub fn is_listening(&self, server_id: &str) -> bool {
+        self.listeners.contains(server_id)
+    }
+
+    /// `GET /v1/punch/listen/{id}?ts=..` (`path_and_query` exactly as requested, signed by
+    /// the listing key over an empty body). Ok = accept the WebSocket.
+    pub fn listen(&mut self, now: u64, path_and_query: &str, sig: Option<&str>) -> Result<String, Reply> {
+        let Some((id, ts)) = punch::parse_listen_path(path_and_query) else {
+            return Err(Reply::text(400, "expected /v1/punch/listen/<id>?ts=<unix ms>"));
+        };
+        let Some(row) = self.rows.get(&id).filter(|l| !self.stale(l, now)) else {
+            return Err(Reply::text(404, "unknown or expired listing (register first)"));
+        };
+        if now.abs_diff(ts) > punch::LISTEN_SKEW_MS {
+            return Err(Reply::text(400, "clock skew: ts is more than 5 minutes off"));
+        }
+        if auth::verify(&row.listing_key, sig, "GET", path_and_query, b"").is_err() {
+            return Err(Reply::text(403, "bad signature"));
+        }
+        if self.listen_ts.get(&id).is_some_and(|last| ts <= *last) {
+            return Err(Reply::text(409, "stale ts"));
+        }
+        if self.listen_ts.len() >= MAX_BUCKETS {
+            self.listen_ts.clear();
+        }
+        self.listen_ts.insert(id.clone(), ts);
+        Ok(id)
+    }
+
+    /// `POST /v1/punch` from `ip`. On 202 the order says what to send to which host.
+    pub fn punch(&mut self, now: u64, ip: IpAddr, body: &[u8]) -> (Reply, Option<PunchOrder>) {
+        let ip = ip::canonical(ip);
+        if body.len() > MAX_BODY_BYTES {
+            return (Reply::text(413, "body too large"), None);
+        }
+        let Ok(req) = serde_json::from_slice::<punch::PunchReq>(body) else {
+            return (Reply::text(400, "bad JSON (host, port, endpoint)"), None);
+        };
+        let ep = match punch::check_request(&req, ip) {
+            Ok(ep) => ep,
+            Err((code, why)) => return (Reply::text(code, why), None),
+        };
+        if !self.punch_rate.requester_ok(now, ip) {
+            return (Reply::text(429, "punch throttled (this address)"), None);
+        }
+        let host = req.host.trim().trim_start_matches('[').trim_end_matches(']');
+        let host = host.parse::<IpAddr>().map(|h| ip::canonical(h).to_string()).unwrap_or_else(|_| host.to_string());
+        let Some(row) = self.rows.values().find(|l| l.host == host && l.port == req.port && !self.stale(l, now)) else {
+            return (Reply::text(404, "no such server in the list"), None);
+        };
+        let id = row.server_id.clone();
+        if !self.listeners.contains(&id) {
+            return (Reply::text(409, "this server does not take punch requests (update it, or it lost its link to the list)"), None);
+        }
+        if !self.punch_rate.server_ok(now, &id) {
+            return (Reply::text(429, "punch throttled (this server)"), None);
+        }
+        let msg = punch::PunchMsg { t: "punch".into(), to: ep.to_string(), nonce: req.nonce.clone() };
+        let msg = serde_json::to_string(&msg).unwrap_or_default();
+        (Reply::json(202, &punch::PunchResp { sent: true }), Some(PunchOrder { server_id: id, msg }))
     }
 
     pub fn config(&self) -> &Config {
@@ -292,6 +372,8 @@ impl Registry {
                 reachable: false,
                 last_seen_utc_ms: l.last_seen_ms,
                 age_s: now.saturating_sub(l.last_seen_ms) / 1000,
+                nat: l.nat.clone(),
+                punch: l.punch && self.listeners.contains(&l.server_id),
             })
             .collect()
     }
@@ -311,9 +393,12 @@ impl Registry {
                 self.announce_down(now, &l, fx);
             }
             self.last_hb.remove(&id);
+            self.listeners.remove(&id);
+            self.listen_ts.remove(&id);
         }
         let (cap, every) = (self.cfg.register_burst, self.cfg.register_every_ms);
         self.reg_rate.retain(|_, b| !b.is_full(now, cap, every));
+        self.punch_rate.sweep(now);
         let live: std::collections::HashSet<String> = self.rows.values().map(announce_key).collect();
         let forget: Vec<String> = self
             .announce
@@ -412,6 +497,8 @@ impl Registry {
             registered_ms: existing.as_ref().map(|o| o.registered_ms).unwrap_or(now),
             last_seen_ms: now,
             last_ts: ts,
+            nat: f.nat,
+            punch: f.punch,
         };
         self.rows.insert(id.clone(), l.clone());
         fx.push(Effect::Put(l.clone()));
@@ -456,6 +543,7 @@ impl Registry {
             // The server's address changed: it registers again from the new one.
             self.rows.remove(id);
             self.last_hb.remove(id);
+            self.listeners.remove(id);
             fx.push(Effect::Remove(id.to_string()));
             return (Reply::text(410, "address changed; register again"), fx);
         }
@@ -466,6 +554,9 @@ impl Registry {
         }
         if let Some(m) = fields::heartbeat_mode(req.mode.as_deref()) {
             l.mode = m;
+        }
+        if req.nat.is_some() {
+            l.nat = fields::nat_kind(req.nat.as_deref());
         }
         l.last_seen_ms = now;
         l.last_ts = ts;
@@ -498,6 +589,7 @@ impl Registry {
         }
         self.rows.remove(id);
         self.last_hb.remove(id);
+        self.listeners.remove(id);
         fx.push(Effect::Remove(id.to_string()));
         self.announce_down(now, &row, &mut fx);
         (Reply::empty(), fx)
@@ -860,6 +952,84 @@ mod tests {
         // the "up" was already sent before the reload
         let (_, fx) = del(&mut r2, T0 + 70_000, &sk, &id, T0 + 70_000);
         assert_eq!(announced(&fx), vec![false]);
+    }
+
+    fn listen(r: &mut Registry, now: u64, sk: &SigningKey, id: &str, ts: u64) -> Result<String, Reply> {
+        let p = punch::listen_path(id, ts);
+        let sig = auth::sign(sk, "GET", &p, b"");
+        r.listen(now, &p, Some(&sig))
+    }
+
+    fn punch_req(r: &mut Registry, now: u64, from: &str, host: &str, port: u16, ep: &str) -> (Reply, Option<PunchOrder>) {
+        let b = serde_json::to_vec(&json!({"host": host, "port": port, "endpoint": ep, "nonce": "c0ffee"})).unwrap();
+        r.punch(now, ip(from), &b)
+    }
+
+    #[test]
+    fn listen_socket_is_signed_fresh_and_not_replayable() {
+        let mut r = reg();
+        let (sk, thief) = (key(1), key(9));
+        let id = id_of(&register(&mut r, T0, "203.0.113.5", &sk, 7777, T0).0);
+        assert_eq!(listen(&mut r, T0, &thief, &id, T0).unwrap_err().status, 403);
+        assert_eq!(listen(&mut r, T0, &sk, &id, T0 - 6 * 60_000).unwrap_err().status, 400, "clock skew");
+        assert_eq!(listen(&mut r, T0, &sk, &"ab".repeat(16), T0).unwrap_err().status, 404);
+        assert_eq!(listen(&mut r, T0, &sk, &id, T0), Ok(id.clone()));
+        assert_eq!(listen(&mut r, T0, &sk, &id, T0).unwrap_err().status, 409, "replay");
+        assert_eq!(listen(&mut r, T0 + 1, &sk, &id, T0 + 1), Ok(id.clone()), "a reconnect");
+        // no signature at all, a malformed path
+        assert_eq!(r.listen(T0, &punch::listen_path(&id, T0 + 2), None).unwrap_err().status, 403);
+        assert_eq!(r.listen(T0, "/v1/punch/listen/x", None).unwrap_err().status, 400);
+    }
+
+    #[test]
+    fn punch_reaches_only_a_listening_server_and_only_the_requester() {
+        let mut r = reg();
+        let sk = key(1);
+        let b = {
+            let mut v: serde_json::Value = serde_json::from_slice(&reg_body(&sk, 7777, T0)).unwrap();
+            v["nat"] = json!("cone");
+            v["punch"] = json!(true);
+            serde_json::to_vec(&v).unwrap()
+        };
+        let sig = auth::sign(&sk, "POST", "/v1/register", &b);
+        let id = id_of(&r.register(T0, ip("203.0.113.5"), &b, Some(&sig)).0);
+        let e = &r.list(T0)[0];
+        assert_eq!((e.nat.as_str(), e.punch), ("cone", false), "no listen socket yet");
+        // not listening: 409, unknown server: 404
+        assert_eq!(punch_req(&mut r, T0, "198.51.100.20", "203.0.113.5", 7777, "198.51.100.20:40000").0.status, 409);
+        assert_eq!(punch_req(&mut r, T0, "198.51.100.20", "203.0.113.5", 7778, "198.51.100.20:40000").0.status, 404);
+        r.set_listener(&id, true);
+        assert!(r.list(T0)[0].punch);
+        let (rep, order) = punch_req(&mut r, T0, "198.51.100.20", "203.0.113.5", 7777, "198.51.100.20:40000");
+        assert_eq!(rep.status, 202, "{}", rep.body);
+        let o = order.unwrap();
+        assert_eq!(o.server_id, id);
+        assert_eq!(o.msg, r#"{"t":"punch","to":"198.51.100.20:40000","nonce":"c0ffee"}"#);
+        // aiming at someone else is refused before anything is sent
+        let (rep, order) = punch_req(&mut r, T0, "198.51.100.20", "203.0.113.5", 7777, "192.0.2.99:40000");
+        assert_eq!((rep.status, order), (403, None));
+        // a heartbeat updates the kind; a delete closes the relay
+        assert_eq!(hb(&mut r, T0 + 60_000, "203.0.113.5", &sk, &id, 1, T0 + 60_000).status, 204);
+        assert_eq!(del(&mut r, T0 + 70_000, &sk, &id, T0 + 70_000).0.status, 204);
+        assert!(!r.is_listening(&id));
+        // a listener for an unknown listing is not recorded
+        r.set_listener("ffff", true);
+        assert!(!r.is_listening("ffff"));
+    }
+
+    #[test]
+    fn punch_is_rate_limited_per_requester_and_per_server() {
+        let mut r = reg();
+        let id = id_of(&register(&mut r, T0, "203.0.113.5", &key(1), 7777, T0).0);
+        r.set_listener(&id, true);
+        let ok = |r: &mut Registry, from: &str, now| punch_req(r, now, from, "203.0.113.5", 7777, &format!("{from}:40000")).0.status;
+        let n = (0..10).filter(|_| ok(&mut r, "198.51.100.20", T0) == 202).count();
+        assert_eq!(n, 6, "per-address burst");
+        assert_eq!(ok(&mut r, "198.51.100.20", T0 + 10_000), 202, "one more after 10 s");
+        // many joiners at one server: the per-server bucket (12) caps the fan-in
+        let n = (1..=30u8).filter(|i| ok(&mut r, &format!("192.0.2.{i}"), T0 + 10_000) == 202).count();
+        // 12 per server, refilled one per 2 s: 6 used at T0, +5 by T0 + 10 s, 1 used again
+        assert_eq!(n, 10);
     }
 
     #[test]

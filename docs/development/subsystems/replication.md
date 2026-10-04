@@ -33,7 +33,7 @@ record transport (see [../protocol.md](../protocol.md)). There are no state file
    the same bytes with WireHdr.peer = owner and aux = this pair's relay interval
         ▼
  receiving sidecar: root -> per-peer slot peer_root; pose -> poseplay::Playback (per peer)
-   dedup / reorder / late-drop / cut / restart, clock offset + p90 jitter -> adaptive delay
+   dedup / reorder / late-drop / cut / restart, clock offset + p95 jitter -> adaptive delay, stretch, blend
    the hsmp-poseplay thread evaluates every peer every 2 ms -> per-peer slot peer_play
         ▼
  HSMPAvatars, every game frame: read peer_play, build joint-consistent targets,
@@ -111,17 +111,23 @@ world epoch, no Soft* access, exact BP names) are in
 - **Ordering.** Sorted insert by sender `ts`. Duplicates are dropped. A frame whose `ts` is
   already played is dropped as late. A `ts` jump back of 2 s or more (`RESTART_BACK_MS`) means
   the sender restarted: the stream is reset. Lag compensation uses the same threshold.
-- **Clock.** Offset = min(rx − ts) over the last 2 s (tracks drift). Jitter = p90 of
-  (rx − ts − offset). p95 latched the buffer at its cap for seconds after every Wi-Fi spike; p90
-  rides those out with brief extrapolation or hold instead.
-- **Delay.** `clamp(p90 + 6 ms + max(0, interval − 17 ms), 16, 250)` (`DELAY_MIN_V2_MS`,
+- **Clock.** Offset = min(rx − ts) over the last 2 s (tracks drift and route changes). Jitter =
+  p95 of the lateness (rx − ts − offset at arrival) over the last 8 s (`JITTER_WINDOW_MS`). A
+  300 ms spike every few seconds is a few % of that window, so it no longer makes the buffer
+  breathe; the stretch below rides it out.
+- **Delay.** `clamp(p95 + 6 ms + max(0, interval − 17 ms), 16, 250)` (`DELAY_MIN_V2_MS`,
   `DELAY_MARGIN_V2_MS`, `V2_EXTRAP_OK_MS`; the interval part is capped at 66 ms). That is about
   one frame on a LAN at 60 Hz. A stream the relay decimated to 30 / 15 / 7.5 Hz buffers the part
   of its frame interval that extrapolation cannot cover, so it interpolates between received
   frames instead of extrapolating. The interval is the relay's `aux` when present, else the
   median spacing of the newest frames. The delay grows fast and shrinks slowly.
-- **Playback clock.** Advances with local time, slewed at most ±10 % toward
-  `now − offset − delay`. Hard re-sync only when more than 250 ms off. It never runs backwards.
+- **Playback clock.** Advances with local time, slewed toward `now − offset − delay` (−10 % to
+  +15 %). Hard re-sync only when more than 250 ms off. It never runs backwards.
+- **Stretch.** While the playback clock is past the newest frame (late data) it slows toward
+  0.6× over 40 ms of overrun (`STRETCH_MIN_RATE`, `STRETCH_FULL_MS`), as long as it is less than
+  150 ms behind its target, then catches up at up to +15 %. The rate is smoothed (40 ms) and
+  written to `PeerPlay::rate`; HSMPAvatars' own clock runs at that rate. A late burst plays as
+  a short slow-down and catch-up instead of extrapolation, a hold and a jump.
 - **Sampling.** Hermite per bone with the sender's velocities as tangents (no finite
   differences), slerp for rotations, up to a 270 ms gap (`HERMITE_MAX_GAP_V2_MS`; a 7.5 Hz relay
   is 133 ms). Past the newest frame: extrapolation with the sender's velocities, including
@@ -130,9 +136,14 @@ world epoch, no Soft* access, exact BP names) are in
 - **Look-ahead.** HSMPAvatars writes the `pose_lead` slot (≤ 120 ms, `LEAD_MAX_MS`): the poses
   are evaluated where the bodies should stand after the coming physics step, interpolated from the
   buffer where possible, with sender acceleration applied for up to 60 ms.
+- **Correction blending.** When late frames arrive after real starvation (the playback clock
+  more than a frame past the newest frame), the difference between what was shown and the new
+  data becomes an offset that decays over 100 ms (`BLEND_TAU_MS`, up to `BLEND_MAX_UU` 120 uu)
+  instead of a step.
 - **Cuts.** A pelvis jump of more than 300 uu at more than 3000 uu/s (respawn, round reset,
-  teleport) drops all older frames, shows the new place at once and increments `cut`.
-  HSMPAvatars snaps the mesh when `cut` changes.
+  teleport), or a frame more than 600 ms after the previous one (`GAP_CUT_MS`: a level load, a
+  respawn nearby), drops all older frames, shows the new place at once and increments `cut`.
+  HSMPAvatars re-poses the stand-in when `cut` changes (below).
 
 The evaluated result is the `peer_play` record (`crates/hsmp-ipc/src/schema/pose.rs`
 `PeerPlay`): mode (`interp` / `extrap` / `hold` / `stale`), `cut`, the sender time `pt` the pose
@@ -181,12 +192,21 @@ a physics body and each body is given a velocity every frame.
   freed while that hand's weapon is servoed, restored on release.
 - **Joint-consistent targets** (`PURE.fk_retarget`, knob `retarget`): each bone is rebuilt from
   its parent's target with the stand-in's own parent offset, so the servo never asks for a
-  stretched joint. Joint limits stay the asset's. Half Sword's joints are named
+  stretched joint. The offsets are measured once per body; one more than 15 % off the
+  reference skeleton (`PURE.V2_REF_T` = codec `REF_T`, scaled to the character) is replaced by
+  the reference, so a body measured stretched cannot make every later target stretched. Joint limits stay the asset's. Half Sword's joints are named
   `UserConstraint_N`; `SetAngularLimits(bone name)` is a no-op on them.
 - **Collision.** World geometry (WorldStatic/WorldDynamic) is ignored by the driven mesh: the
   owner's pose already contains his contact with his world. Contact with the local pawn and
   weapons stays physical, so local hits fire the native damage path (see [combat.md](combat.md)).
   `BoneCore` collision is off.
+- **Clean start** (`PX.start_repose`). Driving starts only on a live sample (not stale, not hold)
+  read after the claim: a stale sample can be the owner's previous round or place. At the start,
+  and on every `cut`: the actor root is teleported to the replicated root, physics is off for one
+  frame (every body takes the animated pose; a reused Willie loses its old constraint state), then
+  the mesh is snapped onto the target pelvis and the servo is soft for 300 ms (`PX.RAMP_MS`, caps
+  from 30 % up). Before this a new stand-in was pulled toward its first target body by body at up
+  to 900 uu/s, and the rigid snap came only after 150 ms: limbs stretched and torn on spawn.
 - **Release** (free native ragdoll) only on a server-declared death (the `standin_dead` bus key
   from HSMPCombat, or the owner's `peer_vitals` record), stale data for 500 ms, or a cut. A
   vitals "dead" flag that outlives a respawn is ignored, so a stand-in is never frozen for a
@@ -272,10 +292,13 @@ also show hand error up to about one frame of motion (≈ 9 uu at 800 uu/s) even
 | HSMPAvatars | `SNAP_BODY_ERR` / `SNAP_BODY_MS` | 150 uu / 150 ms | rigid snap on a sustained pelvis error |
 | HSMPAvatars | `POSE_RANGE` | 4000 uu | pose-drive only stand-ins this close |
 | poseplay.rs | `DELAY_MIN_V2_MS` / `DELAY_MAX_MS` / `DELAY_MARGIN_V2_MS` | 16 / 250 / 6 | buffer bounds |
-| poseplay.rs | `JITTER_QUANTILE`, `CLOCK_WINDOW_MS` | 0.90 / 2000 | jitter estimate |
+| poseplay.rs | `JITTER_QUANTILE`, `JITTER_WINDOW_MS`, `CLOCK_WINDOW_MS` | 0.95 / 8000 / 2000 | jitter estimate (lateness quantile and window), offset window |
 | poseplay.rs | `EXTRAP_MS`, `EXTRAP_MAX_UU` | 100 / 30 | loss concealment |
-| poseplay.rs | `CUT_DIST_UU`, `CUT_SPEED_UUPS` | 300 / 3000 | teleport detection |
-| poseplay.rs | `SLEW_MAX`, `RESYNC_MS` | 0.10 / 250 | playback clock |
+| poseplay.rs | `CUT_DIST_UU`, `CUT_SPEED_UUPS`, `GAP_CUT_MS` | 300 / 3000 / 600 | teleport and stream-gap detection |
+| poseplay.rs | `SLEW_MAX`, `SLEW_MAX_UP`, `RESYNC_MS` | 0.10 / 0.15 / 250 | playback clock |
+| poseplay.rs | `STRETCH_MIN_RATE`, `STRETCH_FULL_MS`, `STRETCH_MAX_LAG_MS`, `RATE_TAU_MS` | 0.6 / 40 / 150 / 40 | slow-down while starving |
+| poseplay.rs | `BLEND_TAU_MS`, `BLEND_MAX_UU` | 100 / 120 | blending of late corrections |
+| HSMPAvatars | `PX.RAMP_MS`, `PX.STRETCH_WATCH_MS`, `PX.PAWN_WATCH_MS` | 300 / 3000 / 8000 | soft servo after a clean start; spawn stretch windows |
 | sidecar/pose.rs | `PLAY_WRITE` | 2 ms | `peer_play` evaluation cadence |
 
 **Dev knobs** (dev builds, `DEVCTL` capability): `hsmp-tools ipc-ctl --pid <game> tune <key>
@@ -316,3 +339,45 @@ Receiver (`[HSMPAvatars]`):
 - the native stages log `native servo ON` / `refused (<reason>): Lua path`.
 
 Must not appear: `had NO simulated bodies`, `weapon=nograb`.
+
+## Rubber banding and spawn checks (netfeel)
+
+**Offline model.** `crates/hsmp-pose/src/feelsim.rs` runs the real jitter buffer behind netsim's
+path model (AR(1) jitter, FIFO, burst loss, reorder, duplicates, spikes; sender and receiver
+clocks with their own offset and drift) and a model of the v2 driver above (smooth clock, step
+offset, aim, capped velocity servo on point bodies, the rigid-snap rule). It reports display
+latency, buffer delay, tracking error against the owner's true motion, and the rubber-band
+measures: frames whose shown pelvis / hand moves more than 3 / 8 uu beyond the owner's motion
+over the same span (snaps), backward steps, playback-clock warps and resets, rigid snaps.
+
+    cargo test -p hsmp-pose --release --test netfeel -- --nocapture
+    NETFEEL_ONE=far FEELSIM_DEBUG=4 cargo test -p hsmp-pose --release --test netfeel netfeel_one -- --nocapture
+
+Measured (60 s, two seeds each, before → after the smoothing change; pelvis snaps per minute, hand snaps per
+minute, worst pelvis jump in one frame, display latency p50):
+
+| Profile | pelvis snaps/min | hand snaps/min | pelvis jump max | latency p50 |
+|---|---|---|---|---|
+| typical (100 ms one-way path) | 6–18 → 1–2 | 7–10 → 1 | 9–16 → 4 uu | 118 → 122 ms |
+| intl (176) | 20–34 → 10 | 15–27 → 2–6 | 16 → 11–12 uu | 197 → 204 ms |
+| bad (220, spikes, 5 % loss) | 223–336 → 55–66 | 112–210 → 7–48 | 20–29 → 9–10 uu | 310 → 385 ms |
+| far (300, ±50, 2 % loss) | 23–43 → 5–10 | 32–55 → 12–13 | 19–24 → 8–10 uu | 345 → 358 ms |
+| wifi (70, spikes) | 222–282 → 18–28 | 122–145 → 14–15 | 20 → 6–14 uu | 153 → 179 ms |
+
+Where the snaps came from: the buffer ran past its newest frame (late data) into extrapolation,
+a hold and a jump to the late data; a step offset that followed every frame-time change (a long
+frame moved the shown time forward, the next one back); leaving a hold stepped the shown time
+back a frame; and spikes inside the 2 s p90 window made the buffer grow and shrink.
+
+**Local pawn.** Nothing in the replication path moves the local pawn: the server relays and
+validates but never corrects it (a root over the speed cap is dropped from the relay, not sent
+back). The only moves are HSMPSync spawn_place's (round start placement, a fall below the floor,
+a drift while protected before Live, a Director retry before Ready) and HSMPAvatars' launch clamp
+(our pelvis faster than 1500 uu/s within 160 uu of a stand-in). Each emits `pawn_correction
+{why, live, dist_cm}`.
+
+**Gate rules.** SMOOTH-1 (scenarios `netfeel`, `p0_gate`, `p0_wifi`): no `pawn_correction`
+during Live other than `fell`; per peer, `netfeel` snaps and rigid snaps per minute of Live
+within the profile's limits (typical 10 / 0.5, intl 20 / 0.5, far 30 / 0.5, wifi 40 / 1, bad
+80 / 1) and at most one clock reset per minute. SPAWN-1: every `spawn_stretch {who, peer, max_uu,
+bone}` (3 s after each stand-in start or re-pose, 8 s after our own pawn appears) at most 10 uu.

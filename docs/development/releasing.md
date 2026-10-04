@@ -314,8 +314,12 @@ on uninstall.
 
 ## 7. Not done yet
 
-- **Crash upload.** Consent, detection, redaction and local export exist
-  (`launcher/src/crash.rs`, the `CrashSink` trait); nothing uploads.
+- **Bug-report upload.** The launcher can send a report zip to the master's `/v1/reports`
+  (`launcher/src/report.rs`), but the live Worker does not have that endpoint yet (it needs
+  Cloudflare R2). `release.json` `report_upload` (copied into the manifest, default `false`)
+  decides whether "Upload to HSMP" is shown; keep it `false` until the Worker with
+  `/v1/reports` is deployed. A 404, 405, 5xx or network failure is reported as "Upload isn't
+  available yet".
 - **Code signing** (Authenticode) of the launcher and the binaries, which would remove the
   SmartScreen prompt and most antivirus false positives.
 - **Version agreement check** between the tag, `release.json` and the workspace version (§1).

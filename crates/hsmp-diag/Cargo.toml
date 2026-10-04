@@ -1,0 +1,29 @@
+[package]
+name = "hsmp-diag"
+description = "HSMP diagnostics: per-session log folders on the player's machine, the non-blocking rotating log file of the sidecar and the server, and the crash classifier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# Used by hsmp-sidecar (the session watcher, its log file), hsmp-server (its log file),
+# hsmp-launcher (bug reports) and hsmp-tools (crash-triage).
+[dependencies]
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+hsmp-master-core = { path = "../hsmp-master-core" }

@@ -1400,7 +1400,7 @@ mod tests {
     fn impact_inputs_bounded_by_the_real_relative_speed() {
         // A stand-in whose servo body rushed into the blade measured raw 9000;
         // a sharp sword edge (CP 120) at 1500 uu/s against a still victim can
-        // do at most rig 0.85 · 1.1 · max(1500, 1.8 · 1500) ≈ 2525.
+        // do at most rig 1.05 (the pommel, the class maximum) · 1.1 · max(1500, 1.8 · 1500) ≈ 3119.
         damage::set_kit(461, &kit("w_arming1", &[]));
         let mut h = hit(1);
         h.raw_damage = 9000.0;
@@ -1408,7 +1408,7 @@ mod tests {
         h.velocity = [9000.0, 0.0, 0.0];
         h.impulse = [12000.0, 0.0, 0.0];
         let c = damage::clamp_impact(461, &mut h, Some(1500.0), Some(1500.0), false);
-        assert!((h.raw_damage - c.raw_max).abs() < 0.1 && c.raw_max < 2600.0, "{:?} {}", c, h.raw_damage);
+        assert!((h.raw_damage - c.raw_max).abs() < 0.1 && c.raw_max < 3200.0, "{:?} {}", c, h.raw_damage);
         assert!(h.velocity[0] < 9000.0 * c.factor + 0.1 && h.impulse[0] < 12000.0 * c.factor + 0.1);
         // A blunt flat hit (CP 0) may reach 2.33x as much; honest values pass.
         let mut h = hit(2);

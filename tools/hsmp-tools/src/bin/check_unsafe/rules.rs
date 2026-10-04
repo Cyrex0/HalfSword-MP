@@ -267,6 +267,8 @@ pub struct Shim {
     /// Line of the ExecuteWithDelay+LoopAsync remap (max of the two), if both exist.
     pub delay_loop: Option<usize>,
     pub keybind: Option<usize>,
+    /// Line of the `RegisterKeyBind` remap: sync binds also fire on the input thread.
+    pub keybind_sync: Option<usize>,
     /// Lines of the `if LoopInGameThreadWithDelay and ... then ... end` block.
     pub block: Option<(usize, usize)>,
 }
@@ -294,6 +296,7 @@ pub fn find_shim(src: &str) -> Shim {
             s.delay_loop = Some(a.max(b));
         }
         s.keybind = assigned("RegisterKeyBindAsync");
+        s.keybind_sync = assigned("RegisterKeyBind");
         s.block = Some((line, toks[e].line));
         break;
     }
@@ -349,6 +352,14 @@ fn u4_thread_shim(c: &mut Ctx, shim: &Shim, is_main: bool, is_shared: bool) {
         let target = match w {
             "ExecuteWithDelay" | "LoopAsync" => shim.delay_loop,
             "RegisterKeyBindAsync" => shim.keybind,
+            "RegisterKeyBind" => shim.keybind_sync,
+            // The shim's key wrappers run on the UE4SS input thread: any UE4SS
+            // call there (ExecuteInGameThread pushes onto the hook state) races
+            // the game thread's native hooks. They may only queue.
+            "ExecuteInGameThread" if in_shim => {
+                hits.push((line, "ExecuteInGameThread inside the game-thread shim: key callbacks run on the input thread and this call pushes onto the mod's hook state mid-hook (push_structproperty crash) - queue the callback and drain it from a LoopInGameThreadWithDelay loop".into()));
+                continue;
+            }
             "ExecuteAsync" => {
                 if !in_shim {
                     hits.push((line, "ExecuteAsync runs Lua on a worker thread (no game-thread variant): use ExecuteInGameThread (a bare reference - pcall(ExecuteAsync, f), local f = ExecuteAsync - is the same call)".into()));
@@ -862,6 +873,19 @@ mod tests {
         assert_eq!(rules(&run("m/main.lua", bare)), vec![("U4", 1), ("U4", 2), ("U4", 3)]);
         let early = format!("ExecuteWithDelay(1, f)\n{SHIM}LoopAsync(100, f)\n");
         assert_eq!(rules(&run("m/main.lua", &early)), vec![("U4", 1)]);
+    }
+
+    #[test]
+    fn u4_keybinds_queue_off_the_input_thread() {
+        // a sync bind fires on the input thread too: it needs the shim's remap
+        let bare = format!("{SHIM}RegisterKeyBind(Key.Q, f)\n");
+        assert_eq!(rules(&run("m/main.lua", &bare)), vec![("U4", 5)]);
+        // the old wrapper called ExecuteInGameThread from the input thread
+        let old = "if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then\n    ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end\n    LoopAsync = function(ms, fn) return LoopInGameThreadWithDelay(ms, fn) end\n    local _gt = ExecuteInGameThread\n    local _rkb = RegisterKeyBind\n    RegisterKeyBind = function(key, a) return _rkb(key, function() _gt(a) end) end\nend\nRegisterKeyBind(Key.Q, f)\n";
+        assert_eq!(rules(&run("m/main.lua", old)), vec![("U4", 4)]);
+        // the queueing wrapper is clean, and so are binds after it
+        let queued = "if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then\n    ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end\n    LoopAsync = function(ms, fn) return LoopInGameThreadWithDelay(ms, fn) end\n    local q = {}\n    local _rkb = RegisterKeyBind\n    RegisterKeyBind = function(key, a) return _rkb(key, function() q[#q + 1] = a end) end\nend\nRegisterKeyBind(Key.Q, f)\nExecuteInGameThread(f)\n";
+        assert!(run("m/main.lua", queued).is_empty(), "{:?}", run("m/main.lua", queued));
     }
 
     #[test]

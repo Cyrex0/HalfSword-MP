@@ -26,7 +26,6 @@ local UEHelpers = require("UEHelpers")
 -- userdata). Route every deferred, looped and key-bound callback onto the
 -- game thread.
 if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then
-    local _gt = ExecuteInGameThread
     ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end
     LoopAsync = function(ms, fn)
         local h
@@ -36,14 +35,32 @@ if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedA
         end)
         return h
     end
-    local _rkba = RegisterKeyBindAsync
-    RegisterKeyBindAsync = function(key, mods, fn)
-        return _rkba(key, mods, function() _gt(function() pcall(fn) end) end)
+    -- Key callbacks run on the UE4SS input thread. Native-function hooks run
+    -- on the game thread on this mod's hook state without UE4SS's lock, so an
+    -- ExecuteInGameThread call from a key callback pushed onto that state
+    -- mid-hook (crash in push_structproperty, 2026-10-03). The input thread
+    -- now only appends to a queue (plain Lua, no UE4SS call) and a
+    -- game-thread loop runs what it queued.
+    local kq, kq_w, kq_r, kq_loop = {}, 0, 0, nil
+    local function kq_wrap(fn)
+        if not kq_loop then
+            kq_loop = LoopInGameThreadWithDelay(16, function()
+                while kq_r < kq_w do
+                    kq_r = kq_r + 1
+                    local f = kq[kq_r]
+                    kq[kq_r] = nil
+                    if f then pcall(f) end
+                end
+            end)
+        end
+        return function() local n = kq_w + 1; kq[n] = fn; kq_w = n end
     end
+    local _rkba = RegisterKeyBindAsync
+    RegisterKeyBindAsync = function(key, mods, fn) return _rkba(key, mods, kq_wrap(fn)) end
     local _rkb = RegisterKeyBind
     RegisterKeyBind = function(key, a, b)
-        if b then return _rkb(key, a, function() _gt(function() pcall(b) end) end) end
-        return _rkb(key, function() _gt(function() pcall(a) end) end)
+        if b then return _rkb(key, a, kq_wrap(b)) end
+        return _rkb(key, kq_wrap(a))
     end
 end
 
@@ -264,6 +281,7 @@ local function forget_widgets()
     state.top_focus, state.top_ring = nil, nil
     state.menu, state.canvas, state.wt = nil, nil, nil
     state.style_src, state.text_src = nil, nil
+    state.crash_note = nil
     drop_screen_refs()
 end
 pcall(function()
@@ -369,6 +387,7 @@ local function reset_lobby_session(is_host, chosen)
     lobby.session_wall = os.time()
     lobby.entered_t = nil
     lobby.over = nil
+    MX.net_status = nil        -- the new server reports its own reachability
     lobby.saw_live = false     -- this session's sidecar has written a live status
     lobby.saw_terminal, lobby.term = false, nil   -- a terminal status seen / pending
     lobby.prefs_sent = false   -- the host's saved ROUNDS / KIT RULES not re-sent yet
@@ -501,6 +520,16 @@ function MX.build_poll()
     end
 end
 
+-- This run's log folder (diag.lua): `hsmp-sidecar --log-session start` at boot, then the
+-- watcher that collects the logs when the game exits. The sidecar and a listen server get
+-- `--log-dir` (MX.log_args) once the folder is known.
+MX.Diag = load_module("diag", true)
+if MX.Diag then
+    MX.Diag.init({ log = Log, ipc = function() return rawget(_G, "HSMP_IPC") end, sidecar_exe = win(tostring(SIDECAR_EXE)),
+                   game_pid = GAME_PID, state_dir = win(STATE_DIR) })
+end
+function MX.log_args() return MX.Diag and MX.Diag.log_args() or {} end
+
 -- Start `exe args` as `role` (a previous child of that role is stopped first).
 -- opts: {env = {K = v}}. Returns the pid or nil, err.
 function MX.spawn_role(role, exe, args, opts)
@@ -556,7 +585,13 @@ function on_settings_saved(changed)
     end
 end
 
-local function host_port() return tonumber((settings.server or ""):match(":(%d+)$")) or 7777 end
+-- The HOST PORT setting; anything outside 1024-65535 (a hand-edited settings file) is 7777,
+-- never port 0 (an OS-picked port nobody could reach) or a port that cannot bind.
+local function host_port()
+    local p = tonumber((settings.server or ""):match(":(%d+)$"))
+    if not p or p < 1024 or p > 65535 or p ~= math.floor(p) then return 7777 end
+    return p
+end
 
 -- HOST GAME: boots hsmp-server + hsmp-sidecar and sends the user to the
 -- LOBBY sub-screen. No level travel yet — the player waits in-lobby until
@@ -593,10 +628,16 @@ local function spawn_server_and_sidecar()
     local server_args = { "--bind", "0.0.0.0:" .. port, "--tick-hz", "30", "--max-peers", "8", "--map", chosen_map,
                           "--owner-key-file", win(STATE_DIR .. "/.player_key") }
     for _, a in ipairs(proc_args("server")) do server_args[#server_args + 1] = a end
+    for _, a in ipairs(MX.log_args()) do server_args[#server_args + 1] = a end
+    -- SETTINGS > AUTO PORT FORWARD off: no UPnP / PCP / NAT-PMP mapping on the router.
+    if settings.upnp == false then
+        server_args[#server_args + 1] = "--port-map"; server_args[#server_args + 1] = "off"
+    end
     local server_env = { HSMP_LOBBY_MAP = chosen_map, HSMP_MASTER_URL = master, HSMP_SERVER_NAME = adv_name,
                          HSMP_SERVER_MODE = adv_mode, HSMP_LISTEN_HOST = "1", HSMP_REGION = (region ~= "") and region or nil }
     local sidecar_args = { "--server", "127.0.0.1:" .. port, "--state-dir", win(STATE_DIR), "--nick", tostring(settings.nick) }
     for _, a in ipairs(sc_args) do sidecar_args[#sidecar_args + 1] = a end
+    for _, a in ipairs(MX.log_args()) do sidecar_args[#sidecar_args + 1] = a end
     reset_lobby_session(true, chosen_map)
     lobby.starting = os.clock()   -- latched until the lobby screen is up
     lobby.server_label = adv_name
@@ -630,6 +671,14 @@ local function spawn_sidecar_only(server, nick, map_name, label)
     MX.ipc_error = nil
     local sidecar_args = { "--server", server, "--state-dir", win(STATE_DIR), "--nick", tostring(nick or settings.nick) }
     for _, a in ipairs(sc_args) do sidecar_args[#sidecar_args + 1] = a end
+    for _, a in ipairs(MX.log_args()) do sidecar_args[#sidecar_args + 1] = a end
+    -- The server lists that may relay a NAT-traversal punch to this host when it does not
+    -- answer directly (the sidecar tries direct first, then the punch).
+    for _, u in ipairs(effective_master_urls()) do
+        if type(u) == "string" and u:match("^https?://[%w%.%-%[%]:]+[%w%./%-_]*$") then
+            sidecar_args[#sidecar_args + 1] = "--master"; sidecar_args[#sidecar_args + 1] = u
+        end
+    end
     -- The advertised map is a display hint until the session snapshot reports the
     -- server's arena; nothing ever travels to it.
     reset_lobby_session(false, (map_name and map_name ~= "") and map_name or settings.lobby_map)
@@ -755,6 +804,52 @@ local function is_peer_ready(pid, match_st)
     if not match_st or not match_st.ready then return false end
     for _, r in ipairs(match_st.ready) do if r == pid then return true end end
     return false
+end
+
+-- The listen host's reachability: the server's NET_STATUS notice (code 9) to its owner,
+-- args { state, port, public address, NAT kind } (server/src/nat). The newest one wins.
+MX.net_status = nil
+local function net_status_pump()
+    local ipc = rawget(_G, "HSMP_IPC")
+    for _, e in ipairs((ipc and ipc.events and ipc.events("notice")) or {}) do
+        local n = e.data or e
+        if type(n) == "table" and n.code == 9 then
+            local a = n.args or {}
+            MX.net_status = { state = a[1] or "", port = tonumber(a[2]), public = a[3] or "", kind = a[4] or "" }
+            Log("NET_STATUS: port map %s, port %s, public %s, nat %s", tostring(a[1]), tostring(a[2]), tostring(a[3]), tostring(a[4]))
+        end
+    end
+end
+
+-- The host lobby's note: longest first (set_text_fit), and its colour.
+local function host_net_note(bind_port)
+    local n = MX.net_status
+    if not n then
+        return { "Checking whether players outside your network can reach you...", "Checking your router..." }, Kit.C.dim
+    end
+    local p = n.port or bind_port
+    local names = { upnp = "UPnP", pcp = "PCP", natpmp = "NAT-PMP" }
+    if names[n.state] then
+        return { string.format("Router port opened automatically (%s): players outside your network can join on UDP %d", names[n.state], p),
+                 string.format("Router port opened automatically (%s)", names[n.state]) }, Kit.C.good
+    elseif n.state == "open" then
+        return { string.format("This PC has a public address: players can reach UDP %d if your firewall allows it", p),
+                 "Public address: reachable if your firewall allows it" }, Kit.C.good
+    elseif n.state == "double" then
+        return { "Router port opened, but your router is behind another NAT (your provider's?): outside players may not reach you",
+                 "Router port opened, but another NAT is in front of it" }, Kit.C.warn
+    elseif n.state == "trying" then
+        return { "Opening your router port...", "Opening router port..." }, Kit.C.dim
+    end
+    local punch = n.kind == "cone+punch"
+    local tail = punch and " (joiners will try NAT traversal)" or ""
+    if n.state == "off" then
+        return { string.format("Automatic port forwarding is off: forward UDP %d to this PC for players outside your network%s", p, tail),
+                 string.format("Forward UDP %d to this PC for internet players", p) }, Kit.C.warn
+    end
+    return { string.format("Couldn't open your router port automatically: players outside your network may not reach you. Forward UDP %d to this PC.%s", p, tail),
+             string.format("Couldn't open your router port automatically. Forward UDP %d to this PC.", p),
+             string.format("Forward UDP %d to this PC for internet players", p) }, Kit.C.warn
 end
 
 -- SERVER chat replies (from_peer 0): commands.lua infers refusals from them.
@@ -1171,6 +1266,34 @@ local function add_to_canvas(entry, x, y, w, h)
             slot:SetSize({ X = w, Y = h })
         end)
         entry.slot = slot
+    end
+end
+
+-- The main menu's "the game crashed last time" line (diag.lua), under the ribbon column.
+-- Built once the menu is injected; shown only while no sub-screen is open. The ref is
+-- forgotten with the other widgets on a world change (forget_widgets).
+function MX.crash_note_sync()
+    local Dg = MX.Diag
+    if not (Dg and Dg.crashed_last_time() and state.injected and state.canvas and state.wt) then return end
+    local n = state.crash_note
+    if not n then
+        local tb = construct("/Script/UMG.TextBlock", state.wt, "HSMP_CrashNote_" .. tostring(menu_world_gen))
+        if not tb then return end
+        if state.text_src then clone_text_look(tb, state.text_src) end
+        pcall(function() tb:SetText(FText(Dg.CRASH_NOTE)) end)
+        pcall(function() tb.AutoWrapText = true end)
+        pcall(function() local f = tb.Font; if f then f.Size = 18; tb:SetFont(f) end end)
+        pcall(function() tb:SetColorAndOpacity({ SpecifiedColor = { R = 0.95, G = 0.75, B = 0.3, A = 1 }, ColorUseRule = 0 }) end)
+        local r = MX.top_ribbon_rects()[5]
+        n = { button = tb, shown = nil }
+        add_to_canvas(n, r[1] + math.floor(r[3] * 0.08), r[2] + r[4] + 4, math.floor(r[3] * 0.9), 64)
+        state.crash_note = n
+        Log("crash note shown (previous run %s crashed)", tostring(Dg.prev_id))
+    end
+    local want = state.screen_active == nil
+    if n.shown ~= want then
+        n.shown = want
+        set_vis(n.button, want and 3 or 1)
     end
 end
 
@@ -1670,18 +1793,41 @@ local function start_check(S)
     return true
 end
 
+-- The link record's reason line while still connecting, or nil.
+local function lobby_link_reason()
+    local l = MX.link()
+    local r = l and l.reason
+    if type(r) ~= "string" or r == "" then return nil end
+    return r
+end
+
 local function lobby_status_line(S)
     local st = S.status
     if st == "connected" then
         return "CONNECTED" .. (S.rtt and string.format("   %d MS", math.floor(S.rtt + 0.5)) or ""), Kit.C.good, false
     elseif st == "reconnecting" then return "RECONNECTING...", Kit.C.warn, true
-    elseif st == nil or st == "connecting" or st == "handshake" then return "CONNECTING...", Kit.C.ok, true end
+    elseif st == nil or st == "connecting" or st == "handshake" then
+        -- the sidecar's NAT traversal line ("Connecting through your router...", or what the
+        -- host must do when nothing gets through)
+        local why = lobby_link_reason()
+        if why then
+            local blocked = why:find("blocks incoming", 1, true) ~= nil
+            return why:upper(), blocked and Kit.C.bad or Kit.C.ok, not blocked
+        end
+        return "CONNECTING...", Kit.C.ok, true
+    end
     return tostring(st):upper(), Kit.C.bad, false
 end
 
 local function render_lobby()
     if not ui_alive() then return end
     local w = ui.w
+    if lobby.is_host and w.port_note then
+        net_status_pump()
+        local note, col = host_net_note(host_port())
+        Kit.set_text_fit(w.port_note, note)
+        Kit.set_color(w.port_note, col)
+    end
     local S = lobby_snapshot()
     local admin = S.admin
     lobby.admin_now = admin
@@ -2284,6 +2430,8 @@ local function autotest_dispatch(c)
         end
         if at.mover then at.mover.start(c.arg or "10")
         else Log("AUTOTEST cmd #%s: move - autotest_mover.lua not found", tostring(c.id)) end
+    elseif name == "world_poke" then
+        -- HSMPWorld reads it from its own DevCtl cursor (world sync test)
     else
         Log("AUTOTEST cmd #%s: unknown cmd %s - ignored", tostring(c.id), tostring(name))
     end
@@ -2540,7 +2688,8 @@ local function build_lobby_kit()
     my = my + chh + u(Kit.SP.lg)
     w.mode_line = Kit.text("", rx, my, rw, lh, F(Kit.TS.small), 0, Kit.C.dim)
     if lobby.is_host then
-        -- the server binds 0.0.0.0; internet players still need the router to forward the port
+        -- whether internet players can reach us: the server's NET_STATUS (router port opened
+        -- automatically, or what to forward by hand); refreshed by render_lobby
         local p = host_port()
         local fs = F(Kit.TS.small)
         local ny = my + lh
@@ -2548,9 +2697,9 @@ local function build_lobby_kit()
         if lines >= 1 then
             w.port_note = Kit.text("", rx, ny, rw, math.ceil(fs * Kit.LINE_H) * lines, fs, 0, Kit.C.dim,
                 { wrap = lines > 1 and lines or nil, valign = "top" })
-            Kit.set_text_fit(w.port_note, { string.format("Players outside your network need UDP %d forwarded to this PC", p),
-                                            string.format("Outside players need UDP %d forwarded here", p),
-                                            string.format("Forward UDP %d for internet players", p) })
+            local note, col = host_net_note(p)
+            Kit.set_text_fit(w.port_note, note)
+            Kit.set_color(w.port_note, col)
         end
     end
 
@@ -3001,6 +3150,7 @@ LoopAsync(500, function()
             if LocalMaster then pcall(LocalMaster.tick) end      -- touches no widget
             pcall(MX.build_poll)                                 -- startup build check (no widget)
             pcall(MX.career_poll)                                -- boot career recovery, if slow
+            if MX.Diag then pcall(MX.Diag.poll); pcall(MX.crash_note_sync) end   -- log folder + crash note
             CTL.flush()                                          -- command records held until connected
             if not lobby.active then MX.update_host_label(nil); return end
             lobby_tick = lobby_tick + 1

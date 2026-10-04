@@ -87,9 +87,11 @@ pub const V2_SENDER_FPS_MAX_IV_MS: f64 = 55.0;
 pub const HERMITE_MAX_GAP_V2_MS: f64 = 270.0;
 /// Window for the clock-offset / jitter estimate.
 pub const CLOCK_WINDOW_MS: f64 = 2000.0;
+/// Window of the lateness quantile that sizes the buffer.
+pub const JITTER_WINDOW_MS: f64 = 8000.0;
 /// Quantile of arrival lateness the buffer covers; rarer spikes are ridden
 /// out with extrapolation/hold instead of adding latency for everyone.
-pub const JITTER_QUANTILE: f64 = 0.90;
+pub const JITTER_QUANTILE: f64 = 0.95;
 /// Extrapolate at most this far past the newest frame, then hold.
 pub const EXTRAP_MS: f64 = 100.0;
 /// ... and never move a bone further than this while extrapolating (uu).
@@ -101,10 +103,28 @@ pub const HERMITE_MAX_GAP_MS: f64 = 120.0;
 /// Pelvis jump that counts as a teleport (respawn / round reset).
 pub const CUT_DIST_UU: f32 = 300.0;
 pub const CUT_SPEED_UUPS: f32 = 3000.0;
+/// A frame this long (sender ms) after the previous one starts over (cut).
+pub const GAP_CUT_MS: f64 = 600.0;
 /// Playback clock: slew limit and hard re-sync threshold.
 pub const SLEW_MAX: f64 = 0.10;
 pub const SLEW_TIME_MS: f64 = 200.0;
 pub const RESYNC_MS: f64 = 250.0;
+/// Starving buffer (the playback clock ran past the newest frame): the clock
+/// slows down toward STRETCH_MIN_RATE over STRETCH_FULL_MS of overrun, so a
+/// late burst plays as a brief slow-down and a catch-up instead of a freeze
+/// and a jump. Not beyond STRETCH_MAX_LAG_MS behind the target (then the
+/// stream is gone, not late).
+pub const STRETCH_MIN_RATE: f64 = 0.6;
+pub const STRETCH_FULL_MS: f64 = 40.0;
+pub const STRETCH_MAX_LAG_MS: f64 = 150.0;
+/// Catch-up after a stretch may run this much faster than real time.
+pub const SLEW_MAX_UP: f64 = 0.15;
+/// The playback rate follows its wanted value with this time constant (ms):
+/// no step in the shown speed.
+pub const RATE_TAU_MS: f64 = 40.0;
+/// Correction blending after late data (see `blend_step`).
+pub const BLEND_TAU_MS: f64 = 100.0;
+pub const BLEND_MAX_UU: f32 = 120.0;
 /// Largest look-ahead the game may ask for (`sample_lead`), ms.
 pub const LEAD_MAX_MS: f64 = 120.0;
 /// Look-ahead prediction: sender acceleration is applied this long (ms), at most this hard (uu/s^2).
@@ -217,6 +237,8 @@ pub struct Sample {
     pub jitter: f64,
     /// The frame interval the buffer is sized for (ms).
     pub interval: f64,
+    /// Playback-clock rate when sampled (1 = real time); the game's own clock follows it.
+    pub rate: f64,
     /// Increments on every discontinuity; the game snaps the body when it changes.
     pub cut: u32,
     pub mask: u32,
@@ -233,6 +255,8 @@ pub struct Sample {
 #[derive(Default, Debug)]
 pub struct Clock {
     win: VecDeque<(f64, f64)>, // (rx, rx - ts)
+    /// (rx, lateness above the offset at that moment) over JITTER_WINDOW_MS.
+    late: VecDeque<(f64, f64)>,
     pub offset: Option<f64>,
     pub j95: f64,
 }
@@ -243,16 +267,39 @@ impl Clock {
         while let Some(&(r, _)) = self.win.front() {
             if rx - r > CLOCK_WINDOW_MS && self.win.len() > 8 { self.win.pop_front(); } else { break; }
         }
-        let mut d: Vec<f64> = self.win.iter().map(|x| x.1).collect();
-        d.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let min = d[0];
-        let p95 = d[((d.len() as f64 * JITTER_QUANTILE).ceil() as usize).clamp(1, d.len()) - 1];
+        let min = self.win.iter().map(|x| x.1).fold(f64::INFINITY, f64::min);
         self.offset = Some(min);
-        self.j95 = p95 - min;
+        // Lateness is kept longer than the offset window: a 300 ms spike every few
+        // seconds is a few % of it and is ridden out by the stretch, while steady
+        // jitter sets the buffer. The offset itself still follows drift and route
+        // changes within CLOCK_WINDOW_MS.
+        self.late.push_back((rx, rx - ts - min));
+        while let Some(&(r, _)) = self.late.front() {
+            if rx - r > JITTER_WINDOW_MS && self.late.len() > 8 { self.late.pop_front(); } else { break; }
+        }
+        let mut d: Vec<f64> = self.late.iter().map(|x| x.1.max(0.0)).collect();
+        let k = ((d.len() as f64 * JITTER_QUANTILE).ceil() as usize).clamp(1, d.len()) - 1;
+        let (_, q, _) = d.select_nth_unstable_by(k, |a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        self.j95 = *q;
     }
     pub fn reset(&mut self) { *self = Clock::default(); }
 }
 
+
+/// What `blend_step` showed last time.
+#[derive(Clone, Debug)]
+struct Blend {
+    at: f64,
+    lead: f64,
+    newest: f64,
+    mode: Mode,
+    cut: u32,
+    mask: u32,
+    shown: [Xf; SLOTS],
+    vel: [Vel; SLOTS],
+    off: [[f32; 3]; SLOTS],
+    qoff: [[f32; 4]; SLOTS],
+}
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Stats {
     pub accepted: u32, pub reordered: u32, pub dup: u32, pub late: u32, pub cuts: u32,
@@ -274,6 +321,9 @@ pub struct Playback {
     /// None = measure it from the frames.
     pub interval_hint: Option<f64>,
     pub stats: Stats,
+    /// Current playback-clock rate (1 = real time; below 1 while the buffer starves).
+    pub rate: f64,
+    blend: Option<Blend>,
 }
 
 fn dist3(a: &[f32], b: &[f32]) -> f32 {
@@ -281,7 +331,7 @@ fn dist3(a: &[f32], b: &[f32]) -> f32 {
 }
 
 impl Playback {
-    pub fn new() -> Self { Playback { delay: 60.0, ..Default::default() } }
+    pub fn new() -> Self { Playback { delay: 60.0, rate: 1.0, ..Default::default() } }
 
     /// The server forwards this sender's frames every `ms`.
     pub fn set_interval_hint(&mut self, ms: f32) {
@@ -293,6 +343,7 @@ impl Playback {
         self.roots.clear();
         self.clock.reset();
         self.pt = None;
+        self.blend = None;
         self.stats.restarts += 1;
     }
 
@@ -374,10 +425,12 @@ impl Playback {
         if frame.ts > newest {
             // Discontinuity: a jump no body can make => drop history so we
             // never interpolate through walls, and tell the game to snap.
+            // A long gap (the owner loaded a level, respawned, was paused) is a cut
+            // too: never interpolate from the old pose to the new one.
             let cut = self.frames.back().map(|p| {
                 let d = dist3(&p.b[PELVIS], &frame.b[PELVIS]);
                 let dt = ((frame.ts - p.ts) / 1000.0).max(1e-3) as f32;
-                d > CUT_DIST_UU && d / dt > CUT_SPEED_UUPS
+                (d > CUT_DIST_UU && d / dt > CUT_SPEED_UUPS) || frame.ts - p.ts > GAP_CUT_MS
             }).unwrap_or(false);
             if cut {
                 self.frames.clear();
@@ -415,7 +468,7 @@ impl Playback {
             if let Some(p) = self.roots.back() {
                 let d = dist3(&p.pos, &pos);
                 let dt = ((ts - p.ts) / 1000.0).max(1e-3) as f32;
-                if d > CUT_DIST_UU && d / dt > CUT_SPEED_UUPS { self.roots.clear(); }
+                if (d > CUT_DIST_UU && d / dt > CUT_SPEED_UUPS) || ts - p.ts > GAP_CUT_MS { self.roots.clear(); }
             }
             self.roots.push_back(s);
         } else {
@@ -437,16 +490,81 @@ impl Playback {
     /// they reach that far, instead of the game extrapolating a sample by up
     /// to two frames (100 ms at 20 fps). `Sample::pt` is the evaluated time,
     /// `Sample::lead` the shift.
+
+    /// Correction blending. When late frames arrive while the playback point was
+    /// extrapolating or holding, the new trajectory differs from what was shown:
+    /// instead of stepping to it, the difference becomes an offset that decays
+    /// with BLEND_TAU_MS. A difference above BLEND_MAX_UU is shown at once.
+    fn blend_step(&mut self, mut so: SampleOut, at: f64, lead: f64) -> SampleOut {
+        let newest = self.frames.back().map_or(f64::NEG_INFINITY, |f| f.ts);
+        let cut = self.cut;
+        let prev = self.blend.take();
+        if so.mode == Mode::Stale || so.mask == 0 { return so; }
+        let mut off = [[0f32; 3]; SLOTS];
+        let mut qoff = [[0f32, 0.0, 0.0, 1.0]; SLOTS];
+        if let Some(b) = prev.filter(|b| b.cut == cut) {
+            let dt = (at - b.at).max(0.0);
+            let k = (-dt / BLEND_TAU_MS).exp() as f32;
+            // only after real starvation: the playback clock itself (not the requested
+            // look-ahead) was more than a frame past the newest frame
+            let jump = b.mode != Mode::Interp && newest > b.newest && b.at - b.lead - b.newest > V2_EXTRAP_OK_MS;
+            for i in 0..SLOTS {
+                if so.mask & b.mask & (1 << i) == 0 { continue; }
+                if jump {
+                    // where the shown body was heading vs where the new data puts it
+                    let s = dt as f32 / 1000.0;
+                    let mut d = [0f32; 3];
+                    for a in 0..3 { d[a] = b.shown[i][a] + b.vel[i][a] * s - so.bones[i][a]; }
+                    if (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt() > BLEND_MAX_UU { continue; }
+                    off[i] = d;
+                    let qs = [b.shown[i][3], b.shown[i][4], b.shown[i][5], b.shown[i][6]];
+                    let qr = [so.bones[i][3], so.bones[i][4], so.bones[i][5], so.bones[i][6]];
+                    qoff[i] = v2::qnorm(v2::qmul(qs, [-qr[0], -qr[1], -qr[2], qr[3]]));
+                } else {
+                    for a in 0..3 { off[i][a] = b.off[i][a] * k; }
+                    qoff[i] = nlerp(&[0.0, 0.0, 0.0, 1.0], &b.qoff[i], k);
+                }
+            }
+        }
+        let raw_vel = so.vel;
+        for i in 0..SLOTS {
+            if so.mask & (1 << i) == 0 { continue; }
+            let o = off[i];
+            if o != [0.0; 3] {
+                for a in 0..3 {
+                    so.bones[i][a] += o[a];
+                    // the decaying offset moves the body too
+                    so.vel[i][a] -= o[a] * (1000.0 / BLEND_TAU_MS) as f32;
+                }
+            }
+            if qoff[i][3] < 0.999_999 {
+                let q = v2::qnorm(v2::qmul(qoff[i], [so.bones[i][3], so.bones[i][4], so.bones[i][5], so.bones[i][6]]));
+                so.bones[i][3..7].copy_from_slice(&q);
+            }
+        }
+        self.blend = Some(Blend { at, lead, newest, mode: so.mode, cut, mask: so.mask, shown: so.bones, vel: raw_vel, off, qoff });
+        so
+    }
     pub fn sample_lead(&mut self, now: f64, lead: f64) -> Option<Sample> {
         let offset = self.clock.offset?;
         let target = now - offset - self.delay;
         let pt = match self.pt {
             Some(pt) if (target - pt).abs() <= RESYNC_MS => {
                 let dt = (now - self.last_now).clamp(0.0, 100.0);
-                let rate = ((target - pt) / SLEW_TIME_MS).clamp(-SLEW_MAX, SLEW_MAX);
-                pt + dt * (1.0 + rate)
+                let mut want = 1.0 + ((target - pt) / SLEW_TIME_MS).clamp(-SLEW_MAX, SLEW_MAX_UP);
+                // Starving: slow down instead of running into extrapolation and hold.
+                if let Some(n) = self.frames.back().map(|f| f.ts) {
+                    let over = pt - n;
+                    if over > 0.0 && target - pt < STRETCH_MAX_LAG_MS {
+                        let s = (over / STRETCH_FULL_MS).min(1.0);
+                        want = want.min(1.0 - (1.0 - STRETCH_MIN_RATE) * s);
+                    }
+                }
+                if !(self.rate > 0.0) { self.rate = 1.0; }
+                self.rate += (want - self.rate) * (dt / RATE_TAU_MS).min(1.0);
+                pt + dt * self.rate
             }
-            _ => target,
+            _ => { self.rate = 1.0; target }
         };
         self.pt = Some(pt);
         self.last_now = now;
@@ -460,6 +578,7 @@ impl Playback {
             let newest = self.frames.back().unwrap();
             sample_frames_lead(&self.frames, at, sender_now - newest.ts, lead)
         };
+        let so = self.blend_step(so, at, lead);
         let age = self.frames.back().map(|f| sender_now - f.ts).unwrap_or(f64::INFINITY);
         match so.mode {
             Mode::Interp => self.stats.interp += 1,
@@ -469,7 +588,7 @@ impl Playback {
         }
         let root = sample_roots(&self.roots, at);
         if self.frames.is_empty() && root.is_none() { return None; }
-        Some(Sample { pt: at, lead, mode: so.mode, age, delay: self.delay, jitter: self.clock.j95, interval: self.interval(), cut: self.cut,
+        Some(Sample { pt: at, lead, mode: so.mode, age, delay: self.delay, jitter: self.clock.j95, interval: self.interval(), rate: self.rate, cut: self.cut,
                       mask: so.mask, bones: so.bones, root, vmask: so.vmask, vel: so.vel, v2: so.v2, extra: so.extra })
     }
 }
@@ -830,9 +949,11 @@ mod tests {
         assert_eq!(s.mode, Mode::Extrap);
         let newest = pb.frames.back().unwrap().clone();
         for i in [0usize, HR, WPN_R] { assert!(dist3(&s.bones[i], &newest.b[i]) <= EXTRAP_MAX_UU + 1e-3); }
-        // Way past: hold (still bounded), then stale after STALE_MS.
-        let s = pb.sample(now0 + 50.0).unwrap();
-        let s = if s.mode == Mode::Extrap { pb.sample(now0 + 100.0).unwrap() } else { s };
+        // Way past (the clock slows while starving, so it takes longer): hold
+        // (still bounded), then stale after STALE_MS.
+        let mut t = now0;
+        let mut s = pb.sample(t).unwrap();
+        while s.mode == Mode::Extrap && t < now0 + 400.0 { t += 8.0; s = pb.sample(t).unwrap(); }
         assert_eq!(s.mode, Mode::Hold);
         for i in [0usize, HR, WPN_R] { assert!(dist3(&s.bones[i], &newest.b[i]) <= EXTRAP_MAX_UU + 1e-3); }
         let mut now = now0 + 100.0;
@@ -874,6 +995,20 @@ mod tests {
         let s = pb.sample(10_000.0 + 20.0 * period + 31.0).unwrap();
         assert_eq!(s.cut, 1);
         assert!(s.bones[0][0] > 4000.0, "shows the new place immediately: {}", s.bones[0][0]);
+    }
+
+    #[test]
+    fn a_long_gap_starts_over() {
+        let mut pb = Playback::new();
+        feed(&mut pb, 0..10, 1000.0 / 60.0, 30.0);
+        let cut0 = pb.cut;
+        // 800 ms later, 50 uu away: slow enough for a walk, but nothing to interpolate.
+        let ts = 10_000.0 + 9.0 * 1000.0 / 60.0 + 800.0;
+        let mut f = frame_at(99, ts, 300.0, 6.0);
+        f.b[0][0] += 50.0;
+        assert_eq!(pb.push_pose(ts + 30.0, f), Push::Cut);
+        assert_eq!(pb.cut, cut0 + 1);
+        assert_eq!(pb.frames.len(), 1);
     }
 
     #[test]

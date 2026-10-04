@@ -7,6 +7,7 @@ local Mo = {}
 
 Mo.FIGHT_FLASH_S = 1.5     -- "FIGHT!" after countdown -> live
 Mo.DIED_S        = 3.0     -- "YOU DIED", then "SPECTATING"
+Mo.ARENA_VIEW    = 0xFFFFFFFF  -- spectate target: HSMPMatch shows the arena overview
 Mo.FEED_LINES    = 5
 Mo.FEED_TTL_S    = 6.0     -- a kill-feed line stays, then fades over FEED_FADE_S
 Mo.FEED_FADE_S   = 1.0
@@ -322,9 +323,10 @@ function Mo.centre(T, snap, now)
             local my_hp = snap.vown and snap.vown.hp
             -- who the camera really follows (HSMPMatch's spectate bus record), else the first living foe
             local sp = snap.spectate
-            local foe = (sp and sp.target) or first_alive_foe(snap)
-            local name = (sp and sp.nick ~= "" and sp.nick) or (foe and Mo.nick(snap, foe))
-            local title = name and ("SPECTATING " .. string.upper(name)) or "SPECTATING"
+            local arena = sp and sp.target == Mo.ARENA_VIEW
+            local foe = (not arena) and ((sp and sp.target) or first_alive_foe(snap)) or nil
+            local name = (not arena) and ((sp and sp.nick ~= "" and sp.nick) or (foe and Mo.nick(snap, foe))) or nil
+            local title = arena and "ARENA VIEW" or (name and ("SPECTATING " .. string.upper(name)) or "SPECTATING")
             local keys = (sp and sp.alive and sp.alive > 1) and "Q / E switch   -   TAB scores" or "TAB scores"
             if my_hp and my_hp > 0 then
                 -- the server has us out but our pawn lives: a late joiner
@@ -388,7 +390,7 @@ function Mo.panel(T, snap, now, ctx)
     if T.pause_open then
         if T.confirm and now - T.confirm_at >= Mo.CONFIRM_S then T.confirm = nil end   -- a confirm times out
         local cf = T.confirm
-        local text = "The match keeps running while this menu is open."
+        local text = "The match keeps running while this menu is open. Report a problem: open the launcher > Create bug report."
         if cf == "leave" then text = "Leave the match? In a duel your opponent wins by forfeit."
         elseif cf == "quit" then text = "Quit Half Sword? You leave the match." end
         return { kind = "pause", modal = true, title = "PAUSED", text = text, vertical = true,

@@ -34,6 +34,8 @@ mod loadout_client;
 #[path = "../combat_client.rs"]
 mod combat_client;
 use hsmp_pose::{posecodec, poseplay};
+#[path = "../world_rx.rs"]
+mod world_rx; // the world tables (pure; also driven by tests/hsmpworld-sim)
 #[path = "../world_client.rs"]
 mod world_client;
 #[path = "../interact_client.rs"]
@@ -50,8 +52,12 @@ mod panic_guard; // any panic is fatal (log + career restore + exit)
 mod ipc_shm; // HSMP-SHM: the shared-memory backend
 mod records_in; // ABI 2: typed G2S records -> their domain
 mod parent; // which game process we belong to
+mod traversal; // NAT traversal: STUN + punch request when the host does not answer
 #[path = "../build_id.rs"]
 mod build_id;
+#[path = "../log_init.rs"]
+mod log_init; // stdout + the --log-dir file
+mod session_log; // --log-session: the per-run log folder
 
 // Siblings share each other's items through `use super::*`.
 use net::*;
@@ -224,6 +230,35 @@ struct Args {
     /// `--career-recover`: the guard's backup root (default %LOCALAPPDATA%\HSMP\save_backups).
     #[arg(long, requires = "career_recover")]
     career_backup_root: Option<PathBuf>,
+
+    /// Also write the log to <dir>/sidecar.log (rotated at 32 MB). HSMPMenu passes the run's
+    /// session folder (%LOCALAPPDATA%\HSMP\logs\<run>). Default: HSMP_LOG_DIR, else stdout only.
+    #[arg(long)]
+    log_dir: Option<PathBuf>,
+
+    /// The per-run log folder (session_log.rs): `start` creates it and prints `dir=...`;
+    /// `watch` (with --session-dir) waits for the game to exit and collects its logs there.
+    #[arg(long, value_parser = ["start", "watch"])]
+    log_session: Option<String>,
+
+    /// `--log-session watch`: the folder `start` printed.
+    #[arg(long)]
+    session_dir: Option<PathBuf>,
+
+    /// Server list that may relay a hole-punch request to a host behind a NAT (base URL;
+    /// repeatable, or comma-separated). The browser passes the lists it knows.
+    #[arg(long, value_delimiter = ',')]
+    master: Vec<String>,
+
+    /// NAT traversal when the server does not answer directly: auto (public servers
+    /// only) | off.
+    #[arg(long, env = "HSMP_PUNCH", default_value = "auto")]
+    punch: String,
+
+    /// STUN servers for this socket's public endpoint (host:port, comma-separated);
+    /// "" = the public defaults, "off" = none.
+    #[arg(long, env = "HSMP_STUN_SERVERS", default_value = "")]
+    stun: String,
 }
 
 /// `--career-recover`: crash recovery only. Returns the stdout JSON lines
@@ -291,6 +326,7 @@ fn attach_ipc(args: &Args) -> &'static ipc_shm::ShmLink {
         eprintln!("{msg}");
         warn!(ipc = spec, "{msg}");
         events::emit("ipc_refused", serde_json::json!({"code": "no_ipc", "detail": msg}));
+        log_init::flush();
         std::process::exit(EXIT_NO_IPC);
     }
     let refuse = |r: hsmp_ipc::handshake::Refusal| -> ! {
@@ -299,6 +335,7 @@ fn attach_ipc(args: &Args) -> &'static ipc_shm::ShmLink {
         if let Some(t) = &args.ipc_tap {
             ipc_shm::tap_refusal(t, &r);
         }
+        log_init::flush();
         std::process::exit(r.code.exit_code());
     };
     let Some(name) = hsmp_ipc::shm::parse_ipc_arg(spec) else {
@@ -332,12 +369,22 @@ async fn main() -> Result<()> {
             Err(e) => { eprintln!("player key: {e:#}"); std::process::exit(1) }
         }
     }
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "hsmp_sidecar=info".into()),
-        )
-        .init();
+    if let Some(mode) = args.log_session.as_deref() {
+        let code = if mode == "start" {
+            let (lines, code) = session_log::start(args.parent_pid, build_id::VERSION);
+            for l in lines {
+                println!("{l}");
+            }
+            code
+        } else if let Some(d) = &args.session_dir {
+            session_log::watch(d, args.parent_pid, &args.state_dir)
+        } else {
+            eprintln!("--log-session watch needs --session-dir");
+            2
+        };
+        std::process::exit(code);
+    }
+    let _log_guard = log_init::init("hsmp_sidecar=info", log_init::dir_from(args.log_dir.as_deref()).as_deref(), "sidecar");
 
     #[cfg(windows)]
     unsafe {
@@ -352,6 +399,7 @@ async fn main() -> Result<()> {
         std::process::exit(if ok { 0 } else { 1 });
     }
     panic_guard::install(Some(args.state_dir.clone()));
+    panic_guard::on_fatal_panic(log_init::flush);
     info!(?args, "sidecar starting");
     if let Err(e) = events::init(args.events.as_deref(), "sidecar") {
         warn!(error = %e, path = ?args.events, "cannot open --events file");
@@ -472,6 +520,12 @@ async fn main() -> Result<()> {
     let recv_task = spawn_recv_task(&sock, &shared);
     let ping_task = spawn_ping_task(&sock, &shared);
     let transport_task = spawn_transport_task(&sock, &shared);
+    // Joining a host behind a NAT: direct first, then a punch through the server list.
+    let _traversal = traversal::spawn(sock.clone(), traversal::Opts {
+        mode: traversal::Mode::parse(&args.punch),
+        masters: args.master.iter().map(|m| m.trim().to_string()).filter(|m| m.starts_with("http://") || m.starts_with("https://")).collect(),
+        stun: traversal::stun_servers(&args.stun),
+    });
     // Root / skeletal / weapon from the game: the hsmp-ipc thread reads the typed slots and
     // hands the bodies to the forwarder, which sends them.
     let send_task = {
@@ -637,3 +691,4 @@ mod startup_tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 }
+

@@ -100,6 +100,12 @@ pub struct RegisterReq {
     /// Unix ms; must be newer than the last one accepted for this listing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ts: Option<u64>,
+    /// How the server is reachable (`NAT_KINDS`); absent from older servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nat: Option<String>,
+    /// The server takes punch requests (it opens the listen socket, punch.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub punch: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +134,9 @@ pub struct HeartbeatReq {
     pub hmac: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ts: Option<u64>,
+    /// As in the registration; absent = unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nat: Option<String>,
 }
 
 /// `DELETE /v1/servers/{id}`.
@@ -158,6 +167,22 @@ pub struct Fields {
     pub version: String,
     pub region: String,
     pub content_hash: String,
+    pub nat: String,
+    pub punch: bool,
+}
+
+/// How a listed server is reachable:
+/// - `open`: no NAT in front of it (public address)
+/// - `upnp` / `pcp` / `natpmp`: its router port was opened automatically
+/// - `double`: mapped, but the router itself is behind another NAT (CGNAT)
+/// - `cone`: behind a NAT with endpoint-independent mapping, no mapping: needs a punch
+/// - `symmetric`: behind a NAT that maps per destination: needs a forwarded port
+/// - `unknown`: STUN did not answer
+pub const NAT_KINDS: &[&str] = &["open", "upnp", "pcp", "natpmp", "double", "cone", "symmetric", "unknown"];
+
+/// A reported NAT kind, or "" for anything not in `NAT_KINDS`.
+pub fn nat_kind(s: Option<&str>) -> String {
+    s.map(str::trim).filter(|k| NAT_KINDS.contains(k)).unwrap_or("").to_string()
 }
 
 /// Validate a registration. `min_port` is MIN_PORT on a public list (1 keeps the old
@@ -200,6 +225,8 @@ pub fn validate_register(r: &RegisterReq, min_port: u16) -> Result<Fields, &'sta
         version,
         region,
         content_hash,
+        nat: nat_kind(r.nat.as_deref()),
+        punch: r.punch.unwrap_or(false),
     })
 }
 
@@ -295,6 +322,24 @@ mod tests {
         assert_eq!(resp.heartbeat_s, None);
         let h: HeartbeatReq = serde_json::from_str(r#"{"players":2,"nonce":"n","hmac":"h"}"#).unwrap();
         assert_eq!(h.ts, None);
+    }
+
+    #[test]
+    fn nat_fields_are_optional_and_checked() {
+        let mut r = req();
+        let f = validate_register(&r, MIN_PORT).unwrap();
+        assert_eq!((f.nat.as_str(), f.punch), ("", false));
+        r.nat = Some("cone".into());
+        r.punch = Some(true);
+        let f = validate_register(&r, MIN_PORT).unwrap();
+        assert_eq!((f.nat.as_str(), f.punch), ("cone", true));
+        r.nat = Some("<script>".into());
+        assert_eq!(validate_register(&r, MIN_PORT).unwrap().nat, "");
+        // an older server's registration has neither and still parses
+        let old: RegisterReq = serde_json::from_str(r#"{"name":"x","port":7777}"#).unwrap();
+        assert!(old.nat.is_none() && old.punch.is_none());
+        // and an older master never sees them when they are unset
+        assert!(!serde_json::to_string(&old).unwrap().contains("nat"));
     }
 
     #[test]

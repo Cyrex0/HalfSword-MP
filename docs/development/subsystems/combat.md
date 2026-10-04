@@ -97,13 +97,17 @@ The assertions in `tests/combat_sim.rs`:
 - ≤ 3 % of honest hits damage-clamped;
 - every cheat ≤ 0.5 %, or at most one success when there are fewer than 200 attempts;
 - honest players next to cheaters ≥ 97 %;
-- solo parity and health replication (§7, §8).
+- solo parity and health replication (§7, §8);
+- the replayed hit spot falls under the same armour layer as the touched one for ≥ 99.5 % of
+  replayed blade blows (`hit_location_survives_the_replay_delay`, typical and wifi; §5 "Where the
+  blow lands").
 
 Notes on the profiles:
 
-- `bad` (RTT 220 ms, ±40 jitter, 200 ms spikes) puts the honest view lag at about 300 ms, the default
-  rewind cap, so most hits there are rejected as `rewind_cap`. This favours the defender by design.
-  `lagcomp::set_max_rewind` raises the cap to 400 ms; there is no command-line flag for it.
+- `bad` (RTT 220 ms, ±40 jitter, 200 ms spikes) and `far` (RTT 300 ms, ±50 jitter) put the honest
+  view lag at 400–430 ms. The rewind cap follows the attacker's path (§3), so these hits land:
+  accepted 98 % on `bad` and 99.9 % on `far` (they were 5 % and 0 % under the fixed 300 ms cap).
+  Beyond 600 ms of view lag (`REWIND_CEILING_MS`) the defender wins.
 - Without a blade stream (PhysicsHandle stand-ins), parries cannot be validated: blades estimated
   from hand plus weapon actor fall outside the clash tolerance.
 
@@ -126,8 +130,11 @@ Policy, in order:
 
 1. Timestamps are required once the victim streams. The attacker's own timestamp must match the
    claim's arrival through its clock map.
-2. Rewind: at most the cap (300 ms) behind the victim's newest sample, net of a capped delivery
-   credit. Beyond the cap the defender wins.
+2. Rewind: at most the cap behind the victim's newest sample, net of a capped delivery credit.
+   The cap is the attacker's honest view lag on its measured path (RTT + its modelled buffer of
+   the victim + one frame, `ViewPrediction::honest_lag`) plus the view tolerance and 40 ms,
+   never below the configured cap (300 ms; 400 on high-latency servers) and never above 600 ms.
+   Beyond the cap the defender wins.
 3. Geometry: the contact must lie on the victim's rewound capsules, and on the attacker's blade swept
    over the last frame (or, without a blade stream, within reach of its weapon actor and hands).
 4. Blocks: only server-validated clashes cancel a hit. A geometrically valid hit is held for the
@@ -140,6 +147,7 @@ Every constant and why:
 |---|---|---|
 | `HISTORY_MS` | 1200 | Covers the 300/400 ms rewind cap, delivery and resends. |
 | `MAX_REWIND_MS` / `HIGH_LATENCY_REWIND_MS` | 300 / 400 | The cap applies to the **view lag**: how old the victim pose was at the attacker's hit, measured on the server's clock maps and never from the client's `age_ms`. |
+| `REWIND_SLACK_MS` / `REWIND_CEILING_MS` | 40 / 600 | The cap grows to `honest_lag + tol + 40`, up to 600 ms: a 300 ms RTT attacker still lands hits, a view far behind its path does not. |
 | `DELIVERY_CREDIT_MS` | 130 | The total age when judged (view lag + claim delivery) may exceed the cap by one resend or RTO plus a Lua tick. Spikes beyond that favour the defender. |
 | `FUTURE_MS`, `ATTACKER_LEAD_MS` | 150, 300 | A clamped view time may lead the newest victim sample by 150 ms. The attacker's ts may lead its stream by 300 ms; beyond that the claim is a `ts_future` reject. |
 | `ARRIVAL_LEAD_MS` / `ARRIVAL_LATE_MS` | 50 / 150 (+2·jitter) | `attacker_ts` mapped through the clock map must agree with the claim's arrival, net of `age_ms` (the game's `lage_ms` plus the sidecar's resend age). |
@@ -219,7 +227,8 @@ blood loss, not by summed Health loss. That is why the HUD shows CON / BODY % / 
 
 The server's Health-loss cap for a claim is that formula with every unknown at its worst case:
 
-- **Rigidity** is the highest `rig` tag per class: sword 0.85, dagger 1.0, axe 1.25, blunt 2.0,
+- **Rigidity** is the highest `rig` tag of any module of the class, pommel and guard included (a
+  pommel strike or a mordhau is a sword blow): sword 1.05, dagger 1.05, axe 1.25, blunt 2.0,
   polearm 1.45, shield 1.0. Unarmed is 1.0 and unknown is 2.5 (traps).
 - **Quality and alignment** are taken at ×1.1 (best quality) and ×2.333 (blunt alignment).
 - **Velocity** is the server-measured striking speed, × `SPEED_TOL` 1.0.
@@ -242,10 +251,14 @@ follows from that.
 
 - **Claims** come from the "Deal Complex Damage" callback on a stand-in whose Collided Component is
   mine (weapon or body): the armour-stage inputs as the game passed them (claim flag bit 5,
-  `FLAG_COMPLEX`), no delta rows. Nothing is measured on the stand-in. One claim per contact episode
-  per bone: a tick's calls on one bone give the strongest call (Rigidity·|Hit Velocity| first, then
-  |Hit Impulse|·(Cutting Power+1)); a continuation goes out at most every 150 ms (`CONT_MS`) and the
-  episode ends after a 120 ms gap (`EPISODE_GAP_MS`). Each claim carries the game's claim id `cid`
+  `FLAG_COMPLEX`), no delta rows. Nothing is measured on the stand-in. Every call that passed the
+  stand-in's own Deal Complex Damage gate (|Hit Impulse|·(Cutting Power+1) at least the last one on
+  that bone within 0.1 s; read back from `Last Complex Damage Impulse` and `Last Complex Damage Bone`
+  after the call) is a claim, in order, at most 4 per bone and tick (`BF.MAX_PER_BONE_TICK`). That
+  gate runs on my screen exactly as it would on the victim in solo, so these are the calls that reach
+  Get Damage in solo: a graze followed by a harder frame lands twice there and here, a weaker frame
+  inside the window never. Without readable gate state, a tick's calls on one bone give the strongest
+  (Rigidity·|Hit Velocity| first). Each claim carries the game's claim id `cid`
   and `lage_ms` (time held in the game). `attacker_ts = floor(os.clock·1000)` in the callback (the
   pose clock); `victim_view_ts` / `victim_arm_ts` come from HSMPAvatars' `playback` bus key (what the
   stand-in was displaying). A Get Damage callback is never a claim.
@@ -271,9 +284,30 @@ follows from that.
 - **Victim.** A stand-in's blow that lands on my pawn locally (its body, or a weapon whose gate
   leaked) is undone in the callback from my baseline (refreshed every tick and after every
   legitimate hit) and reported as a `touch`. The server-validated replay through my own Deal
-  Complex Damage is the only damage another player does to me, reaction included. The replay first
-  clears `Last Complex Damage Impulse`, because replays arrive bunched (parry holds, jitter) and the
-  per-bone contact gate would swallow a later, weaker blow.
+  Complex Damage is the only damage another player does to me, reaction included. Replays arrive
+  bunched (parry holds, jitter, resends), so the replay sets the game's gates as solo would have them:
+  `Last Complex Damage Impulse` is cleared (the claim already passed that gate on the attacker's
+  screen), and Get Damage's per-bone `Last Damage Taken` is kept only after a blow of the same
+  attacker on the same bone less than 0.2 s earlier on the attacker's clock (`BF.GD_GATE_MS`, the
+  game's RetriggerableDelay); otherwise it is cleared.
+- **Where the blow lands.** Deal Complex Damage maps the hit point into the hit bone's space and
+  traces the armour layers covering that spot (layers stack). The claim carries `offset`, `normal`,
+  `velocity` and `impulse` in the hit bone's frame (flag bit 6, `BF.LOCAL`; from
+  `GetSocketTransform`, rotation removed, offset divided by the bone scale), and every replay turns
+  them back with its own bone. A world offset re-added to a victim that turned or leaned since the
+  attacker saw it put the blow somewhere else on the body: under the helmet instead of the open face,
+  on the back plate instead of the gap, or inside the body where the trace finds nothing.
+- **Stand-in body (open).** A stand-in wears the owner's armour exactly: the same slots and proxy
+  collisions with the same Def tags (measured in game, combat-parity.md §3). It keeps the pooled foe's
+  passport body, though: Height Rate, Muscle Rate, `Mass Scale (Set in BP)`, and bone masses up to
+  2.6× the owner's. The replay's damage uses the victim's own body. The physical normal impulse the
+  attacker's blade gets from the stand-in does not, and Hit Velocity takes the larger of that impulse
+  and the weapon's speed. Fixing this needs the owner's passport Height and Weight in the `loadout`
+  record (HSMPLoadout), applied before the stand-in's body setup.
+- **What struck.** Flag bit 7 (`BF.WEAPON`): the striking component was a weapon. The replay passes
+  the attacker's weapon (its first collision component; my own for the hit fx of my blow) or its body
+  mesh as Collided Component: Get Damage reads the 'Weapon' tag (consciousness of light blows,
+  `Last Hit By Weapon`).
 - **Clash reports.** Weapon-on-weapon contact between my weapon and a stand-in's (Collision Hit) is
   sent as `clash`, at most every 100 ms per peer.
 - **Death.** My own native Death / Dying sends a `death_report` at once. A server `death` about me
@@ -316,7 +350,9 @@ trim.
 
 | `damage` field | carries (FLAG_COMPLEX) |
 |---|---|
-| `impulse` / `velocity` | Hit Impulse / Hit Velocity (pre-armour) |
+| `impulse` / `velocity` | Hit Impulse / Hit Velocity (pre-armour; bone frame with bit 6, lengths unchanged) |
+| `offset` / `normal` | hit point minus the bone, and the impact normal (bone frame with bit 6) |
+| `location` | world hit point on the attacker's screen (lag comp) |
 | `cutting_power` / `draw_cut` | Cutting Power / Draw Cut (pre-armour) |
 | `pain_rate` | Stab Rate |
 | `damage_out` | Rigidity |
@@ -352,7 +388,8 @@ with PhysicsHandle stand-ins (20 uu servo noise). Scripted-blade teleports (> 45
 counted as contacts.
 
 **Offline proof in Lua.** `hsmp-tools lua-test damage_parity` runs the real HSMPCombat `main.lua`
-against a model of the decompiled Deal Complex Damage → Get Damage with after-call hooks. See
+against a model of the decompiled Deal Complex Damage → Get Damage (bone frames, armour coverage by
+spot, both contact gates, the weapon tag) with after-call hooks. See
 [combat-parity.md](combat-parity.md).
 
 ## 8. Health replication end to end (`sim::health`, `health_replication_end_to_end`)

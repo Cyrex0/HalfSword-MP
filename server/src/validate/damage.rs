@@ -152,7 +152,10 @@ pub fn groups_for_bone(bone: &str) -> &'static [&'static str] {
 // (hm 1.125). A claim above that bound is physically impossible.
 
 /// Largest `rigNNN` tag per class in shipped content (weapon_tags /
-/// module_tags): sword & falchion blades 0.70–0.85, rondels 1.00, axe heads
+/// module_tags), over EVERY module of the weapon, not just the blade: a
+/// pommel strike or a mordhau hits with the pommel (1.05) or the guard (1.00),
+/// and capping those at the blade's 0.85 cut honest blows by up to 19 %.
+/// Sword & falchion blades 0.70–0.85, rondels 1.00, axe heads
 /// ≤ 1.25, maces 1.33 / hammers 1.10 / flail heads 2.00, poleaxe & hafted
 /// heads ≤ 1.45, shields ≤ 1.00, traps 2.50. Unarmed: Willie-vs-Willie body
 /// contact (Deal Complex Damage with the body's own rigidity, assumed 1).
@@ -160,8 +163,8 @@ pub fn rig_max(c: WeaponClass) -> f32 {
     match c {
         WeaponClass::Unknown => 2.50,
         WeaponClass::Unarmed => 1.00,
-        WeaponClass::Dagger => 1.00,
-        WeaponClass::Sword => 0.85,
+        WeaponClass::Dagger => 1.05,
+        WeaponClass::Sword => 1.05,
         WeaponClass::Axe => 1.25,
         WeaponClass::Blunt => 2.00,
         WeaponClass::Polearm => 1.45,
@@ -499,6 +502,11 @@ pub const KICK_MAX: f32 = 10.0;
 /// Lower Threshold << 16 | Extra High Velocity << 17. The owner replays them
 /// through its OWN armour stage (solo parity).
 pub const FLAG_COMPLEX: u8 = 1 << 5;
+/// `offset`, `normal`, `velocity` and `impulse` are in the hit bone's frame (rotation
+/// removed, offset in unscaled bone units). Lengths are unchanged; `location` stays world.
+pub const FLAG_LOCAL: u8 = 1 << 6;
+/// The striking component was a weapon, not a Willie body part.
+pub const FLAG_WEAPON: u8 = 1 << 7;
 /// Hit Impulse ceiling over the attacker's peak striking speed (live user
 /// swings: the DCD Hit Impulse — the normal impulse, which rubber
 /// banding does not scale — reached ~11× it on a blade pressing into a body).
@@ -721,8 +729,8 @@ mod tests {
         // Unknown speed and kit: the permissive ceiling.
         assert_eq!(loss_cap(WeaponClass::Unknown, None, Armour::None, false), LOSS_CEILING);
         // Stabs skip the DRS gate.
-        assert!(native_bound_part(WeaponClass::Dagger, 140.0, Armour::None, true, Part::UpperTorso)
-            > native_bound_part(WeaponClass::Dagger, 140.0, Armour::None, false, Part::UpperTorso));
+        assert!(native_bound_part(WeaponClass::Dagger, 120.0, Armour::None, true, Part::UpperTorso)
+            > native_bound_part(WeaponClass::Dagger, 120.0, Armour::None, false, Part::UpperTorso));
         // Parts follow the game's kH table.
         assert_eq!(part_of("neck_01"), Part::Neck);
         assert_eq!(part_of("spine_02"), Part::LowerTorso);

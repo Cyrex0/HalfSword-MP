@@ -28,3 +28,24 @@ TTL_S = "360"
 # Discord announcements (only when the DISCORD_WEBHOOK_URL secret is set): include the
 # server's ip:port in "server up" messages. "0" leaves it out.
 DISCORD_SHOW_ADDRESS = "1"
+# Bug reports: per address and day, all reports of a day (150 MB keeps 60 days under the
+# R2 free 10 GB), and how long reports are kept (the bucket's lifecycle rule says the same).
+REPORTS_PER_IP_DAY = "3"
+REPORTS_DAY_BYTES = "157286400"
+REPORTS_RETENTION_DAYS = "60"
+
+# Bug reports from the launcher (src/reports.rs, POST /v1/reports), stored in R2. Create the
+# bucket and its 60-day expiry once, before the first deploy with this binding
+# (docs/development/bug-reports.md):
+#   npx wrangler r2 bucket create hsmp-reports
+#   npx wrangler r2 bucket lifecycle add hsmp-reports expire-reports r/ --expire-days 60
+# and the admin token for listing / downloading: npx wrangler secret put REPORTS_ADMIN_TOKEN
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "hsmp-reports"
+
+# Upload bursts per address (2 a minute); the per-day caps are the REPORTS_* vars.
+[[ratelimits]]
+name = "REPORT_RATE"
+namespace_id = "2001"
+simple = { limit = 2, period = 60 }

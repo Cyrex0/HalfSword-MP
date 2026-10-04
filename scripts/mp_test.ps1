@@ -336,7 +336,7 @@ if ($runCfg.deploy_check -and (@($runCfg.deploy_check.mismatched).Count -or @($r
     Say "deployed files differ from the deploy stamp ($(@($runCfg.deploy_check.mismatched).Count) changed, $(@($runCfg.deploy_check.missing).Count) missing): DoD-13 will FAIL" Red
 }
 # A -Netsim override weaker than the scenario's own profile cannot certify the scenario (gate rule NETSIM)
-$order = @("none", "lan", "good", "typical", "wifi", "bad", "awful")
+$order = @("none", "lan", "good", "typical", "wifi", "intl", "bad", "far", "awful")
 $scList = @("$($sc.netsim)" -split ",")
 for ($i = 1; $i -le $Instances; $i++) {
     if ($topology -eq "listen" -and $i -eq 1) { continue }
@@ -361,6 +361,8 @@ function Inst-Env([int]$i) {
         # 16.7 ms drops to exactly 30 fps on the heavier arenas, which a player on
         # their own PC would not see (HSMPMatch director.lua D.TEST_CVAR_OK).
         HSMP_TEST_CVARS = $TestCvars
+        # Test runs never touch the real router (no UPnP / PCP / NAT-PMP mapping, no public STUN).
+        HSMP_PORT_MAP = "off"; HSMP_STUN_SERVERS = "off"
     }
     $e.HSMP_IPC = $Ipc
     if ($IpcTaps.Contains("$i")) {
@@ -555,8 +557,8 @@ if ($topology -eq "dedicated") {
     $sa = @("--rcon-bind", "127.0.0.1:$RconPort", "--rcon-password", $RconPw, "--bans-file", "`"$(Join-Path $Run 'bans.txt')`"")
     if ($caps.events) { $sa += @("--events", "`"$(Join-Path $Run 'server.jsonl')`"") }
     if ($caps.debug_verbs) { $sa += "--debug-verbs" }
-    # security: instance 1 (the listen host) owns its server by its player key
-    if ($caps.admin_keys) { $sa += @("--owner-key-file", "`"$(Join-Path $stateDirs["1"] '.player_key')`"") }
+    # The listen host owns its server by its player key: HSMPMenu already
+    # passes --owner-key-file (a second copy makes hsmp-server refuse to start).
     $wrap = @(
         "@echo off",
         "rem mp_test.ps1 listen-host wrapper (HSMP_SERVER_EXE of instance 1): adds RCON/--events, logs to the run dir",
@@ -619,6 +621,9 @@ function Place-GameWindow([int]$procId, [int]$i, [int]$n) {
         Say "game$i has no main window yet; left where it is" Yellow
     } catch { Say "window placement skipped: $_" Yellow }
 }
+# A listen host reaches its lobby before the others are even launched: the
+# first scenario wait counts events from here, not from after the launches.
+$launchSince = NowMs
 for ($i = 1; $i -le $Instances; $i++) {
     $ie = Inst-Env $i
     if ($FakeGame) {
@@ -640,7 +645,7 @@ for ($i = 1; $i -le $Instances; $i++) {
 }
 
 # --- 6. scenario steps -------------------------------------------------------------------------
-$since = NowMs
+$since = if ($topology -eq "listen") { $launchSince } else { NowMs }
 $failed = $null
 $cmdSeq = 0
 $quitDone = $false

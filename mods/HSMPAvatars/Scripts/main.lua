@@ -46,7 +46,6 @@ local UEHelpers = require("UEHelpers")
 -- userdata). Route every deferred, looped and key-bound callback onto
 -- the game thread.
 if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedAction then
-    local _gt = ExecuteInGameThread
     ExecuteWithDelay = function(ms, fn) return ExecuteInGameThreadWithDelay(ms, fn) end
     LoopAsync = function(ms, fn)
         local h
@@ -56,14 +55,32 @@ if LoopInGameThreadWithDelay and ExecuteInGameThreadWithDelay and CancelDelayedA
         end)
         return h
     end
-    local _rkba = RegisterKeyBindAsync
-    RegisterKeyBindAsync = function(key, mods, fn)
-        return _rkba(key, mods, function() _gt(function() pcall(fn) end) end)
+    -- Key callbacks run on the UE4SS input thread. Native-function hooks run
+    -- on the game thread on this mod's hook state without UE4SS's lock, so an
+    -- ExecuteInGameThread call from a key callback pushed onto that state
+    -- mid-hook (crash in push_structproperty, 2026-10-03). The input thread
+    -- now only appends to a queue (plain Lua, no UE4SS call) and a
+    -- game-thread loop runs what it queued.
+    local kq, kq_w, kq_r, kq_loop = {}, 0, 0, nil
+    local function kq_wrap(fn)
+        if not kq_loop then
+            kq_loop = LoopInGameThreadWithDelay(16, function()
+                while kq_r < kq_w do
+                    kq_r = kq_r + 1
+                    local f = kq[kq_r]
+                    kq[kq_r] = nil
+                    if f then pcall(f) end
+                end
+            end)
+        end
+        return function() local n = kq_w + 1; kq[n] = fn; kq_w = n end
     end
+    local _rkba = RegisterKeyBindAsync
+    RegisterKeyBindAsync = function(key, mods, fn) return _rkba(key, mods, kq_wrap(fn)) end
     local _rkb = RegisterKeyBind
     RegisterKeyBind = function(key, a, b)
-        if b then return _rkb(key, a, function() _gt(function() pcall(b) end) end) end
-        return _rkb(key, function() _gt(function() pcall(a) end) end)
+        if b then return _rkb(key, a, kq_wrap(b)) end
+        return _rkb(key, kq_wrap(a))
     end
 end
 
@@ -435,7 +452,7 @@ function PURE.play_from_out(o)
         v2 = true, seq = o.seq, pt = tonumber(o.pt) or 0, mode = o.mode or "?",
         age = tonumber(o.age) or -1, delay = tonumber(o.delay) or 0, jit = tonumber(o.jit) or 0,
         cut = tonumber(o.cut) or 0, slots = {}, nbones = 0, weapons = {},
-        lead = tonumber(o.lead) or 0, iv = tonumber(o.iv) or -1, st = tonumber(o.st) or 0,
+        lead = tonumber(o.lead) or 0, iv = tonumber(o.iv) or -1, st = tonumber(o.st) or 0, rate = tonumber(o.rate) or 1,
     }
     local r = o.root
     if type(r) == "table" then
@@ -2328,6 +2345,154 @@ for i, bn in ipairs(PURE.V2_SLOTS) do _sv_fn[i] = fname(bn) end
 -- 95-97 / 46-48 deg: both hands ~50 deg off target, capped every frame. The
 -- servo drives every body, so the limits are not needed to hold the pose;
 -- on release the physics asset's own profile comes back (native ragdoll).
+-- SK_Body_Man reference offsets, parent space, uu (posecodec_v2 REF_T; a hsmp-tools
+-- test keeps the two equal).
+PURE.V2_REF_T = {
+    { 0, 0, 0 },
+    { 0, -0.23, 3.67 }, { 0, 1.60, 6.60 }, { 0, 1.42, 7.10 }, { 0, 0.21, 8.52 }, { 0, -3.00, 19.41 },
+    { 0, -0.61, 11.87 }, { 0, 0.61, 5.02 }, { 0, 0, 4.91 },
+    { 1.43, -1.60, 5.44 }, { 17.81, 0, 0 }, { 27.77, -0.01, 0.01 }, { 27.25, 0, 0 },
+    { -1.43, -1.60, 5.44 }, { -17.81, 0, 0 }, { -27.77, -0.01, 0.01 }, { -27.25, 0, 0 },
+    { 9.97, 0.26, -2.35 }, { 2.36, 2.60, -43.20 }, { 1.76, -2.60, -42.10 },
+    { -9.97, 0.26, -2.35 }, { -2.36, 2.60, -43.20 }, { -1.76, -2.60, -42.10 },
+}
+function PURE.len3(v) return math.sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3]) end
+
+-- The character scale of measured parent offsets: median of measured / reference
+-- length over the bones longer than 5 uu (1 when nothing was measured).
+function PURE.ref_scale(loc)
+    local r = {}
+    for i = 2, #PURE.V2_REF_T do
+        local ref, m = PURE.len3(PURE.V2_REF_T[i]), loc and loc[i]
+        if m and ref > 5 then r[#r + 1] = PURE.len3(m) / ref end
+    end
+    if #r == 0 then return 1 end
+    table.sort(r)
+    return r[math.floor((#r + 1) / 2)]
+end
+
+-- Parent offsets measured on the stand-in, checked against the reference
+-- skeleton: an offset taken from a stretched or dislocated body (a reused Willie,
+-- a ragdoll mid-fall) would make every later target stretched as well. An
+-- offset more than 15 % (and 2 uu) off the scaled reference, or missing, is
+-- replaced by the reference. Returns the offsets and how many were replaced.
+function PURE.ref_loc(loc)
+    local k = PURE.ref_scale(loc)
+    local out, fixed = {}, 0
+    for i = 2, #PURE.V2_REF_T do
+        local ref = PURE.V2_REF_T[i]
+        local want = PURE.len3(ref) * k
+        local m = loc and loc[i]
+        if m and math.abs(PURE.len3(m) - want) <= math.max(2, 0.15 * want) then
+            out[i] = m
+        else
+            out[i] = { ref[1] * k, ref[2] * k, ref[3] * k }
+            fixed = fixed + 1
+        end
+    end
+    return out, fixed, k
+end
+
+-- Largest joint stretch of a pose: |child - parent| against the reference length
+-- (uu), over the bones present in `pos` (index -> {x, y, z}). Returns it and the
+-- bone index.
+function PURE.stretch(pos, ref_len)
+    local worst, bone = 0, nil
+    for i = 2, #PURE.V2_PARENT do
+        local a, b, l = pos[i], pos[PURE.V2_PARENT[i]], ref_len[i]
+        if a and b and l then
+            local d = math.abs(math.sqrt((a[1] - b[1]) ^ 2 + (a[2] - b[2]) ^ 2 + (a[3] - b[3]) ^ 2) - l)
+            if d > worst then worst, bone = d, i end
+        end
+    end
+    return worst, bone
+end
+
+-- Clean (re)start of a stand-in: physics off for one frame so every body takes
+-- the animated pose, then (drive_frame, re-pose second half) physics on and the
+-- mesh snapped onto the target pelvis. `why` (drive start, discontinuity)
+-- also starts the soft servo ramp and the spawn stretch watch.
+function PX.start_repose(p, body, now, why)
+    body.repose_at = now
+    body.reposes = (body.reposes or 0) + 1
+    if why then
+        body.repose_start = why
+        Log("pose: stand-in of %s: %s: clean start (physics reset, snap onto the target pelvis)", tostring(p.nick), why)
+    end
+    if pcall(function() body.mesh:SetSimulatePhysics(false) end) then body.repose = true end
+end
+
+-- How long after a clean start the servo is soft, and the stretch watch.
+PX.RAMP_MS = 300
+PX.STRETCH_WATCH_MS = 3000
+PX.PAWN_WATCH_MS = 8000
+
+-- One frame of the spawn stretch watch of stand-in `p` (positions of its bodies
+-- this frame); emits `spawn_stretch` once the window is over.
+function PX.watch_stretch(id, p, sv, cpos, now)
+    local w = p.spawn_watch
+    if not w then return end
+    local d, b = PURE.stretch(cpos, sv.ref_len or {})
+    if d > w.max then w.max, w.bone = d, PURE.V2_SLOTS[b] or "-" end
+    w.n = (w.n or 0) + 1
+    if now - w.t0 >= PX.STRETCH_WATCH_MS then
+        p.spawn_watch = nil
+        ev("spawn_stretch", { who = "standin", peer = id, max_uu = w.max, bone = w.bone, why = w.why, frames = w.n })
+        Log("pose peer %d: spawn stretch over %d ms after %s: max %.1f uu (%s), %d frames", id, PX.STRETCH_WATCH_MS,
+            w.why, w.max, w.bone, w.n)
+    end
+end
+
+-- Rubber-band measure of one driven body (netfeel): how much the body's
+-- per-frame motion changes beyond the change in its targets' (second
+-- differences, uu per frame). A jump of the shown body shows as a spike.
+function PX.nf_note(st, c, h, a)
+    if not (h.c1 and h.c2 and h.a1 and h.a2) then return end
+    local dr, da = 0, 0
+    for k = 1, 3 do
+        dr = dr + (c[k] - 2 * h.c1[k] + h.c2[k]) ^ 2
+        da = da + (a[k] - 2 * h.a1[k] + h.a2[k]) ^ 2
+    end
+    local x = math.max(0, math.sqrt(dr) - math.sqrt(da))
+    local nf = st.nf or { n = 0, snaps = 0, max = 0 }
+    st.nf = nf
+    nf.n = nf.n + 1
+    if x > PX.NF_SNAP_UU then nf.snaps = nf.snaps + 1 end
+    if x > nf.max then nf.max = x end
+end
+PX.NF_SNAP_UU = 3
+
+-- Spawn stretch watch of OUR pawn: for PX.PAWN_WATCH_MS after its mesh is
+-- (re)acquired (a new world / pawn: covers the settle, the placement teleport
+-- and its verification), the largest joint stretch against the reference
+-- skeleton scaled to this character. Emits `spawn_stretch` (who = pawn) once.
+function PX.watch_pawn(mesh, now)
+    local w = PX.local_watch
+    if not w then return end
+    local pos = {}
+    for i = 1, PURE.V2_NB do
+        pcall(function() local l = mesh:GetSocketLocation(_sv_fn[i]); pos[i] = { l.X, l.Y, l.Z } end)
+    end
+    local ratios, ref_len = {}, {}
+    for i = 2, PURE.V2_NB do
+        local a, b, rl = pos[i], pos[PURE.V2_PARENT[i]], PURE.len3(PURE.V2_REF_T[i])
+        if a and b and rl > 5 then ratios[#ratios + 1] = PURE.len3({ a[1] - b[1], a[2] - b[2], a[3] - b[3] }) / rl end
+    end
+    if #ratios >= 10 then
+        table.sort(ratios)
+        local k = ratios[math.floor((#ratios + 1) / 2)]
+        for i = 2, PURE.V2_NB do ref_len[i] = PURE.len3(PURE.V2_REF_T[i]) * k end
+        local d, b = PURE.stretch(pos, ref_len)
+        if d > w.max then w.max, w.bone = d, PURE.V2_SLOTS[b] or "-" end
+        w.n = w.n + 1
+    end
+    if now - w.t0 >= PX.PAWN_WATCH_MS then
+        PX.local_watch = nil
+        ev("spawn_stretch", { who = "pawn", peer = -1, max_uu = w.max, bone = w.bone, why = "pawn", frames = w.n })
+        Log("contact: our pawn's spawn stretch over %d ms: max %.1f uu (%s), %d frames", PX.PAWN_WATCH_MS, w.max, w.bone, w.n)
+    end
+end
+
 function PX.open_limits(p, body, now)
     local deg = TUNE.limits or 0
     if deg <= 0 then return PX.close_limits(p, body) end
@@ -2374,6 +2539,14 @@ local function servo_setup(body)
             local q = { pt.Rotation.X, pt.Rotation.Y, pt.Rotation.Z, pt.Rotation.W }
             sv.loc[i] = PURE.qrot(PURE.qconj(q), { t.Translation.X - pt.Translation.X, t.Translation.Y - pt.Translation.Y, t.Translation.Z - pt.Translation.Z })
         end)
+    end
+    local fixed, k
+    sv.loc, fixed, k = PURE.ref_loc(sv.loc)
+    sv.ref_len = {}
+    for i = 2, PURE.V2_NB do sv.ref_len[i] = PURE.len3(sv.loc[i]) end
+    if fixed > 0 then
+        Log("pose: %d of %d parent offsets measured off the reference skeleton (stretched body at setup?): reference used (scale %.3f)",
+            fixed, PURE.V2_NB - 1, k)
     end
     body.sv = sv
     Log("pose: servo set up on %s: %d/%d bodies (codec v2)", tostring(body.field), sv.n, PURE.V2_NB - 1)
@@ -2672,7 +2845,10 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     -- jumped by 2-3 uu every frame as new frames came in).
     local xoff = 0
     if not v1aim and TUNE.stamp ~= 0 then
-        local dn = PX.d_now or 0
+        -- The smoothed frame time, not this frame's: with a long buffer xoff sits at
+        -- its cap, and a cap that follows every frame-time change makes the shown
+        -- time jump forward on a long frame and back on the next (netfeel).
+        local dn = PX.dt_s and PX.dt_s * 1000 or PX.d_now or 0
         xoff = PURE.clamp(8 + (cur.delay or 0) + dn - (TUNE.lat or PX.LAT_TARGET_MS), 0, dn)
     end
     p.xoff = xoff
@@ -2694,16 +2870,25 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     -- velocities (|shift| <= a few ms). "lead" (tune knob, ms) adds a
     -- velocity lead; off by default (replay: doubles a swing's hand error).
     -- (cur.lead: the sidecar evaluated this sample that far past its playback clock, see PoseLead)
-    local expect = cur.pt - (cur.lead or 0) + (now - (cur.read_at or now))
+    -- The sidecar's clock runs at cur.rate (slower while its buffer starves,
+    -- faster while it catches up): this clock follows that rate, so a stretch
+    -- is not read as an error (which would reset the clock again and again).
+    local rate = PURE.clamp(tonumber(cur.rate) or 1, 0.5, 1.5)
+    if rate ~= rate or (tonumber(cur.rate) or 0) <= 0 then rate = 1 end
+    local expect = cur.pt - (cur.lead or 0) + (now - (cur.read_at or now)) * rate
     local clk = (TUNE.clock ~= 0) and p.clk or nil
-    if not clk or cut_reset or math.abs(expect - (clk.pt + (now - clk.at))) > 50 then
-        clk = { pt = expect, at = now }
+    if not clk or cut_reset or math.abs(expect - (clk.pt + (now - clk.at) * (clk.r or 1))) > 50 then
+        if clk and not cut_reset and body.sv and body.sv.err then body.sv.err.clkr = (body.sv.err.clkr or 0) + 1 end
+        clk = { pt = expect, at = now, r = rate }
     else
-        local pt = clk.pt + (now - clk.at)
-        clk = { pt = pt + 0.1 * (expect - pt), at = now }
+        local r = clk.r or 1
+        local pt = clk.pt + (now - clk.at) * r
+        clk = { pt = pt + 0.1 * (expect - pt), at = now, r = r + 0.3 * (rate - r) }
     end
     p.clk = clk
-    local frozen = cur.mode == "stale" or cur.mode == "hold" or holding
+    -- A hold sample already stands still (zero velocities): only stale data
+    -- freezes the shown time, so leaving a hold does not step it back.
+    local frozen = cur.mode == "stale" or holding
     -- Per-slot acceleration of the replicated motion (from consecutive fresh
     -- samples): the aim over a 17-50 ms step follows the curve, not a tangent.
     if fresh and not v1aim then
@@ -2807,6 +2992,10 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local s_gain = yl and yl.gain or (TUNE.gain or SERVO_GAIN)
     local s_capl = yl and yl.cap_lin or SERVO_CAP_LIN
     local s_capa = yl and yl.cap_ang or SERVO_CAP_ANG
+    if body.ramp_at then
+        local k = (now - body.ramp_at) / PX.RAMP_MS
+        if k >= 1 or k < 0 then body.ramp_at = nil else s_capl, s_capa = s_capl * (0.3 + 0.7 * k), s_capa * (0.3 + 0.7 * k) end
+    end
     if yl and not p.yielding then Log("pose peer %d: yielding to an interaction (gain %.2f caps %.0f/%.0f)", id, s_gain, s_capl, s_capa) end
     p.yielding = yl ~= nil
     -- contact impulses (see CONTACT_BODIES)
@@ -2839,6 +3028,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
         end
     end
     local probe = POSE_PROBE and prev and {} or nil
+    local cpos = p.spawn_watch and {} or nil
     local st = sv.err
     local pel_err
     local ncap = 0
@@ -2876,6 +3066,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 if qon and i >= 10 and i <= 17 then st.arm = st.arm or {}; st.arm[#st.arm + 1] = e end
             end
             if probe then probe[i] = c end
+            if cpos then cpos[i] = c end
             -- Smoothness / planted-foot / idle metrics (pose_quality): pelvis,
             -- head, hands, feet. Stand-in second differences vs. those of the
             -- poses it was driven to (the owner's motion at the same labels).
@@ -2924,6 +3115,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                         p.qfoot[i] = nil
                     end
                 end
+                if i == 1 and h then PX.nf_note(st, c, h, a) end
                 p.qhist = p.qhist or {}
                 p.qhist[i] = { c1 = c, c2 = h and h.c1, a1 = a, a2 = h and h.a1 }
             end
@@ -2996,6 +3188,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
             end
         end
     end
+    if cpos then PX.watch_stretch(id, p, sv, cpos, now) end
     if TUNE.tdiag and PX.td_acc and PX.td_acc[1] > 0 then
         local td, M = PX.td_acc, PX.td_acc[1]
         PX.tbuf = PX.tbuf or {}
@@ -3203,6 +3396,13 @@ local function drive_frame(id, p, now)
             end
         end
         if not p.driving then
+            -- Start only on live data read after the claim: a stale sample can be
+            -- the owner's previous round or place, and pulling a fresh Willie there
+            -- body by body is what tore limbs apart on spawn.
+            if not fresh or cur.mode == "stale" or cur.mode == "hold" or (cur.read_at or 0) < (p.claimed_at or 0) then
+                p.cut_seen = cur.cut
+                return
+            end
             set_muscles_blocked(p, true)
             set_motor_strength(body, 0.0)
             servo_setup(body)
@@ -3218,14 +3418,26 @@ local function drive_frame(id, p, now)
             -- weapons (contact with US stays physical).
             world_collision(body, false)
             p.driving = true
+            -- Root first, then a clean start: physics off for one frame (the
+            -- bodies take the animated pose, any broken constraint state of a
+            -- reused Willie is gone), snapped onto the target pelvis next frame
+            -- (re-pose below), and a soft servo for the first moments.
+            if cur.root then
+                drive_root(p.actor, { X = cur.root[1], Y = cur.root[2], Z = cur.root[3] }, cur.root[4], true)
+            end
+            PX.start_repose(p, body, now, "drive start")
+            p.cut_seen = cur.cut
+            return
         end
         local pel = cur.slots[1]
         p.targets = pel and { Pelvis = pel } or nil
-        if pel and cut_changed and snap_clear(pel) then
-            snap_mesh(body, pel[1], pel[2], pel[3])
+        if pel and cut_changed then
+            -- Teleport / respawn: the same clean start as a new drive.
+            PX.start_repose(p, body, now, string.format("discontinuity #%d (teleport/respawn)", cur.cut))
             ghost(body, now, nil)
-            Log("pose peer %d: discontinuity #%d (teleport/respawn) -> snapped stand-in", id, cur.cut)
             body.err_since = nil
+            p.cut_seen = cur.cut
+            return
         end
         p.cut_seen = cur.cut
         local holding = cur.mode == "stale" or quiet > PLAY_STALE_MS
@@ -3242,6 +3454,13 @@ local function drive_frame(id, p, now)
             body.stall = nil
             if pel and snap_clear(pel) then snap_mesh(body, pel[1], pel[2], pel[3]) end
             p.qhist, p.idlew, p.qfoot = nil, nil, nil
+            p.aim = nil
+            -- soft servo for the first moments, and the spawn stretch watch
+            if body.repose_start then
+                body.ramp_at = now
+                p.spawn_watch = { t0 = now, max = 0, bone = "-", why = body.repose_start }
+                body.repose_start = nil
+            end
             return
         end
         PX.stalled = nil
@@ -3253,14 +3472,13 @@ local function drive_frame(id, p, now)
         if PX.stalled and not p.yielding and not p.near_us and now - (body.repose_at or -1e9) > 2000 then
             Log("pose peer %d: %s stalled off target (twisted against a joint) for %d frames: re-posing the stand-in",
                 id, PURE.V2_SLOTS[PX.stalled] or "?", body.stall and body.stall[PX.stalled] or 0)
-            body.repose_at = now
-            body.reposes = (body.reposes or 0) + 1
-            if pcall(function() body.mesh:SetSimulatePhysics(false) end) then body.repose = true end
+            PX.start_repose(p, body, now, nil)
         end
         if pel and pel_err and pel_err > SNAP_BODY_ERR then
             body.err_since = body.err_since or now
             if now - body.err_since >= SNAP_BODY_MS and snap_clear(pel) then
                 snap_mesh(body, pel[1], pel[2], pel[3])
+                if body.sv and body.sv.err then body.sv.err.rigid = (body.sv.err.rigid or 0) + 1 end
                 ghost(body, now, "after a rigid snap")
                 body.err_since = nil
                 p.qhist, p.idlew, p.qfoot = nil, nil, nil   -- no quality history across a snap
@@ -3439,6 +3657,7 @@ local function on_frame()
     pcall(function()
         local lp, lm = local_pelvis()
         if not lp then return end
+        if PX.local_watch then PX.watch_pawn(lm, t0) end
         local near = math.huge
         for _, p in pairs(puppets) do
             local tp = p.targets and p.targets.Pelvis
@@ -3457,15 +3676,20 @@ local function on_frame()
         if dt < 0.004 or dt > 0.25 then return end
         local v = { X = (lp.X - pv[1]) / dt, Y = (lp.Y - pv[2]) / dt, Z = (lp.Z - pv[3]) / dt }
         local sp = math.sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z)
-        if sp > 20000 then return end   -- a teleport (spawn placement), not physics
+        -- A teleport (spawn placement, its hold corrections), not physics: seen as
+        -- 4000-8000 uu/s over one frame right after a new-round placement.
+        if sp > 20000 or sp * dt > 150 then return end
         if sp > contact.peak then contact.peak = sp end
         if near < LAUNCH_NEAR * 2 and sp > contact.near_peak then contact.near_peak = sp end
-        if near < LAUNCH_NEAR and sp > LAUNCH_SPEED and t0 - contact.last_clamp > 200 then
+        -- Only in the fight: before Live our pawn is placed and held (protected, no
+        -- collision with stand-ins), and those moves read as launches.
+        if near < LAUNCH_NEAR and sp > LAUNCH_SPEED and t0 - contact.last_clamp > 200 and PQ.live() then
             contact.last_clamp = t0
             contact.clamps = contact.clamps + 1
             local k = LAUNCH_KEEP / sp
             lm:SetAllPhysicsLinearVelocity({ X = v.X * k, Y = v.Y * k, Z = v.Z * k }, false)
             Log("contact: launch clamp on our pawn (%.0f uu/s at %.0f uu from a stand-in -> %d uu/s)", sp, near, LAUNCH_KEEP)
+            ev("pawn_correction", { why = "launch_clamp", live = PQ.live() and true or false, dist_cm = 0, speed = sp })
         end
     end)
     _frame_cost = _frame_cost + (os.clock() - c0) * 1000   -- Lua cost of this frame (ms)
@@ -3734,6 +3958,13 @@ local function tick_puppet(id, p, me_loc)
             local qframes = e.qn or 0
             if vis and qframes >= 30 then ev("pose_quality", { peer = q.peer, arm_p95_uu = q.arm_p95_uu, tip_p95_uu = q.tip_p95_uu, latency_ms = q.latency_ms,
                 jitter_ratio = q.jitter_ratio, foot_slide_p95 = q.foot_slide_p95, idle_rms = q.idle_rms }) end
+            -- SMOOTH-1: rubber banding of this stand-in over the same window.
+            local nf = e.nf or { n = 0, snaps = 0, max = 0 }
+            local win = math.max(0.5, (now - (p.nf_t0 or (now - 5000))) / 1000)
+            p.nf_t0 = now
+            if vis and qframes >= 30 then ev("netfeel", { peer = id, frames = nf.n, snaps_per_min = nf.snaps * 60 / win,
+                jump_max_uu = nf.max, rigid_snaps = e.rigid or 0, clock_resets = e.clkr or 0,
+                buffer_ms = cur and cur.delay or -1, jitter_ms = cur and cur.jit or -1, window_s = win }) end
             Log("pose peer %d: pose_quality%s arm_p95=%.2f uu tip_p95=%.2f uu jitter_ratio=%.2f foot_slide_p95=%.1f uu/s idle_rms=%.2f uu latency~%.0f ms (sample age 8 + buffer %.0f + 1 servo frame - lead %.0f; excludes network transit) | jitter worst: %s",
                 id, (not vis and " (NOT RENDERED: not reported)") or (qframes < 30 and string.format(" (%d Live frames: not reported)", qframes)) or "", q.arm_p95_uu, q.tip_p95_uu, jr, fs, ir, q.latency_ms, q.buffer_ms, lead, tostring(p.q_jdbg))
             p.q_jdbg = nil
@@ -3801,6 +4032,7 @@ local function on_tick()
         if not local_body or local_body.gen ~= world_gen or local_body.addr ~= addr then
             local m = pick_pose_mesh(me)
             local_body = m and { mesh = m, gen = world_gen, addr = addr } or nil
+            PX.local_watch = local_body and { t0 = now_ms(), max = 0, bone = "-", n = 0 } or nil
         end
     end
     if next(puppets) ~= nil and os.clock() - contact.last_log >= 5 then

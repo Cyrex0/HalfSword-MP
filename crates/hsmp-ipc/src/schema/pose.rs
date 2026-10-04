@@ -83,7 +83,9 @@ crate::ipc_pod! {
         /// Frame interval the buffer is sized for (play line "iv").
         pub iv: f32,
         pub k: f32,
-        pub _r: u32,
+        /// Playback-clock rate (1 = real time; below 1 while the buffer starves, above
+        /// while it catches up). 0 = unknown (an older sidecar).
+        pub rate: f32,
         /// Slot mask (bit i = `b[i]` valid) and velocity mask.
         pub mask: u32,
         pub vmask: u32,

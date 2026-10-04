@@ -1,0 +1,31 @@
+{
+  "alive_at_end": {
+    "game1": true,
+    "game2": true,
+    "server": true
+  },
+  "game_force_killed": [],
+  "new_crashes": [],
+  "orphans": [],
+  "quit_path": {
+    "game1": "menu_quit",
+    "game2": "menu_quit"
+  },
+  "restarted": {},
+  "save_files": {
+    "GameProgress.sav": {
+      "mtime_ms": 1790793600000,
+      "sha256": "aa11",
+      "size": 18432
+    },
+    "Settings.sav": {
+      "mtime_ms": 1790794000000,
+      "sha256": "bb22",
+      "size": 2048
+    }
+  },
+  "save_hashes": {
+    "GameProgress.sav": "aa11",
+    "Settings.sav": "bb22"
+  }
+}

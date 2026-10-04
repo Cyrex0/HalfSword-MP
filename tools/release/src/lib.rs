@@ -75,6 +75,10 @@ pub struct Config {
     /// every other file, so the launcher pins their hashes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub native_mods: Vec<NativeMod>,
+    /// The master's `/v1/reports` endpoint is live: the launcher offers "Upload to HSMP".
+    /// Copied into the manifest; false (the default) hides the button.
+    #[serde(default)]
+    pub report_upload: bool,
 }
 
 /// One UE4SS C++ mod: `<native-dir>/<name>/<file>` -> `ue4ss/Mods/<name>/<file>`.
@@ -368,6 +372,7 @@ pub fn build(o: &BuildOpts, key: &ed25519_dalek::SigningKey) -> Result<Built, St
         ini_settings: cfg.ini_settings.clone(),
         mods_template: "payload/mods.release.txt".into(),
         files: vec![],
+        report_upload: cfg.report_upload,
     };
     let (manifest_bytes, sig_bytes) = pack::seal(manifest, &items, key)?;
     let manifest = Manifest::parse(&manifest_bytes)?;

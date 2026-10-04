@@ -51,3 +51,9 @@
 {"v":1,"ev":"cmd_sent","inst":"1","mod":"HSMPMenu","seq":51,"t_ms":58000,"wall_ms":1790880053000,"cmd":"ready","cmd_id":1790880001,"arg":null,"backend":"legacy","via":"autotest"}
 {"v":1,"ev":"cmd_result","inst":"1","mod":"HSMPMenu","seq":52,"t_ms":58300,"wall_ms":1790880053300,"cmd":"ready","cmd_id":1790880001,"ok":true,"reason":null,"state":"accepted","source":"server","ms":300,"tries":1}
 {"v":1,"ev":"save_redirected","inst":"1","mod":"HSMPMatch","seq":53,"t_ms":58400,"wall_ms":1790880053400,"fn":"SaveGameToSlot","slot":"GameProgress","to_slot":"HSMP_1_GameProgress","op":"write","ok":true,"how":"redirected"}
+{"bone":"hand_r","ev":"spawn_stretch","frames":180,"inst":"1","max_uu":2.5,"mod":"HSMPAvatars","peer":2,"round":1,"seq":24,"t_ms":16400,"v":1,"wall_ms":1790880011400,"who":"standin","why":"drive start"}
+{"clock_resets":0,"ev":"netfeel","frames":290,"inst":"1","jump_max_uu":4.0,"mod":"HSMPAvatars","peer":2,"rigid_snaps":0,"round":1,"seq":23,"snaps_per_min":2.0,"t_ms":21500,"v":1,"wall_ms":1790880016500,"window_s":5.0}
+{"clock_resets":0,"ev":"netfeel","frames":290,"inst":"1","jump_max_uu":4.0,"mod":"HSMPAvatars","peer":2,"rigid_snaps":0,"round":1,"seq":26,"snaps_per_min":2.0,"t_ms":26500,"v":1,"wall_ms":1790880021500,"window_s":5.0}
+{"bone":"hand_r","ev":"spawn_stretch","frames":180,"inst":"1","max_uu":2.5,"mod":"HSMPAvatars","peer":2,"round":2,"seq":49,"t_ms":39400,"v":1,"wall_ms":1790880034400,"who":"standin","why":"drive start"}
+{"clock_resets":0,"ev":"netfeel","frames":290,"inst":"1","jump_max_uu":4.0,"mod":"HSMPAvatars","peer":2,"rigid_snaps":0,"round":2,"seq":48,"snaps_per_min":2.0,"t_ms":44500,"v":1,"wall_ms":1790880039500,"window_s":5.0}
+{"clock_resets":0,"ev":"netfeel","frames":290,"inst":"1","jump_max_uu":4.0,"mod":"HSMPAvatars","peer":2,"rigid_snaps":0,"round":2,"seq":51,"snaps_per_min":2.0,"t_ms":49500,"v":1,"wall_ms":1790880044500,"window_s":5.0}

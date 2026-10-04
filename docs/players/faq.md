@@ -64,6 +64,13 @@ HSMP only adds its own buttons next to them. A few HSMP changes are always on, f
 or videos that start while you are idle are skipped. To play the game exactly as it ships,
 [uninstall HSMP](uninstall.md).
 
+### Why does the hair look different?
+
+With HSMP installed, close-up hair uses the game's hair cards instead of hair strands, in
+multiplayer and single-player alike. Hair strands hit an engine crash on the first arena load of
+a session. The cards are the game's own (the same ones it shows for distant characters), so hair
+is still there, only less detailed up close. Uninstalling HSMP removes the setting.
+
 ### How many players can play together?
 
 Up to **8 players** per server, the host included.
@@ -79,8 +86,10 @@ custom kits with a point budget). See [Playing](playing.md#the-lobby).
 
 Yes, with **DIRECT CONNECT**. One player hosts (from the menu, or with a dedicated server), and the
 others type the host's public address, for example `203.0.113.5:7777`, in the server browser. The
-host has to forward a UDP port on their router (the launcher adds the Windows Firewall rule). See
-[Hosting from the menu](playing.md#hosting-from-the-menu).
+host's router needs its UDP port open: HSMP opens it automatically (UPnP) when the router allows
+it, and otherwise tries NAT traversal through the server list; if neither works, the host forwards
+the port by hand (the launcher adds the Windows Firewall rule). See
+[Playing with friends over the internet](playing.md#playing-with-friends-over-the-internet).
 
 HSMP handles short connection drops: you get about 35 seconds to reconnect during a match.
 
@@ -89,8 +98,8 @@ HSMP handles short connection drops: you get about 35 seconds to reconnect durin
 Yes. The server browser shows internet games from the public server list
 (`https://master.halfswordmp.workers.dev`), games on your local network (LAN) and a game hosted
 on your own PC. A game you host is added to the public list too; players on the internet can join
-it only if your router forwards its UDP port. You can always join by address with
-**DIRECT CONNECT**.
+it when your router port is open (HSMP tries UPnP first), or through NAT traversal when it is not.
+You can always join by address with **DIRECT CONNECT**.
 
 Anyone can also run a server list ("master server") and add it under
 **SETTINGS > SERVER LISTS**. For server operators: [Master server](../hosting/master-server.md).
@@ -138,8 +147,11 @@ The launcher is also not code-signed yet, which is why Windows SmartScreen warns
 ### Does HSMP send data anywhere?
 
 The launcher only asks GitHub for the list of HSMP releases (when it opens and when you click
-**Check for updates**) and downloads the release you choose. It sends nothing about you. It does
-not even save a crash report unless you click **Save a redacted report**, and it never uploads one.
+**Check for updates**) and downloads the release you choose. It sends nothing about you unless you
+make a bug report: **Create bug report** asks the HSMP server list once for your public address
+(so it can remove it from the logs), and **Upload to HSMP...** sends the report you checked.
+Nothing is sent without that click. See
+[Sending us a bug report](troubleshooting.md#sending-us-a-bug-report).
 
 In the game, HSMP talks to the game server you join, to the server lists you set, and to servers
 in your browser list (to measure their ping). The server sees your nickname, your IP address, your

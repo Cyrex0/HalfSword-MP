@@ -43,7 +43,7 @@ pub fn run(a: Args) -> Result<i32> {
         let (line, ms) = split(spec);
         s.write_all(format!("{line}\n").as_bytes())?;
         std::thread::sleep(Duration::from_millis(ms));
-        let mut buf = [0u8; 256];
+        let mut buf = vec![0u8; 64 * 1024];
         let n = match s.read(&mut buf) {
             Ok(n) => n,
             Err(e) => bail!("no reply to {line:?}: {e}"),

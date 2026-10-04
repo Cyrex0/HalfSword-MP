@@ -20,6 +20,8 @@ members = [
     "crates/hsmp-native",
     "crates/hsmp-native/fake-sidecar",
     "crates/hsmp-master-core",
+    "crates/hsmp-diag",
+    "crates/hsmp-nat",
     # products
     "server",
     "launcher",
@@ -32,13 +34,14 @@ members = [
     "tests/hsmp-interact-test",
     "tests/hsmp-saveguard-test",
     "tests/hsmpworld-tests",
+    "tests/hsmpworld-sim",
 ]
 # The native-transport spike is its own workspace (C/C++ + staticlibs built by CMake), and
 # master-cf/ (the Cloudflare Worker) builds for wasm32 with worker-build.
 exclude = ["experimental/native-spike", "master-cf"]
 
 [workspace.package]
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 edition = "2021"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"

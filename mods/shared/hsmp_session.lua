@@ -214,6 +214,25 @@ function M.reset_view() vc.sver, vc.lver, vc.v = nil, nil, nil end
 -- ---- notices (S2G `notice` records) -------------------------------------------------
 M.NOTICE_NAME = { [1] = "host_left", [2] = "role_changed", [3] = "load_failed", [4] = "player_joined",
                   [5] = "player_left", [6] = "admin_changed", [7] = "config_queued", [8] = "sudden_death" }
+M.NOTICE_NAME[9] = "net_status"
+
+-- NET_STATUS (the listen host's own server, to its owner): how reachable the hosted game is.
+-- state: upnp | pcp | natpmp | open | double | trying | failed | off; kind "cone+punch" =
+-- joiners can still get in through NAT traversal.
+function M.net_status_text(state, port, kind)
+    local p = port and tostring(port) or "?"
+    local names = { upnp = "UPnP", pcp = "PCP", natpmp = "NAT-PMP" }
+    if names[state] then return string.format("Router port opened automatically (%s)", names[state])
+    elseif state == "open" then return "Your PC has a public address: players can reach you directly"
+    elseif state == "double" then return "Router port opened, but another NAT is in front of your router: outside players may not reach you"
+    elseif state == "trying" then return "" end
+    local tail = (kind == "cone+punch") and " Joiners will try NAT traversal." or ""
+    if state == "off" then
+        return string.format("Automatic port forwarding is off: forward UDP %s to this PC for players outside your network.%s", p, tail)
+    end
+    return string.format("Couldn't open your router port automatically: players outside your network may not reach you. Forward UDP %s to this PC.%s", p, tail)
+end
+
 -- The player-facing text of a notice record (the sidecar's old notice_json wording).
 function M.notice_text(n)
     local a = n.args or {}
@@ -223,7 +242,8 @@ function M.notice_text(n)
     elseif c == 1 and arg(2) ~= "" then return string.format("The host %s left; %s is the host now", arg(1), arg(2))
     elseif c == 1 then return string.format("The host %s left", arg(1))
     elseif c == 4 then return string.format("%s %s", arg(1), arg(2) == "rejoined" and "rejoined" or "joined")
-    elseif c == 5 then return string.format("%s %s", arg(1), arg(2) == "left" and "left" or "disconnected") end
+    elseif c == 5 then return string.format("%s %s", arg(1), arg(2) == "left" and "left" or "disconnected")
+    elseif c == 9 then return M.net_status_text(arg(1), tonumber(arg(2)), arg(4)) end
     local parts = {}
     for i = 1, #a do if a[i] ~= "" then parts[#parts + 1] = a[i] end end
     return table.concat(parts, " ")

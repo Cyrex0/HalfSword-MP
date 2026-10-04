@@ -31,13 +31,15 @@
 //!   master <url> <index 1..n> <n>      (only when a master answered)
 //!   lan    <0|1> <servers found>        (only with --lan)
 //!   done   <0|1>
-//!   S host port name map mode players max pwd proto version region ping_ms source live content proto_min proto_max
+//!   S host port name map mode players max pwd proto version region ping_ms source live content proto_min proto_max nat punch
 //!
 //! ping_ms: -1 = pending, -2 = no answer. live: 1 if the server answered
 //! (fields then come from the server itself, fresher than the master).
 //! source: master | direct | lan.
 //! content: the first 16 hex chars of the content hash the server enforces ("" = any or
 //! unknown); proto_min / proto_max: its protocol range (0 = unknown, use proto).
+//! nat: how the listing says it is reachable (open, upnp, pcp, natpmp, double, cone, symmetric,
+//! unknown; "" = not reported); punch: 1 if the list can relay a hole punch to it now.
 
 // Only needed for PROTOCOL_VERSION; kept out of this binary's test build so
 // proto.rs's own tests (run by hsmp-server / hsmp-sidecar) aren't duplicated.
@@ -107,6 +109,10 @@ struct Row {
     /// Accepted protocol range; 0 = unknown (only `proto`).
     proto_min: u32,
     proto_max: u32,
+    /// The listing's `nat` (open, upnp, cone, symmetric, ...; "" = not reported) and whether
+    /// the list can relay a punch to it right now.
+    nat: String,
+    punch: bool,
 }
 
 fn tsv(s: &str) -> String {
@@ -167,6 +173,8 @@ fn row_from_json(v: &serde_json::Value) -> Option<Row> {
         content: query::content_tag(o.get("content_hash").and_then(|x| x.as_str()).unwrap_or("")),
         proto_min: n("proto_min").min(65_535),
         proto_max: n("proto_max").min(65_535),
+        nat: s("nat"),
+        punch: o.get("punch").and_then(|x| x.as_bool()).unwrap_or(false),
     })
 }
 
@@ -217,10 +225,10 @@ fn render(gen: &str, st: &Status, meta: &Meta, rows: &[Row], done: bool) -> Stri
     out.push_str(&format!("done\t{}\n", if done { 1 } else { 0 }));
     for r in rows {
         out.push_str(&format!(
-            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             tsv(&r.host), r.port, tsv(&r.name), tsv(&r.map), tsv(&r.mode),
             r.players, r.max, r.pwd as u8, r.proto, tsv(&r.version), tsv(&r.region),
-            r.ping, r.source, r.live as u8, r.content, r.proto_min, r.proto_max,
+            r.ping, r.source, r.live as u8, r.content, r.proto_min, r.proto_max, tsv(&r.nat), r.punch as u8,
         ));
     }
     out
@@ -639,10 +647,21 @@ mod tests {
         let st = Status { code: "ok", msg: String::new(), listed: 2, skipped: 0 };
         let out = render("g", &st, &Meta::default(), &rows, true);
         let s: Vec<&str> = out.lines().find(|l| l.starts_with("S\t")).unwrap().split('\t').collect();
-        assert_eq!(&s[15..], &["abababababababab", "6", "7"]);
+        assert_eq!(&s[15..], &["abababababababab", "6", "7", "", "0"]);
         let mut r = rows[1].clone();
         apply_info(&mut r, 5, &query::QueryInfo { content_tag: "CDCDCDCDCDCDCDCD".into(), proto_min: 6, proto_max: 6, ..Default::default() });
         assert_eq!((r.content.as_str(), r.proto_min), ("cdcdcdcdcdcdcdcd", 6));
+    }
+
+    #[test]
+    fn nat_and_punch_columns() {
+        let body = r#"[{"host":"1.2.3.4","port":7777,"nat":"cone","punch":true},{"host":"1.2.3.4","port":7778}]"#;
+        let (rows, _) = parse_master_list(body).unwrap();
+        assert_eq!((rows[0].nat.as_str(), rows[0].punch, rows[1].nat.as_str(), rows[1].punch), ("cone", true, "", false));
+        let st = Status { code: "ok", msg: String::new(), listed: 2, skipped: 0 };
+        let out = render("g", &st, &Meta::default(), &rows, true);
+        let s: Vec<&str> = out.lines().find(|l| l.starts_with("S\t")).unwrap().split('\t').collect();
+        assert_eq!(&s[18..], &["cone", "1"]);
     }
 
     #[test]
@@ -660,7 +679,7 @@ mod tests {
         let out = render("g", &st, &Meta::default(), &rows, true);
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines.iter().filter(|l| l.starts_with("S\t")).count(), 1);
-        assert_eq!(lines.last().unwrap().split('\t').count(), 18);
+        assert_eq!(lines.last().unwrap().split('\t').count(), 20);
     }
 
     #[test]

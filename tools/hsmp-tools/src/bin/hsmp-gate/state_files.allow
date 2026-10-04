@@ -33,6 +33,7 @@
 .state_dump_
 .willie_dump_
 .world_scan.txt
+.parity_results.txt
 
 [runtime: log] logs written at run time by the game, the sidecar and the harness (STATE-1 only)
 hsmp_events*.jsonl
@@ -47,10 +48,13 @@ sidecar*.jsonl
 [runtime: identity] the player identity and pinned server keys (STATE-1 only)
 identity
 known_servers.json
+# a listen host's server inherits HSMP_STATE_DIR and keeps its identity there
+server_identity.key
 
-[fs: logs] event logs and the panic log
+[fs: logs] event logs, the panic log, and the --report zip written next to the logs
 fs:server/src/events.rs
 fs:server/src/sidecar/panic_guard.rs
+fs:server/src/server_report.rs
 
 [fs: career guard] career-save backups and the guard log (+ the state dir itself at start)
 fs:server/src/sidecar/career_guard.rs

@@ -106,6 +106,8 @@ struct Run {
     /// how long each round's Live lasts (ms; Live -> RoundOver). The real p0_gate kills at once
     /// (~1 s); WORLD-1 / COMBAT-1 only judge rounds with Live >= 10 s.
     live_len: i64,
+    /// HSMPWorld world_track / world_sync_quality during Live (harness runs; WORLD-2)
+    track: bool,
 }
 
 fn obj(v: Value) -> Map<String, Value> {
@@ -157,7 +159,7 @@ impl Run {
             pose: [3.1, 5.2, 72.0, 1.05, 2.0, 0.2], pose_legacy: false,
             hb: shape == Shape::Contract, hb_next: vec![T0; n + 1],
             crashes: vec![], no_triage: false, mem: vec![], ue4ss: vec![],
-            career_guard: true, cg_extra: vec![], netsim_traffic: vec![true; n + 1], live_len: 11_000,
+            career_guard: true, cg_extra: vec![], netsim_traffic: vec![true; n + 1], live_len: 11_000, track: false,
             listing: vec![None; n + 1],
             netsim_late: vec![Some(0.4); n + 1], netsim_loss_scale: vec![1.0; n + 1],
         };
@@ -183,7 +185,7 @@ impl Run {
         let modname = match ev {
             "lobby_ready" | "cmd_sent" | "cmd_result" | "x_autotest_cmd" => "HSMPMenu",
             "kit_verified" | "pawn_state" => "HSMPLoadout",
-            "pose_quality" => "HSMPAvatars",
+            "pose_quality" | "netfeel" | "spawn_stretch" => "HSMPAvatars",
             _ => "HSMPMatch",
         };
         let mut rec = obj(json!({"v": 1, "ev": ev, "inst": i.to_string(), "mod": modname, "seq": self.seq[i],
@@ -338,6 +340,30 @@ impl Run {
                                                          "epoch": 1, "world": path}));
             }
         }
+        // HSMPWorld world_track (server clock = wall + 1500 ms): one body thrown at 300 cm/s,
+        // instance 2 sampling 37 ms later and seeing it 100 ms behind; then the rest poses
+        if self.track {
+            for i in 1..=n {
+                let off = if bad.world2 == i { 300.0 } else { 0.0 };
+                let (phase, lag) = if i == 1 { (0i64, 0.0) } else { (37, 0.1) };
+                for k in 0..30i64 {
+                    let dt = 10_000 + 100 * k + phase;
+                    let tt = (dt as f64 / 1000.0 - 10.0 - lag).max(0.0);
+                    self.ev(i, "world_track", dt, json!({"nid": 1318867211u64, "t": self.t + dt + 1500, "x": 300.0 * tt + off, "y": 50.0, "z": 30.0,
+                                                       "qx": 0.0, "qy": 0.0, "qz": 0.0, "qw": 1.0, "mode": if i == 1 { "own" } else { "follow" },
+                                                       "owner": 1, "rest": false, "level": 3458262474u64, "epoch": 1}));
+                }
+                for (dt, x) in [(13_200i64, 900.0), (16_200, 900.0)] {
+                    let rx = if bad.world2 == i { x + 10.0 } else { x };
+                    self.ev(i, "world_track", dt + phase, json!({"nid": 1318867211u64, "t": self.t + dt + phase + 1500, "x": rx, "y": 50.0, "z": 30.0,
+                                                               "qx": 0.0, "qy": 0.0, "qz": 0.0, "qw": 1.0, "mode": "free", "owner": 0, "rest": true,
+                                                               "level": 3458262474u64, "epoch": 1}));
+                }
+                self.ev(i, "world_sync_quality", 15_000, json!({"hard_snaps": if bad.world2 == i { 2 } else { 0 }, "max_off_cm": 12, "lost_races": 0,
+                                                              "takeovers": 0, "poked": if i == 1 { 1 } else { 0 }, "follow_ticks": 180, "window_s": 5.0,
+                                                              "level": 3458262474u64, "epoch": 1}));
+            }
+        }
         // HSMPCombat combat_quality every 5 s of combat (Shape::Contract: the players fight)
         if full {
             for (k, dt) in [(1i64, 14_000), (2, 19_000)] {
@@ -370,6 +396,11 @@ impl Run {
                             f["idle_rms"] = json!(idle);
                         }
                         self.ev(i, "pose_quality", 9500 + 5000 * k, f);
+                        self.ev(i, "netfeel", 9500 + 5000 * k, json!({"peer": j, "frames": 290, "snaps_per_min": 2.0, "jump_max_uu": 4.0,
+                            "rigid_snaps": 0, "clock_resets": 0, "window_s": 5.0, "round": rnd}));
+                        if k == 1 {
+                            self.ev(i, "spawn_stretch", 9400, json!({"who": "standin", "peer": j, "max_uu": 2.5, "bone": "hand_r", "why": "drive start", "frames": 180, "round": rnd}));
+                        }
                     }
                 }
             }
@@ -585,11 +616,14 @@ struct Bad {
     world_div: usize,
     /// COMBAT-1: this instance's claims leak (pending grows) and half are rejected
     combat: usize,
+    /// WORLD-2: this instance's world_track is 3 m off the other's, its rest pose 10 cm off,
+    /// and it reports hard snaps
+    world2: usize,
 }
 impl Bad {
     fn none() -> Bad {
         Bad { world: (0, ""), census: (0, 0), rhand: 0, dist: (0, 0.0), pose: (0, [0.0; 6]), close: 0, sunk: 0, vitals: 0,
-              pawn: (0, ""), world_div: 0, combat: 0 }
+              pawn: (0, ""), world_div: 0, combat: 0, world2: 0 }
     }
 }
 
@@ -910,7 +944,7 @@ pub fn make(root: &Path) {
     let mut r = Run::new(root, "p0_gate_fail", "p0_gate", &["Alley", "Pit"], 3, "rcon", Shape::Contract);
     r.lobby(1);
     let bad = Bad { world: (2, "Hub_Tavern"), census: (1, 3), rhand: 2, dist: (1, 250.0), pose: (1, [7.5, 12.0, 140.0, 1.4, 6.5, 0.9]),
-                    close: 2, sunk: 1, vitals: 2, pawn: (2, "fists"), world_div: 1, combat: 2 };
+                    close: 2, sunk: 1, vitals: 2, pawn: (2, "fists"), world_div: 1, combat: 2, world2: 0 };
     r.arena_block("Alley", 3, 2, &bad, 0);
     r.arena_block("Pit", 3, 0, &none, 1);
     // a menu command whose server answer never came: the menu's own timeout is no result
@@ -947,6 +981,23 @@ pub fn make(root: &Path) {
                                 "weapon_r=Weapon_Fists_C (the kit has a weapon there)", "pawn_state at=rearm",
                                 "id(s) 1318867211 mismatched in two consecutive verdicts", "last verdict has hash_match=false",
                                 "pending grew 3 -> 12", "accepted 12/24 = 50.0 % (floor 97 % under typical"]}), false, false);
+
+    // 3. WORLD-2: both screens track the thrown body 100 ms apart and agree on its rest pose
+    // (pass); one screen 3 m off with its rest pose 10 cm off and two hard snaps (fail)
+    for (case, w2, verdict) in [("world_sync_pass", 0usize, "pass"), ("world_sync_fail", 2, "fail")] {
+        let mut r = Run::new(root, case, "world_sync", &["Cellar"], 2, "rcon", Shape::Contract);
+        r.track = true;
+        r.lobby(1);
+        let bad = Bad { world2: w2, ..Bad::none() };
+        r.arena_block("Cellar", 2, if w2 > 0 { 1 } else { 0 }, &bad, 0);
+        let exp = if w2 == 0 {
+            json!({"verdict": verdict, "rules": {"WORLD-1": "pass", "WORLD-2": "pass"}, "messages": ["paired samples p50 30 / p95 30 cm (limit 130, typical)"]})
+        } else {
+            json!({"verdict": verdict, "rules": {"WORLD-2": "fail"},
+                   "messages": ["moving bodies p95 270 cm apart > 130 (typical)", "rests 10.0 cm apart", "2 hard snap(s)"]})
+        };
+        r.write(exp, false, false);
+    }
 
     // 3a. DoD-2 with zero hitch events and no heartbeat: incomplete, never pass
     let mut r = Run::new(root, "p0_gate_no_heartbeat", "p0_gate", &["Alley"], 2, "rcon", Shape::Contract);

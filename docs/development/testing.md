@@ -130,6 +130,9 @@ shape outside the contract. A rule that needs a field no emitter writes reports 
 | `cmd_result` (server) | **`source`** (`command`/`rcon`/`legacy`), **`player`**, **`cmd_id`**, `seat`, `peer_id`, `cmd`, `ok`, `reason`, `code`, `config_rev` | **server** `command_locked`: once per applied command (a cached resend is `cmd_dup`) | 10 |
 | S2G `cmd_result` (tap) | **`cmd_id`**, **`ok`**, `reason_code`, `code`, `reason_text`, `config_rev`, `cmd`, `wall_ms` | **sidecar**: one per fresh `cmd_result` record from the server (an `s2g` record in `inst<i>/ipc_tap.jsonl`; the gate reads its payload as `cmd_result`, src `sidecar`) | 10 |
 | `pose_quality` | **`peer`**, **`arm_p95_uu`**, **`tip_p95_uu`**, **`latency_ms`**, **`jitter_ratio`**, **`foot_slide_p95`**, **`idle_rms`** (each `-1` = not applicable in that Live window; see POSE-1 below) | HSMPAvatars, every 5 s over Live frames only | POSE-1 |
+| `netfeel` | **`peer`**, **`snaps_per_min`**, **`rigid_snaps`**, **`clock_resets`**, **`jump_max_uu`**, **`window_s`**, `frames`, `buffer_ms`, `jitter_ms` | HSMPAvatars, with each `pose_quality` sample | SMOOTH-1 |
+| `pawn_correction` | **`why`** (`round start`, `new round`, `fell`, `drift`, `director retry`, `launch_clamp`), **`live`**, **`dist_cm`** | HSMPSync spawn_place, HSMPAvatars (launch clamp): every move of the local pawn | SMOOTH-1 |
+| `spawn_stretch` | **`who`** (`standin`/`pawn`), **`peer`**, **`max_uu`**, **`bone`**, **`why`**, `frames` | HSMPAvatars: 3 s after a stand-in starts / is re-posed, 8 s after our pawn appears | SPAWN-1 |
 | `load_failed` | **`round`**, **`nick`**, **`error`**, `peer_id`, `seat`, `match_id` | **server** | 1 |
 | `round_void` | **`round`**, `fighters`, `streak`, `match_id` | **server** | 1 |
 | `seat_restored` | **`same_seat`**, **`same_wins`**, `player_key`, `seat`, `old_seat`, `wins`, `match_id`, `how` | **server** | 11 |
@@ -140,6 +143,8 @@ shape outside the contract. A rule that needs a field no emitter writes reports 
 | `career_guard` | **`action`** (`backup`/`clean`/`restored`/`recreated`/`quarantined`/`skipped_newer`/`error`), **`file`**, **`why`**, **`kind`** (`enter`/`leave`/`recover`), `backup`, `pid` | **sidecar** (`main.rs career_guard_event`): `--events` and `<state>/.career_guard.jsonl` (append-only, never swept; collected into `inst<i>/`, read as src `sidecar`) | 8 |
 | `pawn_state` | **`at`**, **`protected`**, **`downed`**, **`consciousness`**, **`dist_cm`** (from the placement destination), **`weapon_r`**, **`weapon_l`**, **`reason`** (kit drops), `round`, `pawn`, `fallen`, `health`, `live`, `who` | HSMPSync `spawn_place.lua emit_state` (placed/ready/protect/live/protect_end), HSMPLoadout `kit.lua` (rearm/weapon_drop) | PAWN-1 |
 | `world_consistency` | **`compared`**, **`mismatched`** (ids), **`hash_match`**, **`level`**, `mismatched_n`, `hash_equal`, `peer`, `epoch`, `world`, `f_seq` (the caller's `seq`); server: `other`, `kinds` | HSMPWorld `main.lua` (verdict every 5 s after Ready); **server** `world_glue.rs` (pairing) | WORLD-1 |
+| `world_track` | **`nid`**, **`t`** (host clock ms: the performance counter, the same in every game process on the machine), **`x`**/**`y`**/**`z`**, **`rest`**, **`level`**, **`epoch`**, `qx`/`qy`/`qz`/`qw`, `mode` (`own`/`follow`/`free`), `owner` | HSMPWorld `main.lua` under the harness (`HSMP_AUTOTEST` or `HSMP_WORLD_TRACK`): every 100 ms per owned or recently moving body, a `rest` sample when it stops and 3 s later | WORLD-2 |
+| `world_sync_quality` | **`hard_snaps`**, `max_off_cm`, `lost_races`, `takeovers`, `poked`, `follow_ticks`, `window_s`, `level`, `epoch` | HSMPWorld `main.lua`, every 5 s while it followed, lost a race or poked | WORLD-2 |
 | `combat_quality` (`x_combat_quality` before the vocabulary listed it) | **`claims`**, **`accepted`**, **`pending`** (carried), **`rejected_by_reason`** (`{code: n}`), `confirmed`, `clashes`, `round`, `window_s` (per-window counts, every 5 s of combat; silent without combat) | HSMPCombat `main.lua emit_quality` | COMBAT-1 |
 
 Known but not judged:
@@ -185,6 +190,27 @@ samples at all the rule is incomplete.
 
 POSE-1 does not pass on every run today: remote-pose fidelity on heavy arenas (many physics bodies)
 can exceed these limits in some rounds.
+
+**SMOOTH-1** (`netfeel`, `p0_gate`, `p0_wifi`). Per instance: no `pawn_correction` with
+`live = true` other than `fell` (an honest pawn is never moved during Live); per remote peer, over
+all Live `netfeel` samples: snaps per minute and rigid snaps per minute within the worst
+profile's limits, and at most one playback-clock reset per minute.
+
+| Profile | snaps/min | rigid snaps/min |
+|---|---|---|
+| `none`/`lan`/`good`/`typical` | ≤ 10 | ≤ 0.5 |
+| `intl` | ≤ 20 | ≤ 0.5 |
+| `far` | ≤ 30 | ≤ 0.5 |
+| `wifi` | ≤ 40 | ≤ 1 |
+| `bad` | ≤ 80 | ≤ 1 |
+| `awful` | rule incomplete | |
+
+A snap is a frame whose stand-in pelvis motion changes more than 3 uu beyond the change in its
+targets' (second differences). The limits come from the offline model ([subsystems/replication.md](subsystems/replication.md)
+"Rubber banding") with headroom; they are to be checked against in-game runs.
+
+**SPAWN-1** (`netfeel`, `p0_gate`, `p0_wifi`). Every `spawn_stretch` sample (the largest joint
+stretch against the reference skeleton after a spawn) is at most 10 uu. No samples: incomplete.
 
 **What the emitter measures (HSMPAvatars).** A sample covers only Live frames with the owner alive
 (the Director's `director` bus key in state `Live`), each Live window starts clean, and a window with less than 0.5 s of such frames is
@@ -326,8 +352,10 @@ The `foreach_arena`/`foreach_round` blocks unroll. Placeholders are `{arena} {se
 
 | Scenario | DoD | Topology | Drives |
 |---|---|---|---|
-| `p0_gate` | 1-8, 10, 12, 13, POSE-1, PAWN-1, WORLD-1, COMBAT-1 | dedicated | per arena: `BESTOF 2R-1`, `MAP`, `START`, then R × (ready_report each, Live, `DEBUG KILL <alternating seat>`, RoundOver), `ABORT` |
-| `p0_wifi` | 14 (= 1-7), 12, POSE-1, PAWN-1, WORLD-1, COMBAT-1 | dedicated | p0_gate on Alley+Pit under `wifi` |
+| `p0_gate` | 1-8, 10, 12, 13, POSE-1, SMOOTH-1, SPAWN-1, PAWN-1, WORLD-1, COMBAT-1 | dedicated | per arena: `BESTOF 2R-1`, `MAP`, `START`, then R × (ready_report each, Live, `DEBUG KILL <alternating seat>`, RoundOver), `ABORT` |
+| `p0_wifi` | 14 (= 1-7), 12, POSE-1, SMOOTH-1, SPAWN-1, PAWN-1, WORLD-1, COMBAT-1 | dedicated | p0_gate on Alley+Pit under `wifi` |
+| `netfeel` | 12, SMOOTH-1, SPAWN-1, POSE-1 | dedicated | two fighters on Pit over `far` (`-Netsim intl`/`bad` for the others), moving, R rounds |
+| `world_sync` | 1, 2, 3, 12, 13, WORLD-1, WORLD-2 | dedicated | per arena (Cellar, Alley) and round: Live, both players `world_poke` props in turn (3 throws), 8 s to settle, `DEBUG KILL`; run it with `-Netsim typical`, `intl` or `far` |
 | `map_change` | 4, 10, 12 | dedicated | the host's autotest client picks Yard, Slums, Cellar, then starts; everyone loads Cellar |
 | `start_refused` | 4, 12 | dedicated | last instance `HSMP_AUTOTEST_READY=0`; `START` must be refused; 20 s with no travel |
 | `reconnect` | 11, 12 | dedicated | 8 s netsim blackout on the joiner mid-Live; Paused, then Live, same seat/wins |
@@ -376,6 +404,7 @@ exists but a round lacks it, the rule **fails**.
 | DoD-13 | `g0.json` has every G0 check and all pass; clean tree; its commit == the deploy stamp's commit; the quick run's skipped `cargo` is covered by the stamp's full G0 (`g0_ok`, same commit, clean); the stamp's profile is `release`, or `dev` = the release mod set plus only the template's `dev` entries; the stamp hashes every deployed file (`hashes`) and `deploy_check` re-hashed all of them identical at run start; the binaries the run executed (`bins_used`) are the stamped ones; `-SkipBuild` only with binaries proven valid for the commit (`bins_match_commit`); `report.json` `gate.commit` (the judging hsmp-gate's build) == the deployed commit, built from a clean tools tree | g0.json / deploy stamp missing, dirty tree, commit mismatch, no full G0 for the deployed commit; a stamp without `hashes` (an old deploy: redeploy); no `deploy_check`; another profile, or a dev deploy that turned a shipped mod off or a non-shipped mod on; `-SkipBuild` with unproven binaries; the gate built from another commit or from a dirty tools tree | a G0 check failed; a deployed file changed or went missing after the deploy; the run executed binaries other than the stamped ones |
 | PAWN-1 | per round and instance, every `pawn_state{protected=true, at ∈ placed/ready/protect/live}`: `downed=false`, `consciousness ≥ 95`, `dist_cm ≤ 100` (DoD-7's limit), `weapon_r`/`weapon_l` not fists/None where the instance's `kit_verified{who=self, ok=true}` has a weapon; no `pawn_state{at=rearm}` after `at=ready` ([spawns.md](subsystems/spawns.md) §1.7) | no `pawn_state` in the run; a field missing; the kit's hands unknown | a limit is violated (the first offending event is named); a round without a protected `pawn_state` |
 | WORLD-1 | per round whose Live lasted ≥ 10 s, per instance, during Live: a `world_consistency` with `compared ≥ 1`; no id in `mismatched` of two consecutive verdicts (same `level`); the round's last verdict `hash_match=true` ([world-replication.md](subsystems/world-replication.md)) | no `world_consistency`; no verdict with `compared ≥ 1` in a judged round; **no round with Live ≥ 10 s** (the real p0_gate kills at once: Live ≈ 1 s) | a repeated mismatch; the last verdict mismatched |
+| WORLD-2 | per round whose Live lasted ≥ 10 s: every two instances' `world_track` of the same body (same `nid`, `level`, `epoch`) paired at the same host-clock time `t` (the other track linear between samples ≤ 250 ms apart): the moving samples' p95 distance ≤ the profile's limit (none/lan/good 80 cm, typical/wifi 130, intl 170, bad and far 260: the simulator's results with margin, [world-replication.md](subsystems/world-replication.md) "Measuring sync"); the last `rest` samples of each body both screens tracked within 5 cm (WORLD-1's pose tolerance); no `world_sync_quality` hard snap during Live | no `world_track` at all; a judged round with no paired sample (nothing moved on two screens); a profile without a limit (awful); no round with Live ≥ 10 s | p95 above the limit; a body resting > 5 cm apart; a hard snap |
 | COMBAT-1 | per round whose Live lasted ≥ 10 s, per instance: ≥ 1 `combat_quality` during Live; `pending` not growing (last ≤ first + 5); `accepted / (claims − parried)` ≥ the documented honest-acceptance floor ([combat.md](subsystems/combat.md): 99 % none/lan, 97 % good/typical, 93 % wifi; most impaired profile in the run) when ≥ 20 claims were decided; the same ratio over every Live sample of the run per instance | no `combat_quality` (the emitter is silent without combat: the autotest players do not fight); no sample in a judged round; **no round with Live ≥ 10 s**; bad/awful (no floor) | `pending` grew; the acceptance ratio is below the floor |
 | STATE-1 | (every shared-memory run: run.json `ipc = "shm"`) every name in `inst<i>/state_dir_listing.txt` is on the state-dir allow-list the gate was built with (`state_files.allow`: names, prefixes, `{}`/`<id>` patterns and `[runtime]` globs) | an instance has no `state_dir_listing.txt` | a file outside the list is left in a state dir (an IPC file came back) |
 | NETSIM | each impaired instance ran at least the scenario's profile, its proxy logged `netsim_start` with that profile (the listen host has no proxy by design), and its `netsim_stats{in,out,clients}` show game traffic: `in` and `out` growing over the run with `clients ≥ 1`, and growing across every round (last sample at/before Live → first sample at/after the round's end); every `netsim_stats` window overlapping Live has the proxy's own scheduling error `late_p99_ms` ≤ 2 ms, and the measured loss (`lost`/`in`, ≥ 5000 packets) is at least half the profile's `loss` | a weaker `-Netsim` override, no `netsim_start`, no `netsim_stats`; no `late_*` fields (an old netsim); a Live window with `late_p99_ms` > 2 ms (the box starved the proxy: the path was not the profile's); measured loss below half the profile's | the proxy ran a different profile than run.json says; a proxy with zero traffic (the client bypassed the impairment); a round with no traffic through the proxy |
@@ -408,7 +437,7 @@ arena, round, live/end ms), `checks` (one line per rule × round × instance) an
 | `hsmp-server --debug-verbs` | RCON `MAP <arena>`, `START`, `ABORT`, `BESTOF <n>`, `DEBUG KILL <seat>` (reply `OK ...` / `ERR <reason>`); `START` with an unready player → `ERR`. Without it the harness runs the stopgap mode |
 | `--parent-pid` | On the server, the sidecar and the master: exit when the parent dies (§3) |
 | `HSMP_AUTOTEST` (HSMPMenu) | `host` = be seat 1 (join `HSMP_AUTOTEST_ADDR` when `HSMP_AUTOTEST_EXTERNAL=1`, else host a listen server and do not auto-start); `join` = join `HSMP_AUTOTEST_ADDR`; `HSMP_AUTOTEST_READY=1\|0` = auto-ready in the lobby; legacy `1` for the stopgap |
-| Autotest commands | Under `HSMP_AUTOTEST`, HSMPMenu consumes `dev_cmd` AUTOTEST records from the DevCtl ring (`IPC.dev_poll`). The harness sends `hsmp-tools ipc-ctl --pid <game> --id <n> autotest pick_arena\|start\|ready\|unready\|leave\|quit\|move [arg]`; they run through the same code path as the buttons, with `cmd_sent` / `cmd_result` events. `move` (arg `"<seconds>[,noswing][,nowalk]"`, `autotest_mover.lua`) walks the local pawn (its own input disabled meanwhile) and swings its right arm by impulses, then stands still for the last 3 s; `quit` uses `KismetSystemLibrary:QuitGame` |
+| Autotest commands | Under `HSMP_AUTOTEST`, HSMPMenu consumes `dev_cmd` AUTOTEST records from the DevCtl ring (`IPC.dev_poll`). The harness sends `hsmp-tools ipc-ctl --pid <game> --id <n> autotest pick_arena\|start\|ready\|unready\|leave\|quit\|move\|world_poke [arg]`; they run through the same code path as the buttons, with `cmd_sent` / `cmd_result` events. `move` (arg `"<seconds>[,noswing][,nowalk]"`, `autotest_mover.lua`) walks the local pawn (its own input disabled meanwhile) and swings its right arm by impulses, then stands still for the last 3 s; `quit` uses `KismetSystemLibrary:QuitGame`; `world_poke` (arg `"<cm/s>[,<n>]"`) is HSMPWorld's (its own DevCtl cursor; HSMPMenu ignores it): it throws the n free bodies nearest the pawn by a mod-side impulse after a touch claim (`world_sync`, WORLD-2) |
 | Events | The emitters in §1 |
 
 ### Environment the harness gives each game

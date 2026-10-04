@@ -540,6 +540,7 @@ checksum = "edca88bc138befd0323b20752846e6587272d3b03b0343c8ea28a6f819e6e71f"
 dependencies = [
  "async-trait",
  "axum-core",
+ "base64 0.22.1",
  "bytes",
  "futures-util",
  "http",
@@ -558,8 +559,10 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_urlencoded",
+ "sha1",
  "sync_wrapper",
  "tokio",
+ "tokio-tungstenite",
  "tower",
  "tower-layer",
  "tower-service",
@@ -716,6 +719,12 @@ dependencies = [
  "quote",
  "syn 3.0.6",
 ]
+
+[[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "byteorder-lite"
@@ -1083,6 +1092,12 @@ dependencies = [
  "once_cell",
  "parking_lot_core",
 ]
+
+[[package]]
+name = "data-encoding"
+version = "2.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
 name = "der"
@@ -1873,7 +1888,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-combat-sim"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "hsmp-ipc",
  "hsmp-net",
@@ -1884,8 +1899,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "hsmp-diag"
+version = "0.1.0-beta.4"
+dependencies = [
+ "hex",
+ "hsmp-master-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "windows-sys 0.52.0",
+ "zip",
+]
+
+[[package]]
 name = "hsmp-fake-sidecar"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "bytemuck",
  "hsmp-ipc",
@@ -1893,21 +1922,21 @@ dependencies = [
 
 [[package]]
 name = "hsmp-hud-test"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-interact-test"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-ipc"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "bytemuck",
  "proptest",
@@ -1917,12 +1946,15 @@ dependencies = [
 
 [[package]]
 name = "hsmp-launcher"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "anyhow",
  "ed25519-dalek",
  "eframe",
  "hex",
+ "hsmp-diag",
+ "hsmp-master-core",
+ "regex",
  "rfd",
  "serde",
  "serde_json",
@@ -1935,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-master-core"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -1947,15 +1979,25 @@ dependencies = [
 
 [[package]]
 name = "hsmp-modes"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "proptest",
  "serde",
 ]
 
 [[package]]
+name = "hsmp-nat"
+version = "0.1.0-beta.4"
+dependencies = [
+ "rand 0.8.8",
+ "reqwest",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "hsmp-native"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "bytemuck",
  "hsmp-ipc",
@@ -1965,7 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-net"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "chacha20poly1305",
  "ed25519-dalek",
@@ -1978,21 +2020,21 @@ dependencies = [
 
 [[package]]
 name = "hsmp-pose"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "hsmp-ipc",
 ]
 
 [[package]]
 name = "hsmp-pose-truth"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-release"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.2.17",
@@ -2006,14 +2048,14 @@ dependencies = [
 
 [[package]]
 name = "hsmp-saveguard-test"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-server"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -2022,9 +2064,12 @@ dependencies = [
  "clap",
  "dashmap",
  "ed25519-dalek",
+ "futures-util",
  "hex",
+ "hsmp-diag",
  "hsmp-ipc",
  "hsmp-master-core",
+ "hsmp-nat",
  "hsmp-net",
  "hsmp-pose",
  "httpdate",
@@ -2038,6 +2083,7 @@ dependencies = [
  "sha2",
  "socket2 0.5.10",
  "tokio",
+ "tokio-tungstenite",
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
@@ -2046,12 +2092,15 @@ dependencies = [
 
 [[package]]
 name = "hsmp-tools"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "anyhow",
  "bytemuck",
  "clap",
+ "hsmp-diag",
  "hsmp-ipc",
+ "hsmp-master-core",
+ "hsmp-nat",
  "hsmp-pose",
  "mlua",
  "rand 0.8.8",
@@ -2064,8 +2113,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hsmpworld-sim"
+version = "0.1.0-beta.4"
+dependencies = [
+ "hsmp-ipc",
+ "mlua",
+ "tracing",
+]
+
+[[package]]
 name = "hsmpworld-tests"
-version = "0.1.0-beta.3"
+version = "0.1.0-beta.4"
 dependencies = [
  "mlua",
 ]
@@ -4400,6 +4458,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
+dependencies = [
+ "futures-util",
+ "log",
+ "rustls",
+ "rustls-pki-types",
+ "tokio",
+ "tokio-rustls",
+ "tungstenite",
+ "webpki-roots 0.26.11",
+]
+
+[[package]]
 name = "toml_datetime"
 version = "1.1.1+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4567,6 +4641,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 
 [[package]]
+name = "tungstenite"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18e5b8366ee7a95b16d32197d0b2604b43a0be89dc5fac9f8e96ccafbaedda8a"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.8.8",
+ "rustls",
+ "rustls-pki-types",
+ "sha1",
+ "thiserror 1.0.69",
+ "utf-8",
+]
+
+[[package]]
 name = "type-map"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4677,6 +4771,12 @@ name = "urlencoding"
 version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
+
+[[package]]
+name = "utf-8"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utf8_iter"

@@ -127,6 +127,8 @@ pub mod Notice {
     pub const ADMIN_CHANGED: u16 = 6;
     pub const CONFIG_QUEUED: u16 = 7;
     pub const SUDDEN_DEATH: u16 = 8;
+    /// Listen host only: how reachable the server is (args: state, port, public address, NAT kind).
+    pub const NET_STATUS: u16 = 9;
 }
 
 /// `S2CServerClosing.reason`.

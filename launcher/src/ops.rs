@@ -50,6 +50,10 @@ pub fn log_line(line: &str) {
     if let Ok(h) = hsmp_home() {
         let p = h.join("launcher").join("launcher.log");
         let _ = std::fs::create_dir_all(p.parent().unwrap());
+        // one old copy above 4 MB
+        if std::fs::metadata(&p).is_ok_and(|m| m.len() > 4 << 20) {
+            let _ = std::fs::rename(&p, p.with_file_name("launcher.1.log"));
+        }
         if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
             let _ = writeln!(f, "{} {line}", util::iso_utc(util::now_unix()));
         }
@@ -164,11 +168,38 @@ pub fn startup_check(env: &Env, log: &mut dyn FnMut(String)) -> Result<(), Strin
         log(format!("career save check skipped while {} runs; it runs the next time the launcher opens", running.join(", ")));
         return Ok(());
     }
+    rescue_session_logs(env, log);
     let rec = crate::careerguard::recover(env, log);
     if let Err(e) = install::reapply_ini(env, log) {
         log(format!("note: ini settings not re-applied: {e}"));
     }
     startup_verdict(rec)
+}
+
+/// Where the per-run log folders are: `HSMP_LOGS_DIR`, else `<HSMP home>ogs`.
+pub fn logs_root(hsmp_home: &Path) -> PathBuf {
+    std::env::var_os("HSMP_LOGS_DIR").filter(|v| !v.is_empty()).map(PathBuf::from).unwrap_or_else(|| hsmp_home.join("logs"))
+}
+
+/// A run whose log watcher never finished (PC shut down, watcher stopped): copy its
+/// UE4SS.log into its session folder before the next game start overwrites it. Runs with
+/// the start-up check, so never while the game runs.
+pub fn rescue_session_logs(env: &Env, log: &mut dyn FnMut(String)) {
+    let root = logs_root(&env.hsmp_home);
+    if !root.is_dir() {
+        return;
+    }
+    let win64 = game::win64(&env.game_root);
+    let src = hsmp_diag::collect::Sources {
+        ue4ss_log: Some(win64.join("ue4ss").join("UE4SS.log")),
+        ue4ss_dir: Some(win64.join("ue4ss")),
+        ue_saved: Some(env.ue_saved.clone()),
+        state_dir: Some(win64.join("hsmp_state")),
+    };
+    hsmp_diag::sessions::close_stale(&root, &hsmp_diag::proc::alive);
+    if let Some(id) = hsmp_diag::collect::rescue(&root, &src, hsmp_diag::time::now_ms()) {
+        log(format!("logs: kept UE4SS.log of the unfinished game run {id}"));
+    }
 }
 
 fn startup_verdict(rec: Result<Option<crate::careerguard::Recovery>, String>) -> Result<(), String> {
@@ -373,8 +404,8 @@ mod tests {
         assert!(logs.iter().all(|l| !l.contains("not re-applied")), "{logs:?}");
     }
 
-    /// The shipped release's launch options go to `steam -applaunch` unchanged, hair
-    /// streaming workaround included; a folder that is not Steam's install is refused.
+    /// The shipped release's launch options go to `steam -applaunch` unchanged, the IO-1
+    /// hair cvars included; a folder that is not Steam's install is refused.
     #[test]
     fn steam_launch_command_of_the_release() {
         let rel: serde_json::Value = serde_json::from_str(include_str!("../../tools/release/release.json")).unwrap();
@@ -382,7 +413,8 @@ mod tests {
         let steam_exe = Path::new("C:\\Program Files (x86)\\Steam\\steam.exe");
         let (exe, a) = steam_command(&args, Some(steam_exe), true).unwrap();
         assert_eq!(exe, steam_exe);
-        assert_eq!(a, vec!["-applaunch", "2397300", "-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0"]);
+        assert_eq!(a, vec!["-applaunch", "2397300", "-ini:Engine:[SystemSettings]:r.HairStrands.Streaming=0",
+                           "-ini:Engine:[SystemSettings]:r.HairStrands.UseCardsInsteadOfStrands=1"]);
         assert!(steam_command(&args, Some(steam_exe), false).unwrap_err().contains("Steam's copy"));
         assert!(steam_command(&args, None, true).unwrap_err().contains("Steam was not found"));
     }

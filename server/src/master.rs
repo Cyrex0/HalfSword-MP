@@ -33,6 +33,7 @@ mod proc_util; // --pid-file / --parent-pid (docs/development/testing.md)
 mod query;
 
 use ipkey::ip_key;
+use hsmp_master_core::punch;
 
 use anyhow::{Context, Result};
 use axum::{
@@ -172,6 +173,12 @@ struct ServerEntry {
     /// Seconds since the last heartbeat, computed at list time.
     #[serde(default)]
     age_s: u64,
+    /// How the server is reachable (hsmp_master_core::fields::NAT_KINDS; "" = not reported).
+    #[serde(default)]
+    nat: String,
+    /// A punch request reaches it right now (its listen socket is open).
+    #[serde(default)]
+    punch: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -186,6 +193,11 @@ struct ServerStored {
     last_heartbeat: SystemTime,
     /// Monotonic time of the last accepted heartbeat request (rate limit).
     last_hb_req: Option<Instant>,
+    /// The signed registration's listing key (hex), when the server sent one: it signs the
+    /// punch listen request.
+    listing_key: Option<String>,
+    /// The server said it takes punch requests.
+    punch_claim: bool,
 }
 
 #[derive(Clone)]
@@ -196,6 +208,17 @@ struct AppState {
     /// Two clients post with the same room_id and get each other's addrs.
     rendezvous: Arc<DashMap<String, Vec<(SocketAddr, SystemTime)>>>,
     rate_rendezvous: Arc<DashMap<IpAddr, (u32, SystemTime)>>,
+    /// Punch relay: the open listen socket of each listing (a newer one replaces it).
+    listeners: Arc<DashMap<ServerId, Listener>>,
+    listen_ts: Arc<DashMap<ServerId, u64>>,
+    punch_rate: Arc<std::sync::Mutex<punch::Limiter>>,
+}
+
+/// One host's listen socket: messages for it, and which socket this is.
+#[derive(Clone)]
+struct Listener {
+    tx: tokio::sync::mpsc::Sender<String>,
+    gen: u64,
 }
 
 impl AppState {
@@ -205,6 +228,9 @@ impl AppState {
             rate_register: Arc::new(DashMap::new()),
             rendezvous: Arc::new(DashMap::new()),
             rate_rendezvous: Arc::new(DashMap::new()),
+            listeners: Arc::new(DashMap::new()),
+            listen_ts: Arc::new(DashMap::new()),
+            punch_rate: Arc::new(std::sync::Mutex::new(punch::Limiter::new(punch::Limits::default(), now_ms()))),
         }
     }
 }
@@ -289,6 +315,13 @@ struct RegisterReq {
     #[serde(default)]
     #[allow(dead_code)]
     hmac: Option<String>,
+    /// Signed registrations (hsmp_master_core::auth): the key that signs the punch listen request.
+    #[serde(default)]
+    listing_key: Option<String>,
+    #[serde(default)]
+    nat: Option<String>,
+    #[serde(default)]
+    punch: Option<bool>,
 }
 fn default_max_players() -> u32 { 8 }
 
@@ -312,6 +345,8 @@ struct HeartbeatReq {
     mode: Option<String>,
     nonce: String,
     hmac: String,
+    #[serde(default)]
+    nat: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -442,6 +477,7 @@ fn live_entries(st: &AppState) -> Vec<ServerEntry> {
         .map(|r| {
             let mut e = r.value().entry.clone();
             e.age_s = now.duration_since(r.value().last_heartbeat).unwrap_or(Duration::ZERO).as_secs();
+            e.punch = r.value().punch_claim && st.listeners.contains_key(r.key());
             e
         })
         .collect();
@@ -483,6 +519,116 @@ async fn rendezvous_post(
         "you": remote.to_string(),
         "peers": peers_s,
     })).into_response()
+}
+
+/// `POST /v1/punch` (hsmp_master_core::punch): a joiner asks a listed host to punch.
+async fn punch_post(
+    State(st): State<AppState>,
+    ConnectInfo(remote): ConnectInfo<SocketAddr>,
+    body: Bytes,
+) -> impl IntoResponse {
+    let Ok(req) = serde_json::from_slice::<punch::PunchReq>(&body) else {
+        return (StatusCode::BAD_REQUEST, "bad JSON (host, port, endpoint)").into_response();
+    };
+    let ep = match punch::check_request(&req, remote.ip()) {
+        Ok(ep) => ep,
+        Err((code, why)) => return (StatusCode::from_u16(code).unwrap_or(StatusCode::BAD_REQUEST), why).into_response(),
+    };
+    let now = now_ms();
+    if !st.punch_rate.lock().unwrap_or_else(|e| e.into_inner()).requester_ok(now, remote.ip()) {
+        return (StatusCode::TOO_MANY_REQUESTS, "punch throttled (this address)").into_response();
+    }
+    let host = req.host.trim().trim_start_matches('[').trim_end_matches(']').to_string();
+    let wall = SystemTime::now();
+    let Some(id) = st
+        .servers
+        .iter()
+        .find(|r| r.value().entry.host == host && r.value().entry.port == req.port && !is_stale(r.value(), wall))
+        .map(|r| r.key().clone())
+    else {
+        return (StatusCode::NOT_FOUND, "no such server in the list").into_response();
+    };
+    let Some(l) = st.listeners.get(&id).map(|l| l.clone()) else {
+        return (StatusCode::CONFLICT, "this server does not take punch requests").into_response();
+    };
+    if !st.punch_rate.lock().unwrap_or_else(|e| e.into_inner()).server_ok(now, &id) {
+        return (StatusCode::TOO_MANY_REQUESTS, "punch throttled (this server)").into_response();
+    }
+    let msg = punch::PunchMsg { t: "punch".into(), to: ep.to_string(), nonce: req.nonce.clone() };
+    if l.tx.try_send(serde_json::to_string(&msg).unwrap_or_default()).is_err() {
+        return (StatusCode::CONFLICT, "this server's link to the list is down").into_response();
+    }
+    info!(server_id = %id, to = %ep, "punch request relayed");
+    (StatusCode::ACCEPTED, Json(punch::PunchResp { sent: true })).into_response()
+}
+
+/// `GET /v1/punch/listen/{id}?ts=..`: the listed host's relay socket. Accepted from the
+/// listing's own address, signed by its listing key when it registered with one.
+async fn punch_listen(
+    State(st): State<AppState>,
+    ConnectInfo(remote): ConnectInfo<SocketAddr>,
+    uri: axum::extract::OriginalUri,
+    headers: axum::http::HeaderMap,
+    ws: axum::extract::ws::WebSocketUpgrade,
+) -> axum::response::Response {
+    let pq = uri.0.path_and_query().map(|p| p.as_str().to_string()).unwrap_or_default();
+    let Some((id, ts)) = punch::parse_listen_path(&pq) else {
+        return (StatusCode::BAD_REQUEST, "expected /v1/punch/listen/<id>?ts=<unix ms>").into_response();
+    };
+    let Some((owner, key)) = st.servers.get(&id).filter(|r| !is_stale(r.value(), SystemTime::now())).map(|r| (r.owner_ip, r.listing_key.clone())) else {
+        return (StatusCode::NOT_FOUND, "unknown or expired listing (register first)").into_response();
+    };
+    if owner != remote.ip() {
+        return (StatusCode::FORBIDDEN, "not the owner").into_response();
+    }
+    if let Some(k) = key {
+        let sig = headers.get(hsmp_master_core::SIG_HEADER).and_then(|v| v.to_str().ok());
+        if hsmp_master_core::auth::verify(&k, sig, "GET", &pq, b"").is_err() {
+            return (StatusCode::FORBIDDEN, "bad signature").into_response();
+        }
+    }
+    if now_ms().abs_diff(ts) > punch::LISTEN_SKEW_MS {
+        return (StatusCode::BAD_REQUEST, "clock skew: ts is more than 5 minutes off").into_response();
+    }
+    {
+        let mut last = st.listen_ts.entry(id.clone()).or_insert(0);
+        if ts <= *last {
+            return (StatusCode::CONFLICT, "stale ts").into_response();
+        }
+        *last = ts;
+    }
+    ws.on_upgrade(move |socket| listener_task(st, id, socket))
+}
+
+/// One host's listen socket: relays punch messages down, answers pings, and unregisters
+/// itself when it closes (or when a newer socket of the same listing replaced it).
+async fn listener_task(st: AppState, id: ServerId, mut socket: axum::extract::ws::WebSocket) {
+    use axum::extract::ws::Message;
+    static GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let gen = GEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(16);
+    st.listeners.insert(id.clone(), Listener { tx, gen });
+    info!(server_id = %id, "punch listener connected");
+    loop {
+        tokio::select! {
+            m = rx.recv() => match m {
+                Some(m) => if socket.send(Message::Text(m)).await.is_err() { break },
+                None => break, // replaced by a newer socket
+            },
+            m = socket.recv() => match m {
+                Some(Ok(Message::Text(t))) if t == punch::PING => {
+                    if socket.send(Message::Text(punch::PONG.into())).await.is_err() { break }
+                }
+                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                Some(Ok(_)) => {}
+            },
+        }
+        if !st.servers.contains_key(&id) {
+            break; // the listing went away
+        }
+    }
+    st.listeners.remove_if(&id, |_, l| l.gen == gen);
+    info!(server_id = %id, "punch listener closed");
 }
 
 async fn dashboard(State(st): State<AppState>) -> Html<String> {
@@ -639,6 +785,8 @@ async fn register(
         reachable,
         last_seen_utc_ms: now_ms(),
         age_s: 0,
+        nat: hsmp_master_core::fields::nat_kind(req.nat.as_deref()),
+        punch: false,
     };
 
     let mut nonces = std::collections::VecDeque::with_capacity(8);
@@ -652,6 +800,8 @@ async fn register(
             recent_nonces: nonces,
             last_heartbeat: SystemTime::now(),
             last_hb_req: None,
+            listing_key: req.listing_key.as_deref().map(str::trim).filter(|k| k.len() == 64).map(str::to_ascii_lowercase),
+            punch_claim: req.punch.unwrap_or(false),
         },
     );
 
@@ -717,6 +867,9 @@ async fn heartbeat(
     }
 
     row.entry.players = req.players.min(row.entry.max_players);
+    if req.nat.is_some() {
+        row.entry.nat = hsmp_master_core::fields::nat_kind(req.nat.as_deref());
+    }
     if let Some(m) = req.map.as_deref().and_then(|m| clean(m, MAX_MAP)) {
         row.entry.map = m;
     }
@@ -807,6 +960,8 @@ fn app(state: AppState) -> Router {
         // NAT traversal helpers.
         .route("/v1/myaddr", get(myaddr))
         .route("/v1/rendezvous/:room_id", post(rendezvous_post))
+        .route("/v1/punch", post(punch_post))
+        .route("/v1/punch/listen/:id", get(punch_listen))
         // No request needs more than a few hundred bytes (413 beyond).
         .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_BYTES))
         // A body that trickles in is cut off (408), freeing the slot.
@@ -874,7 +1029,8 @@ async fn serve_bounded(listener: tokio::net::TcpListener, router: Router) -> std
             let _ip_slot = ip_slot;
             let mut b = hyper::server::conn::http1::Builder::new();
             b.timer(TokioTimer::new()).header_read_timeout(HEADER_READ_TIMEOUT);
-            let conn = b.serve_connection(TokioIo::new(stream), hyper_svc);
+            // with_upgrades: the punch listen WebSocket leaves this bounded HTTP connection.
+            let conn = b.serve_connection(TokioIo::new(stream), hyper_svc).with_upgrades();
             let _ = time::timeout(CONN_MAX_LIFETIME, conn).await;
         });
     }

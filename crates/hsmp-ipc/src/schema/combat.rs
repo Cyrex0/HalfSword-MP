@@ -37,8 +37,9 @@ pub const DELTA_FIELDS: u8 = 24;
 /// Bone name capacity (bytes, `[A-Za-z0-9_]`).
 pub const BONE_BYTES: usize = 32;
 /// Claim flag bits (bit0 inside, bit1 lower_threshold, bit2 shockwave, bit3 stab, bit4 hit
-/// flesh, bit5 armour-stage inputs).
-pub const DAMAGE_FLAGS_ALL: u8 = 0x3F;
+/// flesh, bit5 armour-stage inputs, bit6 offset / normal / velocity / impulse in the hit
+/// bone's frame, bit7 struck by a weapon rather than a body part).
+pub const DAMAGE_FLAGS_ALL: u8 = 0xFF;
 /// World coordinate bound (cm) for hit locations / offsets.
 pub const LOC_LIMIT: f32 = 1.0e7;
 
@@ -285,9 +286,7 @@ fn check_damage(d: &Damage) -> Result<(), Invalid> {
     if !bone_ok(&d.bone) {
         return Err(Invalid::Range("bone"));
     }
-    if d.flags & !DAMAGE_FLAGS_ALL != 0 {
-        return Err(Invalid::Range("flags"));
-    }
+    // Every flag bit is defined (DAMAGE_FLAGS_ALL).
     if !v3_within(&d.location, LOC_LIMIT) {
         return Err(Invalid::Range("location"));
     }
@@ -549,7 +548,9 @@ mod tests {
             view::<Damage>(&to_payload(&d, &[])).unwrap_err()
         };
         assert_eq!(bad(&|d| d.bone = Str::new("neck\"}")), Invalid::Range("bone"));
-        assert_eq!(bad(&|d| d.flags = 0x40), Invalid::Range("flags"));
+        let mut all = claim();
+        all.flags = DAMAGE_FLAGS_ALL;
+        assert!(view::<Damage>(&to_payload(&all, &[])).is_ok(), "every flag bit is defined");
         assert_eq!(bad(&|d| d.location[1] = 2.0e7), Invalid::Range("location"));
         assert_eq!(bad(&|d| d.offset[0] = -2.0e7), Invalid::Range("offset"));
         assert_eq!(bad(&|d| d.target_peer_id = 0), Invalid::Range("target_peer_id"));

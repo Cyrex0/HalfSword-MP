@@ -162,6 +162,7 @@ impl Manifest {
             ini_settings: vec![],
             mods_template: String::new(),
             files: vec![],
+            report_upload: false,
         }
     }
 }

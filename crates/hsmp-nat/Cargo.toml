@@ -1,0 +1,25 @@
+[package]
+name = "hsmp-nat"
+description = "HSMP NAT traversal: STUN, punch probes, UPnP-IGD / NAT-PMP / PCP port mapping"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+# The codecs (stun, probe, the UPnP SOAP bodies, NAT-PMP, PCP) are pure functions; the
+# clients run on tokio. Nothing here talks to a real router in tests: every client takes
+# its endpoints from `portmap::Targets`, which the tests point at mocks on 127.0.0.1.
+[dependencies]
+tokio = { version = "1", features = ["rt", "net", "time", "sync", "macros", "io-util"] }
+reqwest = { version = "0.12", default-features = false }
+rand = "0.8"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "rt", "net", "time", "sync", "macros", "io-util"] }
+
+[lints]
+workspace = true

@@ -16,6 +16,8 @@ pub mod lua_check;
 pub mod lua_test;
 pub mod mapdump_summary;
 pub mod net_bench;
+pub mod natlab;
 pub mod netsim;
 pub mod pose_probe;
 pub mod rcon;
+pub mod report_fixture;

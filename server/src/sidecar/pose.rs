@@ -63,6 +63,7 @@ pub(super) fn peer_play_of(peer_id: u32, seq: u64, s: &poseplay::Sample) -> hsmp
     p.jit = s.jitter as f32;
     p.lead = s.lead as f32;
     p.iv = s.interval as f32;
+    p.rate = if s.rate.is_finite() { s.rate as f32 } else { 1.0 };
     p.mask = s.mask;
     p.vmask = s.vmask;
     let mut flags = 0;
@@ -160,6 +161,7 @@ pub(super) fn spawn_latency_report() {
             info!("latency ms: {}", line);
             for l in play_report(5.0) { info!("{}", l); }
             if let Some(l) = tx_report(5.0) { info!("{}", l); }
+            if let Some(l) = link_report() { info!("{}", l); }
         }
     });
 }
@@ -259,4 +261,20 @@ fn tx_report(secs: f64) -> Option<String> {
     if n == 0 { return None; }
     Some(format!("pose v2 tx: {:.1} frames/s, {:.0} B/frame, {:.1} KB/s payload, control in {}%",
         n as f64 / secs, b as f64 / n as f64, b as f64 / secs / 1000.0, 100 * c / n))
+}
+
+/// The server link over the last report interval: RTT and loss (the lines bug reports read).
+fn link_report() -> Option<String> {
+    static LAST: std::sync::Mutex<(u64, u64, u64)> = std::sync::Mutex::new((0, 0, 0));
+    let s = super::net::conn_stats()?;
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    let (sent0, lost0, re0) = *last;
+    // a new connection restarts the counters
+    let (ds, dl, dr) = if s.pkts_sent >= sent0 { (s.pkts_sent - sent0, s.pkts_lost.saturating_sub(lost0), s.retransmits.saturating_sub(re0)) } else { (s.pkts_sent, s.pkts_lost, s.retransmits) };
+    *last = (s.pkts_sent, s.pkts_lost, s.retransmits);
+    let loss = if ds > 0 { 100.0 * dl as f64 / ds as f64 } else { 0.0 };
+    Some(format!(
+        "link: rtt {:.0} ms (min {:.0}, var {:.0}) | loss {:.2}% ({dl}/{ds} pkts, {dr} retransmits) | rx {} pkts | total lost {} spurious {} | pacing {:.0} KB/s",
+        s.srtt_ms, s.min_rtt_ms, s.rttvar_ms, loss, s.pkts_recv, s.pkts_lost, s.spurious_lost, s.cc_rate_bps / 1024.0
+    ))
 }

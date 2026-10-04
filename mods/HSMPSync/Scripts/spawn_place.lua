@@ -220,7 +220,8 @@ function SP.new(env, opts)
     -- This process has placed nothing yet, so there is no valid status.
     if env.clear_status then pcall(env.clear_status) end   -- the bus key, cleared (seq 0)
     self.counters = { placed = 0, verified = 0, failed = 0, retries = 0, falls = 0,
-                      invuln_set = 0, vitals = 0, requests = 0, nocollide = 0, recollide = 0, states = 0 }
+                      invuln_set = 0, vitals = 0, requests = 0, nocollide = 0, recollide = 0, states = 0,
+                      corrections_live = 0 }
     self:reset("init")
     return self
 end
@@ -395,6 +396,18 @@ end
 -- Start (or restart) a placement of `pawn` on order e. why: "round start",
 -- "fell", "director retry", "drift", "new pawn". no_protect: a Live re-place:
 -- the move only, no protection (arm_protection is a no-op for it).
+-- Every move of the local pawn by this module is a correction the player sees
+-- (SMOOTH-1): event `pawn_correction` {why, live, dist_cm}. During Live only a
+-- fall below the floor may move an honest player.
+function P:note_correction(why, dest)
+    local env = self.env
+    local x, y, z = env.pawn_loc(self.pawn)
+    local d = (x and dest) and math.sqrt((x - dest.X) ^ 2 + (y - dest.Y) ^ 2 + (z - dest.Z) ^ 2) or -1
+    local live = (self.live_seen or env.match() == "live") and true or false
+    if live then self.counters.corrections_live = self.counters.corrections_live + 1 end
+    if env.ev then pcall(env.ev, "pawn_correction", { why = why, live = live, dist_cm = d }) end
+end
+
 function P:place(pawn, e, plan, why, no_protect)
     local env = self.env
     local now = env.now()
@@ -410,6 +423,7 @@ function P:place(pawn, e, plan, why, no_protect)
         self:write_status(self.cur, false, "no ground under the server point")
         return false
     end
+    self:note_correction(why, dest)
     self.cur = { e = e, plan = plan, why = why, dest = dest, floor = floor, clear = clear, off = off,
                  tries = 0, t0 = now, no_protect = no_protect }
     self.placed_pawn = self.pawn_id
@@ -752,6 +766,7 @@ function P:watch_step(now)
         local nx, ny, nz, nyaw = env.native_point()
         local fz = nx and env.ground(self.pawn, nx, ny, nz)
         if fz then
+            self:note_correction(fell and "fell" or "drift", { X = nx, Y = ny, Z = fz + T.pawn_half_height })
             env.teleport(self.pawn, { X = nx, Y = ny, Z = fz + T.pawn_half_height }, nyaw)
             env.log("spawn watchdog: no server order; put back on native spawner 0 (%.0f,%.0f,%.0f)", nx, ny, fz)
         end
@@ -760,7 +775,8 @@ function P:watch_step(now)
         if nx then
             local fz = env.ground(self.pawn, nx, ny, nz)
             if fz then
-                env.teleport(self.pawn, { X = nx, Y = ny, Z = fz + T.pawn_half_height }, nyaw)
+                self:note_correction(fell and "fell" or "drift", { X = nx, Y = ny, Z = fz + T.pawn_half_height })
+            env.teleport(self.pawn, { X = nx, Y = ny, Z = fz + T.pawn_half_height }, nyaw)
                 env.log("spawn watchdog: no server order; put back on native spawner 0 (%.0f,%.0f,%.0f)", nx, ny, fz)
             end
         end

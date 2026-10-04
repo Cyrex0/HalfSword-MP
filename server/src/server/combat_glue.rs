@@ -227,6 +227,7 @@ pub(super) async fn dispatch_damage(
             }
         }
         crate::combat::Verdict::Ack { accepted, reason } => {
+            crate::stats::combat(accepted, &reason);
             if !accepted && crate::validate::rate::log_ok("damage_rejected") {
                 warn!(attacker_id, target = hit.target_peer_id, hit_id = hit.hit_id,
                       %reason, "damage rejected");

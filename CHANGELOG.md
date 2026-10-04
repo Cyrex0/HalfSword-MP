@@ -8,6 +8,81 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+## [0.1.0-beta.4] - 2026-10-04
+
+### What's new
+
+- Spectator camera: when you are out, you get a follow camera on the other fighters and an
+  arena view. No more black screen.
+- Fixed a crash when switching between spectate targets.
+- Damage now matches single player across all armour types. Hits are replayed at the right
+  spot on the body, so armour protects the way it does offline.
+- Weapon and body hit types are carried over the network: a pommel strike no longer cuts.
+- Smoother play at high ping: no more rubber banding, and hits are accepted at 150-300 ms ping.
+- No more stretched or broken bodies when fighters spawn.
+- Props and items stay in sync: who owns them, smooth movement, and two players grabbing the
+  same item no longer both get it.
+- Hosting is easier: the router opens the hosting port by itself (UPnP, PCP or NAT-PMP), and
+  players behind a router that blocks incoming connections can still join through hole
+  punching.
+- Every game session writes its own logs, and the launcher has a "Create bug report" button
+  that collects them into a zip you can save or attach to a GitHub issue.
+- Servers write logs and regular stats lines.
+- Fixed the hair-streaming crash a few seconds into the first arena: hair is now drawn as hair
+  cards.
+
+### Launcher
+
+- "Upload to HSMP" in the bug report window only appears when the release says the server list
+  takes reports (`report_upload` in `release.json`, off for this release). Use "Save report zip"
+  or "Open GitHub issue". If an upload cannot reach the service, the launcher says so and points
+  at those two buttons.
+
+### Hosting
+
+- **The router port opens automatically.** A hosted server asks the router for its UDP port
+  (UPnP-IGD, then PCP, then NAT-PMP), renews the lease and removes it when it stops. The host
+  lobby says "Router port opened automatically (UPnP)" or, when it could not, which UDP port to
+  forward by hand. **SETTINGS > HOSTING > ROUTER PORT: OFF**, or `hsmp-server --port-map off`,
+  turns it off.
+- **NAT traversal.** A host whose port is still closed can be joined through the server list: the
+  joiner's game asks the list for a punch, the host sends a few small probes towards the joiner,
+  and the normal handshake follows. The browser shows such servers with **NAT** in PING; the
+  joiner's lobby reads "CONNECTING THROUGH YOUR ROUTER..." meanwhile, and "The host's network
+  blocks incoming connections; ask them to forward UDP <port>" when nothing gets through.
+- The server learns its public address with STUN from its game port and lists the port that
+  works (the router's or the NAT's mapped port). Listings carry `nat` and `punch`.
+- The HOST PORT is always 1024-65535 when the server starts: a hand-edited port 0 used to make
+  the OS pick a random port, which was then listed.
+
+### Server list
+
+- Punch relay: `GET /v1/punch/listen/{id}` (a signed WebSocket per listed host, held with the
+  Durable Object hibernation API on the Worker) and `POST /v1/punch` (the requester's own endpoint
+  only, rate-limited). Deploy the Worker for the relay; older Workers simply have none.
+
+### World objects
+
+- Props, dropped and thrown weapons stay together on every screen at higher ping. A body another
+  player simulates plays in that player's timeline while they hold or push it, and is shown
+  where it is now once it flies free; corrections blend instead of snapping. In the simulator
+  at ~180 ms RTT the median gap between two screens drops from 67 to 37 cm and snaps from 14 per
+  run to none.
+- Pushing a prop another player pushed before hands it over once you are clearly nearer.
+- Two players grabbing the same weapon: the one the server picks keeps it; the other lets go
+  (it no longer stays in both hands).
+- A prop you pushed no longer jumps back to where it started after it comes to rest.
+
+### Fixes
+
+- **No more crash a few seconds into the first arena of a session** (an engine crash on the
+  IoDispatcher thread, `PAK_ASYNC_READ_OOB`). Hair is now drawn with the game's hair cards
+  instead of hair strands (`r.HairStrands.UseCardsInsteadOfStrands=1`, set by the launcher, the
+  Steam launch options and the mod), so close-up hair is less detailed. The crash was more likely
+  on slow connections.
+- In the first arena of a session, a newly spawned fighter is hidden for dressing 0.5 s after it
+  appears instead of at once, so for that half second it is seen in its base clothes.
+
 ## [0.1.0-beta.3] - 2026-10-03
 
 ### Launcher
