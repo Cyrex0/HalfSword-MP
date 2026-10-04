@@ -1446,6 +1446,11 @@ pub(crate) async fn rcon_debug_kill(socket: &Arc<UdpSocket>, state: &Arc<ServerS
     r
 }
 
+/// RCON: the connected peer at `seat`.
+pub(crate) async fn seat_peer(state: &Arc<ServerState>, seat: u8) -> Option<PeerId> {
+    peer_at_seat(&*state.inner.lock().await, seat)
+}
+
 /// RCON `STATUS`: one JSON line (phase, round, config, roster).
 pub(crate) async fn rcon_status(state: &Arc<ServerState>) -> String {
     let inner = state.inner.lock().await;
