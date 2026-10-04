@@ -609,20 +609,26 @@ impl Net {
         self.maps().by_addr.keys().copied().collect()
     }
 
+    /// `addrs` into a buffer the caller keeps (the tick reuses its own).
+    pub fn addrs_into(&self, out: &mut Vec<SocketAddr>) {
+        out.clear();
+        out.extend(self.maps().by_addr.keys().copied());
+    }
+
     /// Close every connection whose address is no longer a peer (kick, ban,
     /// RCON and timeout paths that removed the peer directly). Cheap when
     /// nothing changed. Call it under the peer-table lock (admission accepts
     /// under the same lock, so a fresh connection always has its peer). The
     /// CLOSE datagrams go out with the next `tick`.
-    pub fn reconcile<'a>(&self, peers: impl Iterator<Item = &'a SocketAddr>) {
-        let keep: std::collections::HashSet<SocketAddr> = peers.copied().collect();
+    pub fn reconcile<V>(&self, peers: &HashMap<SocketAddr, V>) {
+        // Runs every tick: the unchanged case allocates nothing.
         let stale: Vec<(SocketAddr, ConnId)> = {
             let mm = self.maps();
             let m = &mm.by_addr;
-            if m.len() == keep.len() && m.keys().all(|a| keep.contains(a)) {
+            if m.len() == peers.len() && m.keys().all(|a| peers.contains_key(a)) {
                 return;
             }
-            m.iter().filter(|(a, _)| !keep.contains(a)).map(|(a, c)| (*a, *c)).collect()
+            m.iter().filter(|(a, _)| !peers.contains_key(*a)).map(|(a, c)| (*a, *c)).collect()
         };
         let now = self.now_ms();
         let mut ep = self.ep();
@@ -767,7 +773,7 @@ mod tests {
         let out = net.send_msg(new, test_msg());
         assert!(!out.is_empty() && out.iter().all(|(a, _)| *a == new), "server now sends to the new path");
         assert!(!net.send_msg(old, test_msg()).is_empty(), "old address is an alias for a while");
-        net.reconcile([new].iter());
+        net.reconcile(&HashMap::from([(new, ())]));
         assert!(net.ep().conn(cid).is_some_and(|c| c.is_open()), "reconcile keeps the moved connection");
         assert_eq!(net.counters().migrations, 1);
     }

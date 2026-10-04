@@ -52,6 +52,8 @@ mod build_id;
 mod log_init; // stdout + the --log-dir files
 mod server_report; // --report: the redacted bug-report zip of this server's logs
 mod stats; // the 10 s stats line, the shutdown summary, RCON REPORT
+#[cfg(test)]
+mod alloc_count; // counting allocator for the allocation tests
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
