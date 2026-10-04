@@ -68,9 +68,11 @@ pub type ConnId = u64;
 /// Capability bits (negotiated as `client_caps & server_caps`). Every wire
 /// addition after v5 hides behind one of these; none is required.
 pub mod caps {
-    /// `S2CSession.mode` sections other than `None`, `S2CEvent::KillFeed`.
+    /// Game modes: the `mode` record (teams, scores, kills / deaths, round clock, respawn
+    /// orders, imposed kit) and `kill_feed`. A server running any mode but duel / FFA admits
+    /// only peers that have it.
     pub const MODES: u64 = 1 << 0;
-    /// Zone (battle royale ring) state in `S2CSession.mode`.
+    /// The King of the hill `zone` record.
     pub const ZONE: u64 = 1 << 1;
     /// Interaction channel messages (`Impulse`, `Grab`, `Clash`).
     pub const INTERACT: u64 = 1 << 2;

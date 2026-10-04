@@ -227,6 +227,8 @@ pub(crate) async fn on_game_status(socket: &Arc<UdpSocket>, state: &Arc<ServerSt
             let order = inner.spawn_plan.iter().find(|s| s.peer_id == id).map(|s| s.spawn_id);
             if gs.spawn_id != 0 && order == Some(gs.spawn_id) {
                 note_placed(&mut inner, id, gs.spawn_id >> 8);
+                // Deathmatch: the reloaded world placed the pawn on its respawn order.
+                if loaded == inner.match_round { modes::on_placed(&mut inner, id, gs.spawn_id); }
             }
             let died = game_status_in(&mut inner, id, alive, loaded, arena, dead);
             if gs.load_error != 0 { note_load_error(&mut inner, id, load_error_name(gs.load_error)); }
@@ -306,24 +308,20 @@ pub(super) fn combat_open(inner: &Inner) -> bool {
 }
 
 /// Connected participants of this match that are still standing.
-fn standing(inner: &Inner) -> Vec<PeerId> {
+pub(super) fn standing(inner: &Inner) -> Vec<PeerId> {
     inner.peers.values()
         .filter(|p| p.alive && is_present(inner, p))
         .map(|p| p.id)
         .collect()
 }
 
-/// `standing(inner).len()` without the list (checked every tick of a live round).
-fn standing_count(inner: &Inner) -> usize {
-    inner.peers.values().filter(|p| p.alive && is_present(inner, p)).count()
-}
-
 /// Mark `pid` dead for the current round. Returns false if it was already
 /// dead / unknown or no round is open (late packet, native flow, stand-in).
 pub(super) fn declare_death(inner: &mut Inner, pid: PeerId, killer: PeerId, cause: u8) -> bool {
     // Spawn protection: a death report or ledger kill right after the
-    // player's placement (insta-death at round start) does not count.
-    if combat_open(inner) && spawn_protected(inner, pid) {
+    // player's placement (insta-death at round start), or right after a
+    // deathmatch respawn, does not count.
+    if combat_open(inner) && (spawn_protected(inner, pid) || modes::protected(inner, pid)) {
         let alive = inner.peers.values().any(|p| p.id == pid && p.alive);
         if alive {
             warn!(peer_id = pid, killer, cause, round = inner.match_round,
@@ -354,39 +352,70 @@ pub(super) fn declare_death_unprotected(inner: &mut Inner, pid: PeerId, killer: 
     inner.out_msgs.push((None, death_msg(pid, round, killer, cause)));
     info!(peer_id = pid, killer, cause, round, settling = inner.settle_ms > 0,
           "DEATH declared (authoritative)");
+    modes::on_death(inner, pid, killer, cause);
     if inner.match_state == "live" { check_round_end(inner, true); }
     true
 }
 
-/// Live round: start the settle once ≤ 1 participant is standing (a solo
-/// test round only ends when its player dies).
+/// Live round: start the settle once ≤ 1 side (player or team) is standing (a
+/// solo test round only ends when its player dies). A deathmatch round
+/// ends only on its clock: deaths respawn.
 fn check_round_end(inner: &mut Inner, after_death: bool) {
     if inner.match_state != "live" { return; }
-    let alive = standing_count(inner);
-    let multi = inner.participants.len() >= 2;
+    if inner.modes.run.is_some_and(|c| c.respawns()) { return; }
+    let (alive, multi) = modes::standing_sides(inner, |i, p| p.alive && is_present(i, p));
     if alive == 0 || (multi && alive <= 1) {
         if !after_death { info!(alive, "match: round ends (players left / timed out)"); }
-        inner.match_state = "roundover".into();
-        inner.match_reason = "pending".into();
-        inner.last_winner = 0;
-        inner.countdown_ms = 0; // runs once the result is fixed
-        inner.settle_ms = SETTLE_MS;
-        inner.match_state_dirty = true;
-        info!(round = inner.match_round, alive, "match: round over, settling {} ms for trades",
-              SETTLE_MS);
-        // Report Live -> RoundOver now (a death arrives outside the tick).
-        session::observe_phase(inner);
+        begin_settle(inner, alive);
     }
 }
 
-/// Settle deadline: fix the round result (see the block comment above).
+/// The round is over (last side standing, or the mode's end: objective, clock): settle
+/// SETTLE_MS for trades before the result is fixed.
+pub(super) fn begin_settle(inner: &mut Inner, alive: usize) {
+    inner.match_state = "roundover".into();
+    inner.match_reason = "pending".into();
+    inner.last_winner = 0;
+    inner.countdown_ms = 0; // runs once the result is fixed
+    inner.settle_ms = SETTLE_MS;
+    inner.match_state_dirty = true;
+    info!(round = inner.match_round, alive, "match: round over, settling {} ms for trades",
+          SETTLE_MS);
+    // Report Live -> RoundOver now (a death arrives outside the tick).
+    session::observe_phase(inner);
+}
+
+/// Settle deadline: fix the round result (see the block comment above). The mode
+/// decides who won (modes::decide): the last side standing, or the side its objective /
+/// clock names; anything else is a draw.
 pub(super) fn finalize_round(inner: &mut Inner) {
     inner.settle_ms = 0;
     let alive = standing(inner);
     let round = inner.match_round;
-    
-    let text = if alive.len() == 1 {
-        let winner = alive[0];
+    let (winner, reason, result) = modes::decide(inner, &alive);
+    let ended_by = inner.modes.end;
+    modes::on_result(inner, winner, result);
+    let why = match result {
+        hsmp_ipc::schema::session::mode_result::OBJECTIVE => " (held the hill)",
+        hsmp_ipc::schema::session::mode_result::TIME_LIMIT => " (time)",
+        hsmp_ipc::schema::session::mode_result::KILLS => " (most kills)",
+        hsmp_ipc::schema::session::mode_result::SUDDEN_DEATH => " (sudden death)",
+        _ => "",
+    };
+    let text = if let Some(modes::Side::Team(t)) = winner {
+        let wins = modes::team_won(inner, t);
+        let match_over = wins >= needed_wins(inner);
+        let rep = modes::team_rep(inner, t);
+        let name = modes::side_name(inner, modes::Side::Team(t));
+        end_round(inner, rep, reason, match_over);
+        if match_over { inner.sess.match_winner = Some((rep, name.clone(), wins)); }
+        info!(round, team = t, wins, match_over, reason, deaths = ?inner.round_deaths, "ROUND RESULT (authoritative): team win");
+        if match_over {
+            format!("MATCH OVER — {} wins ({} rounds){}", name, wins, why)
+        } else {
+            format!("round {} — {} wins ({} total){}", round, name, wins, why)
+        }
+    } else if let Some(modes::Side::Player(winner)) = winner {
         let mut wins = 0u32;
         let mut nick = String::new();
         let mut key = None;
@@ -395,21 +424,25 @@ pub(super) fn finalize_round(inner: &mut Inner) {
         }
         if let Some(k) = key { inner.wins_by_key.insert(k, wins); }
         let match_over = wins >= needed_wins(inner);
-        end_round(inner, winner, "", match_over);
-        info!(round, winner_id = winner, winner_nick = %nick, wins, match_over,
+        end_round(inner, winner, reason, match_over);
+        info!(round, winner_id = winner, winner_nick = %nick, wins, match_over, reason,
               deaths = ?inner.round_deaths, "ROUND RESULT (authoritative)");
         if match_over {
-            format!("MATCH OVER — {} wins ({} rounds)", nick, wins)
+            format!("MATCH OVER — {} wins ({} rounds){}", nick, wins, why)
         } else {
-            format!("round {} — {} wins ({} total)", round, nick, wins)
+            format!("round {} — {} wins ({} total){}", round, nick, wins, why)
         }
     } else {
-        // Nobody (mutual kill / trade inside the window) — or, defensively,
-        // several (cannot happen: settle starts at ≤ 1) — is a draw.
+        // Nobody (mutual kill / trade inside the window), a tied clock, or —
+        // defensively — several sides (cannot happen: settle starts at ≤ 1) is a draw.
         end_round(inner, 0, "draw", false);
-        info!(round, standing = alive.len(), deaths = ?inner.round_deaths,
+        info!(round, standing = alive.len(), deaths = ?inner.round_deaths, result,
               "ROUND RESULT (authoritative): draw");
-        format!("round {} — draw (simultaneous kill)", round)
+        match ended_by {
+            Some(modes::RoundEnd::Time) => format!("round {} — draw (time)", round),
+            Some(modes::RoundEnd::SuddenDeathOver) => format!("round {} — draw (no kill in sudden death)", round),
+            _ => format!("round {} — draw (simultaneous kill)", round),
+        }
     };
     push_server_chat(inner, &text);
 }
@@ -447,17 +480,14 @@ pub(super) fn present_participants(inner: &Inner) -> Vec<PeerId> {
     inner.peers.values().filter(|p| is_present(inner, p)).map(|p| p.id).collect()
 }
 
-/// `present_participants(inner).len()` without the list (match_step runs every tick).
-fn present_count(inner: &Inner) -> usize {
-    inner.peers.values().filter(|p| is_present(inner, p)).count()
-}
-
 /// A connected participant whose game is still alive (see `present_participants`).
-fn is_present(inner: &Inner, p: &PeerState) -> bool {
+/// A deathmatch player loading its respawn may be silent for a level load.
+pub(super) fn is_present(inner: &Inner, p: &PeerState) -> bool {
     let check_pings = inner.match_state == "live";
     is_participant(inner, p)
         && match inner.match_peers.get(&p.id) {
-            Some(m) if m.aware && check_pings => inner.now_ms.saturating_sub(m.last_ping_ms) <= GAME_PING_TIMEOUT_MS,
+            Some(m) if m.aware && check_pings && !modes::respawning(inner, p.id) =>
+                inner.now_ms.saturating_sub(m.last_ping_ms) <= GAME_PING_TIMEOUT_MS,
             _ => true,
         }
         // Resume: a game client silent for 3 s mid-Live is away.
@@ -490,9 +520,20 @@ fn end_round(inner: &mut Inner, winner: PeerId, reason: &str, match_over: bool) 
     inner.match_state_dirty = true;
 }
 
-/// Award the match to the last participant standing after the others left.
+/// Award the match to the last participant (its team, in a team mode) standing
+/// after the others left.
 pub(super) fn forfeit_to(inner: &mut Inner, winner: PeerId) {
     let needed = needed_wins(inner);
+    let team = modes::team_of_peer(inner, winner);
+    if team != 0 {
+        let w = needed.max(inner.modes.team_wins[team as usize - 1]);
+        modes::set_team_wins(inner, team, w);
+        modes::on_result(inner, Some(modes::Side::Team(team)), hsmp_ipc::schema::session::mode_result::ELIMINATION);
+        end_round(inner, winner, "forfeit", true);
+        inner.sess.match_winner = Some((winner, modes::side_name(inner, modes::Side::Team(team)), w));
+        info!(winner_id = winner, team, "match over by forfeit (team)");
+        return;
+    }
     let mut key = None;
     for p in inner.peers.values_mut() {
         if p.id == winner { p.wins = p.wins.max(needed); key = Some(session::peer_key(p)); }
@@ -532,8 +573,9 @@ pub(super) fn match_step(inner: &mut Inner) {
         inner.match_state_dirty = true;
     }
 
-    let multi = inner.participants.len() >= 2;
-    let present = present_count(inner);
+    // Sides (players, or teams in a team mode) with a present participant: a
+    // match pauses when fewer than 2 are left, not when a teammate drops.
+    let (present, multi) = modes::standing_sides(inner, is_present);
 
     // Nobody of this match is left (also a solo match whose only player
     // left, or an empty server): back to the lobby instead of "live" forever.
@@ -704,6 +746,8 @@ pub(super) fn begin_countdown(inner: &mut Inner, ms: u64) {
     inner.settle_ms = 0;
     inner.match_state_dirty = true;
     info!(round = inner.match_round + 1, "match: countdown begins (waiting for clients to load)");
+    let round = inner.match_round + 1;
+    modes::on_countdown(inner, round);
     plan_spawns(inner);
 }
 
@@ -722,10 +766,12 @@ fn plan_spawns(inner: &mut Inner) {
     let mut by_seat: HashMap<u32, PeerId> = HashMap::new();
     let seats: Vec<crate::spawns::Seat> = inner.peers.values()
         .map(|p| {
-            let seat = inner.sess.seats.get(&session::peer_key(p)).copied().unwrap_or(255) as u32;
+            let key = session::peer_key(p);
+            let seat = inner.sess.seats.get(&key).copied().unwrap_or(255) as u32;
             let order = (seat << 24) | (p.id & 0x00FF_FFFF);
             by_seat.insert(order, p.id);
-            crate::spawns::Seat { peer: order, team: 0 }
+            // Teams spawn on their own side of the arena (sides swap every round).
+            crate::spawns::Seat { peer: order, team: modes::team_of_key(inner, &key) }
         })
         .collect();
     let mut plan = crate::spawns::assign(&inner.match_arena, round, &seats);
@@ -793,6 +839,7 @@ pub(super) fn reset_to_lobby(inner: &mut Inner) {
     // when there is one, was taken before this reset).
     for p in inner.peers.values_mut() { p.ready = false; p.alive = true; p.wins = 0; }
     inner.match_state_dirty = true;
+    modes::on_lobby(inner);
     session::on_lobby(inner);
 }
 

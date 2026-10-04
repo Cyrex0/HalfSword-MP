@@ -1400,6 +1400,10 @@ impl Store {
         p.death = Some((now_ms, ts));
     }
 
+    pub fn note_alive(&mut self, id: PeerId) {
+        if let Some(p) = self.peers.get_mut(&id) { p.death = None; }
+    }
+
     pub fn forget(&mut self, id: PeerId) {
         self.peers.remove(&id);
         self.relayed.retain(|(v, s), _| *v != id && *s != id);
@@ -2369,6 +2373,8 @@ pub fn note_net_jitter(id: PeerId, rttvar_ms: f32) { store().lock().unwrap().not
 pub fn clock_info(id: PeerId) -> Option<ClockInfo> { store().lock().unwrap().clock_info(id, now_ms()) }
 pub fn set_max_rewind(ms: i64) { store().lock().unwrap().set_max_rewind(ms) }
 pub fn note_death(id: PeerId) { store().lock().unwrap().note_death(id, now_ms()) }
+/// A respawned player: its last death no longer opens a trade window.
+pub fn note_alive(id: PeerId) { store().lock().unwrap().note_alive(id) }
 pub fn forget(id: PeerId) {
     store().lock().unwrap().forget(id);
     crate::validate::damage::forget(id);

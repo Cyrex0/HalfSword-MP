@@ -1057,6 +1057,13 @@ impl Ledger {
         }
     }
 
+    /// A new life for `peer` inside `round` (deathmatch respawn): as a round start, for
+    /// this peer only. Vitals sent before now (seq <= the last seen) never count for it.
+    pub fn respawn(&mut self, peer: PeerId, round: u32, now: Instant) {
+        if let Some(l) = self.lives.get_mut(&peer) { l.round = round.wrapping_sub(1); }
+        self.life(peer, round, now);
+    }
+
     pub fn last_attacker(&self, victim: PeerId, round: u32) -> PeerId {
         self.lives.get(&victim).filter(|l| l.round == round).map_or(0, |l| l.last_attacker)
     }
@@ -1164,6 +1171,8 @@ pub fn ledger_forget(peer: PeerId) {
 #[cfg(test)]
 pub(crate) const ISOLATED_TEST_IDS: PeerId = 70_000;
 pub fn ledger_begin_round(round: u32) { ledger().lock().unwrap().begin_round(round, Instant::now()) }
+/// A deathmatch respawn: `peer` starts a new life inside `round`.
+pub fn ledger_respawn(peer: PeerId, round: u32) { ledger().lock().unwrap().respawn(peer, round, Instant::now()) }
 /// Server tick: god-mode verdicts due now (see `Ledger::sweep`).
 pub fn ledger_sweep(round: u32) -> Vec<(PeerId, LedgerVerdict)> { ledger().lock().unwrap().sweep(round, Instant::now()) }
 
@@ -1377,6 +1386,24 @@ mod tests {
         h.target_peer_id = target;
         h.set_delta_pairs(&[(FIELD_HEALTH, health_delta), (10, -5.0)]);
         h
+    }
+
+    /// A deathmatch respawn starts a new life inside the same round: the last
+    /// attacker and the booked losses are gone, and only vitals newer than the
+    /// respawn count.
+    #[test]
+    fn ledger_respawn_starts_a_new_life_in_the_same_round() {
+        let mut l = Ledger::default();
+        let t0 = Instant::now();
+        l.on_vitals(2, 1, 1, 100.0, false, t0);
+        l.on_forward(1, 1, &lhit(2, 1, -60.0), t0 + Duration::from_millis(100));
+        assert!(l.on_vitals(2, 1, 2, 0.0, true, t0 + Duration::from_millis(200)).unwrap().lethal);
+        assert_eq!(l.last_attacker(2, 1), 1);
+        l.respawn(2, 1, t0 + Duration::from_millis(300));
+        assert_eq!(l.last_attacker(2, 1), 0);
+        assert!(l.on_vitals(2, 1, 2, 0.0, true, t0 + Duration::from_millis(400)).is_none(), "a stale dead frame of the old life");
+        let v = l.on_vitals(2, 1, 3, 100.0, false, t0 + Duration::from_millis(500)).unwrap();
+        assert!(!v.lethal);
     }
 
     #[test]

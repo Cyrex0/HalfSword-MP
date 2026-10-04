@@ -380,6 +380,16 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
         return;
     }
     let caps = p.caps;
+    // A mode older clients cannot play (docs/development/protocol.md §7.2): refused with an
+    // actionable text instead of a session record they would refuse.
+    if let Some(why) = modes::join_refusal(&inner, caps) {
+        drop(inner);
+        info!(%from, player = %fp, %why, "join rejected: client without caps::MODES");
+        crate::stats::refused("version");
+        let out = state.net.reject(p, reject_code::VERSION, &why);
+        send_out(socket, state, out).await;
+        return;
+    }
     let taken: Vec<String> = inner.peers.values().map(|q| q.nick.clone()).collect();
     let nick = dedup_nick(p.nick(), &taken);
     // Accept under the peer lock, so the tick's reconcile never sees a

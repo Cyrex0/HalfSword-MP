@@ -16,7 +16,7 @@ use super::*;
 use crate::events;
 use rand::RngCore;
 use serde_json::json;
-use v5::{AdminRole, CmdReason, Jip, Phase, ResultReason, Role, TeamRule};
+use v5::{AdminRole, CmdReason, Jip, Phase, ResultReason, Role};
 use hsmp_ipc::layout::{Bool, Str};
 use hsmp_ipc::schema::session as rec;
 use rec::{cfg, cmd_op};
@@ -270,8 +270,8 @@ pub(crate) struct KitView {
 #[derive(Debug, Clone)]
 pub(crate) struct SessionOpts {
     pub debug_verbs: bool,
-    /// Advertised mode string ("duel", "ffa", ...).
-    pub mode: String,
+    /// The game mode and its options (`--mode`, `--teams`, ...).
+    pub mode: ModeCfg,
 }
 
 /// Results cached per player: a duplicate `cmd_id` gets the same answer.
@@ -287,7 +287,7 @@ pub(crate) struct SessionCore {
     pub match_id: u64,
     pub frozen: Option<rec::SessionConfig>,
     pub config_rev: u32,
-    cfg_sig: Option<(String, u8, u8, u16)>,
+    cfg_sig: Option<(String, u8, u8, u16, ModeCfg)>,
     /// Seat order and roster rows `session_due` builds into every tick.
     snap_bufs: (Vec<(u8, PlayerKey)>, Vec<rec::RosterRow>),
     /// Seat (1-based) per player key; kept for a participant while a match
@@ -317,7 +317,6 @@ pub(crate) struct SessionCore {
     pub kits: KitView,
     pub debug_verbs: bool,
     pub max_peers: u8,
-    pub mode: u8,
     /// First load error a client reported while loading: peer -> (pending
     /// round, error, server ms). One retry window, then it sits out.
     pub load_errors: HashMap<PeerId, (u32, String, u64)>,
@@ -366,7 +365,6 @@ impl SessionCore {
             kits: KitView::default(),
             debug_verbs: false,
             max_peers: max_peers.min(255) as u8,
-            mode: v5::Mode::DUEL,
             load_errors: HashMap::new(),
             sat_out: Vec::new(),
             placed: HashMap::new(),
@@ -400,22 +398,13 @@ impl SessionCore {
     }
 }
 
-pub(crate) fn mode_code(mode: &str) -> u8 {
-    match mode.trim().to_ascii_lowercase().as_str() {
-        "ffa" | "lms" | "ffa_lms" => v5::Mode::FFA,
-        "teams" | "team" | "lts" | "team_elim" => v5::Mode::TEAM_ELIM,
-        "koth" | "king" | "king_of_hill" => v5::Mode::KING_OF_HILL,
-        _ => v5::Mode::DUEL,
-    }
-}
-
 /// main.rs: apply the command-line options.
 pub(crate) async fn configure_session(state: &Arc<ServerState>, o: SessionOpts) {
     let mut inner = state.inner.lock().await;
     // One epoch and one clock for Welcome and every snapshot.
     inner.sess.epoch = state.net.epoch();
     inner.sess.debug_verbs = o.debug_verbs;
-    inner.sess.mode = mode_code(&o.mode);
+    modes::configure(&mut inner, o.mode);
     let epoch = inner.sess.epoch;
     info!(epoch, debug_verbs = o.debug_verbs, "session layer ready");
     events::emit("server_start", json!({"epoch": epoch, "debug_verbs": o.debug_verbs}));
@@ -495,15 +484,16 @@ fn effective_arena(a: &str) -> &str {
 /// The live (lobby) config, assembled from the server state.
 pub(crate) fn live_config(inner: &Inner) -> rec::SessionConfig {
     let s = &inner.sess;
+    let m = &inner.modes.cfg;
     let secs = |ms: u64| (ms / 1000).min(255) as u8;
     rec::SessionConfig {
         rev: s.config_rev,
         arena: Str::new(effective_arena(&inner.match_arena)),
-        mode: s.mode,
+        mode: m.mode,
         best_of: inner.best_of,
-        round_time_limit_s: 0,
-        team_rule: TeamRule::NONE,
-        teams: 0,
+        round_time_limit_s: m.round_time(),
+        team_rule: m.rule(),
+        teams: m.team_count(),
         kit_mode: s.kits.mode,
         kit_budget: s.kits.budget,
         kit_fairness: 0,
@@ -523,10 +513,10 @@ pub(crate) fn live_config(inner: &Inner) -> rec::SessionConfig {
 /// commands, legacy verbs, RCON, the kit-rules channel).
 pub(crate) fn refresh_config_rev(inner: &mut Inner) {
     // Every tick: compared in place, the arena is copied only when something changed.
-    let same = |old: &(String, u8, u8, u16)| old.0 == inner.match_arena && old.1 == inner.best_of
-        && old.2 == inner.sess.kits.mode && old.3 == inner.sess.kits.budget;
+    let same = |old: &(String, u8, u8, u16, ModeCfg)| old.0 == inner.match_arena && old.1 == inner.best_of
+        && old.2 == inner.sess.kits.mode && old.3 == inner.sess.kits.budget && old.4 == inner.modes.cfg;
     if inner.sess.cfg_sig.as_ref().is_some_and(same) { return; }
-    let sig = (inner.match_arena.clone(), inner.best_of, inner.sess.kits.mode, inner.sess.kits.budget);
+    let sig = (inner.match_arena.clone(), inner.best_of, inner.sess.kits.mode, inner.sess.kits.budget, inner.modes.cfg);
     match &inner.sess.cfg_sig {
         Some(_) => {
             inner.sess.config_rev = inner.sess.config_rev.wrapping_add(1).max(1);
@@ -831,6 +821,7 @@ fn result_reason(inner: &Inner) -> u8 {
         "forfeit" => ResultReason::FORFEIT,
         "opponent_left" => ResultReason::OPPONENT_LEFT,
         "load_failed" => rec::result_reason::LOAD_FAILED,
+        "time_limit" => ResultReason::TIME_LIMIT,
         "" if inner.last_winner != 0 => ResultReason::KILL,
         _ => ResultReason::NONE,
     }
@@ -910,11 +901,13 @@ fn fill_session(inner: &Inner, now_ms: u64, seats: &mut Vec<(u8, PlayerKey)>, ro
                 r.admin_role = if p.is_admin { inner.admins.role(&key).max(AdminRole::ADMIN) } else { AdminRole::NONE };
                 r.connected = Bool::TRUE;
                 r.waiting = Bool::from(waiting.contains(&p.id));
+                r.team = modes::team_of_key(inner, &key);
             }
             None => {
                 // A participant whose connection dropped: the seat waits for it.
                 r.nick = Str::new(s.nicks.get(&key).map(String::as_str).unwrap_or(""));
                 r.wins = inner.wins_by_key.get(&key).copied().unwrap_or(0);
+                r.team = modes::team_of_key(inner, &key);
             }
         }
         rows.push(r);
@@ -1022,6 +1015,7 @@ pub(crate) fn cmd_name(c: &rec::Command) -> &'static str {
         cmd_op::SET_CONFIG => match c.patch.mask {
             cfg::BEST_OF => "best_of",
             cfg::KIT_RULES => "kit_rules",
+            cfg::MODE => "mode",
             _ => "set_config",
         },
         cmd_op::KICK => "kick",
@@ -1032,6 +1026,7 @@ pub(crate) fn cmd_name(c: &rec::Command) -> &'static str {
         cmd_op::SET_TEAM => "set_team",
         cmd_op::UNBAN => "unban",
         cmd_op::RESET_MATCH => "reset_match",
+        cmd_op::SET_OPTION => "set_option",
         _ => "unknown",
     }
 }
@@ -1158,6 +1153,28 @@ pub(crate) fn apply_command(inner: &mut Inner, actor: Actor, cmd: &rec::Command,
                 _ => refuse(CmdReason::UNKNOWN_PLAYER, format!("no such ban: {}", text)),
             }
         }
+        cmd_op::SET_TEAM => {
+            // A player picks its own team (FIXED teams, lobby); an admin may move anyone.
+            if !lobby { return refuse(CmdReason::WRONG_PHASE, "teams are fixed until the lobby"); }
+            let target = if cmd.peer_id != 0 && me.and_then(|a| inner.peers.get(&a)).map_or(true, |p| p.id != cmd.peer_id) {
+                if !is_admin { return refuse(CmdReason::NOT_ADMIN, "only the host can move other players"); }
+                inner.peers.values().find(|p| p.id == cmd.peer_id).map(peer_key)
+            } else {
+                me.and_then(|a| inner.peers.get(&a)).map(peer_key)
+            };
+            let Some(k) = target else { return refuse(CmdReason::UNKNOWN_PLAYER, format!("no such peer id={}", cmd.peer_id)) };
+            match modes::pick_team(inner, k, cmd.role) {
+                Ok(t) => ok(t),
+                Err((c, t)) => refuse(c, t),
+            }
+        }
+        cmd_op::SET_OPTION => {
+            if !lobby { return refuse(CmdReason::WRONG_PHASE, "mode options are frozen until the lobby"); }
+            match modes::set_option(inner, cmd.choice, cmd.ballot, &by) {
+                Ok(t) => ok(t),
+                Err((c, t)) => refuse(c, t),
+            }
+        }
         _ => refuse(CmdReason::UNSUPPORTED, format!("{} is not supported yet", cmd_name(cmd))),
     }
 }
@@ -1178,9 +1195,14 @@ pub(crate) fn start_match(inner: &mut Inner, force: bool, by: &str) -> Outcome {
         return refuse(CmdReason::NOT_ALL_READY,
             format!("start blocked: {} of {} peers ready", ready_count, total));
     }
-    inner.sess.auto_start_at = None;
     let keys: Vec<PlayerKey> = inner.peers.values().map(peer_key).collect();
     inner.participants = keys;
+    reconcile_seats(inner);
+    if let Err(why) = modes::on_start(inner) {
+        inner.participants.clear();
+        return refuse(CmdReason::NOT_ENOUGH_PLAYERS, format!("start blocked: {}", why));
+    }
+    inner.sess.auto_start_at = None;
     inner.pauses_by_key.clear();
     inner.match_pauses = 0;
     inner.paused_from_live = false;
@@ -1200,7 +1222,8 @@ pub(crate) fn start_match(inner: &mut Inner, force: bool, by: &str) -> Outcome {
     ok(format!("starting on {}", inner.match_arena))
 }
 
-/// SET_CONFIG (lobby only): arena, best-of, kit rules (the `cfg` bits of the patch's mask).
+/// SET_CONFIG (lobby only): arena, best-of, kit rules, game mode, teams, round time (the `cfg`
+/// bits of the patch's mask).
 fn set_config(inner: &mut Inner, expected_rev: u32, p: &rec::ConfigPatch, fx: &mut CmdEffects, by: &str) -> Outcome {
     if inner.match_state != "lobby" {
         return refuse(CmdReason::WRONG_PHASE, "match config is frozen until the lobby");
@@ -1226,16 +1249,21 @@ fn set_config(inner: &mut Inner, expected_rev: u32, p: &rec::ConfigPatch, fx: &m
     }
     let cur = live_config(inner);
     let unsupported = [
-        ("mode", has(cfg::MODE) && p.mode != cur.mode),
-        ("round_time_limit_s", has(cfg::ROUND_TIME) && p.round_time_limit_s != cur.round_time_limit_s),
-        ("team_rule", has(cfg::TEAM_RULE) && p.team_rule != cur.team_rule),
-        ("teams", has(cfg::TEAMS) && p.teams != cur.teams),
         ("max_fighters", has(cfg::MAX_FIGHTERS) && p.max_fighters != cur.max_fighters),
         ("max_spectators", has(cfg::MAX_SPECTATORS) && p.max_spectators != cur.max_spectators),
         ("join_in_progress", has(cfg::JIP) && p.join_in_progress != cur.join_in_progress),
     ];
     if let Some((f, _)) = unsupported.iter().find(|(_, bad)| *bad) {
         return refuse(CmdReason::UNSUPPORTED, format!("{} is not configurable yet", f));
+    }
+    // The game mode and its teams / round clock (modes.rs validates, and refuses a mode
+    // that a connected player's client is too old for).
+    if has(cfg::MODE) || has(cfg::TEAM_RULE) || has(cfg::TEAMS) || has(cfg::ROUND_TIME) {
+        if let Err((code, text)) = modes::set_cfg(inner, has(cfg::MODE).then_some(p.mode),
+                has(cfg::TEAM_RULE).then_some(p.team_rule), has(cfg::TEAMS).then_some(p.teams),
+                has(cfg::ROUND_TIME).then_some(p.round_time_limit_s), by) {
+            return refuse(code, text);
+        }
     }
     if let Some(a) = arena { set_arena(inner, a, by); }
     if has(cfg::BEST_OF) {
@@ -1424,12 +1452,17 @@ pub(crate) async fn rcon_status(state: &Arc<ServerState>) -> String {
     let now = state.net.now_ms();
     let s = build_session(&inner, now);
     let h = &s.head;
-    let roster: Vec<serde_json::Value> = s.rows.iter().map(|r| json!({
+    let (mh, mrows) = modes::mode_record(&inner, now);
+    let roster: Vec<serde_json::Value> = s.rows.iter().map(|r| {
+        let m = mrows.iter().find(|m| m.seat == r.seat).copied().unwrap_or_default();
+        json!({
         "seat": r.seat, "peer_id": r.peer_id, "nick": r.nick.lossy(), "ready": r.ready.get(), "alive": r.alive.get(),
-        "wins": r.wins, "loaded_round": r.loaded_round, "connected": r.connected.get(),
+        "wins": r.wins, "loaded_round": r.loaded_round, "connected": r.connected.get(), "team": r.team,
+        "kills": m.kills, "deaths": m.deaths, "score": m.score, "respawning": m.respawning.get(),
         "admin": r.admin_role >= AdminRole::ADMIN,
         "role": match r.role { Role::FIGHTER => "fighter", Role::SPECTATOR => "spectator", _ => "queued" },
-    })).collect();
+    })}).collect();
+    let c = *inner.modes.now();
     json!({
         "epoch": h.epoch, "phase": Phase::name(h.phase), "phase_label": phase_label(h.phase),
         "round": h.round, "match_id": h.match_id, "arena": h.config.arena.lossy(),
@@ -1437,6 +1470,10 @@ pub(crate) async fn rcon_status(state: &Arc<ServerState>) -> String {
         "config_rev": h.config.rev, "peers": inner.peers.len(),
         "waiting_on": s.rows.iter().filter(|r| r.waiting.get()).map(|r| r.seat).collect::<Vec<u8>>(),
         "debug_verbs": inner.sess.debug_verbs, "roster": roster,
+        "mode": modes::mode_name(c.mode), "teams": c.team_count(), "team_rule": c.rule(),
+        "round_time_s": c.round_time(), "koth_target_s": c.koth_target_s, "friendly_fire": c.friendly_fire,
+        "respawn_s": c.respawn_s, "team_wins": &mh.team_wins[..c.team_count() as usize],
+        "round_kit": inner.modes.kit.as_ref().map(|k| k.label.clone()),
     }).to_string()
 }
 

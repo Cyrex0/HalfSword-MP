@@ -463,6 +463,33 @@ pub fn assign(arena: &str, round: u32, seats: &[Seat]) -> Vec<SpawnAssign> {
 /// Add a seat to an existing plan without moving anyone (a player who joined
 /// or reconnected during the countdown): the free point furthest from every
 /// occupied one. Returns false if the peer already has a seat.
+/// A deathmatch respawn point on `arena`: the candidate (real spawners first, derived ones
+/// when they are clearly better) farthest from every point in `avoid` (the living players,
+/// other pending respawns), facing their centroid (the arena centre when alone).
+/// Deterministic: ties go to the lowest slot. None without map data.
+pub fn respawn_point(arena: &str, avoid: &[[f32; 3]]) -> Option<(u8, [f32; 3], f32)> {
+    let t = table(arena)?;
+    let cand = candidates(t);
+    if cand.is_empty() { return None; }
+    let gap = |i: usize| avoid.iter().map(|a| dist(cand[i].pos, *a)).fold(f32::MAX, f32::min);
+    let best = |r: std::ops::Range<usize>| r.max_by(|a, b| gap(*a).total_cmp(&gap(*b)).then(b.cmp(a)));
+    let real = best(0..t.points.len());
+    let over = best(t.points.len()..cand.len());
+    let slot = match (real, over) {
+        // A derived point only when the best real one is inside the spacing and it is not.
+        (Some(r), Some(o)) if gap(r) < min_sep_cm(2) && gap(o) > gap(r) + 0.5 => o,
+        (r, o) => r.or(o)?,
+    };
+    let p = cand[slot];
+    let face = if avoid.is_empty() {
+        t.centre
+    } else {
+        let n = avoid.len() as f32;
+        [avoid.iter().map(|a| a[0]).sum::<f32>() / n, avoid.iter().map(|a| a[1]).sum::<f32>() / n, 0.0]
+    };
+    Some((slot.min(255) as u8, p.pos, yaw_towards(p.pos, face).unwrap_or(p.yaw)))
+}
+
 pub fn add_seat(arena: &str, round: u32, plan: &mut Vec<SpawnAssign>, peer: PeerId) -> bool {
     if plan.iter().any(|s| s.peer_id == peer) { return false; }
     let Some(t) = table(arena) else { return false; };

@@ -278,6 +278,30 @@ pub(super) async fn on_welcome(payload: &[u8], shared: &Arc<Mutex<SharedState>>)
     // HSMP-SHM: every Welcome starts a new session epoch (session-scoped slots).
     if let Some(l) = ipc_shm::link() {
         l.on_welcome();
+        // A server without game modes never sends `mode` / `zone`: clear what an earlier
+        // server left in the slots (seq 0 / radius 0 = none).
+        if w.caps & hsmp_net::net::caps::MODES == 0 {
+            l.post_record("mode", None, rs::K_MODE, &hsmp_ipc::record::to_payload(&rs::ModeHead::default(), &[]));
+        }
+        if w.caps & hsmp_net::net::caps::ZONE == 0 {
+            l.post_record("zone", None, rs::K_ZONE, &hsmp_ipc::record::to_payload(&rs::ZoneState::default(), &[]));
+        }
+    }
+    Ok(())
+}
+
+/// `mode` / `zone` (game modes): validated, into the `mode` / `zone` slot as they are.
+pub(super) fn on_mode(kind: u16, payload: &[u8]) -> Result<()> {
+    let slot = if kind == rs::K_MODE {
+        let v = view::<rs::ModeHead>(payload).map_err(|e| anyhow::anyhow!("mode: {e}"))?;
+        debug!(mode = v.head.mode, round = v.head.round, rows = v.rows.len(), "mode state");
+        "mode"
+    } else {
+        view::<rs::ZoneState>(payload).map_err(|e| anyhow::anyhow!("zone: {e}"))?;
+        "zone"
+    };
+    if let Some(l) = ipc_shm::link() {
+        l.post_record(slot, None, kind, payload);
     }
     Ok(())
 }

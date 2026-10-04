@@ -958,6 +958,112 @@ HSMP_SA(sizeof(hsmp_FallbackSwap) == 64, "hsmp_FallbackSwap size");
 HSMP_SA(offsetof(hsmp_FallbackSwap, until_s) == 0, "hsmp_FallbackSwap.until_s offset");
 HSMP_SA(offsetof(hsmp_FallbackSwap, keep) == 8, "hsmp_FallbackSwap.keep offset");
 
+typedef struct hsmp_ModeHead {
+    uint64_t match_id;
+    uint64_t server_time_ms;
+    uint64_t round_end_ms;
+    uint32_t seq;
+    uint32_t round;
+    uint32_t team_wins[4];
+    uint32_t team_score[4];
+    uint16_t target_s;
+    uint16_t n;
+    uint16_t round_time_s;
+    uint8_t mode;
+    uint8_t team_rule;
+    uint8_t teams;
+    uint8_t friendly_fire;
+    uint8_t sudden_death;
+    uint8_t respawn_s;
+    uint8_t team_alive[4];
+    uint8_t result;
+    uint8_t winner_team;
+    uint8_t _r[6];
+    char kit_r[32];
+    char kit_l[32];
+    char kit_label[48];
+} hsmp_ModeHead;
+HSMP_SA(sizeof(hsmp_ModeHead) == 200, "hsmp_ModeHead size");
+HSMP_SA(offsetof(hsmp_ModeHead, match_id) == 0, "hsmp_ModeHead.match_id offset");
+HSMP_SA(offsetof(hsmp_ModeHead, server_time_ms) == 8, "hsmp_ModeHead.server_time_ms offset");
+HSMP_SA(offsetof(hsmp_ModeHead, round_end_ms) == 16, "hsmp_ModeHead.round_end_ms offset");
+HSMP_SA(offsetof(hsmp_ModeHead, seq) == 24, "hsmp_ModeHead.seq offset");
+HSMP_SA(offsetof(hsmp_ModeHead, round) == 28, "hsmp_ModeHead.round offset");
+HSMP_SA(offsetof(hsmp_ModeHead, team_wins) == 32, "hsmp_ModeHead.team_wins offset");
+HSMP_SA(offsetof(hsmp_ModeHead, team_score) == 48, "hsmp_ModeHead.team_score offset");
+HSMP_SA(offsetof(hsmp_ModeHead, target_s) == 64, "hsmp_ModeHead.target_s offset");
+HSMP_SA(offsetof(hsmp_ModeHead, n) == 66, "hsmp_ModeHead.n offset");
+HSMP_SA(offsetof(hsmp_ModeHead, round_time_s) == 68, "hsmp_ModeHead.round_time_s offset");
+HSMP_SA(offsetof(hsmp_ModeHead, mode) == 70, "hsmp_ModeHead.mode offset");
+HSMP_SA(offsetof(hsmp_ModeHead, team_rule) == 71, "hsmp_ModeHead.team_rule offset");
+HSMP_SA(offsetof(hsmp_ModeHead, teams) == 72, "hsmp_ModeHead.teams offset");
+HSMP_SA(offsetof(hsmp_ModeHead, friendly_fire) == 73, "hsmp_ModeHead.friendly_fire offset");
+HSMP_SA(offsetof(hsmp_ModeHead, sudden_death) == 74, "hsmp_ModeHead.sudden_death offset");
+HSMP_SA(offsetof(hsmp_ModeHead, respawn_s) == 75, "hsmp_ModeHead.respawn_s offset");
+HSMP_SA(offsetof(hsmp_ModeHead, team_alive) == 76, "hsmp_ModeHead.team_alive offset");
+HSMP_SA(offsetof(hsmp_ModeHead, result) == 80, "hsmp_ModeHead.result offset");
+HSMP_SA(offsetof(hsmp_ModeHead, winner_team) == 81, "hsmp_ModeHead.winner_team offset");
+HSMP_SA(offsetof(hsmp_ModeHead, _r) == 82, "hsmp_ModeHead._r offset");
+HSMP_SA(offsetof(hsmp_ModeHead, kit_r) == 88, "hsmp_ModeHead.kit_r offset");
+HSMP_SA(offsetof(hsmp_ModeHead, kit_l) == 120, "hsmp_ModeHead.kit_l offset");
+HSMP_SA(offsetof(hsmp_ModeHead, kit_label) == 152, "hsmp_ModeHead.kit_label offset");
+
+typedef struct hsmp_ModeRow {
+    uint32_t peer_id;
+    uint32_t score;
+    uint16_t kills;
+    uint16_t deaths;
+    uint16_t round_kills;
+    uint16_t life;
+    uint8_t seat;
+    uint8_t team;
+    uint8_t alive;
+    uint8_t respawning;
+    uint8_t in_zone;
+    uint8_t _r[3];
+    uint64_t respawn_at_ms;
+} hsmp_ModeRow;
+HSMP_SA(sizeof(hsmp_ModeRow) == 32, "hsmp_ModeRow size");
+HSMP_SA(offsetof(hsmp_ModeRow, peer_id) == 0, "hsmp_ModeRow.peer_id offset");
+HSMP_SA(offsetof(hsmp_ModeRow, score) == 4, "hsmp_ModeRow.score offset");
+HSMP_SA(offsetof(hsmp_ModeRow, kills) == 8, "hsmp_ModeRow.kills offset");
+HSMP_SA(offsetof(hsmp_ModeRow, deaths) == 10, "hsmp_ModeRow.deaths offset");
+HSMP_SA(offsetof(hsmp_ModeRow, round_kills) == 12, "hsmp_ModeRow.round_kills offset");
+HSMP_SA(offsetof(hsmp_ModeRow, life) == 14, "hsmp_ModeRow.life offset");
+HSMP_SA(offsetof(hsmp_ModeRow, seat) == 16, "hsmp_ModeRow.seat offset");
+HSMP_SA(offsetof(hsmp_ModeRow, team) == 17, "hsmp_ModeRow.team offset");
+HSMP_SA(offsetof(hsmp_ModeRow, alive) == 18, "hsmp_ModeRow.alive offset");
+HSMP_SA(offsetof(hsmp_ModeRow, respawning) == 19, "hsmp_ModeRow.respawning offset");
+HSMP_SA(offsetof(hsmp_ModeRow, in_zone) == 20, "hsmp_ModeRow.in_zone offset");
+HSMP_SA(offsetof(hsmp_ModeRow, _r) == 21, "hsmp_ModeRow._r offset");
+HSMP_SA(offsetof(hsmp_ModeRow, respawn_at_ms) == 24, "hsmp_ModeRow.respawn_at_ms offset");
+
+typedef struct hsmp_ZoneState {
+    uint64_t match_id;
+    float center[3];
+    float radius_cm;
+    float half_height_cm;
+    uint32_t round;
+    uint8_t holder_seat;
+    uint8_t holder_team;
+    uint8_t contested;
+    uint8_t inside;
+    uint32_t _r;
+    char arena[40];
+} hsmp_ZoneState;
+HSMP_SA(sizeof(hsmp_ZoneState) == 80, "hsmp_ZoneState size");
+HSMP_SA(offsetof(hsmp_ZoneState, match_id) == 0, "hsmp_ZoneState.match_id offset");
+HSMP_SA(offsetof(hsmp_ZoneState, center) == 8, "hsmp_ZoneState.center offset");
+HSMP_SA(offsetof(hsmp_ZoneState, radius_cm) == 20, "hsmp_ZoneState.radius_cm offset");
+HSMP_SA(offsetof(hsmp_ZoneState, half_height_cm) == 24, "hsmp_ZoneState.half_height_cm offset");
+HSMP_SA(offsetof(hsmp_ZoneState, round) == 28, "hsmp_ZoneState.round offset");
+HSMP_SA(offsetof(hsmp_ZoneState, holder_seat) == 32, "hsmp_ZoneState.holder_seat offset");
+HSMP_SA(offsetof(hsmp_ZoneState, holder_team) == 33, "hsmp_ZoneState.holder_team offset");
+HSMP_SA(offsetof(hsmp_ZoneState, contested) == 34, "hsmp_ZoneState.contested offset");
+HSMP_SA(offsetof(hsmp_ZoneState, inside) == 35, "hsmp_ZoneState.inside offset");
+HSMP_SA(offsetof(hsmp_ZoneState, _r) == 36, "hsmp_ZoneState._r offset");
+HSMP_SA(offsetof(hsmp_ZoneState, arena) == 40, "hsmp_ZoneState.arena offset");
+
 typedef struct hsmp_Damage {
     uint32_t hit_id;
     uint32_t cid;
@@ -1767,6 +1873,9 @@ HSMP_SA(offsetof(hsmp_DevCmd, arg) == 48, "hsmp_DevCmd.arg offset");
 #define HSMP_REC_UI_REQUEST 0x0238u /* UiRequest */
 #define HSMP_REC_RETURN_TO_LOBBY 0x0239u /* ReturnToLobby */
 #define HSMP_REC_FALLBACK_SWAP 0x023au /* FallbackSwap */
+#define HSMP_REC_MODE 0x0240u /* ModeHead */
+#define HSMP_REC_MODE_MAX_ROWS 64u
+#define HSMP_REC_ZONE 0x0241u /* ZoneState */
 #define HSMP_REC_DAMAGE 0x0310u /* Damage */
 #define HSMP_REC_DAMAGE_MAX_ROWS 24u
 #define HSMP_REC_DAMAGE_IN 0x0311u /* Damage */
@@ -1835,6 +1944,19 @@ HSMP_SA(offsetof(hsmp_DevCmd, arg) == 48, "hsmp_DevCmd.arg offset");
 #define HSMP_GAME_MODE_FFA 1u
 #define HSMP_GAME_MODE_TEAM_ELIM 2u
 #define HSMP_GAME_MODE_KING_OF_HILL 3u
+#define HSMP_GAME_MODE_ROULETTE 4u
+#define HSMP_GAME_MODE_BRAWL 5u
+#define HSMP_GAME_MODE_DEATHMATCH 6u
+#define HSMP_MODE_OPT_KOTH_TARGET 1u
+#define HSMP_MODE_OPT_FRIENDLY_FIRE 2u
+#define HSMP_MODE_OPT_RESPAWN_S 3u
+#define HSMP_MODE_RESULT_NONE 0u
+#define HSMP_MODE_RESULT_ELIMINATION 1u
+#define HSMP_MODE_RESULT_OBJECTIVE 2u
+#define HSMP_MODE_RESULT_TIME_LIMIT 3u
+#define HSMP_MODE_RESULT_KILLS 4u
+#define HSMP_MODE_RESULT_SUDDEN_DEATH 5u
+#define HSMP_MODE_RESULT_DRAW 6u
 #define HSMP_TEAM_RULE_NONE 0u
 #define HSMP_TEAM_RULE_AUTO 1u
 #define HSMP_TEAM_RULE_FIXED 2u
@@ -1872,6 +1994,7 @@ HSMP_SA(offsetof(hsmp_DevCmd, arg) == 48, "hsmp_DevCmd.arg offset");
 #define HSMP_CMD_OP_SET_TEAM 11u
 #define HSMP_CMD_OP_UNBAN 12u
 #define HSMP_CMD_OP_RESET_MATCH 13u
+#define HSMP_CMD_OP_SET_OPTION 14u
 #define HSMP_CFG_ARENA 1u
 #define HSMP_CFG_MODE 2u
 #define HSMP_CFG_BEST_OF 4u
