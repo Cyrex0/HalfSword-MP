@@ -28,8 +28,6 @@
 //! quantisation never accumulates down a chain (hand error = its own
 //! quantisation only).
 
-#![allow(dead_code)]
-
 pub const MAGIC: [u8; 4] = [0xFF, 0xFF, 0xFF, 0x02];
 
 /// Bones of a v2 frame, parents first. Real (lower-case) Willie names.
@@ -260,14 +258,9 @@ fn mu_dec(c: u32, max: f32) -> f32 {
     let a = ((1.0 + MU).powf(m) - 1.0) / MU * max;
     if c & 0x80 != 0 { -a } else { a }
 }
-/// [`put_vel`] without rebuilding the decoded value (the encoder does not need it).
+/// Three velocity components, mu-law, 8 bits each.
 fn put_vel_enc(w: &mut BitW, v: V3, max: f32) {
     for c in v { w.put(mu_enc(c, max), 8); }
-}
-fn put_vel(w: &mut BitW, v: V3, max: f32) -> V3 {
-    let mut out = [0f32; 3];
-    for i in 0..3 { let c = mu_enc(v[i], max); w.put(c, 8); out[i] = mu_dec(c, max); }
-    out
 }
 fn get_vel(r: &mut BitR, max: f32) -> Option<V3> {
     Some([mu_dec(r.get(8)?, max), mu_dec(r.get(8)?, max), mu_dec(r.get(8)?, max)])

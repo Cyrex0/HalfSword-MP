@@ -26,8 +26,6 @@
 //!                           extrapolation (≤ EXTRAP_MS, ≤ EXTRAP_MAX_UU) on
 //!                           loss; hold; stale after STALE_MS.
 
-#![allow(dead_code)]
-
 use crate::posecodec::{self, v2, PoseFrame};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -659,6 +657,7 @@ fn hold(f: &Frame, mode: Mode) -> SampleOut {
     SampleOut { mode, mask: f.mask, bones: f.b, vmask: f.vmask, vel: f.vel, v2: f.v2, extra: f.extra.clone() }
 }
 
+#[cfg(test)]
 fn sample_frames(fr: &VecDeque<Frame>, t: f64, age: f64) -> SampleOut { sample_frames_lead(fr, t, age, 0.0) }
 
 /// `lead` (ms, `sample_lead`): the game asked for a pose that far past the

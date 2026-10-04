@@ -12,8 +12,6 @@
 //! hands stay on one timeline. Lag compensation only reads the 16 real bones
 //! (`BONE_COUNT`); decoders accept every `WIRE_BONES` slot.
 
-#![allow(dead_code)]
-
 /// Codec v2 (full physical state); see posecodec_v2.rs.
 #[path = "posecodec_v2.rs"]
 pub mod v2;
