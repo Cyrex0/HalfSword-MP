@@ -83,23 +83,16 @@ pose separately, so not every pair is relayed together. Delivery ratios and rela
 unchanged within noise. Without `--pump` the old bots never send two stream records in one
 datagram, and the numbers are identical before and after.
 
-### 3. Match timers in seconds at any `--tick-hz`; bounded flags (`8d7ed77`)
+### 3. Tick-rate timers (superseded by dev) and the `--max-peers` bound (`8d7ed77`, merge `bb10ff9`)
 
-The round-flow timers were tick counts that assumed 30 Hz: countdowns, load barrier (45 s),
-load-retry window, game-ping and link-stall timeouts, reconnect grace, trade settle, and the
-60 s peer timeout. `--tick-hz 60` halved every one of them, while the advertised config
-(`countdown_s` and so on) went from 3 to 1 s. They now scale through `hz_ticks`. At 30 Hz the
-numbers are exactly the old ones. `--tick-hz 0` divided by zero at startup. The flag now
-accepts 10..=120, and `--max-peers` accepts 1..=64 (the `session` record lists at most 64
-seats).
+On beta.4 the round-flow timers were tick counts that assumed 30 Hz, so `--tick-hz 60` halved
+them all, and `--tick-hz 0` divided by zero. I fixed that by scaling the counts. dev then brought
+real-time (ms) timers and a 60 Hz default with `--tick-hz` 20..=240, which fixes the same bugs
+more thoroughly. In the merge I took dev's version and dropped mine (`hz_ticks` and its test).
 
-Tests: `round_flow_timings_are_seconds_at_any_tick_rate`, which fails on the old code with
-config `(1, 2, 22)` instead of `(3, 4, 45)`, and
-`limit_args_tests::tick_rate_and_peer_cap_are_bounded`.
-
-The default stays 30 and HSMPMenu still passes `--tick-hz 30`. The player streams are 60 Hz
-from the clients whatever the tick rate. A 60 Hz tick would only buy faster snapshots and
-death repeats, at about twice the tick CPU (still tiny).
+What remains from this commit: `--max-peers` takes 1..=64, because the `session` record lists at
+most 64 seats and 0 made no sense. Test: `main.rs`
+`max_peers_tests::peer_cap_is_bounded`.
 
 ### 4. Master: half the storage writes (`5866b73`)
 
@@ -152,7 +145,7 @@ invocation should be far away, but check `wrangler tail` on the next deploy.
   sends 5,000 rounds of random and mutated bodies, ids, paths, signatures and addresses to
   register, heartbeat, delete, punch, listen, the report-zip check and the dashboard. No panic
   was found, so it guards against regressions; it fixes nothing.
-- **CLI.** `--tick-hz 0` panicked (division by zero); fixed in §3.
+- **CLI.** `--tick-hz 0` panicked (division by zero). dev fixes it too; see §3.
 
 ### 6. Tooling
 
@@ -182,17 +175,25 @@ byte count no longer counts a datagram once per record in it.
 
 ## Test results
 
-- `cargo test -p hsmp-server` (debug): all pass (330 unit tests in hsmp-server plus the
-  integration suites). `cargo test -p hsmp-master-core`: 37 pass.
-- Workspace: see the final section below.
+- Before the dev merge: `cargo test --workspace --locked -j 2 --no-fail-fast`. All pass except
+  the known Linux-only baseline failures (7 in the hsmp-launcher lib, and the hsmp-native
+  shared-memory tests `lua_api_end_to_end`, `records_dev_proc_conformance_and_bench`,
+  `s2g_only_from_the_live_sidecar`, `native_sampling_g1`). No new failure.
+- After merging dev (`bb10ff9`): `cargo test -p hsmp-server -p hsmp-master-core
+  --no-fail-fast` all pass (341 hsmp-server unit tests, the integration suites, 37 master-core
+  tests). I did not repeat the workspace run after the merge.
+- `cargo clippy -p hsmp-server -p hsmp-master-core --all-targets --locked`: exit 0. The two new
+  warnings from this branch are fixed. The remaining warnings in these packages were there before.
+- `master-cf`: `cargo check --locked --target wasm32-unknown-unknown` passes.
+- After the merge (60 Hz default tick), release: steady tick 0 allocations; 16 players 3.1 µs
+  (lobby) and 5.6 µs (live). Loadtest `--pump`: 8 bots 2391 datagrams/s out, 8.5 % CPU; 16 bots
+  6591 /s, 16.5 % CPU.
 
 ## Needs Windows or in-game verification
 
 - Relay bundling with the real sidecar and game: the expected effect is fewer, larger datagrams
   per receiver. Watch for any change in pose smoothness. Pacing and loss handling are per
   datagram in hsmp-net and did not change.
-- `--tick-hz` other than 30 with a real game (the Director reads phase deadlines in ms, so it
-  should not care).
 - The master change on the real Worker: a deploy, then confirm the rows-written count in the
   Cloudflare dashboard halves.
 
