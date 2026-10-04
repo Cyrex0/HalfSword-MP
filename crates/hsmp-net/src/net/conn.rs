@@ -1081,7 +1081,9 @@ impl Conn {
         if self.path_resp_tx.is_some() || matches!(self.state, ConnState::Closing { .. }) {
             t = now;
         }
-        if self.out.latest_pending() > 0 {
+        // Reliable data counts only while the pacer is what holds it back (a
+        // backlog waiting for the send window waits for an ack, not a timer).
+        if self.out.latest_pending() > 0 || (self.cc_tokens < 0.0 && self.out.reliable_unsent()) {
             t = t.min(self.pacer_ready_at(now));
         }
         t.max(now)
@@ -1098,7 +1100,7 @@ impl Conn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::channel::{CH_ORDERED, CH_RELIABLE};
+    use crate::net::channel::{CH_ORDERED, CH_RELIABLE, SEND_WINDOW};
 
     fn pair(cfg: ConnConfig) -> (Conn, Conn) {
         let s = crypto::derive(&[1; 32], &[2; 32], &[3; 32]);
@@ -1290,6 +1292,41 @@ mod tests {
         }
         let srtt = s.stats().srtt_ms;
         assert!(srtt >= 100.0 - MAX_ACK_DELAY_MS as f64 - 0.5, "talked down to {srtt}");
+    }
+
+    /// A reliable backlog held back by the pacer is due again when the pacer
+    /// refills, not at the next timer (RTO, keepalive): a caller sleeping
+    /// until `next_timeout` must not stall a world sync for ~300 ms per window.
+    #[test]
+    fn next_timeout_wakes_for_paced_reliable_data() {
+        let (mut c, _s) = pair(ConnConfig::default());
+        for _ in 0..40 {
+            c.send(SendMode::Reliable, vec![7; 1100]).unwrap();
+        }
+        let mut sent = 0;
+        while c.poll_transmit(0).is_some() {
+            sent += 1;
+        }
+        assert!(sent < 40, "the pacer held part of the burst ({sent} sent)");
+        assert!(c.out.reliable_unsent());
+        let due = c.next_timeout(0);
+        let refill = c.pacer_ready_at(0);
+        assert!(refill > 0 && refill <= 5, "pacer refills in {refill} ms");
+        assert_eq!(due, refill, "next_timeout {due} ms, pacer ready at {refill} ms");
+        assert!(c.poll_transmit(due).is_some(), "data goes out when due");
+
+        // A backlog beyond the send window waits for acks: no busy wake-ups.
+        let (mut c, _s) = pair(ConnConfig::default());
+        for _ in 0..(SEND_WINDOW + 40) {
+            c.send(SendMode::Reliable, vec![7; 10]).unwrap();
+        }
+        let mut t = 0;
+        while t < 100 {
+            while c.poll_transmit(t).is_some() {}
+            t += 10;
+        }
+        assert!(c.out.reliable_unsent(), "held by the window");
+        assert!(c.next_timeout(t) > t, "spins on a window-blocked backlog");
     }
 
     #[test]
