@@ -95,6 +95,9 @@ pub struct ServerState {
     pub(crate) net: crate::net::Net,
     /// Relevance thinning + per-client bandwidth budget for stream relays.
     pub(crate) relay: crate::relay::Relay,
+    /// Peers with relayed messages queued while the receive loop handles one datagram (None =
+    /// not batching). Flushed after it, so records a sender sent together leave together.
+    relay_batch: std::sync::Mutex<Option<Vec<SocketAddr>>>,
 }
 
 pub(crate) struct Inner {
@@ -214,6 +217,7 @@ impl ServerState {
             max_peers,
             net,
             relay: crate::relay::Relay::default(),
+            relay_batch: std::sync::Mutex::new(None),
         }
     }
 

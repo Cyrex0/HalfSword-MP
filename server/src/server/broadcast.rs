@@ -84,6 +84,55 @@ pub async fn shutdown(socket: &UdpSocket, state: &Arc<ServerState>, reason: u8, 
     super::dispatch::log_transport_stats(state);
 }
 
+impl ServerState {
+    /// The receive loop starts handling one datagram's messages: relays queue until
+    /// `end_relay_batch`.
+    pub(super) fn begin_relay_batch(&self) {
+        *self.relay_batch.lock().unwrap_or_else(|e| e.into_inner()) = Some(Vec::new());
+    }
+
+    /// Stop batching; the peers that have relayed messages queued.
+    pub(super) fn end_relay_batch(&self) -> Vec<SocketAddr> {
+        self.relay_batch.lock().unwrap_or_else(|e| e.into_inner()).take().unwrap_or_default()
+    }
+
+    /// Queue `bytes` for `dst` if a batch is open (true), else leave it to the caller.
+    fn batch_queue(&self, dst: SocketAddr, mode: hsmp_net::net::SendMode, bytes: Vec<u8>) -> Result<(), Vec<u8>> {
+        let mut b = self.relay_batch.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(dsts) = b.as_mut() else { return Err(bytes) };
+        if self.net.queue_bytes(dst, mode, bytes) && !dsts.contains(&dst) {
+            dsts.push(dst);
+        }
+        Ok(())
+    }
+}
+
+/// One relayed message to `dst`: queued while the receive loop batches (sent with the other
+/// records of the same incoming datagram), else sent now.
+async fn relay_to(socket: &UdpSocket, state: &ServerState, dst: SocketAddr, mode: hsmp_net::net::SendMode, bytes: Vec<u8>) {
+    let Err(bytes) = state.batch_queue(dst, mode, bytes) else { return };
+    let pf = crate::perf::perf();
+    for (a, dg) in state.net.send_bytes(dst, mode, bytes) {
+        if socket.send_to(&dg, a).await.is_ok() { pf.sent(dg.len()); }
+    }
+}
+
+/// Send what the batch queued, one flush per peer.
+pub(super) async fn flush_relay_batch(socket: &UdpSocket, state: &ServerState) {
+    for dst in state.end_relay_batch() {
+        let out = state.net.flush(dst);
+        send_out_relayed(socket, out).await;
+    }
+}
+
+/// Relayed stream datagrams (not charged to the budget again: the relay already did).
+async fn send_out_relayed(socket: &UdpSocket, out: crate::net::Out) {
+    let pf = crate::perf::perf();
+    for (a, dg) in out {
+        if socket.send_to(&dg, a).await.is_ok() { pf.sent(dg.len()); }
+    }
+}
+
 /// A `pose` record from `src` (peer `sid`), relayed by the rate plan. `msg` is the
 /// incoming message with `peer` already patched to `sid`; each receiver gets it with `aux` =
 /// the pair's relay interval (ms; patched per receiver, no re-encode). Lag comp learns which
@@ -94,16 +143,13 @@ pub(super) async fn relay_pose(socket: &UdpSocket, state: &Arc<ServerState>, src
     let wire = msg.len() + crate::relay::SEAL_OVERHEAD;
     let chosen = state.relay.select(src, &dsts, crate::relay::Stream::Skel, wire);
     crate::stats::pose_relayed(sid, chosen.len());
-    let pf = crate::perf::perf();
     for crate::relay::Pick { dst, interval_ms } in chosen {
         if let Some(v) = state.relay.peer_id(&dst) {
             crate::lagcomp::note_relayed(v, sid, ts, interval_ms);
         }
         let mut b = msg.clone();
         hsmp_ipc::wire::set_aux(&mut b, interval_ms);
-        for (a, dg) in state.net.send_bytes(dst, mode, b) {
-            if socket.send_to(&dg, a).await.is_ok() { pf.sent(dg.len()); }
-        }
+        relay_to(socket, state, dst, mode, b).await;
     }
 }
 
@@ -116,13 +162,10 @@ pub(super) async fn relay_record(socket: &UdpSocket, state: &Arc<ServerState>, s
     let dsts = state.net.addrs();
     let wire = msg.len() + crate::relay::SEAL_OVERHEAD;
     let chosen = state.relay.select(src, &dsts, stream, wire);
-    let pf = crate::perf::perf();
     let n = chosen.len();
     for (i, crate::relay::Pick { dst, .. }) in chosen.into_iter().enumerate() {
         let bytes = if i + 1 == n { std::mem::take(&mut msg) } else { msg.clone() };
-        for (a, dg) in state.net.send_bytes(dst, mode, bytes) {
-            if socket.send_to(&dg, a).await.is_ok() { pf.sent(dg.len()); }
-        }
+        relay_to(socket, state, dst, mode, bytes).await;
     }
 }
 

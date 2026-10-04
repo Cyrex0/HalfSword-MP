@@ -440,27 +440,41 @@ impl Net {
 
     /// Relay path: the body is serialised once by the caller.
     pub fn send_bytes(&self, addr: SocketAddr, mode: SendMode, bytes: Vec<u8>) -> Out {
-        let Some(cid) = self.cid(&addr) else { return Vec::new() };
-        let now = self.now_ms();
+        if !self.queue_bytes(addr, mode, bytes) {
+            return Vec::new();
+        }
+        self.flush(addr)
+    }
+
+    /// Queue a message for `addr` without transmitting it: messages queued for one peer
+    /// before its `flush` share datagrams. False if it was dropped.
+    pub fn queue_bytes(&self, addr: SocketAddr, mode: SendMode, bytes: Vec<u8>) -> bool {
+        let Some(cid) = self.cid(&addr) else { return false };
         let mut ep = self.ep();
         // A channel-0 message too big for one datagram (a large voice frame)
         // travels reliably and fragmented instead. Decided up front so the
         // buffer is moved, not cloned for a retry.
         let r = ep.send(cid, fit_mode(mode, bytes.len()), bytes);
         match r {
-            Ok(()) => {}
+            Ok(()) => true,
             Err(SendError::Backpressure) => {
                 drop(ep);
                 self.count(|c| c.backpressure += 1);
                 debug!(%addr, "v5: reliable backlog full; message dropped");
-                return Vec::new();
+                false
             }
             Err(e) => {
                 debug!(%addr, ?e, "v5: send refused");
-                return Vec::new();
+                false
             }
         }
-        ep.poll_transmit_one(now, cid)
+    }
+
+    /// The datagrams of everything queued for `addr`.
+    pub fn flush(&self, addr: SocketAddr) -> Out {
+        let Some(cid) = self.cid(&addr) else { return Vec::new() };
+        let now = self.now_ms();
+        self.ep().poll_transmit_one(now, cid)
     }
 
     /// Close `addr`'s connection (CLOSE is repeated by `tick`). Returns the

@@ -952,6 +952,7 @@ fn fill_session(inner: &Inner, now_ms: u64, seats: &mut Vec<(u8, PlayerKey)>, ro
 }
 
 /// Same snapshot content apart from the per-send stamps (seq, server time).
+#[cfg(test)]
 fn same_content(a: &SessionSnap, b: &SessionSnap) -> bool {
     same_parts(a, &b.head, &b.rows)
 }
