@@ -115,6 +115,11 @@ pub mod caps {
     /// accepted hit on ANOTHER player, replayed on that player's stand-in for
     /// blood and wounds). Opted in by server and sidecar.
     pub const HIT_FX: u64 = 1 << 16;
+    /// Application: the `body` record (the owner's passport body: Height / Muscle
+    /// Rate, mass scales, bone masses), sent by the client and relayed to the other
+    /// players that negotiated it, for their stand-ins of it. Opted in by server and
+    /// sidecar; peers without it never send or receive the record.
+    pub const BODY: u64 = 1 << 17;
     /// Everything this build implements at the transport level (the
     /// application-level bits are opted in by the server / sidecar).
     pub const SUPPORTED: u64 = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY;

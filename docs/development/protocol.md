@@ -661,6 +661,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0512` | `kit_rules_req` | C→S | ordered | Set the kit rules (admin) |
 | `0x0513` | `kit_rules` | S→C | rel_latest | The current kit rules |
 | `0x0514` | `loadout` | C→S, S→C | rel_latest | The full armour and weapon loadout, fragmented as needed |
+| `0x0515` | `body` | C→S, S→C | rel_latest | The owner's passport body (rates, scales, bone masses) for its stand-ins; only with `caps::BODY` |
 
 **Interact (`0x06`, `caps::INTERACT`)**
 
@@ -786,6 +787,7 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 | 14 | PATH_CHALLENGE | Transport: path validation by an echoed token (§4.6) |
 | 15 | REL_KEY | Transport: keyed `ReliableLatest` chunks (§5.1) |
 | 16 | HIT_FX | Offered by server and sidecar: `touch` up, `hitfx_in` down |
+| 17 | BODY | Offered by server and sidecar: `body` up and down (relayed only between peers that have it) |
 
 `caps::SUPPORTED = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY` are the transport bits
 `hsmp-net` implements itself; every client and server built from it offers them through

@@ -12,6 +12,30 @@ fn main() {
     let profiles = get("--profiles").unwrap_or_else(|| "loopback,good,typical,wifi,intl,bad,far".into());
     let policy = if args.iter().any(|a| a == "--legacy") { Policy::Legacy } else { Policy::Dedupe };
     let v2 = !args.iter().any(|a| a == "--v1");
+    if let Some(p) = get("--hvf") {
+        // hit_vel_factor calibration, offline half: the sim's honest claims.
+        use hsmp_combat_sim::calib;
+        let s = calib::sim_run(&p, seeds);
+        println!("hit_vel_factor calibration, sim profile {p}, {seeds} seed(s), {} honest armour-stage claims\n", s.len());
+        println!("{}", calib::table(&calib::report(&s)));
+        return;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--hvf-logs") {
+        // In-game half: UE4SS.log ([HSMPParity] DCD lines) and server logs (impact rescale).
+        use hsmp_combat_sim::calib;
+        let mut s = Vec::new();
+        for f in args.iter().skip(i + 1).take_while(|a| !a.starts_with("--")) {
+            let text = std::fs::read(f).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_else(|e| {
+                eprintln!("{f}: {e}");
+                String::new()
+            });
+            let n0 = s.len();
+            s.extend(calib::parse_log(&text));
+            eprintln!("{f}: {} sample(s)", s.len() - n0);
+        }
+        println!("{}", calib::table(&calib::report(&s)));
+        return;
+    }
     if let Some(p) = get("--parrystats") {
         let (par, oth) = suite::parry_distances(&p, seeds);
         for i in 0..3 {

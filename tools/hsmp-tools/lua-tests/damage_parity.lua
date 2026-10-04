@@ -33,7 +33,10 @@
 --      is one claim;
 --   3. a graze and a harder frame in one tick both land, as in solo;
 --   4. blows far apart on the attacker's clock whose replays arrive bunched do
---      not gate each other; frames of one contact still do;
+--      not gate each other; frames of one contact still do, also when their
+--      replays arrive further apart than the game's 0.2 s reset;
+--   4b. a stand-in that took a blow natively (Invulnerable reset) keeps its
+--      contact gate, so its claims stay those of solo;
 --   5. a light weapon blow keeps the 'Weapon' consciousness factor;
 --   6. the echo, a rejected blow, and the blood on the stand-in (as before).
 
@@ -154,7 +157,10 @@ local function get_damage(self, Impulse, Velocity, Location, Normal, bone, raw, 
         self["Was Just Touched"] = true
         if self.Invulnerable then return end
         local b = bone:ToString()
-        if CLOCK - (self.ldt_at or -1e9) >= 0.2 then self["Last Damage Taken"] = 0 end   -- Reset Last Damage Taken
+        -- Reset Last Damage Taken: a RetriggerableDelay that fires 0.2 s after the
+        -- last pass. A value written after it fired stays (the delay is spent).
+        local fire = (self.ldt_at or -1e9) + 0.2
+        if CLOCK >= fire and (self.ldt_w or -1e9) < fire then self["Last Damage Taken"] = 0 end
         local drs = raw * 2 * self.hm
         local lb = self["Last Damaged Bone"] and self["Last Damaged Bone"]:ToString() or "None"
         if not (drs >= self["Last Damage Taken"] * (draw + 1) or b ~= lb) then return end
@@ -253,6 +259,15 @@ local function mk_willie(name, armour, hm, pose)
         ["Current Pain Threshold"] = 0, ["Dismembered Array"] = {}, ["Get Up Rate"] = 1, ["Dead Weight Scale"] = 1,
         ["Pain Stumble Immediate"] = v(0, 0, 0),
     }
+    -- Last Damage Taken lives behind the metatable so the model knows when it
+    -- was last written (the reset delay above).
+    w.__ldt, w["Last Damage Taken"] = 0, nil
+    setmetatable(w, {
+        __index = function(t, k) if k == "Last Damage Taken" then return rawget(t, "__ldt") end end,
+        __newindex = function(t, k, x)
+            if k == "Last Damage Taken" then rawset(t, "__ldt", x); rawset(t, "ldt_w", CLOCK) else rawset(t, k, x) end
+        end,
+    })
     w.IsValid = valid
     w.GetAddress = function(self) return self.__addr end
     w.GetFName = function(self) return FName(self.__name) end
@@ -414,6 +429,12 @@ local function run(blows, opts)
     SI.Health = 1000
     api.set_puppets({ ["Willie_BP_C_SI"] = 2 }, { [2] = SI }, nil)
     api.C3.protect(SI)
+    if opts.leak then
+        -- the game reset Invulnerable: the stand-in takes the blow natively and
+        -- HSMPCombat puts it back from the tick's baseline
+        SI.Invulnerable = false
+        api.C3.baseline(SI)
+    end
     PC.Pawn = ATT
     local si0 = state_of(SI)
     local n0 = #claims()
@@ -564,6 +585,30 @@ do
     local b4 = { bone = "head", spot = "front", vel = 1450, imp = 1200, cut = 0, stab = 0, rig = 3.1, weapon = true }
     solo, mp, mine = run({ { b3, 0 }, { b4, 0.15 } }, { armour = ARMOUR[1].set })
     T.check(same(solo, mp), "4. a weaker blow 150 ms after the first is gated on the victim as in solo",
+        T.repr({ n = #mine, solo = solo, mp = mp }))
+    -- the same two blows, the second replay 300 ms after the first (jitter, a
+    -- parry hold): the game's own 0.2 s reset has fired on the victim by then
+    solo, mp, mine = run({ { b3, 0 }, { b4, 0.15 } }, { armour = ARMOUR[1].set, spread = true })
+    T.check(#mine == 2 and same(solo, mp), "4. ...also when its replay arrives 300 ms after the first",
+        T.repr({ n = #mine, solo = solo, mp = mp }))
+    solo, mp, mine = run({ { b1, 0 }, { b2, 0.35 } }, { armour = ARMOUR[1].set, spread = true })
+    T.check(#mine == 2 and same(solo, mp), "4. ...and blows 350 ms apart replayed 300 ms apart both land",
+        T.repr({ n = #mine, solo = solo, mp = mp }))
+end
+
+-- ---- 4b. the stand-in's Invulnerable did not hold ---------------------------------------
+do
+    -- A hard frame on the open back plate of the stand-in, then one with less
+    -- impulse (stopped by Deal Complex Damage's contact gate in solo) but more
+    -- speed (it would pass Get Damage's gate).
+    local hard = { bone = "spine_03", spot = "back", vel = 1600, cut = 95, stab = 0, rig = 0.8, weapon = true }
+    local fast = { bone = "spine_03", spot = "back", vel = 1700, imp = 300, cut = 95, stab = 0, rig = 0.8, weapon = true }
+    local solo, mp, mine = run({ { hard, 0 }, { fast, 0.016 } }, { armour = ARMOUR[2].set, same_tick = true })
+    T.check(#mine == 1 and same(solo, mp), "4b. a frame the contact gate stops: one claim, as in solo",
+        T.repr({ n = #mine, solo = solo, mp = mp }))
+    solo, mp, mine = run({ { hard, 0 }, { fast, 0.016 } }, { armour = ARMOUR[2].set, same_tick = true, leak = true })
+    T.check(#mine == 1 and same(solo, mp),
+        "4b. ...also when the stand-in took the first frame natively and was put back (its contact gate is kept)",
         T.repr({ n = #mine, solo = solo, mp = mp }))
 end
 

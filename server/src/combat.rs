@@ -544,7 +544,9 @@ fn settle_waiting(lc: &mut Store, attacker: PeerId, d: &mut Decision, now_ms: i6
         let (v0, i0, vrs) = (len(hit.velocity), len(hit.impulse), hit.raw_damage);
         let c = damage::clamp_impact_ex(attacker, &mut hit, peak, rel, rel_exact, unarmed);
         if hit.flags & damage::FLAG_COMPLEX != 0 && crate::validate::rate::log_ok("impact_rescale") {
-            tracing::info!(attacker, target = hit.target_peer_id, hit_id = hit.hit_id, bone = hit.bone_str(),
+            // (`class`: the hit_vel_factor calibration groups these lines by it)
+            let class = if unarmed { damage::WeaponClass::Unarmed } else { damage::weapon_class(attacker) };
+            tracing::info!(attacker, target = hit.target_peer_id, hit_id = hit.hit_id, bone = hit.bone_str(), class = ?class,
                 vel_claimed = v0, vel_forwarded = len(hit.velocity), imp_claimed = i0, imp_forwarded = len(hit.impulse),
                 standin_rel = vrs, server_striking = ?speed, server_peak = ?peak, server_relative = ?rel, rel_exact, factor = c.factor,
                 cut = hit.cutting_power, rig = hit.damage_out, "combat: impact rescale");

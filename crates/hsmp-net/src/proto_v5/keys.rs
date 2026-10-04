@@ -48,6 +48,8 @@ pub const KIT_RULES: u32 = key(0x84, 0);
 /// `C2SLoadout`/`S2CLoadout` complete version per peer (reassembled by the
 /// transport; the v4 manual chunking can go): `key(LOADOUT, peer_id)`.
 pub const LOADOUT: u8 = 0x85;
+/// `body` (the passport body for stand-ins, needs `caps::BODY`) per peer: `key(BODY, peer_id)`.
+pub const BODY: u8 = 0x89;
 
 #[cfg(test)]
 mod tests {
