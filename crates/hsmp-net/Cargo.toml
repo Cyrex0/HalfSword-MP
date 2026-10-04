@@ -21,5 +21,10 @@ hmac = "0.12"
 sha2 = "0.10"
 rand = "0.8"
 
+[features]
+# The deterministic impaired link (loss, duplication, jitter) for other crates' tests
+# (hsmp-server's server-mods transfer test).
+testlink = []
+
 [lints]
 workspace = true

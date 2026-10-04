@@ -45,6 +45,11 @@ pub(super) async fn handle_server_record(
         rs::K_CHAT_IN => session_client::on_chat_in(payload)?,
         rs::K_ADMIN_STATE => session_client::on_admin_state(payload, shared).await?,
         rs::K_PONG => session_client::on_pong(payload)?,
+        // Server mods (0x09xx): the manifest and the chunks (mods_client.rs).
+        k if hsmp_ipc::schema::mods::is_mods_kind(k) => {
+            hsmp_ipc::schema::check_payload(k, payload).map_err(|e| anyhow::anyhow!("server mods record {k:#x}: {e}"))?;
+            super::mods_client::on_server_record(k, payload)
+        }
         // Grabs and shoves (interact_client.rs): into the S2G ring as `interact`.
         k if hsmp_ipc::schema::interact::is_interact_kind(k) => interact_client::on_s2c(h, payload),
         // ---- combat (combat_client.rs): copied into the S2G ring / peer slot as they are ----

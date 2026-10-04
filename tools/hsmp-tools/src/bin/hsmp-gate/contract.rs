@@ -148,8 +148,9 @@ pub const CONTRACT: &[Entry] = &[
     e("drop_forfeit_round", SV, &[], &[]),
     // NAT traversal (server/src/nat): a relayed punch answered with probes. Not judged.
     e("nat_punch", SV, &[], &["to", "nonce"]),
-    // server mods (docs/hosting/server-mods.md): a joining player's set loaded / declined / failed
-    e("server_mods", SV, &[], &["peer_id", "result", "ms", "failed"]),
+    // server mods (docs/hosting/server-mods.md): the server (a joining player's set loaded /
+    // declined / failed) and the sidecar (accepted / loaded / failed with a code)
+    e("server_mods", &[Src::Server, Src::Sidecar], &[], &["peer_id", "result", "ms", "failed", "state", "code", "text"]),
     // --- hsmp-sidecar --events -----------------------------------------------------------------
     e("cmd_sent", SC, &[], &[]),
     e("cmd_timeout", SC, &["cmd", "cmd_id", "tries"], &[]),

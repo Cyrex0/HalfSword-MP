@@ -33,6 +33,8 @@ pub(super) fn on_g2s(l: &'static ShmLink, h: &RecordHeader, payload: &[u8]) {
         hsmp_ipc::schema::world::K_WORLD_CLAIM | hsmp_ipc::schema::world::K_WORLD_SYNC => {
             crate::world_client::on_g2s(l, h.kind, payload)
         }
+        // Server mods: the player's decision, HSMPModHost's loaded report (mods_client.rs).
+        k if hsmp_ipc::schema::mods::is_mods_kind(k) => super::mods_client::on_game_record(k, payload),
         k => debug!(kind = k, len = payload.len(), "ipc: G2S record of a kind nobody handles; dropped"),
     }
 }

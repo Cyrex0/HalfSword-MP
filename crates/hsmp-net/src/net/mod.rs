@@ -23,8 +23,8 @@ pub mod handshake;
 pub mod replay;
 pub mod wire;
 
-#[cfg(test)]
-mod testlink;
+#[cfg(any(test, feature = "testlink"))]
+pub mod testlink;
 #[cfg(test)]
 mod tests;
 
