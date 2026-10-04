@@ -206,7 +206,7 @@ if opts.kind == "sync_native" or opts.kind == "sync_lua" then
     else
         T.check(puts >= 1200, "the Lua sampler wrote root / weapon / pose every frame", puts)
     end
-    report(opts.kind, b, native and 1000 or 3000)
+    report(opts.kind, b, native and 400 or 2500)
     T.check(#M.dead_touch == 0, "nothing freed touched", T.repr(M.dead_touch))
     return
 end
@@ -283,7 +283,7 @@ if opts.kind == "avatars_native" or opts.kind == "avatars_lua" then
         play()
     end)
     T.check(p.body.sv.err.n > drove0 + 300 * 20, "every measured frame drove the bodies", p.body.sv.err.n - drove0)
-    report(opts.kind, b, native and 12000 or 40000)
+    report(opts.kind, b, native and 8000 or 9000)
     T.check(not T.contains(M.logtext(), "frame driver error"), "no driver errors", M.logtext():sub(-2000))
     T.check(#M.dead_touch == 0, "nothing freed touched", T.repr(M.dead_touch))
     return

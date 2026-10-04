@@ -551,27 +551,37 @@ end
 -- part beyond the replicated motion clamped (contact safety).
 function PURE.servo(cur, tg, com, dt, cap_lin, cap_ang, gain)
     gain = gain or 1
-    local cq = { cur[4], cur[5], cur[6], cur[7] }
-    local tq = { tg[4], tg[5], tg[6], tg[7] }
-    local cc = PURE.qrot(cq, com)
-    local tc = PURE.qrot(tq, com)
-    local vx = (tg[1] + tc[1] - cur[1] - cc[1]) / dt
-    local vy = (tg[2] + tc[2] - cur[2] - cc[2]) / dt
-    local vz = (tg[3] + tc[3] - cur[3] - cc[3]) / dt
-    local e = PURE.qmul(tq, PURE.qconj(cq))
-    if e[4] < 0 then e = { -e[1], -e[2], -e[3], -e[4] } end
-    local s = math.sqrt(e[1] * e[1] + e[2] * e[2] + e[3] * e[3])
+    -- qrot(cq, com), qrot(tq, com) and qmul(tq, qconj(cq)) written out as scalars
+    -- (same operations in the same order, no tables: this runs for every body of
+    -- every stand-in each frame on the Lua path).
+    local cx, cy, cz, cw = cur[4], cur[5], cur[6], cur[7]
+    local qx, qy, qz, qw = tg[4], tg[5], tg[6], tg[7]
+    local m1, m2, m3 = com[1], com[2], com[3]
+    local ux, uy, uz = 2 * (cy * m3 - cz * m2), 2 * (cz * m1 - cx * m3), 2 * (cx * m2 - cy * m1)
+    local cc1, cc2, cc3 = m1 + cw * ux + (cy * uz - cz * uy), m2 + cw * uy + (cz * ux - cx * uz), m3 + cw * uz + (cx * uy - cy * ux)
+    ux, uy, uz = 2 * (qy * m3 - qz * m2), 2 * (qz * m1 - qx * m3), 2 * (qx * m2 - qy * m1)
+    local tc1, tc2, tc3 = m1 + qw * ux + (qy * uz - qz * uy), m2 + qw * uy + (qz * ux - qx * uz), m3 + qw * uz + (qx * uy - qy * ux)
+    local vx = (tg[1] + tc1 - cur[1] - cc1) / dt
+    local vy = (tg[2] + tc2 - cur[2] - cc2) / dt
+    local vz = (tg[3] + tc3 - cur[3] - cc3) / dt
+    local nx, ny, nz = -cx, -cy, -cz
+    local e1 = qw * nx + qx * cw + qy * nz - qz * ny
+    local e2 = qw * ny - qx * nz + qy * cw + qz * nx
+    local e3 = qw * nz + qx * ny - qy * nx + qz * cw
+    local e4 = qw * cw - qx * nx - qy * ny - qz * nz
+    if e4 < 0 then e1, e2, e3, e4 = -e1, -e2, -e3, -e4 end
+    local s = math.sqrt(e1 * e1 + e2 * e2 + e3 * e3)
     local wx, wy, wz = 0, 0, 0
     if s > 1e-9 then
-        local k = math.deg(2 * math.atan(s, e[4])) / s / dt
-        wx, wy, wz = e[1] * k, e[2] * k, e[3] * k
+        local k = math.deg(2 * math.atan(s, e4)) / s / dt
+        wx, wy, wz = e1 * k, e2 * k, e3 * k
     end
     -- Replicated motion (feed-forward) at the COM: v_com = v_origin + w x r.
     local wr = math.pi / 180
     local ax, ay, az = (tg[11] or 0) * wr, (tg[12] or 0) * wr, (tg[13] or 0) * wr
-    local fx = (tg[8] or 0) + ay * tc[3] - az * tc[2]
-    local fy = (tg[9] or 0) + az * tc[1] - ax * tc[3]
-    local fz = (tg[10] or 0) + ax * tc[2] - ay * tc[1]
+    local fx = (tg[8] or 0) + ay * tc3 - az * tc2
+    local fy = (tg[9] or 0) + az * tc1 - ax * tc3
+    local fz = (tg[10] or 0) + ax * tc2 - ay * tc1
     -- Feed-forward the replicated motion; correct only `gain` of the remaining
     -- error per step (1 = deadbeat; < 1 filters frame-to-frame noise).
     local dx, dy, dz = (vx - fx) * gain, (vy - fy) * gain, (vz - fz) * gain
@@ -1395,9 +1405,14 @@ function PX.nat_refused(s, err)
     end
     if s.logged ~= err then s.logged = err; Log("%s refused (%s): Lua path", s.label, err) end
 end
+-- Closure-free reflected reads for the per-frame paths: pcall(PX.r_*, obj, ...).
+function PX.r_index(o, k) return o[k] end
+PX.vlin, PX.vang = { X = 0, Y = 0, Z = 0 }, { X = 0, Y = 0, Z = 0 }   -- velocity arguments, refilled per call
+function PX.r_addr(o) return o:GetAddress() end
 function PX.nat_addr(o)
-    local a; pcall(function() a = o:GetAddress() end)
-    return a
+    local ok, a = pcall(PX.r_addr, o)
+    if ok then return a end
+    return nil
 end
 -- servo_config once (shared by native_servo and native_wservo); false = refused (logged against `s`).
 function PX.ns_config(s)
@@ -2754,12 +2769,28 @@ end
 
 -- Stand-in weapon parts for a hand ("Weapon R"/"Weapon L"), re-resolved when
 -- the actor changes (HSMPLoadout / the game swap weapons at will).
+-- Contact impulse of one body (see CONTACT_BODIES): its velocity now against what the
+-- servo commanded last frame.
+function PX.contact_body(mesh, sv, i, cv, near)
+    local fn = _sv_fn[i]
+    if not sv.mass[i] then sv.mass[i] = mesh:GetBoneMass(fn, true) or 0 end
+    local v = mesh:GetPhysicsLinearVelocity(fn)
+    local dv = math.sqrt((v.X - cv[1]) ^ 2 + (v.Y - cv[2]) ^ 2 + (v.Z - cv[3]) ^ 2)
+    local imp = dv * sv.mass[i]   -- kg*uu/s
+    local ci = sv.err.ci or { near = {}, far = {}, maxn = 0, maxb = "-" }
+    sv.err.ci = ci
+    local t = near and ci.near or ci.far
+    t[#t + 1] = imp
+    if near and imp > ci.maxn then ci.maxn = imp; ci.maxb = PURE.V2_SLOTS[i] end
+end
+
 local function servo_weapon_parts(p, body, field)
     body.wc_owner = p
-    local wa; pcall(function() wa = p.actor[field] end)
+    local okw, wa = pcall(PX.r_index, p.actor, field)
+    if not okw then wa = nil end
     -- An empty hand drops the entry at once (never kept for later use)
     if not (wa and wa:IsValid()) then body.sv.wc[field] = nil; return nil end
-    local addr; pcall(function() addr = wa:GetAddress() end)
+    local addr = PX.nat_addr(wa)
     local c = body.sv.wc[field]
     if c and c.addr == addr and body.sv.wc_gen == PX.wc_gen_poll() then
         local wa2, root = PX.wc_check(p, field, c)
@@ -3147,18 +3178,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
         for _, i in ipairs(PX.CONTACT_BODIES) do
             local cv = sv.cmd[i]
             if cv then
-                pcall(function()
-                    local fn = _sv_fn[i]
-                    if not sv.mass[i] then sv.mass[i] = mesh:GetBoneMass(fn, true) or 0 end
-                    local v = mesh:GetPhysicsLinearVelocity(fn)
-                    local dv = math.sqrt((v.X - cv[1]) ^ 2 + (v.Y - cv[2]) ^ 2 + (v.Z - cv[3]) ^ 2)
-                    local imp = dv * sv.mass[i]   -- kg*uu/s
-                    local ci = sv.err.ci or { near = {}, far = {}, maxn = 0, maxb = "-" }
-                    sv.err.ci = ci
-                    local t = near and ci.near or ci.far
-                    t[#t + 1] = imp
-                    if near and imp > ci.maxn then ci.maxn = imp; ci.maxb = PURE.V2_SLOTS[i] end
-                end)
+                pcall(PX.contact_body, mesh, sv, i, cv, near)
             end
         end
     end
@@ -3332,8 +3352,10 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 if body.stall[i] > (PX.STALL_FRAMES or 20) then PX.stalled = i end
             end
             if not nat then   -- the native call already set them
-                mesh:SetPhysicsLinearVelocity({ X = vx, Y = vy, Z = vz }, false, fn)
-                mesh:SetPhysicsAngularVelocityInDegrees({ X = wx, Y = wy, Z = wz }, false, fn)
+                local lv, av = PX.vlin, PX.vang   -- reused: the call copies them into FVectors
+                lv.X, lv.Y, lv.Z, av.X, av.Y, av.Z = vx, vy, vz, wx, wy, wz
+                mesh:SetPhysicsLinearVelocity(lv, false, fn)
+                mesh:SetPhysicsAngularVelocityInDegrees(av, false, fn)
             end
         end
     end
