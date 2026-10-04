@@ -206,6 +206,8 @@ pub struct ClaimRec {
     pub pcell: Option<(damage::WeaponClass, damage::Armour, u8, f32, bool)>,
     /// Debug: true relative speed, stand-in one, server estimate.
     pub rel_dbg: Option<(f32, f32, Option<f32>, f32)>,
+    /// Server peak striking speed at first arrival (Info::peak_speed, or the contact speed).
+    pub server_peak: Option<f32>,
     /// Honest blade contacts: (capsule segment, true time of the victim pose shown, contact point).
     pub geo: Option<(usize, f64, V3)>,
 }
@@ -356,7 +358,7 @@ pub struct World {
     qseq: u64,
     pub claims: Vec<ClaimRec>,
     /// Claim payloads (same index as `claims`; Msg is Copy).
-    pending_hits: Vec<DamageEvent>,
+    pub pending_hits: Vec<DamageEvent>,
     /// age_ms each claim left Lua with (same index).
     base_age: Vec<u32>,
     hitmap: HashMap<(usize, u32), usize>,
@@ -1140,6 +1142,7 @@ impl World {
             booked_loss: None, outcome: None, confirm_t: None, applied_t: None, arrived_t: None, forwarded_t: None, effective: eff, hand: main.hand, n_events: evs.len(), bound_sum, lie: evs.iter().map(|e| e.lie).fold(0.0, f32::max), speed: main.speed, bone: main.bone, server_speed: None, parry_d: None, s_blade: main.s_blade,
             solo: if main.dcd.is_some() { Some(main.solo) } else { None }, mp: None,
             rel_dbg: main.dcd.map(|x| (main.solo_vrel, x.vrel_s, None, main.speed)),
+            server_peak: None,
             geo: if kind == ClaimKind::Honest && !main.hand { Some((main.seg, main.shown_t, main.loc)) } else { None },
             pcell: main.dcd.map(|x| (w_class(&self.plan.fighters[c]), x.armour, game::part_rank(main.bone), x.k.hm, main.stab)),
         });
@@ -1333,6 +1336,7 @@ impl World {
                     }
                     if let crate::lagcomp::Eval::Accept(i) = self.core.lc.evaluate(self.clients[from].pid, &hit, now) {
                         self.claims[rec].server_speed = i.contact_speed;
+                        self.claims[rec].server_peak = i.peak_speed.or(i.contact_speed);
                         if let Some(d) = self.claims[rec].rel_dbg.as_mut() { d.2 = i.rel_speed; }
                         self.claims[rec].parry_d = Some(i.parry_d);
                     }

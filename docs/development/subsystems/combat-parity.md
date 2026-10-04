@@ -20,7 +20,8 @@ runs, wears other armour and is Invulnerable.
 | 1 | Sword cut, sword thrust, axe, mace, polearm haft, fist and kick × cloth, padded, mail, plate and mixed armour × head, torso, arm, leg × front, side, back (420 blows): the MP change of Health, Consciousness, Bleeding, Pain, part Health, blood marks and stumble direction equals solo, field by field (tables printed). A taller stand-in changes nothing. | `every weapon x armour x part x spot`, `1b.` |
 | 2 | One clean blow = one claim, and the Invulnerable stand-in takes nothing. | `2.` |
 | 3 | A graze and a harder frame in one tick both land (two claims), as in solo; a weaker second frame is stopped by the game's gate on both sides. | `3.` |
-| 4 | Two blows 350 ms apart whose replays arrive in one victim tick are not gated by each other; a weaker blow 150 ms after the first is, as in solo. | `4.` |
+| 4 | Two blows 350 ms apart whose replays arrive in one victim tick are not gated by each other; a weaker blow 150 ms after the first is, as in solo. Also when the replays arrive 300 ms apart (the game's own 0.2 s reset has fired on the victim by then). | `4.` |
+| 4b | A stand-in whose Invulnerable the game reset takes the blow and is put back, but keeps its contact gate: a frame that gate stops in solo is no claim. | `4b.` |
 | 5 | A light weapon blow keeps Get Damage's 'Weapon' consciousness factor; the same blow by a fist does not. | `5.` |
 | 6 | The echo is undone and reported as a touch; a rejected blow leaves the victim as it was; other screens see the blood on the stand-in, whose vitals stay the owner's. | `6.` |
 
@@ -113,8 +114,9 @@ refuses to run outside an MP session: only there is the career save redirected.
   (Set in BP)` (1.21 vs 1.005) and bone masses 2–2.6× the owner's (pelvis 15.7 kg vs 6.05 kg). The
   damage replay uses the victim's own height factor, so it is unaffected. The normal impulse the
   attacker's weapon gets from the heavier stand-in is affected, and Hit Velocity takes the larger of
-  that impulse and the weapon's speed. This is open: the `loadout` record carries no body passport
-  (see combat.md §5).
+  that impulse and the weapon's speed. Since then the owner's body travels as the `body` record and
+  each stand-in gets its owner's bone masses and rates (combat.md §5 "Stand-in body"); check it
+  with the steps in §4.
 - `spots 70` on my own pawn: 112 blows (7 bones × 4 spots × mace / cut / stab / fist). The
   world-offset replay of a stand-in that stood 70° turned differed from solo in **31**. For example,
   a head cut did −101 consciousness / +114 bleeding in solo and −4.8 consciousness in the replay. The
@@ -122,3 +124,25 @@ refuses to run outside an MP session: only there is the career save redirected.
   `Break Arm` cannot be undone by the harness, and it changed the next two blows' pain.
 - `swing`: setting the root velocity of a held weapon did not move it into the stand-in (no contact).
   The experiment needs another way to drive the weapon.
+
+## 4. Stand-in body (the `body` record)
+
+Offline: `hsmp-tools lua-test standin_body` (the record from the owner's pawn, the masses on the
+stand-in) and `cargo test -p hsmp-server body` (wire, caps, sidecar slot). In game, with two
+instances on a dedicated server of this build:
+
+1. Each `UE4SS.log` has `[HSMPCombat] body: own passport body v=... height=... muscle=...
+   bones=N` once after the arena loads (and again only when the body changes, e.g. after
+   dressing), with N around 22. The sidecar log has `body sent`; the other sidecar `body
+   received` with the same version, and the server `body stored ... receivers=1`.
+2. Within a second of the stand-in appearing: `body: stand-in Willie_BP_C_... of peer N <- owner
+   body v=...: K bone mass(es) set`. A trailing `(the game reset R before)` that keeps growing
+   means the game re-applies its own masses: report it with the log.
+3. `hsmp-tools ipc-ctl --pid <game pid> autotest parity "kit"` on both instances: the stand-in's
+   `HeightRate`, `MuscleRate`, `mass_scale_bp` and every `mass=...kg` value now equal the owner's
+   line on the other instance (within 1 %); the `mass` scales differ where the stand-in's bones are
+   a different size. Its height (mesh size) still is the pooled Willie's (not applied).
+4. A beta.4 client in the same lobby: no `body` lines for it on any side, and its own stand-ins
+   keep the pooled bodies (no error, no disconnect).
+5. Fight a round: no new `native damage on stand-in ... put back` or stretch / launch of the
+   stand-in after the masses change (`spawn_stretch` stays ≤ 10 uu, combat.md / replication.md).
