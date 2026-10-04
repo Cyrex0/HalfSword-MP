@@ -144,7 +144,7 @@ fn cpu_ms(pid: u32) -> f64 {
         .unwrap_or(f64::NAN)
 }
 
-fn pct(v: &mut Vec<u32>, p: f64) -> f64 {
+fn pct(v: &mut [u32], p: f64) -> f64 {
     if v.is_empty() { return f64::NAN; }
     v.sort_unstable();
     let idx = ((v.len() as f64 - 1.0) * p).round() as usize;
@@ -732,13 +732,13 @@ mod attack {
         // 4. A captured Hello replayed from another address gets a cookie
         //    (one Challenge, <= the Hello) and allocates nothing.
         let p1 = players(target).await.unwrap_or(0);
-        let rep = probe(target, &[hello.clone()], Duration::from_millis(500)).await;
+        let rep = probe(target, std::slice::from_ref(&hello), Duration::from_millis(500)).await;
         let ok = rep.len() == 1 && rep[0][0] == 0xA2 && rep[0].len() <= hello.len();
         r.check("v5_spoofed_hello", ok, format!("replies {:?} (sizes), hello {} B",
             rep.iter().map(|d| d.len()).collect::<Vec<_>>(), hello.len()));
         // 5. The captured Auth replayed from another address: cookie bound to
         //    the victim's address -> silently dropped.
-        let rep = probe(target, &[auth.clone()], Duration::from_millis(500)).await;
+        let rep = probe(target, std::slice::from_ref(&auth), Duration::from_millis(500)).await;
         r.check("v5_replayed_auth_other_addr", rep.is_empty(), format!("{} replies", rep.len()));
         // ... and from the victim's own address: duplicate, dropped.
         let _ = a.sock.send_to(&auth, target).await;

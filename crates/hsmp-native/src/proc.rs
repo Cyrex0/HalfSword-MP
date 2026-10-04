@@ -50,6 +50,7 @@ pub const CAPTURE_MAX: usize = 1 << 20;
 pub const WAIT_MAX_MS: u64 = 5000;
 
 /// One process we spawned.
+#[cfg_attr(not(windows), allow(dead_code))] // job and eof are read by the Windows backend only
 pub struct ProcEnt {
     /// Process handle (as an integer, so the state stays `Send`).
     handle: isize,

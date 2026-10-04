@@ -138,7 +138,7 @@ mod tests {
             assert_eq!(v["role"], "server");
             assert_eq!(v["pid"], std::process::id());
             assert_eq!(v["parent_pid"], 42);
-            assert!(v["exe"].as_str().unwrap().len() > 0);
+            assert!(!v["exe"].as_str().unwrap().is_empty());
         }
         assert!(!p.exists());
         let _ = std::fs::remove_dir_all(&dir);

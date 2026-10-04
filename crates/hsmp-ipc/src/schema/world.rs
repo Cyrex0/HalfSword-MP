@@ -628,13 +628,13 @@ mod tests {
         assert_eq!(size_of::<HeldRow>(), 80);
         // One world_state message (8 B wire header + head + rows) fits one datagram
         // (hsmp-net MAX_UNRELIABLE = 1155); a full reliable set fits one 64 KiB message.
-        assert!(8 + 24 + STATE_MAX * 32 <= 1155);
+        const { assert!(8 + 24 + STATE_MAX * 32 <= 1155) };
         for (head, row, max) in [(16, 16, OWNERS_MAX), (16, 48, SNAPS_MAX), (16, 24, MANIFEST_MAX), (16, 224, DYN_MAX),
                                  (24, 32, HASH_MAX), (32, 16, VERDICT_MAX)] {
             assert!(8 + head + row * max <= 64 * 1024, "{head} + {row} x {max}");
         }
         // The bus key fits a bus value.
-        assert!(8 + 80 * HELD_MAX <= super::super::bus::BUS_VALUE_BYTES);
+        const { assert!(8 + 80 * HELD_MAX <= super::super::bus::BUS_VALUE_BYTES) };
     }
 
     #[test]

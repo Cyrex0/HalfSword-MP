@@ -1,8 +1,13 @@
 //! `hsmp-sidecar --log-session start|watch` and `--log-dir`, end to end with the real binary.
 //! A short-lived child process stands in for the game.
 
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::path::PathBuf;
+#[cfg(windows)]
+use std::path::Path;
+use std::process::Command;
+#[cfg(windows)]
+use std::process::Stdio;
+#[cfg(windows)]
 use std::time::{Duration, Instant};
 
 fn sidecar() -> &'static str {
@@ -16,6 +21,7 @@ fn scratch(tag: &str) -> PathBuf {
     d
 }
 
+#[cfg(windows)]
 fn start(logs: &Path, pid: u32) -> Vec<(String, String)> {
     let out = Command::new(sidecar())
         .args(["--log-session", "start", "--parent-pid", &pid.to_string()])
@@ -26,6 +32,7 @@ fn start(logs: &Path, pid: u32) -> Vec<(String, String)> {
     String::from_utf8_lossy(&out.stdout).lines().filter_map(|l| l.split_once('=')).map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }
 
+#[cfg(windows)]
 fn get<'a>(kv: &'a [(String, String)], k: &str) -> Option<&'a str> {
     kv.iter().find(|(a, _)| a == k).map(|(_, v)| v.as_str())
 }

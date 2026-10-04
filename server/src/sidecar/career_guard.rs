@@ -490,7 +490,7 @@ fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
         }
     }
     let _ = fs::remove_file(from);
-    Err(last.unwrap_or_else(|| io::Error::new(io::ErrorKind::Other, "rename failed")))
+    Err(last.unwrap_or_else(|| io::Error::other("rename failed")))
 }
 
 /// Copy `src` to `dst` atomically: temp sibling, fsync, rename over `dst`.
@@ -531,7 +531,7 @@ fn restore_file(backup: &Path, target: &Path, sha: &str) -> io::Result<()> {
     atomic_copy(backup, target)?;
     let ht = sha256_file(target)?;
     if ht != sha {
-        return Err(io::Error::new(io::ErrorKind::Other, format!("restored file hashes to {ht}, expected {sha}")));
+        return Err(io::Error::other(format!("restored file hashes to {ht}, expected {sha}")));
     }
     Ok(())
 }

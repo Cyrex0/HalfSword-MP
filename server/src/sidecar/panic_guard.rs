@@ -13,6 +13,7 @@
 //!   2. runs the registered fatal callbacks once (best effort, `try_lock`
 //!      only, never blocks): the career-save restore;
 //!   3. `std::process::exit(EXIT_PANIC)`.
+//!
 //! A panic raised while the hook itself runs (re-entrancy) exits at once.
 //!
 //! Self-contained (std only, plus tokio for the debug test hook), so the

@@ -74,6 +74,7 @@ pub fn urgent_vs(a: &Vitals, prev: &Vitals) -> bool {
 mod tests {
     use super::*;
 
+    #[allow(clippy::excessive_precision)] // arbitrary sample values, rounded to f32 on purpose
     fn sample() -> Vitals {
         let mut f = unknown();
         let vals = [87.5, 100.0, 25.0, 61.3, 59.9, 100.0, 12.25, 0.0, 99.99, 100.0, 100.0,

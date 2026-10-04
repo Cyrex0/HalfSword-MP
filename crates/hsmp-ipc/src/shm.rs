@@ -102,6 +102,7 @@ impl Mapping {
 }
 
 impl Drop for Mapping {
+    #[allow(clippy::needless_return)] // not needless on Windows: the unmap follows
     fn drop(&mut self) {
         if self.heap {
             let layout = std::alloc::Layout::from_size_align(SEGMENT_SIZE, 4096).expect("layout");

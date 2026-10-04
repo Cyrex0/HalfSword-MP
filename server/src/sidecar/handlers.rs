@@ -85,6 +85,8 @@ pub(super) async fn handle_server_record(
 }
 
 #[cfg(test)]
+// The serial guard is held across awaits on purpose: it keeps these tests one at a time.
+#[allow(clippy::await_holding_lock)]
 mod tests {
     use super::*;
     use hsmp_ipc::record::to_payload;
