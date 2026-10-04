@@ -217,6 +217,17 @@ end
 R.CHECKS.dev_cmd = function(t)
     if t.op < 1 or t.op > 3 then return "op" end
 end
+R.CHECKS.body = function(t)   -- schema/loadout.rs check_body / check_body_bone
+    local function rate(x) return x >= 0 and x <= 4 end
+    local function scale(x) return x > 0 and x <= 16 end
+    if not rate(t.height_rate) or not rate(t.muscle_rate) then return "rate" end
+    if not scale(t.mass_scale_bp) then return "scale" end
+    for i = 1, 3 do if not scale(t.char_scale[i]) then return "scale" end end
+    for _, r in ipairs(t.rows or {}) do
+        if r.bone == "" then return "bone" end
+        if not (r.mass > 0 and r.mass <= 500) or not (r.mass_scale > 0 and r.mass_scale <= 16) then return "mass" end
+    end
+end
 
 function R.check(_, rec, t)
     local f = R.CHECKS[rec]

@@ -13,6 +13,10 @@
 //!   `peer_loadout`): the worn appearance: both hand weapons' passports in the head, one row
 //!   per armour piece / passport. Sent once per version (reliable, newest per owner); the
 //!   transport fragments it (no application chunking).
+//! - `body` (C2S, game slot `body`; S2C with `peer` = owner, per-peer slot `peer_body`): the
+//!   owner's passport body (Height / Muscle Rate, BP mass and character scales, bone
+//!   masses) for its stand-ins. Sent once per version, only on connections that negotiated
+//!   `caps::BODY` (a beta.4 peer never sees it).
 //!
 //! Item ids stay strings (`Str<32>`), not catalogue indices: the catalogue
 //! (`server/src/loadout.rs` `catalog`, `HSMPLoadout/Scripts/hsmp_catalog.lua`) can change
@@ -101,6 +105,7 @@ pub const K_KIT_VERDICT: u16 = 0x0511;
 pub const K_KIT_RULES_REQ: u16 = 0x0512;
 pub const K_KIT_RULES: u16 = 0x0513;
 pub const K_LOADOUT: u16 = 0x0514;
+pub const K_BODY: u16 = 0x0515;
 pub const K_KIT_STATUS: u16 = 0x0520;
 pub const K_STANDIN_WEAPONS: u16 = 0x0521;
 
@@ -270,6 +275,68 @@ pub fn check_loadout_rows(rows: &[ArmorRow]) -> Result<(), Invalid> {
     Ok(())
 }
 
+// ---- body (the owner's passport body, for its stand-ins) --------------------------------------
+
+/// Bone rows per `body` record (the 22 simulated bodies of a Willie, and slack).
+pub const BODY_MAX_BONES: usize = 24;
+/// `body` bounds: Height / Muscle Rate, the BP mass and character scales, bone masses (kg)
+/// and mass scales. Anything beyond is garbage.
+pub const BODY_RATE_MAX: f32 = 4.0;
+pub const BODY_SCALE_MAX: f32 = 16.0;
+pub const BODY_MASS_MAX: f32 = 500.0;
+
+crate::ipc_pod! {
+    /// One simulated body of the owner's Willie: its mass as the physics has it (kg, mass
+    /// scale and armour included) and its mass scale.
+    pub struct BodyBone {
+        pub bone: Str<32>,
+        pub mass: f32,
+        pub mass_scale: f32,
+    }
+
+    /// Head of a `body` record: the owner's passport body (Willie "Height Rate",
+    /// "Muscle Rate", "Mass Scale (Set in BP)", "Character Scale (Set in BP)"), then `n`
+    /// bone rows. Stand-ins keep the body of the pooled Willie they were; their owner's
+    /// body makes the blade meet the same masses as on the owner's screen.
+    pub struct BodyHead {
+        /// Owner's version (changes only when the body does).
+        pub version: u32,
+        pub n: u16,
+        pub _r: u16,
+        pub height_rate: f32,
+        pub muscle_rate: f32,
+        pub mass_scale_bp: f32,
+        pub _r2: f32,
+        pub char_scale: [f32; 3],
+        pub _r3: f32,
+    }
+}
+
+fn check_body(h: &BodyHead) -> Result<(), Invalid> {
+    let rate = |x: f32| (0.0..=BODY_RATE_MAX).contains(&x);
+    let scale = |x: f32| x > 0.0 && x <= BODY_SCALE_MAX;
+    if !rate(h.height_rate) || !rate(h.muscle_rate) {
+        return Err(Invalid::Range("rate"));
+    }
+    if !scale(h.mass_scale_bp) || !h.char_scale.iter().all(|x| scale(*x)) {
+        return Err(Invalid::Range("scale"));
+    }
+    Ok(())
+}
+
+fn check_body_bone(_h: &BodyHead, b: &BodyBone) -> Result<(), Invalid> {
+    if b.bone.is_empty() {
+        return Err(Invalid::Range("bone"));
+    }
+    if !(b.mass > 0.0 && b.mass <= BODY_MASS_MAX) || !(b.mass_scale > 0.0 && b.mass_scale <= BODY_SCALE_MAX) {
+        return Err(Invalid::Range("mass"));
+    }
+    Ok(())
+}
+
+crate::record!(BodyHead, kind = K_BODY, name = "body", rows = BodyBone, count = n, max = BODY_MAX_BONES,
+    check = check_body, check_row = check_body_bone);
+
 // ---- game-local bus keys (HSMPLoadout) ---------------------------------------------------------
 
 crate::ipc_pod! {
@@ -335,6 +402,8 @@ pub const RECORDS: &[RecordInfo] = &[
         chan = Chan::RelLatest(hsmp_net_keys::KIT_RULES), doc = "server kit rules"),
     crate::record_info!(LoadoutHead, cap = CAP_LOADOUT_KIT, flow = flow::C2S | flow::S2C | flow::G2S | flow::S2G,
         chan = Chan::RelLatest(hsmp_net_keys::LOADOUT), doc = "worn appearance (hand passports + armour rows), once per version; peer = owner"),
+    crate::record_info!(BodyHead, cap = CAP_LOADOUT_KIT, flow = flow::C2S | flow::S2C | flow::G2S | flow::S2G,
+        chan = Chan::RelLatest(hsmp_net_keys::BODY), doc = "passport body (rates, scales, bone masses) for stand-ins, once per version; peer = owner; only with caps::BODY"),
     crate::record_info!(KitStatus, cap = CAP_BUS, flow = flow::LOCAL, chan = Chan::None,
         doc = "own pawn kit evidence (kit.lua -> Director, Loadout)"),
     crate::record_info!(StandinWeapons, cap = CAP_BUS, flow = flow::LOCAL, chan = Chan::None,
@@ -347,6 +416,7 @@ pub mod hsmp_net_keys {
     pub const KIT: u8 = 0x83;
     pub const KIT_RULES: u8 = 0x84;
     pub const LOADOUT: u8 = 0x85;
+    pub const BODY: u8 = 0x89;
 }
 
 /// Named record slots of this domain.
@@ -363,6 +433,10 @@ pub const SLOTS: &[SlotInfo] = &[
         world_scoped: false, doc: "the server's kit rules" },
     SlotInfo { name: "peer_loadout", kind: K_LOADOUT, form: SlotForm::PeerBlob, dir: Dir::SidecarToGame,
         cap: CAP_LOADOUT_KIT, world_scoped: false, doc: "a peer's worn appearance (single reader: HSMPLoadout)" },
+    SlotInfo { name: "body", kind: K_BODY, form: SlotForm::Slot, dir: Dir::GameToSidecar, cap: CAP_LOADOUT_KIT,
+        world_scoped: false, doc: "own passport body (HSMPCombat writer; the sidecar sends it)" },
+    SlotInfo { name: "peer_body", kind: K_BODY, form: SlotForm::PeerSlot, dir: Dir::SidecarToGame, cap: CAP_LOADOUT_KIT,
+        world_scoped: false, doc: "a peer's passport body (HSMPCombat applies it to the stand-in)" },
     SlotInfo { name: "kit_status", kind: K_KIT_STATUS, form: SlotForm::Bus, dir: Dir::Local, cap: CAP_BUS,
         world_scoped: false, doc: "own pawn kit evidence" },
     SlotInfo { name: "standin_weapons", kind: K_STANDIN_WEAPONS, form: SlotForm::Bus, dir: Dir::Local, cap: CAP_BUS,
@@ -383,6 +457,7 @@ pub const ENUMS: &[EnumInfo] = &[
 /// Shared-memory homes of the records (segment fields).
 pub type KitBuf = crate::record::VarBuf<Kit, KIT_MAX_ARMOR>;
 pub type LoadoutBuf = crate::record::VarBuf<LoadoutHead, LOADOUT_MAX_ROWS>;
+pub type BodyBuf = crate::record::VarBuf<BodyHead, BODY_MAX_BONES>;
 
 #[cfg(test)]
 mod tests {
@@ -519,6 +594,62 @@ mod tests {
         assert_eq!(buf.payload(), &p[..]);
     }
 
+
+    fn body() -> (BodyHead, Vec<BodyBone>) {
+        let mut h = BodyHead::default();
+        h.version = 3;
+        h.height_rate = 0.946;
+        h.muscle_rate = 0.018;
+        h.mass_scale_bp = 1.005;
+        h.char_scale = [1.0, 1.0, 1.02];
+        let rows = vec![
+            BodyBone { bone: Str::new("pelvis"), mass: 6.05, mass_scale: 1.0 },
+            BodyBone { bone: Str::new("spine_03"), mass: 5.2, mass_scale: 1.2 },
+        ];
+        (h, rows)
+    }
+
+    #[test]
+    fn body_layout_round_trip_and_hostile_bytes() {
+        assert_eq!(core::mem::size_of::<BodyHead>(), 40);
+        assert_eq!(core::mem::size_of::<BodyBone>(), 40);
+        let (h, rows) = body();
+        let p = to_payload(&h, &rows);
+        assert_eq!(p.len(), 40 + 2 * 40);
+        let v = view::<BodyHead>(&p).unwrap();
+        assert_eq!((v.head.version, v.rows.len()), (3, 2));
+        assert_eq!(v.rows[1].bone, "spine_03");
+        assert!(super::super::check_payload(K_BODY, &p).is_ok());
+        assert_eq!(super::super::record_by_name("body").unwrap().kind, K_BODY);
+        // Garbage rates, scales, masses and names are refused.
+        let mut bad = h;
+        bad.height_rate = -0.1;
+        assert_eq!(view::<BodyHead>(&to_payload(&bad, &rows)).unwrap_err(), Invalid::Range("rate"));
+        let mut bad = h;
+        bad.char_scale[2] = 0.0;
+        assert_eq!(view::<BodyHead>(&to_payload(&bad, &rows)).unwrap_err(), Invalid::Range("scale"));
+        let mut bad = h;
+        bad.mass_scale_bp = 1.0e3;
+        assert_eq!(view::<BodyHead>(&to_payload(&bad, &rows)).unwrap_err(), Invalid::Range("scale"));
+        let mut r = rows.clone();
+        r[0].mass = 0.0;
+        assert_eq!(view::<BodyHead>(&to_payload(&h, &r)).unwrap_err(), Invalid::Range("mass"));
+        let mut r = rows.clone();
+        r[1].bone = Str::default();
+        assert_eq!(view::<BodyHead>(&to_payload(&h, &r)).unwrap_err(), Invalid::Range("bone"));
+        let mut nan = h;
+        nan.muscle_rate = f32::NAN;
+        assert!(view::<BodyHead>(&to_payload(&nan, &rows)).is_err());
+        let mut over = to_payload(&h, &[]);
+        over[4] = (BODY_MAX_BONES + 1) as u8;
+        assert!(matches!(view::<BodyHead>(&over), Err(Invalid::Rows { .. })));
+        assert!(view::<BodyHead>(&p[..p.len() - 1]).is_err());
+        // The largest record fits its slot.
+        let full: Vec<BodyBone> = (0..BODY_MAX_BONES).map(|_| rows[0]).collect();
+        let fp = to_payload(&h, &full);
+        assert_eq!(core::mem::size_of::<BodyBuf>(), fp.len());
+        view::<BodyHead>(&fp).unwrap();
+    }
     #[test]
     fn status_and_weapon_gen() {
         let mut s = KitStatus::default();

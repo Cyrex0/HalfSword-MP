@@ -3,8 +3,8 @@
 local S = {}
 S.ABI_MAJOR = 2
 S.ABI_MINOR = 0
-S.LAYOUT_HASH = "e3c1b55babd38c1a"
-S.SEGMENT_SIZE = 3743744
+S.LAYOUT_HASH = "e66f34519195e128"
+S.SEGMENT_SIZE = 3780608
 
 -- kind name -> { id, cap, dir, form, replaces }
 S.KINDS = {
@@ -867,6 +867,22 @@ S.STRUCTS = {
         { "req_hier", "bool" },
         { "_r", { "u8", 2 } },
     } },
+    BodyHead = { size = 40, fields = {
+        { "version", "u32" },
+        { "n", "u16" },
+        { "_r", "u16" },
+        { "height_rate", "f32" },
+        { "muscle_rate", "f32" },
+        { "mass_scale_bp", "f32" },
+        { "_r2", "f32" },
+        { "char_scale", { "f32", 3 } },
+        { "_r3", "f32" },
+    } },
+    BodyBone = { size = 40, fields = {
+        { "bone", { "str", 32 } },
+        { "mass", "f32" },
+        { "mass_scale", "f32" },
+    } },
     KitStatus = { size = 448, fields = {
         { "t", "f64" },
         { "rev", "u64" },
@@ -986,6 +1002,7 @@ S.RECORDS = {
     kit_rules_req = { id = 0x0512, layout = "KitRules", row = nil, count = nil, max_rows = 0, cap = 0x8, flow = "c2s,g2s", chan = "ordered" },
     kit_rules = { id = 0x0513, layout = "KitRules", row = nil, count = nil, max_rows = 0, cap = 0x8, flow = "s2c,s2g", chan = "rel_latest" },
     loadout = { id = 0x0514, layout = "LoadoutHead", row = "ArmorRow", count = "n", max_rows = 48, cap = 0x8, flow = "c2s,s2c,g2s,s2g", chan = "rel_latest" },
+    body = { id = 0x0515, layout = "BodyHead", row = "BodyBone", count = "n", max_rows = 24, cap = 0x8, flow = "c2s,s2c,g2s,s2g", chan = "rel_latest" },
     kit_status = { id = 0x0520, layout = "KitStatus", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     standin_weapons = { id = 0x0521, layout = "StandinWeapons", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     interact = { id = 0x0610, layout = "Interact", row = nil, count = nil, max_rows = 0, cap = 0x40, flow = "c2s,s2c,g2s,s2g", chan = "reliable" },
@@ -1037,6 +1054,8 @@ S.SLOTS = {
     peer_kit = { record = "kit_verdict", form = "peer_slot", dir = "s2g", cap = 0x8, world_scoped = false },
     kit_rules = { record = "kit_rules", form = "slot", dir = "s2g", cap = 0x8, world_scoped = false },
     peer_loadout = { record = "loadout", form = "peer_blob", dir = "s2g", cap = 0x8, world_scoped = false },
+    body = { record = "body", form = "slot", dir = "g2s", cap = 0x8, world_scoped = false },
+    peer_body = { record = "body", form = "peer_slot", dir = "s2g", cap = 0x8, world_scoped = false },
     kit_status = { record = "kit_status", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     standin_weapons = { record = "standin_weapons", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     pose_yield = { record = "pose_yield", form = "bus", dir = "local", cap = 0x100, world_scoped = true },

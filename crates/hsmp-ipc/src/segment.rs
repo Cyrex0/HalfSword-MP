@@ -7,7 +7,7 @@ use crate::ring::Ring;
 use crate::schema::bus::{BusDir, BusValue, BUS_KEYS};
 use crate::schema::pose::{PeerDir, PeerPlay, PeerRoot, PoseBuf, PoseLead, Root, Weapon, MAX_PEER_SLOTS};
 use crate::schema::combat::Vitals;
-use crate::schema::loadout::{KitBuf, KitRules, LoadoutBuf};
+use crate::schema::loadout::{BodyBuf, KitBuf, KitRules, LoadoutBuf};
 use crate::record::VarBuf;
 use crate::schema::world as w;
 use crate::schema::session::{AdminBuf, Link, SessionBuf};
@@ -44,6 +44,7 @@ crate::ipc_layout! {
         pub local_vitals: SeqSlot<Stamped<Vitals>>,
         pub kit: SeqSlot<Stamped<KitBuf>>,
         pub kit_rules_req: SeqSlot<Stamped<KitRules>>,
+        pub body: SeqSlot<Stamped<BodyBuf>>,
     }
 
     /// Game-written large blobs.
@@ -63,6 +64,7 @@ crate::ipc_layout! {
         pub root: SeqSlot<Stamped<PeerRoot>>,
         pub vitals: SeqSlot<Stamped<Vitals>>,
         pub kit: SeqSlot<Stamped<KitBuf>>,
+        pub body: SeqSlot<Stamped<BodyBuf>>,
     }
 
     #[repr(align(4096))]
@@ -173,6 +175,8 @@ impl Segment {
             "kit_rules" => Some(&self.peers.kit_rules),
             "peer_kit" => self.peers.slots.get(peer).map(|s| &s.kit as &dyn crate::schema::RawSlot),
             "peer_loadout" => self.peer_loadouts.slots.get(peer).map(|s| s as &dyn crate::schema::RawSlot),
+            "body" => Some(&self.game_out.body),
+            "peer_body" => self.peers.slots.get(peer).map(|s| &s.body as &dyn crate::schema::RawSlot),
             // pose (schema/pose.rs SLOTS)
             "local_root" => Some(&self.game_out.local_root),
             "local_weapon" => Some(&self.game_out.local_weapon),

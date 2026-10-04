@@ -954,6 +954,33 @@ function C3.standin_hit(w)
     end
 end
 
+-- The owner's passport body on stand-ins (standin_body.lua): my own body into
+-- the `body` slot, each peer's `peer_body` onto its stand-in (bone masses).
+C3.BODY = load_module("standin_body")
+function C3.body_publish(me)
+    local B, ipc = C3.BODY, rawget(_G, "HSMP_IPC")
+    if not (B and ipc and ipc.put) then return end
+    local mesh = C3.hit_mesh and C3.hit_mesh(me) or body_mesh(me)
+    if mesh then B.publish(me, mesh, ipc.put, Log) end
+end
+function C3.body_apply(peer, w)
+    local B, ipc = C3.BODY, rawget(_G, "HSMP_IPC")
+    if not (B and ipc and ipc.peer_rec) then return end
+    local rec = ipc.peer_rec("peer_body", peer)
+    if type(rec) ~= "table" then return end
+    local nm = wname(w)
+    local mesh = C3.hit_mesh(w)
+    if not (nm and mesh) then return end
+    local n = B.apply(nm, w, mesh, rec)
+    if n > 0 then
+        local f = B.fight_count()
+        if f <= 5 or f % 50 == 0 then
+            Log("body: stand-in %s of peer %d <- owner body v=%s: %d bone mass(es) set%s", nm, peer,
+                tostring(rec.version), n, f > 0 and string.format(" (the game reset %d before)", f) or "")
+        end
+    end
+end
+
 -- Armour-stage bookkeeping: the Deal Complex Damage calls my weapon / body
 -- made on stand-ins this tick (stand-in FName -> { records }). No UObject is
 -- kept in it; cleared every flush and on every world drop.
@@ -1981,6 +2008,7 @@ local function update_standins()
                 -- leak is put back to (the mirrored owner state, this tick).
                 C3.protect(w, peer)
                 C3.baseline(w)
+                if C3.BODY and (tick_num + peer) % C3.BODY.APPLY_TICKS == 0 then C3.body_apply(peer, w) end
             end
         end
     end
@@ -2105,6 +2133,7 @@ wg_on_drop(function(why)
     dism_cache, dism_tick = {}, -999
     vout.last = nil           -- first sample of the new world goes out at once
     VB.base = {}          -- a dead flag must be re-earned in the new world
+    if C3.BODY then C3.BODY.drop() end
 end)
 
 local function on_tick()
@@ -2143,6 +2172,7 @@ local function on_tick()
 
     local me = local_pawn()
     if me then own_pawn_tick(me) end
+    if me and C3.BODY and tick_num % C3.BODY.PUBLISH_TICKS == 0 then C3.body_publish(me) end
     if me and next(C3.gated) ~= nil and tick_num % 5 == 0 then C3.ungate(me) end
 
     read_feedback()

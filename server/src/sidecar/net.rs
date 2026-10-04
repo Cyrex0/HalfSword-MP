@@ -135,6 +135,8 @@ impl NetClient {
         cfg.caps |= hsmp_net::net::caps::POSE_RATE;
         // Combat hit effects: touch reports up, stand-in blood / wounds down.
         cfg.caps |= hsmp_net::net::caps::HIT_FX;
+        // The owner's passport body for its stand-ins (body records), both ways.
+        cfg.caps |= hsmp_net::net::caps::BODY;
         // Path-dead after 2 s of silence while sending: re-handshake
         // long before the 10 s idle timeout.
         let conn = ConnConfig { dead_after_ms: hsmp_net::net::conn::CLIENT_DEAD_AFTER_MS, ..ConnConfig::default() };
