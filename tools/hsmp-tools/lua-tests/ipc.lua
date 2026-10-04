@@ -347,7 +347,7 @@ elseif opts.kind == "sync_shm" then
 elseif opts.kind == "play_from_out" then
     -- PURE.play_from_out builds exactly what PURE.parse_play2 builds from the
     -- equivalent play line.
-    local src = T.read(T.path("mods/HSMPAvatars/Scripts/main.lua"))
+    local src = T.read(T.path("mods/HSMPAvatars/Scripts/avatars_pure.lua"))
     local a = src:find("-- BEGIN PURE", 1, true)
     local b = src:find("-- END PURE", 1, true)
     local PURE = assert(load(src:sub(a, b - 1) .."\nreturn PURE", "@PURE"))()
