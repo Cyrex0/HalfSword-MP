@@ -1119,3 +1119,36 @@ fn a_parry_from_a_shoulder_detached_from_the_torso_is_not_a_clash() {
     assert!(ok.s.parried(VIC, ATT, ats, ok.now));
     assert!(ok.s.reach_violation(VIC, &ok.s.peers[&VIC], vts).is_none());
 }
+
+/// The attacker's path RTT steps from 40 to 140 ms (a route change, a
+/// download filling its link): its display of the victim is 100 ms older
+/// from then on, and the prediction follows within a few seconds instead of
+/// holding the old minimum for 16 samples. Damage→ack samples (client
+/// processing included) arriving in a burst never push the transport
+/// samples out of the window.
+#[test]
+fn prediction_follows_an_rtt_step_within_seconds() {
+    let mut c = Clock::default();
+    for s in 0..20i64 { c.note_rtt(s * 1000, 40.0); }
+    for s in 20..=24i64 { c.note_rtt(s * 1000, 140.0); }
+    assert_eq!(c.rtt(24_500), Some(140.0));
+    // A fight: 30 inflated damage→ack samples within one second.
+    for k in 0..30i64 { c.note_rtt(24_600 + k * 30, 190.0); }
+    assert_eq!(c.rtt(25_500), Some(140.0));
+    assert_eq!(c.rtt(RTT_TTL_MS + 30_000), None);
+
+    // End to end: the scene runs on a 140 ms path; the last 4 s of samples
+    // say 140, the 15 s before them 40.
+    let sc = {
+        let mut sc = Scene::new(70, 20_000, runner, |_| None, sword_near);
+        let rtt = &mut sc.s.peers.get_mut(&ATT).unwrap().clock.rtt;
+        rtt.clear();
+        for s in 1..=15i64 { rtt.push_back((s * 1000, 40.0)); }
+        for s in 16..=20i64 { rtt.push_back((s * 1000, 140.0)); }
+        sc
+    };
+    let h = 19_950;
+    let p = sc.s.predict_view(ATT, VIC, sc.ats(h), sc.now).unwrap();
+    let honest = sc.honest_view(h, 31) as i64;
+    assert!((p.expected - honest).abs() <= FRAME_MS, "expected {} honest {} (off by {} ms)", p.expected, honest, p.expected - honest);
+}
