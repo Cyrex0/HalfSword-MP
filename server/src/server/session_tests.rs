@@ -321,6 +321,36 @@ fn promote_grants_admin_without_revoking_anyone() {
     assert_eq!(role(i.peers[&b].id), AdminRole::NONE);
 }
 
+/// A granted admin cannot kick or ban the listen host (OWNER): only the owner itself or RCON
+/// outranks it. Admins can still kick each other and ordinary players.
+#[test]
+fn an_admin_cannot_kick_or_ban_the_owner() {
+    let st = new_state();
+    let mut i = st.inner.try_lock().unwrap();
+    let host = join(&mut i, 1, "Host");
+    let a = join(&mut i, 2, "A");
+    let b = join(&mut i, 3, "B");
+    let (host_id, a_id, b_id) = (i.peers[&host].id, i.peers[&a].id, i.peers[&b].id);
+    assert!(cmd(&mut i, host, 1, C::Promote { peer_id: a_id, admin_role: AdminRole::ADMIN }).ok);
+    let mut fx = CmdEffects::default();
+    let r = cl(&mut i, Actor::Peer(a), Some(2), 0, &C::Kick { peer_id: host_id, reason: "bye".into() }, &mut fx).0;
+    assert!(!r.ok && r.reason_code == CmdReason::NOT_ADMIN, "{r:?}");
+    assert!(fx.kicks.is_empty(), "no kick of the owner is queued");
+    let mut ban = C::Kick { peer_id: host_id, reason: String::new() }.rec(3, 0);
+    ban.op = cmd_op::BAN;
+    let mut fx = CmdEffects::default();
+    let (r, _) = command_locked(&mut i, Actor::Peer(a), &ban, &mut fx);
+    assert!(!r.ok.get() && fx.kicks.is_empty(), "no ban of the owner");
+    // an admin may still kick a player, the owner may kick an admin, RCON may kick anyone
+    let mut fx = CmdEffects::default();
+    assert!(cl(&mut i, Actor::Peer(a), Some(4), 0, &C::Kick { peer_id: b_id, reason: String::new() }, &mut fx).0.ok);
+    let mut fx = CmdEffects::default();
+    assert!(cl(&mut i, Actor::Peer(host), Some(5), 0, &C::Kick { peer_id: a_id, reason: String::new() }, &mut fx).0.ok);
+    let mut fx = CmdEffects::default();
+    assert!(cl(&mut i, Actor::Rcon, None, 0, &C::Kick { peer_id: host_id, reason: String::new() }, &mut fx).0.ok);
+    assert_eq!(fx.kicks.len(), 1);
+}
+
 // ---- admin assignment on a dedicated server ------------------------------------
 
 #[test]

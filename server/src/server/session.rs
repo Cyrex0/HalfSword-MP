@@ -1055,9 +1055,17 @@ pub(crate) fn apply_command(inner: &mut Inner, actor: Actor, cmd: &rec::Command,
         cmd_op::SET_CONFIG => set_config(inner, cmd.expected_rev, &cmd.patch, fx, &by),
         cmd_op::KICK | cmd_op::BAN => {
             let ban = cmd.op == cmd_op::BAN;
-            let Some(addr) = inner.peers.iter().find(|(_, p)| p.id == cmd.peer_id).map(|(a, _)| *a) else {
+            let Some((addr, target)) = inner.peers.iter().find(|(_, p)| p.id == cmd.peer_id).map(|(a, p)| (*a, peer_key(p))) else {
                 return refuse(CmdReason::UNKNOWN_PLAYER, format!("no such peer id={}", cmd.peer_id));
             };
+            // Nobody but the owner itself and RCON outranks the listen host: an admin it
+            // granted must not be able to throw it off its own server.
+            if let Some(a) = me {
+                let mine = inner.peers.get(&a).map_or(AdminRole::NONE, |p| inner.admins.role(&peer_key(p)));
+                if inner.admins.role(&target) > mine {
+                    return refuse(CmdReason::NOT_ADMIN, "the host cannot be kicked or banned");
+                }
+            }
             let reason = if text.is_empty() {
                 if ban { "banned".to_string() } else { "kicked".to_string() }
             } else { text.to_string() };
