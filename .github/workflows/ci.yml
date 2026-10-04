@@ -100,7 +100,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo test --locked -p hsmp-net -p hsmp-server -p hsmp-modes
+      - run: cargo test --locked -p hsmp-net -p hsmp-server
       - run: cargo build --release --locked -p hsmp-server --bin hsmp-server --bin hsmp-master --bin hsmp-query
       - uses: actions/upload-artifact@v4
         with:

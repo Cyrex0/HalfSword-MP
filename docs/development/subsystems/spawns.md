@@ -405,7 +405,8 @@ Log: `blocked native lose-flow travel (UI_Lose_C:Delay) x1`, on the 1st and ever
 
 ## 5. Known gaps
 
-- Team ids are not populated yet (`team: 0`): the game modes in `server/src/modes` are not wired
-  into the server (see [modes.md](modes.md)).
+- Team modes pass each seat's team (`modes::team_of_key`), so teams spawn on their own side;
+  deathmatch respawns use `respawn_point` (the candidate farthest from the living), see
+  [modes.md](modes.md).
 - If `CapsuleTraceSingleForObjects` errors (Lua marshalling of the object-type array and hit
   struct), the clearance check reports clear and only the distance check applies.

@@ -494,8 +494,7 @@ Do not skip the hook with `--no-verify`.
 
 CI runs five parallel jobs: Windows G0 (`hsmp-gate g0 --no-stamp --skip clippy`), Windows e2e
 (`scripts/e2e-test.sh`), Clippy (the same command as the G0 `clippy` check, which is why G0 skips it
-there), Linux (`cargo test --locked -p hsmp-net -p hsmp-server
--p hsmp-modes`, then a release build of `hsmp-server`, `hsmp-master` and `hsmp-query`) and a
+there), Linux (`cargo test --locked -p hsmp-net -p hsmp-server`, then a release build of `hsmp-server`, `hsmp-master` and `hsmp-query`) and a
 Docker image smoke test. A full local G0 plus `scripts/e2e-test.sh` covers the three Windows jobs. Build caches are saved from
 `main` only; pull requests restore them. The Linux job cannot be reproduced on Windows:
 the `cfg(not(windows))` code (the sidecar's `/proc` process checks, for one) only compiles and runs
@@ -504,7 +503,7 @@ there. With WSL and a distro, run the job's test command in the distro on a copy
 
 ```sh
 rsync -a --delete --exclude target --exclude .git /mnt/d/<worktree>/ ~/hsmp-linux/
-cd ~/hsmp-linux && cargo test --locked -p hsmp-net -p hsmp-server -p hsmp-modes
+cd ~/hsmp-linux && cargo test --locked -p hsmp-net -p hsmp-server
 ```
 
 Without WSL, the Linux job is first seen on the push.

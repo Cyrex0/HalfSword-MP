@@ -147,7 +147,7 @@ end with a line `END`. Before `AUTH`, every other command answers `ERR auth requ
 |---|---|---|
 | `AUTH <password>` | `OK authenticated` or `ERR bad password` | A wrong password closes the connection. |
 | `HELP` | one line listing the verbs | |
-| `STATUS` | `OK {json}` | Phase, round, match id, arena, best-of, connected peers, and the roster by seat (nick, peer id, ready, alive, wins, admin, role). |
+| `STATUS` | `OK {json}` | Phase, round, match id, arena, best-of, connected peers, the game mode (`mode`, `teams`, `team_rule`, `round_time_s`, `koth_target_s`, `friendly_fire`, `respawn_s`, `team_wins`, `round_kit`), and the roster by seat (nick, peer id, ready, alive, wins, team, kills, deaths, score, respawning, admin, role). |
 | `REPORT` | the newest stats report, then `END` | The 10-second `stats:` line and one `stats peer` line per player (see [Logs and diagnostics](logs-and-diagnostics.md#the-stats-lines)). |
 | `LIST` | `<id> <nick> <ip:port>` per player, then `END` | The id is what `KICK` and `BAN` take. |
 | `KICK <id>` | `OK kicked`, `ERR no such peer` or `ERR <reason>` | The player is disconnected and may rejoin. |
@@ -160,6 +160,11 @@ end with a line `END`. Before `AUTH`, every other command answers `ERR auth requ
 | `ABORT` | `OK aborted` or `OK already in the lobby` | Ends the match and returns to the lobby. |
 | `BESTOF <n>` | `OK config updated` or `ERR <reason>` | Lobby only. 1 to 31. |
 | `KIT <mode> [budget]` | `OK config updated` or `ERR <reason>` | Lobby only. Mode `free`, `classes` or `custom` (or `0`, `1`, `2`). The budget applies to `custom` and is 100 if left out. |
+| `MODE <mode>` | `OK config updated` or `ERR <reason>` | Lobby only. `duel`, `ffa`, `teams`, `koth`, `roulette`, `brawl`, `deathmatch` ([Game modes](configuration.md#game-modes)). Refused while a connected player's HSMP is too old for it. |
+| `TEAMS <off\|auto\|fixed> [n]` | `OK config updated` or `ERR <reason>` | Lobby only. The team rule and, optionally, the team count (2 to 4). |
+| `TEAM <seat> <team>` | `OK team Red` or `ERR <reason>` | Lobby only, `fixed` teams. Puts the player at that seat (see `STATUS`) on team 1 to 4; 0 removes the pick. |
+| `ROUNDTIME <s>` | `OK config updated` or `ERR <reason>` | Lobby only. Round clock in seconds, 0 to 1800 (0 = the mode's default). |
+| `OPTION <name> <value>` | `OK <what changed>` or `ERR <reason>` | Lobby only. `koth_target <10..600>`, `ff <on\|off>`, `respawn <1..30>`. |
 | `ADMIN ADD <peer id \| player id \| key>` | `OK admin <player_id>` | Makes that player an admin by player key; appended to `--admins-file` when one is set. |
 | `ADMIN REMOVE <peer id \| player id \| key>` | `OK not admin <player_id>` | |
 | `ADMIN LIST` | `OK <key> <owner\|config\|file\|runtime> <online peer N nick\|offline>` lines, then `END` | |

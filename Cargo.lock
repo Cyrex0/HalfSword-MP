@@ -1978,14 +1978,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hsmp-modes"
-version = "0.1.0-beta.5"
-dependencies = [
- "proptest",
- "serde",
-]
-
-[[package]]
 name = "hsmp-nat"
 version = "0.1.0-beta.5"
 dependencies = [

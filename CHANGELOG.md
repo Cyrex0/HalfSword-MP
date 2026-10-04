@@ -8,6 +8,33 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+### What's new
+
+- Game modes, picked by the host on the lobby's new **GAME MODE** screen (or with `--mode` and
+  RCON `MODE`):
+  - **Team elimination** (2 to 4 teams): teams balanced automatically or picked by the players in
+    the lobby; teammates spawn together and cannot hurt each other unless friendly fire is on.
+  - **King of the hill**: hold the hill alone to score; the first to the target wins the round.
+    The HUD shows who holds it and how far and where it is.
+  - **Weapon roulette**: everybody gets the same random weapon and armour each round.
+  - **Brawl**: fists only, no armour.
+  - **Timed deathmatch**: respawn after a death, most kills when the clock runs out wins; a tie
+    goes to sudden death.
+  - King of the hill, roulette, brawl and deathmatch can be played in teams too, and every mode
+    can have a round clock.
+- The scoreboard (TAB) shows kills and deaths, and team tags in team modes; the top banner shows
+  team scores, points or kills, and the round clock.
+- The server browser lists a server's game mode.
+- Server admins: new flags `--teams`, `--team-rule`, `--round-time`, `--koth-target`,
+  `--friendly-fire`, `--respawn-delay` (and `HSMP_KOTH_ZONES`), and RCON `MODE`, `TEAMS`, `TEAM`,
+  `ROUNDTIME`, `OPTION`; `STATUS` reports teams, kills and deaths.
+
+### Compatibility
+
+- A server playing any mode other than duel or free-for-all only admits players with this version
+  or newer; older clients get "update HSMP to join". Duel and free-for-all servers still admit
+  0.1.0-beta.5 clients.
+
 ## [0.1.0-beta.5] - 2026-10-04
 
 ### What's new
