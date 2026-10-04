@@ -214,10 +214,8 @@ end
 -- slot / weapon / root / control tables reused): callers keep it as p.last
 -- while `o` is refilled next frame, so they alternate two of them per peer.
 do   -- (one block: the main chunk is near the 200-locals limit)
-local function fill(dst, src, base, n)
-    dst = dst or {}
-    for i = 1, n do dst[i] = src[base + i] end
-    return dst
+local function fill(dst, src, base, n)   -- dst[1..n] = src[base+1 .. base+n]
+    return table.move(src, base + 1, base + n, 1, dst or {})
 end
 function PURE.play_from_out(o, into)
     if type(o) ~= "table" or type(o.B) ~= "table" then return nil end

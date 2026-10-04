@@ -1,6 +1,6 @@
 -- Per-frame Lua heap churn of the hot loops, offline.
 --
---     hsmp-tools lua-test framecost       (HSMP_FRAMECOST_PRINT=1 prints the numbers)
+--     hsmp-tools lua-test framecost       (prints the numbers)
 --
 -- Every UE4SS call and the native module are mocked with allocation-free stand-ins
 -- (constant return values, no-op writes), so the bytes counted are the mods' own
@@ -17,12 +17,10 @@
 -- Every case runs in its own Lua state (T.isolated).
 
 local mode, opts = ...
-local PRINT = false
-for _, a in ipairs({ ... }) do if a == "print" then PRINT = true end end
 
 if mode ~= "case" then
     for _, k in ipairs({ "ipc", "sync_native", "sync_lua", "avatars_native", "avatars_lua", "pure_equal", "world" }) do
-        T.isolated(T.script, "case", { kind = k, print = PRINT or os.getenv("HSMP_FRAMECOST_PRINT") == "1" })
+        T.isolated(T.script, "case", { kind = k })
     end
     return
 end
@@ -40,7 +38,6 @@ end
 
 local function report(name, bytes, limit)
     local line = string.format("framecost %-16s %9.1f B/frame (limit %d)", name, bytes, limit)
-    if opts.print then print(line) end
     T.log(line)
     T.check(bytes <= limit, name .. ": per-frame Lua garbage within the budget", line)
 end
@@ -83,6 +80,7 @@ if opts.kind == "ipc" then
     return
 end
 
+local real_clock = os.clock   -- umg_mock replaces os.clock with its fake clock
 local M = require("umg_mock")
 local sd = T.tmpdir("hsmp_fc_sd_")
 local la = T.tmpdir("hsmp_fc_la_")
@@ -284,6 +282,17 @@ if opts.kind == "avatars_native" or opts.kind == "avatars_lua" then
         play()
     end)
     T.check(p.body.sv.err.n > drove0 + 300 * 20, "every measured frame drove the bodies", p.body.sv.err.n - drove0)
+    -- CPU time of the driver, for information (not checked: machine-dependent)
+    local us = 0
+    for _ = 1, 400 do
+        M.now = M.now + 16
+        play()
+        local c0 = real_clock()
+        frame_fn()
+        us = us + (real_clock() - c0) * 1e6
+    end
+    local line = string.format("framecost %-16s %9.1f us/frame (Lua CPU, this machine)", opts.kind, us / 400)
+    T.log(line)
     report(opts.kind, b, native and 8000 or 9000)
     T.check(not T.contains(M.logtext(), "frame driver error"), "no driver errors", M.logtext():sub(-2000))
     T.check(#M.dead_touch == 0, "nothing freed touched", T.repr(M.dead_touch))
