@@ -36,7 +36,7 @@ fn needed_factor_and_recommendation() {
     assert!((r.p999 - 1.998).abs() < 1e-3 && (r.recommended.unwrap() - 2.198).abs() < 1e-2, "{r:?}");
     assert!((r.clamped_shipped - 0.2).abs() < 0.01, "needed > 1.8 for the top 20 %: {}", r.clamped_shipped);
     assert_eq!(report(&s[..50])[0].recommended, None, "too few samples");
-    assert!(table(&[r.clone()]).contains("| Server | Sword | 1000 |"));
+    assert!(table(std::slice::from_ref(r)).contains("| Server | Sword | 1000 |"));
 }
 
 /// The calibration's ceiling is the server's: for blows over a grid of speeds the real
