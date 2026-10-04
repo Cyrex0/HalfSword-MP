@@ -36,6 +36,11 @@ pub fn negotiated() -> bool {
     CAPS.load(Ordering::Relaxed) & hsmp_net::net::caps::INTERACT != 0
 }
 
+/// The current connection negotiated `cap` (any `hsmp_net::net::caps` bit).
+pub fn has_cap(cap: u64) -> bool {
+    CAPS.load(Ordering::Relaxed) & cap != 0
+}
+
 fn kind_name(k: u8) -> &'static str {
     match k {
         K::GRAB_START => "grab_start",

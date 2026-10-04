@@ -190,6 +190,76 @@ impl RateLimiter {
     }
 }
 
+/// Query replies, all sources together.
+pub const GLOBAL_RATE: f64 = 200.0;
+pub const GLOBAL_BURST: f64 = 400.0;
+/// Query replies per source (IPv4 address, IPv6 /64). A browser refresh sends a few; a LAN
+/// party behind one address browsing together stays well inside.
+pub const PER_SOURCE_RATE: f64 = 20.0;
+pub const PER_SOURCE_BURST: f64 = 40.0;
+/// Sources tracked at once. A full table (all of them active) falls back to the global
+/// budget alone for new sources.
+pub const MAX_SOURCES: usize = 4096;
+
+/// The server's reply budget: a per-source bucket, then the global one, so one host cannot
+/// use up the global budget and blank every other browser's ping.
+pub struct QueryLimiter {
+    global: RateLimiter,
+    by_src: std::collections::HashMap<std::net::IpAddr, (f64, Instant)>,
+    pruned_at: Option<Instant>,
+}
+
+impl Default for QueryLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl QueryLimiter {
+    pub fn new() -> Self {
+        QueryLimiter { global: RateLimiter::new(GLOBAL_RATE, GLOBAL_BURST), by_src: Default::default(), pruned_at: None }
+    }
+
+    fn key(ip: std::net::IpAddr) -> std::net::IpAddr {
+        match ip {
+            std::net::IpAddr::V6(v) => match v.to_ipv4_mapped() {
+                Some(v4) => v4.into(),
+                None => {
+                    let s = v.segments();
+                    std::net::Ipv6Addr::new(s[0], s[1], s[2], s[3], 0, 0, 0, 0).into()
+                }
+            },
+            v4 => v4,
+        }
+    }
+
+    pub fn sources(&self) -> usize {
+        self.by_src.len()
+    }
+
+    pub fn allow_at(&mut self, ip: std::net::IpAddr, now: Instant) -> bool {
+        let k = Self::key(ip);
+        let refill = |t: f64, at: Instant| (t + now.saturating_duration_since(at).as_secs_f64() * PER_SOURCE_RATE).min(PER_SOURCE_BURST);
+        if !self.by_src.contains_key(&k) && self.by_src.len() >= MAX_SOURCES {
+            if self.pruned_at.is_none_or(|p| now.saturating_duration_since(p).as_secs() >= 1) {
+                self.pruned_at = Some(now);
+                self.by_src.retain(|_, (t, at)| refill(*t, *at) < PER_SOURCE_BURST);
+            }
+            if self.by_src.len() >= MAX_SOURCES {
+                return self.global.allow_at(now);
+            }
+        }
+        let e = self.by_src.entry(k).or_insert((PER_SOURCE_BURST, now));
+        e.0 = refill(e.0, e.1);
+        e.1 = now;
+        if e.0 < 1.0 || !self.global.allow_at(now) {
+            return false;
+        }
+        e.0 -= 1.0;
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,6 +338,54 @@ mod tests {
         let mut p = build_reply(1, &QueryInfo::default());
         p.truncate(20); // cut JSON
         assert!(parse_reply(&p).is_none());
+    }
+
+    /// Seeded mutation of requests and replies: no panic, a request parses only when padded,
+    /// and a reply built from any strings fits in the request.
+    #[test]
+    fn query_codec_survives_mutation() {
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut rnd = move || { x ^= x << 13; x ^= x >> 7; x ^= x << 17; x };
+        let info = QueryInfo { name: "n".into(), map: "Map_Arena_Pit".into(), server_key: "ab".repeat(32), ..Default::default() };
+        let seeds = [build_request(7), build_reply(7, &info)];
+        for i in 0..20_000 {
+            let mut d = seeds[i % 2].clone();
+            for _ in 0..1 + rnd() % 4 {
+                let n = d.len().max(1);
+                match rnd() % 4 {
+                    0 if !d.is_empty() => { let j = (rnd() as usize) % n; d[j] ^= 1 << (rnd() % 8); }
+                    1 => d.truncate((rnd() as usize) % n),
+                    2 if !d.is_empty() => { let j = (rnd() as usize) % n; d[j] = b"{}\":,\\x\xff0"[(rnd() % 9) as usize]; }
+                    _ => d.push(rnd() as u8),
+                }
+            }
+            if parse_request(&d).is_some() {
+                assert!(d.len() >= REQ_LEN);
+            }
+            if let Some((_, got)) = parse_reply(&d) {
+                let mut s = |n: usize| (0..n).map(|_| char::from_u32(0x20 + (rnd() % 0x3000) as u32).unwrap_or('?')).collect::<String>();
+                let q = QueryInfo { name: got.name + &s(200), map: s(300), mode: s(100), region: s(50), build: s(40), ..got };
+                assert!(build_reply(1, &q).len() <= REQ_LEN, "reply larger than the request");
+            }
+        }
+    }
+
+    /// One source cannot use up the global reply budget: past its own burst it is refused
+    /// while other sources still get answers.
+    #[test]
+    fn one_source_cannot_starve_the_others() {
+        let t0 = Instant::now();
+        let mut q = QueryLimiter::new();
+        let flood: std::net::IpAddr = "198.51.100.7".parse().unwrap();
+        let served = (0..1000).filter(|_| q.allow_at(flood, t0)).count();
+        assert!(served <= PER_SOURCE_BURST as usize, "{served} replies to one source in one instant");
+        let other: std::net::IpAddr = "203.0.113.9".parse().unwrap();
+        assert!(q.allow_at(other, t0), "another source is still answered");
+        assert!(q.allow_at(flood, t0 + Duration::from_secs(1)), "the flooder refills");
+        // a flood of distinct sources is bounded by the global budget and the table size
+        let n = (0..100_000u32).filter(|i| q.allow_at(std::net::IpAddr::from(i.to_be_bytes()), t0)).count();
+        assert!(n <= GLOBAL_BURST as usize);
+        assert!(q.sources() <= MAX_SOURCES);
     }
 
     #[test]

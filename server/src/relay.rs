@@ -37,6 +37,38 @@ use std::time::{Duration, Instant};
 
 use crate::proto::PeerId;
 
+/// FxHash (rustc's hasher) for the relay's maps: `select` looks up several
+/// (recipient, sender) keys per recipient of every stream frame, and SipHash
+/// over socket addresses was most of its cost. The keys are the addresses of
+/// admitted peers (at most 64), so there is nothing to flood.
+#[derive(Default, Clone, Copy)]
+struct Fx(u64);
+
+impl Fx {
+    fn add(&mut self, w: u64) {
+        self.0 = (self.0.rotate_left(5) ^ w).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+}
+
+impl std::hash::Hasher for Fx {
+    fn finish(&self) -> u64 { self.0 }
+    fn write(&mut self, b: &[u8]) {
+        for c in b.chunks(8) {
+            let mut w = [0u8; 8];
+            w[..c.len()].copy_from_slice(c);
+            self.add(u64::from_le_bytes(w));
+        }
+    }
+    fn write_u8(&mut self, v: u8) { self.add(v as u64) }
+    fn write_u16(&mut self, v: u16) { self.add(v as u64) }
+    fn write_u32(&mut self, v: u32) { self.add(v as u64) }
+    fn write_u64(&mut self, v: u64) { self.add(v) }
+    fn write_usize(&mut self, v: usize) { self.add(v as u64) }
+}
+
+type FxMap<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<Fx>>;
+type FxSet<K> = std::collections::HashSet<K, std::hash::BuildHasherDefault<Fx>>;
+
 /// Sustained downstream budget per client (bytes/s), set once at startup
 /// from `--client-budget-kbps` (default 128 KB/s ≈ 1 Mbit/s).
 static BUDGET_BPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(128 * 1024);
@@ -49,8 +81,9 @@ const BURST_S: f64 = 0.375;
 /// Skeletal frames leave this much headroom so root updates keep flowing.
 const SKEL_RESERVE: f64 = 3.0 * 1024.0;
 /// Bytes a v5 datagram adds around one channel-0 body: header 22 + AEAD tag
-/// 16 + UNREL chunk header 7 (docs/development/protocol.md).
-pub const SEAL_OVERHEAD: usize = 22 + 16 + 7;
+/// 16 + UNREL chunk header 7 + the ACK_DELAY chunk 3 that every datagram of a
+/// live connection carries (caps::ACK_DELAY; docs/development/protocol.md).
+pub const SEAL_OVERHEAD: usize = 22 + 16 + 7 + 3;
 const RANK_REFRESH: Duration = Duration::from_millis(500);
 const FAR_UU: f32 = 6000.0;
 
@@ -67,36 +100,36 @@ struct SrcStat { frames: u32, rate: f64, bytes: f64 }
 
 #[derive(Default)]
 struct RelayInner {
-    pos: HashMap<SocketAddr, [f32; 3]>,
+    pos: FxMap<SocketAddr, [f32; 3]>,
     /// (dst, src) -> (rank among dst's others by distance, distance)
-    rank: HashMap<(SocketAddr, SocketAddr), (u16, f32)>,
-    counters: HashMap<(SocketAddr, SocketAddr, Stream), u32>,
-    buckets: HashMap<SocketAddr, Bucket>,
+    rank: FxMap<(SocketAddr, SocketAddr), (u16, f32)>,
+    counters: FxMap<(SocketAddr, SocketAddr, Stream), u32>,
+    buckets: FxMap<SocketAddr, Bucket>,
     /// Per (dst, src) share of dst's budget (fair share).
-    shares: HashMap<(SocketAddr, SocketAddr), Bucket>,
+    shares: FxMap<(SocketAddr, SocketAddr), Bucket>,
     ranked_at: Option<Instant>,
-    src: HashMap<(SocketAddr, Stream), SrcStat>,
+    src: FxMap<(SocketAddr, Stream), SrcStat>,
     /// Budget-fitted decimation factor per (dst, src, stream).
-    alloc: HashMap<(SocketAddr, SocketAddr, Stream), u32>,
+    alloc: FxMap<(SocketAddr, SocketAddr, Stream), u32>,
     /// Non-stream bytes charged per dst since the last plan, and their
     /// measured rate.
-    other_bytes: HashMap<SocketAddr, f64>,
-    other_rate: HashMap<SocketAddr, f64>,
+    other_bytes: FxMap<SocketAddr, f64>,
+    other_rate: FxMap<SocketAddr, f64>,
     /// Peer id at each address (lag comp, per-peer caps).
-    ids: HashMap<SocketAddr, PeerId>,
+    ids: FxMap<SocketAddr, PeerId>,
     srcs_n: usize,
     /// Congestion state of the path to each recipient.
-    paths: HashMap<SocketAddr, PathCtl>,
+    paths: FxMap<SocketAddr, PathCtl>,
     /// Recipients with no body in play (spectators, the dead): every player
     /// is relevant to them, wherever their parked body is.
-    free: std::collections::HashSet<SocketAddr>,
+    free: FxSet<SocketAddr>,
     /// Bandwidth the two nearest players' streams need at their floors
     /// (bytes/s): a congestion cut never takes a budget below it.
-    floor_bps: HashMap<SocketAddr, f64>,
+    floor_bps: FxMap<SocketAddr, f64>,
     /// Per sender since the last report: pose frames in, and refused before
     /// the relay (rate gate, lag comp); skeletal frames relayed per pair.
-    diag_in: HashMap<SocketAddr, (u32, u32)>,
-    diag_out: HashMap<(SocketAddr, SocketAddr), u32>,
+    diag_in: FxMap<SocketAddr, (u32, u32)>,
+    diag_out: FxMap<(SocketAddr, SocketAddr), u32>,
 }
 
 /// Transport counters of the connection to one recipient (cumulative).
@@ -475,8 +508,8 @@ fn measure_rates(r: &mut RelayInner, dt_s: f64) {
 /// of the far players, then their root/weapon, then the two nearest
 /// players' skeletons (never below 30 Hz), then their root.
 fn allocate(r: &mut RelayInner, dsts: &[SocketAddr]) {
-    let mut alloc = HashMap::new();
-    let mut floor_bps = HashMap::new();
+    let mut alloc = FxMap::default();
+    let mut floor_bps = FxMap::default();
     for &dst in dsts {
         let other = r.other_rate.get(&dst).copied().unwrap_or(0.0);
         let b = scaled_budget(r, &dst);
@@ -610,16 +643,25 @@ mod tests {
         got
     }
 
+    /// The overhead the budget charges per relayed frame is what a live
+    /// connection puts on the wire: with the negotiated transport caps every
+    /// datagram after the first received one carries an ACK_DELAY chunk.
     #[test]
     fn seal_overhead_matches_a_real_v5_datagram() {
-        use hsmp_net::net::{Conn, ConnConfig, SendMode, Side};
+        use hsmp_net::net::{caps, crypto, Conn, ConnConfig, SendMode, Side};
         let r = hsmp_ipc::schema::pose::Root { tick: 99, ts: 1, send_wall_ms: 2, pos: [1.0, 2.0, 3.0], rot: [0.0, 0.0, 0.0, 1.0], vel: [0.5, 0.0, 0.0] };
         let bytes = hsmp_ipc::wire::encode(0, 4, &r, &[]);
         let mode = proto::record_mode(hsmp_ipc::schema::pose::K_ROOT, 4).unwrap();
-        let mut c = Conn::new(Side::Server, 9, [1; 32], [2; 32], 0, ConnConfig::default());
+        let k = crypto::derive(&[1; 32], &[2; 32], &[3; 32]);
+        let mut s = Conn::from_handshake(Side::Server, &k, 0, ConnConfig::default());
+        let mut c = Conn::from_handshake(Side::Client, &k, 0, ConnConfig::default());
+        s.set_caps(caps::SUPPORTED);
+        c.set_caps(caps::SUPPORTED);
         c.send(mode, bytes.clone()).unwrap();
+        s.recv(1, &c.poll_transmit(0).unwrap()).unwrap();
+        s.send(mode, bytes.clone()).unwrap();
         assert!(matches!(mode, SendMode::Latest { .. }));
-        let dg = c.poll_transmit(0).unwrap();
+        let dg = s.poll_transmit(2).unwrap();
         assert_eq!(dg.len(), bytes.len() + SEAL_OVERHEAD);
     }
 
@@ -1067,6 +1109,29 @@ mod tests {
         for src in &a[1..] {
             let hz = got.get(src).copied().unwrap_or(0) as f64 / 7.5;
             assert!(hz >= 29.0, "{src}: {hz:.1} Hz under a congestion cut");
+        }
+    }
+
+    /// Cost of the per-frame recipient selection (the relay's hot path):
+    /// every player streams root/weapon/skeletal at 60 Hz to all others.
+    /// `cargo test -p hsmp-server --release --bin hsmp-server select_cost -- --nocapture`
+    #[test]
+    fn select_cost() {
+        for n in [16usize, 64] {
+            let relay = Relay::default();
+            let a = addrs(n);
+            for (i, x) in a.iter().enumerate() { relay.update_pos(*x, [i as f32 * 150.0, 0.0, 0.0]); }
+            run(&relay, &a, 60, 1);
+            let frames = 30_000 / n * n;
+            let t0 = Instant::now();
+            let mut picks = 0usize;
+            for k in 0..frames {
+                let st = [Stream::Skel, Stream::Root, Stream::Weapon][k % 3];
+                picks += relay.select(a[k % n], &a, st, 1).len(); // 1 B: no budget drops, every run picks the same
+            }
+            let ns = t0.elapsed().as_nanos() as f64;
+            println!("select_cost: {n} players: {:.0} ns per frame, {:.0} ns per recipient ({picks} picks)",
+                ns / frames as f64, ns / (frames * (n - 1)) as f64);
         }
     }
 }

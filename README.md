@@ -111,7 +111,6 @@ other game builds until HSMP is updated for them.
   spawns slightly off its spawn point, falls, or has to re-arm right after the round begins.
 - Without a named admin, a dedicated server's lobby starts the match by itself when every player is
   ready. See [admins](docs/hosting/dedicated-server.md).
-- `--tick-hz` changes game timers that are counted in ticks. Leave it at the default of 30.
 - One unexpected server error can stop the dedicated server. Run it under a service manager that
   restarts it (systemd, NSSM, Docker `--restart`).
 - Some developer hotkeys are still active in the release build.

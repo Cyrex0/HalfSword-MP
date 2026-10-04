@@ -15,7 +15,7 @@ use hsmp_ipc::layout::Str;
 use hsmp_ipc::record::{to_payload, view, Invalid};
 use hsmp_ipc::schema::loadout::{
     check_loadout_rows, Kit, KitRules, LoadoutHead, K_KIT, K_KIT_RULES_REQ, K_KIT_VERDICT,
-    K_LOADOUT, VERDICT_ACCEPTED, VERDICT_DEFAULT, VERDICT_REPLACED,
+    BodyHead, K_BODY, K_LOADOUT, VERDICT_ACCEPTED, VERDICT_DEFAULT, VERDICT_REPLACED,
 };
 use hsmp_ipc::wire::{self, WireHdr};
 use std::collections::HashMap;
@@ -67,6 +67,10 @@ pub async fn handle_record(
             check_loadout_rows(&v.rows).map_err(crate::server::refused)?;
             on_loadout(socket, state, from, v.head.version, payload).await;
         }
+        K_BODY => {
+            let v = view::<BodyHead>(payload).map_err(crate::server::refused)?;
+            on_body(socket, state, from, v.head.version, payload).await;
+        }
         k => {
             // kit_verdict / kit_rules are server -> client only.
             debug!(%from, kind = k, "loadout: record kind not accepted from a client; dropped");
@@ -102,6 +106,11 @@ enum LoadoutStep {
 }
 
 fn store_loadout(st: &mut HashMap<PeerId, Stored>, pid: PeerId, version: u32, payload: &[u8], now: Instant) -> LoadoutStep {
+    store_versioned(st, K_LOADOUT, pid, version, payload, now)
+}
+
+/// `store_loadout` for any versioned per-owner record of this domain (`loadout`, `body`).
+fn store_versioned(st: &mut HashMap<PeerId, Stored>, kind: u16, pid: PeerId, version: u32, payload: &[u8], now: Instant) -> LoadoutStep {
     let e = st.entry(pid).or_insert_with(|| Stored { version: 0, msg: Vec::new(), window_start: now, window_count: 0 });
     if now.duration_since(e.window_start) >= Duration::from_secs(1) {
         e.window_start = now;
@@ -115,7 +124,7 @@ fn store_loadout(st: &mut HashMap<PeerId, Stored>, pid: PeerId, version: u32, pa
         return LoadoutStep::Stale;
     }
     e.version = version;
-    e.msg = wire::message(K_LOADOUT, 0, pid, payload);
+    e.msg = wire::message(kind, 0, pid, payload);
     LoadoutStep::Relay
 }
 
@@ -145,10 +154,52 @@ async fn on_loadout(socket: &UdpSocket, state: &Arc<ServerState>, from: SocketAd
     send_all(socket, state, &others, &msg).await;
 }
 
+
+// ---- passport body (body records, caps::BODY) ----------------------------------------------
+
+fn body_store() -> &'static Mutex<HashMap<PeerId, Stored>> {
+    static S: OnceLock<Mutex<HashMap<PeerId, Stored>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Players that get a `body` record of `owner`: every other one that negotiated
+/// `caps::BODY` (a beta.4 sidecar never sees the record).
+fn body_pick(peers: impl Iterator<Item = (SocketAddr, PeerId)>, owner: PeerId, caps: impl Fn(PeerId) -> u64) -> Vec<SocketAddr> {
+    let mut out: Vec<SocketAddr> = peers
+        .filter(|&(_, id)| id != owner && caps(id) & hsmp_net::net::caps::BODY != 0)
+        .map(|(a, _)| a)
+        .collect();
+    out.sort();
+    out
+}
+
+/// One validated `body` record from `from`: store the newest version, relay it once to the
+/// players that can read it.
+async fn on_body(socket: &UdpSocket, state: &Arc<ServerState>, from: SocketAddr, version: u32, payload: &[u8]) {
+    let (pid, others) = {
+        let inner = state.lock().lock().await;
+        let Some(p) = inner.peers.get(&from) else { return };
+        let others = body_pick(inner.peers.iter().map(|(a, p)| (*a, p.id)), p.id, crate::interact::peer_caps);
+        (p.id, others)
+    };
+    let msg = {
+        let mut st = body_store().lock().await;
+        match store_versioned(&mut st, K_BODY, pid, version, payload, Instant::now()) {
+            LoadoutStep::Relay => st[&pid].msg.clone(),
+            LoadoutStep::Stale | LoadoutStep::RateLimited => {
+                debug!(peer_id = pid, version, "body record dropped (stale, duplicate or rate-limited)");
+                return;
+            }
+        }
+    };
+    info!(peer_id = pid, version, receivers = others.len(), "body stored");
+    send_all(socket, state, &others, &msg).await;
+}
 /// Peer left: drop its stored loadout (peer ids are never reused, so they would otherwise
 /// accumulate per reconnect).
 pub async fn forget(pid: PeerId) {
     store().lock().await.remove(&pid);
+    body_store().lock().await.remove(&pid);
     kit_gate().lock().unwrap_or_else(|e| e.into_inner()).pending.remove(&pid);
 }
 
@@ -619,10 +670,19 @@ pub async fn replay_to(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, to: So
         let st = store().lock().await;
         others.iter().filter_map(|pid| st.get(pid).filter(|e| !e.msg.is_empty()).map(|e| e.msg.clone())).collect()
     };
-    if to_joiner.len() > 1 || !loadouts.is_empty() {
-        info!(%to, kits = to_joiner.len() - 1, loadouts = loadouts.len(), "replaying kits / loadouts to joiner");
+    // Passport bodies, only to a joiner that can read them.
+    let joiner = peers.iter().find(|(a, _, _)| *a == to).map(|(_, id, _)| *id);
+    let bodies: Vec<Vec<u8>> = match joiner {
+        Some(j) if crate::interact::peer_caps(j) & hsmp_net::net::caps::BODY != 0 => {
+            let st = body_store().lock().await;
+            others.iter().filter_map(|pid| st.get(pid).filter(|e| !e.msg.is_empty()).map(|e| e.msg.clone())).collect()
+        }
+        _ => Vec::new(),
+    };
+    if to_joiner.len() > 1 || !loadouts.is_empty() || !bodies.is_empty() {
+        info!(%to, kits = to_joiner.len() - 1, loadouts = loadouts.len(), bodies = bodies.len(), "replaying kits / loadouts to joiner");
     }
-    for m in to_joiner.into_iter().chain(loadouts) {
+    for m in to_joiner.into_iter().chain(loadouts).chain(bodies) {
         send_msg(socket, state, to, m).await;
     }
     for m in &to_all {
@@ -1390,6 +1450,32 @@ mod record_tests {
         assert_eq!(record_mode(hsmp_ipc::schema::loadout::K_KIT_STATUS, 0), None, "a bus record never travels");
     }
 
+
+    /// `body` travels on its own per-owner stream, only to peers that negotiated
+    /// caps::BODY (a beta.4 sidecar never gets a record kind it does not know), and its
+    /// store keeps the newest version per owner as the loadout store does.
+    #[test]
+    fn body_records_reach_only_capable_peers_newest_first() {
+        use crate::proto::record_mode;
+        use hsmp_net::net::caps;
+        let k = record_mode(K_BODY, 9);
+        assert_eq!(k, Some(SendMode::ReliableLatest { key: key(keys::BODY, 9) }));
+        for other in [K_LOADOUT, K_KIT, hsmp_ipc::schema::interact::K_INTERACT_GRAB_R, hsmp_ipc::schema::interact::K_INTERACT_GRAB_L] {
+            assert_ne!(record_mode(other, 9), k, "kind {other:#x} shares the body stream");
+        }
+        assert_eq!(keys::BODY, hsmp_ipc::schema::loadout::hsmp_net_keys::BODY);
+        let a = |n: u16| -> SocketAddr { format!("127.0.0.1:{n}").parse().unwrap() };
+        let peers = vec![(a(1), 3), (a(2), 4), (a(3), 5), (a(4), 6)];
+        let capsf = |id: PeerId| if id == 6 { caps::HIT_FX } else { caps::BODY | caps::HIT_FX };
+        assert_eq!(body_pick(peers.clone().into_iter(), 4, capsf), vec![a(1), a(3)], "never the owner, never a beta.4 peer");
+        let mut st = HashMap::new();
+        let t0 = Instant::now();
+        let p = vec![7u8; 80];
+        assert_eq!(store_versioned(&mut st, K_BODY, 4, 3, &p, t0), LoadoutStep::Relay);
+        let (h, q) = wire::split(&st[&4].msg).unwrap();
+        assert_eq!((h.kind, h.peer, q), (K_BODY, 4, &p[..]));
+        assert_eq!(store_versioned(&mut st, K_BODY, 4, 2, &[1u8; 80], t0), LoadoutStep::Stale);
+    }
     /// Mutated kit records that pass the record check go through the whole validator
     /// (catalogue, rules, fallback) without a panic, and always resolve to a legal kit.
     #[test]

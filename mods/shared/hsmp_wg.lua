@@ -100,14 +100,17 @@ function M.new(opts)
     -- PlayerController lookup, whichever millisecond it runs in, and two
     -- frames never share one. Fallback (no CDO / call failed): the os.clock()
     -- millisecond, in its own key space.
+    -- (The pcall bodies below are functions made once, not closures per call: these
+    -- run several times per frame in every mod.)
+    local function frame_count()
+        local ksl = UEH and UEH.GetKismetSystemLibrary and UEH.GetKismetSystemLibrary()
+        local n = ksl and ksl:GetFrameCount()
+        if type(n) == "number" then return n end
+        return nil
+    end
     local frame = opts.frame or function()
-        local id
-        pcall(function()
-            local ksl = UEH and UEH.GetKismetSystemLibrary and UEH.GetKismetSystemLibrary()
-            local n = ksl and ksl:GetFrameCount()
-            if type(n) == "number" then id = n end
-        end)
-        if id ~= nil then return id end
+        local ok, id = pcall(frame_count)
+        if ok and id ~= nil then return id end
         return "c" .. tostring(os.clock())   -- looked up per call (tests patch os.clock)
     end
     local hold_s = opts.hold_s or M.TRAVEL_HOLD_S
@@ -123,11 +126,12 @@ function M.new(opts)
     -- also dropped (untouched) on every guard drop (world change, level change
     -- requested), so a PlayerController of an old world is never handed out.
     local pcc = { pc = nil, frame = nil, drops = -1 }
+    local function get_pc() return UEH.GetPlayerController() end
     function WG.pc()
         local f = frame()
         if pcc.frame ~= nil and pcc.frame == f and pcc.drops == WG.drops then return pcc.pc end
-        local pc
-        pcall(function() pc = UEH.GetPlayerController() end)
+        local ok, pc = pcall(get_pc)
+        if not ok then pc = nil end
         WG.pc_lookups = WG.pc_lookups + 1
         pcc.pc, pcc.frame, pcc.drops = pc, f, WG.drops
         return pc
@@ -136,15 +140,18 @@ function M.new(opts)
     -- The current UWorld through this frame's WG.pc() (UEHelpers.GetWorld()
     -- is another full PlayerController walk); the UEHelpers fallback only
     -- when there is no PlayerController. nil when there is no valid world.
-    function WG.world()
+    local function cur_world()
         local w
-        pcall(function()
-            local pc = WG.pc()
-            if pc and pc:IsValid() then w = pc:GetWorld() end
-            if not (w and w:IsValid()) then w = UEH.GetWorld() end
-            if not (w and w:IsValid()) then w = nil end
-        end)
+        local pc = WG.pc()
+        if pc and pc:IsValid() then w = pc:GetWorld() end
+        if not (w and w:IsValid()) then w = UEH.GetWorld() end
+        if not (w and w:IsValid()) then w = nil end
         return w
+    end
+    function WG.world()
+        local ok, w = pcall(cur_world)
+        if ok then return w end
+        return nil
     end
 
     -- Register a handler run on every drop. It must only reset Lua
@@ -158,20 +165,27 @@ function M.new(opts)
 
     -- Fresh lookups only (this frame's WG.pc() / GetWorld); never touches an
     -- object cached beyond the current frame.
-    function WG.world_key(pc)
-        local key, name
-        pcall(function()
-            if not (pc and pc:IsValid()) then pc = WG.pc() end
-            local w
-            if pc and pc:IsValid() then w = pc:GetWorld() else pc = nil end
-            if not (w and w:IsValid()) then pc = nil; w = UEH.GetWorld() end
-            if w and w:IsValid() then
-                name = w:GetFullName()
-                key = name .. "@" .. tostring(w:GetAddress())
-                if pc then key = key .. "#" .. pc:GetFName():ToString() end
+    local function pc_name(pc) return pc:GetFName():ToString() end
+    local function key_of(pc)
+        if not (pc and pc:IsValid()) then pc = WG.pc() end
+        local w
+        if pc and pc:IsValid() then w = pc:GetWorld() else pc = nil end
+        if not (w and w:IsValid()) then pc = nil; w = UEH.GetWorld() end
+        if w and w:IsValid() then
+            local name = w:GetFullName()
+            local addr = tostring(w:GetAddress())
+            if pc then
+                local ok, pn = pcall(pc_name, pc)
+                if ok then return name .. "@" .. addr .. "#" .. pn, name end   -- one concatenation
             end
-        end)
-        return key, name
+            return name .. "@" .. addr, name
+        end
+        return nil, nil
+    end
+    function WG.world_key(pc)
+        local ok, key, name = pcall(key_of, pc)
+        if ok then return key, name end
+        return nil, nil
     end
 
     function WG.drop(why)

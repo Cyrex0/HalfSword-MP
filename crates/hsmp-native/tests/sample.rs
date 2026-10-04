@@ -534,7 +534,7 @@ fn native_sampling_g1() {
     "#);
     // ---- native servo: servo_bodies (the stand-in body loop) ----
     {
-        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/HSMPAvatars/Scripts/main.lua");
+        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/HSMPAvatars/Scripts/avatars_pure.lua");
         let s = std::fs::read_to_string(p).unwrap();
         let a0 = s.find("function PURE.qmul(").unwrap();
         let b0 = s[a0..].find("function PURE.fk_retarget(").unwrap() + a0;

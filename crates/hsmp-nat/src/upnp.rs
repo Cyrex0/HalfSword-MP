@@ -1,12 +1,16 @@
-//! UPnP Internet Gateway Device: SSDP discovery, the device description, and the three SOAP
+//! UPnP Int    let text = read_body(r).await.ok_or_else(|| SoapError::Http(format!("HTTP {status}: unreadable or oversized answer")))?;rnet Gateway Device: SSDP discovery, the device description, and the three SOAP
 //! actions of WANIPConnection / WANPPPConnection that are used (AddPortMapping,
 //! DeletePortMapping, GetExternalIPAddress). The message builders and parsers are pure; the
 //! HTTP goes through reqwest (plain HTTP on the LAN, never a proxy).
 
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 pub const SSDP_ADDR: &str = "239.255.255.250:1900";
+
+/// Largest description or SOAP answer read from a device (real ones are a few KiB). Anything
+/// on the LAN can answer an M-SEARCH, so its texts are bounded before they are parsed.
+pub const MAX_BODY: usize = 64 * 1024;
 
 /// Search targets, most specific first (IGD v1 and v2 both carry WANIPConnection:1/2).
 pub const SEARCH_TARGETS: &[&str] = &[
@@ -36,6 +40,33 @@ pub fn ssdp_location(resp: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// The host of an `http://host[:port][/path]` URL, lower-cased ("" hosts and other schemes:
+/// None). IPv6 literals keep their brackets off.
+pub fn url_host(url: &str) -> Option<String> {
+    let u = url.trim();
+    if !u.get(..7)?.eq_ignore_ascii_case("http://") {
+        return None;
+    }
+    let auth = u[7..].split(['/', '?', '#']).next()?;
+    if auth.contains('@') {
+        return None;
+    }
+    let host = match auth.strip_prefix('[') {
+        Some(v6) => v6.split_once(']')?.0,
+        None => auth.rsplit_once(':').map_or(auth, |(h, _)| h),
+    };
+    (!host.is_empty()).then(|| host.to_ascii_lowercase())
+}
+
+/// The LOCATION of an SSDP answer, only when it points at the device that sent the answer:
+/// anyone who can reach the discovery socket can answer, and the description, the control
+/// URL and every SOAP call follow from this URL.
+pub fn device_location(resp: &str, from: IpAddr) -> Option<String> {
+    let loc = ssdp_location(resp)?;
+    let host = url_host(&loc)?;
+    (host.parse::<IpAddr>().ok() == Some(from)).then_some(loc)
 }
 
 /// The text of every element named `name` (any namespace prefix), in document order.
@@ -103,14 +134,19 @@ pub fn join_url(base: &str, rel: &str) -> String {
     if dir.ends_with('/') { format!("{dir}{rel}") } else { format!("{dir}/{rel}") }
 }
 
-/// The WANIPConnection (preferred) or WANPPPConnection service of an IGD description.
+/// The WANIPConnection (preferred) or WANPPPConnection service of an IGD description. A
+/// control URL on another host than the description's (`location`) is ignored.
 pub fn find_wan_service(xml: &str, location: &str) -> Option<WanService> {
     let base = element(xml, "URLBase").filter(|b| !b.is_empty()).unwrap_or(location).to_string();
+    let device = url_host(location)?;
     let mut ppp = None;
     for svc in elements(xml, "service") {
         let Some(ty) = element(svc, "serviceType") else { continue };
         let Some(ctl) = element(svc, "controlURL") else { continue };
         let s = WanService { service_type: ty.to_string(), control_url: join_url(&base, ctl) };
+        if url_host(&s.control_url).as_deref() != Some(device.as_str()) {
+            continue;
+        }
         if ty.contains(":WANIPConnection:") {
             return Some(s);
         }
@@ -201,6 +237,21 @@ fn http() -> reqwest::Client {
     reqwest::Client::builder().no_proxy().timeout(Duration::from_secs(4)).build().unwrap_or_default()
 }
 
+/// The body of `r` as text, at most MAX_BODY bytes (None beyond that or on a read error).
+async fn read_body(mut r: reqwest::Response) -> Option<String> {
+    if r.content_length().is_some_and(|n| n > MAX_BODY as u64) {
+        return None;
+    }
+    let mut v = Vec::new();
+    while let Some(c) = r.chunk().await.ok()? {
+        if v.len() + c.len() > MAX_BODY {
+            return None;
+        }
+        v.extend_from_slice(&c);
+    }
+    Some(String::from_utf8_lossy(&v).into_owned())
+}
+
 /// POST one SOAP action; the response body on 200.
 pub async fn soap(svc: &WanService, action: &str, body: String) -> Result<String, SoapError> {
     let r = http()
@@ -213,7 +264,7 @@ pub async fn soap(svc: &WanService, action: &str, body: String) -> Result<String
         .map_err(|e| SoapError::Http(e.to_string()))?;
     let ok = r.status().is_success();
     let status = r.status();
-    let text = r.text().await.map_err(|e| SoapError::Http(e.to_string()))?;
+    let text = read_body(r).await.ok_or_else(|| SoapError::Http(format!("HTTP {status}: unreadable or oversized answer")))?;
     if ok {
         return Ok(text);
     }
@@ -241,13 +292,13 @@ pub async fn discover(ssdp: SocketAddr, local: Ipv4Addr, wait: Duration) -> Opti
             return None;
         }
         let Ok(Ok((n, from))) = tokio::time::timeout(left, sock.recv_from(&mut buf)).await else { return None };
-        let Some(loc) = ssdp_location(&String::from_utf8_lossy(&buf[..n])) else { continue };
+        let Some(loc) = device_location(&String::from_utf8_lossy(&buf[..n]), from.ip()) else { continue };
         if tried.contains(&loc) || tried.len() >= 8 {
             continue;
         }
         tried.push(loc.clone());
         let Ok(r) = http().get(&loc).send().await else { continue };
-        let Ok(xml) = r.text().await else { continue };
+        let Some(xml) = read_body(r).await else { continue };
         if let Some(svc) = find_wan_service(&xml, &loc) {
             let dev = match from.ip() {
                 std::net::IpAddr::V4(v) => v,
@@ -351,5 +402,79 @@ pub(crate) mod tests {
             <errorDescription>ConflictInMappingEntry</errorDescription></UPnPError></detail></s:Fault></s:Body></s:Envelope>"#;
         assert_eq!(soap_error(fault), Some(err::CONFLICT));
         assert_eq!(soap_error("<html>500</html>"), None);
+    }
+
+    /// An HTTP server on `ip` serving `body` for every request; returns its port.
+    async fn serve_desc(ip: &str, body: String) -> u16 {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let l = tokio::net::TcpListener::bind((ip, 0)).await.unwrap();
+        let port = l.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut s, _)) = l.accept().await else { return };
+                let body = body.clone();
+                tokio::spawn(async move {
+                    let mut b = [0u8; 2048];
+                    let _ = s.read(&mut b).await;
+                    let resp = format!("HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nConnection: close\r\n\r\n{body}");
+                    let _ = s.write_all(resp.as_bytes()).await;
+                });
+            }
+        });
+        port
+    }
+
+    /// An SSDP responder on 127.0.0.1 that answers every M-SEARCH with `location`.
+    async fn ssdp_responder(location: String) -> SocketAddr {
+        let s = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let a = s.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut b = [0u8; 2048];
+            loop {
+                let Ok((n, from)) = s.recv_from(&mut b).await else { return };
+                if b[..n].starts_with(b"M-SEARCH") {
+                    let ans = format!("HTTP/1.1 200 OK\r\nST: upnp:rootdevice\r\nLOCATION: {location}\r\n\r\n");
+                    let _ = s.send_to(ans.as_bytes(), from).await;
+                }
+            }
+        });
+        a
+    }
+
+    #[test]
+    fn device_location_must_be_the_answering_device() {
+        let ans = "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.1:5000/rootDesc.xml\r\n\r\n";
+        assert!(device_location(ans, "192.168.1.1".parse().unwrap()).is_some());
+        assert!(device_location(ans, "192.168.1.66".parse().unwrap()).is_none());
+        let meta = "HTTP/1.1 200 OK\r\nLOCATION: http://169.254.169.254/latest/meta-data\r\n\r\n";
+        assert!(device_location(meta, "192.168.1.1".parse().unwrap()).is_none());
+        assert_eq!(url_host("http://u@192.168.1.1/x"), None);
+        assert_eq!(url_host("http://[fe80::1]:5000/x").as_deref(), Some("fe80::1"));
+        // a description that sends the SOAP calls to another host
+        let x = MINIUPNPD.replace("<controlURL>/ctl/IPConn</controlURL>", "<controlURL>http://203.0.113.9/ctl</controlURL>");
+        assert_eq!(find_wan_service(&x, "http://192.168.1.1:5000/rootDesc.xml"), None);
+        let x = format!("<root><URLBase>http://203.0.113.9/</URLBase>{MINIUPNPD}</root>");
+        assert_eq!(find_wan_service(&x, "http://192.168.1.1:5000/rootDesc.xml"), None);
+    }
+
+    /// An SSDP answer pointing at another host is not followed (no request goes there).
+    #[tokio::test]
+    async fn discovery_ignores_a_location_on_another_host() {
+        let hport = serve_desc("127.0.0.2", MINIUPNPD.to_string()).await;
+        let ssdp = ssdp_responder(format!("http://127.0.0.2:{hport}/rootDesc.xml")).await;
+        assert!(discover(ssdp, Ipv4Addr::LOCALHOST, Duration::from_millis(800)).await.is_none());
+        // the same device answering for itself is found
+        let hport = serve_desc("127.0.0.1", MINIUPNPD.to_string()).await;
+        let ssdp = ssdp_responder(format!("http://127.0.0.1:{hport}/rootDesc.xml")).await;
+        assert!(discover(ssdp, Ipv4Addr::LOCALHOST, Duration::from_millis(800)).await.is_some());
+    }
+
+    /// A description larger than MAX_BODY is refused instead of read into memory.
+    #[tokio::test]
+    async fn oversized_description_is_refused() {
+        let big = format!("{}{MINIUPNPD}", " ".repeat(4 * MAX_BODY));
+        let hport = serve_desc("127.0.0.1", big).await;
+        let ssdp = ssdp_responder(format!("http://127.0.0.1:{hport}/rootDesc.xml")).await;
+        assert!(discover(ssdp, Ipv4Addr::LOCALHOST, Duration::from_millis(800)).await.is_none());
     }
 }

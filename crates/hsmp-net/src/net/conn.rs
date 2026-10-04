@@ -300,6 +300,10 @@ pub struct Conn {
     /// A PATH_CHALLENGE to answer, and the newest PATH_RESPONSE received.
     path_resp_tx: Option<[u8; 8]>,
     path_resp_rx: Option<[u8; 8]>,
+    /// Scratch buffers reused across packets: the payload being assembled,
+    /// and the decrypted payload of the packet being received.
+    tx_buf: Vec<u8>,
+    rx_buf: Vec<u8>,
 }
 
 impl Conn {
@@ -360,6 +364,8 @@ impl Conn {
             silence_base: now,
             path_resp_tx: None,
             path_resp_rx: None,
+            tx_buf: Vec::new(),
+            rx_buf: Vec::new(),
             cfg,
             caps: 0,
             largest_rx_at: now,
@@ -580,16 +586,17 @@ impl Conn {
         self.stats.rttvar_ms = self.rttvar;
     }
 
-    fn open_rx(&mut self, seq: u64, phase: bool, aad: &[u8], ct: &[u8]) -> Option<Vec<u8>> {
+    /// Decrypt into `pt` (a reused buffer); false if no key opens it.
+    fn open_rx(&mut self, seq: u64, phase: bool, aad: &[u8], ct: &[u8], pt: &mut Vec<u8>) -> bool {
         if phase == self.rx.phase {
-            return crypto::open(&self.rx.cipher, seq, aad, ct);
+            return crypto::open_into(&self.rx.cipher, seq, aad, ct, pt);
         }
         if self.rx.next.is_none() {
             let s = crypto::next_secret(&self.rx.secret);
             self.rx.next = Some((s, crypto::cipher(&s)));
         }
         let (ns, nc) = self.rx.next.as_ref().expect("set above");
-        if let Some(pt) = crypto::open(nc, seq, aad, ct) {
+        if crypto::open_into(nc, seq, aad, ct, pt) {
             let (ns, nc) = (*ns, nc.clone());
             let old = std::mem::replace(&mut self.rx.cipher, nc);
             self.rx.prev = Some(old);
@@ -597,9 +604,9 @@ impl Conn {
             self.rx.phase = phase;
             self.rx.next = None;
             self.stats.key_updates_rx += 1;
-            return Some(pt);
+            return true;
         }
-        self.rx.prev.as_ref().and_then(|p| crypto::open(p, seq, aad, ct))
+        self.rx.prev.as_ref().is_some_and(|p| crypto::open_into(p, seq, aad, ct, pt))
     }
 
     /// Process one incoming datagram addressed to this connection.
@@ -631,15 +638,18 @@ impl Conn {
             }
         }
         let (aad, ct) = dg.split_at(DATA_HEADER_LEN);
-        let Some(pt) = self.open_rx(seq, h.flags & FLAG_KEY_PHASE != 0, aad, ct) else {
+        let mut pt = std::mem::take(&mut self.rx_buf);
+        if !self.open_rx(seq, h.flags & FLAG_KEY_PHASE != 0, aad, ct, &mut pt) {
+            self.rx_buf = pt;
             self.stats.auth_failed += 1;
             return Err(Drop::Auth);
-        };
+        }
         self.last_recv = now;
         self.stats.pkts_recv += 1;
         self.stats.bytes_recv += dg.len() as u64;
         let mut out = Vec::new();
         let parsed = self.inbox.on_payload(now, seq, &pt, &mut out);
+        self.rx_buf = pt;
         // A payload whose fragments do not fit the reassembly limits is
         // left unprocessed and NOT marked received, so it is never acked and
         // the sender retransmits its reliable content (no protocol violation
@@ -743,8 +753,11 @@ impl Conn {
             }
             any = true;
         }
+        // Most bits repeat acks already processed: only packets at or above
+        // the oldest one still outstanding can be newly acked.
+        let oldest = self.sent.keys().next().copied().unwrap_or(u64::MAX);
         for i in 0..32u64 {
-            if (bits >> i) & 1 == 1 && largest > i {
+            if (bits >> i) & 1 == 1 && largest > i && largest - 1 - i >= oldest {
                 if let Some(p) = self.sent.remove(&(largest - 1 - i)) {
                     for f in p.frags {
                         self.out.on_frag_acked(f);
@@ -887,8 +900,8 @@ impl Conn {
         dg.extend_from_slice(&ack.to_le_bytes());
         dg.extend_from_slice(&bits.to_le_bytes());
         dg.push(flags);
-        let ct = crypto::seal(&self.tx.cipher, seq, &dg, payload);
-        dg.extend_from_slice(&ct);
+        dg.extend_from_slice(payload);
+        crypto::seal_in_place(&self.tx.cipher, seq, DATA_HEADER_LEN, &mut dg);
         self.next_seq += 1;
         self.tx.count += 1;
         self.last_send = now;
@@ -905,6 +918,17 @@ impl Conn {
 
     /// Produce the next datagram to send, if any. Call until `None`.
     pub fn poll_transmit(&mut self, now: u64) -> Option<Vec<u8>> {
+        // The payload is assembled in a buffer kept across calls: a poll
+        // with nothing to send allocates nothing.
+        let mut payload = std::mem::take(&mut self.tx_buf);
+        payload.clear();
+        payload.reserve(super::MAX_PLAINTEXT);
+        let dg = self.poll_transmit_with(now, &mut payload);
+        self.tx_buf = payload;
+        dg
+    }
+
+    fn poll_transmit_with(&mut self, now: u64, payload: &mut Vec<u8>) -> Option<Vec<u8>> {
         match self.state {
             ConnState::Closed { .. } => return None,
             ConnState::Closing { code } => {
@@ -953,7 +977,6 @@ impl Conn {
         self.inbox.expire(now);
         self.detect_losses(now);
         self.maybe_rekey(now);
-        let mut payload = Vec::with_capacity(super::MAX_PLAINTEXT);
         // A PATH_RESPONSE goes out at once, paced or not.
         if let Some(t) = self.path_resp_tx.take() {
             payload.push(channel::CK_PATH_RESPONSE);
@@ -965,7 +988,7 @@ impl Conn {
         let frags = if !has_data {
             Vec::new()
         } else if self.pacer_ready(now) {
-            self.out.fill(&mut payload, self.next_seq)
+            self.out.fill(payload, self.next_seq)
         } else {
             self.cc_limited = true;
             self.stats.paced += 1;
@@ -1004,7 +1027,7 @@ impl Conn {
             payload.push(CK_ACK_DELAY);
             payload.extend_from_slice(&d.to_le_bytes());
         }
-        let dg = self.seal_packet(now, &payload, frags, track);
+        let dg = self.seal_packet(now, payload, frags, track);
         if self.cfg.pacing && has_data {
             self.cc_tokens -= dg.len() as f64;
         }
@@ -1058,7 +1081,9 @@ impl Conn {
         if self.path_resp_tx.is_some() || matches!(self.state, ConnState::Closing { .. }) {
             t = now;
         }
-        if self.out.latest_pending() > 0 {
+        // Reliable data counts only while the pacer is what holds it back (a
+        // backlog waiting for the send window waits for an ack, not a timer).
+        if self.out.latest_pending() > 0 || (self.cc_tokens < 0.0 && self.out.reliable_unsent()) {
             t = t.min(self.pacer_ready_at(now));
         }
         t.max(now)
@@ -1075,7 +1100,7 @@ impl Conn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::net::channel::{CH_ORDERED, CH_RELIABLE};
+    use crate::net::channel::{CH_ORDERED, CH_RELIABLE, SEND_WINDOW};
 
     fn pair(cfg: ConnConfig) -> (Conn, Conn) {
         let s = crypto::derive(&[1; 32], &[2; 32], &[3; 32]);
@@ -1267,6 +1292,41 @@ mod tests {
         }
         let srtt = s.stats().srtt_ms;
         assert!(srtt >= 100.0 - MAX_ACK_DELAY_MS as f64 - 0.5, "talked down to {srtt}");
+    }
+
+    /// A reliable backlog held back by the pacer is due again when the pacer
+    /// refills, not at the next timer (RTO, keepalive): a caller sleeping
+    /// until `next_timeout` must not stall a world sync for ~300 ms per window.
+    #[test]
+    fn next_timeout_wakes_for_paced_reliable_data() {
+        let (mut c, _s) = pair(ConnConfig::default());
+        for _ in 0..40 {
+            c.send(SendMode::Reliable, vec![7; 1100]).unwrap();
+        }
+        let mut sent = 0;
+        while c.poll_transmit(0).is_some() {
+            sent += 1;
+        }
+        assert!(sent < 40, "the pacer held part of the burst ({sent} sent)");
+        assert!(c.out.reliable_unsent());
+        let due = c.next_timeout(0);
+        let refill = c.pacer_ready_at(0);
+        assert!(refill > 0 && refill <= 5, "pacer refills in {refill} ms");
+        assert_eq!(due, refill, "next_timeout {due} ms, pacer ready at {refill} ms");
+        assert!(c.poll_transmit(due).is_some(), "data goes out when due");
+
+        // A backlog beyond the send window waits for acks: no busy wake-ups.
+        let (mut c, _s) = pair(ConnConfig::default());
+        for _ in 0..(SEND_WINDOW + 40) {
+            c.send(SendMode::Reliable, vec![7; 10]).unwrap();
+        }
+        let mut t = 0;
+        while t < 100 {
+            while c.poll_transmit(t).is_some() {}
+            t += 10;
+        }
+        assert!(c.out.reliable_unsent(), "held by the window");
+        assert!(c.next_timeout(t) > t, "spins on a window-blocked backlog");
     }
 
     #[test]

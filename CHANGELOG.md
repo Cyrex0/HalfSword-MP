@@ -8,6 +8,20 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+### Changed
+
+- Less work per frame in the game mods: the stand-in driver, the pose sender, the world
+  replication tick and the IPC facade allocate far less Lua garbage per frame (the stand-in
+  driver about 25 times less), and the pose sender makes one native call per sample.
+- Damage: two blows that the game would gate in single player are gated in MP too when their
+  replays arrive more than 0.2 s apart; a stand-in that took a blow natively no longer turns
+  the next frames of the same contact into extra claims.
+- Tools: `hsmp-combat-sim --hvf` / `--hvf-logs` measure the server's Hit Velocity ceiling
+  (`hit_vel_factor`) from the sim and from in-game logs; the impact rescale log line carries the
+  weapon class.
+- Stand-ins get their owner's body: bone masses, Mass Scale and Muscle Rate (new `body`
+  record, capability `BODY`; beta.4 peers neither send nor receive it). Height is carried but
+  not applied yet.
 - The lobby menu waits briefly for the server's answer to a command before it shows a result
   read from the session state, so a lost packet at high ping no longer shows a guessed result.
 - Developer: `hsmp-gate g0 --skip <checks>`; CI runs G0, the end-to-end suite and clippy as

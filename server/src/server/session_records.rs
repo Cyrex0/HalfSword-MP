@@ -189,9 +189,9 @@ async fn on_chat(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: Socket
     if trimmed.is_empty() || trimmed.chars().count() > 256 { return; }
     let (from_id, from_nick, addrs) = {
         let mut inner = state.inner.lock().await;
-        let st = inner.server_tick;
+        let st = inner.now_ms;
         let (fid, fnick) = match inner.peers.get_mut(&from) {
-            Some(p) => { p.last_seen_tick = st; (p.id, p.nick.clone()) }
+            Some(p) => { p.last_seen_ms = st; (p.id, p.nick.clone()) }
             None => return,
         };
         if !super::dispatch::within_budget(state, fid, crate::validate::rate::Kind::Chat, 1.0) {

@@ -1,7 +1,7 @@
 //! What this `hsmp-server` advertises about itself — to the master registry
 //! (master_client heartbeat) and to server-browser UDP queries (query.rs).
 
-use crate::query::{self, QueryInfo, RateLimiter};
+use crate::query::{self, QueryInfo, QueryLimiter};
 use crate::server::ServerState;
 use std::net::SocketAddr;
 use std::sync::{Mutex, OnceLock};
@@ -25,8 +25,8 @@ pub struct Advertised {
 }
 
 static ADVERTISED: OnceLock<Advertised> = OnceLock::new();
-/// Server-wide query reply budget: protects the recv loop from floods.
-static QUERY_RL: OnceLock<Mutex<RateLimiter>> = OnceLock::new();
+/// Query reply budget (per source, then server-wide): protects the recv loop from floods.
+static QUERY_RL: OnceLock<Mutex<QueryLimiter>> = OnceLock::new();
 
 pub fn init(a: Advertised) {
     let _ = ADVERTISED.set(a);
@@ -96,9 +96,9 @@ pub async fn answer(socket: &UdpSocket, state: &ServerState, from: SocketAddr, d
         return;
     };
     let ok = QUERY_RL
-        .get_or_init(|| Mutex::new(RateLimiter::new(200.0, 400.0)))
+        .get_or_init(|| Mutex::new(QueryLimiter::new()))
         .lock()
-        .map(|mut rl| rl.allow())
+        .map(|mut rl| rl.allow_at(from.ip(), std::time::Instant::now()))
         .unwrap_or(false);
     if !ok {
         return;

@@ -97,7 +97,7 @@ fn parse_args() -> Args {
         secs: 10,
         port: 47777,
         root_ts: false,
-        tick_hz: 30,
+        tick_hz: 60,
         spread: 3000.0,
         v5_attack: false,
         target: "127.0.0.1:7777".into(),
@@ -112,7 +112,7 @@ fn parse_args() -> Args {
             "--clients" => { a.clients = next.split(',').filter_map(|s| s.parse().ok()).collect(); i += 1; }
             "--secs" => { a.secs = next.parse().unwrap_or(10); i += 1; }
             "--port" => { a.port = next.parse().unwrap_or(47777); i += 1; }
-            "--tick-hz" => { a.tick_hz = next.parse().unwrap_or(30); i += 1; }
+            "--tick-hz" => { a.tick_hz = next.parse().unwrap_or(60); i += 1; }
             "--spread" => { a.spread = next.parse().unwrap_or(3000.0); i += 1; }
             "--root-ts" => { a.root_ts = true; }
             "--v5-attack" => { a.v5_attack = true; }

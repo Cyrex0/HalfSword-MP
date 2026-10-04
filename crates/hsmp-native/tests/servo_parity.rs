@@ -1,5 +1,5 @@
 //! Servo parity: the native servo (`hsmp_native::servo::servo`) against Lua's `PURE.servo`
-//! taken verbatim from mods/HSMPAvatars/Scripts/main.lua (golden vectors generated here, both
+//! taken verbatim from mods/HSMPAvatars/Scripts/avatars_pure.lua (golden vectors generated here, both
 //! sides fed the same numbers, results compared bit for bit).
 
 use std::ffi::{CStr, CString};
@@ -9,8 +9,8 @@ use mlua::ffi;
 
 /// The Lua source of PURE.qmul .. PURE.servo (qmul, qrot, qconj, qangle, servo).
 fn pure_servo_src() -> String {
-    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/HSMPAvatars/Scripts/main.lua");
-    let s = std::fs::read_to_string(p).expect("HSMPAvatars main.lua");
+    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/HSMPAvatars/Scripts/avatars_pure.lua");
+    let s = std::fs::read_to_string(p).expect("HSMPAvatars avatars_pure.lua");
     let a = s.find("function PURE.qmul(").expect("PURE.qmul in HSMPAvatars");
     let b = s[a..].find("function PURE.fk_retarget(").expect("PURE.fk_retarget after PURE.servo") + a;
     s[a..b].to_string()

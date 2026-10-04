@@ -731,9 +731,9 @@ mod lua_ref_tests {
     /// stand-in's checked parent offsets); it must stay equal.
     #[test]
     fn lua_reference_skeleton_matches() {
-        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/HSMPAvatars/Scripts/main.lua");
-        let src = std::fs::read_to_string(&p).expect("HSMPAvatars main.lua");
-        let at = src.find("PURE.V2_REF_T = {").expect("PURE.V2_REF_T in main.lua");
+        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../mods/HSMPAvatars/Scripts/avatars_pure.lua");
+        let src = std::fs::read_to_string(&p).expect("HSMPAvatars avatars_pure.lua");
+        let at = src.find("PURE.V2_REF_T = {").expect("PURE.V2_REF_T in avatars_pure.lua");
         let body = &src[at + "PURE.V2_REF_T = {".len()..];
         let body = &body[..body.find("\n}").expect("end of PURE.V2_REF_T")];
         let nums: Vec<f32> = body.split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))

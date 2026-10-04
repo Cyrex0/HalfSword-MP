@@ -35,6 +35,7 @@ Record flow (G2S = game to sidecar over shared memory, C2S / S2C = network):
 | `death_report` / `death_ack` | G2S, C2S / S2C | the owner's own death, resent until acked |
 | `death` | S2C, S2G | a server-declared death |
 | `vitals` / `peer_vitals` | slot, C2S, S2C | see [vitals.md](vitals.md) |
+| `body` | G2S, C2S, S2C, S2G | the owner's passport body for its stand-ins (§5 "Stand-in body"); only with `caps::BODY` |
 
 ## 2. Simulator (`crates/hsmp-combat-sim`)
 
@@ -82,6 +83,8 @@ cargo run --release -p hsmp-combat-sim -- --seeds 3 [--profiles a,b] [--legacy] 
 cargo run --release -p hsmp-combat-sim -- --debug PROFILE [--players N] [--seed S] [--cheat NAME]
 cargo run --release -p hsmp-combat-sim -- --parrystats PROFILE
 cargo run --release -p hsmp-combat-sim -- --health PROFILE
+cargo run --release -p hsmp-combat-sim -- --hvf PROFILE         # hit_vel_factor calibration (§7)
+cargo run --release -p hsmp-combat-sim -- --hvf-logs FILE...    # ... from UE4SS / server logs
 ```
 
 The assertions in `tests/combat_sim.rs`:
@@ -233,7 +236,8 @@ The server's Health-loss cap for a claim is that formula with every unknown at i
 - **Quality and alignment** are taken at ×1.1 (best quality) and ×2.333 (blunt alignment).
 - **Velocity** is the server-measured striking speed, × `SPEED_TOL` 1.0.
 - **Impulse factor** (`hit_vel_factor`): dagger 1.2, sword 1.8, axe / blunt / polearm / shield 2.5,
-  unarmed or unknown 3.0. Not calibrated against the game yet.
+  unarmed or unknown 3.0. Not calibrated against the game yet; the procedure is in §7
+  ("Calibrating `hit_vel_factor`").
 - **Armour** is the weakest piece of each layer: padded 5/20/2, mail 1/150/15, plate (gauntlets)
   10/200/75 (blunt / cut / stab).
 - **Height** factor hm is taken at its maximum, 1.125.
@@ -272,7 +276,9 @@ follows from that.
   `Temp Disable Damage` (Collision Hit's gate) are re-asserted every tick; anything that still lands
   is put back from the tick's baseline in the callback. Only real damage (a part health down, a
   bleed up) counts, so the game's own regeneration is never "put back". A weapon a stand-in dropped
-  and I pick up gets its gate lifted.
+  and I pick up gets its gate lifted. The put-back keeps the stand-in's Deal Complex Damage contact
+  gate (`Last Complex Damage Impulse` / `Bone`) as the call left it: that gate decides which of my
+  calls are claims.
 - **Team.** A stand-in spawns with the local player's `Team Int`, and Collision Hit treats a
   non-zero matching team as friendly fire: Cutting Rate 0 and Hit Velocity / Impulse ×0.1, so every
   blow would be a weak blunt touch. Each stand-in therefore gets its own team (100 + peer), and mine
@@ -289,7 +295,9 @@ follows from that.
   `Last Complex Damage Impulse` is cleared (the claim already passed that gate on the attacker's
   screen), and Get Damage's per-bone `Last Damage Taken` is kept only after a blow of the same
   attacker on the same bone less than 0.2 s earlier on the attacker's clock (`BF.GD_GATE_MS`, the
-  game's RetriggerableDelay); otherwise it is cleared.
+  game's RetriggerableDelay); otherwise it is cleared. When it is kept but the replays arrive more
+  than 0.2 s apart on my clock, the game's own reset has already cleared it: the replay writes the
+  earlier blow's value and bone back, so the gate holds as in solo.
 - **Where the blow lands.** Deal Complex Damage maps the hit point into the hit bone's space and
   traces the armour layers covering that spot (layers stack). The claim carries `offset`, `normal`,
   `velocity` and `impulse` in the hit bone's frame (flag bit 6, `BF.LOCAL`; from
@@ -297,13 +305,22 @@ follows from that.
   them back with its own bone. A world offset re-added to a victim that turned or leaned since the
   attacker saw it put the blow somewhere else on the body: under the helmet instead of the open face,
   on the back plate instead of the gap, or inside the body where the trace finds nothing.
-- **Stand-in body (open).** A stand-in wears the owner's armour exactly: the same slots and proxy
-  collisions with the same Def tags (measured in game, combat-parity.md §3). It keeps the pooled foe's
-  passport body, though: Height Rate, Muscle Rate, `Mass Scale (Set in BP)`, and bone masses up to
-  2.6× the owner's. The replay's damage uses the victim's own body. The physical normal impulse the
-  attacker's blade gets from the stand-in does not, and Hit Velocity takes the larger of that impulse
-  and the weapon's speed. Fixing this needs the owner's passport Height and Weight in the `loadout`
-  record (HSMPLoadout), applied before the stand-in's body setup.
+- **Stand-in body.** A stand-in wears the owner's armour exactly: the same slots and proxy
+  collisions with the same Def tags (measured in game, combat-parity.md §3). As a pooled Willie it
+  kept the foe's passport body: Height Rate, Muscle Rate, `Mass Scale (Set in BP)`, and bone masses
+  up to 2.6× the owner's. The replay's damage uses the victim's own body, but the normal impulse
+  the attacker's blade gets from the stand-in does not, and Hit Velocity takes the larger of that
+  impulse and the weapon's speed. HSMPCombat (`standin_body.lua`) now writes my own body into the
+  `body` record every 2 s (a new version only when it changed: rates, BP mass and character
+  scales, one row per simulated body with its mass in kg and mass scale). The record travels only
+  on connections that negotiated `caps::BODY` (beta.4 peers neither send nor receive it; kind
+  0x0515, stream 0x89, newest version per owner, replayed to capable joiners). Once a second each
+  stand-in gets its owner's rates and every bone whose mass differs by more than 1 % gets the mass
+  scale that gives it the owner's mass (`SetMassScale` on its `Mesh`, computed from the mass it has
+  now, so armour weight and bone size are included). A mass the game puts back is set again and
+  counted in the log line. The geometry (Character Scale, the stand-in's height) is carried but not
+  applied: HSMPAvatars measures the stand-in's bone offsets once per drive, and a mesh rescaled
+  under it would stretch every joint.
 - **What struck.** Flag bit 7 (`BF.WEAPON`): the striking component was a weapon. The replay passes
   the attacker's weapon (its first collision component; my own for the hit fx of my blow) or its body
   mesh as Collided Component: Get Damage reads the 'Weapon' tag (consciousness of light blows,
@@ -380,6 +397,49 @@ pass unchanged unless physically impossible:
 - **Ledger booking** (`combat::hit_loss`) for an armour-stage claim is the server's own replay
   estimate, `damage::replay_loss` at `HM_MIN` 0.875 through the victim's armour. It must never exceed
   the real replay (§8).
+
+**Calibrating `hit_vel_factor`.** The factor bounds how far an honest Hit Velocity (the larger
+of the weapon's COM speed and the contact's normal impulse, which scales with both bodies'
+masses) can exceed the relative speed. It is a measured quantity with two parts: the game's
+physics ratio |Hit Velocity| / relative speed, and the server's error on the relative speed. The
+tool is in `crates/hsmp-combat-sim` (`src/calib.rs`, tests in `tests/calib.rs`, which also prove
+that its ceiling is the server's `clamp_impact_ex`):
+
+1. **Offline, network part.** `cargo run --release -p hsmp-combat-sim -- --hvf typical --seeds 3`
+   (and `wifi`): per class, the factor every honest armour-stage claim needs against the server's
+   relative speed, the share the shipped factor cuts, the share it would cut against the true
+   relative speed, and `net p99` (true / server relative speed at p99). The sim's physics is the
+   shipped factor itself (`game::draw_contact`), so the sim measures the server's error, not the
+   game.
+2. **In game, physics part.** Dev deploy (HSMPParity on), both instances in an MP session, real
+   fights per weapon class (or `parity near` / `swing`): HSMPParity logs every Deal Complex Damage
+   the game makes (`DCD on ... by <class> wp=<weapon actor>: |vel| |imp| rel`, up to 3000 per
+   session), and the server logs `combat: impact rescale` with `class`, the claimed Hit Velocity,
+   the peak and the relative speed (5 lines/s budget). Also fight the same weapons in solo with
+   HSMPParity on (its DCD lines need no MP).
+3. `cargo run --release -p hsmp-combat-sim -- --hvf-logs UE4SS.log server.log ...` prints the same
+   table for `Game` (solo / attacker-screen physics) and `Server` (what the ceiling really saw)
+   samples. A class gets a recommendation (p99.9 of the needed factor × 1.1) only from 200 binding
+   samples.
+4. A candidate factor must also keep `cargo test -p hsmp-combat-sim --test combat_sim
+   cheats_rejected` green: a looser ceiling is exactly what `DamageInflate` exploits.
+
+First numbers (sim, 3 seeds; no in-game DCD capture yet, so the factor stays as shipped):
+
+| profile | class | claims | shipped cuts | ... against the true rel | ... with `hvf · max(peak, rel)` | net p99 |
+|---|---|---|---|---|---|---|
+| typical | sword | 476 | 5.0 % | 1.3 % | 0.8 % | 2.06 |
+| typical | axe | 166 | 3.0 % | 1.2 % | 0.6 % | 2.04 |
+| typical | blunt | 139 | 8.6 % | 2.2 % | 2.9 % | 2.05 |
+| typical | polearm | 299 | 6.0 % | 1.3 % | 2.3 % | 2.41 |
+| wifi | sword | 472 | 3.6 % | 1.5 % | 0.9 % | 2.02 |
+| wifi | polearm | 283 | 7.1 % | 1.1 % | 1.1 % | 3.33 |
+
+Most of the honest blows the ceiling cuts are cut by the server's relative speed (lag comp's view
+of the victim's body), not by the physics. The looser form `hvf · max(peak, rel)` was tried: it
+spares most of them, but `cheats_rejected` then lets 14 of 187 `DamageInflate` claims through
+(0.5 relative-speed floor of the peak: 3, 0.7: 5; the bar is 1). The ceiling therefore stays
+`max(peak, hvf · rel)`; a better relative speed from lag comp is the way to recover those blows.
 
 **Parity (sim, `damage_parity_with_solo`).** A paired Monte Carlo median of hits-to-kill per weapon
 class × victim armour × zone. A cell needs ≥ 20 contacts and a solo TTK within the cap; at least 45

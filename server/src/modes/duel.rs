@@ -10,7 +10,7 @@
 //! | Live: alive = loaded participants; loaded late joiners become participants | L1662-1699 | `on_round_start(fighters)` |
 //! | Death only while combat is open (live, or settling); once per round | L1245-1278 | `RoundCore::death` |
 //! | Round ends when 0 stand, or (2+ participants) <= 1 stands; solo round ends only at death | L1280-1297 | `RoundCore::check_round_end` |
-//! | 400 ms trade settle (`SETTLE_TICKS = 12` @ 30 Hz); combat stays open | L1242-1243, L1246-1248 | `SETTLE_MS`, `ModeStatus::Settling` |
+//! | 400 ms trade settle (match_core `SETTLE_MS`); combat stays open | L1242-1243, L1246-1248 | `SETTLE_MS`, `ModeStatus::Settling` |
 //! | Settle deadline: exactly 1 standing wins (+1), else draw (mutual kill) | L1299-1331 | `RoundCore::finalize` |
 //! | A draw scores nobody and never ends the match | L1322-1329 | `RoundCore::record` (`max_rounds = 0`) |
 //! | Wins >= target => match over | L1313, L1397-1408 | `RoundCore::record` |

@@ -12,6 +12,30 @@ fn main() {
     let profiles = get("--profiles").unwrap_or_else(|| "loopback,good,typical,wifi,intl,bad,far".into());
     let policy = if args.iter().any(|a| a == "--legacy") { Policy::Legacy } else { Policy::Dedupe };
     let v2 = !args.iter().any(|a| a == "--v1");
+    if let Some(p) = get("--hvf") {
+        // hit_vel_factor calibration, offline half: the sim's honest claims.
+        use hsmp_combat_sim::calib;
+        let s = calib::sim_run(&p, seeds);
+        println!("hit_vel_factor calibration, sim profile {p}, {seeds} seed(s), {} honest armour-stage claims\n", s.len());
+        println!("{}", calib::table(&calib::report(&s)));
+        return;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--hvf-logs") {
+        // In-game half: UE4SS.log ([HSMPParity] DCD lines) and server logs (impact rescale).
+        use hsmp_combat_sim::calib;
+        let mut s = Vec::new();
+        for f in args.iter().skip(i + 1).take_while(|a| !a.starts_with("--")) {
+            let text = std::fs::read(f).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_else(|e| {
+                eprintln!("{f}: {e}");
+                String::new()
+            });
+            let n0 = s.len();
+            s.extend(calib::parse_log(&text));
+            eprintln!("{f}: {} sample(s)", s.len() - n0);
+        }
+        println!("{}", calib::table(&calib::report(&s)));
+        return;
+    }
     if let Some(p) = get("--parrystats") {
         let (par, oth) = suite::parry_distances(&p, seeds);
         for i in 0..3 {
@@ -53,6 +77,43 @@ fn main() {
         if std::env::var("SIM_HEALTH").is_ok() { debug_health(&w); }
         if let Ok(c) = std::env::var("SIM_CELL") { debug_cell(&w, &c); }
         if args.iter().any(|a| a == "--ok") { debug_ok(&w, 25); }
+        return;
+    }
+    // `--tick-hz 30,60,100`: the same honest fights at each server tick rate,
+    // plus the tick-snapshot ablations (`--ablate`) and the cheat suite.
+    if let Some(list) = get("--tick-hz") {
+        let ablate = args.iter().any(|a| a == "--ablate");
+        let mut rows = Vec::new();
+        let mut cheats = Vec::new();
+        for hz in list.split(',').filter_map(|s| s.trim().parse::<u32>().ok()) {
+            let tick = 1000.0 / hz as f64;
+            for p in profiles.split(',') {
+                let mut s = suite::honest_cfg(p, seeds, &|c| { c.stream_v2 = v2; c.policy = policy; c.server_tick_ms = tick; });
+                s.label = format!("{p} @ {hz} Hz");
+                rows.push(s);
+                if ablate {
+                    let mut s = suite::honest_cfg(p, seeds, &|c| { c.server_tick_ms = tick; c.record_on_tick = true; });
+                    s.label = format!("{p} @ {hz} Hz, history per tick");
+                    rows.push(s);
+                    let mut s = suite::honest_cfg(p, seeds, &|c| { c.server_tick_ms = tick; c.relay_on_tick = true; });
+                    s.label = format!("{p} @ {hz} Hz, relay on tick");
+                    rows.push(s);
+                }
+            }
+            if !args.iter().any(|a| a == "--no-cheats") {
+                let c = suite::cheats_cfg("typical", seeds, policy, &|c| c.server_tick_ms = tick);
+                let (mut n, mut k) = (0, 0);
+                for ch in ALL_CHEATS {
+                    let (a, b) = c.cheat.get(&format!("{:?}", ch)).copied().unwrap_or((0, 0));
+                    n += a;
+                    k += b;
+                }
+                cheats.push((format!("all cheats, typical @ {hz} Hz"), n, k));
+            }
+            eprintln!("{hz} Hz done");
+        }
+        println!("{}", table(&rows));
+        if !cheats.is_empty() { println!("{}", cheat_table(&cheats)); }
         return;
     }
     let mut rows = Vec::new();
