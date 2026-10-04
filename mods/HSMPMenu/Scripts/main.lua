@@ -92,6 +92,9 @@ local function load_module(name, quiet)
     if not quiet then Log("%s.lua failed to load (%s)", name, table.concat(errs, " / ")) end
     return nil
 end
+-- UMG widget helpers (menu_umg.lua).
+local U = load_module("menu_umg")
+if not U then error("HSMPMenu: menu_umg.lua is missing (deploy copies every Scripts/*.lua)") end
 
 -- shared/hsmp_cfg.lua (docs/development/testing.md): every path and
 -- URL comes from it (hsmp.cfg next to the game exe + the HSMP_* env overrides).
@@ -625,7 +628,7 @@ local function spawn_server_and_sidecar()
     MX.ipc_error = nil
     -- No shell: the args are an array and the listing values travel as the
     -- server's own environment (IPC.spawn opts.env).
-    local server_args = { "--bind", "0.0.0.0:" .. port, "--tick-hz", "30", "--max-peers", "8", "--map", chosen_map,
+    local server_args = { "--bind", "0.0.0.0:" .. port, "--max-peers", "8", "--map", chosen_map,
                           "--owner-key-file", win(STATE_DIR .. "/.player_key") }
     for _, a in ipairs(proc_args("server")) do server_args[#server_args + 1] = a end
     for _, a in ipairs(MX.log_args()) do server_args[#server_args + 1] = a end
@@ -1058,61 +1061,6 @@ end
 
 -- --- UMG widget helpers ---------------------------------------------------
 
-local function construct(class_path, outer, name)
-    if outer == nil then return nil end   -- never construct into a nil / freed outer
-    local cls = StaticFindObject(class_path)
-    if not cls or not cls:IsValid() then return nil end
-    return StaticConstructObject(cls, outer, FName(name, FNAME_Add), 0, 0, nil, false)
-end
-
-local function clone_button_look(dst, src) pcall(function() dst.WidgetStyle = src.WidgetStyle end) end
-local function clone_text_look(dst, src)
-    pcall(function() dst.Font = src.Font end)
-    pcall(function() dst.ColorAndOpacity = src.ColorAndOpacity end)
-    pcall(function() dst.ShadowColorAndOpacity = src.ShadowColorAndOpacity end)
-    pcall(function() dst.ShadowOffset = src.ShadowOffset end)
-end
-
-local function set_vis(w, v)
-    if w and w:IsValid() then pcall(function() w:SetVisibility(v) end) end
-end
-
-local function find_child(root, name)
-    local n; pcall(function() n = root:GetChildrenCount() end); if not n then return nil end
-    for i = 0, n - 1 do
-        local c; pcall(function() c = root:GetChildAt(i) end)
-        if c and c:IsValid() and c:GetFName():ToString() == name then return c end
-    end
-    return nil
-end
-
-local function find_text_child(button)
-    local n; pcall(function() n = button:GetChildrenCount() end); if not n then return nil end
-    for i = 0, n - 1 do
-        local c; pcall(function() c = button:GetChildAt(i) end)
-        if c and c:IsValid() then
-            local cls = c:GetClass():GetFName():ToString()
-            if cls == "TextBlock" or cls:find("Text") then return c end
-        end
-    end
-    return nil
-end
-
-local function slot_rect(btn)
-    if not btn then return nil end
-    local slot = btn.Slot; if not slot or not slot:IsValid() then return nil end
-    local x, y, w, h
-    pcall(function() local p = slot:GetPosition(); x = p.X; y = p.Y end)
-    pcall(function() local s = slot:GetSize();     w = s.X; h = s.Y end)
-    return x, y, w, h
-end
-
-local function copy_slot_anchoring(src_btn, dst_slot)
-    local src_slot = src_btn.Slot; if not src_slot or not src_slot:IsValid() then return end
-    pcall(function() local a  = src_slot:GetAnchors();  if a  then dst_slot:SetAnchors(a) end end)
-    pcall(function() local al = src_slot:GetAlignment(); if al then dst_slot:SetAlignment(al) end end)
-    pcall(function() dst_slot.ZOrder = src_slot.ZOrder end)
-end
 
 -- --- fade-in --------------------------------------------------------------
 
@@ -1156,14 +1104,14 @@ local function discover_native(menu)
 
     local anchors = {}
     for _, n in ipairs({ "Button_0","Button_1","Button_2","Button_3","Button_4" }) do
-        local b = find_child(canvas, n); if b then table.insert(anchors, { name = n, btn = b }) end
+        local b = U.find_child(canvas, n); if b then table.insert(anchors, { name = n, btn = b }) end
     end
     if #anchors == 0 then return false end
 
     local best_r, best_i = 0, 1
     local nmin_x, nmin_y, nmax_x, nmax_y = math.huge, math.huge, -math.huge, -math.huge
     for i, a in ipairs(anchors) do
-        local x, y, w, h = slot_rect(a.btn)
+        local x, y, w, h = U.slot_rect(a.btn)
         if w and h and h > 0 then
             if (w/h) > best_r then best_r = w/h; best_i = i end
             nmin_x = math.min(nmin_x, x); nmin_y = math.min(nmin_y, y)
@@ -1171,7 +1119,7 @@ local function discover_native(menu)
         end
     end
     state.style_src = anchors[best_i].btn
-    state.text_src  = find_text_child(state.style_src)
+    state.text_src  = U.find_text_child(state.style_src)
     state.nmin_x = nmin_x; state.nmin_y = nmin_y
     state.nmax_x = nmax_x; state.nmax_y = nmax_y
 
@@ -1216,7 +1164,7 @@ end
 -- the canvas's right safe margin and its 5 ribbons fit the safe height
 -- (canvas units; the column shares the native anchor state.anchor_x/y).
 function MX.ribbon_geometry()
-    local sw, sh = select(3, slot_rect(state.style_src))
+    local sw, sh = select(3, U.slot_rect(state.style_src))
     local rw = math.floor((sw or 469) * 1.10)
     local rh = math.floor((sh or 120) * 1.10)
     local M = state.metrics or {}
@@ -1238,16 +1186,16 @@ end
 -- menu world generation, so a re-injection never reuses a live name.
 local function build_native_button(label, cb, name_suffix)
     local tag = name_suffix .. "_g" .. menu_world_gen
-    local btn = construct("/Script/UMG.Button", state.wt, "HSMPBtn_" .. tag)
+    local btn = U.construct("/Script/UMG.Button", state.wt, "HSMPBtn_" .. tag)
     if not btn then return nil end
-    clone_button_look(btn, state.style_src)
+    U.clone_button_look(btn, state.style_src)
     pcall(function() btn.ContentPadding = { Left=0, Top=0, Right=0, Bottom=0 } end)
     pcall(function() btn.HorizontalAlignment = 2 end)
     pcall(function() btn.VerticalAlignment   = 2 end)
-    local tb = construct("/Script/UMG.TextBlock", btn, "HSMPLbl_" .. tag)
+    local tb = U.construct("/Script/UMG.TextBlock", btn, "HSMPLbl_" .. tag)
     if tb then
         pcall(function() tb:SetText(FText(label)) end)
-        if state.text_src then clone_text_look(tb, state.text_src) end
+        if state.text_src then U.clone_text_look(tb, state.text_src) end
         pcall(function() tb:SetJustification(1) end)
         pcall(function() tb.Justification = 1 end)
         pcall(function() tb.AutoWrapText = false end)
@@ -1260,7 +1208,7 @@ local function add_to_canvas(entry, x, y, w, h)
     local slot
     pcall(function() slot = state.canvas:AddChildToCanvas(entry.button) end)
     if slot and slot:IsValid() then
-        copy_slot_anchoring(state.style_src, slot)
+        U.copy_slot_anchoring(state.style_src, slot)
         pcall(function()
             slot:SetPosition({ X = x, Y = y })
             slot:SetSize({ X = w, Y = h })
@@ -1277,9 +1225,9 @@ function MX.crash_note_sync()
     if not (Dg and Dg.crashed_last_time() and state.injected and state.canvas and state.wt) then return end
     local n = state.crash_note
     if not n then
-        local tb = construct("/Script/UMG.TextBlock", state.wt, "HSMP_CrashNote_" .. tostring(menu_world_gen))
+        local tb = U.construct("/Script/UMG.TextBlock", state.wt, "HSMP_CrashNote_" .. tostring(menu_world_gen))
         if not tb then return end
-        if state.text_src then clone_text_look(tb, state.text_src) end
+        if state.text_src then U.clone_text_look(tb, state.text_src) end
         pcall(function() tb:SetText(FText(Dg.CRASH_NOTE)) end)
         pcall(function() tb.AutoWrapText = true end)
         pcall(function() local f = tb.Font; if f then f.Size = 18; tb:SetFont(f) end end)
@@ -1293,7 +1241,7 @@ function MX.crash_note_sync()
     local want = state.screen_active == nil
     if n.shown ~= want then
         n.shown = want
-        set_vis(n.button, want and 3 or 1)
+        U.set_vis(n.button, want and 3 or 1)
     end
 end
 
@@ -1364,7 +1312,7 @@ end
 local function build_top_ring()
     state.top_ring = {}
     for i = 1, 4 do
-        local b = construct("/Script/UMG.Border", state.wt, string.format("HSMPTopRing_%d_g%d", i, menu_world_gen))
+        local b = U.construct("/Script/UMG.Border", state.wt, string.format("HSMPTopRing_%d_g%d", i, menu_world_gen))
         if b then
             pcall(function() b:SetBrushColor((Kit and Kit.C.focus) or { R = 1, G = 0.82, B = 0.36, A = 1 }) end)
             pcall(function() b:SetVisibility(1) end)
@@ -1420,7 +1368,7 @@ local function top_focus(i)
     if not ring or not state.injected then return end
     local e = i and state.ribbons[i]
     if not e or not e.rect then
-        for _, r in ipairs(ring) do set_vis(r.button, 1) end
+        for _, r in ipairs(ring) do U.set_vis(r.button, 1) end
         return
     end
     local x, y, w, h = e.rect[1], e.rect[2], e.rect[3], e.rect[4]
@@ -1433,7 +1381,7 @@ local function top_focus(i)
             r.slot:SetPosition({ X = rects[k][1], Y = rects[k][2] })
             r.slot:SetSize({ X = rects[k][3], Y = rects[k][4] })
         end)
-        set_vis(r.button, 3)
+        U.set_vis(r.button, 3)
     end
 end
 
@@ -1444,24 +1392,24 @@ end
 local function hide_top_and_natives()
     state.native_hidden = {}
     for _, n in ipairs(state.native_names) do
-        local w = find_child(state.canvas, n)
-        if w then set_vis(w, 1); table.insert(state.native_hidden, w) end
+        local w = U.find_child(state.canvas, n)
+        if w then U.set_vis(w, 1); table.insert(state.native_hidden, w) end
     end
-    for _, r in ipairs(state.ribbons) do set_vis(r.button, 1) end
-    for _, r in ipairs(state.top_ring or {}) do set_vis(r.button, 1) end
+    for _, r in ipairs(state.ribbons) do U.set_vis(r.button, 1) end
+    for _, r in ipairs(state.top_ring or {}) do U.set_vis(r.button, 1) end
 end
 
 local function show_top_and_natives()
-    for _, w in ipairs(state.native_hidden) do set_vis(w, 0) end
+    for _, w in ipairs(state.native_hidden) do U.set_vis(w, 0) end
     state.native_hidden = {}
-    for _, r in ipairs(state.ribbons) do set_vis(r.button, 0) end
+    for _, r in ipairs(state.ribbons) do U.set_vis(r.button, 0) end
 end
 
 -- Remove sub-screen widgets. UWidget doesn't expose RemoveFromParent on
 -- CanvasPanelSlot children directly in UE4SS, so we collapse + null the ref.
 local function destroy_screen_widgets()
     for _, w in ipairs(state.screen_widgets) do
-        set_vis(w.button, 1)       -- collapse
+        U.set_vis(w.button, 1)       -- collapse
         -- Also try RemoveChild if the canvas exposes it.
         pcall(function() state.canvas:RemoveChild(w.button) end)
     end
@@ -1474,7 +1422,7 @@ end
 -- ui_kit (required): every screen is built with it.
 if Kit then
     Kit.init({
-        state = state, Log = Log, construct = construct, clone_text_look = clone_text_look,
+        state = state, Log = Log, construct = U.construct, clone_text_look = U.clone_text_look,
         world_gen = function() return menu_world_gen end,
         uis = UIS,
         -- fresh viewport metrics for a build (only ever called on this world's injected menu)
@@ -3108,7 +3056,7 @@ LoopAsync(33, function()
                     -- the mouse went to the native menu: the ribbon column lets go
                     if state.top_focus then
                         for _, n in ipairs(state.native_names) do
-                            local nb = find_child(state.canvas, n)
+                            local nb = U.find_child(state.canvas, n)
                             local h = false
                             if nb then pcall(function() h = nb:IsHovered() end) end
                             if h then top_focus(nil); break end

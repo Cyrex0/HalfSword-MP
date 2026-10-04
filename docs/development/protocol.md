@@ -661,6 +661,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0512` | `kit_rules_req` | C→S | ordered | Set the kit rules (admin) |
 | `0x0513` | `kit_rules` | S→C | rel_latest | The current kit rules |
 | `0x0514` | `loadout` | C→S, S→C | rel_latest | The full armour and weapon loadout, fragmented as needed |
+| `0x0515` | `body` | C→S, S→C | rel_latest | The owner's passport body (rates, scales, bone masses) for its stand-ins; only with `caps::BODY` |
 
 **Interact (`0x06`, `caps::INTERACT`)**
 
@@ -696,6 +697,13 @@ once on any change. It is a variable record: `SessionHead` plus one `RosterRow` 
 Receiver rules: drop the snapshot if `(epoch, seq) ≤ last`; a new epoch resets all tracking (in a
 match it sends the Director back to the lobby with "Server restarted"). The map is
 `frozen.arena` in a match, else `config.arena`. The own spawn is the own roster row's spawn.
+
+Timing: the server tick rate (`--tick-hz`, 60 by default) is not on the wire and a client must
+not assume one. Every duration a client sees is in real time: `phase_deadline_ms` on the
+server clock (count down from it with the local clock, as `shared/hsmp_session.lua` does), the
+config's `*_s` fields in seconds, and the `aux` relay interval of a `pose` record in ms. The
+`tick` fields of `root`, `weapon` and `pose` are the sender's own sample counter, not a server
+tick. See [tick rate](tick-rate.md).
 
 ### 6.5 Commands
 
@@ -779,6 +787,7 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 | 14 | PATH_CHALLENGE | Transport: path validation by an echoed token (§4.6) |
 | 15 | REL_KEY | Transport: keyed `ReliableLatest` chunks (§5.1) |
 | 16 | HIT_FX | Offered by server and sidecar: `touch` up, `hitfx_in` down |
+| 17 | BODY | Offered by server and sidecar: `body` up and down (relayed only between peers that have it) |
 
 `caps::SUPPORTED = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY` are the transport bits
 `hsmp-net` implements itself; every client and server built from it offers them through

@@ -11,7 +11,7 @@ use proto::v5;
 
 /// Transport timer period: acks, retransmits, keepalives, CLOSE repeats.
 const TRANSPORT_TICK: Duration = Duration::from_millis(5);
-/// Liveness refresh of `PeerState::last_seen_tick` from authenticated
+/// Liveness refresh of `PeerState::last_seen_ms` from authenticated
 /// packets, at most once per this long per peer (replaces C2SKeepalive).
 const TOUCH_EVERY: Duration = Duration::from_millis(500);
 
@@ -104,8 +104,8 @@ pub async fn recv_loop(socket: Arc<UdpSocket>, state: Arc<ServerState>) -> anyho
                         touched.retain(|_, t| now.duration_since(*t) < Duration::from_secs(5));
                     }
                     let mut inner = state.inner.lock().await;
-                    let tick = inner.server_tick;
-                    if let Some(p) = inner.peers.get_mut(&from) { p.last_seen_tick = tick; }
+                    let now = inner.now_ms;
+                    if let Some(p) = inner.peers.get_mut(&from) { p.last_seen_ms = now; }
                 }
                 handle_deliveries(&socket, &state, from, deliveries).await;
             }
@@ -387,7 +387,7 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
     let cid = state.net.accept(p);
     let id = inner.next_peer_id;
     inner.next_peer_id += 1;
-    let now_tick = inner.server_tick;
+    let now = inner.now_ms;
     // Admin comes from the policy (the listen host's key,
     // configured or granted keys), never from joining first.
     let role = inner.admins.role(&key);
@@ -399,10 +399,10 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
         from,
         PeerState {
             id, nick: nick.clone(), cid, player_key: key,
-            last_seen_tick: now_tick,
+            last_seen_ms: now,
             last_root: None,
             ready: false,
-            last_valid_pos: None, last_valid_tick: now_tick,
+            last_valid_pos: None, last_valid_ms: now,
             // Joining mid-match: spectate (not alive, can't hit or be
             // hit) until the next round's live transition decides.
             wins: 0, alive: joins_alive,
@@ -485,10 +485,10 @@ async fn resume(
     // Same address: `accept` replaces (and closes) the old connection itself.
     let cid = state.net.accept(p);
     let Some(mut peer) = inner.peers.remove(&old) else { return };
-    let tick = inner.server_tick;
+    let now = inner.now_ms;
     let old_cid = peer.cid;
     peer.cid = cid;
-    peer.last_seen_tick = tick;
+    peer.last_seen_ms = now;
     let (id, nick, alive) = (peer.id, peer.nick.clone(), peer.alive);
     inner.peers.insert(from, peer);
     // Messages queued under the lock for the old address follow the peer.
@@ -894,10 +894,9 @@ pub(crate) mod resume_tests {
             if session::accept_root(&state, a, pos, Default::default()).await.is_some() { x = pos[0]; }
         }
         assert!(x <= 1050.0 + 1.0, "moved {x} uu inside one tick");
-        // An honest sprint (700 uu/s, 60 Hz on the tick clock) keeps passing.
+        // An honest sprint (700 uu/s, 60 Hz roots on the arrival clock) keeps passing.
         let mut x = x;
         for k in 0..120 {
-            if k % 2 == 0 { state.inner.lock().await.server_tick += 1; }
             tokio::time::sleep(Duration::from_millis(16)).await;
             let pos = [x + 700.0 / 60.0, 0.0, 100.0];
             assert!(session::accept_root(&state, a, pos, Default::default()).await.is_some(), "sprint step {k} refused");
@@ -1028,8 +1027,8 @@ mod migrate_tests {
             let mut inner = state.inner.lock().await;
             inner.peers.insert(old, PeerState {
                 id: 7, nick: "Willie".into(), cid, player_key: [9; 32],
-                last_seen_tick: 0, last_root: None,
-                ready: true, last_valid_pos: Some([1.0, 2.0, 3.0]), last_valid_tick: 0,
+                last_seen_ms: 0, last_root: None,
+                ready: true, last_valid_pos: Some([1.0, 2.0, 3.0]), last_valid_ms: 0,
                 wins: 2, alive: true, is_admin: true,
             });
             inner.match_state = "live".into();
@@ -1047,8 +1046,8 @@ mod migrate_tests {
     fn fixture(id: PeerId, cid: u64, key: u8) -> PeerState {
         PeerState {
             id, nick: format!("p{id}"), cid, player_key: [key; 32],
-            last_seen_tick: 0, last_root: None,
-            ready: true, last_valid_pos: None, last_valid_tick: 0,
+            last_seen_ms: 0, last_root: None,
+            ready: true, last_valid_pos: None, last_valid_ms: 0,
             wins: 0, alive: true, is_admin: false,
         }
     }
@@ -1124,8 +1123,8 @@ mod migrate_tests {
             let mut inner = state.inner.lock().await;
             inner.peers.insert(old, PeerState {
                 id: 8, nick: "Banned".into(), cid, player_key: [8; 32],
-                last_seen_tick: 0, last_root: None,
-                ready: true, last_valid_pos: None, last_valid_tick: 0,
+                last_seen_ms: 0, last_root: None,
+                ready: true, last_valid_pos: None, last_valid_ms: 0,
                 wins: 0, alive: true, is_admin: false,
             });
             inner.banned_ips.insert(new.ip());

@@ -19,14 +19,21 @@ pub fn honest(name: &str, seeds: u64, v2: bool, policy: Policy) -> Stats {
 
 /// `honest` with an explicit stand-in tracking error (uu, 1σ).
 pub fn honest_with(name: &str, seeds: u64, v2: bool, policy: Policy, servo: Option<f32>) -> Stats {
+    honest_cfg(name, seeds, &|cfg| {
+        cfg.stream_v2 = v2;
+        cfg.policy = policy;
+        if let Some(n) = servo { cfg.servo_noise = n; }
+    })
+}
+
+/// Honest fights on `profile` with every config changed by `tweak`.
+pub fn honest_cfg(name: &str, seeds: u64, tweak: &dyn Fn(&mut Config)) -> Stats {
     let mut s = Stats::new(name);
     for seed in 0..seeds {
         for (k, &(n, dur)) in SHAPES.iter().enumerate() {
             let mut cfg = Config::new(profile(name), n, 1000 * seed + k as u64 + 17);
             cfg.dur_ms = dur;
-            cfg.stream_v2 = v2;
-            cfg.policy = policy;
-            if let Some(n) = servo { cfg.servo_noise = n; }
+            tweak(&mut cfg);
             let mut w = World::new(cfg);
             w.run();
             s.add(&w);
@@ -39,6 +46,11 @@ pub fn honest_with(name: &str, seeds: u64, v2: bool, policy: Policy, servo: Opti
 /// every cheat kind, `seeds` fights each. Returns the folded stats (cheat
 /// rows in `Stats::cheat`).
 pub fn cheats(name: &str, seeds: u64, policy: Policy) -> Stats {
+    cheats_cfg(name, seeds, policy, &|_| {})
+}
+
+/// `cheats` with every config changed by `tweak`.
+pub fn cheats_cfg(name: &str, seeds: u64, policy: Policy, tweak: &dyn Fn(&mut Config)) -> Stats {
     let mut s = Stats::new(name);
     for (ci, &ch) in ALL_CHEATS.iter().enumerate() {
         // A backtrack only lies when the victim moved: give it retreats and
@@ -58,6 +70,7 @@ pub fn cheats(name: &str, seeds: u64, policy: Policy) -> Stats {
             cfg.health_model = ch == Cheat::GodMode;
             // Two cheaters of the same kind (one per pair).
             cfg.cheats = vec![(0, ch), (2, ch)];
+            tweak(&mut cfg);
             let mut w = World::new(cfg);
             w.run();
             s.add(&w);

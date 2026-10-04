@@ -8,14 +8,28 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+### Changed
+
+- Less work per frame in the game mods: the stand-in driver, the pose sender, the world
+  replication tick and the IPC facade allocate far less Lua garbage per frame (the stand-in
+  driver about 25 times less), and the pose sender makes one native call per sample.
+- Damage: two blows that the game would gate in single player are gated in MP too when their
+  replays arrive more than 0.2 s apart; a stand-in that took a blow natively no longer turns
+  the next frames of the same contact into extra claims.
+- Tools: `hsmp-combat-sim --hvf` / `--hvf-logs` measure the server's Hit Velocity ceiling
+  (`hit_vel_factor`) from the sim and from in-game logs; the impact rescale log line carries the
+  weapon class.
+- Stand-ins get their owner's body: bone masses, Mass Scale and Muscle Rate (new `body`
+  record, capability `BODY`; beta.4 peers neither send nor receive it). Height is carried but
+  not applied yet.
+
 ### Server
 
 - The server tick no longer allocates in steady play and costs about a fifth of what it did at
   16 players.
 - Relayed records a player sent together (root and pose of one frame) reach the other players
   in one datagram: about a fifth fewer datagrams and 5 to 7 % less download.
-- A `--tick-hz` other than 30 no longer changes countdowns, the load barrier, pauses and
-  timeouts; it accepts 10 to 120 (0 crashed the server). `--max-peers` accepts 1 to 64.
+- `--max-peers` accepts 1 to 64 (the session roster's size).
 - The public server list writes a listing at most every other heartbeat when nothing visible
   changed (half the storage writes on the free Cloudflare plan).
 

@@ -16,7 +16,7 @@
 
 use crate::SharedState;
 use hsmp_ipc::record::view;
-use hsmp_ipc::schema::loadout::{Kit, KitRules, LoadoutHead, K_KIT, K_KIT_RULES, K_KIT_RULES_REQ, K_KIT_VERDICT, K_LOADOUT};
+use hsmp_ipc::schema::loadout::{BodyHead, Kit, KitRules, LoadoutHead, K_BODY, K_KIT, K_KIT_RULES, K_KIT_RULES_REQ, K_KIT_VERDICT, K_LOADOUT};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -64,6 +64,8 @@ struct KitSync {
     rules: Option<(u8, u16)>,
     /// Newest loadout version written per peer.
     loadout: HashMap<u32, u32>,
+    /// Newest body version written per peer.
+    body: HashMap<u32, u32>,
 }
 
 fn sync() -> std::sync::MutexGuard<'static, KitSync> {
@@ -127,6 +129,9 @@ pub fn spawn_outbox_task(sock: Arc<UdpSocket>, shared: Arc<Mutex<SharedState>>) 
         // Latest valid payloads (a blob is taken once; slots are kept to resend).
         let (mut loadout, mut kit, mut rules): (Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>) = (None, None, None);
         let mut lo_sent: Option<(Vec<u8>, u32, u64)> = None; // (payload, pid, generation)
+        let mut body_slot = GameSlot::new("body", K_BODY);
+        let mut body: Option<Vec<u8>> = None;
+        let mut body_sent: Option<(Vec<u8>, u32, u64)> = None;
         let mut kit_sent: Option<(Vec<u8>, u32, u64)> = None;
         let mut kit_sent_at: Option<Instant> = None; // never `now - 1h`
         let mut rules_sent: Option<(Vec<u8>, u32, u64)> = None;
@@ -137,6 +142,7 @@ pub fn spawn_outbox_task(sock: Arc<UdpSocket>, shared: Arc<Mutex<SharedState>>) 
             if let Some(p) = lo_slot.poll() { loadout = Some(p.to_vec()); }
             if let Some(p) = kit_slot.poll() { kit = Some(p.to_vec()); }
             if let Some(p) = rules_slot.poll() { rules = Some(p.to_vec()); }
+            if let Some(p) = body_slot.poll() { body = Some(p.to_vec()); }
             let (pid, connected, gen, is_admin) = {
                 let s = shared.lock().await;
                 (s.my_peer_id, s.status == "connected", generation(), crate::session_client::is_admin())
@@ -150,6 +156,18 @@ pub fn spawn_outbox_task(sock: Arc<UdpSocket>, shared: Arc<Mutex<SharedState>>) 
                     info!(version, bytes = p.len(), "loadout sent");
                     send(&sock, K_LOADOUT, p).await;
                     lo_sent = Some((p.clone(), pid, gen));
+                }
+            }
+
+            // Passport body: once per version / session, only to a server that reads it.
+            if let Some(p) = &body {
+                if crate::interact_client::has_cap(hsmp_net::net::caps::BODY)
+                    && body_sent.as_ref().map_or(true, |(q, a, g)| q != p || (*a, *g) != (pid, gen))
+                {
+                    let version = view::<BodyHead>(p).map(|v| v.head.version).unwrap_or(0);
+                    info!(version, bytes = p.len(), "body sent");
+                    send(&sock, K_BODY, p).await;
+                    body_sent = Some((p.clone(), pid, gen));
                 }
             }
 
@@ -272,6 +290,32 @@ pub fn on_loadout(peer: u32, payload: &[u8]) {
     info!(peer, version, bytes = payload.len(), rows = v.rows.len(), "loadout received");
 }
 
+
+/// `body` of `peer`: newest version only, published once into `peer_body`.
+pub fn on_body(peer: u32, payload: &[u8]) {
+    let Ok(v) = view::<BodyHead>(payload) else {
+        debug!(peer, "invalid body dropped");
+        return;
+    };
+    let version = v.head.version;
+    if !body_fresh(peer, version) {
+        return; // already have this or a newer version: duplicate / replay
+    }
+    if let Some(l) = crate::ipc_shm::link() {
+        l.post_record("peer_body", Some(peer), K_BODY, payload);
+    }
+    info!(peer, version, bones = v.rows.len(), height = v.head.height_rate, muscle = v.head.muscle_rate, "body received");
+}
+
+/// Remember `version` as `peer`'s newest body; false when it is not newer.
+fn body_fresh(peer: u32, version: u32) -> bool {
+    let mut s = sync();
+    if s.body.get(&peer).is_some_and(|w| *w >= version) {
+        return false;
+    }
+    s.body.insert(peer, version);
+    true
+}
 #[cfg(test)]
 mod kit_client_tests {
     use super::*;
@@ -360,6 +404,41 @@ mod kit_client_tests {
         assert!(l.test_slot("peer_loadout", Some(4)).is_none() && l.test_slot("peer_kit", Some(4)).is_none());
     }
 
+
+    fn body_rec(version: u32, height: f32) -> Vec<u8> {
+        use hsmp_ipc::schema::loadout::BodyBone;
+        let mut h = BodyHead::default();
+        h.version = version;
+        h.height_rate = height;
+        h.muscle_rate = 0.1;
+        h.mass_scale_bp = 1.0;
+        h.char_scale = [1.0; 3];
+        to_payload(&h, &[BodyBone { bone: Str::new("pelvis"), mass: 6.0, mass_scale: 1.0 }])
+    }
+
+    /// A peer's passport body reaches `peer_body` once per newer version; hostile bytes
+    /// never; the own `body` slot is read like every game slot.
+    #[tokio::test]
+    async fn body_records_reach_the_peer_slot_and_the_game_slot_is_read() {
+        let _serial = crate::ipc_shm::ShmLink::test_lock();
+        let l = crate::ipc_shm::ShmLink::test_global();
+        on_body(7, &body_rec(5, 0.9));
+        on_body(7, &body_rec(4, 0.2));
+        assert_eq!(l.test_slot("peer_body", Some(7)), Some((K_BODY, body_rec(5, 0.9))), "older version dropped");
+        on_body(7, &body_rec(6, 0.3));
+        assert_eq!(l.test_slot("peer_body", Some(7)), Some((K_BODY, body_rec(6, 0.3))));
+        on_body(8, &body_rec(1, 9.0)); // Height Rate out of range
+        on_body(8, &[0u8; 7]);
+        assert!(l.test_slot("peer_body", Some(8)).is_none());
+        let seg = l.segment();
+        let game_epoch = seg.header.game.epoch.load(std::sync::atomic::Ordering::Acquire);
+        let meta = hsmp_ipc::schema::SlotMeta { writer_epoch: game_epoch, valid: 1, ..Default::default() };
+        let mut scratch = Vec::new();
+        let mut gs = GameSlot::new("body", K_BODY);
+        assert!(seg.slot_ref("body", 0).unwrap().put(meta, K_BODY, &body_rec(2, 0.5), &mut scratch));
+        assert_eq!(gs.poll(), Some(&body_rec(2, 0.5)[..]));
+        assert!(gs.poll().is_none());
+    }
     /// The outbox reads the game's slots as bytes: a fresh valid value is seen once, a value
     /// from another game instance (writer epoch) or of the wrong kind never.
     #[test]

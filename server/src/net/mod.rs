@@ -160,6 +160,8 @@ impl Net {
         cfg.caps |= hn::caps::PING;
         // Combat hit effects (C2STouch / S2CHitFx).
         cfg.caps |= hn::caps::HIT_FX;
+        // Passport bodies for stand-ins (body records).
+        cfg.caps |= hn::caps::BODY;
         let conn_cfg = ConnConfig { idle_timeout_ms: SERVER_IDLE_MS, ..ConnConfig::default() };
         let ep = ServerEndpoint::new(cfg, conn_cfg, 0, None);
         let static_pub = ep.static_public();

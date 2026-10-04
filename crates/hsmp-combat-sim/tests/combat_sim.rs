@@ -173,3 +173,27 @@ fn hit_location_survives_the_replay_delay() {
         assert!(o.world_off > 2 * o.local_off.max(1), "{p}: the world-offset baseline should be worse ({} vs {})", o.world_off, o.local_off);
     }
 }
+
+/// The server tick only schedules the held-hit flush, clash judging and the
+/// ledger sweep: honest acceptance, parries, trades and cheat rejection are
+/// the same at 30, 60 and 100 Hz (docs/development/tick-rate.md).
+#[test]
+fn tick_rate_does_not_change_combat_outcomes() {
+    let at = |hz: f64| {
+        let t = 1000.0 / hz;
+        let mut s = suite::honest_cfg("typical", SEEDS, &|c| c.server_tick_ms = t);
+        s.label = format!("typical @ {hz} Hz");
+        let c = suite::cheats_cfg("typical", 1, Policy::Dedupe, &|c| c.server_tick_ms = t);
+        let (n, k) = c.cheat.values().fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1));
+        (s, n, k)
+    };
+    let runs: Vec<_> = [30.0, 60.0, 100.0].into_iter().map(at).collect();
+    println!("{}", table(&runs.iter().map(|r| r.0.clone()).collect::<Vec<_>>()));
+    let base = runs[0].0.accept_pct();
+    for (s, n, k) in &runs {
+        common(s, 97.0);
+        assert!((s.accept_pct() - base).abs() <= 0.5, "{}: acceptance {:.2} % vs {:.2} % at 30 Hz", s.label, s.accept_pct(), base);
+        let fa = 100.0 * *k as f64 / (*n).max(1) as f64;
+        assert!(fa <= 0.6, "{}: cheats false-accepted {:.2} %", s.label, fa);
+    }
+}

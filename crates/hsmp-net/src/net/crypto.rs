@@ -12,8 +12,8 @@
 //! ```
 //! AEAD: ChaCha20-Poly1305, nonce = full 64-bit packet number LE || 4 zero bytes.
 
-use chacha20poly1305::aead::{Aead, KeyInit, Payload};
-use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
+use chacha20poly1305::aead::{Aead, AeadInPlace, KeyInit, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, Tag};
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
 
@@ -42,6 +42,30 @@ pub fn seal(c: &ChaCha20Poly1305, seq: u64, aad: &[u8], pt: &[u8]) -> Vec<u8> {
 
 pub fn open(c: &ChaCha20Poly1305, seq: u64, aad: &[u8], ct: &[u8]) -> Option<Vec<u8>> {
     c.decrypt(Nonce::from_slice(&nonce(seq)), Payload { msg: ct, aad }).ok()
+}
+
+/// `buf` holds the associated data (`buf[..aad_len]`) followed by the
+/// plaintext: encrypt the plaintext in place and append the tag. Same bytes
+/// as `aad ‖ seal(..)`, without a second buffer.
+pub fn seal_in_place(c: &ChaCha20Poly1305, seq: u64, aad_len: usize, buf: &mut Vec<u8>) {
+    let (aad, pt) = buf.split_at_mut(aad_len);
+    let tag = c
+        .encrypt_in_place_detached(Nonce::from_slice(&nonce(seq)), aad, pt)
+        .expect("ChaCha20-Poly1305 encryption cannot fail for datagram-sized input");
+    buf.extend_from_slice(&tag);
+}
+
+/// `open` into a caller-owned buffer (cleared first, its capacity reused).
+/// On failure `out` is left empty.
+pub fn open_into(c: &ChaCha20Poly1305, seq: u64, aad: &[u8], ct: &[u8], out: &mut Vec<u8>) -> bool {
+    out.clear();
+    let Some(n) = ct.len().checked_sub(super::TAG_LEN) else { return false };
+    out.extend_from_slice(&ct[..n]);
+    if c.decrypt_in_place_detached(Nonce::from_slice(&nonce(seq)), aad, out, Tag::from_slice(&ct[n..])).is_ok() {
+        return true;
+    }
+    out.clear();
+    false
 }
 
 #[derive(Clone)]
@@ -138,6 +162,26 @@ mod tests {
         assert!(open(&c, 42, b"hdX", &ct).is_none(), "wrong AAD must fail");
         let other = cipher(&next_secret(&[7u8; 32]));
         assert!(open(&other, 42, b"hdr", &ct).is_none(), "next key must differ");
+    }
+
+    #[test]
+    fn in_place_variants_match_the_allocating_ones() {
+        let c = cipher(&[7u8; 32]);
+        let mut buf = b"hdrpayload".to_vec();
+        seal_in_place(&c, 42, 3, &mut buf);
+        let ct = seal(&c, 42, b"hdr", b"payload");
+        assert_eq!(&buf[3..], &ct[..]);
+        let mut out = Vec::new();
+        assert!(open_into(&c, 42, b"hdr", &ct, &mut out));
+        assert_eq!(out, b"payload");
+        assert!(!open_into(&c, 43, b"hdr", &ct, &mut out));
+        assert!(out.is_empty());
+        assert!(!open_into(&c, 42, b"hdr", &ct[..10], &mut out));
+        // Empty plaintext (an ack-only packet).
+        let mut buf = b"hdr".to_vec();
+        seal_in_place(&c, 7, 3, &mut buf);
+        assert_eq!(&buf[3..], &seal(&c, 7, b"hdr", b"")[..]);
+        assert!(open_into(&c, 7, b"hdr", &buf[3..], &mut out) && out.is_empty());
     }
 
     #[test]

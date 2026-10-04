@@ -164,7 +164,7 @@ local REACT = {
     "Pain Leg R", "Pain Leg L", "Ball Pain", "Liver Pain",
 }
 local REACT_VEC = { "Pain Stumble Immediate", "PainFlinchDirection_Latest", "Pain Wound Direction" }
-local TICK_MS       = 33
+local TICK_MS       = 33     -- this mod's own Lua loop on the game thread, not the server tick
 local PUPPET_HP_PIN = 100.0    -- a stand-in's Health floor (it is Invulnerable; the game's own regen clamps Health to 100 every tick, so a higher pin is rewritten each frame)
 local EPS           = 0.01
 
@@ -791,13 +791,21 @@ function C3.snap_all(w)
     return s
 end
 
-function C3.put_all(w, s)
+-- keep_contact: leave Deal Complex Damage's contact gate as the call left it
+-- (a stand-in: that gate decides which of my calls are claims, as on the
+-- victim in solo).
+C3.CONTACT_GATE = { ["Last Complex Damage Impulse"] = true, ["Last Complex Damage Bone"] = true }
+function C3.put_all(w, s, keep_contact)
     if not s then return end
     restore(w, s.f)
     put_react(w, s.r)
     for k, v in pairs(s.life) do pcall(function() w[k] = v end) end
-    for k, v in pairs(s.g) do pcall(function() w[k] = v end) end
-    for k, v in pairs(s.gn) do pcall(function() w[k] = FName(v) end) end
+    for k, v in pairs(s.g) do
+        if not (keep_contact and C3.CONTACT_GATE[k]) then pcall(function() w[k] = v end) end
+    end
+    for k, v in pairs(s.gn) do
+        if not (keep_contact and C3.CONTACT_GATE[k]) then pcall(function() w[k] = FName(v) end) end
+    end
 end
 
 local function addr_of(w)
@@ -937,10 +945,39 @@ function C3.standin_hit(w)
         end
     end
     if not hurt then return end   -- Invulnerable held: nothing to undo
-    C3.put_all(w, b)
+    -- (runs inside the Deal Complex Damage call too, before its callback reads
+    -- the contact gate)
+    C3.put_all(w, b, true)
     C3.standin_restores = C3.standin_restores + 1
     if C3.standin_restores <= 5 or C3.standin_restores % 50 == 0 then
         Log("native damage on stand-in %s put back (#%d; Invulnerable did not hold)", wname(w) or "?", C3.standin_restores)
+    end
+end
+
+-- The owner's passport body on stand-ins (standin_body.lua): my own body into
+-- the `body` slot, each peer's `peer_body` onto its stand-in (bone masses).
+C3.BODY = load_module("standin_body")
+function C3.body_publish(me)
+    local B, ipc = C3.BODY, rawget(_G, "HSMP_IPC")
+    if not (B and ipc and ipc.put) then return end
+    local mesh = C3.hit_mesh and C3.hit_mesh(me) or body_mesh(me)
+    if mesh then B.publish(me, mesh, ipc.put, Log) end
+end
+function C3.body_apply(peer, w)
+    local B, ipc = C3.BODY, rawget(_G, "HSMP_IPC")
+    if not (B and ipc and ipc.peer_rec) then return end
+    local rec = ipc.peer_rec("peer_body", peer)
+    if type(rec) ~= "table" then return end
+    local nm = wname(w)
+    local mesh = C3.hit_mesh(w)
+    if not (nm and mesh) then return end
+    local n = B.apply(nm, w, mesh, rec)
+    if n > 0 then
+        local f = B.fight_count()
+        if f <= 5 or f % 50 == 0 then
+            Log("body: stand-in %s of peer %d <- owner body v=%s: %d bone mass(es) set%s", nm, peer,
+                tostring(rec.version), n, f > 0 and string.format(" (the game reset %d before)", f) or "")
+        end
     end
 end
 
@@ -985,9 +1022,9 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         return
     end
     if not (nm and puppet_peer[nm]) then return end
-    -- Did this call pass the stand-in's own contact gate? (Read before the
-    -- backstop, which may put the gate back.) The gate runs natively and
-    -- exactly as in solo; a call it stopped never reached Get Damage there.
+    -- Did this call pass the stand-in's own contact gate? The gate runs
+    -- natively and exactly as in solo; a call it stopped never reached Get
+    -- Damage there. (The backstop keeps that gate as the call left it.)
     local gate = BF.gate_passed(w, pv(HitBone), pv(HitImpulse), pv(CuttingPower))
     C3.standin_hit(w)   -- backstop (the nested Get Damage callback did it too)
     if not combat_window then return end
@@ -1541,7 +1578,8 @@ end
 -- Get Damage's gate: a blow on the bone of the last blow that passed it, while
 -- Last Damage Taken is still set (RetriggerableDelay 0.2 s), needs DRS >= that
 -- value × (Draw Cut + 1). C3.gd_last is the last replayed blow that passed:
--- { attacker, ats (its clock), bone }. Returns the gate state before the call.
+-- { attacker, ats (its clock), bone, name, ldt }. Returns the gate state
+-- before the call.
 C3.gd_last = nil
 function C3.gd_gate_open(me, attacker, d, bone)
     local ats = math.tointeger(tonumber(d.attacker_ts)) or 0
@@ -1549,7 +1587,15 @@ function C3.gd_gate_open(me, attacker, d, bone)
     local gl = C3.gd_last
     local keep = gl ~= nil and gl.attacker == attacker and gl.bone == b and ats > 0
         and ats >= gl.ats and ats - gl.ats < BF.GD_GATE_MS
-    if not keep then pcall(function() me["Last Damage Taken"] = 0 end) end
+    if not keep then
+        pcall(function() me["Last Damage Taken"] = 0 end)
+    elseif gl.ldt then
+        -- Solo still has the gate set here, but the replays may be further
+        -- apart on my clock than 0.2 s (jitter, a parry hold): the game's own
+        -- reset has cleared it by now. Put the value of that blow back.
+        pcall(function() me["Last Damage Taken"] = gl.ldt end)
+        pcall(function() me["Last Damaged Bone"] = FName(gl.name or bone) end)
+    end
     local s = {}
     pcall(function() s.ldt = tonumber(me["Last Damage Taken"]) end)
     pcall(function() s.ldb = me["Last Damaged Bone"]:ToString():lower() end)
@@ -1561,7 +1607,8 @@ function C3.gd_gate_note(me, attacker, d, bone, s0)
     pcall(function() ldb = me["Last Damaged Bone"]:ToString():lower() end)
     local b = bone:lower()
     if ldb == b and (ldt ~= s0.ldt or s0.ldb ~= b) then
-        C3.gd_last = { attacker = attacker, ats = math.tointeger(tonumber(d.attacker_ts)) or 0, bone = b }
+        C3.gd_last = { attacker = attacker, ats = math.tointeger(tonumber(d.attacker_ts)) or 0, bone = b,
+                       name = bone, ldt = ldt }
     end
 end
 
@@ -1961,6 +2008,7 @@ local function update_standins()
                 -- leak is put back to (the mirrored owner state, this tick).
                 C3.protect(w, peer)
                 C3.baseline(w)
+                if C3.BODY and (tick_num + peer) % C3.BODY.APPLY_TICKS == 0 then C3.body_apply(peer, w) end
             end
         end
     end
@@ -2085,6 +2133,7 @@ wg_on_drop(function(why)
     dism_cache, dism_tick = {}, -999
     vout.last = nil           -- first sample of the new world goes out at once
     VB.base = {}          -- a dead flag must be re-earned in the new world
+    if C3.BODY then C3.BODY.drop() end
 end)
 
 local function on_tick()
@@ -2123,6 +2172,7 @@ local function on_tick()
 
     local me = local_pawn()
     if me then own_pawn_tick(me) end
+    if me and C3.BODY and tick_num % C3.BODY.PUBLISH_TICKS == 0 then C3.body_publish(me) end
     if me and next(C3.gated) ~= nil and tick_num % 5 == 0 then C3.ungate(me) end
 
     read_feedback()

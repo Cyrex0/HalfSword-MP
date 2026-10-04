@@ -65,7 +65,7 @@ The entry script (`scripts/docker-entry.sh`) turns these into flags:
 
 Every other server variable from [Configuration](configuration.md#environment-variables) is passed
 through as is, for example `HSMP_KIT_MODE`, `HSMP_KIT_BUDGET`, `HSMP_PERF`. Use `HSMP_NAME` for the name: `HSMP_SERVER_NAME` has no effect in the
-image, because the entry script always passes `--name`. `--tick-hz` is not exposed; it stays at 30.
+image, because the entry script always passes `--name`. `HSMP_TICK_HZ` sets `--tick-hz` (default 60).
 
 To pass flags the entry script does not know, override the entry point:
 

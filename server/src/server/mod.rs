@@ -62,7 +62,7 @@ pub(crate) use broadcast::{broadcast_admin_state, send_out};
 pub(crate) use session_records::{broadcast_msg, chat_to, server_chat_msg};
 pub(crate) use records::refused;
 pub use broadcast::shutdown;
-pub use tick::tick_loop;
+pub use tick::{tick_loop, TICK_HZ_MIN, TICK_HZ_MAX};
 pub use session::net_status_notices;
 // Session layer: typed commands, snapshot, RCON match/debug verbs.
 pub(crate) use session::{configure_session, rcon_debug_kill, rcon_status, run_command, Actor, KitView, SessionOpts};
@@ -75,12 +75,14 @@ pub struct PeerState {
     /// Ed25519 player identity from the v5 handshake (seats, wins and bans
     /// key on this).
     pub player_key: [u8; 32],
-    pub last_seen_tick: u32,
+    /// Server clock (ms) of the last packet heard from this peer.
+    pub last_seen_ms: u64,
     /// The last accepted `root` record of this peer.
     pub last_root: Option<hsmp_ipc::schema::pose::Root>,
     pub ready: bool,
     pub last_valid_pos: Option<[f32; 3]>,
-    pub last_valid_tick: u32,
+    /// Arrival time (server clock, ms) of the last accepted root.
+    pub last_valid_ms: u64,
     pub wins: u32,
     pub alive: bool,
     pub is_admin: bool,
@@ -103,7 +105,12 @@ pub struct ServerState {
 pub(crate) struct Inner {
     pub peers: HashMap<SocketAddr, PeerState>,
     next_peer_id: PeerId,
+    /// Ticks run so far (stats only: no timer counts ticks).
     server_tick: u32,
+    /// Server clock (ms, `Net::now_ms`) at the start of the current tick. Every
+    /// match timer is real time on this clock, so `--tick-hz` changes only how
+    /// often they are checked.
+    now_ms: u64,
     pub admin_peer_id: PeerId,
     pub banned_ips: HashSet<IpAddr>,
     /// Who is admin (owner / configured / granted keys), admin.rs.
@@ -114,7 +121,8 @@ pub(crate) struct Inner {
     match_state: String,
     match_arena: String,
     match_round: u32,
-    countdown_ticks: u32,
+    /// Time left on the phase timer (countdown, result screens, pause grace).
+    countdown_ms: u64,
     best_of: u8,
     match_state_dirty: bool,
 
@@ -122,9 +130,9 @@ pub(crate) struct Inner {
     /// Per-peer game-client reports from the `ping:<loaded_round>:<dead>` verb.
     match_peers: HashMap<PeerId, MatchPeer>,
     /// Countdown is frozen until every barrier-aware participant has loaded
-    /// the arena for the pending round (or `barrier_deadline` passes).
+    /// the arena for the pending round (or `barrier_deadline_ms` passes).
     barrier_passed: bool,
-    barrier_deadline: u32,
+    barrier_deadline_ms: u64,
     /// Player keys playing this match (set at START). Keyed by identity, not
     /// peer id, so a reconnect (new peer id) rejoins the same seat.
     participants: Vec<session::PlayerKey>,
@@ -146,7 +154,7 @@ pub(crate) struct Inner {
     /// > 0 while a finished round "settles": the last-standing player is
     /// provisional; a trade hit / death landing in this window makes it a
     /// draw. The result is published only when this reaches 0.
-    settle_ticks: u32,
+    settle_ms: u64,
     /// Pause budget: Live pauses each player key took this match,
     /// all Live pauses this match, and whether the current pause interrupted
     /// a Live round (it then resumes that same round, never replays it).
@@ -169,7 +177,7 @@ pub(crate) struct MatchPeer {
     aware: bool,
     /// Round number whose arena this client has loaded and spawned into.
     loaded_round: u32,
-    last_ping_tick: u32,
+    last_ping_ms: u64,
     /// Last round this client reported its pawn placed (`spawned:` verb).
     spawned_round: u32,
 }
@@ -187,6 +195,7 @@ impl ServerState {
                 peers: HashMap::new(),
                 next_peer_id: 1,
                 server_tick: 0,
+                now_ms: 0,
                 admin_peer_id: 0,
                 banned_ips: HashSet::new(),
                 admins: admin::AdminPolicy::default(),
@@ -194,12 +203,12 @@ impl ServerState {
                 match_state: "lobby".to_string(),
                 match_arena: "default".to_string(),
                 match_round: 0,
-                countdown_ticks: 0,
+                countdown_ms: 0,
                 best_of: 3,
                 match_state_dirty: false,
                 match_peers: HashMap::new(),
                 barrier_passed: true,
-                barrier_deadline: 0,
+                barrier_deadline_ms: 0,
                 participants: Vec::new(),
                 wins_by_key: HashMap::new(),
                 last_winner: 0,
@@ -207,7 +216,7 @@ impl ServerState {
                 spawn_round: 0,
                 spawn_plan: Vec::new(),
                 round_deaths: Vec::new(),
-                settle_ticks: 0,
+                settle_ms: 0,
                 pauses_by_key: HashMap::new(),
                 match_pauses: 0,
                 paused_from_live: false,

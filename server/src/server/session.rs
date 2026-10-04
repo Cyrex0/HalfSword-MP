@@ -100,13 +100,14 @@ fn dist3(a: [f32; 3], b: [f32; 3]) -> f32 {
 }
 
 pub(super) async fn accept_root(state: &Arc<ServerState>, from: SocketAddr, position: [f32; 3], stored: hsmp_ipc::schema::pose::Root) -> Option<PeerId> {
+    // Arrival time on the server clock: the speed rule measures the real time
+    // between roots, not the tick they landed in.
+    let arrived = state.net.now_ms();
     let accepted = {
         let mut inner = state.inner.lock().await;
-        let st = inner.server_tick;
-        // The configured tick rate.
-        let hz = inner.sess.tick_hz.max(1) as f32;
+        let st = inner.now_ms;
         let p = inner.peers.get_mut(&from)?;
-        p.last_seen_tick = st;
+        p.last_seen_ms = st;
         // NaN-safe: a non-finite / out-of-world position is
         // refused, also as the first packet, and a NaN speed never passes.
         // The burst is a per-peer distance bucket on the server clock (not a
@@ -117,7 +118,7 @@ pub(super) async fn accept_root(state: &Arc<ServerState>, from: SocketAddr, posi
         let accept = match p.last_valid_pos {
             None => crate::validate::input::root_step_ok(None, position, 0.0),
             Some(prev) => {
-                let dt_s = st.wrapping_sub(p.last_valid_tick) as f32 / hz;
+                let dt_s = arrived.saturating_sub(p.last_valid_ms) as f32 / 1000.0;
                 let d = dist3(prev, position);
                 crate::validate::input::root_step_ok(Some((prev, 1.0)), position, f32::INFINITY)
                     && d.is_finite()
@@ -137,7 +138,7 @@ pub(super) async fn accept_root(state: &Arc<ServerState>, from: SocketAddr, posi
         }
         if accept {
             p.last_valid_pos = Some(position);
-            p.last_valid_tick = st;
+            p.last_valid_ms = arrived;
             p.last_root = Some(stored);
             Some(p.id)
         } else { None }
@@ -149,9 +150,9 @@ pub(super) async fn accept_root(state: &Arc<ServerState>, from: SocketAddr, posi
 /// Liveness bookkeeping for stream packets that need no validation.
 pub(super) async fn touch_peer(state: &Arc<ServerState>, from: SocketAddr) -> Option<PeerId> {
     let mut inner = state.inner.lock().await;
-    let st = inner.server_tick;
+    let st = inner.now_ms;
     let p = inner.peers.get_mut(&from)?;
-    p.last_seen_tick = st;
+    p.last_seen_ms = st;
     Some(p.id)
 }
 
@@ -269,7 +270,6 @@ pub(crate) struct KitView {
 #[derive(Debug, Clone)]
 pub(crate) struct SessionOpts {
     pub debug_verbs: bool,
-    pub tick_hz: u32,
     /// Advertised mode string ("duel", "ffa", ...).
     pub mode: String,
 }
@@ -295,10 +295,10 @@ pub(crate) struct SessionCore {
     pub seats: HashMap<PlayerKey, u8>,
     pub nicks: HashMap<PlayerKey, String>,
     pub admin_key: Option<PlayerKey>,
-    /// No-admin auto start: server tick at which the lobby
+    /// No-admin auto start: server time (ms) at which the lobby
     /// starts the match because every player is ready (`auto_start_step`).
     /// None = not armed.
-    pub auto_start_at: Option<u32>,
+    pub auto_start_at: Option<u64>,
     /// Winner of the match that just ended (id, nick, wins), fixed when it
     /// ended; the S2CMatchResult names it even if it left meanwhile.
     pub match_winner: Option<(PeerId, String, u32)>,
@@ -316,18 +316,17 @@ pub(crate) struct SessionCore {
     force_send: bool,
     pub kits: KitView,
     pub debug_verbs: bool,
-    pub tick_hz: u32,
     pub max_peers: u8,
     pub mode: u8,
     /// First load error a client reported while loading: peer -> (pending
-    /// round, error, server tick). One retry window, then it sits out.
-    pub load_errors: HashMap<PeerId, (u32, String, u32)>,
+    /// round, error, server ms). One retry window, then it sits out.
+    pub load_errors: HashMap<PeerId, (u32, String, u64)>,
     /// Peers that sat out the pending round after failing to load (nick, error).
     pub sat_out: Vec<(PeerId, String, String)>,
-    /// Placement report per peer: (round, server tick) — spawn protection.
-    pub placed: HashMap<PeerId, (u32, u32)>,
-    /// Server tick of the last countdown -> live.
-    pub live_tick: u32,
+    /// Placement report per peer: (round, server ms) — spawn protection.
+    pub placed: HashMap<PeerId, (u32, u64)>,
+    /// Server time (ms) of the last countdown -> live.
+    pub live_ms: u64,
     /// Consecutive rounds voided because too few fighters loaded.
     pub void_streak: u32,
     next_event_id: u32,
@@ -366,13 +365,12 @@ impl SessionCore {
             force_send: false,
             kits: KitView::default(),
             debug_verbs: false,
-            tick_hz: 30,
             max_peers: max_peers.min(255) as u8,
             mode: v5::Mode::DUEL,
             load_errors: HashMap::new(),
             sat_out: Vec::new(),
             placed: HashMap::new(),
-            live_tick: 0,
+            live_ms: 0,
             void_streak: 0,
             next_event_id: 0,
             stalled: HashSet::new(),
@@ -417,7 +415,6 @@ pub(crate) async fn configure_session(state: &Arc<ServerState>, o: SessionOpts) 
     // One epoch and one clock for Welcome and every snapshot.
     inner.sess.epoch = state.net.epoch();
     inner.sess.debug_verbs = o.debug_verbs;
-    inner.sess.tick_hz = o.tick_hz.max(1);
     inner.sess.mode = mode_code(&o.mode);
     let epoch = inner.sess.epoch;
     info!(epoch, debug_verbs = o.debug_verbs, "session layer ready");
@@ -498,8 +495,7 @@ fn effective_arena(a: &str) -> &str {
 /// The live (lobby) config, assembled from the server state.
 pub(crate) fn live_config(inner: &Inner) -> rec::SessionConfig {
     let s = &inner.sess;
-    let hz = s.tick_hz.max(1);
-    let secs = |ticks: u32| (hz_ticks(inner, ticks) / hz).min(255) as u8;
+    let secs = |ms: u64| (ms / 1000).min(255) as u8;
     rec::SessionConfig {
         rev: s.config_rev,
         arena: Str::new(effective_arena(&inner.match_arena)),
@@ -513,10 +509,10 @@ pub(crate) fn live_config(inner: &Inner) -> rec::SessionConfig {
         kit_fairness: 0,
         max_fighters: s.max_peers,
         max_spectators: 0,
-        countdown_s: secs(FIRST_COUNTDOWN_TICKS),
-        roundover_s: secs(ROUNDOVER_TICKS),
-        matchover_s: secs(MATCH_OVER_TICKS),
-        barrier_timeout_s: secs(BARRIER_TIMEOUT_TICKS),
+        countdown_s: secs(FIRST_COUNTDOWN_MS),
+        roundover_s: secs(ROUNDOVER_MS),
+        matchover_s: secs(MATCH_OVER_MS),
+        barrier_timeout_s: secs(BARRIER_TIMEOUT_MS),
         // Late joiners spectate, then fight from the next round they loaded.
         join_in_progress: Jip::NEXT_ROUND,
         _r: [0; 3],
@@ -624,15 +620,13 @@ fn reseat(inner: &mut Inner) {
 /// treated as away (its connection may still be open: the transport idle
 /// timeout is 10 s client side / 20 s server side). A duel then pauses for
 /// its return (RECONNECT_GRACE), and the same seat and wins continue.
-pub(crate) const LINK_STALL_TICKS: u32 = 3 * 30;
+pub(crate) const LINK_STALL_MS: u64 = 3000;
 
-/// Last tick this peer was heard from: any authenticated packet
-/// (`last_seen_tick`, refreshed at most every 500 ms) or a game ping.
-fn last_heard(inner: &Inner, p: &PeerState) -> u32 {
-    let ping = inner.match_peers.get(&p.id).map(|m| m.last_ping_tick).unwrap_or(0);
-    let tick = inner.server_tick;
-    // the more recent of the two (wrapping tick arithmetic)
-    if tick.wrapping_sub(ping) < tick.wrapping_sub(p.last_seen_tick) { ping } else { p.last_seen_tick }
+/// When this peer was last heard from (server ms): any authenticated packet
+/// (`last_seen_ms`, refreshed at most every 500 ms) or a game ping.
+fn last_heard(inner: &Inner, p: &PeerState) -> u64 {
+    let ping = inner.match_peers.get(&p.id).map(|m| m.last_ping_ms).unwrap_or(0);
+    ping.max(p.last_seen_ms)
 }
 
 /// The link of a game client counts as up. Only real game clients (they
@@ -643,7 +637,7 @@ pub(crate) fn link_ok(inner: &Inner, p: &PeerState) -> bool {
     if inner.match_state != "live" && inner.match_state != "paused" { return true; }
     let aware = inner.match_peers.get(&p.id).map(|m| m.aware).unwrap_or(false);
     if !aware { return true; }
-    inner.server_tick.wrapping_sub(last_heard(inner, p)) <= hz_ticks(inner, LINK_STALL_TICKS)
+    inner.now_ms.saturating_sub(last_heard(inner, p)) <= LINK_STALL_MS
 }
 
 /// Edge detector for link stalls (called every tick from `reconcile_seats`):
@@ -843,21 +837,18 @@ fn result_reason(inner: &Inner) -> u8 {
 }
 
 fn deadline_candidate(inner: &Inner, phase: u8, now_ms: u64) -> u64 {
-    let hz = inner.sess.tick_hz.max(1) as u64;
-    let ticks = match phase {
-        Phase::LOADING => {
-            let left = inner.barrier_deadline.wrapping_sub(inner.server_tick);
-            if left < u32::MAX / 2 { left } else { 0 }
-        }
-        Phase::COUNTDOWN | Phase::ROUND_OVER | Phase::MATCH_OVER | Phase::PAUSED => inner.countdown_ticks,
+    let left = match phase {
+        Phase::LOADING => inner.barrier_deadline_ms.saturating_sub(inner.now_ms),
+        Phase::COUNTDOWN | Phase::ROUND_OVER | Phase::MATCH_OVER | Phase::PAUSED => inner.countdown_ms,
         // No-admin auto start armed (`auto_start_step`): when it fires.
         Phase::LOBBY => match inner.sess.auto_start_at {
-            Some(at) => { let left = at.wrapping_sub(inner.server_tick); if left < u32::MAX / 2 { left.max(1) } else { 0 } }
+            Some(at) if at > inner.now_ms => at - inner.now_ms,
+            Some(_) => 1,
             None => 0,
         },
         _ => 0,
-    } as u64;
-    if ticks == 0 { 0 } else { now_ms + ticks * 1000 / hz }
+    };
+    if left == 0 { 0 } else { now_ms + left }
 }
 
 /// Keep `phase_deadline_ms` stable between snapshots (a few ms of tick jitter
@@ -929,7 +920,7 @@ fn fill_session(inner: &Inner, now_ms: u64, seats: &mut Vec<(u8, PlayerKey)>, ro
         rows.push(r);
     }
     let winner_seat = if inner.last_winner != 0 { seat_of_peer(inner, inner.last_winner).unwrap_or(rec::NO_SEAT) } else { rec::NO_SEAT };
-    let head = rec::SessionHead {
+    rec::SessionHead {
         epoch: s.epoch,
         match_id: if in_match { s.match_id } else { 0 },
         phase_deadline_ms: if s.deadline.0 == phase { s.deadline.1 } else { deadline_candidate(inner, phase, now_ms) },
@@ -947,8 +938,7 @@ fn fill_session(inner: &Inner, now_ms: u64, seats: &mut Vec<(u8, PlayerKey)>, ro
         _r2: 0,
         config,
         frozen: frozen.unwrap_or_default(),
-    };
-    head
+    }
 }
 
 /// Same snapshot content apart from the per-send stamps (seq, server time).
@@ -1125,9 +1115,17 @@ pub(crate) fn apply_command(inner: &mut Inner, actor: Actor, cmd: &rec::Command,
         cmd_op::SET_CONFIG => set_config(inner, cmd.expected_rev, &cmd.patch, fx, &by),
         cmd_op::KICK | cmd_op::BAN => {
             let ban = cmd.op == cmd_op::BAN;
-            let Some(addr) = inner.peers.iter().find(|(_, p)| p.id == cmd.peer_id).map(|(a, _)| *a) else {
+            let Some((addr, target)) = inner.peers.iter().find(|(_, p)| p.id == cmd.peer_id).map(|(a, p)| (*a, peer_key(p))) else {
                 return refuse(CmdReason::UNKNOWN_PLAYER, format!("no such peer id={}", cmd.peer_id));
             };
+            // Nobody but the owner itself and RCON outranks the listen host: an admin it
+            // granted must not be able to throw it off its own server.
+            if let Some(a) = me {
+                let mine = inner.peers.get(&a).map_or(AdminRole::NONE, |p| inner.admins.role(&peer_key(p)));
+                if inner.admins.role(&target) > mine {
+                    return refuse(CmdReason::NOT_ADMIN, "the host cannot be kicked or banned");
+                }
+            }
             let reason = if text.is_empty() {
                 if ban { "banned".to_string() } else { "kicked".to_string() }
             } else { text.to_string() };
@@ -1198,7 +1196,7 @@ pub(crate) fn start_match(inner: &mut Inner, force: bool, by: &str) -> Outcome {
     }
     info!(arena = %inner.match_arena, force, by = %by, "match start: arena locked");
     on_match_start(inner);
-    begin_countdown(inner, FIRST_COUNTDOWN_TICKS);
+    begin_countdown(inner, FIRST_COUNTDOWN_MS);
     ok(format!("starting on {}", inner.match_arena))
 }
 
@@ -1281,10 +1279,10 @@ pub(crate) fn auto_start_step(inner: &mut Inner) {
     let n = inner.peers.len();
     let ready = inner.peers.values().filter(|p| p.ready).count();
     let eligible = inner.admin_peer_id == 0 && n >= AUTO_START_MIN && ready == n;
-    let tick = inner.server_tick;
+    let now = inner.now_ms;
     match (eligible, inner.sess.auto_start_at) {
         (true, None) => {
-            let at = tick.wrapping_add(AUTO_START_S * inner.sess.tick_hz.max(1));
+            let at = now + AUTO_START_S as u64 * 1000;
             inner.sess.auto_start_at = Some(at);
             inner.match_state_dirty = true;
             info!(players = n, delay_s = AUTO_START_S, "no admin: everyone is ready, auto start armed");
@@ -1299,7 +1297,7 @@ pub(crate) fn auto_start_step(inner: &mut Inner) {
             lobby_chat(inner, if inner.admin_peer_id != 0 { "Auto start cancelled: the host starts the match".into() }
                 else { "Auto start cancelled: not everyone is ready".into() });
         }
-        (true, Some(at)) if tick.wrapping_sub(at) < u32::MAX / 2 => {
+        (true, Some(at)) if now >= at => {
             let r = start_match(inner, false, "auto");
             inner.sess.auto_start_at = None;
             events::emit("auto_start", json!({"state": if r.ok { "started" } else { "refused" }, "players": n,

@@ -95,7 +95,7 @@ try {
     Write-Host "=== Starting dedicated server on ${ServerHost}:${ServerPort} ==="
     $env:RUST_LOG = "hsmp_server=debug,hsmp_sidecar=debug"
     $server = Start-Process -FilePath $ServerExe `
-        -ArgumentList "--bind", "${ServerHost}:${ServerPort}", "--tick-hz", "30", "--max-peers", "8" `
+        -ArgumentList "--bind", "${ServerHost}:${ServerPort}", "--max-peers", "8" `
         -WorkingDirectory $GameCwd -WindowStyle Minimized `
         -RedirectStandardOutput "$LogDir\server.out.log" -RedirectStandardError "$LogDir\server.err.log" -PassThru
     Track $server "server"

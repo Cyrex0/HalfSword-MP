@@ -25,7 +25,7 @@
 local F = {}
 
 F.SEND_MS     = 50     -- the owner's send interval (main.lua SEND_EVERY ticks)
-F.FAST_SEND_MS = 33    -- held items and bodies at their owner (contact): every 2nd tick, the server's flush rate
+F.FAST_SEND_MS = 33    -- held items and bodies at their owner (contact): every 2nd tick, the server's world flush (world_glue.rs WORLD_TICK, fixed: not --tick-hz)
 F.D_MIN_FAST  = 25
 F.CONTACT_CM  = 300    -- a body this near its owner is in contact (main.lua NEAR_DIST)
 F.D_MIN       = 40

@@ -40,21 +40,21 @@ facade), [ue4ss.md](ue4ss.md) (the UE4SS build the native module is pinned to).
 
 The whole segment is one `#[repr(C)] struct Segment` (`crates/hsmp-ipc/src/segment.rs`), so
 every offset is a compile-time constant. Each region starts on a 4 KiB boundary. The table is
-for the current layout (`SEGMENT_SIZE = 0x392000`, 3,743,744 bytes); the generated header
+for the current layout (`SEGMENT_SIZE = 0x39B000`, 3,780,608 bytes); the generated header
 `crates/hsmp-native/cpp/gen/hsmp_ipc.h` has every offset.
 
 | Region | Offset | Size | Writer | Contents |
 |---|---|---|---|---|
 | `header` | `0x000000` | 4 KiB | both (fields owned per side) | Frozen prefix, one block per side, shared epochs (§2.1) |
-| `game_out` | `0x001000` | 4 KiB | game | Seqlock slots: `local_root`, `local_weapon`, `local_pose`, `pose_lead`, `local_vitals`, `kit`, `kit_rules_req` |
+| `game_out` | `0x001000` | 4 KiB | game | Seqlock slots: `local_root`, `local_weapon`, `local_pose`, `pose_lead`, `local_vitals`, `kit`, `kit_rules_req`, `body` |
 | `game_blobs` | `0x002000` | 364 KiB | game | Triple buffers: `world_out`, `loadout`, `world_manifest_out`, `world_dyn_out`, `world_hash` |
-| `peers` | `0x05D000` | 96 KiB | sidecar | `dir` (peer id to slot), `kit_rules`, and `MAX_PEER_SLOTS = 32` × { `play`, `root`, `vitals`, `kit` } |
-| `peer_loadouts` | `0x075000` | 1,364 KiB | sidecar | 32 triple-buffered `loadout` records |
-| `state` | `0x1CA000` | 744 KiB | sidecar | Slots `session`, `link`, `admin`, `world_consistency`; triple buffers `world_remote`, `world_owners`, `world_manifest`, `world_dyn` |
-| `g2s` | `0x284000` | 260 KiB | game | Ring, 512 × 512 B (game to sidecar) |
-| `s2g` | `0x2C5000` | 516 KiB | sidecar | Ring, 1024 × 512 B (sidecar to game) |
-| `bus` | `0x346000` | 268 KiB | game | Bus directory and 64 keys × 4 KiB (§6) |
-| `devctl` | `0x389000` | 36 KiB | tools | Ring, 64 × 512 B, developer commands (§8) |
+| `peers` | `0x05D000` | 132 KiB | sidecar | `dir` (peer id to slot), `kit_rules`, and `MAX_PEER_SLOTS = 32` × { `play`, `root`, `vitals`, `kit`, `body` } |
+| `peer_loadouts` | `0x07E000` | 1,364 KiB | sidecar | 32 triple-buffered `loadout` records |
+| `state` | `0x1D3000` | 744 KiB | sidecar | Slots `session`, `link`, `admin`, `world_consistency`; triple buffers `world_remote`, `world_owners`, `world_manifest`, `world_dyn` |
+| `g2s` | `0x28D000` | 260 KiB | game | Ring, 512 × 512 B (game to sidecar) |
+| `s2g` | `0x2CE000` | 516 KiB | sidecar | Ring, 1024 × 512 B (sidecar to game) |
+| `bus` | `0x34F000` | 268 KiB | game | Bus directory and 64 keys × 4 KiB (§6) |
+| `devctl` | `0x392000` | 36 KiB | tools | Ring, 64 × 512 B, developer commands (§8) |
 
 Peer slots are indexed by slot, not by peer id: peer ids are u32 and not dense. The sidecar
 owns the `dir` mapping and bumps a per-slot generation when it reassigns a slot; the game drops

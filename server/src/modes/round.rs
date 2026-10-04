@@ -8,10 +8,10 @@ use super::traits::*;
 use super::zone::{Zone, ZoneDamage, ZoneTable};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// server.rs L1242-1243: `SETTLE_TICKS = 12` at 30 Hz = 400 ms. Covers
+/// Same as match_core `SETTLE_MS` (400 ms). Covers
 /// DEFENDER_GRACE (200 ms) plus trade-hit transit.
 pub const SETTLE_MS: Ms = 400;
-/// server.rs L196-197: `RECONNECT_GRACE_TICKS = 30 * 30` = 30 s.
+/// Same as match_core `RECONNECT_GRACE_MS` (30 s).
 pub const RECONNECT_GRACE_MS: Ms = 30_000;
 
 /// server.rs L1358: `needed_wins = (best_of + 1) / 2`.

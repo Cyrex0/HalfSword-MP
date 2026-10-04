@@ -51,15 +51,19 @@ IPC.MSG_MISMATCH = "Mod and helper program versions do not match - reinstall HSM
 IPC.MSG_NO_HELPER = "Helper program did not start - reinstall HSMP"
 
 -- ---- small helpers ------------------------------------------------------------
-local function call(f, ...)
-    if type(f) ~= "function" then return nil, "missing" end
-    local r = table.pack(pcall(f, ...))
-    if not r[1] then
+-- The results pass straight through (no table.pack): every IPC call of every frame
+-- goes through here.
+local function called(ok, ...)
+    if not ok then
         IPC.errors = (IPC.errors or 0) + 1
-        if (IPC.errors or 0) <= 5 then Log("ipc: native call raised: %s", tostring(r[2])) end
+        if (IPC.errors or 0) <= 5 then Log("ipc: native call raised: %s", tostring((...))) end
         return nil, "raised"
     end
-    return table.unpack(r, 2, r.n)
+    return ...
+end
+local function call(f, ...)
+    if type(f) ~= "function" then return nil, "missing" end
+    return called(pcall(f, ...))
 end
 
 local function band(a, b) return ((tonumber(a) or 0) // 1 | 0) & ((tonumber(b) or 0) // 1 | 0) end

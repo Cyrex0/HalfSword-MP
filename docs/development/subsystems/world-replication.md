@@ -12,7 +12,7 @@ whoever touches or holds a body simulates it, everyone else follows.
 | Records (one binary form game → server → game) | `crates/hsmp-ipc/src/schema/world.rs` |
 | Sidecar (slots ↔ wire, scope and epoch gating, resends) | `server/src/world_client.rs`; its tables (pure) `server/src/world_rx.rs` |
 | Server rules (pure logic) | `server/src/world.rs`, static arena table `server/src/world_static_table.rs` |
-| Server glue and the 30 Hz world task | `server/src/server/world_glue.rs` |
+| Server glue and the 30 Hz world task (its own fixed 33 ms timer, not `--tick-hz`) | `server/src/server/world_glue.rs` |
 | World-sync simulator and measurement | `tests/hsmpworld-sim`; gate rule WORLD-2 in `tools/hsmp-tools/src/bin/hsmp-gate/rules.rs` |
 
 ## What is replicated

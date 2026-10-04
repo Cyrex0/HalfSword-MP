@@ -69,8 +69,11 @@ struct Args {
     #[arg(long, default_value = "0.0.0.0:7777")]
     bind: String,
 
-    /// Server tick rate, Hz (10..=120). Match timers are in seconds at any rate.
-    #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u32).range(10..=120))]
+    /// Server tick rate, Hz (20-240). How often the server runs match flow,
+    /// flushes held hits and sends its periodic records. Every timer is in real
+    /// time, so this changes decision latency and cost, never game timings.
+    /// Pose and root relays are forwarded on arrival, not on the tick.
+    #[arg(long, env = "HSMP_TICK_HZ", default_value_t = 60, value_parser = clap::value_parser!(u32).range(server::TICK_HZ_MIN as i64..=server::TICK_HZ_MAX as i64))]
     tick_hz: u32,
 
     /// Max peers permitted at once (1..=64, the session roster's size). Lobby refuses JOIN
@@ -422,7 +425,6 @@ async fn main() -> Result<()> {
     let state = Arc::new(server::ServerState::with_net(args.max_peers, transport));
     server::configure_session(&state, server::SessionOpts {
         debug_verbs: args.debug_verbs,
-        tick_hz: args.tick_hz,
         mode: env_or_mode(&args.mode),
     }).await;
     // Who is admin: listen host key, configured admins, or nobody.
@@ -621,19 +623,35 @@ mod content_check_tests {
 }
 
 #[cfg(test)]
-mod limit_args_tests {
-    /// `--tick-hz 0` divided by zero at startup; a peer cap the session record cannot list
-    /// (more than 64 roster rows) is refused too.
+mod tick_hz_tests {
+    /// 60 Hz by default; 20 to 240 accepted; 0 (which used to divide by zero) refused.
     #[test]
-    fn tick_rate_and_peer_cap_are_bounded() {
+    fn tick_hz_is_validated() {
         use clap::Parser;
-        let parse = |a: &[&str]| super::Args::try_parse_from(a).map(|x| (x.tick_hz, x.max_peers));
-        assert_eq!(parse(&["hsmp-server"]).unwrap(), (30, 8));
-        assert_eq!(parse(&["hsmp-server", "--tick-hz", "60", "--max-peers", "16"]).unwrap(), (60, 16));
-        assert!(parse(&["hsmp-server", "--tick-hz", "0"]).is_err());
-        assert!(parse(&["hsmp-server", "--tick-hz", "1000"]).is_err());
+        let hz = |a: &[&str]| super::Args::try_parse_from(a).map(|x| x.tick_hz);
+        if std::env::var_os("HSMP_TICK_HZ").is_none() {
+            assert_eq!(hz(&["hsmp-server"]).unwrap(), 60);
+        }
+        for ok in ["20", "30", "60", "100", "128", "240"] {
+            assert_eq!(hz(&["hsmp-server", "--tick-hz", ok]).unwrap().to_string(), ok);
+        }
+        for bad in ["0", "19", "241", "-5", "sixty"] {
+            assert!(hz(&["hsmp-server", "--tick-hz", bad]).is_err(), "--tick-hz {bad} accepted");
+        }
+    }
+}
+
+#[cfg(test)]
+mod max_peers_tests {
+    /// A peer cap the session record cannot list (more than 64 roster rows), or 0, is refused.
+    #[test]
+    fn peer_cap_is_bounded() {
+        use clap::Parser;
+        let parse = |a: &[&str]| super::Args::try_parse_from(a).map(|x| x.max_peers);
+        assert_eq!(parse(&["hsmp-server"]).unwrap(), 8);
+        assert_eq!(parse(&["hsmp-server", "--max-peers", "16"]).unwrap(), 16);
+        assert_eq!(parse(&["hsmp-server", "--max-peers", "64"]).unwrap(), 64);
         assert!(parse(&["hsmp-server", "--max-peers", "0"]).is_err());
         assert!(parse(&["hsmp-server", "--max-peers", "65"]).is_err());
-        assert_eq!(parse(&["hsmp-server", "--max-peers", "64"]).unwrap().1, 64);
     }
 }

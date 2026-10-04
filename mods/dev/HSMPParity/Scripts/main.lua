@@ -371,19 +371,21 @@ end
 local captured = 0
 local function on_dcd(selfp, hc, cc, bone, loc, nrm, vel, imp, cp, stab, rig, blunt, lower, dp, kick)
     captured = captured + 1
-    if captured > 400 then return end
+    if captured > 3000 then return end   -- (enough for a calibration run: calib MIN_N per class)
     local function g(p) local v; pcall(function() v = p:get() end); return v end
     local w = g(selfp)
     local b = "?"; pcall(function() b = g(bone):ToString() end)
     local c = g(cc)
     local owner = "?"; pcall(function() owner = c:GetOwner():GetClass():GetFName():ToString() end)
+    -- the weapon actor (its name carries the weapon type: hit_vel_factor calibration)
+    local wp = "?"; pcall(function() wp = c:GetOwner():GetFName():ToString() end)
     local cv, wv = { 0, 0, 0 }, { 0, 0, 0 }
     pcall(function() cv = vec(c:GetPhysicsLinearVelocity(FName("None"))) end)
     pcall(function() wv = vec(g(hc):GetPhysicsLinearVelocity(g(bone))) end)
     local rel = math.sqrt((cv[1] - wv[1]) ^ 2 + (cv[2] - wv[2]) ^ 2 + (cv[3] - wv[3]) ^ 2)
     local function L(p) local t = vec(g(p)); return math.sqrt(t[1] ^ 2 + t[2] ^ 2 + t[3] ^ 2) end
-    Log("DCD on %s bone=%s by %s: |vel|=%.0f |imp|=%.0f rel=%.0f cut=%.1f stab=%.2f rig=%.2f kick=%.1f",
-        nm(w), b, owner, L(vel), L(imp), rel, num(g(cp)), num(g(stab)), num(g(rig)), num(g(kick)))
+    Log("DCD on %s bone=%s by %s wp=%s: |vel|=%.0f |imp|=%.0f rel=%.0f cut=%.1f stab=%.2f rig=%.2f kick=%.1f",
+        nm(w), b, owner, wp, L(vel), L(imp), rel, num(g(cp)), num(g(stab)), num(g(rig)), num(g(kick)))
 end
 local hooked = false
 

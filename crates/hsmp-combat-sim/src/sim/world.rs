@@ -139,6 +139,13 @@ pub struct Config {
     /// Fault injection for the checker: the stand-in's echo blow on the
     /// victim's pawn is NOT restored (double application).
     pub echo_leak: bool,
+    /// Server tick period (ms): held-hit flush, clash judging, ledger sweep.
+    pub server_tick_ms: f64,
+    /// Ablation: the server keeps only the newest pose sample per tick
+    /// (a tick-snapshot history) instead of every sample on arrival.
+    pub record_on_tick: bool,
+    /// Ablation: poses are relayed on the next tick, not on arrival.
+    pub relay_on_tick: bool,
 }
 
 impl Config {
@@ -148,6 +155,8 @@ impl Config {
             policy: Policy::Dedupe, cheats: Vec::new(), drift_ppm: 300.0, degenerate_polearm: true,
             servo_noise: std::env::var("SIM_SERVO_NOISE").ok().and_then(|s| s.parse().ok()).unwrap_or(SERVO_NOISE),
             health_model: false, stall: None, echo_leak: false,
+            server_tick_ms: SERVER_TICK_MS,
+            record_on_tick: false, relay_on_tick: false,
         }
     }
 }
@@ -206,6 +215,8 @@ pub struct ClaimRec {
     pub pcell: Option<(damage::WeaponClass, damage::Armour, u8, f32, bool)>,
     /// Debug: true relative speed, stand-in one, server estimate.
     pub rel_dbg: Option<(f32, f32, Option<f32>, f32)>,
+    /// Server peak striking speed at first arrival (Info::peak_speed, or the contact speed).
+    pub server_peak: Option<f32>,
     /// Honest blade contacts: (capsule segment, true time of the victim pose shown, contact point).
     pub geo: Option<(usize, f64, V3)>,
 }
@@ -356,13 +367,16 @@ pub struct World {
     qseq: u64,
     pub claims: Vec<ClaimRec>,
     /// Claim payloads (same index as `claims`; Msg is Copy).
-    pending_hits: Vec<DamageEvent>,
+    pub pending_hits: Vec<DamageEvent>,
     /// age_ms each claim left Lua with (same index).
     base_age: Vec<u32>,
     hitmap: HashMap<(usize, u32), usize>,
     alive: Vec<bool>,
     dead_at: Vec<f64>,
     next_tick: f64,
+    /// Pose samples held for the next tick (ablations): (from, ts, true t).
+    tick_records: Vec<(usize, u32, f64)>,
+    tick_relays: Vec<(usize, u32, f64)>,
     next_rtt: f64,
     next_contact: u64,
     /// screen clashes: (client, peer, true t, true time of the peer pose shown)
@@ -443,6 +457,8 @@ impl World {
             alive: vec![true; n],
             dead_at: vec![-1e9; n],
             next_tick: 0.0,
+            tick_records: Vec::new(),
+            tick_relays: Vec::new(),
             next_rtt: 0.0,
             next_contact: 1,
             screen_clashes: Vec::new(),
@@ -1140,6 +1156,7 @@ impl World {
             booked_loss: None, outcome: None, confirm_t: None, applied_t: None, arrived_t: None, forwarded_t: None, effective: eff, hand: main.hand, n_events: evs.len(), bound_sum, lie: evs.iter().map(|e| e.lie).fold(0.0, f32::max), speed: main.speed, bone: main.bone, server_speed: None, parry_d: None, s_blade: main.s_blade,
             solo: if main.dcd.is_some() { Some(main.solo) } else { None }, mp: None,
             rel_dbg: main.dcd.map(|x| (main.solo_vrel, x.vrel_s, None, main.speed)),
+            server_peak: None,
             geo: if kind == ClaimKind::Honest && !main.hand { Some((main.seg, main.shown_t, main.loc)) } else { None },
             pcell: main.dcd.map(|x| (w_class(&self.plan.fighters[c]), x.armour, game::part_rank(main.bone), x.k.hm, main.stab)),
         });
@@ -1302,12 +1319,18 @@ impl World {
         let now = t as i64;
         match m {
             Msg::SPose { from, ts, t: ts_t } => {
-                self.server_record(from, ts, ts_t, now);
-                for to in 0..self.cfg.players {
-                    if to == from { continue; }
-                    for at in self.clients[to].down.send(t) {
-                        self.push(at, Msg::CPose { to, from, ts, t: ts_t });
+                if self.cfg.record_on_tick {
+                    match self.tick_records.iter_mut().find(|e| e.0 == from) {
+                        Some(e) => if ts > e.1 { *e = (from, ts, ts_t); },
+                        None => self.tick_records.push((from, ts, ts_t)),
                     }
+                } else {
+                    self.server_record(from, ts, ts_t, now);
+                }
+                if self.cfg.relay_on_tick {
+                    self.tick_relays.push((from, ts, ts_t));
+                } else {
+                    self.relay_pose(from, ts, ts_t, t);
                 }
             }
             Msg::CPose { to, from, ts, t: _ } => self.view_rx(to, from, ts, t),
@@ -1333,6 +1356,7 @@ impl World {
                     }
                     if let crate::lagcomp::Eval::Accept(i) = self.core.lc.evaluate(self.clients[from].pid, &hit, now) {
                         self.claims[rec].server_speed = i.contact_speed;
+                        self.claims[rec].server_peak = i.peak_speed.or(i.contact_speed);
                         if let Some(d) = self.claims[rec].rel_dbg.as_mut() { d.2 = i.rel_speed; }
                         self.claims[rec].parry_d = Some(i.parry_d);
                     }
@@ -1380,8 +1404,23 @@ impl World {
         }
     }
 
+    fn relay_pose(&mut self, from: usize, ts: u32, ts_t: f64, t: f64) {
+        for to in 0..self.cfg.players {
+            if to == from { continue; }
+            for at in self.clients[to].down.send(t) {
+                self.push(at, Msg::CPose { to, from, ts, t: ts_t });
+            }
+        }
+    }
+
     fn server_tick(&mut self, t: f64) {
         let now = t as i64;
+        for (from, ts, ts_t) in std::mem::take(&mut self.tick_records) {
+            self.server_record(from, ts, ts_t, now);
+        }
+        for (from, ts, ts_t) in std::mem::take(&mut self.tick_relays) {
+            self.relay_pose(from, ts, ts_t, t);
+        }
         for (apid, hit, v) in self.core.flush(now) {
             let Some(a) = self.clients.iter().position(|c| c.pid == apid) else { continue };
             let Some(&rec) = self.hitmap.get(&(a, hit.hit_id)) else { continue };
@@ -1504,7 +1543,7 @@ impl World {
                 }
             }
             if t >= self.next_tick {
-                self.next_tick += SERVER_TICK_MS;
+                self.next_tick += self.cfg.server_tick_ms;
                 self.server_tick(t);
             }
             if t >= self.next_rtt {

@@ -3,7 +3,7 @@
 #[test]
 fn hsmpavatars_pure_servo_and_parser() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let avatars = root.join("mods/HSMPAvatars/Scripts/main.lua");
+    let avatars = root.join("mods/HSMPAvatars/Scripts/avatars_pure.lua");
     let test = std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/servo_pure.lua")).unwrap();
     let lua = mlua::Lua::new();
     let arg = lua.create_table().unwrap();

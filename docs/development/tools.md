@@ -67,10 +67,11 @@ that `check_travel` and `check_wg` share. What each lint checks, with
 examples, is in [lua-mods.md](lua-mods.md).
 
 Lua suites (`hsmp-tools lua-test --list`): `avatars`, `combat`,
-`damage_parity`, `director`, `flow`, `hsmp_log`, `hsmp_session`, `hsmpworld`,
+`damage_parity`, `director`, `flow`, `framecost`, `hsmp_log`, `hsmp_session`, `hsmpworld`,
 `hud_net`, `ipc`, `kit_status`, `loadout`, `menu_ui`, `pose`, `records`, `rvp`,
 `sidecar_peers`, `spawn_place`, `sync`, `ui_scale`, `vitals`, `world_guard`,
-`world_state`. `menu_ui -- dump` renders every menu screen as ASCII.
+`world_state`. `menu_ui -- dump` renders every menu screen as ASCII; `framecost` prints the
+per-frame Lua garbage (and the stand-in driver's Lua CPU time) of the hot loops.
 
 `hsmp-tools lua-test` with no suite runs them all; `--verbose` prints every
 passing check; `--list` lists suites. Exit codes: 0 ok, 1 check/lint

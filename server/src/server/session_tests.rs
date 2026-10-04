@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::server::match_core::round_tests::peer;
-use crate::server::tick::advance;
+use crate::server::tick::{advance, MatchResult};
 use proptest::prelude::*;
 
 /// Test shorthand for a `command` record (the old v5 command shapes).
@@ -208,8 +208,34 @@ fn cmd(i: &mut Inner, a: SocketAddr, id: u32, c: C) -> R {
     cl(i, Actor::Peer(a), Some(id), 0, &c, &mut CmdEffects::default()).0
 }
 
+thread_local! {
+    /// Tick rate the helpers below simulate (`at_rates` changes it).
+    static HZ: std::cell::Cell<u32> = const { std::cell::Cell::new(30) };
+}
+
+fn hz() -> u64 { HZ.with(|h| h.get()) as u64 }
+
+/// Run `f` once per tick rate. Every timer is real time, so the same script
+/// must give the same result at each rate.
+fn at_rates(mut f: impl FnMut()) {
+    for rate in [30, 60, 100, 128] {
+        HZ.with(|h| h.set(rate));
+        f();
+    }
+    HZ.with(|h| h.set(30));
+}
+
+/// Ticks that cover `ms` at the simulated rate.
+fn tk(ms: u64) -> u32 { ms.saturating_mul(hz()).div_ceil(1000) as u32 }
+
+/// One tick: the clock moves on by one tick period.
+fn step(i: &mut Inner) -> Option<MatchResult> {
+    let t = (i.server_tick as u64 + 1) * 1000 / hz();
+    advance(i, t)
+}
+
 /// Advance n ticks. Every connected client's transport keeps talking (keepalive
-/// PINGs refresh `last_seen_tick` in dispatch), as on a real server.
+/// PINGs refresh `last_seen_ms` in dispatch), as on a real server.
 fn ticks(i: &mut Inner, n: u32) {
     ticks_except(i, n, &[]);
 }
@@ -217,11 +243,11 @@ fn ticks(i: &mut Inner, n: u32) {
 /// Advance n ticks while the peers at `silent` send nothing (a blackout).
 fn ticks_except(i: &mut Inner, n: u32, silent: &[SocketAddr]) {
     for _ in 0..n {
-        let t = i.server_tick;
+        let t = i.now_ms;
         for (a, p) in i.peers.iter_mut() {
-            if !silent.contains(a) { p.last_seen_tick = t; }
+            if !silent.contains(a) { p.last_seen_ms = t; }
         }
-        advance(i);
+        step(i);
     }
 }
 
@@ -259,36 +285,38 @@ async fn nan_root_is_refused_and_never_disables_the_speed_cap() {
 /// time window: the key is the proof).
 #[test]
 fn listen_host_regains_admin_by_key_and_nobody_else_inherits_it() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let host = join(&mut i, 1, "Host");
-    let b = join(&mut i, 2, "B");
-    let _c = join(&mut i, 3, "C");
-    let host_key = peer_key(&i.peers[&host]);
-    assert!(i.peers[&host].is_admin);
-    assert_eq!(i.admins.role(&host_key), AdminRole::OWNER);
-    assert!(!i.peers[&b].is_admin);
-    // NAT rebind / timeout: the host drops. No one is promoted.
-    assert!(admin_left_after(&mut i, host), "the owner leaving is reported");
-    ticks(&mut i, 30);
-    assert_eq!(i.admin_peer_id, 0);
-    assert!(i.peers.values().all(|p| !p.is_admin), "no one inherits admin");
-    // The host is back from a new address: admin again.
-    let host2 = join(&mut i, 9, "Host");
-    assert_eq!(peer_key(&i.peers[&host2]), host_key);
-    assert_eq!(i.admin_peer_id, i.peers[&host2].id);
-    assert!(i.peers[&host2].is_admin && !i.peers[&b].is_admin);
-    // Also much later (the key, not a window, decides).
-    leave(&mut i, host2);
-    ticks(&mut i, 10 * 60 * 30);
-    let host3 = join(&mut i, 10, "Host");
-    assert!(i.peers[&host3].is_admin);
-    // A stranger whose nick equals the host's does not get it (different key).
-    let mut s = peer(500, "Host");
-    s.player_key = [5; 32];
-    i.peers.insert(addr(11), s);
-    refresh_admins(&mut i);
-    assert!(!i.peers[&addr(11)].is_admin);
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let host = join(&mut i, 1, "Host");
+        let b = join(&mut i, 2, "B");
+        let _c = join(&mut i, 3, "C");
+        let host_key = peer_key(&i.peers[&host]);
+        assert!(i.peers[&host].is_admin);
+        assert_eq!(i.admins.role(&host_key), AdminRole::OWNER);
+        assert!(!i.peers[&b].is_admin);
+        // NAT rebind / timeout: the host drops. No one is promoted.
+        assert!(admin_left_after(&mut i, host), "the owner leaving is reported");
+        ticks(&mut i, tk(1000));
+        assert_eq!(i.admin_peer_id, 0);
+        assert!(i.peers.values().all(|p| !p.is_admin), "no one inherits admin");
+        // The host is back from a new address: admin again.
+        let host2 = join(&mut i, 9, "Host");
+        assert_eq!(peer_key(&i.peers[&host2]), host_key);
+        assert_eq!(i.admin_peer_id, i.peers[&host2].id);
+        assert!(i.peers[&host2].is_admin && !i.peers[&b].is_admin);
+        // Also much later (the key, not a window, decides).
+        leave(&mut i, host2);
+        ticks(&mut i, tk(10 * 60 * 1000));
+        let host3 = join(&mut i, 10, "Host");
+        assert!(i.peers[&host3].is_admin);
+        // A stranger whose nick equals the host's does not get it (different key).
+        let mut s = peer(500, "Host");
+        s.player_key = [5; 32];
+        i.peers.insert(addr(11), s);
+        refresh_admins(&mut i);
+        assert!(!i.peers[&addr(11)].is_admin);
+    });
 }
 
 fn admin_left_after(i: &mut Inner, a: SocketAddr) -> bool {
@@ -319,6 +347,36 @@ fn promote_grants_admin_without_revoking_anyone() {
     assert_eq!(role(i.peers[&back].id), AdminRole::OWNER);
     assert_eq!(role(c_id), AdminRole::ADMIN);
     assert_eq!(role(i.peers[&b].id), AdminRole::NONE);
+}
+
+/// A granted admin cannot kick or ban the listen host (OWNER): only the owner itself or RCON
+/// outranks it. Admins can still kick each other and ordinary players.
+#[test]
+fn an_admin_cannot_kick_or_ban_the_owner() {
+    let st = new_state();
+    let mut i = st.inner.try_lock().unwrap();
+    let host = join(&mut i, 1, "Host");
+    let a = join(&mut i, 2, "A");
+    let b = join(&mut i, 3, "B");
+    let (host_id, a_id, b_id) = (i.peers[&host].id, i.peers[&a].id, i.peers[&b].id);
+    assert!(cmd(&mut i, host, 1, C::Promote { peer_id: a_id, admin_role: AdminRole::ADMIN }).ok);
+    let mut fx = CmdEffects::default();
+    let r = cl(&mut i, Actor::Peer(a), Some(2), 0, &C::Kick { peer_id: host_id, reason: "bye".into() }, &mut fx).0;
+    assert!(!r.ok && r.reason_code == CmdReason::NOT_ADMIN, "{r:?}");
+    assert!(fx.kicks.is_empty(), "no kick of the owner is queued");
+    let mut ban = C::Kick { peer_id: host_id, reason: String::new() }.rec(3, 0);
+    ban.op = cmd_op::BAN;
+    let mut fx = CmdEffects::default();
+    let (r, _) = command_locked(&mut i, Actor::Peer(a), &ban, &mut fx);
+    assert!(!r.ok.get() && fx.kicks.is_empty(), "no ban of the owner");
+    // an admin may still kick a player, the owner may kick an admin, RCON may kick anyone
+    let mut fx = CmdEffects::default();
+    assert!(cl(&mut i, Actor::Peer(a), Some(4), 0, &C::Kick { peer_id: b_id, reason: String::new() }, &mut fx).0.ok);
+    let mut fx = CmdEffects::default();
+    assert!(cl(&mut i, Actor::Peer(host), Some(5), 0, &C::Kick { peer_id: a_id, reason: String::new() }, &mut fx).0.ok);
+    let mut fx = CmdEffects::default();
+    assert!(cl(&mut i, Actor::Rcon, None, 0, &C::Kick { peer_id: host_id, reason: String::new() }, &mut fx).0.ok);
+    assert_eq!(fx.kicks.len(), 1);
 }
 
 // ---- admin assignment on a dedicated server ------------------------------------
@@ -395,54 +453,58 @@ fn admin_key_parsing_and_masking() {
 /// match starts by itself.
 #[test]
 fn no_admin_lobby_auto_starts_when_everyone_is_ready() {
-    let st = dedicated();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "A");
-    // One ready player alone never auto-starts.
-    cmd(&mut i, a, 1, C::Ready(true));
-    ticks(&mut i, 10 * 30);
-    assert_eq!(i.match_state, "lobby");
-    assert!(i.sess.auto_start_at.is_none());
-    let b = join(&mut i, 2, "B");
-    ticks(&mut i, 3);
-    assert!(i.sess.auto_start_at.is_none(), "B is not ready");
-    cmd(&mut i, b, 1, C::Ready(true));
-    ticks(&mut i, 2);
-    assert!(i.sess.auto_start_at.is_some(), "everyone ready: armed");
-    update_deadline(&mut i, 1_000);
-    let s = tv(&build_session(&i, 1_000));
-    assert_eq!(s.phase, Phase::LOBBY);
-    assert!(s.phase_deadline_ms > 1_000, "the lobby shows when it starts");
-    // B changes its mind: cancelled.
-    cmd(&mut i, b, 2, C::Ready(false));
-    ticks(&mut i, 1);
-    assert!(i.sess.auto_start_at.is_none());
-    cmd(&mut i, b, 3, C::Ready(true));
-    ticks(&mut i, AUTO_START_S * 30 + 2);
-    assert_ne!(i.match_state, "lobby", "started by itself");
-    assert_eq!(i.participants.len(), 2);
-    assert!(i.sess.match_id != 0);
+    at_rates(|| {
+        let st = dedicated();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "A");
+        // One ready player alone never auto-starts.
+        cmd(&mut i, a, 1, C::Ready(true));
+        ticks(&mut i, tk(10_000));
+        assert_eq!(i.match_state, "lobby");
+        assert!(i.sess.auto_start_at.is_none());
+        let b = join(&mut i, 2, "B");
+        ticks(&mut i, 3);
+        assert!(i.sess.auto_start_at.is_none(), "B is not ready");
+        cmd(&mut i, b, 1, C::Ready(true));
+        ticks(&mut i, 2);
+        assert!(i.sess.auto_start_at.is_some(), "everyone ready: armed");
+        update_deadline(&mut i, 1_000);
+        let s = tv(&build_session(&i, 1_000));
+        assert_eq!(s.phase, Phase::LOBBY);
+        assert!(s.phase_deadline_ms > 1_000, "the lobby shows when it starts");
+        // B changes its mind: cancelled.
+        cmd(&mut i, b, 2, C::Ready(false));
+        ticks(&mut i, 1);
+        assert!(i.sess.auto_start_at.is_none());
+        cmd(&mut i, b, 3, C::Ready(true));
+        ticks(&mut i, tk(AUTO_START_S as u64 * 1000) + 2);
+        assert_ne!(i.match_state, "lobby", "started by itself");
+        assert_eq!(i.participants.len(), 2);
+        assert!(i.sess.match_id != 0);
+    });
 }
 
 /// With an admin present the admin starts; READY alone does not.
 #[test]
 fn an_admin_present_disables_the_auto_start() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let host = join(&mut i, 1, "Host");
-    let b = join(&mut i, 2, "B");
-    cmd(&mut i, host, 1, C::Ready(true));
-    cmd(&mut i, b, 1, C::Ready(true));
-    ticks(&mut i, AUTO_START_S * 30 + 30);
-    assert_eq!(i.match_state, "lobby");
-    // The host drops: the remaining ready... only one player: still lobby.
-    leave(&mut i, host);
-    ticks(&mut i, AUTO_START_S * 30 + 30);
-    assert_eq!(i.match_state, "lobby");
-    let c = join(&mut i, 3, "C");
-    cmd(&mut i, c, 1, C::Ready(true));
-    ticks(&mut i, AUTO_START_S * 30 + 2);
-    assert_ne!(i.match_state, "lobby", "no admin left: the ready players start");
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let host = join(&mut i, 1, "Host");
+        let b = join(&mut i, 2, "B");
+        cmd(&mut i, host, 1, C::Ready(true));
+        cmd(&mut i, b, 1, C::Ready(true));
+        ticks(&mut i, tk(AUTO_START_S as u64 * 1000) + tk(1000));
+        assert_eq!(i.match_state, "lobby");
+        // The host drops: the remaining ready... only one player: still lobby.
+        leave(&mut i, host);
+        ticks(&mut i, tk(AUTO_START_S as u64 * 1000) + tk(1000));
+        assert_eq!(i.match_state, "lobby");
+        let c = join(&mut i, 3, "C");
+        cmd(&mut i, c, 1, C::Ready(true));
+        ticks(&mut i, tk(AUTO_START_S as u64 * 1000) + 2);
+        assert_ne!(i.match_state, "lobby", "no admin left: the ready players start");
+    });
 }
 
 // ---- per-peer state is dropped on leave, and budgets ----------------------------
@@ -506,33 +568,35 @@ fn two_willies_get_distinct_nicks_keys_and_seats() {
 
 #[test]
 fn seats_follow_the_handshake_player_key_not_the_nick() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "Willie");
-    let b = join(&mut i, 2, "Bob");
-    i.peers.get_mut(&a).unwrap().player_key = [7; 32];
-    i.peers.get_mut(&b).unwrap().player_key = [9; 32];
-    reconcile_seats(&mut i);
-    for p in i.peers.values_mut() { p.ready = true; }
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-    ticks(&mut i, 91);
-    let seat_b = seat(&i, b);
-    assert_eq!(peer_key(&i.peers[&b]), [9; 32]);
-    // B reconnects from a new address under another nick: same key, same seat.
-    leave(&mut i, b);
-    ticks(&mut i, 1);
-    let b2 = addr(50);
-    let mut p = peer(42, "Bobby");
-    p.player_key = [9; 32];
-    p.alive = false;
-    i.peers.insert(b2, p);
-    on_joined(&mut i, b2);
-    assert_eq!(seat(&i, b2), seat_b);
-    // A stranger reusing B's old nick gets no seat of B's.
-    let c = join(&mut i, 3, "Bob");
-    i.peers.get_mut(&c).unwrap().player_key = [11; 32];
-    reconcile_seats(&mut i);
-    assert_ne!(seat(&i, c), seat_b);
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "Willie");
+        let b = join(&mut i, 2, "Bob");
+        i.peers.get_mut(&a).unwrap().player_key = [7; 32];
+        i.peers.get_mut(&b).unwrap().player_key = [9; 32];
+        reconcile_seats(&mut i);
+        for p in i.peers.values_mut() { p.ready = true; }
+        assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
+        let seat_b = seat(&i, b);
+        assert_eq!(peer_key(&i.peers[&b]), [9; 32]);
+        // B reconnects from a new address under another nick: same key, same seat.
+        leave(&mut i, b);
+        ticks(&mut i, 1);
+        let b2 = addr(50);
+        let mut p = peer(42, "Bobby");
+        p.player_key = [9; 32];
+        p.alive = false;
+        i.peers.insert(b2, p);
+        on_joined(&mut i, b2);
+        assert_eq!(seat(&i, b2), seat_b);
+        // A stranger reusing B's old nick gets no seat of B's.
+        let c = join(&mut i, 3, "Bob");
+        i.peers.get_mut(&c).unwrap().player_key = [11; 32];
+        reconcile_seats(&mut i);
+        assert_ne!(seat(&i, c), seat_b);
+    });
 }
 
 #[test]
@@ -601,57 +665,61 @@ fn match_snapshot_has_frozen_config_spawns_and_seat_ordered_plan() {
 
 #[test]
 fn snapshot_cadence_and_seq() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "A");
-    let s1 = session_due(&mut i, 100).map(|s| tv(&s)).expect("first snapshot");
-    assert_eq!(s1.seq, 1);
-    assert!(session_due(&mut i, 150).map(|s| tv(&s)).is_none(), "nothing changed, lobby 1 Hz");
-    i.peers.get_mut(&a).unwrap().ready = true;
-    let s2 = session_due(&mut i, 160).map(|s| tv(&s)).expect("on change");
-    assert_eq!(s2.seq, 2);
-    assert!(session_due(&mut i, 900).map(|s| tv(&s)).is_none());
-    assert_eq!(session_due(&mut i, 1161).map(|s| tv(&s)).unwrap().seq, 3, "1 Hz in the lobby");
-    // In a match: 3 Hz.
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-    let s4 = session_due(&mut i, 1170).map(|s| tv(&s)).unwrap();
-    assert_eq!(s4.phase, Phase::LOADING);
-    ticks(&mut i, 1);
-    let s5 = session_due(&mut i, 1200).map(|s| tv(&s)).unwrap();
-    assert_eq!(s5.phase, Phase::COUNTDOWN);
-    assert!(session_due(&mut i, 1400).map(|s| tv(&s)).is_none());
-    assert!(session_due(&mut i, 1534).map(|s| tv(&s)).is_some(), "333 ms in a match");
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "A");
+        let s1 = session_due(&mut i, 100).map(|s| tv(&s)).expect("first snapshot");
+        assert_eq!(s1.seq, 1);
+        assert!(session_due(&mut i, 150).map(|s| tv(&s)).is_none(), "nothing changed, lobby 1 Hz");
+        i.peers.get_mut(&a).unwrap().ready = true;
+        let s2 = session_due(&mut i, 160).map(|s| tv(&s)).expect("on change");
+        assert_eq!(s2.seq, 2);
+        assert!(session_due(&mut i, 900).map(|s| tv(&s)).is_none());
+        assert_eq!(session_due(&mut i, 1161).map(|s| tv(&s)).unwrap().seq, 3, "1 Hz in the lobby");
+        // In a match: 3 Hz.
+        assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
+        let s4 = session_due(&mut i, 1170).map(|s| tv(&s)).unwrap();
+        assert_eq!(s4.phase, Phase::LOADING);
+        ticks(&mut i, 1);
+        let s5 = session_due(&mut i, 1200).map(|s| tv(&s)).unwrap();
+        assert_eq!(s5.phase, Phase::COUNTDOWN);
+        assert!(session_due(&mut i, 1400).map(|s| tv(&s)).is_none());
+        assert!(session_due(&mut i, 1534).map(|s| tv(&s)).is_some(), "333 ms in a match");
+    });
 }
 
 #[test]
 fn disconnected_participant_keeps_its_seat_and_wins() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "A");
-    let b = join(&mut i, 2, "B");
-    for p in i.peers.values_mut() { p.ready = true; }
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-    ticks(&mut i, 1 + 90);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    let pid_a = i.peers[&a].id;
-    let pid_b = i.peers[&b].id;
-    assert!(declare_death(&mut i, pid_b, pid_a, DEATH_REPORTED));
-    ticks(&mut i, 12);
-    assert_eq!(i.peers[&a].wins, 1);
-    let seat_a = seat(&i, a);
-    // A drops: the duel pauses, the roster keeps the seat (connected=false).
-    leave(&mut i, a);
-    ticks(&mut i, 1);
-    let s = tv(&build_session(&i, 0));
-    let ra = s.roster.iter().find(|r| r.seat == seat_a).unwrap();
-    assert!(!ra.connected);
-    assert_eq!(ra.wins, 1);
-    assert_eq!(ra.nick, "A");
-    // A comes back from another address: same seat, same wins.
-    let a2 = join(&mut i, 9, "A");
-    assert_eq!(seat(&i, a2), seat_a);
-    assert_eq!(i.peers[&a2].wins, 1);
-    assert_ne!(i.peers[&a2].id, pid_a, "new peer id, same seat");
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "A");
+        let b = join(&mut i, 2, "B");
+        for p in i.peers.values_mut() { p.ready = true; }
+        assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        let pid_a = i.peers[&a].id;
+        let pid_b = i.peers[&b].id;
+        assert!(declare_death(&mut i, pid_b, pid_a, DEATH_REPORTED));
+        ticks(&mut i, tk(SETTLE_MS));
+        assert_eq!(i.peers[&a].wins, 1);
+        let seat_a = seat(&i, a);
+        // A drops: the duel pauses, the roster keeps the seat (connected=false).
+        leave(&mut i, a);
+        ticks(&mut i, 1);
+        let s = tv(&build_session(&i, 0));
+        let ra = s.roster.iter().find(|r| r.seat == seat_a).unwrap();
+        assert!(!ra.connected);
+        assert_eq!(ra.wins, 1);
+        assert_eq!(ra.nick, "A");
+        // A comes back from another address: same seat, same wins.
+        let a2 = join(&mut i, 9, "A");
+        assert_eq!(seat(&i, a2), seat_a);
+        assert_eq!(i.peers[&a2].wins, 1);
+        assert_ne!(i.peers[&a2].id, pid_a, "new peer id, same seat");
+    });
 }
 
 // ---- commands ---------------------------------------------------------------
@@ -771,115 +839,125 @@ fn duplicate_cmd_id_gets_the_cached_result_and_is_not_reapplied() {
 
 #[test]
 fn phase_transitions_through_a_match() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "A");
-    let b = join(&mut i, 2, "B");
-    for p in i.peers.values_mut() { p.ready = true; }
-    i.best_of = 3;
-    let mut seen = vec![phase_code(&i)];
-    fn note(i: &Inner, seen: &mut Vec<u8>) {
-        let p = phase_code(i);
-        if *seen.last().unwrap() != p { seen.push(p); }
-        assert_eq!(i.sess.last_phase, p, "observe_phase ran");
-    }
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-    note(&i, &mut seen);
-    let (pa, pb) = (i.peers[&a].id, i.peers[&b].id);
-    for round in 1..=2u32 {
-        for _ in 0..400 {
-            advance(&mut i);
-            note(&i, &mut seen);
-            if phase_code(&i) == Phase::LIVE { break; }
-        }
-        assert_eq!(i.match_round, round);
-        assert!(declare_death(&mut i, pb, pa, DEATH_DAMAGE));
-        note(&i, &mut seen);
-        ticks(&mut i, 13);
-        note(&i, &mut seen);
-    }
-    for _ in 0..400 { advance(&mut i); note(&i, &mut seen); }
-    use Phase::*;
-    assert_eq!(seen, vec![LOBBY, LOADING, COUNTDOWN, LIVE, ROUND_OVER, LOADING, COUNTDOWN, LIVE, ROUND_OVER,
-                          MATCH_OVER, LOBBY]);
-    assert_eq!(phase_label(MATCH_OVER), "MatchOver");
-    assert_eq!(phase_label(ROUND_OVER), "RoundOver");
-}
-
-#[test]
-fn solo_match_whose_player_leaves_returns_to_lobby() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "Solo");
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok, "solo start needs no ready");
-    ticks(&mut i, 1 + 90);
-    assert_eq!(i.match_state, "live");
-    leave(&mut i, a);
-    ticks(&mut i, 1);
-    assert_eq!(i.match_state, "lobby");
-    assert_eq!(phase_code(&i), Phase::LOBBY);
-    assert!(i.sess.frozen.is_none());
-    assert!(i.sess.seats.is_empty());
-}
-
-#[test]
-fn empty_server_returns_to_lobby_from_any_match_phase() {
-    for steps in [0u32, 1, 40, 91, 95] {
+    at_rates(|| {
         let st = new_state();
         let mut i = st.inner.try_lock().unwrap();
         let a = join(&mut i, 1, "A");
         let b = join(&mut i, 2, "B");
         for p in i.peers.values_mut() { p.ready = true; }
+        i.best_of = 3;
+        let mut seen = vec![phase_code(&i)];
+        fn note(i: &Inner, seen: &mut Vec<u8>) {
+            let p = phase_code(i);
+            if *seen.last().unwrap() != p { seen.push(p); }
+            assert_eq!(i.sess.last_phase, p, "observe_phase ran");
+        }
         assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-        ticks(&mut i, steps);
+        note(&i, &mut seen);
+        let (pa, pb) = (i.peers[&a].id, i.peers[&b].id);
+        for round in 1..=2u32 {
+            for _ in 0..tk(13_333) {
+                step(&mut i);
+                note(&i, &mut seen);
+                if phase_code(&i) == Phase::LIVE { break; }
+            }
+            assert_eq!(i.match_round, round);
+            assert!(declare_death(&mut i, pb, pa, DEATH_DAMAGE));
+            note(&i, &mut seen);
+            ticks(&mut i, tk(SETTLE_MS) + 1);
+            note(&i, &mut seen);
+        }
+        for _ in 0..tk(13_333) { step(&mut i); note(&i, &mut seen); }
+        use Phase::*;
+        assert_eq!(seen, vec![LOBBY, LOADING, COUNTDOWN, LIVE, ROUND_OVER, LOADING, COUNTDOWN, LIVE, ROUND_OVER,
+                              MATCH_OVER, LOBBY]);
+        assert_eq!(phase_label(MATCH_OVER), "MatchOver");
+        assert_eq!(phase_label(ROUND_OVER), "RoundOver");
+    });
+}
+
+#[test]
+fn solo_match_whose_player_leaves_returns_to_lobby() {
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "Solo");
+        assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok, "solo start needs no ready");
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
+        assert_eq!(i.match_state, "live");
         leave(&mut i, a);
-        leave(&mut i, b);
         ticks(&mut i, 1);
-        assert_eq!(i.match_state, "lobby", "after {steps} ticks");
-    }
+        assert_eq!(i.match_state, "lobby");
+        assert_eq!(phase_code(&i), Phase::LOBBY);
+        assert!(i.sess.frozen.is_none());
+        assert!(i.sess.seats.is_empty());
+    });
+}
+
+#[test]
+fn empty_server_returns_to_lobby_from_any_match_phase() {
+    at_rates(|| {
+        for steps in [0u32, 1, tk(1333), 1 + tk(3000), tk(3000) + 5] {
+            let st = new_state();
+            let mut i = st.inner.try_lock().unwrap();
+            let a = join(&mut i, 1, "A");
+            let b = join(&mut i, 2, "B");
+            for p in i.peers.values_mut() { p.ready = true; }
+            assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
+            ticks(&mut i, steps);
+            leave(&mut i, a);
+            leave(&mut i, b);
+            ticks(&mut i, 1);
+            assert_eq!(i.match_state, "lobby", "after {steps} ticks");
+        }
+    });
 }
 
 #[test]
 fn loaded_counts_only_on_the_frozen_arena() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "A");
-    i.match_arena = "Map_Arena_Pit".into();
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-    let id = i.peers[&a].id;
-    // A game that reports the wrong world is not loaded: the barrier holds.
-    game_status_in(&mut i, id, true, 1, Some("Map_Arena_Yard"), false);
-    assert_eq!(i.match_peers[&id].loaded_round, 0);
-    ticks(&mut i, 5);
-    assert_eq!(phase_code(&i), Phase::LOADING);
-    assert_eq!(tv(&build_session(&i, 0)).waiting_on, vec![1]);
-    game_status_in(&mut i, id, true, 1, Some("/Game/Maps/Arenas/Map_Arena_Pit.Map_Arena_Pit"), false);
-    assert_eq!(i.match_peers[&id].loaded_round, 1);
-    ticks(&mut i, 1);
-    assert_eq!(phase_code(&i), Phase::COUNTDOWN);
-    // An old client without an arena field is trusted (headless tools).
-    assert!(arena_matches(&i, None) && arena_matches(&i, Some("")));
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "A");
+        i.match_arena = "Map_Arena_Pit".into();
+        assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
+        let id = i.peers[&a].id;
+        // A game that reports the wrong world is not loaded: the barrier holds.
+        game_status_in(&mut i, id, true, 1, Some("Map_Arena_Yard"), false);
+        assert_eq!(i.match_peers[&id].loaded_round, 0);
+        ticks(&mut i, 5);
+        assert_eq!(phase_code(&i), Phase::LOADING);
+        assert_eq!(tv(&build_session(&i, 0)).waiting_on, vec![1]);
+        game_status_in(&mut i, id, true, 1, Some("/Game/Maps/Arenas/Map_Arena_Pit.Map_Arena_Pit"), false);
+        assert_eq!(i.match_peers[&id].loaded_round, 1);
+        ticks(&mut i, 1);
+        assert_eq!(phase_code(&i), Phase::COUNTDOWN);
+        // An old client without an arena field is trusted (headless tools).
+        assert!(arena_matches(&i, None) && arena_matches(&i, Some("")));
+    });
 }
 
 #[test]
 fn debug_kill_ends_the_round_by_seat() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "A");
-    let b = join(&mut i, 2, "B");
-    for p in i.peers.values_mut() { p.ready = true; }
-    assert!(debug_kill(&mut i, 2).is_err(), "not live");
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-    ticks(&mut i, 1 + 90);
-    assert!(debug_kill(&mut i, 9).is_err());
-    let sb = seat(&i, b);
-    assert!(debug_kill(&mut i, sb).is_ok());
-    assert!(debug_kill(&mut i, sb).is_err(), "already dead");
-    observe_phase(&mut i);
-    assert_eq!(phase_code(&i), Phase::ROUND_OVER);
-    ticks(&mut i, 13);
-    assert_eq!(i.peers[&a].wins, 1);
-    assert_eq!(tv(&build_session(&i, 0)).last_result.winner_seat, seat(&i, a));
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "A");
+        let b = join(&mut i, 2, "B");
+        for p in i.peers.values_mut() { p.ready = true; }
+        assert!(debug_kill(&mut i, 2).is_err(), "not live");
+        assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
+        assert!(debug_kill(&mut i, 9).is_err());
+        let sb = seat(&i, b);
+        assert!(debug_kill(&mut i, sb).is_ok());
+        assert!(debug_kill(&mut i, sb).is_err(), "already dead");
+        observe_phase(&mut i);
+        assert_eq!(phase_code(&i), Phase::ROUND_OVER);
+        ticks(&mut i, tk(SETTLE_MS) + 1);
+        assert_eq!(i.peers[&a].wins, 1);
+        assert_eq!(tv(&build_session(&i, 0)).last_result.winner_seat, seat(&i, a));
+    });
 }
 
 // ---- load failures and spawn protection (user bug: "guy insta died and now
@@ -915,115 +993,125 @@ fn notices(i: &Inner) -> Vec<Vec<String>> {
 
 #[test]
 fn load_error_gets_one_retry_window_then_the_round_is_void_not_stuck() {
-    let (st, v) = loading_match(&["Willie", "Mate"]);
-    let mut i = st.inner.try_lock().unwrap();
-    let (a, m) = (v[0], v[1]);
-    load(&mut i, a, 1);
-    let mid = i.peers[&m].id;
-    note_load_error(&mut i, mid, "spawn_timeout");
-    ticks(&mut i, LOAD_RETRY_TICKS - 1);
-    assert_eq!(phase_code(&i), Phase::LOADING, "inside the retry window: still waiting");
-    note_load_error(&mut i, mid, "spawn_timeout"); // repeated pings do not restart the window
-    ticks(&mut i, 1);
-    assert_eq!(phase_code(&i), Phase::COUNTDOWN, "window over: the barrier releases");
-    assert_eq!(i.sess.sat_out.len(), 1);
-    let n = notices(&i);
-    assert_eq!(n.len(), 1);
-    assert_eq!(n[0][0], "Mate");
-    assert_eq!(n[0][1], "spawn_timeout");
-    // Only one fighter loaded in a duel: the round is void (no winner, no
-    // loss), the match moves on to the next round instead of stalling.
-    ticks(&mut i, 95);
-    assert_eq!(i.match_state, "roundover");
-    assert_eq!(i.match_reason, "load_failed");
-    assert_eq!(i.last_winner, 0);
-    assert!(i.peers.values().all(|p| p.wins == 0));
-    assert!(i.round_deaths.is_empty(), "nobody died");
-    assert_eq!(i.sess.void_streak, 1);
-    // Next round: Mate loads this time and the duel is played.
-    ticks(&mut i, ROUNDOVER_TICKS);
-    assert_eq!(phase_code(&i), Phase::LOADING);
-    load(&mut i, a, 2);
-    load(&mut i, m, 2);
-    ticks(&mut i, 92);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    assert_eq!(i.match_round, 2);
-    assert!(i.peers.values().all(|p| p.alive));
-    assert_eq!(i.sess.void_streak, 0);
+    at_rates(|| {
+        let (st, v) = loading_match(&["Willie", "Mate"]);
+        let mut i = st.inner.try_lock().unwrap();
+        let (a, m) = (v[0], v[1]);
+        load(&mut i, a, 1);
+        let mid = i.peers[&m].id;
+        note_load_error(&mut i, mid, "spawn_timeout");
+        ticks(&mut i, tk(LOAD_RETRY_MS) - 1);
+        assert_eq!(phase_code(&i), Phase::LOADING, "inside the retry window: still waiting");
+        note_load_error(&mut i, mid, "spawn_timeout"); // repeated pings do not restart the window
+        ticks(&mut i, 1);
+        assert_eq!(phase_code(&i), Phase::COUNTDOWN, "window over: the barrier releases");
+        assert_eq!(i.sess.sat_out.len(), 1);
+        let n = notices(&i);
+        assert_eq!(n.len(), 1);
+        assert_eq!(n[0][0], "Mate");
+        assert_eq!(n[0][1], "spawn_timeout");
+        // Only one fighter loaded in a duel: the round is void (no winner, no
+        // loss), the match moves on to the next round instead of stalling.
+        ticks(&mut i, tk(FIRST_COUNTDOWN_MS) + 5);
+        assert_eq!(i.match_state, "roundover");
+        assert_eq!(i.match_reason, "load_failed");
+        assert_eq!(i.last_winner, 0);
+        assert!(i.peers.values().all(|p| p.wins == 0));
+        assert!(i.round_deaths.is_empty(), "nobody died");
+        assert_eq!(i.sess.void_streak, 1);
+        // Next round: Mate loads this time and the duel is played.
+        ticks(&mut i, tk(ROUNDOVER_MS));
+        assert_eq!(phase_code(&i), Phase::LOADING);
+        load(&mut i, a, 2);
+        load(&mut i, m, 2);
+        ticks(&mut i, tk(FIRST_COUNTDOWN_MS) + 2);
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        assert_eq!(i.match_round, 2);
+        assert!(i.peers.values().all(|p| p.alive));
+        assert_eq!(i.sess.void_streak, 0);
+    });
 }
 
 #[test]
 fn a_client_that_recovers_inside_the_window_plays() {
-    let (st, v) = loading_match(&["A", "B"]);
-    let mut i = st.inner.try_lock().unwrap();
-    load(&mut i, v[0], 1);
-    let bid = i.peers[&v[1]].id;
-    note_load_error(&mut i, bid, "no_pawn");
-    ticks(&mut i, 100);
-    load(&mut i, v[1], 1);
-    ticks(&mut i, 1 + 90);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    assert!(i.peers.values().all(|p| p.alive));
-    assert!(i.sess.sat_out.is_empty() && notices(&i).is_empty());
+    at_rates(|| {
+        let (st, v) = loading_match(&["A", "B"]);
+        let mut i = st.inner.try_lock().unwrap();
+        load(&mut i, v[0], 1);
+        let bid = i.peers[&v[1]].id;
+        note_load_error(&mut i, bid, "no_pawn");
+        ticks(&mut i, tk(3333));
+        load(&mut i, v[1], 1);
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        assert!(i.peers.values().all(|p| p.alive));
+        assert!(i.sess.sat_out.is_empty() && notices(&i).is_empty());
+    });
 }
 
 #[test]
 fn three_players_one_fails_the_other_two_fight_and_it_spectates() {
-    let (st, v) = loading_match(&["A", "B", "C"]);
-    let mut i = st.inner.try_lock().unwrap();
-    load(&mut i, v[0], 1);
-    load(&mut i, v[1], 1);
-    let cid = i.peers[&v[2]].id;
-    note_load_error(&mut i, cid, "wrong_world");
-    ticks(&mut i, LOAD_RETRY_TICKS + 1 + 90);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    assert!(i.peers[&v[0]].alive && i.peers[&v[1]].alive);
-    assert!(!i.peers[&v[2]].alive, "C spectates this round");
-    assert!(i.round_deaths.is_empty(), "C is not dead and lost nothing");
-    // The round is decided between A and B only.
-    let (pa, pb) = (i.peers[&v[0]].id, i.peers[&v[1]].id);
-    assert!(declare_death_unprotected(&mut i, pb, pa, DEATH_DAMAGE));
-    ticks(&mut i, 13);
-    assert_eq!(i.last_winner, pa);
+    at_rates(|| {
+        let (st, v) = loading_match(&["A", "B", "C"]);
+        let mut i = st.inner.try_lock().unwrap();
+        load(&mut i, v[0], 1);
+        load(&mut i, v[1], 1);
+        let cid = i.peers[&v[2]].id;
+        note_load_error(&mut i, cid, "wrong_world");
+        ticks(&mut i, tk(LOAD_RETRY_MS) + 1 + tk(FIRST_COUNTDOWN_MS));
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        assert!(i.peers[&v[0]].alive && i.peers[&v[1]].alive);
+        assert!(!i.peers[&v[2]].alive, "C spectates this round");
+        assert!(i.round_deaths.is_empty(), "C is not dead and lost nothing");
+        // The round is decided between A and B only.
+        let (pa, pb) = (i.peers[&v[0]].id, i.peers[&v[1]].id);
+        assert!(declare_death_unprotected(&mut i, pb, pa, DEATH_DAMAGE));
+        ticks(&mut i, tk(SETTLE_MS) + 1);
+        assert_eq!(i.last_winner, pa);
+    });
 }
 
 #[test]
 fn barrier_never_waits_more_than_45_s() {
-    let (st, v) = loading_match(&["A", "Mate"]);
-    let mut i = st.inner.try_lock().unwrap();
-    load(&mut i, v[0], 1);
-    // Mate pings but never loads and reports no error.
-    ticks(&mut i, BARRIER_TIMEOUT_TICKS - 1);
-    assert_eq!(phase_code(&i), Phase::LOADING);
-    ticks(&mut i, 2);
-    assert_eq!(phase_code(&i), Phase::COUNTDOWN, "45 s: released");
-    assert_eq!(notices(&i)[0][1], "timeout");
-    // A late error report cannot extend it either.
-    let (st2, v2) = loading_match(&["A", "Mate"]);
-    let mut j = st2.inner.try_lock().unwrap();
-    load(&mut j, v2[0], 1);
-    ticks(&mut j, BARRIER_TIMEOUT_TICKS - 5);
-    let mid = j.peers[&v2[1]].id;
-    note_load_error(&mut j, mid, "spawn_timeout");
-    ticks(&mut j, 6);
-    assert_eq!(phase_code(&j), Phase::COUNTDOWN, "the 10 s window is capped by the 45 s deadline");
+    at_rates(|| {
+        let (st, v) = loading_match(&["A", "Mate"]);
+        let mut i = st.inner.try_lock().unwrap();
+        load(&mut i, v[0], 1);
+        // Mate pings but never loads and reports no error.
+        ticks(&mut i, tk(BARRIER_TIMEOUT_MS) - 1);
+        assert_eq!(phase_code(&i), Phase::LOADING);
+        ticks(&mut i, 2);
+        assert_eq!(phase_code(&i), Phase::COUNTDOWN, "45 s: released");
+        assert_eq!(notices(&i)[0][1], "timeout");
+        // A late error report cannot extend it either.
+        let (st2, v2) = loading_match(&["A", "Mate"]);
+        let mut j = st2.inner.try_lock().unwrap();
+        load(&mut j, v2[0], 1);
+        ticks(&mut j, tk(BARRIER_TIMEOUT_MS) - 5);
+        let mid = j.peers[&v2[1]].id;
+        note_load_error(&mut j, mid, "spawn_timeout");
+        ticks(&mut j, 6);
+        assert_eq!(phase_code(&j), Phase::COUNTDOWN, "the 10 s window is capped by the 45 s deadline");
+    });
 }
 
 #[test]
 fn repeated_void_rounds_end_the_match() {
-    let (st, v) = loading_match(&["A", "Mate"]);
-    let mut i = st.inner.try_lock().unwrap();
-    let mid = i.peers[&v[1]].id;
-    for round in 1..=MAX_VOID_ROUNDS {
-        load(&mut i, v[0], round);
-        note_load_error(&mut i, mid, "spawn_timeout");
-        ticks(&mut i, LOAD_RETRY_TICKS + 1 + 90);
-        if round < MAX_VOID_ROUNDS {
-            assert_eq!(i.match_reason, "load_failed", "round {round}");
-            ticks(&mut i, ROUNDOVER_TICKS);
+    at_rates(|| {
+        let (st, v) = loading_match(&["A", "Mate"]);
+        let mut i = st.inner.try_lock().unwrap();
+        let mid = i.peers[&v[1]].id;
+        for round in 1..=MAX_VOID_ROUNDS {
+            load(&mut i, v[0], round);
+            note_load_error(&mut i, mid, "spawn_timeout");
+            ticks(&mut i, tk(LOAD_RETRY_MS) + 1 + tk(FIRST_COUNTDOWN_MS));
+            if round < MAX_VOID_ROUNDS {
+                assert_eq!(i.match_reason, "load_failed", "round {round}");
+                ticks(&mut i, tk(ROUNDOVER_MS));
+            }
         }
-    }
-    assert_eq!(i.match_state, "lobby", "no endless loop of void rounds");
+        assert_eq!(i.match_state, "lobby", "no endless loop of void rounds");
+    });
 }
 
 /// Spawn protection covers placement → Live only (the client ends
@@ -1031,35 +1119,37 @@ fn repeated_void_rounds_end_the_match() {
 /// from Live on there is no protected attacker or victim.
 #[test]
 fn spawn_protection_covers_placement_to_live_only() {
-    let (st, v) = loading_match(&["A", "Mate"]);
-    let mut i = st.inner.try_lock().unwrap();
-    let (pa, pm) = (i.peers[&v[0]].id, i.peers[&v[1]].id);
-    assert!(i.spawn_plan.iter().all(|s| s.protect_ms >= SPAWN_PROTECT_MS), "orders carry the protection");
-    load(&mut i, v[0], 1);
-    load(&mut i, v[1], 1);
-    note_placed(&mut i, pm, 1); // Mate placed on its order during loading
-    ticks(&mut i, 1);
-    assert_eq!(phase_code(&i), Phase::COUNTDOWN);
-    // Countdown: Mate is protected, A (no placement report) is not, and no
-    // death or damage counts for anyone (no open round).
-    assert!(spawn_protected(&i, pm) && !spawn_protected(&i, pa));
-    assert!(!declare_death(&mut i, pm, pa, DEATH_DAMAGE));
-    assert!(!declare_death(&mut i, pa, pm, DEATH_DAMAGE));
-    ticks(&mut i, 90);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    // Live: protection is over for both, at once. A kill right after Live counts.
-    assert!(!spawn_protected(&i, pm) && !spawn_protected(&i, pa));
-    assert!(declare_death(&mut i, pm, pa, DEATH_DAMAGE));
-    assert!(!i.peers[&v[1]].alive);
-    // DEBUG KILL (admin) is never blocked: next round, inside the window.
-    ticks(&mut i, 13 + ROUNDOVER_TICKS);
-    load(&mut i, v[0], 2);
-    load(&mut i, v[1], 2);
-    note_placed(&mut i, pm, 2);
-    ticks(&mut i, 92);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    let seat_m = seat(&i, v[1]);
-    assert!(debug_kill(&mut i, seat_m).is_ok());
+    at_rates(|| {
+        let (st, v) = loading_match(&["A", "Mate"]);
+        let mut i = st.inner.try_lock().unwrap();
+        let (pa, pm) = (i.peers[&v[0]].id, i.peers[&v[1]].id);
+        assert!(i.spawn_plan.iter().all(|s| s.protect_ms >= SPAWN_PROTECT_MS), "orders carry the protection");
+        load(&mut i, v[0], 1);
+        load(&mut i, v[1], 1);
+        note_placed(&mut i, pm, 1); // Mate placed on its order during loading
+        ticks(&mut i, 1);
+        assert_eq!(phase_code(&i), Phase::COUNTDOWN);
+        // Countdown: Mate is protected, A (no placement report) is not, and no
+        // death or damage counts for anyone (no open round).
+        assert!(spawn_protected(&i, pm) && !spawn_protected(&i, pa));
+        assert!(!declare_death(&mut i, pm, pa, DEATH_DAMAGE));
+        assert!(!declare_death(&mut i, pa, pm, DEATH_DAMAGE));
+        ticks(&mut i, tk(FIRST_COUNTDOWN_MS));
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        // Live: protection is over for both, at once. A kill right after Live counts.
+        assert!(!spawn_protected(&i, pm) && !spawn_protected(&i, pa));
+        assert!(declare_death(&mut i, pm, pa, DEATH_DAMAGE));
+        assert!(!i.peers[&v[1]].alive);
+        // DEBUG KILL (admin) is never blocked: next round, inside the window.
+        ticks(&mut i, tk(SETTLE_MS) + 1 + tk(ROUNDOVER_MS));
+        load(&mut i, v[0], 2);
+        load(&mut i, v[1], 2);
+        note_placed(&mut i, pm, 2);
+        ticks(&mut i, tk(FIRST_COUNTDOWN_MS) + 2);
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        let seat_m = seat(&i, v[1]);
+        assert!(debug_kill(&mut i, seat_m).is_ok());
+    });
 }
 
 /// The legacy C2SKitRules path cannot change the kit rules mid-match (they
@@ -1134,46 +1224,50 @@ fn per_ip_cap_counts_an_ipv6_slash_64_as_one_host() {
 /// A placement report sent mid-round grants no protection.
 #[test]
 fn placement_reported_mid_round_grants_no_protection() {
-    let (st, v) = loading_match(&["A", "Mate"]);
-    let mut i = st.inner.try_lock().unwrap();
-    let (pa, pm) = (i.peers[&v[0]].id, i.peers[&v[1]].id);
-    load(&mut i, v[0], 1);
-    load(&mut i, v[1], 1);
-    ticks(&mut i, 1 + 90);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    ticks(&mut i, 60); // 2 s into the round
-    note_placed(&mut i, pm, 1);
-    assert!(!spawn_protected(&i, pm), "no protection on demand");
-    assert!(declare_death(&mut i, pm, pa, DEATH_DAMAGE));
+    at_rates(|| {
+        let (st, v) = loading_match(&["A", "Mate"]);
+        let mut i = st.inner.try_lock().unwrap();
+        let (pa, pm) = (i.peers[&v[0]].id, i.peers[&v[1]].id);
+        load(&mut i, v[0], 1);
+        load(&mut i, v[1], 1);
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        ticks(&mut i, tk(2000)); // 2 s into the round
+        note_placed(&mut i, pm, 1);
+        assert!(!spawn_protected(&i, pm), "no protection on demand");
+        assert!(declare_death(&mut i, pm, pa, DEATH_DAMAGE));
+    });
 }
 
 /// The match winner leaving during MATCH OVER does not make the
 /// result name whoever is still connected.
 #[test]
 fn match_result_names_the_winner_even_after_it_left() {
-    let (st, v) = loading_match(&["A", "B", "C"]);
-    let mut i = st.inner.try_lock().unwrap();
-    i.best_of = 1;
-    let (pa, pb, pc) = (i.peers[&v[0]].id, i.peers[&v[1]].id, i.peers[&v[2]].id);
-    for a in &v { load(&mut i, *a, 1); }
-    ticks(&mut i, 1 + 90);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    ticks(&mut i, 120); // past spawn protection
-    assert!(declare_death(&mut i, pb, pa, DEATH_DAMAGE));
-    assert!(declare_death(&mut i, pc, pa, DEATH_DAMAGE));
-    ticks(&mut i, 20); // settle
-    assert_eq!(i.match_state, "match_over");
-    leave(&mut i, v[0]); // the winner leaves the result screen
-    let mut result = None;
-    for _ in 0..MATCH_OVER_TICKS + 5 {
-        let t = i.server_tick;
-        for p in i.peers.values_mut() { p.last_seen_tick = t; }
-        if let Some(b) = advance(&mut i) { result = Some(b); }
-    }
-    match result {
-        Some(r) => assert_eq!((r.winner_peer_id, r.winner_nick.as_str()), (pa, "A")),
-        None => panic!("no match result"),
-    }
+    at_rates(|| {
+        let (st, v) = loading_match(&["A", "B", "C"]);
+        let mut i = st.inner.try_lock().unwrap();
+        i.best_of = 1;
+        let (pa, pb, pc) = (i.peers[&v[0]].id, i.peers[&v[1]].id, i.peers[&v[2]].id);
+        for a in &v { load(&mut i, *a, 1); }
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        ticks(&mut i, tk(4000)); // past spawn protection
+        assert!(declare_death(&mut i, pb, pa, DEATH_DAMAGE));
+        assert!(declare_death(&mut i, pc, pa, DEATH_DAMAGE));
+        ticks(&mut i, tk(SETTLE_MS) + 8); // settle
+        assert_eq!(i.match_state, "match_over");
+        leave(&mut i, v[0]); // the winner leaves the result screen
+        let mut result = None;
+        for _ in 0..tk(MATCH_OVER_MS) + 5 {
+            let t = i.now_ms;
+            for p in i.peers.values_mut() { p.last_seen_ms = t; }
+            if let Some(b) = step(&mut i) { result = Some(b); }
+        }
+        match result {
+            Some(r) => assert_eq!((r.winner_peer_id, r.winner_nick.as_str()), (pa, "A")),
+            None => panic!("no match result"),
+        }
+    });
 }
 
 /// The proptest seed (proptest-regressions/server/session_tests.txt), as a
@@ -1183,19 +1277,21 @@ fn match_result_names_the_winner_even_after_it_left() {
 /// lobby (match_step supervises the result screen as well).
 #[test]
 fn last_player_leaving_the_result_screen_returns_to_the_lobby() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let ann = join(&mut i, 1, "Ann");
-    let willie = join(&mut i, 2, "Willie");
-    assert!(cmd(&mut i, ann, 1, C::Start { force: true }).ok);
-    leave(&mut i, willie);
-    for _ in 0..900 { advance(&mut i); }
-    assert_eq!(i.match_state, "match_over", "forfeit after the reconnect window");
-    leave(&mut i, ann);
-    advance(&mut i);
-    assert_eq!(i.match_state, "lobby");
-    assert_eq!(i.sess.last_phase, Phase::LOBBY, "the transition was observed");
-    assert!(tv(&build_session(&i, 0)).frozen.is_none());
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let ann = join(&mut i, 1, "Ann");
+        let willie = join(&mut i, 2, "Willie");
+        assert!(cmd(&mut i, ann, 1, C::Start { force: true }).ok);
+        leave(&mut i, willie);
+        for _ in 0..tk(30_000) { step(&mut i); }
+        assert_eq!(i.match_state, "match_over", "forfeit after the reconnect window");
+        leave(&mut i, ann);
+        step(&mut i);
+        assert_eq!(i.match_state, "lobby");
+        assert_eq!(i.sess.last_phase, Phase::LOBBY, "the transition was observed");
+        assert!(tv(&build_session(&i, 0)).frozen.is_none());
+    });
 }
 
 // ---- property test ----------------------------------------------------------
@@ -1266,7 +1362,7 @@ proptest! {
                     issued = Some((a, next_cmd, C::SetConfig(Patch { best_of: Some(n), ..Default::default() })));
                 },
                 Op::Kill(s) => { let _ = debug_kill(&mut i, s); observe_phase(&mut i); }
-                Op::Tick(n) => for _ in 0..n { advance(&mut i); },
+                Op::Tick(n) => for _ in 0..n { step(&mut i); },
                 Op::Dup(k) => if let Some(a) = slots[k as usize] {
                     if let Some((id, c, r)) = last_cmd.get(&a).cloned() {
                         if i.peers.contains_key(&a) {
@@ -1337,7 +1433,7 @@ proptest! {
             }
             // An empty server is in the lobby after one tick.
             if i.peers.is_empty() {
-                advance(&mut i);
+                step(&mut i);
                 prop_assert_eq!(i.match_state.as_str(), "lobby");
             }
         }
@@ -1354,16 +1450,16 @@ fn live_duel_round2() -> (ServerState, Vec<SocketAddr>) {
         let mut i = st.inner.try_lock().unwrap();
         load(&mut i, v[0], 1);
         load(&mut i, v[1], 1);
-        ticks(&mut i, 1 + 90);
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
         assert_eq!(phase_code(&i), Phase::LIVE);
         let sb = seat(&i, v[1]);
         // past the spawn protection, then A wins round 1
-        ticks(&mut i, SPAWN_PROTECT_MS as u32 * 30 / 1000 + 1);
+        ticks(&mut i, tk(SPAWN_PROTECT_MS as u64) + 1);
         debug_kill(&mut i, sb).unwrap();
-        ticks(&mut i, 13 + ROUNDOVER_TICKS);
+        ticks(&mut i, tk(SETTLE_MS) + 1 + tk(ROUNDOVER_MS));
         load(&mut i, v[0], 2);
         load(&mut i, v[1], 2);
-        ticks(&mut i, 92);
+        ticks(&mut i, tk(FIRST_COUNTDOWN_MS) + 2);
         assert_eq!(phase_code(&i), Phase::LIVE);
         assert_eq!(i.match_round, 2);
         assert_eq!(i.peers[&v[0]].wins, 1);
@@ -1373,118 +1469,126 @@ fn live_duel_round2() -> (ServerState, Vec<SocketAddr>) {
 
 #[test]
 fn blackout_8s_pauses_the_duel_and_resumes_into_the_same_seat_and_wins() {
-    let (st, v) = live_duel_round2();
-    let mut i = st.inner.try_lock().unwrap();
-    let (a, b) = (v[0], v[1]);
-    let (seat_a, seat_b) = (seat(&i, a), seat(&i, b));
-    let id_b = i.peers[&b].id;
-    // A's network dies for 8 s: its connection stays open (transport idle
-    // timeout 10 s), it just goes silent.
-    ticks_except(&mut i, LINK_STALL_TICKS - 2, &[a]);
-    assert_eq!(i.match_state, "live", "3 s of silence is tolerated");
-    ticks_except(&mut i, 4, &[a]);
-    assert_eq!(i.match_state, "paused", "then the duel pauses for A's return");
-    assert_eq!(i.match_reason, "opponent_left");
-    assert!(i.sess.stalled.contains(&i.peers[&a].id));
-    let s = tv(&build_session(&i, 0));
-    assert_eq!(s.phase, Phase::PAUSED);
-    assert!(s.roster.iter().all(|r| r.connected), "the seat never left the roster");
-    ticks_except(&mut i, 8 * 30 - LINK_STALL_TICKS - 2, &[a]);
-    assert_eq!(i.match_state, "paused", "still waiting inside the 30 s window");
-    // A is back on the same connection: the SAME round resumes (a
-    // drop never buys a replay from full health).
-    load(&mut i, a, 2);
-    ticks(&mut i, 1);
-    assert!(i.sess.stalled.is_empty());
-    assert_eq!(phase_code(&i), Phase::LIVE, "participant back: the round resumes");
-    assert_eq!(i.match_round, 2, "same round, not replayed");
-    assert_eq!((seat(&i, a), seat(&i, b)), (seat_a, seat_b), "same seats");
-    assert_eq!(i.peers[&a].wins, 1, "same wins");
-    assert_eq!(i.peers[&b].id, id_b);
-    assert!(i.peers.values().all(|p| p.alive));
-    // A second drop by A in this match has no pause left: A loses the round.
-    ticks_except(&mut i, LINK_STALL_TICKS + 2, &[a]);
-    assert_eq!(i.match_state, "roundover", "no second pause");
-    ticks(&mut i, 13);
-    assert_eq!(i.peers[&b].wins, 1, "B wins the round A dropped out of");
+    at_rates(|| {
+        let (st, v) = live_duel_round2();
+        let mut i = st.inner.try_lock().unwrap();
+        let (a, b) = (v[0], v[1]);
+        let (seat_a, seat_b) = (seat(&i, a), seat(&i, b));
+        let id_b = i.peers[&b].id;
+        // A's network dies for 8 s: its connection stays open (transport idle
+        // timeout 10 s), it just goes silent.
+        ticks_except(&mut i, tk(LINK_STALL_MS) - 2, &[a]);
+        assert_eq!(i.match_state, "live", "3 s of silence is tolerated");
+        ticks_except(&mut i, 4, &[a]);
+        assert_eq!(i.match_state, "paused", "then the duel pauses for A's return");
+        assert_eq!(i.match_reason, "opponent_left");
+        assert!(i.sess.stalled.contains(&i.peers[&a].id));
+        let s = tv(&build_session(&i, 0));
+        assert_eq!(s.phase, Phase::PAUSED);
+        assert!(s.roster.iter().all(|r| r.connected), "the seat never left the roster");
+        ticks_except(&mut i, tk(8000) - tk(LINK_STALL_MS) - 2, &[a]);
+        assert_eq!(i.match_state, "paused", "still waiting inside the 30 s window");
+        // A is back on the same connection: the SAME round resumes (a
+        // drop never buys a replay from full health).
+        load(&mut i, a, 2);
+        ticks(&mut i, 1);
+        assert!(i.sess.stalled.is_empty());
+        assert_eq!(phase_code(&i), Phase::LIVE, "participant back: the round resumes");
+        assert_eq!(i.match_round, 2, "same round, not replayed");
+        assert_eq!((seat(&i, a), seat(&i, b)), (seat_a, seat_b), "same seats");
+        assert_eq!(i.peers[&a].wins, 1, "same wins");
+        assert_eq!(i.peers[&b].id, id_b);
+        assert!(i.peers.values().all(|p| p.alive));
+        // A second drop by A in this match has no pause left: A loses the round.
+        ticks_except(&mut i, tk(LINK_STALL_MS) + 2, &[a]);
+        assert_eq!(i.match_state, "roundover", "no second pause");
+        ticks(&mut i, tk(SETTLE_MS) + 1);
+        assert_eq!(i.peers[&b].wins, 1, "B wins the round A dropped out of");
+    });
 }
 
 #[test]
 fn reconnect_with_a_new_handshake_inside_the_window_keeps_seat_and_wins() {
-    let (st, v) = live_duel_round2();
-    let mut i = st.inner.try_lock().unwrap();
-    let (a, b) = (v[0], v[1]);
-    let seat_a = seat(&i, a);
-    let old_id = i.peers[&a].id;
-    // A's transport timed out (or a new socket): the old peer is removed ...
-    leave(&mut i, a);
-    ticks(&mut i, 1);
-    assert_eq!(i.match_state, "paused");
-    let s = tv(&build_session(&i, 0));
-    let ra = s.roster.iter().find(|r| r.seat == seat_a).unwrap();
-    assert!(!ra.connected && ra.wins == 1, "seat kept, disconnected, wins shown");
-    ticks(&mut i, 20 * 30);
-    assert_eq!(i.match_state, "paused", "20 s later: still inside the window");
-    // ... and the same player key comes back with a new peer id.
-    let a2 = join(&mut i, 9, "A");
-    assert_ne!(i.peers[&a2].id, old_id, "new peer id");
-    assert_eq!(seat(&i, a2), seat_a, "same seat by key");
-    assert_eq!(i.peers[&a2].wins, 1, "same wins by key");
-    // Its old session (ledger, health) is gone, so it does not come back to
-    // full health in the interrupted round: the round resumes
-    // without it and B wins it; A fights again from the next round.
-    assert!(!i.peers[&a2].alive);
-    // (B's game kept pinging through the pause, as a real client does.)
-    load(&mut i, b, 2);
-    load(&mut i, a2, 2);
-    ticks(&mut i, 1);
-    assert_eq!(i.match_round, 2, "not replayed");
-    ticks(&mut i, 13);
-    assert_eq!(i.peers[&b].wins, 1, "B takes the interrupted round");
-    assert_eq!(i.match_state, "roundover");
-    ticks(&mut i, ROUNDOVER_TICKS);
-    load(&mut i, a2, 3);
-    load(&mut i, b, 3);
-    ticks(&mut i, 92);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    assert!(i.peers[&a2].alive, "the returning player fights the next round");
+    at_rates(|| {
+        let (st, v) = live_duel_round2();
+        let mut i = st.inner.try_lock().unwrap();
+        let (a, b) = (v[0], v[1]);
+        let seat_a = seat(&i, a);
+        let old_id = i.peers[&a].id;
+        // A's transport timed out (or a new socket): the old peer is removed ...
+        leave(&mut i, a);
+        ticks(&mut i, 1);
+        assert_eq!(i.match_state, "paused");
+        let s = tv(&build_session(&i, 0));
+        let ra = s.roster.iter().find(|r| r.seat == seat_a).unwrap();
+        assert!(!ra.connected && ra.wins == 1, "seat kept, disconnected, wins shown");
+        ticks(&mut i, tk(20_000));
+        assert_eq!(i.match_state, "paused", "20 s later: still inside the window");
+        // ... and the same player key comes back with a new peer id.
+        let a2 = join(&mut i, 9, "A");
+        assert_ne!(i.peers[&a2].id, old_id, "new peer id");
+        assert_eq!(seat(&i, a2), seat_a, "same seat by key");
+        assert_eq!(i.peers[&a2].wins, 1, "same wins by key");
+        // Its old session (ledger, health) is gone, so it does not come back to
+        // full health in the interrupted round: the round resumes
+        // without it and B wins it; A fights again from the next round.
+        assert!(!i.peers[&a2].alive);
+        // (B's game kept pinging through the pause, as a real client does.)
+        load(&mut i, b, 2);
+        load(&mut i, a2, 2);
+        ticks(&mut i, 1);
+        assert_eq!(i.match_round, 2, "not replayed");
+        ticks(&mut i, tk(SETTLE_MS) + 1);
+        assert_eq!(i.peers[&b].wins, 1, "B takes the interrupted round");
+        assert_eq!(i.match_state, "roundover");
+        ticks(&mut i, tk(ROUNDOVER_MS));
+        load(&mut i, a2, 3);
+        load(&mut i, b, 3);
+        ticks(&mut i, tk(FIRST_COUNTDOWN_MS) + 2);
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        assert!(i.peers[&a2].alive, "the returning player fights the next round");
+    });
 }
 
 #[test]
 fn resume_window_expired_forfeits_to_the_player_who_stayed() {
-    let (st, v) = live_duel_round2();
-    let mut i = st.inner.try_lock().unwrap();
-    let (a, b) = (v[0], v[1]);
-    let id_b = i.peers[&b].id;
-    leave(&mut i, a);
-    ticks(&mut i, 1);
-    assert_eq!(i.match_state, "paused");
-    ticks(&mut i, 30 * 30 + 2);
-    assert_eq!(i.match_state, "match_over");
-    assert_eq!(i.match_reason, "forfeit");
-    assert_eq!(i.last_winner, id_b);
+    at_rates(|| {
+        let (st, v) = live_duel_round2();
+        let mut i = st.inner.try_lock().unwrap();
+        let (a, b) = (v[0], v[1]);
+        let id_b = i.peers[&b].id;
+        leave(&mut i, a);
+        ticks(&mut i, 1);
+        assert_eq!(i.match_state, "paused");
+        ticks(&mut i, tk(30_000) + 2);
+        assert_eq!(i.match_state, "match_over");
+        assert_eq!(i.match_reason, "forfeit");
+        assert_eq!(i.last_winner, id_b);
+    });
 }
 
 #[test]
 fn a_deliberate_leave_forfeits_at_once_and_says_left() {
-    let (st, v) = live_duel_round2();
-    let mut i = st.inner.try_lock().unwrap();
-    let (a, b) = (v[0], v[1]);
-    let (id_a, id_b) = (i.peers[&a].id, i.peers[&b].id);
-    on_deliberate_leave(&mut i, a, v5::LeaveReason::USER);
-    assert!(i.sess.leaving.contains(&id_a), "peer_leave words the notice 'left'");
-    assert_eq!(i.match_state, "match_over", "no 30 s pause for a player who chose to leave");
-    assert_eq!((i.match_reason.as_str(), i.last_winner), ("forfeit", id_b));
-    leave(&mut i, a);
-    ticks(&mut i, 1);
-    assert_eq!(i.match_state, "match_over", "stays on the result screen");
-    // A leave in the lobby changes nothing but the notice.
-    let st2 = new_state();
-    let mut j = st2.inner.try_lock().unwrap();
-    let x = join(&mut j, 1, "X");
-    let _y = join(&mut j, 2, "Y");
-    on_deliberate_leave(&mut j, x, v5::LeaveReason::USER);
-    assert_eq!(j.match_state, "lobby");
+    at_rates(|| {
+        let (st, v) = live_duel_round2();
+        let mut i = st.inner.try_lock().unwrap();
+        let (a, b) = (v[0], v[1]);
+        let (id_a, id_b) = (i.peers[&a].id, i.peers[&b].id);
+        on_deliberate_leave(&mut i, a, v5::LeaveReason::USER);
+        assert!(i.sess.leaving.contains(&id_a), "peer_leave words the notice 'left'");
+        assert_eq!(i.match_state, "match_over", "no 30 s pause for a player who chose to leave");
+        assert_eq!((i.match_reason.as_str(), i.last_winner), ("forfeit", id_b));
+        leave(&mut i, a);
+        ticks(&mut i, 1);
+        assert_eq!(i.match_state, "match_over", "stays on the result screen");
+        // A leave in the lobby changes nothing but the notice.
+        let st2 = new_state();
+        let mut j = st2.inner.try_lock().unwrap();
+        let x = join(&mut j, 1, "X");
+        let _y = join(&mut j, 2, "Y");
+        on_deliberate_leave(&mut j, x, v5::LeaveReason::USER);
+        assert_eq!(j.match_state, "lobby");
+    });
 }
 
 #[test]
@@ -1503,23 +1607,25 @@ fn listen_host_leaving_closes_the_server_only_in_listen_mode() {
 
 #[test]
 fn stalls_count_only_for_game_clients_in_a_live_round() {
-    // Headless peers (no pings) are never judged by silence.
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let a = join(&mut i, 1, "A");
-    let _b = join(&mut i, 2, "B");
-    for p in i.peers.values_mut() { p.ready = true; }
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-    ticks(&mut i, 1 + 90);
-    assert_eq!(phase_code(&i), Phase::LIVE);
-    ticks_except(&mut i, 10 * 30, &[a]);
-    assert_eq!(i.match_state, "live", "a headless client is not paused for silence");
-    // Game clients: silence while loading is the barrier's business.
-    let (st2, v) = loading_match(&["A", "B"]);
-    let mut j = st2.inner.try_lock().unwrap();
-    load(&mut j, v[1], 1);
-    ticks_except(&mut j, 10 * 30, &[v[0]]);
-    assert_eq!(phase_code(&j), Phase::LOADING, "no pause while loading (a level load blocks the game)");
+    at_rates(|| {
+        // Headless peers (no pings) are never judged by silence.
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "A");
+        let _b = join(&mut i, 2, "B");
+        for p in i.peers.values_mut() { p.ready = true; }
+        assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
+        ticks(&mut i, 1 + tk(FIRST_COUNTDOWN_MS));
+        assert_eq!(phase_code(&i), Phase::LIVE);
+        ticks_except(&mut i, tk(10_000), &[a]);
+        assert_eq!(i.match_state, "live", "a headless client is not paused for silence");
+        // Game clients: silence while loading is the barrier's business.
+        let (st2, v) = loading_match(&["A", "B"]);
+        let mut j = st2.inner.try_lock().unwrap();
+        load(&mut j, v[1], 1);
+        ticks_except(&mut j, tk(10_000), &[v[0]]);
+        assert_eq!(phase_code(&j), Phase::LOADING, "no pause while loading (a level load blocks the game)");
+    });
 }
 
 fn notice_args(i: &Inner, want: u16) -> Vec<Vec<String>> {
@@ -1528,22 +1634,24 @@ fn notice_args(i: &Inner, want: u16) -> Vec<Vec<String>> {
 
 #[test]
 fn join_notices_for_the_hud() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    let _a = join(&mut i, 1, "A");
-    let b = join(&mut i, 2, "B");
-    assert_eq!(notice_args(&i, v5::Notice::PLAYER_JOINED), vec![vec!["B".to_string(), "joined".to_string()]],
-        "the first player gets no notice; B does");
-    i.out_msgs.clear();
-    // B's seat is kept while a match runs: B coming back says "rejoined".
-    for p in i.peers.values_mut() { p.ready = true; }
-    let a = i.peers.iter().find(|(_, p)| p.nick == "A").map(|(a, _)| *a).unwrap();
-    assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
-    leave(&mut i, b);
-    ticks(&mut i, 1);
-    i.out_msgs.clear();
-    let _b2 = join(&mut i, 3, "B");
-    assert_eq!(notice_args(&i, v5::Notice::PLAYER_JOINED), vec![vec!["B".to_string(), "rejoined".to_string()]]);
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let _a = join(&mut i, 1, "A");
+        let b = join(&mut i, 2, "B");
+        assert_eq!(notice_args(&i, v5::Notice::PLAYER_JOINED), vec![vec!["B".to_string(), "joined".to_string()]],
+            "the first player gets no notice; B does");
+        i.out_msgs.clear();
+        // B's seat is kept while a match runs: B coming back says "rejoined".
+        for p in i.peers.values_mut() { p.ready = true; }
+        let a = i.peers.iter().find(|(_, p)| p.nick == "A").map(|(a, _)| *a).unwrap();
+        assert!(cmd(&mut i, a, 1, C::Start { force: false }).ok);
+        leave(&mut i, b);
+        ticks(&mut i, 1);
+        i.out_msgs.clear();
+        let _b2 = join(&mut i, 3, "B");
+        assert_eq!(notice_args(&i, v5::Notice::PLAYER_JOINED), vec![vec!["B".to_string(), "rejoined".to_string()]]);
+    });
 }
 
 /// Measurement (printed with --nocapture): bytes of one session snapshot record and the
@@ -1573,38 +1681,121 @@ fn snapshot_bytes_and_encode_cost() {
     }
 }
 
-/// `--tick-hz 60`: the load barrier, the countdown and the advertised timings stay in
-/// seconds (they were counted in 30 Hz ticks and ran twice as fast).
+/// One scripted three-player match driven by the clock: a load error, a kill,
+/// a player leaving mid-round, a stalled link that pauses the match, the
+/// reconnect grace running out (forfeit), the result screen. Run at 30, 60,
+/// 100 and 128 Hz: the phases, results and phase lengths are the same at
+/// every rate (within a tick or two of 30 Hz), and the lengths are the
+/// real-time constants.
 #[test]
-fn round_flow_timings_are_seconds_at_any_tick_rate() {
-    let st = new_state();
-    let mut i = st.inner.try_lock().unwrap();
-    i.sess.tick_hz = 60;
-    let v: Vec<SocketAddr> = ["A", "Mate"].iter().enumerate().map(|(k, n)| join(&mut i, k as u16 + 1, n)).collect();
-    for p in i.peers.values_mut() { p.ready = true; }
-    i.match_arena = "Map_Arena_Pit".into();
-    assert!(cmd(&mut i, v[0], 1, C::Start { force: false }).ok);
-    for a in &v {
-        let id = i.peers[a].id;
-        game_status_in(&mut i, id, true, 0, None, false);
+fn scripted_match_is_identical_at_every_tick_rate() {
+    use Phase::*;
+    fn run() -> (Vec<(u8, u64)>, Vec<String>) {
+        let (st, v) = loading_match(&["A", "B", "C"]);
+        let mut i = st.inner.try_lock().unwrap();
+        let (a, b, c) = (v[0], v[1], v[2]);
+        let pid = |i: &Inner, x: SocketAddr| i.peers[&x].id;
+        let mut phases = vec![(phase_code(&i), 0u64)];
+        let mut results: Vec<String> = Vec::new();
+        let mut loaded: HashMap<SocketAddr, u32> = HashMap::new();
+        let mut silent: Vec<SocketAddr> = Vec::new();
+        let mut done: HashSet<&str> = HashSet::new();
+        let (mut entered, mut pinged) = (0u64, 0u64);
+        while i.now_ms < 150_000 {
+            let now = i.now_ms;
+            for (x, p) in i.peers.iter_mut() { if !silent.contains(x) { p.last_seen_ms = now; } }
+            if now >= pinged + 500 {
+                pinged = now;
+                let up: Vec<(SocketAddr, PeerId, bool)> = i.peers.iter()
+                    .filter(|(x, _)| !silent.contains(x)).map(|(x, p)| (*x, p.id, p.alive)).collect();
+                for (x, id, alive) in up {
+                    let r = loaded.get(&x).copied().unwrap_or(0);
+                    game_status_in(&mut i, id, alive, r, Some("Map_Arena_Pit"), false);
+                }
+            }
+            step(&mut i);
+            let ph = phase_code(&i);
+            if ph != phases.last().unwrap().0 {
+                phases.push((ph, i.now_ms));
+                entered = i.now_ms;
+            }
+            let res = format!("round {} winner {} {}", i.match_round, i.last_winner, i.match_reason);
+            if results.last() != Some(&res) { results.push(res); }
+            if ph == LOBBY { break; }
+            let since = i.now_ms - entered;
+            let mut once = |k: &'static str, at: u64| since >= at && done.insert(k);
+            let mut load_now = |i: &mut Inner, x: SocketAddr, r: u32| {
+                loaded.insert(x, r);
+                load(i, x, r);
+            };
+            match (ph, i.match_round) {
+                (LOADING, 0) => {
+                    if once("a1", 1200) { load_now(&mut i, a, 1); }
+                    if once("c1", 1500) { let id = pid(&i, c); note_load_error(&mut i, id, "spawn_timeout"); }
+                    if once("b1", 2500) { load_now(&mut i, b, 1); }
+                }
+                (LIVE, 1) if once("kill1", 1500) => { let (vb, ka) = (pid(&i, b), pid(&i, a)); declare_death(&mut i, vb, ka, DEATH_DAMAGE); }
+                (LOADING, 1) => {
+                    if once("a2", 300) { load_now(&mut i, a, 2); }
+                    if once("b2", 600) { load_now(&mut i, b, 2); }
+                    if once("c2", 900) { load_now(&mut i, c, 2); }
+                }
+                (LIVE, 2) => {
+                    if once("leave", 1000) { leave(&mut i, a); }
+                    if once("kill2", 1500) { let (vc, kb) = (pid(&i, c), pid(&i, b)); declare_death(&mut i, vc, kb, DEATH_DAMAGE); }
+                }
+                (LOADING, 2) => {
+                    if once("b3", 300) { load_now(&mut i, b, 3); }
+                    if once("c3", 300) { load_now(&mut i, c, 3); }
+                }
+                (LIVE, 3) if once("stall", 800) => silent.push(c),
+                _ => {}
+            }
+        }
+        (phases, results)
     }
-    let cfg = live_config(&i);
-    assert_eq!((cfg.countdown_s, cfg.roundover_s, cfg.barrier_timeout_s), (3, 4, 45));
-    load(&mut i, v[0], 1);
-    // Mate pings but never loads: 45 s at 60 Hz.
-    for _ in 0..2 * BARRIER_TIMEOUT_TICKS - 2 {
-        let id = i.peers[&v[1]].id;
-        game_status_in(&mut i, id, true, 0, None, false);
+    let durations = |p: &[(u8, u64)]| p.windows(2).map(|w| (w[0].0, w[1].1 - w[0].1)).collect::<Vec<_>>();
+    let mut base: Option<(Vec<(u8, u64)>, Vec<String>)> = None;
+    at_rates(|| {
+        let (phases, results) = run();
+        let d = durations(&phases);
+        assert_eq!(phases.iter().map(|p| p.0).collect::<Vec<_>>(),
+            vec![LOADING, COUNTDOWN, LIVE, ROUND_OVER, LOADING, COUNTDOWN, LIVE, ROUND_OVER,
+                 LOADING, COUNTDOWN, LIVE, PAUSED, MATCH_OVER, LOBBY], "{} Hz", hz());
+        let expect = [(LOADING, 11_500), (COUNTDOWN, 3000), (LIVE, 1500), (ROUND_OVER, 4400), (LOADING, 900),
+            (COUNTDOWN, 3000), (LIVE, 1500), (ROUND_OVER, 4400), (LOADING, 300), (COUNTDOWN, 3000),
+            (LIVE, 3800), (PAUSED, 30_000), (MATCH_OVER, 5000)];
+        for (k, (&(ph, got), &(eph, want))) in d.iter().zip(expect.iter()).enumerate() {
+            assert_eq!(ph, eph);
+            assert!(got.abs_diff(want) <= 100, "{} Hz: phase {k} ({}) lasted {got} ms, want {want}", hz(), phase_label(ph));
+        }
+        if let Some((bp, br)) = &base {
+            assert_eq!(&results, br, "{} Hz: different results", hz());
+            for (k, (x, y)) in d.iter().zip(durations(bp).iter()).enumerate() {
+                assert!(x.1.abs_diff(y.1) <= 70, "{} Hz: phase {k} lasted {} ms, {} ms at 30 Hz", hz(), x.1, y.1);
+            }
+        } else {
+            base = Some((phases, results));
+        }
+    });
+}
+
+/// The peer timeout is 60 s of silence at every tick rate.
+#[test]
+fn peer_timeout_is_real_time() {
+    at_rates(|| {
+        let st = new_state();
+        let mut i = st.inner.try_lock().unwrap();
+        let a = join(&mut i, 1, "A");
+        let _b = join(&mut i, 2, "B");
         ticks(&mut i, 1);
-    }
-    assert_eq!(phase_code(&i), Phase::LOADING, "still inside the 45 s barrier");
-    ticks(&mut i, 3);
-    assert_eq!(phase_code(&i), Phase::COUNTDOWN, "45 s: released");
-    // The 3 s countdown: 180 ticks.
-    let mut n = 0;
-    while phase_code(&i) == Phase::COUNTDOWN && n < 1000 {
-        ticks(&mut i, 1);
-        n += 1;
-    }
-    assert!((2 * FIRST_COUNTDOWN_TICKS - 2..=2 * FIRST_COUNTDOWN_TICKS + 2).contains(&n), "countdown took {n} ticks at 60 Hz");
+        let quiet = i.now_ms;
+        ticks_except(&mut i, tk(super::tick::PEER_TIMEOUT_MS) - 1, &[a]);
+        assert!(super::tick::timed_out(&i).is_empty(), "{} Hz: timed out early", hz());
+        ticks_except(&mut i, 2, &[a]);
+        let gone = super::tick::timed_out(&i);
+        assert_eq!(gone.len(), 1, "{} Hz", hz());
+        assert_eq!(gone[0].0, a);
+        assert!(i.now_ms - quiet > super::tick::PEER_TIMEOUT_MS);
+    });
 }
