@@ -311,7 +311,9 @@ if Settings and J then
     settings = Settings.init({ kit = Kit, json = J, log = Log, path = SETTINGS_FILE, state_dir = STATE_DIR,
         exit_screen = function() exit_screen() end,
         default_urls = function() return MASTER_URLS end,
-        on_saved = function(changed) on_settings_saved(changed) end })
+        on_saved = function(changed) on_settings_saved(changed) end,
+        forget_server_mods = function() return MX.Mods and MX.Mods.forget_all() end,
+        server_mods_count = function() return MX.Mods and MX.Mods.count() or 0 end })
 else
     Log("settings.lua / jsonlite.lua missing - using built-in defaults (nothing is saved)")
     settings = { nick = "Willie", server = "127.0.0.1:7777", send_hz = 60, hud = true, avatars = true,
@@ -400,6 +402,7 @@ local function reset_lobby_session(is_host, chosen)
     -- another server when this player becomes admin there.
     if HSMP_IPC then HSMP_IPC.put("kit_rules_req", { seq = 0 }) end   -- the kit_rules_req slot: seq 0 = no request
     if Cmd then Cmd.reset() end
+    if MX.Mods then MX.Mods.reset() end   -- server mods: the last server's offer is gone
 end
 
 -- --- process tracking (docs/development/testing.md) -------------------------
@@ -596,6 +599,12 @@ local function host_port()
     return p
 end
 
+-- The server-mods cache the sidecar writes and HSMPModHost loads (hsmp_cfg; outside ue4ss/Mods).
+function MX.mods_cache()
+    local d = (type(CfgLib) == "table" and type(CfgLib.mods_cache_dir) == "function") and CfgLib.mods_cache_dir() or "hsmp_mods"
+    return win(d)
+end
+
 -- HOST GAME: boots hsmp-server + hsmp-sidecar and sends the user to the
 -- LOBBY sub-screen. No level travel yet — the player waits in-lobby until
 -- the server starts the match; every client then loads the server's arena.
@@ -626,6 +635,7 @@ local function spawn_server_and_sidecar()
         return
     end
     MX.ipc_error = nil
+    sc_args[#sc_args + 1] = "--mods-cache"; sc_args[#sc_args + 1] = MX.mods_cache()
     -- No shell: the args are an array and the listing values travel as the
     -- server's own environment (IPC.spawn opts.env).
     local server_args = { "--bind", "0.0.0.0:" .. port, "--max-peers", "8", "--map", chosen_map,
@@ -672,6 +682,7 @@ local function spawn_sidecar_only(server, nick, map_name, label)
         return
     end
     MX.ipc_error = nil
+    sc_args[#sc_args + 1] = "--mods-cache"; sc_args[#sc_args + 1] = MX.mods_cache()
     local sidecar_args = { "--server", server, "--state-dir", win(STATE_DIR), "--nick", tostring(nick or settings.nick) }
     for _, a in ipairs(sc_args) do sidecar_args[#sidecar_args + 1] = a end
     for _, a in ipairs(MX.log_args()) do sidecar_args[#sidecar_args + 1] = a end
@@ -1501,6 +1512,24 @@ if MX.ModeUI then
     table.insert(forget_hooks, function() MX.ModeUI.forget() end)
 end
 
+-- Server mods: the consent, the warning screen and the progress (server_mods.lua).
+do
+    local mod = load_module("server_mods")
+    if mod then
+        MX.Mods = mod
+        mod.attach({
+            kit = Kit, log = Log, json = J, state_dir = STATE_DIR, ev = ev,
+            ipc = function() return rawget(_G, "HSMP_IPC") end,
+            policy = function() return settings.server_mods or "ask" end,
+            server_label = function() return lobby.server_label or lobby.server_addr or "" end,
+            decline = function(why) MX.mods_leave(why) end,
+        })
+        table.insert(forget_hooks, function() mod.forget() end)
+    else
+        Log("server_mods.lua failed to load - servers with mods cannot be joined")
+    end
+end
+
 -- --- main.lua kit screens: character, lobby ------------------------------------------
 -- Built once on enter; clicks and ticks re-render in place (state.screen_render).
 -- The build table (ui) is dropped on screen exit / world change via forget_hooks.
@@ -2053,6 +2082,13 @@ local function lobby_cancel()
     exit_screen()
 end
 
+-- Server mods declined or failed: leave the server, back to the server browser.
+function MX.mods_leave(why)
+    session_teardown(why or "server mods declined")
+    exit_screen()
+    enter_screen("browser")
+end
+
 -- JOIN from the browser. A held session (RECONNECT pending, lobby left for
 -- the main menu) is closed gracefully first (leave request, the 100 ms poll,
 -- the kills of our children) after a confirm, so the reconnecting sidecar
@@ -2103,7 +2139,7 @@ local function lobby_session_over(why, graceful)
     Log("session over (%s): leaving the lobby screen (%s)", tostring(why), graceful and "leave request" or "sidecar ended")
     -- LOADOUT (classes) is opened from the lobby: it closes too
     local on = state.injected and (state.screen_active == "lobby" or state.screen_active == "classes"
-        or state.screen_active == "mode")
+        or state.screen_active == "mode" or state.screen_active == "mods")
     session_teardown("session over: " .. tostring(why), { no_leave = not graceful })
     if on then exit_screen() end
 end
@@ -2714,6 +2750,7 @@ local BUILDERS = {
     lobby     = function() build_lobby_kit(); return render_lobby end,
     classes   = function() if Classes then Classes.build(); return Kit and Classes.render or nil end end,
     mode      = function() if MX.ModeUI then MX.ModeUI.build(); return MX.ModeUI.render end end,
+    mods      = function() if MX.Mods then MX.Mods.build(); return MX.Mods.render end end,
 }
 
 function enter_screen(kind)
@@ -2730,7 +2767,7 @@ function enter_screen(kind)
     end
     -- No zombie lobby stuck on CONNECTING...: the lobby (and LOADOUT,
     -- opened from it) needs a session that is held or starting.
-    if (kind == "lobby" or kind == "classes" or kind == "mode") and not lobby.active and not lobby.starting then
+    if (kind == "lobby" or kind == "classes" or kind == "mode" or kind == "mods") and not lobby.active and not lobby.starting then
         Log("enter screen %s refused: no MP session (it ended)", kind)
         if state.screen_active then exit_screen() end
         return
@@ -3151,6 +3188,11 @@ LoopAsync(500, function()
             if state.injected then
                 local over, graceful = lobby_over_reason(sstat)
                 if over then lobby_session_over(over, graceful); return end
+                -- The server's mods: the warning, the download, the load (the lobby waits).
+                if MX.Mods then
+                    local ok, hold = pcall(MX.Mods.tick, state.screen_active, enter_screen)
+                    if not ok then Log("server mods tick failed: %s", tostring(hold)) elseif hold then return end
+                end
                 -- RECONNECT worked after a lost travel left us on the main menu:
                 -- back to the lobby screen.
                 if lobby.lost_seen and sstat == "connected" and not state.screen_active and not conn_lost_latched() then

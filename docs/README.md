@@ -21,6 +21,7 @@ audience. Start with the [project README](../README.md) for an overview.
 | [Dedicated server](hosting/dedicated-server.md) | Quick start on Windows and Linux, admins, what the server does and does not do |
 | [Ports and firewall](hosting/ports-and-firewall.md) | Every port HSMP uses, with firewall commands |
 | [Configuration](hosting/configuration.md) | Every `hsmp-server` flag and environment variable |
+| [Server mods](hosting/server-mods.md) | Serving your own Lua mods to players: folder layout, `mod.json`, rules and limits, what players see |
 | [RCON](hosting/rcon.md) | Remote administration, safely (loopback + SSH tunnel) |
 | [Master server](hosting/master-server.md) | Running `hsmp-master`, the server list |
 | [Docker](hosting/docker.md) | The container image, volumes, the identity key |

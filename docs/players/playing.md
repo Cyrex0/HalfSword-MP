@@ -257,6 +257,8 @@ Click **SETTINGS** on the main menu.
 | **NET INDICATOR** | Ping and packet loss, bottom right: ALWAYS, WHEN BAD, or OFF. | ALWAYS |
 | **PEER AVATARS** | Shows the other players' bodies. Turn it off only to debug. | ON |
 | **ROUTER PORT** | While you host, opens the HOST PORT on your router automatically (UPnP, PCP or NAT-PMP) and closes it again when you stop. OFF: forward the port by hand. | ON |
+| **SERVER MODS: ALLOW** | ASK ME: a server that wants to install mods shows you a warning first. NEVER: such servers are declined (you cannot join them). See [Server mods](#server-mods). | ASK ME |
+| **FORGET REMEMBERED SERVERS** | Servers you accepted mods for with REMEMBER ask again. | |
 
 **SAVE & BACK** checks and saves everything. **BACK** leaves without saving. **RESET DEFAULTS**
 resets everything except your nickname. HUD settings apply from your next match.
@@ -267,6 +269,39 @@ There is no UI scale setting. The HSMP menus and the HUD scale themselves to the
 are laid out for 1920x1080 and scaled by the window's height (or its width on screens narrower than
 16:9). On an ultrawide screen they keep the 16:9 size and stay centred. Text never gets smaller
 than 9 pixels.
+
+## Server mods
+
+Some servers install their own mods (UE4SS Lua scripts) on your PC when you join. The server
+browser marks them with **[MODS n]**, and before anything downloads you get a warning screen:
+
+> This server wants to install N mods that run with FULL ACCESS to your PC (files, network,
+> everything a game mod can do). Only accept for servers you trust.
+
+with every mod's name, version, author, description and size, the server's key and the mod set's
+hash.
+
+- **What "full access" means.** A server mod is code, like a mod you install yourself. HSMP checks
+  that you get exactly the files the server announced (every byte is checked against its SHA-256
+  before it is saved), that they are Lua and plain data files only (no programs, no DLLs), and that
+  they cannot replace HSMP's own mods. It does **not** limit what that Lua code may do once it
+  runs. Accept only for servers you trust.
+- **ACCEPT & JOIN** downloads the mods, starts them and takes you into the lobby. **DECLINE** leaves
+  the server and takes you back to the server browser.
+- **REMEMBER FOR THIS SERVER** (on by default) skips the question next time for this server and
+  exactly these mods. If the server changes a single file, you are asked again.
+- **Revoking:** SETTINGS > **FORGET REMEMBERED SERVERS**, or delete
+  `HalfswordUE5\Binaries\Win64\hsmp_state\.server_mods.json`. SETTINGS > SERVER MODS: **NEVER**
+  declines every server's mods.
+- Downloaded mods are kept in `HalfswordUE5\Binaries\Win64\hsmp_mods` (outside the UE4SS mods
+  folder, so they never run on their own). They are checked again before every use and not
+  downloaded twice. Deleting the folder is safe; the launcher's uninstall deletes it.
+- When you leave the server, its mods are stopped. A few things a mod may have registered (key
+  binds, console commands) cannot be removed while the game runs; they stay switched off. Restart
+  the game for a completely clean state.
+
+If something goes wrong (a file does not match the server's hash, the download stops, the mods
+fail to start) the screen says why and **BACK TO BROWSER** leaves the server.
 
 ## Character
 

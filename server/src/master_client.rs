@@ -225,6 +225,8 @@ impl MasterClient {
             ts: Some(self.next_ts()),
             nat: Some(nat.nat_kind().to_string()).filter(|k| !k.is_empty()),
             punch: Some(punch),
+            mods: Some(a.mods).filter(|n| *n > 0),
+            mods_bytes: (a.mods > 0).then_some(a.mods_bytes),
         };
         let body = match serde_json::to_vec(&req) {
             Ok(b) => b,

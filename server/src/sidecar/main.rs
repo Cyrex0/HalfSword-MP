@@ -58,6 +58,11 @@ mod build_id;
 #[path = "../log_init.rs"]
 mod log_init; // stdout + the --log-dir file
 mod session_log; // --log-session: the per-run log folder
+#[path = "../server_mods/mod.rs"]
+#[allow(dead_code)] // the server's half (serving) is only used by the transfer tests here
+mod server_mods; // the server-mods manifest: rebuilt and checked from the server's records
+mod mods_cache; // server mods: the verified, content-addressed cache (--mods-cache)
+mod mods_client; // server mods: offer, consent, download, ready
 
 // Siblings share each other's items through `use super::*`.
 use net::*;
@@ -259,6 +264,12 @@ struct Args {
     /// "" = the public defaults, "off" = none.
     #[arg(long, env = "HSMP_STUN_SERVERS", default_value = "")]
     stun: String,
+
+    /// Server mods: the cache folder (content-addressed: `<dir>/<mod hash>/...`). HSMPMenu
+    /// passes `hsmp_mods` next to the game (outside `ue4ss/Mods`, so UE4SS never loads a
+    /// server mod by itself). docs/hosting/server-mods.md.
+    #[arg(long, env = "HSMP_MODS_CACHE", default_value = "hsmp_mods")]
+    mods_cache: PathBuf,
 }
 
 /// `--career-recover`: crash recovery only. Returns the stdout JSON lines
@@ -545,6 +556,9 @@ async fn main() -> Result<()> {
 
     // Session: the command resend loop (detached; session_client.rs).
     session_client::spawn_tasks();
+
+    // Server mods: offer, consent, download into the verified cache (detached; mods_client.rs).
+    mods_client::spawn(sock.clone(), args.mods_cache.clone());
 
     let mut leave_reason: u8 = proto::v5::LeaveReason::USER;
     tokio::select! {

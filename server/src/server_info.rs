@@ -22,6 +22,9 @@ pub struct Advertised {
     /// The content hash the server enforces (64 hex), or "" when it accepts any
     /// (`--allow-mismatched-content`).
     pub content_hash: String,
+    /// Server mods (`--mods-dir`): how many, and their total size in bytes (0 = none).
+    pub mods: u32,
+    pub mods_bytes: u64,
 }
 
 static ADVERTISED: OnceLock<Advertised> = OnceLock::new();
@@ -95,6 +98,8 @@ pub fn snapshot(state: &ServerState) -> QueryInfo {
         proto_max: hsmp_net::net::VERSION_MAX as u32,
         server_key: a.server_key,
         content_tag: query::content_tag(&a.content_hash),
+        mods: a.mods,
+        mods_kb: a.mods_bytes.div_ceil(1024),
     }
 }
 
@@ -129,6 +134,7 @@ mod tests {
             name: "Test Srv".into(), mode: "Free Fight".into(),
             default_map: "Map_Arena_Pit".into(), region: "EU".into(),
             max_players: 8, password: false, server_key: "cd".repeat(32), content_hash: "ef".repeat(32),
+            mods: 2, mods_bytes: 5000,
         });
         let sock = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
         let addr = sock.local_addr().unwrap();
@@ -152,6 +158,7 @@ mod tests {
         assert_eq!(info.map, "Map_Arena_Pit");
         assert_eq!(info.proto_ver, crate::proto::PROTOCOL_VERSION);
         assert_eq!(info.content_tag, "efefefefefefefef");
+        assert_eq!((info.mods, info.mods_kb), (2, 5));
     }
 
     #[test]

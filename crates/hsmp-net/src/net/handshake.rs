@@ -46,6 +46,8 @@ pub mod reject_code {
     pub const SERVER_CLOSING: u8 = 8;
     pub const DUPLICATE_PLAYER: u8 = 9;
     pub const RATE_LIMITED: u8 = 10;
+    /// The server serves mods and the client cannot take them (no `caps::SERVER_MODS`).
+    pub const MODS_REQUIRED: u8 = 11;
     pub const INTERNAL: u8 = 255;
 }
 

@@ -259,6 +259,9 @@ pub(super) async fn on_welcome(payload: &[u8], shared: &Arc<Mutex<SharedState>>)
     }
     MY_PEER.store(w.peer_id, Ordering::Release);
     IS_ADMIN.store(false, Ordering::Release);
+    // Server mods: hold the session back from the game until they are loaded (before any
+    // later record of this connection is handled).
+    super::mods_client::on_welcome(w.server_epoch, w.caps);
     link_update(|l| {
         l.my_peer_id = w.peer_id;
         l.server_epoch = w.server_epoch;
@@ -379,16 +382,12 @@ pub(super) fn on_session(payload: &[u8]) -> Result<()> {
     PHASE.store(h.phase, Ordering::Release);
     // Deaths are deduped per (epoch, match, peer, round).
     combat_client::set_match(h.epoch, h.match_id);
-    if let Some(l) = ipc_shm::link() {
-        l.post_record("session", None, rs::K_SESSION, payload);
-        let me = my_peer_id();
-        let peers: Vec<(u32, String)> = v
-            .rows
-            .iter()
-            .filter(|r| r.connected.get() && r.peer_id != 0 && r.peer_id != me)
-            .map(|r| (r.peer_id, r.nick.lossy().into_owned()))
-            .collect();
-        l.sync_roster(&peers);
+    if super::mods_client::holds_session() {
+        // The server's mods are not loaded yet: the game stays out of the session (it would
+        // travel into a running match); the newest snapshot goes in when they are.
+        *held_session() = Some(payload.to_vec());
+    } else {
+        post_session(payload, &v);
     }
     if old_phase != Some(h.phase) {
         with(|c| c.phase = Some(h.phase));
@@ -401,6 +400,36 @@ pub(super) fn on_session(payload: &[u8]) -> Result<()> {
         }));
     }
     Ok(())
+}
+
+/// The newest snapshot held back while the server's mods load (mods_client.rs).
+fn held_session() -> std::sync::MutexGuard<'static, Option<Vec<u8>>> {
+    static H: std::sync::OnceLock<std::sync::Mutex<Option<Vec<u8>>>> = std::sync::OnceLock::new();
+    H.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// The snapshot into the game's `session` slot and its roster into the peer directory.
+fn post_session(payload: &[u8], v: &hsmp_ipc::record::View<'_, rs::SessionHead>) {
+    if let Some(l) = ipc_shm::link() {
+        l.post_record("session", None, rs::K_SESSION, payload);
+        let me = my_peer_id();
+        let peers: Vec<(u32, String)> = v
+            .rows
+            .iter()
+            .filter(|r| r.connected.get() && r.peer_id != 0 && r.peer_id != me)
+            .map(|r| (r.peer_id, r.nick.lossy().into_owned()))
+            .collect();
+        l.sync_roster(&peers);
+    }
+}
+
+/// The server's mods are loaded (or it has none): the held snapshot reaches the game.
+pub(super) fn release_held_session() {
+    let Some(p) = held_session().take() else { return };
+    if let Ok(v) = view::<rs::SessionHead>(&p) {
+        info!("server mods loaded: the session reaches the game");
+        post_session(&p, &v);
+    }
 }
 
 /// `pings`: every connected player's RTT into the peer directory.

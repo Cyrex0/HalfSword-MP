@@ -294,6 +294,9 @@ pub struct State {
     pub pending: Option<Tx>,
 }
 
+/// The server-mods cache next to the game (hsmp-sidecar --mods-cache; deleted on uninstall).
+pub const SERVER_MODS_CACHE: &str = "hsmp_mods";
+
 /// Files/folders the game + HSMP create at runtime in Win64 (archived on uninstall).
 fn is_runtime_artefact(name: &str) -> bool {
     let l = name.to_ascii_lowercase();
@@ -1156,6 +1159,16 @@ pub fn uninstall_with(env: &Env, o: &UninstallOpts, log: &mut dyn FnMut(String))
         Ok(())
     };
     let win64 = game::win64(&env.game_root);
+    // The server-mods cache (docs/hosting/server-mods.md): third-party code downloaded from
+    // servers, re-downloadable and verified before each use, so it is deleted, not archived.
+    // A repair leaves it alone.
+    let mods_cache = win64.join(SERVER_MODS_CACHE);
+    if mods_cache.is_dir() {
+        match std::fs::remove_dir_all(&mods_cache) {
+            Ok(()) => log(format!("removed the server mods cache {}", mods_cache.display())),
+            Err(e) => log(format!("could not remove the server mods cache {}: {e}", mods_cache.display())),
+        }
+    }
     for name in runtime_names(&win64) {
         let n = name.to_string_lossy().to_string();
         if !st.runtime_preexisting.iter().any(|p| p.eq_ignore_ascii_case(&n)) {

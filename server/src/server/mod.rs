@@ -38,6 +38,7 @@ mod records; // protocol v6: typed record messages, per-domain dispatch
 mod pose_glue; // protocol v6: root / weapon / pose records
 mod session_records; // session domain records (0x02xx): builders + C2S handlers
 mod modes; // game modes: teams, King of the hill, roulette / brawl kits, deathmatch respawns
+mod mods_glue; // server mods (0x09xx): join gating, manifest, chunk serving
 
 // Siblings share each other's items through `use super::*`.
 use session::*;
@@ -65,6 +66,7 @@ pub(crate) use records::refused;
 pub use broadcast::shutdown;
 pub use tick::{tick_loop, TICK_HZ_MIN, TICK_HZ_MAX};
 pub use session::net_status_notices;
+pub use mods_glue::serve_loop as mods_serve_loop;
 // Session layer: typed commands, snapshot, RCON match/debug verbs.
 pub(crate) use session::{configure_session, rcon_debug_kill, rcon_status, run_command, seat_peer, Actor, KitView, SessionOpts};
 pub(crate) use modes::{mode_label, parse_mode, ModeCfg};
@@ -102,6 +104,8 @@ pub struct ServerState {
     /// Peers with relayed messages queued while the receive loop handles one datagram (None =
     /// not batching). Flushed after it, so records a sender sent together leave together.
     relay_batch: std::sync::Mutex<Option<Vec<SocketAddr>>>,
+    /// Server mods (`--mods-dir`; mods_glue.rs): set once at startup, never when there are none.
+    pub(crate) mods: std::sync::OnceLock<Arc<crate::server_mods::Host>>,
 }
 
 pub(crate) struct Inner {
@@ -171,6 +175,8 @@ pub(crate) struct Inner {
     sess: session::SessionCore,
     /// Game modes (modes.rs): config, teams, scores, round clock, respawns, round kit.
     modes: modes::ModeCore,
+    /// Players still loading the server's mods (peer id -> since, server ms; mods_glue.rs).
+    pub(crate) mods_pending: HashMap<PeerId, u64>,
 }
 
 /// What a peer's GAME (not just its sidecar) last told us.
@@ -227,11 +233,13 @@ impl ServerState {
                 out_msgs: Vec::new(),
                 sess: session::SessionCore::new(max_peers),
                 modes: modes::ModeCore::default(),
+                mods_pending: HashMap::new(),
             }),
             max_peers,
             net,
             relay: crate::relay::Relay::default(),
             relay_batch: std::sync::Mutex::new(None),
+            mods: std::sync::OnceLock::new(),
         }
     }
 

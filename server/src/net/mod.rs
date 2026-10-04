@@ -152,7 +152,13 @@ pub struct Net {
 
 impl Net {
     pub fn new(static_secret: [u8; 32], content_hash: Option<[u8; 32]>) -> Self {
+        Self::with_caps(static_secret, content_hash, 0)
+    }
+
+    /// `new`, offering `extra_caps` too (`caps::SERVER_MODS` when the server has mods).
+    pub fn with_caps(static_secret: [u8; 32], content_hash: Option<[u8; 32]>, extra_caps: u64) -> Self {
         let mut cfg = ServerConfig::new(static_secret);
+        cfg.caps |= extra_caps;
         cfg.content_hash = content_hash;
         // Interaction channel (docs/development/subsystems/interact.md), offered on top of the base set.
         cfg.caps |= hn::caps::INTERACT;

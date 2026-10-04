@@ -1830,6 +1830,198 @@ HSMP_SA(offsetof(hsmp_DevCmd, num) == 8, "hsmp_DevCmd.num offset");
 HSMP_SA(offsetof(hsmp_DevCmd, key) == 16, "hsmp_DevCmd.key offset");
 HSMP_SA(offsetof(hsmp_DevCmd, arg) == 48, "hsmp_DevCmd.arg offset");
 
+typedef struct hsmp_ModManifestHead {
+    uint8_t set_hash[32];
+    uint64_t total_bytes;
+    uint32_t max_chunk;
+    uint32_t timeout_s;
+    uint16_t n;
+    uint16_t files;
+    uint32_t _r;
+} hsmp_ModManifestHead;
+HSMP_SA(sizeof(hsmp_ModManifestHead) == 56, "hsmp_ModManifestHead size");
+HSMP_SA(offsetof(hsmp_ModManifestHead, set_hash) == 0, "hsmp_ModManifestHead.set_hash offset");
+HSMP_SA(offsetof(hsmp_ModManifestHead, total_bytes) == 32, "hsmp_ModManifestHead.total_bytes offset");
+HSMP_SA(offsetof(hsmp_ModManifestHead, max_chunk) == 40, "hsmp_ModManifestHead.max_chunk offset");
+HSMP_SA(offsetof(hsmp_ModManifestHead, timeout_s) == 44, "hsmp_ModManifestHead.timeout_s offset");
+HSMP_SA(offsetof(hsmp_ModManifestHead, n) == 48, "hsmp_ModManifestHead.n offset");
+HSMP_SA(offsetof(hsmp_ModManifestHead, files) == 50, "hsmp_ModManifestHead.files offset");
+HSMP_SA(offsetof(hsmp_ModManifestHead, _r) == 52, "hsmp_ModManifestHead._r offset");
+
+typedef struct hsmp_ModRow {
+    uint8_t mod_hash[32];
+    uint64_t bytes;
+    uint16_t first_file;
+    uint16_t files;
+    uint32_t _r;
+    char name[32];
+    char version[16];
+    char author[48];
+    char description[160];
+} hsmp_ModRow;
+HSMP_SA(sizeof(hsmp_ModRow) == 304, "hsmp_ModRow size");
+HSMP_SA(offsetof(hsmp_ModRow, mod_hash) == 0, "hsmp_ModRow.mod_hash offset");
+HSMP_SA(offsetof(hsmp_ModRow, bytes) == 32, "hsmp_ModRow.bytes offset");
+HSMP_SA(offsetof(hsmp_ModRow, first_file) == 40, "hsmp_ModRow.first_file offset");
+HSMP_SA(offsetof(hsmp_ModRow, files) == 42, "hsmp_ModRow.files offset");
+HSMP_SA(offsetof(hsmp_ModRow, _r) == 44, "hsmp_ModRow._r offset");
+HSMP_SA(offsetof(hsmp_ModRow, name) == 48, "hsmp_ModRow.name offset");
+HSMP_SA(offsetof(hsmp_ModRow, version) == 80, "hsmp_ModRow.version offset");
+HSMP_SA(offsetof(hsmp_ModRow, author) == 96, "hsmp_ModRow.author offset");
+HSMP_SA(offsetof(hsmp_ModRow, description) == 144, "hsmp_ModRow.description offset");
+
+typedef struct hsmp_ModFilesHead {
+    uint8_t set_hash[32];
+    uint16_t n;
+    uint8_t _r[6];
+} hsmp_ModFilesHead;
+HSMP_SA(sizeof(hsmp_ModFilesHead) == 40, "hsmp_ModFilesHead size");
+HSMP_SA(offsetof(hsmp_ModFilesHead, set_hash) == 0, "hsmp_ModFilesHead.set_hash offset");
+HSMP_SA(offsetof(hsmp_ModFilesHead, n) == 32, "hsmp_ModFilesHead.n offset");
+HSMP_SA(offsetof(hsmp_ModFilesHead, _r) == 34, "hsmp_ModFilesHead._r offset");
+
+typedef struct hsmp_ModFileRow {
+    uint8_t sha256[32];
+    uint64_t size;
+    uint16_t mod_index;
+    uint8_t _r[6];
+    char path[128];
+} hsmp_ModFileRow;
+HSMP_SA(sizeof(hsmp_ModFileRow) == 176, "hsmp_ModFileRow size");
+HSMP_SA(offsetof(hsmp_ModFileRow, sha256) == 0, "hsmp_ModFileRow.sha256 offset");
+HSMP_SA(offsetof(hsmp_ModFileRow, size) == 32, "hsmp_ModFileRow.size offset");
+HSMP_SA(offsetof(hsmp_ModFileRow, mod_index) == 40, "hsmp_ModFileRow.mod_index offset");
+HSMP_SA(offsetof(hsmp_ModFileRow, _r) == 42, "hsmp_ModFileRow._r offset");
+HSMP_SA(offsetof(hsmp_ModFileRow, path) == 48, "hsmp_ModFileRow.path offset");
+
+typedef struct hsmp_ModChunkReq {
+    uint64_t offset;
+    uint32_t req_id;
+    uint32_t len;
+    uint16_t file;
+    uint8_t _r[6];
+} hsmp_ModChunkReq;
+HSMP_SA(sizeof(hsmp_ModChunkReq) == 24, "hsmp_ModChunkReq size");
+HSMP_SA(offsetof(hsmp_ModChunkReq, offset) == 0, "hsmp_ModChunkReq.offset offset");
+HSMP_SA(offsetof(hsmp_ModChunkReq, req_id) == 8, "hsmp_ModChunkReq.req_id offset");
+HSMP_SA(offsetof(hsmp_ModChunkReq, len) == 12, "hsmp_ModChunkReq.len offset");
+HSMP_SA(offsetof(hsmp_ModChunkReq, file) == 16, "hsmp_ModChunkReq.file offset");
+HSMP_SA(offsetof(hsmp_ModChunkReq, _r) == 18, "hsmp_ModChunkReq._r offset");
+
+typedef struct hsmp_ModChunkHead {
+    uint64_t offset;
+    uint32_t req_id;
+    uint32_t n;
+    uint16_t file;
+    uint8_t _r[6];
+} hsmp_ModChunkHead;
+HSMP_SA(sizeof(hsmp_ModChunkHead) == 24, "hsmp_ModChunkHead size");
+HSMP_SA(offsetof(hsmp_ModChunkHead, offset) == 0, "hsmp_ModChunkHead.offset offset");
+HSMP_SA(offsetof(hsmp_ModChunkHead, req_id) == 8, "hsmp_ModChunkHead.req_id offset");
+HSMP_SA(offsetof(hsmp_ModChunkHead, n) == 12, "hsmp_ModChunkHead.n offset");
+HSMP_SA(offsetof(hsmp_ModChunkHead, file) == 16, "hsmp_ModChunkHead.file offset");
+HSMP_SA(offsetof(hsmp_ModChunkHead, _r) == 18, "hsmp_ModChunkHead._r offset");
+
+typedef struct hsmp_ModReady {
+    uint8_t set_hash[32];
+    uint8_t result;
+    uint8_t failed;
+    uint8_t _r[6];
+} hsmp_ModReady;
+HSMP_SA(sizeof(hsmp_ModReady) == 40, "hsmp_ModReady size");
+HSMP_SA(offsetof(hsmp_ModReady, set_hash) == 0, "hsmp_ModReady.set_hash offset");
+HSMP_SA(offsetof(hsmp_ModReady, result) == 32, "hsmp_ModReady.result offset");
+HSMP_SA(offsetof(hsmp_ModReady, failed) == 33, "hsmp_ModReady.failed offset");
+HSMP_SA(offsetof(hsmp_ModReady, _r) == 34, "hsmp_ModReady._r offset");
+
+typedef struct hsmp_ModOffer {
+    uint8_t set_hash[32];
+    uint8_t server_key[32];
+    uint64_t total_bytes;
+    uint64_t cached_bytes;
+    uint16_t n;
+    uint16_t files;
+    uint32_t _r;
+} hsmp_ModOffer;
+HSMP_SA(sizeof(hsmp_ModOffer) == 88, "hsmp_ModOffer size");
+HSMP_SA(offsetof(hsmp_ModOffer, set_hash) == 0, "hsmp_ModOffer.set_hash offset");
+HSMP_SA(offsetof(hsmp_ModOffer, server_key) == 32, "hsmp_ModOffer.server_key offset");
+HSMP_SA(offsetof(hsmp_ModOffer, total_bytes) == 64, "hsmp_ModOffer.total_bytes offset");
+HSMP_SA(offsetof(hsmp_ModOffer, cached_bytes) == 72, "hsmp_ModOffer.cached_bytes offset");
+HSMP_SA(offsetof(hsmp_ModOffer, n) == 80, "hsmp_ModOffer.n offset");
+HSMP_SA(offsetof(hsmp_ModOffer, files) == 82, "hsmp_ModOffer.files offset");
+HSMP_SA(offsetof(hsmp_ModOffer, _r) == 84, "hsmp_ModOffer._r offset");
+
+typedef struct hsmp_ModEntry {
+    uint8_t set_hash[32];
+    uint8_t mod_hash[32];
+    uint64_t bytes;
+    uint16_t index;
+    uint16_t n;
+    uint16_t files;
+    uint8_t cached;
+    uint8_t _r;
+    char name[32];
+    char version[16];
+    char author[48];
+    char description[160];
+} hsmp_ModEntry;
+HSMP_SA(sizeof(hsmp_ModEntry) == 336, "hsmp_ModEntry size");
+HSMP_SA(offsetof(hsmp_ModEntry, set_hash) == 0, "hsmp_ModEntry.set_hash offset");
+HSMP_SA(offsetof(hsmp_ModEntry, mod_hash) == 32, "hsmp_ModEntry.mod_hash offset");
+HSMP_SA(offsetof(hsmp_ModEntry, bytes) == 64, "hsmp_ModEntry.bytes offset");
+HSMP_SA(offsetof(hsmp_ModEntry, index) == 72, "hsmp_ModEntry.index offset");
+HSMP_SA(offsetof(hsmp_ModEntry, n) == 74, "hsmp_ModEntry.n offset");
+HSMP_SA(offsetof(hsmp_ModEntry, files) == 76, "hsmp_ModEntry.files offset");
+HSMP_SA(offsetof(hsmp_ModEntry, cached) == 78, "hsmp_ModEntry.cached offset");
+HSMP_SA(offsetof(hsmp_ModEntry, _r) == 79, "hsmp_ModEntry._r offset");
+HSMP_SA(offsetof(hsmp_ModEntry, name) == 80, "hsmp_ModEntry.name offset");
+HSMP_SA(offsetof(hsmp_ModEntry, version) == 112, "hsmp_ModEntry.version offset");
+HSMP_SA(offsetof(hsmp_ModEntry, author) == 128, "hsmp_ModEntry.author offset");
+HSMP_SA(offsetof(hsmp_ModEntry, description) == 176, "hsmp_ModEntry.description offset");
+
+typedef struct hsmp_ModProgress {
+    uint8_t set_hash[32];
+    uint64_t done_bytes;
+    uint64_t total_bytes;
+    uint8_t state;
+    uint8_t code;
+    uint8_t _r[6];
+    char text[128];
+} hsmp_ModProgress;
+HSMP_SA(sizeof(hsmp_ModProgress) == 184, "hsmp_ModProgress size");
+HSMP_SA(offsetof(hsmp_ModProgress, set_hash) == 0, "hsmp_ModProgress.set_hash offset");
+HSMP_SA(offsetof(hsmp_ModProgress, done_bytes) == 32, "hsmp_ModProgress.done_bytes offset");
+HSMP_SA(offsetof(hsmp_ModProgress, total_bytes) == 40, "hsmp_ModProgress.total_bytes offset");
+HSMP_SA(offsetof(hsmp_ModProgress, state) == 48, "hsmp_ModProgress.state offset");
+HSMP_SA(offsetof(hsmp_ModProgress, code) == 49, "hsmp_ModProgress.code offset");
+HSMP_SA(offsetof(hsmp_ModProgress, _r) == 50, "hsmp_ModProgress._r offset");
+HSMP_SA(offsetof(hsmp_ModProgress, text) == 56, "hsmp_ModProgress.text offset");
+
+typedef struct hsmp_ModDecision {
+    uint8_t set_hash[32];
+    uint8_t op;
+    uint8_t _r[7];
+} hsmp_ModDecision;
+HSMP_SA(sizeof(hsmp_ModDecision) == 40, "hsmp_ModDecision size");
+HSMP_SA(offsetof(hsmp_ModDecision, set_hash) == 0, "hsmp_ModDecision.set_hash offset");
+HSMP_SA(offsetof(hsmp_ModDecision, op) == 32, "hsmp_ModDecision.op offset");
+HSMP_SA(offsetof(hsmp_ModDecision, _r) == 33, "hsmp_ModDecision._r offset");
+
+typedef struct hsmp_ModLoaded {
+    uint8_t set_hash[32];
+    uint8_t ok;
+    uint8_t failed;
+    uint8_t _r[6];
+    char text[128];
+} hsmp_ModLoaded;
+HSMP_SA(sizeof(hsmp_ModLoaded) == 168, "hsmp_ModLoaded size");
+HSMP_SA(offsetof(hsmp_ModLoaded, set_hash) == 0, "hsmp_ModLoaded.set_hash offset");
+HSMP_SA(offsetof(hsmp_ModLoaded, ok) == 32, "hsmp_ModLoaded.ok offset");
+HSMP_SA(offsetof(hsmp_ModLoaded, failed) == 33, "hsmp_ModLoaded.failed offset");
+HSMP_SA(offsetof(hsmp_ModLoaded, _r) == 34, "hsmp_ModLoaded._r offset");
+HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
+
 #pragma pack(pop)
 
 /* Records (protocol v6 kinds; the wire header is hsmp_WireHdr). */
@@ -1930,6 +2122,19 @@ HSMP_SA(offsetof(hsmp_DevCmd, arg) == 48, "hsmp_DevCmd.arg offset");
 #define HSMP_REC_POSE_YIELD 0x0620u /* PoseYield */
 #define HSMP_REC_POSE_YIELD_MAX_ROWS 32u
 #define HSMP_REC_DEV_CMD 0x0810u /* DevCmd */
+#define HSMP_REC_MOD_MANIFEST 0x0901u /* ModManifestHead */
+#define HSMP_REC_MOD_MANIFEST_MAX_ROWS 16u
+#define HSMP_REC_MOD_FILES 0x0902u /* ModFilesHead */
+#define HSMP_REC_MOD_FILES_MAX_ROWS 256u
+#define HSMP_REC_MOD_CHUNK_REQ 0x0903u /* ModChunkReq */
+#define HSMP_REC_MOD_CHUNK 0x0904u /* ModChunkHead */
+#define HSMP_REC_MOD_CHUNK_MAX_ROWS 32768u
+#define HSMP_REC_MOD_READY 0x0905u /* ModReady */
+#define HSMP_REC_MOD_OFFER 0x0906u /* ModOffer */
+#define HSMP_REC_MOD_ENTRY 0x0907u /* ModEntry */
+#define HSMP_REC_MOD_PROGRESS 0x0908u /* ModProgress */
+#define HSMP_REC_MOD_DECISION 0x0909u /* ModDecision */
+#define HSMP_REC_MOD_LOADED 0x090au /* ModLoaded */
 
 /* Code tables. */
 #define HSMP_PHASE_LOBBY 0u
@@ -2179,6 +2384,29 @@ HSMP_SA(offsetof(hsmp_DevCmd, arg) == 48, "hsmp_DevCmd.arg offset");
 #define HSMP_DEV_OP_AUTOTEST 1u
 #define HSMP_DEV_OP_TUNE 2u
 #define HSMP_DEV_OP_TDIAG 3u
+#define HSMP_MOD_RESULT_LOADED 1u
+#define HSMP_MOD_RESULT_FAILED 2u
+#define HSMP_MOD_RESULT_DECLINED 3u
+#define HSMP_MOD_STATE_OFFER 1u
+#define HSMP_MOD_STATE_DOWNLOADING 2u
+#define HSMP_MOD_STATE_VERIFYING 3u
+#define HSMP_MOD_STATE_READY 4u
+#define HSMP_MOD_STATE_JOINED 5u
+#define HSMP_MOD_STATE_FAILED 6u
+#define HSMP_MOD_STATE_CLEAR 7u
+#define HSMP_MOD_ERROR_NONE 0u
+#define HSMP_MOD_ERROR_HASH_MISMATCH 1u
+#define HSMP_MOD_ERROR_TOO_LARGE 2u
+#define HSMP_MOD_ERROR_BAD_MANIFEST 3u
+#define HSMP_MOD_ERROR_DISCONNECTED 4u
+#define HSMP_MOD_ERROR_DISK 5u
+#define HSMP_MOD_ERROR_TIMEOUT 6u
+#define HSMP_MOD_ERROR_LOAD_FAILED 7u
+#define HSMP_MOD_ERROR_DECLINED 8u
+#define HSMP_MOD_ERROR_BLOCKED 9u
+#define HSMP_MOD_OP_ACCEPT 1u
+#define HSMP_MOD_OP_DECLINE 2u
+#define HSMP_MOD_OP_RESEND 3u
 
 /* Region and field offsets from the segment base. */
 #define HSMP_OFF_HEADER 0x0u

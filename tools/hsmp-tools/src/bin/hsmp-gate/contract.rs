@@ -116,6 +116,11 @@ pub const CONTRACT: &[Entry] = &[
     // DoD-8: attributes a career-file mtime change to a pre-session native write (guard off)
     e("x_save_call", L, &["fn", "slot", "active"], &["err"]),
     e("x_autotest_cmd", L, &[], &[]),
+    // HSMPModHost (docs/hosting/server-mods.md): a server mod raised an error; a set loaded / unloaded
+    e("x_server_mod_error", L, &[], &["mod", "what", "error"]),
+    e("x_server_mods_offer", L, &[], &["mods", "bytes", "decision"]),
+    e("x_server_mods_loaded", L, &[], &["set", "mods", "ok", "failed"]),
+    e("x_server_mods_unloaded", L, &[], &["why", "inert"]),
     e("conn_state", L, &[], &[]),
     e("travel_reason", L, &[], &[]),
     e("resume", L, &[], &[]),
@@ -155,6 +160,9 @@ pub const CONTRACT: &[Entry] = &[
     e("respawned", SV, &[], &[]),
     // NAT traversal (server/src/nat): a relayed punch answered with probes. Not judged.
     e("nat_punch", SV, &[], &["to", "nonce"]),
+    // server mods (docs/hosting/server-mods.md): the server (a joining player's set loaded /
+    // declined / failed) and the sidecar (accepted / loaded / failed with a code)
+    e("server_mods", &[Src::Server, Src::Sidecar], &[], &["peer_id", "result", "ms", "failed", "state", "code", "text"]),
     // --- hsmp-sidecar --events -----------------------------------------------------------------
     e("cmd_sent", SC, &[], &[]),
     e("cmd_timeout", SC, &["cmd", "cmd_id", "tries"], &[]),

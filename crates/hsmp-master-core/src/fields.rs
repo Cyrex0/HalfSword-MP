@@ -15,6 +15,9 @@ pub const MAX_BODY_BYTES: usize = 4096;
 /// Game ports below this are refused: a listing must not point players' UDP probes at a
 /// well-known service on the registrant's address.
 pub const MIN_PORT: u16 = 1024;
+/// Server mods a listing may report (the protocol's set limit) and their largest size.
+pub const MAX_MODS: u32 = 16;
+pub const MAX_MODS_BYTES: u64 = 64 << 20;
 
 /// Unicode format characters (category Cf) that render as nothing or reorder text: zero-width
 /// spaces and joiners, bidi controls, BOM, tag characters. They allow look-alike names.
@@ -106,6 +109,12 @@ pub struct RegisterReq {
     /// The server takes punch requests (it opens the listen socket, punch.rs).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub punch: Option<bool>,
+    /// Server mods it serves (docs/hosting/server-mods.md): count and total bytes; absent
+    /// from servers without mods and from older servers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mods: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mods_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +178,9 @@ pub struct Fields {
     pub content_hash: String,
     pub nat: String,
     pub punch: bool,
+    /// Server mods: count (at most MAX_MODS) and bytes (at most MAX_MODS_BYTES).
+    pub mods: u32,
+    pub mods_bytes: u64,
 }
 
 /// How a listed server is reachable:
@@ -227,6 +239,8 @@ pub fn validate_register(r: &RegisterReq, min_port: u16) -> Result<Fields, &'sta
         content_hash,
         nat: nat_kind(r.nat.as_deref()),
         punch: r.punch.unwrap_or(false),
+        mods: r.mods.unwrap_or(0).min(MAX_MODS),
+        mods_bytes: r.mods_bytes.unwrap_or(0).min(MAX_MODS_BYTES),
     })
 }
 
@@ -322,6 +336,24 @@ mod tests {
         assert_eq!(resp.heartbeat_s, None);
         let h: HeartbeatReq = serde_json::from_str(r#"{"players":2,"nonce":"n","hmac":"h"}"#).unwrap();
         assert_eq!(h.ts, None);
+    }
+
+    #[test]
+    fn mods_fields_are_optional_and_clamped() {
+        let mut r = req();
+        let f = validate_register(&r, MIN_PORT).unwrap();
+        assert_eq!((f.mods, f.mods_bytes), (0, 0));
+        r.mods = Some(3);
+        r.mods_bytes = Some(5000);
+        let f = validate_register(&r, MIN_PORT).unwrap();
+        assert_eq!((f.mods, f.mods_bytes), (3, 5000));
+        r.mods = Some(1000);
+        r.mods_bytes = Some(u64::MAX);
+        let f = validate_register(&r, MIN_PORT).unwrap();
+        assert_eq!((f.mods, f.mods_bytes), (MAX_MODS, MAX_MODS_BYTES));
+        // a server without mods sends neither key
+        let v = serde_json::to_value(req()).unwrap();
+        assert!(v.get("mods").is_none() && v.get("mods_bytes").is_none());
     }
 
     #[test]

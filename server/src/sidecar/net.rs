@@ -139,6 +139,8 @@ impl NetClient {
         cfg.caps |= hsmp_net::net::caps::BODY;
         // Game modes: the `mode` / `kill_feed` records and the King of the hill `zone`.
         cfg.caps |= hsmp_net::net::caps::MODES | hsmp_net::net::caps::ZONE;
+        // Server mods: offered always; the game asks the player before anything downloads.
+        cfg.caps |= hsmp_net::net::caps::SERVER_MODS;
         // Path-dead after 2 s of silence while sending: re-handshake
         // long before the 10 s idle timeout.
         let conn = ConnConfig { dead_after_ms: hsmp_net::net::conn::CLIENT_DEAD_AFTER_MS, ..ConnConfig::default() };
@@ -637,6 +639,7 @@ async fn on_events(evs: Vec<ClientEvent>, shared: &Arc<Mutex<SharedState>>) {
                 // Disk I/O: off the receive path.
                 std::thread::spawn(move || remember_server_key(&known_path, &server, &server_key));
                 crate::interact_client::set_caps(caps);
+                super::mods_client::on_connected(server_key);
             }
             ClientEvent::Rejected { code, text, authenticated } => {
                 warn!(code, %text, authenticated, "relay rejected us");
@@ -693,6 +696,7 @@ async fn on_events(evs: Vec<ClientEvent>, shared: &Arc<Mutex<SharedState>>) {
                     }
                 };
                 warn!(code, by_peer, "connection lost; status {:?}", status);
+                super::mods_client::on_link_down();
                 if let Some(st) = status {
                     if st == "kicked" && super::session_client::link_now().reason.is_empty() {
                         super::session_client::set_reason("kicked", 0, 0);

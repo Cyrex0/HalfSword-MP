@@ -23,8 +23,8 @@ pub mod handshake;
 pub mod replay;
 pub mod wire;
 
-#[cfg(test)]
-mod testlink;
+#[cfg(any(test, feature = "testlink"))]
+pub mod testlink;
 #[cfg(test)]
 mod tests;
 
@@ -122,6 +122,11 @@ pub mod caps {
     /// players that negotiated it, for their stand-ins of it. Opted in by server and
     /// sidecar; peers without it never send or receive the record.
     pub const BODY: u64 = 1 << 17;
+    /// Application: server-served mods (`mod_manifest` / `mod_files` / `mod_chunk` down,
+    /// `mod_chunk_req` / `mod_ready` up; docs/hosting/server-mods.md). The server offers it
+    /// only when it has a `--mods-dir`, the sidecar always; a server with mods refuses a
+    /// client without it (`reject_code::MODS_REQUIRED`).
+    pub const SERVER_MODS: u64 = 1 << 18;
     /// Everything this build implements at the transport level (the
     /// application-level bits are opted in by the server / sidecar).
     pub const SUPPORTED: u64 = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY;

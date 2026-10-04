@@ -289,6 +289,7 @@ that it is never larger than the Auth it answers.
 | 8 | SERVER_CLOSING | shutdown in progress |
 | 9 | DUPLICATE_PLAYER | the same key is connected and replacement is refused |
 | 10 | RATE_LIMITED | too many attempts |
+| 11 | MODS_REQUIRED | the server serves mods and the client has no `caps::SERVER_MODS` (§12) |
 | 255 | INTERNAL | — |
 
 ### 3.8 Client behaviour
@@ -571,7 +572,7 @@ Every channel message is one record:
 
 ### 6.2 Kinds and validation
 
-A kind id is `domain << 8 | n` with `n` in `0x10..=0xFF`. Every kind, with its layout,
+A kind id is `domain << 8 | n` with `n` in `0x10..=0xFF` (the server-mods domain `0x09` uses `0x01..=0x0F`). Every kind, with its layout,
 capability bit, allowed flow (`c2s`, `s2c`, `g2s`, `s2g`, `local`) and channel, is declared once
 in `crates/hsmp-ipc/src/schema/<domain>.rs` (`RECORDS`). `hsmp-tools gen-ipc` generates the C
 header and the Lua schema from it.
@@ -672,6 +673,16 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0610` | `interact` | C→S, S→C | reliable | Grab start / end, impulse, grab denied |
 | `0x0611` | `interact_grab_r` | C→S, S→C | rel_latest | Right-hand grab update, superseded per (initiator, hand) |
 | `0x0612` | `interact_grab_l` | C→S, S→C | rel_latest | Left-hand grab update |
+
+**Server mods (`0x09`, `caps::SERVER_MODS`; §12)**
+
+| Kind | Name | Dir | Channel | What |
+|---|---|---|---|---|
+| `0x0901` | `mod_manifest` | S→C | ordered | The set: hash, total size, chunk size, timeout; one row per mod (hash, size, files, name, version, author, description) |
+| `0x0902` | `mod_files` | S→C | ordered | Every file: SHA-256, size, mod row, path inside the mod |
+| `0x0903` | `mod_chunk_req` | C→S | ordered | Pull `len` (≤ 32 KiB) bytes of file `file` from `offset` |
+| `0x0904` | `mod_chunk` | S→C | reliable | The bytes of one request (byte rows) |
+| `0x0905` | `mod_ready` | C→S | ordered | The set is loaded (`LOADED`), or `DECLINED` / `FAILED` |
 
 Field-level definitions: the structs in `crates/hsmp-ipc/src/schema/<domain>.rs`, or the
 generated `crates/hsmp-native/cpp/gen/hsmp_ipc.h`.
@@ -822,6 +833,7 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 | 15 | REL_KEY | Transport: keyed `ReliableLatest` chunks (§5.1) |
 | 16 | HIT_FX | Offered by server and sidecar: `touch` up, `hitfx_in` down |
 | 17 | BODY | Offered by server and sidecar: `body` up and down (relayed only between peers that have it) |
+| 18 | SERVER_MODS | Offered by the sidecar always and by a server with `--mods-dir`: the `0x09` records (§12). A server with mods refuses a client without it (`MODS_REQUIRED`) |
 
 `caps::SUPPORTED = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY` are the transport bits
 `hsmp-net` implements itself; every client and server built from it offers them through
@@ -973,3 +985,65 @@ mock routers), `hsmp-master-core` (listen signature and replay, the endpoint che
 `scripts/e2e-nat.sh` (an emulated NAT in front of the host, `hsmp-server --emulate-nat`: a direct
 join fails, a punched join succeeds) and `scripts/e2e-master-cf.sh` CF6-CF8 (the same through the
 Worker under `wrangler dev`).
+
+## 12. Server mods
+
+A server started with `--mods-dir` serves UE4SS Lua mods to its players
+([../hosting/server-mods.md](../hosting/server-mods.md)). Everything travels over the game
+connection; there is no HTTP. Code: `server/src/server_mods/` (manifest, serving),
+`server/src/server/mods_glue.rs` (join gating), `server/src/sidecar/mods_client.rs` and
+`mods_cache.rs` (client), `crates/hsmp-ipc/src/schema/mods.rs` (records),
+`mods/HSMPModHost` (loading) and `mods/HSMPMenu/Scripts/server_mods.lua` (consent).
+
+```
+server                                      sidecar                                  game
+Challenge: caps SERVER_MODS
+admission: no SERVER_MODS -> AuthReject MODS_REQUIRED
+welcome, admin_state, mod_manifest, mod_files ->
+(player pending)                            session held back from the game;
+                                            manifest rebuilt and checked          -> mod_offer, mod_entry x N,
+                                                                                     mod_progress OFFER
+                                                                                  <- mod_decision ACCEPT
+                                         <- mod_chunk_req (window 4, 32 KiB)
+mod_chunk (serve loop, rate-limited)     ->  SHA-256 per file; cache commit
+                                                                                  -> mod_progress READY
+                                                                                  <- mod_loaded (HSMPModHost)
+                                         <- mod_ready LOADED
+(player joins: roster, READY, START)        held session -> game                  -> mod_progress JOINED
+```
+
+**Manifest.** Mods sorted by lower-case name, files by path. `mod_hash` = SHA-256 of
+`"hsmp-server-mod-v1\0"` and the length-prefixed name, version, author, description, the file
+count and each (path, u64 size, SHA-256); `set_hash` = SHA-256 of `"hsmp-server-mod-set-v1\0"`,
+the mod count and the mod hashes. The client rebuilds the manifest from the two records and checks
+every rule again (the rules table in the hosting page: names, `HSMP*`, paths, extensions, limits),
+the canonical order and both hash levels; a manifest that breaks one fails with `BAD_MANIFEST`
+before anything is shown or requested.
+
+**Transfer.** Pull-based: at most 4 `mod_chunk_req` in flight (128 KiB, inside the transport's
+256 KiB), re-asked after 10 s, resumed after a reconnect at the first missing (file, offset); a
+late answer to a request of an old connection is ignored. Chunks travel on channel 1 (reliable,
+unordered), which the transport fills after channel 0 and 2, so game streams keep their latency.
+The server queues at most 16 requests per player, serves them from a 10 ms loop within a
+per-player and a server-wide token bucket (`--mods-rate-kbps`, `--mods-total-rate-kbps`), and
+disconnects a player that pulls more than three times the set plus 4 MiB per session or sends
+more than 64 bad requests.
+
+**Gating.** A pending player (from admission to its `mod_ready LOADED`) is not listed in
+`session`, cannot run commands (`cmd_result` "still loading the server's mods"), is not counted by
+START or the auto start, never becomes a participant, and its records other than the `0x09`
+kinds, `leave`, `ping`, `command`, `kit`, `loadout` and `body` are dropped. After
+`--mods-timeout-s` it is kicked. A session resume of a pending player gets the manifest again; a
+resume of a player that loaded the set does not. The sidecar answers a manifest whose set it
+already loaded at once (the same server after a restart).
+
+**Game side.** The sidecar puts only data into shared memory (set and mod hashes, the server key,
+names, versions, authors, descriptions, sizes, states and reason text); paths and bytes stay in
+the sidecar and its cache (`<hsmp_mods>/<mod hash hex>/...`, written by a verify-then-rename
+commit). HSMPModHost loads `<hsmp_mods>/<mod hash>/Scripts/main.lua` for each `mod_entry` of the
+set the sidecar reported READY.
+
+Tests: `hsmp-ipc` `schema::mods::tests`, `hsmp-server` `server_mods::manifest::tests`,
+`server_mods::tests`, `server::mods_glue::tests`, sidecar `mods_client::tests` (the transfer over
+the impaired link with a reconnect) and `mods_cache::tests`, `hsmp-tools lua-test modhost` and
+`server_mods`.
