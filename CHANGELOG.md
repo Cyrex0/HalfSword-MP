@@ -8,6 +8,17 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+### Server
+
+- The server tick no longer allocates in steady play and costs about a fifth of what it did at
+  16 players.
+- Relayed records a player sent together (root and pose of one frame) reach the other players
+  in one datagram: about a fifth fewer datagrams and 5 to 7 % less download.
+- A `--tick-hz` other than 30 no longer changes countdowns, the load barrier, pauses and
+  timeouts; it accepts 10 to 120 (0 crashed the server). `--max-peers` accepts 1 to 64.
+- The public server list writes a listing at most every other heartbeat when nothing visible
+  changed (half the storage writes on the free Cloudflare plan).
+
 ## [0.1.0-beta.4] - 2026-10-04
 
 ### What's new

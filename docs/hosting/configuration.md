@@ -45,6 +45,22 @@ How the environment fallbacks work: `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSM
 `HSMP_REGION` are used only when the matching flag is absent (or given with its default value). A
 flag with any other value wins. `HSMP_RCON_PASSWORD` is used only when `--rcon-password` is absent.
 
+### More than 8 players
+
+`--max-peers` accepts up to 64, and the server side handles 16 players without trouble: the
+tick costs about 6 µs at 16 players, and relaying 16 players takes about 12 to 17 % of one core
+in `hsmp-loadtest`. What limits a bigger match today is the game side and the upload:
+
+- The game is tested with up to 8 players. Each remote player needs a stand-in body, taken from
+  the arena's own fighters (capped by the game's "Free Mode Foes Amount"), and the mods have
+  not been tested with more than 7 of them.
+- Upload: every player receives every other player's stream, thinned by distance to fit
+  `--client-budget-kbps` (128 KB/s by default). At 16 players the far players arrive at a lower
+  rate (about 8 to 17 Hz instead of 30 to 60 Hz); the two nearest stay at 30 Hz or more. The
+  host needs about 1 Mbit/s of upload per player at the full budget.
+- At most 4 players may join from one public IP address (LAN and loopback addresses are not
+  limited).
+
 ### Environment variables
 
 | Variable | Default | What it does |

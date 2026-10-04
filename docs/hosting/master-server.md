@@ -77,7 +77,7 @@ with its unit tests in the normal `cargo test --workspace`.
 |---|---|---|
 | Worker requests | 100,000 | 36,000 heartbeats + browser refreshes |
 | Durable Object requests | 100,000 | the same writes, plus list reads not served from cache |
-| SQLite rows written | 100,000 | ~36,000 (one row per heartbeat) |
+| SQLite rows written | 100,000 | ~18,000 (a heartbeat that changes nothing visible is written only every other time) |
 | SQLite rows read | 5,000,000 | the list is read once per object wake, then kept in memory |
 | Durable Object duration | 13,000 GB-s | at most ~10,800 if it never sleeps (128 MB × 24 h) |
 | Storage | 5 GB | a few hundred KB |
@@ -91,7 +91,9 @@ between requests. Since SQLite is the only Durable Object storage on the free pl
 The heartbeat interval and expiry are `HEARTBEAT_S` and `TTL_S` in `wrangler.toml`
 (`120` and `360`). The registration answer tells each server the interval, so changing it needs
 no server update. At 120 s, 50 servers use 36,000 of the 100,000 daily requests and leave ~64,000
-for browser refreshes (about 44 a minute). A crashed server disappears after at most 6 minutes;
+for browser refreshes (about 44 a minute). A heartbeat that changes nothing the browser shows (players, map, mode, NAT) is
+kept in memory only, as long as the stored copy would still outlive the next heartbeat after a
+restart of the Durable Object; with 120 / 360 s that writes every other heartbeat. A crashed server disappears after at most 6 minutes;
 the browser shows it as not answering before that. If a day's quota runs out, Cloudflare refuses
 requests until midnight UTC; games already running are not affected, and the browser falls back
 to `127.0.0.1` and LAN discovery.
