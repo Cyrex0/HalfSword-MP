@@ -247,21 +247,18 @@ impl Outbox {
                 }
                 let wire_key = key.filter(|_| self.keyed);
                 let extra = if wire_key.is_some() { KEY_LEN } else { 0 };
-                let pieces = if data.len() <= MAX_SINGLE - extra {
-                    vec![data]
-                } else {
-                    frag::split(&data, FRAG_DATA - extra)
+                let out_frag = |d| OutFrag {
+                    data: d,
+                    state: FragState::Unsent,
+                    sends: 0,
                 };
-                debug_assert!(pieces.len() <= MAX_FRAGS);
-                let bytes = pieces.iter().map(|p| p.len()).sum();
-                let frags = pieces
-                    .into_iter()
-                    .map(|d| OutFrag {
-                        data: d,
-                        state: FragState::Unsent,
-                        sends: 0,
-                    })
-                    .collect();
+                let bytes = data.len();
+                let frags: Vec<OutFrag> = if data.len() <= MAX_SINGLE - extra {
+                    vec![out_frag(data)]
+                } else {
+                    frag::split(&data, FRAG_DATA - extra).into_iter().map(out_frag).collect()
+                };
+                debug_assert!(frags.len() <= MAX_FRAGS);
                 let id = r.next_id;
                 r.next_id = r.next_id.wrapping_add(1);
                 r.msgs.insert(
@@ -343,15 +340,15 @@ impl Outbox {
     /// the newest message per key, so it never starves the reliable channels
     /// for long. Then channel 2, then channel 1.
     pub fn fill(&mut self, buf: &mut Vec<u8>, pkt: u64) -> Vec<FragRef> {
-        let mut rest = VecDeque::with_capacity(self.latest.len());
-        while let Some((key, data)) = self.latest.pop_front() {
+        // In queue order; what does not fit stays queued.
+        self.latest.retain(|(key, data)| {
             if buf.len() + UNREL_HDR + data.len() <= MAX_PLAINTEXT {
-                write_unrel(buf, key, &data);
+                write_unrel(buf, *key, data);
+                false
             } else {
-                rest.push_back((key, data));
+                true
             }
-        }
-        self.latest = rest;
+        });
         let mut refs = Vec::new();
         let mut frag_inflight = self.frag_inflight();
         for ch in [CH_ORDERED, CH_RELIABLE] {
