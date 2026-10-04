@@ -309,8 +309,17 @@ const RING_CAP: usize = 256;
 const CLOCK_CAP: usize = 512;
 /// A stream silent this long restarts its clock map (stall / reconnect).
 pub const CLOCK_GAP_RESET_MS: i64 = 1000;
-const RTT_SAMPLES: usize = 16;
+/// RTT samples kept: the transport's srtt once a second plus damage→ack
+/// samples, which arrive in bursts during a fight and must not push the
+/// transport samples out of the window.
+const RTT_SAMPLES: usize = 64;
 const RTT_TTL_MS: i64 = 60_000;
+/// The RTT is the minimum over this span ending at the newest sample: long
+/// enough to hold several transport samples (the min filters the client
+/// processing in damage→ack samples), short enough that a path that got
+/// slower moves the prediction within seconds. The clock offsets use a 2 s
+/// window; a longer RTT window put the two out of step after an RTT change.
+const RTT_WINDOW_MS: i64 = 4_000;
 pub const MAX_CAPSULES: usize = 24;
 
 type V3 = [f32; 3];
@@ -677,7 +686,8 @@ impl Clock {
     /// Minimum recent RTT (the display path runs at minimum delay + jitter
     /// buffer; ack timing adds client processing, which the min filters out).
     fn rtt(&self, now: i64) -> Option<f32> {
-        self.rtt.iter().filter(|e| now - e.0 <= RTT_TTL_MS).map(|e| e.1).reduce(f32::min)
+        let newest = self.rtt.iter().map(|e| e.0).max()?;
+        self.rtt.iter().filter(|e| now - e.0 <= RTT_TTL_MS && newest - e.0 <= RTT_WINDOW_MS).map(|e| e.1).reduce(f32::min)
     }
 }
 
