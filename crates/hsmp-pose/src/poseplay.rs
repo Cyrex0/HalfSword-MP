@@ -1239,7 +1239,7 @@ mod tests {
                 let ts = 10_000.0 + n as f64 * period;
                 if ts + 40.0 <= now {
                     let k = if ts < 12_000.0 { 1 } else { 8 };
-                    if n % k == 0 {
+                    if n.is_multiple_of(k) {
                         if hint { pb.set_interval_hint((period * k as f64) as f32); }
                         let mut f = v2_with_vel(ts);
                         f.ts = ts;

@@ -43,7 +43,7 @@ pub fn is_stun(d: &[u8]) -> bool {
         && d[0] & 0xC0 == 0
         && d[4..8] == MAGIC_COOKIE.to_be_bytes()
         && u16::from_be_bytes([d[2], d[3]]) as usize + HEADER_LEN == d.len()
-        && d.len() % 4 == 0
+        && d.len().is_multiple_of(4)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

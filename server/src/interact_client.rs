@@ -206,7 +206,7 @@ pub fn outbound_msg(payload: &[u8]) -> Option<Vec<u8>> {
               bone = bone_name(ev.bone), "interact: our grab");
     }
     let n = SENT.fetch_add(1, Ordering::Relaxed) + 1;
-    if n % 500 == 0 {
+    if n.is_multiple_of(500) {
         info!(sent = n, "interact: events sent");
     }
     Some(hsmp_ipc::wire::message(ix::wire_kind(&ev), 0, 0, hsmp_ipc::bytemuck::bytes_of(&ev)))

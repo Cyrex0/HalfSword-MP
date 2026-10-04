@@ -419,9 +419,9 @@ pub fn boxed_zeroed<T: Pod>() -> Box<T> {
 
 /// View a Pod value as its u64 words (Pod sizes are multiples of 8 and have no padding).
 pub fn as_words<T: Pod>(v: &T) -> &[u64] {
-    assert!(core::mem::size_of::<T>() % 8 == 0 && core::mem::align_of::<T>() <= 8 || core::mem::size_of::<T>() % 8 == 0);
+    assert!(core::mem::size_of::<T>().is_multiple_of(8) && core::mem::align_of::<T>() <= 8 || core::mem::size_of::<T>().is_multiple_of(8));
     let n = core::mem::size_of::<T>() / 8;
-    if (v as *const T as usize) % core::mem::align_of::<u64>() != 0 {
+    if !(v as *const T as usize).is_multiple_of(core::mem::align_of::<u64>()) {
         panic!("as_words: value not 8-aligned");
     }
     // SAFETY: Pod, size multiple of 8 (ipc_pod! asserts), alignment checked above, no padding.
@@ -431,7 +431,7 @@ pub fn as_words<T: Pod>(v: &T) -> &[u64] {
 /// Mutable word view of a Pod value (every bit pattern is a valid Pod).
 pub fn as_words_mut<T: Pod>(v: &mut T) -> &mut [u64] {
     let n = core::mem::size_of::<T>() / 8;
-    if (v as *mut T as usize) % core::mem::align_of::<u64>() != 0 {
+    if !(v as *mut T as usize).is_multiple_of(core::mem::align_of::<u64>()) {
         panic!("as_words_mut: value not 8-aligned");
     }
     // SAFETY: as in `as_words`; any u64 pattern written leaves a valid Pod.

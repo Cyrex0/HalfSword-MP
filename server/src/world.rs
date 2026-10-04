@@ -1309,7 +1309,7 @@ impl World {
                     // Rest frames always go; held items only thin beyond FAR2.
                     let urgent = o.flags & WF_ASLEEP != 0 || (o.flags & WF_HELD != 0 && d <= FAR2);
                     let every = if d > FAR2 { 4 } else if d > FAR1 { 2 } else { 1 };
-                    if !urgent && every > 1 && flush % every != 0 {
+                    if !urgent && every > 1 && !flush.is_multiple_of(every) {
                         self.stats.objs_thinned += 1;
                         continue;
                     }

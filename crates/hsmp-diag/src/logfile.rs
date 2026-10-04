@@ -149,11 +149,9 @@ pub fn prune_daily(dir: &Path, name: &str, ext: &str, keep_days: u64, max_total:
         if is_current(p) {
             continue;
         }
-        if *t < cutoff || total > max_total {
-            if std::fs::remove_file(p).is_ok() {
-                total = total.saturating_sub(*len);
-                removed.push(p.clone());
-            }
+        if (*t < cutoff || total > max_total) && std::fs::remove_file(p).is_ok() {
+            total = total.saturating_sub(*len);
+            removed.push(p.clone());
         }
     }
     removed

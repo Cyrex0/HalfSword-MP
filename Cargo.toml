@@ -55,13 +55,9 @@ homepage = "https://github.com/Cyrex0/HalfSword-MP"
 # cleaned up crate by crate; everything else stays a warning.
 unnecessary_map_or = "allow"
 needless_range_loop = "allow"
-manual_is_multiple_of = "allow"
 field_reassign_with_default = "allow"
 too_many_arguments = "allow"
 type_complexity = "allow"
-collapsible_if = "allow"
-collapsible_else_if = "allow"
-new_without_default = "allow"
 
 # One release profile for every binary. The release tool (tools/release) builds the shipped
 # binaries reproducibly from this profile.

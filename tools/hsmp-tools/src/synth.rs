@@ -437,7 +437,7 @@ impl Synth {
             p.w[15 + k] = s.base[k] as f64;
             p.w[18 + k] = s.tip[k] as f64;
         }
-        if tick % 2 == 0 {
+        if tick.is_multiple_of(2) {
             let t = ts / 1000.0;
             let mut c = [0f64; CONTROL_NUMS];
             let guard = (t * 0.5).sin() > 0.3;

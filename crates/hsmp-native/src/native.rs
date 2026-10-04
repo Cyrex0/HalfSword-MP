@@ -90,6 +90,12 @@ pub struct Native {
     pub(crate) sample: crate::sample::SampleState,
 }
 
+impl Default for Native {
+    fn default() -> Native {
+        Native::new()
+    }
+}
+
 impl Native {
     pub fn new() -> Native {
         Native {
@@ -355,10 +361,8 @@ impl Native {
         }
         if self.sidecar_lost {
             flags |= sc::FLAG_SIDECAR_LOST;
-        } else if h.sidecar.state() == Some(SideState::Ready) {
-            if h.sidecar.hb_age_s(now, h.qpc_freq.load(Acquire)).is_some_and(|a| a > 1.0) {
-                flags |= sc::FLAG_SIDECAR_STALLED;
-            }
+        } else if h.sidecar.state() == Some(SideState::Ready) && h.sidecar.hb_age_s(now, h.qpc_freq.load(Acquire)).is_some_and(|a| a > 1.0) {
+            flags |= sc::FLAG_SIDECAR_STALLED;
         }
         if h.prefix.refuse_code() != RefuseCode::None {
             flags |= sc::FLAG_REFUSED;

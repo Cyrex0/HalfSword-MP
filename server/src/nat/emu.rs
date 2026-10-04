@@ -72,7 +72,7 @@ pub fn inbound_ok(from: SocketAddr) -> bool {
         return true;
     }
     let n = DROPPED.fetch_add(1, Ordering::Relaxed);
-    if n < 5 || n % 100 == 0 {
+    if n < 5 || n.is_multiple_of(100) {
         tracing::info!(%from, dropped = n + 1, "emulated NAT: unsolicited inbound datagram dropped");
     }
     false

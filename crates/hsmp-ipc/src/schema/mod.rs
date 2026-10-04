@@ -215,7 +215,7 @@ unsafe impl<T: Pod + bytemuck::Pod> IpcType for Stamped<T> {
 impl<T: Pod + bytemuck::Pod> Stamped<T> {
     /// Body capacity in bytes.
     pub const CAP: usize = {
-        assert!(core::mem::size_of::<T>() % 8 == 0);
+        assert!(core::mem::size_of::<T>().is_multiple_of(8));
         core::mem::size_of::<T>()
     };
     /// A zeroed value on the heap (bodies can be large).

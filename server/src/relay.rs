@@ -417,7 +417,7 @@ impl Relay {
             *c = c.wrapping_add(1);
             // The first frame of a stream always goes (a rarely-updated stream
             // must not lose its only frame); then every f-th.
-            if f > 1 && c.wrapping_sub(1) % f != 0 {
+            if f > 1 && !c.wrapping_sub(1).is_multiple_of(f) {
                 pf.thinned.fetch_add(1, Ordering::Relaxed);
                 continue;
             }

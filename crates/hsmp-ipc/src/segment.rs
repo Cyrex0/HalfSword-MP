@@ -117,7 +117,7 @@ crate::ipc_layout! {
 
 /// Bytes in the segment (the mapping size).
 pub const SEGMENT_SIZE: usize = core::mem::size_of::<Segment>();
-const _: () = assert!(SEGMENT_SIZE % 4096 == 0);
+const _: () = assert!(SEGMENT_SIZE.is_multiple_of(4096));
 const _: () = assert!(SEGMENT_SIZE <= 8 * 1024 * 1024, "segment over the 8 MiB budget");
 
 /// The layout hash both binaries carry.

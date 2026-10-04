@@ -100,7 +100,7 @@ pub fn run(run_dir: &Path, parent_pid: u32) {
     let mut taps: HashMap<String, Tail> = HashMap::new();
     let mut tick: u64 = 0;
     loop {
-        if stop.exists() || (tick % 8 == 0 && !util::pid_alive(parent_pid)) {
+        if stop.exists() || (tick.is_multiple_of(8) && !util::pid_alive(parent_pid)) {
             break;
         }
         tick += 1;

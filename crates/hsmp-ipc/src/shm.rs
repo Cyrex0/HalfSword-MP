@@ -88,7 +88,7 @@ impl Mapping {
     /// The segment, if the mapping is large enough to hold one. Validate the header
     /// ([`crate::handshake::check_prefix`]) before trusting anything in it.
     pub fn segment(&self) -> Option<&Segment> {
-        if self.len < SEGMENT_SIZE || (self.base as usize) % 4096 != 0 {
+        if self.len < SEGMENT_SIZE || !(self.base as usize).is_multiple_of(4096) {
             return None;
         }
         // SAFETY: in bounds and aligned; Segment is all atomics / cells / Pod.
