@@ -921,6 +921,8 @@ fn sweep_once(st: &AppState) -> usize {
     for id in &to_drop {
         st.servers.remove(id);
     }
+    st.listen_ts.retain(|id, _| st.servers.contains_key(id));
+    st.punch_rate.lock().unwrap_or_else(|e| e.into_inner()).sweep(now_ms());
     // Trim rate maps that are far stale.
     let cutoff = now - Duration::from_secs(600);
     st.rate_register.retain(|_, t| *t > cutoff);
@@ -1460,6 +1462,18 @@ mod tests {
         assert!(IpSlot::take(&m, "203.0.113.5".parse().unwrap()).is_some(), "per source");
         drop(held);
         assert!(IpSlot::take(&m, ip).is_some());
+    }
+
+    /// Listen timestamps of listings that are gone are dropped by the sweep (otherwise every
+    /// registration that ever opened a listen socket leaves an entry behind for good).
+    #[test]
+    fn sweep_forgets_listen_timestamps_of_gone_listings() {
+        let st = AppState::new();
+        for k in 0..100 {
+            st.listen_ts.insert(format!("gone{k}"), 1);
+        }
+        sweep_once(&st);
+        assert!(st.listen_ts.is_empty(), "{} stale listen timestamps kept", st.listen_ts.len());
     }
 
     /// IPv6 sources are rate-limited per /64.
