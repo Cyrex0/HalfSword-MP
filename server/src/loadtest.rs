@@ -134,6 +134,23 @@ fn bind_socket() -> std::io::Result<UdpSocket> {
     UdpSocket::from_std(s.into())
 }
 
+/// CPU time (user + system) of `pid` in ms, NaN when unknown.
+#[cfg(target_os = "linux")]
+fn cpu_ms(pid: u32) -> f64 {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).ok().and_then(|s| proc_stat_cpu_ms(&s)).unwrap_or(f64::NAN)
+}
+
+/// utime + stime (fields 14 and 15, after the parenthesised command name) of a
+/// `/proc/<pid>/stat` line, at the kernel's USER_HZ of 100.
+#[cfg(any(target_os = "linux", test))]
+fn proc_stat_cpu_ms(stat: &str) -> Option<f64> {
+    let rest = stat.get(stat.rfind(')')? + 1..)?;
+    let f: Vec<&str> = rest.split_whitespace().collect();
+    let ticks: u64 = f.get(11)?.parse::<u64>().ok()? + f.get(12)?.parse::<u64>().ok()?;
+    Some(ticks as f64 * 10.0)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn cpu_ms(pid: u32) -> f64 {
     let out = Command::new("powershell")
         .args(["-NoProfile", "-Command",
@@ -816,4 +833,17 @@ fn synth_pose(pos: [f32; 3], ts: f64, out: &mut Vec<u8>) {
         f.bones[i].p = [par[0] + v2::REF_T[i][0], par[1] + v2::REF_T[i][1], par[2] + v2::REF_T[i][2]];
     }
     v2::encode_into(&f, out);
+}
+
+#[cfg(test)]
+mod cpu_tests {
+    /// The server CPU column on Linux: utime + stime from `/proc/<pid>/stat`, also with a
+    /// command name that holds spaces and parentheses.
+    #[test]
+    fn proc_stat_cpu_time() {
+        let line = "4242 (hsmp (srv) x) S 1 4242 4242 0 -1 4194560 900 0 0 0 250 50 0 0 20 0 9 0 100 0 0";
+        assert_eq!(super::proc_stat_cpu_ms(line), Some(3000.0));
+        assert_eq!(super::proc_stat_cpu_ms("garbage"), None);
+        assert_eq!(super::proc_stat_cpu_ms("1 (x) S 1"), None);
+    }
 }

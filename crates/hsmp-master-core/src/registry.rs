@@ -789,6 +789,66 @@ mod tests {
         let (_, fx) = hb_fx(&mut r, now, &sk, &id, 3, now);
         assert!(matches!(&fx[..], [Effect::Put(l)] if l.players == 3));
     }
+
+    /// Hostile input on every entry point (bodies, ids, paths, signatures, addresses): random
+    /// bytes and mutations of valid requests never panic, and the caps hold.
+    #[test]
+    fn hostile_requests_never_panic() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let sk = key(9);
+        let valid = [
+            reg_body(&sk, 7777, T0),
+            serde_json::to_vec(&json!({"players": 3, "map": "Map_Arena_Pit", "mode": "Best of 5", "nat": "open", "ts": T0 + 1})).unwrap(),
+            serde_json::to_vec(&json!({"host": "203.0.113.5", "port": 7777, "endpoint": "198.51.100.7:40000", "nonce": "ab"})).unwrap(),
+            br#"{"name":"\u0000\u202e","port":65535,"players":4294967295,"max_players":0,"ts":18446744073709551615}"#.to_vec(),
+        ];
+        let words = ["/v1/punch/listen/", "?ts=", "&", "ffff", "\u{202e}", "%00", "", "/", "9999999999999999999999"];
+        let mut r = reg();
+        let (rep, _) = register(&mut r, T0, "203.0.113.5", &sk, 7777, T0);
+        let id = id_of(&rep);
+        for k in 0..5_000u64 {
+            let now = T0 + k * 997;
+            let mut body = valid[(next() % valid.len() as u64) as usize].clone();
+            for _ in 0..next() % 6 {
+                let n = body.len().max(1);
+                match next() % 4 {
+                    0 if !body.is_empty() => { let i = (next() as usize) % n; body[i] = next() as u8; }
+                    1 => { let i = (next() as usize) % n; body.truncate(i); }
+                    2 => body.push(next() as u8),
+                    _ => { let i = (next() as usize) % n; body.insert(i.min(body.len()), b"\"{}[]:,\\"[(next() % 8) as usize]); }
+                }
+            }
+            if next() % 10 == 0 {
+                body = (0..next() % 300).map(|_| next() as u8).collect();
+            }
+            let from = IpAddr::from(std::net::Ipv6Addr::from((next() as u128) << 64 | next() as u128));
+            let from = if next() % 2 == 0 { IpAddr::from(std::net::Ipv4Addr::from(next() as u32)) } else { from };
+            let sig_s: String = (0..next() % 140).map(|_| char::from(b"0123456789abcdefg"[(next() % 17) as usize])).collect();
+            let sig = if next() % 3 == 0 { Some(auth::sign(&sk, "POST", "/v1/register", &body)) } else { Some(sig_s) };
+            let rid: String = match next() % 3 {
+                0 => id.clone(),
+                1 => (0..next() % 80).map(|_| char::from(32 + (next() % 95) as u8)).collect(),
+                _ => words[(next() % words.len() as u64) as usize].repeat((next() % 4) as usize),
+            };
+            let path: String = (0..next() % 5).map(|_| words[(next() % words.len() as u64) as usize]).collect::<String>() + &rid;
+            let _ = r.register(now, from, &body, sig.as_deref());
+            let _ = r.heartbeat(now, from, &rid, &body, sig.as_deref());
+            let _ = r.punch(now, from, &body);
+            let _ = r.listen(now, &path, sig.as_deref());
+            if next() % 50 == 0 { let _ = r.delete(now, &rid, &body, sig.as_deref()); }
+            let _ = crate::reports::check(&body);
+            let _ = punch::parse_listen_path(&path);
+            let _ = r.sweep(now);
+            assert!(r.len() <= r.config().max_servers);
+            let _ = crate::dashboard::render(&r.list(now));
+        }
+    }
     fn announced(fx: &[Effect]) -> Vec<bool> {
         fx.iter().filter_map(|e| if let Effect::Announce(a) = e { Some(a.up) } else { None }).collect()
     }
