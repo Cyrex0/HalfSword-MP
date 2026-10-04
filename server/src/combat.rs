@@ -78,6 +78,7 @@ const MAX_BONE_LEN: usize = 32;
 /// - unknown indices and non-finite values are dropped;
 /// - health-type fields (0..100 on a Willie) are clamped to ±HEALTH_DELTA_CAP,
 ///   the rest (pain, bleeding, blood rate, stamina) to ±DELTA_ABS_CAP.
+///
 /// Anything dropped or clamped bumps the attacker's `DamageClamped` counter.
 const MAX_DELTAS: usize = 24;
 const DELTA_FIELDS: usize = 24;
@@ -336,7 +337,7 @@ impl Engine {
                 };
             }
             if let Some(ev) = &d.approved {
-                *hit = ev.clone();
+                *hit = *ev;
             }
             if !d.accepted {
                 return Verdict::Ack { accepted: false, reason: d.reason.clone() };
@@ -387,7 +388,7 @@ impl Engine {
                 Verdict::Ack { accepted: false, reason: r }
             }
             None => {
-                d.waiting = Some(hit.clone());
+                d.waiting = Some(*hit);
                 match settle_waiting(lc, ctx.attacker_id, &mut d, now_ms) {
                     Some((v, ev)) => { *hit = ev; v }
                     None => Verdict::Hold,
@@ -484,7 +485,7 @@ impl Engine {
 /// clash cancellation, defender hold, damage cap. None = still waiting.
 /// On a decision `d` is filled in and the waiting claim consumed.
 fn settle_waiting(lc: &mut Store, attacker: PeerId, d: &mut Decision, now_ms: i64) -> Option<(Verdict, DamageEvent)> {
-    let mut hit = d.waiting.clone()?;
+    let mut hit = d.waiting?;
     let allow_lead = now_ms - d.first_at >= WAIT_MAX_MS;
     let mut reason: Option<String> = None;
     let mut hold = false;
@@ -556,8 +557,8 @@ fn settle_waiting(lc: &mut Store, attacker: PeerId, d: &mut Decision, now_ms: i6
     d.accepted = accepted;
     d.reason = reason.clone().unwrap_or_default();
     d.grace_ms = if held { lc.grace_ms(hit.target_peer_id, attacker, now_ms) } else { 0 };
-    d.pending = if held { Some(hit.clone()) } else { None };
-    d.approved = if accepted { Some(hit.clone()) } else { None };
+    d.pending = if held { Some(hit) } else { None };
+    d.approved = if accepted { Some(hit) } else { None };
     d.forwarded_at = if accepted && !held { Some(now_ms) } else { None };
     let v = match reason {
         None if held => {
@@ -1120,13 +1121,10 @@ pub struct RelaySeq {
 
 impl RelaySeq {
     pub fn fresh(&mut self, peer: PeerId, stream: u8, seq: u32) -> bool {
-        match self.last.get(&(peer, stream)) {
-            Some(&l) => {
-                let back = l.wrapping_sub(seq);
-                let restarted = back > 1000 && back < u32::MAX / 2;
-                if !seq_newer(seq, l) && !restarted { return false; }
-            }
-            None => {}
+        if let Some(&l) = self.last.get(&(peer, stream)) {
+            let back = l.wrapping_sub(seq);
+            let restarted = back > 1000 && back < u32::MAX / 2;
+            if !seq_newer(seq, l) && !restarted { return false; }
         }
         self.last.insert((peer, stream), seq);
         true

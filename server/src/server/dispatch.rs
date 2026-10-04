@@ -895,7 +895,6 @@ pub(crate) mod resume_tests {
         }
         assert!(x <= 1050.0 + 1.0, "moved {x} uu inside one tick");
         // An honest sprint (700 uu/s, 60 Hz roots on the arrival clock) keeps passing.
-        let mut x = x;
         for k in 0..120 {
             tokio::time::sleep(Duration::from_millis(16)).await;
             let pos = [x + 700.0 / 60.0, 0.0, 100.0];

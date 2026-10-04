@@ -384,8 +384,8 @@ pub(super) fn finalize_round(inner: &mut Inner) {
     inner.settle_ms = 0;
     let alive = standing(inner);
     let round = inner.match_round;
-    let text;
-    if alive.len() == 1 {
+    
+    let text = if alive.len() == 1 {
         let winner = alive[0];
         let mut wins = 0u32;
         let mut nick = String::new();
@@ -398,19 +398,19 @@ pub(super) fn finalize_round(inner: &mut Inner) {
         end_round(inner, winner, "", match_over);
         info!(round, winner_id = winner, winner_nick = %nick, wins, match_over,
               deaths = ?inner.round_deaths, "ROUND RESULT (authoritative)");
-        text = if match_over {
+        if match_over {
             format!("MATCH OVER — {} wins ({} rounds)", nick, wins)
         } else {
             format!("round {} — {} wins ({} total)", round, nick, wins)
-        };
+        }
     } else {
         // Nobody (mutual kill / trade inside the window) — or, defensively,
         // several (cannot happen: settle starts at ≤ 1) — is a draw.
         end_round(inner, 0, "draw", false);
         info!(round, standing = alive.len(), deaths = ?inner.round_deaths,
               "ROUND RESULT (authoritative): draw");
-        text = format!("round {} — draw (simultaneous kill)", round);
-    }
+        format!("round {} — draw (simultaneous kill)", round)
+    };
     push_server_chat(inner, &text);
 }
 
@@ -424,7 +424,7 @@ pub(super) const NEXT_ROUND_COUNTDOWN_MS: u64 = 3000;
 pub(super) const ROUNDOVER_MS: u64 = 4000;
 pub(super) const MATCH_OVER_MS: u64 = 5000;
 
-fn needed_wins(inner: &Inner) -> u32 { (inner.best_of as u32 + 1) / 2 }
+fn needed_wins(inner: &Inner) -> u32 { (inner.best_of as u32).div_ceil(2) }
 
 /// Seat holders of this match are keyed by player key, not by nick or
 /// peer id. No participants yet (lobby) means everyone.

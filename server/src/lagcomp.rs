@@ -355,7 +355,7 @@ pub fn ms_at(t: Instant) -> i64 {
         // floor() for instants before the epoch too (the epoch is set lazily, so
         // a caller can hold an Instant from before it): ms_at(t + n ms) − ms_at(t)
         // must be exactly n either side of the epoch.
-        None => -(((e.duration_since(t).as_nanos() + 999_999) / 1_000_000) as i64),
+        None => -(e.duration_since(t).as_nanos().div_ceil(1_000_000) as i64),
     }
 }
 
@@ -1255,8 +1255,8 @@ impl Store {
         }
     }
 
-    /// `p` against `id`'s validated root at `ts`: further than POSE_ROOT_MAX
-    /// + `extra` is `Off`. A root sample may lag the stream by up to
+    /// `p` against `id`'s validated root at `ts`: further than POSE_ROOT_MAX +
+    /// `extra` is `Off`. A root sample may lag the stream by up to
     /// ROOT_COVER_LEAD_MS (a lost / speed-capped root packet, a ragdoll
     /// launch); beyond FUTURE_MS the body may have moved on, at most at
     /// PELVIS_SPEED_MAX, which widens the bound. No root sample covering ts
@@ -2295,7 +2295,7 @@ impl Store {
                 }
             }
         }
-        let Some(b) = a.blade.sample(at, ATTACKER_LEAD_MS) else { return None };
+        let b = a.blade.sample(at, ATTACKER_LEAD_MS)?;
         let g = crate::validate::pose::geom(crate::validate::damage::weapon_class(attacker));
         let l = len(sub(b.tip, b.base));
         if l > g.blade_max {

@@ -17,7 +17,7 @@ const SEEDS: u64 = 3;
 
 fn honest(name: &str) -> Stats {
     let s = suite::honest(name, SEEDS, true, Policy::Dedupe);
-    println!("{}", table(&[s.clone()]));
+    println!("{}", table(std::slice::from_ref(&s)));
     s
 }
 
@@ -75,7 +75,7 @@ fn cheats_rejected() {
 #[test]
 fn honest_acceptance_v1_handle_standins() {
     let s = suite::honest_with("typical", SEEDS, false, Policy::Dedupe, Some(20.0));
-    println!("{}", table(&[s.clone()]));
+    println!("{}", table(std::slice::from_ref(&s)));
     assert!(s.accept_pct() >= 97.0, "v1 typical: {:.2} % ({})", s.accept_pct(), s.top_reasons(6));
     assert!(!s.reasons.contains_key("bad_field"));
 }
