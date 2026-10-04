@@ -196,6 +196,10 @@ impl Reply {
     }
 }
 
+/// How late a heartbeat may arrive (network, retries) when deciding whether the stored copy can
+/// skip a write.
+const HEARTBEAT_SLACK_MS: u64 = 30_000;
+
 /// Bound for the in-memory rate-limit maps (a flood of addresses resets them, never grows them).
 const MAX_BUCKETS: usize = 20_000;
 /// Announcement states for listings that went away are forgotten after this.
@@ -221,6 +225,8 @@ pub struct Registry {
     global_rate: Bucket,
     announce_rate: Bucket,
     last_hb: HashMap<String, u64>,
+    /// `last_seen_ms` of each listing's stored copy (what a Worker restart would load).
+    stored_seen: HashMap<String, u64>,
     /// Listings whose host holds a punch listen socket right now (the Worker rebuilds this
     /// from its hibernated WebSockets on wake).
     listeners: std::collections::HashSet<String>,
@@ -241,6 +247,7 @@ impl Registry {
         Registry {
             global_rate: Bucket::full(cfg.global_register_burst, now),
             announce_rate: Bucket::full(cfg.announce_burst, now),
+            stored_seen: rows.iter().map(|r| (r.server_id.clone(), r.last_seen_ms)).collect(),
             rows: rows.into_iter().map(|r| (r.server_id.clone(), r)).collect(),
             announce: announce.into_iter().map(|a| (a.key.clone(), a)).collect(),
             reg_rate: HashMap::new(),
@@ -337,6 +344,13 @@ impl Registry {
         self.rows.is_empty()
     }
 
+    /// The stored copy of `id` would still be listed until after the next heartbeat is due
+    /// (one interval plus `HEARTBEAT_SLACK_MS` from now).
+    fn stored_fresh(&self, id: &str, now: u64) -> bool {
+        let Some(&seen) = self.stored_seen.get(id) else { return false };
+        seen + self.cfg.ttl_s * 1000 > now + self.cfg.heartbeat_s * 1000 + HEARTBEAT_SLACK_MS
+    }
+
     fn stale(&self, l: &Listing, now: u64) -> bool {
         now.saturating_sub(l.last_seen_ms) > self.cfg.ttl_s * 1000
     }
@@ -393,6 +407,7 @@ impl Registry {
                 self.announce_down(now, &l, fx);
             }
             self.last_hb.remove(&id);
+            self.stored_seen.remove(&id);
             self.listeners.remove(&id);
             self.listen_ts.remove(&id);
         }
@@ -501,6 +516,7 @@ impl Registry {
             punch: f.punch,
         };
         self.rows.insert(id.clone(), l.clone());
+        self.stored_seen.insert(id.clone(), now);
         fx.push(Effect::Put(l.clone()));
         if existing.is_none() {
             self.announce_up(now, &l, &mut fx);
@@ -543,11 +559,12 @@ impl Registry {
             // The server's address changed: it registers again from the new one.
             self.rows.remove(id);
             self.last_hb.remove(id);
+            self.stored_seen.remove(id);
             self.listeners.remove(id);
             fx.push(Effect::Remove(id.to_string()));
             return (Reply::text(410, "address changed; register again"), fx);
         }
-        let mut l = row;
+        let mut l = row.clone();
         l.players = req.players.min(l.max_players);
         if let Some(m) = fields::heartbeat_map(req.map.as_deref()) {
             l.map = m;
@@ -562,7 +579,13 @@ impl Registry {
         l.last_ts = ts;
         self.rows.insert(id.to_string(), l.clone());
         self.last_hb.insert(id.to_string(), now);
-        fx.push(Effect::Put(l));
+        // A heartbeat that changes nothing a client sees is kept in memory only while the stored
+        // copy is fresh enough that, loaded after a restart, it outlives the next heartbeat.
+        let visible = l.players != row.players || l.map != row.map || l.mode != row.mode || l.nat != row.nat;
+        if visible || !self.stored_fresh(id, now) {
+            self.stored_seen.insert(id.to_string(), now);
+            fx.push(Effect::Put(l));
+        }
         (Reply::empty(), fx)
     }
 
@@ -589,6 +612,7 @@ impl Registry {
         }
         self.rows.remove(id);
         self.last_hb.remove(id);
+        self.stored_seen.remove(id);
         self.listeners.remove(id);
         fx.push(Effect::Remove(id.to_string()));
         self.announce_down(now, &row, &mut fx);
@@ -713,6 +737,58 @@ mod tests {
         v.server_id
     }
 
+
+    fn hb_fx(r: &mut Registry, now: u64, sk: &SigningKey, id: &str, players: u32, ts: u64) -> (Reply, Vec<Effect>) {
+        let b = serde_json::to_vec(&json!({"players": players, "map": "Map_Arena_Yard", "mode": "Best of 5", "nonce": "x", "hmac": "", "ts": ts})).unwrap();
+        let sig = auth::sign(sk, "POST", &format!("/v1/heartbeat/{id}"), &b);
+        r.heartbeat(now, ip("203.0.113.5"), id, &b, Some(&sig))
+    }
+
+    /// The Worker's database: what `apply` would hold after these effects.
+    fn store(db: &mut BTreeMap<String, Listing>, fx: &[Effect]) {
+        for e in fx {
+            match e {
+                Effect::Put(l) => { db.insert(l.server_id.clone(), l.clone()); }
+                Effect::Remove(id) => { db.remove(id); }
+                _ => {}
+            }
+        }
+    }
+
+    /// A day of unchanged heartbeats writes the listing at most every other heartbeat, and a
+    /// restart from the stored rows at any moment never loses the listing.
+    #[test]
+    fn unchanged_heartbeats_skip_writes_without_losing_the_listing_on_restart() {
+        let mut r = reg();
+        let sk = key(1);
+        let mut db = BTreeMap::new();
+        let (rep, fx) = register(&mut r, T0, "203.0.113.5", &sk, 7777, T0);
+        store(&mut db, &fx);
+        let id = id_of(&rep);
+        let beats = 24 * 3600 / 120;
+        let mut writes = 0;
+        for k in 1..=beats {
+            let now = T0 + k * 120_000;
+            // The Durable Object was evicted just before this heartbeat: reload from storage.
+            if k % 7 == 0 {
+                r = Registry::new(cfg(), db.values().cloned().collect(), vec![], now);
+            }
+            let (rep, fx) = hb_fx(&mut r, now, &sk, &id, 2, now);
+            assert_eq!(rep.status, 204, "heartbeat {k}: {}", rep.body);
+            writes += fx.iter().filter(|e| matches!(e, Effect::Put(_))).count() as u64;
+            store(&mut db, &fx);
+            assert_eq!(r.list(now).len(), 1);
+            // A restart right now still lists it until well after the next heartbeat is due.
+            let restarted = Registry::new(cfg(), db.values().cloned().collect(), vec![], now);
+            assert_eq!(restarted.list(now + 120_000 + HEARTBEAT_SLACK_MS).len(), 1, "heartbeat {k}");
+        }
+        println!("{beats} heartbeats a day: {writes} listing writes");
+        assert!(writes <= beats / 2 + beats / 7 + 1, "{writes} writes for {beats} heartbeats");
+        // A change the browser shows is written at once.
+        let now = T0 + (beats + 1) * 120_000;
+        let (_, fx) = hb_fx(&mut r, now, &sk, &id, 3, now);
+        assert!(matches!(&fx[..], [Effect::Put(l)] if l.players == 3));
+    }
     fn announced(fx: &[Effect]) -> Vec<bool> {
         fx.iter().filter_map(|e| if let Effect::Announce(a) = e { Some(a.up) } else { None }).collect()
     }
