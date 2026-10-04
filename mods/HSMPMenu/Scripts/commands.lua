@@ -302,6 +302,16 @@ local function infer(cmd, match_st, srv_arena)
     return nil
 end
 
+-- How long an inferred outcome waits for the server's cmd_result record before it is
+-- shown: two retransmits at ~300 ms RTT (initial RTO 300 ms, doubled on a second loss).
+C.INFER_GRACE_S = 2.0
+
+-- A server answer can still arrive only over the record transport.
+local function answers_possible()
+    local ipc = rawget(_G, "HSMP_IPC")
+    return ipc ~= nil and ipc.events ~= nil
+end
+
 local function timeout_reason(cmd)
     if cmd.kind == "start" then return "the server did not start the match - check that everyone is ready" end
     return "no answer from the server"
@@ -328,7 +338,14 @@ function C.tick(match_st, srv_arena)
                 end
             else
                 local st, why = infer(cmd, match_st, srv_arena)
-                if st then
+                -- The session snapshot and the cmd_result record travel on different
+                -- channels: when the result packet is lost the snapshot can arrive a
+                -- retransmit (or two) earlier. Wait that long for the server's own answer.
+                local hold = st and answers_possible()
+                if st then cmd.inferred_t = cmd.inferred_t or now_s() else cmd.inferred_t = nil end
+                if hold and now_s() - cmd.inferred_t < C.INFER_GRACE_S and age < k.timeout_s then
+                    -- wait; the sidecar keeps resending until the answer arrives
+                elseif st then
                     resolve(cmd, st, why, "inferred")
                 elseif age >= k.timeout_s then
                     resolve(cmd, "refused", timeout_reason(cmd), "timeout")

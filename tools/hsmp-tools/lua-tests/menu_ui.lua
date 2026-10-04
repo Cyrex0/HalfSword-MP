@@ -467,6 +467,10 @@ local function boot(vw, vh, scale, env, pre_lua, extra_path, scripts_dir)
     local f, err = load(T.read(dir .. "/main.lua"), "@" .. dir .. "/main.lua")
     if not f then error(err) end
     f()
+    -- the emulated server here answers through its state files only (no cmd_result record
+    -- unless a case writes one): inference is immediate, as without the record transport.
+    -- The wait for the server's record is lua-tests/commands.lua's subject.
+    if type(package.loaded.commands) == "table" then package.loaded.commands.INFER_GRACE_S = 0 end
     -- the startup menu appears -> inject after 500 ms
     M.on_new(M.menu)
     M.run(700)
@@ -1371,7 +1375,7 @@ local function execs() return table.concat(T.map(M.execs, tostring), "\n") end
 local function isolated_scripts()
     local base = T.tmpdir("hsmp_iso_")
     local dir = base .. "/mods/HSMPMenu/Scripts"
-    os.execute('mkdir "' .. dir:gsub("/", "\\") .. '" >nul 2>nul')   -- the real os.execute (mock not installed yet)
+    T.mkdir(dir)
     for _, p in ipairs(T.glob(SCRIPTS, "*.lua")) do
         T.write(dir .. "/" .. p:match("([^/\\]+)$"), T.read(p))
     end
