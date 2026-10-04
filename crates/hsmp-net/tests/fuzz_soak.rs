@@ -159,7 +159,7 @@ fn corpus() -> Vec<Vec<u8>> {
     // u32-tag shaped inputs with a zero / random tail
     for k in 0u32..48 {
         let mut z = k.to_le_bytes().to_vec();
-        z.extend(std::iter::repeat(0u8).take(64));
+        z.extend(std::iter::repeat_n(0u8, 64));
         v.push(z);
         let mut r = k.to_le_bytes().to_vec();
         r.extend((0..96).map(|_| rng.gen::<u8>()));

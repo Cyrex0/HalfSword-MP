@@ -15,15 +15,21 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # Line tables keep test backtraces readable; full debug info mostly costs link time
+  # (MSVC PDBs) and cache size.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
   # Keep in step with rust-toolchain.toml.
   RUST_TOOLCHAIN: "1.98.1"
 
+# The Windows checks run as three parallel jobs, each with its own build cache (they build
+# different things: release tools, debug tests, clippy metadata, the release server).
+# Caches are saved from main only: pull requests restore main's cache and never evict it.
 jobs:
   # The G0 gate without the game: lints, Lua suites, the gate self-test and
   # `cargo test --workspace`. bp_names and the dump rules of `unsafe` report SKIP.
-  # Then the end-to-end suite: real server, sidecars and master over UDP/HTTP.
-  windows:
-    name: Windows (G0 + e2e)
+  # G0's clippy check is the clippy job below (the same command), run in parallel.
+  windows-g0:
+    name: Windows (G0)
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -32,11 +38,29 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
-      - name: Build hsmp-tools and the server
-        run: cargo build --release --locked -p hsmp-tools -p hsmp-server
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build hsmp-tools
+        run: cargo build --release --locked -p hsmp-tools
       - name: G0 (no game)
         shell: bash
-        run: target/release/hsmp-gate.exe --repo "$PWD" g0 --no-stamp
+        run: target/release/hsmp-gate.exe --repo "$PWD" g0 --no-stamp --skip clippy
+
+  # The end-to-end suite: real server, sidecars and master over UDP/HTTP.
+  windows-e2e:
+    name: Windows (e2e)
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build hsmp-tools and the server
+        run: cargo build --release --locked -p hsmp-tools -p hsmp-server
       - name: End-to-end tests
         shell: bash
         run: |
@@ -44,9 +68,10 @@ jobs:
           HSMP_BINS="$PWD/target/release" \
           bash scripts/e2e-test.sh
 
-  # Clippy must compile and must not hit a deny-level lint. Style lints that are noisy
-  # across the existing code are allowed in the root Cargo.toml ([workspace.lints]);
-  # the remaining warnings are reported, not fatal, until they are cleaned up.
+  # Clippy must compile and must not hit a deny-level lint (G0's clippy check, verbatim).
+  # Style lints that are noisy across the existing code are allowed in the root Cargo.toml
+  # ([workspace.lints]); the remaining warnings are reported, not fatal. On Windows: the
+  # launcher and the native module have Windows-only code.
   clippy:
     name: Clippy
     runs-on: windows-2022
@@ -58,6 +83,8 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked
 
   # The dedicated server and master build and pass their tests on Linux.
@@ -71,6 +98,8 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test --locked -p hsmp-net -p hsmp-server -p hsmp-modes
       - run: cargo build --release --locked -p hsmp-server --bin hsmp-server --bin hsmp-master --bin hsmp-query
       - uses: actions/upload-artifact@v4

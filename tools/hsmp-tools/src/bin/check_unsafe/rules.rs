@@ -67,9 +67,9 @@ impl<'a> Ctx<'a> {
         let t = &self.toks;
         let mut v = vec![];
         for k in 0..t.len() {
-            if t[k].name(name) && (!member_only || self.is_member(k)) {
-                v.push(t[k].line);
-            } else if t[k].kind == Kind::Str && t[k].text == name && k > 0 && t[k - 1].op("[") && t.get(k + 1).map(|x| x.op("]")).unwrap_or(false) {
+            let named = t[k].name(name) && (!member_only || self.is_member(k));
+            let indexed = t[k].kind == Kind::Str && t[k].text == name && k > 0 && t[k - 1].op("[") && t.get(k + 1).is_some_and(|x| x.op("]"));
+            if named || indexed {
                 v.push(t[k].line);
             }
         }

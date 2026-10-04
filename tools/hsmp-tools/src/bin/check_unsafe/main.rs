@@ -130,35 +130,9 @@ fn match_baseline(all: &[(Finding, String)], base: &[(String, String, String)]) 
         .collect();
     let mut stale = vec![];
     for (k, n) in left {
-        stale.extend(std::iter::repeat(k).take(n));
+        stale.extend(std::iter::repeat_n(k, n));
     }
     (matched, stale)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    fn f(line: usize, code: &str) -> (Finding, String) {
-        (Finding { file: "mods/HSMPLoadout/Scripts/main.lua".into(), line, rule: "U3", msg: "m".into(), code: code.into() }, "HSMPLoadout".into())
-    }
-    fn b(code: &str) -> (String, String, String) {
-        ("U3".into(), "mods/HSMPLoadout/Scripts/main.lua".into(), code.into())
-    }
-    #[test]
-    fn baseline_is_counted() {
-        let x = "pcall(function() cur:K2_DestroyActor() end)";
-        // one baseline line, two identical findings: the second is NEW
-        let (m, stale) = match_baseline(&[f(1, x), f(9, x)], &[b(x)]);
-        assert_eq!(m, vec![true, false]);
-        assert!(stale.is_empty());
-        // two lines cover two
-        let (m, _) = match_baseline(&[f(1, x), f(9, x)], &[b(x), b(x)]);
-        assert_eq!(m, vec![true, true]);
-        // a fixed copy leaves one stale line
-        let (m, stale) = match_baseline(&[f(1, x)], &[b(x), b(x)]);
-        assert_eq!(m, vec![true]);
-        assert_eq!(stale.len(), 1);
-    }
 }
 
 fn main() {
@@ -279,4 +253,30 @@ fn main() {
         let _ = std::fs::write(j, serde_json::to_string_pretty(&doc).unwrap_or_default());
     }
     std::process::exit(rep.finish("no unsafe UE4SS API use outside the baseline"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn f(line: usize, code: &str) -> (Finding, String) {
+        (Finding { file: "mods/HSMPLoadout/Scripts/main.lua".into(), line, rule: "U3", msg: "m".into(), code: code.into() }, "HSMPLoadout".into())
+    }
+    fn b(code: &str) -> (String, String, String) {
+        ("U3".into(), "mods/HSMPLoadout/Scripts/main.lua".into(), code.into())
+    }
+    #[test]
+    fn baseline_is_counted() {
+        let x = "pcall(function() cur:K2_DestroyActor() end)";
+        // one baseline line, two identical findings: the second is NEW
+        let (m, stale) = match_baseline(&[f(1, x), f(9, x)], &[b(x)]);
+        assert_eq!(m, vec![true, false]);
+        assert!(stale.is_empty());
+        // two lines cover two
+        let (m, _) = match_baseline(&[f(1, x), f(9, x)], &[b(x), b(x)]);
+        assert_eq!(m, vec![true, true]);
+        // a fixed copy leaves one stale line
+        let (m, stale) = match_baseline(&[f(1, x)], &[b(x), b(x)]);
+        assert_eq!(m, vec![true]);
+        assert_eq!(stale.len(), 1);
+    }
 }

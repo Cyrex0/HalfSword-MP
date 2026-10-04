@@ -2,21 +2,21 @@
 //! evidence DoD-2 shares. Limits come from the scenario's `soak` object (scenarios.json).
 //!
 //! * SOAK-CRASH  `<run>/crash_triage.json` (`hsmp-tools crash-triage --since <run start> --until <run end>`,
-//!               written by mp_test.ps1 or, if missing, by the gate itself): new dumps <= crashes_max,
-//!               each reported with its signature; every game alive at quit_all.
+//!   written by mp_test.ps1 or, if missing, by the gate itself): new dumps <= crashes_max,
+//!   each reported with its signature; every game alive at quit_all.
 //! * SOAK-MEM    `<run>/mem.jsonl` (`hsmp-gate memwatch`): per game, the samples after `mem_warmup_min`
-//!               (from that process's first sample) -> least-squares private-bytes slope (MB/h) <
-//!               `mem_slope_max_mb_per_h`; growth = peak - median(first 3 post-warm-up samples) <=
-//!               `mem_growth_max_mb`; handle slope <= `handle_slope_max_per_h`. server/master/sidecar:
-//!               slope <= `aux_mem_slope_max_mb_per_h`. Fewer than `mem_min_samples` = incomplete.
+//!   (from that process's first sample) -> least-squares private-bytes slope (MB/h) <
+//!   `mem_slope_max_mb_per_h`; growth = peak - median(first 3 post-warm-up samples) <=
+//!   `mem_growth_max_mb`; handle slope <= `handle_slope_max_per_h`. server/master/sidecar:
+//!   slope <= `aux_mem_slope_max_mb_per_h`. Fewer than `mem_min_samples` = incomplete.
 //! * SOAK-LUAERR Lua errors in the run's UE4SS.log (LUA_ERR*, "attempt to <op>", "stack traceback",
-//!               "<file>.lua:<n>:", "bad argument #") + hsmp_log `lua_error` events <= `lua_errors_max`;
-//!               `lua_error_allow` = regexes of lines to ignore.
+//!   "<file>.lua:<n>:", "bad argument #") + hsmp_log `lua_error` events <= `lua_errors_max`;
+//!   `lua_error_allow` = regexes of lines to ignore.
 //! * SOAK-HITCH  `stall_check` with `hitch_max_ms` (shared with DoD-2): per instance the `frame_hb`
-//!               heartbeat (release profile, every 10 s) must be present, else incomplete; a `hitch`
-//!               with ms > the limit and travel=false fails (no flag: the [travel, world_ready]
-//!               window decides), and so do heartbeat gaps / frame_hb max_ms over the limit
-//!               outside travel.
+//!   heartbeat (release profile, every 10 s) must be present, else incomplete; a `hitch`
+//!   with ms > the limit and travel=false fails (no flag: the [travel, world_ready]
+//!   window decides), and so do heartbeat gaps / frame_hb max_ms over the limit
+//!   outside travel.
 
 use crate::rules::{FAIL, INCOMPLETE, PASS};
 use crate::util::{self, bv, ev_name, f64v, inst, s, sv, wall, Ev};

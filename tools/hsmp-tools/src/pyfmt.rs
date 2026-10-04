@@ -80,11 +80,11 @@ pub fn py_repr(x: f64) -> String {
     if decpt > -4 && decpt <= 16 {
         if decpt <= 0 {
             out.push_str("0.");
-            out.extend(std::iter::repeat('0').take((-decpt) as usize));
+            out.extend(std::iter::repeat_n('0', (-decpt) as usize));
             out.push_str(&digits);
         } else if (decpt as usize) >= digits.len() {
             out.push_str(&digits);
-            out.extend(std::iter::repeat('0').take(decpt as usize - digits.len()));
+            out.extend(std::iter::repeat_n('0', decpt as usize - digits.len()));
             out.push_str(".0");
         } else {
             out.push_str(&digits[..decpt as usize]);
@@ -200,7 +200,7 @@ fn emit(v: &PyVal, ind: usize, level: usize, o: &mut String) {
     }
     let pad = |n: usize, o: &mut String| {
         o.push('\n');
-        o.extend(std::iter::repeat(' ').take(n * ind));
+        o.extend(std::iter::repeat_n(' ', n * ind));
     };
     match v {
         PyVal::List(items) => {

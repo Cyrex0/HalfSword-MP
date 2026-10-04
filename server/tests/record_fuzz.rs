@@ -39,7 +39,7 @@ fn corpus() -> Vec<Vec<u8>> {
                 let b = (n as u64).to_le_bytes();
                 h[f.offset..f.offset + f.ty.size()].copy_from_slice(&b[..f.ty.size()]);
                 let mut p = h;
-                p.extend(std::iter::repeat(0u8).take(n * row.size()));
+                p.extend(std::iter::repeat_n(0u8, n * row.size()));
                 v.push(hsmp_ipc::wire::message(r.kind, 7, 3, &p));
             }
         }

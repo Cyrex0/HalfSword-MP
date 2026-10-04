@@ -702,7 +702,7 @@ fn states_hosting_world_guard() {
     c.check(vt(&h, "feed[1].tx") == "P3 slew Mate", format!("{tag}: a later death record goes on top ({})", vt(&h, "feed[1].tx")));
     h.run(6400);
     let op = h.n(&format!("rawget({V}.feed[4].tx.tb, 'opacity')"));
-    c.check(op >= 0.0 && op < 1.0, format!("{tag}: old feed lines fade ({op})"));
+    c.check((0.0..1.0).contains(&op), format!("{tag}: old feed lines fade ({op})"));
     h.run(2000);
     c.check(!vshown(&h, "feed[1].tx"), format!("{tag}: feed lines expire"));
 

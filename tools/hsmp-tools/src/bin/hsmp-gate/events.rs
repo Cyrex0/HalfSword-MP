@@ -315,7 +315,7 @@ pub fn gather(run: &Path, cfg: &Value) -> Vec<Ev> {
                 evs.push(e);
             }
         }
-        let tap = crate::observe::tap_path(run, &cfg, &is);
+        let tap = crate::observe::tap_path(run, cfg, &is);
         if tap.is_file() {
             let mut mark = Ev::new();
             mark.insert("ev".into(), json!("_collected"));

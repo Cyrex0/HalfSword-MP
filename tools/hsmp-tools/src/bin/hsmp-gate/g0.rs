@@ -33,6 +33,8 @@ pub struct Opts {
     pub quick: bool,
     pub json: Option<PathBuf>,
     pub only: Option<Vec<String>>,
+    /// checks reported as SKIP without running (CI runs clippy in a parallel job)
+    pub skip: Vec<String>,
     pub no_stamp: bool,
     /// fail, instead of skip, the checks that need the game's UE4SS object dump
     pub strict: bool,
@@ -159,6 +161,7 @@ fn check_ipc_schema(repo: &Path) -> (&'static str, String) {
     if !cfg!(windows) {
         return ("pass", format!("{hash}; generated files current; header compile: not on Windows"));
     }
+    #[cfg_attr(not(windows), allow(unused_variables))] // the compile below is Windows-only
     let Some(vc) = vcvars64() else {
         return ("pass", format!("{hash}; generated files current; header compile skipped (MSVC not found)"));
     };
@@ -222,6 +225,17 @@ fn check_clippy(repo: &Path) -> (&'static str, String) {
     } else {
         let errs: Vec<&str> = out.lines().filter(|l| l.starts_with("error") || l.trim_start().starts_with("--> ")).take(8).collect();
         ("fail", format!("{} ({dt:.0}s)", errs.join(" | ")))
+    }
+}
+
+/// Why `name` is reported as SKIP without running, or None to run it.
+fn skip_reason(name: &str, o: &Opts) -> Option<&'static str> {
+    if o.skip.iter().any(|s| s == name) {
+        Some("--skip")
+    } else if o.quick && (name == "cargo" || name == "clippy") {
+        Some("--quick")
+    } else {
+        None
     }
 }
 
@@ -298,6 +312,11 @@ pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
         ("cargo", Box::new(check_cargo)),
         ("clippy", Box::new(check_clippy)),
     ];
+    // a misspelt --skip would otherwise run nothing less and say nothing
+    if let Some(bad) = o.skip.iter().find(|s| !checks.iter().any(|(n, _)| n == s)) {
+        eprintln!("[G0] --skip {bad}: no such check");
+        return 2;
+    }
     let mut res = Map::new();
     let mut failed = vec![];
     let mut skipped = vec![];
@@ -307,7 +326,10 @@ pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
                 continue;
             }
         }
-        let (st, summary) = if o.quick && (*name == "cargo" || *name == "clippy") { ("skip", "--quick".to_string()) } else { f(repo) };
+        let (st, summary) = match skip_reason(name, o) {
+            Some(why) => ("skip", why.to_string()),
+            None => f(repo),
+        };
         println!("[G0] {name:13} {:5} {summary}", st.to_uppercase());
         match st {
             "fail" => failed.push(name.to_string()),
@@ -350,4 +372,29 @@ pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
     };
     println!("[G0] {verdict}");
     if failed.is_empty() { 0 } else { 1 }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn opts(quick: bool, skip: &[&str]) -> Opts {
+        Opts { quick, json: None, only: None, skip: skip.iter().map(|s| s.to_string()).collect(), no_stamp: true, strict: false }
+    }
+
+    #[test]
+    fn skip_reports_the_named_checks_only() {
+        let o = opts(false, &["clippy"]);
+        assert_eq!(skip_reason("clippy", &o), Some("--skip"));
+        assert_eq!(skip_reason("cargo", &o), None);
+        assert_eq!(skip_reason("lua_test", &o), None);
+    }
+
+    #[test]
+    fn quick_skips_cargo_and_clippy() {
+        let o = opts(true, &[]);
+        assert_eq!(skip_reason("cargo", &o), Some("--quick"));
+        assert_eq!(skip_reason("clippy", &o), Some("--quick"));
+        assert_eq!(skip_reason("wg", &o), None);
+    }
 }

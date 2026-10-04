@@ -2,6 +2,7 @@
 //!
 //! Protocol: UTF-8, LF-terminated commands and responses.
 //!
+//! ```text
 //! Session:
 //!   > AUTH <password>
 //!   < OK authenticated
@@ -30,6 +31,7 @@
 //!                           --admins-file when set, else for this run)
 //!   > ADMIN REMOVE <...>  → "OK not admin <player_id>"
 //!   > ADMIN LIST          → "OK <key> <owner|config|file|runtime> <online peer N nick|offline>" lines, "END"
+//! ```
 //! BANS (RCON) lists full IPs; in-game admins only ever see them masked.
 //! KICK and BAN take the same path (Command::Kick / Command::Ban).
 //!
@@ -248,7 +250,7 @@ async fn handle_client(
     let mut on_fail = Some(on_fail);
     let mut fail = move || { if let Some(f) = on_fail.take() { f() } };
     let (rd, mut wr) = stream.into_split();
-    let mut rd = BufReader::with_capacity(lim.max_line.min(8192).max(64), rd);
+    let mut rd = BufReader::with_capacity(lim.max_line.clamp(64, 8192), rd);
     let mut raw = Vec::with_capacity(256);
     let mut authenticated = false;
     let auth_deadline = tokio::time::Instant::now() + lim.auth_timeout;

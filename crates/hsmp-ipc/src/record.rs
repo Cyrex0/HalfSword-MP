@@ -417,7 +417,7 @@ unsafe impl<R: Record, const CAP: usize> IpcType for VarBuf<R, CAP> {
 impl<R: Record, const CAP: usize> VarBuf<R, CAP> {
     const LAYOUT_OK: () = {
         assert!(CAP <= R::MAX_ROWS || R::MAX_ROWS == 0, "VarBuf capacity over the record's MAX_ROWS");
-        assert!(core::mem::size_of::<R>() % 8 == 0);
+        assert!(core::mem::size_of::<R>().is_multiple_of(8));
         assert!(core::mem::size_of::<Self>() == core::mem::size_of::<R>() + CAP * core::mem::size_of::<R::Row>());
     };
 
@@ -553,7 +553,7 @@ mod tests {
         let mut big = h;
         big.n = 9;
         let mut bp = bytemuck::bytes_of(&big).to_vec();
-        bp.extend(std::iter::repeat(1u8).take(9 * 8));
+        bp.extend(std::iter::repeat_n(1u8, 9 * 8));
         assert!(matches!(view::<THead>(&bp), Err(Invalid::Rows { n: 9, max: 8 })));
         let mut short = p.clone();
         short.truncate(40);

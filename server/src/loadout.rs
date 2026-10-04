@@ -1278,7 +1278,7 @@ mod kit_tests {
         let mut h = Kit::default();
         h.n = 17;
         let mut p = hsmp_ipc::bytemuck::bytes_of(&h).to_vec();
-        p.extend(std::iter::repeat(0u8).take(17 * 32));
+        p.extend(std::iter::repeat_n(0u8, 17 * 32));
         assert!(view::<Kit>(&p).is_err(), "17 armour rows refused");
         let p = class_sel("peasant");
         let armor: Vec<&str> = p.armor().collect();

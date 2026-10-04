@@ -11,11 +11,11 @@
 //!      (or comma-separated): primary first, then fallbacks, tried in order
 //!      until one answers. Each entry is validated on its own — malformed
 //!      entries are skipped and counted, never fatal.
-//!   1b. With `--lan` (in parallel with 1): the browser query is broadcast to
-//!      255.255.255.255 and sent to 127.0.0.1 on every `--lan-ports` port;
-//!      every server that answers is listed with source `lan`. No master
-//!      needed (servers already answer queries on their game port from any
-//!      source, so the server side needs no change).
+//!      * With `--lan` (in parallel with 1): the browser query is broadcast to
+//!        255.255.255.255 and sent to 127.0.0.1 on every `--lan-ports` port;
+//!        every server that answers is listed with source `lan`. No master
+//!        needed (servers already answer queries on their game port from any
+//!        source, so the server side needs no change).
 //!   2. Sends a UDP browser query (query.rs) to every server (+ any
 //!      `--direct host:port`), 3 attempts, and records the best RTT and the
 //!      server's live info (players / map / name / ...).
@@ -272,7 +272,7 @@ async fn fetch_masters(
 /// True for http(s)://localhost, 127.x.x.x or [::1] URLs.
 fn is_loopback_url(url: &str) -> bool {
     let rest = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
-    let auth = rest.split(|c| c == '/' || c == '?' || c == '#').next().unwrap_or("");
+    let auth = rest.split(['/', '?', '#']).next().unwrap_or("");
     let auth = auth.rsplit_once('@').map(|(_, h)| h).unwrap_or(auth);
     let host = if let Some(v6) = auth.strip_prefix('[') { v6.split(']').next().unwrap_or("") } else { auth.rsplit_once(':').map(|(h, _)| h).unwrap_or(auth) };
     host.eq_ignore_ascii_case("localhost") || host.parse::<IpAddr>().map(|ip| ip.is_loopback()).unwrap_or(false)

@@ -9,7 +9,7 @@
 //! |---|---|
 //! | `check(cond, msg [, detail])` | one counted assertion; `cond` uses *Python* truthiness (nil/false/0/"" fail) |
 //! | `root`, `path(rel)`, `tests_dir`, `script` | repo root / repo-relative path / suite dir / this file (all `/`-separated) |
-//! | `read(p)` / `write(p, s)` / `append(p, s)` / `remove(p)` / `exists(p)` | files (read -> nil if missing) |
+//! | `read(p)` / `write(p, s)` / `append(p, s)` / `remove(p)` / `exists(p)` / `mkdir(p)` | files (read -> nil if missing; mkdir creates parents) |
 //! | `tmpdir(prefix)` | fresh temp dir, deleted when the suite ends |
 //! | `glob(base, pattern)` | sorted paths (`*`, `?`, `**`) |
 //! | `json_decode(s)` | JSON -> Lua (null -> nil) |
@@ -232,6 +232,9 @@ pub fn install(lua: &Lua, sh: &Rc<Shared>, script: &Path) -> mlua::Result<()> {
     })?)?;
     t.set("write", lua.create_function(|_, (p, s): (String, mlua::String)| {
         std::fs::write(&p, s.as_bytes()).map_err(|e| mlua::Error::runtime(format!("write {p}: {e}")))
+    })?)?;
+    t.set("mkdir", lua.create_function(|_, p: String| {
+        std::fs::create_dir_all(&p).map_err(|e| mlua::Error::runtime(format!("mkdir {p}: {e}")))
     })?)?;
     t.set("append", lua.create_function(|_, (p, s): (String, mlua::String)| {
         use std::io::Write;

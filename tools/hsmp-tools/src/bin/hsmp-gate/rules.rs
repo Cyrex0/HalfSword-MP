@@ -81,7 +81,7 @@ fn client<'a>(evs: &'a [Ev], name: &str, i: Option<&str>) -> Vec<&'a Ev> {
     evs.iter().filter(|e| ev_name(e) == name && is_client(e) && i.map(|x| inst(e) == x).unwrap_or(true)).collect()
 }
 
-fn harness<'a>(evs: &'a [Ev]) -> impl Iterator<Item = &'a Ev> {
+fn harness(evs: &[Ev]) -> impl Iterator<Item = &Ev> {
     evs.iter().filter(|e| util::src(e) == "harness")
 }
 
@@ -354,7 +354,7 @@ fn dod4(c: &mut Checks, x: &Ctx) {
     let picks: Vec<&Ev> = harness(x.evs).filter(|e| e.contains_key("pick")).collect();
     let wr_any = client(x.evs, "world_ready", None);
     for m in &starts {
-        let exp = picks.iter().filter(|p| wall(p) <= wall(m)).last().and_then(|p| sv(p, "pick")).or_else(|| sv(m, "arena"));
+        let exp = picks.iter().rfind(|p| wall(p) <= wall(m)).and_then(|p| sv(p, "pick")).or_else(|| sv(m, "arena"));
         let hi = starts.iter().chain(refused.iter()).map(|x| wall(x)).filter(|w| *w > wall(m)).min().unwrap_or(i64::MAX);
         let exp_s = exp.clone().unwrap_or_else(|| "?".into());
         if wr_any.is_empty() {
@@ -487,7 +487,7 @@ fn dod7(c: &mut Checks, x: &Ctx) {
     }
     for r in x.rounds {
         for i in &x.insts {
-            let Some(e) = sv_all.iter().filter(|e| inst(e) == i && in_round(e, r)).last() else {
+            let Some(e) = sv_all.iter().rfind(|e| inst(e) == i && in_round(e, r)) else {
                 c.add("DoD-7", FAIL, format!("{}: no spawn_verified", rl(r)), Some(r.idx), Some(i));
                 continue;
             };
@@ -543,7 +543,7 @@ fn dod7(c: &mut Checks, x: &Ctx) {
             match (f64v(e, "x"), f64v(e, "y")) {
                 (Some(px), Some(py)) => {
                     let others: Vec<(String, f64)> = x.insts.iter().filter(|j| *j != i)
-                        .filter_map(|j| sv_all.iter().filter(|o| inst(o) == j && in_round(o, r)).last().map(|o| (j, o)))
+                        .filter_map(|j| sv_all.iter().rfind(|o| inst(o) == j && in_round(o, r)).map(|o| (j, o)))
                         .filter_map(|(j, o)| Some((j.clone(), ((f64v(o, "x")? - px).powi(2) + (f64v(o, "y")? - py).powi(2)).sqrt())))
                         .collect();
                     if others.is_empty() && x.insts.len() > 1 {
@@ -873,7 +873,7 @@ fn dod11(c: &mut Checks, x: &Ctx) {
             };
             for i in &x.insts {
                 let lr = client(x.evs, "lobby_ready", Some(i));
-                let before = lr.iter().filter(|e| wall(e) < t0).last();
+                let before = lr.iter().rfind(|e| wall(e) < t0);
                 let Some(after) = lr.iter().find(|e| wall(e) >= t0) else {
                     c.add("DoD-11", FAIL, "no lobby_ready after the restart", None, Some(i));
                     continue;
@@ -1263,9 +1263,8 @@ fn pawn1(c: &mut Checks, x: &Ctx) {
                 continue;
             }
             // the kit's hands: this instance's own verified kit (this round, else the latest before it)
-            let kit = kits.iter().filter(|k| inst(k) == i && s(k, "who") == Some("self") && bv(k, "ok") == Some(true) && wall(k) <= r.win_hi)
-                .filter(|k| in_round(k, r)).last()
-                .or_else(|| kits.iter().filter(|k| inst(k) == i && s(k, "who") == Some("self") && bv(k, "ok") == Some(true) && wall(k) <= r.win_hi).last());
+            let kit = kits.iter().filter(|k| inst(k) == i && s(k, "who") == Some("self") && bv(k, "ok") == Some(true) && wall(k) <= r.win_hi).rfind(|k| in_round(k, r))
+                .or_else(|| kits.iter().rfind(|k| inst(k) == i && s(k, "who") == Some("self") && bv(k, "ok") == Some(true) && wall(k) <= r.win_hi));
             let kit_hand = |k: &str| kit.map(|kv| !empty_hand(s(kv, k)));
             let mut probs: Vec<String> = vec![];
             let mut missing: HashSet<&str> = HashSet::new();
@@ -1833,7 +1832,7 @@ fn netsim_rule(c: &mut Checks, x: &Ctx) {
             c.add("NETSIM", PASS, "no impairment required", None, Some(i));
             continue;
         }
-        let start = x.evs.iter().filter(|e| util::src(e) == "netsim" && inst(e) == i && ev_name(e) == "netsim_start").last();
+        let start = x.evs.iter().rfind(|e| util::src(e) == "netsim" && inst(e) == i && ev_name(e) == "netsim_start");
         match start {
             None => c.add("NETSIM", INCOMPLETE, format!("no netsim_start in netsim{i}.jsonl (proxy not evidenced; profile {got})"), None, Some(i)),
             Some(e) if s(e, "profile") == Some(got) => c.add("NETSIM", PASS, format!("proxy ran {got} (scenario {want})"), None, Some(i)),
@@ -1870,7 +1869,7 @@ fn netsim_traffic(c: &mut Checks, x: &Ctx, i: &str) {
     let mut idle: Vec<String> = vec![];
     for r in x.rounds {
         let Some(end) = r.end_ms else { continue };
-        let before = st.iter().filter(|e| wall(e) <= r.live_ms).last();
+        let before = st.iter().rfind(|e| wall(e) <= r.live_ms);
         let after = st.iter().find(|e| wall(e) >= end);
         let (Some(b), Some(a)) = (before, after) else { continue };
         judged += 1;

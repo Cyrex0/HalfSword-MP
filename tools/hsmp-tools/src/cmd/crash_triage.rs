@@ -123,12 +123,13 @@ pub fn parse_cdb(out: &str) -> CdbInfo {
     // the marker on a line of its own (the echoed command line also contains it)
     let thr_mark = Regex::new(r"(?m)^===THREADS===").unwrap().find(out).map(|m| m.start()).unwrap_or(out.len());
     if cs_at < thr_mark {
+        let addr = Regex::new(r"^[\w.\-]+\+0x").unwrap();
         for l in out[cs_at..thr_mark].lines().skip(1) {
             let l = l.trim();
             if l.is_empty() || l.starts_with("0:") || l.starts_with("===") || l.contains("quit:") {
                 break;
             }
-            if l.contains('!') || Regex::new(r"^[\w.\-]+\+0x").unwrap().is_match(l) || l.starts_with("0x") {
+            if l.contains('!') || addr.is_match(l) || l.starts_with("0x") {
                 c.frames.push(l.to_string());
             }
         }

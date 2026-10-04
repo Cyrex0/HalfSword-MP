@@ -25,11 +25,7 @@
 //! Retired mods (HSMPLobby, HSMPAdmin, HSMPCharacter, HSMPSettings, HSMPChat;
 //! never deployed) are reported as notes, not failures.
 
-#[path = "../dirlint/luablock.rs"]
-#[allow(dead_code)]
-mod luablock;
-
-use hsmp_tools::{lint, paths};
+use hsmp_tools::{lint, luablock, paths};
 use regex::Regex;
 
 const ALLOWED: &[(&str, &str)] = &[

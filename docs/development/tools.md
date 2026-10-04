@@ -57,12 +57,12 @@ Standalone binaries in `src/bin/` (same package):
 
 | tool | run | what |
 |---|---|---|
-| `hsmp-gate` | `hsmp-gate g0 [--quick] [--strict]`, `hsmp-gate scenarios`, `assert`, `selftest`, ... | the gate harness ([testing.md](testing.md)) |
+| `hsmp-gate` | `hsmp-gate g0 [--quick] [--strict] [--skip clippy,...]`, `hsmp-gate scenarios`, `assert`, `selftest`, ... | the gate harness ([testing.md](testing.md)) |
 | `check_travel` | `cargo run --release -p hsmp-tools --bin check_travel` | only the Director changes level |
 | `check_wg` | `... --bin check_wg [-- --strict] [--sites] [--release-set]` | world-guard lint W1-W3 |
 | `check_unsafe` | `... --bin check_unsafe [-- --strict] [--dump F \| --no-dump] [--json F] [--list-soft] [--write-baseline]` | UE4SS API lint U1-U6 (soft hook params/props, SetLeaderPoseComponent, K2_DestroyActor, off-thread delays, unguarded hook captures, console outside the Director); known findings in `tools/hsmp-tools/check_unsafe.baseline` |
 
-`src/bin/dirlint/luablock.rs` is not a binary: it is the Lua block parser
+`src/luablock.rs` (in the hsmp-tools library) is the Lua block parser
 that `check_travel` and `check_wg` share. What each lint checks, with
 examples, is in [lua-mods.md](lua-mods.md).
 

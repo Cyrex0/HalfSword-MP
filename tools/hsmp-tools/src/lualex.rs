@@ -72,7 +72,7 @@ fn strip_impl(src: &str, keep_strings: bool) -> String {
         if ch == '-' && i + 1 < n && c[i + 1] == '-' {
             if let Some(level) = long_open(i + 2) {
                 let (j, nl) = long_body(i + 2 + level + 2, level);
-                out.extend(std::iter::repeat('\n').take(nl));
+                out.extend(std::iter::repeat_n('\n', nl));
                 i = j;
             } else {
                 while i < n && c[i] != '\n' {
@@ -89,7 +89,7 @@ fn strip_impl(src: &str, keep_strings: bool) -> String {
                 continue;
             }
             out.push_str("\"\"");
-            out.extend(std::iter::repeat('\n').take(nl));
+            out.extend(std::iter::repeat_n('\n', nl));
             i = j;
             continue;
         }
@@ -128,7 +128,7 @@ fn strip_impl(src: &str, keep_strings: bool) -> String {
                 continue;
             }
             out.push_str("\"\"");
-            out.extend(std::iter::repeat('\n').take(nl));
+            out.extend(std::iter::repeat_n('\n', nl));
             continue;
         }
         out.push(ch);

@@ -312,7 +312,7 @@ pub fn run(a: Args) -> Result<i32> {
     for (name, path) in &logs {
         if name == "sidecarB" {
             let text = std::fs::read(path).map(|b| String::from_utf8_lossy(&b).to_string()).unwrap_or_default();
-            let last = text.lines().filter(|l| l.contains("pose peer") || l.contains("latency ms")).last();
+            let last = text.lines().rfind(|l| l.contains("pose peer") || l.contains("latency ms"));
             if let Some(l) = last {
                 println!("sidecar B last report: {}", strip.replace(l.trim(), ""));
             }

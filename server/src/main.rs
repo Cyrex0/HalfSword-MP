@@ -306,16 +306,16 @@ mod rcon_config_tests {
     fn allow_remote_flag_and_env_parse() {
         use clap::Parser;
         let parse = |a: &[&str]| super::Args::try_parse_from(a).map(|x| x.rcon_allow_remote);
-        assert_eq!(parse(&["hsmp-server"]).unwrap(), false);
-        assert_eq!(parse(&["hsmp-server", "--rcon-allow-remote"]).unwrap(), true);
+        assert!(!parse(&["hsmp-server"]).unwrap());
+        assert!(parse(&["hsmp-server", "--rcon-allow-remote"]).unwrap());
         // the Docker image and the docs set HSMP_RCON_ALLOW_REMOTE=1
         std::env::set_var("HSMP_RCON_ALLOW_REMOTE", "1");
         let one = parse(&["hsmp-server"]);
         std::env::set_var("HSMP_RCON_ALLOW_REMOTE", "0");
         let zero = parse(&["hsmp-server"]);
         std::env::remove_var("HSMP_RCON_ALLOW_REMOTE");
-        assert_eq!(one.unwrap(), true);
-        assert_eq!(zero.unwrap(), false);
+        assert!(one.unwrap());
+        assert!(!zero.unwrap());
     }
 
     #[test]

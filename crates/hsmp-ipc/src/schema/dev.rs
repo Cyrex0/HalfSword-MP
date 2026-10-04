@@ -91,7 +91,7 @@ mod tests {
         let long = "é".repeat(200);
         let c = DevCmd::new(1, DEV_OP_AUTOTEST, &long, &long, 0.0);
         let h = view::<DevCmd>(bytemuck::bytes_of(&c)).unwrap().head();
-        assert!(h.key.as_str().is_some() && h.key.len() <= 32 && h.key.len() % 2 == 0);
+        assert!(h.key.as_str().is_some() && h.key.len() <= 32 && h.key.len().is_multiple_of(2));
         assert!(h.arg.as_str().is_some() && h.arg.len() <= 192);
     }
 

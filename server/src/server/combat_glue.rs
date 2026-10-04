@@ -357,7 +357,7 @@ mod record_flow_tests {
     use super::super::dispatch::resume_tests::live_duel;
     use hsmp_ipc::schema::combat::{Damage, K_DEATH};
 
-    fn recs<'a>(t: &'a super::super::dispatch::resume_tests::TClient, kind: u16) -> Vec<&'a Vec<u8>> {
+    fn recs(t: &super::super::dispatch::resume_tests::TClient, kind: u16) -> Vec<&Vec<u8>> {
         t.records.iter().filter(|m| wire::kind_of(m) == kind).collect()
     }
 

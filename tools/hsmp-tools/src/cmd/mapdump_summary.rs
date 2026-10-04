@@ -74,12 +74,12 @@ fn len(v: &Value) -> usize {
     }
 }
 
-fn last_seg<'a>(x: &'a str, sep: char) -> &'a str {
+fn last_seg(x: &str, sep: char) -> &str {
     x.rsplit(sep).next().unwrap_or("")
 }
 
 /// Counter -> (key, count) sorted by key.
-fn counter<'a>(it: impl Iterator<Item = String>) -> BTreeMap<String, usize> {
+fn counter(it: impl Iterator<Item = String>) -> BTreeMap<String, usize> {
     let mut m = BTreeMap::new();
     for k in it {
         *m.entry(k).or_insert(0) += 1;

@@ -564,7 +564,7 @@ mod tests {
         let mut h = claim();
         h.n = 25;
         let mut p = bytemuck::bytes_of(&h).to_vec();
-        p.extend(std::iter::repeat(0u8).take(25 * 8));
+        p.extend(std::iter::repeat_n(0u8, 25 * 8));
         assert!(matches!(view::<Damage>(&p), Err(Invalid::Rows { .. })));
         let p = to_payload(&claim(), &rows);
         assert!(view::<Damage>(&p[..p.len() - 1]).is_err());

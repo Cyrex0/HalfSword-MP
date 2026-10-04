@@ -163,8 +163,8 @@ pub fn on_record(r: &mut WorldRx, kind: u16, peer: PeerId, payload: &[u8], t: u6
                 let v = view::<rec::ManifestHead>(payload)?;
                 if !scope(r, v.head.level, v.head.epoch, false) { return Ok(()); }
                 for e in v.rows.iter() {
-                    if !r.manifest.contains_key(&e.id) {
-                        r.manifest.insert(e.id, *e);
+                    if let std::collections::btree_map::Entry::Vacant(slot) = r.manifest.entry(e.id) {
+                        slot.insert(*e);
                         r.dirty_manifest = true;
                     }
                 }
@@ -173,8 +173,8 @@ pub fn on_record(r: &mut WorldRx, kind: u16, peer: PeerId, payload: &[u8], t: u6
                 let v = view::<rec::DynHead>(payload)?;
                 if !scope(r, v.head.level, v.head.epoch, false) { return Ok(()); }
                 for e in v.rows.iter() {
-                    if !r.dyns.contains_key(&e.id) {
-                        r.dyns.insert(e.id, *e);
+                    if let std::collections::btree_map::Entry::Vacant(slot) = r.dyns.entry(e.id) {
+                        slot.insert(*e);
                         r.dirty_dyn = true;
                     }
                 }

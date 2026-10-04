@@ -276,6 +276,7 @@ pub fn image_name_kills(repo: &Path) -> Vec<String> {
 ///   Duration (`Duration::..`, `from_secs/millis/..`, an UPPER_CASE constant, or a name with
 ///   dur/timeout/window/interval/ttl/grace/period/delay/age in it). `t - other_instant` is a
 ///   saturating Duration and is not flagged.
+///
 /// Known hits are baselined in tools/hsmp-tools/instant_sub.baseline as `path: trimmed line`
 /// (line-number free). Each baseline line covers ONE hit in that file (a count), and a stale
 /// entry FAILS (a fixed hit must leave the baseline, or the line could come back unseen).
@@ -534,11 +535,11 @@ mod tests {
         }
         let good = [
             format!("let now = Instant::now();\nlet age = now {m} last_seen;"),
-            format!("let now = Instant::now();\nlet left = now.checked_sub(d);"),
+            "let now = Instant::now();\nlet left = now.checked_sub(d);".to_string(),
             format!("let now = SystemTime::now();\nlet cutoff = now {m} Duration::from_secs(600);"),
             format!("let now = Instant::now();\nlet ok = now {m}= x;"),
             format!("// let t = Instant::now() {m} d;"),
-            format!("let x = Instant::now();\nlet d = x.duration_since(start);"),
+            "let x = Instant::now();\nlet d = x.duration_since(start);".to_string(),
         ];
         for g in &good {
             assert!(instant_sub_in(g).is_empty(), "false positive:\n{g}\n{:?}", instant_sub_in(g));

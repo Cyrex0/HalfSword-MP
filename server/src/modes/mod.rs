@@ -10,10 +10,6 @@
 //! (crates/hsmp-modes) and can also be mounted inside hsmp-server as
 //! `mod modes;`: the files only use `super::` paths and depend on serde only.
 
-// Until the session reducer wires every hook, a `mod modes;` mount inside
-// hsmp-server would warn about the not-yet-called API.
-#![allow(dead_code)]
-
 pub mod duel;
 pub mod ffa_lms;
 pub mod lts;

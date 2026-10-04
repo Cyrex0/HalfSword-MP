@@ -134,7 +134,7 @@ pub struct Acc {
     pub foot_slide: Vec<f64>,
 }
 
-pub fn pct(v: &mut Vec<f64>, p: f64) -> f64 {
+pub fn pct(v: &mut [f64], p: f64) -> f64 {
     if v.is_empty() { return f64::NAN; }
     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
     v[((v.len() as f64 - 1.0) * p).round() as usize]
@@ -260,7 +260,7 @@ pub fn compare(s: &[Rec], r: &[Rec], phases: &[(String, f64, f64)]) -> Report {
     rep
 }
 
-fn f3(v: &mut Vec<f64>) -> String { format!("{:6.2} {:6.2} {:7.2}", pct(v, 0.5), pct(v, 0.95), pct(v, 1.0)) }
+fn f3(v: &mut [f64]) -> String { format!("{:6.2} {:6.2} {:7.2}", pct(v, 0.5), pct(v, 0.95), pct(v, 1.0)) }
 
 pub fn print(rep: &mut Report) {
     let n = rep.idle_standin_speed.len();
@@ -282,9 +282,9 @@ pub fn print(rep: &mut Report) {
     let worst = rep.idle_rms.iter().cloned().fold(0.0, f64::max);
     println!("idle stillness: {} idle runs (1-5 s) with the owner still, stand-in RMS about its mean p50 {:.2} max {:.2} uu -> {}", nr, pct(&mut rep.idle_rms, 0.5), worst, if nr == 0 { "n/a" } else if worst <= 0.5 { "PASS" } else { "FAIL" });
     println!("matched {} receiver frames ({} outside the sender record)", rep.matched, rep.unmatched);
-    println!("{:<10} {:>6} {:>7} {:>7} | {:<22}| {:<22}| {:<22}| {:<22}| {:<22}| {:<22}| {}",
+    println!("{:<10} {:>6} {:>7} {:>7} | {:<22}| {:<22}| {:<22}| {:<22}| {:<22}| {:<22}| tip uu | latency ms p50/p95",
         "class", "frames", "in-spec", "hand/s", "all bones uu p50/95/max", "all bones deg", "arm chain uu", "arm chain deg",
-        "hands uu", "hands deg", "tip uu | latency ms p50/p95");
+        "hands uu", "hands deg");
     for (k, a) in rep.classes.iter_mut() {
         let hs = pct(&mut a.hand_speed, 0.95);
         println!("{:<10} {:>6} {:>6.1}% {:>7.0} | {} | {} | {} | {} | {} | {} | {} | {:5.1} {:5.1}",

@@ -223,7 +223,7 @@ mod tests {
         let f = crate::posecodec::v2::tests::sample_state(seed as u32, 0.95 + 0.1 * r.f().abs() as f32);
         let mut b = [0f64; BONE_NUMS];
         for (i, x) in f.bones.iter().enumerate() {
-            let jit = if seed % 3 == 0 { 0.37 * r.f() } else { 1e-4 * r.f() };
+            let jit = if seed.is_multiple_of(3) { 0.37 * r.f() } else { 1e-4 * r.f() };
             let o = i * 13;
             b[o] = x.p[0] as f64 + jit;
             b[o + 1] = x.p[1] as f64 + 1e-3 * r.f();
@@ -251,7 +251,7 @@ mod tests {
         c[1] = 3.7;
         c[2] = 260.0;
         let pel = [b[0], b[1], b[2]];
-        if seed % 2 == 0 {
+        if seed.is_multiple_of(2) {
             for i in 0..2 {
                 for k in 0..3 {
                     c[24 + i * 3 + k] = pel[k] + 30.0 * r.f();

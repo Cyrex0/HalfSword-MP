@@ -148,7 +148,7 @@ pub(crate) struct Inner {
     /// Deaths declared this round: (peer, killer, cause). Re-broadcast as
     /// S2CDeath with every match-state broadcast until the next round.
     round_deaths: Vec<(PeerId, PeerId, u8)>,
-    /// > 0 while a finished round "settles": the last-standing player is
+    /// Above 0 while a finished round "settles": the last-standing player is
     /// provisional; a trade hit / death landing in this window makes it a
     /// draw. The result is published only when this reaches 0.
     settle_ms: u64,

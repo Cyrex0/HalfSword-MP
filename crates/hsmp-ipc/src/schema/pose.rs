@@ -439,7 +439,7 @@ mod tests {
     #[test]
     fn pose_record_sizes_and_hostile_counts() {
         let h = PoseHead { tick: 9, n: 0, _r: 0 };
-        let frame = [0xFFu8, 0xFF, 0xFF, 0x02].iter().copied().chain(std::iter::repeat(7u8).take(300)).collect::<Vec<_>>();
+        let frame = [0xFFu8, 0xFF, 0xFF, 0x02].iter().copied().chain(std::iter::repeat_n(7u8, 300)).collect::<Vec<_>>();
         let p = to_payload(&h, &frame);
         assert_eq!(p.len(), 8 + 304);
         let v = view::<PoseHead>(&p).unwrap();

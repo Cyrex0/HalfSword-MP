@@ -42,7 +42,7 @@
 //! function's return value, aliases (`local t = cache; t.x = obj`), objects
 //! kept in closures; review still applies.
 
-use crate::luablock::{block_end, blank_strings, has_word, indent, strip_comments};
+use hsmp_tools::luablock::{block_end, blank_strings, has_word, indent, strip_comments};
 use regex::Regex;
 use std::collections::{BTreeMap, BTreeSet};
 /// Retired mods (never deployed): no W1 finding.
@@ -242,6 +242,7 @@ pub fn scan_file(rel: &str, src: &str, guard: Guard) -> Vec<Finding> {
 
     // W2: module-level caches assigned from a UObject source inside functions.
     let mut reported: BTreeSet<String> = BTreeSet::new();
+    let finds = Regex::new(r"\b(FindAllOf|FindFirstOf|NotifyOnNewObject)\b|:get\(\)").unwrap();
     for (i, l) in lines.iter().enumerate() {
         if indent(l) == 0 || l.trim_start().starts_with("local ") {
             continue;
@@ -275,7 +276,7 @@ pub fn scan_file(rel: &str, src: &str, guard: Guard) -> Vec<Finding> {
         if let Some(c) = rx.insert.captures(l) {
             let lo = i.saturating_sub(8);
             let ctx = lines[lo..=i].join("\n");
-            if Regex::new(r"\b(FindAllOf|FindFirstOf|NotifyOnNewObject)\b|:get\(\)").unwrap().is_match(&ctx) {
+            if finds.is_match(&ctx) {
                 cands.push(c[1].to_string());
             }
         }

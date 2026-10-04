@@ -425,17 +425,11 @@ fn lua_fields(text: &str, pos: usize, arg: &str) -> Option<(BTreeSet<String>, bo
     }
     let before = &text[..pos];
     let decl = Regex::new(&format!(r"(?:local\s+)?\b{ident}\s*=\s*(?:{ident}\s+or\s+)?\{{")).unwrap();
-    let m = decl.find_iter(before).last();
+    let m = decl.find_iter(before).last()?;
     let mut keys = BTreeSet::new();
-    let from = match m {
-        Some(m) => {
-            let open = m.end() - 1;
-            let close = match_close(text.as_bytes(), open)?;
-            keys.extend(lua_table_keys(&text[open..close]));
-            close
-        }
-        None => return None,
-    };
+    let open = m.end() - 1;
+    let from = match_close(text.as_bytes(), open)?;
+    keys.extend(lua_table_keys(&text[open..from]));
     let assign = Regex::new(&format!(r"\b{ident}\.([A-Za-z_]\w*)\s*(?:,|=[^=])")).unwrap();
     for c in assign.captures_iter(&text[from..pos]) {
         keys.insert(c[1].to_string());
@@ -611,7 +605,7 @@ pub fn lua_emits(repo: &Path) -> Vec<Emit> {
             let m = c.get(1).unwrap();
             // skip definitions (`function M.emit(`, `local function ev(`)
             let pre = &text[..m.start()];
-            if Regex::new(r"function\s*$").unwrap().is_match(pre) {
+            if pre.trim_end().ends_with("function") {
                 continue;
             }
             let open = c.get(0).unwrap().end() - 1;
@@ -656,13 +650,14 @@ fn rust_emits_in(repo: &Path, path: &Path, callee: &Regex, src: Src) -> Vec<Emit
     let text = match text.find("#[cfg(test)]") { Some(i) => text[..i].to_string(), None => text };
     let file = rel(repo, path);
     let mut out = vec![];
+    let quoted = Regex::new(r#"^"([A-Za-z_]\w*)"$"#).unwrap();
     for m in callee.find_iter(&text) {
         let open = m.end() - 1;
         let Some((args, _)) = call_args(&text, open) else { continue };
         if args.len() < 2 {
             continue;
         }
-        let Some(name) = Regex::new(r#"^"([A-Za-z_]\w*)"$"#).unwrap().captures(&args[0]).map(|c| c[1].to_string()) else { continue };
+        let Some(name) = quoted.captures(&args[0]).map(|c| c[1].to_string()) else { continue };
         let (fields, open_payload) = rust_payload(&text, open, &args[1]);
         out.push(Emit { src, file: file.clone(), line: line_of(&text, open), ev: name, fields, open: open_payload });
     }

@@ -267,13 +267,13 @@ async fn nan_root_is_refused_and_never_disables_the_speed_cap() {
     let st = Arc::new(new_state());
     let a = { let mut i = st.inner.lock().await; join(&mut i, 1, "A") };
     let body = hsmp_ipc::schema::pose::Root::default();
-    assert!(accept_root(&st, a, [f32::NAN, 0.0, 0.0], body.clone()).await.is_none(), "NaN as the first packet");
-    assert!(accept_root(&st, a, [f32::INFINITY, 0.0, 0.0], body.clone()).await.is_none());
-    assert!(accept_root(&st, a, [100.0, 0.0, 0.0], body.clone()).await.is_some());
+    assert!(accept_root(&st, a, [f32::NAN, 0.0, 0.0], body).await.is_none(), "NaN as the first packet");
+    assert!(accept_root(&st, a, [f32::INFINITY, 0.0, 0.0], body).await.is_none());
+    assert!(accept_root(&st, a, [100.0, 0.0, 0.0], body).await.is_some());
     // Alternate NaN -> teleport: the NaN is refused, the teleport is measured
     // from the last good position and refused too.
-    assert!(accept_root(&st, a, [f32::NAN, 0.0, 0.0], body.clone()).await.is_none());
-    assert!(accept_root(&st, a, [90_000.0, 0.0, 0.0], body.clone()).await.is_none());
+    assert!(accept_root(&st, a, [f32::NAN, 0.0, 0.0], body).await.is_none());
+    assert!(accept_root(&st, a, [90_000.0, 0.0, 0.0], body).await.is_none());
     let i = st.inner.lock().await;
     assert_eq!(i.peers[&a].last_valid_pos, Some([100.0, 0.0, 0.0]));
 }
@@ -651,9 +651,9 @@ fn match_snapshot_has_frozen_config_spawns_and_seat_ordered_plan() {
     let s = tv(&build_session(&i, 5000));
     assert_eq!(s.phase, Phase::LOADING);
     assert_ne!(s.match_id, 0);
-    let f = s.frozen.clone().expect("frozen in a match");
+    let f = s.frozen.expect("frozen in a match");
     assert_eq!(f.arena, "Map_Arena_Pit");
-    assert_eq!(f, i.sess.frozen.clone().unwrap());
+    assert_eq!(f, i.sess.frozen.unwrap());
     // The spawn plan is ordered by seat: seat 1 gets creation index 0.
     let sa = s.roster.iter().find(|r| r.seat == seat(&i, a)).unwrap().spawn.unwrap();
     let sb = s.roster.iter().find(|r| r.seat == seat(&i, b)).unwrap().spawn.unwrap();
@@ -1408,7 +1408,7 @@ proptest! {
                 round_in_match = None;
                 frozen_at_start = None;
             } else {
-                let f = s.frozen.clone().unwrap();
+                let f = s.frozen.unwrap();
                 prop_assert_eq!(f.arena.lossy().into_owned(), i.match_arena.clone());
                 prop_assert!(f.arena.lossy().starts_with("Map_Arena_"));
                 prop_assert_eq!(f.best_of, i.best_of);
@@ -1423,7 +1423,7 @@ proptest! {
                 round_in_match = Some((s.match_id, s.round));
             }
             // Wins never exceed what the best-of needs.
-            let needed = (i.best_of as u32 + 1) / 2;
+            let needed = (i.best_of as u32).div_ceil(2);
             prop_assert!(i.peers.values().all(|p| p.wins <= needed));
             // Snapshot seq strictly increases.
             now += 40;

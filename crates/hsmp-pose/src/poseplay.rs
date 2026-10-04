@@ -26,8 +26,6 @@
 //!                           extrapolation (≤ EXTRAP_MS, ≤ EXTRAP_MAX_UU) on
 //!                           loss; hold; stale after STALE_MS.
 
-#![allow(dead_code)]
-
 use crate::posecodec::{self, v2, PoseFrame};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -483,14 +481,6 @@ impl Playback {
     /// Advance the playback clock to local time `now` (ms) and sample.
     pub fn sample(&mut self, now: f64) -> Option<Sample> { self.sample_lead(now, 0.0) }
 
-    /// Like `sample`, but the pose is evaluated `lead` ms past the playback
-    /// clock (which itself advances exactly as in `sample`). The game asks for
-    /// the time its bodies will stand for after the coming physics step
-    /// (`.pose_lead`): served by interpolation from the buffered frames when
-    /// they reach that far, instead of the game extrapolating a sample by up
-    /// to two frames (100 ms at 20 fps). `Sample::pt` is the evaluated time,
-    /// `Sample::lead` the shift.
-
     /// Correction blending. When late frames arrive while the playback point was
     /// extrapolating or holding, the new trajectory differs from what was shown:
     /// instead of stepping to it, the difference becomes an offset that decays
@@ -545,6 +535,14 @@ impl Playback {
         self.blend = Some(Blend { at, lead, newest, mode: so.mode, cut, mask: so.mask, shown: so.bones, vel: raw_vel, off, qoff });
         so
     }
+
+    /// Like `sample`, but the pose is evaluated `lead` ms past the playback
+    /// clock (which itself advances exactly as in `sample`). The game asks for
+    /// the time its bodies will stand for after the coming physics step
+    /// (`.pose_lead`): served by interpolation from the buffered frames when
+    /// they reach that far, instead of the game extrapolating a sample by up
+    /// to two frames (100 ms at 20 fps). `Sample::pt` is the evaluated time,
+    /// `Sample::lead` the shift.
     pub fn sample_lead(&mut self, now: f64, lead: f64) -> Option<Sample> {
         let offset = self.clock.offset?;
         let target = now - offset - self.delay;
@@ -560,7 +558,7 @@ impl Playback {
                         want = want.min(1.0 - (1.0 - STRETCH_MIN_RATE) * s);
                     }
                 }
-                if !(self.rate > 0.0) { self.rate = 1.0; }
+                if self.rate.is_nan() || self.rate <= 0.0 { self.rate = 1.0; }
                 self.rate += (want - self.rate) * (dt / RATE_TAU_MS).min(1.0);
                 pt + dt * self.rate
             }
@@ -628,7 +626,7 @@ pub fn slerp(a: &[f32], b: &[f32], t: f32) -> [f32; 4] {
     let mut q = [0f32; 4];
     for k in 0..4 { q[k] = a[k] * wa + b[k] * wb; }
     let l = (q.iter().map(|c| c * c).sum::<f32>()).sqrt();
-    if !(l > 1e-8) { return [0.0, 0.0, 0.0, 1.0]; }
+    if l.is_nan() || l <= 1e-8 { return [0.0, 0.0, 0.0, 1.0]; }
     for c in q.iter_mut() { *c /= l; }
     q
 }
@@ -659,6 +657,7 @@ fn hold(f: &Frame, mode: Mode) -> SampleOut {
     SampleOut { mode, mask: f.mask, bones: f.b, vmask: f.vmask, vel: f.vel, v2: f.v2, extra: f.extra.clone() }
 }
 
+#[cfg(test)]
 fn sample_frames(fr: &VecDeque<Frame>, t: f64, age: f64) -> SampleOut { sample_frames_lead(fr, t, age, 0.0) }
 
 /// `lead` (ms, `sample_lead`): the game asked for a pose that far past the
@@ -719,7 +718,7 @@ fn sample_frames_lead(fr: &VecDeque<Frame>, t: f64, age: f64, lead: f64) -> Samp
                     for a in 0..3 { out.bones[i][a] = newest.b[i][a] + d[a] * k; }
                     // Rotation: integrate the sender's angular velocity (deg/s, world).
                     if newest.has_vel(i) {
-                        let s = (disp_t * k) as f32 / 1000.0;
+                        let s = (disp_t * k) / 1000.0;
                         let w = [newest.vel[i][3].to_radians() * s, newest.vel[i][4].to_radians() * s, newest.vel[i][5].to_radians() * s];
                         let ang = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
                         if ang > 1e-9 {
@@ -1239,7 +1238,7 @@ mod tests {
                 let ts = 10_000.0 + n as f64 * period;
                 if ts + 40.0 <= now {
                     let k = if ts < 12_000.0 { 1 } else { 8 };
-                    if n % k == 0 {
+                    if n.is_multiple_of(k) {
                         if hint { pb.set_interval_hint((period * k as f64) as f32); }
                         let mut f = v2_with_vel(ts);
                         f.ts = ts;

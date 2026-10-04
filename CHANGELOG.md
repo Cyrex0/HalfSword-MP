@@ -22,6 +22,10 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 - Stand-ins get their owner's body: bone masses, Mass Scale and Muscle Rate (new `body`
   record, capability `BODY`; beta.4 peers neither send nor receive it). Height is carried but
   not applied yet.
+- The lobby menu waits briefly for the server's answer to a command before it shows a result
+  read from the session state, so a lost packet at high ping no longer shows a guessed result.
+- Developer: `hsmp-gate g0 --skip <checks>`; CI runs G0, the end-to-end suite and clippy as
+  parallel jobs.
 
 ## [0.1.0-beta.4] - 2026-10-04
 

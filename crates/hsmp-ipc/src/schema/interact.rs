@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(bad(YieldRow { gain: f32::NAN, ..row(2) }), Invalid::Float("gain"));
         // Hostile count.
         let mut h = bytemuck::bytes_of(&PoseYield { n: 33, _r: 0 }).to_vec();
-        h.extend(std::iter::repeat(0u8).take(33 * 24));
+        h.extend(std::iter::repeat_n(0u8, 33 * 24));
         assert!(matches!(view::<PoseYield>(&h), Err(Invalid::Rows { n: 33, .. })));
         let s = super::super::slot_by_name("pose_yield").unwrap();
         assert_eq!((s.kind, s.form), (K_POSE_YIELD, SlotForm::Bus));

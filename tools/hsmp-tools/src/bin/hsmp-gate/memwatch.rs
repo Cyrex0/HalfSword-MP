@@ -27,6 +27,7 @@ pub struct Sample {
 
 /// FILETIME (100 ns since 1601) -> .NET DateTime ticks (100 ns since 0001), as PowerShell's
 /// `$p.StartTime.ToUniversalTime().Ticks` records them in the pidfile.
+#[cfg(windows)]
 pub const FILETIME_TO_DOTNET_TICKS: i64 = 504_911_232_000_000_000;
 
 #[cfg(windows)]

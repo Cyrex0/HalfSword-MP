@@ -148,7 +148,10 @@ Kinds: `pick_arena{arena}`, `best_of{n}`, `kit_rules{mode,budget}`, `start`, `ab
   so a resend is answered with the same result.
 - **Fallback inference:** while no `cmd_result` has arrived, the result is also inferred from the
   session snapshot and from SERVER chat replies (`start blocked…`, `map can only be changed…`,
-  `unknown arena…`, ...), with a timeout per kind.
+  `unknown arena…`, ...), with a timeout per kind. An inferred outcome is held for up to 2 s
+  (`INFER_GRACE_S`) so the server's own `cmd_result` can still win: the snapshot and the result travel
+  on different channels, and a lost result packet would otherwise turn a server answer into an
+  inferred one (DoD-10).
 - **A pick is a one-shot request, never a desired state.** It is resent only while it is unanswered.
   It is dropped (`superseded`) when a newer pick is made, when the server's arena changes to another
   value for any reason (RCON, another admin), or when the server answers or refuses it. The menu never

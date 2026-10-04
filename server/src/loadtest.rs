@@ -144,7 +144,7 @@ fn cpu_ms(pid: u32) -> f64 {
         .unwrap_or(f64::NAN)
 }
 
-fn pct(v: &mut Vec<u32>, p: f64) -> f64 {
+fn pct(v: &mut [u32], p: f64) -> f64 {
     if v.is_empty() { return f64::NAN; }
     v.sort_unstable();
     let idx = ((v.len() as f64 - 1.0) * p).round() as usize;
@@ -390,7 +390,7 @@ async fn run_client(
             bot.send_msg(hsmp_ipc::wire::encode(0, 0, &r, &[])).await;
             tx_bytes.fetch_add(120, Ordering::Relaxed);
         }
-        if ms % 50 == 0 {
+        if ms.is_multiple_of(50) {
             let t = now_us();
             synth_pose(pos, (t / 1000) as f64, &mut pose_frame);
             let head = hsmp_ipc::schema::pose::PoseHead { tick: t, n: 0, _r: 0 };
@@ -398,11 +398,11 @@ async fn run_client(
             tx_bytes.fetch_add(340, Ordering::Relaxed);
             // World v2: every peer joins level 1 (epoch 1 = fresh
             // server); peer 0 registers 12 bodies and streams them at 20 Hz.
-            if wseq == 0 || ms % 2000 == 0 {
+            if wseq == 0 || ms.is_multiple_of(2000) {
                 bot.send_msg(hsmp_ipc::wire::encode(0, 0, &wrec::WorldSync { level: 1, _r: 0 }, &[])).await;
             }
             if idx == 0 {
-                if wseq % 20 == 0 {
+                if wseq.is_multiple_of(20) {
                     let entries: Vec<wrec::ManifestEntry> = (0..12u32).map(|i| wrec::ManifestEntry {
                         id: 1000 + i, chash: i, pos: [i as f32 * 100.0, 0.0, 50.0], _r: 0,
                     }).collect();
@@ -417,13 +417,13 @@ async fn run_client(
             }
             wseq += 1;
         }
-        if ms % 200 == 0 {
+        if ms.is_multiple_of(200) {
             let mut v = proto::vitals::unknown();
             v.seq = k as u32;
             proto::vitals::set(&mut v, proto::vitals::I_HEALTH, 100.0);
             bot.send_msg(hsmp_ipc::wire::encode(0, 0, &v, &[])).await;
         }
-        if ms % 1000 == 0 {
+        if ms.is_multiple_of(1000) {
             // The game-status report (the old `ping:0:0` verb): liveness, nothing loaded.
             bot.send_rec(hsmp_ipc::wire::encode(0, 0, &rec::GameStatus::default(), &[])).await;
         }
@@ -732,13 +732,13 @@ mod attack {
         // 4. A captured Hello replayed from another address gets a cookie
         //    (one Challenge, <= the Hello) and allocates nothing.
         let p1 = players(target).await.unwrap_or(0);
-        let rep = probe(target, &[hello.clone()], Duration::from_millis(500)).await;
+        let rep = probe(target, std::slice::from_ref(&hello), Duration::from_millis(500)).await;
         let ok = rep.len() == 1 && rep[0][0] == 0xA2 && rep[0].len() <= hello.len();
         r.check("v5_spoofed_hello", ok, format!("replies {:?} (sizes), hello {} B",
             rep.iter().map(|d| d.len()).collect::<Vec<_>>(), hello.len()));
         // 5. The captured Auth replayed from another address: cookie bound to
         //    the victim's address -> silently dropped.
-        let rep = probe(target, &[auth.clone()], Duration::from_millis(500)).await;
+        let rep = probe(target, std::slice::from_ref(&auth), Duration::from_millis(500)).await;
         r.check("v5_replayed_auth_other_addr", rep.is_empty(), format!("{} replies", rep.len()));
         // ... and from the victim's own address: duplicate, dropped.
         let _ = a.sock.send_to(&auth, target).await;
