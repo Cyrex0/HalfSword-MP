@@ -13,9 +13,6 @@
 //! `--release-set` limits the scan to the mods `mods/mods.release.txt` enables; G0 runs
 //! `--strict --release-set`.
 
-#[path = "../dirlint/luablock.rs"]
-#[allow(dead_code)]
-mod luablock;
 mod wg;
 
 use hsmp_tools::{lint, paths};

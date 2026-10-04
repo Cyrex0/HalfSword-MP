@@ -42,7 +42,7 @@
 //! function's return value, aliases (`local t = cache; t.x = obj`), objects
 //! kept in closures; review still applies.
 
-use crate::luablock::{block_end, blank_strings, has_word, indent, strip_comments};
+use hsmp_tools::luablock::{block_end, blank_strings, has_word, indent, strip_comments};
 use regex::Regex;
 use std::collections::{BTreeMap, BTreeSet};
 /// Retired mods (never deployed): no W1 finding.
