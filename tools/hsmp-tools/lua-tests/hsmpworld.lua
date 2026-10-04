@@ -142,14 +142,17 @@ T.check(first ~= again, "a later scan never reuses a taken id")
 local Q = W.W2
 local GOLD = {
     { rot = { 0, 0, 0 }, vel = { 0, 0, 0 }, flags = 0, want_rot = { 0, 0, 0 }, want_vel = { 0, 0, 0 }, want_flags = 3 << 6 },
-    { rot = { 0, 90, 0 }, vel = { 100.4, -0.5, 0.6 }, flags = 8, want_rot = { 0, 0, 32767 }, want_vel = { 100, 0, 1 }, want_flags = 8 | (2 << 6) },
+    { rot = { 0, 90, 0 }, vel = { 100.4, -0.5, 0.6 }, flags = 8, want_rot = { 0, 0, 32767 }, want_vel = { 100, 0, 1 }, want_flags = 8 | (2 << 6),
+      -- z and w are both sin(45 deg): which one is dropped depends on the C library's last bit
+      -- (glibc's gives w; the Rust reference, in f32, gives z). Both decode to the same rotation.
+      alt_flags = 8 | (3 << 6) },
     { rot = { 10, 20, 30 }, vel = { 5, -6, 1e9 }, flags = 2, want_rot = { -11089, -5917, 6714 }, want_vel = { 5, -6, 32767 }, want_flags = 2 | (3 << 6) },
     { rot = { -45, 170, -120 }, vel = { 0, 0, 0 }, flags = 1 | 0x30, want_rot = { -5602, 19986, 17165 }, want_vel = { 0, 0, 0 }, want_flags = 1 | (1 << 6) },
 }
 for i, g in ipairs(GOLD) do
     local o = Q.qobj(7, { X = 0, Y = 0, Z = 0 }, { Pitch = g.rot[1], Yaw = g.rot[2], Roll = g.rot[3] },
                      { X = g.vel[1], Y = g.vel[2], Z = g.vel[3] }, g.flags)
-    local ok = o.flags == g.want_flags and T.eq(o.vel, g.want_vel)
+    local ok = (o.flags == g.want_flags or o.flags == g.alt_flags) and T.eq(o.vel, g.want_vel)
     for k = 1, 3 do if math.abs(o.rot[k] - g.want_rot[k]) > 1 then ok = false end end
     T.check(ok, "qobj golden vector " .. i, T.repr(o))
 end
