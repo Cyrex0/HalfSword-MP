@@ -477,7 +477,7 @@ so the hook refuses a dirty tree and a push of any commit other than HEAD. The c
 | `clippy` | `cargo clippy --workspace --all-targets --locked` | the CI clippy job's command, verbatim: a compile error or a deny-level lint (`approx_constant` and other `clippy::correctness` lints) fails, warnings are counted only. Skipped with `--quick`. Not in `REQUIRED_CHECKS`, so older stamps and the recorded fixtures stay valid |
 
 A full pass with nothing skipped, on a clean tree, writes `<git-common-dir>/hsmp-g0/<commit>.json` (and the
-legacy `<git-common-dir>/hsmp-g0.json`). A run that skipped a check (no game dump, `--quick`, `--only`) writes no
+legacy `<git-common-dir>/hsmp-g0.json`). A run that skipped a check (no game dump, `--quick`, `--only`, `--skip`) writes no
 stamp. `build-and-deploy.ps1` records it in the deploy stamp
 (`g0_ok`), and `-RequireG0` refuses to deploy without it. `mp_test.ps1` records a `--quick` G0 in each run (`g0.json`).
 
@@ -492,10 +492,12 @@ Do not skip the hook with `--no-verify`.
 
 ### CI (`.github/workflows/ci.yml`) and what G0 does not cover
 
-CI runs four jobs: Windows (`hsmp-gate g0 --no-stamp`, then `scripts/e2e-test.sh`), Clippy (the
-same command as the G0 `clippy` check), Linux (`cargo test --locked -p hsmp-net -p hsmp-server
+CI runs five parallel jobs: Windows G0 (`hsmp-gate g0 --no-stamp --skip clippy`), Windows e2e
+(`scripts/e2e-test.sh`), Clippy (the same command as the G0 `clippy` check, which is why G0 skips it
+there), Linux (`cargo test --locked -p hsmp-net -p hsmp-server
 -p hsmp-modes`, then a release build of `hsmp-server`, `hsmp-master` and `hsmp-query`) and a
-Docker image smoke test. A full local G0 plus `scripts/e2e-test.sh` covers the first two. The Linux job cannot be reproduced on Windows:
+Docker image smoke test. A full local G0 plus `scripts/e2e-test.sh` covers the three Windows jobs. Build caches are saved from
+`main` only; pull requests restore them. The Linux job cannot be reproduced on Windows:
 the `cfg(not(windows))` code (the sidecar's `/proc` process checks, for one) only compiles and runs
 there. With WSL and a distro, run the job's test command in the distro on a copy of the tree
 (rustup picks up `rust-toolchain.toml`):

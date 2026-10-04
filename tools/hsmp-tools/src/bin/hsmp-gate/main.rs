@@ -138,6 +138,9 @@ enum Cmd {
         json: Option<PathBuf>,
         #[arg(long, value_delimiter = ',')]
         only: Option<Vec<String>>,
+        /// Report these checks as SKIP without running them (no G0 stamp is written)
+        #[arg(long, value_delimiter = ',')]
+        skip: Vec<String>,
         #[arg(long)]
         no_stamp: bool,
         /// Fail (instead of skip) the checks that need the game's UE4SS object dump
@@ -281,7 +284,7 @@ fn main() {
             println!("travel lint: {summary}");
             if ok { 0 } else { 1 }
         }
-        Cmd::G0 { quick, json, only, no_stamp, strict } => g0::run_g0(&repo, &g0::Opts { quick, json, only, no_stamp, strict }),
+        Cmd::G0 { quick, json, only, skip, no_stamp, strict } => g0::run_g0(&repo, &g0::Opts { quick, json, only, skip, no_stamp, strict }),
         Cmd::FakeGame => fake_game::run(),
         Cmd::StateFiles { update, verbose } => statefiles::run_cli(&repo, update, verbose),
         Cmd::AbDiff { a, b, json } => abdiff::run(&a, &b, json.as_deref()),
