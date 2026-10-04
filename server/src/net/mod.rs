@@ -442,27 +442,41 @@ impl Net {
 
     /// Relay path: the body is serialised once by the caller.
     pub fn send_bytes(&self, addr: SocketAddr, mode: SendMode, bytes: Vec<u8>) -> Out {
-        let Some(cid) = self.cid(&addr) else { return Vec::new() };
-        let now = self.now_ms();
+        if !self.queue_bytes(addr, mode, bytes) {
+            return Vec::new();
+        }
+        self.flush(addr)
+    }
+
+    /// Queue a message for `addr` without transmitting it: messages queued for one peer
+    /// before its `flush` share datagrams. False if it was dropped.
+    pub fn queue_bytes(&self, addr: SocketAddr, mode: SendMode, bytes: Vec<u8>) -> bool {
+        let Some(cid) = self.cid(&addr) else { return false };
         let mut ep = self.ep();
         // A channel-0 message too big for one datagram (a large voice frame)
         // travels reliably and fragmented instead. Decided up front so the
         // buffer is moved, not cloned for a retry.
         let r = ep.send(cid, fit_mode(mode, bytes.len()), bytes);
         match r {
-            Ok(()) => {}
+            Ok(()) => true,
             Err(SendError::Backpressure) => {
                 drop(ep);
                 self.count(|c| c.backpressure += 1);
                 debug!(%addr, "v5: reliable backlog full; message dropped");
-                return Vec::new();
+                false
             }
             Err(e) => {
                 debug!(%addr, ?e, "v5: send refused");
-                return Vec::new();
+                false
             }
         }
-        ep.poll_transmit_one(now, cid)
+    }
+
+    /// The datagrams of everything queued for `addr`.
+    pub fn flush(&self, addr: SocketAddr) -> Out {
+        let Some(cid) = self.cid(&addr) else { return Vec::new() };
+        let now = self.now_ms();
+        self.ep().poll_transmit_one(now, cid)
     }
 
     /// Close `addr`'s connection (CLOSE is repeated by `tick`). Returns the
@@ -611,20 +625,26 @@ impl Net {
         self.maps().by_addr.keys().copied().collect()
     }
 
+    /// `addrs` into a buffer the caller keeps (the tick reuses its own).
+    pub fn addrs_into(&self, out: &mut Vec<SocketAddr>) {
+        out.clear();
+        out.extend(self.maps().by_addr.keys().copied());
+    }
+
     /// Close every connection whose address is no longer a peer (kick, ban,
     /// RCON and timeout paths that removed the peer directly). Cheap when
     /// nothing changed. Call it under the peer-table lock (admission accepts
     /// under the same lock, so a fresh connection always has its peer). The
     /// CLOSE datagrams go out with the next `tick`.
-    pub fn reconcile<'a>(&self, peers: impl Iterator<Item = &'a SocketAddr>) {
-        let keep: std::collections::HashSet<SocketAddr> = peers.copied().collect();
+    pub fn reconcile<V>(&self, peers: &HashMap<SocketAddr, V>) {
+        // Runs every tick: the unchanged case allocates nothing.
         let stale: Vec<(SocketAddr, ConnId)> = {
             let mm = self.maps();
             let m = &mm.by_addr;
-            if m.len() == keep.len() && m.keys().all(|a| keep.contains(a)) {
+            if m.len() == peers.len() && m.keys().all(|a| peers.contains_key(a)) {
                 return;
             }
-            m.iter().filter(|(a, _)| !keep.contains(a)).map(|(a, c)| (*a, *c)).collect()
+            m.iter().filter(|(a, _)| !peers.contains_key(*a)).map(|(a, c)| (*a, *c)).collect()
         };
         let now = self.now_ms();
         let mut ep = self.ep();
@@ -769,7 +789,7 @@ mod tests {
         let out = net.send_msg(new, test_msg());
         assert!(!out.is_empty() && out.iter().all(|(a, _)| *a == new), "server now sends to the new path");
         assert!(!net.send_msg(old, test_msg()).is_empty(), "old address is an alias for a while");
-        net.reconcile([new].iter());
+        net.reconcile(&HashMap::from([(new, ())]));
         assert!(net.ep().conn(cid).is_some_and(|c| c.is_open()), "reconcile keeps the moved connection");
         assert_eq!(net.counters().migrations, 1);
     }

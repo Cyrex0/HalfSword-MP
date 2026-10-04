@@ -239,6 +239,8 @@ fn kit_facts_set(pid: PeerId, kit: &KitSel) {
 /// its held kit applied.
 pub fn set_round_lock(fighting: &[PeerId]) {
     let mut g = kit_gate().lock().unwrap_or_else(|e| e.into_inner());
+    // Called every tick: the unchanged set returns without allocating.
+    if fighting.len() == g.locked.len() && fighting.iter().all(|p| g.locked.contains(p)) { return; }
     let now: std::collections::HashSet<PeerId> = fighting.iter().copied().collect();
     if now == g.locked { return; }
     let freed: Vec<PeerId> = g.locked.difference(&now).copied().collect();
@@ -614,6 +616,7 @@ pub async fn set_rules(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, mode: 
 }
 
 /// `S2CSession`: the current rules and every stored kit's revision.
+#[cfg_attr(not(test), allow(dead_code))]
 pub async fn session_view() -> crate::server::KitView {
     let st = kit_store().lock().await;
     crate::server::KitView {
@@ -621,6 +624,15 @@ pub async fn session_view() -> crate::server::KitView {
         budget: st.rules.budget,
         revs: st.kits.iter().map(|(id, e)| (*id, e.rev)).collect(),
     }
+}
+
+/// `session_view` into a view the caller keeps (the tick reuses its map's storage).
+pub async fn session_view_into(v: &mut crate::server::KitView) {
+    let st = kit_store().lock().await;
+    v.mode = st.rules.mode;
+    v.budget = st.rules.budget;
+    v.revs.clear();
+    v.revs.extend(st.kits.iter().map(|(id, e)| (*id, e.rev)));
 }
 
 async fn apply_rules(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, addrs: &[SocketAddr], live: &[PeerId],

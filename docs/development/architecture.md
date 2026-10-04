@@ -326,7 +326,9 @@ validate) would remove these effects; it has not been done.
 
 ## 10. Known architectural limits
 
-- **8 players.** `hsmp-server --max-peers` defaults to 8; `SPAWN_SLOTS = 8` (`match_core.rs`);
+- **8 players.** `hsmp-server --max-peers` defaults to 8 (it accepts 1 to 64; the server side is
+  measured at 16, see [More than 8 players](../hosting/configuration.md#more-than-8-players));
+  `SPAWN_SLOTS = 8` (`match_core.rs`, informational: spawn plans add derived points beyond 8);
   stand-ins are the arena's native foe Willies, capped through the game's "Free Mode Foes Amount";
   the Lua side repeats the number. The shared-memory peer table has 32 slots. Relay tiers have no
   interest management.

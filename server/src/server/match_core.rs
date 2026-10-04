@@ -307,11 +307,15 @@ pub(super) fn combat_open(inner: &Inner) -> bool {
 
 /// Connected participants of this match that are still standing.
 fn standing(inner: &Inner) -> Vec<PeerId> {
-    let present = present_participants(inner);
     inner.peers.values()
-        .filter(|p| p.alive && present.contains(&p.id))
+        .filter(|p| p.alive && is_present(inner, p))
         .map(|p| p.id)
         .collect()
+}
+
+/// `standing(inner).len()` without the list (checked every tick of a live round).
+fn standing_count(inner: &Inner) -> usize {
+    inner.peers.values().filter(|p| p.alive && is_present(inner, p)).count()
 }
 
 /// Mark `pid` dead for the current round. Returns false if it was already
@@ -358,7 +362,7 @@ pub(super) fn declare_death_unprotected(inner: &mut Inner, pid: PeerId, killer: 
 /// test round only ends when its player dies).
 fn check_round_end(inner: &mut Inner, after_death: bool) {
     if inner.match_state != "live" { return; }
-    let alive = standing(inner).len();
+    let alive = standing_count(inner);
     let multi = inner.participants.len() >= 2;
     if alive == 0 || (multi && alive <= 1) {
         if !after_death { info!(alive, "match: round ends (players left / timed out)"); }
@@ -440,18 +444,24 @@ pub(super) fn barrier_session(inner: &Inner) -> bool {
 /// Participants currently connected whose game is still alive. Game-ping
 /// staleness only counts during a live round (see GAME_PING_TIMEOUT_MS).
 pub(super) fn present_participants(inner: &Inner) -> Vec<PeerId> {
-    let now = inner.now_ms;
+    inner.peers.values().filter(|p| is_present(inner, p)).map(|p| p.id).collect()
+}
+
+/// `present_participants(inner).len()` without the list (match_step runs every tick).
+fn present_count(inner: &Inner) -> usize {
+    inner.peers.values().filter(|p| is_present(inner, p)).count()
+}
+
+/// A connected participant whose game is still alive (see `present_participants`).
+fn is_present(inner: &Inner, p: &PeerState) -> bool {
     let check_pings = inner.match_state == "live";
-    inner.peers.values()
-        .filter(|p| is_participant(inner, p))
-        .filter(|p| match inner.match_peers.get(&p.id) {
-            Some(m) if m.aware && check_pings => now.saturating_sub(m.last_ping_ms) <= GAME_PING_TIMEOUT_MS,
+    is_participant(inner, p)
+        && match inner.match_peers.get(&p.id) {
+            Some(m) if m.aware && check_pings => inner.now_ms.saturating_sub(m.last_ping_ms) <= GAME_PING_TIMEOUT_MS,
             _ => true,
-        })
+        }
         // Resume: a game client silent for 3 s mid-Live is away.
-        .filter(|p| session::link_ok(inner, p))
-        .map(|p| p.id)
-        .collect()
+        && session::link_ok(inner, p)
 }
 
 /// Present participants that have not loaded the pending round's arena yet.
@@ -523,18 +533,18 @@ pub(super) fn match_step(inner: &mut Inner) {
     }
 
     let multi = inner.participants.len() >= 2;
-    let present = present_participants(inner);
+    let present = present_count(inner);
 
     // Nobody of this match is left (also a solo match whose only player
     // left, or an empty server): back to the lobby instead of "live" forever.
-    if present.is_empty() {
+    if present == 0 {
         info!(state = %inner.match_state, "match: no participant left; back to lobby");
         reset_to_lobby(inner);
         return;
     }
 
     if inner.match_state == "paused" {
-        if present.len() >= 2 {
+        if present >= 2 {
             inner.match_reason.clear();
             if std::mem::take(&mut inner.paused_from_live) {
                 // The interrupted round continues where it stopped
@@ -556,8 +566,8 @@ pub(super) fn match_step(inner: &mut Inner) {
 
     // A finished round settles first: its result is fixed before any pause.
     let settling = inner.match_state == "roundover" && inner.settle_ms > 0;
-    if multi && inner.match_state != "match_over" && present.len() < 2 && !settling {
-        if present.is_empty() {
+    if multi && inner.match_state != "match_over" && present < 2 && !settling {
+        if present == 0 {
             info!("match: all participants gone; back to lobby");
             reset_to_lobby(inner);
             return;
@@ -566,7 +576,7 @@ pub(super) fn match_step(inner: &mut Inner) {
             // A drop during a Live round may pause it only within
             // the budget (one per player per match, MAX_MATCH_PAUSES in all).
             // Beyond it the dropper loses the round, as if dead.
-            let droppers = absent_participants(inner, &present);
+            let droppers = absent_participants(inner, &present_participants(inner));
             let budget_ok = inner.match_pauses < MAX_MATCH_PAUSES
                 && droppers.iter().all(|k| inner.pauses_by_key.get(k).copied().unwrap_or(0) < PAUSES_PER_PLAYER);
             if !budget_ok {
@@ -576,10 +586,10 @@ pub(super) fn match_step(inner: &mut Inner) {
             for k in &droppers { *inner.pauses_by_key.entry(*k).or_insert(0) += 1; }
             inner.match_pauses += 1;
             inner.paused_from_live = true;
-            info!(present = present.len(), pauses = inner.match_pauses,
+            info!(present, pauses = inner.match_pauses,
                   "match: participant dropped mid-round; pausing for its reconnect (its one pause this match)");
         } else {
-            info!(present = present.len(), state = %inner.match_state, "match: participant dropped; pausing for reconnect");
+            info!(present, state = %inner.match_state, "match: participant dropped; pausing for reconnect");
         }
         inner.settle_ms = 0;
         inner.match_state = "paused".into();

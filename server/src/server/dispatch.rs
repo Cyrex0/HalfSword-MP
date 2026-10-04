@@ -107,24 +107,35 @@ pub async fn recv_loop(socket: Arc<UdpSocket>, state: Arc<ServerState>) -> anyho
                     let now = inner.now_ms;
                     if let Some(p) = inner.peers.get_mut(&from) { p.last_seen_ms = now; }
                 }
-                for d in deliveries {
-                    let (h, payload) = match proto::decode_msg(&d.data) {
-                        Ok(m) => m,
-                        Err(e) => { debug!(%from, error = %e, len = d.data.len(), "undecodable message dropped"); continue; }
-                    };
-                    // v6 typed record: validated in place by its domain handler (an unknown
-                    // kind, 0 included, is validated and dropped there).
-                    let pf = crate::perf::perf();
-                    pf.pkts_in.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    let t_handle = std::time::Instant::now();
-                    if let Err(e) = super::records::handle(&socket, &state, from, h, payload).await {
-                        debug!(%from, kind = h.kind, error = %e, len = payload.len(), "v6 record refused");
-                    }
-                    pf.handle(t_handle.elapsed().as_micros() as u32);
-                }
+                handle_deliveries(&socket, &state, from, deliveries).await;
             }
         }
     }
+}
+
+/// The messages of one datagram from the peer known as `from`, each to its domain handler.
+/// Records relayed on are queued per receiver and sent after the last one, so what a sender
+/// packed into one datagram (root and pose of one frame) reaches each receiver in one too.
+pub(super) async fn handle_deliveries(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: SocketAddr,
+                                      deliveries: Vec<hsmp_net::net::Delivery>) {
+    let batch = deliveries.len() > 1;
+    if batch { state.begin_relay_batch(); }
+    for d in deliveries {
+        let (h, payload) = match proto::decode_msg(&d.data) {
+            Ok(m) => m,
+            Err(e) => { debug!(%from, error = %e, len = d.data.len(), "undecodable message dropped"); continue; }
+        };
+        // v6 typed record: validated in place by its domain handler (an unknown
+        // kind, 0 included, is validated and dropped there).
+        let pf = crate::perf::perf();
+        pf.pkts_in.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let t_handle = std::time::Instant::now();
+        if let Err(e) = super::records::handle(socket, state, from, h, payload).await {
+            debug!(%from, kind = h.kind, error = %e, len = payload.len(), "v6 record refused");
+        }
+        pf.handle(t_handle.elapsed().as_micros() as u32);
+    }
+    if batch { flush_relay_batch(socket, state).await; }
 }
 
 /// Windows reports an ICMP port-unreachable for an earlier send as a
@@ -1121,5 +1132,51 @@ mod migrate_tests {
         migrate_peer(&socket, &state, old, new).await;
         let inner = state.inner.lock().await;
         assert!(inner.peers.is_empty(), "the banned address does not keep the seat");
+    }
+}
+
+#[cfg(test)]
+mod bundle_tests {
+    use super::*;
+    use super::resume_tests::live_duel;
+    use crate::net::Action;
+
+    /// A sender's root and vitals that arrive in one datagram reach the other player in one
+    /// datagram too (both relayed), not one datagram each.
+    #[tokio::test]
+    async fn records_sent_together_are_relayed_together() {
+        use hsmp_ipc::schema::{combat::Vitals, pose::Root};
+        let (socket, state, mut a, mut b) = live_duel(46_100).await;
+        // Let the relay plan see both players first.
+        for _ in 0..3 { a.pump(&socket, &state).await; b.pump(&socket, &state).await; }
+        let mut buf = [0u8; 2048];
+        while b.sock.try_recv_from(&mut buf).is_ok() {}
+        let root = Root { tick: 1, ts: 1000, send_wall_ms: 0, pos: [100.0, 200.0, 50.0], rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3] };
+        let vit = Vitals { seq: 7, ..Default::default() };
+        let msgs = [hsmp_ipc::wire::encode(0, 0, &root, &[]), hsmp_ipc::wire::encode(0, 0, &vit, &[])];
+        for m in &msgs {
+            let (h, _) = hsmp_ipc::wire::split(m).unwrap();
+            a.c.send(proto::record_mode(h.kind, 0).unwrap(), m.clone()).unwrap();
+        }
+        let now = state.net.now_ms();
+        let dg = a.c.poll_transmit(now).expect("one datagram");
+        assert!(a.c.poll_transmit(now).is_none(), "the client packed both records into one datagram");
+        let (act, _) = state.net.handle(a.addr, &dg);
+        let Action::Data { deliveries, peer, .. } = act else { panic!("data expected") };
+        assert_eq!(deliveries.len(), 2);
+        handle_deliveries(&socket, &state, peer, deliveries).await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let mut dgs = 0;
+        let mut kinds = Vec::new();
+        let now = state.net.now_ms();
+        while let Ok((n, _)) = b.sock.try_recv_from(&mut buf) {
+            dgs += 1;
+            b.c.handle(now, &buf[..n]);
+        }
+        while let Some(ev) = b.c.poll_event() {
+            if let hsmp_net::net::ClientEvent::Message(d) = ev { kinds.push(hsmp_ipc::wire::kind_of(&d.data)); }
+        }
+        assert!(kinds.contains(&hsmp_ipc::schema::pose::K_ROOT) && kinds.contains(&hsmp_ipc::schema::combat::K_VITALS), "{kinds:x?}");
+        assert_eq!(dgs, 1, "root and vitals in one datagram");
     }
 }

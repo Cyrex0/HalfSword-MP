@@ -10,7 +10,7 @@ prints the same list as the table below.
 | Flag | Default | Environment fallback | What it does |
 |---|---|---|---|
 | `--bind <ip:port>` | `0.0.0.0:7777` | | UDP address for players and browser queries. Use `[::]:7777` for IPv6. The master lists this port, unless the router or the NAT maps it to another one (see `--port-map`, `--stun`). |
-| `--max-peers <n>` | `8` | | Most players at once. Further joins are refused. |
+| `--max-peers <n>` | `8` | | Most players at once, 1 to 64. Further joins are refused. The game side is tested with up to 8 players; see [More than 8 players](#more-than-8-players) before raising it. |
 | `--name <text>` | `Half Sword MP` | `HSMP_SERVER_NAME` | Server name in the browser and on the master. Control characters are removed; cut to 48 characters. |
 | `--mode <text>` | `duel` | `HSMP_SERVER_MODE` | Mode **label** in the browser (cut to 32 characters). It does not change the rules: every match is duel-style rounds. A label starting with "Best of" is rewritten to the live best-of value. |
 | `--map <arena>` | empty | `HSMP_LOBBY_MAP` | Starting arena, also advertised so joiners load the same arena, for example `Map_Arena_Pit`. Arenas: `Map_Arena_Alley`, `Map_Arena_Pit`, `Map_Arena_Yard`, `Map_Arena_Slums`, `Map_Arena_Cellar`, `Map_Arena_LordsHall`, `Map_Arena_EastTower`. Empty or unknown means Alley. |
@@ -44,6 +44,22 @@ prints the same list as the table below.
 How the environment fallbacks work: `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSMP_LOBBY_MAP` and
 `HSMP_REGION` are used only when the matching flag is absent (or given with its default value). A
 flag with any other value wins. `HSMP_RCON_PASSWORD` is used only when `--rcon-password` is absent.
+
+### More than 8 players
+
+`--max-peers` accepts up to 64, and the server side handles 16 players without trouble: the
+tick costs about 6 µs at 16 players, and relaying 16 players takes about 12 to 17 % of one core
+in `hsmp-loadtest`. What limits a bigger match today is the game side and the upload:
+
+- The game is tested with up to 8 players. Each remote player needs a stand-in body, taken from
+  the arena's own fighters (capped by the game's "Free Mode Foes Amount"), and the mods have
+  not been tested with more than 7 of them.
+- Upload: every player receives every other player's stream, thinned by distance to fit
+  `--client-budget-kbps` (128 KB/s by default). At 16 players the far players arrive at a lower
+  rate (about 8 to 17 Hz instead of 30 to 60 Hz); the two nearest stay at 30 Hz or more. The
+  host needs about 1 Mbit/s of upload per player at the full budget.
+- At most 4 players may join from one public IP address (LAN and loopback addresses are not
+  limited).
 
 ### Environment variables
 

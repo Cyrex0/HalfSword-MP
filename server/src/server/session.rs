@@ -191,6 +191,21 @@ pub(crate) fn player_id(k: &PlayerKey) -> [u8; 8] {
     out
 }
 
+/// `player_id` remembered per thread: every roster row of the `session` snapshot (built each
+/// tick) needs one, and the hash would dominate the tick.
+fn player_id_cached(k: &PlayerKey) -> [u8; 8] {
+    use std::cell::RefCell;
+    thread_local! {
+        static IDS: RefCell<HashMap<PlayerKey, [u8; 8]>> = RefCell::new(HashMap::new());
+    }
+    IDS.with(|m| {
+        let mut m = m.borrow_mut();
+        if let Some(id) = m.get(k) { return *id; }
+        if m.len() >= 4096 { m.clear(); }
+        *m.entry(*k).or_insert_with(|| player_id(k))
+    })
+}
+
 pub(crate) fn player_id_hex(k: &PlayerKey) -> String {
     hex::encode(player_id(k))
 }
@@ -273,6 +288,8 @@ pub(crate) struct SessionCore {
     pub frozen: Option<rec::SessionConfig>,
     pub config_rev: u32,
     cfg_sig: Option<(String, u8, u8, u16)>,
+    /// Seat order and roster rows `session_due` builds into every tick.
+    snap_bufs: (Vec<(u8, PlayerKey)>, Vec<rec::RosterRow>),
     /// Seat (1-based) per player key; kept for a participant while a match
     /// runs so a reconnect reclaims it.
     pub seats: HashMap<PlayerKey, u8>,
@@ -332,6 +349,7 @@ impl SessionCore {
             frozen: None,
             config_rev: 1,
             cfg_sig: None,
+            snap_bufs: (Vec::new(), Vec::new()),
             seats: HashMap::new(),
             nicks: HashMap::new(),
             admin_key: None,
@@ -470,8 +488,8 @@ pub(crate) fn observe_phase(inner: &mut Inner) -> Option<u8> {
 // ---- config -----------------------------------------------------------------
 
 /// The arena START would lock (the lobby's "default" means DEFAULT_ARENA).
-fn effective_arena(a: &str) -> String {
-    if a.starts_with("Map_Arena_") { a.to_string() } else { DEFAULT_ARENA.to_string() }
+fn effective_arena(a: &str) -> &str {
+    if a.starts_with("Map_Arena_") { a } else { DEFAULT_ARENA }
 }
 
 /// The live (lobby) config, assembled from the server state.
@@ -480,7 +498,7 @@ pub(crate) fn live_config(inner: &Inner) -> rec::SessionConfig {
     let secs = |ms: u64| (ms / 1000).min(255) as u8;
     rec::SessionConfig {
         rev: s.config_rev,
-        arena: Str::new(&effective_arena(&inner.match_arena)),
+        arena: Str::new(effective_arena(&inner.match_arena)),
         mode: s.mode,
         best_of: inner.best_of,
         round_time_limit_s: 0,
@@ -504,9 +522,12 @@ pub(crate) fn live_config(inner: &Inner) -> rec::SessionConfig {
 /// Bump `config_rev` when any configurable field changed (from any path:
 /// commands, legacy verbs, RCON, the kit-rules channel).
 pub(crate) fn refresh_config_rev(inner: &mut Inner) {
+    // Every tick: compared in place, the arena is copied only when something changed.
+    let same = |old: &(String, u8, u8, u16)| old.0 == inner.match_arena && old.1 == inner.best_of
+        && old.2 == inner.sess.kits.mode && old.3 == inner.sess.kits.budget;
+    if inner.sess.cfg_sig.as_ref().is_some_and(same) { return; }
     let sig = (inner.match_arena.clone(), inner.best_of, inner.sess.kits.mode, inner.sess.kits.budget);
     match &inner.sess.cfg_sig {
-        Some(old) if *old == sig => {}
         Some(_) => {
             inner.sess.config_rev = inner.sess.config_rev.wrapping_add(1).max(1);
             inner.sess.cfg_sig = Some(sig);
@@ -540,6 +561,30 @@ pub(crate) fn on_lobby(inner: &mut Inner) {
 /// are gone (in a match, a participant's seat is kept for its reconnect), seat
 /// every connected player that has none (lowest free seat, by peer id order).
 pub(crate) fn reconcile_seats(inner: &mut Inner) {
+    // Runs every tick: when nothing changed (the usual case) only the admin key is refreshed,
+    // without building the sets below.
+    if seats_in_step(inner) {
+        if let Some(p) = inner.peers.values().filter(|p| p.is_admin).max_by_key(|p| p.id) {
+            inner.sess.admin_key = Some(peer_key(p));
+        }
+    } else {
+        reseat(inner);
+    }
+    observe_links(inner);
+}
+
+/// Every connected player holds a seat under its current nick, and no seat or nick is held
+/// by a key that should lose it (`reseat` would change nothing but the admin key).
+fn seats_in_step(inner: &Inner) -> bool {
+    let in_lobby = inner.match_state == "lobby";
+    let kept = |k: &PlayerKey| inner.peers.values().any(|p| peer_key(p) == *k) || (!in_lobby && inner.participants.contains(k));
+    inner.peers.values().all(|p| {
+        let k = peer_key(p);
+        inner.sess.seats.contains_key(&k) && inner.sess.nicks.get(&k) == Some(&p.nick)
+    }) && inner.sess.seats.keys().all(kept) && inner.sess.nicks.keys().all(kept)
+}
+
+fn reseat(inner: &mut Inner) {
     let in_lobby = inner.match_state == "lobby";
     let mut conn: Vec<(PeerId, PlayerKey, String, bool)> = inner.peers.values()
         .map(|p| (p.id, peer_key(p), p.nick.clone(), p.is_admin))
@@ -567,7 +612,6 @@ pub(crate) fn reconcile_seats(inner: &mut Inner) {
         if admin { inner.sess.admin_key = Some(key); }
     }
     if changed { inner.match_state_dirty = true; }
-    observe_links(inner);
 }
 
 // ---- resume -------------------------------------------------------------------
@@ -600,6 +644,12 @@ pub(crate) fn link_ok(inner: &Inner, p: &PeerState) -> bool {
 /// logs + events `link_stall` and, when the same connection comes back,
 /// `seat_restored` (same seat, same wins: nothing was released).
 fn observe_links(inner: &mut Inner) {
+    // Every tick: the unchanged case allocates nothing.
+    let stalled_now = inner.peers.values().filter(|p| !link_ok(inner, p)).count();
+    if stalled_now == inner.sess.stalled.len()
+        && inner.peers.values().all(|p| link_ok(inner, p) || inner.sess.stalled.contains(&p.id)) {
+        return;
+    }
     let mut now_stalled: HashSet<PeerId> = HashSet::new();
     for p in inner.peers.values() {
         if !link_ok(inner, p) { now_stalled.insert(p.id); }
@@ -815,21 +865,31 @@ fn update_deadline(inner: &mut Inner, now_ms: u64) {
 /// The full snapshot (seq and server time as given; `session_due` stamps them): the
 /// `session` record's head and roster rows, by seat.
 pub(crate) fn build_session(inner: &Inner, now_ms: u64) -> SessionSnap {
+    let mut rows = Vec::new();
+    let head = fill_session(inner, now_ms, &mut Vec::new(), &mut rows);
+    SessionSnap { head, rows }
+}
+
+/// `build_session` into buffers the caller keeps (`session_due` runs every tick and reuses
+/// them): returns the head, `rows` holds the roster.
+fn fill_session(inner: &Inner, now_ms: u64, seats: &mut Vec<(u8, PlayerKey)>, rows: &mut Vec<rec::RosterRow>) -> rec::SessionHead {
     let s = &inner.sess;
     let phase = phase_code(inner);
     let config = live_config(inner);
     let frozen = if phase == Phase::LOBBY { None } else { Some(s.frozen.unwrap_or(config)) };
-    let mut seats: Vec<(u8, PlayerKey)> = s.seats.iter().map(|(k, v)| (*v, *k)).collect();
+    seats.clear();
+    seats.extend(s.seats.iter().map(|(k, v)| (*v, *k)));
     seats.sort_unstable_by_key(|x| x.0);
-    let by_key: HashMap<PlayerKey, &PeerState> = inner.peers.values().map(|p| (peer_key(p), p)).collect();
+    // A linear search: a roster is small, and a map would be rebuilt every tick.
+    let by_key = |k: &PlayerKey| inner.peers.values().find(|p| peer_key(p) == *k);
     let in_match = phase != Phase::LOBBY;
-    let waiting: HashSet<PeerId> = if phase == Phase::LOADING { barrier_waiting_on(inner).into_iter().collect() } else { HashSet::new() };
-    let mut rows = Vec::with_capacity(seats.len().min(rec::MAX_ROSTER));
-    for (seat, key) in seats.into_iter().take(rec::MAX_ROSTER) {
+    let waiting: Vec<PeerId> = if phase == Phase::LOADING { barrier_waiting_on(inner) } else { Vec::new() };
+    rows.clear();
+    for &(seat, key) in seats.iter().take(rec::MAX_ROSTER) {
         let participant = inner.participants.contains(&key);
         let role = if !in_match || participant { Role::FIGHTER } else { Role::SPECTATOR };
-        let mut r = rec::RosterRow { seat, role, player_id: player_id(&key), ..Default::default() };
-        match by_key.get(&key) {
+        let mut r = rec::RosterRow { seat, role, player_id: player_id_cached(&key), ..Default::default() };
+        match by_key(&key) {
             Some(p) => {
                 let mp = inner.match_peers.get(&p.id);
                 r.peer_id = p.id;
@@ -860,7 +920,7 @@ pub(crate) fn build_session(inner: &Inner, now_ms: u64) -> SessionSnap {
         rows.push(r);
     }
     let winner_seat = if inner.last_winner != 0 { seat_of_peer(inner, inner.last_winner).unwrap_or(rec::NO_SEAT) } else { rec::NO_SEAT };
-    let head = rec::SessionHead {
+    rec::SessionHead {
         epoch: s.epoch,
         match_id: if in_match { s.match_id } else { 0 },
         phase_deadline_ms: if s.deadline.0 == phase { s.deadline.1 } else { deadline_candidate(inner, phase, now_ms) },
@@ -878,16 +938,20 @@ pub(crate) fn build_session(inner: &Inner, now_ms: u64) -> SessionSnap {
         _r2: 0,
         config,
         frozen: frozen.unwrap_or_default(),
-    };
-    SessionSnap { head, rows }
+    }
 }
 
 /// Same snapshot content apart from the per-send stamps (seq, server time).
+#[cfg(test)]
 fn same_content(a: &SessionSnap, b: &SessionSnap) -> bool {
+    same_parts(a, &b.head, &b.rows)
+}
+
+fn same_parts(a: &SessionSnap, head: &rec::SessionHead, rows: &[rec::RosterRow]) -> bool {
     let mut x = a.head;
-    x.seq = b.head.seq;
-    x.server_time_ms = b.head.server_time_ms;
-    x == b.head && a.rows == b.rows
+    x.seq = head.seq;
+    x.server_time_ms = head.server_time_ms;
+    x == *head && a.rows == rows
 }
 
 /// Snapshot to broadcast now, if any: on change, else every 1 s in the lobby
@@ -895,14 +959,19 @@ fn same_content(a: &SessionSnap, b: &SessionSnap) -> bool {
 pub(crate) fn session_due(inner: &mut Inner, now_ms: u64) -> Option<SessionSnap> {
     refresh_config_rev(inner);
     update_deadline(inner, now_ms);
-    let mut snap = build_session(inner, now_ms);
-    let every = if snap.head.phase == Phase::LOBBY { 1000 } else { 333 };
-    let changed = inner.sess.last_sent.as_ref().map_or(true, |l| !same_content(l, &snap));
+    // Built every tick into kept buffers; copied out only when it is sent.
+    let (mut seats, mut rows) = std::mem::take(&mut inner.sess.snap_bufs);
+    let mut head = fill_session(inner, now_ms, &mut seats, &mut rows);
+    let every = if head.phase == Phase::LOBBY { 1000 } else { 333 };
+    let changed = inner.sess.last_sent.as_ref().map_or(true, |l| !same_parts(l, &head, &rows));
     if !changed && !inner.sess.force_send && now_ms < inner.sess.last_sent_ms + every {
+        inner.sess.snap_bufs = (seats, rows);
         return None;
     }
     inner.sess.seq = inner.sess.seq.wrapping_add(1);
-    snap.head.seq = inner.sess.seq;
+    head.seq = inner.sess.seq;
+    let snap = SessionSnap { head, rows: rows.clone() };
+    inner.sess.snap_bufs = (seats, rows);
     inner.sess.last_sent = Some(snap.clone());
     inner.sess.last_sent_ms = now_ms;
     inner.sess.force_send = false;

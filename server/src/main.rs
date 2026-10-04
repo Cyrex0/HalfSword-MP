@@ -52,6 +52,15 @@ mod build_id;
 mod log_init; // stdout + the --log-dir files
 mod server_report; // --report: the redacted bug-report zip of this server's logs
 mod stats; // the 10 s stats line, the shutdown summary, RCON REPORT
+#[cfg(test)]
+mod alloc_count; // counting allocator for the allocation tests
+
+fn parse_max_peers(s: &str) -> Result<usize, String> {
+    match s.trim().parse::<usize>() {
+        Ok(n) if (1..=hsmp_ipc::schema::session::MAX_ROSTER).contains(&n) => Ok(n),
+        _ => Err(format!("expected 1..={}", hsmp_ipc::schema::session::MAX_ROSTER)),
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -67,8 +76,9 @@ struct Args {
     #[arg(long, env = "HSMP_TICK_HZ", default_value_t = 60, value_parser = clap::value_parser!(u32).range(server::TICK_HZ_MIN as i64..=server::TICK_HZ_MAX as i64))]
     tick_hz: u32,
 
-    /// Max peers permitted at once. Lobby refuses JOIN beyond this.
-    #[arg(long, default_value_t = 8)]
+    /// Max peers permitted at once (1..=64, the session roster's size). Lobby refuses JOIN
+    /// beyond this. The game side is tested with 8 (docs/development/architecture.md).
+    #[arg(long, default_value_t = 8, value_parser = parse_max_peers)]
     max_peers: usize,
 
     /// Public-facing server name advertised to the master registry.
@@ -628,5 +638,20 @@ mod tick_hz_tests {
         for bad in ["0", "19", "241", "-5", "sixty"] {
             assert!(hz(&["hsmp-server", "--tick-hz", bad]).is_err(), "--tick-hz {bad} accepted");
         }
+    }
+}
+
+#[cfg(test)]
+mod max_peers_tests {
+    /// A peer cap the session record cannot list (more than 64 roster rows), or 0, is refused.
+    #[test]
+    fn peer_cap_is_bounded() {
+        use clap::Parser;
+        let parse = |a: &[&str]| super::Args::try_parse_from(a).map(|x| x.max_peers);
+        assert_eq!(parse(&["hsmp-server"]).unwrap(), 8);
+        assert_eq!(parse(&["hsmp-server", "--max-peers", "16"]).unwrap(), 16);
+        assert_eq!(parse(&["hsmp-server", "--max-peers", "64"]).unwrap(), 64);
+        assert!(parse(&["hsmp-server", "--max-peers", "0"]).is_err());
+        assert!(parse(&["hsmp-server", "--max-peers", "65"]).is_err());
     }
 }

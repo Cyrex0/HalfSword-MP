@@ -7,6 +7,8 @@
 //!
 //! Each client: handshakes, then sends root state at 30 Hz, a ~290 B
 //! skeletal frame at 20 Hz, vitals at 5 Hz and a match ping at 1 Hz;
+//! with --pump, root and skeletal go together in one transmit at 50 Hz, as the sidecar
+//! sends them;
 //! client 0 (the admin/host) also streams 12 world objects at 20 Hz.
 //! Clients live in one process, so the `tick` field of root/skeletal carries
 //! a shared microsecond clock and the receiver measures sendâ†’receive
@@ -81,6 +83,9 @@ struct Args {
     secs: u64,
     port: u16,
     root_ts: bool,
+    /// Root and pose of a frame together in one transmit at 50 Hz, as the sidecar's pump step
+    /// sends them (root + weapon + pose), instead of root at 30 Hz and pose at 20 Hz apart.
+    pump: bool,
     tick_hz: u32,
     spread: f32,
     v5_attack: bool,
@@ -97,6 +102,7 @@ fn parse_args() -> Args {
         secs: 10,
         port: 47777,
         root_ts: false,
+        pump: false,
         tick_hz: 60,
         spread: 3000.0,
         v5_attack: false,
@@ -115,6 +121,7 @@ fn parse_args() -> Args {
             "--tick-hz" => { a.tick_hz = next.parse().unwrap_or(60); i += 1; }
             "--spread" => { a.spread = next.parse().unwrap_or(3000.0); i += 1; }
             "--root-ts" => { a.root_ts = true; }
+            "--pump" => { a.pump = true; }
             "--v5-attack" => { a.v5_attack = true; }
             "--target" => { a.target = next; i += 1; }
             "--via" => { a.via = next.parse().ok(); i += 1; }
@@ -134,6 +141,23 @@ fn bind_socket() -> std::io::Result<UdpSocket> {
     UdpSocket::from_std(s.into())
 }
 
+/// CPU time (user + system) of `pid` in ms, NaN when unknown.
+#[cfg(target_os = "linux")]
+fn cpu_ms(pid: u32) -> f64 {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).ok().and_then(|s| proc_stat_cpu_ms(&s)).unwrap_or(f64::NAN)
+}
+
+/// utime + stime (fields 14 and 15, after the parenthesised command name) of a
+/// `/proc/<pid>/stat` line, at the kernel's USER_HZ of 100.
+#[cfg(any(target_os = "linux", test))]
+fn proc_stat_cpu_ms(stat: &str) -> Option<f64> {
+    let rest = stat.get(stat.rfind(')')? + 1..)?;
+    let f: Vec<&str> = rest.split_whitespace().collect();
+    let ticks: u64 = f.get(11)?.parse::<u64>().ok()? + f.get(12)?.parse::<u64>().ok()?;
+    Some(ticks as f64 * 10.0)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn cpu_ms(pid: u32) -> f64 {
     let out = Command::new("powershell")
         .args(["-NoProfile", "-Command",
@@ -233,11 +257,14 @@ impl Bot {
                         bot.flush(out).await;
                         let evs: Vec<ClientEvent> = std::mem::take(&mut *bot.events.lock().unwrap());
                         let mut keep = Vec::new();
+                        // The datagram's bytes count once, with its first message (several
+                        // records can share one datagram).
+                        let mut len = n;
                         for e in evs {
                             match e {
                                 ClientEvent::Message(d) => {
                                     if let Ok((h, p)) = proto::decode_msg(&d.data) {
-                                        on_msg(n, Rx::Rec(h.kind, h.peer, p.to_vec()));
+                                        on_msg(std::mem::take(&mut len), Rx::Rec(h.kind, h.peer, p.to_vec()));
                                     }
                                 }
                                 other => keep.push(other),
@@ -264,6 +291,22 @@ impl Bot {
     }
 
     /// Queue a v6 record message (`hsmp_ipc::wire` framed) on its kind's channel.
+    /// Several record messages in one transmit (they share datagrams where they fit).
+    async fn send_msgs(&self, msgs: Vec<Vec<u8>>) {
+        let out = {
+            let mut c = self.client.lock().unwrap();
+            for msg in msgs {
+                let Some(mode) = hsmp_ipc::wire::split(&msg).ok().and_then(|(h, _)| proto::record_mode(h.kind, h.peer)) else { continue };
+                let _ = c.send(mode, msg);
+            }
+            let now = now_ms();
+            let mut out = Vec::new();
+            if c.is_connected() { while let Some(dg) = c.poll_transmit(now) { out.push(dg); } }
+            out
+        };
+        self.flush(out).await;
+    }
+
     async fn send_msg(&self, msg: Vec<u8>) -> Vec<Vec<u8>> {
         let Some(mode) = hsmp_ipc::wire::split(&msg).ok().and_then(|(h, _)| proto::record_mode(h.kind, h.peer)) else { return Vec::new() };
         self.send_raw(mode, msg).await
@@ -308,7 +351,7 @@ fn is_connected(e: &ClientEvent) -> bool {
 }
 
 async fn run_client(
-    idx: usize, n: usize, server: SocketAddr, secs: u64, root_ts: bool, spread: f32,
+    idx: usize, n: usize, server: SocketAddr, secs: u64, root_ts: bool, pump: bool, spread: f32,
     stats: Arc<Mutex<Stats>>, tx_bytes: Arc<AtomicU64>, start_at: Instant,
     ids: Arc<Mutex<HashMap<PeerId, usize>>>,
 ) -> anyhow::Result<()> {
@@ -384,18 +427,28 @@ async fn run_client(
         let ms = k * 10;
         let wob = (ms as f32 / 1000.0).sin() * 50.0;
         let pos = [base[0] + wob, base[1], base[2]];
-        if ms % 33 < 10 {
+        if pump && ms.is_multiple_of(20) {
+            let t = now_us();
+            let r = hsmp_ipc::schema::pose::Root { tick: t, ts: t / 1000, send_wall_ms: 0, pos, rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3] };
+            synth_pose(pos, (t / 1000) as f64, &mut pose_frame);
+            let head = hsmp_ipc::schema::pose::PoseHead { tick: t, n: 0, _r: 0 };
+            bot.send_msgs(vec![hsmp_ipc::wire::encode(0, 0, &r, &[]), hsmp_ipc::wire::encode(0, 0, &head, &pose_frame)]).await;
+            tx_bytes.fetch_add(460, Ordering::Relaxed);
+        }
+        if !pump && ms % 33 < 10 {
             let t = now_us();
             let r = hsmp_ipc::schema::pose::Root { tick: t, ts: t / 1000, send_wall_ms: 0, pos, rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3] };
             bot.send_msg(hsmp_ipc::wire::encode(0, 0, &r, &[])).await;
             tx_bytes.fetch_add(120, Ordering::Relaxed);
         }
         if ms.is_multiple_of(50) {
-            let t = now_us();
-            synth_pose(pos, (t / 1000) as f64, &mut pose_frame);
-            let head = hsmp_ipc::schema::pose::PoseHead { tick: t, n: 0, _r: 0 };
-            bot.send_msg(hsmp_ipc::wire::encode(0, 0, &head, &pose_frame)).await;
-            tx_bytes.fetch_add(340, Ordering::Relaxed);
+            if !pump {
+                let t = now_us();
+                synth_pose(pos, (t / 1000) as f64, &mut pose_frame);
+                let head = hsmp_ipc::schema::pose::PoseHead { tick: t, n: 0, _r: 0 };
+                bot.send_msg(hsmp_ipc::wire::encode(0, 0, &head, &pose_frame)).await;
+                tx_bytes.fetch_add(340, Ordering::Relaxed);
+            }
             // World v2: every peer joins level 1 (epoch 1 = fresh
             // server); peer 0 registers 12 bodies and streams them at 20 Hz.
             if wseq == 0 || ms.is_multiple_of(2000) {
@@ -500,7 +553,7 @@ async fn main() -> anyhow::Result<()> {
         let ok = attack::run(&a.target).await;
         std::process::exit(if ok { 0 } else { 1 });
     }
-    println!("server={} secs={} root_ts={} tick_hz={} spread={}", a.server_bin, a.secs, a.root_ts, a.tick_hz, a.spread);
+    println!("server={} secs={} root_ts={} pump={} tick_hz={} spread={}", a.server_bin, a.secs, a.root_ts, a.pump, a.tick_hz, a.spread);
     println!("{:>3} | {:>6} | {:>17} | {:>17} | {:>9} | {:>9} | {:>10} | {:>10}",
              "N", "srvCPU", "root lat p50/p99", "skel lat p50/p99", "root dlv", "skel dlv", "KB/s/clnt", "KB/s total");
     let mut any_decrypt_fail = false;
@@ -529,7 +582,7 @@ async fn main() -> anyhow::Result<()> {
         let start_at = Instant::now() + Duration::from_millis(2000);
         let mut handles = Vec::new();
         for i in 0..n {
-            handles.push(tokio::spawn(run_client(i, n, server, a.secs, a.root_ts, a.spread,
+            handles.push(tokio::spawn(run_client(i, n, server, a.secs, a.root_ts, a.pump, a.spread,
                                                  stats.clone(), tx.clone(), start_at, ids.clone())));
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
@@ -552,8 +605,9 @@ async fn main() -> anyhow::Result<()> {
         let mut s = stats.lock().unwrap();
         let cpu_pct = (cpu1 - cpu0) / wall_ms * 100.0;
         // Expected deliveries if every frame reached every other client.
-        let exp_root = (n * (n - 1)) as f64 * 30.0 * a.secs as f64;
-        let exp_skel = (n * (n - 1)) as f64 * 20.0 * a.secs as f64;
+        let (root_hz, skel_hz) = if a.pump { (50.0, 50.0) } else { (30.0, 20.0) };
+        let exp_root = (n * (n - 1)) as f64 * root_hz * a.secs as f64;
+        let exp_skel = (n * (n - 1)) as f64 * skel_hz * a.secs as f64;
         let (r50, r99) = (pct(&mut s.lat_root_us, 0.50), pct(&mut s.lat_root_us, 0.99));
         let (k50, k99) = (pct(&mut s.lat_skel_us, 0.50), pct(&mut s.lat_skel_us, 0.99));
         let kbps_total = s.rx_bytes as f64 / 1024.0 / a.secs as f64;
@@ -816,4 +870,17 @@ fn synth_pose(pos: [f32; 3], ts: f64, out: &mut Vec<u8>) {
         f.bones[i].p = [par[0] + v2::REF_T[i][0], par[1] + v2::REF_T[i][1], par[2] + v2::REF_T[i][2]];
     }
     v2::encode_into(&f, out);
+}
+
+#[cfg(test)]
+mod cpu_tests {
+    /// The server CPU column on Linux: utime + stime from `/proc/<pid>/stat`, also with a
+    /// command name that holds spaces and parentheses.
+    #[test]
+    fn proc_stat_cpu_time() {
+        let line = "4242 (hsmp (srv) x) S 1 4242 4242 0 -1 4194560 900 0 0 0 250 50 0 0 20 0 9 0 100 0 0";
+        assert_eq!(super::proc_stat_cpu_ms(line), Some(3000.0));
+        assert_eq!(super::proc_stat_cpu_ms("garbage"), None);
+        assert_eq!(super::proc_stat_cpu_ms("1 (x) S 1"), None);
+    }
 }
