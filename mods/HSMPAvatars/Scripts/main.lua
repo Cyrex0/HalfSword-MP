@@ -237,419 +237,9 @@ local function fname(s)
 end
 local function now_ms() return os.clock() * 1000 end   -- MSVC clock(): wall ms
 
--- ============================================================================
--- BEGIN PURE  (no UE calls; unit-tested by `hsmp-tools lua-test`)
--- ============================================================================
-local PURE = {}
-
--- Parent of each hero bone for the length-preserving retarget. Spine_04 ->
--- Upperarm skips the clavicle: that offset is near-rigid.
-PURE.PARENT = {
-    Spine_02 = "Pelvis", Spine_04 = "Spine_02", Head = "Spine_04",
-    Upperarm_L = "Spine_04", Lowerarm_L = "Upperarm_L", Hand_L = "Lowerarm_L",
-    Upperarm_R = "Spine_04", Lowerarm_R = "Upperarm_R", Hand_R = "Lowerarm_R",
-    Thigh_L = "Pelvis", Calf_L = "Thigh_L", Foot_L = "Calf_L",
-    Thigh_R = "Pelvis", Calf_R = "Thigh_R", Foot_R = "Calf_R",
-}
-PURE.ORDER = {   -- parents before children
-    "Spine_02", "Spine_04", "Head",
-    "Upperarm_L", "Lowerarm_L", "Hand_L", "Upperarm_R", "Lowerarm_R", "Hand_R",
-    "Thigh_L", "Calf_L", "Foot_L", "Thigh_R", "Calf_R", "Foot_R",
-}
-PURE.LEN_RATIO_MIN, PURE.LEN_RATIO_MAX = 0.6, 1.6
-
-local NUM = "(%-?[%d%.]+)"
-local XF7 = "^" .. NUM .. "," .. NUM .. "," .. NUM .. "," .. NUM .. "," .. NUM .. "," .. NUM .. "," .. NUM .. "$"
-
--- Parse one codec-v1 pose_play line (the JSON text form). Returns nil (missing / torn / malformed),
--- "same" (seq == last_seq: nothing new), or a table.
-function PURE.parse_play(line, last_seq)
-    if not line or not line:find('"end":1}%s*$') then return nil end
-    local seq = tonumber(line:match('^{"peer_id":%d+,"seq":(%d+)'))
-    if not seq then return nil end
-    if seq == last_seq then return "same" end
-    local t = {
-        seq   = seq,
-        pt    = tonumber(line:match('"pt":(%-?%d+)')) or 0,
-        mode  = line:match('"mode":"(%a+)"') or "?",
-        age   = tonumber(line:match('"age":' .. NUM)) or -1,
-        delay = tonumber(line:match('"delay":' .. NUM)) or 0,
-        jit   = tonumber(line:match('"jit":' .. NUM)) or 0,
-        cut   = tonumber(line:match('"cut":(%d+)')) or 0,
-        bones = {}, nbones = 0,
-    }
-    local rx, ry, rz, ryaw = line:match('"root":%[' .. NUM .. ',' .. NUM .. ',' .. NUM .. ',' .. NUM .. '%]')
-    if rx then t.root = { tonumber(rx), tonumber(ry), tonumber(rz), tonumber(ryaw) } end
-    local body = line:match('"bones":(%b{})')
-    if body then
-        for name, vals in body:gmatch('"([%w_]+)":%[([^%]]+)%]') do
-            local a, b, c, d, e, f, g = vals:match(XF7)
-            if g then
-                t.bones[name] = { tonumber(a), tonumber(b), tonumber(c), tonumber(d), tonumber(e), tonumber(f), tonumber(g) }
-                t.nbones = t.nbones + 1
-            end
-        end
-    end
-    return t
-end
-
-local function d3(a, b)
-    local dx, dy, dz = a[1] - b[1], a[2] - b[2], a[3] - b[3]
-    return math.sqrt(dx * dx + dy * dy + dz * dz)
-end
-PURE.d3 = d3
-
--- Which remote hand holds the weapon: the nearer one (right on a tie-ish).
-function PURE.anchor_hand(b)
-    local w, r, l = b.Weapon, b.Hand_R, b.Hand_L
-    if not w then return nil end
-    if r and l then
-        if d3(w, l) * 1.25 < d3(w, r) then return "Hand_L" end
-        return "Hand_R"
-    end
-    return (r and "Hand_R") or (l and "Hand_L") or nil
-end
-
--- Length-preserving retarget: keep every remote bone DIRECTION (and
--- rotation) but re-impose the stand-in's own bone lengths `lens` (bone ->
--- uu from its parent), walking parents first from the pelvis. Targets then
--- always fit the stand-in's skeleton, so the handles can't stretch a limb
--- whatever the sender's proportions, quantisation or interpolation did.
--- The weapon keeps its remote offset from its (moved) hand.
-function PURE.retarget(src, lens)
-    local out = {}
-    for k, v in pairs(src) do out[k] = v end
-    if not src.Pelvis then return out end
-    for _, bn in ipairs(PURE.ORDER) do
-        local par = PURE.PARENT[bn]
-        local s, sp, np = src[bn], src[par], out[par]
-        if s and sp and np then
-            local dx, dy, dz = s[1] - sp[1], s[2] - sp[2], s[3] - sp[3]
-            local r = 1.0
-            local L = lens and lens[bn]
-            if L then
-                local rl = math.sqrt(dx * dx + dy * dy + dz * dz)
-                if rl > 1e-3 then
-                    r = L / rl
-                    if r < PURE.LEN_RATIO_MIN or r > PURE.LEN_RATIO_MAX then r = 1.0 end
-                end
-            end
-            out[bn] = { np[1] + dx * r, np[2] + dy * r, np[3] + dz * r, s[4], s[5], s[6], s[7] }
-        end
-    end
-    local hand = PURE.anchor_hand(src)
-    if hand and out[hand] then
-        local w, h, nh = src.Weapon, src[hand], out[hand]
-        out.Weapon = { nh[1] + (w[1] - h[1]), nh[2] + (w[2] - h[2]), nh[3] + (w[3] - h[3]), w[4], w[5], w[6], w[7] }
-        out._wpn_hand = hand
-    end
-    return out
-end
-
--- FQuat -> FRotator (degrees), same formula as UE's FQuat::Rotator().
-function PURE.quat_to_rot(x, y, z, w)
-    local sing = z * x - w * y
-    local yaw_y = 2 * (w * z + x * y)
-    local yaw_x = 1 - 2 * (y * y + z * z)
-    local r2d = 180 / math.pi
-    local yaw = math.atan(yaw_y, yaw_x) * r2d
-    local pitch, roll
-    if sing < -0.4999995 then
-        pitch = -90
-        roll = (-yaw - 2 * math.atan(x, w) * r2d + 180) % 360 - 180
-    elseif sing > 0.4999995 then
-        pitch = 90
-        roll = (yaw - 2 * math.atan(x, w) * r2d + 180) % 360 - 180
-    else
-        pitch = math.asin(2 * sing) * r2d
-        roll = math.atan(-2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * r2d
-    end
-    return { Pitch = pitch, Yaw = yaw, Roll = roll }
-end
-
-function PURE.clamp(v, lo, hi) if v < lo then return lo elseif v > hi then return hi end return v end
-
--- ---- codec v2 playback (crates/hsmp-pose/src/poseplay.rs write_v2) -----------
--- Slots: the 23 codec-v2 bones (crates/hsmp-pose/src/posecodec_v2.rs BONES), then the
--- right and left weapon. Slot index here = poseplay slot + 1.
-PURE.V2_SLOTS = {
-    "pelvis", "spine_01", "spine_02", "spine_03", "spine_04", "spine_05",
-    "neck_01", "neck_02", "head",
-    "clavicle_l", "upperarm_l", "lowerarm_l", "hand_l",
-    "clavicle_r", "upperarm_r", "lowerarm_r", "hand_r",
-    "thigh_l", "calf_l", "foot_l",
-    "thigh_r", "calf_r", "foot_r",
-    "weapon_r", "weapon_l",
-}
-PURE.V2_NB = 23
-PURE.V2_WPN_R, PURE.V2_WPN_L = 24, 25
-PURE.V2_NOBODY = { [2] = true }   -- spine_01: no physics body
--- Parent slot of each v2 bone (posecodec_v2.rs PARENT + 1; pelvis = itself).
-PURE.V2_PARENT = { 1, 1, 2, 3, 4, 5, 6, 7, 8, 6, 10, 11, 12, 6, 14, 15, 16, 1, 18, 19, 1, 21, 22 }
-
-local function numlist(s)
-    local t, n = {}, 0
-    if s then for x in s:gmatch("[^,]+") do n = n + 1; t[n] = tonumber(x) end end
-    return t, n
-end
-
--- Parse a v2 pose_play line (the JSON text form, positional arrays). Returns nil, "same", or
--- { v2 = true, seq, pt, mode, age, delay, jit, cut, root, slots = {[slot] = {13}},
---   weapons = {[24|25] = {hands,id,bx,by,bz,tx,ty,tz}}, control = {...} | nil }.
-function PURE.parse_play2(line, last_seq)
-    if not line or not line:find('"end":1}%s*$') then return nil end
-    local seq = tonumber(line:match('^{"peer_id":%d+,"seq":(%d+)'))
-    if not seq then return nil end
-    if seq == last_seq then return "same" end
-    local t = {
-        v2 = true, seq = seq,
-        pt    = tonumber(line:match('"ptf":(%-?[%d%.]+)')) or tonumber(line:match('"pt":(%-?%d+)')) or 0,
-        mode  = line:match('"mode":"(%a+)"') or "?",
-        age   = tonumber(line:match('"age":(%-?[%d%.]+)')) or -1,
-        delay = tonumber(line:match('"delay":(%-?[%d%.]+)')) or 0,
-        jit   = tonumber(line:match('"jit":(%-?[%d%.]+)')) or 0,
-        cut   = tonumber(line:match('"cut":(%d+)')) or 0,
-        slots = {}, nbones = 0, weapons = {},
-        lead  = tonumber(line:match('"lead":(%-?[%d%.]+)')) or 0,
-        iv    = tonumber(line:match('"iv":(%-?[%d%.]+)')) or -1,
-        st    = tonumber(line:match('"st":(%-?[%d%.]+)')) or 0,
-    }
-    local rx, ry, rz, ryaw = line:match('"root":%[(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+),(%-?[%d%.]+)%]')
-    if rx then t.root = { tonumber(rx), tonumber(ry), tonumber(rz), tonumber(ryaw) } end
-    local m = tonumber(line:match('"m":(%d+)')) or 0
-    local B, nb = numlist(line:match('"B":%[([^%]]*)%]'))
-    local k = 0
-    for s = 1, #PURE.V2_SLOTS do
-        if (m // (1 << (s - 1))) % 2 == 1 then
-            if k + 13 > nb then return nil end   -- torn / inconsistent
-            local r = {}
-            for j = 1, 13 do r[j] = B[k + j] end
-            k = k + 13
-            t.slots[s] = r
-            if s <= PURE.V2_NB then t.nbones = t.nbones + 1 end
-        end
-    end
-    local W, nw = numlist(line:match('"W":%[([^%]]*)%]'))
-    local wi = 0
-    for s = PURE.V2_WPN_R, PURE.V2_WPN_L do
-        if t.slots[s] and wi + 8 <= nw then
-            t.weapons[s] = { W[wi + 1], W[wi + 2], W[wi + 3], W[wi + 4], W[wi + 5], W[wi + 6], W[wi + 7], W[wi + 8] }
-            wi = wi + 8
-        end
-    end
-    local C = line:match('"C":%[([^%]]*)%]')
-    if C then t.control = numlist(C) end
-    return t
-end
-
--- The same table parse_play2 builds, from HSMPNative.peer_play's reused
--- output table (the play-line fields as numbers; B / W / C flat). No string,
--- no pattern. The result is a fresh table (callers keep
--- it as p.last while `o` is refilled next frame).
-function PURE.play_from_out(o)
-    if type(o) ~= "table" or type(o.B) ~= "table" then return nil end
-    local t = {
-        v2 = true, seq = o.seq, pt = tonumber(o.pt) or 0, mode = o.mode or "?",
-        age = tonumber(o.age) or -1, delay = tonumber(o.delay) or 0, jit = tonumber(o.jit) or 0,
-        cut = tonumber(o.cut) or 0, slots = {}, nbones = 0, weapons = {},
-        lead = tonumber(o.lead) or 0, iv = tonumber(o.iv) or -1, st = tonumber(o.st) or 0, rate = tonumber(o.rate) or 1,
-    }
-    local r = o.root
-    if type(r) == "table" then
-        t.root = { r[1] or r.x, r[2] or r.y, r[3] or r.z, r[4] or r.yaw }
-        if not (t.root[1] and t.root[4]) then t.root = nil end
-    end
-    local m, B, k = math.tointeger(o.m) or 0, o.B, 0
-    for s = 1, #PURE.V2_SLOTS do
-        if (m >> (s - 1)) & 1 == 1 then
-            if B[k + 13] == nil then return nil end   -- inconsistent: no evidence
-            t.slots[s] = { B[k + 1], B[k + 2], B[k + 3], B[k + 4], B[k + 5], B[k + 6], B[k + 7],
-                           B[k + 8], B[k + 9], B[k + 10], B[k + 11], B[k + 12], B[k + 13] }
-            k = k + 13
-            if s <= PURE.V2_NB then t.nbones = t.nbones + 1 end
-        end
-    end
-    local W, wi = o.W, 0
-    if type(W) == "table" then
-        for s = PURE.V2_WPN_R, PURE.V2_WPN_L do
-            if t.slots[s] and W[wi + 8] ~= nil then
-                t.weapons[s] = { W[wi + 1], W[wi + 2], W[wi + 3], W[wi + 4], W[wi + 5], W[wi + 6], W[wi + 7], W[wi + 8] }
-                wi = wi + 8
-            end
-        end
-    end
-    if type(o.C) == "table" and #o.C > 0 then t.control = table.move(o.C, 1, #o.C, 1, {}) end
-    return t
-end
-
--- Weapon class tag, same as HSMPSync class_tag (1..255).
-function PURE.class_tag(name)
-    local h = 5381
-    for i = 1, #(name or "") do h = (h * 33 + name:byte(i)) % 4294967296 end
-    return h % 255 + 1
-end
-
--- Quaternion helpers (x, y, z, w tables).
-function PURE.qmul(a, b)
-    return { a[4] * b[1] + a[1] * b[4] + a[2] * b[3] - a[3] * b[2],
-             a[4] * b[2] - a[1] * b[3] + a[2] * b[4] + a[3] * b[1],
-             a[4] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[4],
-             a[4] * b[4] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3] }
-end
-function PURE.qrot(q, v)
-    local x, y, z, w = q[1], q[2], q[3], q[4]
-    local tx, ty, tz = 2 * (y * v[3] - z * v[2]), 2 * (z * v[1] - x * v[3]), 2 * (x * v[2] - y * v[1])
-    return { v[1] + w * tx + (y * tz - z * ty), v[2] + w * ty + (z * tx - x * tz), v[3] + w * tz + (x * ty - y * tx) }
-end
-function PURE.qconj(q) return { -q[1], -q[2], -q[3], q[4] } end
-function PURE.qangle(a, b)   -- degrees between two rotations
-    local d = math.abs(a[1] * b[1] + a[2] * b[2] + a[3] * b[3] + a[4] * b[4])
-    if d > 1 then d = 1 end
-    return math.deg(2 * math.acos(d))
-end
-
--- Velocity servo for one rigid body (replication.md "Driver").
---   cur  = { px,py,pz, qx,qy,qz,qw } current bone transform (world)
---   tg   = { 13 } target bone transform + origin velocity (uu/s) + angular (deg/s)
---   com  = body centre of mass in the bone frame
---   dt   = predicted physics step (s); cap_lin / cap_ang bound the correction
--- Returns the COM linear velocity (uu/s) and angular velocity (deg/s) that
--- carry the body exactly onto the target in one step (free body), with the
--- part beyond the replicated motion clamped (contact safety).
-function PURE.servo(cur, tg, com, dt, cap_lin, cap_ang, gain)
-    gain = gain or 1
-    local cq = { cur[4], cur[5], cur[6], cur[7] }
-    local tq = { tg[4], tg[5], tg[6], tg[7] }
-    local cc = PURE.qrot(cq, com)
-    local tc = PURE.qrot(tq, com)
-    local vx = (tg[1] + tc[1] - cur[1] - cc[1]) / dt
-    local vy = (tg[2] + tc[2] - cur[2] - cc[2]) / dt
-    local vz = (tg[3] + tc[3] - cur[3] - cc[3]) / dt
-    local e = PURE.qmul(tq, PURE.qconj(cq))
-    if e[4] < 0 then e = { -e[1], -e[2], -e[3], -e[4] } end
-    local s = math.sqrt(e[1] * e[1] + e[2] * e[2] + e[3] * e[3])
-    local wx, wy, wz = 0, 0, 0
-    if s > 1e-9 then
-        local k = math.deg(2 * math.atan(s, e[4])) / s / dt
-        wx, wy, wz = e[1] * k, e[2] * k, e[3] * k
-    end
-    -- Replicated motion (feed-forward) at the COM: v_com = v_origin + w x r.
-    local wr = math.pi / 180
-    local ax, ay, az = (tg[11] or 0) * wr, (tg[12] or 0) * wr, (tg[13] or 0) * wr
-    local fx = (tg[8] or 0) + ay * tc[3] - az * tc[2]
-    local fy = (tg[9] or 0) + az * tc[1] - ax * tc[3]
-    local fz = (tg[10] or 0) + ax * tc[2] - ay * tc[1]
-    -- Feed-forward the replicated motion; correct only `gain` of the remaining
-    -- error per step (1 = deadbeat; < 1 filters frame-to-frame noise).
-    local dx, dy, dz = (vx - fx) * gain, (vy - fy) * gain, (vz - fz) * gain
-    vx, vy, vz = fx + dx, fy + dy, fz + dz
-    local dl = math.sqrt(dx * dx + dy * dy + dz * dz)
-    if dl > cap_lin then local kk = cap_lin / dl; vx, vy, vz = fx + dx * kk, fy + dy * kk, fz + dz * kk end
-    local gx, gy, gz = (wx - (tg[11] or 0)) * gain, (wy - (tg[12] or 0)) * gain, (wz - (tg[13] or 0)) * gain
-    wx, wy, wz = (tg[11] or 0) + gx, (tg[12] or 0) + gy, (tg[13] or 0) + gz
-    local gl = math.sqrt(gx * gx + gy * gy + gz * gz)
-    if gl > cap_ang then local kk = cap_ang / gl; wx, wy, wz = (tg[11] or 0) + gx * kk, (tg[12] or 0) + gy * kk, (tg[13] or 0) + gz * kk end
-    return vx, vy, vz, wx, wy, wz, dl, gl
-end
-
--- Joint-consistent targets: the owner's rotations, but every bone's position
--- rebuilt from its parent's target with the STAND-IN's own parent offset
--- (`loc[i]`, parent frame). The owner's joints can be a few uu stretched or
--- dislocated (grips, hits: the codec sends those offsets) while the
--- stand-in's are rigid; servoing to positions it cannot reach makes the
--- solver trade them against rotations (measured: clavicles 21-24 deg, hands
--- 30-50 deg held off while positions were only 2-7 uu off). Bones without
--- a measured offset, and the pelvis, keep the owner's position.
-function PURE.fk_retarget(targets, loc)
-    local out = {}
-    for s, t in pairs(targets) do out[s] = t end
-    for i = 2, PURE.V2_NB do
-        local t, par, l = targets[i], out[PURE.V2_PARENT[i]], loc[i]
-        if t and par and l then
-            local o = PURE.qrot({ par[4], par[5], par[6], par[7] }, l)
-            local n = {}
-            for k = 1, #t do n[k] = t[k] end
-            n[1], n[2], n[3] = par[1] + o[1], par[2] + o[2], par[3] + o[3]
-            out[i] = n
-        end
-    end
-    return out
-end
-
--- Advance a v2 target by `ms` with its own velocities (frames without a new
--- pose_play record); bounded by the caller.
-function PURE.advance(tg, ms, acc)
-    local s = ms / 1000
-    local r = { tg[1] + tg[8] * s, tg[2] + tg[9] * s, tg[3] + tg[10] * s }
-    if acc then
-        local h = 0.5 * s * s
-        r[1], r[2], r[3] = r[1] + acc[1] * h, r[2] + acc[2] * h, r[3] + acc[3] * h
-        s = ms / 1000
-        local w = PURE.advance(tg, ms)
-        return { r[1], r[2], r[3], w[4], w[5], w[6], w[7], tg[8] + acc[1] * s, tg[9] + acc[2] * s, tg[10] + acc[3] * s, tg[11], tg[12], tg[13] }
-    end
-    local wx, wy, wz = math.rad(tg[11]) * s, math.rad(tg[12]) * s, math.rad(tg[13]) * s
-    local a = math.sqrt(wx * wx + wy * wy + wz * wz)
-    local q = { tg[4], tg[5], tg[6], tg[7] }
-    if a > 1e-9 then
-        local h = math.sin(a / 2) / a
-        q = PURE.qmul({ wx * h, wy * h, wz * h, math.cos(a / 2) }, q)
-    end
-    return { r[1], r[2], r[3], q[1], q[2], q[3], q[4], tg[8], tg[9], tg[10], tg[11], tg[12], tg[13] }
-end
--- The servo's aim for one step: the pose at `ma` ms past the sample, with
--- the CHORD velocity from `ms` (where the body stands now) to `ma` as its
--- feed-forward, so a body that moves exactly with the feed-forward lands on
--- the aim whatever the step's real length.
-function PURE.aim(tg, ms, ma, acc)
-    local e = PURE.advance(tg, ma, acc)
-    local h = (ma - ms) / 1000
-    if h > 1e-4 then
-        local b = PURE.advance(tg, ms, acc)
-        e[8], e[9], e[10] = (e[1] - b[1]) / h, (e[2] - b[2]) / h, (e[3] - b[3]) / h
-    end
-    return e
-end
--- Bounded acceleration estimate (uu/s^2): a lost or reordered sample must not
--- turn into a wild curve.
-function PURE.clamp_acc(a)
-    local l = math.sqrt(a[1] * a[1] + a[2] * a[2] + a[3] * a[3])
-    local lim = 40000
-    if l > lim then local k = lim / l; return { a[1] * k, a[2] * k, a[3] * k } end
-    return a
-end
--- Dev tuning knobs of the v2 servo (dev_cmd TUNE records, `hsmp-tools ipc-ctl --pid <game>
--- tune <key> <value>`). Flags are on when the value is nonzero (stored 1 / 0;
--- "tdiag" is stored 1 / nil, its readers test presence); numbers are clamped to a sane range.
-PURE.TUNE_FLAGS = { servo = true, wpn = true, world = true, ghost = true, clock = true, motors = true, grips = true,
-                    retarget = true, tonus = true, stamp = true, noacc = true, plant = true, v1aim = true, tdiag = true,
-                    native_servo = true, native_neutralise = true, native_wservo = true }   -- native servo A/B
-PURE.TUNE_RANGE = { cap_lin = { 0, 20000 }, cap_ang = { 0, 20000 }, lead = { -500, 500 }, gain = { 0, 1 },
-                    leg_gain = { 0, 1 }, lat = { 0, 500 }, limits = { 0, 180 }, bench = { 1, 1000 } }
--- The stored value for knob `key` set to `num`, or nil, "unknown" / "bad".
-function PURE.tune_value(key, num)
-    if type(num) ~= "number" or num ~= num or num == math.huge or num == -math.huge then return nil, "bad" end
-    if PURE.TUNE_FLAGS[key] then
-        if key == "tdiag" then return (num ~= 0) and 1 or false end
-        return (num ~= 0) and 1 or 0
-    end
-    local r = PURE.TUNE_RANGE[key]
-    if not r then return nil, "unknown" end
-    local v = math.max(r[1], math.min(r[2], num))
-    if key == "bench" then v = math.floor(v) end
-    return v
-end
--- The change-log line of a tune table.
-function PURE.tune_key(t)
-    local ks = {}
-    for k, v in pairs(t) do if k ~= "key" and v ~= nil and v ~= false then ks[#ks + 1] = k .. "=" .. tostring(v) end end
-    table.sort(ks)
-    return table.concat(ks, " ")
-end
--- ============================================================================
--- END PURE
--- ============================================================================
-
+-- The pure math (no UE calls) lives in avatars_pure.lua.
+local PURE = load_module("avatars_pure")
+if not PURE then error("HSMPAvatars: avatars_pure.lua is missing (deploy copies every Scripts/*.lua)") end
 local quat_to_rot, clamp = PURE.quat_to_rot, PURE.clamp
 
 -- --- settings ----------------------------------------------------------------
@@ -1311,9 +901,14 @@ function PX.nat_refused(s, err)
     end
     if s.logged ~= err then s.logged = err; Log("%s refused (%s): Lua path", s.label, err) end
 end
+-- Closure-free reflected reads for the per-frame paths: pcall(PX.r_*, obj, ...).
+function PX.r_index(o, k) return o[k] end
+PX.vlin, PX.vang = { X = 0, Y = 0, Z = 0 }, { X = 0, Y = 0, Z = 0 }   -- velocity arguments, refilled per call
+function PX.r_addr(o) return o:GetAddress() end
 function PX.nat_addr(o)
-    local a; pcall(function() a = o:GetAddress() end)
-    return a
+    local ok, a = pcall(PX.r_addr, o)
+    if ok then return a end
+    return nil
 end
 -- servo_config once (shared by native_servo and native_wservo); false = refused (logged against `s`).
 function PX.ns_config(s)
@@ -2313,7 +1908,7 @@ end
 -- --- per-frame pose driver -----------------------------------------------------
 
 -- Per peer, the slot / gen / slot-seq last read from PeerPlay.
-PX.play = { out = {}, key = {}, seq = {} }
+PX.play = { out = {}, key = {}, seq = {}, bufs = {}, last = {} }
 local function read_play(id, last_seq)
     local IPC = HSMP_IPC
     if IPC and IPC.use("peer_play") then
@@ -2329,7 +1924,15 @@ local function read_play(id, last_seq)
         end
         P.seq[id] = seq
         if last_seq ~= nil and P.out.seq == last_seq then return "same" end
-        return PURE.play_from_out(P.out)
+        -- two tables per peer, alternating: the caller keeps the last one (p.last)
+        -- and may still hold the one before (last frame's aim) this frame
+        local bufs = P.bufs[id]
+        if not bufs then bufs = { {}, {} }; P.bufs[id] = bufs end
+        local into = (P.last[id] == bufs[1]) and bufs[2] or bufs[1]
+        if not into.slots then into.slots, into.weapons = {}, {} end
+        local t = PURE.play_from_out(P.out, into)
+        if t then P.last[id] = t end
+        return t
     end
     return nil
 end
@@ -2345,68 +1948,6 @@ for i, bn in ipairs(PURE.V2_SLOTS) do _sv_fn[i] = fname(bn) end
 -- 95-97 / 46-48 deg: both hands ~50 deg off target, capped every frame. The
 -- servo drives every body, so the limits are not needed to hold the pose;
 -- on release the physics asset's own profile comes back (native ragdoll).
--- SK_Body_Man reference offsets, parent space, uu (posecodec_v2 REF_T; a hsmp-tools
--- test keeps the two equal).
-PURE.V2_REF_T = {
-    { 0, 0, 0 },
-    { 0, -0.23, 3.67 }, { 0, 1.60, 6.60 }, { 0, 1.42, 7.10 }, { 0, 0.21, 8.52 }, { 0, -3.00, 19.41 },
-    { 0, -0.61, 11.87 }, { 0, 0.61, 5.02 }, { 0, 0, 4.91 },
-    { 1.43, -1.60, 5.44 }, { 17.81, 0, 0 }, { 27.77, -0.01, 0.01 }, { 27.25, 0, 0 },
-    { -1.43, -1.60, 5.44 }, { -17.81, 0, 0 }, { -27.77, -0.01, 0.01 }, { -27.25, 0, 0 },
-    { 9.97, 0.26, -2.35 }, { 2.36, 2.60, -43.20 }, { 1.76, -2.60, -42.10 },
-    { -9.97, 0.26, -2.35 }, { -2.36, 2.60, -43.20 }, { -1.76, -2.60, -42.10 },
-}
-function PURE.len3(v) return math.sqrt(v[1] * v[1] + v[2] * v[2] + v[3] * v[3]) end
-
--- The character scale of measured parent offsets: median of measured / reference
--- length over the bones longer than 5 uu (1 when nothing was measured).
-function PURE.ref_scale(loc)
-    local r = {}
-    for i = 2, #PURE.V2_REF_T do
-        local ref, m = PURE.len3(PURE.V2_REF_T[i]), loc and loc[i]
-        if m and ref > 5 then r[#r + 1] = PURE.len3(m) / ref end
-    end
-    if #r == 0 then return 1 end
-    table.sort(r)
-    return r[math.floor((#r + 1) / 2)]
-end
-
--- Parent offsets measured on the stand-in, checked against the reference
--- skeleton: an offset taken from a stretched or dislocated body (a reused Willie,
--- a ragdoll mid-fall) would make every later target stretched as well. An
--- offset more than 15 % (and 2 uu) off the scaled reference, or missing, is
--- replaced by the reference. Returns the offsets and how many were replaced.
-function PURE.ref_loc(loc)
-    local k = PURE.ref_scale(loc)
-    local out, fixed = {}, 0
-    for i = 2, #PURE.V2_REF_T do
-        local ref = PURE.V2_REF_T[i]
-        local want = PURE.len3(ref) * k
-        local m = loc and loc[i]
-        if m and math.abs(PURE.len3(m) - want) <= math.max(2, 0.15 * want) then
-            out[i] = m
-        else
-            out[i] = { ref[1] * k, ref[2] * k, ref[3] * k }
-            fixed = fixed + 1
-        end
-    end
-    return out, fixed, k
-end
-
--- Largest joint stretch of a pose: |child - parent| against the reference length
--- (uu), over the bones present in `pos` (index -> {x, y, z}). Returns it and the
--- bone index.
-function PURE.stretch(pos, ref_len)
-    local worst, bone = 0, nil
-    for i = 2, #PURE.V2_PARENT do
-        local a, b, l = pos[i], pos[PURE.V2_PARENT[i]], ref_len[i]
-        if a and b and l then
-            local d = math.abs(math.sqrt((a[1] - b[1]) ^ 2 + (a[2] - b[2]) ^ 2 + (a[3] - b[3]) ^ 2) - l)
-            if d > worst then worst, bone = d, i end
-        end
-    end
-    return worst, bone
-end
 
 -- Clean (re)start of a stand-in: physics off for one frame so every body takes
 -- the animated pose, then (drive_frame, re-pose second half) physics on and the
@@ -2662,12 +2203,28 @@ end
 
 -- Stand-in weapon parts for a hand ("Weapon R"/"Weapon L"), re-resolved when
 -- the actor changes (HSMPLoadout / the game swap weapons at will).
+-- Contact impulse of one body (see CONTACT_BODIES): its velocity now against what the
+-- servo commanded last frame.
+function PX.contact_body(mesh, sv, i, cv, near)
+    local fn = _sv_fn[i]
+    if not sv.mass[i] then sv.mass[i] = mesh:GetBoneMass(fn, true) or 0 end
+    local v = mesh:GetPhysicsLinearVelocity(fn)
+    local dv = math.sqrt((v.X - cv[1]) ^ 2 + (v.Y - cv[2]) ^ 2 + (v.Z - cv[3]) ^ 2)
+    local imp = dv * sv.mass[i]   -- kg*uu/s
+    local ci = sv.err.ci or { near = {}, far = {}, maxn = 0, maxb = "-" }
+    sv.err.ci = ci
+    local t = near and ci.near or ci.far
+    t[#t + 1] = imp
+    if near and imp > ci.maxn then ci.maxn = imp; ci.maxb = PURE.V2_SLOTS[i] end
+end
+
 local function servo_weapon_parts(p, body, field)
     body.wc_owner = p
-    local wa; pcall(function() wa = p.actor[field] end)
+    local okw, wa = pcall(PX.r_index, p.actor, field)
+    if not okw then wa = nil end
     -- An empty hand drops the entry at once (never kept for later use)
     if not (wa and wa:IsValid()) then body.sv.wc[field] = nil; return nil end
-    local addr; pcall(function() addr = wa:GetAddress() end)
+    local addr = PX.nat_addr(wa)
     local c = body.sv.wc[field]
     if c and c.addr == addr and body.sv.wc_gen == PX.wc_gen_poll() then
         local wa2, root = PX.wc_check(p, field, c)
@@ -2697,8 +2254,13 @@ local function servo_weapon_parts(p, body, field)
     return c, wa
 end
 
-local function xf7(t)
-    return { t.Translation.X, t.Translation.Y, t.Translation.Z, t.Rotation.X, t.Rotation.Y, t.Rotation.Z, t.Rotation.W }
+local function xf7(t, dst)
+    if not dst then
+        return { t.Translation.X, t.Translation.Y, t.Translation.Z, t.Rotation.X, t.Rotation.Y, t.Rotation.Z, t.Rotation.W }
+    end
+    local tr, r = t.Translation, t.Rotation
+    dst[1], dst[2], dst[3], dst[4], dst[5], dst[6], dst[7] = tr.X, tr.Y, tr.Z, r.X, r.Y, r.Z, r.W
+    return dst
 end
 
 -- Receiver half of the ground-truth probe: what the stand-in shows, labelled
@@ -2898,14 +2460,29 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
             local k = 1000 / (cur.pt - pv.pt)
             for s, tg in pairs(cur.slots) do
                 local o = pv.v[s]
-                if o and tg[8] then p.acc[s] = PURE.clamp_acc({ (tg[8] - o[1]) * k, (tg[9] - o[2]) * k, (tg[10] - o[3]) * k }) end
+                if o and tg[8] then
+                    p.acc[s] = PURE.clamp_acc3(p.acc[s] or {}, (tg[8] - o[1]) * k, (tg[9] - o[2]) * k, (tg[10] - o[3]) * k)
+                end
             end
         elseif not pv or cur.pt - pv.pt > 80 then
             p.acc = {}
         end
-        local vv = {}
-        for s, tg in pairs(cur.slots) do if tg[8] then vv[s] = { tg[8], tg[9], tg[10] } end end
-        p.vprev = { pt = cur.pt, v = vv }
+        -- this sample's velocities, for the next fresh sample (tables reused in place)
+        pv = pv or { v = {} }
+        local vv = pv.v
+        for s in pairs(vv) do
+            local tg = cur.slots[s]
+            if not (tg and tg[8]) then vv[s] = nil end
+        end
+        for s, tg in pairs(cur.slots) do
+            if tg[8] then
+                local v = vv[s] or {}
+                v[1], v[2], v[3] = tg[8], tg[9], tg[10]
+                vv[s] = v
+            end
+        end
+        pv.pt = cur.pt
+        p.vprev = pv
     end
     local targets, label, aim
     if v1aim then
@@ -2928,18 +2505,41 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
         local ma = PURE.clamp(ms + hstep, -SERVO_EXTRAP_MS, SERVO_EXTRAP_MS)
         if frozen then ms, ma = 0, 0 end
         label = cur.pt + ms
-        targets, aim = {}, {}
+        -- Target and aim tables come from a per-stand-in ring of 6 sets (2 per drive):
+        -- a set is refilled 3 drives later. The targets are read until 2 drives later
+        -- (quality history a1 / a2), the aim until the next one (p.aim).
+        local ring = p.vring
+        if not ring then
+            ring = { n = 0 }
+            for k = 1, 6 do ring[k] = { c = {}, t = {} } end
+            p.vring = ring
+        end
+        ring.n = ring.n % 6 + 1
+        local tr = ring[ring.n]
+        ring.n = ring.n % 6 + 1
+        local ar = ring[ring.n]
+        targets, aim = tr.c, ar.c
+        for s in pairs(targets) do targets[s] = nil end
+        for s in pairs(aim) do aim[s] = nil end
         local acc = (not frozen and TUNE.noacc ~= 1) and p.acc or nil
+        local tt, at = tr.t, ar.t
         for s, tg in pairs(cur.slots) do
             local a = acc and acc[s]
-            targets[s] = PURE.advance(tg, ms, a)
-            aim[s] = PURE.aim(tg, ms, ma, a)
+            local t = PURE.advance(tg, ms, a, tt[s] or {})
+            tt[s], targets[s] = t, t
+            local e = PURE.aim(tg, ms, ma, a, at[s] or {})
+            at[s], aim[s] = e, e
         end
     end
     holding = holding or (cur.mode == "stale")
     if TUNE.retarget ~= 0 and sv.loc then
-        targets = PURE.fk_retarget(targets, sv.loc)
-        if aim ~= targets then aim = PURE.fk_retarget(aim, sv.loc) end
+        if v1aim then
+            targets = PURE.fk_retarget(targets, sv.loc)
+            if aim ~= targets then aim = PURE.fk_retarget(aim, sv.loc) end
+        else   -- both built above for this frame only: rebuilt in place
+            PURE.fk_retarget_in(targets, sv.loc)
+            PURE.fk_retarget_in(aim, sv.loc)
+        end
     end
     -- What is on screen now (contract for bus key "playback" = HSMPCombat's view
     -- time of this peer): v2 aim knows it exactly; v1aim shows last frame's
@@ -3012,18 +2612,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
         for _, i in ipairs(PX.CONTACT_BODIES) do
             local cv = sv.cmd[i]
             if cv then
-                pcall(function()
-                    local fn = _sv_fn[i]
-                    if not sv.mass[i] then sv.mass[i] = mesh:GetBoneMass(fn, true) or 0 end
-                    local v = mesh:GetPhysicsLinearVelocity(fn)
-                    local dv = math.sqrt((v.X - cv[1]) ^ 2 + (v.Y - cv[2]) ^ 2 + (v.Z - cv[3]) ^ 2)
-                    local imp = dv * sv.mass[i]   -- kg*uu/s
-                    local ci = sv.err.ci or { near = {}, far = {}, maxn = 0, maxb = "-" }
-                    sv.err.ci = ci
-                    local t = near and ci.near or ci.far
-                    t[#t + 1] = imp
-                    if near and imp > ci.maxn then ci.maxn = imp; ci.maxb = PURE.V2_SLOTS[i] end
-                end)
+                pcall(PX.contact_body, mesh, sv, i, cv, near)
             end
         end
     end
@@ -3034,31 +2623,43 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local ncap = 0
     if TUNE.tdiag then PX.td_acc = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } end
     local nat = PX.ns_bodies(mesh, aim, sv, dt, s_capl, s_capa, s_gain, yl, holding)   -- native servo
+    local sv_c = sv.c7 or {}
+    sv.c7 = sv_c
     for i = 1, PURE.V2_NB do
         local com = sv.com[i]
         local tg = aim[i]
         if com and tg then
             local fn = _sv_fn[i]
+            -- this body's transform: a fresh table when something keeps it past this
+            -- frame (probe, stretch watch, quality history), else a reused one
             local c
+            if probe or cpos or (qon and QBODY[i]) then
+                c = {}
+            else
+                c = sv_c[i]
+                if not c then c = {}; sv_c[i] = c end
+            end
             if nat then
                 local b = (i - 1) * 7
                 local oc = nat.c
-                c = { oc[b + 1], oc[b + 2], oc[b + 3], oc[b + 4], oc[b + 5], oc[b + 6], oc[b + 7] }
+                c[1], c[2], c[3], c[4], c[5], c[6], c[7] = oc[b + 1], oc[b + 2], oc[b + 3], oc[b + 4], oc[b + 5], oc[b + 6], oc[b + 7]
             else
-                c = xf7(mesh:GetSocketTransform(fn, 0))
+                c = xf7(mesh:GetSocketTransform(fn, 0), c)
             end
             -- Tracking error vs. what we aimed at last frame.
             if prev and prev.slots[i] then
                 local a = prev.slots[i]
                 local e = PURE.d3(c, a)
-                local ang = PURE.qangle({ c[4], c[5], c[6], c[7] }, { a[4], a[5], a[6], a[7] })
+                local ang = PURE.qangle8(c[4], c[5], c[6], c[7], a[4], a[5], a[6], a[7])
                 st.n, st.e, st.a = st.n + 1, st.e + e, st.a + ang
                 st.pb = st.pb or {}
                 local pb = st.pb[i] or { 0, 0, 0, 0, 0 }
                 pb[1], pb[2], pb[3] = pb[1] + e, pb[2] + ang, pb[3] + 1
                 -- Twist part of the error (about the bone's own X axis).
-                local le = PURE.qmul(PURE.qconj({ c[4], c[5], c[6], c[7] }), { a[4], a[5], a[6], a[7] })
-                pb[5] = (pb[5] or 0) + math.deg(2 * math.atan(math.abs(le[1]), math.abs(le[4])))
+                local nx, ny, nz, cw = -c[4], -c[5], -c[6], c[7]   -- conj(c) * a, x and w only
+                local le1 = cw * a[4] + nx * a[7] + ny * a[6] - nz * a[5]
+                local le4 = cw * a[7] - nx * a[4] - ny * a[5] - nz * a[6]
+                pb[5] = (pb[5] or 0) + math.deg(2 * math.atan(math.abs(le1), math.abs(le4)))
                 st.pb[i] = pb
                 if e > st.emax then st.emax = e; st.wi = i end
                 if ang > st.amax then st.amax = ang; st.ai = i end
@@ -3146,7 +2747,9 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 local gi = (i >= 18 and not yl and (TUNE.leg_gain or PX.LEG_GAIN)) or s_gain   -- legs: dev knob "leg_gain"
                 vx, vy, vz, wx, wy, wz, dl, gl = PURE.servo(c, g, com, dt, s_capl, s_capa, gi)
             end
-            sv.cmd[i] = { vx, vy, vz }
+            local cmd = sv.cmd[i] or {}
+            cmd[1], cmd[2], cmd[3] = vx, vy, vz
+            sv.cmd[i] = cmd
             if TUNE.tdiag and i == 20 and targets[i] then
                 local t = targets[i]
                 PX.td_foot = string.format("%.2f %.2f %.2f %.2f %.2f %.2f %.1f %d %.2f %.2f %.2f", c[1], c[2], c[3], t[1], t[2], t[3],
@@ -3177,14 +2780,16 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
             if i >= 10 and targets[i] then
                 local t = targets[i]
                 local bad = (dl > s_capl or gl > s_capa)
-                    and PURE.qangle({ c[4], c[5], c[6], c[7] }, { t[4], t[5], t[6], t[7] }) > 45
+                    and PURE.qangle8(c[4], c[5], c[6], c[7], t[4], t[5], t[6], t[7]) > 45
                 body.stall = body.stall or {}
                 body.stall[i] = bad and ((body.stall[i] or 0) + 1) or 0
                 if body.stall[i] > (PX.STALL_FRAMES or 20) then PX.stalled = i end
             end
             if not nat then   -- the native call already set them
-                mesh:SetPhysicsLinearVelocity({ X = vx, Y = vy, Z = vz }, false, fn)
-                mesh:SetPhysicsAngularVelocityInDegrees({ X = wx, Y = wy, Z = wz }, false, fn)
+                local lv, av = PX.vlin, PX.vang   -- reused: the call copies them into FVectors
+                lv.X, lv.Y, lv.Z, av.X, av.Y, av.Z = vx, vy, vz, wx, wy, wz
+                mesh:SetPhysicsLinearVelocity(lv, false, fn)
+                mesh:SetPhysicsAngularVelocityInDegrees(av, false, fn)
             end
         end
     end

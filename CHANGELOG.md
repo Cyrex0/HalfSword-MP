@@ -8,6 +8,12 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+### Changed
+
+- Less work per frame in the game mods: the stand-in driver, the pose sender, the world
+  replication tick and the IPC facade allocate far less Lua garbage per frame (the stand-in
+  driver about 25 times less), and the pose sender makes one native call per sample.
+
 ## [0.1.0-beta.4] - 2026-10-04
 
 ### What's new

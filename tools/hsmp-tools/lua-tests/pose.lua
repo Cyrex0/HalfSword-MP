@@ -21,7 +21,7 @@ for _, path in ipairs({ AV, SY }) do
 end
 
 -- ---- PURE block ----------------------------------------------------------------
-local src = T.read(AV)
+local src = T.read(T.path("mods/HSMPAvatars/Scripts/avatars_pure.lua"))
 local a = src:find("-- BEGIN PURE", 1, true)
 local b = src:find("-- END PURE", 1, true)
 local pure = src:sub(a, b - 1)
