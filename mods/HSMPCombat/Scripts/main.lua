@@ -791,13 +791,21 @@ function C3.snap_all(w)
     return s
 end
 
-function C3.put_all(w, s)
+-- keep_contact: leave Deal Complex Damage's contact gate as the call left it
+-- (a stand-in: that gate decides which of my calls are claims, as on the
+-- victim in solo).
+C3.CONTACT_GATE = { ["Last Complex Damage Impulse"] = true, ["Last Complex Damage Bone"] = true }
+function C3.put_all(w, s, keep_contact)
     if not s then return end
     restore(w, s.f)
     put_react(w, s.r)
     for k, v in pairs(s.life) do pcall(function() w[k] = v end) end
-    for k, v in pairs(s.g) do pcall(function() w[k] = v end) end
-    for k, v in pairs(s.gn) do pcall(function() w[k] = FName(v) end) end
+    for k, v in pairs(s.g) do
+        if not (keep_contact and C3.CONTACT_GATE[k]) then pcall(function() w[k] = v end) end
+    end
+    for k, v in pairs(s.gn) do
+        if not (keep_contact and C3.CONTACT_GATE[k]) then pcall(function() w[k] = FName(v) end) end
+    end
 end
 
 local function addr_of(w)
@@ -937,7 +945,9 @@ function C3.standin_hit(w)
         end
     end
     if not hurt then return end   -- Invulnerable held: nothing to undo
-    C3.put_all(w, b)
+    -- (runs inside the Deal Complex Damage call too, before its callback reads
+    -- the contact gate)
+    C3.put_all(w, b, true)
     C3.standin_restores = C3.standin_restores + 1
     if C3.standin_restores <= 5 or C3.standin_restores % 50 == 0 then
         Log("native damage on stand-in %s put back (#%d; Invulnerable did not hold)", wname(w) or "?", C3.standin_restores)
@@ -985,9 +995,9 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         return
     end
     if not (nm and puppet_peer[nm]) then return end
-    -- Did this call pass the stand-in's own contact gate? (Read before the
-    -- backstop, which may put the gate back.) The gate runs natively and
-    -- exactly as in solo; a call it stopped never reached Get Damage there.
+    -- Did this call pass the stand-in's own contact gate? The gate runs
+    -- natively and exactly as in solo; a call it stopped never reached Get
+    -- Damage there. (The backstop keeps that gate as the call left it.)
     local gate = BF.gate_passed(w, pv(HitBone), pv(HitImpulse), pv(CuttingPower))
     C3.standin_hit(w)   -- backstop (the nested Get Damage callback did it too)
     if not combat_window then return end
@@ -1541,7 +1551,8 @@ end
 -- Get Damage's gate: a blow on the bone of the last blow that passed it, while
 -- Last Damage Taken is still set (RetriggerableDelay 0.2 s), needs DRS >= that
 -- value × (Draw Cut + 1). C3.gd_last is the last replayed blow that passed:
--- { attacker, ats (its clock), bone }. Returns the gate state before the call.
+-- { attacker, ats (its clock), bone, name, ldt }. Returns the gate state
+-- before the call.
 C3.gd_last = nil
 function C3.gd_gate_open(me, attacker, d, bone)
     local ats = math.tointeger(tonumber(d.attacker_ts)) or 0
@@ -1549,7 +1560,15 @@ function C3.gd_gate_open(me, attacker, d, bone)
     local gl = C3.gd_last
     local keep = gl ~= nil and gl.attacker == attacker and gl.bone == b and ats > 0
         and ats >= gl.ats and ats - gl.ats < BF.GD_GATE_MS
-    if not keep then pcall(function() me["Last Damage Taken"] = 0 end) end
+    if not keep then
+        pcall(function() me["Last Damage Taken"] = 0 end)
+    elseif gl.ldt then
+        -- Solo still has the gate set here, but the replays may be further
+        -- apart on my clock than 0.2 s (jitter, a parry hold): the game's own
+        -- reset has cleared it by now. Put the value of that blow back.
+        pcall(function() me["Last Damage Taken"] = gl.ldt end)
+        pcall(function() me["Last Damaged Bone"] = FName(gl.name or bone) end)
+    end
     local s = {}
     pcall(function() s.ldt = tonumber(me["Last Damage Taken"]) end)
     pcall(function() s.ldb = me["Last Damaged Bone"]:ToString():lower() end)
@@ -1561,7 +1580,8 @@ function C3.gd_gate_note(me, attacker, d, bone, s0)
     pcall(function() ldb = me["Last Damaged Bone"]:ToString():lower() end)
     local b = bone:lower()
     if ldb == b and (ldt ~= s0.ldt or s0.ldb ~= b) then
-        C3.gd_last = { attacker = attacker, ats = math.tointeger(tonumber(d.attacker_ts)) or 0, bone = b }
+        C3.gd_last = { attacker = attacker, ats = math.tointeger(tonumber(d.attacker_ts)) or 0, bone = b,
+                       name = bone, ldt = ldt }
     end
 end
 
