@@ -161,6 +161,7 @@ fn check_ipc_schema(repo: &Path) -> (&'static str, String) {
     if !cfg!(windows) {
         return ("pass", format!("{hash}; generated files current; header compile: not on Windows"));
     }
+    #[cfg_attr(not(windows), allow(unused_variables))] // the compile below is Windows-only
     let Some(vc) = vcvars64() else {
         return ("pass", format!("{hash}; generated files current; header compile skipped (MSVC not found)"));
     };

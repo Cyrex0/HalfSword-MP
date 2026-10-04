@@ -139,7 +139,7 @@ fn decode_utf8_escaped(mut b: &[u8]) -> String {
 }
 
 fn decode_utf16(b: &[u8], f: fn([u8; 2]) -> u16) -> String {
-    let units: Vec<u16> = b.chunks_exact(2).map(|c| f([c[0], c[1]])).collect();
+    let units: Vec<u16> = b.as_chunks::<2>().0.iter().map(|c| f([c[0], c[1]])).collect();
     let mut out: String = char::decode_utf16(units.iter().copied()).map(|r| r.unwrap_or_else(|e| esc(ESC_UNIT + e.unpaired_surrogate() as u32))).collect();
     if b.len() % 2 == 1 {
         out.push(esc(ESC_BYTE + b[b.len() - 1] as u32));

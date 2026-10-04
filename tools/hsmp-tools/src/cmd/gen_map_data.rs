@@ -19,6 +19,7 @@
 //!     door, portcullis) is pushed straight away from it until it has that
 //!     clearance (Slums spawn 0 sits 82 cm from a flimsy fence); one ON a barrier
 //!     is dropped.
+//!
 //! Overflow points (for more players than valid points; Cellar has 4): the
 //! midpoint of two valid points on the same floor (|dz| < 40 cm, 250..900 cm
 //! apart), >= 150 cm from every other point, not within 150 cm of a trap/fence
@@ -523,7 +524,7 @@ fn overflow(pts: &[&Spawn], hz: &[[f64; 3]]) -> Vec<Overflow> {
                 continue;
             }
             let dist = hypot(a[0] - b[0], a[1] - b[1]);
-            if !(OVERFLOW_MIN <= dist && dist <= OVERFLOW_MAX) {
+            if !(OVERFLOW_MIN..=OVERFLOW_MAX).contains(&dist) {
                 continue;
             }
             let m = [r1((a[0] + b[0]) / 2.0), r1((a[1] + b[1]) / 2.0), a[2].max(b[2])];

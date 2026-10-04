@@ -74,11 +74,10 @@ pub fn match_events(evs: &[Ev], step: &Value, n: usize, since_ms: i64) -> Option
         }
         let name = ev_name(e);
         let mut cand: Option<Ev> = None;
-        if names.iter().any(|x| x == name) && src != "harness" {
-            cand = Some(e.clone());
-        } else if names.iter().any(|x| x == "lobby_ready") && name == "obs_sidecar" && s(e, "status") == Some("connected")
-            && !real_lobby.contains(inst(e))
-        {
+        let direct = names.iter().any(|x| x == name) && src != "harness";
+        let lobby_stand_in = names.iter().any(|x| x == "lobby_ready") && name == "obs_sidecar"
+            && s(e, "status") == Some("connected") && !real_lobby.contains(inst(e));
+        if direct || lobby_stand_in {
             cand = Some(e.clone());
         } else if names.iter().any(|x| x == "phase") && name == "obs_match" && !has_server_phase {
             if let Some(ph) = s(e, "state").and_then(phase_of_obs) {
@@ -104,10 +103,7 @@ pub fn match_events(evs: &[Ev], step: &Value, n: usize, since_ms: i64) -> Option
     let want = resolve_instances(&who, n);
     let mut got: Vec<Ev> = vec![];
     for w in &want {
-        match hits.iter().find(|e| inst(e) == w) {
-            Some(e) => got.push(e.clone()),
-            None => return None,
-        }
+        got.push(hits.iter().find(|e| inst(e) == w)?.clone());
     }
     Some(got)
 }
@@ -188,7 +184,7 @@ mod tests {
     fn phase_falls_back_to_observed_only_without_server_events() {
         let obs = ev(json!({"ev":"obs_match","inst":"1","src":"observed","state":"live","wall_ms":50}));
         let st = json!({"ev":"phase","who":"server","where":{"to":"Live"}});
-        assert!(match_events(&[obs.clone()], &st, 2, 0).is_some());
+        assert!(match_events(std::slice::from_ref(&obs), &st, 2, 0).is_some());
         let srv = ev(json!({"ev":"phase","inst":"server","src":"serverlog","to":"Lobby","wall_ms":40}));
         assert!(match_events(&[obs, srv], &st, 2, 0).is_none());
     }

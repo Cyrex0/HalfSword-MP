@@ -483,14 +483,6 @@ impl Playback {
     /// Advance the playback clock to local time `now` (ms) and sample.
     pub fn sample(&mut self, now: f64) -> Option<Sample> { self.sample_lead(now, 0.0) }
 
-    /// Like `sample`, but the pose is evaluated `lead` ms past the playback
-    /// clock (which itself advances exactly as in `sample`). The game asks for
-    /// the time its bodies will stand for after the coming physics step
-    /// (`.pose_lead`): served by interpolation from the buffered frames when
-    /// they reach that far, instead of the game extrapolating a sample by up
-    /// to two frames (100 ms at 20 fps). `Sample::pt` is the evaluated time,
-    /// `Sample::lead` the shift.
-
     /// Correction blending. When late frames arrive while the playback point was
     /// extrapolating or holding, the new trajectory differs from what was shown:
     /// instead of stepping to it, the difference becomes an offset that decays
@@ -545,6 +537,14 @@ impl Playback {
         self.blend = Some(Blend { at, lead, newest, mode: so.mode, cut, mask: so.mask, shown: so.bones, vel: raw_vel, off, qoff });
         so
     }
+
+    /// Like `sample`, but the pose is evaluated `lead` ms past the playback
+    /// clock (which itself advances exactly as in `sample`). The game asks for
+    /// the time its bodies will stand for after the coming physics step
+    /// (`.pose_lead`): served by interpolation from the buffered frames when
+    /// they reach that far, instead of the game extrapolating a sample by up
+    /// to two frames (100 ms at 20 fps). `Sample::pt` is the evaluated time,
+    /// `Sample::lead` the shift.
     pub fn sample_lead(&mut self, now: f64, lead: f64) -> Option<Sample> {
         let offset = self.clock.offset?;
         let target = now - offset - self.delay;
@@ -560,7 +560,7 @@ impl Playback {
                         want = want.min(1.0 - (1.0 - STRETCH_MIN_RATE) * s);
                     }
                 }
-                if !(self.rate > 0.0) { self.rate = 1.0; }
+                if self.rate.is_nan() || self.rate <= 0.0 { self.rate = 1.0; }
                 self.rate += (want - self.rate) * (dt / RATE_TAU_MS).min(1.0);
                 pt + dt * self.rate
             }
@@ -628,7 +628,7 @@ pub fn slerp(a: &[f32], b: &[f32], t: f32) -> [f32; 4] {
     let mut q = [0f32; 4];
     for k in 0..4 { q[k] = a[k] * wa + b[k] * wb; }
     let l = (q.iter().map(|c| c * c).sum::<f32>()).sqrt();
-    if !(l > 1e-8) { return [0.0, 0.0, 0.0, 1.0]; }
+    if l.is_nan() || l <= 1e-8 { return [0.0, 0.0, 0.0, 1.0]; }
     for c in q.iter_mut() { *c /= l; }
     q
 }
@@ -719,7 +719,7 @@ fn sample_frames_lead(fr: &VecDeque<Frame>, t: f64, age: f64, lead: f64) -> Samp
                     for a in 0..3 { out.bones[i][a] = newest.b[i][a] + d[a] * k; }
                     // Rotation: integrate the sender's angular velocity (deg/s, world).
                     if newest.has_vel(i) {
-                        let s = (disp_t * k) as f32 / 1000.0;
+                        let s = (disp_t * k) / 1000.0;
                         let w = [newest.vel[i][3].to_radians() * s, newest.vel[i][4].to_radians() * s, newest.vel[i][5].to_radians() * s];
                         let ang = (w[0] * w[0] + w[1] * w[1] + w[2] * w[2]).sqrt();
                         if ang > 1e-9 {

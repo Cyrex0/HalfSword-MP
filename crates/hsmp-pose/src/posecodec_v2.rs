@@ -156,7 +156,7 @@ pub fn qrot(q: Quat, v: V3) -> V3 {
 }
 pub fn qnorm(q: Quat) -> Quat {
     let l = (q.iter().map(|c| c * c).sum::<f32>()).sqrt();
-    if !(l > 1e-6) || !l.is_finite() { return [0.0, 0.0, 0.0, 1.0]; }
+    if !l.is_finite() || l <= 1e-6 { return [0.0, 0.0, 0.0, 1.0]; }
     [q[0] / l, q[1] / l, q[2] / l, q[3] / l]
 }
 /// Angle between two rotations, degrees.
