@@ -312,7 +312,7 @@ DIRA="$SCRATCH/sideA"; DIRB="$SCRATCH/sideB"
 mkdir -p "${DIRA:?}" "${DIRB:?}"
 
 # Security: A hosts (listen server: admin by its player key, never by joining first).
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT" --tick-hz 30 --max-peers 4 --owner-key-file "$DIRA/.player_key" > "$SCRATCH/t4_sv.log" 2>&1 &
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT" --max-peers 4 --owner-key-file "$DIRA/.player_key" > "$SCRATCH/t4_sv.log" 2>&1 &
 SV=$!
 e2e_wait_bound $PORT $SV
 sc_launch "$DIRA" --parent-pid "$E2E_WINPID" --server "127.0.0.1:$PORT" --state-dir "$DIRA" --nick "Alpha" > "$SCRATCH/t4_scA.log" 2>&1 &
@@ -474,7 +474,7 @@ wait 2>/dev/null
 hdr "T13: Sidecar reconnect (v5 idle timeout + re-handshake, same identity)"
 
 e2e_port PORT2
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT2" --tick-hz 30 > "$SCRATCH/t13_sv1.log" 2>&1 &
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT2" > "$SCRATCH/t13_sv1.log" 2>&1 &
 SV1=$!
 e2e_wait_bound $PORT2 $SV1
 DIRR="$SCRATCH/sideReconn"
@@ -495,7 +495,7 @@ if grep -q "connection lost" "$SCRATCH/t13_sc.log"; then
   pass "T13b idle timeout detected the outage"
 else fail "T13b outage detect"; fi
 
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT2" --tick-hz 30 > "$SCRATCH/t13_sv2.log" 2>&1 &
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT2" > "$SCRATCH/t13_sv2.log" 2>&1 &
 SV2=$!
 e2e_wait_bound $PORT2 $SV2
 sleep 4
@@ -519,7 +519,7 @@ e2e_port PORT3
 MP2=$!
 e2e_wait_bound $MPORT2 $MP2
 HSMP_MASTER_URL="http://127.0.0.1:$MPORT2" "$BINS/hsmp-server.exe" \
-  --bind "127.0.0.1:$PORT3" --tick-hz 30 --name "Registered Server" --mode "duel" \
+  --bind "127.0.0.1:$PORT3" --name "Registered Server" --mode "duel" \
   > "$SCRATCH/t14_sv.log" 2>&1 &
 SV3=$!
 sleep 2
@@ -548,10 +548,10 @@ VMP=$!
 e2e_wait_bound $VMPORT $VMP
 # the default server: content check on, registered with the master
 HSMP_MASTER_URL="http://127.0.0.1:$VMPORT" "$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" \
-  --bind "127.0.0.1:$VPORT" --tick-hz 30 --name "Versioned Server" > "$SCRATCH/v_sv.log" 2>&1 &
+  --bind "127.0.0.1:$VPORT" --name "Versioned Server" > "$SCRATCH/v_sv.log" 2>&1 &
 VSV=$!
 # a development server: --allow-mismatched-content
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$VPORT2" --tick-hz 30 \
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$VPORT2" \
   --allow-mismatched-content > "$SCRATCH/v_sv2.log" 2>&1 &
 VSV2=$!
 e2e_wait_bound $VPORT $VSV && e2e_wait_bound $VPORT2 $VSV2
@@ -620,7 +620,7 @@ wait 2>/dev/null
 hdr "T16: Security negatives — wrong-proto, server-full"
 
 e2e_port PORT4
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT4" --tick-hz 30 --max-peers 1 > "$SCRATCH/t16_sv.log" 2>&1 &
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT4" --max-peers 1 > "$SCRATCH/t16_sv.log" 2>&1 &
 SV4=$!
 e2e_wait_bound $PORT4 $SV4
 DIR_ok="$SCRATCH/t16_ok"
@@ -652,7 +652,7 @@ DIRX="$SCRATCH/sideX"; DIRY="$SCRATCH/sideY"
 mkdir -p "${DIRX:?}" "${DIRY:?}"
 
 # Security: X is the listen host (admin by its player key file).
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT5" --tick-hz 30 --max-peers 4 --owner-key-file "$DIRX/.player_key" > "$SCRATCH/t18_sv.log" 2>&1 &
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT5" --max-peers 4 --owner-key-file "$DIRX/.player_key" > "$SCRATCH/t18_sv.log" 2>&1 &
 SV5=$!
 e2e_wait_bound $PORT5 $SV5
 sc_launch "$DIRX" --parent-pid "$E2E_WINPID" --server "127.0.0.1:$PORT5" --state-dir "$DIRX" --nick "AdminGuy" > "$SCRATCH/t18_scX.log" 2>&1 &
@@ -810,7 +810,7 @@ kill $MP6 2>/dev/null; wait 2>/dev/null
 
 # T26-T30: live stack for RTT, respawn (spawn plan), history
 pushd "$T26_WD" >/dev/null
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT6" --tick-hz 30 --max-peers 4 --owner-key-file "$DIRV1/.player_key" > "$SCRATCH/t26_sv.log" 2>&1 &
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT6" --max-peers 4 --owner-key-file "$DIRV1/.player_key" > "$SCRATCH/t26_sv.log" 2>&1 &
 SV6=$!
 popd >/dev/null
 e2e_wait_bound $PORT6 $SV6
@@ -899,7 +899,7 @@ e2e_port RCON_PORT
 BANS_FILE="$SCRATCH/bans.txt"
 rm -f "${BANS_FILE:?}" 2>/dev/null || true
 
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_RCON" --tick-hz 30 \
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_RCON" \
   --bans-file "$BANS_FILE" \
   --rcon-bind "127.0.0.1:$RCON_PORT" --rcon-password e2epw \
   > "$SCRATCH/t32_sv.log" 2>&1 &
@@ -945,7 +945,7 @@ fi
 kill $SV_RCON $SC_RC 2>/dev/null; wait 2>/dev/null
 
 # T35: banlist loaded on restart; banned IP's rejoin is refused
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_RCON" --tick-hz 30 \
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_RCON" \
   --bans-file "$BANS_FILE" > "$SCRATCH/t35_sv.log" 2>&1 &
 SV_RC2=$!
 e2e_wait_bound $PORT_RCON $SV_RC2
@@ -975,7 +975,7 @@ sleep 600 & FAKE2=$!
 WFAKE1=$(cat /proc/$FAKE1/winpid 2>/dev/null || echo $FAKE1)
 WFAKE2=$(cat /proc/$FAKE2/winpid 2>/dev/null || echo $FAKE2)
 
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_S" --tick-hz 30 --max-peers 4 \
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_S" --max-peers 4 \
   --rcon-bind "127.0.0.1:$RCON_S" --rcon-password sesspw --debug-verbs --owner-key-file "$DIRS1/.player_key" \
   --events "$SV_EVENTS" --pid-file "$DIRSP/.pid.server.json" \
   > "$SCRATCH/t36_sv.log" 2>&1 &
@@ -1186,7 +1186,7 @@ if [[ ! -f "$DIRSP/.pid.server.json" ]] && grep -q '"ev":"server_stop"' "$SV_EVE
 else fail "T48a server pidfile cleanup" "$(ls $DIRSP 2>&1)"; fi
 e2e_port PORT_S2
 e2e_port RCON_S2
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_S2" --tick-hz 30 \
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_S2" \
   --rcon-bind "127.0.0.1:$RCON_S2" --rcon-password sesspw > "$SCRATCH/t48_sv.log" 2>&1 &
 SVS2=$!
 e2e_wait_bound $RCON_S2 $SVS2
@@ -1217,7 +1217,7 @@ if [[ "$ADM_KEY" =~ ^[0-9a-f]{64}$ ]]; then
 else fail "ADM0 print-player-key" "$ADM_KEY"; fi
 printf '# e2e admins file\n%s  # adm_admin\n' "$ADM_KEY" > "$SCRATCH/adm_admins.txt"
 printf '203.0.113.77\n' > "$SCRATCH/adm_bans.txt"
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_AD" --tick-hz 30 --max-peers 4 \
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_AD" --max-peers 4 \
   --admins-file "$SCRATCH/adm_admins.txt" --bans-file "$SCRATCH/adm_bans.txt" \
   --rcon-bind "127.0.0.1:$RCON_AD" --rcon-password admpw --events "$SCRATCH/adm_sv.jsonl" > "$SCRATCH/adm_sv.log" 2>&1 &
 SVAD=$!
@@ -1266,7 +1266,7 @@ kill $SVAD $SCAD1 $SCAD2 2>/dev/null; wait 2>/dev/null
 e2e_port PORT_AH
 DIRAH="$SCRATCH/adm_host"; DIRAS="$SCRATCH/adm_early"
 mkdir -p "${DIRAH:?}" "${DIRAS:?}"
-HSMP_LISTEN_HOST=1 "$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_AH" --tick-hz 30 --max-peers 4 \
+HSMP_LISTEN_HOST=1 "$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_AH" --max-peers 4 \
   --owner-key-file "$DIRAH/.player_key" > "$SCRATCH/adm_listen_sv.log" 2>&1 &
 SVAH=$!
 e2e_wait_bound $PORT_AH $SVAH
@@ -1287,7 +1287,7 @@ kill $SVAH $SCAS $SCAH 2>/dev/null; wait 2>/dev/null
 e2e_port PORT_AN
 DIRAN1="$SCRATCH/adm_n1"; DIRAN2="$SCRATCH/adm_n2"
 mkdir -p "${DIRAN1:?}" "${DIRAN2:?}"
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_AN" --tick-hz 30 --max-peers 4 \
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORT_AN" --max-peers 4 \
   --events "$SCRATCH/adm_noadmin.jsonl" > "$SCRATCH/adm_noadmin_sv.log" 2>&1 &
 SVAN=$!
 e2e_wait_bound $PORT_AN $SVAN
@@ -1347,7 +1347,7 @@ hdr "W1-W8: wire protocol (handshake, DoD-9 probe, rejects, kick, closing)"
 
 e2e_port PORTW
 e2e_port RCONW
-"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORTW" --tick-hz 30 --max-peers 8 \
+"$BINS/hsmp-server.exe" --parent-pid "$E2E_WINPID" --bind "127.0.0.1:$PORTW" --max-peers 8 \
   --bans-file "$SCRATCH/w_bans.txt" --rcon-bind "127.0.0.1:$RCONW" --rcon-password e2epw \
   > "$SCRATCH/w_sv.log" 2>&1 &
 SVW=$!

@@ -931,7 +931,7 @@ local send_divider  = 1   -- derived from send_hz below; 1 = send every tick
 local tick_in_cycle = 0
 
 local function recompute_send_divider()
-    -- Base loop is 30 Hz. If send_hz is less, skip ticks between sends.
+    -- This mod's loop is 30 Hz (game side; the server tick is separate). If send_hz is less, skip ticks between sends.
     if send_hz >= 30 then
         send_divider = 1
     else

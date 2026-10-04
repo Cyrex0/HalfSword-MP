@@ -55,6 +55,43 @@ fn main() {
         if args.iter().any(|a| a == "--ok") { debug_ok(&w, 25); }
         return;
     }
+    // `--tick-hz 30,60,100`: the same honest fights at each server tick rate,
+    // plus the tick-snapshot ablations (`--ablate`) and the cheat suite.
+    if let Some(list) = get("--tick-hz") {
+        let ablate = args.iter().any(|a| a == "--ablate");
+        let mut rows = Vec::new();
+        let mut cheats = Vec::new();
+        for hz in list.split(',').filter_map(|s| s.trim().parse::<u32>().ok()) {
+            let tick = 1000.0 / hz as f64;
+            for p in profiles.split(',') {
+                let mut s = suite::honest_cfg(p, seeds, &|c| { c.stream_v2 = v2; c.policy = policy; c.server_tick_ms = tick; });
+                s.label = format!("{p} @ {hz} Hz");
+                rows.push(s);
+                if ablate {
+                    let mut s = suite::honest_cfg(p, seeds, &|c| { c.server_tick_ms = tick; c.record_on_tick = true; });
+                    s.label = format!("{p} @ {hz} Hz, history per tick");
+                    rows.push(s);
+                    let mut s = suite::honest_cfg(p, seeds, &|c| { c.server_tick_ms = tick; c.relay_on_tick = true; });
+                    s.label = format!("{p} @ {hz} Hz, relay on tick");
+                    rows.push(s);
+                }
+            }
+            if !args.iter().any(|a| a == "--no-cheats") {
+                let c = suite::cheats_cfg("typical", seeds, policy, &|c| c.server_tick_ms = tick);
+                let (mut n, mut k) = (0, 0);
+                for ch in ALL_CHEATS {
+                    let (a, b) = c.cheat.get(&format!("{:?}", ch)).copied().unwrap_or((0, 0));
+                    n += a;
+                    k += b;
+                }
+                cheats.push((format!("all cheats, typical @ {hz} Hz"), n, k));
+            }
+            eprintln!("{hz} Hz done");
+        }
+        println!("{}", table(&rows));
+        if !cheats.is_empty() { println!("{}", cheat_table(&cheats)); }
+        return;
+    }
     let mut rows = Vec::new();
     for p in profiles.split(',') {
         let t = std::time::Instant::now();

@@ -60,8 +60,11 @@ struct Args {
     #[arg(long, default_value = "0.0.0.0:7777")]
     bind: String,
 
-    /// Server tick rate, Hz. Snapshots are broadcast at this rate.
-    #[arg(long, default_value_t = 30)]
+    /// Server tick rate, Hz (20-240). How often the server runs match flow,
+    /// flushes held hits and sends its periodic records. Every timer is in real
+    /// time, so this changes decision latency and cost, never game timings.
+    /// Pose and root relays are forwarded on arrival, not on the tick.
+    #[arg(long, env = "HSMP_TICK_HZ", default_value_t = 60, value_parser = clap::value_parser!(u32).range(server::TICK_HZ_MIN as i64..=server::TICK_HZ_MAX as i64))]
     tick_hz: u32,
 
     /// Max peers permitted at once. Lobby refuses JOIN beyond this.
@@ -412,7 +415,6 @@ async fn main() -> Result<()> {
     let state = Arc::new(server::ServerState::with_net(args.max_peers, transport));
     server::configure_session(&state, server::SessionOpts {
         debug_verbs: args.debug_verbs,
-        tick_hz: args.tick_hz,
         mode: env_or_mode(&args.mode),
     }).await;
     // Who is admin: listen host key, configured admins, or nobody.
@@ -607,5 +609,24 @@ mod content_check_tests {
         let x = "ab".repeat(32);
         assert_eq!(super::resolve_content_hash(Some(&x), false).unwrap(), Some([0xab; 32]));
         assert!(super::resolve_content_hash(Some("abc"), false).is_err());
+    }
+}
+
+#[cfg(test)]
+mod tick_hz_tests {
+    /// 60 Hz by default; 20 to 240 accepted; 0 (which used to divide by zero) refused.
+    #[test]
+    fn tick_hz_is_validated() {
+        use clap::Parser;
+        let hz = |a: &[&str]| super::Args::try_parse_from(a).map(|x| x.tick_hz);
+        if std::env::var_os("HSMP_TICK_HZ").is_none() {
+            assert_eq!(hz(&["hsmp-server"]).unwrap(), 60);
+        }
+        for ok in ["20", "30", "60", "100", "128", "240"] {
+            assert_eq!(hz(&["hsmp-server", "--tick-hz", ok]).unwrap().to_string(), ok);
+        }
+        for bad in ["0", "19", "241", "-5", "sixty"] {
+            assert!(hz(&["hsmp-server", "--tick-hz", bad]).is_err(), "--tick-hz {bad} accepted");
+        }
     }
 }

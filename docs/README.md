@@ -35,6 +35,7 @@ audience. Start with the [project README](../README.md) for an overview.
 | [Wire protocol](development/protocol.md) | The network protocol (v6) specification |
 | [Shared-memory IPC](development/ipc-shared-memory.md) | The game-to-sidecar link: segment layout, primitives, schema, native module |
 | [Server modules](development/server-modules.md) | Module map of the server and the sidecar |
+| [Tick rate](development/tick-rate.md) | What the server tick does, what a higher rate buys and costs (measured), the 60 Hz default |
 | [Lua mod guide](development/lua-mods.md) | Writing and changing the UE4SS Lua mods, and the rules that keep the game alive |
 | [Round-reset crash guard](development/crash-rr.md) | The Runtime Vertex Paint crash on level change and how HSMP avoids it |
 | [Testing and the gate](development/testing.md) | Event log, G0, e2e, the in-game gate |

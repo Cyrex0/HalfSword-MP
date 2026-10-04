@@ -1152,3 +1152,80 @@ fn prediction_follows_an_rtt_step_within_seconds() {
     let honest = sc.honest_view(h, 31) as i64;
     assert!((p.expected - honest).abs() <= FRAME_MS, "expected {} honest {} (off by {} ms)", p.expected, honest, p.expected - honest);
 }
+
+/// History resolution vs the server tick (docs/development/tick-rate.md).
+/// A fast swing streamed at the clients' 60 Hz, sampled back at random hit
+/// times: the ring that keeps every sample on arrival against a history that
+/// keeps only the newest sample per server tick. The per-sample ring does
+/// not depend on the tick at all; a per-tick history needs >= the client
+/// rate to match it. `--nocapture` prints the table.
+#[test]
+fn history_keeps_every_sample_whatever_the_tick_rate() {
+    // Tip on a 110 uu arc, angle 1.8 sin(2 pi t / 500 ms): peak 2490 uu/s.
+    let tip = |t: f64| {
+        let a = 1.8 * (std::f64::consts::TAU * t / 500.0).sin();
+        let w = 1.8 * std::f64::consts::TAU / 500.0 * (std::f64::consts::TAU * t / 500.0).cos() * 1000.0;
+        let p = [(110.0 * a.cos()) as f32, (110.0 * a.sin()) as f32, 140.0];
+        let v = [(-110.0 * a.sin() * w) as f32, (110.0 * a.cos() * w) as f32, 0.0];
+        (p, v)
+    };
+    let mut seed = 0x2545_F491_4F6C_DD1Du64;
+    let mut rnd = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; (seed >> 11) as f64 / (1u64 << 53) as f64 };
+    // 60 Hz frames (±1.5 ms frame jitter), 40 ms + 0..15 ms network delay,
+    // in 1.1 s windows (the history keeps 1.2 s) at 30 phases of the swing.
+    let windows: Vec<Vec<(u32, f64)>> = (0..30).map(|w| {
+        let mut f = Vec::new();
+        let mut t = 1000.0 + 1000.0 * w as f64 + rnd() * 17.0;
+        let end = t + 1100.0;
+        while t < end {
+            let ts = (t + rnd() * 3.0 - 1.5).round();
+            f.push((ts as u32, ts + 40.0 + rnd() * 15.0));
+            t += 1000.0 / 60.0;
+        }
+        f
+    }).collect();
+    // Hermite with streamed tip velocity (blades), or linear (bones, capsules).
+    let blade = |ts: u32, hermite: bool| { let (p, v) = tip(ts as f64); Blade { base: [0.0, 0.0, 140.0], tip: p, vel: hermite.then_some(v) } };
+    // hz = None: every sample on arrival; Some(hz): the newest per tick.
+    let ring = |frames: &[(u32, f64)], hz: Option<f64>, phase: f64, h: bool| {
+        let mut r: Ring<Blade> = Ring::new();
+        let Some(hz) = hz else {
+            for &(ts, _) in frames { r.push(ts, blade(ts, h)); }
+            return r;
+        };
+        let (mut next, mut k, mut newest) = (frames[0].1 + phase * 1000.0 / hz, 0usize, None::<u32>);
+        while k < frames.len() {
+            while k < frames.len() && frames[k].1 <= next { newest = newest.max(Some(frames[k].0)); k += 1; }
+            if let Some(ts) = newest { r.push(ts, blade(ts, h)); }
+            next += 1000.0 / hz;
+        }
+        r
+    };
+    let mut err = |hz: Option<f64>, h: bool| {
+        let mut e: Vec<f32> = Vec::new();
+        for f in &windows {
+            let r = ring(f, hz, rnd(), h);
+            let (t0, t1) = (f[3].0 as f64 + 100.0, f[f.len() - 4].0 as f64 - 100.0);
+            for _ in 0..150 {
+                let t = t0 + rnd() * (t1 - t0);
+                let got = r.sample_f(t, 0).map(|b| b.tip).unwrap_or([f32::NAN; 3]);
+                e.push(len(sub(got, tip(t).0)));
+            }
+        }
+        e.sort_by(f32::total_cmp);
+        (e[e.len() / 2], e[e.len() * 95 / 100], e[e.len() - 1])
+    };
+    let row = |e: (f32, f32, f32)| format!("{:.2} / {:.2} / {:.2}", e.0, e.1, e.2);
+    let (base, lin) = (err(None, true), err(None, false));
+    println!("| history | blade tip, Hermite: p50 / p95 / max uu | linear (bones, capsules) |\n|---|---|---|");
+    println!("| every sample (any tick rate) | {} | {} |", row(base), row(lin));
+    let mut by_hz = Vec::new();
+    for hz in [30.0, 60.0, 100.0, 128.0] {
+        let (e, l) = (err(Some(hz), true), err(Some(hz), false));
+        println!("| newest sample per {hz} Hz tick | {} | {} |", row(e), row(l));
+        by_hz.push(l);
+    }
+    assert!(base.1 < 1.0 && lin.1 < 5.0, "per-sample history p95 {:.2} / {:.2} uu", base.1, lin.1);
+    assert!(by_hz[0].1 > 2.0 * lin.1, "a 30 Hz per-tick history loses half the samples");
+    for e in &by_hz { assert!(e.1 >= lin.1 * 0.9, "no per-tick history beats keeping every sample"); }
+}

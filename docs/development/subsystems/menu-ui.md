@@ -340,7 +340,7 @@ component reads this file yet.
   shows a reinstall hint ([ipc-shared-memory.md](../ipc-shared-memory.md)).
 - **`--parent-pid <game pid>`** is passed to the server, the sidecar and the local master, so they exit
   when the game does.
-- **HOST** starts `hsmp-server --bind 0.0.0.0:<port> --tick-hz 30 --max-peers 8 --map <arena>
+- **HOST** starts `hsmp-server --bind 0.0.0.0:<port> --max-peers 8 --map <arena>
   --owner-key-file <state>\.player_key`, with `HSMP_LISTEN_HOST=1`, `HSMP_LOBBY_MAP`,
   `HSMP_MASTER_URL`, `HSMP_SERVER_NAME` (`<nick>'s game`), `HSMP_SERVER_MODE` and `HSMP_REGION` in its
   environment. The host's sidecar writes its player key to `<state>/.player_key` before it connects, so

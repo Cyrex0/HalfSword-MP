@@ -139,6 +139,13 @@ pub struct Config {
     /// Fault injection for the checker: the stand-in's echo blow on the
     /// victim's pawn is NOT restored (double application).
     pub echo_leak: bool,
+    /// Server tick period (ms): held-hit flush, clash judging, ledger sweep.
+    pub server_tick_ms: f64,
+    /// Ablation: the server keeps only the newest pose sample per tick
+    /// (a tick-snapshot history) instead of every sample on arrival.
+    pub record_on_tick: bool,
+    /// Ablation: poses are relayed on the next tick, not on arrival.
+    pub relay_on_tick: bool,
 }
 
 impl Config {
@@ -148,6 +155,8 @@ impl Config {
             policy: Policy::Dedupe, cheats: Vec::new(), drift_ppm: 300.0, degenerate_polearm: true,
             servo_noise: std::env::var("SIM_SERVO_NOISE").ok().and_then(|s| s.parse().ok()).unwrap_or(SERVO_NOISE),
             health_model: false, stall: None, echo_leak: false,
+            server_tick_ms: SERVER_TICK_MS,
+            record_on_tick: false, relay_on_tick: false,
         }
     }
 }
@@ -363,6 +372,9 @@ pub struct World {
     alive: Vec<bool>,
     dead_at: Vec<f64>,
     next_tick: f64,
+    /// Pose samples held for the next tick (ablations): (from, ts, true t).
+    tick_records: Vec<(usize, u32, f64)>,
+    tick_relays: Vec<(usize, u32, f64)>,
     next_rtt: f64,
     next_contact: u64,
     /// screen clashes: (client, peer, true t, true time of the peer pose shown)
@@ -443,6 +455,8 @@ impl World {
             alive: vec![true; n],
             dead_at: vec![-1e9; n],
             next_tick: 0.0,
+            tick_records: Vec::new(),
+            tick_relays: Vec::new(),
             next_rtt: 0.0,
             next_contact: 1,
             screen_clashes: Vec::new(),
@@ -1302,12 +1316,18 @@ impl World {
         let now = t as i64;
         match m {
             Msg::SPose { from, ts, t: ts_t } => {
-                self.server_record(from, ts, ts_t, now);
-                for to in 0..self.cfg.players {
-                    if to == from { continue; }
-                    for at in self.clients[to].down.send(t) {
-                        self.push(at, Msg::CPose { to, from, ts, t: ts_t });
+                if self.cfg.record_on_tick {
+                    match self.tick_records.iter_mut().find(|e| e.0 == from) {
+                        Some(e) => if ts > e.1 { *e = (from, ts, ts_t); },
+                        None => self.tick_records.push((from, ts, ts_t)),
                     }
+                } else {
+                    self.server_record(from, ts, ts_t, now);
+                }
+                if self.cfg.relay_on_tick {
+                    self.tick_relays.push((from, ts, ts_t));
+                } else {
+                    self.relay_pose(from, ts, ts_t, t);
                 }
             }
             Msg::CPose { to, from, ts, t: _ } => self.view_rx(to, from, ts, t),
@@ -1380,8 +1400,23 @@ impl World {
         }
     }
 
+    fn relay_pose(&mut self, from: usize, ts: u32, ts_t: f64, t: f64) {
+        for to in 0..self.cfg.players {
+            if to == from { continue; }
+            for at in self.clients[to].down.send(t) {
+                self.push(at, Msg::CPose { to, from, ts, t: ts_t });
+            }
+        }
+    }
+
     fn server_tick(&mut self, t: f64) {
         let now = t as i64;
+        for (from, ts, ts_t) in std::mem::take(&mut self.tick_records) {
+            self.server_record(from, ts, ts_t, now);
+        }
+        for (from, ts, ts_t) in std::mem::take(&mut self.tick_relays) {
+            self.relay_pose(from, ts, ts_t, t);
+        }
         for (apid, hit, v) in self.core.flush(now) {
             let Some(a) = self.clients.iter().position(|c| c.pid == apid) else { continue };
             let Some(&rec) = self.hitmap.get(&(a, hit.hit_id)) else { continue };
@@ -1504,7 +1539,7 @@ impl World {
                 }
             }
             if t >= self.next_tick {
-                self.next_tick += SERVER_TICK_MS;
+                self.next_tick += self.cfg.server_tick_ms;
                 self.server_tick(t);
             }
             if t >= self.next_rtt {

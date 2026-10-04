@@ -119,7 +119,7 @@ do
     if m then m.init({ mod = "HSMPAvatars", state_dir = STATE_DIR, log = Log }) end
 end
 
-local TICK_MS        = 33
+local TICK_MS        = 33    -- this mod's own Lua loop on the game thread, not the server tick
 local MAX_PEER_ID    = 8     -- probe peer ids 1..8 (server max_peers default)
 local PEERS_EVERY    = 15    -- re-read the roster + probe ids every ~0.5 s
 local CLAIM_RETRY    = 30    -- retry claiming a puppet every ~1 s

@@ -53,7 +53,7 @@ pub struct Args {
     #[arg(long, default_value_t = 20.0)]
     pub vitals_hz: f64,
     /// Server --tick-hz.
-    #[arg(long, default_value_t = 30)]
+    #[arg(long, default_value_t = 60)]
     pub tick_hz: u32,
     /// Give up if the sidecars are not all connected after this many seconds.
     #[arg(long, default_value_t = 30.0)]

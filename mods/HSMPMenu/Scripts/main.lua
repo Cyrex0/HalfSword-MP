@@ -628,7 +628,7 @@ local function spawn_server_and_sidecar()
     MX.ipc_error = nil
     -- No shell: the args are an array and the listing values travel as the
     -- server's own environment (IPC.spawn opts.env).
-    local server_args = { "--bind", "0.0.0.0:" .. port, "--tick-hz", "30", "--max-peers", "8", "--map", chosen_map,
+    local server_args = { "--bind", "0.0.0.0:" .. port, "--max-peers", "8", "--map", chosen_map,
                           "--owner-key-file", win(STATE_DIR .. "/.player_key") }
     for _, a in ipairs(proc_args("server")) do server_args[#server_args + 1] = a end
     for _, a in ipairs(MX.log_args()) do server_args[#server_args + 1] = a end

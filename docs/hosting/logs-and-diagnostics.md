@@ -51,7 +51,7 @@ stats peer 1 nick="Alice" 198.51.100.7:50123: rtt 42 ms (min 35, jitter 4) | los
 
 | Field | Meaning | Look for |
 |---|---|---|
-| `tick avg / p99 / max` | Time the server spent in its 30 Hz tick, over the last 10 s | p99 above about 10 ms: the machine is too slow or overloaded |
+| `tick avg / p99 / max` | Time the server spent in one tick (60 Hz by default), over the last 10 s | p99 above about 10 ms: the machine is too slow or overloaded |
 | `cpu` | CPU time of the server process, as a share of one core | |
 | `up / down` | Bandwidth to / from all players | `up` near your upload speed: lower `--client-budget-kbps` |
 | phase, round, arena | The match state | |

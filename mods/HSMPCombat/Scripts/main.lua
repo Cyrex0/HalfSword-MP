@@ -164,7 +164,7 @@ local REACT = {
     "Pain Leg R", "Pain Leg L", "Ball Pain", "Liver Pain",
 }
 local REACT_VEC = { "Pain Stumble Immediate", "PainFlinchDirection_Latest", "Pain Wound Direction" }
-local TICK_MS       = 33
+local TICK_MS       = 33     -- this mod's own Lua loop on the game thread, not the server tick
 local PUPPET_HP_PIN = 100.0    -- a stand-in's Health floor (it is Invulnerable; the game's own regen clamps Health to 100 every tick, so a higher pin is rewritten each frame)
 local EPS           = 0.01
 

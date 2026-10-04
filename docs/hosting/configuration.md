@@ -25,7 +25,7 @@ prints the same list as the table below.
 | `--rcon-password <text>` | none | `HSMP_RCON_PASSWORD` | RCON password; required with `--rcon-bind`. Must not be blank or start or end with whitespace. Prefer the environment variable: command lines are visible to other local users. |
 | `--rcon-allow-remote` | off | `HSMP_RCON_ALLOW_REMOTE` | Accept a non-loopback `--rcon-bind`. Requires a password of at least 16 characters. Needed in Docker (see [RCON](rcon.md#docker)); otherwise use an SSH tunnel. |
 | `--client-budget-kbps <n>` | `128` | | Downstream budget per player for replicated streams, in KB/s. Streams are thinned by distance to fit. 128 KB/s fits 8 players; raise it only on a well-connected host with more players. The server lowers it on its own for a player whose path shows a queue (a full home upload), down to a quarter. Upload needed at the full budget: about 1 Mbit/s per remote player. |
-| `--tick-hz <n>` | `30` | | Server tick rate. **Leave it at 30.** Many game timers are counted in ticks and assume 30 Hz, so another value changes timeouts and countdowns, and `0` breaks the server. |
+| `--tick-hz <n>` | `60` | `HSMP_TICK_HZ` | Server tick rate, 20 to 240. How often the server runs the match flow, releases held hits and judges parries. Every timer (countdowns, timeouts, grace periods) is in real time, so the value never changes game timings; it only trades decision latency against CPU. Poses are relayed when they arrive, not on the tick. 60 is the measured sweet spot ([tick rate](../development/tick-rate.md)). |
 | `--content-hash <64 hex>` | built in | | The content hash to enforce instead of the one this build embeds (`hsmp-server --build-info` prints it). Clients with other mod files or server data are refused with "Server runs HalfSword-MP X, you have Y". |
 | `--allow-mismatched-content` | off | `HSMP_ALLOW_MISMATCHED_CONTENT` | Development only: no content check. The protocol version is still checked. |
 | `--debug-verbs` | off | | Enables the RCON test verb `DEBUG KILL <seat>`. **Never on a public server.** |
@@ -56,6 +56,7 @@ flag with any other value wins. `HSMP_RCON_PASSWORD` is used only when `--rcon-p
 | `HSMP_RCON_ALLOW_REMOTE` | unset | `1`, `true`, `yes` or `on` act like `--rcon-allow-remote`; `0`, `false`, `no` or `off` leave it off. Leave it unset unless you need it. |
 | `HSMP_KIT_MODE` | `free` | Initial kit rules: `free` (`0`), `classes` (`1`) or `custom` (`2`). Anything else means `free`. Can be changed in the lobby (RCON `KIT`). |
 | `HSMP_KIT_BUDGET` | `30` | Initial point budget for `custom` kits, 1 to 200. |
+| `HSMP_TICK_HZ` | unset | Fallback for `--tick-hz`. |
 | `HSMP_PERF` | unset | `1` logs performance counters (tick time, packet rates, bandwidth drops) every 5 seconds. |
 | `HSMP_LISTEN_HOST` | unset | Set to `1` by HOST GAME in the menu: the server closes when the hosting player leaves. Do not set it on a dedicated server. |
 | `RUST_LOG` | `hsmp_server=info` | Log filter, for example `hsmp_server=debug` or `hsmp_server=warn`. For the master the default is `hsmp_master=info`. |
@@ -209,7 +210,7 @@ Config keys and their defaults:
 | Key | Default | Passed as |
 |---|---|---|
 | `bind` | `0.0.0.0:7777` | `--bind` |
-| `tick_hz` | `30` | `--tick-hz` (leave at 30) |
+| `tick_hz` | `60` | `--tick-hz` (20 to 240) |
 | `max_peers` | `8` | `--max-peers` |
 | `name` | `HSMP Dedicated` | `--name` (write it without quotes: the value is everything after `=`, trimmed) |
 | `mode` | `duel` | `--mode` |

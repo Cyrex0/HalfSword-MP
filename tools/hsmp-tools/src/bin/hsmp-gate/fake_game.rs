@@ -164,7 +164,7 @@ pub fn run() -> i32 {
         // player key, which its sidecar writes to <state>\.player_key.
         let owner = state.join(".player_key").display().to_string();
         // never the real router from a test (no port mapping, no public STUN)
-        let a: Vec<String> = ["--bind", &format!("0.0.0.0:{port}"), "--tick-hz", "30", "--max-peers", "8", "--owner-key-file", &owner, "--port-map", "off", "--stun", "off"]
+        let a: Vec<String> = ["--bind", &format!("0.0.0.0:{port}"), "--max-peers", "8", "--owner-key-file", &owner, "--port-map", "off", "--stun", "off"]
             .iter().map(|s| s.to_string()).collect();
         spawn(&server, &a);
         std::thread::sleep(Duration::from_millis(500));

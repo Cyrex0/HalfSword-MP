@@ -80,19 +80,19 @@ pub(crate) fn resolve_arena(name: &str) -> Option<String> {
 }
 
 /// Slowest acceptable arena (re)load before stragglers are dropped (45 s).
-pub(super) const BARRIER_TIMEOUT_TICKS: u32 = 45 * 30;
+pub(super) const BARRIER_TIMEOUT_MS: u64 = 45_000;
 /// A game that stops pinging (crash / hang) during a LIVE round counts as gone
 /// after 20 s, even if its sidecar process is still connected. Not applied
 /// while clients are loading (countdown/roundover): a level load blocks the
 /// game thread for many seconds on slow PCs; the load barrier's own deadline
 /// covers those phases.
-const GAME_PING_TIMEOUT_TICKS: u32 = 20 * 30;
+const GAME_PING_TIMEOUT_MS: u64 = 20_000;
 /// How long a match pauses for a dropped participant to reconnect (30 s).
-const RECONNECT_GRACE_TICKS: u32 = 30 * 30;
+const RECONNECT_GRACE_MS: u64 = 30_000;
 /// A client that reported a load error (Director `load_error`) gets ONE retry
 /// window of 10 s to still report loaded; then it sits the round out. The
-/// barrier never waits longer than BARRIER_TIMEOUT_TICKS (45 s) in total.
-pub(super) const LOAD_RETRY_TICKS: u32 = 10 * 30;
+/// barrier never waits longer than BARRIER_TIMEOUT_MS (45 s) in total.
+pub(super) const LOAD_RETRY_MS: u64 = 10_000;
 /// `protect_ms` carried in every spawn order (at least this; wire field kept
 /// for older clients). Server and client protection both end at Live
 /// (`spawn_protected`); the value only bounds a client's protection when its
@@ -102,7 +102,7 @@ pub(super) const SPAWN_PROTECT_MS: u16 = 3000;
 /// after this many the match returns to the lobby instead of looping.
 pub(super) const MAX_VOID_ROUNDS: u32 = 3;
 /// A placement report may arrive this long after the round went live (1 s).
-pub(super) const PLACE_LATE_TICKS: u32 = 30;
+pub(super) const PLACE_LATE_MS: u64 = 1000;
 
 /// A load error a client reported (the `game_status` record).
 /// Only the first error of a pending round starts the retry window.
@@ -112,11 +112,11 @@ pub(super) fn note_load_error(inner: &mut Inner, id: PeerId, error: &str) {
     if session::phase_code(inner) != v5::Phase::LOADING { return; }
     let pending = inner.match_round + 1;
     if inner.match_peers.get(&id).map_or(false, |m| m.loaded_round >= pending) { return; }
-    let tick = inner.server_tick;
+    let now = inner.now_ms;
     let fresh = inner.sess.load_errors.get(&id).map_or(true, |(r, _, _)| *r != pending);
     if fresh {
         warn!(peer_id = id, round = pending, error = %e, "client load error: one retry window, then it sits the round out");
-        inner.sess.load_errors.insert(id, (pending, e.to_string(), tick));
+        inner.sess.load_errors.insert(id, (pending, e.to_string(), now));
     }
 }
 
@@ -142,16 +142,16 @@ pub(super) fn load_error_name(code: u8) -> &'static str {
 pub(super) fn note_placed(inner: &mut Inner, id: PeerId, round: u32) {
     if round == 0 || round < inner.match_round { return; }
     // Only a placement for the round being loaded / counted down, or one
-    // arriving within PLACE_LATE_TICKS of it going live, starts protection:
+    // arriving within PLACE_LATE_MS of it going live, starts protection:
     // otherwise a `spawned:<current round>` sent mid-round would grant 3 s
     // of ignored deaths on demand.
     let pending = matches!(inner.match_state.as_str(), "countdown") && round == inner.match_round + 1;
     let just_live = inner.match_state == "live" && round == inner.match_round
-        && inner.server_tick.wrapping_sub(inner.sess.live_tick) <= PLACE_LATE_TICKS;
+        && inner.now_ms.saturating_sub(inner.sess.live_ms) <= PLACE_LATE_MS;
     if !pending && !just_live { return; }
-    let tick = inner.server_tick;
-    let e = inner.sess.placed.entry(id).or_insert((round, tick));
-    if e.0 != round { *e = (round, tick); }
+    let now = inner.now_ms;
+    let e = inner.sess.placed.entry(id).or_insert((round, now));
+    if e.0 != round { *e = (round, now); }
     // The pawn was teleported onto its spawn: the root speed cap starts over
     // from there (the cap is a body speed, not a fixed 300 m/s).
     for p in inner.peers.values_mut().filter(|p| p.id == id) { p.last_valid_pos = None; }
@@ -186,12 +186,12 @@ pub(super) fn arena_matches(inner: &Inner, arena: Option<&str>) -> bool {
 /// barrier, game liveness, redundant death report. Returns true when the
 /// report says the player died in the current live round.
 pub(super) fn game_status_in(inner: &mut Inner, id: PeerId, alive: bool, loaded: u32, arena: Option<&str>, dead: bool) -> bool {
-    let tick = inner.server_tick;
+    let now = inner.now_ms;
     let right_arena = arena_matches(inner, arena);
     let mp = inner.match_peers.entry(id).or_default();
     if !mp.aware { info!(peer_id = id, "game client joined load barrier"); }
     mp.aware = true;
-    mp.last_ping_tick = tick;
+    mp.last_ping_ms = now;
     if right_arena {
         if mp.loaded_round != loaded {
             mp.loaded_round = loaded;
@@ -217,10 +217,10 @@ pub(crate) async fn on_game_status(socket: &Arc<UdpSocket>, state: &Arc<ServerSt
         let dead = this_match && gs.flags & v5::status_flags::DEAD != 0;
         if !this_match {
             // Liveness only: a stale match's load must not pass the barrier.
-            let tick = inner.server_tick;
+            let now = inner.now_ms;
             let mp = inner.match_peers.entry(id).or_default();
             mp.aware = true;
-            mp.last_ping_tick = tick;
+            mp.last_ping_ms = now;
             false
         } else {
             // The spawn order this client applied = its placement report.
@@ -283,7 +283,7 @@ pub(super) async fn handle_player_died(
 // S2CDeath + scoreboard.
 //
 // Round end: when at most one participant is left standing, the round
-// SETTLES for SETTLE_TICKS before its result is fixed. Trade hits swung by the
+// SETTLES for SETTLE_MS before its result is fixed. Trade hits swung by the
 // just-killed player no later than lagcomp::TRADE_WINDOW_MS after its death
 // can still kill the provisional winner meanwhile. At the settle deadline:
 // exactly one participant alive → they win; nobody alive → draw. Same rule
@@ -297,12 +297,12 @@ pub(crate) const DEATH_VITALS: u8 = 2;
 /// (`drop_loses_round`). Within the budget a duel pauses for its
 /// reconnect instead; 3+ player rounds just stop counting it as standing.
 pub(crate) const DEATH_LEFT: u8 = 3;
-/// 400 ms @ 30 Hz: covers DEFENDER_GRACE (200 ms) + trade hit transit.
-const SETTLE_TICKS: u32 = 12;
+/// 400 ms: covers DEFENDER_GRACE (200 ms) + trade hit transit.
+pub(super) const SETTLE_MS: u64 = 400;
 
 /// Hits and deaths count: the round is live, or a finished round is settling.
 pub(super) fn combat_open(inner: &Inner) -> bool {
-    inner.match_state == "live" || (inner.match_state == "roundover" && inner.settle_ticks > 0)
+    inner.match_state == "live" || (inner.match_state == "roundover" && inner.settle_ms > 0)
 }
 
 /// Connected participants of this match that are still standing.
@@ -348,7 +348,7 @@ pub(super) fn declare_death_unprotected(inner: &mut Inner, pid: PeerId, killer: 
     inner.round_deaths.push((pid, killer, cause));
     inner.match_state_dirty = true;
     inner.out_msgs.push((None, death_msg(pid, round, killer, cause)));
-    info!(peer_id = pid, killer, cause, round, settling = inner.settle_ticks > 0,
+    info!(peer_id = pid, killer, cause, round, settling = inner.settle_ms > 0,
           "DEATH declared (authoritative)");
     if inner.match_state == "live" { check_round_end(inner, true); }
     true
@@ -365,11 +365,11 @@ fn check_round_end(inner: &mut Inner, after_death: bool) {
         inner.match_state = "roundover".into();
         inner.match_reason = "pending".into();
         inner.last_winner = 0;
-        inner.countdown_ticks = 0; // runs once the result is fixed
-        inner.settle_ticks = SETTLE_TICKS;
+        inner.countdown_ms = 0; // runs once the result is fixed
+        inner.settle_ms = SETTLE_MS;
         inner.match_state_dirty = true;
         info!(round = inner.match_round, alive, "match: round over, settling {} ms for trades",
-              SETTLE_TICKS * 1000 / 30);
+              SETTLE_MS);
         // Report Live -> RoundOver now (a death arrives outside the tick).
         session::observe_phase(inner);
     }
@@ -377,7 +377,7 @@ fn check_round_end(inner: &mut Inner, after_death: bool) {
 
 /// Settle deadline: fix the round result (see the block comment above).
 pub(super) fn finalize_round(inner: &mut Inner) {
-    inner.settle_ticks = 0;
+    inner.settle_ms = 0;
     let alive = standing(inner);
     let round = inner.match_round;
     let text;
@@ -410,15 +410,15 @@ pub(super) fn finalize_round(inner: &mut Inner) {
     push_server_chat(inner, &text);
 }
 
-/// First countdown after START (3 s @ 30 Hz), run after the load barrier.
-pub(super) const FIRST_COUNTDOWN_TICKS: u32 = 90;
-/// Countdown between rounds (3 s @ 30 Hz). Clients reload the arena when the
+/// First countdown after START (3 s), run after the load barrier.
+pub(super) const FIRST_COUNTDOWN_MS: u64 = 3000;
+/// Countdown between rounds (3 s). Clients reload the arena when the
 /// countdown state begins (HSMPMatch); the load barrier holds this timer
 /// until every game client has loaded, so it does not pad for load time.
-pub(super) const NEXT_ROUND_COUNTDOWN_TICKS: u32 = 90;
+pub(super) const NEXT_ROUND_COUNTDOWN_MS: u64 = 3000;
 /// Result screens: round over 4 s, match over 5 s (e2e T29 times the latter).
-pub(super) const ROUNDOVER_TICKS: u32 = 120;
-pub(super) const MATCH_OVER_TICKS: u32 = 150;
+pub(super) const ROUNDOVER_MS: u64 = 4000;
+pub(super) const MATCH_OVER_MS: u64 = 5000;
 
 fn needed_wins(inner: &Inner) -> u32 { (inner.best_of as u32 + 1) / 2 }
 
@@ -438,14 +438,14 @@ pub(super) fn barrier_session(inner: &Inner) -> bool {
 }
 
 /// Participants currently connected whose game is still alive. Game-ping
-/// staleness only counts during a live round (see GAME_PING_TIMEOUT_TICKS).
+/// staleness only counts during a live round (see GAME_PING_TIMEOUT_MS).
 pub(super) fn present_participants(inner: &Inner) -> Vec<PeerId> {
-    let tick = inner.server_tick;
+    let now = inner.now_ms;
     let check_pings = inner.match_state == "live";
     inner.peers.values()
         .filter(|p| is_participant(inner, p))
         .filter(|p| match inner.match_peers.get(&p.id) {
-            Some(m) if m.aware && check_pings => tick.wrapping_sub(m.last_ping_tick) <= GAME_PING_TIMEOUT_TICKS,
+            Some(m) if m.aware && check_pings => now.saturating_sub(m.last_ping_ms) <= GAME_PING_TIMEOUT_MS,
             _ => true,
         })
         // Resume: a game client silent for 3 s mid-Live is away.
@@ -472,10 +472,10 @@ fn end_round(inner: &mut Inner, winner: PeerId, reason: &str, match_over: bool) 
         inner.sess.match_winner = inner.peers.values().find(|p| p.id == winner)
             .map(|p| (p.id, p.nick.clone(), p.wins));
         inner.match_state = "match_over".into();
-        inner.countdown_ticks = MATCH_OVER_TICKS;
+        inner.countdown_ms = MATCH_OVER_MS;
     } else {
         inner.match_state = "roundover".into();
-        inner.countdown_ticks = ROUNDOVER_TICKS;
+        inner.countdown_ms = ROUNDOVER_MS;
     }
     inner.match_state_dirty = true;
 }
@@ -499,7 +499,7 @@ pub(super) fn forfeit_to(inner: &mut Inner, winner: PeerId) {
 pub(super) fn match_step(inner: &mut Inner) {
     // The result screen is supervised too: the last player leaving it (e.g.
     // right after a forfeit) leaves nobody to show it to, so the empty server
-    // is back in the lobby now instead of running out MATCH_OVER_TICKS with
+    // is back in the lobby now instead of running out MATCH_OVER_MS with
     // the frozen config of a match nobody is in (proptest seed in
     // proptest-regressions/server/session_tests.txt).
     if inner.match_state == "match_over" && inner.peers.is_empty() {
@@ -544,18 +544,18 @@ pub(super) fn match_step(inner: &mut Inner) {
                     "round": inner.match_round, "match_id": inner.sess.match_id,
                 }));
                 inner.match_state = "live".into();
-                inner.countdown_ticks = 0;
+                inner.countdown_ms = 0;
                 inner.match_state_dirty = true;
             } else {
                 info!("match: participant back; next round");
-                begin_countdown(inner, NEXT_ROUND_COUNTDOWN_TICKS);
+                begin_countdown(inner, NEXT_ROUND_COUNTDOWN_MS);
             }
         }
         return; // expiry (forfeit) handled by the countdown transition
     }
 
     // A finished round settles first: its result is fixed before any pause.
-    let settling = inner.match_state == "roundover" && inner.settle_ticks > 0;
+    let settling = inner.match_state == "roundover" && inner.settle_ms > 0;
     if multi && inner.match_state != "match_over" && present.len() < 2 && !settling {
         if present.is_empty() {
             info!("match: all participants gone; back to lobby");
@@ -581,10 +581,10 @@ pub(super) fn match_step(inner: &mut Inner) {
         } else {
             info!(present = present.len(), state = %inner.match_state, "match: participant dropped; pausing for reconnect");
         }
-        inner.settle_ticks = 0;
+        inner.settle_ms = 0;
         inner.match_state = "paused".into();
         inner.match_reason = "opponent_left".into();
-        inner.countdown_ticks = RECONNECT_GRACE_TICKS;
+        inner.countdown_ms = RECONNECT_GRACE_MS;
         inner.barrier_passed = true;
         inner.match_state_dirty = true;
         return;
@@ -595,14 +595,14 @@ pub(super) fn match_step(inner: &mut Inner) {
     if inner.match_state == "countdown" && !inner.barrier_passed {
         let waiting = barrier_waiting_on(inner);
         let pending = inner.match_round + 1;
-        let tick = inner.server_tick;
+        let now = inner.now_ms;
         // Never more than 45 s in total, and a client that reported a load
         // error gets one 10 s retry window: then it sits this round out
         // (a spectator for the round, not a loss) instead of stalling everyone.
-        let deadline_passed = tick.wrapping_sub(inner.barrier_deadline) < u32::MAX / 2;
+        let deadline_passed = now >= inner.barrier_deadline_ms;
         let failed: Vec<PeerId> = waiting.iter().copied().filter(|id| {
             deadline_passed || inner.sess.load_errors.get(id)
-                .map_or(false, |(r, _, t)| *r == pending && tick.wrapping_sub(*t) >= LOAD_RETRY_TICKS)
+                .map_or(false, |(r, _, t)| *r == pending && now.saturating_sub(*t) >= LOAD_RETRY_MS)
         }).collect();
         if waiting.is_empty() {
             inner.barrier_passed = true;
@@ -684,14 +684,14 @@ pub(super) fn sit_out(inner: &mut Inner, id: PeerId, error: &str) {
     inner.sess.sat_out.push((id, nick, error.to_string()));
 }
 
-pub(super) fn begin_countdown(inner: &mut Inner, ticks: u32) {
+pub(super) fn begin_countdown(inner: &mut Inner, ms: u64) {
     inner.sess.load_errors.clear();
     inner.sess.sat_out.clear();
     inner.match_state = "countdown".into();
-    inner.countdown_ticks = ticks;
+    inner.countdown_ms = ms;
     inner.barrier_passed = false;
-    inner.barrier_deadline = inner.server_tick.wrapping_add(BARRIER_TIMEOUT_TICKS);
-    inner.settle_ticks = 0;
+    inner.barrier_deadline_ms = inner.now_ms + BARRIER_TIMEOUT_MS;
+    inner.settle_ms = 0;
     inner.match_state_dirty = true;
     info!(round = inner.match_round + 1, "match: countdown begins (waiting for clients to load)");
     plan_spawns(inner);
@@ -762,8 +762,8 @@ pub(super) fn sync_spawn_plan(inner: &mut Inner) {
 
 pub(super) fn reset_to_lobby(inner: &mut Inner) {
     inner.match_state = "lobby".into();
-    inner.countdown_ticks = 0;
-    inner.settle_ticks = 0;
+    inner.countdown_ms = 0;
+    inner.settle_ms = 0;
     inner.round_deaths.clear();
     inner.match_round = 0;
     inner.spawn_round = 0;
@@ -795,8 +795,8 @@ pub(super) mod round_tests {
     pub(crate) fn peer(id: PeerId, nick: &str) -> PeerState {
         PeerState {
             id, nick: nick.into(), cid: 0, player_key: [0; 32],
-            last_seen_tick: 0, last_root: None,
-            ready: true, last_valid_pos: None, last_valid_tick: 0, wins: 0, alive: true,
+            last_seen_ms: 0, last_root: None,
+            ready: true, last_valid_pos: None, last_valid_ms: 0, wins: 0, alive: true,
             is_admin: false,
         }
     }
@@ -817,9 +817,9 @@ pub(super) mod round_tests {
     }
 
     fn settle(i: &mut Inner) {
-        while i.settle_ticks > 0 {
-            i.settle_ticks -= 1;
-            if i.settle_ticks == 0 { finalize_round(i); }
+        if i.settle_ms > 0 {
+            i.settle_ms = 0;
+            finalize_round(i);
         }
     }
 
@@ -830,7 +830,7 @@ pub(super) mod round_tests {
         let st = live_duel();
         let mut i = st.inner.try_lock().unwrap();
         i.match_arena = "Map_Arena_Pit".into();
-        begin_countdown(&mut i, NEXT_ROUND_COUNTDOWN_TICKS);
+        begin_countdown(&mut i, NEXT_ROUND_COUNTDOWN_MS);
         assert_eq!(i.spawn_round, 2);
         assert_eq!(i.spawn_plan.len(), 2);
         assert_ne!(i.spawn_plan[0].slot, i.spawn_plan[1].slot);
@@ -881,7 +881,7 @@ pub(super) mod round_tests {
             let mut i = st.inner.try_lock().unwrap();
             let second = 3 - first;
             assert!(declare_death(&mut i, first, second, DEATH_DAMAGE));
-            i.settle_ticks -= 3; // trade hit lands 100 ms later
+            i.settle_ms -= 100; // trade hit lands 100 ms later
             assert!(declare_death(&mut i, second, first, DEATH_DAMAGE));
             settle(&mut i);
             assert_eq!(i.match_state, "roundover");
@@ -972,18 +972,18 @@ pub(super) mod round_tests {
         let key_b = session::provisional_key("b");
         i.pauses_by_key.insert(key_b, PAUSES_PER_PLAYER);
         // b is a game client that stopped talking 4 s ago.
-        i.server_tick = 1000;
-        for p in i.peers.values_mut() { p.last_seen_tick = if p.id == 2 { 1000 - 120 } else { 1000 }; }
+        i.now_ms = 40_000;
+        for p in i.peers.values_mut() { p.last_seen_ms = if p.id == 2 { 40_000 - 4000 } else { 40_000 }; }
         for id in [1u32, 2] {
             let m = i.match_peers.entry(id).or_default();
             m.aware = true;
-            m.last_ping_tick = if id == 2 { 1000 - 120 } else { 1000 };
+            m.last_ping_ms = if id == 2 { 40_000 - 4000 } else { 40_000 };
         }
         match_step(&mut i);
         assert_eq!(i.match_state, "roundover");
         assert!(i.round_deaths.iter().any(|&(p, _, c)| p == 2 && c == DEATH_LEFT));
         // It comes back during the settle: still the loser.
-        for p in i.peers.values_mut() { p.last_seen_tick = 1000; }
+        for p in i.peers.values_mut() { p.last_seen_ms = 40_000; }
         settle(&mut i);
         assert_eq!(i.last_winner, 1);
     }
@@ -1015,8 +1015,9 @@ pub(super) mod round_tests {
         i.peers.remove(&b);
         match_step(&mut i);
         assert_eq!(i.match_state, "paused");
-        i.countdown_ticks = 1;
-        super::super::tick::advance(&mut i);
+        i.countdown_ms = 1;
+        let t = i.now_ms + 33;
+        super::super::tick::advance(&mut i, t);
         assert_eq!(i.match_state, "match_over");
         assert_eq!(i.match_reason, "forfeit");
         assert_eq!(i.last_winner, 1);

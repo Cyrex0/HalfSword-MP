@@ -7,11 +7,15 @@
 
 use super::*;
 
-/// One tick of match flow under the lock: supervision, settle, countdown
-/// transitions, then the session bookkeeping (seats, phase events). Returns
-/// the match result to append to history.jsonl when a match just ended.
-pub(super) fn advance(inner: &mut Inner) -> Option<MatchResult> {
+/// One tick of match flow under the lock at server time `now_ms`:
+/// supervision, settle, countdown transitions, then the session bookkeeping
+/// (seats, phase events). Timers run on elapsed time, not on the number of
+/// calls, so the outcome is the same at any tick rate. Returns the match
+/// result to append to history.jsonl when a match just ended.
+pub(super) fn advance(inner: &mut Inner, now_ms: u64) -> Option<MatchResult> {
     inner.server_tick = inner.server_tick.wrapping_add(1);
+    let dt = now_ms.saturating_sub(inner.now_ms);
+    inner.now_ms = inner.now_ms.max(now_ms);
     let mut match_result: Option<MatchResult> = None;
 
     // Match supervision first: reconnect restore, drop -> pause/forfeit,
@@ -22,21 +26,21 @@ pub(super) fn advance(inner: &mut Inner) -> Option<MatchResult> {
     sync_spawn_plan(inner);
 
     // Simultaneous-kill settle: fix the round result at the deadline.
-    if inner.settle_ticks > 0 {
+    if inner.settle_ms > 0 {
         if inner.match_state == "roundover" {
-            inner.settle_ticks -= 1;
-            if inner.settle_ticks == 0 { finalize_round(inner); }
+            inner.settle_ms = inner.settle_ms.saturating_sub(dt);
+            if inner.settle_ms == 0 { finalize_round(inner); }
         } else {
-            inner.settle_ticks = 0;
+            inner.settle_ms = 0;
         }
     }
 
     // Countdown bookkeeping / state transitions. A countdown whose load
     // barrier is still open stays frozen.
     let frozen = inner.match_state == "countdown" && !inner.barrier_passed;
-    if inner.countdown_ticks > 0 && !frozen {
-        inner.countdown_ticks -= 1;
-        if inner.countdown_ticks == 0 {
+    if inner.countdown_ms > 0 && !frozen {
+        inner.countdown_ms = inner.countdown_ms.saturating_sub(dt);
+        if inner.countdown_ms == 0 {
             let next = match inner.match_state.as_str() {
                 "countdown" => Some("live"),
                 "roundover" => Some("countdown"),
@@ -55,7 +59,7 @@ pub(super) fn advance(inner: &mut Inner) -> Option<MatchResult> {
                 if n == "live" {
                     go_live(inner);
                 } else if n == "countdown" {
-                    begin_countdown(inner, NEXT_ROUND_COUNTDOWN_TICKS);
+                    begin_countdown(inner, NEXT_ROUND_COUNTDOWN_MS);
                 } else {
                     // match_over → lobby: the history.jsonl line + reset wins.
                     // The winner fixed when the match ended (it may have
@@ -109,7 +113,7 @@ fn go_live(inner: &mut Inner) {
         }
     }
     inner.round_deaths.clear();
-    inner.settle_ticks = 0;
+    inner.settle_ms = 0;
     crate::combat::ledger_begin_round(round);
     let alive_by_addr: Vec<(SocketAddr, bool)> = inner.peers.iter().map(|(a, p)| {
         let loaded = !aware || inner.match_peers.get(&p.id)
@@ -120,7 +124,7 @@ fn go_live(inner: &mut Inner) {
         if let Some(p) = inner.peers.get_mut(&a) { p.alive = alive; }
     }
     inner.match_reason.clear();
-    inner.sess.live_tick = inner.server_tick;
+    inner.sess.live_ms = inner.now_ms;
     // Too few fighters loaded (the others failed to load or missed the 45 s
     // barrier): the round is void — no winner, nobody loses — instead of a
     // lone fighter "winning" it or the match stalling. Repeated voids end the
@@ -142,8 +146,8 @@ fn go_live(inner: &mut Inner) {
         inner.match_state = "roundover".into();
         inner.match_reason = "load_failed".into();
         inner.last_winner = 0;
-        inner.settle_ticks = 0;
-        inner.countdown_ticks = ROUNDOVER_TICKS;
+        inner.settle_ms = 0;
+        inner.countdown_ms = ROUNDOVER_MS;
         inner.match_state_dirty = true;
         return;
     }
@@ -221,19 +225,40 @@ async fn write_history(r: &MatchResult) {
     }
 }
 
+/// A peer silent this long (no authenticated packet at all) is dropped.
+pub(super) const PEER_TIMEOUT_MS: u64 = 60_000;
+
+/// Peers silent for longer than PEER_TIMEOUT_MS at the current tick.
+pub(super) fn timed_out(inner: &Inner) -> Vec<(SocketAddr, PeerId)> {
+    inner.peers.iter()
+        .filter(|(_, p)| inner.now_ms.saturating_sub(p.last_seen_ms) > PEER_TIMEOUT_MS)
+        .map(|(a, p)| (*a, p.id))
+        .collect()
+}
+/// Repeat of this round's S2CDeath records: 1 s in the lobby, 333 ms in a match.
+const DEATHS_REPEAT_LOBBY_MS: u64 = 1000;
+const DEATHS_REPEAT_MATCH_MS: u64 = 333;
+/// Transport RTTs to lag comp and the `pings` record.
+const PINGS_EVERY_MS: u64 = 1000;
+/// Accepted `--tick-hz` range.
+pub const TICK_HZ_MIN: u32 = 20;
+pub const TICK_HZ_MAX: u32 = 240;
+
+/// The tick period for `tick_hz` (clamped to the accepted range).
+pub fn tick_period(tick_hz: u32) -> Duration {
+    Duration::from_nanos(1_000_000_000 / tick_hz.clamp(TICK_HZ_MIN, TICK_HZ_MAX) as u64)
+}
+
 pub async fn tick_loop(
     socket: Arc<UdpSocket>,
     state: Arc<ServerState>,
     tick_hz: u32,
 ) -> anyhow::Result<()> {
-    let period = Duration::from_micros((1_000_000 / tick_hz as u64).max(1));
-    let mut ticker = time::interval(period);
+    let mut ticker = time::interval(tick_period(tick_hz));
     ticker.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
 
-    const TIMEOUT_TICKS: u32 = 60 * 30;
-    let deaths_every = tick_hz;
-    let mut tick_since_deaths = 0u32;
-    let mut tick_since_pings = 0u32;
+    let mut deaths_sent_ms = 0u64;
+    let mut pings_sent_ms = 0u64;
 
     loop {
         ticker.tick().await;
@@ -250,12 +275,11 @@ pub async fn tick_loop(
         let (timed_out, match_result, session_broadcast) = {
             let mut inner = state.inner.lock().await;
             inner.sess.kits = kits;
-            let tick = inner.server_tick.wrapping_add(1);
-
-            let match_result = advance(&mut inner);
+            let now = state.net.now_ms();
+            let match_result = advance(&mut inner, now);
             // Kit facts are frozen while a round is fought.
             let fighting = matches!(inner.match_state.as_str(), "live" | "paused")
-                || (inner.match_state == "roundover" && inner.settle_ticks > 0);
+                || (inner.match_state == "roundover" && inner.settle_ms > 0);
             let ids: Vec<PeerId> = if fighting { inner.peers.values().map(|p| p.id).collect() } else { Vec::new() };
             // Spectators and the dead watch anyone: the relay ranks every
             // player nearest for them (their parked body says nothing).
@@ -265,10 +289,9 @@ pub async fn tick_loop(
             // Deaths are final and must reach everyone despite loss: repeat this
             // round's S2CDeath on change and periodically (1 s in the lobby,
             // 333 ms in a match; tiny; receivers dedup by (peer, round)).
-            tick_since_deaths = tick_since_deaths.wrapping_add(1);
-            let every = if inner.match_state == "lobby" { deaths_every } else { (deaths_every / 3).max(1) };
-            let due = inner.match_state_dirty || tick_since_deaths >= every;
-            if due { tick_since_deaths = 0; inner.match_state_dirty = false; }
+            let every = if inner.match_state == "lobby" { DEATHS_REPEAT_LOBBY_MS } else { DEATHS_REPEAT_MATCH_MS };
+            let due = inner.match_state_dirty || now.saturating_sub(deaths_sent_ms) >= every;
+            if due { deaths_sent_ms = now; inner.match_state_dirty = false; }
             if due && matches!(inner.match_state.as_str(), "live" | "roundover" | "match_over") {
                 let round = inner.match_round;
                 let again: Vec<Vec<u8>> = inner.round_deaths.iter()
@@ -277,22 +300,16 @@ pub async fn tick_loop(
                 for m in again { inner.out_msgs.push((None, m)); }
             }
 
-            let mut timed: Vec<(SocketAddr, PeerId)> = Vec::new();
             let addrs: Vec<SocketAddr> = inner.peers.keys().copied().collect();
 
             // The `session` record: on change, else 1 Hz lobby / 3 Hz match.
             // The transport clock: the one the welcome's server_time_ms uses. Encoded
             // ONCE; every peer gets the same bytes.
-            let now_ms = state.net.now_ms();
-            let snap_msg = session::session_due(&mut inner, now_ms)
+            let snap_msg = session::session_due(&mut inner, now)
                 .filter(|_| !addrs.is_empty())
                 .map(|s| session_msg(&s));
 
-            for (addr, p) in inner.peers.iter() {
-                if tick.wrapping_sub(p.last_seen_tick) > TIMEOUT_TICKS {
-                    timed.push((*addr, p.id));
-                }
-            }
+            let timed = timed_out(&inner);
             for (addr, _) in &timed {
                 if let Some(gone) = inner.peers.remove(addr) {
                     session::forget_peer_locked(&mut inner, gone.id);
@@ -333,9 +350,9 @@ pub async fn tick_loop(
             info!(admin_now = id, "an admin timed out; no one is promoted (the listen host regains admin by key)");
             broadcast_admin_state(&socket, &state, &addrs).await;
         }
-        tick_since_pings = tick_since_pings.wrapping_add(1);
-        if tick_since_pings >= tick_hz {
-            tick_since_pings = 0;
+        let now = state.net.now_ms();
+        if now.saturating_sub(pings_sent_ms) >= PINGS_EVERY_MS {
+            pings_sent_ms = now;
             pings_tick(&socket, &state).await;
         }
         crate::perf::perf().tick(t_tick.elapsed().as_micros() as u32);

@@ -697,6 +697,13 @@ Receiver rules: drop the snapshot if `(epoch, seq) ≤ last`; a new epoch resets
 match it sends the Director back to the lobby with "Server restarted"). The map is
 `frozen.arena` in a match, else `config.arena`. The own spawn is the own roster row's spawn.
 
+Timing: the server tick rate (`--tick-hz`, 60 by default) is not on the wire and a client must
+not assume one. Every duration a client sees is in real time: `phase_deadline_ms` on the
+server clock (count down from it with the local clock, as `shared/hsmp_session.lua` does), the
+config's `*_s` fields in seconds, and the `aux` relay interval of a `pose` record in ms. The
+`tick` fields of `root`, `weapon` and `pose` are the sender's own sample counter, not a server
+tick. See [tick rate](tick-rate.md).
+
 ### 6.5 Commands
 
 `command { cmd_id, expected_rev (0 = don't care), op, flag, role, choice, peer_id, duration_s,

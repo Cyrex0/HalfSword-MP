@@ -211,7 +211,6 @@ tunnel.** Never open the RCON port in a firewall. See [RCON](rcon.md).
 
 - `--debug-verbs`: enables a test-only RCON verb that kills a player.
 - `--rcon-allow-remote` with the RCON port reachable from the internet.
-- A `--tick-hz` other than 30: many game timers are counted in ticks and assume 30 Hz.
 
 ## Updating
 

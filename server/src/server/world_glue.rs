@@ -20,6 +20,8 @@ use hsmp_ipc::schema::world as rec;
 // arena then, so every world object is back at its initial state).
 // ---------------------------------------------------------------------------
 
+/// The world task's own period, fixed and not `--tick-hz`: thinning counts its
+/// flushes, and HSMPWorld world_follow.lua FAST_SEND_MS mirrors it.
 const WORLD_TICK: Duration = Duration::from_millis(33);
 
 fn world() -> &'static std::sync::Mutex<crate::world::World> {
