@@ -8,6 +8,24 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+## [0.1.0-beta.5] - 2026-10-04
+
+### What's new
+
+- Damage matches single player in two more cases: two blows the game counts as one no longer
+  both land when their replays arrive late, and a stand-in hit natively no longer turns the rest
+  of the same contact into extra hits.
+- Stand-ins carry their owner's body weight and build, so weapons meet the same resistance as
+  on the owner's screen.
+- Fairer hits when a player's ping changes mid-match: lag compensation follows the new ping
+  within seconds instead of up to 16 seconds later.
+- The server runs at 60 Hz by default (`--tick-hz` 20 to 240, `HSMP_TICK_HZ`), and every match
+  timer runs in real time.
+- Lower frame cost in game with remote players on screen, and less network traffic from the
+  server.
+- Security: an admin can no longer kick or ban the listen host; UPnP only talks to the router
+  that answered; one host can no longer use up a server's browser-ping replies.
+
 ### Changed
 
 - Less work per frame in the game mods: the stand-in driver, the pose sender, the world
