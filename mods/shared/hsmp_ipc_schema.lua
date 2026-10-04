@@ -936,6 +936,102 @@ S.STRUCTS = {
         { "key", { "str", 32 } },
         { "arg", { "str", 192 } },
     } },
+    ModManifestHead = { size = 56, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "total_bytes", "u64" },
+        { "max_chunk", "u32" },
+        { "timeout_s", "u32" },
+        { "n", "u16" },
+        { "files", "u16" },
+        { "_r", "u32" },
+    } },
+    ModRow = { size = 304, fields = {
+        { "mod_hash", { "u8", 32 } },
+        { "bytes", "u64" },
+        { "first_file", "u16" },
+        { "files", "u16" },
+        { "_r", "u32" },
+        { "name", { "str", 32 } },
+        { "version", { "str", 16 } },
+        { "author", { "str", 48 } },
+        { "description", { "str", 160 } },
+    } },
+    ModFilesHead = { size = 40, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "n", "u16" },
+        { "_r", { "u8", 6 } },
+    } },
+    ModFileRow = { size = 176, fields = {
+        { "sha256", { "u8", 32 } },
+        { "size", "u64" },
+        { "mod_index", "u16" },
+        { "_r", { "u8", 6 } },
+        { "path", { "str", 128 } },
+    } },
+    ModChunkReq = { size = 24, fields = {
+        { "offset", "u64" },
+        { "req_id", "u32" },
+        { "len", "u32" },
+        { "file", "u16" },
+        { "_r", { "u8", 6 } },
+    } },
+    ModChunkHead = { size = 24, fields = {
+        { "offset", "u64" },
+        { "req_id", "u32" },
+        { "n", "u32" },
+        { "file", "u16" },
+        { "_r", { "u8", 6 } },
+    } },
+    ModReady = { size = 40, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "result", "u8" },
+        { "failed", "u8" },
+        { "_r", { "u8", 6 } },
+    } },
+    ModOffer = { size = 88, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "server_key", { "u8", 32 } },
+        { "total_bytes", "u64" },
+        { "cached_bytes", "u64" },
+        { "n", "u16" },
+        { "files", "u16" },
+        { "_r", "u32" },
+    } },
+    ModEntry = { size = 336, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "mod_hash", { "u8", 32 } },
+        { "bytes", "u64" },
+        { "index", "u16" },
+        { "n", "u16" },
+        { "files", "u16" },
+        { "cached", "bool" },
+        { "_r", "u8" },
+        { "name", { "str", 32 } },
+        { "version", { "str", 16 } },
+        { "author", { "str", 48 } },
+        { "description", { "str", 160 } },
+    } },
+    ModProgress = { size = 184, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "done_bytes", "u64" },
+        { "total_bytes", "u64" },
+        { "state", "u8" },
+        { "code", "u8" },
+        { "_r", { "u8", 6 } },
+        { "text", { "str", 128 } },
+    } },
+    ModDecision = { size = 40, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "op", "u8" },
+        { "_r", { "u8", 7 } },
+    } },
+    ModLoaded = { size = 168, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "ok", "bool" },
+        { "failed", "u8" },
+        { "_r", { "u8", 6 } },
+        { "text", { "str", 128 } },
+    } },
 }
 
 -- record name -> { id, layout, row, count, max_rows, cap, flow, chan }
@@ -1010,6 +1106,16 @@ S.RECORDS = {
     interact_grab_l = { id = 0x0612, layout = "Interact", row = nil, count = nil, max_rows = 0, cap = 0x40, flow = "c2s,s2c", chan = "rel_latest" },
     pose_yield = { id = 0x0620, layout = "PoseYield", row = "YieldRow", count = "n", max_rows = 32, cap = 0x100, flow = "local", chan = "none" },
     dev_cmd = { id = 0x0810, layout = "DevCmd", row = nil, count = nil, max_rows = 0, cap = 0x200, flow = "local", chan = "none" },
+    mod_manifest = { id = 0x0901, layout = "ModManifestHead", row = "ModRow", count = "n", max_rows = 16, cap = 0x0, flow = "s2c", chan = "ordered" },
+    mod_files = { id = 0x0902, layout = "ModFilesHead", row = "ModFileRow", count = "n", max_rows = 256, cap = 0x0, flow = "s2c", chan = "ordered" },
+    mod_chunk_req = { id = 0x0903, layout = "ModChunkReq", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "c2s", chan = "ordered" },
+    mod_chunk = { id = 0x0904, layout = "ModChunkHead", row = "u8", count = "n", max_rows = 32768, cap = 0x0, flow = "s2c", chan = "reliable" },
+    mod_ready = { id = 0x0905, layout = "ModReady", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "c2s", chan = "ordered" },
+    mod_offer = { id = 0x0906, layout = "ModOffer", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "s2g", chan = "none" },
+    mod_entry = { id = 0x0907, layout = "ModEntry", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "s2g", chan = "none" },
+    mod_progress = { id = 0x0908, layout = "ModProgress", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "s2g", chan = "none" },
+    mod_decision = { id = 0x0909, layout = "ModDecision", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "g2s", chan = "none" },
+    mod_loaded = { id = 0x090a, layout = "ModLoaded", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "g2s", chan = "none" },
 }
 S.RECORD_BY_ID = {}
 for name, r in pairs(S.RECORDS) do S.RECORD_BY_ID[r.id] = name end
@@ -1097,6 +1203,10 @@ S.ENUMS.hand_vis = { UNKNOWN = 0, SHOWN = 1, HIDDEN = 2, }
 S.ENUMS.interact_kind = { GRAB_START = 1, GRAB_UPDATE = 2, GRAB_END = 3, IMPULSE = 4, GRAB_DENIED = 5, }
 S.ENUMS.hero_bone = { Pelvis = 0, Spine_02 = 1, Spine_04 = 2, Head = 3, Upperarm_L = 4, Lowerarm_L = 5, Hand_L = 6, Upperarm_R = 7, Lowerarm_R = 8, Hand_R = 9, Thigh_L = 10, Calf_L = 11, Foot_L = 12, Thigh_R = 13, Calf_R = 14, Foot_R = 15, }
 S.ENUMS.dev_op = { AUTOTEST = 1, TUNE = 2, TDIAG = 3, }
+S.ENUMS.mod_result = { LOADED = 1, FAILED = 2, DECLINED = 3, }
+S.ENUMS.mod_state = { OFFER = 1, DOWNLOADING = 2, VERIFYING = 3, READY = 4, JOINED = 5, FAILED = 6, CLEAR = 7, }
+S.ENUMS.mod_error = { NONE = 0, HASH_MISMATCH = 1, TOO_LARGE = 2, BAD_MANIFEST = 3, DISCONNECTED = 4, DISK = 5, TIMEOUT = 6, LOAD_FAILED = 7, DECLINED = 8, BLOCKED = 9, }
+S.ENUMS.mod_op = { ACCEPT = 1, DECLINE = 2, RESEND = 3, }
 for t, vals in pairs(S.ENUMS) do
     local names = {}
     for n, v in pairs(vals) do names[v] = n end
