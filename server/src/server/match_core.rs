@@ -79,6 +79,13 @@ pub(crate) fn resolve_arena(name: &str) -> Option<String> {
         .cloned()
 }
 
+/// The round-flow timings below are in ticks at 30 Hz; this converts one to ticks at the
+/// configured `--tick-hz`, so they stay the same in seconds at any tick rate.
+pub(super) fn hz_ticks(inner: &Inner, ticks_at_30: u32) -> u32 {
+    let hz = inner.sess.tick_hz.max(1) as u64;
+    ((ticks_at_30 as u64 * hz + 15) / 30).min(u32::MAX as u64) as u32
+}
+
 /// Slowest acceptable arena (re)load before stragglers are dropped (45 s).
 pub(super) const BARRIER_TIMEOUT_TICKS: u32 = 45 * 30;
 /// A game that stops pinging (crash / hang) during a LIVE round counts as gone
@@ -147,7 +154,7 @@ pub(super) fn note_placed(inner: &mut Inner, id: PeerId, round: u32) {
     // of ignored deaths on demand.
     let pending = matches!(inner.match_state.as_str(), "countdown") && round == inner.match_round + 1;
     let just_live = inner.match_state == "live" && round == inner.match_round
-        && inner.server_tick.wrapping_sub(inner.sess.live_tick) <= PLACE_LATE_TICKS;
+        && inner.server_tick.wrapping_sub(inner.sess.live_tick) <= hz_ticks(inner, PLACE_LATE_TICKS);
     if !pending && !just_live { return; }
     let tick = inner.server_tick;
     let e = inner.sess.placed.entry(id).or_insert((round, tick));
@@ -370,7 +377,7 @@ fn check_round_end(inner: &mut Inner, after_death: bool) {
         inner.match_reason = "pending".into();
         inner.last_winner = 0;
         inner.countdown_ticks = 0; // runs once the result is fixed
-        inner.settle_ticks = SETTLE_TICKS;
+        inner.settle_ticks = hz_ticks(inner, SETTLE_TICKS);
         inner.match_state_dirty = true;
         info!(round = inner.match_round, alive, "match: round over, settling {} ms for trades",
               SETTLE_TICKS * 1000 / 30);
@@ -457,7 +464,7 @@ fn is_present(inner: &Inner, p: &PeerState) -> bool {
     let check_pings = inner.match_state == "live";
     is_participant(inner, p)
         && match inner.match_peers.get(&p.id) {
-            Some(m) if m.aware && check_pings => inner.server_tick.wrapping_sub(m.last_ping_tick) <= GAME_PING_TIMEOUT_TICKS,
+            Some(m) if m.aware && check_pings => inner.server_tick.wrapping_sub(m.last_ping_tick) <= hz_ticks(inner, GAME_PING_TIMEOUT_TICKS),
             _ => true,
         }
         // Resume: a game client silent for 3 s mid-Live is away.
@@ -482,10 +489,10 @@ fn end_round(inner: &mut Inner, winner: PeerId, reason: &str, match_over: bool) 
         inner.sess.match_winner = inner.peers.values().find(|p| p.id == winner)
             .map(|p| (p.id, p.nick.clone(), p.wins));
         inner.match_state = "match_over".into();
-        inner.countdown_ticks = MATCH_OVER_TICKS;
+        inner.countdown_ticks = hz_ticks(inner, MATCH_OVER_TICKS);
     } else {
         inner.match_state = "roundover".into();
-        inner.countdown_ticks = ROUNDOVER_TICKS;
+        inner.countdown_ticks = hz_ticks(inner, ROUNDOVER_TICKS);
     }
     inner.match_state_dirty = true;
 }
@@ -594,7 +601,7 @@ pub(super) fn match_step(inner: &mut Inner) {
         inner.settle_ticks = 0;
         inner.match_state = "paused".into();
         inner.match_reason = "opponent_left".into();
-        inner.countdown_ticks = RECONNECT_GRACE_TICKS;
+        inner.countdown_ticks = hz_ticks(inner, RECONNECT_GRACE_TICKS);
         inner.barrier_passed = true;
         inner.match_state_dirty = true;
         return;
@@ -612,7 +619,7 @@ pub(super) fn match_step(inner: &mut Inner) {
         let deadline_passed = tick.wrapping_sub(inner.barrier_deadline) < u32::MAX / 2;
         let failed: Vec<PeerId> = waiting.iter().copied().filter(|id| {
             deadline_passed || inner.sess.load_errors.get(id)
-                .map_or(false, |(r, _, t)| *r == pending && tick.wrapping_sub(*t) >= LOAD_RETRY_TICKS)
+                .map_or(false, |(r, _, t)| *r == pending && tick.wrapping_sub(*t) >= hz_ticks(inner, LOAD_RETRY_TICKS))
         }).collect();
         if waiting.is_empty() {
             inner.barrier_passed = true;
@@ -698,9 +705,9 @@ pub(super) fn begin_countdown(inner: &mut Inner, ticks: u32) {
     inner.sess.load_errors.clear();
     inner.sess.sat_out.clear();
     inner.match_state = "countdown".into();
-    inner.countdown_ticks = ticks;
+    inner.countdown_ticks = hz_ticks(inner, ticks);
     inner.barrier_passed = false;
-    inner.barrier_deadline = inner.server_tick.wrapping_add(BARRIER_TIMEOUT_TICKS);
+    inner.barrier_deadline = inner.server_tick.wrapping_add(hz_ticks(inner, BARRIER_TIMEOUT_TICKS));
     inner.settle_ticks = 0;
     inner.match_state_dirty = true;
     info!(round = inner.match_round + 1, "match: countdown begins (waiting for clients to load)");

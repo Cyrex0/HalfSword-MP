@@ -1572,3 +1572,39 @@ fn snapshot_bytes_and_encode_cost() {
         assert_eq!(rec_msg.len(), 8 + 184 + 96 * n);
     }
 }
+
+/// `--tick-hz 60`: the load barrier, the countdown and the advertised timings stay in
+/// seconds (they were counted in 30 Hz ticks and ran twice as fast).
+#[test]
+fn round_flow_timings_are_seconds_at_any_tick_rate() {
+    let st = new_state();
+    let mut i = st.inner.try_lock().unwrap();
+    i.sess.tick_hz = 60;
+    let v: Vec<SocketAddr> = ["A", "Mate"].iter().enumerate().map(|(k, n)| join(&mut i, k as u16 + 1, n)).collect();
+    for p in i.peers.values_mut() { p.ready = true; }
+    i.match_arena = "Map_Arena_Pit".into();
+    assert!(cmd(&mut i, v[0], 1, C::Start { force: false }).ok);
+    for a in &v {
+        let id = i.peers[a].id;
+        game_status_in(&mut i, id, true, 0, None, false);
+    }
+    let cfg = live_config(&i);
+    assert_eq!((cfg.countdown_s, cfg.roundover_s, cfg.barrier_timeout_s), (3, 4, 45));
+    load(&mut i, v[0], 1);
+    // Mate pings but never loads: 45 s at 60 Hz.
+    for _ in 0..2 * BARRIER_TIMEOUT_TICKS - 2 {
+        let id = i.peers[&v[1]].id;
+        game_status_in(&mut i, id, true, 0, None, false);
+        ticks(&mut i, 1);
+    }
+    assert_eq!(phase_code(&i), Phase::LOADING, "still inside the 45 s barrier");
+    ticks(&mut i, 3);
+    assert_eq!(phase_code(&i), Phase::COUNTDOWN, "45 s: released");
+    // The 3 s countdown: 180 ticks.
+    let mut n = 0;
+    while phase_code(&i) == Phase::COUNTDOWN && n < 1000 {
+        ticks(&mut i, 1);
+        n += 1;
+    }
+    assert!((2 * FIRST_COUNTDOWN_TICKS - 2..=2 * FIRST_COUNTDOWN_TICKS + 2).contains(&n), "countdown took {n} ticks at 60 Hz");
+}

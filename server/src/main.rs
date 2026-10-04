@@ -55,6 +55,13 @@ mod stats; // the 10 s stats line, the shutdown summary, RCON REPORT
 #[cfg(test)]
 mod alloc_count; // counting allocator for the allocation tests
 
+fn parse_max_peers(s: &str) -> Result<usize, String> {
+    match s.trim().parse::<usize>() {
+        Ok(n) if (1..=hsmp_ipc::schema::session::MAX_ROSTER).contains(&n) => Ok(n),
+        _ => Err(format!("expected 1..={}", hsmp_ipc::schema::session::MAX_ROSTER)),
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 struct Args {
@@ -62,12 +69,13 @@ struct Args {
     #[arg(long, default_value = "0.0.0.0:7777")]
     bind: String,
 
-    /// Server tick rate, Hz. Snapshots are broadcast at this rate.
-    #[arg(long, default_value_t = 30)]
+    /// Server tick rate, Hz (10..=120). Match timers are in seconds at any rate.
+    #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u32).range(10..=120))]
     tick_hz: u32,
 
-    /// Max peers permitted at once. Lobby refuses JOIN beyond this.
-    #[arg(long, default_value_t = 8)]
+    /// Max peers permitted at once (1..=64, the session roster's size). Lobby refuses JOIN
+    /// beyond this. The game side is tested with 8 (docs/development/architecture.md).
+    #[arg(long, default_value_t = 8, value_parser = parse_max_peers)]
     max_peers: usize,
 
     /// Public-facing server name advertised to the master registry.
@@ -609,5 +617,23 @@ mod content_check_tests {
         let x = "ab".repeat(32);
         assert_eq!(super::resolve_content_hash(Some(&x), false).unwrap(), Some([0xab; 32]));
         assert!(super::resolve_content_hash(Some("abc"), false).is_err());
+    }
+}
+
+#[cfg(test)]
+mod limit_args_tests {
+    /// `--tick-hz 0` divided by zero at startup; a peer cap the session record cannot list
+    /// (more than 64 roster rows) is refused too.
+    #[test]
+    fn tick_rate_and_peer_cap_are_bounded() {
+        use clap::Parser;
+        let parse = |a: &[&str]| super::Args::try_parse_from(a).map(|x| (x.tick_hz, x.max_peers));
+        assert_eq!(parse(&["hsmp-server"]).unwrap(), (30, 8));
+        assert_eq!(parse(&["hsmp-server", "--tick-hz", "60", "--max-peers", "16"]).unwrap(), (60, 16));
+        assert!(parse(&["hsmp-server", "--tick-hz", "0"]).is_err());
+        assert!(parse(&["hsmp-server", "--tick-hz", "1000"]).is_err());
+        assert!(parse(&["hsmp-server", "--max-peers", "0"]).is_err());
+        assert!(parse(&["hsmp-server", "--max-peers", "65"]).is_err());
+        assert_eq!(parse(&["hsmp-server", "--max-peers", "64"]).unwrap().1, 64);
     }
 }

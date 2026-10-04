@@ -10,7 +10,7 @@ prints the same list as the table below.
 | Flag | Default | Environment fallback | What it does |
 |---|---|---|---|
 | `--bind <ip:port>` | `0.0.0.0:7777` | | UDP address for players and browser queries. Use `[::]:7777` for IPv6. The master lists this port, unless the router or the NAT maps it to another one (see `--port-map`, `--stun`). |
-| `--max-peers <n>` | `8` | | Most players at once. Further joins are refused. |
+| `--max-peers <n>` | `8` | | Most players at once, 1 to 64. Further joins are refused. The game side is tested with up to 8 players; see [More than 8 players](#more-than-8-players) before raising it. |
 | `--name <text>` | `Half Sword MP` | `HSMP_SERVER_NAME` | Server name in the browser and on the master. Control characters are removed; cut to 48 characters. |
 | `--mode <text>` | `duel` | `HSMP_SERVER_MODE` | Mode **label** in the browser (cut to 32 characters). It does not change the rules: every match is duel-style rounds. A label starting with "Best of" is rewritten to the live best-of value. |
 | `--map <arena>` | empty | `HSMP_LOBBY_MAP` | Starting arena, also advertised so joiners load the same arena, for example `Map_Arena_Pit`. Arenas: `Map_Arena_Alley`, `Map_Arena_Pit`, `Map_Arena_Yard`, `Map_Arena_Slums`, `Map_Arena_Cellar`, `Map_Arena_LordsHall`, `Map_Arena_EastTower`. Empty or unknown means Alley. |
@@ -25,7 +25,7 @@ prints the same list as the table below.
 | `--rcon-password <text>` | none | `HSMP_RCON_PASSWORD` | RCON password; required with `--rcon-bind`. Must not be blank or start or end with whitespace. Prefer the environment variable: command lines are visible to other local users. |
 | `--rcon-allow-remote` | off | `HSMP_RCON_ALLOW_REMOTE` | Accept a non-loopback `--rcon-bind`. Requires a password of at least 16 characters. Needed in Docker (see [RCON](rcon.md#docker)); otherwise use an SSH tunnel. |
 | `--client-budget-kbps <n>` | `128` | | Downstream budget per player for replicated streams, in KB/s. Streams are thinned by distance to fit. 128 KB/s fits 8 players; raise it only on a well-connected host with more players. The server lowers it on its own for a player whose path shows a queue (a full home upload), down to a quarter. Upload needed at the full budget: about 1 Mbit/s per remote player. |
-| `--tick-hz <n>` | `30` | | Server tick rate. **Leave it at 30.** Many game timers are counted in ticks and assume 30 Hz, so another value changes timeouts and countdowns, and `0` breaks the server. |
+| `--tick-hz <n>` | `30` | | Server tick rate, 10 to 120. Match timers (countdowns, load barrier, pauses, timeouts) are kept in seconds at any rate. 30 is the tested value; a higher rate costs CPU and does not change the player stream rates (those come from the clients). |
 | `--content-hash <64 hex>` | built in | | The content hash to enforce instead of the one this build embeds (`hsmp-server --build-info` prints it). Clients with other mod files or server data are refused with "Server runs HalfSword-MP X, you have Y". |
 | `--allow-mismatched-content` | off | `HSMP_ALLOW_MISMATCHED_CONTENT` | Development only: no content check. The protocol version is still checked. |
 | `--debug-verbs` | off | | Enables the RCON test verb `DEBUG KILL <seat>`. **Never on a public server.** |
@@ -209,7 +209,7 @@ Config keys and their defaults:
 | Key | Default | Passed as |
 |---|---|---|
 | `bind` | `0.0.0.0:7777` | `--bind` |
-| `tick_hz` | `30` | `--tick-hz` (leave at 30) |
+| `tick_hz` | `30` | `--tick-hz` (10 to 120) |
 | `max_peers` | `8` | `--max-peers` |
 | `name` | `HSMP Dedicated` | `--name` (write it without quotes: the value is everything after `=`, trimmed) |
 | `mode` | `duel` | `--mode` |

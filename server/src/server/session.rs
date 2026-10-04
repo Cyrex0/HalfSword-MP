@@ -499,7 +499,7 @@ fn effective_arena(a: &str) -> &str {
 pub(crate) fn live_config(inner: &Inner) -> rec::SessionConfig {
     let s = &inner.sess;
     let hz = s.tick_hz.max(1);
-    let secs = |ticks: u32| (ticks / hz).min(255) as u8;
+    let secs = |ticks: u32| (hz_ticks(inner, ticks) / hz).min(255) as u8;
     rec::SessionConfig {
         rev: s.config_rev,
         arena: Str::new(effective_arena(&inner.match_arena)),
@@ -643,7 +643,7 @@ pub(crate) fn link_ok(inner: &Inner, p: &PeerState) -> bool {
     if inner.match_state != "live" && inner.match_state != "paused" { return true; }
     let aware = inner.match_peers.get(&p.id).map(|m| m.aware).unwrap_or(false);
     if !aware { return true; }
-    inner.server_tick.wrapping_sub(last_heard(inner, p)) <= LINK_STALL_TICKS
+    inner.server_tick.wrapping_sub(last_heard(inner, p)) <= hz_ticks(inner, LINK_STALL_TICKS)
 }
 
 /// Edge detector for link stalls (called every tick from `reconcile_seats`):

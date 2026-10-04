@@ -143,7 +143,7 @@ fn go_live(inner: &mut Inner) {
         inner.match_reason = "load_failed".into();
         inner.last_winner = 0;
         inner.settle_ticks = 0;
-        inner.countdown_ticks = ROUNDOVER_TICKS;
+        inner.countdown_ticks = hz_ticks(inner, ROUNDOVER_TICKS);
         inner.match_state_dirty = true;
         return;
     }
@@ -241,7 +241,7 @@ pub(super) struct TickOut {
     pub admin_promoted: bool,
 }
 
-/// No authenticated packet for this long (60 s at 30 Hz): the peer is removed.
+/// No authenticated packet for this long (60 s; ticks at 30 Hz, see `hz_ticks`): the peer is removed.
 const TIMEOUT_TICKS: u32 = 60 * 30;
 
 /// The part of a tick that runs under the state lock: match flow (`advance`), the kit round
@@ -286,8 +286,9 @@ pub(super) fn tick_locked(state: &ServerState, inner: &mut Inner, sc: &mut TickS
         .map(|s| (inner.peers.keys().copied().collect::<Vec<_>>(), session_msg(&s)));
 
     sc.timed.clear();
+    let timeout = hz_ticks(inner, TIMEOUT_TICKS);
     sc.timed.extend(inner.peers.iter()
-        .filter(|(_, p)| tick.wrapping_sub(p.last_seen_tick) > TIMEOUT_TICKS)
+        .filter(|(_, p)| tick.wrapping_sub(p.last_seen_tick) > timeout)
         .map(|(a, p)| (*a, p.id)));
     let mut admin_promoted = false;
     for (addr, _) in &sc.timed {
