@@ -25,7 +25,13 @@ pub(super) async fn handle(
     payload: &[u8],
 ) -> anyhow::Result<()> {
     let _ = (socket, state, from, payload);
+    // A player still loading the server's mods sends nothing else (mods_glue.rs).
+    if super::mods_glue::gate(state, from, h.kind).await {
+        return Ok(());
+    }
     match h.kind {
+        // Server mods (0x09xx): chunk requests and the loaded report (mods_glue.rs).
+        k if hsmp_ipc::schema::mods::is_mods_kind(k) => super::mods_glue::handle_record(socket, state, from, h, payload).await,
         // Session, match and connection (0x02xx): session_records.rs.
         k if k >> 8 == 0x02 => super::session_records::handle(socket, state, from, h, payload).await,
         // Grabs and shoves (interact_glue.rs): validated, judged, forwarded to the body's owner.

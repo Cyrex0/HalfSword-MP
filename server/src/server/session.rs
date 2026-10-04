@@ -78,6 +78,7 @@ pub(crate) fn forget_peer_locked(inner: &mut Inner, id: PeerId) {
     crate::combat::engine_forget(id);
     crate::validate::cheat::forget(id);
     super::dispatch::forget_limits(id);
+    super::mods_glue::forget(inner, id);
 }
 
 /// `gone` (already removed from the peer table) left: recompute the admins
@@ -890,6 +891,8 @@ fn fill_session(inner: &Inner, now_ms: u64, seats: &mut Vec<(u8, PlayerKey)>, ro
         let role = if !in_match || participant { Role::FIGHTER } else { Role::SPECTATOR };
         let mut r = rec::RosterRow { seat, role, player_id: player_id_cached(&key), ..Default::default() };
         match by_key(&key) {
+            // Still loading the server's mods: not listed yet.
+            Some(p) if super::mods_glue::is_pending(inner, p.id) => continue,
             Some(p) => {
                 let mp = inner.match_peers.get(&p.id);
                 r.peer_id = p.id;
@@ -1063,6 +1066,9 @@ pub(crate) fn apply_command(inner: &mut Inner, actor: Actor, cmd: &rec::Command,
     let (is_admin, me, by) = match actor {
         Actor::Rcon => (true, None, "rcon".to_string()),
         Actor::Peer(a) => match inner.peers.get(&a) {
+            // Still loading the server's mods (mods_glue.rs): no command yet.
+            Some(p) if super::mods_glue::is_pending(inner, p.id) =>
+                return refuse(CmdReason::WRONG_PHASE, "still loading the server's mods"),
             Some(p) => (p.is_admin, Some(a), p.nick.clone()),
             None => return refuse(CmdReason::UNKNOWN_PLAYER, "not connected"),
         },
@@ -1169,8 +1175,11 @@ pub(crate) fn start_match(inner: &mut Inner, force: bool, by: &str) -> Outcome {
     if inner.match_state != "lobby" {
         return refuse(CmdReason::WRONG_PHASE, format!("match already running ({})", inner.match_state));
     }
-    let total = inner.peers.len();
-    let ready_count = inner.peers.values().filter(|p| p.ready).count();
+    // Players still loading the server's mods are not counted and do not take part.
+    let joined = |p: &&PeerState| !super::mods_glue::is_pending(inner, p.id);
+    let total = inner.peers.values().filter(joined).count();
+    let ready_count = inner.peers.values().filter(joined).filter(|p| p.ready).count();
+    let keys: Vec<PlayerKey> = inner.peers.values().filter(joined).map(peer_key).collect();
     if total == 0 {
         return refuse(CmdReason::NOT_ENOUGH_PLAYERS, "no players connected");
     }
@@ -1179,7 +1188,6 @@ pub(crate) fn start_match(inner: &mut Inner, force: bool, by: &str) -> Outcome {
             format!("start blocked: {} of {} peers ready", ready_count, total));
     }
     inner.sess.auto_start_at = None;
-    let keys: Vec<PlayerKey> = inner.peers.values().map(peer_key).collect();
     inner.participants = keys;
     inner.pauses_by_key.clear();
     inner.match_pauses = 0;
@@ -1187,7 +1195,7 @@ pub(crate) fn start_match(inner: &mut Inner, force: bool, by: &str) -> Outcome {
     inner.wins_by_key.clear();
     inner.last_winner = 0;
     inner.match_reason.clear();
-    for p in inner.peers.values_mut() { p.wins = 0; p.alive = true; }
+    for p in inner.peers.values_mut() { p.wins = 0; p.alive = !inner.mods_pending.contains_key(&p.id); }
     for mp in inner.match_peers.values_mut() { mp.loaded_round = 0; }
     // Every client loads exactly the server's arena: never leave it to
     // each client's local default.
@@ -1276,8 +1284,9 @@ pub(crate) fn auto_start_step(inner: &mut Inner) {
         inner.sess.auto_start_at = None;
         return;
     }
-    let n = inner.peers.len();
-    let ready = inner.peers.values().filter(|p| p.ready).count();
+    let joined = |p: &&PeerState| !super::mods_glue::is_pending(inner, p.id);
+    let n = inner.peers.values().filter(joined).count();
+    let ready = inner.peers.values().filter(joined).filter(|p| p.ready).count();
     let eligible = inner.admin_peer_id == 0 && n >= AUTO_START_MIN && ready == n;
     let now = inner.now_ms;
     match (eligible, inner.sess.auto_start_at) {

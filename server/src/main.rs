@@ -52,6 +52,7 @@ mod build_id;
 mod log_init; // stdout + the --log-dir files
 mod server_report; // --report: the redacted bug-report zip of this server's logs
 mod stats; // the 10 s stats line, the shutdown summary, RCON REPORT
+mod server_mods; // --mods-dir: the mods this server serves to its players
 #[cfg(test)]
 mod alloc_count; // counting allocator for the allocation tests
 
@@ -261,6 +262,55 @@ struct Args {
     /// Test only: behave as if behind a NAT that drops unsolicited inbound UDP.
     #[arg(long, hide = true)]
     emulate_nat: bool,
+
+    /// Server mods: a folder of UE4SS Lua mods (one sub-folder per mod, each with
+    /// Scripts/main.lua and an optional mod.json) that every player downloads and runs after
+    /// accepting a warning (docs/hosting/server-mods.md). The server refuses to start when a
+    /// mod breaks a rule.
+    #[arg(long, env = "HSMP_MODS_DIR")]
+    mods_dir: Option<PathBuf>,
+
+    /// Server mods: the largest total size in MiB (1-64).
+    #[arg(long, env = "HSMP_MODS_MAX_MB", default_value_t = 64, value_parser = clap::value_parser!(u64).range(1..=64))]
+    mods_max_mb: u64,
+
+    /// Server mods: seconds a joining player has to accept, download and load them.
+    #[arg(long, env = "HSMP_MODS_TIMEOUT_S", default_value_t = 300, value_parser = clap::value_parser!(u32).range(30..=3600))]
+    mods_timeout_s: u32,
+
+    /// Server mods: download rate per joining player, KiB/s.
+    #[arg(long, env = "HSMP_MODS_RATE_KBPS", default_value_t = 2048, value_parser = clap::value_parser!(u64).range(64..=65536))]
+    mods_rate_kbps: u64,
+
+    /// Server mods: download rate of every joining player together, KiB/s (the rest of the
+    /// upstream stays with the players in the match).
+    #[arg(long, env = "HSMP_MODS_TOTAL_RATE_KBPS", default_value_t = 8192, value_parser = clap::value_parser!(u64).range(64..=262144))]
+    mods_total_rate_kbps: u64,
+}
+
+/// `--mods-dir`: the set, built and checked; `None` without the flag. An invalid mod stops
+/// the server with the reason.
+fn load_server_mods(args: &Args) -> Result<Option<server_mods::Host>> {
+    let Some(dir) = args.mods_dir.as_ref().filter(|d| !d.as_os_str().is_empty()) else { return Ok(None) };
+    let cfg = server_mods::Config {
+        limits: server_mods::manifest::Limits::with_total_mb(args.mods_max_mb),
+        timeout_s: args.mods_timeout_s,
+        peer_rate_bps: args.mods_rate_kbps << 10,
+        total_rate_bps: (args.mods_total_rate_kbps << 10).max(args.mods_rate_kbps << 10),
+    };
+    let (built, notes) = server_mods::manifest::build_from_dir(dir, &cfg.limits)
+        .map_err(|e| anyhow::anyhow!("server mods ({}): {e}", dir.display()))?;
+    for n in notes {
+        warn!(note = %n, "server mods");
+    }
+    for m in &built.manifest.mods {
+        info!(name = %m.name, version = %m.version, author = %m.author, files = m.files.len(), bytes = m.bytes(),
+              hash = %m.hash_hex(), "server mod");
+    }
+    info!(dir = %dir.display(), mods = built.manifest.mods.len(), files = built.manifest.file_count(),
+          bytes = built.manifest.total_bytes(), set = %built.manifest.set_hash_hex(), timeout_s = cfg.timeout_s,
+          rate_kbps = args.mods_rate_kbps, "server mods: players download and run these after accepting the warning");
+    Ok(Some(server_mods::Host::new(cfg, built)))
 }
 
 fn switch_on(v: &str) -> bool {
@@ -418,11 +468,17 @@ async fn main() -> Result<()> {
         None => warn!(version = build_id::VERSION, built_with = build_id::CONTENT_HASH_HEX,
                       "content check OFF (--allow-mismatched-content): clients with other mod files can join"),
     }
-    let transport = net::Net::new(static_key, content_hash);
+    let mods = load_server_mods(&args)?;
+    let mods_caps = if mods.is_some() { hsmp_net::net::caps::SERVER_MODS } else { 0 };
+    let transport = net::Net::with_caps(static_key, content_hash, mods_caps);
     let server_key_hex = hex::encode(transport.static_public());
     info!(key_file = %key_path.display(), server_key = %server_key_hex, fingerprint = %transport.fingerprint(),
           proto = %format!("v{}..=v{}", hsmp_net::net::VERSION_MIN, hsmp_net::net::VERSION_MAX), "server identity");
     let state = Arc::new(server::ServerState::with_net(args.max_peers, transport));
+    let (mods_count, mods_bytes) = mods.as_ref().map_or((0, 0), |h| (h.built.manifest.mods.len() as u32, h.built.manifest.total_bytes()));
+    if let Some(h) = mods {
+        let _ = state.mods.set(Arc::new(h));
+    }
     server::configure_session(&state, server::SessionOpts {
         debug_verbs: args.debug_verbs,
         mode: env_or_mode(&args.mode),
@@ -457,6 +513,8 @@ async fn main() -> Result<()> {
         password: false, // join passwords are not implemented server-side yet
         server_key: server_key_hex.clone(),
         content_hash: content_hash.map(hex::encode).unwrap_or_default(),
+        mods: mods_count,
+        mods_bytes,
     });
 
     info!(version = build_id::VERSION, protocol = %format!("v{}..=v{}", hsmp_net::net::VERSION_MIN, hsmp_net::net::VERSION_MAX),
@@ -488,6 +546,10 @@ async fn main() -> Result<()> {
     });
     // The listen host's owner hears how reachable the server is (NET_STATUS notice).
     tokio::spawn(server::net_status_notices(state.clone()));
+    // Server mods: serve chunks to joining players, time out the ones that never load.
+    if mods_count > 0 {
+        tokio::spawn(server::mods_serve_loop(socket.clone(), state.clone()));
+    }
 
     // Register with master if HSMP_MASTER_URL set.
     let mut master = None;

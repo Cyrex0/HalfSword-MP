@@ -313,7 +313,7 @@ pub(crate) fn same_host_count<'a>(addrs: impl Iterator<Item = &'a SocketAddr>, f
 
 /// Admission for a verified v5 Auth: ban, full, duplicate
 /// key (the reconnect replaces the old connection), then accept + Welcome.
-async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<PendingAuth>) {
+pub(super) async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<PendingAuth>) {
     let from = p.addr;
     let key = p.player_key();
     let fp = hsmp_net::net::handshake::player_fingerprint(&key);
@@ -380,6 +380,15 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
         return;
     }
     let caps = p.caps;
+    // A server with mods takes only clients that can load them.
+    if let Some((code, text)) = super::mods_glue::admit_check(state, caps) {
+        drop(inner);
+        info!(%from, player = %fp, "join rejected: the client cannot take this server's mods");
+        crate::stats::refused("mods_required");
+        let out = state.net.reject(p, code, &text);
+        send_out(socket, state, out).await;
+        return;
+    }
     let taken: Vec<String> = inner.peers.values().map(|q| q.nick.clone()).collect();
     let nick = dedup_nick(p.nick(), &taken);
     // Accept under the peer lock, so the tick's reconcile never sees a
@@ -412,6 +421,7 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
     state.relay.forget(&from);
     state.relay.set_peer(from, id);
     crate::interact::note_caps(id, caps); // interaction channel: negotiated caps per peer
+    super::mods_glue::on_joined_locked(state, &mut inner, id); // pending until its mods are loaded
     // An admin (the listen host back after a drop, a configured admin)
     // joining changes who is admin: everyone's S2CAdminState follows.
     let admins_changed = refresh_admins(&mut inner);
@@ -428,6 +438,8 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
     send_msg_to(socket, state, from, welcome_msg(id, seat, state.net.epoch(), state.net.now_ms(), caps, &nick)).await;
     // Who is admin (the `admin_state` record; the welcome has no admin flag).
     send_msg_to(socket, state, from, admin_state).await;
+    // The server's mods, when it has any (the player stays pending until they are loaded).
+    super::mods_glue::after_welcome(socket, state, from, id, false).await;
     // The roster (who else is here) rides in the next `session` snapshot.
     if !all_addrs.is_empty() {
         broadcast_admin_state(socket, state, &all_addrs).await;
@@ -511,6 +523,7 @@ async fn resume(
     // session snapshot (on_resumed forces one), loadouts. The other clients see no change.
     send_msg_to(socket, state, from, welcome_msg(id, seat, state.net.epoch(), state.net.now_ms(), caps, &nick)).await;
     send_msg_to(socket, state, from, admin_state).await;
+    super::mods_glue::after_welcome(socket, state, from, id, true).await;
     crate::loadout::replay_to(socket, state, from).await;
     flush_out(socket, state).await;
 }
