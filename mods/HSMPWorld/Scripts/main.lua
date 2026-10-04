@@ -691,14 +691,36 @@ function W2.ipc() return rawget(_G, "HSMP_IPC") end
 
 -- --- UE helpers ------------------------------------------------------------------------
 local NAME_NONE
+-- The reflected reads below run for every body every tick: pcall(RD.f, obj, ...) with
+-- these functions made once, not a closure per call.
+local RD = {}
+function RD.is_valid(o) return o:IsValid() end
+function RD.addr(o) return o:GetAddress() end
+function RD.fname(o) return o:GetFName():ToString() end
+function RD.cls(o) return o:GetClass():GetFName():ToString() end
+function RD.cls_full(o) return o:GetClass():GetFullName() end
+function RD.index(o, k) return o[k] end
+function RD.sim(c) return c:IsSimulatingPhysics(NAME_NONE) end
+function RD.loc(o) local l = o:K2_GetActorLocation(); return v3(l.X, l.Y, l.Z) end
+function RD.cloc(c) local l = c:K2_GetComponentLocation(); return v3(l.X, l.Y, l.Z) end
+function RD.crot(c) local q = c:K2_GetComponentRotation(); return { Pitch = q.Pitch, Yaw = q.Yaw, Roll = q.Roll } end
+function RD.parent(a) return a:GetAttachParentActor() end
+function RD.linvel(c) local v = c:GetPhysicsLinearVelocity(NAME_NONE); return v3(v.X, v.Y, v.Z) end
+function RD.pc() return UEHelpers.GetPlayerController() end
+function RD.pawn_of(pc)
+    pc = pc or UEHelpers.GetPlayerController()
+    if pc and pc:IsValid() and pc.Pawn and pc.Pawn:IsValid() then return pc.Pawn end
+    return nil
+end
 local function valid(o)
     if o == nil then return false end
-    local ok, v = pcall(function() return o:IsValid() end)
+    local ok, v = pcall(RD.is_valid, o)
     return ok and v == true
 end
 local function addr(o)
-    local a; pcall(function() a = o:GetAddress() end)
-    return a
+    local ok, a = pcall(RD.addr, o)
+    if ok then return a end
+    return nil
 end
 local function same(a, b)
     if not valid(a) or not valid(b) then return false end
@@ -706,29 +728,33 @@ local function same(a, b)
     return x ~= nil and x == y
 end
 local function fname_of(o)
-    local n; pcall(function() n = o:GetFName():ToString() end)
-    return n
+    local ok, n = pcall(RD.fname, o)
+    if ok then return n end
+    return nil
 end
 local function cls_short(o)
-    local n; pcall(function() n = o:GetClass():GetFName():ToString() end)
-    return n
+    local ok, n = pcall(RD.cls, o)
+    if ok then return n end
+    return nil
 end
 local function cls_path(o)
-    local s; pcall(function() s = o:GetClass():GetFullName() end)
+    local ok, s = pcall(RD.cls_full, o)
+    if not ok then s = nil end
     return s and s:match("^%S+%s+(.+)$") or s
 end
 local function field(o, k)
-    local v; pcall(function() v = o[k] end)
-    return v
+    local ok, v = pcall(RD.index, o, k)
+    if ok then return v end
+    return nil
 end
 local function is_sim(c)
-    local s = false
-    pcall(function() s = c:IsSimulatingPhysics(NAME_NONE) end)
-    return s == true
+    local ok, s = pcall(RD.sim, c)
+    return ok and s == true
 end
 local function get_loc(o)
-    local r; pcall(function() local l = o:K2_GetActorLocation(); r = v3(l.X, l.Y, l.Z) end)
-    return r
+    local ok, r = pcall(RD.loc, o)
+    if ok then return r end
+    return nil
 end
 
 -- Level-owned, real (not a CDO/archetype template), not attached to anything.
@@ -958,11 +984,10 @@ local function weapon_body(a)
 end
 
 local function body_pose(c)
-    local p, r
-    pcall(function()
-        local l = c:K2_GetComponentLocation(); p = v3(l.X, l.Y, l.Z)
-        local q = c:K2_GetComponentRotation(); r = { Pitch = q.Pitch, Yaw = q.Yaw, Roll = q.Roll }
-    end)
+    local ok, p = pcall(RD.cloc, c)
+    if not ok then return nil, nil end
+    local ok2, r = pcall(RD.crot, c)
+    if not ok2 then r = nil end
     return p, r
 end
 
@@ -1327,8 +1352,8 @@ local function natively_held(o)
         if field(o.actor, "Is Held") == true then return true end
         if valid(field(o.actor, "Parent Actor")) then return true end
     end
-    local parent
-    pcall(function() parent = o.actor:GetAttachParentActor() end)
+    local ok, parent = pcall(RD.parent, o.actor)
+    if not ok then parent = nil end
     return valid(parent) and not W2.attach_ok(cls_short(parent))
 end
 
@@ -1401,7 +1426,8 @@ local function read_body(o, now)
     o.sim = sim
     local vel
     if sim then
-        pcall(function() local v = o.body:GetPhysicsLinearVelocity(NAME_NONE); vel = v3(v.X, v.Y, v.Z) end)
+        local ok, v = pcall(RD.linvel, o.body)
+        if ok then vel = v end
     end
     if not vel then
         local dt = (now - (o.read_at or now)) / 1000
@@ -1423,11 +1449,8 @@ local hands = { R = nil, L = nil, gR = nil, gL = nil, pawn = nil, pawn_loc = nil
 -- is a full FindAllOf in UE4SS 3.0.1); never cached across ticks.
 local function read_hands(tick_pc)
     hands.R, hands.L, hands.gR, hands.gL, hands.Ra, hands.La = nil, nil, nil, nil, nil, nil
-    local pawn
-    pcall(function()
-        local pc = tick_pc or UEHelpers.GetPlayerController()
-        if pc and pc:IsValid() and pc.Pawn and pc.Pawn:IsValid() then pawn = pc.Pawn end
-    end)
+    local okp, pawn = pcall(RD.pawn_of, tick_pc)
+    if not okp then pawn = nil end
     hands.pawn = pawn
     hands.pawn_loc = pawn and get_loc(pawn) or nil
     if not pawn then return end
@@ -3222,8 +3245,8 @@ local function on_tick()
 
     refresh_session(now)
     -- One PlayerController lookup per tick, shared by the guard and read_hands
-    local tick_pc
-    pcall(function() tick_pc = UEHelpers.GetPlayerController() end)
+    local okpc, tick_pc = pcall(RD.pc)
+    if not okpc then tick_pc = nil end
     if not wg_check(tick_pc) then return end
     local wname, waddr = current_world()
     T.apply_session_change(wname, waddr)

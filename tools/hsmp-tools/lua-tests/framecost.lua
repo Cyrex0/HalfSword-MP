@@ -21,7 +21,7 @@ local PRINT = false
 for _, a in ipairs({ ... }) do if a == "print" then PRINT = true end end
 
 if mode ~= "case" then
-    for _, k in ipairs({ "ipc", "sync_native", "sync_lua", "avatars_native", "avatars_lua", "pure_equal" }) do
+    for _, k in ipairs({ "ipc", "sync_native", "sync_lua", "avatars_native", "avatars_lua", "pure_equal", "world" }) do
         T.isolated(T.script, "case", { kind = k, print = PRINT or os.getenv("HSMP_FRAMECOST_PRINT") == "1" })
     end
     return
@@ -363,5 +363,40 @@ if opts.kind == "pure_equal" then
         if not same(view, want) then bad.play_in = bad.play_in + 1 end
     end
     for k, v in pairs(bad) do T.check(v == 0, "PURE " .. k .. " identical to the beta.4 math", v) end
+    return
+end
+
+-- ---------------------------------------------------------------- HSMPWorld
+-- The per-body reads of the 16 ms tick: can_drive (alive / valid / natively held) on a
+-- scene prop, and the tick's hand read, through lean UObject stand-ins.
+if opts.kind == "world" then
+    package.preload["UEHelpers"] = function() return {} end
+    package.path = T.path("mods/shared") .. "/?.lua;" .. T.path("mods/HSMPWorld/Scripts") .. "/?.lua;" .. package.path
+    local real_getenv = os.getenv
+    os.getenv = function(k) if k == "HSMP_STATE_DIR" then return sd end return real_getenv(k) end
+    _G.HSMP_WORLD_TEST = true
+    _G.FName = function(s) return s end
+    _G.print = function() end
+    local H = assert(load(T.read(T.path("mods/HSMPWorld/Scripts/main.lua")), "@HSMPWorld/Scripts/main.lua"))()
+    H.set_name_none("None")
+    local LOC = { X = 1, Y = 2, Z = 3 }
+    local Mt = { IsValid = function() return true end, GetAddress = function(self) return rawget(self, "_a") end,
+                 GetAttachParentActor = function() return nil end, IsSimulatingPhysics = function() return true end,
+                 K2_GetActorLocation = function() return LOC end }
+    local MT = { __index = Mt }
+    local function obj(a, props)
+        local o = setmetatable(props or {}, MT)
+        rawset(o, "_a", a)
+        return o
+    end
+    local actor, body = obj(0x100), obj(0x110)
+    local o = { actor = actor, body = body, kind = "prop" }
+    T.check(H.can_drive(o) == true, "the prop is drivable")
+    report("world.can_drive", churn(2000, function() H.can_drive(o) end), opts.limit or 40)
+    local pawn = obj(0x200, { ["Weapon R"] = obj(0x210), ["Grab Component R"] = obj(0x220), ["Grabbed R"] = true })
+    local pc = obj(0x300, { Pawn = pawn })
+    H.read_hands(pc)
+    T.check(H.hands.R == 0x210 and H.hands.gR == 0x220, "the hand read sees the held weapon and grab", T.repr(H.hands))
+    report("world.read_hands", churn(2000, function() H.read_hands(pc) end), opts.limit or 200)
     return
 end
