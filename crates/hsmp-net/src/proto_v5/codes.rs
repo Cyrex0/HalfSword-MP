@@ -34,6 +34,9 @@ pub mod Mode {
     pub const FFA: u8 = 1;
     pub const TEAM_ELIM: u8 = 2;
     pub const KING_OF_HILL: u8 = 3;
+    pub const ROULETTE: u8 = 4;
+    pub const BRAWL: u8 = 5;
+    pub const DEATHMATCH: u8 = 6;
 }
 
 /// `SessionConfig.team_rule`.

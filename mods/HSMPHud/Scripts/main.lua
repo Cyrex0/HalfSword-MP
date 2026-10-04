@@ -726,8 +726,22 @@ local function tick()
     last_panel = spec
     sync_panel(spec, in_arena, now, menu_is_open)
 
+    -- King of the hill: where the hill is from my pawn (only then: one PlayerController lookup)
+    local me_pos, me_yaw
+    if snap.mode and snap.mode.zone and in_arena then
+        pcall(function()
+            local pc = UEHelpers.GetPlayerController()
+            local p = pc and pc:IsValid() and pc.Pawn
+            if p and p:IsValid() then
+                local l = p:K2_GetActorLocation()
+                me_pos = { l.X, l.Y, l.Z }
+                me_yaw = pc:GetControlRotation().Yaw
+            end
+        end)
+    end
     local model = Model.build(T, snap, now, { in_arena = in_arena, menu_open = menu_is_open,
-                                              centre_enabled = CENTRE_BANNER, modal = spec and spec.modal })
+                                              centre_enabled = CENTRE_BANNER, modal = spec and spec.modal,
+                                              me_pos = me_pos, me_yaw = me_yaw })
     last_model = model
     local why = model.visible and "visible" or model.why
     if why ~= last_vis_why then

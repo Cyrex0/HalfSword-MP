@@ -165,7 +165,7 @@ says **HOST**.
 | **ROUNDS** | **BEST OF 1**, **3**, **5** or **7**. |
 | **KIT RULES** | **FREE** (any kit, no points limit), **CLASSES ONLY** (class presets only), or **CUSTOM** (custom kits within a point budget). |
 | **BUDGET** | For **CUSTOM** only: 12, 20, 30, 45 or 60 points. |
-| **MODE** | Set by the server. Today it is **DUEL**. |
+| **MODE** | The game mode; the **MODE** button opens the GAME MODE screen. See [Game modes](#game-modes). |
 
 **Buttons at the bottom:**
 
@@ -173,6 +173,7 @@ says **HOST**.
 |---|---|---|
 | **MARK READY** | everybody | Tells everybody you are ready. It then reads **READY [x]**. Press it again to cancel. |
 | **LOADOUT** | everybody | Opens the loadout screen. See [Your loadout](#your-loadout). |
+| **MODE** | everybody | Opens the GAME MODE screen: the host picks the mode and its options, everybody picks a team when teams are **PICK**. |
 | **START MATCH** | host | Starts the match on the server's arena. It works once every player is ready. With only you in the lobby, it reads **START (SOLO)**. Other players see **HOST STARTS (n/m)**. |
 | **LEAVE** / **CLOSE LOBBY** | everybody / host | Leaves the server. For the host, **CLOSE LOBBY** closes the server for everybody. |
 
@@ -273,12 +274,31 @@ than 9 pixels.
 0 to 10, at most 40 in total. **SAVE & PUBLISH** saves them and sends them to the server with your
 profile.
 
+## Game modes
+
+The host picks the mode on the lobby's **GAME MODE** screen (the **MODE** button). Every mode is
+played in rounds; the first player or team to win enough rounds (2 in a best of 3) wins the match.
+
+| Mode | How to win a round |
+|---|---|
+| **DUEL** / **FFA** | Be the last fighter standing. If everybody falls together, the round is a draw. |
+| **TEAMS** (team elimination) | Be on the last team standing. Teammates cannot hurt each other unless the host turns **FRIENDLY FIRE** on. |
+| **HILL** (King of the hill) | Stand on the hill with no enemy on it: you (or your team) score a point per second. The first to the target (60 s by default) wins. A fight on the hill scores nothing for anybody. Dying still puts you out of the round, and when the round clock runs out the most points win. The top banner says how far the hill is and in which direction ("HILL: 12 m AHEAD-LEFT", "ON THE HILL"). |
+| **ROULETTE** (weapon roulette) | Last fighter standing, but everybody fights with the same random weapon and armour set, a new one each round. The countdown names it. Your own loadout comes back after the match. |
+| **BRAWL** | Last fighter standing, with fists only and no armour. |
+| **DEATHMATCH** | Kill as often as you can before the round clock (5 minutes by default) runs out. When you die, you come back a few seconds later at a spawn point away from the others: your game reloads the arena ("RESPAWN IN 3", then "RESPAWNING..."), and you fight again once you are placed. The most kills win the round; a tie goes to sudden death, where the next kill wins. |
+
+**Teams.** HILL, ROULETTE, BRAWL and DEATHMATCH can be played in teams too. With **AUTO** teams
+the server balances the teams when the match starts; with **PICK** teams every player picks
+**RED**, **BLUE**, **GREEN** or **GOLD** on the GAME MODE screen (**ANY** = the smallest team).
+Teams spawn on their own side of the arena and swap sides every round. When a whole team drops,
+the match waits for it like a duel waits for a dropped opponent.
+
 ## During a match
 
-A match is a series of rounds. The mode today is **DUEL**: with two players it is a duel, with
-three or more it is last man standing. The last fighter standing wins the round. If everybody
-falls, the round is a draw and nobody scores. The first player to win enough rounds (for example 2
-in a best of 3) wins the match.
+A match is a series of rounds (see [Game modes](#game-modes) for how each mode is won). In
+**DUEL**, with two players it is a duel, with three or more it is last man standing. If everybody
+falls, the round is a draw and nobody scores.
 
 How hits work: your game sees your weapon hit another fighter and reports the hit. The server
 checks it against where that fighter was at the moment you saw it (lag compensation), and if it
@@ -289,12 +309,13 @@ So both players see the same wound, and a hit that the server refuses has no eff
 
 | Where | What |
 |---|---|
-| Top centre | Round banner, timer and the score. |
+| Top centre | Round banner, timer and the score. In team modes one cell per team (round wins, and this round's points or kills); in King of the hill the banner shows who holds the hill and where it is; with a round clock the timer counts down (SUDDEN DEATH after a tied deathmatch). |
 | Top left | Every opponent (up to 7): name, **CON** and **BODY %**, a body bar and a stamina bar. The row turns red while that fighter bleeds. |
 | Bottom left | You: a body bar with **BODY %**, then **CON**, your raw health (`hp`) and **BLEED** while you bleed, and a stamina bar. |
 | Top right | Kill feed, and notices such as players joining or leaving. |
 | Bottom right | Net indicator: NET GOOD, NET OK, NET POOR or NET BAD, with ping. |
-| Centre | Big messages: ROUND n, FIGHT!, ROUND OVER, YOU DIED, SPECTATING, VICTORY, MATCH OVER. |
+| Centre | Big messages: ROUND n (with the round kit in weapon roulette and brawl), FIGHT!, ROUND OVER, YOU DIED, RESPAWN IN n, SPECTATING, VICTORY, MATCH OVER. |
+| Centre (hold TAB) | Scoreboard: wins, kills / deaths, ping, status; team tags in team modes. |
 
 What the numbers mean. A Half Sword fight is not decided by raw health: health only drops on hard
 hits to the head, neck and torso, and it regenerates. So the HUD shows what matters:

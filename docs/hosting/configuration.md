@@ -12,7 +12,13 @@ prints the same list as the table below.
 | `--bind <ip:port>` | `0.0.0.0:7777` | | UDP address for players and browser queries. Use `[::]:7777` for IPv6. The master lists this port, unless the router or the NAT maps it to another one (see `--port-map`, `--stun`). |
 | `--max-peers <n>` | `8` | | Most players at once, 1 to 64. Further joins are refused. The game side is tested with up to 8 players; see [More than 8 players](#more-than-8-players) before raising it. |
 | `--name <text>` | `Half Sword MP` | `HSMP_SERVER_NAME` | Server name in the browser and on the master. Control characters are removed; cut to 48 characters. |
-| `--mode <text>` | `duel` | `HSMP_SERVER_MODE` | Mode **label** in the browser (cut to 32 characters). It does not change the rules: every match is duel-style rounds. A label starting with "Best of" is rewritten to the live best-of value. |
+| `--mode <text>` | `duel` | `HSMP_SERVER_MODE` | The game mode the lobby starts with: `duel`, `ffa`, `teams` (team elimination), `koth` (King of the hill), `roulette` (weapon roulette), `brawl` or `deathmatch`. Also the label in the browser (cut to 32 characters); any other text ("Best of 5") is only a label and plays duel. A label starting with "Best of" is rewritten to the live best-of value; a mode other than duel is listed by its name. See [Game modes](#game-modes). |
+| `--teams <n>` | `2` | `HSMP_TEAMS` | Team count of the team modes, 2 to 4. |
+| `--team-rule <rule>` | `none` | `HSMP_TEAM_RULE` | `auto` (the server balances the teams at START), `fixed` (players pick their team in the lobby, the rest fill the smallest team) or `none` (no teams; team elimination then uses `auto`). Team elimination always has teams; duel and FFA never do. |
+| `--round-time <s>` | `0` | `HSMP_ROUND_TIME` | Round clock in seconds, 0 to 1800. 0 = none, except deathmatch (300) and King of the hill (240). |
+| `--koth-target <s>` | `60` | `HSMP_KOTH_TARGET` | King of the hill: seconds a player or team must hold the hill alone to win a round, 10 to 600. |
+| `--friendly-fire` | off | `HSMP_FRIENDLY_FIRE` | Team modes: teammates can hurt each other. Off by default: the server drops a hit between teammates. |
+| `--respawn-delay <s>` | `3` | `HSMP_RESPAWN_S` | Deathmatch: seconds from a death to the respawn order, 1 to 30. |
 | `--map <arena>` | empty | `HSMP_LOBBY_MAP` | Starting arena, also advertised so joiners load the same arena, for example `Map_Arena_Pit`. Arenas: `Map_Arena_Alley`, `Map_Arena_Pit`, `Map_Arena_Yard`, `Map_Arena_Slums`, `Map_Arena_Cellar`, `Map_Arena_LordsHall`, `Map_Arena_EastTower`. Empty or unknown means Alley. |
 | `--region <tag>` | empty | `HSMP_REGION` | Region tag in the browser, for example `EU` or `NA-East` (cut to 16 characters). |
 | `--bans-file <path>` | `bans.txt` | | Persistent ban list. A relative path is relative to the **working directory**. See [Ban list](#ban-list). |
@@ -45,6 +51,30 @@ How the environment fallbacks work: `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSM
 `HSMP_REGION` are used only when the matching flag is absent (or given with its default value). A
 flag with any other value wins. `HSMP_RCON_PASSWORD` is used only when `--rcon-password` is absent.
 
+### Game modes
+
+The mode is a lobby setting: the host changes it on the lobby's **MODE** screen, RCON with `MODE`,
+`TEAMS`, `TEAM`, `ROUNDTIME` and `OPTION` ([rcon.md](rcon.md#commands)); the flags above only set
+what the lobby starts with. It is frozen for a match like the arena and the kit rules.
+
+| Mode | Rules |
+|---|---|
+| `duel`, `ffa` | Last player standing wins the round. |
+| `teams` | Team elimination: last team standing. 2 to 4 teams, `auto` or `fixed`. |
+| `koth` | King of the hill: a player (or team) alone on the hill scores; the first to the target wins the round; deaths still eliminate; at the round clock the most points win. |
+| `roulette` | Everyone fights with the same random weapon and armour set, a new one each round. |
+| `brawl` | Fists only, no armour. |
+| `deathmatch` | Respawns for the round clock; most kills wins the round; a tie goes to sudden death (the next kill, 60 s). |
+
+`koth`, `roulette`, `brawl` and `deathmatch` take teams too (`--team-rule auto|fixed`). The hill is
+the centroid of the arena's spawn points; override it per arena with
+`HSMP_KOTH_ZONES="Map_Arena_Pit:x,y,z,radius;..."` (cm).
+
+**Older clients.** Every mode but `duel` and `ffa` needs an HSMP newer than 0.1.0-beta.5 on every
+player: while such a mode is set, older clients are refused at the handshake with "this server is
+playing <mode>, which needs a newer HSMP", and the lobby cannot switch to one while an older client
+is connected.
+
 ### More than 8 players
 
 `--max-peers` accepts up to 64, and the server side handles 16 players without trouble: the
@@ -68,6 +98,7 @@ in `hsmp-loadtest`. What limits a bigger match today is the game side and the up
 | `HSMP_STATE_DIR` | unset | Folder for the identity key (`server_identity.key`). Set it on every server you run as a service. The Docker image sets `/hsmp/data`. |
 | `HSMP_MASTER_URL` | unset | Register with this master server, for example the public list `https://master.halfswordmp.workers.dev` or `http://203.0.113.5:7778`. Unset means the server is not listed anywhere. The helper scripts and the Docker image set the public list by default (opt out with `-NoMaster` or `HSMP_MASTER_URL=off`). See [Master server](master-server.md). |
 | `HSMP_SERVER_NAME`, `HSMP_SERVER_MODE`, `HSMP_LOBBY_MAP`, `HSMP_REGION` | unset | Fallbacks for `--name`, `--mode`, `--map`, `--region` (see above). |
+| `HSMP_KOTH_ZONES` | unset | King of the hill zones per arena: `Map:x,y,z,radius` entries (cm), `;`-separated. Arenas not listed use the centroid of their spawn points. |
 | `HSMP_RCON_PASSWORD` | unset | RCON password (fallback for `--rcon-password`). |
 | `HSMP_RCON_ALLOW_REMOTE` | unset | `1`, `true`, `yes` or `on` act like `--rcon-allow-remote`; `0`, `false`, `no` or `off` leave it off. Leave it unset unless you need it. |
 | `HSMP_KIT_MODE` | `free` | Initial kit rules: `free` (`0`), `classes` (`1`) or `custom` (`2`). Anything else means `free`. Can be changed in the lobby (RCON `KIT`). |

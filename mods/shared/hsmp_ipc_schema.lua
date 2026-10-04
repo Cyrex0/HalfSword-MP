@@ -553,6 +553,59 @@ S.STRUCTS = {
         { "until_s", "f64" },
         { "keep", { "str", 56 } },
     } },
+    ModeHead = { size = 200, fields = {
+        { "match_id", "u64" },
+        { "server_time_ms", "u64" },
+        { "round_end_ms", "u64" },
+        { "seq", "u32" },
+        { "round", "u32" },
+        { "team_wins", { "u32", 4 } },
+        { "team_score", { "u32", 4 } },
+        { "target_s", "u16" },
+        { "n", "u16" },
+        { "round_time_s", "u16" },
+        { "mode", "u8" },
+        { "team_rule", "u8" },
+        { "teams", "u8" },
+        { "friendly_fire", "bool" },
+        { "sudden_death", "bool" },
+        { "respawn_s", "u8" },
+        { "team_alive", { "u8", 4 } },
+        { "result", "u8" },
+        { "winner_team", "u8" },
+        { "_r", { "u8", 6 } },
+        { "kit_r", { "str", 32 } },
+        { "kit_l", { "str", 32 } },
+        { "kit_label", { "str", 48 } },
+    } },
+    ModeRow = { size = 32, fields = {
+        { "peer_id", "u32" },
+        { "score", "u32" },
+        { "kills", "u16" },
+        { "deaths", "u16" },
+        { "round_kills", "u16" },
+        { "life", "u16" },
+        { "seat", "u8" },
+        { "team", "u8" },
+        { "alive", "bool" },
+        { "respawning", "bool" },
+        { "in_zone", "bool" },
+        { "_r", { "u8", 3 } },
+        { "respawn_at_ms", "u64" },
+    } },
+    ZoneState = { size = 80, fields = {
+        { "match_id", "u64" },
+        { "center", { "f32", 3 } },
+        { "radius_cm", "f32" },
+        { "half_height_cm", "f32" },
+        { "round", "u32" },
+        { "holder_seat", "u8" },
+        { "holder_team", "u8" },
+        { "contested", "bool" },
+        { "inside", "u8" },
+        { "_r", "u32" },
+        { "arena", { "str", 40 } },
+    } },
     Damage = { size = 160, fields = {
         { "hit_id", "u32" },
         { "cid", "u32" },
@@ -974,6 +1027,8 @@ S.RECORDS = {
     ui_request = { id = 0x0238, layout = "UiRequest", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     return_to_lobby = { id = 0x0239, layout = "ReturnToLobby", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     fallback_swap = { id = 0x023a, layout = "FallbackSwap", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
+    mode = { id = 0x0240, layout = "ModeHead", row = "ModeRow", count = "n", max_rows = 64, cap = 0x2, flow = "s2c,s2g", chan = "rel_latest" },
+    zone = { id = 0x0241, layout = "ZoneState", row = nil, count = nil, max_rows = 0, cap = 0x2, flow = "s2c,s2g", chan = "rel_latest" },
     damage = { id = 0x0310, layout = "Damage", row = "DamageDelta", count = "n", max_rows = 24, cap = 0x80, flow = "c2s,g2s", chan = "reliable" },
     damage_in = { id = 0x0311, layout = "Damage", row = "DamageDelta", count = "n", max_rows = 24, cap = 0x80, flow = "s2c,s2g", chan = "reliable" },
     hitfx_in = { id = 0x0312, layout = "Damage", row = "DamageDelta", count = "n", max_rows = 24, cap = 0x80, flow = "s2c,s2g", chan = "reliable" },
@@ -1025,6 +1080,8 @@ S.SLOTS = {
     session = { record = "session", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
     link = { record = "link", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
     admin = { record = "admin_state", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
+    mode = { record = "mode", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
+    zone = { record = "zone", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
     director = { record = "director", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     conn_state = { record = "conn_state", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     spectate = { record = "spectate", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
@@ -1064,14 +1121,16 @@ S.SLOTS = {
 -- code tables: S.ENUMS.<table>.<NAME> = value, S.ENUM_NAMES.<table>[value] = NAME
 S.ENUMS, S.ENUM_NAMES = {}, {}
 S.ENUMS.phase = { LOBBY = 0, LOADING = 1, COUNTDOWN = 2, LIVE = 3, ROUND_OVER = 4, MATCH_OVER = 5, POST_MATCH = 6, PAUSED = 7, }
-S.ENUMS.game_mode = { DUEL = 0, FFA = 1, TEAM_ELIM = 2, KING_OF_HILL = 3, }
+S.ENUMS.game_mode = { DUEL = 0, FFA = 1, TEAM_ELIM = 2, KING_OF_HILL = 3, ROULETTE = 4, BRAWL = 5, DEATHMATCH = 6, }
+S.ENUMS.mode_opt = { KOTH_TARGET = 1, FRIENDLY_FIRE = 2, RESPAWN_S = 3, }
+S.ENUMS.mode_result = { NONE = 0, ELIMINATION = 1, OBJECTIVE = 2, TIME_LIMIT = 3, KILLS = 4, SUDDEN_DEATH = 5, DRAW = 6, }
 S.ENUMS.team_rule = { NONE = 0, AUTO = 1, FIXED = 2, }
 S.ENUMS.jip = { SPECTATE = 0, NEXT_ROUND = 1, NEVER = 2, }
 S.ENUMS.kit_mode = { FREE = 0, CLASSES = 1, CUSTOM = 2, }
 S.ENUMS.role = { FIGHTER = 0, SPECTATOR = 1, QUEUED = 2, }
 S.ENUMS.admin_role = { NONE = 0, MODERATOR = 1, ADMIN = 2, OWNER = 3, }
 S.ENUMS.result_reason = { NONE = 0, KILL = 1, DRAW = 2, FORFEIT = 3, OPPONENT_LEFT = 4, TIME_LIMIT = 5, ABORTED = 6, LOAD_FAILED = 7, }
-S.ENUMS.cmd_op = { READY = 1, START = 2, ABORT = 3, PICK_ARENA = 4, SET_CONFIG = 5, KICK = 6, BAN = 7, PROMOTE = 8, VOTE = 9, SWITCH_ROLE = 10, SET_TEAM = 11, UNBAN = 12, RESET_MATCH = 13, }
+S.ENUMS.cmd_op = { READY = 1, START = 2, ABORT = 3, PICK_ARENA = 4, SET_CONFIG = 5, KICK = 6, BAN = 7, PROMOTE = 8, VOTE = 9, SWITCH_ROLE = 10, SET_TEAM = 11, UNBAN = 12, RESET_MATCH = 13, SET_OPTION = 14, }
 S.ENUMS.cfg = { ARENA = 1, MODE = 2, BEST_OF = 4, ROUND_TIME = 8, TEAM_RULE = 16, TEAMS = 32, KIT_RULES = 64, MAX_FIGHTERS = 128, MAX_SPECTATORS = 256, JIP = 512, }
 S.ENUMS.cmd_reason = { OK = 0, NOT_ADMIN = 1, WRONG_PHASE = 2, NOT_ALL_READY = 3, REV_MISMATCH = 4, UNKNOWN_ARENA = 5, INVALID_VALUE = 6, UNKNOWN_PLAYER = 7, NOT_ENOUGH_PLAYERS = 8, RATE_LIMITED = 9, UNSUPPORTED = 10, }
 S.ENUMS.status_flag = { LOADED = 1, READY = 2, DEAD = 4, IN_MENU = 8, SPECTATING = 16, BACKGROUND = 32, }

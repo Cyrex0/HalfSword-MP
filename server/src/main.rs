@@ -85,9 +85,37 @@ struct Args {
     #[arg(long, default_value = "Half Sword MP")]
     name: String,
 
-    /// Game mode advertised to the master registry (duel/ffa/coop/...).
+    /// Game mode the lobby starts with: duel, ffa, teams, koth, roulette, brawl, deathmatch
+    /// (docs/hosting/configuration.md). Also the label advertised to the master registry; a
+    /// label that is no mode name ("Best of 5") plays duel.
     #[arg(long, default_value = "duel")]
     mode: String,
+
+    /// Team count of the team modes (2..=4).
+    #[arg(long, env = "HSMP_TEAMS", default_value_t = 2, value_parser = clap::value_parser!(u8).range(2..=4))]
+    teams: u8,
+
+    /// How players get their team: auto (balanced at START), fixed (players pick in the lobby)
+    /// or none (no teams; team elimination then balances automatically).
+    #[arg(long, env = "HSMP_TEAM_RULE", default_value = "none", value_parser = ["none", "auto", "fixed"])]
+    team_rule: String,
+
+    /// Round clock in seconds (0 = none; deathmatch defaults to 300, King of the hill to 240).
+    #[arg(long, env = "HSMP_ROUND_TIME", default_value_t = 0, value_parser = clap::value_parser!(u16).range(0..=1800))]
+    round_time: u16,
+
+    /// King of the hill: seconds a player / team must hold the zone alone to win a round.
+    #[arg(long, env = "HSMP_KOTH_TARGET", default_value_t = 60, value_parser = clap::value_parser!(u16).range(10..=600))]
+    koth_target: u16,
+
+    /// Team modes: teammates can hurt each other.
+    #[arg(long, env = "HSMP_FRIENDLY_FIRE", action = clap::ArgAction::SetTrue,
+          value_parser = clap::builder::BoolishValueParser::new())]
+    friendly_fire: bool,
+
+    /// Deathmatch: seconds from a death to the respawn order.
+    #[arg(long, env = "HSMP_RESPAWN_S", default_value_t = 3, value_parser = clap::value_parser!(u8).range(1..=30))]
+    respawn_delay: u8,
 
     /// Arena map name advertised to the master registry so joiners load
     /// the same arena. Falls back to env HSMP_LOBBY_MAP; empty = unknown.
@@ -425,7 +453,7 @@ async fn main() -> Result<()> {
     let state = Arc::new(server::ServerState::with_net(args.max_peers, transport));
     server::configure_session(&state, server::SessionOpts {
         debug_verbs: args.debug_verbs,
-        mode: env_or_mode(&args.mode),
+        mode: mode_cfg(&args),
     }).await;
     // Who is admin: listen host key, configured admins, or nobody.
     server::configure_admins(&state, server::AdminOpts {
@@ -582,6 +610,21 @@ backtrace:
         log_init::flush();
         prev(info);
     }));
+}
+
+/// The lobby's game mode and options from the command line / environment.
+fn mode_cfg(args: &Args) -> server::ModeCfg {
+    let label = env_or_mode(&args.mode);
+    let mode = server::parse_mode(&label).unwrap_or_default();
+    server::ModeCfg {
+        mode,
+        team_rule: match args.team_rule.as_str() { "auto" => 1, "fixed" => 2, _ => 0 },
+        teams: args.teams,
+        round_time_s: args.round_time,
+        koth_target_s: args.koth_target,
+        friendly_fire: args.friendly_fire,
+        respawn_s: args.respawn_delay,
+    }
 }
 
 /// The advertised mode (flag, else HSMP_SERVER_MODE), as main() resolves it.

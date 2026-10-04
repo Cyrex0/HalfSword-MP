@@ -13,7 +13,6 @@ resolver = "2"
 members = [
     # libraries
     "crates/hsmp-net",
-    "crates/hsmp-modes",
     "crates/hsmp-combat-sim",
     "crates/hsmp-ipc",
     "crates/hsmp-pose",

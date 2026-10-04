@@ -34,6 +34,10 @@ pub const NOTICE_ARGS: usize = 4;
 pub const CONN_ACTIONS: usize = 4;
 /// No seat / no winner.
 pub const NO_SEAT: u8 = 0xFF;
+/// Rows of a `mode` record.
+pub const MAX_MODE_ROWS: usize = 64;
+/// Teams a mode can field.
+pub const MAX_TEAMS: u8 = 4;
 
 // ---- records -------------------------------------------------------------------------------
 
@@ -554,6 +558,98 @@ crate::ipc_pod! {
         pub until_s: f64,
         pub keep: Str<56>,
     }
+
+    // ---- game modes (`net::caps::MODES` / `caps::ZONE`) -------------------------------------
+
+    /// Head of the game-mode state (S2C `mode`, copied into the game's `mode` slot; only to
+    /// players with `caps::MODES`): teams, scores, the round clock, the imposed kit; one row
+    /// per seat. Sent on change and with every session snapshot.
+    pub struct ModeHead {
+        pub match_id: u64,
+        pub server_time_ms: u64,
+        /// Server clock (ms) when the round clock runs out; 0 = no clock running.
+        pub round_end_ms: u64,
+        pub seq: u32,
+        pub round: u32,
+        /// Round wins per team (index = team - 1).
+        pub team_wins: [u32; 4],
+        /// This round's score per team: King of the hill ms held, deathmatch kills.
+        pub team_score: [u32; 4],
+        /// King of the hill: seconds held alone that win the round.
+        pub target_s: u16,
+        /// Rows.
+        pub n: u16,
+        /// The round clock (s; 0 = none).
+        pub round_time_s: u16,
+        /// `game_mode` code in force (the frozen one in a match).
+        pub mode: u8,
+        /// `team_rule` code; `teams` = team count (0 = no teams).
+        pub team_rule: u8,
+        pub teams: u8,
+        pub friendly_fire: Bool,
+        /// The round clock ran out on a tie: the next kill decides.
+        pub sudden_death: Bool,
+        /// Deathmatch: seconds from a death to the respawn order.
+        pub respawn_s: u8,
+        /// Players standing per team.
+        pub team_alive: [u8; 4],
+        /// `mode_result` code of the last round result.
+        pub result: u8,
+        /// Team that won the last round (0 = none / not a team result).
+        pub winner_team: u8,
+        pub _r: [u8; 6],
+        /// Weapon roulette / brawl: the kit everyone fights with this round (both empty and
+        /// `kit_label` "" = everyone's own kit; both empty in a brawl).
+        pub kit_r: Str<32>,
+        pub kit_l: Str<32>,
+        /// The imposed kit for the HUD ("Poleaxe, knight armour", "Fists").
+        pub kit_label: Str<48>,
+    }
+
+    /// One seat of the mode state.
+    pub struct ModeRow {
+        pub peer_id: u32,
+        /// This round: King of the hill ms held alone, deathmatch kills.
+        pub score: u32,
+        /// This match.
+        pub kills: u16,
+        pub deaths: u16,
+        pub round_kills: u16,
+        /// Lives started this round (deathmatch: 1 + respawns).
+        pub life: u16,
+        pub seat: u8,
+        /// 0 = no team.
+        pub team: u8,
+        pub alive: Bool,
+        /// Dead and waiting for (or loading) a respawn.
+        pub respawning: Bool,
+        /// King of the hill: standing in the zone.
+        pub in_zone: Bool,
+        pub _r: [u8; 3],
+        /// Server clock (ms) of the pending respawn order; 0 = none.
+        pub respawn_at_ms: u64,
+    }
+
+    /// The King of the hill zone (S2C `zone`, copied into the game's `zone` slot; only to
+    /// players with `caps::ZONE`): a vertical cylinder on the frozen arena.
+    pub struct ZoneState {
+        pub match_id: u64,
+        /// Centre at floor level (cm).
+        pub center: [f32; 3],
+        pub radius_cm: f32,
+        /// Half the cylinder's height around `center` (cm).
+        pub half_height_cm: f32,
+        pub round: u32,
+        /// Seat holding the zone alone (`NO_SEAT` = nobody / contested).
+        pub holder_seat: u8,
+        /// Team holding it alone (0 = none / no teams).
+        pub holder_team: u8,
+        pub contested: Bool,
+        /// Players inside.
+        pub inside: u8,
+        pub _r: u32,
+        pub arena: Str<40>,
+    }
 }
 
 // ---- kinds ---------------------------------------------------------------------------------
@@ -586,12 +682,17 @@ pub const K_TRAVEL_ACK: u16 = 0x0237;
 pub const K_UI_REQUEST: u16 = 0x0238;
 pub const K_RETURN_TO_LOBBY: u16 = 0x0239;
 pub const K_FALLBACK_SWAP: u16 = 0x023A;
+/// Game modes (0x0240..=0x024F, `net::caps::MODES` / `ZONE`).
+pub const K_MODE: u16 = 0x0240;
+pub const K_ZONE: u16 = 0x0241;
 
 /// Supersede streams (`Chan::RelLatest` / `Chan::Latest`, `proto_v5::keys`).
 pub const STREAM_SESSION: u8 = 0x80;
 pub const STREAM_GAME_STATUS: u8 = 0x81;
 pub const STREAM_PINGS: u8 = 0x87;
 pub const STREAM_PING: u8 = 6;
+pub const STREAM_MODE: u8 = 0x90;
+pub const STREAM_ZONE: u8 = 0x91;
 
 // ---- code tables ---------------------------------------------------------------------------
 
@@ -605,6 +706,47 @@ pub mod phase {
     pub const MATCH_OVER: u8 = 5;
     pub const POST_MATCH: u8 = 6;
     pub const PAUSED: u8 = 7;
+}
+
+/// `SessionConfig.mode`. Every code but DUEL / FFA needs `caps::MODES` on every peer (codes
+/// above KING_OF_HILL are refused by older clients).
+pub mod game_mode {
+    pub const DUEL: u8 = 0;
+    pub const FFA: u8 = 1;
+    pub const TEAM_ELIM: u8 = 2;
+    pub const KING_OF_HILL: u8 = 3;
+    pub const ROULETTE: u8 = 4;
+    pub const BRAWL: u8 = 5;
+    pub const DEATHMATCH: u8 = 6;
+    pub const MAX: u8 = DEATHMATCH;
+}
+
+/// `Command.choice` of SET_OPTION (the value in `Command.ballot`).
+pub mod mode_opt {
+    /// King of the hill: seconds held alone that win a round (10..=600).
+    pub const KOTH_TARGET: u8 = 1;
+    /// Team modes: 0 = teammates cannot hurt each other, 1 = they can.
+    pub const FRIENDLY_FIRE: u8 = 2;
+    /// Deathmatch: seconds from a death to the respawn order (1..=30).
+    pub const RESPAWN_S: u8 = 3;
+    pub const MAX: u8 = RESPAWN_S;
+}
+
+/// `ModeHead.result`: how the last round was decided.
+pub mod mode_result {
+    pub const NONE: u8 = 0;
+    /// Last player / team standing.
+    pub const ELIMINATION: u8 = 1;
+    /// King of the hill: the target was reached.
+    pub const OBJECTIVE: u8 = 2;
+    /// The round clock ran out: most standing / most points.
+    pub const TIME_LIMIT: u8 = 3;
+    /// Deathmatch: most kills when the clock ran out.
+    pub const KILLS: u8 = 4;
+    /// The kill after a tied clock.
+    pub const SUDDEN_DEATH: u8 = 5;
+    pub const DRAW: u8 = 6;
+    pub const MAX: u8 = DRAW;
 }
 
 /// `SessionHead.result_reason`.
@@ -636,7 +778,9 @@ pub mod cmd_op {
     pub const UNBAN: u8 = 12;
     /// ABORT, then everyone's wins / alive / ready reset (the admin "reset match").
     pub const RESET_MATCH: u8 = 13;
-    pub const MAX: u8 = RESET_MATCH;
+    /// A mode option (`mode_opt` code in `choice`, the value in `ballot`).
+    pub const SET_OPTION: u8 = 14;
+    pub const MAX: u8 = SET_OPTION;
 }
 
 /// `ConfigPatch.mask` bits.
@@ -743,7 +887,11 @@ pub mod link_state {
 pub const ENUMS: &[super::EnumInfo] = &[
     super::EnumInfo { name: "phase", values: &[("LOBBY", 0), ("LOADING", 1), ("COUNTDOWN", 2), ("LIVE", 3),
         ("ROUND_OVER", 4), ("MATCH_OVER", 5), ("POST_MATCH", 6), ("PAUSED", 7)] },
-    super::EnumInfo { name: "game_mode", values: &[("DUEL", 0), ("FFA", 1), ("TEAM_ELIM", 2), ("KING_OF_HILL", 3)] },
+    super::EnumInfo { name: "game_mode", values: &[("DUEL", 0), ("FFA", 1), ("TEAM_ELIM", 2), ("KING_OF_HILL", 3),
+        ("ROULETTE", 4), ("BRAWL", 5), ("DEATHMATCH", 6)] },
+    super::EnumInfo { name: "mode_opt", values: &[("KOTH_TARGET", 1), ("FRIENDLY_FIRE", 2), ("RESPAWN_S", 3)] },
+    super::EnumInfo { name: "mode_result", values: &[("NONE", 0), ("ELIMINATION", 1), ("OBJECTIVE", 2),
+        ("TIME_LIMIT", 3), ("KILLS", 4), ("SUDDEN_DEATH", 5), ("DRAW", 6)] },
     super::EnumInfo { name: "team_rule", values: &[("NONE", 0), ("AUTO", 1), ("FIXED", 2)] },
     super::EnumInfo { name: "jip", values: &[("SPECTATE", 0), ("NEXT_ROUND", 1), ("NEVER", 2)] },
     super::EnumInfo { name: "kit_mode", values: &[("FREE", 0), ("CLASSES", 1), ("CUSTOM", 2)] },
@@ -753,7 +901,7 @@ pub const ENUMS: &[super::EnumInfo] = &[
         ("OPPONENT_LEFT", 4), ("TIME_LIMIT", 5), ("ABORTED", 6), ("LOAD_FAILED", 7)] },
     super::EnumInfo { name: "cmd_op", values: &[("READY", 1), ("START", 2), ("ABORT", 3), ("PICK_ARENA", 4),
         ("SET_CONFIG", 5), ("KICK", 6), ("BAN", 7), ("PROMOTE", 8), ("VOTE", 9), ("SWITCH_ROLE", 10),
-        ("SET_TEAM", 11), ("UNBAN", 12), ("RESET_MATCH", 13)] },
+        ("SET_TEAM", 11), ("UNBAN", 12), ("RESET_MATCH", 13), ("SET_OPTION", 14)] },
     super::EnumInfo { name: "cfg", values: &[("ARENA", 1), ("MODE", 2), ("BEST_OF", 4), ("ROUND_TIME", 8),
         ("TEAM_RULE", 16), ("TEAMS", 32), ("KIT_RULES", 64), ("MAX_FIGHTERS", 128), ("MAX_SPECTATORS", 256),
         ("JIP", 512)] },
@@ -781,7 +929,7 @@ pub const ENUMS: &[super::EnumInfo] = &[
 const WORLD_LIMIT: f32 = super::pose::WORLD_LIMIT;
 
 fn check_config(c: &SessionConfig) -> Result<(), Invalid> {
-    if c.mode > 3 {
+    if c.mode > game_mode::MAX {
         return Err(Invalid::Range("mode"));
     }
     if c.team_rule > 2 {
@@ -848,6 +996,8 @@ fn check_command(c: &Command) -> Result<(), Invalid> {
         cmd_op::KICK | cmd_op::BAN | cmd_op::PROMOTE if c.peer_id == 0 => return Err(Invalid::Range("peer_id")),
         cmd_op::PROMOTE if c.role > 3 => return Err(Invalid::Range("role")),
         cmd_op::SWITCH_ROLE if c.role > 2 => return Err(Invalid::Range("role")),
+        cmd_op::SET_TEAM if c.role > MAX_TEAMS => return Err(Invalid::Range("role")),
+        cmd_op::SET_OPTION if c.choice == 0 || c.choice > mode_opt::MAX => return Err(Invalid::Range("choice")),
         cmd_op::UNBAN if c.text.is_empty() => return Err(Invalid::Range("text")),
         cmd_op::SET_CONFIG => {
             let p = &c.patch;
@@ -857,7 +1007,7 @@ fn check_command(c: &Command) -> Result<(), Invalid> {
             if p.mask & cfg::ARENA != 0 && p.arena.is_empty() {
                 return Err(Invalid::Range("arena"));
             }
-            if p.mask & cfg::MODE != 0 && p.mode > 3 {
+            if p.mask & cfg::MODE != 0 && p.mode > game_mode::MAX {
                 return Err(Invalid::Range("mode"));
             }
             if p.mask & cfg::TEAM_RULE != 0 && p.team_rule > 2 {
@@ -933,6 +1083,37 @@ fn check_chat(c: &Chat) -> Result<(), Invalid> {
     Ok(())
 }
 
+fn check_mode(h: &ModeHead) -> Result<(), Invalid> {
+    if h.mode > game_mode::MAX {
+        return Err(Invalid::Range("mode"));
+    }
+    if h.team_rule > 2 || h.teams > MAX_TEAMS {
+        return Err(Invalid::Range("teams"));
+    }
+    if h.result > mode_result::MAX || h.winner_team > MAX_TEAMS {
+        return Err(Invalid::Range("result"));
+    }
+    Ok(())
+}
+
+fn check_mode_row(_h: &ModeHead, r: &ModeRow) -> Result<(), Invalid> {
+    if r.team > MAX_TEAMS {
+        return Err(Invalid::Range("team"));
+    }
+    Ok(())
+}
+
+fn check_zone(z: &ZoneState) -> Result<(), Invalid> {
+    if z.center.iter().any(|c| c.abs() > WORLD_LIMIT) || !(0.0..=WORLD_LIMIT).contains(&z.radius_cm)
+        || !(0.0..=WORLD_LIMIT).contains(&z.half_height_cm) {
+        return Err(Invalid::Range("zone"));
+    }
+    if z.holder_team > MAX_TEAMS {
+        return Err(Invalid::Range("holder_team"));
+    }
+    Ok(())
+}
+
 fn check_link(l: &Link) -> Result<(), Invalid> {
     if l.status > sidecar_status::MAX {
         return Err(Invalid::Range("status"));
@@ -972,6 +1153,9 @@ crate::record!(TravelAck, kind = K_TRAVEL_ACK, name = "travel_ack");
 crate::record!(UiRequest, kind = K_UI_REQUEST, name = "ui_request");
 crate::record!(ReturnToLobby, kind = K_RETURN_TO_LOBBY, name = "return_to_lobby");
 crate::record!(FallbackSwap, kind = K_FALLBACK_SWAP, name = "fallback_swap");
+crate::record!(ModeHead, kind = K_MODE, name = "mode", rows = ModeRow, count = n, max = MAX_MODE_ROWS,
+    check = check_mode, check_row = check_mode_row);
+crate::record!(ZoneState, kind = K_ZONE, name = "zone", check = check_zone);
 
 use super::flow::{C2S, G2S, LOCAL, S2C, S2G};
 use super::Chan;
@@ -1021,6 +1205,10 @@ pub const RECORDS: &[super::RecordInfo] = &[
     crate::record_info!(UiRequest, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: HUD UI request"),
     crate::record_info!(ReturnToLobby, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: reopen the lobby once per seq"),
     crate::record_info!(FallbackSwap, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: a transient possession swap for a fallback spawn"),
+    crate::record_info!(ModeHead, cap = CAP_STATE, flow = S2C | S2G, chan = Chan::RelLatest(STREAM_MODE),
+        doc = "game-mode state (teams, scores, kills / deaths, round clock, respawns, imposed kit); caps::MODES only; copied into slot `mode`"),
+    crate::record_info!(ZoneState, cap = CAP_STATE, flow = S2C | S2G, chan = Chan::RelLatest(STREAM_ZONE),
+        doc = "King of the hill zone (centre, radius, holder); caps::ZONE only; copied into slot `zone`"),
 ];
 
 const fn bus(name: &'static str, kind: u16, world_scoped: bool, doc: &'static str) -> super::SlotInfo {
@@ -1035,6 +1223,10 @@ pub const SLOTS: &[super::SlotInfo] = &[
         world_scoped: false, doc: "the sidecar's connection view (replaces .sidecar.json .link.json .metrics.json .kicked.json .reject.json)" },
     super::SlotInfo { name: "admin", kind: K_ADMIN_STATE, form: super::SlotForm::Slot, dir: Dir::SidecarToGame, cap: CAP_STATE,
         world_scoped: false, doc: "the last admin state, as received (replaces .admin.json)" },
+    super::SlotInfo { name: "mode", kind: K_MODE, form: super::SlotForm::Slot, dir: Dir::SidecarToGame, cap: CAP_STATE,
+        world_scoped: false, doc: "the last game-mode state, as received" },
+    super::SlotInfo { name: "zone", kind: K_ZONE, form: super::SlotForm::Slot, dir: Dir::SidecarToGame, cap: CAP_STATE,
+        world_scoped: false, doc: "the last King of the hill zone, as received" },
     bus("director", K_DIRECTOR, false, "replaces .director.json"),
     bus("conn_state", K_CONN_STATE, false, "replaces .conn_state.json"),
     bus("spectate", K_SPECTATE, false, "replaces .spectate.json"),
@@ -1053,6 +1245,8 @@ pub const SLOTS: &[super::SlotInfo] = &[
 pub type SessionBuf = crate::record::VarBuf<SessionHead, MAX_ROSTER>;
 /// The admin slot's body.
 pub type AdminBuf = crate::record::VarBuf<AdminStateHead, MAX_BANS>;
+/// The mode slot's body.
+pub type ModeBuf = crate::record::VarBuf<ModeHead, MAX_MODE_ROWS>;
 
 impl SessionHead {
     /// The round being loaded / counted down to, else the current round.
@@ -1125,6 +1319,9 @@ mod tests {
         assert_eq!(core::mem::size_of::<RosterRow>(), 96);
         assert_eq!(core::mem::size_of::<Command>(), 152);
         assert_eq!(core::mem::size_of::<Link>(), 208);
+        assert_eq!(core::mem::size_of::<ModeHead>(), 200);
+        assert_eq!(core::mem::size_of::<ModeRow>(), 32);
+        assert_eq!(core::mem::size_of::<ZoneState>(), 80);
         for r in RECORDS.iter().filter(|r| r.flow & (G2S | S2G) != 0 && r.max_rows == 0) {
             assert!(r.head.size() <= crate::ring::MAX_PAYLOAD, "{} must fit a ring record", r.name);
         }
@@ -1187,6 +1384,28 @@ mod tests {
         assert_eq!(ok(&c), Err(Invalid::Range("kit_mode")));
         c.patch.mask = cfg::ARENA;
         assert_eq!(ok(&c), Err(Invalid::Range("arena")));
+    }
+
+    #[test]
+    fn mode_records_round_trip_and_checks() {
+        let h = ModeHead { mode: game_mode::DEATHMATCH, teams: 2, team_rule: 1, kit_label: Str::new("Fists"), ..Default::default() };
+        let rows = [ModeRow { peer_id: 3, seat: 1, team: 2, kills: 4, ..Default::default() }];
+        let p = to_payload(&h, &rows);
+        let v = view::<ModeHead>(&p).unwrap();
+        assert_eq!((v.head.n, v.rows[0].kills, v.head.kit_label.as_str()), (1, 4, Some("Fists")));
+        let bad = ModeHead { mode: game_mode::MAX + 1, ..h };
+        assert_eq!(view::<ModeHead>(&to_payload(&bad, &rows)).unwrap_err(), Invalid::Range("mode"));
+        let bad_row = [ModeRow { team: MAX_TEAMS + 1, ..rows[0] }];
+        assert_eq!(view::<ModeHead>(&to_payload(&h, &bad_row)).unwrap_err(), Invalid::Range("team"));
+        let z = ZoneState { center: [1.0, 2.0, 3.0], radius_cm: 300.0, half_height_cm: 250.0, holder_seat: NO_SEAT, ..Default::default() };
+        assert!(view::<ZoneState>(&to_payload(&z, &[])).is_ok());
+        assert_eq!(view::<ZoneState>(&to_payload(&ZoneState { radius_cm: -1.0, ..z }, &[])).unwrap_err(), Invalid::Range("zone"));
+        // SET_TEAM / SET_OPTION commands.
+        let ok = |c: &Command| view::<Command>(&to_payload(c, &[])).map(|_| ());
+        assert!(ok(&Command { role: 2, ..Command::new(1, cmd_op::SET_TEAM) }).is_ok());
+        assert_eq!(ok(&Command { role: MAX_TEAMS + 1, ..Command::new(1, cmd_op::SET_TEAM) }), Err(Invalid::Range("role")));
+        assert_eq!(ok(&Command::new(1, cmd_op::SET_OPTION)), Err(Invalid::Range("choice")));
+        assert!(ok(&Command { choice: mode_opt::KOTH_TARGET, ballot: 60, ..Command::new(1, cmd_op::SET_OPTION) }).is_ok());
     }
 
     #[test]

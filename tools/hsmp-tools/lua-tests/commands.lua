@@ -51,6 +51,24 @@ end
 
 local LOBBY5 = { state = "lobby", best_of = 5, ready = {} }
 
+T.log("== game-mode commands are typed records")
+do
+    _G.HSMP_IPC = { S = { ENUMS = { cmd_op = { SET_CONFIG = 5, SET_TEAM = 11, SET_OPTION = 14 },
+        cfg = { MODE = 2, ROUND_TIME = 8, TEAM_RULE = 16, TEAMS = 32 } } } }
+    local C = dofile(CMDS)
+    local r = C.record({ id = 7, kind = "game_mode", args = { mode = 6 } })
+    T.check(r.op == 5 and r.patch.mask == 2 and r.patch.mode == 6, "mode -> SET_CONFIG MODE", T.repr(r))
+    r = C.record({ id = 8, kind = "teams", args = { rule = 2, n = 3 } })
+    T.check(r.patch.mask == 48 and r.patch.team_rule == 2 and r.patch.teams == 3, "teams -> TEAM_RULE | TEAMS", T.repr(r))
+    r = C.record({ id = 9, kind = "set_team", args = { team = 2 } })
+    T.check(r.op == 11 and r.role == 2 and r.peer_id == 0, "set_team: my own pick", T.repr(r))
+    r = C.record({ id = 10, kind = "set_option", args = { opt = 1, value = 90 } })
+    T.check(r.op == 14 and r.choice == 1 and r.ballot == 90, "set_option", T.repr(r))
+    r = C.record({ id = 11, kind = "round_time", args = { s = 300 } })
+    T.check(r.patch.mask == 8 and r.patch.round_time_limit_s == 300, "round_time", T.repr(r))
+    _G.HSMP_IPC = nil
+end
+
 T.log("== the snapshot arrives before the server's answer (lost result packet)")
 do
     local w = new_env(true)

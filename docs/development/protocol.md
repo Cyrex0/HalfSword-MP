@@ -612,7 +612,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0215` | `game_status` | C→S | rel_latest | The game's state report, about 1 Hz and on change: `match_id`, `round`, `world_key`, `flags` (LOADED, READY, DEAD, IN_MENU, SPECTATING, BACKGROUND), `spawn_id`, `load_error`, `arena`. The server counts a player as loaded only if `match_id`, `round` and `arena` match the frozen config |
 | `0x0216` | `spawned` | C→S | ordered | The pawn was placed on its spawn order (`round`, `slot`, `pos`, `clear`) |
 | `0x0217` | `notice` | S→C | reliable | `notice` code with up to 4 string args; idempotent by `event_id` (`NET_STATUS` = 9, §11) |
-| `0x0218` | `kill_feed` | S→C | reliable | Killer and victim seats, cause, weapon |
+| `0x0218` | `kill_feed` | S→C | reliable | Killer and victim seats (`NO_SEAT` = none), cause, weapon (the round kit's); one per declared death, only to peers with `caps::MODES` |
 | `0x0219` | `kicked` | S→C | reliable | Terminal: no automatic rejoin before `retry_after_s`; followed by close `KICKED` |
 | `0x021A` | `server_closing` | S→C | ordered | `closing_reason`, text, `reconnect_after_ms` (0 = do not); followed by close `SERVER_CLOSING` |
 | `0x021B` | `leave` | C→S | ordered | `leave_reason`; the sidecar sends it when the game exits, then closes |
@@ -621,6 +621,8 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x021E` | `admin_state` | S→C | ordered | Who is admin, and the masked ban list (§6.6) |
 | `0x021F` | `ping` | C→S | latest | Clock probe, every 2 s while connected |
 | `0x0220` | `pong` | S→C | latest | Answer to `ping` with the server wall clock |
+| `0x0240` | `mode` | S→C | rel_latest | Game-mode state (§6.4.1), on change and about 1 Hz in a match; only with `caps::MODES` |
+| `0x0241` | `zone` | S→C | rel_latest | The King of the hill zone: centre, radius, half height, holder seat / team, contested, players inside; only with `caps::ZONE` |
 
 **Combat (`0x03`)**
 
@@ -686,7 +688,8 @@ once on any change. It is a variable record: `SessionHead` plus one `RosterRow` 
   `result_reason`, `has_frozen`, the live `config` and the `frozen` config.
 - **Phases:** LOBBY 0, LOADING 1, COUNTDOWN 2, LIVE 3, ROUND_OVER 4, MATCH_OVER 5, POST_MATCH 6,
   PAUSED 7.
-- **Config:** `rev`, `arena`, `mode` (DUEL, FFA, TEAM_ELIM, KING_OF_HILL), `best_of`,
+- **Config:** `rev`, `arena`, `mode` (DUEL 0, FFA 1, TEAM_ELIM 2, KING_OF_HILL 3, ROULETTE 4, BRAWL 5,
+  DEATHMATCH 6; a peer without `caps::MODES` refuses codes above 3, see §6.4.1), `best_of`,
   `round_time_limit_s`, `team_rule`, `teams`, `kit_mode` / `kit_budget` / `kit_fairness`,
   `max_fighters`, `max_spectators`, `countdown_s`, `roundover_s`, `matchover_s`,
   `barrier_timeout_s`, `join_in_progress` (SPECTATE, NEXT_ROUND, NEVER).
@@ -697,6 +700,37 @@ once on any change. It is a variable record: `SessionHead` plus one `RosterRow` 
 Receiver rules: drop the snapshot if `(epoch, seq) ≤ last`; a new epoch resets all tracking (in a
 match it sends the Director back to the lobby with "Server restarted"). The map is
 `frozen.arena` in a match, else `config.arena`. The own spawn is the own roster row's spawn.
+
+### 6.4.1 Game modes (`mode`, `zone`, `kill_feed`)
+
+Rules: [modes.md](subsystems/modes.md). The `session` record carries the mode, team rule, team
+count and round clock in force (`round_time_limit_s` is the mode's default when the host left it
+at 0) and each seat's `team` (also the lobby's FIXED picks); the rest is in `mode`:
+
+- **`mode` head:** `match_id`, `server_time_ms`, `round_end_ms` (server clock when the round clock
+  runs out, 0 = none; sudden death included), `seq`, `round`, `team_wins[4]`, `team_score[4]`
+  (King of the hill ms held, deathmatch kills), `target_s`, `round_time_s`, `mode`, `team_rule`,
+  `teams`, `friendly_fire`, `sudden_death`, `respawn_s`, `team_alive[4]`, `result` (`mode_result`:
+  NONE, ELIMINATION, OBJECTIVE, TIME_LIMIT, KILLS, SUDDEN_DEATH, DRAW), `winner_team`, and the
+  round's imposed kit (`kit_r`, `kit_l`, `kit_label`; empty = everyone's own kit).
+- **`mode` rows (one per seat):** `peer_id`, `score` (this round), `kills` / `deaths` (match),
+  `round_kills`, `life` (lives started this round), `seat`, `team`, `alive`, `respawning`,
+  `in_zone`, `respawn_at_ms`.
+- **Deathmatch respawn:** the order is the roster row's spawn order with
+  `spawn_id = round << 8 | 0x80 | (life & 0x7F)` (round-start orders keep the low byte below
+  0x80). The client reloads the arena, places the pawn on it and reports it in `game_status`
+  (`round` = the current round with LOADED, `spawn_id` = the order); the server then revives the
+  player (2 s of protection). A respawned peer's next `death` in the same round is a new death: the
+  sidecar re-opens its death dedup when the peer's `life` goes up.
+- **Commands:** SET_CONFIG accepts `mode`, `team_rule`, `teams` and `round_time_limit_s` (lobby,
+  admin). `SET_TEAM` (11): `role` = team 0..4 (0 = no pick), `peer_id` 0 = the sender, another
+  peer = admin only; lobby only, FIXED teams. `SET_OPTION` (14): `choice` = `mode_opt`
+  (KOTH_TARGET 1: 10..600 s, FRIENDLY_FIRE 2: 0 / 1, RESPAWN_S 3: 1..30 s), `ballot` = the value.
+- **Compatibility:** a server playing any mode but DUEL / FFA refuses a joiner without
+  `caps::MODES` at the handshake (reject `VERSION`, "this server is playing <mode>, which needs a
+  newer HSMP: update HSMP to join"), and SET_CONFIG refuses such a mode while a connected peer
+  lacks the cap. Duel / FFA servers keep admitting beta.5 clients, which get no `mode`,
+  `zone` or `kill_feed` records.
 
 Timing: the server tick rate (`--tick-hz`, 60 by default) is not on the wire and a client must
 not assume one. Every duration a client sees is in real time: `phase_deadline_ms` on the
@@ -709,7 +743,7 @@ tick. See [tick rate](tick-rate.md).
 
 `command { cmd_id, expected_rev (0 = don't care), op, flag, role, choice, peer_id, duration_s,
 ballot, text, patch }`. `op` is one of READY 1, START 2, ABORT 3, PICK_ARENA 4, SET_CONFIG 5,
-KICK 6, BAN 7, PROMOTE 8, VOTE 9, SWITCH_ROLE 10, SET_TEAM 11, UNBAN 12, RESET_MATCH 13.
+KICK 6, BAN 7, PROMOTE 8, VOTE 9, SWITCH_ROLE 10, SET_TEAM 11, UNBAN 12, RESET_MATCH 13, SET_OPTION 14 (§6.4.1).
 `SET_CONFIG` carries a `ConfigPatch` whose `mask` says which fields are set.
 
 `cmd_result { cmd_id, config_rev, reason_code, ok, op, reason_text }`. Reason codes: OK 0,
@@ -770,8 +804,8 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 
 | Bit | Name | Status |
 |---|---|---|
-| 0 | MODES | Reserved: game-mode sections, kill feed gating |
-| 1 | ZONE | Reserved |
+| 0 | MODES | Offered by server and sidecar: the `mode` and `kill_feed` records (§6.4.1); required on every peer for modes other than duel / FFA |
+| 1 | ZONE | Offered by server and sidecar: the `zone` record (King of the hill) |
 | 2 | INTERACT | Offered by server and sidecar: the interact records |
 | 3 | BRACKET | Reserved |
 | 4 | MAP_HASH | Reserved |

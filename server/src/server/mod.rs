@@ -37,6 +37,7 @@ mod interact_glue; // interaction channel (docs/development/subsystems/interact.
 mod records; // protocol v6: typed record messages, per-domain dispatch
 mod pose_glue; // protocol v6: root / weapon / pose records
 mod session_records; // session domain records (0x02xx): builders + C2S handlers
+mod modes; // game modes: teams, King of the hill, roulette / brawl kits, deathmatch respawns
 
 // Siblings share each other's items through `use super::*`.
 use session::*;
@@ -65,7 +66,8 @@ pub use broadcast::shutdown;
 pub use tick::{tick_loop, TICK_HZ_MIN, TICK_HZ_MAX};
 pub use session::net_status_notices;
 // Session layer: typed commands, snapshot, RCON match/debug verbs.
-pub(crate) use session::{configure_session, rcon_debug_kill, rcon_status, run_command, Actor, KitView, SessionOpts};
+pub(crate) use session::{configure_session, rcon_debug_kill, rcon_status, run_command, seat_peer, Actor, KitView, SessionOpts};
+pub(crate) use modes::{mode_label, parse_mode, ModeCfg};
 #[derive(Debug, Clone)]
 pub struct PeerState {
     pub id: PeerId,
@@ -167,6 +169,8 @@ pub(crate) struct Inner {
     /// Session layer: epoch, snapshot seq, match id,
     /// frozen config, seats by key, command results cache.
     sess: session::SessionCore,
+    /// Game modes (modes.rs): config, teams, scores, round clock, respawns, round kit.
+    modes: modes::ModeCore,
 }
 
 /// What a peer's GAME (not just its sidecar) last told us.
@@ -222,6 +226,7 @@ impl ServerState {
                 paused_from_live: false,
                 out_msgs: Vec::new(),
                 sess: session::SessionCore::new(max_peers),
+                modes: modes::ModeCore::default(),
             }),
             max_peers,
             net,
@@ -248,6 +253,12 @@ impl ServerState {
     /// label (None while the match lock is busy).
     pub(crate) fn current_best_of(&self) -> Option<u8> {
         self.inner.try_lock().ok().map(|i| i.best_of)
+    }
+
+    /// Non-blocking read of the game mode in force (the frozen one in a match) for the
+    /// server browser's label (None while the match lock is busy).
+    pub(crate) fn current_mode(&self) -> Option<u8> {
+        self.inner.try_lock().ok().map(|i| i.modes.now().mode)
     }
 }
 

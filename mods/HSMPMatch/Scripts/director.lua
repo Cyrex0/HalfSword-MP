@@ -242,6 +242,9 @@ D.valid_arena, D.is_hub, D.is_menu = valid_arena, is_hub, is_menu
 --   remote_fighters  fighter seats other than mine
 --   order, wins{}, alive{}, waiting{}, countdown, best_of, last_winner, reason
 --   spawn_order(round, arena) -> {spawn_id, slot, x, y, z, yaw} | nil
+--   respawn       deathmatch: {spawn_id, life} while the server orders us back into the
+--                 running round (the `mode` record says respawning, the roster carries a
+--                 respawn order: spawn_id round << 8 | 0x80 | life), else nil
 --   match_stale   the snapshot is a previous session's
 --
 -- Liveness is the header heartbeat (never "the content changed recently"):
@@ -376,7 +379,16 @@ function D.session_reader(env, state_dir)
             for _, id in ipairs(v.waiting_on or {}) do sess.waiting[#sess.waiting + 1] = id end
             sess.arena = v.arena
             sess.remote_fighters = v.remote_fighters or 0
+            -- Deathmatch respawn order (shared/hsmp_session.lua HS.mode()).
+            sess.respawn = nil
+            local m = HS and HS.mode and HS.mode(o) or nil
+            local row = m and m.rows[sess.my_id]
+            local sp = v.spawns and v.spawns[sess.my_id]
+            if row and row.respawning and sp and (sp.spawn_id & 0x80) ~= 0 and (sp.spawn_id >> 8) == sess.round then
+                sess.respawn = { spawn_id = sp.spawn_id, life = row.life }
+            end
         else
+            sess.respawn = nil
             if not exists then sess.epoch, sess.match_id = nil, nil end
             sess.phase, sess.arena, sess.roster, sess.order = "none", nil, {}, {}
             sess.remote_fighters = 0
@@ -1248,7 +1260,9 @@ D.T.gi_post_s = 3   -- Spawn: GI profile re-applied after the arena's own "Load 
 
 function Dir:start_pipeline(w, s, why)
     self:ensure_save_guard()   -- also when the match found us already in the arena
-    self.loaded_for = s.pending_round or (s.round + 1)
+    -- A deathmatch respawn load serves the round being fought; any other load the next one.
+    local respawn = s.phase == "live" and s.respawn ~= nil and s.respawn.spawn_id == self.respawn_for
+    self.loaded_for = respawn and s.round or (s.pending_round or (s.round + 1))
     self.loaded_key = self:round_key(self.loaded_for)
     self.ready_round = 0
     self.load_error, self.errors_logged, self.protect_logged = nil, nil, nil
@@ -1802,6 +1816,15 @@ function Dir:step_state(w, s)
             and (st == "Ready" or st == "Live" or st == "Spawn") then
             self.reloaded_for = pkey
             return self:begin_prepare(want, string.format("round %d starting", pending))
+        end
+        -- Deathmatch: the server ordered us back into the running round. The same reload
+        -- as a new round (fresh world, pawn, vitals, placement on the respawn order, kit,
+        -- census), serving THIS round; the server revives us on the placement report.
+        local rsp = s.respawn
+        if s.phase == "live" and rsp and self.respawn_for ~= rsp.spawn_id and (st == "Ready" or st == "Live") then
+            self.respawn_for = rsp.spawn_id
+            self:ev("respawn", { round = s.round, spawn_id = rsp.spawn_id, life = rsp.life })
+            return self:begin_prepare(want, string.format("respawn order (round %d, life %d)", s.round, rsp.life))
         end
         if st == "Spawn" and self.pipe then
             for _ = 1, 3 do   -- run a few cheap steps per tick

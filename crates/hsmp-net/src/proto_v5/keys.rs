@@ -50,6 +50,10 @@ pub const KIT_RULES: u32 = key(0x84, 0);
 pub const LOADOUT: u8 = 0x85;
 /// `body` (the passport body for stand-ins, needs `caps::BODY`) per peer: `key(BODY, peer_id)`.
 pub const BODY: u8 = 0x89;
+/// `mode` (game-mode state, needs `caps::MODES`).
+pub const MODE: u32 = key(0x90, 0);
+/// `zone` (King of the hill zone, needs `caps::ZONE`).
+pub const ZONE: u32 = key(0x91, 0);
 
 #[cfg(test)]
 mod tests {

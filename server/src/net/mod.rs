@@ -162,6 +162,8 @@ impl Net {
         cfg.caps |= hn::caps::HIT_FX;
         // Passport bodies for stand-ins (body records).
         cfg.caps |= hn::caps::BODY;
+        // Game modes: the `mode` / `kill_feed` records, and the King of the hill `zone`.
+        cfg.caps |= hn::caps::MODES | hn::caps::ZONE;
         let conn_cfg = ConnConfig { idle_timeout_ms: SERVER_IDLE_MS, ..ConnConfig::default() };
         let ep = ServerEndpoint::new(cfg, conn_cfg, 0, None);
         let static_pub = ep.static_public();

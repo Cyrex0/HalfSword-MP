@@ -326,6 +326,8 @@ function S.read_all(dir, peer_ids_hint)
     local peers = (ipc and ipc.peer_dir and ipc.peer_dir().list) or {}
     snap.sc = S.sidecar_from(link, peers)
     snap.match = S.match_from(H and H.view())
+    -- game mode: teams, scores, round clock, respawns, the hill (nil from an older server)
+    snap.mode = H and H.mode and H.mode() or nil
     snap.metrics = S.metrics_from(link)
     snap.metrics_raw = snap.metrics and snap.metrics.ts or nil
     -- liveness is the sidecar's header heartbeat, never "the record changed"

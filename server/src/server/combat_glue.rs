@@ -181,9 +181,16 @@ pub(super) async fn dispatch_damage(
         let mut inner = state.inner.lock().await;
         let round = inner.match_round;
         let target_alive = inner.peers.values().any(|p| p.id == hit.target_peer_id && p.alive);
+        // The mode's verdict: no friendly fire between teammates (unless the option
+        // allows it), no hits on / from a player inside its respawn protection.
+        let refused = modes::hit_refusal(&inner, attacker_id, hit.target_peer_id);
         if !combat_open(&inner) || hit.round != round || !target_alive {
             crate::combat::reject_decision(attacker_id, hit.hit_id, "round over / target down");
             verdict = crate::combat::Verdict::Ack { accepted: false, reason: "round over / target down".into() };
+        } else if let Some(why) = refused {
+            debug!(attacker_id, target = hit.target_peer_id, hit_id = hit.hit_id, why, "hit refused by the game mode");
+            crate::combat::reject_decision(attacker_id, hit.hit_id, why);
+            verdict = crate::combat::Verdict::Ack { accepted: false, reason: why.into() };
         } else {
             let v = crate::combat::ledger_forward(attacker_id, round, &hit);
             info!(attacker_id, target = hit.target_peer_id, hit_id = hit.hit_id,

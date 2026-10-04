@@ -223,6 +223,55 @@ do
     T.check(w.dir.loaded_for == 3 and w.dir.state == "Spawn", "new world serves round 3", w.dir.loaded_for)
 end
 
+T.log("== deathmatch respawn: the order reloads the arena and serves the running round")
+do
+    local w = DW.to_live()
+    local n0 = #w.opens
+    local GM = S.ENUMS.game_mode
+    -- killed: the server has us dead; no reload without an order
+    w:match("live", "Map_Arena_Pit", 1, nil, { dead = { 1 } })
+    w.N.sc_put("mode", { seq = 2, mode = GM.DEATHMATCH, round = 1,
+        rows = { { peer_id = 1, seat = 1, life = 1, respawning = true }, { peer_id = 2, seat = 2, life = 1, alive = true } } })
+    w:tick(4)
+    T.check(#w.opens == n0 and w.dir.state == "Live", "dead, respawn pending: no reload before the order", w.dir.state)
+    -- the respawn order: the roster's spawn order becomes round 1 | 0x80 | life
+    w.sess.plan[1] = { spawn_id = 256 + 0x82, slot = 4, x = 300, y = 400, z = 10, yaw = 0 }
+    w:put_session()
+    w.N.sc_put("mode", { seq = 3, mode = GM.DEATHMATCH, round = 1,
+        rows = { { peer_id = 1, seat = 1, life = 2, respawning = true }, { peer_id = 2, seat = 2, life = 1, alive = true } } })
+    w:tick(1)
+    T.check(#w.opens == n0 + 1 and w.opens[#w.opens] == "Map_Arena_Pit", "one reload of the same arena", T.repr(w.opens))
+    local ev = w:last_ev("respawn")
+    T.check(ev and ev.round == 1 and ev.spawn_id == 256 + 0x82 and ev.life == 2, "respawn{round, spawn_id, life}", T.repr(ev))
+    w:tick(4)
+    T.check(#w.opens == n0 + 1, "the order is served once")
+    w:load(); w:tick(1)
+    T.check(w.dir.state == "Spawn" and w.dir.loaded_for == 1, "the new world serves the running round", w.dir.loaded_for)
+    w:tick(2)
+    w:placed(1, { x = 300, y = 400 })
+    w.kit_status = { pawn = w.pawn.id, ok = true, armour_n = 5, r_class = "Sword", l_class = "Shield", rev = 1 }
+    w:clear_pings()
+    w:tick(30)
+    T.check(w.dir.state == "Live" and w.dir.ready_round == 1, "Ready on the running round", w.dir.state)
+    local gs = w:sent("game_status")
+    local last = gs[#gs]
+    T.check(last and last.round == 1 and last.spawn_id == 256 + 0x82 and (last.flags & S.ENUMS.status_flag.LOADED) ~= 0,
+        "game_status reports the respawn order applied (the server revives on it)", T.repr(last))
+    T.check(w.frozen == w.pawn.id, "input stays frozen until the server has us alive")
+    -- revived: alive in the roster, no longer respawning
+    w:match("live", "Map_Arena_Pit", 1)
+    w.N.sc_put("mode", { seq = 4, mode = GM.DEATHMATCH, round = 1,
+        rows = { { peer_id = 1, seat = 1, life = 2, alive = true }, { peer_id = 2, seat = 2, life = 1, alive = true } } })
+    w:tick(2)
+    T.check(w.frozen == false and #w.opens == n0 + 1, "input released; no further reload")
+    -- the next round's countdown still reloads for round 2
+    w:match("roundover", "Map_Arena_Pit", 1); w:tick(2)
+    w:match("countdown", "Map_Arena_Pit", 1); w:tick(1)
+    T.check(#w.opens == n0 + 2, "the next round reloads as usual", T.repr(w.opens))
+    w:load(); w:tick(1)
+    T.check(w.dir.loaded_for == 2, "and serves round 2", w.dir.loaded_for)
+end
+
 T.log("== world change mid-pipeline")
 do
     local w = new_world()
