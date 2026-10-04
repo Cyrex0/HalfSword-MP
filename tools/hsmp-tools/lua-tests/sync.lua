@@ -228,26 +228,30 @@ elseif opts.kind == "native_sample" then
     -- Default ON: no "native_sample" key at all.
     T.write(sd .. "/.settings.json", '{"send_hz":60}\n')
     local N = rawget(_G, "HSMPNative")
-    local calls, mode = { pose = 0, root = 0 }, "ok"
-    N._sample = function(a)
+    local calls, mode = { pose = 0, root = 0, weapon = 0, n = 0 }, "ok"
+    N._sample = function(a)   -- one call carries every part (sample.rs: mask 1 root, 2 weapon, 4 pose)
+        calls.n = calls.n + 1
+        local m, err = 0, nil
+        if a.root_pawn then calls.root = calls.root + 1; m = m | 1 end
+        if a.weapon_actor then calls.weapon = calls.weapon + 1; m = m | 2 end
         if a.mesh then
             calls.pose = calls.pose + 1
-            if mode == "skip" then return 0, "skip:bone" end
-            return 4
+            if mode == "skip" then err = "skip:bone" else m = m | 4 end
         end
-        if a.root_pawn then calls.root = calls.root + 1; return 1 end
-        if a.weapon_actor then return 2 end
-        return 0
+        return m, err
     end
     local pawn = boot()
     pawn.__props["Weapon R"] = weapon("W_1", 5001)
     run(3000, true)
     T.check(calls.pose > 100 and calls.root > 100, "default (no native_sample key): the native sampler takes root + pose", T.repr(calls))
-    T.check(puts("local_pose") == 0 and puts("local_root") == 0, "and the Lua path stays idle", T.repr(hot() and hot().n))
+    T.check(puts("local_pose") == 0 and puts("local_root") == 0 and puts("local_weapon") == 0, "and the Lua path stays idle",
+        T.repr(hot() and hot().n))
+    T.check(calls.weapon > 100 and calls.n == calls.pose, "one native call per sample: root, the held weapon and pose together", T.repr(calls))
     mode = "skip"
-    local p0 = puts("local_pose")
+    local p0, r0 = puts("local_pose"), puts("local_root")
     run(1000, true)
     T.check(puts("local_pose") > p0 + 30, "a refused native sample falls back to the Lua path (same frame)", puts("local_pose") - p0)
+    T.check(puts("local_root") == r0, "only the refused part: root stays native", puts("local_root") - r0)
     mode = "ok"
     T.write(sd .. "/.settings.json", '{"send_hz":60,"native_sample":false}\n')
     run(2000, true)

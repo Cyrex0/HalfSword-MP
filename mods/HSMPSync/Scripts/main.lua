@@ -629,7 +629,7 @@ end
 -- Measured in game: about 85 % less pose sender cost than the Lua path, same quality.
 local NSAMPLE = { want = true, env = os.getenv("HSMP_NATIVE_SAMPLE"), configured = false, retry_at = 0,
                   used = 0, fell_back = 0, nw = 0, logged = nil,
-                  a_pose = {}, a_root = {}, a_weapon = {} }
+                  a = {} }
 if NSAMPLE.env == "0" then NSAMPLE.want = false end
 function NSAMPLE.set(on, why)
     on = on and true or false
@@ -680,30 +680,12 @@ function NSAMPLE.refused(err)
     end
 end
 local function addr_of(o) return pval(r_addr, o) end
-function NSAMPLE.root(pawn, tick, ts)
-    local a = NSAMPLE.a_root
-    a.root_pawn, a.root_tick, a.root_ts = addr_of(pawn), tick, ts
-    if not a.root_pawn then return false end
-    local mask, err = IPC.sample_local(a)
-    if mask and mask & 1 ~= 0 then return true end
-    NSAMPLE.refused(err)
-    return false
-end
-function NSAMPLE.weapon(weapon, tick, ts, wid, held)
-    local a = NSAMPLE.a_weapon
-    a.weapon_actor, a.weapon_tick, a.weapon_ts, a.weapon_id, a.weapon_held = addr_of(weapon), tick, ts, wid, held
-    if not a.weapon_actor then return false end
-    local mask, err = IPC.sample_local(a)
-    if mask and mask & 2 ~= 0 then return true end
-    NSAMPLE.refused(err)
-    return false
-end
--- The same weapon policy as put_skeletal_state (two-handed grip, one actor per
--- address, no "Fists"), then one native call for bones + weapons + control.
-function NSAMPLE.pose(pawn, mesh, tick, ts, dstep)
-    local a = NSAMPLE.a_pose
+-- The pose part of a native sample, into `a`: the same weapon policy as
+-- put_skeletal_state (two-handed grip, one actor per address, no "Fists").
+-- Returns the number of weapons, or nil when the mesh or pawn has no address.
+function NSAMPLE.pose_fields(a, pawn, mesh, tick, ts, dstep)
     a.mesh, a.pawn = addr_of(mesh), addr_of(pawn)
-    if not (a.mesh and a.pawn) then return false end
+    if not (a.mesh and a.pawn) then a.mesh = nil; return nil end
     a.w1, a.h1, a.t1, a.w2, a.h2, a.t2 = 0, 0, 0, 0, 0, 0
     local two = pget(pawn, "R Two Handed Grip") == true
     local seen, nw = nil, 0
@@ -724,14 +706,7 @@ function NSAMPLE.pose(pawn, mesh, tick, ts, dstep)
         end
     end
     a.pose_tick, a.pose_ts, a.dt, a.k, a.control = tick, ts, dstep or 0, 0, tick % 2 == 0
-    local mask, err = IPC.sample_local(a)
-    if mask and mask & 4 ~= 0 then
-        NSAMPLE.used = NSAMPLE.used + 1
-        NSAMPLE.nw = nw
-        return true
-    end
-    NSAMPLE.refused(err)
-    return false
+    return nw
 end
 local _pose_stats = { n = 0, bones = 0, wpn = 0, ctl = 0, cost_ms = 0, at = 0 }
 
@@ -739,14 +714,6 @@ local _pose_stats = { n = 0, bones = 0, wpn = 0, ctl = 0, cost_ms = 0, at = 0 }
 -- IPC.put_pose call: the native module builds the codec v2 `pose` record once.
 local _pb, _pw, _pc = {}, {}, {}
 local function put_skeletal_state(pawn, mesh, ts, dstep)
-    if NSAMPLE.on() and NSAMPLE.pose(pawn, mesh, _skel_seq + 1, ts, dstep) then   -- native sampling
-        _skel_seq = _skel_seq + 1
-        _pose_stats.n = _pose_stats.n + 1
-        _pose_stats.bones = #POSE_BONES
-        if NSAMPLE.nw > 0 then _pose_stats.wpn = _pose_stats.wpn + 1 end
-        if _skel_seq % 2 == 0 then _pose_stats.ctl = _pose_stats.ctl + 1 end
-        return
-    end
     for i = 1, #POSE_BONES do
         local ok, r = pcall(sample_bone, mesh, i)
         if not ok or not r then return end
@@ -834,16 +801,13 @@ end
 
 local _weapon_seq = 0
 
-local function write_weapon_state(ts, weapon, wid, cls_name, hand)
+local function write_weapon_state(ts, weapon, wid, cls_name, hand, native_done)
     if not weapon or not wid then return end
     if logged_weapon_cls ~= cls_name then
         logged_weapon_cls = cls_name
         Log("holding weapon: %s (id=%d, hand %s)", cls_name or "?", wid, hand or "?")
     end
-    if NSAMPLE.on() and NSAMPLE.weapon(weapon, _weapon_seq + 1, ts, wid, (hand == "L") and 2 or 1) then   -- native sampling
-        _weapon_seq = _weapon_seq + 1
-        return
-    end
+    if native_done then return end   -- written by the native sample (NSAMPLE.all)
     local pos, rot, vel
     local ok1 = pcall(function() pos = weapon:K2_GetActorLocation() end)
     local ok2 = pcall(function() rot = weapon:K2_GetActorRotation() end)
@@ -891,13 +855,6 @@ end
 
 -- The local_root record slot (one native call: rotator -> quaternion in the native module).
 local function write_my_state(ts)
-    if NSAMPLE.on() then   -- native sampling
-        local pawn = get_local_pawn()
-        if pawn and NSAMPLE.root(pawn, _root_seq + 1, ts) then
-            _root_seq = _root_seq + 1
-            return true
-        end
-    end
     local st = read_my_transform(ts)
     if not st or not IPC then return false end
     local p, r, v = st.pos, st.rot, st.vel
@@ -1351,6 +1308,39 @@ local function ipc_pump()
         IPC.world_ready(key)
     end
 end
+-- Native sampling of one sample: root, held weapon and pose in ONE sample_local call
+-- (mask bit 1 root, 2 weapon, 4 pose written). Returns the mask; fast_send runs the Lua
+-- path for the parts it did not write. A refusal is counted and logged once per call.
+function NSAMPLE.all(pawn, ts, tsf, dstep, weapon, wid, hand)
+    local a = NSAMPLE.a
+    a.root_pawn, a.root_tick, a.root_ts = addr_of(pawn), _root_seq + 1, ts
+    if weapon and wid then
+        a.weapon_actor, a.weapon_tick, a.weapon_ts, a.weapon_id = addr_of(weapon), _weapon_seq + 1, ts, wid
+        a.weapon_held = (hand == "L") and 2 or 1
+    else
+        a.weapon_actor = nil
+    end
+    local mesh = pose_mesh_for(pawn)
+    local nw = mesh and NSAMPLE.pose_fields(a, pawn, mesh, _skel_seq + 1, tsf, dstep)
+    if not nw then a.mesh = nil end
+    local want = (a.root_pawn and 1 or 0) | (a.weapon_actor and 2 or 0) | (a.mesh and 4 or 0)
+    if want == 0 then return 0 end
+    local mask, err = IPC.sample_local(a)
+    mask = math.tointeger(mask) or 0
+    if mask & want ~= want then NSAMPLE.refused(err) end
+    if mask & 1 ~= 0 then _root_seq = _root_seq + 1 end
+    if mask & 2 ~= 0 then _weapon_seq = _weapon_seq + 1 end
+    if mask & 4 ~= 0 then
+        _skel_seq = _skel_seq + 1
+        _pose_stats.n = _pose_stats.n + 1
+        _pose_stats.bones = #POSE_BONES
+        if nw > 0 then _pose_stats.wpn = _pose_stats.wpn + 1 end
+        if _skel_seq % 2 == 0 then _pose_stats.ctl = _pose_stats.ctl + 1 end
+        NSAMPLE.used = NSAMPLE.used + 1
+        NSAMPLE.nw = nw
+    end
+    return mask & want
+end
 local function fast_send()
     if IPC and IPC.backend == "shm" then pcall(ipc_pump) end
     if not (_last_in_game and _world_ok and MP.live) then return end   -- on_tick maintains the world + MP gates
@@ -1392,11 +1382,8 @@ local function fast_send()
     if not due then return end
     _root_next_ms = math.max(_root_next_ms + interval, now - interval)
     local ts = math.floor(tsf)   -- root / weapon streams carry integer ms
-    pcall(write_my_state, ts)
     local okw, weapon, wid, cls, hand = pcall(find_held_weapon, pawn)
     if not okw then weapon, wid, cls, hand = nil, nil, nil, nil end
-    pcall(write_weapon_state, ts, weapon, wid, cls, hand)
-    local t0 = os.clock() * 1000
     -- The bodies read here stand for the END of this frame's physics step
     -- (this callback runs after it; tsf is the frame START). The step goes
     -- along as "dt" (codec v2 optional step byte): the receiver places the
@@ -1411,7 +1398,17 @@ local function fast_send()
         d = d * 1000
         if d == d and d > 0 and d <= 80 then dstep = d end
     end
-    pcall(write_skeletal_state, pawn, tsf, dstep)
+    -- Native sampling takes root + weapon + pose in one call; the Lua path writes
+    -- whatever it did not.
+    local t0 = os.clock() * 1000
+    local nat = 0
+    if NSAMPLE.on() then
+        local okn, m = pcall(NSAMPLE.all, pawn, ts, tsf, dstep, weapon, wid, hand)
+        if okn then nat = m end
+    end
+    if nat & 1 == 0 then pcall(write_my_state, ts) end
+    pcall(write_weapon_state, ts, weapon, wid, cls, hand, nat & 2 ~= 0)
+    if nat & 4 == 0 then pcall(write_skeletal_state, pawn, tsf, dstep) end
     -- Sender cost / rate report (os.clock is ms-resolution: average it).
     _pose_stats.cost_ms = _pose_stats.cost_ms + (os.clock() * 1000 - t0)
     if now - _pose_stats.at >= 5000 then

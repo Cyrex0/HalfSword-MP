@@ -177,11 +177,10 @@ if opts.kind == "sync_native" or opts.kind == "sync_lua" then
     dofile(T.path("mods/HSMPSync/Scripts/main.lua"))
     T.check(type(frame_fn) == "function", "the per-frame sender is registered")
     local N = rawget(_G, "HSMPNative")
-    N._sample = function(a)
-        if a.mesh then return 4 end
-        if a.root_pawn then return 1 end
-        if a.weapon_actor then return 2 end
-        return 0
+    local ncalls = 0
+    N._sample = function(a)   -- one call carries every part (mask 1 root, 2 weapon, 4 pose)
+        ncalls = ncalls + 1
+        return (a.root_pawn and 1 or 0) | (a.weapon_actor and 2 or 0) | (a.mesh and 4 or 0)
     end
     local function beat()
         N.sc_put("link", { status = 1, state = 1, my_peer_id = 1 })
@@ -198,11 +197,13 @@ if opts.kind == "sync_native" or opts.kind == "sync_lua" then
     N.put_weapon = function() puts = puts + 1; return true end
     N.put_pose = function() puts = puts + 1; return true end
     N.frame = function() return 0 end
+    local c0 = ncalls
     local b = churn(600, function() frame_fn() end, function()
         M.now = M.now + 17   -- one 60 Hz sample due per measured frame
     end)
     if native then
         T.check(hot.local_pose == pose0 and puts == 0, "native sampling took every sample", puts)
+        T.check(ncalls - c0 == 600, "one native call per sample (root + weapon + pose)", ncalls - c0)
     else
         T.check(puts >= 1200, "the Lua sampler wrote root / weapon / pose every frame", puts)
     end
