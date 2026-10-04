@@ -320,7 +320,7 @@ mod tests {
         assert!(!r.ok.get() && r.reason_text.lossy().contains("mods"), "{:?}", r.reason_text.lossy());
         let gs = hsmp_ipc::wire::encode(0, 0, &srec::GameStatus { flags: srec::status_flag::IN_MENU, ..Default::default() }, &[]);
         deliver(&socket, &state, a.addr, &gs).await.unwrap();
-        assert!(state.inner.lock().await.match_peers.get(&aid).is_none(), "game_status of a pending player is dropped");
+        assert!(!state.inner.lock().await.match_peers.contains_key(&aid), "game_status of a pending player is dropped");
         assert!(GATED.load(Ordering::Relaxed) >= 1);
         // the roster lists B only; START by B (alone) does not take A into the match
         {
