@@ -121,7 +121,11 @@ box, informational only): 343 us -> 130-139 us per stand-in frame with the nativ
 - `cargo test -p hsmp-native --test servo_parity`, `-p hsmp-pose-truth --test lua_pure`,
   `-p hsmp-pose --lib lua_ref`, `-p hsmpworld-tests`, `-p hsmpworld-sim`: pass (except the
   baseline Windows-only `claims_and_held_items_are_typed_records`).
-- Workspace: see the hand-back summary (cargo test / clippy run once at the end).
+- `cargo test --workspace --locked --no-fail-fast -j 2` (CARGO_INCREMENTAL=0): only the known
+  Linux-only baseline failures (hsmp-launcher firewall x5 and two install case tests; hsmp-native
+  api, records, s2g_epoch, sample; hsmpworld-tests claims_and_held_items_are_typed_records).
+- `cargo clippy --workspace --all-targets --locked -j 2`: exit 0, 179 warning lines (baseline).
+
 
 ## Needs Windows / in-game verification
 
