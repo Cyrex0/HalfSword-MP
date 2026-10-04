@@ -29,6 +29,8 @@
 --   cfg.exe(name)                      -> bin_dir .. "/" .. name .. ".exe"  (name = "hsmp-server")
 --   cfg.server_exe(), cfg.sidecar_exe(), cfg.query_exe()   (HSMP_*_EXE env still override)
 --   cfg.state_dir()                    -> HSMP_STATE_DIR or "hsmp_state" (forward slashes)
+--   cfg.mods_cache_dir()               -> HSMP_MODS_CACHE or "hsmp_mods": the server-mods cache
+--                                         (docs/hosting/server-mods.md; outside ue4ss/Mods)
 --   cfg.inst()                         -> HSMP_INST or "0"
 --   cfg.dev()                          -> true when HSMP_DEV=1 (dev keys / dev panels allowed)
 --   cfg.source()                       -> path of the cfg file actually read (or nil)
@@ -150,6 +152,12 @@ function M.query_exe()   return ((env("HSMP_QUERY_EXE")   or M.exe("hsmp-query")
 
 function M.state_dir()
     return ((env("HSMP_STATE_DIR") or "hsmp_state"):gsub("\\", "/"))
+end
+
+-- The verified server-mods cache: the sidecar writes it (--mods-cache), HSMPModHost loads
+-- from it. Relative to the game's Win64 folder unless absolute; never under ue4ss/Mods.
+function M.mods_cache_dir()
+    return ((env("HSMP_MODS_CACHE") or "hsmp_mods"):gsub("\\", "/"):gsub("/+$", ""))
 end
 
 function M.inst() return env("HSMP_INST") or "0" end

@@ -116,6 +116,10 @@ pub const CONTRACT: &[Entry] = &[
     // DoD-8: attributes a career-file mtime change to a pre-session native write (guard off)
     e("x_save_call", L, &["fn", "slot", "active"], &["err"]),
     e("x_autotest_cmd", L, &[], &[]),
+    // HSMPModHost (docs/hosting/server-mods.md): a server mod raised an error; a set loaded / unloaded
+    e("x_server_mod_error", L, &[], &["mod", "what", "error"]),
+    e("x_server_mods_loaded", L, &[], &["set", "mods", "ok", "failed"]),
+    e("x_server_mods_unloaded", L, &[], &["why", "inert"]),
     e("conn_state", L, &[], &[]),
     e("travel_reason", L, &[], &[]),
     e("resume", L, &[], &[]),
