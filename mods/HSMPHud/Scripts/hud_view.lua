@@ -125,7 +125,8 @@ function V.layout(cw, ch, n, dpi)
     local hh, ch2, rr, fo, bp = math.floor(44 * s), math.floor(28 * s), math.floor(32 * s), math.floor(26 * s), math.floor(8 * s)
     local bh = bp + hh + ch2 + V.MAX_ROWS * rr + fo + bp
     local bx, by = -math.floor(bw2 / 2), -math.floor(bh / 2)
-    local cols = { { "#", 0.07, 1 }, { "PLAYER", 0.43, 0 }, { "WINS", 0.14, 1 }, { "PING", 0.17, 1 }, { "STATUS", 0.19, 1 } }
+    local cols = { { "#", 0.06, 1 }, { "PLAYER", 0.38, 0 }, { "WINS", 0.10, 1 }, { "K / D", 0.13, 1 }, { "PING", 0.14, 1 },
+                   { "STATUS", 0.19, 1 } }
     L.board = { bg = { x = bx, y = by, w = bw2, h = bh },
                 title = { x = bx + 2 * bp, y = by + bp, w = bw2 - 4 * bp, h = hh, fs = K.fs(20, s) },
                 foot = { x = bx + 2 * bp, y = by + bp + hh + ch2 + V.MAX_ROWS * rr, w = bw2 - 4 * bp, h = fo, fs = K.fs(12, s) },
@@ -387,10 +388,12 @@ function V.apply(w, model, now)
             for ci, t in ipairs(row.cells) do
                 K.show(t, d ~= nil)
                 if d then
-                    local val = ({ d.rank, d.nick, d.wins, d.ping, d.status })[ci]
+                    local val = ({ d.rank, d.nick, d.wins, d.kd or "-", d.ping, d.status })[ci]
                     K.set_text(t, val)
                     local col = d.me and K.C.title or K.C.text
-                    if ci == 5 then col = (d.status == "DEAD") and K.C.bad or ((d.status == "LOADING") and K.C.ok or K.C.good) end
+                    if ci == 6 then
+                        col = (d.status == "DEAD") and K.C.bad or ((d.status == "LOADING" or d.status == "RESPAWN") and K.C.ok or K.C.good)
+                    end
                     K.set_color(t, col)
                 end
             end

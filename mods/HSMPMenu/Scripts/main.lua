@@ -786,7 +786,8 @@ end
 local function read_match_state()
     local v = MX.view()
     if not v then return nil end
-    return { state = v.state, arena = v.arena, countdown = v.countdown_s or 0, best_of = v.best_of, ready = v.ready }
+    return { state = v.state, arena = v.arena, countdown = v.countdown_s or 0, best_of = v.best_of, ready = v.ready,
+             mode = v.config and v.config.mode }
 end
 
 -- The server's arena from the session snapshot, as a MAP_PRESETS path when it is one
@@ -1481,6 +1482,25 @@ do
     end
 end
 
+-- The GAME MODE screen (lobby -> MODE) lives in modes_ui.lua.
+MX.ModeUI = load_module("modes_ui", true)
+if MX.ModeUI then
+    MX.ModeUI.attach({
+        kit = Kit,
+        cmd = function(kind, args) local id = cmd_send(kind, args); lobby.note_cmd = id; return id end,
+        cmd_status = function(id) return cmd_status(id) end,
+        config = function() local v = read_session(); return v and v.config or nil end,
+        mode = function() return MX.HS and MX.HS.mode and MX.HS.mode() or nil end,
+        roster = function() local v = read_session(); return v and v.rows or {} end,
+        my_peer_id = function() return read_my_peer_id() end,
+        is_admin = function() return lobby.admin_now and true or false end,
+        in_lobby = function() local m = read_match_state(); return m == nil or m.state == "lobby" end,
+        alive = function() return state.screen_active == "mode" end,
+        back = function() enter_screen("lobby") end,
+    })
+    table.insert(forget_hooks, function() MX.ModeUI.forget() end)
+end
+
 -- --- main.lua kit screens: character, lobby ------------------------------------------
 -- Built once on enter; clicks and ticks re-render in place (state.screen_render).
 -- The build table (ui) is dropped on screen exit / world change via forget_hooks.
@@ -1589,7 +1609,8 @@ local MAX_LOBBY_ROWS = 8
 local NOTE_ACCEPTED_S = 4         -- an accepted command stays in the note line this long
 local CONNECT_TIMEOUT_S = 15      -- "cannot reach the server" after this long without a connection
 local CMD_WHAT = { pick_arena = "ARENA", best_of = "ROUNDS", start = "START", abort = "ABORT", ready = "READY",
-                   kit_rules = "KIT RULES", kick = "KICK", promote = "MAKE HOST" }
+                   kit_rules = "KIT RULES", kick = "KICK", promote = "MAKE HOST", game_mode = "MODE", teams = "TEAMS",
+                   round_time = "ROUND CLOCK", set_team = "TEAM", set_option = "MODE OPTION" }
 local KIT_MODE_NAMES = { [0] = "FREE", [1] = "CLASSES ONLY", [2] = "CUSTOM" }
 
 local function host_pick_map(path, via)
@@ -1868,7 +1889,13 @@ local function render_lobby()
         or "The point budget only applies to CUSTOM kits - pick CUSTOM first")
     Kit.set_text(w.rules_hint, rules and ("SERVER: " .. (KIT_MODE_NAMES[rules.mode] or "?") .. ((rules.mode == 2) and (" " .. rules.budget) or ""))
         or "SERVER: -")
-    Kit.set_text(w.mode_line, "MODE  " .. (S.mode and S.mode:upper():gsub("_", " ") or "DUEL") .. "   (set by the server)")
+    if MX.ModeUI then
+        local sess = S.session
+        Kit.set_text(w.mode_line, MX.ModeUI.summary(MX.ModeUI.state(sess and sess.config, MX.HS and MX.HS.mode and MX.HS.mode(),
+            sess and sess.rows, S.my_pid or 0)))
+    else
+        Kit.set_text(w.mode_line, "MODE  " .. (S.mode and S.mode:upper():gsub("_", " ") or "DUEL") .. "   (set by the server)")
+    end
 
     -- your loadout
     if w.loadout_sum then Kit.set_text(w.loadout_sum, "YOUR KIT: " .. (Classes and Classes.my_summary and Classes.my_summary() or "-")) end
@@ -2075,7 +2102,8 @@ local function lobby_session_over(why, graceful)
     lobby.over = why
     Log("session over (%s): leaving the lobby screen (%s)", tostring(why), graceful and "leave request" or "sidecar ended")
     -- LOADOUT (classes) is opened from the lobby: it closes too
-    local on = state.injected and (state.screen_active == "lobby" or state.screen_active == "classes")
+    local on = state.injected and (state.screen_active == "lobby" or state.screen_active == "classes"
+        or state.screen_active == "mode")
     session_teardown("session over: " .. tostring(why), { no_leave = not graceful })
     if on then exit_screen() end
 end
@@ -2659,6 +2687,9 @@ local function build_lobby_kit()
           end, reason = "Not connected to the server yet" },
           { label = "LOADOUT", key = "loadout", help = "Pick your class and gear", cb = function()
               if ui_alive() then enter_screen("classes") end
+          end },
+          { label = "MODE", key = "mode", help = "Game mode, teams and your team", cb = function()
+              if ui_alive() and MX.ModeUI then enter_screen("mode") end
           end } },
         { { label = lobby.is_host and "CLOSE LOBBY" or "LEAVE", key = "cancel", style = "danger", cb = lobby_cancel_click,
             help = lobby.is_host and "Close the server and return to the menu" or "Leave the server and return to the menu" },
@@ -2682,6 +2713,7 @@ local BUILDERS = {
     character = function() build_character_kit(); return render_character end,
     lobby     = function() build_lobby_kit(); return render_lobby end,
     classes   = function() if Classes then Classes.build(); return Kit and Classes.render or nil end end,
+    mode      = function() if MX.ModeUI then MX.ModeUI.build(); return MX.ModeUI.render end end,
 }
 
 function enter_screen(kind)
@@ -2698,7 +2730,7 @@ function enter_screen(kind)
     end
     -- No zombie lobby stuck on CONNECTING...: the lobby (and LOADOUT,
     -- opened from it) needs a session that is held or starting.
-    if (kind == "lobby" or kind == "classes") and not lobby.active and not lobby.starting then
+    if (kind == "lobby" or kind == "classes" or kind == "mode") and not lobby.active and not lobby.starting then
         Log("enter screen %s refused: no MP session (it ended)", kind)
         if state.screen_active then exit_screen() end
         return

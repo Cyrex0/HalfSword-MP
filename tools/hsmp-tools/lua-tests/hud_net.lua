@@ -131,3 +131,13 @@ T.check(not T1.connected and not T1.mp.active and T1.mp.dead, "a 'connected' lin
 local T2 = HM.new()
 for i = 1, 5 do HM.observe(T2, { sc = { status = "connected" }, sidecar_raw = i, hb_age = nil }, i, { in_arena = false }) end
 T.check(not T2.connected, "a changing link without a heartbeat is not live (no line-change heuristic)")
+
+T.log("== King of the hill: where the hill is")
+do
+    local z = { x = 1000, y = 0, z = 0, r = 300, hh = 300 }
+    T.check(HM.hill_hint(z, { 900, 50, 20 }, 0) == "ON THE HILL", "inside the radius")
+    T.check(HM.hill_hint(z, { 0, 0, 0 }, 0) == "7 m AHEAD", "facing +X, 7 m to the edge", HM.hill_hint(z, { 0, 0, 0 }, 0))
+    T.check(HM.hill_hint(z, { 0, 0, 0 }, 180) == "7 m BEHIND", "facing away")
+    T.check(HM.hill_hint(z, { 0, 0, 0 }, -90) == "7 m RIGHT", "facing -Y: the hill is to the right")
+    T.check(HM.hill_hint(z, { 0, 0, 0 }, nil) == "7 m" and HM.hill_hint(nil, { 0, 0, 0 }, 0) == nil, "no yaw / no hill")
+end
