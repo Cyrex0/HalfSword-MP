@@ -17,6 +17,7 @@
 --   avatars        bool    HSMPAvatars: show peer avatars
 --   upnp           bool    a hosted server opens its port on the router (UPnP / PCP / NAT-PMP);
 --                          false = hsmp-server --port-map off
+--   server_mods    string  "ask" (default) | "never": servers that serve mods (server_mods.lua)
 --   lobby_map, lobby_mode  the next HOST's boot arena / rounds ("Best of N", re-sent on connect)
 --   host_kit_mode, host_kit_budget  the HOST's last KIT RULES pick (-1 = none), re-sent
 --                  on connect as host
@@ -43,10 +44,10 @@ S.DEFAULTS = {
     region = "", master_url = "",
     hud = true, hud_killfeed = true, hud_net = "always", avatars = true, upnp = true,
     lobby_map = "Map_Arena_Alley", lobby_mode = "Best of 3",
-    host_kit_mode = -1, host_kit_budget = 0,
+    host_kit_mode = -1, host_kit_budget = 0, server_mods = "ask",
 }
 local ORDER = { "nick", "server", "send_hz", "hud", "avatars", "lobby_map", "lobby_mode",
-                "region", "master_url", "hud_killfeed", "hud_net", "host_kit_mode", "host_kit_budget", "upnp" }
+                "region", "master_url", "hud_killfeed", "hud_net", "host_kit_mode", "host_kit_budget", "upnp", "server_mods" }
 
 S.data = {}          -- the live settings (main.lua keeps a reference: never replace the table)
 S.extra = {}         -- keys owned by other mods, written back unchanged
@@ -125,6 +126,7 @@ local function sanitize(d)
     if not km or km ~= math.floor(km) or km < -1 or km > 2 then d.host_kit_mode = -1 end
     local kb = tonumber(d.host_kit_budget)
     if not kb or kb < 0 or kb > 1000 then d.host_kit_budget = 0 end
+    if d.server_mods ~= "never" then d.server_mods = "ask" end
 end
 
 -- Old files were written by pattern; read them the same tolerant way.
@@ -203,7 +205,7 @@ local edit             -- staged copy of S.data
 local test = nil       -- master URL TEST: { gen, urls, started, done, results = { {url, state, n} } }
 local TEST_DEADLINE_S = 8
 
-local FIELDS = { "nick", "server", "send_hz", "region", "master_url", "hud", "hud_killfeed", "hud_net", "avatars", "upnp" }
+local FIELDS = { "nick", "server", "send_hz", "region", "master_url", "hud", "hud_killfeed", "hud_net", "avatars", "upnp", "server_mods" }
 
 local function dirty()
     if not edit then return false end
@@ -356,6 +358,7 @@ function S.render()
     Kit.chip_group_reason(w.net, "The HUD is OFF - turn HUD ON first")
     Kit.chip_group_set(w.av, edit.avatars, false)
     Kit.chip_group_set(w.upnp, edit.upnp, false)
+    Kit.chip_group_set(w.smods, edit.server_mods, false)
     -- save state
     local bad = first_invalid(v)
     local d = dirty()
@@ -438,7 +441,7 @@ function S.build()
         test = nil
     end
     local L
-    L, b = Kit.frame("settings", "SETTINGS", { w = 1500, h = 720 })
+    L, b = Kit.frame("settings", "SETTINGS", { w = 1500, h = 860 })
     local w = b.w
     local u, F = L.u, L.F
     local gap = L.gap
@@ -523,6 +526,23 @@ function S.build()
     rlabel("ROUTER PORT")
     w.upnp = onoff(L, rcx, ry, rcw, ch_, "upnp", "hosting",
         "Open the HOST PORT on your router automatically while you host (UPnP / NAT-PMP / PCP). OFF = forward it by hand")
+    ry = ry + ch_ + u(Kit.SP.lg)
+
+    -- right column: server mods (docs/hosting/server-mods.md)
+    Kit.group("server_mods")
+    ry = section("SERVER MODS", rx, ry, rw)
+    rlabel("ALLOW")
+    w.smods = Kit.chip_group({ { "ask", "ASK ME" }, { "never", "NEVER" } }, rcx, ry, rcw, ch_,
+        function(v) set_edit("server_mods", v) end, { fs = F(Kit.TS.label), gap = gap,
+          help = "Servers can offer mods that run with full access to your PC. ASK ME shows a warning first; NEVER declines them (you cannot join those servers)" })
+    ry = ry + ch_ + row_gap
+    w.smods_forget = Kit.button("FORGET REMEMBERED SERVERS", function()
+        if not b or not Kit.alive(b) then return end
+        local n = ctx.server_mods_count and ctx.server_mods_count() or 0
+        if ctx.forget_server_mods then ctx.forget_server_mods() end
+        b.msg_t = Kit.now() + 4
+        Kit.msg(string.format("Forgot %d server%s: their mods ask again", n, n == 1 and "" or "s"), Kit.C.ok)
+    end, rx, ry, rw, ch_, { fs = F(Kit.TS.label), help = "Every server you accepted mods for with REMEMBER asks again" })
 
     -- actions + keys
     local acts = Kit.actions(L,

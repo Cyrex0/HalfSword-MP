@@ -23,6 +23,9 @@
 .my_character.json
 .gi_backup.txt
 .browser_prefs.txt
+# the server-mods consent (server key -> accepted mod-set hashes; HSMPMenu server_mods.lua):
+# the player's own decision, persistent config; the downloaded mods live outside the state dir
+.server_mods.json
 
 [log: dev output] diagnostic dumps and probe logs (HSMP_DEV / gate only; written, never read back)
 .tdiag_recv.txt
