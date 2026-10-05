@@ -520,7 +520,8 @@ PURE.TUNE_FLAGS = { servo = true, wpn = true, world = true, ghost = true, clock 
                     retarget = true, tonus = true, stamp = true, noacc = true, plant = true, v1aim = true, tdiag = true,
                     native_servo = true, native_neutralise = true, native_wservo = true }   -- native servo A/B
 PURE.TUNE_RANGE = { cap_lin = { 0, 20000 }, cap_ang = { 0, 20000 }, lead = { -500, 500 }, gain = { 0, 1 },
-                    leg_gain = { 0, 1 }, lat = { 0, 500 }, limits = { 0, 180 }, bench = { 1, 1000 } }
+                    leg_gain = { 0, 1 }, lat = { 0, 500 }, limits = { 0, 180 }, bench = { 1, 1000 },
+                    impact_dv = { 0, 5000 }, impact_ms = { 0, 1000 } }
 -- The stored value for knob `key` set to `num`, or nil, "unknown" / "bad".
 function PURE.tune_value(key, num)
     if type(num) ~= "number" or num ~= num or num == math.huge or num == -math.huge then return nil, "bad" end

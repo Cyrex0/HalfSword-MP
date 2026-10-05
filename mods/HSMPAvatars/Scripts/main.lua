@@ -164,6 +164,15 @@ local POSE_DIAG_MS      = 5000
 -- catches up gently instead of hitting like a hammer.
 local SERVO_CAP_LIN   = 900     -- uu/s beyond the replicated velocity
 local SERVO_CAP_ANG   = 900     -- deg/s beyond the replicated angular velocity
+-- Impact yield: a body the solver left IMPACT_DV uu/s off its commanded velocity was struck
+-- (blade, body, prop), not servo-tracked: ease the stand-in for IMPACT_MS so the native contact
+-- response shows, then servo back onto the owner's pose (which by then carries the owner's own
+-- reaction). Without it a stand-in shrugs off every blow within one physics step. First
+-- guesses, not measured: tune impact_dv / impact_ms (impact_dv 0 = off).
+local IMPACT_DV       = 300
+local IMPACT_MS       = 200
+local IMPACT_GAIN     = 0.08
+local IMPACT_CAP      = 200
 local SERVO_GAIN      = 0.3     -- share of the remaining error corrected per step (1 = deadbeat; measured A/B under motion: 1.0 -> jitter 2-9, 0.7 -> 1.4-2.0, 0.4 -> 1.1-1.3, 0.3 -> 1.0-1.2 at the same 0.2-0.6 uu arm error; 0.2 lets arm error reach 3-9 uu)
 local SERVO_EXTRAP_MS = 120     -- advance a target by its velocity at most this long (v2 aim at 20 fps: ~2 x 50 ms past the sample)
 local HOLD_RELEASE_MS = 5000    -- stale data: hold the last pose this long, then release
@@ -2464,6 +2473,7 @@ function PX.contact_body(mesh, sv, i, cv, near)
     local t = near and ci.near or ci.far
     t[#t + 1] = imp
     if near and imp > ci.maxn then ci.maxn = imp; ci.maxb = PURE.V2_SLOTS[i] end
+    return dv
 end
 
 local function servo_weapon_parts(p, body, field)
@@ -2846,6 +2856,9 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local s_gain = yl and yl.gain or (TUNE.gain or SERVO_GAIN)
     local s_capl = yl and yl.cap_lin or SERVO_CAP_LIN
     local s_capa = yl and yl.cap_ang or SERVO_CAP_ANG
+    if p.impact_until and now < p.impact_until then
+        s_gain, s_capl, s_capa = math.min(s_gain, IMPACT_GAIN), math.min(s_capl, IMPACT_CAP), math.min(s_capa, IMPACT_CAP)
+    end
     if body.ramp_at then
         local k = (now - body.ramp_at) / PX.RAMP_MS
         if k >= 1 or k < 0 then body.ramp_at = nil else s_capl, s_capa = s_capl * (0.3 + 0.7 * k), s_capa * (0.3 + 0.7 * k) end
@@ -2863,10 +2876,18 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     sv.cmd = sv.cmd or {}
     sv.mass = sv.mass or {}
     if sv.cmd[1] then
+        local idv = TUNE.impact_dv or IMPACT_DV
         for _, i in ipairs(PX.CONTACT_BODIES) do
             local cv = sv.cmd[i]
             if cv then
-                pcall(PX.contact_body, mesh, sv, i, cv, near)
+                local ok, dv = pcall(PX.contact_body, mesh, sv, i, cv, near)
+                if ok and dv and idv > 0 and dv > idv and not body.ramp_at then
+                    if not (p.impact_logged and now - p.impact_logged < 2000) then
+                        p.impact_logged = now
+                        Log("pose peer %d: struck (%s %.0f uu/s off the servo): yielding %d ms", id, PURE.V2_SLOTS[i] or "?", dv, TUNE.impact_ms or IMPACT_MS)
+                    end
+                    p.impact_until = now + (TUNE.impact_ms or IMPACT_MS)
+                end
             end
         end
     end
