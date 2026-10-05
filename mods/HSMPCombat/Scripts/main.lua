@@ -390,8 +390,13 @@ end
 local BF = { LOCAL = 64, WEAPON = 128, FIST = 262144, LEFT = 524288, RIGHT = 1048576, COMPONENT = 2097152, FEET = 33554432,
     GD_GATE_MS = 200, MAX_PER_BONE_TICK = 4 }
 local CuttingBox = load_module("cutting_box")
+local function bone_index(mesh, bone) return mesh:GetBoneIndex(FName(bone)) end
 function BF.of(mesh, bone)
     if not mesh or not bone or bone == "" then return nil end
+    -- GetSocketTransform silently answers the component's own transform for a name
+    -- the skeleton lacks: never let that stand in for a bone frame.
+    local okb, bi = pcall(bone_index, mesh, bone)
+    if okb and type(bi) == "number" and bi < 0 then return nil end
     local f
     pcall(function()
         local t = mesh:GetSocketTransform(FName(bone), 0)

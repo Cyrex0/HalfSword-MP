@@ -1164,10 +1164,24 @@ function PX.fresh_grips(p)
     end)
     return fresh
 end
+local function constraint_bone2(c) return c.ConstraintInstance.ConstraintBone2:ToString() end
 function PX.grips_off(p, off)
     local list = p.grips and p.grips.list
     if not list or #list == 0 then return end
     local fresh = PX.fresh_grips(p)
+    if off then
+        -- A grip the BP rebuilt (pick-up, drop, grip change) has a new address: until the
+        -- next scan it would keep its locked limits and drive against the hand servo
+        -- (seen 60-90 deg hand error). Force that scan on the next drive tick.
+        local g = p.grips
+        for addr, c in pairs(fresh) do
+            if not g.by[addr] and not (g.other and g.other[addr]) then
+                local ok, b2 = pcall(constraint_bone2, c)
+                if ok and (b2 == "hand_r" or b2 == "hand_l") then g.at = -math.huge
+                else g.other = g.other or {}; g.other[addr] = true end
+            end
+        end
+    end
     for _, g in ipairs(list) do
         g.c = fresh[g.addr]   -- nil when the BP rebuilt it: never touch the old one
         pcall(function()

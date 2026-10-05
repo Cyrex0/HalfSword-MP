@@ -35,9 +35,15 @@ function M.capture(mesh,id,bones,e)
         attempt(row,"joint_angles_deg",function()
             -- Pinned UE4SS scalar OutParm contract populates parameter-name
             -- keys, unlike its array/struct out-table contract.
+            -- GetCurrentJointAngles looks the joint up by its constraint name
+            -- (UserConstraint_N), never by bone: map the bone to the joint
+            -- whose child it is, else report it (a bone name reads zeros).
+            local jn
+            for _,j in ipairs(e.joints or {}) do if j.child==bone then jn=j.name end end
+            if not jn then error("no joint dictionary entry with child "..bone) end
             local s1,tw,s2={},{},{}
-            mesh:GetCurrentJointAngles(fn,s1,tw,s2)
-            return {swing1=num(s1.Swing1Angle),twist=num(tw.TwistAngle),swing2=num(s2.Swing2Angle)}
+            mesh:GetCurrentJointAngles(e.fname(jn),s1,tw,s2)
+            return {joint=jn,swing1=num(s1.Swing1Angle),twist=num(tw.TwistAngle),swing2=num(s2.Swing2Angle)}
         end)
         if e.target then attempt(row,"target",function()
             local t=e.target(bone)

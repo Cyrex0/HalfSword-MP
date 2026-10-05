@@ -4,16 +4,21 @@ local mesh={GetAddress=function()return 10 end,GetSocketTransform=function()retu
     GetCenterOfMass=function()return t.Translation end,GetBoneMass=function()return 2 end,
     GetPhysicsAngularVelocityInDegrees=function()return {X=0,Y=90,Z=0}end}
 function mesh:GetCurrentJointAngles(name,s1,tw,s2)
-    T.check(name=="hand_r","joint query uses exact original bone")
+    T.check(name=="UserConstraint_12","joint query uses the constraint whose child is the bone, never the bone name")
     s1.Swing1Angle=12;tw.TwistAngle=34;s2.Swing2Angle=56
 end
 local env={current=function()return true end,allowed_bone=function(b)return b=="hand_r"end,
     fname=function(b)return b end,now=function()return 7 end,
     physics={GetPhysicsObjectWorldTransform=function()return t end},
-    target=function()return {1,2,3,0,0,0,1}end}
+    target=function()return {1,2,3,0,0,0,1}end,
+    joints={{name="UserConstraint_12",parent="lowerarm_r",child="hand_r"}}}
 local id={match_id=1,round=2,life=3,pawn="native",pawn_address=4,display_time=5}
 local r=M.capture(mesh,id,{"hand_r"},env)
-T.check(r and r.rows[1].joint_angles_deg.twist==34,"scalar outputs use actual reflected parameter names")
+T.check(r and r.rows[1].joint_angles_deg.twist==34 and r.rows[1].joint_angles_deg.joint=="UserConstraint_12","scalar outputs use actual reflected parameter names")
+local jt=env.joints;env.joints={}
+local nj=M.capture(mesh,id,{"hand_r"},env)
+T.check(nj.rows[1].joint_angles_deg==nil and nj.rows[1].errors.joint_angles_deg:find("no joint",1,true)~=nil,"a bone without a joint entry is reported, never read as zero angles")
+env.joints=jt
 T.check(r.physics_frame_verified==false,"raw physics observation never claims basis verified")
 t.Translation.X=999
 T.check(r.rows[1].socket.p[1]==1 and r.rows[1].physics.p[1]==1,"no native transform wrapper retained")
