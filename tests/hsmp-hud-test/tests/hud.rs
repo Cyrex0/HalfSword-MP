@@ -110,6 +110,9 @@ struct Sidecar {
     reason: String,
 }
 
+/// The match id every `mt` session and `mode` record carries.
+const TEST_MATCH: u64 = 9001;
+
 struct Mt {
     state: &'static str,
     rnd: u32,
@@ -154,6 +157,8 @@ struct Hud {
     sidecar: Option<Sidecar>,
     /// Metrics fields of the link record (Lua table fields), None = no sample yet.
     metrics: Option<String>,
+    /// The vitals context of the last `mt` (round, countdown): vitals belong to the current life.
+    ctx: std::cell::Cell<(u32, bool)>,
 }
 
 impl Drop for Hud {
@@ -206,7 +211,7 @@ impl Hud {
         lua.load(PEER_DIR_SHIM).exec().unwrap();
         let main = fs::read_to_string(scripts_dir().join("main.lua")).expect("main.lua");
         lua.load(&main).set_name(format!("@{sp}/main.lua")).exec().expect("main.lua runs");
-        Hud { lua, sd, cw, ch, last_tick: 0, sidecar: None, metrics: None }
+        Hud { lua, sd, cw, ch, last_tick: 0, sidecar: None, metrics: None, ctx: std::cell::Cell::new((0, false)) }
     }
 
     fn ev<T: FromLuaMulti>(&self, expr: &str) -> T {
@@ -229,11 +234,17 @@ impl Hud {
     // --- typed records (the mock's sidecar side, lua-tests/lib/hsmp_native_records.lua) ---
     /// My own `vitals` record, as HSMPCombat writes it (another Lua state, the same segment).
     fn own_vitals(&self, seq: u32, flags: u32, vals: &[(usize, f64)]) {
-        self.exec(&format!("assert(HSMPNative.put('vitals', {{ seq = {seq}, flags = {flags}, v = {} }}))", vrec(vals)));
+        self.exec(&format!("assert(HSMPNative.put('vitals', {{ seq = {seq}, flags = {flags}, {}, v = {} }}))", self.life_ctx(), vrec(vals)));
+    }
+    /// The match / round / life a vitals record carries: the current life of the last `mt`
+    /// (a countdown's records already belong to the next round's first life).
+    fn life_ctx(&self) -> String {
+        let (round, countdown) = self.ctx.get();
+        format!("match_id = {TEST_MATCH}, round = {}, life = 1", if countdown { round + 1 } else { round })
     }
     /// Peer `id`'s `peer_vitals` record, as its sidecar writes it.
     fn peer_vitals(&self, id: u32, seq: u32, flags: u32, vals: &[(usize, f64)]) {
-        self.exec(&format!("HSMPNative.sc_put('peer_vitals', {{ seq = {seq}, flags = {flags}, v = {} }}, {id})", vrec(vals)));
+        self.exec(&format!("HSMPNative.sc_put('peer_vitals', {{ seq = {seq}, flags = {flags}, {}, v = {} }}, {id})", self.life_ctx(), vrec(vals)));
     }
     /// One S2G `death` record (wall_ms / match_id filled by the sidecar).
     fn death(&self, peer: u32, round: u32, killer: u32, cause: u32, wall_ms: u64) {
@@ -313,13 +324,19 @@ impl Hud {
         let winner_seat = ids.iter().position(|x| x.0 == m.winner && m.winner != 0).map_or(255, |i| i + 1);
         let reason = match m.reason { "kill" => "KILL", "draw" => "DRAW", "forfeit" => "FORFEIT", "opponent_left" => "OPPONENT_LEFT",
                                       "load_failed" => "LOAD_FAILED", "" if m.winner != 0 => "KILL", _ => "NONE" };
+        self.ctx.set((m.rnd, m.state == "countdown"));
         let left = if m.state == "live" { m.round_left.unwrap_or(0) } else { m.cd };
         let deadline = if left > 0 { 1_000_000 + left as u64 * 1000 } else { 0 };
         self.exec(&format!(
-            "local E = HSMP_IPC.S.ENUMS; HSMPNative.sc_put('session', {{ epoch = 77, seq = {}, round = {}, phase = E.phase.{phase}, \
+            "local E = HSMP_IPC.S.ENUMS; HSMPNative.sc_put('session', {{ epoch = 77, seq = {}, match_id = {TEST_MATCH}, round = {}, phase = E.phase.{phase}, \
              winner_seat = {winner_seat}, result_reason = E.result_reason.{reason}, server_time_ms = 1000000, phase_deadline_ms = {deadline}, \
              config = {{ arena = {}, best_of = {}, countdown_s = {} }}, rows = {{ {} }} }})",
             self.last_tick + 1, m.rnd, lstr(m.arena), m.best_of, m.cd, rows.join(", ")));
+        // The mode record: every listed player on its first life (vitals are scoped to it).
+        let mrows: Vec<String> = ids.iter().enumerate().map(|(i, (id, _, a))| format!(
+            "{{ seat = {}, peer_id = {id}, life = 1, alive = {} }}", i + 1, *a == 1)).collect();
+        self.exec(&format!("HSMPNative.sc_put('mode', {{ seq = {}, match_id = {TEST_MATCH}, round = {}, rows = {{ {} }} }})",
+            self.last_tick + 1, m.rnd, mrows.join(", ")));
     }
 
     /// A Director connection state (Lua fields of the `conn_state` bus record); None = cleared.
@@ -662,10 +679,11 @@ fn states_hosting_world_guard() {
     h.own_vitals(5, 0, &full(own));
     h.peer_vitals(2, 10, 0, &full(own));
     h.run(400);
-    // BODY = (3*100 + 3*40 + 2*0 + 1.5*0 + .5*100 + .75*(0+100+100+100)) / 13 = 53.46 %
-    c.check(vt(&h, "me.hp.label") == "BODY 53%" && vt(&h, "me.vals") == "CON 75  hp 100  BLEED",
+    // BODY = (3*min(100, crush 62) + 3*40 + 2*0 + 1.5*0 + .5*100 + .75*(0+100+100+100)) / 13 = 44.69 %:
+    // the head takes the lower of its health and the native skull-crush channel (v[11]).
+    c.check(vt(&h, "me.hp.label") == "BODY 45%" && vt(&h, "me.vals") == "CON 75  hp 100  BLEED",
             format!("{tag}: own CON / BODY / BLEED ({} | {})", vt(&h, "me.hp.label"), vt(&h, "me.vals")));
-    c.check(vt(&h, "opps[1].vals") == "CON 75 BODY 53%" && h.b(&format!("{V}.opps[1].vals.color == package.loaded.hud_kit.C.bad")),
+    c.check(vt(&h, "opps[1].vals") == "CON 75 BODY 45%" && h.b(&format!("{V}.opps[1].vals.color == package.loaded.hud_kit.C.bad")),
             format!("{tag}: the same frame on the opponent row reads the same ({})", vt(&h, "opps[1].vals")));
     h.own_vitals(6, 0, &hp_st(87.0, 61.0));
     layout_checks(&mut c, &h, &format!("{tag} fight"));
@@ -803,9 +821,9 @@ fn states_hosting_world_guard() {
     h.run(400);
     c.check(vshown(&h, "board.bg") && vt(&h, "board.title") == "SCOREBOARD  -  BEST OF 3  -  ROUND 3  -  LORDS HALL",
             format!("{tag}: TAB opens the scoreboard ({})", vt(&h, "board.title")));
-    let row = |h: &Hud, r: u32| -> Vec<String> { (1..=5).map(|i| vt(h, &format!("board.rows[{r}].cells[{i}]"))).collect() };
+    let row = |h: &Hud, r: u32| -> Vec<String> { (1..=6).map(|i| vt(h, &format!("board.rows[{r}].cells[{i}]"))).collect() };
     let (r1, r2) = (row(&h, 1), row(&h, 2));
-    c.check(r1 == ["1", "Mate", "2", "88 ms", "ALIVE"] && r2 == ["2", "Willie  (you)", "1", "42 ms", "ALIVE"],
+    c.check(r1 == ["1", "Mate", "2", "0 / 0", "88 ms", "ALIVE"] && r2 == ["2", "Willie  (you)", "1", "0 / 0", "42 ms", "ALIVE"],
             format!("{tag}: rows sorted by wins, with ping ({r1:?} {r2:?})"));
     c.check(!vshown(&h, "board.rows[3].bg"), format!("{tag}: unused rows hidden"));
     c.check(!vshown(&h, "c_title"), format!("{tag}: centre message hidden under the scoreboard"));
@@ -1073,13 +1091,14 @@ fn hud_switches_from_settings() {
     h.world("Map_Arena_Alley");
     h.set_sidecar("connected", &[(1, "Willie"), (2, "Mate")], &[]);
     h.metrics(Some("rtt_ms = 40, loss_pct = 0.0, loss_pct_10s = -1, metrics_wall_ms = 1"));
-    h.own_vitals(1, 0, &hp_st(87.0, 61.0));
-    h.peer_vitals(2, 1, 0, &hp_st(70.0, 40.0));
     // lobby: the switches are read now
     h.write(".settings.json", "{\"nick\":\"Willie\",\"hud\":true,\"hud_killfeed\":false,\"hud_net\":\"bad\"}\n");
     h.mt(Mt { state: "lobby", rnd: 0, ..Default::default() });
     h.run(600);
     h.mt(Mt { state: "live", rnd: 1, ..Default::default() });
+    // vitals of the live round's first life (records are scoped to the current life)
+    h.own_vitals(1, 0, &hp_st(87.0, 61.0));
+    h.peer_vitals(2, 1, 0, &hp_st(70.0, 40.0));
     h.run(600);
     h.death(2, 1, 1, 1, 5);
     h.run(600);

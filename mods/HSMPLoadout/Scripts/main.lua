@@ -1181,7 +1181,7 @@ local function bump_weapon_generation()
     if I and I.bus_put then pcall(I.bus_put, "standin_weapons", { gen = weapon_gen }) end
 end
 local function destroy_hand_weapon(a)
-    pcall(function() a:K2_DestroyActor() end)   -- hand weapon actor only, never a Willie
+    pcall(function() a:K2_DestroyActor() end)   -- unsafe: ok hand weapon actor only, never a Willie
     bump_weapon_generation()
 end
 SI.destroy_hand_weapon = destroy_hand_weapon

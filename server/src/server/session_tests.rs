@@ -271,8 +271,20 @@ fn seat(i: &Inner, a: SocketAddr) -> u8 {
 #[tokio::test]
 async fn nan_root_is_refused_and_never_disables_the_speed_cap() {
     let st = Arc::new(new_state());
-    let a = { let mut i = st.inner.lock().await; join(&mut i, 1, "A") };
-    let body = hsmp_ipc::schema::pose::Root::default();
+    // A verified placement for round 1 of match 91 at the origin (protocol 11: roots come from it).
+    let a = {
+        let mut i = st.inner.lock().await;
+        let a = join(&mut i, 1, "A");
+        let id = i.peers[&a].id;
+        i.match_state = "countdown".into(); i.match_round = 0; i.spawn_round = 1;
+        i.match_arena = "Map_Arena_Alley".into(); i.sess.match_id = 91;
+        i.spawn_plan = vec![crate::spawns::SpawnAssign { peer_id: id, spawn_id: 1 << 8, slot: 0, pos: [0.0; 3], yaw: 0.0, protect_ms: 3000 }];
+        let gs = rec::GameStatus { match_id: 91, round: 1, life: 1, spawn_id: 1 << 8,
+            flags: v5::status_flags::LOADED, arena: Str::new("Map_Arena_Alley"), ..Default::default() };
+        assert!(match_core::game_status_placed(&mut i, id, &gs));
+        a
+    };
+    let body = hsmp_ipc::schema::pose::Root { match_id: 91, round: 1, life: 1, rot: [0.0, 0.0, 0.0, 1.0], ..Default::default() };
     assert!(accept_root(&st, a, [f32::NAN, 0.0, 0.0], body).await.is_none(), "NaN as the first packet");
     assert!(accept_root(&st, a, [f32::INFINITY, 0.0, 0.0], body).await.is_none());
     assert!(accept_root(&st, a, [100.0, 0.0, 0.0], body).await.is_some());

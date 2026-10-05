@@ -34,11 +34,13 @@ fn reported_outcome_cause(reason: u8, mode: u8) -> Option<u8> {
     }
 }
 
-/// A server-declared death as a v6 message (`WireHdr.peer` = the victim).
+/// An unscoped death (match 0, life 0), as tests build it.
+#[cfg(test)]
 pub(super) fn death_msg(peer_id: PeerId, round: u32, killer: PeerId, cause: u8) -> Vec<u8> {
     wire::encode(0, peer_id, &Death::new(peer_id, round, killer, cause), &[])
 }
 
+/// A server-declared death as a v6 message (`WireHdr.peer` = the victim), scoped to the match and life.
 pub(super) fn scoped_death_msg(peer_id:PeerId,round:u32,killer:PeerId,cause:u8,match_id:u64,life:u16)->Vec<u8> {
     let mut d=Death::new(peer_id,round,killer,cause);
     d.match_id=match_id; d.life=life;
@@ -150,10 +152,10 @@ pub(super) async fn handle_record(
                 let cause = reported_outcome_cause(d.reason, mode);
                 let cur = inner.match_round;
                 if let Some(pid) = inner.peers.get(&from).map(|p| p.id) {
-                    if cause.is_some() && d.round == cur && d.match_id == inner.sess.match_id
-                        && d.life == modes::peer_life(&inner,pid) && !modes::respawning(&inner,pid) {
+                    if let Some(cause) = cause.filter(|_| d.round == cur && d.match_id == inner.sess.match_id
+                        && d.life == modes::peer_life(&inner,pid) && !modes::respawning(&inner,pid)) {
                         let killer = crate::combat::ledger_last_attacker(pid, cur);
-                        if declare_death(&mut inner, pid, killer, cause.unwrap()) {
+                        if declare_death(&mut inner, pid, killer, cause) {
                             info!(peer_id = pid, death_id = d.death_id, round = d.round, reason=d.reason, "native outcome (reliable report)");
                         }
                     } else {

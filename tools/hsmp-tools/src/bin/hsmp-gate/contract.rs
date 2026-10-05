@@ -158,6 +158,7 @@ pub const CONTRACT: &[Entry] = &[
     e("mode_set", SV, &[], &[]),
     e("respawn_order", SV, &[], &[]),
     e("respawned", SV, &[], &[]),
+    e("respawn_refused", SV, &[], &["peer_id", "round", "match_id", "reason"]),
     // NAT traversal (server/src/nat): a relayed punch answered with probes. Not judged.
     e("nat_punch", SV, &[], &["to", "nonce"]),
     // server mods (docs/hosting/server-mods.md): the server (a joining player's set loaded /
@@ -661,9 +662,21 @@ fn rust_emits_in(repo: &Path, path: &Path, callee: &Regex, src: Src) -> Vec<Emit
     let Ok(text) = std::fs::read_to_string(path) else { return vec![] };
     // drop `//` line comments (keeps strings intact enough for event payloads)
     let text: String = text.lines().map(|l| match l.find("//") { Some(i) if !l[..i].contains('"') => &l[..i], _ => l }).collect::<Vec<_>>().join("\n");
-    // the test module is not an emitter (a lone #[cfg(test)] helper above real code is)
-    let test_mod = Regex::new(r"#\[cfg\(test\)\]\s*(?:pub(?:\([^)]*\))?\s+)?mod\s").unwrap();
-    let text = match test_mod.find(&text) { Some(m) => text[..m.start()].to_string(), None => text };
+    // test modules are not emitters: blank each inline one (keeping its lines, so later line
+    // numbers hold); a lone #[cfg(test)] helper and the code after a test module still count
+    let test_mod = Regex::new(r"#\[cfg\(test\)\]\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{").unwrap();
+    let mut text = text;
+    while let Some(m) = test_mod.find(&text) {
+        let open = m.end() - 1;
+        let close = match_close(text.as_bytes(), open).unwrap_or(text.len());
+        let blank: String = text[m.start()..close].chars().filter(|&c| c == '\n').collect();
+        text.replace_range(m.start()..close, &blank);
+    }
+    // an out-of-line test module (`#[cfg(test)] #[path = ..] mod x;`) ends the file's real code
+    let text = match Regex::new(r"#\[cfg\(test\)\]\s*(?:#\[[^\]]*\]\s*)*mod\s+\w+\s*;").unwrap().find(&text) {
+        Some(m) => text[..m.start()].to_string(),
+        None => text,
+    };
     let file = rel(repo, path);
     let mut out = vec![];
     let quoted = Regex::new(r#"^"([A-Za-z_]\w*)"$"#).unwrap();

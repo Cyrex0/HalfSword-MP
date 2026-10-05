@@ -1337,7 +1337,7 @@ mod tests {
         assert_eq!(e.on_replay_outcome_by(2,stale),None,"wrong native victim life refused");
         assert_eq!(e.on_replay_outcome_by(2,r),Some(true));
         assert_eq!(e.on_replay_outcome_by(2,r),Some(false),"lost receipt ACK is idempotent");
-        let mut conflicting=r;conflicting.health_delta=-20.0;
+        let mut conflicting=r;conflicting.health_delta = -20.0;
         assert_eq!(e.on_replay_outcome_by(2,conflicting),None,"recorded native result cannot be revised");
         let mut new=c;new.target_life=1;
         assert!(matches!(e.on_damage_inner(&mut lc,&new,&mut h,101),Verdict::Ack{accepted:false,..}),

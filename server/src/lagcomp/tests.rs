@@ -438,7 +438,7 @@ fn native_fist_sphere_validates_its_swept_source_without_whole_body_widening() {
     for t in (1000..=1975).step_by(25) {
         let mut f=posecodec::v2::Full::default();
         f.bones[16].p=[-105.0,-20.0,140.0];
-        f.strikers=Some(vec![posecodec::v2::BodyStriker {part:1,component:10,kind:0,p:[13.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[13.0;3],..Default::default()}]);
+        f.strikers=Some(vec![posecodec::v2::BodyStriker {part:1,component:10,kind:0,p:[13.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[13.0;3]}]);
         sc.s.record_body_strikers(ATT,sc.ats(t),&f);
     }
     let Eval::Accept(i)=sc.eval(&h) else {panic!("actual sphere rejected: {:?}",sc.eval(&h))};
@@ -462,7 +462,7 @@ fn delayed_native_striker_history_waits_instead_of_rejecting_stale_geometry() {
     h.source_class=hsmp_ipc::layout::Str::new("Weapon_Fists_C");
     let mut f=posecodec::v2::Full::default();
     f.bones[16].p=[-140.0,-20.0,140.0];
-    f.strikers=Some(vec![posecodec::v2::BodyStriker{part:1,component:10,kind:0,p:[13.0,0.0,0.0],half:[13.0;3],q:[0.0,0.0,0.0,1.0],..Default::default()}]);
+    f.strikers=Some(vec![posecodec::v2::BodyStriker{part:1,component:10,kind:0,p:[13.0,0.0,0.0],half:[13.0;3],q:[0.0,0.0,0.0,1.0]}]);
     for t in (1000..=1950).step_by(25){sc.s.record_body_strikers(ATT,sc.ats(t),&f);}
     assert!(matches!(sc.s.evaluate_opts(ATT,&h,sc.now,false),Eval::Wait(_)),"newer root/weapon history cannot make stale fist shape a final miss");
     assert!(reason(sc.s.evaluate_opts(ATT,&h,sc.now,true)).contains("body_striker_miss"),"final bounded lead still rejects actual old geometry");
@@ -474,7 +474,7 @@ fn delayed_native_striker_history_waits_instead_of_rejecting_stale_geometry() {
 #[test]
 fn body_striker_sweep_rotation_velocity_and_transient_absence_are_exact() {
     let mut h=PeerHist::new();
-    let s=posecodec::v2::BodyStriker{part:3,component:10,kind:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],half:[7.475,14.949,7.475],..Default::default()};
+    let s=posecodec::v2::BodyStriker{part:3,component:10,kind:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],half:[7.475,14.949,7.475]};
     let mut a=StrikerSet::empty(true);a.shapes[0]=s;a.n=1;
     let mut b=a;b.shapes[0].p=[50.0,0.0,0.0];b.shapes[0].q=[0.0,0.0,(0.1f32).sin(),(0.1f32).cos()];
     h.strikers.push(1000,a);h.strikers.push(1100,b);
@@ -516,29 +516,29 @@ fn native_head_side_contact_uses_only_its_module_envelope() {
         sc.s.peer(VIC).bone_frames.push((t+V_OFF) as u32,BoneFrames {
             p:[[-390.0,0.0,130.0];posecodec::v2::NB],q:[[0.0,0.0,0.0,1.0];posecodec::v2::NB],scale:0.9932 });
     }
-    let mut cutting=h.clone();
+    let mut cutting=h;
     cutting.flags|=crate::validate::damage::FLAG_LOCAL;
     cutting.dism_blunt|=3<<27;
     cutting.hit_box_frame=[400.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0,1.0,1.0,11.0,20.0,3.0];
     assert!(accepted(&sc.eval(&cutting)),"original native Box frame authenticates");
-    let mut socket_divided=cutting.clone();socket_divided.hit_box_frame[0]/=1.125;
+    let mut socket_divided=cutting;socket_divided.hit_box_frame[0]/=1.125;
     assert!(reason(sc.eval(&socket_divided)).contains("cutting geometry differs"),"old socket-divided center cannot match physical history at median skeleton scale0.9932");
-    let mut prior_module=cutting.clone();prior_module.location=[-5.0,0.0,130.0];
+    let mut prior_module=cutting;prior_module.location=[-5.0,0.0,130.0];
     prior_module.dism_blunt=(prior_module.dism_blunt & !(15<<21)) | (2<<21);
     assert!(accepted(&sc.eval(&prior_module)),"native selected Box retained from previous Head still authenticates a current Grip contact");
-    let mut child_strike=cutting.clone();child_strike.dism_blunt=(child_strike.dism_blunt & !(15<<21)) | (3<<21);
+    let mut child_strike=cutting;child_strike.dism_blunt=(child_strike.dism_blunt & !(15<<21)) | (3<<21);
     assert!(reason(sc.eval(&child_strike)).contains("source_role"),"cutting-only virtual ID cannot become a striking collider");
     let mut missing_parent=w.clone();missing_parent.boxes[2].child_of=4;
     assert!(!sc.s.record_weapon_shape(ATT,sc.ats(1975),&missing_parent,false),"unrepresented cutting parent refused");
     for (field,value) in [(0,100.0),(7,1.0),(10,22.0),(4,0.4)] {
-        let mut forged=cutting.clone();forged.hit_box_frame[field]=value;
+        let mut forged=cutting;forged.hit_box_frame[field]=value;
         assert!(reason(sc.eval(&forged)).contains("cutting geometry differs"),"forged Box field {field}");
     }
-    let mut rotated=cutting.clone();rotated.hit_box_frame[5]=0.5;rotated.hit_box_frame[6]=(0.75f32).sqrt();
+    let mut rotated=cutting;rotated.hit_box_frame[5]=0.5;rotated.hit_box_frame[6]=(0.75f32).sqrt();
     assert!(reason(sc.eval(&rotated)).contains("cutting geometry differs"),"normalized forged rotation");
-    let mut reciprocal=cutting.clone();reciprocal.hit_box_frame[7]=1.0;reciprocal.hit_box_frame[10]=22.0;
+    let mut reciprocal=cutting;reciprocal.hit_box_frame[7]=1.0;reciprocal.hit_box_frame[10]=22.0;
     assert!(reason(sc.eval(&reciprocal)).contains("cutting geometry differs"),"scaled extent equality cannot spoof native X-before-scale clamp");
-    let mut wrong_class=cutting.clone();wrong_class.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_ArmingSword_C");
+    let mut wrong_class=cutting;wrong_class.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_ArmingSword_C");
     assert!(reason(sc.eval(&wrong_class)).contains("class mismatch"));
     // The same lateral distance remains outside the thin shaft module.
     h.dism_blunt=crate::validate::damage::SOURCE_RIGHT|(2<<21);

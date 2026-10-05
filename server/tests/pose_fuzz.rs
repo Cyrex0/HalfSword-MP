@@ -24,7 +24,8 @@ fn corpus() -> Vec<Vec<u8>> {
     let mut v = Vec::new();
     for k in 0..4u32 {
         let t = k as f64;
-        let r = sample::root(&[t, 1000.0 + t, 100.0 * t, -50.0, 95.0, 5.0, 30.0 * t, 0.0, 300.0, 0.0, 0.0], 1_700_000_000_000);
+        let mut r = sample::root(&[t, 1000.0 + t, 100.0 * t, -50.0, 95.0, 5.0, 30.0 * t, 0.0, 300.0, 0.0, 0.0], 1_700_000_000_000);
+        (r.match_id, r.round, r.life) = (11, 1, 1);
         v.push(hsmp_ipc::wire::encode(0, 0, &r, &[]));
         let w = sample::weapon(&[t, 1000.0, 7.0, 1.0 + (k % 2) as f64, 10.0, 20.0, 95.0, 0.0, 90.0, 0.0, 1.0, 2.0, 3.0]);
         v.push(hsmp_ipc::wire::encode(0, 0, &w, &[]));

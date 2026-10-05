@@ -69,6 +69,7 @@ fs:server/src/sidecar/net.rs
 
 [fs: tap] the dev/gate IPC tap (a log, not IPC)
 fs:server/src/sidecar/ipc_shm.rs
+fs:server/src/sidecar/ipc_shm_tests.rs
 
 [fs: server mods cache] verified server mods, content-addressed, in --mods-cache (hsmp_mods next to the game: outside the state dir and outside ue4ss/Mods; never IPC)
 fs:server/src/sidecar/mods_cache.rs

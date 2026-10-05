@@ -20,7 +20,8 @@ T.check(not pcall(M.swept_distance,shape,changed,{20,20,30},0.1),"no sweep acros
 changed.bone=b.bone;changed.actor="new-native-actor"
 T.check(not pcall(M.interpolate,shape,changed,0.5),"no manufactured velocity across source actor replacement")
 T.check(not pcall(M.to_world,localshape,{p=frame.p,q=frame.q,scale={1,2,1}}),"nonuniform scaled capsule never approximated by bounding box")
-local native=dofile(T.path("test-results/dev-feature-checks/weapon-catalogue-audit/native-strap-fixture.lua"))
+-- The committed copy of the native strap fixture (the original under test-results/ is local-only).
+local native=dofile(T.path("docs/internal/handoff/combat-evidence-20261005/native-strap-fixture.lua"))
 local function valid(x)return type(x)=="table" and x.valid==true end
 local current_bone,point_calls={},{}
 local component={valid=true}

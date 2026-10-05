@@ -1559,7 +1559,7 @@ impl Store {
                 let p = add(b.p, posecodec::v2::qrot(b.q,corner));
                 if len(sub(p,base)) > g.blade_max + width || point_seg(p,base,tip) > width { return false; }
             }
-            s.boxes[i]=*b;
+            s.boxes[i] = *b;
         }
         let p = self.peer(id);
         let ring = if offhand { &mut p.offhand_shapes } else { &mut p.shapes };

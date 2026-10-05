@@ -26,7 +26,7 @@ pub(crate) unsafe fn read_body_strikers(L: *mut lua_State, index: c_int) -> Opti
     unsafe {
         if !is_table(L,index) { return None; }
         let t=lua_absindex(L,index); let len=lua_rawlen(L,t) as usize;
-        if len%13!=0 || len/13>MAX_BODY_STRIKERS { return Some(Vec::new()); }
+        if !len.is_multiple_of(13) || len/13>MAX_BODY_STRIKERS { return Some(Vec::new()); }
         let mut out:Vec<BodyStriker>=Vec::with_capacity(len/13);
         for i in 0..len/13 {
             let mut a=[0.0;13];
@@ -49,7 +49,7 @@ pub(crate) unsafe fn read_weapon_boxes(L: *mut lua_State, index: c_int) -> Vec<W
         let t = lua_absindex(L, index);
         let len = lua_rawlen(L, t) as usize;
         let stride=15;
-        if len % stride != 0 || len / stride > MAX_WEAPON_BOXES { return Vec::new(); }
+        if !len.is_multiple_of(stride) || len / stride > MAX_WEAPON_BOXES { return Vec::new(); }
         rawget_str(L,t,"class_hash");let class_hash=arg_int(L,-1).unwrap_or(0) as u32;pop(L,1);
         let mut boxes = Vec::with_capacity(len / stride);
         for i in 0..len / stride {

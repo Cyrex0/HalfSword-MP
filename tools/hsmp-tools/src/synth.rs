@@ -26,6 +26,7 @@ use hsmp_ipc::header::ctr;
 use hsmp_ipc::schema::pose::{PoseBuf, Root, K_POSE, K_ROOT, K_WEAPON, NB};
 use hsmp_ipc::schema::combat::{vitals_q, Vitals, K_VITALS};
 use hsmp_ipc::schema::RawSlot;
+use hsmp_pose::posecodec::v2::Context;
 use hsmp_pose::sample::{PoseArgs, BONE_NUMS, CONTROL_NUMS, WEAPON_NUMS};
 use serde_json::{json, Value as J};
 use std::time::Instant;
@@ -342,6 +343,8 @@ pub struct Synth {
     enc: hsmp_pose::sample::Scratch,
     pose_buf: Box<PoseBuf>,
     pose_bytes: u64,
+    /// The pawn generation to stamp, overriding the one read from the session / mode records.
+    pub context: Option<Context>,
 }
 
 /// One sample's `put_pose` arguments.
@@ -349,6 +352,25 @@ pub struct PoseIn {
     pub b: [f64; BONE_NUMS],
     pub w: [f64; WEAPON_NUMS],
     pub c: Option<[f64; CONTROL_NUMS]>,
+}
+
+/// The pawn generation a real HSMPSync would stamp: the session's match and pending round,
+/// and this peer's life from the mode record of that round (1 before one arrives). None
+/// outside a match.
+fn live_context(seg: &hsmp_ipc::segment::Segment) -> Option<Context> {
+    use hsmp_ipc::schema::session::{Link, ModeHead, SessionHead};
+    let (_, _, sb) = crate::ipcgame::read_slot(&seg.state.session)?;
+    let s = hsmp_ipc::record::view::<SessionHead>(&sb).ok()?.head();
+    let (match_id, round) = (s.match_id, s.pending_round());
+    let me = crate::ipcgame::read_slot(&seg.state.link)
+        .and_then(|(_, _, b)| hsmp_ipc::record::view::<Link>(&b).ok().map(|v| v.head().my_peer_id));
+    let life = crate::ipcgame::read_slot(&seg.state.mode).and_then(|(_, _, b)| {
+        let m = hsmp_ipc::record::view::<ModeHead>(&b).ok()?;
+        if m.head.match_id != match_id || m.head.round != round { return None; }
+        m.rows.iter().find(|r| Some(r.peer_id) == me).map(|r| r.life)
+    }).unwrap_or(1);
+    let c = Context { match_id, round, life };
+    c.valid().then_some(c)
 }
 
 impl Synth {
@@ -377,6 +399,7 @@ impl Synth {
             enc: hsmp_pose::sample::Scratch::default(),
             pose_buf: PoseBuf::new_boxed(),
             pose_bytes: 0,
+            context: None,
         }
     }
 
@@ -470,6 +493,8 @@ impl Synth {
     /// (`hsmp_pose::sample`: rotator -> quaternion, the codec v2 encode) and published into its
     /// slot; the timings are that whole game-side cost (minus reading the Lua arguments).
     pub fn write_sample(&mut self, host: &GameHost, now_ms: f64) {
+        // HSMPSync samples only a verified pawn generation (protocol 11): no match, no sample.
+        let Some(ctx) = self.context.or_else(|| live_context(host.seg())) else { return };
         self.tick = self.tick.wrapping_add(1);
         let tick = self.tick;
         let tsf = self.ts0 + now_ms;
@@ -487,7 +512,8 @@ impl Synth {
 
         let t_all = Instant::now();
         let t = Instant::now();
-        let r = hsmp_pose::sample::root(&ra, wall);
+        let mut r = hsmp_pose::sample::root(&ra, wall);
+        (r.match_id, r.round, r.life) = (ctx.match_id, ctx.round, ctx.life);
         go.local_root.put(game_meta(seg, tick), K_ROOT, bytemuck::bytes_of(&r), &mut self.scratch);
         self.root_w.add(t);
         let t = Instant::now();
@@ -496,7 +522,7 @@ impl Synth {
         self.weapon_w.add(t);
         let t = Instant::now();
         let a = PoseArgs { tick: tick as f64, ts: tsf, dt: 1000.0 / self.hz, b: &pin.b, w: std::slice::from_ref(&pin.w), c: pin.c.as_ref() };
-        if hsmp_pose::sample::encode_pose(&a, &mut self.enc, &mut self.pose_buf) {
+        if hsmp_pose::sample::encode_pose_with_context(&a, &mut self.enc, &mut self.pose_buf, &[], None, Some(ctx)) {
             go.local_pose.put(game_meta(seg, tick), K_POSE, self.pose_buf.payload(), &mut self.scratch);
             self.pose_bytes += self.pose_buf.payload_len() as u64;
         }
@@ -629,6 +655,7 @@ mod tests {
     fn writes_land_in_the_slots_and_are_timed() {
         let g = GameHost::anonymous(u64::MAX >> 1).unwrap();
         let mut s = Synth::new(60.0, 20.0, 5);
+        s.context = Some(Context { match_id: 9, round: 1, life: 1 });
         s.write_sample(&g, 1000.0);
         s.write_sample(&g, 1016.7);
         s.write_vitals(&g, 1000.0);

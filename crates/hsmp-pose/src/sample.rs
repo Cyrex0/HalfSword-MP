@@ -310,7 +310,7 @@ mod tests {
         let a=PoseArgs {tick:1.0,ts,dt,b:&b,w:&ws,c:None};
         let mut boxes=vec![(1..=v2::MAX_WEAPON_BOXES as u8).map(|component|v2::WeaponBox {
             component,q:[0.0,0.0,0.0,1.0],half:[1.0;3],native_scale:Some([1.0;3]),
-            child_of:if component>6 {component-6}else{0},..Default::default()}).collect::<Vec<_>>()];
+            child_of:component.saturating_sub(6),..Default::default()}).collect::<Vec<_>>()];
         let mut out=VarBuf::<PoseHead,POSE_FRAME_MAX>::new_boxed();
         assert!(encode_pose_with_boxes(&a,&mut Scratch::default(),&mut out,&boxes));
         assert_eq!(v2::decode(out.used()).unwrap().weapons[0].boxes.len(),12);
@@ -332,7 +332,9 @@ mod tests {
 
     #[test]
     fn root_and_weapon_records() {
-        let r = root(&[42.9, 1000.75, 500.0, 0.0, 100.0, 0.0, 90.0, 0.0, 1.0, 2.0, 3.0], 1_700_000_000_123);
+        let mut r = root(&[42.9, 1000.75, 500.0, 0.0, 100.0, 0.0, 90.0, 0.0, 1.0, 2.0, 3.0], 1_700_000_000_123);
+        assert!(hsmp_ipc::record::check(&r, &[]).is_err(), "a root without its pawn generation is refused");
+        (r.match_id, r.round, r.life) = (7, 1, 1);
         assert_eq!((r.tick, r.ts, r.send_wall_ms), (42, 1000, 1_700_000_000_123));
         assert!((quat_yaw(r.rot) - 90.0).abs() < 1e-3);
         hsmp_ipc::record::check(&r, &[]).unwrap();

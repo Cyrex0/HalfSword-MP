@@ -98,6 +98,7 @@ pub(crate) fn now() -> SessionNow {
 }
 
 /// The current round of the last accepted snapshot (the server's match round).
+#[cfg(test)]
 pub(crate) fn round() -> u32 {
     ROUND.load(Ordering::Acquire)
 }

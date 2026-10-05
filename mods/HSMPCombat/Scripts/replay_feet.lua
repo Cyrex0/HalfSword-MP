@@ -94,7 +94,7 @@ function M.new(e)
             if not current[r.pawn] then
                 local a=find(r.name)
                 if valid(a) and a:GetAddress()==r.address then
-                    if not r.retired then a:K2_DestroyActor();r.retired=true end -- unsafe: exact fresh native foot identity, never Willie
+                    if not r.retired then a:K2_DestroyActor();r.retired=true end -- unsafe: ok exact fresh native foot identity, never Willie
                 else cache[k]=nil end
             end
         end

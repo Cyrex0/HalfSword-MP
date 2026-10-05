@@ -150,7 +150,7 @@ function M.new(e)
                     if valid(owner) and (owner:GetAddress()~=r.pawn or owner:GetFullName()~=r.pawn_name) then return end
                 end
                 stop(a)
-                if not r.retired then a:K2_DestroyActor();r.retired=true end
+                if not r.retired then a:K2_DestroyActor();r.retired=true end -- unsafe: ok pooled Weapon_Fists_C replay actor (class-checked), never Willie
                 -- Destroy request isn't proof. Retain count until a later fresh
                 -- complete enumeration/garbage flag confirms native retirement.
             end)

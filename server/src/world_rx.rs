@@ -23,6 +23,8 @@ pub const MANIFEST_GAP_MS: u64 = 3000;
 #[derive(Clone, Copy)]
 pub struct Sample { pub snap: WorldSnap, pub recv: u64 }
 
+// Plain-old-data records kept by value in a short proposal list: boxing would cost more than it saves.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Copy)]
 pub enum Prop {
     Static(ManifestEntry),

@@ -821,10 +821,10 @@ pub(crate) mod tests {
         f.control=Some(Control::default()); f.step=16.0;
         f.weapons.push(f.weapons[0].clone()); f.weapons[1].hands=2;
         for w in &mut f.weapons { for component in 1..=MAX_WEAPON_BOXES as u8 {
-            w.boxes.push(WeaponBox {component,p:[0.0,0.0,component as f32*10.0],q:[0.0,0.0,0.0,1.0],half:[2.0,3.0,4.0],class_hash:class_hash("BP_Longsword_Tier3_C"),native_scale:Some([2.0,1.0,4.0]),child_of:if component>6 {component-6}else{0}});
+            w.boxes.push(WeaponBox {component,p:[0.0,0.0,component as f32*10.0],q:[0.0,0.0,0.0,1.0],half:[2.0,3.0,4.0],class_hash:class_hash("BP_Longsword_Tier3_C"),native_scale:Some([2.0,1.0,4.0]),child_of:component.saturating_sub(6)});
         }}
         f.context=Some(Context{match_id:u64::MAX,round:u32::MAX,life:u16::MAX});
-        f.strikers=Some((0..MAX_BODY_STRIKERS).map(|i|BodyStriker{part:(i%4+1) as u8,component:(10+i/4) as u8,kind:1,p:[10.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[7.5,15.0,7.5],..Default::default()}).collect());
+        f.strikers=Some((0..MAX_BODY_STRIKERS).map(|i|BodyStriker{part:(i%4+1) as u8,component:(10+i/4) as u8,kind:1,p:[10.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[7.5,15.0,7.5]}).collect());
         let wire=encode(&f);
         assert!(wire.len()<=hsmp_ipc::schema::pose::POSE_FRAME_MAX,"{}",wire.len());
         let decoded=decode(&wire).unwrap();
@@ -863,8 +863,8 @@ pub(crate) mod tests {
         assert!(decode(&encode(&f)).unwrap().strikers.is_none());
         f.strikers=Some(Vec::new());
         assert_eq!(decode(&encode(&f)).unwrap().strikers,Some(Vec::new()));
-        let sphere=BodyStriker{part:1,component:10,kind:0,p:[12.0,-2.0,1.0],q:[0.0,0.0,0.0,1.0],half:[13.0;3],..Default::default()};
-        let foot=BodyStriker{part:4,component:15,kind:1,p:[4.0,8.0,0.0],q:axis_q([0.0,0.0,1.0],30.0),half:[7.475,14.949,7.475],..Default::default()};
+        let sphere=BodyStriker{part:1,component:10,kind:0,p:[12.0,-2.0,1.0],q:[0.0,0.0,0.0,1.0],half:[13.0;3]};
+        let foot=BodyStriker{part:4,component:15,kind:1,p:[4.0,8.0,0.0],q:axis_q([0.0,0.0,1.0],30.0),half:[7.475,14.949,7.475]};
         f.strikers=Some(vec![sphere,foot]); f.step=17.0;
         let wire=encode(&f); let d=decode(&wire).unwrap(); let s=d.strikers.unwrap();
         assert_eq!((s[0].part,s[0].component,s[0].kind,s[0].half),(1,10,0,[13.0;3]));

@@ -919,7 +919,7 @@ mod tests {
         // RawSlot rendering: a seqlock slot and a blob (peek does not take)
         let sl = hsmp_ipc::seqlock::SeqSlot::<schema::Stamped<schema::pose::Root>>::new_boxed();
         let tb = hsmp_ipc::triple::TripleBuf::<schema::Stamped<schema::pose::Root>>::new_boxed();
-        let (kind, payload) = hsmp_ipc::debug_json::json_to_record("root", &json!({"tick": 8, "rot": [0, 0, 0, 1], "pos": [5, 6, 7]})).unwrap();
+        let (kind, payload) = hsmp_ipc::debug_json::json_to_record("root", &json!({"tick": 8, "rot": [0, 0, 0, 1], "pos": [5, 6, 7], "match_id": 3, "round": 1, "life": 1})).unwrap();
         let (mut sc, mut out) = (Vec::new(), Vec::new());
         let meta = SlotMeta { valid: 1, ..Default::default() };
         assert!(schema::RawSlot::put(&*sl, meta, kind, &payload, &mut sc));
@@ -946,7 +946,7 @@ mod tests {
         assert!(ev.iter().any(|e| e["ev"] == "attach"), "{ev:?}");
         assert!(g.has(CAP_POSE) && !g.has(CAP_STATE));
 
-        g.put("local_root", &json!({"tick": 42, "ts": 5.5, "pos": [500.0, 0.0, 100.0], "rot": [0, 90, 0], "vel": [1, 2, 3]})).unwrap();
+        g.put("local_root", &json!({"tick": 42, "ts": 5.5, "pos": [500.0, 0.0, 100.0], "rot": [0, 90, 0], "vel": [1, 2, 3], "match_id": 3, "round": 1, "life": 1})).unwrap();
         let mut b = vec![0.0; NB * 13];
         b[2] = 100.0;
         b[6] = 1.0;
@@ -993,7 +993,7 @@ mod tests {
         s.peers.dir.write(&d);
         let mut pr = PeerRoot::default();
         pr.peer_id = 2;
-        pr.root = local_root_from(&json!({"pos": [1.0, 2.0, 3.0]}));
+        pr.root = local_root_from(&json!({"pos": [1.0, 2.0, 3.0], "match_id": 3, "round": 1, "life": 1}));
         let mut m = game_meta(s, 0);
         m.writer_epoch = 0x55;
         assert!(s.peers.slots[3].root.put(m, hsmp_ipc::schema::pose::K_PEER_ROOT, bytemuck::bytes_of(&pr), &mut Vec::new()));

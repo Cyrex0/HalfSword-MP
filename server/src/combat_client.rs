@@ -222,8 +222,6 @@ pub fn reset_session() {
     deaths_seen().lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
-/// The current round (the session snapshot's, lock-free; SESSION accessor).
-
 fn link() -> Option<&'static crate::ipc_shm::ShmLink> {
     crate::ipc_shm::link()
 }
@@ -999,7 +997,7 @@ mod tests {
         let batches=[step(t,None,&mut log),step(t+RESEND_EVERY,None,&mut log)];
         for b in batches {let m=b.iter().find(|m|wire::kind_of(m)==K_REPLAY_OUTCOME).unwrap();
             assert_eq!(wire::decode::<ReplayOutcome>(m).unwrap().1.head.match_id,80);}
-        let mut wrong=r;wrong.health_delta=-99.0;
+        let mut wrong=r;wrong.health_delta = -99.0;
         on_server_record(wire::WireHdr{kind:K_REPLAY_OUTCOME_ACK,aux:0,peer:0},&to_payload(&wrong,&[]));
         assert_eq!(lock().outcomes.len(),1,"conflicting ACK cannot settle native receipt");
         on_server_record(wire::WireHdr{kind:K_REPLAY_OUTCOME_ACK,aux:0,peer:0},&to_payload(&r,&[]));

@@ -125,7 +125,7 @@ function V.layout(cw, ch, n, dpi)
     local hh, ch2, rr, fo, bp = math.floor(44 * s), math.floor(28 * s), math.floor(32 * s), math.floor(26 * s), math.floor(8 * s)
     local bh = bp + hh + ch2 + V.MAX_ROWS * rr + fo + bp
     local bx, by = -math.floor(bw2 / 2), -math.floor(bh / 2)
-    local cols = { { "#", 0.06, 1 }, { "PLAYER", 0.38, 0 }, { "WINS", 0.10, 1 }, { "K / D", 0.13, 1 }, { "PING", 0.14, 1 },
+    local cols = { { "#", 0.06, 1 }, { "PLAYER", 0.36, 0 }, { "WINS", 0.12, 1 }, { "K / D", 0.13, 1 }, { "PING", 0.14, 1 },
                    { "STATUS", 0.19, 1 } }
     L.board = { bg = { x = bx, y = by, w = bw2, h = bh },
                 title = { x = bx + 2 * bp, y = by + bp, w = bw2 - 4 * bp, h = hh, fs = K.fs(20, s) },

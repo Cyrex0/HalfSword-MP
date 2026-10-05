@@ -126,9 +126,9 @@ function M.new(e)
             -- Retire only the fresh exact private Actor, never a cached source.
             pcall(function()
                 if type_name(created)=="Actor" then
-                    created:K2_DestroyActor()
+                    created:K2_DestroyActor() -- unsafe: ok exact engine Actor created synchronously above, never Willie or a queued paint source
                 end
-            end) -- unsafe: exact engine Actor created synchronously above, never Willie or a queued paint source
+            end)
             e.log("historical cutting Box unavailable: %s",tostring(c));return nil
         end
         return c
