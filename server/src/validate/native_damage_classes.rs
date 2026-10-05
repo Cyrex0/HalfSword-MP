@@ -150,3 +150,23 @@ pub const NATIVE_DAMAGE_CLASSES: &[(&str, WeaponClass)] = &[
 pub fn native_source_class(name:&str)->Option<WeaponClass> {
     NATIVE_DAMAGE_CLASSES.iter().find_map(|(n,c)|(*n==name).then_some(*c))
 }
+
+#[cfg(test)]
+mod tests {
+    // The registry is exactly the held-melee set of the committed PAK audit (static coverage:
+    // a new or renamed native weapon fails here instead of failing closed silently in a match).
+    #[test]
+    fn registry_matches_the_native_weapon_audit() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../docs/internal/handoff/combat-evidence-20261005/coverage-manifest.json");
+        let rows: Vec<serde_json::Value> = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let mut audit: Vec<&str> = rows.iter().filter(|r| r["role"] == "held_melee").filter_map(|r| r["class"].as_str()).collect();
+        let mut ours: Vec<&str> = super::NATIVE_DAMAGE_CLASSES.iter().map(|(n, _)| *n).collect();
+        audit.sort_unstable();
+        ours.sort_unstable();
+        assert_eq!(ours, audit);
+        for r in rows.iter().filter(|r| r["role"] != "held_melee") {
+            let n = r["class"].as_str().unwrap();
+            assert!(super::native_source_class(n).is_none(), "{n} ({}) has no held-melee envelope", r["role"]);
+        }
+    }
+}
