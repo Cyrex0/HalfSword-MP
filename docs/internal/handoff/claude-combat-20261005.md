@@ -6,6 +6,8 @@ The user wants multiplayer combat to follow native solo-versus-AI behavior for E
 
 ## Final build and cloud availability
 
+The full pre-push G0 on this snapshot FAILED: lua_test (22,880 checks passed,7 failed), unsafe (4 findings), events (7 violations), state_files, cargo and clippy. Workspace test compilation includes invalid functional record update syntax in combat-sim world fixtures and a Default mismatch; production release build passed. See the actual gate diagnostics when resolving these. This is an unfinished continuation snapshot, NOT a passing G0 release. The user explicitly prioritized moving past regression tests and pushing all current work for the next agent; the snapshot push bypassed the local hook for that transfer. No permanent hook configuration was changed. Native live parity verification also remains required.
+
 The coordinated protocol11 build/deploy completed successfully on 2026-10-05 after retrying with Windows SDK access. Rust release binaries and HSMPNative were rebuilt together; native live verification is still pending. The first attempt partially deployed Rust binaries before the SDK error; the successful second full run resolved that partial deployment.
 
 Compact audit evidence is committed beside this handoff in `docs/internal/handoff/combat-evidence-20261005/`: all-weapon manifest, module choices/configurations, skeletal summary, native call sites, body recipe/joint dictionary, damage classification matrix, actor retirement proof, and Astra fist fixture. Prefer these paths in a cloud checkout; their originals under test-results are ignored. Supporting source/tests/scripts are committed as well.
