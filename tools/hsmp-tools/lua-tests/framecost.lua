@@ -180,8 +180,15 @@ if opts.kind == "sync_native" or opts.kind == "sync_lua" then
         ncalls = ncalls + 1
         return (a.root_pawn and 1 or 0) | (a.weapon_actor and 2 or 0) | (a.mesh and 4 or 0)
     end
+    -- A live round with verified placement: samples carry their match / round / life context
+    -- (pose_context.lua), as in the sync suite.
+    N.sc_put("session", { epoch = 1, seq = 1, match_id = 71, phase = 3, round = 1, winner_seat = 255,
+        config = { arena = "Map_Arena_Pit" },
+        rows = { { peer_id = 1, seat = 1, connected = true, alive = true, spawn_id = 256, spawn_pos = { 10, 20, 30 } } } })
+    N.sc_put("mode", { seq = 1, match_id = 71, round = 1, rows = { { peer_id = 1, seat = 1, life = 1, alive = true } } })
     local function beat()
         N.sc_put("link", { status = 1, state = 1, my_peer_id = 1 })
+        N.bus_put("spawn_status", { match_id = 71, round = 1, life = 1, spawn_id = 256, pawn = "Willie_BP_C_3", verified = true })
         N._st.hb_age = 0.05
     end
     beat()

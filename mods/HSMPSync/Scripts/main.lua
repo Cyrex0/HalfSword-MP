@@ -97,6 +97,8 @@ end
 local HW = load_shared("hsmp_wg")
 local WEAPON_BOUNDS = load_shared("weapon_bounds")
 local BODY_STRIKERS = load_shared("body_strikers")
+-- Read-only: the pose writers copy it, nothing ever adds to it.
+local NO_STRIKERS = {}
 local POSE_CONTEXT = load_shared("pose_context")
 if not HW then
     Log("FATAL: shared/hsmp_wg.lua missing - HSMPSync disabled (deploy copies shared/*.lua)")
@@ -269,18 +271,17 @@ local logged_weapon_cls = nil
 local already_dead = false
 local _protect_death_logged = false
 
+local function read_ded(pawn) return pawn.DED == true end
+local function read_health(pawn) return tonumber(pawn.Health) end
 local function detect_dead(pawn)
     if not pawn or not pawn:IsValid() then return false end
     -- Native Death is the sole producer of Willie.DED=true. Structural
     -- death can retain positive Health; Dying/Downed/Con0 also cover
     -- recoverable outcomes and must not be interpreted as biological death.
-    local dead = false
-    pcall(function() dead = pawn.DED == true end)
-    pcall(function()
-        local hp = tonumber(pawn.Health)
-        if hp and hp <= 0 then dead = true end
-    end)
-    return dead
+    local okd, ded = pcall(read_ded, pawn)
+    if okd and ded then return true end
+    local okh, hp = pcall(read_health, pawn)
+    return okh and hp ~= nil and hp <= 0
 end
 
 -- The death report can be lost on the way to the server, which ignores
@@ -695,9 +696,18 @@ function NSAMPLE.refused(err)
         Log("native sampling refused (%s): Lua path", err)
     end
 end
+-- The bus record and both session views are cached tables, rebuilt only when their record
+-- changes, so the same inputs give the same context: reuse it instead of building one per
+-- sample (it runs at the sample rate; the pose writers copy it).
+local ctx_memo = { ok = false }
 pose_context = function(pawn)
     if not POSE_CONTEXT or not HS then return nil end
-    return POSE_CONTEXT.of(IPC.bus_table("spawn_status"),HS.view(),HS.mode(),get_my_peer_id(),pval(r_fname,pawn))
+    local st, view, mode, peer, name = IPC.bus_table("spawn_status"), HS.view(), HS.mode(), get_my_peer_id(), pval(r_fname, pawn)
+    local m = ctx_memo
+    if m.ok and m.st == st and m.view == view and m.mode == mode and m.peer == peer and m.name == name then return m.ctx end
+    m.st, m.view, m.mode, m.peer, m.name = st, view, mode, peer, name
+    m.ctx, m.ok = POSE_CONTEXT.of(st, view, mode, peer, name), true
+    return m.ctx
 end
 local function addr_of(o) return pval(r_addr, o) end
 -- The pose part of a native sample, into `a`: the same weapon policy as
@@ -710,7 +720,7 @@ function NSAMPLE.pose_fields(a, pawn, mesh, tick, ts, dstep)
     if not (a.mesh and a.pawn) then a.mesh = nil; return nil end
     a.w1, a.h1, a.t1, a.w2, a.h2, a.t2 = 0, 0, 0, 0, 0, 0
     a.s1, a.s2 = nil, nil
-    a.strikers = {}
+    a.strikers = NO_STRIKERS
     if BODY_STRIKERS then local ok,s=pcall(BODY_STRIKERS.of,pawn,mesh,Log); if ok then a.strikers=s end end
     local two = pget(pawn, "R Two Handed Grip") == true
     local seen, nw = nil, 0
@@ -781,7 +791,7 @@ local function put_skeletal_state(pawn, mesh, ts, dstep)
         local ok = pcall(sample_control_vals, pawn, _pc)
         if ok then ctl = _pc; _pose_stats.ctl = _pose_stats.ctl + 1 end
     end
-    local strikers={}
+    local strikers=NO_STRIKERS
     if BODY_STRIKERS then local ok,s=pcall(BODY_STRIKERS.of,pawn,mesh,Log); if ok then strikers=s end end
     if IPC.put_pose(_skel_seq, ts, dstep or 0, 0, _pb, _pw, ctl, _ps, strikers, context) then
         _pose_stats.n = _pose_stats.n + 1
