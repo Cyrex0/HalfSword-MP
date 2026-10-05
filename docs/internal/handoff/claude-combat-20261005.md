@@ -73,3 +73,46 @@ Installed headless `workspace/IDA Professional 9.1/idat.exe`. Original2.2GB `wor
 Pose evidence decoder: `cargo run -p hsmp-tools --example combat_pose_decode -- <tap.jsonl> <out.jsonl>`. Latest run has large inst1/inst2 pose-evidence.jsonl from midrun snapshots. Taps are validated actually transmitted payload_hex, not fabricated samples. Production-codec decoder preserves original context and complete bones/weapons/boxes. Rejection logs include center_cm/rotation_dot/scale_delta/extent_cm and timestamps/components.
 
 Keep user updated with concrete findings. Complete the native run and evidence-based fixes, not just a new plan. Do not promise 100% perfection; explicitly identify remaining measured gaps until verified.
+
+## Cloud continuation (2026-10-05, Linux, no game)
+
+Pulled `d425cd3`, worked on `dev`. Nothing below ran in the game; native items are unproven.
+
+**Build and gate (fixed):** the workspace compiles (combat-sim enum `..Default`, Ctx fields), clippy 0
+warnings, all Lua suites pass (22,685 checks), G0 events/unsafe/state_files pass. Workspace tests:
+1,222 pass; only the 11 Windows-only tests fail on Linux (7 launcher, 4 native shm). The gate's cargo
+summary had hidden 18 fixture failures (records without match/round/life). `synth` now stamps the live
+pawn context. The pose sender's per-frame garbage regressed to 3.7 KB (body strikers, weapon bounds,
+module resolver, context rebuilt twice per sample): now 339 B native / 2.1 KB Lua path, same outputs.
+
+**Proxy rotation (source investigation, not measured):** codec, interpolation and quaternion
+conventions check out. Leading hypothesis: the owner's grip constraint holds wrist/elbow past their
+Motor limits (about 105-107 / 55-59 deg) while the stand-in's freed grip lets its hard limits stop it
+(95-97 / 46-48) -> rotation-only error at the joint, multiplied by the weapon lever. Fixed meanwhile:
+- `frames` probe read joint angles by bone name (zeros); now by `UserConstraint_N` (dictionary child).
+- A grip the BP rebuilds (new address) is freed on the next drive frame, not after up to 1 s.
+- `BF.of` returns nil for a bone the skeleton lacks (was the component transform).
+Confirm: polearm in guard, `autotest parity "frames 0"` on the owner and `"frames <peer>"` on the
+attacker at the same moment; compare hand_r / lowerarm_r joint angles with their limits; repeat with
+`tune grips 0`. If confirmed, the principled fix is keeping the stand-in grip with its frame set to the
+owner's transmitted hand-to-weapon transform (not opening limits).
+
+**Hit registration:** the server no longer rejects on the claim's stand-in-relative Box frame. It
+rebuilds the bone-relative frame from the attacker's authenticated native Box and the victim's real
+bone, forwards that to the owner's replay, requires the claimed contact to lie on that Box within
+BODY_TOL, and logs the stand-in frame error as `proxy box frame differs` (pose-sync telemetry). Box
+identity (class, ordinal, scale, extent) still rejects. Expect the 73 `hit_box` rejections to become
+accepts; watch whether replays on the owner now damage plausibly.
+
+**Training-dummy feel (new, first-guess values, tune in game):**
+- Impact yield: a stand-in body the solver leaves > `impact_dv` 300 uu/s off its commanded velocity
+  eases the servo (gain 0.08, caps 200) for `impact_ms` 200 ms on native and Lua servo. Log line
+  `pose peer N: struck (...)`. `tune impact_dv 0` disables.
+- Owner FALLEN/DOWNED: stand-in world collision on (no floating/sinking); `tune downed_world 0`.
+
+**Still missing (measured gaps from the source map):** hit momentum is never given to the victim
+(only Deal Complex Damage is replayed; risk of double push with the echo contact, measure first);
+`hit_vel_factor` / 12x impulse ceiling uncalibrated (health often unchanged, only consciousness);
+stand-ins never get Fallen/Downed/broken flags, severed limbs keep physics bodies, death ragdoll is
+local; no damage route for embedded blades, projectiles, ranged, quivers or traps (11 classes fail
+closed); articulated mace straps unsupported.
