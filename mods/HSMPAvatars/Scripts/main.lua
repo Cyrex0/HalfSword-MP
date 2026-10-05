@@ -1026,6 +1026,12 @@ function PX.owner_vitals_dead(id)
     local hp = type(t.v) == "table" and math.tointeger(t.v[1]) or nil
     return f & 1 ~= 0 or hp == 0
 end
+-- The owner's `peer_vitals` record says fallen or downed (VF FALLEN 2 / DOWNED 4). nil = no record.
+function PX.owner_vitals_down(id)
+    local t = HSMP_IPC and HSMP_IPC.peer_rec("peer_vitals", id)
+    if type(t) ~= "table" then return nil end
+    return (math.tointeger(t.flags) or 0) & 6 ~= 0
+end
 PX.BUDGET_MS = 4   -- Lua frame budget for the stand-in driver (ms per frame)
 -- Legs keep a stiffer servo than the 0.3 body gain: the driven mesh ignores world
 -- geometry (no floor friction), so only the servo holds a planted foot against the
@@ -3669,7 +3675,15 @@ local function tick_puppet(id, p, me_loc)
             -- shoving the driven bodies (seen: hand 77 deg held off target).
             -- On a local pawn it simulates far below the map; off here.
             pcall(function() local bc = p.actor.BoneCore; if bc and bc:IsValid() and bc:GetCollisionEnabled() ~= 0 then bc:SetCollisionEnabled(0) end end)
-            world_collision(body, false)   -- re-asserted (see drive start)
+            -- Off while the owner stands (the servo holds the feet; see drive start). A fallen or
+            -- downed owner lies on the floor: the stand-in collides with it again instead of
+            -- floating above or sinking through it (servo and gravity unchanged; tune downed_world 0).
+            local down = TUNE.downed_world ~= 0 and PX.owner_vitals_down(id) == true
+            if down ~= (p.down_world == true) then
+                Log("pose peer %d: owner %s: stand-in world collision %s", id, down and "down" or "up", down and "on" or "off")
+                p.down_world = down
+            end
+            world_collision(body, down)   -- re-asserted (see drive start)
             -- Gravity off is re-asserted too: anything that recreates the
             -- mesh's physics state (collision toggles, the BP's own resets)
             -- turns it back on, and a cached "off" would hide that for good.
