@@ -606,6 +606,13 @@ fn settle_waiting(lc: &mut Store, attacker: PeerId, d: &mut Decision, now_ms: i6
             unarmed = i.unarmed;
             rel = i.rel_speed;
             rel_exact = i.rel_exact;
+            if let Some(hb) = i.hit_box { hit.hit_box_frame = hb; }
+            if let Some((cm, dot)) = i.proxy_box_error {
+                if (cm > lagcomp::BODY_TOL || dot < 0.99) && crate::validate::rate::log_ok("proxy_box_error") {
+                    tracing::info!(attacker, target = hit.target_peer_id, hit_id = hit.hit_id, center_cm = cm, rotation_dot = dot,
+                        "proxy box frame differs from the owner's bone (pose sync); replayed on the owner's frame");
+                }
+            }
             if i.view_clamped {
                 tracing::debug!(attacker, hit_id = hit.hit_id, hint = hit.victim_view_ts,
                     used = i.view_ts, "lagcomp: view hint clamped to the server prediction");

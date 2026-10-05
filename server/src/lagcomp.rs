@@ -1260,6 +1260,13 @@ pub struct Info {
     /// capsules (unarmed). False: the v1 blade estimate, too coarse to rescale
     /// the impact by (only the hard caps apply).
     pub rel_exact: bool,
+    /// The cutting Box frame the owner replays (`hit_box_frame`), rebuilt by the server from
+    /// the attacker's authenticated weapon Box and the victim's real bone as shown: the
+    /// claim's own frame was measured on the stand-in, whose pose-sync error it carries.
+    pub hit_box: Option<[f32; 13]>,
+    /// How far the claim's frame (stand-in) was from that rebuilt frame: centre cm and
+    /// rotation dot. Pose-sync telemetry; never a verdict.
+    pub proxy_box_error: Option<(f32, f32)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -2499,6 +2506,7 @@ impl Store {
             else if distance(&a.offhand) < distance(&a.blade) { &a.offhand } else { &a.blade };
         let a = BladeView { hist: a, blade };
         let component=((hit.dism_blunt >> crate::validate::damage::SOURCE_COMPONENT_SHIFT)&15) as u8;
+        let (mut hit_box, mut proxy_box_error) = (None, None);
         if native && component!=0 {
             let class=hit.source_class.as_str().unwrap_or("");
             if body_contact {
@@ -2541,10 +2549,26 @@ impl Store {
                     let center_error=len(sub(center,expected_center));
                     let scale_error:V3=std::array::from_fn(|i|(h[7+i]-native_scale[i]).abs());
                     let extent_error:V3=std::array::from_fn(|i|(h[10+i]*h[7+i]-box_shape.half[i]).abs());
-                    if center_error>BODY_TOL || dot<0.99
-                        || (0..3).any(|i|scale_error[i]>1.0/1024.0 || extent_error[i]>0.2) {
+                    // The Box itself must be the attacker's own native Box (identity, scale, extent).
+                    if (0..3).any(|i|scale_error[i]>1.0/1024.0 || extent_error[i]>0.2) {
                         return Eval::Reject(format!("hit_box: cutting geometry differs from original hand/component history; center_cm={center_error:.3} rotation_dot={dot:.6} scale_delta={scale_error:?} extent_cm={extent_error:?} attacker_ts={at} victim_ts={} component={component} box={ordinal}",if (9..=16).contains(&bone) {arm} else {view}));
                     }
+                    // Where it was: the attacker's authenticated Box in the world. The contact
+                    // lies on it, the same on every screen (the attacker's own weapon).
+                    let en=expected_norm.sqrt();
+                    let eq=[expected_rotation[0]/en,expected_rotation[1]/en,expected_rotation[2]/en,expected_rotation[3]/en];
+                    let local=posecodec::v2::qrot(posecodec::v2::qconj(eq),sub(c,expected_center));
+                    let outside=len(std::array::from_fn(|i|(local[i].abs()-box_shape.half[i]).max(0.0)));
+                    if outside>BODY_TOL {
+                        return Eval::Reject(format!("hit_box: contact {outside:.1} cm off the original cutting Box; attacker_ts={at} component={component} box={ordinal}"));
+                    }
+                    // The replay frame relative to the victim's real bone, not the stand-in's
+                    // (whose rotation error, up to 90 deg at the wrist, it would carry).
+                    let bq=posecodec::v2::qconj(vf.q[bone]);
+                    let rp=posecodec::v2::qrot(bq,sub(expected_center,vf.p[bone]));
+                    let rq=posecodec::v2::qmul(bq,eq);
+                    hit_box=Some([rp[0],rp[1],rp[2],rq[0],rq[1],rq[2],rq[3],h[7],h[8],h[9],h[10],h[11],h[12]]);
+                    proxy_box_error=Some((center_error,dot));
                 }
             }
         }
@@ -2742,6 +2766,7 @@ impl Store {
         Eval::Accept(Info {
             rewind_ms: rewind, view_ts: view, view_clamped, body_dist: body, weapon_dist, swept,
             parry_possible, parry_d, contact_speed, peak_speed, unarmed, rel_speed, rel_exact: unarmed || s_contact.is_some() || module_contact.is_some(),
+            hit_box, proxy_box_error,
         })
     }
 

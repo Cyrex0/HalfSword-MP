@@ -520,9 +520,16 @@ fn native_head_side_contact_uses_only_its_module_envelope() {
     cutting.flags|=crate::validate::damage::FLAG_LOCAL;
     cutting.dism_blunt|=3<<27;
     cutting.hit_box_frame=[400.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0,1.0,1.0,11.0,20.0,3.0];
-    assert!(accepted(&sc.eval(&cutting)),"original native Box frame authenticates");
+    let authentic=[400.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0,1.0,1.0,11.0,20.0,3.0];
+    let replayed=|e:Eval|->([f32;13],(f32,f32)) {let Eval::Accept(i)=e else {panic!("expected accept, got {e:?}")};(i.hit_box.unwrap(),i.proxy_box_error.unwrap())};
+    let close=|a:[f32;13],b:[f32;13]|a.iter().zip(b).all(|(x,y)|(x-y).abs()<1e-3);
+    let (frame,(cm,dot))=replayed(sc.eval(&cutting));
+    assert!(close(frame,authentic) && cm<1e-3 && dot>0.99999,"original native Box frame authenticates and replays as is");
+    // A stand-in frame off the owner's bone (pose-sync error, or a forgery) changes nothing:
+    // the owner replays the frame rebuilt from authenticated history; the error is reported.
     let mut socket_divided=cutting;socket_divided.hit_box_frame[0]/=1.125;
-    assert!(reason(sc.eval(&socket_divided)).contains("cutting geometry differs"),"old socket-divided center cannot match physical history at median skeleton scale0.9932");
+    let (frame,(cm,_))=replayed(sc.eval(&socket_divided));
+    assert!(close(frame,authentic) && cm>40.0,"old socket-divided center is replaced, its error reported");
     let mut prior_module=cutting;prior_module.location=[-5.0,0.0,130.0];
     prior_module.dism_blunt=(prior_module.dism_blunt & !(15<<21)) | (2<<21);
     assert!(accepted(&sc.eval(&prior_module)),"native selected Box retained from previous Head still authenticates a current Grip contact");
@@ -530,12 +537,20 @@ fn native_head_side_contact_uses_only_its_module_envelope() {
     assert!(reason(sc.eval(&child_strike)).contains("source_role"),"cutting-only virtual ID cannot become a striking collider");
     let mut missing_parent=w.clone();missing_parent.boxes[2].child_of=4;
     assert!(!sc.s.record_weapon_shape(ATT,sc.ats(1975),&missing_parent,false),"unrepresented cutting parent refused");
-    for (field,value) in [(0,100.0),(7,1.0),(10,22.0),(4,0.4)] {
+    for (field,value) in [(7,1.0),(10,22.0)] {
         let mut forged=cutting;forged.hit_box_frame[field]=value;
         assert!(reason(sc.eval(&forged)).contains("cutting geometry differs"),"forged Box field {field}");
     }
+    let mut forged=cutting;forged.hit_box_frame[0]=100.0;
+    assert!(close(replayed(sc.eval(&forged)).0,authentic),"forged Box position is replaced by the authenticated one");
     let mut rotated=cutting;rotated.hit_box_frame[5]=0.5;rotated.hit_box_frame[6]=(0.75f32).sqrt();
-    assert!(reason(sc.eval(&rotated)).contains("cutting geometry differs"),"normalized forged rotation");
+    let (frame,(_,dot))=replayed(sc.eval(&rotated));
+    assert!(close(frame,authentic) && dot<0.99,"forged / stand-in rotation is replaced, its error reported");
+    let mut denormal=cutting;denormal.hit_box_frame[4]=0.4;
+    assert!(reason(sc.eval(&denormal)).contains("cutting geometry differs"),"non-unit Box rotation refused");
+    let mut off_box=cutting;off_box.location=[-5.0,19.0,190.0];
+    let r=reason(sc.eval(&off_box));
+    assert!(r.contains("off the original cutting Box"),"a contact off the authenticated Box is refused: {r}");
     let mut reciprocal=cutting;reciprocal.hit_box_frame[7]=1.0;reciprocal.hit_box_frame[10]=22.0;
     assert!(reason(sc.eval(&reciprocal)).contains("cutting geometry differs"),"scaled extent equality cannot spoof native X-before-scale clamp");
     let mut wrong_class=cutting;wrong_class.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_ArmingSword_C");
