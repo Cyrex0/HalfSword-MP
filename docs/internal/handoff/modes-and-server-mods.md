@@ -27,9 +27,9 @@ connection (32 KiB chunks, SHA-256 checked per file and per mod), stores them in
 DECLINE returns to the browser. Consent is remembered per server key and mod set. Leaving the
 server unloads them as far as UE4SS allows.
 
-**Compatibility:** a beta.5 client can still join duel and FFA servers. A server in any other
-mode refuses it ("update HSMP to join"); a server with mods refuses it with "This server uses N
-server mods. Update HalfSword-MP via the launcher to join."
+**Compatibility:** the current development build requires protocol 8 for every mode because
+placement and cutting claims include their original native evidence. Older protocol clients must update
+before joining. Mode and server-mod capability checks still apply after that protocol check.
 
 ## 2. Setup
 

@@ -56,7 +56,8 @@ pub use match_core::seed_arena;
 #[allow(unused_imports)] // only used inside this module tree
 pub use match_core::{DEFAULT_ARENA, SPAWN_SLOT_SENTINEL_Z, normalize_arena};
 #[allow(unused_imports)] // only used inside this module tree
-pub(crate) use match_core::{DEATH_DAMAGE, DEATH_LEFT, DEATH_REPORTED, DEATH_VITALS};
+pub(crate) use match_core::{DEATH_DAMAGE, DEATH_DEFEAT, DEATH_LEFT, DEATH_REPORTED, DEATH_SURRENDER, DEATH_VITALS};
+pub(crate) use match_core::body_context_matches;
 pub use admin::{load_banlist, set_banlist_path, configure_admins, AdminOpts};
 pub(crate) use admin::rcon_admin;
 pub(crate) use admin::save_banlist;
@@ -156,7 +157,7 @@ pub(crate) struct Inner {
     // ---- authoritative deaths + simultaneous-kill settle (combat) ----
     /// Deaths declared this round: (peer, killer, cause). Re-broadcast as
     /// S2CDeath with every match-state broadcast until the next round.
-    round_deaths: Vec<(PeerId, PeerId, u8)>,
+    round_deaths: Vec<(PeerId, PeerId, u8, u16)>,
     /// Above 0 while a finished round "settles": the last-standing player is
     /// provisional; a trade hit / death landing in this window makes it a
     /// draw. The result is published only when this reaches 0.

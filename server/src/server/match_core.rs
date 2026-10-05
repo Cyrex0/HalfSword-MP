@@ -154,7 +154,7 @@ pub(super) fn note_placed(inner: &mut Inner, id: PeerId, round: u32) {
     if e.0 != round { *e = (round, now); }
     // The pawn was teleported onto its spawn: the root speed cap starts over
     // from there (the cap is a body speed, not a fixed 300 m/s).
-    for p in inner.peers.values_mut().filter(|p| p.id == id) { p.last_valid_pos = None; }
+    // Movement reset belongs exclusively to a scoped GameStatus placement.
 }
 
 /// True while `pid` is under spawn protection (against "insta died at round
@@ -183,9 +183,9 @@ pub(super) fn arena_matches(inner: &Inner, arena: Option<&str>) -> bool {
 }
 
 /// One game-status report (the `game_status` record): load
-/// barrier, game liveness, redundant death report. Returns true when the
-/// report says the player died in the current live round.
-pub(super) fn game_status_in(inner: &mut Inner, id: PeerId, alive: bool, loaded: u32, arena: Option<&str>, dead: bool) -> bool {
+/// barrier and game liveness. The legacy return value is always false:
+/// unscoped status flags cannot declare a protocol 7 pawn death.
+pub(super) fn game_status_in(inner: &mut Inner, id: PeerId, _alive: bool, loaded: u32, arena: Option<&str>, _dead: bool) -> bool {
     let now = inner.now_ms;
     let right_arena = arena_matches(inner, arena);
     let mp = inner.match_peers.entry(id).or_default();
@@ -200,9 +200,55 @@ pub(super) fn game_status_in(inner: &mut Inner, id: PeerId, alive: bool, loaded:
     } else if loaded > mp.loaded_round {
         debug!(peer_id = id, loaded, arena = ?arena, "load report on the wrong arena: not counted");
     }
-    // Round-tagged: a delayed ping from the previous round's corpse must not
-    // kill us in the round that just went live.
-    dead && alive && inner.match_state == "live" && loaded == inner.match_round
+    // Status is load/liveness evidence. Death declarations use the reliable
+    // DeathReport path, whose acknowledgement and resend semantics preserve
+    // the original native callback across packet loss.
+    false
+}
+
+/// Placement is proof of a healthy, verified world, not merely a spawn id echo.
+pub(super) fn game_status_placed(inner: &mut Inner, id: PeerId, gs: &hsmp_ipc::schema::session::GameStatus) -> bool {
+    let arena = gs.arena.as_str().unwrap_or("");
+    let expected_life = if matches!(inner.match_state.as_str(),"loading"|"countdown") && gs.round == inner.match_round + 1 {
+        1
+    } else { modes::peer_life(inner, id) };
+    if gs.match_id != inner.sess.match_id || gs.spawn_id == 0 || gs.load_error != 0
+        || gs.life == 0 || gs.life != expected_life
+        || gs.flags & v5::status_flags::LOADED == 0 || gs.flags & v5::status_flags::DEAD != 0
+        || arena.trim().is_empty() || !arena_matches(inner, Some(arena))
+        || !inner.spawn_plan.iter().any(|s| s.peer_id == id && s.spawn_id == gs.spawn_id)
+    { return false; }
+    let round = gs.spawn_id >> 8;
+    if gs.round != round { return false; }
+    let pending=matches!(inner.match_state.as_str(),"loading"|"countdown") && gs.round==inner.spawn_round;
+    let live=inner.match_state=="live" && gs.round==inner.match_round;
+    if !pending && !live {return false;}
+    let original=(gs.match_id,gs.round,gs.life,gs.spawn_id);
+    if inner.sess.root_placed.get(&id)!=Some(&original) {
+        inner.sess.root_placed.insert(id,original);
+        for p in inner.peers.values_mut().filter(|p|p.id==id) {
+            p.last_valid_pos=None;p.last_root=None;p.last_valid_ms=0;
+        }
+    }
+    note_placed(inner, id, round);
+    if gs.round == inner.match_round { modes::on_placed(inner, id, gs.spawn_id); }
+    true
+}
+
+/// A delayed failure belongs only to the world load that originally failed.
+pub(super) fn game_status_load_error(inner: &mut Inner, id: PeerId, gs: &hsmp_ipc::schema::session::GameStatus) {
+    if gs.load_error != 0 && gs.match_id == inner.sess.match_id && gs.round == inner.match_round + 1 {
+        note_load_error(inner, id, load_error_name(gs.load_error));
+    }
+}
+
+pub(crate) fn body_context_matches(inner: &Inner, id: PeerId, match_id: u64, round: u32, life: u16) -> bool {
+    let pending = inner.match_state == "countdown";
+    let expected_round = if pending { inner.spawn_round } else { inner.match_round };
+    let expected_life = if pending { 1 } else { modes::peer_life(inner, id) };
+    match_id != 0 && match_id == inner.sess.match_id && round == expected_round && life != 0
+        && life == expected_life && inner.peers.values().any(|p| p.id == id)
+        && crate::lagcomp::has_accepted_pose_context(id, match_id, round, life)
 }
 
 /// The `game_status` record (session_records.rs): counted only for this match, round and
@@ -212,7 +258,6 @@ pub(crate) async fn on_game_status(socket: &Arc<UdpSocket>, state: &Arc<ServerSt
         let mut inner = state.inner.lock().await;
         let Some((id, alive)) = inner.peers.get(&from).map(|p| (p.id, p.alive)) else { return };
         let this_match = gs.match_id == inner.sess.match_id || inner.match_state == "lobby";
-        let loaded = if this_match && gs.flags & v5::status_flags::LOADED != 0 { gs.round } else { 0 };
         let arena = if this_match { Some(gs.arena.as_str().unwrap_or("")) } else { Some("") };
         let dead = this_match && gs.flags & v5::status_flags::DEAD != 0;
         if !this_match {
@@ -224,14 +269,9 @@ pub(crate) async fn on_game_status(socket: &Arc<UdpSocket>, state: &Arc<ServerSt
             false
         } else {
             // The spawn order this client applied = its placement report.
-            let order = inner.spawn_plan.iter().find(|s| s.peer_id == id).map(|s| s.spawn_id);
-            if gs.spawn_id != 0 && order == Some(gs.spawn_id) {
-                note_placed(&mut inner, id, gs.spawn_id >> 8);
-                // Deathmatch: the reloaded world placed the pawn on its respawn order.
-                if loaded == inner.match_round { modes::on_placed(&mut inner, id, gs.spawn_id); }
-            }
+            let loaded = if game_status_placed(&mut inner, id, gs) { gs.round } else { 0 };
             let died = game_status_in(&mut inner, id, alive, loaded, arena, dead);
-            if gs.load_error != 0 { note_load_error(&mut inner, id, load_error_name(gs.load_error)); }
+            game_status_load_error(&mut inner, id, gs);
             died
         }
     };
@@ -299,6 +339,10 @@ pub(crate) const DEATH_VITALS: u8 = 2;
 /// (`drop_loses_round`). Within the budget a duel pauses for its
 /// reconnect instead; 3+ player rounds just stop counting it as standing.
 pub(crate) const DEATH_LEFT: u8 = 3;
+/// The native game ended this fighter's bout without killing their body.
+pub(crate) const DEATH_DEFEAT: u8 = 5;
+/// Explicit player surrender, which leaves the native body alive.
+pub(crate) const DEATH_SURRENDER: u8 = 6;
 /// 400 ms: covers DEFENDER_GRACE (200 ms) + trade hit transit.
 pub(super) const SETTLE_MS: u64 = 400;
 
@@ -343,13 +387,14 @@ pub(super) fn declare_death_unprotected(inner: &mut Inner, pid: PeerId, killer: 
         return false;
     }
     let round = inner.match_round;
+    let life = modes::peer_life(inner,pid);
     let Some(p) = inner.peers.values_mut().find(|p| p.id == pid) else { return false };
     if !p.alive { return false; }
     p.alive = false;
     crate::lagcomp::note_death(pid);
-    inner.round_deaths.push((pid, killer, cause));
+    inner.round_deaths.push((pid, killer, cause, life));
     inner.match_state_dirty = true;
-    inner.out_msgs.push((None, death_msg(pid, round, killer, cause)));
+    inner.out_msgs.push((None, combat_glue::scoped_death_msg(pid,round,killer,cause,inner.sess.match_id,life)));
     info!(peer_id = pid, killer, cause, round, settling = inner.settle_ms > 0,
           "DEATH declared (authoritative)");
     modes::on_death(inner, pid, killer, cause);
@@ -830,6 +875,7 @@ pub(super) fn reset_to_lobby(inner: &mut Inner) {
     inner.sess.load_errors.clear();
     inner.sess.sat_out.clear();
     inner.sess.placed.clear();
+    inner.sess.root_placed.clear();
     inner.pauses_by_key.clear();
     inner.match_pauses = 0;
     inner.paused_from_live = false;
@@ -1038,7 +1084,7 @@ pub(super) mod round_tests {
         }
         match_step(&mut i);
         assert_eq!(i.match_state, "roundover");
-        assert!(i.round_deaths.iter().any(|&(p, _, c)| p == 2 && c == DEATH_LEFT));
+        assert!(i.round_deaths.iter().any(|&(p, _, c, _)| p == 2 && c == DEATH_LEFT));
         // It comes back during the settle: still the loser.
         for p in i.peers.values_mut() { p.last_seen_ms = 40_000; }
         settle(&mut i);

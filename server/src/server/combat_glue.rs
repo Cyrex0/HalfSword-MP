@@ -25,9 +25,24 @@ use hsmp_ipc::schema::combat::{
 };
 use hsmp_ipc::wire;
 
+fn reported_outcome_cause(reason: u8, mode: u8) -> Option<u8> {
+    match reason {
+        0 => Some(DEATH_REPORTED),
+        1 if mode == hsmp_ipc::schema::session::game_mode::BRAWL => Some(DEATH_DEFEAT),
+        2 => Some(DEATH_SURRENDER),
+        _ => None,
+    }
+}
+
 /// A server-declared death as a v6 message (`WireHdr.peer` = the victim).
 pub(super) fn death_msg(peer_id: PeerId, round: u32, killer: PeerId, cause: u8) -> Vec<u8> {
     wire::encode(0, peer_id, &Death::new(peer_id, round, killer, cause), &[])
+}
+
+pub(super) fn scoped_death_msg(peer_id:PeerId,round:u32,killer:PeerId,cause:u8,match_id:u64,life:u16)->Vec<u8> {
+    let mut d=Death::new(peer_id,round,killer,cause);
+    d.match_id=match_id; d.life=life;
+    wire::encode(0,peer_id,&d,&[])
 }
 
 /// A claim verdict for the attacker.
@@ -51,6 +66,19 @@ pub(super) async fn handle_record(
     payload: &[u8],
 ) -> anyhow::Result<()> {
     match h.kind {
+        hsmp_ipc::schema::combat::K_REPLAY_OUTCOME => {
+            use hsmp_ipc::schema::combat::{ReplayOutcome,K_REPLAY_OUTCOME,K_REPLAY_OUTCOME_ACK};
+            let r=view::<ReplayOutcome>(payload).map_err(super::records::refused)?.head();
+            let Some(victim)=touch_peer(state,from).await else {return Ok(())};
+            let Some(fresh)=crate::combat::on_replay_outcome(victim,r) else {return Ok(())};
+            send_rec(socket,state,from,wire::message(K_REPLAY_OUTCOME_ACK,0,victim,payload)).await;
+            if fresh {
+                info!(victim,attacker=r.attacker,hit_id=r.hit_id,match_id=r.match_id,round=r.round,life=r.victim_life,
+                    status=r.status,fields=r.observed_fields,hp_delta=r.health_delta,"owner native replay outcome");
+                let addr={let inner=state.inner.lock().await;inner.peers.iter().find(|(_,p)|p.id==r.attacker).map(|(a,_)|*a)};
+                if let Some(addr)=addr {send_rec(socket,state,addr,wire::message(K_REPLAY_OUTCOME,0,victim,payload)).await;}
+            }
+        }
         K_DAMAGE => {
             let mut hit = {
                 let v = view::<crate::proto::Damage>(payload).map_err(super::records::refused)?;
@@ -72,6 +100,9 @@ pub(super) async fn handle_record(
                     // on the provisional winner; everyone else is dead.
                     match_live: combat_open(&inner),
                     match_round: inner.match_round,
+                    match_id: inner.sess.match_id,
+                    attacker_life: modes::peer_life(&inner,a.id),
+                    target_life: modes::peer_life(&inner,hit.target_peer_id),
                 };
                 (crate::combat::on_damage(&ctx, &mut hit), a.id, target.map(|(addr, _)| *addr))
             };
@@ -108,17 +139,22 @@ pub(super) async fn handle_record(
         }
         K_DEATH_REPORT => {
             let d = view::<DeathReport>(payload).map_err(super::records::refused)?.head();
+            // A defeat eliminates the fighter, but never invents HP damage or
+            // a biological death. Unknown report reasons cannot eliminate anyone.
             // Round-scoped + idempotent: a resend from an earlier round never
             // kills a player in the current one; a resend after the death was
             // already counted is answered by the periodic death re-send.
             {
                 let mut inner = state.inner.lock().await;
+                let mode = inner.modes.run.map_or(hsmp_ipc::schema::session::game_mode::DUEL, |c| c.mode);
+                let cause = reported_outcome_cause(d.reason, mode);
                 let cur = inner.match_round;
                 if let Some(pid) = inner.peers.get(&from).map(|p| p.id) {
-                    if d.round == cur {
+                    if cause.is_some() && d.round == cur && d.match_id == inner.sess.match_id
+                        && d.life == modes::peer_life(&inner,pid) && !modes::respawning(&inner,pid) {
                         let killer = crate::combat::ledger_last_attacker(pid, cur);
-                        if declare_death(&mut inner, pid, killer, DEATH_REPORTED) {
-                            info!(peer_id = pid, death_id = d.death_id, round = d.round, "death (reliable report)");
+                        if declare_death(&mut inner, pid, killer, cause.unwrap()) {
+                            info!(peer_id = pid, death_id = d.death_id, round = d.round, reason=d.reason, "native outcome (reliable report)");
                         }
                     } else {
                         debug!(peer_id = pid, death_id = d.death_id, round = d.round, cur, "death ignored (stale round)");
@@ -141,6 +177,8 @@ pub(super) async fn handle_record(
                     return Ok(());
                 }
                 let round = inner.match_round;
+                if f.match_id != inner.sess.match_id || f.round != round || f.life != modes::peer_life(&inner,pid)
+                    || modes::respawning(&inner,pid) { return Ok(()); }
                 if let Some(v) = crate::combat::vitals_in(pid, round, &mut f) {
                     super::dispatch::on_ledger_verdict(&mut inner, pid, round, &v, f.dead());
                 }
@@ -184,7 +222,9 @@ pub(super) async fn dispatch_damage(
         // The mode's verdict: no friendly fire between teammates (unless the option
         // allows it), no hits on / from a player inside its respawn protection.
         let refused = modes::hit_refusal(&inner, attacker_id, hit.target_peer_id);
-        if !combat_open(&inner) || hit.round != round || !target_alive {
+        if !combat_open(&inner) || hit.round != round || !target_alive
+            || hit.match_id != inner.sess.match_id || hit.attacker_life != modes::peer_life(&inner,attacker_id)
+            || hit.victim_life != modes::peer_life(&inner,hit.target_peer_id) {
             crate::combat::reject_decision(attacker_id, hit.hit_id, "round over / target down");
             verdict = crate::combat::Verdict::Ack { accepted: false, reason: "round over / target down".into() };
         } else if let Some(why) = refused {
@@ -202,6 +242,15 @@ pub(super) async fn dispatch_damage(
                       "KILL (server ledger): lethal hit accepted");
             }
             fx_to = hit_fx_recipients(&inner.peers, hit.target_peer_id);
+        }
+    }
+    if verdict == crate::combat::Verdict::Reforward {
+        let inner=state.inner.lock().await;
+        if hit.match_id!=inner.sess.match_id || hit.round!=inner.match_round
+            || hit.attacker_life!=modes::peer_life(&inner,attacker_id)
+            || hit.victim_life!=modes::peer_life(&inner,hit.target_peer_id) {
+            crate::combat::reject_decision(attacker_id,hit.hit_id,"stale_life");
+            verdict=crate::combat::Verdict::Ack {accepted:false,reason:"stale_life".into()};
         }
     }
     // Blood / wounds on every other screen's stand-in of the victim (the
@@ -268,6 +317,25 @@ pub(super) fn hit_fx_pick(peers: impl Iterator<Item = (SocketAddr, PeerId)>, vic
 #[cfg(test)]
 mod hit_fx_tests {
     use super::*;
+    #[test]
+    fn native_defeat_is_distinct_from_death_and_unknown_reasons_are_rejected() {
+        let brawl = hsmp_ipc::schema::session::game_mode::BRAWL;
+        assert_eq!(reported_outcome_cause(0, brawl), Some(DEATH_REPORTED));
+        assert_eq!(reported_outcome_cause(1, brawl), Some(DEATH_DEFEAT));
+        for mode in 0..=6 {
+            assert_eq!(reported_outcome_cause(0, mode), Some(DEATH_REPORTED));
+            assert_eq!(reported_outcome_cause(2, mode), Some(DEATH_SURRENDER));
+            if mode != brawl { assert_eq!(reported_outcome_cause(1, mode), None); }
+        }
+        for reason in 3..=u8::MAX { assert_eq!(reported_outcome_cause(reason, brawl), None); }
+        let report = DeathReport { death_id: 7, match_id: 81, round: 3, life: 130,
+            reason: 1, ..Default::default() };
+        let bytes = wire::encode(0, 9, &report, &[]);
+        let (_, decoded) = wire::decode::<DeathReport>(&bytes).unwrap();
+        assert_eq!((decoded.head.reason, decoded.head.match_id, decoded.head.round, decoded.head.life),
+            (1, 81, 3, 130));
+        assert_eq!(std::mem::size_of::<DeathReport>(), 24);
+    }
     #[test]
     fn hit_fx_goes_to_every_other_capable_player() {
         let a = |n: u16| -> SocketAddr { format!("127.0.0.1:{n}").parse().unwrap() };
@@ -369,6 +437,64 @@ mod record_flow_tests {
     }
 
     #[tokio::test]
+    async fn duel_rejects_automatic_ko_but_accepts_scoped_manual_surrender() {
+        let (socket, state, _ca, cb) = live_duel(76_201).await;
+        let bid = cb.welcome_id().unwrap();
+        let report = {
+            let mut inner = state.inner.lock().await;
+            inner.sess.match_id = 82;
+            inner.modes.run = Some(super::super::modes::ModeCfg {
+                mode: hsmp_ipc::schema::session::game_mode::DUEL, ..Default::default() });
+            DeathReport { death_id: 19, match_id: 82, round: 1,
+                life: super::super::modes::peer_life(&inner, bid), reason: 1, ..Default::default() }
+        };
+        let ko = wire::encode(0, 0, &report, &[]);
+        let (h, p) = wire::split(&ko).unwrap();
+        handle_record(&socket, &state, cb.addr, h, p).await.unwrap();
+        assert!(state.inner.lock().await.peers.values().find(|p| p.id == bid).unwrap().alive);
+        let surrendered = wire::encode(0, 0, &DeathReport { reason: 2, ..report }, &[]);
+        let (h, p) = wire::split(&surrendered).unwrap();
+        handle_record(&socket, &state, cb.addr, h, p).await.unwrap();
+        let inner = state.inner.lock().await;
+        assert!(!inner.peers.values().find(|p| p.id == bid).unwrap().alive);
+        assert_eq!(inner.round_deaths.len(), 1);
+        assert_eq!(inner.round_deaths[0].2, DEATH_SURRENDER);
+    }
+
+    #[tokio::test]
+    async fn scoped_native_defeat_eliminates_once_without_claiming_hp_damage() {
+        let (socket, state, _ca, cb) = live_duel(76_101).await;
+        let bid = cb.welcome_id().unwrap();
+        let report = {
+            let mut inner = state.inner.lock().await;
+            inner.sess.match_id = 81;
+            inner.modes.run = Some(super::super::modes::ModeCfg {
+                mode: hsmp_ipc::schema::session::game_mode::BRAWL, ..Default::default() });
+            DeathReport { death_id: 17, match_id: 81, round: 1,
+                life: super::super::modes::peer_life(&inner, bid), reason: 1, ..Default::default() }
+        };
+        // Unknown reasons and delayed reports from a different pawn life
+        // cannot end the currently living fighter's bout.
+        for invalid in [DeathReport { reason: 3, ..report },
+            DeathReport { life: report.life + 1, ..report },
+            DeathReport { match_id: 80, ..report }] {
+            let bytes = wire::encode(0, 0, &invalid, &[]);
+            let (h, p) = wire::split(&bytes).unwrap();
+            handle_record(&socket, &state, cb.addr, h, p).await.unwrap();
+            assert!(state.inner.lock().await.peers.values().find(|p| p.id == bid).unwrap().alive);
+        }
+        let bytes = wire::encode(0, 0, &report, &[]);
+        let (h, p) = wire::split(&bytes).unwrap();
+        handle_record(&socket, &state, cb.addr, h, p).await.unwrap();
+        handle_record(&socket, &state, cb.addr, h, p).await.unwrap();
+        let inner = state.inner.lock().await;
+        assert!(!inner.peers.values().find(|p| p.id == bid).unwrap().alive);
+        assert_eq!(inner.round_deaths.len(), 1, "reliable retry cannot count a second defeat");
+        assert_eq!(inner.round_deaths[0].2, DEATH_DEFEAT);
+        assert_eq!(inner.match_state, "roundover");
+    }
+
+    #[tokio::test]
     async fn claim_ack_vitals_and_death_records_flow() {
         let (socket, state, mut ca, mut cb) = live_duel(75_001).await;
         let (aid, bid) = (ca.welcome_id().unwrap(), cb.welcome_id().unwrap());
@@ -399,7 +525,8 @@ mod record_flow_tests {
 
         // Vitals from A are relayed to B with peer = A, as they came.
         let mut f = crate::proto::vitals::unknown();
-        f.seq = 7;
+        f.seq = 7;f.round=1;
+        {let inner=state.inner.lock().await;f.match_id=inner.sess.match_id;f.life=super::super::modes::peer_life(&inner,aid);}
         crate::proto::vitals::set(&mut f, 0, 88.0);
         let vm = wire::encode(0, 0, &f, &[]);
         let (h, p) = wire::split(&vm).unwrap();
@@ -412,7 +539,7 @@ mod record_flow_tests {
         assert_eq!(&got[0][wire::HDR..], p, "relayed byte for byte (no clamp needed)");
 
         // B reports its own death: acked; the death goes to everyone.
-        let dm = wire::encode(0, 0, &DeathReport { death_id: 4, round: 1 }, &[]);
+        let dm = wire::encode(0, 0, &DeathReport { death_id: 4, round: 1, ..Default::default() }, &[]);
         let (h, p) = wire::split(&dm).unwrap();
         super::super::records::handle(&socket, &state, cb.addr, h, p).await.unwrap();
         for _ in 0..4 { ca.pump(&socket, &state).await; cb.pump(&socket, &state).await; }

@@ -106,6 +106,7 @@ pub const K_KIT_RULES_REQ: u16 = 0x0512;
 pub const K_KIT_RULES: u16 = 0x0513;
 pub const K_LOADOUT: u16 = 0x0514;
 pub const K_BODY: u16 = 0x0515;
+pub const K_BODY2: u16 = 0x0516;
 pub const K_KIT_STATUS: u16 = 0x0520;
 pub const K_STANDIN_WEAPONS: u16 = 0x0521;
 
@@ -213,7 +214,7 @@ fn floats_ok(v: &[f32]) -> bool {
     v.iter().all(|x| x.abs() <= LOADOUT_FLOAT_LIMIT)
 }
 
-fn check_weapon(w: &WeaponPass, field: &'static str) -> Result<(), Invalid> {
+pub(crate) fn check_weapon(w: &WeaponPass, field: &'static str) -> Result<(), Invalid> {
     let all = [w.mass_head, w.mass_guard, w.mass_grip, w.mass_pommel, w.price];
     if !floats_ok(&all) || !floats_ok(&w.head_size) || !floats_ok(&w.guard_size) || !floats_ok(&w.grip_size)
         || !floats_ok(&w.pommel_size) || !floats_ok(&w.color_wood) || !floats_ok(&w.color_leather)
@@ -337,6 +338,46 @@ fn check_body_bone(_h: &BodyHead, b: &BodyBone) -> Result<(), Invalid> {
 crate::record!(BodyHead, kind = K_BODY, name = "body", rows = BodyBone, count = n, max = BODY_MAX_BONES,
     check = check_body, check_row = check_body_bone);
 
+crate::ipc_pod! {
+    /// Original verified native body generation. Height is carried independently
+    /// of Height Rate and mesh scale; applying native height needs construction proof.
+    pub struct Body2Head {
+        pub match_id: u64,
+        pub round: u32,
+        pub life: u16,
+        pub n: u16,
+        pub version: u32,
+        pub height_rate: f32,
+        pub muscle_rate: f32,
+        pub mass_scale_bp: f32,
+        pub char_scale: [f32; 3],
+        pub native_height: f32,
+        pub actor_scale: [f32; 3],
+        pub _r: u32,
+        /// Owner lineage metadata, never compared to a pooled proxy's name.
+        pub pawn: Str<64>,
+    }
+}
+impl Body2Head {
+    pub fn body_head(&self) -> BodyHead {
+        BodyHead { version: self.version, n: self.n, height_rate: self.height_rate,
+            muscle_rate: self.muscle_rate, mass_scale_bp: self.mass_scale_bp,
+            char_scale: self.char_scale, ..Default::default() }
+    }
+}
+fn check_body2(h: &Body2Head) -> Result<(), Invalid> {
+    if h.match_id == 0 || h.round == 0 || h.life == 0 || h.pawn.is_empty() {
+        return Err(Invalid::Range("body_context"));
+    }
+    if !(0.0..=1.0).contains(&h.native_height) || h.actor_scale.iter().any(|s| !(*s > 0.0 && *s <= BODY_SCALE_MAX)) {
+        return Err(Invalid::Range("native_height"));
+    }
+    check_body(&h.body_head())
+}
+fn check_body2_bone(h: &Body2Head, b: &BodyBone) -> Result<(), Invalid> { check_body_bone(&h.body_head(), b) }
+crate::record!(Body2Head, kind = K_BODY2, name = "body2", rows = BodyBone, count = n, max = BODY_MAX_BONES,
+    check = check_body2, check_row = check_body2_bone);
+
 // ---- game-local bus keys (HSMPLoadout) ---------------------------------------------------------
 
 crate::ipc_pod! {
@@ -404,6 +445,8 @@ pub const RECORDS: &[RecordInfo] = &[
         chan = Chan::RelLatest(hsmp_net_keys::LOADOUT), doc = "worn appearance (hand passports + armour rows), once per version; peer = owner"),
     crate::record_info!(BodyHead, cap = CAP_LOADOUT_KIT, flow = flow::C2S | flow::S2C | flow::G2S | flow::S2G,
         chan = Chan::RelLatest(hsmp_net_keys::BODY), doc = "passport body (rates, scales, bone masses) for stand-ins, once per version; peer = owner; only with caps::BODY"),
+    crate::record_info!(Body2Head, cap = CAP_LOADOUT_KIT, flow = flow::C2S | flow::S2C | flow::G2S | flow::S2G,
+        chan = Chan::RelLatest(hsmp_net_keys::BODY2), doc = "verified original native body generation; only with caps::BODY2"),
     crate::record_info!(KitStatus, cap = CAP_BUS, flow = flow::LOCAL, chan = Chan::None,
         doc = "own pawn kit evidence (kit.lua -> Director, Loadout)"),
     crate::record_info!(StandinWeapons, cap = CAP_BUS, flow = flow::LOCAL, chan = Chan::None,
@@ -417,6 +460,7 @@ pub mod hsmp_net_keys {
     pub const KIT_RULES: u8 = 0x84;
     pub const LOADOUT: u8 = 0x85;
     pub const BODY: u8 = 0x89;
+    pub const BODY2: u8 = 0x8a;
 }
 
 /// Named record slots of this domain.
@@ -437,6 +481,10 @@ pub const SLOTS: &[SlotInfo] = &[
         world_scoped: false, doc: "own passport body (HSMPCombat writer; the sidecar sends it)" },
     SlotInfo { name: "peer_body", kind: K_BODY, form: SlotForm::PeerSlot, dir: Dir::SidecarToGame, cap: CAP_LOADOUT_KIT,
         world_scoped: false, doc: "a peer's passport body (HSMPCombat applies it to the stand-in)" },
+    SlotInfo { name: "body2", kind: K_BODY2, form: SlotForm::Slot, dir: Dir::GameToSidecar, cap: CAP_LOADOUT_KIT,
+        world_scoped: false, doc: "own verified body generation" },
+    SlotInfo { name: "peer_body2", kind: K_BODY2, form: SlotForm::PeerSlot, dir: Dir::SidecarToGame, cap: CAP_LOADOUT_KIT,
+        world_scoped: false, doc: "peer original body generation" },
     SlotInfo { name: "kit_status", kind: K_KIT_STATUS, form: SlotForm::Bus, dir: Dir::Local, cap: CAP_BUS,
         world_scoped: false, doc: "own pawn kit evidence" },
     SlotInfo { name: "standin_weapons", kind: K_STANDIN_WEAPONS, form: SlotForm::Bus, dir: Dir::Local, cap: CAP_BUS,
@@ -458,10 +506,32 @@ pub const ENUMS: &[EnumInfo] = &[
 pub type KitBuf = crate::record::VarBuf<Kit, KIT_MAX_ARMOR>;
 pub type LoadoutBuf = crate::record::VarBuf<LoadoutHead, LOADOUT_MAX_ROWS>;
 pub type BodyBuf = crate::record::VarBuf<BodyHead, BODY_MAX_BONES>;
+pub type Body2Buf = crate::record::VarBuf<Body2Head, BODY_MAX_BONES>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn body2_requires_original_native_generation_and_independent_height() {
+        let (old, rows) = body();
+        let h = Body2Head { match_id: 80, round: 2, life: 130, n: old.n, version: 5,
+            height_rate: old.height_rate, muscle_rate: old.muscle_rate, mass_scale_bp: old.mass_scale_bp,
+            char_scale: old.char_scale, native_height: 0.76, actor_scale: [0.97,0.98,0.99],
+            pawn: Str::new("Willie_BP_C_84"), ..Default::default() };
+        let payload = to_payload(&h, &rows);
+        let v = view::<Body2Head>(&payload).unwrap();
+        assert_eq!((v.head.match_id,v.head.round,v.head.life),(80,2,130));
+        assert_eq!(core::mem::size_of::<Body2Head>(),128);
+        for bad in [Body2Head{life:0,..h},Body2Head{round:0,..h},Body2Head{match_id:0,..h},
+            Body2Head{pawn:Str::default(),..h},Body2Head{native_height:f32::NAN,..h},
+            Body2Head{actor_scale:[1.,f32::INFINITY,1.],..h}] {
+            assert!(view::<Body2Head>(&to_payload(&bad,&rows)).is_err());
+        }
+        let full = vec![rows[0]; BODY_MAX_BONES];
+        let mut all = h;
+        all.n = BODY_MAX_BONES as u16;
+        assert!(view::<Body2Head>(&to_payload(&all,&full)).is_ok(), "all masses fit the latest-value slot; no ring truncation");
+    }
     use crate::record::{payload_len, to_payload, view};
 
     fn kit() -> (Kit, Vec<KitItem>) {

@@ -224,7 +224,10 @@ function DW.new(opts)
         local x, y, z = o.x or 100, o.y or 200, o.z or 98
         local pu = o.protect_until
         if pu == nil and o.verified ~= false and not o.unbounded then pu = self.clock + 3 end
-        IPC.bus_put("spawn_status", { seq = o.seq or 1, round = round, arena = arena, spawn_id = round * 256, slot = 2,
+        local order = self.sess.plan[1]
+        IPC.bus_put("spawn_status", { seq = o.seq or 1, match_id = o.match_id or self.sess.match_id,
+            life = o.life or (self.dir and self.dir.pipe and self.dir.pipe.life) or 0,
+            round = round, arena = arena, spawn_id = o.spawn_id or (order and order.spawn_id) or round * 256, slot = 2,
             pawn = o.pawn or self.pawn.id, has_dest = true, pos = { x, y, z }, clear = true, why = o.why or "round start",
             verified = o.verified ~= false, tries = o.tries or 1, has_floor = true, floor = z - 100, protect_ms = 3000,
             has_protect_until = pu ~= nil, protect_until = pu or 0, t = self.clock, error = o.error or "", tol_cm = 100 })

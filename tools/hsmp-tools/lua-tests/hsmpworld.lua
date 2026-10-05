@@ -365,6 +365,35 @@ local function mkbody(pos, sim)
     return b
 end
 
+T.log("== native physics failures retain the previous replicated state")
+do
+    local body = mkbody({ X = 150, Y = 0, Z = 90 }, true)
+    local actor = mkobj("Prop_1", "Prop_C", 0x8801)
+    local o = { actor = actor, body = body, kind = "prop", sim = true, sim0 = true,
+                pos = { X = 150, Y = 0, Z = 90 }, rot = { Pitch = 0, Yaw = 0, Roll = 0 }, buf = {} }
+    local setter = body.SetSimulatePhysics
+    body.SetSimulatePhysics = function() error("native freeze refused") end
+    T.check(not W.set_sim(o, false) and o.sim == true, "failed native freeze does not invent kinematic state")
+    body.SetSimulatePhysics = function() end
+    T.check(not W.set_sim(o, false) and o.sim == true, "silently refused native freeze is verified")
+    body.SetSimulatePhysics = setter
+    T.check(W.set_sim(o, false) and o.sim == false, "successful freeze updates simulation state")
+    o.kin = true
+    body.SetSimulatePhysics = function() error("native restore refused") end
+    T.check(not W.become_local(o, "free") and o.kin == true and o.sim == false,
+        "failed release retains follower ownership so physics restoration can retry")
+    o.pin_kin, o.pinned_at = true, 10
+    T.check(not W.W2.unpin(o, true) and o.pin_kin == true and o.pinned_at == 10,
+        "failed unpin retains restoration ownership and deadline")
+    o.pin_kin = nil
+    body.SetSimulatePhysics = setter
+    T.check(W.become_local(o, "free") and o.kin == false and o.sim == true, "release retries native restoration")
+    local oldpos, oldrot = o.pos, o.rot
+    body.K2_SetWorldLocationAndRotation = function() error("native teleport refused") end
+    T.check(not W.teleport(o, { X = 175, Y = 0, Z = 90 }, oldrot) and o.pos == oldpos,
+        "failed native teleport never claims that the body reached the target")
+end
+
 T.log("== HSMPWorld walks no actor in the first WG.SETTLE_S of a world")
 do
     local UEH = require("UEHelpers")
@@ -510,6 +539,225 @@ do
 end
 
 -- ---- world_follow.lua: timelines, dead reckoning, blending -----------------------------
+T.log("== placement and restoration failures retain transition ownership")
+do
+    W2.new_level("World /Game/Maps/Arenas/Map_Arena_Pit.Map_Arena_Pit", 0xA900, 90000)
+    local wn = W2.W()
+    local body = mkbody({ X = 100, Y = 0, Z = 50 }, true)
+    body.GetFName = function() return { ToString = function() return "SM" end } end
+    local actor = mkobj("Barrel_901", "BP_Barrel_C", 9901)
+    local native_world = { IsValid = function() return true end,
+        GetFullName = function() return wn.name end, GetAddress = function() return wn.addr end }
+    actor.GetWorld = function() return native_world end
+    body.GetWorld = function() return native_world end
+    actor.K2_GetComponentsByClass = function() return { { get = function() return body end } } end
+    local o = { nid = 901, lid = 901, kind = "prop", cls = "BP_Barrel_C", comp = "SM", actor = actor,
+        actor_addr = 9901, body = body, sim = true, sim0 = true, dyn_owner = 0,
+        spawn_pos = { X = 110, Y = 0, Z = 50 }, spawn_rot = { Pitch = 0, Yaw = 0, Roll = 0 },
+        anchor_pos = { X = 110, Y = 0, Z = 50 }, anchor_rot = { Pitch = 0, Yaw = 0, Roll = 0 },
+        pos = { X = 100, Y = 0, Z = 50 }, rot = { Pitch = 0, Yaw = 0, Roll = 0 }, vel = { X = 0, Y = 0, Z = 0 },
+        buf = {}, probed_at = os.clock() * 1000, last_probe = -999, last_read = -999 }
+    wn.objs = { o }; wn.by_nid[901] = o
+    local setter, place = body.SetSimulatePhysics, body.K2_SetWorldLocationAndRotation
+    body.SetSimulatePhysics = function() error("freeze refused") end
+    T.check(not W2.restore_body(o) and o.restore_pending and body.sim,
+        "spawn restoration stops before placement when freezing fails")
+    body.SetSimulatePhysics = setter
+    body.K2_SetWorldLocationAndRotation = function() error("spawn placement refused") end
+    T.check(not W2.restore_body(o) and o.restore_pending and not body.sim,
+        "spawn placement failure keeps ownership of the frozen body")
+    local placements = 0
+    body.K2_SetWorldLocationAndRotation = function() placements = placements + 1; if placements == 2 then error("sleep placement refused") end end
+    T.check(not W2.restore_body(o) and o.restore_pending and body.sim,
+        "failed final rest placement is retained after original simulation is restored")
+    body.K2_SetWorldLocationAndRotation = place
+    T.check(W2.restore_body(o) and not o.restore_pending,
+        "spawn restoration retries the whole transition after final rest failure")
+    body.K2_SetWorldLocationAndRotation = function() error("placement refused") end
+    T.check(not W2.pin_anchor(o, 10) and o.pin_pending and not o.pin_kin and body.sim == false,
+        "freeze followed by failed pin placement remains pending")
+    body.K2_SetWorldLocationAndRotation = place
+    T.check(W2.pin_anchor(o, 20) and o.pin_pending == nil and o.pin_kin and o.pinned_at == 20,
+        "pending pin completes only after placement succeeds")
+    o.pin_kin, o.kin = nil, true
+    o.buf = { { flags = 1, pos = o.spawn_pos, q = { 0, 0, 0, 1 }, vel = { X = 0, Y = 0, Z = 0 } } }
+    body.K2_SetWorldLocationAndRotation = function() error("final rest refused") end
+    T.check(not W2.become_local(o, "free") and o.kin and body.sim == false,
+        "asleep release does not enable physics at the wrong location")
+    body.K2_SetWorldLocationAndRotation = place
+    body.SetSimulatePhysics = function(_, on) if on then error("restore refused") else setter(body, on) end end
+    local original_buf = o.buf
+    T.check(not W2.restore_all("failure regression") and o.nid == 901 and o.buf == original_buf and o.kin and o.restore_pending,
+        "round reset retains binding, stream and ownership until physics restoration succeeds")
+    body.SetSimulatePhysics = setter
+    T.check(W2.restore_all("recovery regression") and not o.kin and o.nid == nil and not o.restore_pending and body.sim,
+        "round reset retries and commits after native restoration succeeds")
+    o.kin, o.sim, body.sim = true, false, false
+    body.SetSimulatePhysics = function() error("release refused") end
+    T.check(not W2.release_world("failed release") and o.kin and not body.sim,
+        "session release retains failed physics ownership")
+    local q = W2.release_retries()
+    local _, retry = next(q)
+    T.check(retry and retry.actor == nil and retry.body == nil and retry.actor_addr == 9901 and retry.body_name == "SM",
+        "session retry stores plain world and actor/component lineage without UObjects")
+    local old_find, old_static, old_settled = FindAllOf, StaticFindObject, W2.WG.settled
+    FindAllOf = function() return { actor } end
+    StaticFindObject = function() return { IsValid = function() return true end } end
+    W2.WG.settled = function() return true end
+    body.SetSimulatePhysics = setter
+    W2.W2.service_release_retries(wn.name, wn.addr, os.clock() * 1000)
+    T.check(body.sim and next(q) == nil, "same-world release retry resolves fresh lineage and restores physics")
+    body.sim, o.sim, o.kin = false, false, true
+    body.SetSimulatePhysics = function() error("release refused") end
+    W2.release_world("lineage regression")
+    local sets = #body.sets
+    W2.W2.service_release_retries(wn.name, "another guard key", os.clock() * 1000)
+    T.check(next(q) == nil and #body.sets == sets, "world generation mismatch discards retries without native writes")
+    W2.release_world("delayed retry regression")
+    local _, delayed = next(q)
+    local retry_at = os.clock() * 1000
+    for i = 1, 12 do W2.W2.service_release_retries(wn.name, wn.addr, retry_at + i * 250) end
+    T.check(next(q) ~= nil and delayed.tries == 12, "restoration failure beyond three seconds retains plain identity ownership")
+    W2.W2.service_release_retries(wn.name, wn.addr, delayed.next_ms - 1)
+    T.check(delayed.tries == 12, "persistent native failure backs off rather than querying every callback")
+    body.SetSimulatePhysics = setter
+    W2.W2.service_release_retries(wn.name, wn.addr, delayed.next_ms)
+    T.check(body.sim and next(q) == nil, "late native recovery restores physics instead of leaving the object frozen")
+    body.sim, o.sim, o.kin = false, false, true
+    body.SetSimulatePhysics = function() error("release refused") end
+    W2.release_world("reclaimed retry regression")
+    wn.lineage = wn.lineage + 1
+    body.SetSimulatePhysics = setter
+    local reclaimed_sets = #body.sets
+    W2.W2.service_release_retries(wn.name, wn.addr, os.clock() * 1000)
+    T.check(next(q) == nil and not body.sim and #body.sets == reclaimed_sets,
+        "old release lease cannot unfreeze a body reclaimed by a new replication lifetime")
+    body.SetSimulatePhysics = function() error("release refused") end
+    W2.release_world("teardown regression")
+    T.check(next(q) ~= nil, "retry exists before teardown")
+    local teardown_sets = #body.sets
+    W2.WG.travel("retry teardown")
+    T.check(next(W2.release_retries()) == nil and teardown_sets == #body.sets, "world teardown forgets pending identities untouched")
+    W2.WG.travel_from = nil
+    local batch = W2.release_retries()
+    local queries = 0
+    FindAllOf = function() queries = queries + 1; return {} end
+    for i = 1, 5 do
+        batch["budget" .. i] = { world_name = wn.name, world_key = wn.addr, next_ms = 0,
+            tries = 0, cls = "MissingProp_C", actor_addr = i, name = "missing" .. i }
+    end
+    W2.W2.service_release_retries(wn.name, wn.addr, 1000)
+    T.check(queries == 4, "many pending releases bound expensive native inventory queries per callback")
+    W2.W2.service_release_retries(wn.name, wn.addr, 1001)
+    T.check(queries == 5, "deferred release identities get the next callback without starvation")
+    for key in pairs(batch) do batch[key] = nil end
+    FindAllOf, StaticFindObject, W2.WG.settled = old_find, old_static, old_settled
+end
+
+T.log("== an ambiguous controller lookup loss preserves native restoration ownership")
+do
+    local name, native_address = "World /Game/Maps/Arenas/Map_Arena_Pit.Map_Arena_Pit", 44200
+    local key = name .. "@" .. native_address .. "#OldPC"
+    local restored_key = name .. "@" .. native_address .. "#NewPC"
+    W2.new_level(name, key, 100000)
+    local body = mkbody({ X = 100, Y = 0, Z = 50 }, true)
+    body.GetFName = function() return { ToString = function() return "SM" end } end
+    local actor = mkobj("Recover_Barrel", "BP_Barrel_C", 9950)
+    local world = { IsValid = function() return true end,
+        GetFullName = function() return name end, GetAddress = function() return native_address end }
+    actor.GetWorld = function() return world end
+    body.GetWorld = function() return world end
+    actor.K2_GetComponentsByClass = function() return { { get = function() return body end } } end
+    local o = { actor = actor, actor_addr = 9950, body = body, cls = "BP_Barrel_C", kind = "prop", sim0 = true, sim = true }
+    T.check(W2.set_sim(o, false) and not body.sim, "freezing captures original simulation before losing current object references")
+    local old_find, old_static, old_settled = FindAllOf, StaticFindObject, W2.WG.settled
+    local actor_addr, body_addr, cached_reads = actor.GetAddress, body.GetAddress, 0
+    actor.GetAddress = function() cached_reads = cached_reads + 1; error("cached actor touched during drop") end
+    body.GetAddress = function() cached_reads = cached_reads + 1; error("cached body touched during drop") end
+    W2.WG.drop("no valid world")
+    actor.GetAddress, body.GetAddress = actor_addr, body_addr
+    T.check(cached_reads == 0 and W2.W() == nil and not body.sim,
+        "ambiguous guard drop discards wrappers without reading or writing old native objects")
+    T.check(W2.W2.recovery_pending(name, restored_key), "controller name changes retain recovery for the same native world")
+    FindAllOf = function() return { actor } end
+    StaticFindObject = function() return { IsValid = function() return true end } end
+    W2.WG.settled = function() return true end
+    local before = #body.sets
+    actor.GetWorld = function() return { IsValid = function() return true end,
+        GetFullName = function() return "another world" end, GetAddress = function() return native_address end } end
+    W2.W2.service_release_retries(name, restored_key, 100000)
+    T.check(not body.sim and #body.sets == before and W2.W2.recovery_pending(name, restored_key),
+        "matching actor address and name cannot authorise a write in the wrong native world")
+    actor.GetWorld = function() return world end
+    W2.W2.service_release_retries(name, restored_key, 100250)
+    T.check(body.sim and not W2.W2.recovery_pending(name, restored_key),
+        "fresh exact native lookup restores original simulation before rescanning a frozen follower")
+    W2.new_level(name, restored_key, 100500)
+    T.check(W2.set_sim(o, false), "removed-body scenario starts from an owned freeze")
+    W2.WG.drop("world changed")
+    local is_valid = body.IsValid
+    actor.K2_GetComponentsByClass = function() return {} end
+    body.IsValid = function() error("removed body wrapper touched") end
+    before = #body.sets
+    W2.W2.service_release_retries(name, restored_key, 100750)
+    T.check(not W2.W2.recovery_pending(name, restored_key) and #body.sets == before,
+        "successful fresh enumeration of a removed original body releases recovery without touching its old wrapper")
+    body.IsValid = is_valid
+    actor.K2_GetComponentsByClass = function() return { { get = function() return body end } } end
+    body.sim, o.sim = true, true
+    W2.new_level(name, restored_key, 101000)
+    T.check(W2.set_sim(o, false), "a new freeze has fresh restoration ownership")
+    before = #body.sets
+    W2.WG.travel("real LoadMap")
+    T.check(next(W2.release_retries()) == nil and #body.sets == before,
+        "confirmed travel discards the plain ledger without touching the old world")
+    W2.WG.travel_from = nil
+    W2.new_level(name, key, 102000)
+    local copy = mkobj("Remote_Sword", "ModularWeaponBP_Sword_C", 9970)
+    copy.GetWorld = function() return world end
+    local destroys = 0
+    copy.K2_DestroyActor = function() destroys = destroys + 1 end -- refused/deferred native request
+    local copied = { actor = copy, actor_addr = 9970, body = body, cls = "ModularWeaponBP_Sword_C",
+        kind = "weapon", sim0 = true, sim = true, spawned_by_us = true }
+    T.check(W2.W2.track_copy(copied), "a created copy retains plain cleanup ownership before any guard loss")
+    W2.WG.drop("world changed")
+    FindAllOf = function() return { copy } end
+    W2.W2.service_release_retries(name, restored_key, 102000)
+    T.check(destroys == 1 and W2.W2.recovery_pending(name, restored_key),
+        "a protected destroy call cannot release recovery for a still-present copy")
+    W2.W2.service_release_retries(name, restored_key, 102250)
+    T.check(destroys == 2 and W2.W2.recovery_pending(name, restored_key),
+        "controller identity changes cannot discard an unconfirmed cleanup lease")
+    FindAllOf = function() return {} end
+    W2.W2.service_release_retries(name, restored_key, 102500)
+    T.check(not W2.W2.recovery_pending(name, restored_key),
+        "fresh native absence confirms copy cleanup and permits rescanning")
+    W2.new_level(name, restored_key, 103000)
+    body.sim = true
+    copied.spawned_by_us = false
+    T.check(W2.set_sim(copied, false), "pathless weapon component starts with original simulation ownership")
+    W2.WG.drop("world changed")
+    copy.GetAttachedActors = function() end
+    copy.K2_GetComponentsByClass = function() return {} end
+    FindAllOf = function() return { copy } end
+    W2.W2.service_release_retries(name, restored_key, 103250)
+    T.check(not W2.W2.recovery_pending(name, restored_key),
+        "complete fresh weapon and attached-component enumeration proves a pathless original body absent")
+    W2.new_level(name, restored_key, 104000)
+    copied.spawned_by_us, copied.probed_at = true, os.clock() * 1000
+    copied.dead = nil
+    W2.W().objs = { copied }
+    W2.W2.track_copy(copied)
+    copy.K2_DestroyActor = function() error("native destruction refused") end
+    W2.release_world("thrown copy cleanup")
+    T.check(next(W2.release_retries()) ~= nil and copied.actor == nil,
+        "failed native destruction queues plain copy cleanup before releasing the cached wrapper")
+    FindAllOf = function() return {} end
+    W2.W2.service_release_retries(name, restored_key, 104250)
+    T.check(next(W2.release_retries()) == nil, "later fresh absence completes failed copy cleanup")
+    FindAllOf, StaticFindObject, W2.WG.settled = old_find, old_static, old_settled
+end
+
 T.log("== world_follow: a body somebody else simulates")
 do
     local FW = dofile(MODS .. "/HSMPWorld/Scripts/world_follow.lua")
@@ -583,4 +831,86 @@ do
     local r = FW.pose(st3, { smp(1000, 100, 0, 0, 0) }, { off = -900, delay = 100, delay_fast = 60 }, { now = 100, dt = 0.016, owner_dist = 50 })
     T.check(math.abs(r.X) < 1e-6, "rebased onto another sender: no jump", T.repr(r))
     T.check(T.contains(T.read(WORLD), "K.FW = load_module(\"world_follow\")"), "main.lua uses world_follow.lua")
+end
+
+-- A dropped modular weapon must survive the other mod stripping its hand
+-- actor first. Keep only plain record data, scoped to the current arena.
+do
+    W2.new_level("World /Game/Maps/Arenas/Map_Arena_Pit.Map_Arena_Pit", 0xA123, 90000)
+    local world = W2.W()
+    world.puppets = { { id = 2 } }
+    local path = "/Game/Assets/Weapons/Sword.Sword_C"
+    local pass = { class = "@Weapons/Sword", head = "@Weapons/Blade", head_size = { 1.2, 0.8, 1.1 },
+        color_wood = { 0.1, 0.2, 0.3, 1 }, mass_head = 1.7, mat_steel = 3 }
+    local rec = { flags = 1, r = pass }
+    local prior_ipc = W2.W2.ipc
+    W2.W2.ipc = function() return { peer_rec = function(slot, peer)
+        T.check(slot == "peer_loadout" and peer == 2, "passport cache uses the dropping peer's appearance")
+        return rec
+    end } end
+    W2.cache_peer_passports()
+    rec = { flags = 0 }
+    W2.cache_peer_passports()
+    T.check(world.peer_passports[2][path] == pass, "hand removal retains the last received modules for the dropped item")
+    W2.W2.ipc = prior_ipc
+    local prior_find = _G.StaticFindObject
+    _G.StaticFindObject = function(p) return { IsValid = function() return true end, path = p,
+        GetFullName = function() return "BlueprintGeneratedClass " .. p end } end
+    local decoded = W2.record_passport(pass)
+    T.check(decoded.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139.path == "/Game/Assets/Weapons/Blade.Blade_C",
+        "dropped item uses the owner's actual blade class")
+    T.check(decoded.HeadSize_21_2D425E61473B8F64FBAB51B223459D57.X == 1.2 and
+        decoded.CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7 == 1.7,
+        "dropped item preserves module size and physics mass")
+    decoded.Name_57_3729B51148E846FE8DD336B9419BCEE1 = { ToString = function() return "my sword" end }
+    local captured = W2.encode_passport({ ["Weapon Passport"] = decoded })
+    T.check(captured.head == "@Weapons/Blade" and captured.head_size[1] == 1.2 and captured.mass_head == 1.7,
+        "source actor passport captures exact modules and compresses UClass paths rather than their metaclass")
+    local helpers = require("UEHelpers")
+    local old_world, old_gs = helpers.GetWorld, helpers.GetGameplayStatics
+    local spawned = { IsValid = function() return true end }
+    local finished_passport
+    helpers.GetWorld = function() return { IsValid = function() return true end } end
+    helpers.GetGameplayStatics = function() return {
+        IsValid = function() return true end,
+        BeginDeferredActorSpawnFromClass = function() return spawned end,
+        FinishSpawningActor = function(_, actor) finished_passport = actor["Weapon Passport"] end,
+    } end
+    local dropped, why = W2.spawn_remote_item({ id = 0x80020001, dyn = 2, class = path,
+        pos = { X = 100, Y = 0, Z = 10 } })
+    T.check(dropped == spawned and why == "received peer passport" and
+        finished_passport.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139.path == "/Game/Assets/Weapons/Blade.Blade_C",
+        "destroyed stand-in hand still yields the real modular blade before actor construction")
+    local other = {}; for k, v in pairs(pass) do other[k] = v end
+    other.head = "@Weapons/OtherBlade"
+    local manifest = Q.manifest_from({ level = 1, epoch = 1, rows = {} }, { level = 1, epoch = 1, rows = {
+        { id = 0x80020002, chash = 1, pos = { 100, 0, 10 }, dyn_owner = 2, class_path = path,
+          has_passport = true, passport = other } } })
+    W2.spawn_remote_item(manifest.e[1])
+    T.check(finished_passport.HeadModule_11_62DF53134688807E1DA7F4A20E9F7139.path == "/Game/Assets/Weapons/OtherBlade.OtherBlade_C",
+        "per-id dynamic passport beats an old same-class hand cache, including late join")
+    local previous_passport = finished_passport
+    local failed_copy, reason = W2.spawn_remote_item({ id = 0x80020003, class = path,
+        pos = { X = 100, Y = 0, Z = 10 }, src = { ["Weapon Passport"] = nil } })
+    T.check(failed_copy == nil and reason == "source weapon passport not ready" and finished_passport == previous_passport,
+        "pickup race never finishes a class-default replacement when the original passport cannot be copied")
+    helpers.GetWorld, helpers.GetGameplayStatics = old_world, old_gs
+    _G.StaticFindObject = prior_find
+    W2.new_level("World /Game/Maps/Arenas/Map_Arena_Pit.Map_Arena_Pit", 0xA124, 91000)
+    T.check(next(W2.W().peer_passports) == nil, "arena reload drops cached weapon appearances")
+end
+
+do
+    local function component(name)
+        return {IsValid=function()return true end,GetFName=function()return{ToString=function()return name end}end}
+    end
+    local z,a=component("Z_Constraint"),component("A_Constraint")
+    local actor={K2_GetComponentsByClass=function()return{{get=function()return z end},{get=function()return a end}}end}
+    W2.W().pcc_class=component("PhysicsConstraintComponent")
+    local constraints=W2.W2.actor_constraints(actor)
+    T.check(#constraints==2 and constraints[1][1]=="A_Constraint" and constraints[2][1]=="Z_Constraint",
+        "native copied constraint return array preserves deterministic bit order")
+    T.check(constraints[1][2]==a and constraints[2][2]==z,"constraint enumeration retains exact fresh UObject identities")
+    local missing=T.read(WORLD):gsub('K.NA = load_module%("native_array"%)','K.NA = nil')
+    T.check(assert(load(missing,"@"..rel(WORLD)))()==nil,"missing required native-array dependency disables World explicitly")
 end

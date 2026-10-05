@@ -247,7 +247,8 @@ end
 local function r3(x) return math.floor((tonumber(x) or 0) * 1000 + 0.5) / 1000 end
 
 -- A passport UStruct as its record table (ArmorRow / WeaponPass fields).
-local function enc_struct(s, fields)
+local function enc_struct(s, fields, exact)
+    local round = exact and function(value) return tonumber(value) or 0 end or r3
     local t = {}
     for _, fd in ipairs(fields) do
         local name, kind = fd[1], fd[2]
@@ -258,10 +259,10 @@ local function enc_struct(s, fields)
         elseif kind == "bool" then e = (v == true)
         elseif kind == "color" then
             e = { 0, 0, 0, 1 }
-            pcall(function() e = { r3(v.R), r3(v.G), r3(v.B), r3(v.A) } end)
+            pcall(function() e = { round(v.R), round(v.G), round(v.B), round(v.A) } end)
         elseif kind == "vec" then
             e = { 0, 0, 0 }
-            pcall(function() e = { r3(v.X), r3(v.Y), r3(v.Z) } end)
+            pcall(function() e = { round(v.X), round(v.Y), round(v.Z) } end)
         elseif kind == "name" then
             e = ""
             pcall(function() e = v:ToString() end)
@@ -545,7 +546,7 @@ end
 local function weapon_entry(x)
     if not valid(x) then return nil end
     local pass = field(x, "Weapon Passport")
-    local arr = pass and enc_struct(pass, WEAPON_FIELDS) or nil
+    local arr = pass and enc_struct(pass, WEAPON_FIELDS, true) or nil
     -- The passport's own class can be empty for level-placed weapons; fall back
     -- to the actor's class so the stand-in still gets the right weapon.
     if arr and (arr.class == nil or arr.class == "") then
@@ -703,7 +704,7 @@ local function write_local()
         busy_since = nil
     end
     local L = read_local_loadout(pawn)
-    local content = sig({ p = L.p, a = L.a, w = L.w })
+    local content = sig({ p = L.p, a = L.a }) .. "|" .. Kit.weapon_sig(L)
     local now = os.time()
     if content == last_content then
         if now - last_heartbeat >= 30 then
@@ -743,6 +744,18 @@ local tries   = {}   -- peer_id -> { key, n, next_at }
 --   hand      own hands' address signature (publish on change)
 local SI = { aw = {}, strip = {}, dyn_seen = nil, dyn_raw = nil, hand = nil }
 function SI.reset() SI.aw, SI.strip, SI.dyn_seen, SI.dyn_raw, SI.hand = {}, {}, nil, nil, nil end
+SI.weapon_equal = (function()
+    local ok, value = pcall(require, 'weapon_passport_equal')
+    if ok and type(value) == 'table' then return value end
+    local source = (debug.getinfo(1, 'S').source or ''):gsub('^@', '')
+    local directory = source:match('^(.*)[/\\]') or '.'
+    local loaded, module = pcall(dofile, directory .. '/weapon_passport_equal.lua')
+    if loaded and type(module) == 'table' then return module end
+    Log('exact Weapon Passport helper unavailable: %s', tostring(module))
+end)()
+Kit.weapon_passport_key = function(record)
+    return SI.weapon_equal and SI.weapon_equal.signature(record, WEAPON_FIELDS) or "unavailable"
+end
 
 -- HSMPAvatars' stand-ins (bus key "puppets", typed rows {peer, name}) as
 -- { ["<peer id>"] = "<Willie FName>" }; nil = never written.
@@ -768,7 +781,7 @@ local function remote_loadout(id)
     if type(t) ~= "table" or not t.version then return nil end
     local c = lo_cache[id]
     if c and c.rec == t then return c.L end
-    local L = { v = t.version, p = {}, a = {}, w = {} }
+    local L = { v = t.version, p = {}, a = {}, w = {}, exact_armour = true }
     for _, r in ipairs(t.rows or {}) do
         local f = tonumber(r.flags) or 0
         if f & REC.PIECE ~= 0 then L.p[#L.p + 1] = { r.slot, r.class } end
@@ -1005,7 +1018,12 @@ local function apply_armour(puppet, L)
     end
     local want, first, later = {}, {}, {}
     local nt, ns = 0, 0
-    for _, e in ipairs(base_pass[key]) do want[e[1]] = e[2] end
+    -- Received appearances already include the owner's real base clothing.
+    -- A pooled foe's non-catalogue pieces can be helmets/plate too, not just
+    -- underwear; merging them makes an opponent wear gear its owner removed.
+    if not L.exact_armour then
+        for _, e in ipairs(base_pass[key]) do want[e[1]] = e[2] end
+    end
     for _, pc in ipairs(pieces) do
         local slot, path = pc[1], pc[2]
         local g = given[slot]
@@ -1022,7 +1040,7 @@ local function apply_armour(puppet, L)
     end
     table.sort(first); table.sort(later)
     local wrote = 0
-    res[#res + 1] = "passport=" .. tostring(pcall(function()
+    local passport_ok, passport_err = pcall(function()
         local m = passport_armour_map(puppet)
         m:Empty()
         for _, list in ipairs({ first, later }) do
@@ -1031,7 +1049,11 @@ local function apply_armour(puppet, L)
                 wrote = wrote + 1
             end
         end
-    end))
+    end)
+    res[#res + 1] = "passport=" .. tostring(passport_ok)
+    if not passport_ok then
+        return false, #pieces, table.concat(res, " ") .. " FAIL " .. tostring(passport_err)
+    end
     local ok, err = call_setup(puppet, false)
     local built = #current_passports(puppet)
     local mode = "checked"
@@ -1039,13 +1061,16 @@ local function apply_armour(puppet, L)
         -- The game's layering rules refused something the server-validated
         -- kit allows (arming points / slot blocking): rebuild without checks.
         -- ("Set Up Armor" removed the refused entries from the passport map.)
-        pcall(function()
+        local rewrite_ok, rewrite_err = pcall(function()
             local m = passport_armour_map(puppet)
             m:Empty()
             for _, list in ipairs({ first, later }) do
                 for _, slot in ipairs(list) do m:Add(slot, dec_struct(want[slot], ARMOR_FIELDS)) end
             end
         end)
+        if not rewrite_ok then
+            return false, #pieces, table.concat(res, " ") .. " rewrite FAIL " .. tostring(rewrite_err)
+        end
         ok, err = call_setup(puppet, true)
         built = #current_passports(puppet)
         mode = "nocheck"
@@ -1091,7 +1116,7 @@ local function weapon_templates()
             local arr = gi[key]
             for i = 1, #arr do
                 local e
-                pcall(function() e = enc_struct(arr[i], WEAPON_FIELDS) end)
+                pcall(function() e = enc_struct(arr[i], WEAPON_FIELDS, true) end)
                 if e and e.head and e.head ~= "" then list[#list + 1] = e end
             end
         end
@@ -1142,19 +1167,22 @@ local function set_hand_passport(pawn, side, cls, pass)
 end
 
 -- HSMPAvatars caches a stand-in's hand-weapon root component; every
--- K2_DestroyActor of a hand weapon here bumps the bus key "standin_weapons"
+-- destruction or native replacement of a hand weapon bumps "standin_weapons"
 -- (typed record { gen }) so Avatars drops its cached pointers at once (it also
 -- re-validates each use).
 local weapon_gen = nil
-local function destroy_hand_weapon(a)
+local function bump_weapon_generation()
     local I = ipc()
     if weapon_gen == nil then
         local t = I and I.bus_table and I.bus_table("standin_weapons")
         weapon_gen = tonumber(type(t) == "table" and t.gen) or 0
     end
-    pcall(function() a:K2_DestroyActor() end)   -- unsafe: ok a hand weapon actor (Weapon R/L), never a Willie
     weapon_gen = weapon_gen + 1
     if I and I.bus_put then pcall(I.bus_put, "standin_weapons", { gen = weapon_gen }) end
+end
+local function destroy_hand_weapon(a)
+    pcall(function() a:K2_DestroyActor() end)   -- hand weapon actor only, never a Willie
+    bump_weapon_generation()
 end
 SI.destroy_hand_weapon = destroy_hand_weapon
 
@@ -1175,31 +1203,40 @@ local function spawn_weapon_actor(puppet, cls, pass)
 end
 
 local function apply_weapon(puppet, side, entry)
+    if not SI.weapon_equal then return "FAIL exact Passport helper unavailable" end
+    local empty_hand = entry == nil
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
     local cur
     for _, f in ipairs(side == "R" and { "Weapon R", "Weapon R_0" } or { "Weapon L", "Weapon L_0" }) do
         if not cur then local x = field(puppet, f); if valid(x) then cur = x end end
     end
     if not entry then
-        set_hand_passport(puppet, side, nil)
-        -- Remote hand is empty: the stand-in must not keep the arena foe's weapon.
-        if cur then
-            destroy_hand_weapon(cur)   -- bumps standin_weapons
-            return "stripped"
-        end
-        return "none"
+        -- Fists are omitted from the appearance stream, but the native Sphere
+        -- still supplies collision tags/owner identity to damage replay. Keep
+        -- or construct the game's real pseudo-weapon rather than deleting it.
+        entry = { class = "@Weapons/Blueprints/Built_Weapons/Weapon_Fists" }
+        -- Keep the old actor valid until native hand setup subtracts its
+        -- weight and destroys it through Destroy Previous=true.
     end
     local cls = resolve_class(entry.class)
     if not cls then return "noclass" end
     if cur then
         local cp = ""; pcall(function() cp = class_path(cur:GetClass()) end)
-        if cp == entry.class then return "same" end
+        if cp == entry.class and (empty_hand or SI.weapon_equal.matches(field(cur, "Weapon Passport"), entry, WEAPON_FIELDS, class_path)) then
+            local reused = empty_hand and weapon_passport_for(cls, cur) or dec_struct(entry, WEAPON_FIELDS)
+            reused[WP_CLASS] = cls
+            if not set_hand_passport(puppet, side, cls, reused) then return "FAIL hand passport" end
+            return "same"
+        end
     end
-    local pass = dec_struct(entry, WEAPON_FIELDS)
+    local pass = empty_hand and weapon_passport_for(cls) or dec_struct(entry, WEAPON_FIELDS)
     pass[WP_CLASS] = cls
     set_hand_passport(puppet, side, cls, pass)
     local ok, err = pcall(bp_call, puppet, fname, cls, nil, false, true, pass)
-    if ok then return "ok" end
+    if ok then
+        if cur then bump_weapon_generation() end
+        return "ok"
+    end
     -- nil actor rejected by the reflection layer: spawn it ourselves and hand
     -- the actor to the same BP function.
     local a
@@ -1208,7 +1245,10 @@ local function apply_weapon(puppet, side, entry)
         if not a then error("spawn failed") end
         bp_call(puppet, fname, cls, a, false, true, pass)
     end)
-    if ok2 then return "ok(spawned)" end
+    if ok2 then
+        if cur then bump_weapon_generation() end
+        return "ok(spawned)"
+    end
     if valid(a) then pcall(function() a:K2_DestroyActor() end) end
     return "FAIL " .. tostring(err) .. " / " .. tostring(err2)
 end
@@ -1934,3 +1974,5 @@ LoopAsync(2000, function()
 end)
 
 Log("loaded; state_dir=%s (Ctrl+F7 = gear dump + re-apply own kit)", STATE_DIR)
+
+

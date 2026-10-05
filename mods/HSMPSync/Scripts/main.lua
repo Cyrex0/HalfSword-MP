@@ -95,6 +95,9 @@ local function load_shared(name)
 end
 
 local HW = load_shared("hsmp_wg")
+local WEAPON_BOUNDS = load_shared("weapon_bounds")
+local BODY_STRIKERS = load_shared("body_strikers")
+local POSE_CONTEXT = load_shared("pose_context")
 if not HW then
     Log("FATAL: shared/hsmp_wg.lua missing - HSMPSync disabled (deploy copies shared/*.lua)")
     return
@@ -258,7 +261,7 @@ local logged_weapon_cls = nil
 
 -- --- death detection -------------------------------------------------------
 --
--- The local pawn is polled each tick for Health <= 0. When that first flips
+-- The local pawn is polled each tick for Health <= 0 or native DED. When that first flips
 -- true a `death_report` record is sent (tagged with the round it happened in).
 -- The latch resets when the pawn is alive again, so the next round registers
 -- a fresh death.
@@ -268,10 +271,11 @@ local _protect_death_logged = false
 
 local function detect_dead(pawn)
     if not pawn or not pawn:IsValid() then return false end
-    -- Willie_BP exposes `Health` (double @ 0x13A8). No `bIsDead` field; the
-    -- `Dying()` UFunction is a BP side-effect, not a readable flag. Health
-    -- <= 0 is the only safe test.
+    -- Native Death is the sole producer of Willie.DED=true. Structural
+    -- death can retain positive Health; Dying/Downed/Con0 also cover
+    -- recoverable outcomes and must not be interpreted as biological death.
     local dead = false
+    pcall(function() dead = pawn.DED == true end)
     pcall(function()
         local hp = tonumber(pawn.Health)
         if hp and hp <= 0 then dead = true end
@@ -281,7 +285,7 @@ end
 
 -- The death report can be lost on the way to the server, which ignores
 -- repeats (already-dead peers), so it is re-sent while the pawn stays dead.
--- HSMPMatch's 1 Hz ping also carries a dead flag as a second channel.
+-- GameStatus DEAD is diagnostic only; these original-context reports retry.
 local _died_resend_at = 0
 local DIED_RESEND_S = 1.0
 
@@ -305,16 +309,23 @@ local my_peer_status, refresh_my_peer_id   -- forward: defined in "peer id" belo
 -- a pawn that stays dead into a same-world round change must not report
 -- died:<new round>. Reset on a world drop (wg_on_drop below).
 local _died_round = nil
+local _died_context, _died_pawn = nil, nil
+local pose_context -- forward: source placement helper, defined after the peer reader
 local function send_died(why, latched)
     local st, round = current_match()
     if st ~= "live" or round <= 0 then return false end
     if latched ~= nil and round ~= latched then return false end
+    local pawn=get_local_pawn()
+    local original=_died_context
+    local current=pawn and pose_context and pose_context(pawn)
+    if not original or not current or pval(r_fname,pawn)~=_died_pawn
+        or current.match_id~=original.match_id or current.round~=original.round or current.life~=original.life then return false end
     -- Nothing is sent before the session is up.
     if refresh_my_peer_id then pcall(refresh_my_peer_id) end
     if my_peer_status ~= nil and my_peer_status ~= "connected" then return false end
     -- The typed G2S `death_report` record (schema/combat.rs DeathReport; the
     -- sidecar fills death_id and resends it until the server's death_ack).
-    if not (IPC and IPC.send("death_report", { round = round })) then return false end
+    if not (IPC and IPC.send("death_report", { match_id=original.match_id, round=original.round, life=original.life })) then return false end
     if why then Log("%s; emitted death_report round %d", why, round) end
     return true
 end
@@ -341,7 +352,9 @@ local function check_death(pc)
         already_dead = true
         _died_resend_at = os.clock() + DIED_RESEND_S
         local st, round = current_match()
-        _died_round = (st == "live" and round > 0) and round or false   -- false: never resent
+        _died_context = st=="live" and pose_context and pose_context(pawn) or nil
+        _died_pawn = pval(r_fname,pawn)
+        _died_round = _died_context and _died_context.round or false   -- never acquire a later life
         if not send_died("death detected", _died_round or -1) then
             Log("death detected outside a live round; not reported (server decides rounds)")
         end
@@ -360,7 +373,10 @@ function hs_mp_player_died()
     if already_dead then return end
     already_dead = true
     local st, round = current_match()
-    _died_round = (st == "live" and round > 0) and round or false
+    local pawn=get_local_pawn()
+    _died_context = st=="live" and pawn and pose_context and pose_context(pawn) or nil
+    _died_pawn = pawn and pval(r_fname,pawn) or nil
+    _died_round = _died_context and _died_context.round or false
     send_died("hs_mp_player_died() invoked externally", _died_round or -1)
 end
 
@@ -679,14 +695,23 @@ function NSAMPLE.refused(err)
         Log("native sampling refused (%s): Lua path", err)
     end
 end
+pose_context = function(pawn)
+    if not POSE_CONTEXT or not HS then return nil end
+    return POSE_CONTEXT.of(IPC.bus_table("spawn_status"),HS.view(),HS.mode(),get_my_peer_id(),pval(r_fname,pawn))
+end
 local function addr_of(o) return pval(r_addr, o) end
 -- The pose part of a native sample, into `a`: the same weapon policy as
 -- put_skeletal_state (two-handed grip, one actor per address, no "Fists").
 -- Returns the number of weapons, or nil when the mesh or pawn has no address.
 function NSAMPLE.pose_fields(a, pawn, mesh, tick, ts, dstep)
+    a.context=pose_context(pawn)
+    if not a.context then a.mesh=nil; return nil end
     a.mesh, a.pawn = addr_of(mesh), addr_of(pawn)
     if not (a.mesh and a.pawn) then a.mesh = nil; return nil end
     a.w1, a.h1, a.t1, a.w2, a.h2, a.t2 = 0, 0, 0, 0, 0, 0
+    a.s1, a.s2 = nil, nil
+    a.strikers = {}
+    if BODY_STRIKERS then local ok,s=pcall(BODY_STRIKERS.of,pawn,mesh,Log); if ok then a.strikers=s end end
     local two = pget(pawn, "R Two Handed Grip") == true
     local seen, nw = nil, 0
     for _, side in ipairs(WEAPON_SIDES) do
@@ -701,6 +726,10 @@ function NSAMPLE.pose_fields(a, pawn, mesh, tick, ts, dstep)
                     local hands = (side == "R") and (two and 3 or 1) or 2
                     if nw == 1 then a.w1, a.h1, a.t1 = addr, hands, class_tag(cls)
                     else a.w2, a.h2, a.t2 = addr, hands, class_tag(cls) end
+                    if WEAPON_BOUNDS then
+                        local ok, boxes = pcall(WEAPON_BOUNDS.of, w, WG.key, os.clock(), Log)
+                        if ok then if nw==1 then a.s1=boxes else a.s2=boxes end end
+                    end
                 end
             end
         end
@@ -712,8 +741,10 @@ local _pose_stats = { n = 0, bones = 0, wpn = 0, ctl = 0, cost_ms = 0, at = 0 }
 
 -- The Lua path: the same sample as numbers into reused flat arrays, one
 -- IPC.put_pose call: the native module builds the codec v2 `pose` record once.
-local _pb, _pw, _pc = {}, {}, {}
+local _pb, _pw, _pc, _ps = {}, {}, {}, {}
 local function put_skeletal_state(pawn, mesh, ts, dstep)
+    local context=pose_context(pawn)
+    if not context then return end
     for i = 1, #POSE_BONES do
         local ok, r = pcall(sample_bone, mesh, i)
         if not ok or not r then return end
@@ -725,6 +756,7 @@ local function put_skeletal_state(pawn, mesh, ts, dstep)
         end
     end
     for k = #_pw, 1, -1 do _pw[k] = nil end
+    _ps[1], _ps[2] = nil, nil
     local seen, two = nil, false
     pcall(function() two = pawn["R Two Handed Grip"] == true end)
     local nw = 0
@@ -736,7 +768,10 @@ local function put_skeletal_state(pawn, mesh, ts, dstep)
                 seen = seen or addr
                 local hands = (side == "R") and (two and 3 or 1) or 2
                 local ok, got = pcall(sample_weapon_vals, pawn, w, hands, mesh, _pw, nw * 21)
-                if ok and got then nw = nw + 1 else for k = nw * 21 + 1, nw * 21 + 21 do _pw[k] = nil end end
+                if ok and got then
+                    nw = nw + 1
+                    if WEAPON_BOUNDS then local bok, boxes = pcall(WEAPON_BOUNDS.of, w, WG.key, os.clock(), Log); if bok then _ps[nw]=boxes end end
+                else for k = nw * 21 + 1, nw * 21 + 21 do _pw[k] = nil end end
             end
         end
     end
@@ -746,7 +781,9 @@ local function put_skeletal_state(pawn, mesh, ts, dstep)
         local ok = pcall(sample_control_vals, pawn, _pc)
         if ok then ctl = _pc; _pose_stats.ctl = _pose_stats.ctl + 1 end
     end
-    if IPC.put_pose(_skel_seq, ts, dstep or 0, 0, _pb, _pw, ctl) then
+    local strikers={}
+    if BODY_STRIKERS then local ok,s=pcall(BODY_STRIKERS.of,pawn,mesh,Log); if ok then strikers=s end end
+    if IPC.put_pose(_skel_seq, ts, dstep or 0, 0, _pb, _pw, ctl, _ps, strikers, context) then
         _pose_stats.n = _pose_stats.n + 1
         _pose_stats.bones = #POSE_BONES
         if nw > 0 then _pose_stats.wpn = _pose_stats.wpn + 1 end
@@ -827,6 +864,8 @@ local _root_seq = 0   -- root write counter; the sidecar dedups on `tick`
 local function read_my_transform(ts)
     local pawn = get_local_pawn()
     if not pawn then return nil end
+    local context=pose_context(pawn)
+    if not context then return nil end
     -- Wrap each reflection call in pcall. The Pawn pointer can be in a
     -- transitional state (level-reload, respawn) where IsValid returns true
     -- but the underlying UObject fields haven't been populated yet.
@@ -842,6 +881,7 @@ local function read_my_transform(ts)
     _root_seq = _root_seq + 1
     return {
         pid  = PID,
+        context = context,
         nick = "Willie",
         tick = _root_seq,
         -- Sender game clock (MSVC clock(): wall ms since process start).
@@ -858,7 +898,7 @@ local function write_my_state(ts)
     local st = read_my_transform(ts)
     if not st or not IPC then return false end
     local p, r, v = st.pos, st.rot, st.vel
-    return IPC.put_root(st.tick, st.ts, p[1], p[2], p[3], r[1], r[2], r[3], v[1], v[2], v[3]) and true or false
+    return IPC.put_root(st.tick, st.ts, p[1], p[2], p[3], r[1], r[2], r[3], v[1], v[2], v[3],st.context) and true or false
 end
 
 -- --- MP session gate --------------------------------------------------------------
@@ -1020,7 +1060,8 @@ local spawn_env = SPL and SPL.make_ue_env({
     world = function()
         return { key = WG.key, short = (current_world_name() or ""):match("([%w_]+)$") }
     end,
-    view = function() return HS and HS.view() end,   -- the session record (spawn plan)
+    view = function() return HS and HS.view() end,
+    mode = function() return HS and HS.mode() end,   -- the session record (spawn plan)
     session_live = session_live,         -- no order without a live MP session
     connected = function() return session_live() and my_peer_status == "connected" end,
 })
@@ -1057,6 +1098,7 @@ wg_on_drop(function()
     _in_game_checked_tick = -999
     _world_ok = false
     _died_round = nil
+    _died_context, _died_pawn = nil, nil
 end)
 
 local function on_tick()
@@ -1160,7 +1202,7 @@ local function on_tick()
     -- on_tick only gates the slower state on having a pawn.
     if get_local_pawn(pc0) == nil then return end
 
-    -- Death / respawn (detect_dead only probes Health, the only real field).
+    -- Death / respawn (native DED or nonpositive Health, never KO hints).
     pcall(check_death, pc0)
 end
 
@@ -1313,6 +1355,9 @@ end
 -- path for the parts it did not write. A refusal is counted and logged once per call.
 function NSAMPLE.all(pawn, ts, tsf, dstep, weapon, wid, hand)
     local a = NSAMPLE.a
+    a.context=pose_context(pawn)
+    if not a.context then a.root_pawn=nil;a.mesh=nil;return 0 end
+    a.pawn=addr_of(pawn)
     a.root_pawn, a.root_tick, a.root_ts = addr_of(pawn), _root_seq + 1, ts
     if weapon and wid then
         a.weapon_actor, a.weapon_tick, a.weapon_ts, a.weapon_id = addr_of(weapon), _weapon_seq + 1, ts, wid

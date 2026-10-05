@@ -378,7 +378,10 @@ local function refresh_me(tick_pc)
         -- world guard has validated this tick): the old pawn's grab handles
         -- let go, the grabs on the old body are over.
         if next(held) ~= nil then
-            for _, r in pairs(held) do
+            for key, r in pairs(held) do
+                -- Late lease refreshes describe the old pawn's bone. Closing
+                -- that id prevents them from attaching to the new life.
+                closed[key] = r.id
                 pcall(function() if r.h and r.h:IsValid() then r.h:ReleaseComponent() end end)
             end
             held = {}

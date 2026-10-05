@@ -56,3 +56,19 @@ offer(1, 7)
 T.check(#sent == 0, "after FORGET it asks again")
 T.write(dir .. "/" .. SM.FILE, "garbage{")
 T.check(SM.count() == 0 and not SM.remembered(SM.hex(raw(7)), SM.hex(raw(1))), "a broken file remembers nothing")
+
+offer(1,7)
+SM.cur.remember=false
+SM.accept()
+local before=#sent
+queues.mod_offer={{data={set_hash=raw(1),server_key=raw(7),n=1,total_bytes=2048}}}
+queues.mod_progress={{data={set_hash=raw(1),state=1}}}
+SM.tick("mods",function(k)opened=k end)
+T.check(SM.cur.decided=="accept" and #sent==before,"same-identity resume preserves explicit consent without duplicate send")
+queues.mod_offer={{data={set_hash=raw(1),server_key=raw(8),n=1,total_bytes=2048}}}
+queues.mod_entry={{data={set_hash=raw(1),index=0,name="Arena",bytes=2048}}}
+queues.mod_progress={{data={set_hash=raw(1),state=1}}}
+SM.tick("mods",function(k)opened=k end)
+T.check(SM.cur.key==SM.hex(raw(8)) and SM.cur.decided==nil and #sent==before,"different server identity with same bytes needs fresh user decision without a manual menu reset")
+SM.accept()
+T.check(#sent==before+1 and sent[#sent].op==1,"new identity warning remains actionable")

@@ -921,12 +921,19 @@ impl Native {
             // root
             let rp = addr("root_pawn");
             if !rp.is_null() {
+                rawget_str(L,t,"context");
+                let root_context=crate::pose_hot::read_pose_context(L,-1);pop(L,1);
+                // The original context is captured from the very same pawn
+                // supplied to the pose sample; never authorize a second actor.
+                if rp!=addr("pawn") {fail("skip:root_context_pawn",&mut err);}
+                else {
                 match live(vt, rp, classes[C_ACTOR]).and_then(|a| self.actor_state(vt, a)) {
-                    Some((pos, rot, vel)) => match self.write_root(num("root_tick") as u32, num("root_ts"), pos, rot, vel) {
+                    Some((pos, rot, vel)) => match self.write_root(num("root_tick") as u32, num("root_ts"), pos, rot, vel,root_context) {
                         Ok(()) => mask |= 1,
                         Err(e) => fail(&hot_msg(e), &mut err),
                     },
                     None => fail("skip:root", &mut err),
+                }
                 }
             }
             // weapon actor
@@ -954,13 +961,17 @@ impl Native {
                         }
                     }
                     let mut nw = 0usize;
-                    for (wk, hk, tk) in [("w1", "h1", "t1"), ("w2", "h2", "t2")] {
+                    let mut boxes = Vec::new();
+                    for (wk, hk, tk, sk) in [("w1", "h1", "t1", "s1"), ("w2", "h2", "t2", "s2")] {
                         let wp = addr(wk);
                         if wp.is_null() {
                             continue;
                         }
                         if let Some(v) = self.sample_weapon(vt, mesh, wp, num(hk), num(tk)) {
                             self.sample.weapons[nw] = v;
+                            rawget_str(L, t, sk);
+                            boxes.push(crate::pose_hot::read_weapon_boxes(L, -1));
+                            pop(L, 1);
                             nw += 1;
                         }
                     }
@@ -977,7 +988,11 @@ impl Native {
                     let bones = *self.sample.bones;
                     let weapons = self.sample.weapons;
                     let control = self.sample.control;
-                    self.write_pose(num("pose_tick") as u32, num("pose_ts"), num("dt"), num("k"), &bones, &weapons[..nw], ctl.then_some(&control))
+                    rawget_str(L,t,"strikers");
+                    let strikers=crate::pose_hot::read_body_strikers(L,-1); pop(L,1);
+                    rawget_str(L,t,"context");
+                    let context=crate::pose_hot::read_pose_context(L,-1); pop(L,1);
+                    self.write_pose(num("pose_tick") as u32, num("pose_ts"), num("dt"), num("k"), &bones, &weapons[..nw], ctl.then_some(&control), &boxes, strikers.as_deref(), context)
                         .map_err(hot_msg)?;
                     Ok(())
                 })();

@@ -16,7 +16,7 @@
 
 use crate::SharedState;
 use hsmp_ipc::record::view;
-use hsmp_ipc::schema::loadout::{BodyHead, Kit, KitRules, LoadoutHead, K_BODY, K_KIT, K_KIT_RULES, K_KIT_RULES_REQ, K_KIT_VERDICT, K_LOADOUT};
+use hsmp_ipc::schema::loadout::{BodyHead, Body2Head, Kit, KitRules, LoadoutHead, K_BODY, K_BODY2, K_KIT, K_KIT_RULES, K_KIT_RULES_REQ, K_KIT_VERDICT, K_LOADOUT};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -66,6 +66,7 @@ struct KitSync {
     loadout: HashMap<u32, u32>,
     /// Newest body version written per peer.
     body: HashMap<u32, u32>,
+    body2: HashMap<u32, u32>,
 }
 
 fn sync() -> std::sync::MutexGuard<'static, KitSync> {
@@ -129,9 +130,10 @@ pub fn spawn_outbox_task(sock: Arc<UdpSocket>, shared: Arc<Mutex<SharedState>>) 
         // Latest valid payloads (a blob is taken once; slots are kept to resend).
         let (mut loadout, mut kit, mut rules): (Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>) = (None, None, None);
         let mut lo_sent: Option<(Vec<u8>, u32, u64)> = None; // (payload, pid, generation)
-        let mut body_slot = GameSlot::new("body", K_BODY);
+        let mut body_slot = GameSlot::new("body2", K_BODY2);
         let mut body: Option<Vec<u8>> = None;
         let mut body_sent: Option<(Vec<u8>, u32, u64)> = None;
+        let mut body_sent_at: Option<Instant> = None;
         let mut kit_sent: Option<(Vec<u8>, u32, u64)> = None;
         let mut kit_sent_at: Option<Instant> = None; // never `now - 1h`
         let mut rules_sent: Option<(Vec<u8>, u32, u64)> = None;
@@ -161,13 +163,15 @@ pub fn spawn_outbox_task(sock: Arc<UdpSocket>, shared: Arc<Mutex<SharedState>>) 
 
             // Passport body: once per version / session, only to a server that reads it.
             if let Some(p) = &body {
-                if crate::interact_client::has_cap(hsmp_net::net::caps::BODY)
-                    && body_sent.as_ref().map_or(true, |(q, a, g)| q != p || (*a, *g) != (pid, gen))
+                if crate::interact_client::has_cap(hsmp_net::net::caps::BODY2)
+                    && (body_sent.as_ref().map_or(true, |(q, a, g)| q != p || (*a, *g) != (pid, gen))
+                        || body_sent_at.map_or(true, |t| t.elapsed() >= Duration::from_secs(2)))
                 {
-                    let version = view::<BodyHead>(p).map(|v| v.head.version).unwrap_or(0);
+                    let version = view::<Body2Head>(p).map(|v| v.head.version).unwrap_or(0);
                     info!(version, bytes = p.len(), "body sent");
-                    send(&sock, K_BODY, p).await;
+                    send(&sock, K_BODY2, p).await;
                     body_sent = Some((p.clone(), pid, gen));
+                    body_sent_at = Some(Instant::now());
                 }
             }
 
@@ -306,6 +310,21 @@ pub fn on_body(peer: u32, payload: &[u8]) {
     }
     info!(peer, version, bones = v.rows.len(), height = v.head.height_rate, muscle = v.head.muscle_rate, "body received");
 }
+pub fn on_body2(peer: u32, payload: &[u8]) {
+    let Ok(v) = view::<Body2Head>(payload) else { return };
+    let version = v.head.version;
+    {
+        let s = sync();
+        if s.body2.get(&peer).is_some_and(|old| *old >= version) { return; }
+        // Commit only after publishing succeeds, so a temporarily absent peer
+        // slot can be filled by the server's later replay.
+    }
+    if let Some(l) = crate::ipc_shm::link() {
+        if l.try_post_record("peer_body2", Some(peer), K_BODY2, payload) {
+            sync().body2.insert(peer, version);
+        }
+    }
+}
 
 /// Remember `version` as `peer`'s newest body; false when it is not newer.
 fn body_fresh(peer: u32, version: u32) -> bool {
@@ -418,6 +437,28 @@ mod kit_client_tests {
 
     /// A peer's passport body reaches `peer_body` once per newer version; hostile bytes
     /// never; the own `body` slot is read like every game slot.
+    #[tokio::test]
+    async fn body2_preserves_original_life_height_and_full_mass_rows_in_its_own_slot() {
+        let _serial = crate::ipc_shm::ShmLink::test_lock();
+        let l = crate::ipc_shm::ShmLink::test_global();
+        let h = Body2Head { match_id:80,round:2,life:130,version:50,height_rate:0.9,muscle_rate:0.1,
+            mass_scale_bp:1.0,char_scale:[1.0;3],native_height:0.76,actor_scale:[0.97;3],
+            pawn:Str::new("Willie_BP_C_84"),..Default::default() };
+        let rows = vec![hsmp_ipc::schema::loadout::BodyBone{bone:Str::new("pelvis"),mass:6.0,mass_scale:1.0};24];
+        let p = to_payload(&h,&rows);
+        on_body2(77,&p);
+        assert_eq!(l.test_slot("peer_body2",Some(77)),Some((K_BODY2,p.clone())));
+        on_body2(77,&to_payload(&Body2Head{version:49,life:2,..h},&rows));
+        assert_eq!(l.test_slot("peer_body2",Some(77)),Some((K_BODY2,p.clone())));
+        on_body(77,&body_rec(999,0.5));
+        assert_eq!(l.test_slot("peer_body2",Some(77)),Some((K_BODY2,p.clone())),"legacy body cannot overwrite body2");
+        let seg = l.segment();
+        let epoch = seg.header.game.epoch.load(std::sync::atomic::Ordering::Acquire);
+        let meta=hsmp_ipc::schema::SlotMeta{writer_epoch:epoch,valid:1,..Default::default()};
+        let mut scratch=Vec::new();
+        assert!(seg.slot_ref("body2",0).unwrap().put(meta,K_BODY2,&p,&mut scratch));
+        assert_eq!(GameSlot::new("body2",K_BODY2).poll(),Some(p.as_slice()));
+    }
     #[tokio::test]
     async fn body_records_reach_the_peer_slot_and_the_game_slot_is_read() {
         let _serial = crate::ipc_shm::ShmLink::test_lock();

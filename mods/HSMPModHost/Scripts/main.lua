@@ -162,7 +162,7 @@ local function pump()
         local set, st = hex(d.set_hash), tonumber(d.state)
         if st == ST.READY then
             if H.set ~= set then ready = set; resend_at = 0 end
-            if H.set == set then IPC.send("mod_loaded", { set_hash = d.set_hash, ok = true, failed = H.failed or 0, text = "" }) end
+            if H.set == set then IPC.send("mod_loaded", { set_hash = d.set_hash, ok = H.load_ok == true, failed = H.failed or 0, text = H.load_text or "" }) end
         elseif st == ST.CLEAR or st == ST.FAILED then
             unload(st == ST.CLEAR and "the server has no mods" or "the mods failed")
         elseif st == ST.OFFER and H.set and H.set ~= set then

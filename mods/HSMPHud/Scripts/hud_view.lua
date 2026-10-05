@@ -247,6 +247,7 @@ function V.opp_text(o)
         return (o.hp and string.format("HP %d", r0(o.hp)) or "HP --") .. (o.st and string.format("  ST %d", r0(o.st)) or "")
     end
     local t = string.format("CON %s BODY %s", o.con and tostring(r0(o.con)) or "--", o.body and (r0(o.body) .. "%") or "--")
+    if o.severed then t = t .. " SEVERED" end
     return t   -- bleeding: the row turns red (V.apply; no room for a word at 1280x720)
 end
 function V.bar_frac(o)
@@ -255,7 +256,7 @@ function V.bar_frac(o)
 end
 function V.me_label(me)
     if me.dead then return "DEAD" end
-    if me.body then return string.format("BODY %d%%", r0(me.body)) end
+    if me.body then return string.format("BODY %d%%%s", r0(me.body), me.severed and " SEVERED" or "") end
     return string.format("HP %d", r0(me.hp))
 end
 function V.me_vals(me)

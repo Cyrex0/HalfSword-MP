@@ -261,6 +261,11 @@ fn send_input(i: Input) {
 
 /// The transport connected (the server identity for the consent key).
 pub(crate) fn on_connected(server_key: [u8; 32]) {
+    // Welcome may be delivered before the transfer task handles Connected.
+    // The fast-path epoch is meaningful only for the same authenticated server.
+    static KEY: std::sync::Mutex<[u8;32]> = std::sync::Mutex::new([0;32]);
+    let mut key=KEY.lock().unwrap_or_else(|e|e.into_inner());
+    if *key != server_key { LOADED_EPOCH.set(None); *key=server_key; }
     send_input(Input::Connected(server_key));
 }
 
@@ -412,7 +417,20 @@ impl Client {
 
     fn handle(&mut self, i: Input, now: u64, out: &mut Vec<Act>) {
         match i {
-            Input::Connected(k) => self.server_key = k,
+            Input::Connected(k) => {
+                if self.server_key != k {
+                    // Consent belongs to server identity AND content set. Identical
+                    // bytes on a different server still require its own decision.
+                    if self.phase != Phase::Idle { out.push(self.progress(mod_state::CLEAR)); }
+                    self.phase=Phase::Idle;
+                    self.ann=None;self.xfer=None;self.loaded=None;
+                    self.cached.clear();self.pend_manifest=None;self.pend_files=None;
+                    self.loaded_epoch.set(None);
+                    self.error=(mod_error::NONE,String::new());
+                    self.progress_at=None;self.last_progress=None;
+                }
+                self.server_key=k;
+            },
             Input::LinkDown => {
                 if let Some(x) = self.xfer.as_mut() {
                     x.on_reconnect();
@@ -998,4 +1016,32 @@ mod tests {
         assert_eq!(progress_states(&out), vec![mod_state::CLEAR]);
         let _ = std::fs::remove_dir_all(&root);
     }
+    #[test]
+    fn consent_does_not_follow_identical_mods_to_another_server() {
+        let root=std::env::temp_dir().join(format!("hsmp-mod-identity-{}",rand::random::<u64>()));
+        let hold=Box::leak(Box::new(AtomicBool::new(true)));
+        let epoch=Box::leak(Box::new(LoadedEpoch(std::sync::Mutex::new(None))));
+        let mut c=Client::new(root,hold,epoch);
+        let h=host(&[10_000]);
+        let caps=hsmp_net::net::caps::SERVER_MODS;
+        feed(&mut c,Input::Connected([7;32]));
+        feed(&mut c,Input::Welcome{epoch:77,caps});
+        feed(&mut c,Input::Server(rec::K_MOD_MANIFEST,hsmp_ipc::wire::split(&h.manifest_msg).unwrap().1.to_vec()));
+        feed(&mut c,Input::Server(rec::K_MOD_FILES,hsmp_ipc::wire::split(&h.files_msg).unwrap().1.to_vec()));
+        let accepted=decision(&c,rec::mod_op::ACCEPT);feed(&mut c,accepted);
+        assert_eq!(c.phase,Phase::Downloading);
+        feed(&mut c,Input::Connected([7;32]));
+        assert_eq!(c.phase,Phase::Downloading,"same-key reconnect preserves consent and transfer");
+        c.loaded=Some(h.set_hash());c.phase=Phase::Loaded;epoch.set(Some(77));
+        let cleared=feed(&mut c,Input::Connected([8;32]));
+        assert_eq!(progress_states(&cleared),vec![mod_state::CLEAR]);
+        assert!(c.loaded.is_none() && epoch.with(|e|e.is_none()));
+        feed(&mut c,Input::Welcome{epoch:77,caps});
+        feed(&mut c,Input::Server(rec::K_MOD_MANIFEST,hsmp_ipc::wire::split(&h.manifest_msg).unwrap().1.to_vec()));
+        let offered=feed(&mut c,Input::Server(rec::K_MOD_FILES,hsmp_ipc::wire::split(&h.files_msg).unwrap().1.to_vec()));
+        assert_eq!(c.phase,Phase::Offered);
+        assert_eq!(progress_states(&offered),vec![mod_state::OFFER]);
+        assert!(offered.iter().all(|a|matches!(a,Act::Game(..))),"new identity must neither download nor release before consent");
+    }
+
 }

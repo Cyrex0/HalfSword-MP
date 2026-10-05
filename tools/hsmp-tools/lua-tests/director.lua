@@ -257,6 +257,7 @@ do
     local last = gs[#gs]
     T.check(last and last.round == 1 and last.spawn_id == 256 + 0x82 and (last.flags & S.ENUMS.status_flag.LOADED) ~= 0,
         "game_status reports the respawn order applied (the server revives on it)", T.repr(last))
+    T.check(last and last.life == 2, "game_status carries the verified native pawn's full original life")
     T.check(w.frozen == w.pawn.id, "input stays frozen until the server has us alive")
     -- revived: alive in the roster, no longer respawning
     w:match("live", "Map_Arena_Pit", 1)
@@ -270,6 +271,71 @@ do
     T.check(#w.opens == n0 + 2, "the next round reloads as usual", T.repr(w.opens))
     w:load(); w:tick(1)
     T.check(w.dir.loaded_for == 2, "and serves round 2", w.dir.loaded_for)
+end
+
+T.log("== repeated deathmatch match: round 1 life 2 may reuse spawn 386")
+do
+    local w = DW.to_live()
+    local GM = S.ENUMS.game_mode
+    local function order(life)
+        w.sess.plan[1] = { spawn_id = 256 + 0x80 + (life & 0x7f), slot = 4, x = 300, y = 400, z = 10, yaw = 0 }
+        w:put_session()
+        w.N.sc_put("mode", { seq = life, mode = GM.DEATHMATCH, round = 1,
+            rows = {{ peer_id = 1, seat = 1, life = life, respawning = true }} })
+    end
+    order(2); w:tick(1); w:load(); w:tick(3)
+    T.check(w.dir.state == "Spawn", "respawn generation 2 is still loading")
+    local opens = #w.opens
+    -- A full life may change while its compact spawn id is reused.
+    order(130); w:tick(1)
+    T.check(#w.opens == opens + 1 and w.dir.respawn_life == 130,
+        "a newer full life preempts the old in-flight pipeline despite the same spawn id")
+    w:load(); w:tick(3); w:placed(1, { life = 2, x = 300, y = 400 }); w:tick(4)
+    T.check(w.dir.ready_round == 0, "an old life's placement cannot complete the new pipeline")
+    w:placed(1, { life = 130, x = 300, y = 400 })
+    w.kit_status = { pawn = w.pawn.id, ok = true, armour_n = 5 }
+    w:tick(30)
+    T.check(w.dir.state == "Live" and w.dir.ready_context.life == 130,
+        "the fresh full-life placement completes the reissued respawn")
+end
+do
+    local w = DW.to_live()
+    local GM = S.ENUMS.game_mode
+    w:session(77, 11); w:tick(1)
+    local function order(seq)
+        w.sess.plan[1] = { spawn_id=386, slot=4, x=300, y=400, z=10, yaw=0 }
+        w:put_session()
+        w.N.sc_put("mode", {seq=seq,mode=GM.DEATHMATCH,round=1,
+            rows={{peer_id=1,seat=1,life=2,respawning=true},{peer_id=2,seat=2,life=1,alive=true}}})
+    end
+    order(2); w:tick(1)
+    w:load(); w:tick(3); w:placed(1,{x=300,y=400})
+    w.kit_status={pawn=w.pawn.id,ok=true,armour_n=5,r_class="Sword",l_class="Shield",rev=1}
+    w:tick(30)
+    w.N.sc_put("mode", {seq=3,mode=GM.DEATHMATCH,round=1,
+        rows={{peer_id=1,seat=1,life=2,alive=true},{peer_id=2,seat=2,life=1,alive=true}}})
+    w:tick(2)
+    T.check(w.dir.state=="Live" and w.dir.respawn_for==386,"first match served life 2 spawn 386",w.dir.state)
+    w:match("lobby","Map_Arena_Pit",0); w:tick(12)
+    w:load(); w:tick(2)
+    T.check(w.dir.respawn_for==nil,"ABORT/new match context forgets the old match's respawn ID")
+    -- Keep the old match_id while the new countdown/arena are prepared; the
+    -- eventual new ID must not create a second context or lose an in-flight order.
+    w:match("countdown","Map_Arena_Pit",0); w:tick(2)
+    w:load(); w:tick(1)
+    w:spawns(1,"Map_Arena_Pit",100,200,10); w:placed(1)
+    w.kit_status={pawn=w.pawn.id,ok=true,armour_n=5}
+    w:tick(30)
+    w:match("live","Map_Arena_Pit",1); w:tick(2)
+    local before=#w.opens
+    order(4); w:tick(1)
+    T.check(#w.opens==before+1 and w.dir.respawn_for==386,
+        "second match life 2 reusing spawn 386 starts a fresh arena reload",T.repr(w.opens))
+    local gen=w.dir.match_gen
+    w:session(77,12); w:tick(4)
+    T.check(w.dir.match_gen==gen and w.dir.respawn_for==386,
+        "late match_id allocation preserves the in-flight respawn in its existing context")
+    T.check(#w.opens==before+1,"repeated order within the same match never reloads twice")
 end
 
 T.log("== world change mid-pipeline")
@@ -324,7 +390,7 @@ do
     w:tick(4)
     w:tick(3)
     T.check(#w.opens == 0 and w.dir.load_error == "gi_verify", "GI writes that do not stick: no travel, load_error=gi_verify", tostring(w.dir.load_error))
-    T.check(T.any(w:pings(), function(p) return p == "0:0::" .. S.ENUMS.load_error.OTHER end), "the game status carries the load error", T.repr(w:pings()))
+    T.check(T.any(w:pings(), function(p) return p == "1:0::" .. S.ENUMS.load_error.OTHER end), "the game status carries the original pending round's load error", T.repr(w:pings()))
     w.gi_stuck = {}
     w:tick(24)
     T.check(#w.opens == 1, "retried after gi_retry_s and travelled", T.repr(w.opens))
@@ -390,6 +456,9 @@ do
     w:placed(2)
     w:tick(4)
     T.check(D.PIPE[w.dir.pipe.step] == "place", "a status for another round is ignored")
+    w:placed(1, { spawn_id = 386 })
+    w:tick(2)
+    T.check(D.PIPE[w.dir.pipe.step] == "place", "a status for another life spawn order is ignored")
     -- verified, but the body snapped back afterwards (the Slums bug)
     w:placed(1, { stay = true })
     w.pawn.x, w.pawn.y = 257, 415
@@ -423,6 +492,34 @@ do
 end
 
 T.log("== spawn protection: no dead ping inside the window, input frozen until the pipeline is done")
+do
+    local w = to_ready({ setup = function(w) w:session(77, 11) end })
+    local original = w.dir.ready_context.match_id
+    local s = w.dir.sess
+    local changed = {}
+    for k, v in pairs(s) do changed[k] = v end
+    changed.match_id = (original or 0) + 100
+    changed.life = 130
+    w.dir.next_ping = 0
+    w.dir:ping(changed, w.pawn)
+    local sends = w:sent("game_status")
+    T.check(sends[#sends].match_id == original, "Ready evidence keeps its original match identity")
+    T.check(sends[#sends].life == 1, "Ready evidence never borrows life from the receipt-current session")
+    w.dir:error("spawn_timeout", "old source failure")
+    w.dir.next_ping = 0
+    w.dir:ping(changed, w.pawn)
+    sends = w:sent("game_status")
+    T.check(sends[#sends].match_id == original and sends[#sends].round == 1,
+        "a delayed load failure preserves its original match and round")
+    T.check((sends[#sends].flags & S.ENUMS.status_flag.LOADED) == 0,
+        "load failure revokes the Ready placement report")
+    w:new_pawn()
+    w.dir.next_ping = 0
+    w.dir:ping(s, w.pawn)
+    sends = w:sent("game_status")
+    T.check((sends[#sends].flags & S.ENUMS.status_flag.LOADED) == 0 and sends[#sends].spawn_id == 0,
+        "another pawn cannot acknowledge the old verified spawn")
+end
 do
     local w = to_ready()
     T.check(w.dir.state == "Ready", "Ready")
@@ -840,8 +937,16 @@ do
     local n0 = #w.opens
     w:session(77, 6)   -- lands now
     w:tick(4)
-    T.check(#w.opens == n0 and w.dir.state == "Ready", "the late match_id does not re-prepare the arena",
+    T.check(#w.opens == n0 and w.dir.state == "Spawn", "the late match_id re-verifies in the existing arena",
         T.repr({ w.opens, w.dir.state }))
+    T.check(w.dir.ready_round == 0, "old match placement evidence cannot pass the new match's load barrier")
+    w:placed(1)
+    w:tick(30)
+    local reports = w:sent("game_status")
+    local gs = reports[#reports]
+    T.check(w.dir.state == "Ready" and gs.match_id == 6 and gs.life == 1
+        and (gs.flags & S.ENUMS.status_flag.LOADED) ~= 0,
+        "fresh source placement verifies the new match without relabelling the old proof", T.repr(gs))
     T.check(w.dir.match_gen == g1, "no second match context for the same match", w.dir.match_gen)
     T.check(next_round(w, 1) == 1 and w.dir.loaded_for == 2, "match 2 round 2 still reloads once (H2)", w.dir.loaded_for)
     -- a match_id change with no lobby in between is still a new match

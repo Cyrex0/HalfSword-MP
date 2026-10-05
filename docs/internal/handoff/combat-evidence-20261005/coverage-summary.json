@@ -1,0 +1,21 @@
+{
+  "built_weapon_classes": 154,
+  "catalogue_registered_unique": 128,
+  "extra_melee_unique": 13,
+  "roles": {
+    "world_trap": 5,
+    "held_melee": 141,
+    "projectile": 2,
+    "ammo_container": 2,
+    "ranged_weapon": 2,
+    "body_striker": 2
+  },
+  "max_source_class_bytes": 40,
+  "source_class_hash_collisions": {},
+  "module_classes": 401,
+  "literal_or_default_or_inheritance_edges": 2462,
+  "skeletal_configurations": 4,
+  "weapon_skeletal_physics_assets": 3,
+  "runtime_exhaustive_coverage": false,
+  "static_options_semantics": "Reachability is an upper bound of literal construction choices and inheritance, not proof that every Cartesian combination is valid or that runtime random choice was observed."
+}

@@ -87,6 +87,10 @@ const OVERRIDE_UU: f32 = 0.1;
 pub type Quat = [f32; 4];
 pub type V3 = [f32; 3];
 
+pub fn class_hash(name: &str) -> u32 {
+    name.bytes().fold(2166136261u32, |h,b|(h ^ b as u32).wrapping_mul(16777619))
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Bone { pub p: V3, pub q: Quat, pub v: V3, pub w: V3 }
 
@@ -98,6 +102,51 @@ pub struct Weapon {
     pub p: V3, pub q: Quat, pub v: V3, pub w: V3,
     /// Blade base and tip in weapon space (uu).
     pub base: V3, pub tip: V3,
+    /// Bounds of the actual collision modules, in weapon space (world uu).
+    pub boxes: Vec<WeaponBox>,
+}
+
+pub const MAX_WEAPON_BOXES: usize = 12;
+/// Native ordinal or cutting-child ID; sparse original ordinals are never renumbered.
+pub const MAX_WEAPON_COMPONENT_ID: u8 = 15;
+pub const MAX_BODY_STRIKERS: usize = 8;
+/// 1 right fist, 2 left fist, 3 right foot, 4 left foot; bone-local world units.
+/// kind 0 is a sphere (half[0] radius), kind 1 an oriented box.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct BodyStriker { pub part: u8, pub component: u8, pub kind: u8, pub p: V3, pub q: Quat, pub half: V3 }
+impl BodyStriker {
+    pub fn bone(&self) -> Option<usize> { match self.part { 1=>Some(16),2=>Some(12),3=>Some(22),4=>Some(19),_=>None } }
+    pub fn valid(&self) -> bool {
+        self.bone().is_some() && (1..=MAX_WEAPON_COMPONENT_ID).contains(&self.component) && self.kind<=1
+            && self.p.iter().all(|v|v.is_finite() && v.abs()<=48.0)
+            && self.half.iter().all(|v|v.is_finite() && *v>0.0 && *v<=32.0)
+            && self.q.iter().all(|v|v.is_finite())
+            && (0.5..=1.5).contains(&self.q.iter().map(|v|v*v).sum::<f32>())
+    }
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct WeaponBox {
+    pub component: u8, pub p: V3, pub q: Quat, pub half: V3,
+    /// FNV-1a of the full original class name (not the legacy eight-bit tag).
+    pub class_hash: u32,
+    /// Native positive world scale, only for actual UBoxComponent shapes.
+    pub native_scale: Option<V3>,
+    /// Zero for striking modules; otherwise the original collision-array
+    /// ordinal whose native selected recursive child is this cutting Box.
+    pub child_of: u8,
+}
+impl WeaponBox {
+    pub fn valid(&self) -> bool {
+        (1..=MAX_WEAPON_COMPONENT_ID).contains(&self.component)
+            && self.child_of<=MAX_WEAPON_COMPONENT_ID
+            && (self.child_of==0 || (self.native_scale.is_some() && self.child_of<self.component))
+            && self.native_scale.is_none_or(|s|s.iter().all(|v|v.is_finite() && *v>=1.0/1024.0 && *v<16.0))
+            && self.p.iter().all(|v| v.is_finite() && v.abs() <= 400.0)
+            && self.half.iter().all(|v| v.is_finite() && *v >= 0.0 && *v <= 300.0)
+            && self.half.iter().any(|v| *v > 0.0)
+            && self.q.iter().all(|v| v.is_finite())
+            && (0.5..=1.5).contains(&self.q.iter().map(|v| v*v).sum::<f32>())
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -112,14 +161,22 @@ pub struct Control {
     pub ik_world: [bool; 4],
 }
 
+/// Original pawn placement generation, carried with the sampled geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Context { pub match_id: u64, pub round: u32, pub life: u16 }
+impl Context { pub fn valid(self)->bool { self.match_id != 0 && self.round != 0 && self.life != 0 } }
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Full {
+    pub context: Option<Context>,
     /// Sender clock, ms (sub-ms precise).
     pub ts: f64,
     /// Sender skeleton scale (live offset / reference offset).
     pub k: f32,
     pub bones: [Bone; NB],
     pub weapons: Vec<Weapon>,
+    /// None is a legacy frame; Some(empty) explicitly has no native strikers.
+    pub strikers: Option<Vec<BodyStriker>>,
     pub control: Option<Control>,
     /// Bones whose translation was sent explicitly (diagnostics).
     pub overrides: u32,
@@ -131,8 +188,8 @@ pub struct Full {
 
 impl Default for Full {
     fn default() -> Self {
-        Full { ts: 0.0, k: 1.0, bones: [Bone { q: [0.0, 0.0, 0.0, 1.0], ..Default::default() }; NB],
-               weapons: Vec::new(), control: None, overrides: 0, step: 0.0 }
+        Full { context: None, ts: 0.0, k: 1.0, bones: [Bone { q: [0.0, 0.0, 0.0, 1.0], ..Default::default() }; NB],
+               weapons: Vec::new(), strikers: None, control: None, overrides: 0, step: 0.0 }
     }
 }
 
@@ -303,7 +360,9 @@ pub fn encode_into(f: &Full, out: &mut Vec<u8>) {
     out.push(((ts - ms) * 256.0).floor().clamp(0.0, 255.0) as u8);
     let nw = f.weapons.len().min(2);
     let step = if f.step.is_finite() { f.step.round().clamp(0.0, 255.0) as u8 } else { 0 };
-    let flags = (f.control.is_some() as u8) | ((nw as u8) << 1) | (((step > 0) as u8) << 3);
+    let shapes = f.weapons.iter().take(2).any(|w| !w.boxes.is_empty());
+    let native_boxes = f.weapons.iter().take(2).any(|w|w.boxes.iter().any(|b|b.native_scale.is_some() || b.class_hash!=0));
+    let flags = (f.control.is_some() as u8) | ((nw as u8) << 1) | (((step > 0) as u8) << 3) | ((shapes as u8) << 4) | ((f.strikers.is_some() as u8)<<5) | ((f.context.is_some() as u8)<<6) | ((native_boxes as u8)<<7);
     out.push(flags);
     let pel = f.bones[0].p;
     for v in pel { out.extend_from_slice(&v.to_le_bytes()); }
@@ -376,6 +435,40 @@ pub fn encode_into(f: &Full, out: &mut Vec<u8>) {
             put_v3(&mut w, v, IK_STEP, 12);
         }
     }
+    if shapes {
+        for wp in f.weapons.iter().take(2) {
+            let complete=wp.boxes.len()<=MAX_WEAPON_BOXES && wp.boxes.iter().all(|b|b.valid()
+                && wp.boxes.iter().filter(|o|o.component==b.component).count()==1
+                && (b.child_of==0 || wp.boxes.iter().any(|p|p.component==b.child_of && p.child_of==0)));
+            let boxes: Vec<_> = if complete {wp.boxes.iter().collect()} else {Vec::new()};
+            w.put(boxes.len() as u32, 4);
+            if native_boxes { w.put(boxes.first().map_or(0,|b|b.class_hash),32); }
+            for b in boxes {
+                w.put(b.component as u32,4);
+                put_v3(&mut w, b.p, 0.1, 13);
+                put_quat(&mut w, b.q, 10);
+                // Nonnegative native half extents use an unsigned range;
+                // signed12 would clip otherwise-valid values above204.7.
+                for v in b.half { w.put((v*10.0).round().clamp(0.0,4095.0) as u32,12); }
+                if native_boxes {
+                    w.put(b.native_scale.is_some() as u32,1);
+                    if let Some(s)=b.native_scale { for v in s { w.put((v*1024.0).round().clamp(1.0,16383.0) as u32,14); } w.put(b.child_of as u32,4); }
+                }
+            }
+        }
+    }
+    if let Some(strikers)=&f.strikers {
+        w.put(strikers.len() as u32,4);
+        for s in strikers.iter().take(MAX_BODY_STRIKERS) {
+            w.put(s.part.saturating_sub(1) as u32,2); w.put(s.component as u32,4); w.put(s.kind as u32,1);
+            put_v3(&mut w,s.p,1.0/16.0,11); put_quat(&mut w,s.q,10);
+            for x in s.half.iter().take(if s.kind==0 {1} else {3}) { w.put((x*16.0).round() as u32,10); }
+        }
+    }
+    if let Some(c)=f.context {
+        w.put(c.match_id as u32,32); w.put((c.match_id>>32) as u32,32);
+        w.put(c.round,32); w.put(c.life as u32,16);
+    }
     *out = w.finish();
     if step > 0 { out.push(step); }
 }
@@ -387,11 +480,14 @@ pub fn decode(buf: &[u8]) -> Option<Full> {
     let ms = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as f64;
     let ts = ms + buf[8] as f64 / 256.0;
     let flags = buf[9];
+    if flags & 128 != 0 && flags & 16 == 0 {return None;}
     let rf = |o: usize| f32::from_le_bytes([buf[o], buf[o + 1], buf[o + 2], buf[o + 3]]);
     let pel = [rf(10), rf(14), rf(18)];
     if !pel.iter().all(|v| v.is_finite()) { return None; }
     let k = 0.5 + u16::from_le_bytes([buf[22], buf[23]]) as f32 / 65535.0;
-    let mut r = BitR::new(&buf[24..]);
+    let end = buf.len().checked_sub((flags & 8 != 0) as usize)?;
+    if end < 24 { return None; }
+    let mut r = BitR::new(&buf[24..end]);
     let mut f = Full { ts, k, ..Default::default() };
     f.bones[0].p = pel;
     f.bones[0].q = get_quat(&mut r, ROOT_QBITS)?;
@@ -424,7 +520,7 @@ pub fn decode(buf: &[u8]) -> Option<Full> {
         let wv = get_vel(&mut r, VANG_MAX)?;
         let base = get_v3(&mut r, BLADE_STEP, 16)?;
         let tip = get_v3(&mut r, BLADE_STEP, 16)?;
-        f.weapons.push(Weapon { hands, id, p, q, v, w: wv, base, tip });
+        f.weapons.push(Weapon { hands, id, p, q, v, w: wv, base, tip, boxes: Vec::new() });
     }
     if flags & 1 != 0 {
         let mut c = Control { flags: r.get(32)?, grip_r: r.get(4)? as u8, grip_l: r.get(4)? as u8, ..Default::default() };
@@ -441,6 +537,43 @@ pub fn decode(buf: &[u8]) -> Option<Full> {
             c.ik[i] = if world { add(pel, v) } else { v };
         }
         f.control = Some(c);
+    }
+    if flags & 16 != 0 {
+        for wp in &mut f.weapons {
+            let n = r.get(4)? as usize;
+            if n > MAX_WEAPON_BOXES { return None; }
+            let class_hash = if flags & 128 != 0 { r.get(32)? } else {0};
+            for _ in 0..n {
+                let mut b = WeaponBox { component: r.get(4)? as u8, p: get_v3(&mut r, 0.1, 13)?, q: get_quat(&mut r, 10)?, half: [r.get(12)? as f32*0.1,r.get(12)? as f32*0.1,r.get(12)? as f32*0.1],class_hash,..Default::default() };
+                if flags & 128 != 0 && r.get(1)? != 0 {
+                    b.native_scale=Some([r.get(14)? as f32/1024.0,r.get(14)? as f32/1024.0,r.get(14)? as f32/1024.0]);
+                    b.child_of=r.get(4)? as u8;
+                }
+                if !b.valid() || wp.boxes.iter().any(|old|old.component==b.component) { return None; }
+                wp.boxes.push(b);
+            }
+            if wp.boxes.iter().any(|b|b.child_of!=0 && !wp.boxes.iter().any(|p|p.component==b.child_of && p.child_of==0)) {return None;}
+        }
+    }
+    if flags & 32 != 0 {
+        let n=r.get(4)? as usize;
+        if n>MAX_BODY_STRIKERS { return None; }
+        let mut strikers:Vec<BodyStriker>=Vec::with_capacity(n);
+        for _ in 0..n {
+            let (part,component,kind)=(r.get(2)? as u8+1,r.get(4)? as u8,r.get(1)? as u8);
+            let p=get_v3(&mut r,1.0/16.0,11)?; let q=get_quat(&mut r,10)?;
+            let x=r.get(10)? as f32/16.0;
+            let half=if kind==0 {[x;3]} else {[x,r.get(10)? as f32/16.0,r.get(10)? as f32/16.0]};
+            let s=BodyStriker{part,component,kind,p,q,half};
+            if !s.valid() || strikers.iter().any(|old|old.part==part && old.component==component) {return None;}
+            strikers.push(s);
+        }
+        f.strikers=Some(strikers);
+    }
+    if flags & 64 != 0 {
+        let lo=r.get(32)? as u64; let hi=r.get(32)? as u64;
+        let c=Context{match_id:lo|(hi<<32),round:r.get(32)?,life:r.get(16)? as u16};
+        if !c.valid() {return None;} f.context=Some(c);
     }
     if flags & 8 != 0 { f.step = *buf.last()? as f32; }
     Some(f)
@@ -494,6 +627,7 @@ pub fn from_parts(tick: u32, ts: f64, dt: f64, b: &[f32], ws: &[[f32; 21]], ctl:
             v: [a[9], a[10], a[11]], w: [a[12], a[13], a[14]],
             base: qrot(inv, sub([a[15], a[16], a[17]], p)),
             tip: qrot(inv, sub([a[18], a[19], a[20]], p)),
+            boxes: Vec::new(),
         });
     }
     if let Some(mut ctl) = ctl {
@@ -608,6 +742,7 @@ pub(crate) mod tests {
         f.weapons.push(Weapon {
             hands: 1, id: 7, p: add(f.bones[16].p, [3.0, -2.0, 1.0]), q: axis_q([0.3, 1.0, 0.2], 77.0),
             v: [2500.0, -900.0, 100.0], w: [1800.0, 0.0, -600.0], base: [0.0, 0.0, 18.0], tip: [0.0, 0.0, 105.5],
+            boxes: Vec::new(),
         });
         f
     }
@@ -639,6 +774,106 @@ pub(crate) mod tests {
             assert_eq!((wd.hands, wd.id), (1, 7));
             assert_eq!(d.overrides, 0, "pure FK state needs no overrides");
         }
+    }
+
+    #[test]
+    fn weapon_modules_roundtrip_and_legacy_frames_remain_valid() {
+        let mut f=sample_state(3,1.0);
+        let old=encode(&f);
+        assert_eq!(old[9]&16,0);
+        assert!(decode(&old).unwrap().weapons[0].boxes.is_empty());
+        f.step=17.0;
+        f.weapons[0].boxes.push(WeaponBox {component:10,p:[0.0,0.0,160.0],q:axis_q([0.0,0.0,1.0],35.0),half:[20.0,4.0,18.0],..Default::default()});
+        f.weapons[0].boxes.push(WeaponBox {component:15,p:[0.0,0.0,10.0],q:[0.0,0.0,0.0,1.0],half:[2.0,2.0,2.0],..Default::default()});
+        let wire=encode(&f);
+        let d=decode(&wire).unwrap();
+        let b=d.weapons[0].boxes[0];
+        assert_eq!(b.component,10);
+        assert_eq!(d.weapons[0].boxes[1].component,15);
+        assert!(!WeaponBox {component:16,..b}.valid());
+        assert!(!WeaponBox {component:0,..b}.valid());
+        assert!(dist(b.p,f.weapons[0].boxes[0].p)<0.1);
+        assert!(dist(b.half,f.weapons[0].boxes[0].half)<0.1);
+        assert!(qangle_deg(b.q,f.weapons[0].boxes[0].q)<0.5);
+        assert_eq!(d.step,17.0);
+        for n in 1..=15 { assert!(decode(&wire[..wire.len()-n]).is_none(),"truncated by {n}"); }
+        let duplicate=f.weapons[0].boxes[0];
+        f.weapons[0].boxes.push(duplicate);
+        assert!(decode(&encode(&f)).unwrap().weapons[0].boxes.is_empty(),"invalid duplicate identity omits whole geometry rather than partial rows");
+    }
+
+    #[test]
+    fn unsigned_extent_300_and_signed_position_400_keep_original_precision() {
+        let mut f=Full::default();
+        f.weapons.push(Weapon {hands:1,q:[0.0,0.0,0.0,1.0],boxes:vec![WeaponBox {
+            component:1,p:[400.0,-400.0,0.1],q:[0.0,0.0,0.0,1.0],half:[300.0,0.1,0.0],
+            native_scale:Some([1.0,1.0,1.0]),..Default::default()}],..Default::default()});
+        let d=decode(&encode(&f)).unwrap();let b=d.weapons[0].boxes[0];
+        assert_eq!(b.p,[400.0,-400.0,0.1]);assert_eq!(b.half,[300.0,0.1,0.0]);
+        assert!(!WeaponBox {p:[400.1,0.0,0.0],..b}.valid());
+        assert!(!WeaponBox {half:[300.1,0.0,0.0],..b}.valid());
+    }
+
+    #[test]
+    fn full_weapon_module_budget_fits_pose_slot() {
+        let mut f=sample_state(7,1.0);
+        for i in 1..NB { f.bones[i].p[0]+=i as f32*2.0; }
+        f.control=Some(Control::default()); f.step=16.0;
+        f.weapons.push(f.weapons[0].clone()); f.weapons[1].hands=2;
+        for w in &mut f.weapons { for component in 1..=MAX_WEAPON_BOXES as u8 {
+            w.boxes.push(WeaponBox {component,p:[0.0,0.0,component as f32*10.0],q:[0.0,0.0,0.0,1.0],half:[2.0,3.0,4.0],class_hash:class_hash("BP_Longsword_Tier3_C"),native_scale:Some([2.0,1.0,4.0]),child_of:if component>6 {component-6}else{0}});
+        }}
+        f.context=Some(Context{match_id:u64::MAX,round:u32::MAX,life:u16::MAX});
+        f.strikers=Some((0..MAX_BODY_STRIKERS).map(|i|BodyStriker{part:(i%4+1) as u8,component:(10+i/4) as u8,kind:1,p:[10.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[7.5,15.0,7.5],..Default::default()}).collect());
+        let wire=encode(&f);
+        assert!(wire.len()<=hsmp_ipc::schema::pose::POSE_FRAME_MAX,"{}",wire.len());
+        let decoded=decode(&wire).unwrap();
+        assert_eq!(decoded.overrides.count_ones(),(NB-1) as u32,"every non-root bone has a position override");
+        assert_eq!(decoded.context,f.context);
+        assert_eq!(decoded.weapons[1].boxes.len(),MAX_WEAPON_BOXES);
+        assert_eq!(decoded.strikers.unwrap().len(),MAX_BODY_STRIKERS);
+        assert_eq!(decoded.weapons[0].boxes[0].native_scale,Some([2.0,1.0,4.0]));
+        assert_eq!(decoded.weapons[0].boxes[0].class_hash,class_hash("BP_Longsword_Tier3_C"));
+        assert_eq!(decoded.weapons[0].boxes[MAX_WEAPON_BOXES-1].child_of,6,"cutting child parent survives wire encoding");
+        assert!(!WeaponBox{child_of:8,..decoded.weapons[0].boxes[7]}.valid(),"self-parent is not a native child");
+        let mut orphan=f.clone();orphan.weapons[0].boxes[7].child_of=3;
+        orphan.weapons[0].boxes.retain(|b|b.component!=3);
+        assert!(decode(&encode(&orphan)).unwrap().weapons[0].boxes.is_empty(),"orphan child omits whole geometry");
+        // IPC wire8 + PoseHead8 + unreliable framing7 + encrypted header22/tag16.
+        assert!(wire.len()+8+8+7+22+16<=1200);
+        println!("maximum v2 frame with {} bones, full overrides, 24 modules, 8 body strikers, control and step: {} B",NB,wire.len());
+    }
+
+    #[test]
+    fn original_context_roundtrips_without_float_loss_and_rejects_bad_or_truncated() {
+        let mut f=sample_state(3,1.0);
+        assert_eq!(decode(&encode(&f)).unwrap().context,None);
+        let c=Context{match_id:0xfedcba9876543210,round:0xf1234567,life:65535};
+        f.context=Some(c); f.step=0.0;
+        let wire=encode(&f);
+        assert_eq!(decode(&wire).unwrap().context,Some(c));
+        for n in 1..=14 {assert!(decode(&wire[..wire.len()-n]).is_none());}
+        f.context=Some(Context{life:0,..c});
+        assert!(decode(&encode(&f)).is_none());
+    }
+
+    #[test]
+    fn body_striker_extension_preserves_native_identity_and_legacy_absence() {
+        let mut f=sample_state(5,1.0);
+        assert!(decode(&encode(&f)).unwrap().strikers.is_none());
+        f.strikers=Some(Vec::new());
+        assert_eq!(decode(&encode(&f)).unwrap().strikers,Some(Vec::new()));
+        let sphere=BodyStriker{part:1,component:10,kind:0,p:[12.0,-2.0,1.0],q:[0.0,0.0,0.0,1.0],half:[13.0;3],..Default::default()};
+        let foot=BodyStriker{part:4,component:15,kind:1,p:[4.0,8.0,0.0],q:axis_q([0.0,0.0,1.0],30.0),half:[7.475,14.949,7.475],..Default::default()};
+        f.strikers=Some(vec![sphere,foot]); f.step=17.0;
+        let wire=encode(&f); let d=decode(&wire).unwrap(); let s=d.strikers.unwrap();
+        assert_eq!((s[0].part,s[0].component,s[0].kind,s[0].half),(1,10,0,[13.0;3]));
+        assert_eq!((s[1].part,s[1].component,s[1].kind),(4,15,1));
+        assert!(dist(s[1].half,foot.half)<0.06); assert_eq!(d.step,17.0);
+        for n in 1..=12 {assert!(decode(&wire[..wire.len()-n]).is_none());}
+        f.strikers=Some(vec![sphere,sphere]);assert!(decode(&encode(&f)).is_none());
+        assert!(!BodyStriker{half:[40.0;3],..sphere}.valid());
+        assert!(!BodyStriker{p:[100.0,0.0,0.0],..sphere}.valid());
     }
 
     #[test]

@@ -71,6 +71,7 @@ pub(crate) fn forget_peer_locked(inner: &mut Inner, id: PeerId) {
     inner.match_peers.remove(&id);
     inner.sess.load_errors.remove(&id);
     inner.sess.placed.remove(&id);
+    inner.sess.root_placed.remove(&id);
     inner.sess.stalled.remove(&id);
     inner.sess.leaving.remove(&id);
     crate::lagcomp::forget(id); // + validate::damage (kit facts, neck health)
@@ -107,6 +108,16 @@ pub(super) async fn accept_root(state: &Arc<ServerState>, from: SocketAddr, posi
     let accepted = {
         let mut inner = state.inner.lock().await;
         let st = inner.now_ms;
+        let id=inner.peers.get(&from)?.id;
+        let pending=matches!(inner.match_state.as_str(),"loading"|"countdown");
+        let round=if pending {inner.spawn_round}else{inner.match_round};
+        let life=if pending {1}else{modes::peer_life(&inner,id)};
+        let context_ok=stored.match_id!=0 && stored.match_id==inner.sess.match_id
+            && stored.round==round && stored.life==life && life!=0;
+        let placed=inner.sess.root_placed.get(&id).copied();
+        let assignment=inner.spawn_plan.iter().find(|a|a.peer_id==id).copied();
+        if !context_ok || !placed.is_some_and(|p|p.0==stored.match_id && p.1==stored.round && p.2==stored.life
+            && assignment.is_some_and(|a|a.spawn_id==p.3)) {return None;}
         let p = inner.peers.get_mut(&from)?;
         p.last_seen_ms = st;
         // NaN-safe: a non-finite / out-of-world position is
@@ -117,7 +128,8 @@ pub(super) async fn accept_root(state: &Arc<ServerState>, from: SocketAddr, posi
         // whose time since the last accepted root covers it (no lock-out).
         let id = p.id;
         let accept = match p.last_valid_pos {
-            None => crate::validate::input::root_step_ok(None, position, 0.0),
+            None => crate::validate::input::root_step_ok(None, position, 0.0)
+                && assignment.is_some_and(|a|root_spawn_position_ok(a.pos,position)),
             Some(prev) => {
                 let dt_s = arrived.saturating_sub(p.last_valid_ms) as f32 / 1000.0;
                 let d = dist3(prev, position);
@@ -146,6 +158,54 @@ pub(super) async fn accept_root(state: &Arc<ServerState>, from: SocketAddr, posi
     };
     if accepted.is_some() { state.relay.update_pos(from, position); }
     accepted
+}
+
+/// Native placement searches clearance rings through225cm and verifies within
+///100cm XY. Actor origin is100cm above floor; floor offsets<=150cm and verified
+///Z error<=250cm (HSMPSync spawn_place.T). First root stays in that bounded area.
+pub(crate) fn root_spawn_position_ok(spawn:[f32;3],position:[f32;3])->bool {
+    position.iter().chain(spawn.iter()).all(|x|x.is_finite())
+        && ((position[0]-spawn[0]).powi(2)+(position[1]-spawn[1]).powi(2)).sqrt()<=325.0
+        && (position[2]-spawn[2]).abs()<=500.0
+}
+
+#[cfg(test)]
+mod root_generation_tests {
+    use super::*;
+    use hsmp_ipc::schema::pose::Root;
+    #[tokio::test]
+    async fn scoped_spawn_root_rejects_delayed_life_and_duplicate_reset() {
+        let state=Arc::new(ServerState::new(8));
+        let from:SocketAddr="127.0.0.1:44991".parse().unwrap();
+        let setup=|i:&mut Inner,round:u32,pos:[f32;3]| {
+            i.match_state="countdown".into();i.match_round=round-1;i.spawn_round=round;
+            i.match_arena="Map_Arena_Alley".into();i.sess.match_id=91;
+            i.spawn_plan=vec![crate::spawns::SpawnAssign {peer_id:1,spawn_id:round<<8,slot:0,pos,yaw:0.0,protect_ms:3000}];
+        };
+        let gs=|round:u32| rec::GameStatus {match_id:91,round,life:1,spawn_id:round<<8,
+            flags:v5::status_flags::LOADED,arena:Str::new("Map_Arena_Alley"),..Default::default()};
+        {let mut i=state.inner.lock().await;i.peers.insert(from,match_core::round_tests::peer(1,"p"));setup(&mut i,1,[0.0;3]);
+            assert!(match_core::game_status_placed(&mut i,1,&gs(1)));}
+        let root=|round:u32,pos|Root {match_id:91,round,life:1,pos,rot:[0.0,0.0,0.0,1.0],..Default::default()};
+        assert!(accept_root(&state,from,[0.0,0.0,100.0],root(1,[0.0,0.0,100.0])).await.is_some());
+        {let mut i=state.inner.lock().await;assert!(match_core::game_status_placed(&mut i,1,&gs(1)));
+            assert_eq!(i.peers[&from].last_valid_pos,Some([0.0,0.0,100.0]));
+            setup(&mut i,2,[2000.0,0.0,0.0]);assert!(match_core::game_status_placed(&mut i,1,&gs(2)));}
+        assert!(accept_root(&state,from,[0.0,0.0,100.0],root(1,[0.0,0.0,100.0])).await.is_none());
+        assert!(accept_root(&state,from,[9000.0,0.0,100.0],root(2,[9000.0,0.0,100.0])).await.is_none());
+        assert!(accept_root(&state,from,[2000.0,0.0,100.0],root(2,[2000.0,0.0,100.0])).await.is_some());
+        assert!(accept_root(&state,from,[9000.0,0.0,100.0],root(2,[9000.0,0.0,100.0])).await.is_none());
+        let mut stale=root(2,[2000.0,0.0,100.0]);stale.life=2;
+        assert!(accept_root(&state,from,stale.pos,stale).await.is_none());
+        {let mut i=state.inner.lock().await;i.match_state="live".into();i.match_round=2;
+            let key=peer_key(&i.peers[&from]);i.modes.stats.entry(key).or_default().life=2;
+            let mut fresh=gs(2);fresh.life=2;
+            assert!(match_core::game_status_placed(&mut i,1,&fresh));}
+        assert!(accept_root(&state,from,[2000.0,0.0,100.0],root(2,[2000.0,0.0,100.0])).await.is_none());
+        assert!(accept_root(&state,from,stale.pos,stale).await.is_some());
+        {let mut i=state.inner.lock().await;let mut fresh=gs(2);fresh.life=2;
+            assert!(match_core::game_status_placed(&mut i,1,&fresh));assert!(i.peers[&from].last_valid_pos.is_some());}
+    }
 }
 
 /// Liveness bookkeeping for stream packets that need no validation.
@@ -325,6 +385,8 @@ pub(crate) struct SessionCore {
     pub sat_out: Vec<(PeerId, String, String)>,
     /// Placement report per peer: (round, server ms) — spawn protection.
     pub placed: HashMap<PeerId, (u32, u64)>,
+    /// Healthy original placement tuple; movement reset is once per assignment.
+    pub root_placed: HashMap<PeerId, (u64,u32,u16,u32)>,
     /// Server time (ms) of the last countdown -> live.
     pub live_ms: u64,
     /// Consecutive rounds voided because too few fighters loaded.
@@ -369,6 +431,7 @@ impl SessionCore {
             load_errors: HashMap::new(),
             sat_out: Vec::new(),
             placed: HashMap::new(),
+            root_placed: HashMap::new(),
             live_ms: 0,
             void_streak: 0,
             next_event_id: 0,

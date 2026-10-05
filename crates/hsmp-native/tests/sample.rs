@@ -475,16 +475,22 @@ fn native_sampling_g1() {
             scalars = { "All Body Tonus", "Stamina", "Missing Scalar" }, ik = { "R Out End Pos", "Soft Thing" },
             grip_r = "R_GripType_Current", grip_l = "L_GripType_Current", aim = "Aim Vector",
             ctrl_rot = "Current Control Rotation", weapon_base = "Root Scene", weapon_tip = "TippyTipScene" }))
-        local a = { mesh = MESH, pawn = PAWN, pose_tick = 1, pose_ts = 1000.5, dt = 16, k = 0, control = true,
+        local a = { context={match_id=1,round=1,life=1},mesh = MESH, pawn = PAWN, pose_tick = 1, pose_ts = 1000.5, dt = 16, k = 0, control = true,
             w1 = WEAPON, h1 = 1, t1 = 77, root_pawn = PAWN, root_tick = 1, root_ts = 1000,
             weapon_actor = WEAPON, weapon_tick = 1, weapon_ts = 1000, weapon_id = 5, weapon_held = 1 }
         local mask, err = N.sample_local(a)
         assert(mask == 7 and err == nil, "mask " .. tostring(mask) .. " " .. tostring(err) .. " " .. repr(N.sample_status()))
+        local wrong={root_pawn=WEAPON,pawn=PAWN,root_tick=2,root_ts=1001,context=a.context}
+        local wrong_mask,wrong_err=N.sample_local(wrong)
+        assert(wrong_mask==0 and wrong_err=="skip:root_context_pawn","root must use original pose pawn")
+        local unscoped={root_pawn=PAWN,pawn=PAWN,root_tick=2,root_ts=1001}
+        local unscoped_mask,unscoped_err=N.sample_local(unscoped)
+        assert(unscoped_mask==0 and unscoped_err=="bad:context","missing original native context refused")
         local _, root_n = N.get("local_root", -1)
         local _, wpn_n = N.get("local_weapon", -1)
         local _, pose_n = N.get("local_pose", -1)
         -- the Lua path with the same numbers
-        assert(N.put_root(1, 1000, 100, 200, 300, 1, 2, 3, 7, 8, 9))
+        assert(N.put_root(1, 1000, 100, 200, 300, 1, 2, 3, 7, 8, 9, a.context))
         assert(N.put_weapon(1, 1000, 5, 1, 100, 200, 300, 1, 2, 3, 7, 8, 9))
         local b = {}
         for i, name in ipairs(BONES) do
@@ -498,7 +504,7 @@ fn native_sampling_g1() {
         local c = { 5, 3, 2, 0.75, 42.5 }
         for i = 6, 37 do c[i] = 0 end
         c[20], c[21], c[22], c[23], c[24], c[25], c[26], c[27] = 1, 0, 0, 10, 20, 5, 6, 7
-        assert(N.put_pose(1, 1000.5, 16, 0, b, w, c))
+        assert(N.put_pose(1, 1000.5, 16, 0, b, w, c,nil,nil,a.context))
         local _, root_l = N.get("local_root", -1)
         local _, wpn_l = N.get("local_weapon", -1)
         local _, pose_l = N.get("local_pose", -1)
@@ -506,6 +512,29 @@ fn native_sampling_g1() {
         assert(same(root_n, root_l), "root: native " .. repr(root_n) .. " lua " .. repr(root_l))
         assert(same(wpn_n, wpn_l), "weapon: native " .. repr(wpn_n) .. " lua " .. repr(wpn_l))
         assert(same(pose_n, pose_l), "pose: native " .. repr(pose_n) .. "\nlua " .. repr(pose_l))
+        -- Both entry points carry the same maximum module set, including
+        -- component ordinals, with control/step and full translated bones.
+        local boxes = {}
+        for i=1,8 do for _,v in ipairs({i+7,0,0,i*10,0,0,0,1,2,3,4}) do boxes[#boxes+1]=v end end
+        a.s1, a.s2, a.w2, a.h2, a.t2 = boxes, boxes, WEAPON, 2, 77
+        local strikers={}
+        for i=1,8 do for _,v in ipairs({(i-1)%4+1,10+math.floor((i-1)/4),1,10,0,0,0,0,0,1,7.5,15,7.5}) do strikers[#strikers+1]=v end end
+        a.strikers=strikers
+        local context={match_id=0xfedcba9876543210,round=0xf1234567,life=65535}
+        a.context=context
+        assert(N.sample_local(a)==7)
+        local _, shaped_native=N.get("local_pose",-1)
+        local ww={}; for i=1,21 do ww[i]=w[i]; ww[21+i]=w[i] end; ww[22]=2
+        assert(N.put_pose(1,1000.5,16,0,b,ww,c,{boxes,boxes},strikers,context))
+        local _, shaped_lua=N.get("local_pose",-1)
+        assert(same(shaped_native,shaped_lua),"native and Lua maximum module frames differ")
+        assert(#shaped_lua.rows<=896,"maximum module frame must fit shared pose capacity")
+        context.life=0
+        assert(not N.put_pose(1,1000.5,16,0,b,ww,c,{boxes,boxes},strikers,context),"invalid explicit generation must fail, not become legacy")
+        local _, unchanged=N.get("local_pose",-1)
+        assert(same(unchanged,shaped_lua),"invalid context must not replace last valid pose")
+        context.life=65535
+
         -- world rules
         assert(N.world_leaving())
         local m3, e3 = N.sample_local(a)
@@ -526,7 +555,7 @@ fn native_sampling_g1() {
         e.objs[w.weapon].dead = true;
     }
     run(a, r#"
-        local a = { mesh = MESH, pawn = PAWN, pose_tick = 3, pose_ts = 2, w1 = WEAPON, h1 = 1, t1 = 1,
+        local a = { context={match_id=1,round=1,life=1},mesh = MESH, pawn = PAWN, pose_tick = 3, pose_ts = 2, w1 = WEAPON, h1 = 1, t1 = 1,
             root_pawn = PAWN, root_tick = 3, root_ts = 2, weapon_actor = WEAPON, weapon_tick = 3, weapon_ts = 2, weapon_id = 5, weapon_held = 1 }
         local m, e = N.sample_local(a)
         assert(m == 5 and e == "skip:weapon", tostring(m) .. " " .. tostring(e))

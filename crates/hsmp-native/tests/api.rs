@@ -108,7 +108,7 @@ impl FakeSidecar {
         self.seg().peers.slots[slot].play.write(&p);
     }
     fn write_root(&self, slot: usize) {
-        let root = Root { tick: 9, ts: 77, send_wall_ms: 1, pos: [1.0, 2.0, 3.0], rot: hsmp_pose::sample::rotator_to_quat(0.0, 90.0, 0.0), vel: [0.0; 3] };
+        let root = Root { tick: 9, ts: 77, send_wall_ms: 1, pos: [1.0, 2.0, 3.0], rot: hsmp_pose::sample::rotator_to_quat(0.0, 90.0, 0.0), vel: [0.0; 3], match_id: 1, round: 1, life: 1, _r: 0 };
         let r = PeerRoot { peer_id: 100 + slot as u32, _r: 0, root };
         assert!(self.seg().peers.slots[slot].root.put(self.meta(), sc::pose::K_PEER_ROOT, bytemuck::bytes_of(&r), &mut Vec::new()));
     }
@@ -145,7 +145,7 @@ fn lua_api_end_to_end() {
 
     // Before open: nothing raises.
     run(a, r#"
-        local N = HSMPNative
+        local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
         assert(N._impl == "F")
         local ma, mi, h = N.abi(); assert(ma == 2 and mi == 0 and #h == 16)
         assert(N.frame("w1") == 0)
@@ -159,8 +159,17 @@ fn lua_api_end_to_end() {
 
     // Game writes before any sidecar exists.
     run(a, r#"
-        local N = HSMPNative
-        assert(N.put_root(1, 10.5, 1, 2, 3, 0, 90, 0, 4, 5, 6))
+        local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
+        assert(N.put_root(1, 10.5, 1, 2, 3, 0, 90, 0, 4, 5, 6, root_context))
+        local _,scoped=N.get("local_root",-1)
+        assert(scoped.match_id==1 and scoped.round==1 and scoped.life==1)
+        assert(not N.put_root(2,11,1,2,3,0,0,0,0,0,0),"missing original context refused")
+        root_context.match_id=9007199254740993
+        assert(N.put_root(2,11,1,2,3,0,0,0,0,0,0,root_context))
+        local _,wide=N.get("local_root",-1)
+        assert(wide.match_id==9007199254740993,"full integer identity preserved")
+        root_context.match_id=1
+        assert(N.put_root(1,10.5,1,2,3,0,90,0,4,5,6,root_context))
         assert(N.put_weapon(1, 10.5, 77, 1, 1, 2, 3, 0, 90, 0, 0, 0, 0))
         local b = {}
         for i = 1, 23 * 13 do b[i] = i * 0.5 end
@@ -170,7 +179,7 @@ fn lua_api_end_to_end() {
         for i = 1, 37 do c[i] = i end
         assert(N.put_pose(5, 11.25, 8.3, 1.0, b, w, c))
         local r, e = N.put_pose(5, 11.25, 8.3, 1.0, {1, 2, 3}); assert(r == nil and e == "bad")
-        r, e = N.put_root("x"); assert(r == nil and e == "bad")
+        r, e = N.put_root("x", root_context); assert(r == nil and e == "bad")
         assert(N.put_lead(12.5))
         assert(N.put("vitals", {seq = 1, flags = 1, v = {5760}}))
         r, e = N.put("session", {}); assert(r == nil and e == "bad")
@@ -277,13 +286,13 @@ fn lua_api_end_to_end() {
 
     // Bus round trip (typed records only: UTF-8, rows, world-scoped clear).
     run(b, r#"
-        local N = HSMPNative
+        local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
         assert(N.bus_put("conn_state", {wall = 2.5, seq = 7, attempt = -1, in_match = true, state = "fight", reason = "Grüße"}))
         assert(N.bus_put("puppets", {rows = {{peer = 101, name = "Willie_1"}}}))
         local r, e = N.bus_put("dev_notes", {phase = "fight"}); assert(r == nil and e == "bad", "a key that is not a typed record")
     "#);
     run(c, r#"
-        local N = HSMPNative
+        local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
         local g, t = N.bus_get("conn_state", -1)
         assert(g > 0 and t.state == "fight" and t.reason == "Grüße" and t.wall == 2.5 and t.attempt == -1 and t.in_match == true)
         assert(math.type(t.seq) == "integer" and math.type(t.wall) == "float")
@@ -295,7 +304,7 @@ fn lua_api_end_to_end() {
 
     // World leave / ready.
     run(a, r#"
-        local N = HSMPNative
+        local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
         local we = N.ipc_info().world_epoch
         assert(N.world_leaving())
         assert(N.ipc_info().world_epoch == we + 1 and N.ipc_info().state == "loading")
@@ -316,7 +325,7 @@ fn lua_api_end_to_end() {
     std::thread::spawn(|| {
         let l = new_state("HSMPOther");
         run(l, r#"
-            local N = HSMPNative
+            local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
             local r, e = N.send("death_report", {}); assert(r == nil and e == "wrong thread", tostring(e))
             r, e = N.frame("x"); assert(r == nil and e == "wrong thread")
             assert(N.thread_ok() == false)
@@ -332,7 +341,7 @@ fn lua_api_end_to_end() {
     drop(sc1);
     let sc2 = FakeSidecar::attach(&name, 0xB2);
     run(a, r#"
-        local N = HSMPNative
+        local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
         local f = N.frame("w3")
         assert(f & 0x8 ~= 0, "SIDECAR_RESET on restart")
         local out = {}
@@ -349,7 +358,7 @@ fn lua_api_end_to_end() {
 
     // Allocation-free hot path + timings.
     run(a, r#"
-        local N = HSMPNative
+        local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
         local out, plays, ev, b, w, c = {}, {}, {}, {}, {}, {}
         for i = 1, 7 do plays[i] = {} end
         for i = 1, 23 * 13 do b[i] = i * 0.25 end
@@ -360,7 +369,7 @@ fn lua_api_end_to_end() {
         for i = 1, 7 do seqs[i] = N.peer_play(i - 1, plays[i], -1) end
         local function one()
             N.frame("w3")
-            N.put_root(1, 2, 1, 2, 3, 0, 0, 0, 0, 0, 0)
+            N.put_root(1, 2, 1, 2, 3, 0, 0, 0, 0, 0, 0, root_context)
             N.put_pose(1, 2, 3, 1, b, w, c)
             N.peers(out)
             for i = 1, 7 do N.peer_play(i - 1, plays[i], -1) end
@@ -381,7 +390,7 @@ fn lua_api_end_to_end() {
             print(string.format("TIMING %-28s %8.3f us", label, us))
         end
         bench("frame", 20000, function() N.frame("w3") end)
-        bench("put_root", 20000, function() N.put_root(1, 2, 1, 2, 3, 0, 0, 0, 0, 0, 0) end)
+        bench("put_root", 20000, function() N.put_root(1, 2, 1, 2, 3, 0, 0, 0, 0, 0, 0, root_context) end)
         bench("put_pose (23x13+w+c)", 20000, function() N.put_pose(1, 2, 3, 1, b, w, c) end)
         bench("peers (7)", 20000, function() N.peers(out) end)
         bench("peer_play x7 (changed)", 5000, function() for i = 1, 7 do N.peer_play(i - 1, plays[i], -1) end end)
@@ -400,7 +409,7 @@ fn lua_api_end_to_end() {
 
     // G2S full -> "full", never raises.
     run(a, r#"
-        local N = HSMPNative
+        local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
         local full
         for i = 1, 600 do
             local r, e = N.send("death_report", {death_id = i, round = i})

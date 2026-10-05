@@ -1,9 +1,10 @@
-//! Combat and vitals (kinds `0x03xx`, caps `COMBAT` / `VITALS`), ABI 2 / protocol v6.
+//! Combat and vitals (kinds `0x03xx`, caps `COMBAT` / `VITALS`), ABI 2 / protocol v8.
 //!
 //! One record per datum, end to end:
 //! - [`Damage`] (+ [`DamageDelta`] rows): the attacker's claim. The game sends it G2S
 //!   (`IPC.send("damage", t)`, `cid` = its claim id); the attacker's sidecar fills `hit_id`,
-//!   `round` and `age_ms` in place and resends it C2S until a final verdict. The server
+//!   and `age_ms` in place and resends it C2S until a final verdict. Original match, round
+//!   and both pawn lives remain unchanged. The server
 //!   forwards the approved record to the victim's owner as `damage_in` (alias kind, `WireHdr.peer`
 //!   = attacker) and to every other player as `hitfx_in`; the receiving sidecars push it into
 //!   the S2G ring as it is.
@@ -11,10 +12,12 @@
 //!   clashes (`hit_id` 0); the attacker's sidecar patches `cid` in place and pushes it S2G. Its
 //!   local timeout / queue-full answers are the same record.
 //! - [`DamageAck`]: the owner's sidecar acks every `damage_in` (C2S).
+//! - [`ReplayOutcome`] / [`ReplayOutcomeAck`]: idempotent owner-native execution results,
+//!   separate from transport receipt and the server's geometric verdict.
 //! - [`Clash`] (`clash`, `touch`): parry / contact evidence, G2S then C2S as it is.
 //! - [`DeathReport`] / [`DeathAck`]: the owner's own death (G2S from HSMPCombat and HSMPSync,
 //!   resent C2S by the sidecar until acked); [`Death`]: a server-declared death (S2C; the
-//!   sidecar fills `match_id` / `wall_ms` and pushes it S2G).
+//!   server captures the original `match_id`, round and life and the sidecar pushes it S2G).
 //! - [`Vitals`]: the owner's vitals, quantised once by the game (u16 = round(v · 64),
 //!   0xFFFF unknown; dismembered parts as a bitmask over `dism_part`). Written into the game's
 //!   `vitals` slot, gated and sent C2S by the sidecar (which patches `seq`), relayed S2C with
@@ -59,7 +62,15 @@ pub const VF_FALLEN: u16 = 2;
 pub const VF_DOWNED: u16 = 4;
 pub const VF_HEADLESS: u16 = 8;
 pub const VF_PAIN_SHOCK: u16 = 16;
-pub const VF_ALL: u16 = 31;
+// Current native functional injury state, not a sticky history of damage.
+pub const VF_HEAD_IMPAIRED: u16 = 32;
+pub const VF_NECK_IMPAIRED: u16 = 64;
+pub const VF_BACK_IMPAIRED: u16 = 128;
+pub const VF_ARM_R_IMPAIRED: u16 = 256;
+pub const VF_ARM_L_IMPAIRED: u16 = 512;
+pub const VF_LEG_R_IMPAIRED: u16 = 1024;
+pub const VF_LEG_L_IMPAIRED: u16 = 2048;
+pub const VF_ALL: u16 = 4095;
 
 /// Reflected property names on Willie_BP_C, in `Vitals::v` order.
 pub const VITALS_NAMES: [&str; VITALS_N] = [
@@ -103,7 +114,7 @@ crate::ipc_pod! {
         pub cid: u32,
         /// The victim.
         pub target_peer_id: u32,
-        /// Server round the claim is for (the sidecar stamps it).
+        /// Original server round captured by the game at native contact.
         pub round: u32,
         /// ms between the hit on the attacker's screen and this transmission (sidecar).
         pub age_ms: u32,
@@ -114,7 +125,10 @@ crate::ipc_pod! {
         pub attacker_ts: u32,
         pub victim_view_ts: u32,
         pub victim_arm_ts: u32,
-        /// Blunt Destruction Int | Kick·10 << 8 | Lower Threshold << 16 | Extra High << 17.
+        /// Blunt Destruction Int | Kick·10 << 8 | Lower Threshold << 16 | Extra High << 17
+        /// | native fist source << 18 | source left hand << 19 | source right hand << 20
+        /// | native collision array ordinal (0 legacy, 1..15) << 21 | native foot source << 25
+        /// | native DamageParent << 26 | distinct optional cutting HitBox ordinal << 27.
         pub dism_blunt: i32,
         pub raw_damage: f32,
         pub cutting_power: f32,
@@ -135,6 +149,18 @@ crate::ipc_pod! {
         /// Delta rows.
         pub n: u8,
         pub _r: [u8; 6],
+        /// Captured authenticated match and both native pawn generations.
+        pub match_id: u64,
+        pub attacker_life: u16,
+        pub victim_life: u16,
+        pub _life_r: [u8; 4],
+        /// Original native source class; modern component ordinals are class scoped.
+        pub source_class: Str<48>,
+        /// Cutting Box center in physical cm in the victim bone's rotation frame
+        /// (no socket/reference-scale normalization), then its local quaternion, followed
+        /// by original world scale and unscaled native BoxExtent. All zero without a Box.
+        pub hit_box_frame: [f32; 13],
+        pub _box_r: [u8; 4],
     }
 
     /// The server's answer to a claim, or a validated clash (`hit_id` 0, `peer` = the other
@@ -159,6 +185,21 @@ crate::ipc_pod! {
         pub hit_id: u32,
     }
 
+    /// Native owner attempt result, separate from the transport DamageAck.
+    /// Context is the original approved hit, never assigned at receipt.
+    pub struct ReplayOutcome {
+        pub match_id: u64,
+        pub round: u32,
+        pub attacker: u32,
+        pub hit_id: u32,
+        pub victim_life: u16,
+        pub status: u8,
+        pub _r: u8,
+        /// Bit i: native FIELDS[i] changed; this includes limbs/consciousness.
+        pub observed_fields: u32,
+        pub health_delta: f32,
+    }
+
     /// `clash`: my weapon met `other_peer_id`'s; `touch`: its stand-in reached my body.
     /// `my_ts` = my sender clock, `other_ts` = the other's sender time I was displaying.
     pub struct Clash {
@@ -168,11 +209,16 @@ crate::ipc_pod! {
         pub _r: u32,
     }
 
-    /// The owner's own death (G2S: `death_id` 0, `round` 0 = the sidecar's current round;
-    /// C2S: both filled by the sidecar).
+    /// An original-life native death or final defeat. Only `death_id` is
+    /// allocated by the sidecar; match, round, life and reason remain original.
     pub struct DeathReport {
         pub death_id: u32,
         pub round: u32,
+        pub match_id: u64,
+        pub life: u16,
+        /// 0 = native death, 1 = Brawl final KO, 2 = deliberate surrender.
+        pub reason: u8,
+        pub _life_r: [u8; 5],
     }
 
     /// The server counted `death_id` (S2C).
@@ -183,13 +229,14 @@ crate::ipc_pod! {
 
     /// The server declared `peer_id` dead in `round` (S2C, re-sent while the round lasts;
     /// S2G once per (match, peer, round)). `cause`: 0 owner report, 1 damage ledger, 2 owner
-    /// vitals, 3 left, 4 zone.
+    /// vitals, 3 left, 4 zone, 5 Brawl KO, 6 deliberate surrender.
     pub struct Death {
         pub peer_id: u32,
         pub round: u32,
         pub killer: u32,
         pub cause: u8,
-        pub _r: [u8; 3],
+        pub _r: u8,
+        pub life: u16,
         /// The server's match id (the receiving sidecar fills it).
         pub match_id: u64,
         /// Wall clock ms at receipt (the receiving sidecar fills it).
@@ -206,6 +253,10 @@ crate::ipc_pod! {
         pub flags: u16,
         /// `VITALS_NAMES` order: round(v · 64), `VITALS_UNKNOWN` = unknown.
         pub v: [u16; 19],
+        pub match_id: u64,
+        pub round: u32,
+        pub life: u16,
+        pub _life_r: [u8; 2],
     }
 
     /// Stand-ins whose death HSMPCombat is playing (bus key `standin_dead`).
@@ -229,6 +280,8 @@ pub const K_DAMAGE_IN: u16 = 0x0311;
 pub const K_HITFX_IN: u16 = 0x0312;
 pub const K_DAMAGE_VERDICT: u16 = 0x0313;
 pub const K_DAMAGE_ACK: u16 = 0x0314;
+pub const K_REPLAY_OUTCOME: u16 = 0x0315;
+pub const K_REPLAY_OUTCOME_ACK: u16 = 0x0316;
 pub const K_CLASH: u16 = 0x0318;
 pub const K_TOUCH: u16 = 0x0319;
 pub const K_DEATH_REPORT: u16 = 0x0320;
@@ -282,7 +335,45 @@ fn v3_within(v: &[f32; 3], lim: f32) -> bool {
     v.iter().all(|c| c.abs() <= lim)
 }
 
-fn check_damage(d: &Damage) -> Result<(), Invalid> {
+pub fn check_damage(d: &Damage) -> Result<(), Invalid> {
+    // Armour-stage bits 0..17 are native damage inputs; 18 is a fist
+    // pseudo-weapon, 19/20 identify left/right source hand. Old senders have
+    // neither hand bit. Bits 21..24 are the native collision array ordinal
+    // (1..15, 0 legacy). This identity cap differs from the eight pose boxes.
+    if d.dism_blunt & (1 << 26) != 0 && d.flags & (1 << 5) == 0 {
+        return Err(Invalid::Range("dism_blunt"));
+    }
+    if d.dism_blunt & 0x7be0_0000 != 0 && d.flags & ((1 << 5) | (1 << 7)) != ((1 << 5) | (1 << 7)) {
+        return Err(Invalid::Range("dism_blunt"));
+    }
+    if d.flags & (1 << 5) != 0 && (d.dism_blunt < 0
+        || (d.dism_blunt & 0x7800_0000 != 0 && (d.dism_blunt & 0x1e0_0000 == 0 || d.dism_blunt & 0x18_0000 == 0))
+        || (d.dism_blunt & (1 << 25) != 0 && (d.dism_blunt & (1 << 18) != 0
+            || d.dism_blunt & 0x18_0000 == 0 || d.dism_blunt & 0x1e0_0000 == 0))
+        || d.dism_blunt & 0x18_0000 == 0x18_0000
+        || (d.dism_blunt & 0x3fc_0000 != 0 && d.flags & (1 << 7) == 0)) {
+        return Err(Invalid::Range("dism_blunt"));
+    }
+    let ordinal = (d.dism_blunt >> 21) & 15;
+    let box_ordinal = (d.dism_blunt >> 27) & 15;
+    if d.flags & (1<<7) != 0 && (d.flags & (1<<5) == 0 || ordinal==0) {return Err(Invalid::Range("dism_blunt"));}
+    if ordinal != 0 && d.dism_blunt & 0x18_0000 == 0 { return Err(Invalid::Range("dism_blunt")); }
+    if ordinal != 0 && d.source_class.is_empty() { return Err(Invalid::Range("source_class")); }
+    if !d.source_class.as_str().is_some_and(|s|s.bytes().all(|b|b.is_ascii_alphanumeric() || b==b'_')) {
+        return Err(Invalid::Range("source_class"));
+    }
+    if d.hit_box_frame.iter().any(|v|!v.is_finite()) { return Err(Invalid::Float("hit_box_frame")); }
+    if box_ordinal == 0 {
+        if d.hit_box_frame.iter().any(|v| *v != 0.0) { return Err(Invalid::Range("hit_box_frame")); }
+    } else {
+        let a = &d.hit_box_frame;
+        if d.flags & (1 << 6) == 0 || a[..3].iter().any(|v| v.abs() > 600.0)
+            || !(0.99..=1.01).contains(&a[3..7].iter().map(|v|v*v).sum::<f32>())
+            || a[7..10].iter().any(|v| *v < 1.0/1024.0 || *v >= 16.0)
+            || a[10..13].iter().any(|v| *v <= 0.0 || *v > 300.0) {
+            return Err(Invalid::Range("hit_box_frame"));
+        }
+    }
     if !bone_ok(&d.bone) {
         return Err(Invalid::Range("bone"));
     }
@@ -295,6 +386,24 @@ fn check_damage(d: &Damage) -> Result<(), Invalid> {
     }
     if d.target_peer_id == 0 {
         return Err(Invalid::Range("target_peer_id"));
+    }
+    Ok(())
+}
+
+pub const REPLAY_CHANGED:u8=1;
+pub const REPLAY_NO_OBSERVED_CHANGE:u8=2;
+pub const REPLAY_STALE_CONTEXT:u8=3;
+pub const REPLAY_SOURCE_MISSING:u8=4;
+pub const REPLAY_INACTIVE:u8=5;
+pub const REPLAY_UNCERTAIN:u8=6;
+pub const REPLAY_EXPIRED:u8=7;
+fn check_replay_outcome(r:&ReplayOutcome)->Result<(),Invalid> {
+    if !(REPLAY_CHANGED..=REPLAY_EXPIRED).contains(&r.status) || r.attacker==0 || r.hit_id==0
+        || r.observed_fields & !0x00ff_ffff != 0 || !r.health_delta.is_finite() {
+        return Err(Invalid::Range("replay_outcome"));
+    }
+    if r.status!=REPLAY_CHANGED && (r.observed_fields!=0 || r.health_delta!=0.0) {
+        return Err(Invalid::Range("replay_outcome"));
     }
     Ok(())
 }
@@ -365,6 +474,7 @@ crate::record!(Damage, kind = K_DAMAGE, name = "damage", rows = DamageDelta, cou
     check = check_damage, check_row = check_delta);
 crate::record!(DamageVerdict, kind = K_DAMAGE_VERDICT, name = "damage_verdict", check = check_verdict);
 crate::record!(DamageAck, kind = K_DAMAGE_ACK, name = "damage_ack");
+crate::record!(ReplayOutcome, kind = K_REPLAY_OUTCOME, name = "replay_outcome", check = check_replay_outcome);
 crate::record!(Clash, kind = K_CLASH, name = "clash", check = check_clash);
 crate::record!(DeathReport, kind = K_DEATH_REPORT, name = "death_report");
 crate::record!(DeathAck, kind = K_DEATH_ACK, name = "death_ack");
@@ -378,22 +488,26 @@ pub const STREAM_VITALS: u8 = 8;
 
 /// Record kinds of this domain (wire + shared memory).
 pub const RECORDS: &[RecordInfo] = &[
-    crate::record_info!(Damage, cap = CAP_COMBAT, flow = flow::G2S | flow::C2S, chan = Chan::Reliable,
+    crate::record_info!(Damage, cap = CAP_COMBAT, flow = flow::G2S | flow::C2S, chan = Chan::Ordered,
         doc = "damage claim (game -> sidecar: hit_id / round / age_ms filled -> server)"),
     crate::record_info!(alias K_DAMAGE_IN, "damage_in", Damage, cap = CAP_COMBAT, flow = flow::S2C | flow::S2G,
-        chan = Chan::Reliable, doc = "approved hit on the receiver's own pawn (peer = attacker)"),
+        chan = Chan::Ordered, doc = "approved hit on the receiver's own pawn (peer = attacker)"),
     crate::record_info!(alias K_HITFX_IN, "hitfx_in", Damage, cap = CAP_COMBAT, flow = flow::S2C | flow::S2G,
         chan = Chan::Reliable, doc = "approved hit on another player (stand-in fx; peer = attacker)"),
     crate::record_info!(DamageVerdict, cap = CAP_COMBAT, flow = flow::S2C | flow::S2G, chan = Chan::Reliable,
         doc = "claim verdict (confirm / final) or validated clash; cid filled by the sidecar"),
     crate::record_info!(DamageAck, cap = CAP_COMBAT, flow = flow::C2S, chan = Chan::Reliable,
         doc = "owner sidecar acked a damage_in"),
+    crate::record_info!(ReplayOutcome,cap=CAP_COMBAT,flow=flow::G2S|flow::C2S|flow::S2C|flow::S2G,chan=Chan::Reliable,
+        doc="native owner replay result; receipt is independent of damage_ack"),
+    crate::record_info!(alias K_REPLAY_OUTCOME_ACK,"replay_outcome_ack",ReplayOutcome,cap=CAP_COMBAT,flow=flow::S2C|flow::S2G,
+        chan=Chan::Reliable,doc="server accepted the authenticated native owner attempt result"),
     crate::record_info!(Clash, cap = CAP_COMBAT, flow = flow::G2S | flow::C2S, chan = Chan::Reliable,
         doc = "weapon clash evidence (parry)"),
     crate::record_info!(alias K_TOUCH, "touch", Clash, cap = CAP_COMBAT, flow = flow::G2S | flow::C2S,
         chan = Chan::Reliable, doc = "a stand-in's blow reached my body (evidence against a parry)"),
     crate::record_info!(DeathReport, cap = CAP_COMBAT, flow = flow::G2S | flow::C2S, chan = Chan::Reliable,
-        doc = "the owner's own death (resent until death_ack)"),
+        doc = "original-life native death or final defeat (resent until death_ack)"),
     crate::record_info!(DeathAck, cap = CAP_COMBAT, flow = flow::S2C, chan = Chan::Reliable,
         doc = "server counted a death_report"),
     crate::record_info!(Death, cap = CAP_COMBAT, flow = flow::S2C | flow::S2G, chan = Chan::Reliable,
@@ -424,12 +538,19 @@ const DISM_ENUM: [(&str, u32); 23] = [
 /// Code tables of this domain (Lua: `S.ENUMS.<name>.<VALUE>`, C: `HSMP_<NAME>_<VALUE>`).
 pub const ENUMS: &[EnumInfo] = &[
     EnumInfo { name: "verdict_kind", values: &[("CONFIRM", VERDICT_CONFIRM as u32), ("FINAL", VERDICT_FINAL as u32), ("CLASH", VERDICT_CLASH as u32)] },
+    EnumInfo {name:"replay_status",values:&[("CHANGED",1),("NO_OBSERVED_CHANGE",2),("STALE_CONTEXT",3),
+        ("SOURCE_MISSING",4),("INACTIVE",5),("UNCERTAIN",6),("EXPIRED",7)]},
     EnumInfo { name: "damage_reason", values: DAMAGE_REASONS },
     // Bit index of each dismemberable part in `Vitals::dism`.
     EnumInfo { name: "dism_part", values: &DISM_ENUM },
     EnumInfo { name: "vitals_flag", values: &[("DEAD", VF_DEAD as u32), ("FALLEN", VF_FALLEN as u32), ("DOWNED", VF_DOWNED as u32),
-        ("HEADLESS", VF_HEADLESS as u32), ("PAIN_SHOCK", VF_PAIN_SHOCK as u32)] },
-    EnumInfo { name: "death_cause", values: &[("REPORTED", 0), ("DAMAGE", 1), ("VITALS", 2), ("LEFT", 3), ("ZONE", 4)] },
+        ("HEADLESS", VF_HEADLESS as u32), ("PAIN_SHOCK", VF_PAIN_SHOCK as u32),
+        ("HEAD_IMPAIRED", VF_HEAD_IMPAIRED as u32), ("NECK_IMPAIRED", VF_NECK_IMPAIRED as u32),
+        ("BACK_IMPAIRED", VF_BACK_IMPAIRED as u32), ("ARM_R_IMPAIRED", VF_ARM_R_IMPAIRED as u32),
+        ("ARM_L_IMPAIRED", VF_ARM_L_IMPAIRED as u32), ("LEG_R_IMPAIRED", VF_LEG_R_IMPAIRED as u32),
+        ("LEG_L_IMPAIRED", VF_LEG_L_IMPAIRED as u32)] },
+    EnumInfo { name: "death_cause", values: &[("REPORTED", 0), ("DAMAGE", 1), ("VITALS", 2), ("LEFT", 3), ("ZONE", 4), ("DEFEAT", 5), ("SURRENDER", 6)] },
+    EnumInfo { name: "death_report_reason", values: &[("DEATH", 0), ("DEFEAT", 1), ("SURRENDER", 2)] },
 ];
 
 // ---- helpers (writers and readers in Rust) --------------------------------------------------
@@ -497,7 +618,7 @@ impl DamageVerdict {
 
 impl Death {
     pub fn new(peer_id: u32, round: u32, killer: u32, cause: u8) -> Self {
-        Death { peer_id, round, killer, cause, _r: [0; 3], match_id: 0, wall_ms: 0 }
+        Death { peer_id, round, killer, cause, _r: 0, life: 0, match_id: 0, wall_ms: 0 }
     }
 }
 
@@ -518,16 +639,16 @@ mod tests {
             victim_view_ts: 90, victim_arm_ts: 95, dism_blunt: 2561, raw_damage: 5.0, cutting_power: 6.0,
             pain_rate: 0.5, draw_cut: 0.0, damage_out: 0.8, offset: [1.0; 3], location: [2.0; 3],
             impulse: [3.0; 3], velocity: [4.0; 3], normal: [0.0, 0.0, 1.0], bone: Str::new("neck_01"),
-            flags: 32, n: 0, _r: [0; 6],
+            flags: 32, n: 0, _r: [0; 6], ..Default::default()
         }
     }
 
     #[test]
     fn sizes() {
-        assert_eq!(core::mem::size_of::<Damage>(), 160);
+        assert_eq!(core::mem::size_of::<Damage>(), 280);
         assert_eq!(core::mem::size_of::<DamageDelta>(), 8);
         assert_eq!(core::mem::size_of::<DamageVerdict>(), 64);
-        assert_eq!(core::mem::size_of::<Vitals>(), 48);
+        assert_eq!(core::mem::size_of::<Vitals>(), 64);
         assert_eq!(core::mem::size_of::<Death>(), 32);
         assert_eq!(core::mem::size_of::<Clash>(), 16);
         assert!(crate::record::payload_len::<Damage>(MAX_DELTAS) <= crate::ring::MAX_PAYLOAD);
@@ -550,12 +671,44 @@ mod tests {
         assert_eq!(bad(&|d| d.bone = Str::new("neck\"}")), Invalid::Range("bone"));
         let mut all = claim();
         all.flags = DAMAGE_FLAGS_ALL;
+        all.dism_blunt=(1<<20)|(1<<21);all.source_class=Str::new("ModularWeaponBP_ArmingSword_C");
         assert!(view::<Damage>(&to_payload(&all, &[])).is_ok(), "every flag bit is defined");
         assert_eq!(bad(&|d| d.location[1] = 2.0e7), Invalid::Range("location"));
         assert_eq!(bad(&|d| d.offset[0] = -2.0e7), Invalid::Range("offset"));
         assert_eq!(bad(&|d| d.target_peer_id = 0), Invalid::Range("target_peer_id"));
         assert_eq!(bad(&|d| d.velocity[2] = f32::NAN), Invalid::Float("velocity"));
         assert_eq!(bad(&|d| d.raw_damage = f32::INFINITY), Invalid::Float("raw_damage"));
+        for source in [1 << 18, 1 << 19, 1 << 20, (1 << 18) | (1 << 19)] {
+            let mut d = claim(); d.flags |= 128; d.dism_blunt |= source;
+            assert!(view::<Damage>(&to_payload(&d, &[])).is_err(), "protocol 8 rejects unbound ordinal-zero weapon claims");
+        }
+        assert_eq!(bad(&|d| { d.flags |= 128; d.dism_blunt |= (1 << 19) | (1 << 20); }), Invalid::Range("dism_blunt"));
+        for ordinal in 1..=15 {
+            let mut d = claim(); d.flags |= 128; d.dism_blunt |= (1<<20) | ordinal << 21;
+            d.source_class=Str::new("BP_Longsword_Tier3_C");
+            assert!(view::<Damage>(&to_payload(&d, &[])).is_ok());
+        }
+        assert_eq!(bad(&|d| { d.flags |= 128; d.dism_blunt |= 1 << 27; }), Invalid::Range("dism_blunt"));
+        for ordinal in 1..=15 {
+            let mut d = claim(); d.flags |= 128|64;
+            d.dism_blunt |= (1 << 19) | (3 << 21) | (ordinal << 27);
+            d.source_class=Str::new("BP_Longsword_Tier3_C");
+            d.hit_box_frame=[0.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0,1.0,1.0,10.0,2.0,20.0];
+            assert!(view::<Damage>(&to_payload(&d, &[])).is_ok(), "distinct native cutting box {ordinal}");
+        }
+        assert_eq!(bad(&|d| { d.flags |= 128; d.dism_blunt |= (3 << 21) | (1 << 27); }), Invalid::Range("dism_blunt"));
+        assert_eq!(bad(&|d| { d.flags &= !32; d.flags |= 128; d.dism_blunt |= (1 << 19) | (3 << 21) | (1 << 27); }), Invalid::Range("dism_blunt"));
+        assert_eq!(bad(&|d| { d.dism_blunt = i32::MIN; }), Invalid::Range("dism_blunt"));
+        let mut body_parent = claim(); body_parent.dism_blunt |= 1 << 26;
+        assert!(view::<Damage>(&to_payload(&body_parent, &[])).is_ok());
+        assert_eq!(bad(&|d| { d.flags &= !32; d.dism_blunt |= 1 << 26; }), Invalid::Range("dism_blunt"));
+        let mut foot = claim(); foot.flags |= 128; foot.dism_blunt |= (1 << 25) | (1 << 19) | (10 << 21);
+        foot.source_class=Str::new("Weapon_Feet_C");
+        assert!(view::<Damage>(&to_payload(&foot, &[])).is_ok());
+        assert_eq!(bad(&|d| { d.flags |= 128; d.dism_blunt |= (1 << 25) | (1 << 18) | (1 << 19) | (10 << 21); }), Invalid::Range("dism_blunt"));
+        assert_eq!(bad(&|d| { d.flags |= 128; d.dism_blunt |= (1 << 25) | (10 << 21); }), Invalid::Range("dism_blunt"));
+        assert_eq!(bad(&|d| { d.flags |= 128; d.flags &= !32; d.dism_blunt |= 1 << 21; }), Invalid::Range("dism_blunt"));
+        assert_eq!(bad(&|d| d.dism_blunt |= 1 << 18), Invalid::Range("dism_blunt"));
         let p = to_payload(&claim(), &[DamageDelta::new(24, 1.0)]);
         assert_eq!(view::<Damage>(&p).unwrap_err(), Invalid::Range("i"));
         let p = to_payload(&claim(), &[DamageDelta::new(1, f32::NAN)]);
@@ -608,13 +761,13 @@ mod tests {
         let c = Clash { other_peer_id: 4, my_ts: 10, other_ts: 20, _r: 0 };
         assert!(view::<Clash>(&to_payload(&c, &[])).is_ok());
         assert_eq!(view::<Clash>(&to_payload(&Clash { other_peer_id: 0, ..c }, &[])).unwrap_err(), Invalid::Range("other_peer_id"));
-        assert!(view::<DeathReport>(&to_payload(&DeathReport { death_id: 1, round: 2 }, &[])).is_ok());
+        assert!(view::<DeathReport>(&to_payload(&DeathReport { death_id: 1, round: 2, ..Default::default() }, &[])).is_ok());
         assert!(view::<DamageAck>(&[0u8; 7]).is_err());
     }
 
     #[test]
     fn vitals_quantise_and_checks() {
-        let mut v = Vitals { seq: 1, dism: 0, flags: VF_FALLEN, v: [VITALS_UNKNOWN; 19] };
+        let mut v = Vitals { seq: 1, dism: 0, flags: VF_FALLEN, v: [VITALS_UNKNOWN; 19], ..Default::default() };
         v.v[0] = vitals_q(0, 87.5);
         v.v[13] = vitals_q(13, 61.5);
         assert_eq!(v.health(), Some(87.5));
@@ -628,7 +781,9 @@ mod tests {
         assert!(dism_bit("tail").is_none());
         assert!(view::<Vitals>(&to_payload(&v, &[])).is_ok());
         let mut b = v;
-        b.flags = 32;
+        b.flags = VF_ALL;
+        assert!(view::<Vitals>(&to_payload(&b, &[])).is_ok(), "current native regional injuries fit the existing flags field");
+        b.flags = 4096;
         assert_eq!(view::<Vitals>(&to_payload(&b, &[])).unwrap_err(), Invalid::Range("flags"));
         b = v;
         b.dism = 1 << 23;
@@ -654,11 +809,43 @@ mod tests {
     }
 
     #[test]
+    fn native_outcome_schema_separates_execution_from_delivery() {
+        let r=ReplayOutcome{match_id:5,round:2,attacker:7,hit_id:9,victim_life:3,status:REPLAY_CHANGED,
+            observed_fields:1,health_delta:-5.0,..Default::default()};
+        assert!(view::<ReplayOutcome>(&to_payload(&r,&[])).is_ok());
+        for status in [REPLAY_SOURCE_MISSING,REPLAY_UNCERTAIN,REPLAY_EXPIRED] {
+            let mut b=r;b.status=status;
+            assert!(view::<ReplayOutcome>(&to_payload(&b,&[])).is_err(),"nonexecuted/uncertain result cannot claim observed injury");
+            b.observed_fields=0;b.health_delta=0.0;
+            assert!(view::<ReplayOutcome>(&to_payload(&b,&[])).is_ok());
+        }
+        let mut b=r;b.observed_fields=1<<24;
+        assert!(view::<ReplayOutcome>(&to_payload(&b,&[])).is_err());
+        b=r;b.health_delta=f32::NAN;
+        assert!(view::<ReplayOutcome>(&to_payload(&b,&[])).is_err());
+        for kind in [K_REPLAY_OUTCOME,K_REPLAY_OUTCOME_ACK] {
+            assert_eq!(crate::schema::record_info(kind).unwrap().chan,Chan::Reliable);
+        }
+    }
+
+    #[test]
     fn every_kind_has_a_record() {
         for k in [K_DAMAGE, K_DAMAGE_IN, K_HITFX_IN, K_DAMAGE_VERDICT, K_DAMAGE_ACK, K_CLASH, K_TOUCH, K_DEATH_REPORT,
                   K_DEATH_ACK, K_DEATH, K_VITALS, K_STANDIN_DEAD] {
             assert!(crate::schema::record_info(k).is_some(), "{k:#06x}");
         }
         assert_eq!(VITALS_NAMES.len(), VITALS_N);
+    }
+
+    #[test]
+    fn native_damage_routes_are_ordered_without_ordering_bulk_downloads() {
+        for kind in [K_DAMAGE, K_DAMAGE_IN] {
+            assert_eq!(crate::schema::record_info(kind).unwrap().chan, Chan::Ordered);
+        }
+        for kind in [K_HITFX_IN, K_DAMAGE_VERDICT, K_DAMAGE_ACK] {
+            assert_eq!(crate::schema::record_info(kind).unwrap().chan, Chan::Reliable);
+        }
+        assert_eq!(crate::schema::record_by_name("mod_chunk").unwrap().chan, Chan::Reliable,
+            "20 MiB mod data must not block the ordered native combat stream");
     }
 }

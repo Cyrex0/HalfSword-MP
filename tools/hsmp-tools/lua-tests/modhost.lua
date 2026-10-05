@@ -75,3 +75,12 @@ T.check(calls.unevents[1] == "Ping" and #calls.cancelled == 1, "custom event rem
 calls.keys[1]()
 T.check(env.key_ran == nil and calls.loop() == true, "inert key bind does nothing, the loop stops")
 T.check(H.inert_left_total() == 1, "one registration left inert until a restart")
+
+local missing_entries={{name="Missing",hash=hash("d")}}
+local missing_ok,missing_failed,missing_text=H.load_set("missing-set",missing_entries)
+T.check(not missing_ok and missing_failed==1 and missing_text:find("missing from the cache",1,true),"missing cache refuses mod set")
+local repeated_ok,repeated_failed,repeated_text=H.load_set("missing-set",missing_entries)
+T.check(not repeated_ok and repeated_failed==missing_failed and repeated_text==missing_text,"duplicate READY never turns failed cache load into successful join")
+T.check(H.load_ok==false and H.load_text==missing_text,"repeated READY reporter retains original load result")
+H.unload_all("missing regression")
+T.check(H.load_ok==nil and H.load_text==nil,"unload drops prior load outcome")

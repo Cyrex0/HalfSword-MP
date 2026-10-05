@@ -726,6 +726,13 @@ fn i_can_break_free_and_a_new_pawn_drops_old_grabs() {
     t.run(80);
     assert_eq!(t.s("M.handles[1].GrabbedComponent"), "nil", "old pawn's grab released");
     assert!(t.logs().contains("my pawn changed"));
+    t.inject(2, r#""grab_update", 2, 0, "Lowerarm_L", {0, 0, 0}, {0, 0, 0}, 4"#);
+    t.run(40);
+    assert_eq!(t.n("#M.handles"), 1.0, "old-life lease refresh must not allocate a handle on the new pawn");
+    assert_eq!(t.s("M.handles[1].GrabbedComponent"), "nil", "old-life lease refresh remains closed");
+    t.inject(2, r#""grab_start", 3, 0, "Lowerarm_L", {0, 0, 0}, {0, 0, 0}, 5"#);
+    t.run(40);
+    assert_eq!(t.n("#M.handles"), 2.0, "a fresh grab may allocate a handle on the new pawn");
 }
 
 // --- world guard, session gating ---------------------------------------------------------------

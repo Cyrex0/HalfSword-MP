@@ -10,6 +10,7 @@
 //! wire data).
 
 use super::{Dir, Form, KindInfo, SlotMeta, CAP_POSE};
+use crate::layout::Bool;
 
 /// Codec-v2 bones (HSMPSync `POSE_BONES`, `posecodec_v2::BONES`).
 pub const NB: usize = 23;
@@ -62,6 +63,11 @@ crate::ipc_pod! {
     /// One remote peer's sampled playback (replaces `.pose_play<id>.json`). Written only by
     /// the sidecar's `hsmp-poseplay` thread.
     pub struct PeerPlay {
+        pub match_id: u64,
+        pub round: u32,
+        pub life: u16,
+        pub has_context: Bool,
+        pub _context_r: u8,
         pub meta: SlotMeta,
         pub peer_id: u32,
         /// `poseplay::Mode` as u32: see `PLAY_MODES`.
@@ -185,6 +191,11 @@ crate::ipc_pod! {
         pub rot: [f32; 4],
         /// Linear velocity, cm/s.
         pub vel: [f32; 3],
+        /// Original verified pawn generation at sampling (never receipt time).
+        pub match_id: u64,
+        pub round: u32,
+        pub life: u16,
+        pub _r: u16,
     }
 
     /// The held weapon's transform (wire kind `weapon`, C2S only: the server keeps it for lag
@@ -221,9 +232,10 @@ crate::ipc_pod! {
     }
 }
 
-/// Largest pose codec v2 frame (bytes). The largest frame the encoder can produce (2 weapons,
-/// control, every translation override, the step byte) is 518 B.
-pub const POSE_FRAME_MAX: usize = 640;
+/// Pose codec v2 storage budget (bytes), including two weapons with eight native
+/// Boxes each, eight body strikers, full overrides, derivatives, control and context.
+/// The codec maximum-size fixture verifies this cap and the full UDP MTU budget.
+pub const POSE_FRAME_MAX: usize = 1120;
 
 pub const K_ROOT: u16 = 0x0110;
 pub const K_WEAPON: u16 = 0x0111;
@@ -247,6 +259,7 @@ fn pos_ok(p: &[f32; 3]) -> bool {
 
 fn check_root(r: &Root) -> Result<(), crate::record::Invalid> {
     use crate::record::Invalid;
+    if r.match_id==0 || r.round==0 || r.life==0 {return Err(Invalid::Range("context"));}
     if !pos_ok(&r.pos) {
         return Err(Invalid::Range("pos"));
     }
@@ -321,6 +334,12 @@ crate::ipc_pod! {
         pub body_ts: f64,
         pub arm_ts: f64,
         pub local_ms: f64,
+        /// Original pose actually driving this named stand-in, never current Mode.
+        pub match_id: u64,
+        pub round: u32,
+        pub life: u16,
+        pub _life_r: [u8; 2],
+        pub pawn: crate::layout::Str<56>,
     }
 }
 
@@ -387,16 +406,18 @@ mod tests {
     use crate::record::{to_payload, view, Invalid};
 
     fn root() -> Root {
-        Root { tick: 7, ts: 1000, send_wall_ms: 1_700_000_000_000, pos: [100.0, -50.0, 95.0], rot: [0.0, 0.0, std::f32::consts::FRAC_1_SQRT_2, std::f32::consts::FRAC_1_SQRT_2], vel: [300.0, 0.0, 0.0] }
+        Root { tick: 7, ts: 1000, send_wall_ms: 1_700_000_000_000, pos: [100.0, -50.0, 95.0], rot: [0.0, 0.0, std::f32::consts::FRAC_1_SQRT_2, std::f32::consts::FRAC_1_SQRT_2], vel: [300.0, 0.0, 0.0],match_id:9007199254740993,round:2,life:130,_r:0 }
     }
 
     #[test]
     fn root_weapon_peer_root_round_trip_and_ranges() {
         let r = root();
         let p = to_payload(&r, &[]);
-        assert_eq!(p.len(), 56);
+        assert_eq!(p.len(), 72);
         assert_eq!(view::<Root>(&p).unwrap().head(), r);
-        assert!(matches!(view::<Root>(&p[..55]), Err(Invalid::Short { .. })));
+        assert!(matches!(view::<Root>(&p[..71]), Err(Invalid::Short { .. })));
+        let mut unscoped=r;unscoped.life=0;
+        assert_eq!(view::<Root>(&to_payload(&unscoped,&[])).unwrap_err(),Invalid::Range("context"));
         let mut bad = r;
         bad.pos[2] = f32::NAN;
         assert_eq!(view::<Root>(&to_payload(&bad, &[])).unwrap_err(), Invalid::Float("pos"));
@@ -425,7 +446,7 @@ mod tests {
 
         let pr = PeerRoot { peer_id: 3, _r: 0, root: r };
         let p = to_payload(&pr, &[]);
-        assert_eq!(p.len(), 64);
+        assert_eq!(p.len(), 80);
         assert_eq!(&p[8..], bytemuck::bytes_of(&r), "peer_root = peer id + the root record bytes");
         assert_eq!(view::<PeerRoot>(&p).unwrap().head(), pr);
         let mut bp = pr;

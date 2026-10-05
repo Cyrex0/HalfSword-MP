@@ -1,4 +1,4 @@
-# Wire protocol (v6)
+# Wire protocol (v10)
 
 The UDP protocol between `hsmp-sidecar` (client) and `hsmp-server`.
 
@@ -27,6 +27,57 @@ The UDP protocol between `hsmp-sidecar` (client) and `hsmp-server`.
 - **Versioning.** `PROTOCOL_VERSION` changes only when the packet header (§4) or handshake (§3)
   changes, or when the message representation changes. Everything else is added behind a
   capability bit (§7).
+
+### What changed in v10
+
+Weapon geometry now supports twelve rows per held weapon. Position uses signed
+13-bit integers and nonnegative half-extents use unsigned 12-bit integers;
+both retain the existing 0.1-unit resolution. Quaternion and native-scale
+precision are unchanged. The full maximum frame is 1118 bytes (1179 bytes with
+UDP framing), below the 1200-byte datagram limit. Pose storage allows 1120 bytes.
+The changed bit layout first required protocol 10 at both endpoints. Protocol 11
+also binds every Root record to its original verified match, round and pawn life;
+the current build requires protocol 11 at both endpoints. Delayed records from a
+previous pawn generation must not seed a new spawn's movement history.
+
+### What changed in v9
+
+Weapon pose geometry distinguishes a native cutting child box from its parent
+striking component. A cutting child carries its original collision-array parent
+ordinal. The server checks that relationship when validating the cutting frame
+and refuses cutting-only children as striking sources. The parent mesh envelope
+remains available for contact validation. This pose representation requires
+protocol 9 on both endpoints; version 8 peers cannot join this build.
+
+### What changed in v8
+
+Game status carries the original full pawn life for placement verification,
+including when the spawn order's short life suffix repeats. Its unscoped DEAD
+flag no longer declares deaths; reliable, scoped death reports do that.
+
+Cutting claims carry the original native box frame and source class. Pose
+history supplies independent native box geometry and class identity for server
+validation. Replay uses a separate collision-disabled box instead of moving a
+live weapon component. These layout changes require protocol 8 throughout.
+
+The capability-gated `body2` record retains the owner's original match, round,
+life and pawn name, native passport height, actor scale, mesh scale and measured
+bone masses. Its receiver requires matching pose context and does not substitute
+an unscoped `body` record. Native height and actor scale are diagnostic evidence;
+applying them at native construction still requires runtime verification.
+
+### What changed in v7
+
+Combat and pose records now carry the original match, round and pawn life. Damage
+claims capture both attacker and victim life; death reports, vitals and verified
+placement retain their original context. The server and receiving game reject stale
+contexts instead of assigning delayed traffic to the current pawn. Native replay
+outcomes and acknowledgments report execution separately from geometric acceptance
+and transport receipt.
+
+The transport and 8-byte application header remain unchanged. The larger record
+layouts and required life context are incompatible with v6, so both ends advertise
+only v7. A v6 client receives a `VERSION` PreReject before entering a session.
 
 ### What changed in v6
 
@@ -599,7 +650,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 |---|---|---|---|---|
 | `0x0110` | `root` | C→S, S→C | latest | Root position, rotation (quaternion), velocity, tick, timestamps |
 | `0x0111` | `weapon` | C→S | latest | Held weapon transform; kept by the server for lag compensation, not relayed |
-| `0x0112` | `pose` | C→S, S→C | latest | A pose codec v2 frame as rows (≤ 640 bytes). The server decodes it once (structural check, lag compensation) and relays the incoming bytes |
+| `0x0112` | `pose` | C→S, S→C | latest | A pose codec v2 frame as rows (≤ 1120 bytes). The server decodes it once (structural check, lag compensation) and relays the incoming bytes. Optional flag `0x10` adds up to twelve local module and cutting-child boxes per held weapon, each carrying its native collision-component ordinal (1–15), center, rotation, half-extents, exact class fingerprint and optional native box scale. Optional flag `0x20` adds up to eight native fist/foot sphere or box shapes, keyed by side/limb and component ordinal, with measured dimensions and bone-relative transforms. A named contact requires its exact source shape and swept point velocity |
 
 **Session, match and connection (`0x02`)**
 
@@ -636,7 +687,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0314` | `damage_ack` | C→S | reliable | Receipt of a delivered hit |
 | `0x0318` | `clash` | C→S | reliable | The sender's screen showed a blade-on-blade contact |
 | `0x0319` | `touch` | C→S | reliable | The sender's screen showed a peer's stand-in reach its body (evidence against a parry; `caps::HIT_FX`) |
-| `0x0320` | `death_report` | C→S | reliable | The owning game reports its death |
+| `0x0320` | `death_report` | C→S | reliable | Original match/round/life outcome: reason 0 native death, reason 1 final Brawl knockout, reason 2 deliberate surrender. Other modes reject automatic knockout; temporary unconsciousness is not an outcome |
 | `0x0321` | `death_ack` | S→C | reliable | Receipt of a death report |
 | `0x0322` | `death` | S→C | reliable | A declared death, with `death_cause` |
 | `0x0328` | `vitals` | C→S, S→C | latest | Health and wound state as u16 values and `vitals_flag` bits |
@@ -665,6 +716,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0513` | `kit_rules` | S→C | rel_latest | The current kit rules |
 | `0x0514` | `loadout` | C→S, S→C | rel_latest | The full armour and weapon loadout, fragmented as needed |
 | `0x0515` | `body` | C→S, S→C | rel_latest | The owner's passport body (rates, scales, bone masses) for its stand-ins; only with `caps::BODY` |
+| `0x0516` | `body2` | C→S, S→C | rel_latest | Original verified body generation, native height, actor/mesh scales and bone masses; only with `caps::BODY2`, matched to pose context |
 
 **Interact (`0x06`, `caps::INTERACT`)**
 
@@ -802,10 +854,10 @@ and the nick never decide them.
 
 - The Hello carries `version_min..=version_max`. The server picks the highest common version, or
   answers PreReject `VERSION` with its own range and an actionable text.
-- This build: `VERSION_MIN = VERSION_MAX = PROTOCOL_VERSION = 6`
+- This build: `VERSION_MIN = VERSION_MAX = PROTOCOL_VERSION = 10`
   (`crates/hsmp-net/src/net/mod.rs`).
-- Adding a record kind does not bump the version: it goes behind a capability bit. Changing an
-  existing record's layout changes the shared-memory layout hash; add a new kind instead.
+- New optional record kinds go behind capability bits. Breaking existing record layouts
+  requires a protocol version change and a matching shared-memory layout hash.
 
 ### 7.2 Capability bits (u64)
 
@@ -834,6 +886,7 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 | 16 | HIT_FX | Offered by server and sidecar: `touch` up, `hitfx_in` down |
 | 17 | BODY | Offered by server and sidecar: `body` up and down (relayed only between peers that have it) |
 | 18 | SERVER_MODS | Offered by the sidecar always and by a server with `--mods-dir`: the `0x09` records (§12). A server with mods refuses a client without it (`MODS_REQUIRED`) |
+| 19 | BODY2 | Offered by server and sidecar: generation-bound native body snapshots, relayed only between peers that have it |
 
 `caps::SUPPORTED = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY` are the transport bits
 `hsmp-net` implements itself; every client and server built from it offers them through
@@ -1047,3 +1100,15 @@ Tests: `hsmp-ipc` `schema::mods::tests`, `hsmp-server` `server_mods::manifest::t
 `server_mods::tests`, `server::mods_glue::tests`, sidecar `mods_client::tests` (the transfer over
 the impaired link with a reconnect) and `mods_cache::tests`, `hsmp-tools lua-test modhost` and
 `server_mods`.
+
+Pose v2 flag `0x40` carries the original verified native pawn placement context:
+`match_id:u64`, `round:u32`, `life:u16` (14 bytes, integer-preserving). It follows
+native body strikers and precedes the optional physics-step byte. Full geometry,
+23 bones with every translation override, two weapons with twelve geometry rows each,
+eight body strikers, native box scales and class fingerprints, control, context
+and step fit in 1118 of the 1120 pose bytes (1179 bytes with message and encryption framing).
+Active matches reject missing or mismatched context before history insertion or
+relay. A generation change clears collision histories and cuts playback; the
+receiver also checks cached samples against its current authoritative life.
+`SpawnStatus` stores the context of the original verified placement, including
+its actual pawn identity, and never adopts a newer generation at receipt time.

@@ -31,6 +31,10 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "native_wservo" })
     T.isolated(T.script, "case", { kind = "wpn_status" })
     T.isolated(T.script, "case", { kind = "skeleton_ref" })
+    T.isolated(T.script, "case", { kind = "body_scale" })
+    T.isolated(T.script, "case", { kind = "fist_grip" })
+    T.isolated(T.script, "case", { kind = "pose_context" })
+    T.isolated(T.script, "case", { kind = "bodyheight" })
     return
 end
 
@@ -144,8 +148,116 @@ if opts.kind == "tune" then
     T.check(api.PURE.tune_value("gain", 0 / 0) == nil and api.PURE.tune_value("gain", 7) == 1, "NaN refused; gain clamped to 1")
 end
 
+if opts.kind == "bodyheight" then
+    local api = boot(true)
+    local me = M.new_obj("Willie_BP_C", "ME"); rawset(me,"__addr",7001)
+    me.__props.Health=100; M.pc.__props.Pawn=me
+    sidecar({ {1,"Me"}, {2,"Peer"} }); peer_root(2,10,300,0,100); M.run(2200)
+    local actor_scale, mesh_scale, sim, calls = {X=.97,Y=.97,Z=.97}, {X=.997,Y=.996,Z=.998}, true, {}
+    local field="Height_21_0EB204DF4978B92AD0ED188FD32EEC7B"
+    local mesh={IsValid=function() return true end,GetAddress=function() return 8002 end,
+        K2_GetComponentScale=function() return mesh_scale end,IsSimulatingPhysics=function() return sim end,
+        SetSimulatePhysics=function(_,v) sim=v;calls[#calls+1]=v and "on" or "off" end,
+        SetWorldScale3D=function(_,v) mesh_scale=v;calls[#calls+1]="mesh" end}
+    local actor={IsValid=function() return true end,GetAddress=function() return 8001 end,
+        GetFName=function() return {ToString=function() return "REMOTE" end} end,Mesh=mesh,["Character Passport"]={[field]=.76},
+        GetActorScale3D=function() return actor_scale end,
+        SetActorScale3D=function(_,v) actor_scale=v;calls[#calls+1]="actor" end}
+    actor["Set Character Height"]=function(self)
+        calls[#calls+1]="native-height"
+        local k=.875+.125*self["Character Passport"][field];self:SetActorScale3D({X=k,Y=k,Z=k})
+    end
+    FindAllOf=function(cls) if cls=="Willie_BP_C" then return {me,actor} end end
+    local p={gen=api.generation(),actor=actor,driving=true,in_range=true,nick="Peer",
+        body={mesh=mesh,ctl="servo",sv={},handles={},sims={}}}
+    T.check(select(2,api.generation())==p.gen,"height test uses settled current-world cache",T.repr({api.generation()}))
+    api.set_puppet(2,p)
+    api.PX.bodyheight("2 0.946")
+    T.check(p.body.height_probe and p.body.repose and calls[1]=="off" and calls[2]=="native-height",
+        "remote height probe enters driver's physics-off window before native actor scaling",M.logtext())
+    T.check(p.body.sv==nil and p.body.scale_remeasure,"probe discards cached COM and rest offsets")
+    if not p.body.height_probe then return end
+    local expiry=p.body.height_probe.until_t
+    api.PX.height_tick(p,expiry-.01)
+    T.check(actor["Character Passport"][field]==.946,"geometry probe remains active before deadline")
+    api.PX.height_tick(p,expiry)
+    T.check(p.body.height_probe==nil and actor["Character Passport"][field]==.76 and actor_scale.X==.97,
+        "bounded timeout restores original native passport/actor scale without a new pose")
+    p.body.repose=nil;sim=true
+    api.PX.bodyheight("2 0.946")
+    api.PX.height_restore(p,"release",false)
+    T.check(p.body.height_probe==nil and sim and not p.body.repose and mesh_scale.Y==.996,
+        "release cleanup restores original geometry and simulation immediately")
+    p.body.repose=nil;sim=true
+    api.PX.bodyheight("2 0.946")
+    local n=#calls
+    actor.IsValid=function() error("old world object touched") end
+    mesh.IsValid=function() error("old world mesh touched") end
+    api.drop_caches("test world teardown")
+    T.check(#calls==n and next(api.puppets())==nil,
+        "world teardown discards diagnostic state without touching old native objects")
+    actor.IsValid=function() return true end;mesh.IsValid=function() return true end
+    p.body.height_probe=nil;p.body.repose=nil
+    api.set_puppet(2,p)
+    p.body.repose=nil
+    M.pc.__props.Pawn=actor
+    n=#calls;api.PX.bodyheight("2 0.946")
+    T.check(#calls==n and p.body.height_probe==nil,"probe refuses a stand-in now possessed as our pawn")
+end
+
+if opts.kind == "pose_context" then
+    local api = boot(true)
+    HSMPNative.sc_put("session", { seq = 1, match_id = 901, round = 2, phase = 3 })
+    HSMPNative.sc_put("mode", { seq = 1, match_id = 901, round = 2,
+        rows = { { peer_id = 2, seat = 1, life = 3, alive = true } } })
+    local p = { gen = -1, driving = true, last = { v2 = true, has_context = true,
+        match_id = 901, round = 2, life = 2 }, aim = {}, shown = {}, play = { seq = 77, seq_at = 500 } }
+    api.drive_frame(2, p, 501)
+    T.check(p.driving == false, "authoritative new life releases an old cached servo immediately")
+    T.check(p.last == nil and p.aim == nil and p.shown == nil and p.play.seq == nil,
+        "old cached pose and displayed timeline are removed before another frame can drive")
+end
+
 if opts.kind == "parse" then
     local api = boot(true)
+    local P = api.PURE
+    local s = { match_id = 901, round = 2, state = "live" }
+    local m = { match_id = 901, round = 2, rows = { [2] = { life = 3 } } }
+    local pose = { has_context = true, match_id = 901, round = 2, life = 3, B = {}, m = 0 }
+    T.check(P.pose_context_ok(pose, s, m, 2), "pose belongs to current match/round/native life")
+    T.check(not P.pose_context_ok(pose, s, nil, 2), "live pose waits for authoritative Mode life")
+    pose.life = 2
+    T.check(not P.pose_context_ok(pose, s, m, 2), "previous life is rejected even when cached")
+    pose.life, pose.match_id = 3, 900
+    T.check(not P.pose_context_ok(pose, s, m, 2), "previous match pose is rejected")
+    pose.match_id, pose.round = 901, 1
+    T.check(not P.pose_context_ok(pose, s, m, 2), "previous round pose is rejected")
+    pose.round, pose.has_context = 2, false
+    T.check(not P.pose_context_ok(pose, s, m, 2), "active match never accepts an unlabelled pose")
+    s.state, s.spawn_round, pose.round, pose.life, pose.has_context = "countdown", 3, 3, 1, true
+    T.check(P.pose_context_ok(pose, s, m, 2), "next round placement uses its own initial life")
+    local shown=P.displayed_pose(pose,"Willie_BP_C_rendered",100,500)
+    pose.life=2
+    local row=P.playback_row(2,shown,501)
+    T.check(row and row.life==1 and row.match_id==901 and row.round==3 and row.pawn=="Willie_BP_C_rendered",
+        "displayed playback retains original pose life and actual pawn after source table changes")
+    T.check(P.playback_row(2,shown,751)==nil,"stalled displayed pose cannot attribute new contacts")
+    local delayed=P.playback_row(2,shown,850,true)
+    T.check(delayed and delayed.local_ms==500 and delayed.life==1,
+        "approved delayed trade retains original timestamp and life without refreshing contact eligibility")
+    T.check(P.playback_row(2,shown,499,true)==nil,"retained generation cannot authorize a future timestamp")
+    shown.pawn=""
+    T.check(P.playback_row(2,shown,501)==nil,"displayed playback requires exact native actor identity")
+    pose.life=1
+    pose.life = 3
+    T.check(not P.pose_context_ok(pose, s, m, 2), "old Mode life cannot authorize next round pose")
+    pose.life = 1
+    local parsed = P.play_from_out(pose)
+    T.check(parsed.has_context and parsed.match_id == 901 and parsed.round == 3 and parsed.life == 1,
+        "typed pose retains life context in alternating cached output")
+    P.play_from_out({ B = {}, m = 0 }, parsed)
+    T.check(not parsed.has_context and parsed.match_id == nil and parsed.life == nil,
+        "reused pose table clears absent life context")
     -- the typed `standin_dead` bus record HSMPCombat writes ({wall, rows = {{peer, name}}})
     local set, wall = api.parse_standin_dead({ wall = 1700000000,
         rows = { { peer = 2, name = "Willie_BP_C_5" }, { peer = 11, name = "Willie_BP_C_9" } } })
@@ -652,6 +764,11 @@ if opts.kind == "skeleton_ref" then
     out, fixed = P.ref_loc(loc)
     T.check(fixed == 2 and math.abs(P.len3(out[17]) - 27.25 * k) < 1e-3 and out[19] ~= nil,
         "a stretched and a missing offset come from the reference", T.repr({ fixed, out[17], out[19] }))
+    local neck = P.V2_REF_T[7]
+    loc[7] = { P.len3(neck) * k, 0, 0 }
+    out, fixed = P.ref_loc(loc)
+    T.check(fixed == 3 and P.d3(out[7], { neck[1] * k, neck[2] * k, neck[3] * k }) < 1e-6,
+        "an equal-length neck displaced sideways is not cached as the reference joint", T.repr(out[7]))
     -- a pose built from the reference, then one joint pulled 12 uu
     local pos, len = { { 0, 0, 100 } }, {}
     for i = 2, #P.V2_REF_T do
@@ -664,4 +781,85 @@ if opts.kind == "skeleton_ref" then
     pos[13] = { pos[13][1] + 12, pos[13][2], pos[13][3] }   -- hand_l pulled off the forearm
     local d, b = P.stretch(pos, len)
     T.check(d > 10 and (b == 13 or b == 12), "a pulled joint is measured", T.repr({ d, b }))
+end
+
+if opts.kind == "body_scale" then
+    local api = boot(true)
+    local n = HSMPNative
+    local scale, calls, asset_rebuilds = { X=1, Y=1, Z=1 }, {}, 0
+    local mesh = {
+        K2_GetComponentScale = function() return scale end,
+        SetSimulatePhysics = function(_, on) calls[#calls+1] = on and "on" or "off" end,
+        SetWorldScale3D = function(_, s) scale = s; calls[#calls+1] = "scale" end,
+        SetPhysicsAsset = function() asset_rebuilds = asset_rebuilds + 1 end,
+    }
+    local p = { nick="peer", aim={}, shown={}, qhist={}, idlew={}, qfoot={} }
+    local body = { mesh=mesh, sv={} }
+    local pose = { has_context=true,match_id=10,round=1,life=1 }
+    n.sc_put("peer_body2", { version=1, match_id=10,round=1,life=1,pawn="Owner",native_height=.5,actor_scale={1,1,1},
+        height_rate=1, muscle_rate=0, mass_scale_bp=1,
+        char_scale={ 1.1, 0.95, 1.2 }, rows={} }, 2)
+    HSMP_IPC.peer_dir(true)
+    local stale_pose = { has_context=true,match_id=10,round=1,life=2 }
+    T.check(not api.PX.sync_body_scale(2,p,body,999,stale_pose) and #calls == 0,
+        "an old body generation cannot resize the fresh native life")
+    T.check(not api.PX.sync_body_scale(2,p,body,999) and #calls == 0,
+        "no body geometry is applied before an authenticated pose is displayed")
+    T.check(api.PX.sync_body_scale(2, p, body, 1000, pose), "owner mesh scale starts a coordinated geometry reset")
+    T.check(T.eq(calls, { "off", "scale" }) and body.repose and body.scale_remeasure,
+        "physics stops before resizing, then geometry is marked for measurement", T.repr(calls))
+    T.check(asset_rebuilds == 0,
+        "scale sync retains native bodies and their active physics-control bindings")
+    T.check(body.sv == nil and p.aim == nil and p.shown == nil and p.qhist == nil,
+        "old COM/joint offsets and prior pose aims are discarded after resizing")
+    T.check(math.abs(scale.X-1.1)<1e-6 and math.abs(scale.Y-0.95)<1e-6 and math.abs(scale.Z-1.2)<1e-6,
+        "all three owner scale axes are preserved")
+    T.check(not api.PX.sync_body_scale(2, p, body, 1017, pose) and #calls == 2,
+        "unchanged geometry does not reset physics every frame")
+    n.sc_put("peer_body2", { version=2, match_id=10,round=1,life=1,pawn="Owner",native_height=.5,actor_scale={1,1,1},
+        height_rate=1, muscle_rate=0, mass_scale_bp=1,
+        char_scale={ 1, 1, 1 }, rows={} }, 2)
+    body.sv, p.aim = {}, {}
+    T.check(api.PX.sync_body_scale(2, p, body, 2000, pose) and body.sv == nil and p.aim == nil and #calls == 4,
+        "a later owner geometry change invalidates a running servo too")
+end
+
+if opts.kind == "fist_grip" then
+    local api = boot(true)
+    local states = {}
+    local grip = {
+        IsValid=function() return true end, GetAddress=function() return 501 end,
+        ConstraintInstance={ ConstraintBone2={ToString=function() return "hand_r" end},
+            ProfileInstance={AngularDrive={SlerpDrive={Stiffness=10,Damping=2,MaxForce=100}},
+                LinearLimit={XMotion=2,YMotion=2,ZMotion=2,Limit=1},
+                ConeLimit={Swing1Motion=2,Swing1LimitDegrees=10,Swing2Motion=2,Swing2LimitDegrees=20},
+                TwistLimit={TwistMotion=2,TwistLimitDegrees=30}} },
+    }
+    for _, k in ipairs({"LinearX","LinearY","LinearZ","AngularSwing1","AngularSwing2","AngularTwist"}) do
+        grip["Set"..k.."Limit"] = function(_, mode, value) states[k]={mode,value} end
+    end
+    grip.SetAngularDriveParams = function() end
+    local function weapon(cls)
+        return {IsValid=function() return true end,
+            GetClass=function() return {GetFName=function() return {ToString=function() return cls end} end} end}
+    end
+    local actor={ ["Weapon R"]=weapon("Weapon_Fists_C"), K2_GetComponentsByClass=function() return {grip} end }
+    local p={actor=actor}
+    local list=api.PX.grip_constraints(p,1000)
+    T.check(list[1].freed and states.LinearX[1]==0 and states.AngularTwist[1]==0,
+        "fist grip is freed even without a weapon servo target")
+    actor["Weapon R"]=weapon("ModularWeaponBP_Polearm_C")
+    list=api.PX.grip_constraints(p,2001)
+    T.check(not list[1].freed and states.LinearX[1]==2 and states.AngularTwist[2]==30,
+        "an unserved real weapon regains its original grip limits")
+    actor["Weapon R"]=weapon("Weapon_Fists_C")
+    api.PX.grip_constraints(p,3002)
+    actor["Weapon R"]=nil
+    list=api.PX.grip_constraints(p,4003)
+    T.check(not list[1].freed and states.LinearX[1]==2,"an empty hand regains original grip limits")
+    actor["Weapon R"]=weapon("Weapon_Fists_C")
+    api.PX.grip_constraints(p,5004)
+    api.PX.grips_off(p,false)
+    T.check(not list[1].freed and states.LinearX[1]==2 and states.AngularTwist[1]==2,
+        "ending the stand-in drive restores its original fist grip")
 end

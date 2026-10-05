@@ -982,7 +982,20 @@ fn respawn_step(inner: &mut Inner) {
             .collect();
         let life = {
             let s = inner.modes.stats.entry(key).or_default();
-            s.life = s.life.saturating_add(1);
+            let Some(next) = s.life.checked_add(1) else {
+                // Reusing u16::MAX would authenticate an old pawn as a new
+                // life. Leave this player dead until the next round/match.
+                inner.modes.respawns.remove(&pid);
+                inner.modes.dirty = true;
+                inner.match_state_dirty = true;
+                warn!(peer_id = pid, "deathmatch: pawn life generation exhausted; respawn refused");
+                crate::events::emit("respawn_refused", serde_json::json!({
+                    "peer_id": pid, "round": inner.match_round, "match_id": inner.sess.match_id,
+                    "reason": "life_generation_exhausted",
+                }));
+                continue;
+            };
+            s.life = next;
             s.life
         };
         let round = inner.match_round;
@@ -1134,3 +1147,10 @@ fn zone_record(inner: &Inner) -> Option<Vec<u8>> {
 #[cfg(test)]
 #[path = "modes_tests.rs"]
 mod tests;
+
+/// Server-authoritative native pawn generation assigned by the spawn order.
+pub(crate) fn peer_life(inner: &Inner, peer: PeerId) -> u16 {
+    inner.peers.values().find(|p|p.id==peer)
+        .and_then(|p|inner.modes.stats.get(&session::peer_key(p)))
+        .map_or(0, |s|s.life)
+}

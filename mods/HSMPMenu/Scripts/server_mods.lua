@@ -148,12 +148,12 @@ function M.pump()
     if not I then return end
     for _, e in ipairs(I.events("mod_offer")) do
         local d = e.data or {}
-        local set = M.hex(d.set_hash)
-        if not M.cur or M.cur.set ~= set then
+        local set,key = M.hex(d.set_hash),M.hex(d.server_key)
+        if not M.cur or M.cur.set ~= set or M.cur.key ~= key then
             M.cur = { set = set, raw = d.set_hash, mods = {}, remember = true }
         end
         local c = M.cur
-        c.key, c.n, c.total, c.cached = M.hex(d.server_key), tonumber(d.n) or 0, tonumber(d.total_bytes) or 0, tonumber(d.cached_bytes) or 0
+        c.key, c.n, c.total, c.cached = key, tonumber(d.n) or 0, tonumber(d.total_bytes) or 0, tonumber(d.cached_bytes) or 0
     end
     for _, e in ipairs(I.events("mod_entry")) do
         local d = e.data or {}

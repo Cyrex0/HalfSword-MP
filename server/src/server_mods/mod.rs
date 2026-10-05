@@ -225,6 +225,14 @@ impl Host {
         s.global.give(n);
         if let Some(p) = s.peers.get_mut(&peer) {
             p.bucket.give(n);
+            // The receive loop can refill the queue while send_out awaits
+            // transport capacity. Preserve this original request without
+            // exceeding the per-peer bound; the newest one can be asked again.
+            if p.q.len() >= MAX_QUEUE {
+                if let Some(dropped)=p.q.pop_back() {
+                    p.booked=p.booked.saturating_sub(dropped.len as u64);
+                }
+            }
             p.q.push_front(r);
         }
     }
@@ -345,4 +353,23 @@ mod tests {
         h.retain(|_| false);
         assert_eq!(h.queued(1), 0);
     }
+    #[test]
+    fn backpressure_retry_stays_bounded_when_receive_refills_queue() {
+        let h=host(Config::default(),&[100_000]);
+        let original=req(0,0,1024,1);
+        assert_eq!(h.request(1,&original,0),Req::Queued);
+        let sent=h.take_due(0,1);
+        assert_eq!(sent.len(),1);
+        for id in 2..=MAX_QUEUE as u32+1 {
+            assert_eq!(h.request(1,&req(0,1024,1024,id),0),Req::Queued);
+        }
+        let booked=h.serve().peers[&1].booked;
+        h.retry(1,sent[0].1);
+        assert_eq!(h.queued(1),MAX_QUEUE);
+        let s=h.serve();let p=&s.peers[&1];
+        assert_eq!(p.q.front().unwrap().req_id,1,"original request retained first");
+        assert_eq!(p.booked,booked-1024,"discarded unsent request refunded from transfer budget");
+        assert!(p.q.iter().all(|r|r.req_id!=MAX_QUEUE as u32+1));
+    }
+
 }

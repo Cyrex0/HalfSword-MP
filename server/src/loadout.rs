@@ -15,7 +15,7 @@ use hsmp_ipc::layout::Str;
 use hsmp_ipc::record::{to_payload, view, Invalid};
 use hsmp_ipc::schema::loadout::{
     check_loadout_rows, Kit, KitRules, LoadoutHead, K_KIT, K_KIT_RULES_REQ, K_KIT_VERDICT,
-    BodyHead, K_BODY, K_LOADOUT, VERDICT_ACCEPTED, VERDICT_DEFAULT, VERDICT_REPLACED,
+    BodyHead, Body2Head, K_BODY, K_BODY2, K_LOADOUT, VERDICT_ACCEPTED, VERDICT_DEFAULT, VERDICT_REPLACED,
 };
 use hsmp_ipc::wire::{self, WireHdr};
 use std::collections::HashMap;
@@ -70,6 +70,10 @@ pub async fn handle_record(
         K_BODY => {
             let v = view::<BodyHead>(payload).map_err(crate::server::refused)?;
             on_body(socket, state, from, v.head.version, payload).await;
+        }
+        K_BODY2 => {
+            let v = view::<Body2Head>(payload).map_err(crate::server::refused)?;
+            on_body2(socket, state, from, &v.head, payload).await;
         }
         k => {
             // kit_verdict / kit_rules are server -> client only.
@@ -161,6 +165,27 @@ fn body_store() -> &'static Mutex<HashMap<PeerId, Stored>> {
     static S: OnceLock<Mutex<HashMap<PeerId, Stored>>> = OnceLock::new();
     S.get_or_init(|| Mutex::new(HashMap::new()))
 }
+fn body2_store() -> &'static Mutex<HashMap<PeerId, Stored>> {
+    static S: OnceLock<Mutex<HashMap<PeerId, Stored>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(HashMap::new()))
+}
+async fn on_body2(socket: &UdpSocket, state: &Arc<ServerState>, from: SocketAddr, h: &Body2Head, payload: &[u8]) {
+    let (pid, others) = {
+        let inner = state.lock().lock().await;
+        let Some(p) = inner.peers.get(&from) else { return };
+        if crate::interact::peer_caps(p.id) & hsmp_net::net::caps::BODY2 == 0
+            || !crate::server::body_context_matches(&inner, p.id, h.match_id, h.round, h.life) { return; }
+        let others = inner.peers.iter().filter(|(_, q)| q.id != p.id
+            && crate::interact::peer_caps(q.id) & hsmp_net::net::caps::BODY2 != 0).map(|(a, _)| *a).collect::<Vec<_>>();
+        (p.id, others)
+    };
+    let msg = {
+        let mut st = body2_store().lock().await;
+        if store_versioned(&mut st, K_BODY2, pid, h.version, payload, Instant::now()) != LoadoutStep::Relay { return; }
+        st[&pid].msg.clone()
+    };
+    send_all(socket, state, &others, &msg).await;
+}
 
 /// Players that get a `body` record of `owner`: every other one that negotiated
 /// `caps::BODY` (a beta.4 sidecar never sees the record).
@@ -200,6 +225,7 @@ async fn on_body(socket: &UdpSocket, state: &Arc<ServerState>, from: SocketAddr,
 pub async fn forget(pid: PeerId) {
     store().lock().await.remove(&pid);
     body_store().lock().await.remove(&pid);
+    body2_store().lock().await.remove(&pid);
     kit_gate().lock().unwrap_or_else(|e| e.into_inner()).pending.remove(&pid);
 }
 
@@ -725,10 +751,21 @@ pub async fn replay_to(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, to: So
         }
         _ => Vec::new(),
     };
+    let bodies2 = if joiner.is_some_and(|j| crate::interact::peer_caps(j) & hsmp_net::net::caps::BODY2 != 0) {
+        let candidates = {
+            let st = body2_store().lock().await;
+            others.iter().filter_map(|pid| st.get(pid).map(|e| (*pid, e.msg.clone()))).collect::<Vec<_>>()
+        };
+        let inner = state.lock().lock().await;
+        candidates.into_iter().filter_map(|(id, msg)| {
+            let (_, v) = hsmp_ipc::wire::decode::<Body2Head>(&msg).ok()?;
+            crate::server::body_context_matches(&inner, id, v.head.match_id, v.head.round, v.head.life).then_some(msg)
+        }).collect::<Vec<_>>()
+    } else { Vec::new() };
     if to_joiner.len() > 1 || !loadouts.is_empty() || !bodies.is_empty() {
         info!(%to, kits = to_joiner.len() - 1, loadouts = loadouts.len(), bodies = bodies.len(), "replaying kits / loadouts to joiner");
     }
-    for m in to_joiner.into_iter().chain(loadouts).chain(bodies) {
+    for m in to_joiner.into_iter().chain(loadouts).chain(bodies).chain(bodies2) {
         send_msg(socket, state, to, m).await;
     }
     for m in &to_all {
@@ -1544,6 +1581,9 @@ mod record_tests {
             assert_ne!(record_mode(other, 9), k, "kind {other:#x} shares the body stream");
         }
         assert_eq!(keys::BODY, hsmp_ipc::schema::loadout::hsmp_net_keys::BODY);
+        assert_eq!(keys::BODY2, hsmp_ipc::schema::loadout::hsmp_net_keys::BODY2);
+        assert_eq!(record_mode(K_BODY2,9),Some(SendMode::ReliableLatest{key:key(keys::BODY2,9)}));
+        assert_ne!(record_mode(K_BODY2,9),k,"legacy body cannot overwrite the Body2 reliable stream");
         let a = |n: u16| -> SocketAddr { format!("127.0.0.1:{n}").parse().unwrap() };
         let peers = vec![(a(1), 3), (a(2), 4), (a(3), 5), (a(4), 6)];
         let capsf = |id: PeerId| if id == 6 { caps::HIT_FX } else { caps::BODY | caps::HIT_FX };

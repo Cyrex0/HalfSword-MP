@@ -195,6 +195,13 @@ local CAUSE = { [1] = "", [2] = "", [0] = "" }
 function Mo.death_text(snap, d)
     local v = who(snap, d.victim)
     if d.cause == 3 then return v .. " left the fight" end
+    if d.cause == 6 then return v .. " surrendered" end
+    if d.cause == 5 then
+        if d.killer and d.killer ~= 0 and d.killer ~= d.victim then
+            return who(snap,d.killer) .. " defeated " .. v
+        end
+        return v .. (v == "You" and " were defeated" or " was defeated")
+    end
     if d.killer and d.killer ~= 0 and d.killer ~= d.victim then
         return who(snap, d.killer) .. " slew " .. v .. (CAUSE[d.cause] or "")
     end
@@ -374,6 +381,10 @@ function Mo.centre(T, snap, now)
     end
     local m = snap.match
     if not m then return nil end
+    if m.state=="live" and snap.surrender then
+        return {title=string.format("Hold to surrender %d%%",math.floor(snap.surrender.progress*100)),
+            sub="Release to cancel",tone="warn"}
+    end
     local me = my_id(snap)
     if m.state == "lobby" and Mo.rematch_waiting(T, now) then
         return { title = "REMATCH", sub = string.format("waiting for everyone to be ready   -   %d s", math.max(0, math.ceil(Mo.REMATCH_HOLD_S - (now - T.result_at)))) }
@@ -607,7 +618,7 @@ function Mo.build(T, snap, now, ctx)
         local hp = vo.hp
         local dead = (m and m.alive[me] == false and m.state == "live") or hp <= 0 or vo.dead or false
         out.me = { hp = math.max(0, hp), st = vo.st, dead = dead and true or false,
-                   body = vo.body, con = vo.con, bleeding = vo.bleeding or false }
+                   body = vo.body, con = vo.con, bleeding = vo.bleeding or false, severed = vo.severed or false }
     end
 
     -- opponents (roster order) from their `peer_vitals` records
@@ -622,7 +633,8 @@ function Mo.build(T, snap, now, ctx)
                 local down = r and r.down
                 out.opps[#out.opps + 1] = { id = id, name = Mo.nick(snap, id), hp = hp, st = st,
                                             dead = dead and true or false, down = (not dead) and down and true or false,
-                                            body = r and r.body, con = r and r.con, bleeding = r and r.bleeding or false }
+                                            body = r and r.body, con = r and r.con, bleeding = r and r.bleeding or false,
+                                            severed = r and r.severed or false }
             end
         end
     end

@@ -167,7 +167,7 @@ impl Net {
         // Combat hit effects (C2STouch / S2CHitFx).
         cfg.caps |= hn::caps::HIT_FX;
         // Passport bodies for stand-ins (body records).
-        cfg.caps |= hn::caps::BODY;
+        cfg.caps |= hn::caps::BODY | hn::caps::BODY2;
         // Game modes: the `mode` / `kill_feed` records, and the King of the hill `zone`.
         cfg.caps |= hn::caps::MODES | hn::caps::ZONE;
         let conn_cfg = ConnConfig { idle_timeout_ms: SERVER_IDLE_MS, ..ConnConfig::default() };

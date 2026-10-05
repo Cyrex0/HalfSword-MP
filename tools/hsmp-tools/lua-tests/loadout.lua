@@ -33,7 +33,14 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "stale_session" })
     T.isolated(T.script, "case", { kind = "weapon_gen" })
     T.isolated(T.script, "case", { kind = "record" })
+    T.isolated(T.script, "case", { kind = "native_empty_fists" })
+    T.isolated(T.script, "case", { kind = "passport_write_retry" })
+    T.isolated(T.script, "case", { kind = "passport_variant" })
     return
+end
+
+if opts.kind=="passport_variant"then
+    package.path=T.path("mods/HSMPLoadout/Scripts/?.lua")..";"..T.path("mods/shared/?.lua")..";"..package.path
 end
 
 local M = require("umg_mock")
@@ -72,6 +79,13 @@ local function boot(world)
     _G.RegisterHook = function() return 1, 2 end
     M.own = M.new_obj("Willie_BP_C", "Willie_BP_C_3"); rawset(M.own, "__addr", 1003)
     M.standin = M.new_obj("Willie_BP_C", "Willie_BP_C_9"); rawset(M.standin, "__addr", 1009)
+    -- Every native Willie has the equipment passport map. A missing map
+    -- must fail dressing rather than letting an empty write look successful.
+    M.standin.__props["Character Passport"] = { ["Equipment_26_741A2FC641801842FE691295645C604F"] = {
+        ["ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358"] = {
+            Empty = function() end, Add = function() end, ForEach = function() end },
+        ["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"] = {
+            Add = function() end, Remove = function() end } } }
     M.standin.__props.bHidden = (opts.standin_visible ~= true)   -- in game the BeginPlay hook hides it
     M.pc.__props.Pawn = M.own
     _G.FindAllOf = function(c)
@@ -79,6 +93,22 @@ local function boot(world)
         return nil
     end
     _G.RegisterBeginPlayPostHook = function(fn) M.bp_hook = fn end
+    if opts.kind == "strip" or opts.kind == "weapon_gen" then
+        local path = "/Game/Assets/Weapons/Blueprints/Built_Weapons/Weapon_Fists.Weapon_Fists_C"
+        local fc = { IsValid=function()return true end, GetFullName=function()return "BlueprintGeneratedClass "..path end,
+            GetCDO=function()return {IsValid=function()return true end,["Weapon Passport"]={}} end }
+        local find = StaticFindObject
+        _G.StaticFindObject=function(p)return p==path and fc or find(p) end
+        for _,side in ipairs({"R","L"}) do
+            Mt["Set Up "..(side=="R" and "Right" or "Left").." Hand Weapon"]=function(pawn)
+                local old=pawn.__props["Weapon "..side]
+                if old and old:IsValid() then old:K2_DestroyActor() end
+                local a=M.new_obj("Weapon_Fists_C","NativeFist_"..side)
+                rawset(a,"__clspath",path); a.__props["Weapon Passport"]={}
+                pawn.__props["Weapon "..side]=a
+            end
+        end
+    end
     dofile(LO)
 end
 
@@ -126,6 +156,92 @@ end
 local function remote(v, R)
     HSMPNative.sc_put("peer_loadout", { version = v, flags = R and 1 or 0, r = R and { class = R } or nil, rows = {} }, 2)
 end
+
+if opts.kind=="passport_variant"then
+    boot()
+    local fields_text=T.read(LO):match("local WEAPON_FIELDS = (%b{})")
+    local fields=assert(load("return "..fields_text))()
+    local classpath="/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C"
+    local classes={}
+    local function expand(short)
+        local path=short:gsub("^@Weapons/","/Game/Assets/Weapons/")
+        local leaf=path:match("([^/]+)$")
+        return path.."."..leaf.."_C"
+    end
+    local function class(path)
+        if not classes[path]then classes[path]={IsValid=function()return true end,
+            GetFullName=function()return "BlueprintGeneratedClass "..path end,
+            GetFName=function()return FName(path:match("([^%.]+)$"))end,
+            GetCDO=function()return {IsValid=function()return true end,["Weapon Passport"]={}}end}end
+        return classes[path]
+    end
+    StaticFindObject=function(path)return class(path)end
+    local wanted={class="@Weapons/ModularWeaponBP_Sword",head="@Weapons/Modules/HeadA",grip="@Weapons/Modules/GripA",
+        name="variant",id=7,head_size={1,1.0001,1},mass_head=1.1,mat_steel=4,
+        color_wood={0,0,0,1},color_leather={0,0,0,1}}
+    local native={}
+    for _,fd in ipairs(fields)do
+        local kind,v=fd[2],wanted[fd[3]]
+        if kind=="class"then native[fd[1]]=v and class(expand(v))or nil
+        elseif kind=="name"then native[fd[1]]={ToString=function()return v or ""end}
+        elseif kind=="num"or kind=="int"then native[fd[1]]=v or 0
+        elseif kind=="vec"then native[fd[1]]={X=v and v[1]or 0,Y=v and v[2]or 0,Z=v and v[3]or 0}
+        elseif kind=="color"then native[fd[1]]={R=0,G=0,B=0,A=1}end
+    end
+    local current=weapon("same-class-before",9001,classpath)
+    current.__props["Weapon Passport"]=native
+    M.standin.__props["Weapon R"]=current
+    local setups,stored=0,{}
+    M.standin.__props["Character Passport"]["Equipment_26_741A2FC641801842FE691295645C604F"]
+        ["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"].Add=function(_,hand,pass)stored[hand]=pass end
+    M.Methods["Set Up Right Hand Weapon"]=function(w,cls,actor,reversed,destroy_previous,pass)
+        setups=setups+1
+        T.check(destroy_previous==true,"variant replacement uses native previous-weapon destruction path")
+        if w.__props["Weapon R"]then w.__props["Weapon R"]:K2_DestroyActor()end
+        local fresh=weapon("same-class-after"..setups,9100+setups,classpath)
+        for _,fd in ipairs(fields)do
+            if fd[2]=="name"then
+                local text=pass[fd[1]]
+                pass[fd[1]]={ToString=function()return text end}
+            end
+        end
+        fresh.__props["Weapon Passport"]=pass;w.__props["Weapon R"]=fresh
+    end
+    M.Methods["Set Up Left Hand Weapon"]=function()end
+    HSMPNative.bus_put("puppets",{rows={{peer=2,name="Willie_BP_C_9"}}})
+    local function publish_variant(version)
+        HSMPNative.sc_put("peer_loadout",{version=version,flags=1,r=wanted,rows={}},2)
+    end
+    publish_variant(1);run(4500,true)
+    T.check(setups==0 and M.standin.__props["Weapon R"]==current,"exact same-class full Passport reuses existing native actor")
+    T.check(stored[0]and string.pack("<f",stored[0]["CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7"])
+        ==string.pack("<f",wanted.mass_head),
+        "same-variant reuse refreshes character hand passport for delayed native rearm",M.logtext())
+    wanted.mass_head=2.2;publish_variant(2);run(1500,true)
+    T.check(setups==1 and M.standin.__props["Weapon R"]~=current,"same-class custom mass update reaches hand applier and replaces actor")
+    local generation=HSMPNative.sc_get("standin_weapons")
+    T.check(generation and generation.gen==1,"same-class variant replacement invalidates cached weapon components")
+    wanted.head_size[2]=1.0002;publish_variant(3);run(1500,true)
+    T.check(setups==2,"submillimeter same-class shape update survives exact application key")
+    publish_variant(4);run(1500,true)
+    T.check(setups==2,"identical variant version refresh does not rebuild a stable native weapon")
+    local own_weapon=weapon("source-same-class",9500,classpath)
+    local own_pass={}
+    for key,value in pairs(M.standin.__props["Weapon R"].__props["Weapon Passport"])do own_pass[key]=value end
+    local size_field="HeadSize_21_2D425E61473B8F64FBAB51B223459D57"
+    own_pass[size_field]={X=1,Y=1.0002,Z=1}
+    own_weapon.__props["Weapon Passport"]=own_pass;M.own.__props["Weapon R"]=own_weapon
+    run(2500,true)
+    local before=HSMPNative.sc_get("loadout")
+    T.check(before and string.pack("<f",before.r.head_size[2])==string.pack("<f",1.0002),
+        "owner publisher preserves native weapon shape without .001 rounding")
+    own_pass[size_field].Y=1.00021;run(2500,true)
+    local after=HSMPNative.sc_get("loadout")
+    T.check(before and after and before.version~=after.version
+        and string.pack("<f",after.r.head_size[2])==string.pack("<f",1.00021),
+        "owner same-class tiny variant change publishes instead of disappearing in rounded content signature")
+    return
+end
 -- The own `loadout` record the writer put (nil = never written).
 local function own_loadout() return HSMPNative.sc_get("loadout") end
 -- Peer 2's loadout with armour pieces ({slot, class path} rows).
@@ -133,6 +249,85 @@ local function remote_armour(v, pieces)
     local rows = {}
     for i, p in ipairs(pieces) do rows[i] = { flags = 1, slot = p[1], class = p[2] } end
     HSMPNative.sc_put("peer_loadout", { version = v, flags = 0, rows = rows }, 2)
+end
+
+if opts.kind == "passport_write_retry" then
+    boot()
+    local pass = M.standin.__props["Character Passport"]
+    M.standin.__props["Character Passport"] = nil
+    HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
+    remote(1, nil)
+    run(4300, true)
+    T.check(setup_armor == 0 and T.contains(M.logtext(), "passport=false"),
+        "missing passport blocks native dressing and is reported for retry", M.logtext())
+    M.standin.__props["Character Passport"] = pass
+    run(1500, true)
+    T.check(setup_armor > 0, "same loadout retries when the native passport becomes ready")
+end
+
+if opts.kind == "native_empty_fists" then
+    boot()
+    local fists_path = "/Game/Assets/Weapons/Blueprints/Built_Weapons/Weapon_Fists.Weapon_Fists_C"
+    local sword_path = "/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C"
+    local classes = {}
+    for _, path in ipairs({fists_path, sword_path}) do
+        classes[path] = { IsValid = function() return true end,
+            GetFullName = function() return "BlueprintGeneratedClass " .. path end,
+            GetFName = function() return FName(path:match("([^%.]+)$")) end,
+            GetCDO = function() return { IsValid = function() return true end, ["Weapon Passport"] = {} } end }
+    end
+    local find = StaticFindObject
+    _G.StaticFindObject = function(path) return classes[path] or find(path) end
+    local setups = 0
+    for _, side in ipairs({"R", "L"}) do
+        M.Methods["Set Up " .. (side == "R" and "Right" or "Left") .. " Hand Weapon"] = function(pawn, cls, actor, dropped, destroy, pass)
+            T.check(dropped == false and destroy == true, "empty hand uses original native setup arguments")
+            setups = setups + 1
+            local path = cls:GetFullName():gsub("^BlueprintGeneratedClass ", "")
+            local old = pawn.__props["Weapon " .. side]
+            if old and old:IsValid() then
+                pawn.__props["All Weapons Weights"] = pawn.__props["All Weapons Weights"] - old.__props.mass
+                pawn.__props["Armor Weight Body"] = pawn.__props["Armor Weight Body"] - old.__props.mass
+                old:K2_DestroyActor()
+            end
+            local mass = path == fists_path and 0.5 or 5
+            pawn.__props["All Weapons Weights"] = pawn.__props["All Weapons Weights"] + mass
+            pawn.__props["Armor Weight Body"] = pawn.__props["Armor Weight Body"] + mass
+            local a = weapon("Native_" .. side .. "_" .. setups, 9000 + setups, path)
+            a.__props.mass = mass
+            a.__props["Weapon Passport"], a.__props["Parent Actor"] = pass, pawn
+            pawn.__props["Weapon " .. side] = a
+        end
+    end
+    M.standin.__props["Weapon R"] = weapon("OriginalSword", 8001, sword_path)
+    M.standin.__props["Weapon R"].__props.mass = 5
+    M.standin.__props["Weapon R"].__props["Weapon Passport"] = { HeadSize_21_2D425E61473B8F64FBAB51B223459D57 = {X=9,Y=9,Z=9} }
+    M.standin.__props["All Weapons Weights"], M.standin.__props["Armor Weight Body"] = 5, 25
+    HSMPNative.bus_put("puppets", { rows = { {peer = 2, name = "Willie_BP_C_9"} } })
+    remote(1, nil)
+    run(4500, true)
+    local r, l = M.standin.__props["Weapon R"], M.standin.__props["Weapon L"]
+    T.check(r and l and rawget(r, "__clspath") == fists_path and rawget(l, "__clspath") == fists_path,
+        "empty appearance creates native fists symmetrically")
+    T.check(T.any(destroyed, function(n) return n == "OriginalSword" end), "empty desired hand strips real arena weapon")
+    T.check(M.standin.__props["All Weapons Weights"] == 1 and M.standin.__props["Armor Weight Body"] == 21,
+        "native replacement subtracts old sword weight before adding fists")
+    T.check(not r.__props["Weapon Passport"].HeadSize_21_2D425E61473B8F64FBAB51B223459D57 or r.__props["Weapon Passport"].HeadSize_21_2D425E61473B8F64FBAB51B223459D57.X ~= 9,
+        "native fists use their own template without the previous sword head size")
+    local gen = HSMPNative.sc_get("standin_weapons")
+    T.check(gen and gen.gen == 1, "native replacement invalidates cached hand components")
+    local n = setups
+    remote(2, nil); run(1600, true)
+    T.check(setups == n and r:IsValid() and l:IsValid(), "repeated empty snapshot retains fists without actor churn")
+    T.check(r.__props["Parent Actor"] == M.standin and l.__props["Parent Actor"] == M.standin,
+        "native setup retains the correct parent identity")
+    remote(3, "@Weapons/ModularWeaponBP_Sword"); run(1600, true)
+    T.check(rawget(M.standin.__props["Weapon R"], "__clspath") == sword_path and not r:IsValid(),
+        "later real weapon replaces the fist through native setup")
+    T.check(l:IsValid(), "other empty hand keeps its fist")
+    T.check(M.standin.__props["All Weapons Weights"] == 5.5 and M.standin.__props["Armor Weight Body"] == 25.5,
+        "native sword replacement subtracts fist weight exactly once")
+    return
 end
 
 if opts.kind == "m15" then
@@ -426,12 +621,17 @@ if opts.kind == "record" then
     M.standin.__props["Character Passport"] = { ["Equipment_26_741A2FC641801842FE691295645C604F"] = {
         ["ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358"] = {
             Empty = function() added = {} end, Add = function(_, k, v) added[k] = v end,
-            ForEach = function() end },
+            -- Native pooled-foe gear outside the catalogue must not leak
+            -- into an owner's complete appearance, including an empty slot.
+            ForEach = function(_, fn) fn({ get = function() return 0 end }, { get = function()
+                return { [AF.core] = cls("/Game/Assets/Armor/X/BP_FoeHelm.BP_FoeHelm_C"), [AF.slot] = 0 }
+            end }) end },
         ["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"] = { Add = function() end, Remove = function() end } } }
     HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
     HSMPNative.sc_put("peer_loadout", rec, 2)
     run(2000, true)
     local p = added[3]
+    T.check(added[0] == nil, "pooled foe helmet is not merged into the owner's replicated armour", T.repr(added))
     T.check(p and p[AF.fab1] and p[AF.fab1].R == 0.5 and p[AF.fab1].B == 0.125 and p[AF.rust] == true and p[AF.price] == 5,
         "the stand-in's passport map gets the owner's passport (by field name)", T.repr(p))
     T.check(T.contains(M.logtext(), "applied loadout v=" .. tostring(rec and rec.version)), "and the version is applied", M.logtext())

@@ -366,6 +366,9 @@ if opts.kind == "pure_equal" then
                     cut = n % 5, lead = 12, iv = 16, st = 3, rate = 1.05, m = m, B = B, W = W, C = (n % 2 == 1) and C or false,
                     root = (n % 7 ~= 0) and { x = rnd(1000), y = rnd(1000), z = rnd(100), yaw = rnd(180) } or false }
         local want = R.play_from_out(o)
+        -- Lifecycle provenance is new metadata, independent of beta.4 pose math.
+        -- Legacy random fixtures have no original context and must say so.
+        want.has_context=false
         if not same(P.play_from_out(o), want) then bad.play = bad.play + 1 end
         local got = P.play_from_out(o, into)
         local view = {}

@@ -99,7 +99,9 @@ local function load_module(name)
     if ok and type(mod) == "table" then return mod end
     local src = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
     local dir = src:match("^(.*)[/\\]") or "."
-    for _, path in ipairs({ dir .. "/" .. name .. ".lua", dir .. "/../../shared/" .. name .. ".lua" }) do
+    local paths = { dir .. "/" .. name .. ".lua", dir .. "/../../shared/" .. name .. ".lua" }
+    if name == "standin_body" then paths[#paths+1] = dir .. "/../../HSMPCombat/Scripts/standin_body.lua" end
+    for _, path in ipairs(paths) do
         local ok2, mod2 = pcall(dofile, path)
         if ok2 and type(mod2) == "table" then return mod2 end
     end
@@ -239,6 +241,9 @@ local function now_ms() return os.clock() * 1000 end   -- MSVC clock(): wall ms
 
 -- The pure math (no UE calls) lives in avatars_pure.lua.
 local PURE = load_module("avatars_pure")
+local INJURY = load_module("body_injury")
+local BODY_HEIGHT = load_module("standin_body") -- optional dev-only native height probe helper
+local SEVERED_PHYSICS = os.getenv("HSMP_SEVERED_PHYSICS") == "1" -- opt-in until native restore proof
 if not PURE then error("HSMPAvatars: avatars_pure.lua is missing (deploy copies every Scripts/*.lua)") end
 local quat_to_rot, clamp = PURE.quat_to_rot, PURE.clamp
 
@@ -436,6 +441,7 @@ local function read_snapshot(id)
         local t = IPC.peer_rec("peer_root", id)
         local r = type(t) == "table" and t.root or nil
         if type(r) ~= "table" or type(r.pos) ~= "table" or not r.tick then return nil end
+        if not PURE.pose_context_ok(r,HSM and HSM.view(),HSM and HSM.mode(),id) then return nil end
         -- yaw (degrees) of the quaternion {x, y, z, w}, as FQuat::Rotator
         local q = type(r.rot) == "table" and r.rot or {}
         local x, y, z, w = tonumber(q[1]) or 0, tonumber(q[2]) or 0, tonumber(q[3]) or 0, tonumber(q[4]) or 1
@@ -833,6 +839,12 @@ function PX.poll_dev()
     local n = ipc.dev_poll(16, out)
     for i = 1, n do
         local c = out[i] and (out[i].data or out[i])
+        if type(c) == "table" and c.op == 1 and c.key == "bodyphysics" and PX.bodyphysics then
+            PX.bodyphysics_request = tostring(c.arg or "") -- act only after the normal world guard
+        end
+        if type(c) == "table" and c.op == 1 and c.key == "bodyheight" then
+            PX.bodyheight_request = tostring(c.arg or "")
+        end
         if type(c) == "table" and c.op == 2 then   -- S.ENUMS.dev_op.TUNE
             local k = tostring(c.key or "")
             local v, err = PURE.tune_value(k, tonumber(c.num))
@@ -1096,12 +1108,19 @@ function PX.grip_constraints(p, now)
         Log("pose: stand-in grip constraints driven off: %d (BP slerp drive %s)", #list, tostring(list[1] and list[1].stiff))
     end
     p.grips = { at = now, list = list, by = by }
-    -- Free the limits only while that hand's weapon is servoed to the owner's
-    -- (a weapon that is not - other class, kinematic fists - keeps its grip and
-    -- just follows the hand). Re-applied each refresh: the BP may re-lock.
+    -- A real weapon needs a fresh servo target before its grip is freed.
+    -- Fists have no weapon pose target at all: a locked grip to that pseudo
+    -- actor fights the hand-bone servo, so driven fists must be free too.
+    -- Re-applied each refresh: the BP may re-lock.
     for _, g in ipairs(list) do
-        local ws = p.wservo and p.wservo[g.hand == "hand_r" and "Weapon R" or "Weapon L"]
-        local want = g.lim and TUNE.grips ~= 0 and ws and now - ws < 500
+        local field = g.hand == "hand_r" and "Weapon R" or "Weapon L"
+        local ws = p.wservo and p.wservo[field]
+        local fists = false
+        pcall(function()
+            local wa = p.actor[field] -- resolve current possession, never an old cached actor
+            if wa and wa:IsValid() then fists = wa:GetClass():GetFName():ToString():match("^Weapon_Fists") ~= nil end
+        end)
+        local want = g.lim and TUNE.grips ~= 0 and (fists or (ws and now - ws < 500))
         pcall(function()
             if want then
                 g.c:SetLinearXLimit(0, 0); g.c:SetLinearYLimit(0, 0); g.c:SetLinearZLimit(0, 0)
@@ -1170,6 +1189,13 @@ end
 
 -- Hand the stand-in back to its own muscles (no fresh pose).
 local function release_standin(p)
+    if PX.height_restore and p.body and p.body.height_probe and p.gen == world_gen and cache_gen == world_gen then
+        PX.height_restore(p, "release", false)
+    end
+    if p.body and p.gen == world_gen and cache_gen == world_gen and p.body.mesh and p.body.mesh:IsValid() then
+        p.body.injury_disabled = INJURY.restore(p.body.mesh, p.body.injury_disabled, fname)
+        p.body.injury_probe = nil
+    end
     if p.driving == false then return end
     if p.gen == world_gen and cache_gen == world_gen and p.actor and p.actor:IsValid() then
         PX.grips_off(p, false); PX.close_limits(p, p.body)
@@ -1494,6 +1520,168 @@ end
 -- --- puppets -----------------------------------------------------------------
 
 local puppets     = {}   -- id -> { actor, nick, body, play, ... }
+function PX.injury_diag(id,body,bone,stage)
+    pcall(function()
+        local f = fname(bone)
+        local c = body.mesh:GetCenterOfMass(f)
+        Log("bodyphysics evidence peer=%d mesh=%s bone=%s stage=%s com=(%.3f,%.3f,%.3f) mass=%.4f sim=%s disabled=%s",
+            id,tostring(body.mesh:GetAddress()),bone,stage,c.X,c.Y,c.Z,
+            body.mesh:GetBoneMass(f,false),tostring(body.mesh:IsSimulatingPhysics(f)),
+            tostring(body.injury_disabled and body.injury_disabled[bone] == true))
+    end)
+end
+function PX.bodyphysics(arg)
+    local id, bone, action = arg:match("^(%d+)%s+([%w_]+)%s+(%a+)$")
+    id = tonumber(id)
+    local p = id and puppets[id]
+    bone = bone and bone:lower()
+    -- Diagnostic limbs only: never disable the pelvis or whole character.
+    local allowed = {lowerarm_l=true,lowerarm_r=true,hand_l=true,hand_r=true,
+        calf_l=true,calf_r=true,foot_l=true,foot_r=true}
+    if not (p and p.gen == world_gen and p.actor and p.actor:IsValid() and p.body and p.body.mesh:IsValid()
+        and allowed[bone] and (action == "off" or action == "on")) then
+        Log("bodyphysics refused: expected current stand-in peer, distal limb, off|on")
+        return
+    end
+    local body = p.body
+    PX.injury_diag(id,body,bone,"before_" .. action)
+    if action == "off" then
+        body.injury_probe = {bone=bone,until_t=os.clock()+2}
+    else
+        body.injury_probe = nil
+    end
+    local want = action == "off" and {[bone]=true} or {}
+    local err
+    body.injury_disabled, err = INJURY.apply(body.mesh,body.injury_disabled,want,fname)
+    Log("bodyphysics peer=%d mesh=%s bone=%s action=%s applied=%s error=%s auto_restore_s=2",
+        id,tostring(body.mesh:GetAddress()),bone,action,tostring(body.injury_disabled[bone] == true),tostring(err))
+    PX.injury_diag(id,body,bone,"after_" .. action)
+end
+
+-- Explicit dev command only: resize exactly one existing remote body for
+-- two seconds, retaining its native physics asset/controls throughout.
+function PX.height_resolve(p, s)
+    if not (p and p.gen == world_gen and cache_gen == world_gen and p.body and s) then return nil end
+    local actor, mesh
+    pcall(function()
+        local me = local_pawn()
+        if not (me and me:IsValid()) then return end
+        for _, w in pairs(FindAllOf("Willie_BP_C") or {}) do
+            if w and w:IsValid() and not same(w, me) and w:GetAddress() == s.addr
+                and w:GetFName():ToString() == s.name then
+                local m = w.Mesh
+                if m and m:IsValid() and m:GetAddress() == s.mesh_addr then actor, mesh = w, m end
+                break
+            end
+        end
+    end)
+    return actor, mesh
+end
+function PX.height_restore(p, why, repose)
+    local body = p.body
+    local s = body and body.height_probe
+    if not s then return true end
+    if s.retry_at and os.clock() < s.retry_at then return false end
+    local actor, mesh = PX.height_resolve(p, s)
+    if not actor then
+        -- Never write a previous world's object or a body now possessed by us.
+        body.height_probe = nil
+        Log("bodyheight restoration abandoned: target identity/ownership changed (%s)", tostring(why))
+        return false
+    end
+    if repose then PX.start_repose(p, body, now_ms(), "height diagnostic restore") end
+    local ok = BODY_HEIGHT.height_restore(actor, mesh, s)
+    body.sv, body.scale_remeasure = nil, true
+    p.aim, p.shown, p.qhist, p.idlew, p.qfoot = nil, nil, nil, nil, nil
+    if not repose then
+        body.repose = nil
+        pcall(function() mesh:SetSimulatePhysics(s.sim) end)
+    end
+    if ok then
+        body.height_probe = nil
+    else
+        s.retry_at = os.clock()+1 -- retain snapshot without resetting/logging every frame
+    end
+    Log("bodyheight peer=%d actor=%s mesh=%s restore=%s reason=%s original_height=%.9f",
+        s.peer, s.name, tostring(s.mesh_addr), tostring(ok), tostring(why), s.height)
+    return ok
+end
+function PX.height_tick(p, clock)
+    local s = p.body and p.body.height_probe
+    if p.gen == world_gen and s and (clock or os.clock()) >= s.until_t then
+        PX.height_restore(p, "automatic 2-second timeout", p.driving == true)
+    end
+end
+function PX.bodyheight(arg)
+    local id, height = arg:match("^(%d+)%s+([%d%.]+)$")
+    id, height = tonumber(id), tonumber(height)
+    local p = id and puppets[id]
+    if not (BODY_HEIGHT and p and p.gen == world_gen and p.driving and p.in_range and p.body
+        and p.body.ctl == "servo" and not p.owner_dead and not p.body.height_probe and not p.body.repose
+        and height and height >= 0 and height <= 1) then
+        Log("bodyheight refused: expected active remote servo peer and native passport height 0..1")
+        return
+    end
+    local s, err
+    pcall(function()
+        s = BODY_HEIGHT.height_snapshot(p.actor, p.body.mesh)
+        if not s then return end
+        s.addr, s.name, s.mesh_addr = p.actor:GetAddress(), p.actor:GetFName():ToString(), p.body.mesh:GetAddress()
+        s.sim = p.body.mesh:IsSimulatingPhysics(fname("pelvis"))
+    end)
+    local actor, mesh = PX.height_resolve(p, s)
+    if not actor or s.sim ~= true then Log("bodyheight refused: fresh identity or native snapshot unavailable"); return end
+    s.peer, s.until_t = id, os.clock()+2
+    p.body.height_probe = s -- retain restoration data before the first write
+    PX.start_repose(p, p.body, now_ms(), "height diagnostic apply")
+    if not p.body.repose then PX.height_restore(p, "physics-off refused", false); return end
+    local ok
+    ok, err = BODY_HEIGHT.height_probe(actor, mesh, height, s)
+    p.body.sv, p.body.scale_remeasure = nil, true
+    p.aim, p.shown, p.qhist, p.idlew, p.qfoot = nil, nil, nil, nil, nil
+    Log("bodyheight peer=%d actor=%s mesh=%s height=%.9f original=%.9f applied=%s error=%s auto_restore_s=2",
+        id, s.name, tostring(s.mesh_addr), height, s.height, tostring(ok), tostring(err))
+    if not ok then PX.height_restore(p, "native write failed", false) end
+end
+function PX.injury_targets(id,p,targets,aim)
+    local body = p.body
+    if not body then return end
+    if not SEVERED_PHYSICS and not body.injury_probe and not next(body.injury_disabled or {}) then return end
+    local want = {}
+    if SEVERED_PHYSICS then
+        local r = HSMP_IPC and HSMP_IPC.peer_rec("peer_vitals",id)
+        local shown=p.shown or p.applied_context
+        local view=HSM and HSM.view()
+        local allowed=shown and shown.has_context==true and (shown.match_id or 0)>0
+            and (shown.round or 0)>0 and (shown.life or 0)>0
+            and shown.pawn==p.actor:GetFName():ToString()
+            and view and (view.match_id or 0)>0
+            and PURE.pose_context_ok(shown,view,HSM and HSM.mode(),id)
+        local key=p.actor:GetFName():ToString().."@"..tostring(p.actor:GetAddress())
+            ..":"..body.mesh:GetFName():ToString().."@"..tostring(body.mesh:GetAddress())
+        local mask
+        body.injury_journal,mask=INJURY.select_mask(body.injury_journal,shown,allowed,r,key)
+        local enums = HSMP_IPC and HSMP_IPC.S and HSMP_IPC.S.ENUMS and HSMP_IPC.S.ENUMS.dism_part
+        if mask and enums then
+            for name,bit in pairs(enums) do
+                if mask & (1 << bit) ~= 0 then want[name:lower()] = true end
+            end
+        end
+    end
+    local probe = body.injury_probe
+    local restored_bone
+    if probe and os.clock() < probe.until_t then want[probe.bone] = true
+    elseif probe then
+        restored_bone = probe.bone
+        body.injury_probe = nil; Log("bodyphysics peer=%d automatic restore",id)
+    end
+    local err
+    body.injury_disabled,err = INJURY.apply(body.mesh,body.injury_disabled,want,fname)
+    if err then Log("bodyphysics peer=%d %s",id,err) end
+    if restored_bone then PX.injury_diag(id,body,restored_bone,"automatic_restore") end
+    INJURY.omit(aim,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+    INJURY.omit(targets,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+end
 local _driven     = {}   -- actor address -> driven stand-in (ReceiveTick post-hook)
 local next_claim  = {}   -- id -> tick of next claim attempt
 local warned_none = {}   -- id -> true once "no combatant" was logged
@@ -1879,6 +2067,10 @@ end
 -- Forget every cached UObject WITHOUT touching it (world gone / changing).
 -- Pure Lua + bus writes: safe inside the LoadMap hook.
 drop_caches = function(reason)
+    for _, p in pairs(puppets) do
+        if p.body and p.body.height_probe then Log("bodyheight probe discarded at world teardown (no old UObject access)") end
+    end
+    PX.bodyheight_request = nil
     if next(puppets) ~= nil then Log("dropping all puppet caches (no UE access): %s", reason) end
     puppets, next_claim, warned_none = {}, {}, {}
     _driven = {}
@@ -1923,6 +2115,10 @@ local function read_play(id, last_seq)
             return nil                                                       -- empty / stale epoch
         end
         P.seq[id] = seq
+        if not PURE.pose_context_ok(P.out, HSM and HSM.view(), HSM and HSM.mode(), id) then
+            P.last[id], P.seq[id] = nil, nil
+            return "context"
+        end
         if last_seq ~= nil and P.out.seq == last_seq then return "same" end
         -- two tables per peer, alternating: the caller keeps the last one (p.last)
         -- and may still hold the one before (last frame's aim) this frame
@@ -1961,6 +2157,35 @@ function PX.start_repose(p, body, now, why)
         Log("pose: stand-in of %s: %s: clean start (physics reset, snap onto the target pelvis)", tostring(p.nick), why)
     end
     if pcall(function() body.mesh:SetSimulatePhysics(false) end) then body.repose = true end
+end
+
+-- Geometry changes belong to the avatar driver: resizing a live mesh while
+-- retaining old COM/parent-offset caches would pull every joint apart.
+function PX.sync_body_scale(id, p, body, now, pose)
+    local r = HSMP_IPC and HSMP_IPC.peer_rec("peer_body2", id)
+    if not pose or pose.has_context ~= true or type(r) ~= "table" or r.match_id == 0
+        or r.match_id ~= pose.match_id or r.round ~= pose.round or r.life ~= pose.life
+        or not r.life or r.life < 1 or type(r.pawn) ~= "string" or r.pawn == "" then return false end
+    local s = type(r) == "table" and r.char_scale
+    if type(s) ~= "table" then return false end
+    for i = 1, 3 do
+        if type(s[i]) ~= "number" or s[i] ~= s[i] or s[i] <= 0 or s[i] > 16 then return false end
+    end
+    local c
+    pcall(function() c = body.mesh:K2_GetComponentScale() end)
+    if not c then return false end
+    if math.abs(c.X-s[1]) <= 0.001 and math.abs(c.Y-s[2]) <= 0.001 and math.abs(c.Z-s[3]) <= 0.001 then return false end
+    PX.start_repose(p, body, now, "owner body scale changed")
+    if not body.repose then return false end
+    local ok = pcall(function() body.mesh:SetWorldScale3D({ X=s[1], Y=s[2], Z=s[3] }) end)
+    if not ok then return true end -- complete the physics reset even after a refused write
+    -- Keep existing bodies: SetPhysicsAsset(force=true) destroys the native
+    -- character's active physics-control bindings (verified live: both
+    -- stand-ins reached 20–130 cm / 90–155 degree tracking errors).
+    Log("pose: owner body scale %.3f/%.3f/%.3f applied; existing physics bodies retained", s[1], s[2], s[3])
+    body.sv, body.scale_remeasure = nil, true
+    p.aim, p.shown, p.qhist, p.idlew, p.qfoot = nil, nil, nil, nil, nil
+    return true
 end
 
 -- How long after a clean start the servo is soft, and the stretch watch.
@@ -2055,7 +2280,7 @@ local _frame_dt = 1 / 60          -- predicted physics step of the coming frame 
 local _clk_off = nil              -- os.clock base - world real time (ms)
 
 -- Bone-frame centre of mass of every stand-in body, measured once.
-local function servo_setup(body)
+local function servo_setup(body, clean_geometry)
     if body.sv then return body.sv end
     local sv = { com = {}, n = 0, err = { n = 0, e = 0, emax = 0, a = 0, amax = 0, hmax = 0, capped = 0 }, wc = {} }
     for i = 1, PURE.V2_NB do
@@ -2082,7 +2307,14 @@ local function servo_setup(body)
         end)
     end
     local fixed, k
-    sv.loc, fixed, k = PURE.ref_loc(sv.loc)
+    if clean_geometry then
+        -- These offsets were read immediately after the animated reset and
+        -- physics rebuild, so they include the owner's anisotropic scale.
+        -- Comparing them against one uniform reference scale would undo it.
+        fixed, k = 0, PURE.ref_scale(sv.loc)
+    else
+        sv.loc, fixed, k = PURE.ref_loc(sv.loc)
+    end
     sv.ref_len = {}
     for i = 2, PURE.V2_NB do sv.ref_len[i] = PURE.len3(sv.loc[i]) end
     if fixed > 0 then
@@ -2207,7 +2439,9 @@ end
 -- servo commanded last frame.
 function PX.contact_body(mesh, sv, i, cv, near)
     local fn = _sv_fn[i]
-    if not sv.mass[i] then sv.mass[i] = mesh:GetBoneMass(fn, true) or 0 end
+    local mass = tonumber(mesh:GetBoneMass(fn, false))
+    if not mass or mass ~= mass or mass <= 0 or mass == math.huge then return end
+    sv.mass[i] = mass -- diagnostics follow successful current native mass changes
     local v = mesh:GetPhysicsLinearVelocity(fn)
     local dv = math.sqrt((v.X - cv[1]) ^ 2 + (v.Y - cv[2]) ^ 2 + (v.Z - cv[3]) ^ 2)
     local imp = dv * sv.mass[i]   -- kg*uu/s
@@ -2361,7 +2595,10 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local sv = servo_setup(body)
     -- What is on screen now = what we aimed at last frame (contract for
     -- bus key "playback", i.e. HSMPCombat's view time of this peer).
-    if p.aim then p.shown = { label = p.aim.label, at = now } end
+    if p.aim then
+        p.shown = PURE.displayed_pose(p.aim, p.aim.pawn, p.aim.label, now)
+        p.applied_context = p.shown
+    end
     if sv.n == 0 then return end
     -- Time accounting (measured in game with tdiag): this callback runs after
     -- the frame's physics, so the bodies we read stand for the end of the
@@ -2546,7 +2783,10 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     -- aim.
     -- (lag comp keeps the sender's frame-start stamps: the pose shown stands
     -- for label, which is the frame start + cur.st on that clock)
-    if not v1aim then p.shown = { label = label - (cur.st or 0), at = now } end
+    if not v1aim then
+        p.shown = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), label - (cur.st or 0), now)
+        p.applied_context = p.shown
+    end
     -- Foot planting: while the owner's foot is planted (its replicated speed
     -- under PQ.PLANT_SPD), the stand-in's foot is locked where it was when the
     -- plant began and only creeps toward the owner's foot at PQ.PLANT_CREEP
@@ -2622,6 +2862,12 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local pel_err
     local ncap = 0
     if TUNE.tdiag then PX.td_acc = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } end
+    if v1aim and (SEVERED_PHYSICS or body.injury_probe or next(body.injury_disabled or {})) then
+        local copy = {}
+        for s,t in pairs(targets) do copy[s] = t end
+        targets = copy -- never remove slots from the retained received pose
+    end
+    PX.injury_targets(id,p,targets,aim)
     local nat = PX.ns_bodies(mesh, aim, sv, dt, s_capl, s_capa, s_gain, yl, holding)   -- native servo
     local sv_c = sv.c7 or {}
     sv.c7 = sv_c
@@ -2761,7 +3007,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 -- driven bodies and the commanded COM momentum, per frame.
                 local td = PX.td_acc
                 sv.mass2 = sv.mass2 or {}
-                if not sv.mass2[i] then pcall(function() sv.mass2[i] = mesh:GetBoneMass(fn, true) or 0 end) end
+                sv.mass2[i] = nil
+                pcall(function() sv.mass2[i] = mesh:GetBoneMass(fn, false) or 0 end)
                 local m = sv.mass2[i] or 0
                 local wc = PURE.qrot({ c[4], c[5], c[6], c[7] }, com)
                 td[1], td[2], td[3], td[4] = td[1] + m, td[2] + m * (c[1] + wc[1]), td[3] + m * (c[2] + wc[2]), td[4] + m * (c[3] + wc[3])
@@ -2950,7 +3197,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     _probe_buf[#_probe_buf + 1] = table.concat(out, " ")
         probe_flush(id, false)
     end
-    p.aim = { slots = aim, label = label + hstep }
+    p.aim = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), label + hstep, now)
+    p.aim.slots = aim
     return pel_err
 end
 
@@ -2968,6 +3216,12 @@ local function drive_frame(id, p, now)
         pl.bad = (pl.bad or 0) + 1   -- missing or torn record
     end
     local cur = p.last
+    if r == "context" or (cur and not PURE.pose_context_ok(cur, HSM and HSM.view(), HSM and HSM.mode(), id)) then
+        if p.driving then release_standin(p) end
+        p.last, p.aim, p.shown, p.cut_seen = nil, nil, nil, nil
+        pl.seq, pl.seq_at = nil, nil
+        return
+    end
     if cur and cur.v2 then
         -- Codec v2: velocity servo every frame (replication.md "Driver").
         local quiet = now - (pl.seq_at or -1e9)
@@ -3000,6 +3254,7 @@ local function drive_frame(id, p, now)
                 end
             end
         end
+        if PX.sync_body_scale(id, p, body, now, cur) then return end
         if not p.driving then
             -- Start only on live data read after the claim: a stale sample can be
             -- the owner's previous round or place, and pulling a fresh Willie there
@@ -3052,6 +3307,10 @@ local function drive_frame(id, p, now)
         if body.repose then
             body.repose = nil
             pcall(function() body.mesh:SetSimulatePhysics(true) end)
+            if body.scale_remeasure then
+                body.sv, body.scale_remeasure = nil, nil
+                servo_setup(body, true)
+            end
             body.gravity = nil
             set_gravity(body, false)
             set_motor_strength(body, 0.0)
@@ -3630,6 +3889,24 @@ local function on_tick()
     -- 0.5-0.6 s after a round reload (GetFName / FName:ToString on a dead
     -- object, right after the first claim pass).
     if os.clock() - (census.arena_at or 0) < PX.WORLD_SETTLE_S then return end
+    if PX.bodyphysics_request then
+        local request = PX.bodyphysics_request
+        PX.bodyphysics_request = nil
+        PX.bodyphysics(request)
+    end
+    if PX.bodyheight_request then
+        local request = PX.bodyheight_request
+        PX.bodyheight_request = nil
+        PX.bodyheight(request)
+    end
+    -- A diagnostic must restore even when no fresh pose reaches drive_v2.
+    for id,p in pairs(puppets) do
+        PX.height_tick(p)
+        if p.gen == world_gen and p.actor and p.actor:IsValid() and p.body and p.body.mesh:IsValid()
+            and (p.body.injury_probe or next(p.body.injury_disabled or {})) then
+            PX.injury_targets(id,p,nil,nil)
+        end
+    end
     local me_loc = willie_loc(me)
     PX.view_loc = PX.camera_loc(pc) or me_loc   -- stand-in range from the camera
     do
@@ -3805,15 +4082,11 @@ local function on_tick()
     -- the reader can advance it.
     local pb = {}
     for id, p in pairs(puppets) do
-        local cur = p.last
-        if p.shown and cur and cur.v2 and now_ms() - p.shown.at < 250 then
-            -- Codec v2: the sender time the stand-in is SHOWING right now (the
-            -- pose it was driven to last frame, read back this frame) and the
-            -- local ms of that read; HSMPCombat advances it to the hit time.
-            pb[#pb + 1] = { peer = id, body_ts = math.floor(p.shown.label), arm_ts = math.floor(p.shown.label), local_ms = math.floor(p.shown.at) }
-        elseif cur and not cur.v2 and cur.read_at and cur.mode ~= "stale" then
-            pb[#pb + 1] = { peer = id, body_ts = math.floor(cur.pt), arm_ts = math.floor(cur.pt), local_ms = math.floor(cur.read_at) }
-        end
+        -- Keep the original timestamp and pawn generation after driving stops.
+        -- New contacts still enforce freshness; approved death trades need this
+        -- immutable binding until the actor or its native life is replaced.
+        local row = PURE.playback_row(id, p.shown or p.applied_context, now_ms(), true)
+        if row then pb[#pb + 1] = row end
     end
     if HSMP_IPC then HSMP_IPC.bus_put("playback", { rows = pb }) end
 end
@@ -3953,7 +4226,9 @@ if rawget(_G, "HSMP_AVATARS_TEST") then
         parse_standin_dead = DH.parse, combat_declared_dead = DH.declared,
         puppets = function() return puppets end,
         set_puppet = function(id, p) puppets[id] = p end,
-        PX = PX, servo_weapon_parts = servo_weapon_parts, set_gravity = set_gravity,
+        PX = PX, drive_frame = drive_frame, servo_weapon_parts = servo_weapon_parts, set_gravity = set_gravity,
+        generation = function() return world_gen, cache_gen end,
+        drop_caches = drop_caches,
         snap_mesh = snap_mesh, release_standin = release_standin,
         read_roster = read_roster, roster = function() return roster end,
         tune = function() return TUNE end, caps = function() return SERVO_CAP_LIN, SERVO_CAP_ANG end, PURE = PURE,

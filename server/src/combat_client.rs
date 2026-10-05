@@ -38,6 +38,7 @@ use hsmp_ipc::schema::combat::{
     VERDICT_CONFIRM, VERDICT_FINAL,
 };
 use hsmp_ipc::wire;
+use hsmp_ipc::schema::combat::{ReplayOutcome,K_REPLAY_OUTCOME,K_REPLAY_OUTCOME_ACK};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use std::sync::{Arc, OnceLock};
@@ -51,6 +52,7 @@ use tracing::{debug, info, warn};
 const TICK: Duration = Duration::from_millis(5);
 const RESEND_EVERY: Duration = Duration::from_millis(120);
 const HIT_GIVE_UP: Duration = Duration::from_secs(2);
+const OUTCOME_GIVE_UP:Duration=Duration::from_secs(10);
 const DEATH_RESEND: Duration = Duration::from_millis(150);
 const DEATH_GIVE_UP: Duration = Duration::from_secs(10);
 const SEEN_CAP: usize = 4096;
@@ -68,7 +70,6 @@ pub const VITALS_REPEAT: [Duration; 2] = [Duration::from_millis(120), Duration::
 /// Byte offsets (in a framed message: the 8-byte wire header + the record) of the
 /// fields this side fills in place.
 const OFF_HIT_ID: usize = wire::HDR + core::mem::offset_of!(Damage, hit_id);
-const OFF_ROUND: usize = wire::HDR + core::mem::offset_of!(Damage, round);
 const OFF_AGE: usize = wire::HDR + core::mem::offset_of!(Damage, age_ms);
 
 /// Owner-side send policy for the vitals stream. The game offers every frame it
@@ -130,18 +131,25 @@ struct PendingHit {
 
 struct PendingDeath {
     death_id: u32,
-    round: u32,
+    report: DeathReport,
     created: Instant,
     last_sent: Option<Instant>,
 }
 
+type OutcomeKey=(u64,u32,u32,u32,u16);
+fn outcome_key(r:&ReplayOutcome)->OutcomeKey {(r.match_id,r.round,r.attacker,r.hit_id,r.victim_life)}
+struct PendingOutcome {record:ReplayOutcome,created:Instant,last_sent:Option<Instant>}
+struct IncomingHit {attacker:u32,payload:Vec<u8>,created:Instant,last_queued:Option<Instant>}
 #[derive(Default)]
 struct Side {
     next_hit_id: u32,
     next_death_id: u32,
     pending_hits: HashMap<u32, PendingHit>,
+    /// G2S callback order, independent of randomized map iteration, identical
+    /// creation times, and hit-id wrap. Bounded by MAX_PENDING_HITS.
+    pending_order: VecDeque<u32>,
     /// A death report from the game: Some(its round, 0 = the current one).
-    death_requested: Option<u32>,
+    death_requested: Option<DeathReport>,
     pending_death: Option<PendingDeath>,
     seen: VecDeque<(u32, u32)>,
     seen_set: HashSet<(u32, u32)>,
@@ -149,12 +157,24 @@ struct Side {
     fx_seen: VecDeque<(u32, u32)>,
     fx_seen_set: HashSet<(u32, u32)>,
     acks_out: Vec<(u32, u32)>,
+    outcomes:HashMap<OutcomeKey,PendingOutcome>,
+    outcome_order:VecDeque<OutcomeKey>,
+    incoming:VecDeque<IncomingHit>,
     vitals_seq_out: u32,
     vitals_seq_in: HashMap<u32, u32>,
+    vitals_context_in: HashMap<u32,(u64,u32,u16)>,
     vitals_gate: VitalsGate,
     vitals_sent: u64,
     /// Messages produced off the combat task (G2S evidence), sent with its next batch.
     out: Vec<Vec<u8>>,
+}
+
+impl Side {
+    fn remove_hit(&mut self, id: u32) -> Option<PendingHit> {
+        let hit = self.pending_hits.remove(&id)?;
+        self.pending_order.retain(|queued| *queued != id);
+        Some(hit)
+    }
 }
 
 fn side() -> &'static std::sync::Mutex<Side> {
@@ -179,8 +199,8 @@ fn current_match() -> (u64, u64) {
 }
 
 /// Authoritative deaths already pushed, keyed (epoch, match id, peer, round).
-fn deaths_seen() -> &'static std::sync::Mutex<VecDeque<(u64, u64, u32, u32)>> {
-    static S: OnceLock<std::sync::Mutex<VecDeque<(u64, u64, u32, u32)>>> = OnceLock::new();
+fn deaths_seen() -> &'static std::sync::Mutex<VecDeque<(u64, u64, u32, u32, u16)>> {
+    static S: OnceLock<std::sync::Mutex<VecDeque<(u64, u64, u32, u32, u16)>>> = OnceLock::new();
     S.get_or_init(|| std::sync::Mutex::new(VecDeque::new()))
 }
 
@@ -191,6 +211,9 @@ pub fn reset_session() {
     {
         let mut s = lock();
         s.vitals_seq_in.clear();
+        s.vitals_context_in.clear();
+        s.incoming.clear();s.outcomes.clear();s.outcome_order.clear();
+        s.pending_death=None;s.death_requested=None;
         s.seen.clear();
         s.seen_set.clear();
         s.fx_seen.clear();
@@ -200,19 +223,14 @@ pub fn reset_session() {
 }
 
 /// The current round (the session snapshot's, lock-free; SESSION accessor).
-fn now_round() -> u32 {
-    crate::session_client::round()
-}
 
 fn link() -> Option<&'static crate::ipc_shm::ShmLink> {
     crate::ipc_shm::link()
 }
 
 /// Push a typed S2G record for the game.
-fn to_game(kind: u16, peer: u32, payload: &[u8]) {
-    if let Some(l) = link() {
-        l.push_record(kind, 0, peer, payload);
-    }
+fn to_game(kind: u16, peer: u32, payload: &[u8]) -> bool {
+    link().is_some_and(|l|l.push_record(kind,0,peer,payload))
 }
 
 /// A local verdict for the game (timeout / queue_full): the same record the server sends.
@@ -230,6 +248,20 @@ fn local_final(cid: u32, reason: &str) {
 /// short locks only).
 pub fn on_g2s(kind: u16, payload: &[u8]) {
     match kind {
+        K_REPLAY_OUTCOME => {
+            let Ok(v)=view::<ReplayOutcome>(payload) else {return};
+            let r=v.head();let key=outcome_key(&r);
+            let mut s=lock();
+            s.incoming.retain(|i|view::<Damage>(&i.payload).map_or(true,|d| !(i.attacker==r.attacker
+                && d.head.hit_id==r.hit_id && d.head.match_id==r.match_id && d.head.round==r.round && d.head.victim_life==r.victim_life)));
+            if let Some(old)=s.outcomes.get(&key) {
+                if hsmp_ipc::bytemuck::bytes_of(&old.record)!=payload {warn!(hit_id=r.hit_id,"conflicting game replay outcome ignored");}
+                return;
+            }
+            if s.outcomes.len()>=4096 {warn!("native outcome queue full");return;}
+            s.outcomes.insert(key,PendingOutcome{record:r,created:Instant::now(),last_sent:None});
+            s.outcome_order.push_back(key);
+        }
         K_DAMAGE => {
             let Ok(v) = view::<Damage>(payload) else { return };
             let (cid, lage) = (v.head.cid, v.head.lage_ms.min(LAGE_MAX));
@@ -246,8 +278,9 @@ pub fn on_g2s(kind: u16, payload: &[u8]) {
             s.next_hit_id = s.next_hit_id.wrapping_add(1).max(1);
             let mut msg = wire::message(K_DAMAGE, 0, 0, payload);
             msg[OFF_HIT_ID..OFF_HIT_ID + 4].copy_from_slice(&id.to_le_bytes());
-            msg[OFF_ROUND..OFF_ROUND + 4].copy_from_slice(&now_round().to_le_bytes());
+            // Original match/round/life belong to the native callback; never relabel them.
             s.pending_hits.insert(id, PendingHit { msg, cid, lage, created: Instant::now(), last_sent: None, sends: 0 });
+            s.pending_order.push_back(id);
         }
         K_CLASH | K_TOUCH => {
             let msg = wire::message(kind, 0, 0, payload);
@@ -261,7 +294,7 @@ pub fn on_g2s(kind: u16, payload: &[u8]) {
         }
         K_DEATH_REPORT => {
             let Ok(v) = view::<DeathReport>(payload) else { return };
-            lock().death_requested = Some(v.head.round);
+            lock().death_requested = Some(v.head());
         }
         k => debug!(kind = k, "combat: G2S record kind not sent by the game; dropped"),
     }
@@ -332,9 +365,11 @@ fn step(now: Instant, fresh_vitals: Option<Vitals>, vitals_log_at: &mut Instant)
         }
 
         let mut expired = Vec::new();
-        for (id, p) in s.pending_hits.iter_mut() {
+        let order: Vec<u32> = s.pending_order.iter().copied().collect();
+        for id in order {
+            let Some(p) = s.pending_hits.get_mut(&id) else { continue };
             if now.duration_since(p.created) > HIT_GIVE_UP {
-                expired.push(*id);
+                expired.push(id);
                 continue;
             }
             if p.last_sent.map_or(true, |t| now.duration_since(t) >= RESEND_EVERY) {
@@ -346,21 +381,23 @@ fn step(now: Instant, fresh_vitals: Option<Vitals>, vitals_log_at: &mut Instant)
             }
         }
         for id in expired {
-            if let Some(p) = s.pending_hits.remove(&id) {
+            if let Some(p) = s.remove_hit(id) {
                 warn!(hit_id = id, sends = p.sends, "combat: hit never acked; giving up");
                 // A final answer for every claim.
                 finals.push(p.cid);
             }
         }
 
-        if let Some(r) = s.death_requested.take() {
-            let round = if r != 0 { r } else { now_round() };
-            let same_round = s.pending_death.as_ref().map_or(false, |d| d.round == round);
+        if let Some(mut report) = s.death_requested.take() {
+            let round=report.round;
+            let same_round = s.pending_death.as_ref().map_or(false, |d| d.report.round==report.round
+                && d.report.match_id==report.match_id && d.report.life==report.life);
             if !same_round {
                 let id = s.next_death_id;
                 s.next_death_id = s.next_death_id.wrapping_add(1).max(1);
                 info!(death_id = id, round, "combat: own death queued");
-                s.pending_death = Some(PendingDeath { death_id: id, round, created: now, last_sent: None });
+                report.death_id=id;
+                s.pending_death = Some(PendingDeath { death_id:id,report,created:now,last_sent:None });
             }
         }
         let mut drop_death = false;
@@ -370,7 +407,7 @@ fn step(now: Instant, fresh_vitals: Option<Vitals>, vitals_log_at: &mut Instant)
                 drop_death = true;
             } else if d.last_sent.map_or(true, |t| now.duration_since(t) >= DEATH_RESEND) {
                 d.last_sent = Some(now);
-                sends.push(wire::encode(0, 0, &DeathReport { death_id: d.death_id, round: d.round }, &[]));
+                sends.push(wire::encode(0, 0, &d.report, &[]));
             }
         }
         if drop_death { s.pending_death = None; }
@@ -379,6 +416,26 @@ fn step(now: Instant, fresh_vitals: Option<Vitals>, vitals_log_at: &mut Instant)
             sends.push(wire::encode(0, 0, &DamageAck { attacker, hit_id }, &[]));
         }
 
+        let keys:Vec<_>=s.outcome_order.iter().copied().collect();
+        let mut expired_outcomes=Vec::new();let mut sent_outcomes=0;
+        for key in keys {
+            let Some(p)=s.outcomes.get_mut(&key) else {continue};
+            if now.duration_since(p.created)>OUTCOME_GIVE_UP {expired_outcomes.push(key);continue;}
+            if sent_outcomes<64 && p.last_sent.map_or(true,|t|now.duration_since(t)>=RESEND_EVERY) {
+                p.last_sent=Some(now);sent_outcomes+=1;
+                sends.push(wire::encode(0,0,&p.record,&[]));
+            }
+        }
+        for key in expired_outcomes {s.outcomes.remove(&key);s.outcome_order.retain(|k|*k!=key);}
+        // Original first-delivery order is preserved. Later IPC retries are
+        // harmless because the Lua native-attempt cache executes each id once.
+        s.incoming.retain(|i|now.duration_since(i.created)<=HIT_GIVE_UP);
+        for i in s.incoming.iter_mut() {
+            if i.last_queued.map_or(true,|t|now.duration_since(t)>=RESEND_EVERY) {
+                if !to_game(K_DAMAGE_IN,i.attacker,&i.payload) {break;}
+                i.last_queued=Some(now);
+            }
+        }
         if let Some(mut f) = s.vitals_gate.poll(now) {
             s.vitals_seq_out = s.vitals_seq_out.wrapping_add(1);
             s.vitals_sent += 1;
@@ -411,6 +468,17 @@ pub fn on_server_record(h: wire::WireHdr, payload: &[u8]) {
     }
     match h.kind {
         K_DAMAGE_IN => on_damage_in(h.peer, payload),
+        K_REPLAY_OUTCOME_ACK => {
+            if let Ok(v)=view::<ReplayOutcome>(payload) {
+                let r=v.head();let key=outcome_key(&r);
+                let mut s=lock();
+                if s.outcomes.get(&key).is_some_and(|p|hsmp_ipc::bytemuck::bytes_of(&p.record)==payload) {
+                    s.outcomes.remove(&key);s.outcome_order.retain(|k|*k!=key);
+                }
+                drop(s);to_game(K_REPLAY_OUTCOME_ACK,h.peer,payload);
+            }
+        }
+        K_REPLAY_OUTCOME => {to_game(K_REPLAY_OUTCOME,h.peer,payload);},
         K_HITFX_IN => on_hit_fx(h.peer, payload),
         K_DAMAGE_VERDICT => on_verdict(payload),
         K_DEATH_ACK => {
@@ -447,7 +515,12 @@ fn on_damage_in(attacker: u32, payload: &[u8]) {
         first_time(&mut s.seen, &mut s.seen_set, (attacker, hit_id))
     };
     if is_new {
-        to_game(K_DAMAGE_IN, attacker, payload);
+        let mut s=lock();
+        if s.incoming.len()>=4096 {warn!(attacker,hit_id,"combat game delivery queue full");return;}
+        // Enqueue once immediately for low latency, retain until Lua outcome.
+        let queued= !s.incoming.iter().any(|i|i.last_queued.is_none()) && to_game(K_DAMAGE_IN,attacker,payload);
+        s.incoming.push_back(IncomingHit{attacker,payload:payload.to_vec(),created:Instant::now(),
+            last_queued:queued.then(Instant::now)});
         info!(attacker, hit_id, bone = bone.as_str().unwrap_or(""), dmg, "combat: hit on us");
     }
 }
@@ -484,7 +557,7 @@ fn on_verdict(payload: &[u8]) {
             }
         }
         _ => {
-            let Some(p) = lock().pending_hits.remove(&rec.hit_id) else { return };
+            let Some(p) = lock().remove_hit(rec.hit_id) else { return };
             if rec.ok.get() {
                 debug!(hit_id = rec.hit_id, sends = p.sends, "combat: hit delivered");
             } else {
@@ -506,29 +579,49 @@ fn on_death(payload: &[u8]) {
     let mut d = v.head();
     // Scoped by match: the server restarts rounds at 1 every match.
     let (epoch, match_id) = current_match();
-    if !death_is_new(epoch, match_id, d.peer_id, d.round) {
+    if d.match_id!=match_id {
         return;
     }
-    d.match_id = match_id;
+    // Preserve server-authenticated original match and pawn life.
     d.wall_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |t| t.as_millis() as u64);
-    to_game(K_DEATH, d.peer_id, hsmp_ipc::bytemuck::bytes_of(&d));
+    if !deliver_death_once(epoch, &d, || to_game(K_DEATH, d.peer_id, hsmp_ipc::bytemuck::bytes_of(&d))) {
+        return;
+    }
     info!(peer_id = d.peer_id, round = d.round, killer = d.killer, cause = d.cause, "combat: authoritative death");
 }
 
-/// Records the key; false when this death was already pushed.
-pub(crate) fn death_is_new(epoch: u64, match_id: u64, peer_id: u32, round: u32) -> bool {
+/// Commit dedup only after the game IPC accepted the outcome. A full ring
+/// leaves it eligible for the server's next reliable resend.
+fn deliver_death_once(epoch: u64, d: &Death, deliver: impl FnOnce() -> bool) -> bool {
     let mut seen = deaths_seen().lock().unwrap_or_else(|e| e.into_inner());
-    let key = (epoch, match_id, peer_id, round);
+    let key = (epoch, d.match_id, d.peer_id, d.round, d.life);
+    if seen.contains(&key) || !deliver() { return false; }
+    seen.push_back(key);
+    while seen.len() > 256 { seen.pop_front(); }
+    true
+}
+
+/// Records the key; false when this death was already pushed.
+#[cfg(test)]
+pub(crate) fn death_is_new_life(epoch: u64, match_id: u64, peer_id: u32, round: u32,life:u16) -> bool {
+    let mut seen = deaths_seen().lock().unwrap_or_else(|e| e.into_inner());
+    let key = (epoch, match_id, peer_id, round,life);
     if seen.contains(&key) { return false; }
     seen.push_back(key);
     while seen.len() > 256 { seen.pop_front(); }
     true
 }
 
+#[cfg(test)]
+pub(crate) fn death_is_new(epoch:u64,match_id:u64,peer_id:u32,round:u32)->bool {
+    death_is_new_life(epoch,match_id,peer_id,round,0)
+}
+
 /// A deathmatch respawn (the `mode` record's life count of `peer_id` went up): its next
 /// death in the same round is news again.
 pub fn forget_death(peer_id: u32, round: u32) {
-    deaths_seen().lock().unwrap_or_else(|e| e.into_inner()).retain(|k| !(k.2 == peer_id && k.3 == round));
+    // Real life keys remain sticky across respawns; only legacy unit fixtures use zero.
+    deaths_seen().lock().unwrap_or_else(|e| e.into_inner()).retain(|k| !(k.2 == peer_id && k.3 == round && k.4==0));
 }
 
 pub fn on_death_ack(death_id: u32) {
@@ -541,8 +634,18 @@ pub fn on_death_ack(death_id: u32) {
 
 /// Latest-wins by seq per peer (wrapping compare; a big backwards jump means
 /// the peer's sidecar restarted). Records `seq` when accepted.
+#[cfg(test)]
 fn accept_vitals_seq(peer_id: u32, seq: u32) -> bool {
-    let mut s = lock();
+    accept_vitals_context(peer_id,seq,(0,0,0))
+}
+
+fn accept_vitals_context(peer_id:u32,seq:u32,context:(u64,u32,u16))->bool {
+    let mut s=lock();
+    if let Some(previous)=s.vitals_context_in.get(&peer_id).copied() {
+        if context.0==previous.0 && (context.1,context.2)<(previous.1,previous.2) {return false;}
+        if previous!=context {s.vitals_seq_in.remove(&peer_id);}
+    }
+    s.vitals_context_in.insert(peer_id,context);
     let last = s.vitals_seq_in.get(&peer_id).copied();
     let newer = match last {
         None => true,
@@ -560,7 +663,8 @@ fn accept_vitals_seq(peer_id: u32, seq: u32) -> bool {
 /// stand-in; HSMPAvatars / HSMPHud read it).
 fn on_vitals(peer: u32, payload: &[u8]) {
     let Ok(v) = view::<Vitals>(payload) else { return };
-    if peer == 0 || !accept_vitals_seq(peer, v.head.seq) {
+    if peer == 0 || v.head.match_id!=current_match().1
+        || !accept_vitals_context(peer,v.head.seq,(v.head.match_id,v.head.round,v.head.life)) {
         return;
     }
     if let Some(l) = link() {
@@ -599,6 +703,36 @@ mod tests {
     /// round and age filled in place and is resent until the FINAL verdict, whose cid is
     /// patched in; a CONFIRM keeps it pending; an unknown claim times out with a local
     /// verdict; clash / touch / death reports are framed as they are.
+    #[test]
+    fn claim_send_order_survives_equal_times_wrap_resends_and_removal() {
+        let _g = serial();
+        *lock() = Side { next_hit_id: u32::MAX - 1, next_death_id: 1, ..Default::default() };
+        let t0 = Instant::now();
+        for cid in [379, 380, 381, 382] { on_g2s(K_DAMAGE, &claim(cid)); }
+        {
+            let mut s = lock();
+            for p in s.pending_hits.values_mut() { p.created = t0; }
+            assert_eq!(s.pending_order.len(), 4);
+        }
+        let ids = |batch: Vec<Vec<u8>>| -> Vec<(u32, u32)> {
+            batch.iter().filter(|m| wire::kind_of(m) == K_DAMAGE)
+                .map(|m| { let (_, v) = wire::decode::<Damage>(m).unwrap(); (v.head.hit_id, v.head.cid) }).collect()
+        };
+        let expected = vec![(u32::MAX - 1, 379), (u32::MAX, 380), (1, 381), (2, 382)];
+        let mut log_at = t0;
+        assert_eq!(ids(step(t0, None, &mut log_at)), expected, "first-send callback order");
+        assert_eq!(ids(step(t0 + RESEND_EVERY, None, &mut log_at)), expected, "resend callback order");
+        let final_payload = to_payload(&DamageVerdict::new(u32::MAX, 0, VERDICT_FINAL, true, ""), &[]);
+        on_server_record(wire::WireHdr { kind: K_DAMAGE_VERDICT, aux: 0, peer: 0 }, &final_payload);
+        let remaining = vec![(u32::MAX - 1, 379), (1, 381), (2, 382)];
+        assert_eq!(ids(step(t0 + RESEND_EVERY * 2, None, &mut log_at)), remaining);
+        assert_eq!(lock().pending_order.len(), 3, "FINAL removes the order entry");
+        step(t0 + HIT_GIVE_UP + Duration::from_millis(1), None, &mut log_at);
+        assert!(lock().pending_hits.is_empty());
+        assert!(lock().pending_order.is_empty(), "expiration removes order entries");
+        *lock() = Side { next_hit_id: 1, next_death_id: 1, ..Default::default() };
+    }
+
     #[test]
     fn claims_verdicts_and_reports() {
         let _g = serial();
@@ -646,7 +780,7 @@ mod tests {
         assert_eq!(sent.iter().filter(|m| wire::kind_of(m) == K_TOUCH).count(), 1);
         assert_eq!(&sent.iter().find(|m| wire::kind_of(m) == K_TOUCH).unwrap()[wire::HDR..], &c[..]);
         // Death report: one per round, resent until acked.
-        on_g2s(K_DEATH_REPORT, &to_payload(&DeathReport { death_id: 0, round: 3 }, &[]));
+        on_g2s(K_DEATH_REPORT, &to_payload(&DeathReport { death_id: 0, round: 3, ..Default::default() }, &[]));
         let sent = step(t0 + Duration::from_secs(5), None, &mut log_at);
         let (_, d) = wire::decode::<DeathReport>(sent.iter().find(|m| wire::kind_of(m) == K_DEATH_REPORT).unwrap()).unwrap();
         assert_eq!(d.head.round, 3);
@@ -683,7 +817,8 @@ mod tests {
 
         let e = 0xD1E5_0000 + std::process::id() as u64;
         set_match(e, 101);
-        let dm = to_payload(&Death::new(2, 1, 3, 1), &[]);
+        let mut original=Death::new(2,1,3,1);original.match_id=101;original.life=1;
+        let dm=to_payload(&original,&[]);
         on_server_record(wire::WireHdr { kind: K_DEATH, aux: 0, peer: 2 }, &dm);
         on_server_record(wire::WireHdr { kind: K_DEATH, aux: 0, peer: 2 }, &dm);
         let got = l.test_records(K_DEATH);
@@ -693,7 +828,21 @@ mod tests {
         assert!(v.wall_ms > 0);
         set_match(e, 102);
         on_server_record(wire::WireHdr { kind: K_DEATH, aux: 0, peer: 2 }, &dm);
-        assert_eq!(l.test_records(K_DEATH).len(), 1, "match 2, round 1: not swallowed");
+        assert!(l.test_records(K_DEATH).is_empty(), "old authenticated match cannot be rebound on receipt");
+        original.match_id=102;
+        on_server_record(wire::WireHdr {kind:K_DEATH,aux:0,peer:2}, &to_payload(&original,&[]));
+        assert_eq!(l.test_records(K_DEATH).len(),1,"actual new match death accepted");
+    }
+
+    #[test]
+    fn native_defeat_delivery_retries_full_game_ring_before_dedup() {
+        let d = Death { match_id: 891, peer_id: 89101, round: 3, life: 130,
+            cause: 5, ..Default::default() };
+        assert!(!deliver_death_once(891, &d, || false));
+        assert!(deliver_death_once(891, &d, || true), "failed IPC must not consume the outcome");
+        assert!(!deliver_death_once(891, &d, || panic!("duplicate must not enter IPC")));
+        let next = Death { life: 131, ..d };
+        assert!(deliver_death_once(891, &next, || true));
     }
 
     #[test]
@@ -722,7 +871,7 @@ mod tests {
         let l = crate::ipc_shm::ShmLink::test_global();
         let peer = 0x00AC_0000 + (std::process::id() & 0xFFFF);
         let mut f = frame(55.5, 12.0, vitals::F_FALLEN);
-        f.seq = 99;
+        f.seq = 99;f.match_id=current_match().1;
         let p = to_payload(&f, &[]);
         on_server_record(wire::WireHdr { kind: K_VITALS, aux: 0, peer }, &p);
         let (k, got) = l.test_slot("peer_vitals", Some(peer)).expect("posted");
@@ -791,7 +940,7 @@ mod tests {
             (K_DAMAGE_IN, claim(1)), (K_HITFX_IN, claim(2)), (K_DAMAGE, claim(3)),
             (K_DAMAGE_VERDICT, to_payload(&DamageVerdict::new(5, 0, VERDICT_FINAL, false, "x"), &[])),
             (K_DEATH, to_payload(&Death::new(2, 1, 3, 1), &[])), (K_VITALS, to_payload(&frame(50.0, 50.0, 0), &[])),
-            (K_DEATH_REPORT, to_payload(&DeathReport { death_id: 0, round: 1 }, &[])),
+            (K_DEATH_REPORT, to_payload(&DeathReport { death_id: 0, round: 1, ..Default::default() }, &[])),
             (K_CLASH, to_payload(&hsmp_ipc::schema::combat::Clash { other_peer_id: 3, my_ts: 1, other_ts: 2, _r: 0 }, &[])),
         ];
         for i in 0..4000 {
@@ -812,14 +961,67 @@ mod tests {
             }
         }
         lock().pending_hits.clear();
+        lock().pending_order.clear();
     }
 
     /// The vitals record on the wire: 48 B + the 8-byte header (the codec frame was
     /// 43 B + a bincode envelope of 16 B + the 8-byte v6 header = 67 B).
     #[test]
+    fn full_game_ring_cannot_reorder_first_native_deliveries() {
+        let _g=serial();let l=crate::ipc_shm::ShmLink::test_global();
+        *lock()=Side{next_hit_id:1,next_death_id:1,..Default::default()};
+        l.test_records(K_TOUCH);l.test_records(K_DAMAGE_IN);
+        for _ in 0..crate::ipc_shm::S2G_OVERFLOW {l.push_record(K_TOUCH,0,0,&[]);}
+        let first=Damage{target_peer_id:4,hit_id:379,match_id:7,round:2,victim_life:1,bone:Str::new("pelvis"),..Default::default()};
+        let second=Damage{hit_id:380,..first};
+        on_damage_in(700,&to_payload(&first,&[]));
+        assert!(lock().incoming.front().unwrap().last_queued.is_none());
+        l.test_records(K_TOUCH);
+        on_damage_in(700,&to_payload(&second,&[]));
+        assert!(l.test_records(K_DAMAGE_IN).is_empty(),"later hit cannot use ring capacity ahead of held earlier hit");
+        let now=Instant::now();let mut log=now;step(now,None,&mut log);
+        let ids:Vec<_>=l.test_records(K_DAMAGE_IN).into_iter().map(|(_,_,p)|view::<Damage>(&p).unwrap().head.hit_id).collect();
+        assert_eq!(ids,vec![379,380]);
+        let r=ReplayOutcome{match_id:7,round:2,attacker:700,hit_id:379,victim_life:1,status:2,..Default::default()};
+        on_g2s(K_REPLAY_OUTCOME,&to_payload(&r,&[]));
+        assert_eq!(lock().incoming.len(),1,"Lua outcome settles IPC delivery retry independently of transport ACK");
+        *lock()=Side{next_hit_id:1,next_death_id:1,..Default::default()};
+    }
+
+    #[test]
+    fn original_life_receipts_and_vitals_survive_retries_without_rebinding() {
+        let _g=serial();let l=crate::ipc_shm::ShmLink::test_global();
+        *lock()=Side{next_hit_id:1,next_death_id:1,..Default::default()};
+        let r=ReplayOutcome{match_id:80,round:2,attacker:7,hit_id:9,victim_life:3,status:1,
+            observed_fields:1,health_delta:-2.5,..Default::default()};
+        on_g2s(K_REPLAY_OUTCOME,&to_payload(&r,&[]));
+        let t=Instant::now();let mut log=t;
+        let batches=[step(t,None,&mut log),step(t+RESEND_EVERY,None,&mut log)];
+        for b in batches {let m=b.iter().find(|m|wire::kind_of(m)==K_REPLAY_OUTCOME).unwrap();
+            assert_eq!(wire::decode::<ReplayOutcome>(m).unwrap().1.head.match_id,80);}
+        let mut wrong=r;wrong.health_delta=-99.0;
+        on_server_record(wire::WireHdr{kind:K_REPLAY_OUTCOME_ACK,aux:0,peer:0},&to_payload(&wrong,&[]));
+        assert_eq!(lock().outcomes.len(),1,"conflicting ACK cannot settle native receipt");
+        on_server_record(wire::WireHdr{kind:K_REPLAY_OUTCOME_ACK,aux:0,peer:0},&to_payload(&r,&[]));
+        assert!(lock().outcomes.is_empty());l.test_records(K_REPLAY_OUTCOME_ACK);
+        assert!(accept_vitals_context(700,500,(80,2,3)));
+        assert!(accept_vitals_context(700,1,(80,2,4)),"new life resets seq gate");
+        assert!(!accept_vitals_context(700,501,(80,2,3)),"late old life cannot poison new sequence");
+        let report=DeathReport{match_id:80,round:2,life:3,..Default::default()};
+        on_g2s(K_DEATH_REPORT,&to_payload(&report,&[]));
+        let b=step(t,None,&mut log);let m=b.iter().find(|m|wire::kind_of(m)==K_DEATH_REPORT).unwrap();
+        let original=wire::decode::<DeathReport>(m).unwrap().1.head;
+        assert_eq!((original.match_id,original.round,original.life),(80,2,3));
+        assert!(death_is_new_life(800,80,700,2,3));forget_death(700,2);
+        assert!(!death_is_new_life(800,80,700,2,3),"respawn does not forget actual old life");
+        assert!(death_is_new_life(800,80,700,2,4));
+        *lock()=Side{next_hit_id:1,next_death_id:1,..Default::default()};
+    }
+
+    #[test]
     fn vitals_message_size() {
         let mut f = frame(87.0, 61.0, 0);
         f.seq = 1;
-        assert_eq!(wire::encode(0, 0, &f, &[]).len(), 56);
+        assert_eq!(wire::encode(0, 0, &f, &[]).len(), 72);
     }
 }

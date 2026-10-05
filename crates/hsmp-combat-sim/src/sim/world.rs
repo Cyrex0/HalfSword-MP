@@ -234,8 +234,8 @@ enum Msg {
     /// Lua outbox line picked up by the sidecar.
     Pickup { client: usize, rec: usize },
     PickupClash { client: usize, other: usize, my_ts: u32, other_ts: u32 },
-    SVitals { from: usize, seq: u32, hp: f32, dead: bool, life: u32 },
-    CVitals { to: usize, from: usize, seq: u32, hp: f32, life: u32 },
+    SVitals { from: usize, seq: u32, hp: f32, dead: bool, life: u32, ..Default::default() },
+    CVitals { to: usize, from: usize, seq: u32, hp: f32, life: u32, ..Default::default() },
     SDeath { from: usize, life: u32 },
 }
 
@@ -1398,8 +1398,8 @@ impl World {
                 }
             }
             Msg::CClash { to, other } => self.glints.push((to, other, t)),
-            Msg::SVitals { from, seq, hp, dead, life } => self.vitals_server(from, seq, hp, dead, life, t),
-            Msg::CVitals { to, from, seq, hp, life } => self.vitals_view(to, from, seq, hp, life, t),
+            Msg::SVitals { from, seq, hp, dead, life, ..Default::default() } => self.vitals_server(from, seq, hp, dead, life, t),
+            Msg::CVitals { to, from, seq, hp, life, ..Default::default() } => self.vitals_view(to, from, seq, hp, life, t),
             Msg::SDeath { from, life } => self.death_report(from, life, t),
         }
     }

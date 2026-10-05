@@ -78,7 +78,8 @@ pub(super) async fn after_welcome(socket: &Arc<UdpSocket>, state: &Arc<ServerSta
 fn allowed_while_pending(kind: u16) -> bool {
     rec::is_mods_kind(kind)
         || matches!(kind, srec::K_LEAVE | srec::K_PING | srec::K_COMMAND)
-        || matches!(kind, hsmp_ipc::schema::loadout::K_KIT | hsmp_ipc::schema::loadout::K_LOADOUT | hsmp_ipc::schema::loadout::K_BODY)
+        || matches!(kind, hsmp_ipc::schema::loadout::K_KIT | hsmp_ipc::schema::loadout::K_LOADOUT
+            | hsmp_ipc::schema::loadout::K_BODY | hsmp_ipc::schema::loadout::K_BODY2)
 }
 
 /// The records gate: true = drop this record (its sender is pending). Costs one atomic load

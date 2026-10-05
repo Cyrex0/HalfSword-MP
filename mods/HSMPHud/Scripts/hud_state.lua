@@ -58,7 +58,7 @@ S.hss = hss
 function S.match_from(v)
     if type(v) ~= "table" then return nil end
     local m = {
-        state = v.state or "lobby", round = v.round or 0, countdown = v.countdown_s or 0,
+        state = v.state or "lobby", match_id = v.match_id or 0, round = v.round or 0, countdown = v.countdown_s or 0,
         best_of = v.best_of or 0, last_winner = v.last_winner or 0, reason = v.reason or "",
         arena = v.arena or "", seq = v.seq or 0,
         order = {}, wins = {}, alive = {}, waiting = {}, ready = {},
@@ -149,11 +149,11 @@ end
 -- an opponent's: IPC.peer_rec("peer_vitals", id)): {seq, dism, flags, v[19]}
 -- with v quantised once by the owner (u16 = round(x * 64), 65535 unknown).
 -- Flags: 1 DEAD, 2 FALLEN, 4 DOWNED. v[14] (Lua, wire #13) is Stamina.
--- What decides a Half Sword fight is not raw Health (it only drops on hard
--- torso / head / neck hits, never below a per-part floor, and regenerates
--- about (Health - 10) % per second): it is consciousness (KO, the
--- consciousness-cap loss), the body parts (Snap Neck and head crush kill,
--- broken limbs disable) and blood loss. The HUD shows:
+-- Health, consciousness and structural injuries are separate native values.
+-- Native default main-health regeneration is (Health - 25) * 0.01 per second
+-- above the native floor (0.75 HP/s at Health 100 and Regen Rate 1).
+-- Consciousness loss can be recoverable; native death and surrender determine
+-- weapon-mode outcomes, while permanent knockout also ends Brawl. The HUD shows:
 --   CON   Consciousness (wire #11), 0..100.
 --   BODY  weighted mean of the part healths, %: head 3, neck 3, upper torso 2,
 --         lower torso 1.5, back 0.5, each arm and leg 0.75 (sum 13). The fatal
@@ -168,11 +168,36 @@ S.VITALS_N = 19
 S.VITALS_UNKNOWN = 65535
 local function q64(x) return x and math.floor(x * 64 + 0.5) / 64 or nil end
 S.q64 = q64
-function S.vitals_metrics(v)
+-- Dismemberment survives native health regeneration. Treat a severed region
+-- as unusable when displaying body condition, without changing game health.
+local DISM_REGIONS = {
+    [2] = 1 << 8, [3] = (1 << 6) | (1 << 7),
+    [4] = (1 << 3) | (1 << 4) | (1 << 5),
+    [5] = (1 << 0) | (1 << 1) | (1 << 2),
+    [7] = (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16),
+    [8] = (1 << 9) | (1 << 10) | (1 << 11) | (1 << 12),
+    [9] = (1 << 20) | (1 << 21) | (1 << 22),
+    [10] = (1 << 17) | (1 << 18) | (1 << 19),
+}
+-- These current native broken/dislocated regions are functionally impaired
+-- even when the numeric health channel has regenerated. No game values change.
+local INJURY_REGIONS = { [2]=32, [3]=64, [6]=128, [7]=256, [8]=512, [9]=1024, [10]=2048 }
+function S.vitals_metrics(v, dism, flags)
     if type(v) ~= "table" then return nil end
+    dism = math.tointeger(dism) or 0
+    flags = math.tointeger(flags) or 0
     local sum, wsum = 0, 0
     for i, w in pairs(S.BODY_W) do
         local x = q64(v[i])
+        -- Blunt trauma has a separate native head-health channel. Ordinary
+        -- Health regeneration does not erase a crushed skull's condition.
+        if i == 2 then
+            local crush = q64(v[11])
+            if crush then x = x and math.min(x, crush) or crush end
+        end
+        if (DISM_REGIONS[i] and dism & DISM_REGIONS[i] ~= 0)
+            or (INJURY_REGIONS[i] and flags & INJURY_REGIONS[i] ~= 0)
+            or (i == 2 and flags & 8 ~= 0) then x = 0 end
         if x then sum = sum + w * math.max(0, math.min(100, x)); wsum = wsum + w end
     end
     local con, bleed = q64(v[12]), q64(v[16])
@@ -181,6 +206,8 @@ function S.vitals_metrics(v)
         con = con and math.max(0, math.min(100, con)) or nil,
         bleed = bleed,
         bleeding = bleed ~= nil and bleed > S.BLEED_MIN,
+        severed = dism ~= 0 or flags & 8 ~= 0,
+        injured = flags & 4064 ~= 0,
     }
 end
 
@@ -198,9 +225,45 @@ function S.vitals_from_record(t)
     local r = { seq = math.tointeger(t.seq) or 0, hp = v[1], st = v[14] }
     r.dead = f & 1 ~= 0 or (r.hp ~= nil and r.hp <= 0)
     r.down = f & 6 ~= 0 and not r.dead
-    local m = S.vitals_metrics(v)
-    if m then r.body, r.con, r.bleed, r.bleeding = m.body, m.con, m.bleed, m.bleeding end
+    local m = S.vitals_metrics(v, t.dism, f)
+    if m then
+        r.body, r.con, r.bleed, r.bleeding = m.body, m.con, m.bleed, m.bleeding
+        r.severed = m.severed
+        r.injured = m.injured
+    end
     return r
+end
+
+-- Latest slots retain their last record across respawns and rematches. Only
+-- display injuries belonging to the generation currently assigned to this peer.
+function S.current_vitals(t, view, mode, peer)
+    if type(t) ~= "table" or type(view) ~= "table" or type(mode) ~= "table"
+        or (view.match_id or 0) == 0 or mode.match_id ~= view.match_id
+        or mode.round ~= view.round then return nil end
+    local row = mode.rows and mode.rows[peer]
+    if not row then return nil end
+    local round, life = view.round, row.life
+    if view.state == "countdown" then round, life = round + 1, 1 end
+    if not life or life < 1 or t.match_id ~= view.match_id
+        or t.round ~= round or t.life ~= life then return nil end
+    return S.vitals_from_record(t)
+end
+
+function S.surrender_from(t,view,mode,status,now_ms)
+    if type(t)~="table" or t.active~=true or type(view)~="table" or view.state~="live"
+        or view.status~="connected" or type(mode)~="table" or type(status)~="table"
+        or status.verified~=true then return nil end
+    local peer=view.my_peer_id
+    local row=mode.rows and mode.rows[peer]
+    local order=view.spawns and view.spawns[peer]
+    if not row or not order or not view.alive or view.alive[peer]~=true or row.alive~=true
+        or row.respawning or mode.match_id~=view.match_id or mode.round~=view.round
+        or t.match_id~=view.match_id or t.round~=view.round or t.life~=row.life or (t.life or 0)<1
+        or status.match_id~=t.match_id or status.round~=t.round or status.life~=t.life
+        or status.pawn~=t.pawn or t.pawn=="" or status.spawn_id~=order.spawn_id then return nil end
+    if type(t.at_ms)~="number" or t.at_ms~=t.at_ms or now_ms<t.at_ms or now_ms-t.at_ms>1000
+        or type(t.progress)~="number" or t.progress~=t.progress or t.progress<0 or t.progress>1 then return nil end
+    return {progress=t.progress,remaining_s=t.remaining_s}
 end
 
 -- --- deaths (typed `death` records, S2G) ------------------------------------------------------
@@ -219,7 +282,7 @@ function S.death_of(d)
     if not victim or victim == 0 then return nil end
     local mid = math.tointeger(d.match_id)
     local round = math.tointeger(d.round)
-    return { victim = victim, round = round, killer = math.tointeger(d.killer) or 0,
+    return { victim = victim, round = round, life = math.tointeger(d.life) or 0, killer = math.tointeger(d.killer) or 0,
              cause = math.tointeger(d.cause), t = math.tointeger(d.wall_ms), match_id = (mid ~= 0) and mid or nil }
 end
 
@@ -238,7 +301,7 @@ end
 
 function S.death_key(tail, d)
     if not d.round then return d.victim .. "@" .. tostring(d.t) end
-    if d.match_id then return "m" .. d.match_id .. ":" .. d.victim .. ":" .. d.round end
+    if d.match_id then return "m" .. d.match_id .. ":" .. d.victim .. ":" .. d.round .. ":" .. (d.life or 0) end
     if d.round < (tail.max_round or 0) then tail.gen = (tail.gen or 0) + 1; tail.max_round = 0 end
     if d.round > (tail.max_round or 0) then tail.max_round = d.round end
     return "g" .. (tail.gen or 0) .. ":" .. d.victim .. ":" .. d.round
@@ -325,7 +388,8 @@ function S.read_all(dir, peer_ids_hint)
     snap.sidecar_raw = lver
     local peers = (ipc and ipc.peer_dir and ipc.peer_dir().list) or {}
     snap.sc = S.sidecar_from(link, peers)
-    snap.match = S.match_from(H and H.view())
+    local view = H and H.view()
+    snap.match = S.match_from(view)
     -- game mode: teams, scores, round clock, respawns, the hill (nil from an older server)
     snap.mode = H and H.mode and H.mode() or nil
     snap.metrics = S.metrics_from(link)
@@ -337,7 +401,10 @@ function S.read_all(dir, peer_ids_hint)
     snap.prefs = S.parse_hud_prefs(settings)
     -- my own `vitals` record (HSMPCombat writes it; the sidecar sends it): read
     -- with the opponents' reader, so both screens compute the same numbers
-    snap.vown = S.vitals_from_record(ipc and ipc.rec("vitals"))
+    local my = snap.sc and snap.sc.my_id or 0
+    snap.vown = S.current_vitals(ipc and ipc.rec("vitals"), view, snap.mode, my)
+    snap.surrender = S.surrender_from(ipc and ipc.bus_table and ipc.bus_table("surrender_hold"),
+        view,snap.mode,ipc and ipc.bus_table and ipc.bus_table("spawn_status"),os.clock()*1000)
     snap.conn = S.conn_from(ipc and ipc.bus_table and ipc.bus_table("conn_state"))
     snap.spectate = S.spectate_from(ipc and ipc.bus_table and ipc.bus_table("spectate"))
     snap.is_admin = link ~= nil and link.is_admin == true
@@ -349,14 +416,13 @@ function S.read_all(dir, peer_ids_hint)
     end
     -- remote vitals only for peers in the roster (old sessions' peers are ignored)
     snap.vremote = {}
-    local my = snap.sc and snap.sc.my_id or 0
     local ids = {}
     for _, id in ipairs(peer_ids_hint or {}) do ids[id] = true end
     if snap.match then for _, id in ipairs(snap.match.order) do ids[id] = true end end
     if snap.sc then for _, id in ipairs(snap.sc.ids) do ids[id] = true end end
     for id in pairs(ids) do
         if id ~= my then
-            local r = S.vitals_from_record(ipc and ipc.peer_rec("peer_vitals", id))
+            local r = S.current_vitals(ipc and ipc.peer_rec("peer_vitals", id), view, snap.mode, id)
             if r then snap.vremote[id] = r end
         end
     end

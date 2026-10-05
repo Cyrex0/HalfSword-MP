@@ -31,13 +31,13 @@ mod tests;
 pub use channel::{Delivery, SendError, SendMode, CH_ORDERED, CH_RELIABLE, CH_UNRELIABLE};
 pub use conn::{close_code, Conn, ConnConfig, ConnState, ConnStats, Side};
 pub use endpoint::{Client, ClientConfig, ClientEvent, Incoming, PendingAuth, ServerConfig, ServerEndpoint};
-/// The header/handshake format version. v6 (HSMP-SHM ABI 2): every channel message is a
-/// typed record behind an 8-byte header (`hsmp_ipc::wire`); the transport is unchanged.
-pub const PROTOCOL_VERSION: u16 = 6;
-/// Lowest protocol version this build accepts (v5 bodies are not v6 messages).
-pub const VERSION_MIN: u16 = 6;
+/// Protocol v11 adds original match/round/life to each native root sample.
+/// Typed records still use the v6 transport and 8-byte application header.
+pub const PROTOCOL_VERSION: u16 = 11;
+/// Older combat record layouts cannot interoperate with authenticated life context.
+pub const VERSION_MIN: u16 = PROTOCOL_VERSION;
 /// Highest protocol version this build speaks.
-pub const VERSION_MAX: u16 = 6;
+pub const VERSION_MAX: u16 = PROTOCOL_VERSION;
 
 /// Largest datagram either side ever sends (safe below every common MTU).
 pub const MAX_DATAGRAM: usize = 1200;
@@ -122,6 +122,8 @@ pub mod caps {
     /// players that negotiated it, for their stand-ins of it. Opted in by server and
     /// sidecar; peers without it never send or receive the record.
     pub const BODY: u64 = 1 << 17;
+    /// Original-generation native passport body snapshots.
+    pub const BODY2: u64 = 1 << 19;
     /// Application: server-served mods (`mod_manifest` / `mod_files` / `mod_chunk` down,
     /// `mod_chunk_req` / `mod_ready` up; docs/hosting/server-mods.md). The server offers it
     /// only when it has a `--mods-dir`, the sidecar always; a server with mods refuses a

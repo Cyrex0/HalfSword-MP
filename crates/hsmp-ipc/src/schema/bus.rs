@@ -27,7 +27,7 @@ crate::ipc_pod! {
 }
 
 /// Keys that are cleared at every world leave.
-pub const WORLD_SCOPED_KEYS: &[&str] = &["puppets", "standin_dead", "playback", "pose_yield", "world_held", "spawn_status"];
+pub const WORLD_SCOPED_KEYS: &[&str] = &["puppets", "standin_dead", "playback", "pose_yield", "world_held", "spawn_status", "surrender_hold"];
 
 pub const K_BUS: u16 = 0x0701;
 

@@ -169,6 +169,10 @@ function PURE.parse_play2(line, last_seq)
     if seq == last_seq then return "same" end
     local t = {
         v2 = true, seq = seq,
+        match_id = tonumber(line:match('"match_id":(%d+)')),
+        round = tonumber(line:match('"round":(%d+)')),
+        life = tonumber(line:match('"life":(%d+)')),
+        has_context = line:match('"has_context":(true)') ~= nil,
         pt    = tonumber(line:match('"ptf":(%-?[%d%.]+)')) or tonumber(line:match('"pt":(%-?%d+)')) or 0,
         mode  = line:match('"mode":"(%a+)"') or "?",
         age   = tonumber(line:match('"age":(%-?[%d%.]+)')) or -1,
@@ -217,10 +221,43 @@ do   -- (one block: the main chunk is near the 200-locals limit)
 local function fill(dst, src, base, n)   -- dst[1..n] = src[base+1 .. base+n]
     return table.move(src, base + 1, base + n, 1, dst or {})
 end
+-- Pose data belongs to one native life, including poses cached between reads.
+function PURE.displayed_pose(pose, pawn, label, at)
+    return {label=label,at=at,pawn=pawn,has_context=pose.has_context,
+        match_id=pose.match_id,round=pose.round,life=pose.life}
+end
+
+function PURE.playback_row(peer, shown, now, allow_stale)
+    if not shown or shown.has_context~=true or not shown.match_id or shown.match_id==0
+        or not shown.life or shown.life<1 or type(shown.pawn)~="string" or shown.pawn==""
+        or not shown.at or now-shown.at<0 or (not allow_stale and now-shown.at>=250) then return nil end
+    return {peer=peer,body_ts=math.floor(shown.label),arm_ts=math.floor(shown.label),local_ms=math.floor(shown.at),
+        match_id=shown.match_id,round=shown.round,life=shown.life,pawn=shown.pawn}
+end
+
+function PURE.pose_context_ok(o, session, mode, peer)
+    if type(session) ~= "table" or (session.match_id or 0) == 0 then return true end
+    if type(o) ~= "table" or o.has_context ~= true then return false end
+    local round = session.round or 0
+    if session.state == "countdown" or session.state == "paused" then
+        if (session.spawn_round or 0) > 0 then round = session.spawn_round end
+    end
+    local life = 1
+    if type(mode) == "table" and mode.match_id == session.match_id and mode.round == round then
+        local row = mode.rows and mode.rows[peer]
+        if row and (row.life or 0) > 0 then life = row.life end
+        if session.state == "live" and not (row and (row.life or 0) > 0) then return false end
+    elseif session.state == "live" then
+        return false
+    end
+    return o.match_id == session.match_id and o.round == round and o.life == life
+end
+
 function PURE.play_from_out(o, into)
     if type(o) ~= "table" or type(o.B) ~= "table" then return nil end
     local t = into or { slots = {}, weapons = {} }
     t.v2, t.seq, t.pt, t.mode = true, o.seq, tonumber(o.pt) or 0, o.mode or "?"
+    t.match_id, t.round, t.life, t.has_context = o.match_id, o.round, o.life, o.has_context == true
     t.age, t.delay, t.jit = tonumber(o.age) or -1, tonumber(o.delay) or 0, tonumber(o.jit) or 0
     t.cut, t.nbones = tonumber(o.cut) or 0, 0
     t.lead, t.iv, t.st, t.rate = tonumber(o.lead) or 0, tonumber(o.iv) or -1, tonumber(o.st) or 0, tonumber(o.rate) or 1
@@ -544,10 +581,14 @@ function PURE.ref_loc(loc)
         local ref = PURE.V2_REF_T[i]
         local want = PURE.len3(ref) * k
         local m = loc and loc[i]
-        if m and math.abs(PURE.len3(m) - want) <= math.max(2, 0.15 * want) then
+        local expected = { ref[1] * k, ref[2] * k, ref[3] * k }
+        -- Equal length does not mean an intact joint: a pooled/ragdolled
+        -- neck can be displaced sideways. Caching that direction permanently
+        -- makes the servo aim at a bent skeleton on every later frame.
+        if m and PURE.d3(m, expected) <= math.max(2, 0.15 * want) then
             out[i] = m
         else
-            out[i] = { ref[1] * k, ref[2] * k, ref[3] * k }
+            out[i] = expected
             fixed = fixed + 1
         end
     end

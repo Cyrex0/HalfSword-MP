@@ -1,0 +1,80 @@
+[
+  {
+    "file": "extra-melee-BP_Weapon_Treasure_Chalice_001.json",
+    "class": "BP_Weapon_Treasure_Chalice_001_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Treasure/BP_Weapon_Treasure_Chalice_001"
+  },
+  {
+    "file": "extra-melee-BP_Weapon_Treasure_Goblet_001.json",
+    "class": "BP_Weapon_Treasure_Goblet_001_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Treasure/BP_Weapon_Treasure_Goblet_001"
+  },
+  {
+    "file": "extra-melee-BP_Weapon_Treasure_Goblet_002.json",
+    "class": "BP_Weapon_Treasure_Goblet_002_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Treasure/BP_Weapon_Treasure_Goblet_002"
+  },
+  {
+    "file": "extra-melee-BP_Weapon_Treasure_Paten_001.json",
+    "class": "BP_Weapon_Treasure_Paten_001_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Treasure/BP_Weapon_Treasure_Paten_001"
+  },
+  {
+    "file": "extra-melee-ModularWeaponBP_ArmingSword.json",
+    "class": "ModularWeaponBP_ArmingSword_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/ModularWeaponBP_ArmingSword"
+  },
+  {
+    "file": "extra-melee-ModularWeaponBP_BaronBeak.json",
+    "class": "ModularWeaponBP_BaronBeak_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Unique/ModularWeaponBP_BaronBeak"
+  },
+  {
+    "file": "extra-melee-ModularWeaponBP_Dagger.json",
+    "class": "ModularWeaponBP_Dagger_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/ModularWeaponBP_Dagger"
+  },
+  {
+    "file": "extra-melee-ModularWeaponBP_Falchion_Long.json",
+    "class": "ModularWeaponBP_Falchion_Long_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/ModularWeaponBP_Falchion_Long"
+  },
+  {
+    "file": "extra-melee-ModularWeaponBP_Falchion_Short.json",
+    "class": "ModularWeaponBP_Falchion_Short_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/ModularWeaponBP_Falchion_Short"
+  },
+  {
+    "file": "extra-melee-ModularWeaponBP_Rondel_Gold.json",
+    "class": "ModularWeaponBP_Rondel_Gold_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Reforged/ModularWeaponBP_Rondel_Gold"
+  },
+  {
+    "file": "extra-melee-ModularWeaponBP_Rondel.json",
+    "class": "ModularWeaponBP_Rondel_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Reforged/ModularWeaponBP_Rondel"
+  },
+  {
+    "file": "extra-melee-Shield_Buckler_Gold.json",
+    "class": "Shield_Buckler_Gold_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Shield_Buckler_Gold"
+  },
+  {
+    "file": "extra-melee-Shield_Tagre_Gold.json",
+    "class": "Shield_Tagre_Gold_C",
+    "parent": "BlueprintGeneratedClass'ModularWeaponBP_C'",
+    "package": "HalfswordUE5/Content/Assets/Weapons/Blueprints/Built_Weapons/Shield_Tagre_Gold"
+  }
+]

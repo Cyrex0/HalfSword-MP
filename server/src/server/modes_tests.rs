@@ -483,7 +483,23 @@ fn deathmatch_respawns_on_the_clients_placement_report() {
     assert_eq!(i.match_state, "live");
     assert!(!alive(&i, b));
     // The placement report revives it, with a short protection.
-    let gs = rec::GameStatus { match_id: i.sess.match_id, round: 1, flags: v5::status_flags::LOADED, spawn_id: order, ..Default::default() };
+    let gs = rec::GameStatus { match_id: i.sess.match_id, round: 1, life: 2, flags: v5::status_flags::LOADED, spawn_id: order,
+        arena: hsmp_ipc::layout::Str::new("Map_Arena_Pit"), ..Default::default() };
+    for bad in [
+        rec::GameStatus { flags: 0, ..gs },
+        rec::GameStatus { life: 0, ..gs },
+        rec::GameStatus { life: 1, ..gs },
+        rec::GameStatus { flags: v5::status_flags::LOADED | v5::status_flags::DEAD, ..gs },
+        rec::GameStatus { load_error: 1, ..gs },
+        rec::GameStatus { match_id: gs.match_id + 1, ..gs },
+        rec::GameStatus { round: 2, ..gs },
+        rec::GameStatus { spawn_id: order - 1, ..gs },
+        rec::GameStatus { arena: hsmp_ipc::layout::Str::new("Map_Arena_Yard"), ..gs },
+        rec::GameStatus { arena: Default::default(), ..gs },
+    ] {
+        game_status_in_rec(&mut i, b, &bad);
+        assert!(!alive(&i, b), "unverified status cannot revive a native pawn");
+    }
     let died = game_status_in_rec(&mut i, b, &gs);
     assert!(!died);
     assert!(alive(&i, b));
@@ -491,6 +507,9 @@ fn deathmatch_respawns_on_the_clients_placement_report() {
     assert_eq!(hit_refusal(&i, a, b), Some("respawn protection"));
     assert!(!declare_death(&mut i, b, a, DEATH_DAMAGE), "no death inside the protection");
     run(&mut i, RESPAWN_PROTECT_MS + 50);
+    let stale_dead = rec::GameStatus { flags: v5::status_flags::LOADED | v5::status_flags::DEAD, ..gs };
+    assert!(!game_status_in_rec(&mut i, b, &stale_dead), "unscoped DEAD is diagnostic only, even after protection");
+    assert!(alive(&i, b), "an old corpse's ping cannot kill the new life");
     assert_eq!(hit_refusal(&i, a, b), None);
     let s = i.modes.stats[&key(2)];
     assert_eq!((s.life, s.deaths), (2, 1));
@@ -499,11 +518,91 @@ fn deathmatch_respawns_on_the_clients_placement_report() {
 
 /// What `on_game_status` does under the lock for a `game_status` record.
 fn game_status_in_rec(i: &mut Inner, pid: PeerId, gs: &rec::GameStatus) -> bool {
-    let loaded = if gs.flags & v5::status_flags::LOADED != 0 { gs.round } else { 0 };
-    if gs.spawn_id != 0 && i.spawn_plan.iter().any(|s| s.peer_id == pid && s.spawn_id == gs.spawn_id) && loaded == i.match_round {
-        on_placed(i, pid, gs.spawn_id);
-    }
+    let loaded = if game_status_placed(i, pid, gs) { gs.round } else { 0 };
     game_status_in(i, pid, true, loaded, None, gs.flags & v5::status_flags::DEAD != 0)
+}
+
+#[test]
+fn body_snapshot_authentication_requires_the_current_accepted_pose_generation() {
+    let st = server(43, 2, all_caps());
+    let mut i = st.inner.try_lock().unwrap();
+    go_live(&mut i);
+    let b = id(43, 2);
+    let m = i.sess.match_id;
+    assert!(!body_context_matches(&i,b,m,1,1), "a snapshot cannot authenticate ahead of its pose");
+    let f = crate::posecodec::v2::Full { context:Some(crate::posecodec::v2::Context{match_id:m,round:1,life:1}),
+        ts:100.0,..Default::default() };
+    crate::lagcomp::record_skeletal_v2(b,&f);
+    assert!(!body_context_matches(&i,b,m,1,1), "an uncovered first pose cannot authenticate body geometry");
+    crate::lagcomp::record_root(b,100,[0.0;3]);
+    assert!(crate::lagcomp::record_skeletal_v2(b,&f));
+    assert!(body_context_matches(&i,b,m,1,1));
+    assert!(!body_context_matches(&i,b,m+1,1,1));
+    assert!(!body_context_matches(&i,b,m,2,1));
+    assert!(!body_context_matches(&i,b,m,1,2));
+    i.modes.stats.get_mut(&key(2)).unwrap().life = 2;
+    assert!(!body_context_matches(&i,b,m,1,1), "previous-life accepted pose cannot authenticate a current body");
+    assert!(!body_context_matches(&i,b,m,1,2), "new life also waits for its own pose");
+}
+
+#[test]
+fn countdown_placement_uses_fresh_life_one_instead_of_the_previous_round_life() {
+    let st = server(42, 2, all_caps());
+    let mut i = st.inner.try_lock().unwrap();
+    assert!(session::start_match(&mut i, true, "test").ok);
+    let b = id(42, 2);
+    i.modes.stats.entry(key(2)).or_default().life = 130;
+    let order = i.spawn_plan.iter().find(|s| s.peer_id == b).unwrap().spawn_id;
+    let fresh = rec::GameStatus { match_id: i.sess.match_id, round: i.match_round + 1, life: 1,
+        flags: v5::status_flags::LOADED, spawn_id: order,
+        arena: hsmp_ipc::layout::Str::new("Map_Arena_Pit"), ..Default::default() };
+    let failure = rec::GameStatus { flags: 0, load_error: 1, ..fresh };
+    game_status_load_error(&mut i, b, &rec::GameStatus { round: 0, ..failure });
+    game_status_load_error(&mut i, b, &rec::GameStatus { match_id: fresh.match_id + 1, ..failure });
+    assert!(!i.sess.load_errors.contains_key(&b), "old round/match failures cannot start a pending load retry timer");
+    game_status_load_error(&mut i, b, &failure);
+    assert_eq!(i.sess.load_errors[&b].0, fresh.round);
+    assert!(!game_status_placed(&mut i, b, &rec::GameStatus { life: 130, ..fresh }));
+    assert!(game_status_placed(&mut i, b, &fresh));
+    game_status_in_rec(&mut i, b, &fresh);
+    assert_eq!(i.match_peers[&b].loaded_round, fresh.round);
+}
+
+#[test]
+fn deathmatch_wrapped_spawn_id_still_requires_the_full_original_life() {
+    let st = server(41, 2, all_caps());
+    let mut i = st.inner.try_lock().unwrap();
+    set_mode(&mut i, ModeCfg { mode: gm::DEATHMATCH, respawn_s: 1, ..Default::default() });
+    go_live(&mut i);
+    let (a, b) = (id(41, 1), id(41, 2));
+    i.modes.stats.get_mut(&key(2)).unwrap().life = 129;
+    i.match_peers.entry(b).or_default().aware = true;
+    assert!(declare_death(&mut i, b, a, DEATH_DAMAGE));
+    run(&mut i, 1100);
+    let order = i.modes.respawns[&b].spawn_id;
+    assert_eq!(order, respawn_spawn_id(1, 2));
+    let old = rec::GameStatus { match_id: i.sess.match_id, round: 1, life: 2,
+        flags: v5::status_flags::LOADED, spawn_id: order,
+        arena: hsmp_ipc::layout::Str::new("Map_Arena_Pit"), ..Default::default() };
+    assert!(!game_status_placed(&mut i, b, &old));
+    assert!(!alive(&i, b));
+    assert!(game_status_placed(&mut i, b, &rec::GameStatus { life: 130, ..old }));
+    assert!(alive(&i, b));
+}
+
+#[test]
+fn deathmatch_life_exhaustion_never_reuses_the_last_native_generation() {
+    let st = server(40, 2, all_caps());
+    let mut i = st.inner.try_lock().unwrap();
+    set_mode(&mut i, ModeCfg { mode: gm::DEATHMATCH, respawn_s: 1, ..Default::default() });
+    go_live(&mut i);
+    let (a, b) = (id(40, 1), id(40, 2));
+    i.modes.stats.get_mut(&key(2)).unwrap().life = u16::MAX;
+    assert!(declare_death(&mut i, b, a, DEATH_DAMAGE));
+    run(&mut i, 1100);
+    assert!(!alive(&i, b));
+    assert!(!i.modes.respawns.contains_key(&b));
+    assert_eq!(peer_life(&i, b), u16::MAX);
 }
 
 #[test]

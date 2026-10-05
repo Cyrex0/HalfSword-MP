@@ -429,7 +429,7 @@ async fn run_client(
         let pos = [base[0] + wob, base[1], base[2]];
         if pump && ms.is_multiple_of(20) {
             let t = now_us();
-            let r = hsmp_ipc::schema::pose::Root { tick: t, ts: t / 1000, send_wall_ms: 0, pos, rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3] };
+            let r = hsmp_ipc::schema::pose::Root { tick: t, ts: t / 1000, send_wall_ms: 0, pos, rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3], match_id: 1, round: 1, life: 1, _r: 0 };
             synth_pose(pos, (t / 1000) as f64, &mut pose_frame);
             let head = hsmp_ipc::schema::pose::PoseHead { tick: t, n: 0, _r: 0 };
             bot.send_msgs(vec![hsmp_ipc::wire::encode(0, 0, &r, &[]), hsmp_ipc::wire::encode(0, 0, &head, &pose_frame)]).await;
@@ -437,7 +437,7 @@ async fn run_client(
         }
         if !pump && ms % 33 < 10 {
             let t = now_us();
-            let r = hsmp_ipc::schema::pose::Root { tick: t, ts: t / 1000, send_wall_ms: 0, pos, rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3] };
+            let r = hsmp_ipc::schema::pose::Root { tick: t, ts: t / 1000, send_wall_ms: 0, pos, rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3], match_id: 1, round: 1, life: 1, _r: 0 };
             bot.send_msg(hsmp_ipc::wire::encode(0, 0, &r, &[])).await;
             tx_bytes.fetch_add(120, Ordering::Relaxed);
         }

@@ -200,7 +200,7 @@ function W2.manifest_from(t, td)
     if type(td) == "table" and td.level == r.level and td.epoch == r.epoch then
         for _, e in ipairs(td.rows or {}) do
             r.e[#r.e + 1] = { id = e.id, chash = e.chash, pos = v3(e.pos[1], e.pos[2], e.pos[3]), dyn = e.dyn_owner,
-                              class = e.class_path or "" }
+                              class = e.class_path or "", passport = e.has_passport == true and e.passport or nil }
         end
     end
     return r

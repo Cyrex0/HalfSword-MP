@@ -238,7 +238,7 @@ crate::ipc_pod! {
     }
 
     /// The game's state report (G2S from the Director ~1 Hz and on change, framed C2S): load
-    /// barrier, game liveness, redundant death report, applied spawn order.
+    /// barrier, game liveness, diagnostic death flag, applied spawn generation.
     pub struct GameStatus {
         pub match_id: u64,
         /// The round whose world is loaded (with `status_flag` LOADED).
@@ -251,7 +251,10 @@ crate::ipc_pod! {
         pub spawn_id: u32,
         /// `load_error` code; 0 = none.
         pub load_error: u8,
-        pub _r: [u8; 7],
+        pub _r: u8,
+        /// Original verified pawn life; zero only when not LOADED.
+        pub life: u16,
+        pub _r2: u32,
         /// Short name of the loaded world's arena; "" while in the menu.
         pub arena: Str<40>,
     }
@@ -458,6 +461,20 @@ crate::ipc_pod! {
     }
 
     /// The spectated player (bus `spectate`, HSMPMatch).
+    pub struct SurrenderHold {
+        pub match_id: u64,
+        pub round: u32,
+        pub life: u16,
+        pub active: Bool,
+        pub _r: u8,
+        pub progress: f32,
+        pub remaining_s: f32,
+        /// Local monotonic process time; HUD discards a stalled publisher.
+        pub at_ms: f64,
+        pub pawn: Str<64>,
+    }
+
+    /// The spectated player (bus `spectate`, HSMPMatch).
     pub struct Spectate {
         /// Peer id; 0 = not spectating.
         pub target: u32,
@@ -470,6 +487,10 @@ crate::ipc_pod! {
 
     /// HSMPSync's placement report (bus `spawn_status`; the Director's evidence).
     pub struct SpawnStatus {
+        /// Original authoritative placement context; never refreshed from receipt time.
+        pub match_id: u64,
+        pub life: u16,
+        pub _context_r: [u8; 6],
         /// Process clock (s) until which the pawn is protected (valid if `has_protect_until`;
         /// unbounded until Live otherwise).
         pub protect_until: f64,
@@ -682,6 +703,7 @@ pub const K_TRAVEL_ACK: u16 = 0x0237;
 pub const K_UI_REQUEST: u16 = 0x0238;
 pub const K_RETURN_TO_LOBBY: u16 = 0x0239;
 pub const K_FALLBACK_SWAP: u16 = 0x023A;
+pub const K_SURRENDER_HOLD: u16 = 0x023B;
 /// Game modes (0x0240..=0x024F, `net::caps::MODES` / `ZONE`).
 pub const K_MODE: u16 = 0x0240;
 pub const K_ZONE: u16 = 0x0241;
@@ -1042,6 +1064,9 @@ fn check_game_status(g: &GameStatus) -> Result<(), Invalid> {
     if g.load_error > load_error::MAX {
         return Err(Invalid::Range("load_error"));
     }
+    if g.flags & status_flag::LOADED != 0 && g.life == 0 {
+        return Err(Invalid::Range("life"));
+    }
     Ok(())
 }
 
@@ -1144,6 +1169,7 @@ crate::record!(Ping, kind = K_PING, name = "ping");
 crate::record!(Pong, kind = K_PONG, name = "pong");
 crate::record!(Link, kind = K_LINK, name = "link", check = check_link);
 crate::record!(DirectorState, kind = K_DIRECTOR, name = "director");
+crate::record!(SurrenderHold, kind = K_SURRENDER_HOLD, name = "surrender_hold");
 crate::record!(ConnState, kind = K_CONN_STATE, name = "conn_state");
 crate::record!(Spectate, kind = K_SPECTATE, name = "spectate");
 crate::record!(SpawnStatus, kind = K_SPAWN_STATUS, name = "spawn_status");
@@ -1198,6 +1224,7 @@ pub const RECORDS: &[super::RecordInfo] = &[
     crate::record_info!(DirectorState, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: Director heartbeat"),
     crate::record_info!(ConnState, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: connection state shown to the player"),
     crate::record_info!(Spectate, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: spectated player"),
+    crate::record_info!(SurrenderHold, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: original-life deliberate surrender hold progress"),
     crate::record_info!(SpawnStatus, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: HSMPSync placement report"),
     crate::record_info!(SpawnRequest, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: Director asks for a (re-)placement"),
     crate::record_info!(TravelRequest, cap = CAP_BUS, flow = LOCAL, chan = Chan::None, doc = "bus: Menu travel request"),
@@ -1230,6 +1257,7 @@ pub const SLOTS: &[super::SlotInfo] = &[
     bus("director", K_DIRECTOR, false, "replaces .director.json"),
     bus("conn_state", K_CONN_STATE, false, "replaces .conn_state.json"),
     bus("spectate", K_SPECTATE, false, "replaces .spectate.json"),
+    bus("surrender_hold", K_SURRENDER_HOLD, true, "original-life deliberate surrender hold progress"),
     bus("spawn_status", K_SPAWN_STATUS, true, "replaces .spawn_status.json"),
     bus("spawn_request", K_SPAWN_REQUEST, false, "replaces .spawn_request.json"),
     bus("travel_request", K_TRAVEL_REQUEST, false, "replaces .travel_request.json"),
@@ -1410,7 +1438,11 @@ mod tests {
 
     #[test]
     fn small_record_checks() {
-        assert!(view::<GameStatus>(&to_payload(&GameStatus { flags: status_flag::LOADED | status_flag::DEAD, ..Default::default() }, &[])).is_ok());
+        assert!(view::<GameStatus>(&to_payload(&GameStatus { life: 1, flags: status_flag::LOADED | status_flag::DEAD, ..Default::default() }, &[])).is_ok());
+        assert_eq!(view::<GameStatus>(&to_payload(&GameStatus { flags: status_flag::LOADED, ..Default::default() }, &[])).unwrap_err(), Invalid::Range("life"));
+        assert_eq!(std::mem::size_of::<GameStatus>(), 72);
+        assert_eq!(std::mem::offset_of!(GameStatus, life), 26);
+        assert_eq!(std::mem::offset_of!(GameStatus, arena), 32);
         assert_eq!(view::<GameStatus>(&to_payload(&GameStatus { flags: 1 << 9, ..Default::default() }, &[])).unwrap_err(), Invalid::Range("flags"));
         assert_eq!(view::<GameStatus>(&to_payload(&GameStatus { load_error: 10, ..Default::default() }, &[])).unwrap_err(), Invalid::Range("load_error"));
         assert_eq!(view::<Spawned>(&to_payload(&Spawned::default(), &[])).unwrap_err(), Invalid::Range("round"));

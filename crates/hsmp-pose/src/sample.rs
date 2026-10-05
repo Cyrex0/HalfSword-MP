@@ -60,6 +60,7 @@ pub fn root(a: &[f64; 11], wall_ms: u64) -> Root {
         pos: v3(a[2], a[3], a[4]),
         rot: rot_of(a[5], a[6], a[7]),
         vel: v3(a[8], a[9], a[10]),
+        match_id: 0, round: 0, life: 0, _r: 0,
     }
 }
 
@@ -103,6 +104,19 @@ pub struct Scratch {
 /// number is not finite (the frame would not decode the same) — the old sidecar dropped
 /// such a sample too.
 pub fn encode_pose(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut PoseBuf) -> bool {
+    encode_pose_with_boxes(a, s, out, &[])
+}
+
+pub fn encode_pose_with_boxes(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut PoseBuf, boxes: &[Vec<v2::WeaponBox>]) -> bool {
+    encode_pose_with_geometry(a,s,out,boxes,None)
+}
+
+pub fn encode_pose_with_geometry(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut PoseBuf, boxes: &[Vec<v2::WeaponBox>], strikers: Option<&[v2::BodyStriker]>) -> bool {
+    encode_pose_with_context(a,s,out,boxes,strikers,None)
+}
+
+pub fn encode_pose_with_context(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut PoseBuf, boxes: &[Vec<v2::WeaponBox>], strikers: Option<&[v2::BodyStriker]>, context: Option<v2::Context>) -> bool {
+    if context.is_some_and(|c| !c.valid()) {return false;}
     s.b.clear();
     s.b.extend(a.b.iter().map(|x| *x as f32));
     let mut ws = [[0f32; WEAPON_NUMS]; 2];
@@ -127,7 +141,18 @@ pub fn encode_pose(a: &PoseArgs<'_>, s: &mut Scratch, out: &mut PoseBuf) -> bool
         ik_world: [false; 4],
     });
     let tick = a.tick as u32;
-    let Some((_, f)) = v2::from_parts(tick, a.ts, a.dt as f32 as f64, &s.b, &ws[..nw], ctl) else { return false };
+    let Some((_, mut f)) = v2::from_parts(tick, a.ts, a.dt as f32 as f64, &s.b, &ws[..nw], ctl) else { return false };
+    for (w, b) in f.weapons.iter_mut().zip(boxes) {
+        if b.len()>v2::MAX_WEAPON_BOXES || b.iter().any(|row|!row.valid()
+            || b.iter().filter(|other|other.component==row.component).count()!=1
+            || (row.child_of!=0 && !b.iter().any(|parent|parent.component==row.child_of && parent.child_of==0))) {return false;}
+        w.boxes.extend_from_slice(b);
+    }
+    if let Some(bs)=strikers {
+        if bs.len()>v2::MAX_BODY_STRIKERS || bs.iter().enumerate().any(|(i,b)|!b.valid() || bs[..i].iter().any(|old|old.part==b.part && old.component==b.component)) { return false; }
+        f.strikers=Some(bs.to_vec());
+    }
+    f.context=context;
     v2::encode_into(&f, &mut s.frame);
     if s.frame.len() > POSE_FRAME_MAX {
         return false;
@@ -277,6 +302,22 @@ mod tests {
             let v = view::<PoseHead>(out.payload()).expect("the record validates");
             assert_eq!(&*v.rows, &want[..]);
         }
+    }
+
+    #[test]
+    fn complete_native_module_capacity_is_never_truncated() {
+        let (b,ws,_,ts,dt)=sample(1);
+        let a=PoseArgs {tick:1.0,ts,dt,b:&b,w:&ws,c:None};
+        let mut boxes=vec![(1..=v2::MAX_WEAPON_BOXES as u8).map(|component|v2::WeaponBox {
+            component,q:[0.0,0.0,0.0,1.0],half:[1.0;3],native_scale:Some([1.0;3]),
+            child_of:if component>6 {component-6}else{0},..Default::default()}).collect::<Vec<_>>()];
+        let mut out=VarBuf::<PoseHead,POSE_FRAME_MAX>::new_boxed();
+        assert!(encode_pose_with_boxes(&a,&mut Scratch::default(),&mut out,&boxes));
+        assert_eq!(v2::decode(out.used()).unwrap().weapons[0].boxes.len(),12);
+        boxes[0].push(v2::WeaponBox {component:13,q:[0.0,0.0,0.0,1.0],half:[1.0;3],..Default::default()});
+        assert!(!encode_pose_with_boxes(&a,&mut Scratch::default(),&mut out,&boxes),"thirteen rows cannot silently become twelve");
+        boxes[0].pop();boxes[0][11].child_of=7;
+        assert!(!encode_pose_with_boxes(&a,&mut Scratch::default(),&mut out,&boxes),"child cannot use another child as its native parent");
     }
 
     #[test]

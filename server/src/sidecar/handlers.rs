@@ -66,6 +66,7 @@ pub(super) async fn handle_server_record(
         hsmp_ipc::schema::loadout::K_KIT_RULES => loadout_client::on_kit_rules(payload),
         hsmp_ipc::schema::loadout::K_LOADOUT => loadout_client::on_loadout(h.peer, payload),
         hsmp_ipc::schema::loadout::K_BODY => loadout_client::on_body(h.peer, payload),
+        hsmp_ipc::schema::loadout::K_BODY2 => loadout_client::on_body2(h.peer, payload),
         // ---- pose (protocol v6; schema/pose.rs) ----
         K_ROOT => {
             let v = match hsmp_ipc::record::view::<Root>(payload) {

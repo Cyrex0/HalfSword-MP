@@ -7,6 +7,16 @@ Records: `crates/hsmp-ipc/src/schema/combat.rs`. The in-game checklist is in
 
 ## 1. Overview
 
+Native injury channels remain independent: a blunt hit can lower consciousness
+and head crush without crossing the main Health damage threshold. Temporary
+unconsciousness remains recoverable. The owner's native `Event Lose Match`,
+after its own prolonged knockout/submission checks, reports a scoped final
+defeat in Brawl only (`death_report.reason=1`, `death.cause=5`). Other modes
+continue through automatic knockouts until native death or deliberate surrender
+(`death_report.reason=2`, `death.cause=6`). Elimination leaves a surrendered or
+knocked-out body alive; it never writes Health zero or calls native Death/Dying.
+The ordinary biological death report retains reason zero.
+
 Damage is owner-authoritative and server-validated:
 
 1. My weapon (or body) touches a peer's **stand-in** on my screen. The stand-in takes no damage.
@@ -374,7 +384,9 @@ trim.
 | `pain_rate` | Stab Rate |
 | `damage_out` | Rigidity |
 | `raw_damage` | the stand-in's measured relative speed (uu/s) |
-| `dism_blunt` | Blunt Destruction Int \| Kick·10 << 8 \| Lower Threshold << 16 \| Extra High Velocity << 17 |
+| `dism_blunt` | Blunt Destruction Int \| Kick·10 << 8 \| Lower Threshold << 16 \| Extra High Velocity << 17 \| fist source << 18 \| left-hand source << 19 \| right-hand source << 20 |
+
+Source bits preserve the native striking component independently of geometry. Fists retain the weapon flag for native replay, but the server validates them against the attacker's body capsules and body velocity. A named left or right weapon source uses that hand's history and replay component; it cannot borrow the other hand's geometry. Both hand bits set, source bits without the weapon flag, and undefined packed bits are rejected. Legacy claims without source bits retain their previous selection behavior.
 
 **Server bounds (`damage::clamp_complex`).** The inputs are the attacker's own native call, so they
 pass unchanged unless physically impossible:
@@ -498,3 +510,11 @@ The run also covers a stalled owner (its Lua hung for 10 s while its sidecar kee
 Unit tests worth knowing: `ledger_ceiling_never_cuts_an_owner_that_reports_in_the_replay_tick`,
 `honest_owner_at_full_health_after_estimated_hits_is_shown_and_kept` (combat.rs) and
 `victim_touch_after_its_clash_keeps_the_hit` (lagcomp/tests.rs).
+
+## Protocol 8 historical cutting shape
+
+The 280-byte Damage header carries an exact ASCII native source class (48-byte field; capture rejects names of 48 bytes or more) and thirteen original HitBox values: center in physical centimetres in the victim bone's rotation frame, local quaternion, original world scale, and unscaled native extent. Capture subtracts the original bone position and applies inverse rotation; replay and server validation apply rotation and add the corresponding bone position. Neither operation divides by native socket scale or multiplies by the median skeleton reference scale. Those scales have different provenance, so normalizing with one and reconstructing with the other moves a legitimate Box. Other damage point and velocity coordinates retain their existing semantics. All 24 injury deltas fit the 472-byte ring payload exactly. Weapon claims require an original component ordinal, one source hand, and exact class history. Ordinal-zero weapon fallback is rejected.
+
+The server reconstructs the historical cutting Box against authenticated original pose history, including victim bone frame, exact source class fingerprint, component ordinal, native Box scale, and scaled extent. Keeping scale separate prevents a forged reciprocal extent/scale pair from changing the native X-before-scale clamp. The original live weapon is never transformed or resized. Replay uses a private collision-disabled, nonsimulating Box pool bounded to 128 native actors per world, including partial construction failures. Session reconnect retains the pool; world travel retires its numeric identities. Native Shipping snapshots and deep-copies shape transforms/extents synchronously before asynchronous paint work, allowing bounded reuse while retaining the UObject for its world lifetime.
+
+The tracked extra melee registry records thirteen original PAK classes independently verified as direct ModularWeaponBP descendants. The diagnostic command `autotest parity inventory extra` checks those separately from the configured 128 weapon classes. Catalogue presence and inheritance evidence do not establish successful native injury for every weapon. Thrown or ranged source objects still need separate authenticated object identity, and body-striker HitBox replay remains rejected where original native Box scale history is unavailable. The private factory command `autotest parity cutproxy` must pass native construction, readback, collision flags, and reuse checks before cutting PvP is considered verified.

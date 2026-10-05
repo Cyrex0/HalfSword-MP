@@ -7,6 +7,69 @@ use std::ffi::c_int;
 
 use hsmp_ipc::schema::pose::{PoseBuf, PoseLead, K_POSE, K_ROOT, K_WEAPON};
 use hsmp_pose::sample::{self, PoseArgs, BONE_NUMS, CONTROL_NUMS, WEAPON_NUMS};
+use hsmp_pose::posecodec::v2::{BodyStriker, MAX_BODY_STRIKERS, WeaponBox, MAX_WEAPON_BOXES};
+
+/// Integer Lua fields preserve all 64 match-id bits (no floating conversion).
+pub(crate) unsafe fn read_pose_context(L: *mut lua_State, index: c_int) -> Option<hsmp_pose::posecodec::v2::Context> {
+    unsafe {
+        if !is_table(L,index) {return None;}
+        let t=lua_absindex(L,index);
+        let get=|name:&str| {rawget_str(L,t,name);let v=arg_int(L,-1);pop(L,1);v};
+        let match_id=get("match_id").unwrap_or(0) as u64;
+        let round=get("round").filter(|v|*v>0 && *v<=u32::MAX as i64).unwrap_or(0) as u32;
+        let life=get("life").filter(|v|*v>0 && *v<=u16::MAX as i64).unwrap_or(0) as u16;
+        Some(hsmp_pose::posecodec::v2::Context{match_id,round,life})
+    }
+}
+
+pub(crate) unsafe fn read_body_strikers(L: *mut lua_State, index: c_int) -> Option<Vec<BodyStriker>> {
+    unsafe {
+        if !is_table(L,index) { return None; }
+        let t=lua_absindex(L,index); let len=lua_rawlen(L,t) as usize;
+        if len%13!=0 || len/13>MAX_BODY_STRIKERS { return Some(Vec::new()); }
+        let mut out:Vec<BodyStriker>=Vec::with_capacity(len/13);
+        for i in 0..len/13 {
+            let mut a=[0.0;13];
+            if !geti_nums(L,t,(i*13+1) as i64,&mut a) || a[..3].iter().any(|v|!v.is_finite() || *v!=v.floor()) {return Some(Vec::new());}
+            let s=BodyStriker {part:a[0] as u8,component:a[1] as u8,kind:a[2] as u8,p:[a[3] as f32,a[4] as f32,a[5] as f32],
+                q:[a[6] as f32,a[7] as f32,a[8] as f32,a[9] as f32],half:[a[10] as f32,a[11] as f32,a[12] as f32]};
+            if !s.valid() || out.iter().any(|old|old.part==s.part && old.component==s.component) {return Some(Vec::new());}
+            out.push(s);
+        }
+        Some(out)
+    }
+}
+
+/// Protocol10 flat geometry: fifteen numbers per row (component, p, q, half,
+/// native scale or zero, native cutting-parent ordinal or zero).
+/// A malformed optional shape never manufactures geometry.
+pub(crate) unsafe fn read_weapon_boxes(L: *mut lua_State, index: c_int) -> Vec<WeaponBox> {
+    unsafe {
+        if !is_table(L, index) { return Vec::new(); }
+        let t = lua_absindex(L, index);
+        let len = lua_rawlen(L, t) as usize;
+        let stride=15;
+        if len % stride != 0 || len / stride > MAX_WEAPON_BOXES { return Vec::new(); }
+        rawget_str(L,t,"class_hash");let class_hash=arg_int(L,-1).unwrap_or(0) as u32;pop(L,1);
+        let mut boxes = Vec::with_capacity(len / stride);
+        for i in 0..len / stride {
+            let mut a = [0.0; 11];
+            if !geti_nums(L, t, (i * stride + 1) as i64, &mut a) { return Vec::new(); }
+            let mut scale=[0.0;3];
+            if !geti_nums(L,t,(i*stride+12) as i64,&mut scale) {return Vec::new();}
+            let mut parent=[0.0];
+            if !geti_nums(L,t,(i*stride+15) as i64,&mut parent) || parent[0]!=parent[0].floor() || !(0.0..=15.0).contains(&parent[0]) {return Vec::new();}
+            let native_scale=if scale==[0.0;3] {None} else {Some(scale.map(|v|v as f32))};
+            if a[0] != a[0].floor() { return Vec::new(); }
+            let b = WeaponBox { component: a[0] as u8, p: [a[1] as f32,a[2] as f32,a[3] as f32],
+                q: [a[4] as f32,a[5] as f32,a[6] as f32,a[7] as f32],
+                half: [a[8] as f32,a[9] as f32,a[10] as f32],class_hash,native_scale,child_of:parent[0] as u8 };
+            if !b.valid() { return Vec::new(); }
+            boxes.push(b);
+        }
+        boxes
+    }
+}
 
 use crate::lua::*;
 use crate::native::Native;
@@ -71,16 +134,18 @@ impl Native {
     /// The `root` record of one sample into `local_root`: `rot_pyr_deg` = UE rotator
     /// (pitch, yaw, roll), converted to a quaternion here, once.
     #[allow(dead_code)]
-    pub(crate) fn write_root(&mut self, tick: u32, ts_ms: f64, pos: [f64; 3], rot_pyr_deg: [f64; 3], vel: [f64; 3]) -> Result<(), HotErr> {
+    pub(crate) fn write_root(&mut self, tick: u32, ts_ms: f64, pos: [f64; 3], rot_pyr_deg: [f64; 3], vel: [f64; 3], context: Option<hsmp_pose::posecodec::v2::Context>) -> Result<(), HotErr> {
         let a = [tick as f64, ts_ms, pos[0], pos[1], pos[2], rot_pyr_deg[0], rot_pyr_deg[1], rot_pyr_deg[2], vel[0], vel[1], vel[2]];
-        self.write_root_args(&a)
+        self.write_root_args(&a, context)
     }
 
-    fn write_root_args(&mut self, a: &[f64; 11]) -> Result<(), HotErr> {
+    fn write_root_args(&mut self, a: &[f64; 11], context: Option<hsmp_pose::posecodec::v2::Context>) -> Result<(), HotErr> {
         if self.seg().is_none() {
             return Err(HotErr::NotOpen);
         }
-        let r = sample::root(a, wall_ms());
+        let c=context.filter(|c|c.match_id!=0 && c.round!=0 && c.life!=0).ok_or(HotErr::Bad("context"))?;
+        let mut r = sample::root(a, wall_ms());
+        r.match_id=c.match_id; r.round=c.round; r.life=c.life;
         hsmp_ipc::record::check(&r, &[]).map_err(|e| HotErr::Bad(e.field().unwrap_or("root")))?;
         let meta = self.meta();
         if !put_slot(self.seg(), "local_root", meta, K_ROOT, bytemuck::bytes_of(&r), &mut self.pose.stamped) {
@@ -116,14 +181,14 @@ impl Native {
     /// (hands, class, p q v w, blade base xyz, tip xyz; world), `control` = the 37 control
     /// numbers. `k` is ignored (the encoder measures the skeleton scale).
     #[allow(dead_code)]
-    pub(crate) fn write_pose(&mut self, tick: u32, ts_ms: f64, dt_ms: f64, k: f64, bones: &[f64; BONE_NUMS], weapons: &[[f64; WEAPON_NUMS]], control: Option<&[f64; CONTROL_NUMS]>) -> Result<(), HotErr> {
+    pub(crate) fn write_pose(&mut self, tick: u32, ts_ms: f64, dt_ms: f64, k: f64, bones: &[f64; BONE_NUMS], weapons: &[[f64; WEAPON_NUMS]], control: Option<&[f64; CONTROL_NUMS]>, boxes: &[Vec<WeaponBox>], strikers: Option<&[BodyStriker]>, context: Option<hsmp_pose::posecodec::v2::Context>) -> Result<(), HotErr> {
         let _ = k;
         if self.seg().is_none() {
             return Err(HotErr::NotOpen);
         }
         let p = &mut *self.pose;
         let a = PoseArgs { tick: tick as f64, ts: ts_ms, dt: dt_ms, b: bones, w: &weapons[..weapons.len().min(2)], c: control };
-        if !sample::encode_pose(&a, &mut p.enc, &mut p.buf) {
+        if !sample::encode_pose_with_context(&a, &mut p.enc, &mut p.buf, boxes, strikers, context) {
             return Err(HotErr::Bad("b"));
         }
         self.publish_pose()
@@ -153,7 +218,8 @@ impl Native {
                     None => return nil_err(L, "bad"),
                 }
             }
-            let r = self.write_root_args(&a);
+            let context=read_pose_context(L,12);
+            let r = self.write_root_args(&a,context);
             hot_result(L, r)
         }
     }
@@ -214,8 +280,18 @@ impl Native {
                 has_c = true;
             }
             // (`tick` stays an f64 here: the encoder truncates it exactly as before.)
+            let mut boxes = Vec::new();
+            if is_table(L, 8) {
+                for i in 1..=nw {
+                    lua_rawgeti(L, 8, i as i64);
+                    boxes.push(read_weapon_boxes(L, -1));
+                    pop(L, 1);
+                }
+            }
             let a = PoseArgs { tick, ts, dt, b: &p.b, w: &p.w[..nw], c: has_c.then_some(&p.c) };
-            if !sample::encode_pose(&a, &mut p.enc, &mut p.buf) {
+            let strikers=read_body_strikers(L,9);
+            let context=read_pose_context(L,10);
+            if !sample::encode_pose_with_context(&a, &mut p.enc, &mut p.buf, &boxes, strikers.as_deref(), context) {
                 return nil_err(L, "bad:b");
             }
             let r = self.publish_pose();

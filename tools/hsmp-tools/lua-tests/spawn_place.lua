@@ -471,6 +471,30 @@ end
 T.log("== a new pawn gets its own placement and protection")
 do
     local w = placed_world()
+    w:go_live()
+    w:secs(4)
+    w.plan.by_peer[1].spawn_id = 386 -- round1, deathmatch life2
+    w.director = "Spawn"
+    w:new_pawn()
+    w:tick(1)
+    T.check(w.sp:protected() and w.pawn.props.Invulnerable,
+        "server-authorized fresh deathmatch life is protected even though match is already Live")
+    T.check(w.sp:protect_until() > w.clock and w.sp:protect_until() <= w.clock+15,
+        "live respawn protection is bounded before placement")
+    w:secs(3)
+    T.check(w.teleports == 2 and w:status().verified and w:status().pawn == w.pawn.id,
+        "actual fresh deathmatch pawn receives its order and verifies during Live")
+    w.director = "Live"
+    w:secs(4)
+    T.check(not w.sp:protected() and not w.pawn.props.Invulnerable,
+        "verified respawn protection expires without waiting for another Live transition")
+    w:new_pawn()
+    w:secs(3)
+    T.check(w.teleports == 2 and not w.sp:protected(),
+        "completed respawn order does not authorize arbitrary later possession resets")
+end
+do
+    local w = placed_world()
     w:secs(3.5)
     w:go_live()
     w:secs(4)
@@ -905,4 +929,25 @@ do
     T.check(w:count("Willie_BP_C_7", true) == 1 and w:count("Willie_BP_C_8", true) == 0,
         "collision restored with the Willie that still exists only", T.repr(w.calls))
     T.check(T.contains(w:logtext(), "collision with 1 other Willie(s) restored (protection over)"), "restore logged for 1")
+end
+
+T.log("== original placement context survives report refresh and changes only after new placement")
+do
+    local w=placed_world()
+    w.plan.match_id=51
+    w:secs(4)
+    local old=w:status()
+    T.check(old.verified and old.match_id==51 and old.life==1,"verified status stores original order match and life")
+    w:go_live();w:tick()
+    T.check(w:status().match_id==51 and w:status().life==1,"Live report refresh retains original placement context")
+    w.mstate,w.mround="countdown",0
+    w:spawns(1,"Map_Arena_Slums",517,250,853)
+    w.plan.match_id=52
+    local before=w.teleports
+    w:tick()
+    T.check(w.teleports==before+1 and not w:status().verified and w:status().match_id==52,
+        "same pawn and spawn256 in a new match requires a fresh physical placement")
+    T.check(old.match_id==51,"new session never relabels saved old placement")
+    w:secs(1.2)
+    T.check(w:status().verified and w:status().match_id==52,"new match verifies its own placement")
 end

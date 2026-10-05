@@ -910,18 +910,21 @@ pub(crate) mod resume_tests {
             let mut p = match_core::round_tests::peer(75_001, "t");
             p.last_valid_pos = Some([0.0, 0.0, 100.0]);
             i.peers.insert(a, p);
+            i.match_state="countdown".into();i.sess.match_id=1;i.spawn_round=1;
+            i.spawn_plan=vec![crate::spawns::SpawnAssign {peer_id:75_001,spawn_id:256,slot:0,pos:[0.0;3],yaw:0.0,protect_ms:3000}];
+            i.sess.root_placed.insert(75_001,(1,1,1,256));
         }
         let mut x = 0.0;
         for _ in 0..10 {
             let pos = [x + 350.0, 0.0, 100.0];
-            if session::accept_root(&state, a, pos, Default::default()).await.is_some() { x = pos[0]; }
+            if session::accept_root(&state, a, pos, hsmp_ipc::schema::pose::Root {match_id:1,round:1,life:1,..Default::default()}).await.is_some() { x = pos[0]; }
         }
         assert!(x <= 1050.0 + 1.0, "moved {x} uu inside one tick");
         // An honest sprint (700 uu/s, 60 Hz roots on the arrival clock) keeps passing.
         for k in 0..120 {
             tokio::time::sleep(Duration::from_millis(16)).await;
             let pos = [x + 700.0 / 60.0, 0.0, 100.0];
-            assert!(session::accept_root(&state, a, pos, Default::default()).await.is_some(), "sprint step {k} refused");
+            assert!(session::accept_root(&state, a, pos, hsmp_ipc::schema::pose::Root {match_id:1,round:1,life:1,..Default::default()}).await.is_some(), "sprint step {k} refused");
             x = pos[0];
         }
     }
@@ -1173,8 +1176,13 @@ mod bundle_tests {
         for _ in 0..3 { a.pump(&socket, &state).await; b.pump(&socket, &state).await; }
         let mut buf = [0u8; 2048];
         while b.sock.try_recv_from(&mut buf).is_ok() {}
-        let root = Root { tick: 1, ts: 1000, send_wall_ms: 0, pos: [100.0, 200.0, 50.0], rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3] };
-        let vit = Vitals { seq: 7, ..Default::default() };
+        {let mut i=state.inner.lock().await;let id=a.welcome_id().unwrap();i.sess.match_id=91;
+            let key=session::peer_key(i.peers.get(&a.addr).unwrap());i.modes.stats.entry(key).or_default().life=1;
+            i.spawn_plan.push(crate::spawns::SpawnAssign {peer_id:id,spawn_id:256,slot:0,pos:[0.0;3],yaw:0.0,protect_ms:3000});
+            i.sess.root_placed.insert(id,(91,1,1,256));}
+        let root = Root { tick: 1, ts: 1000, send_wall_ms: 0, pos: [100.0, 200.0, 50.0], rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3], match_id: 91, round: 1, life: 1, _r: 0 };
+        let vit = {let inner=state.inner.lock().await;Vitals {seq:7,round:inner.match_round,match_id:inner.sess.match_id,
+            life:super::modes::peer_life(&inner,a.welcome_id().unwrap()),..Default::default()}};
         let msgs = [hsmp_ipc::wire::encode(0, 0, &root, &[]), hsmp_ipc::wire::encode(0, 0, &vit, &[])];
         for m in &msgs {
             let (h, _) = hsmp_ipc::wire::split(m).unwrap();

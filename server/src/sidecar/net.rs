@@ -136,7 +136,7 @@ impl NetClient {
         // Combat hit effects: touch reports up, stand-in blood / wounds down.
         cfg.caps |= hsmp_net::net::caps::HIT_FX;
         // The owner's passport body for its stand-ins (body records), both ways.
-        cfg.caps |= hsmp_net::net::caps::BODY;
+        cfg.caps |= hsmp_net::net::caps::BODY | hsmp_net::net::caps::BODY2;
         // Game modes: the `mode` / `kill_feed` records and the King of the hill `zone`.
         cfg.caps |= hsmp_net::net::caps::MODES | hsmp_net::net::caps::ZONE;
         // Server mods: offered always; the game asks the player before anything downloads.

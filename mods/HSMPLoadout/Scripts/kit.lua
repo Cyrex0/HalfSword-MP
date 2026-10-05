@@ -374,7 +374,10 @@ end
 function Kit.weapon_sig(L, hsuf, strip)
     if type(L) ~= "table" then return "-" end
     local w, kw = L.w or {}, L.kit_w
-    local function c(e) return type(e) == "table" and tostring(e.class) or "-" end
+    local function c(e)
+        if Kit.weapon_passport_key then return Kit.weapon_passport_key(e) end
+        return type(e) == "table" and tostring(e.class) or "-"
+    end
     return string.format("R=%s,L=%s,kR=%s,kL=%s%s%s%s", c(w.R), c(w.L), kw and tostring(kw.R) or "-",
         kw and tostring(kw.L) or "-", hsuf or "", (strip and strip.R) and "|sR" or "", (strip and strip.L) and "|sL" or "")
 end
@@ -935,3 +938,4 @@ function Kit.force_local()
 end
 
 return Kit
+

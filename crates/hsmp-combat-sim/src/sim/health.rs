@@ -282,7 +282,7 @@ impl World {
         let (seq, life) = (v.seq, h.life[c]);
         h.log.vitals_sent.push((c, life, t));
         for at in self.clients[c].up.send(t) {
-            self.push(at, Msg::SVitals { from: c, seq, hp, dead, life });
+            self.push(at, Msg::SVitals { from: c, seq, hp, dead, life, ..Default::default() });
         }
     }
 
@@ -312,7 +312,7 @@ impl World {
         for to in 0..self.cfg.players {
             if to == from { continue; }
             for at in self.clients[to].down.send(t) {
-                self.push(at, Msg::CVitals { to, from, seq, hp: shown, life });
+                self.push(at, Msg::CVitals { to, from, seq, hp: shown, life, ..Default::default() });
             }
         }
     }

@@ -194,6 +194,7 @@ local function load_module(name)
 end
 
 local HW = load_module("hsmp_wg")
+local NativeModules=load_module("native_weapon_modules")
 if not HW then
     Log("FATAL: shared/hsmp_wg.lua missing - %s disabled (deploy copies shared/*.lua)", "HSMPCombat")
     return
@@ -277,7 +278,15 @@ local VITALS = {
     { "Fallen Rate", 0.05, false },            -- 18 posture comes from the pose stream
 }
 -- Flag bits (vitals.rs F_*): Willie_BP_C booleans.
-local VFLAGS = { { "DED", 1 }, { "Fallen", 2 }, { "Downed", 4 }, { "Headless", 8 }, { "Pain Shock", 16 } }
+local VFLAGS = {
+    { "DED", 1 }, { "Fallen", 2 }, { "Downed", 4 }, { "Headless", 8 }, { "Pain Shock", 16 },
+    { "Head Broken", 32 }, { "Neck Snapped", 64 }, { "Neck Dislocated", 64 },
+    { "Back Broken", 128 }, { "Spine Dislocated", 128 },
+    { "Arm R Broken", 256 }, { "Arm R Dislocated", 256 },
+    { "Arm L Broken", 512 }, { "Arm L Dislocated", 512 },
+    { "Leg R Broken", 1024 }, { "Leg R Dislocated", 1024 },
+    { "Leg L Broken", 2048 }, { "Leg L Dislocated", 2048 },
+}
 local VITALS_TICKS    = 2      -- sample every 2nd 33 ms tick (~15 Hz)
 local VITALS_BEAT_S   = 1.0    -- heartbeat (server ledger reflection)
 local DISM_TICKS      = 6      -- "Dismembered Array" read at ~5 Hz
@@ -327,6 +336,7 @@ end
 -- go straight to the facade's IPC.send (no line ids, no JSON). Nothing is sent
 -- before the session is up (`connected`, from the session status below).
 local connected = false
+local my_peer_id = 0
 -- "connected" = the shared liveness rule (shared/hsmp_session.lua):
 -- status connected AND a fresh sidecar heartbeat. A dead sidecar's leftover
 -- "connected" file must not make single-player act as MP (career heals,
@@ -335,7 +345,7 @@ local HSESS = load_module("hsmp_session")   -- typed session / link records (ses
 local SESS = HSESS and HSESS.new({})
 -- SEND: the G2S kinds this mod sends; refused = sends IPC.send refused (bad /
 -- too_big / unavailable), per kind.
-local SEND = { kinds = { damage = true, touch = true, clash = true, death_report = true }, refused = {} }
+local SEND = { kinds = { damage = true, touch = true, clash = true, death_report = true, replay_outcome = true }, refused = {} }
 local function send_rec(kind, t)
     if not connected then return false end
     local ipc = rawget(_G, "HSMP_IPC")
@@ -377,7 +387,9 @@ local function bone_pos(mesh, bone)
 end
 
 -- Bone frames: { p = world position, q = unit quaternion {x, y, z, w}, s = scale }.
-local BF = { LOCAL = 64, WEAPON = 128, GD_GATE_MS = 200, MAX_PER_BONE_TICK = 4 }
+local BF = { LOCAL = 64, WEAPON = 128, FIST = 262144, LEFT = 524288, RIGHT = 1048576, COMPONENT = 2097152, FEET = 33554432,
+    GD_GATE_MS = 200, MAX_PER_BONE_TICK = 4 }
+local CuttingBox = load_module("cutting_box")
 function BF.of(mesh, bone)
     if not mesh or not bone or bone == "" then return nil end
     local f
@@ -436,10 +448,17 @@ end
 function BF.is_weapon(comp)
     if not comp then return false end
     local tagged = false
+    local ok, live = pcall(function() return comp:IsValid() end)
+    if not ok or not live then return false end
     pcall(function() tagged = comp:ComponentHasTag(FName("Weapon")) == true end)
     if tagged then return true end
     local cls
-    pcall(function() cls = comp:GetOwner():GetClass():GetFName():ToString() end)
+    pcall(function()
+        -- GetOwner can return a truthy UE4SS wrapper around nullptr after a
+        -- weapon drop/destruction. pcall cannot catch GetClass's native AV.
+        local owner = comp:GetOwner()
+        if owner and owner:IsValid() then cls = owner:GetClass():GetFName():ToString() end
+    end)
     return cls ~= nil and cls ~= "Willie_BP_C"
 end
 
@@ -559,7 +578,7 @@ local function refresh_puppets()
                     -- the stand-in's even when the weapon's "Parent Actor" /
                     -- attach parent doesn't resolve (else its local echo on
                     -- my pawn would NOT be zeroed: double damage).
-                    for _, k in ipairs({ "Weapon R", "Weapon L" }) do
+                    for _, k in ipairs({ "Weapon R", "Weapon L", "Foot R Weapon", "Foot L Weapon" }) do
                         pcall(function()
                             local wp = w[k]
                             if wp and wp:IsValid() then puppet_weapon[wname(wp) or ""] = id end
@@ -582,6 +601,65 @@ local function same(a, b)
     if ok then return r end
     local ok2, r2 = pcall(function() return a:GetFullName() == b:GetFullName() end)
     return ok2 and r2 or false
+end
+
+-- Source identity travels separately from WEAPON: fists are native weapon
+-- components for replay, but their geometry is the replicated hand/body.
+function BF.source(comp, pawn)
+    local owner, cls
+    pcall(function()
+        if not (comp and comp:IsValid()) then return end
+        owner = comp:GetOwner()
+        if not (owner and owner:IsValid()) then owner = nil; return end
+        cls = owner:GetClass():GetFName():ToString()
+    end)
+    if not owner then return 0 end
+    local bits = cls and cls:find("Fists", 1, true) and BF.FIST or 0
+    local feet = cls and cls:find("Weapon_Feet", 1, true) ~= nil
+    if feet then bits = bits + BF.FEET end
+    local r, l
+    pcall(function()
+        if feet then r, l = pawn["Foot R Weapon"], pawn["Foot L Weapon"]
+        else r, l = pawn["Weapon R"], pawn["Weapon L"] end
+    end)
+    if same(owner, r) then bits = bits + BF.RIGHT
+    elseif same(owner, l) then bits = bits + BF.LEFT end
+    if feet and not same(owner, r) and not same(owner, l) then return bits, nil, "unknown_foot_owner" end
+    if not feet and not same(owner, r) and not same(owner, l) then return bits, nil, "unknown_weapon_owner" end
+    local ordinal, reason, arr
+    local read_ok = pcall(function() arr = owner["Collision Components Array"] end)
+    if not read_ok or not arr then return bits, nil, "missing_array" end
+    local scanned = pcall(function()
+        local n = 0
+        arr:ForEach(function(_, entry)
+            n = n + 1 -- Count invalid entries too: identity is the native array slot.
+            if same(entry:get(), comp) then
+                if n <= 15 then ordinal = n else reason = "unsupported_index" end
+            end
+        end)
+    end)
+    if not scanned then reason = "unreadable_array" end
+    return bits + (ordinal or 0) * BF.COMPONENT, ordinal, reason or (not ordinal and "component_not_listed" or nil)
+end
+
+-- HitBox is a distinct optional native cutting input. Never substitute the
+-- striking collider for it, or resolve a box from the other held weapon.
+function BF.hit_box(box, collided, pawn)
+    if not box then return 0 end
+    local valid, same_owner, is_box = false, false, false
+    pcall(function()
+        valid = box:IsValid()
+        if valid then
+            same_owner = same(box:GetOwner(), collided:GetOwner())
+            is_box = box:GetClass():GetFName():ToString() == "BoxComponent"
+        end
+    end)
+    if not valid then return 0 end
+    if not same_owner or not is_box then return nil end
+    if not NativeModules then return nil end
+    local _,ordinal=BF.source(collided,pawn)
+    if not ordinal then return nil end
+    return NativeModules.box(collided:GetOwner(),collided,box)
 end
 
 -- The Willie holding a weapon actor. Real property name "Parent Actor"
@@ -748,6 +826,7 @@ local C3 = {
     touch_last = {},            -- peer -> now_ms of the last touch report
     touches = 0, undone = 0, standin_restores = 0, fx = 0, fx_skipped = 0,
     protect_tick = -1,
+    replay_stats = {}, receipt_stats = {}, replay_fields=0, replay_hp=0, receipt_fields=0, receipt_hp=0,
 }
 
 -- Combat records waiting in the facade's retry queue (ring full /
@@ -861,10 +940,11 @@ function C3.protect(w, peer)
     end
     if C3.STANDIN_INVULNERABLE then
         pcall(function() if w.Invulnerable ~= true then w.Invulnerable = true end end)
+        pcall(function() w["Force Disable Dismemberment"] = true end)
         local nm = wname(w)
         if nm then C3.gated[nm] = true end
     end
-    for _, k in ipairs({ "Weapon R", "Weapon L" }) do
+    for _, k in ipairs({ "Weapon R", "Weapon L", "Foot R Weapon", "Foot L Weapon" }) do
         pcall(function()
             local wp = w[k]
             if wp and wp:IsValid() then
@@ -883,9 +963,13 @@ function C3.ungate(me)
     if nm and C3.gated[nm] then
         C3.gated[nm] = nil
         pcall(function() me.Invulnerable = false end)
-        Log("my pawn %s was a stand-in: Invulnerable lifted", nm)
+        -- Avatars/cosmetic replay harden stand-ins structurally as well. A
+        -- pooled stand-in becoming OUR real pawn must regain native severing.
+        -- Only touch a pawn recorded as ours to gate, never normal spawn flags.
+        pcall(function() me["Force Disable Dismemberment"] = false end)
+        Log("my pawn %s was a stand-in: Invulnerable and dismemberment guards lifted", nm)
     end
-    for _, k in ipairs({ "Weapon R", "Weapon L" }) do
+    for _, k in ipairs({ "Weapon R", "Weapon L", "Foot R Weapon", "Foot L Weapon" }) do
         pcall(function()
             local wp = me[k]
             local wn = wp and wp:IsValid() and wname(wp)
@@ -955,23 +1039,67 @@ function C3.standin_hit(w)
 end
 
 -- The owner's passport body on stand-ins (standin_body.lua): my own body into
--- the `body` slot, each peer's `peer_body` onto its stand-in (bone masses).
+-- the `body2` slot, each peer's `peer_body2` onto its proven stand-in life.
 C3.BODY = load_module("standin_body")
-function C3.body_publish(me)
+function C3.body_context(me)
+    local ipc = rawget(_G,"HSMP_IPC")
+    local status = ipc and ipc.bus_table and ipc.bus_table("spawn_status")
+    local view = HSESS and HSESS.view and HSESS.view()
+    local order = view and view.spawns and view.spawns[my_peer_id]
+    if not me or not view or not status or status.verified ~= true or status.pawn ~= wname(me)
+        or status.match_id ~= view.match_id or not order or status.spawn_id ~= order.spawn_id then return nil end
+    if view.state == "countdown" then
+        if status.round ~= view.round + 1 or status.life ~= 1 then return nil end
+    else
+        local expected = C3.life_for(my_peer_id,true)
+        if not expected or status.round ~= expected.round or status.life ~= expected.life then return nil end
+    end
+    -- Copy original placement facts together; Mode is solely an admission check.
+    return {match_id=status.match_id,round=status.round,life=status.life,pawn=status.pawn}
+end
+function C3.body_publish(me, ctx)
     local B, ipc = C3.BODY, rawget(_G, "HSMP_IPC")
     if not (B and ipc and ipc.put) then return end
     local mesh = C3.hit_mesh and C3.hit_mesh(me) or body_mesh(me)
-    if mesh then B.publish(me, mesh, ipc.put, Log) end
+    ctx = ctx or C3.body_context(me)
+    if mesh and ctx then return B.publish(me, mesh, ipc.put, Log, ctx) end
+end
+function C3.body_tick(me)
+    local ctx = C3.body_context(me)
+    if not ctx then return end
+    local key = string.format("%s:%d:%d:%s",tostring(ctx.match_id),ctx.round,ctx.life,ctx.pawn)
+    local now = os.clock()
+    if (C3.body_generation ~= key and now >= (C3.body_retry_at or 0))
+        or tick_num % C3.BODY.PUBLISH_TICKS == 0 then
+        C3.body_retry_at = now + .25
+        if C3.body_publish(me,ctx) then C3.body_generation = key end
+    end
+end
+function C3.body_expected_context(peer)
+    local view = HSESS and HSESS.view and HSESS.view()
+    if view and view.state == "countdown" then
+        if not (view.spawns and view.spawns[peer]) then return nil end
+        return {match_id=view.match_id,round=view.round+1,life=1}
+    end
+    return C3.life_for(peer,false)
 end
 function C3.body_apply(peer, w)
     local B, ipc = C3.BODY, rawget(_G, "HSMP_IPC")
     if not (B and ipc and ipc.peer_rec) then return end
-    local rec = ipc.peer_rec("peer_body", peer)
+    local rec = ipc.peer_rec("peer_body2", peer)
     if type(rec) ~= "table" then return end
     local nm = wname(w)
     local mesh = C3.hit_mesh(w)
     if not (nm and mesh) then return end
-    local n = B.apply(nm, w, mesh, rec)
+    local expected = C3.body_expected_context(peer)
+    local playback = ipc.bus_table and ipc.bus_table("playback")
+    local context
+    for _, row in ipairs(playback and playback.rows or {}) do
+        if row.peer == peer and row.pawn == nm and B.context_matches(rec, row)
+            and B.context_matches(rec, expected) then context = row; break end
+    end
+    if not context then return end
+    local n = B.apply(nm, w, mesh, rec, context)
     if n > 0 then
         local f = B.fight_count()
         if f <= 5 or f % 50 == 0 then
@@ -982,28 +1110,102 @@ function C3.body_apply(peer, w)
 end
 
 -- Armour-stage bookkeeping: the Deal Complex Damage calls my weapon / body
--- made on stand-ins this tick (stand-in FName -> { records }). No UObject is
+-- made on stand-ins this tick, in callback order. No UObject is
 -- kept in it; cleared every flush and on every world drop.
-local CX = { pending = {}, orphans = 0 }
+local CX = { pending = {}, orphans = 0, source_skips = {} }
+local read_vitals
 CX.discard_outbox = C3.discard_outbox
 local complex_hook_ok = false
 local complex_tries = 0
 
--- Relative speed of my striking component against the stand-in bone it hit
--- (the server rescales the impulse from it). 0 = unknown.
-function C3.vrel(collided, hitcomp, bone)
+-- Relative speed at the contact, including angular motion of the striking
+-- component and victim bone. The server compares this with its reconstructed
+-- contact-point speed, so COM velocities would measure a different quantity.
+-- 0 = stationary relative contact, or unavailable measurement.
+function C3.vrel(collided, hitcomp, bone, point, source_bone)
     local function vel(c, b)
-        local v
-        pcall(function() v = vec(c:GetPhysicsLinearVelocity(b or FName("None"))) end)
-        if not v or (v[1] == 0 and v[2] == 0 and v[3] == 0) then
-            pcall(function() v = vec(c:GetComponentVelocity()) end)
+        if point then
+            local ok, measured = pcall(function()
+                return c:GetPhysicsLinearVelocityAtPoint(point, b or FName("None"))
+            end)
+            -- A successful zero is a real stationary point (e.g. a rotating
+            -- body's pivot); do not replace it with its moving COM velocity.
+            if ok and measured then return vec(measured) end
         end
+        local v
+        local ok, measured = pcall(function() return c:GetPhysicsLinearVelocity(b or FName("None")) end)
+        -- A stationary physics body is still a valid measurement. Replacing
+        -- zero with its skeletal component's movement invents a moving limb
+        -- on a resting contact, just as replacing a stationary point would.
+        if ok and measured then return vec(measured) end
+        pcall(function() v = vec(c:GetComponentVelocity()) end)
         return v
     end
-    local wv, bv = vel(collided), vel(hitcomp, bone)
+    local wv, bv = vel(collided, source_bone), vel(hitcomp, bone)
     if not wv or not bv then return 0 end
     local dx, dy, dz = wv[1] - bv[1], wv[2] - bv[2], wv[3] - bv[3]
     return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- Blueprint ComponentHit hooks run after their nested DCD call. Resolve the
+-- original physics body then, before flush: component addresses and the exact
+-- native impact point associate it with that pending call, never a nearby bone
+-- or the pawn's stale last-contact fields. Only numeric metadata is retained.
+function C3.body_hit(selfp, HitComponent, OtherActor, OtherComp, NormalImpulse, Hit)
+    if replaying or #CX.pending == 0 then return end
+    local hc, oc, hit = pv(HitComponent), pv(OtherComp), pv(Hit)
+    if not hc or not oc or not hit then return end
+    local ha, oa = addr_of(hc), addr_of(oc)
+    if not ha or not oa then return end
+    local point, my_bone, other_bone
+    pcall(function() if hit.ImpactPoint then point = vec(hit.ImpactPoint) end end)
+    pcall(function() my_bone = hit.MyBoneName end)
+    pcall(function() other_bone = hit.BoneName end)
+    if not point then return end
+    -- Willie selects its self physics body with K2_GetClosestPointOnPhysicsAsset
+    -- before the nested DCD (native ubergraph 234333/234420). MyBoneName can be
+    -- None. Use that exact native result only while all original event fields
+    -- still identify this same callback; never reuse last-contact pawn state.
+    local w = pv(selfp)
+    pcall(function()
+        local original_name = my_bone and my_bone:ToString()
+        if original_name and original_name ~= "None" and original_name ~= "" and hc:GetBoneIndex(my_bone) >= 0 then return end
+        local native_point = w["Body Hit Impact Point"]
+        if not native_point then return end
+        local stored = vec(native_point)
+        if same(w.Mesh,hc) and same(w["Hit Component"],hc) and same(w["Other Comp"],oc)
+            and math.abs(stored[1]-point[1]) <= 0.01 and math.abs(stored[2]-point[2]) <= 0.01
+            and math.abs(stored[3]-point[3]) <= 0.01 then
+            local native_bone = w["Body Hit Bone Name Self"]
+            local name = native_bone:ToString()
+            if name ~= "None" and name ~= "" and hc:GetBoneIndex(native_bone) >= 0 then my_bone = native_bone end
+        end
+    end)
+    local now = os.clock()
+    for i = #CX.pending, math.max(1, #CX.pending - 63), -1 do
+        local r = CX.pending[i]
+        if r.body_source and not r.source_bone and now - r.at >= 0 and now - r.at <= 0.05 then
+            local src, dst, sb, tb, target_name
+            if r.source_address == ha and r.target_address == oa then src, dst, sb, tb = hc, oc, my_bone, other_bone
+            elseif r.source_address == oa and r.target_address == ha then src, dst, sb, tb = oc, hc, other_bone, my_bone end
+            pcall(function() target_name = tb:ToString() end)
+            if src and target_name == r.bone and math.abs(r.loc[1]-point[1]) <= 0.01 and math.abs(r.loc[2]-point[2]) <= 0.01
+                and math.abs(r.loc[3]-point[3]) <= 0.01 then
+                local name, index
+                pcall(function() name = sb:ToString(); index = src:GetBoneIndex(sb) end)
+                if name and name ~= "None" and name ~= "" and index and index >= 0 then
+                    r.vrel = C3.vrel(src, dst, FName(r.bone), {X=point[1],Y=point[2],Z=point[3]}, sb)
+                    r.source_bone = name
+                    CX.body_resolved = (CX.body_resolved or 0) + 1
+                    if CX.body_resolved <= 5 or CX.body_resolved % 100 == 0 then
+                        Log("body contact velocity: native source bone=%s victim=%s speed=%.1f (#%d)",
+                            name, r.bone, r.vrel, CX.body_resolved)
+                    end
+                end
+                return -- One original event resolves its newest matching DCD only.
+            end
+        end
+    end
 end
 
 -- After-callback of Willie_BP "Deal Complex Damage" (the call has run).
@@ -1029,14 +1231,42 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
     C3.standin_hit(w)   -- backstop (the nested Get Damage callback did it too)
     if not combat_window then return end
     if WG.travel_from ~= nil or WG.key == nil or not WG.settled() then return end
-    if gate == false then return end
     local coll = pv(CollidedComponent)
     local src = hit_source(coll)
     if not (me and src and same(src, me)) then return end
+    if gate == false then
+        CX.gate_stops = (CX.gate_stops or 0) + 1
+        if CX.gate_stops <= 5 or CX.gate_stops % 1000 == 0 then
+            local last, last_bone, bone
+            pcall(function() last=w["Last Complex Damage Impulse"];last_bone=w["Last Complex Damage Bone"]:ToString();bone=pv(HitBone):ToString() end)
+            Log("native contact gate stopped claim: victim=%s bone=%s priorBone=%s priorImpulse=%s (#%d)",
+                nm,tostring(bone),tostring(last_bone),tostring(last),CX.gate_stops)
+        end
+        return
+    end
     local peer = puppet_peer[nm]
+    local mine, theirs = C3.life_for(my_peer_id,true), C3.displayed_for(peer,w)
+    if not mine or not theirs or mine.match_id ~= theirs.match_id or mine.round ~= theirs.round then return end
+    CX.input_diag = (CX.input_diag or 0) + 1
+    if CX.input_diag <= 10 or CX.input_diag % 100 == 0 then
+        pcall(function()
+            local hb = pv(HitBox)
+            local has_box = hb and hb:IsValid()
+            local box_name = has_box and hb:GetFullName() or "nil"
+            local _, slot = BF.source(coll, me)
+            local box_slot
+            if has_box then _, box_slot = BF.source(hb, me) end
+            Log("native DCD inputs #%d: collider=%s ordinal=%s Weapon=%s Flesh=%s HitBox=%s boxOrdinal=%s sameCollider=%s DamageParent=%s",
+                CX.input_diag, coll:GetFullName(), tostring(slot),
+                tostring(coll:ComponentHasTag(FName("Weapon"))), tostring(coll:ComponentHasTag(FName("Flesh"))),
+                box_name, tostring(box_slot), tostring(has_box and same(hb, coll) or false), tostring(pv(DamageParent)))
+        end)
+    end
     local bname = ""
     pcall(function() bname = pv(HitBone):ToString() end)
     bname = bname:gsub("[^%w_]", "")
+    local body, vitals = C3.BODY, read_vitals and read_vitals(peer)
+    if body and body.severed and vitals and body.severed(bname, vitals.dism) then return end
     local loc = vec(pv(Location))
     local nrm, vel, imp = vec(pv(Normal)), vec(pv(HitVelocity)), vec(pv(HitImpulse))
     local hmesh = pv(HitComponent)
@@ -1050,31 +1280,135 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         local bp = bone_pos(hmesh, bname) or bone_pos(body_mesh(w), bname)
         if bp then off = { loc[1] - bp[1], loc[2] - bp[2], loc[3] - bp[3] } end
     end
-    if BF.is_weapon(coll) then flags = flags + BF.WEAPON end
+    local source = 0
+    if BF.is_weapon(coll) then
+        flags = flags + BF.WEAPON
+        local ordinal, why
+        source, ordinal, why = BF.source(coll, me)
+        if not ordinal then
+            why = why or "unknown_source"
+            local n = (CX.source_skips[why] or 0) + 1
+            CX.source_skips[why] = n
+            if n <= 3 or n % 100 == 0 then
+                local name = "?"; pcall(function() name = coll:GetFullName() end)
+                Log("contact claim skipped: source collider %s (%s, #%d)", name, why, n)
+            end
+            return -- Preserve actual collider identity; never fabricate a head/root fallback.
+        end
+    end
     local vts, vats = playback_ts(peer)
+    local hit_box = BF.hit_box(pv(HitBox), coll, me)
+    if hit_box == nil then
+        Log("contact claim skipped: native cutting HitBox cannot be represented exactly")
+        return
+    end
+    if hit_box ~= 0 and (flags & BF.WEAPON == 0 or source & (BF.LEFT | BF.RIGHT) == 0) then return end
+    local body_source = same(coll, C3.hit_mesh(me)) or same(coll, body_mesh(me))
+    local source_class = ""
+    if flags & BF.WEAPON ~= 0 then
+        pcall(function() source_class=coll:GetOwner():GetClass():GetFName():ToString() end)
+        if source_class=="" or #source_class>=48 then
+            Log("contact claim skipped: original native weapon class is not representable (%d bytes)",#source_class);return
+        end
+    end
+    local box_frame={0,0,0,0,0,0,0,0,0,0,0,0,0}
+    if hit_box~=0 then
+        box_frame=CuttingBox.capture(pv(HitBox),fr,BF)
+        if not box_frame then Log("contact claim skipped: original native cutting Box geometry unavailable");return end
+    end
     local rec = {
         at = os.clock(), vel = vel, imp = imp,
-        vrel = C3.vrel(coll, hmesh, pv(HitBone)),
+        -- Skeletal bodies have many physics bodies: None would sample the root,
+        -- silently losing a moving limb's velocity. Await original ComponentHit.
+        vrel = body_source and 0 or C3.vrel(coll, hmesh, pv(HitBone), pv(Location)),
+        body_source = body_source, source_address = addr_of(coll), target_address = addr_of(hmesh),
         cut = num(pv(CuttingPower)), stab = num(pv(StabRate)), rig = num(pv(Rigidity)),
         dism = math.floor(num(pv(BluntInt))), lower = pv(LowerThreshold) == true,
         kick = num(pv(KickPower)), xhv = pv(ExtraHigh) == true, draw = num(pv(DrawCut)),
-        nm = nm, peer = peer, bone = bname, gate = gate, flags = flags,
+        nm = nm, peer = peer, bone = bname, gate = gate, flags = flags, source = source, parent = pv(DamageParent) == true,
+        match_id = mine.match_id, round = mine.round, attacker_life = mine.life, victim_life = theirs.life, hit_box = hit_box,
+        source_class=source_class,hit_box_frame=box_frame,
         ats = now_ms(), vts = vts, vats = vats, loc = loc, nrm = nrm, off = off,
     }
-    local list = CX.pending[nm] or {}
-    CX.pending[nm] = list
-    list[#list + 1] = rec
+    CX.pending[#CX.pending + 1] = rec
 end
 CX.pre = function(...) pcall(on_complex, ...) end   -- (name kept: the hook wrapper)
+
+-- Evidence only: embedded-weapon GD is not an ordinary impact claim. Resolve
+-- original native constraint membership synchronously; retain no UObject.
+function C3.inside_journal(w,coll,bone,mesh,box,raw,cut,draw,pain,apply)
+    if not combat_window or not coll or not coll:IsValid() then return end
+    local me=local_pawn()
+    local peer=puppet_peer[wname(w) or ""]
+    local mine,theirs=C3.life_for(my_peer_id,true),C3.displayed_for(peer,w)
+    if not me or not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return end
+    local weapon=coll:GetOwner()
+    if not weapon or not weapon:IsValid() or not same(weapon_parent(weapon),me) then return end
+    local source,ordinal=BF.source(coll,me)
+    local matched,n=nil,0
+    local arr=weapon["Stuck Constraints Array"]
+    if arr then arr:ForEach(function(_,entry)
+        n=n+1;if n>128 then return end
+        local c=entry:get()
+        if c and c:IsValid() and same(c["My Weapon"],weapon) and same(c["Weapon Hit Module"],coll)
+            and same(c["Hit Actor"],w) and same(c["Component 2 (Body)"],mesh)
+            and c["Bone Name 2"]:ToString()==bone:ToString() then matched=c:GetFullName() end
+    end) end
+    C3.inside_count=(C3.inside_count or 0)+1
+    if C3.inside_count>8 and os.clock()<(C3.inside_diag_at or 0)+1 then return end
+    C3.inside_diag_at=os.clock()
+    local frame=CuttingBox.capture(box,BF.of(mesh,bone:ToString()),BF)
+    Log("INSIDE_JOURNAL evidence_only=true match=%s round=%s attackerLife=%s victimLife=%s peer=%s source=%s ordinal=%s class=%s constraint=%s bone=%s raw=%s cut=%s draw=%s pain=%s applyBone=%s boxFrame=%s collider=%s",
+        tostring(mine.match_id),tostring(mine.round),tostring(mine.life),tostring(theirs.life),tostring(peer),
+        tostring(source),tostring(ordinal),tostring(weapon:GetClass():GetFName():ToString()),tostring(matched or "UNPROVEN"),
+        bone:ToString(),tostring(raw),tostring(cut),tostring(draw),tostring(pain),tostring(apply),
+        frame and table.concat(frame,",") or "nil_or_unrepresentable",coll:GetFullName())
+    return matched~=nil
+end
+
+function C3.constraint_begin_journal(selfp)
+    if replaying or not combat_window then return end
+    local c=pv(selfp)
+    if not c or not c:IsValid() then return end
+    local weapon,w=c["My Weapon"],c["Hit Actor"]
+    local me=local_pawn()
+    if not weapon or not weapon:IsValid() or not me or not same(weapon_parent(weapon),me)
+        or not w or not w:IsValid() then return end
+    local peer=puppet_peer[wname(w) or ""]
+    local mine,theirs=C3.life_for(my_peer_id,true),C3.displayed_for(peer,w)
+    if not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return end
+    local coll=c["Weapon Hit Module"]
+    local source,ordinal=BF.source(coll,me)
+    C3.constraint_count=(C3.constraint_count or 0)+1
+    if C3.constraint_count>8 and os.clock()<(C3.constraint_diag_at or 0)+1 then return end
+    C3.constraint_diag_at=os.clock()
+    Log("CONSTRAINT_JOURNAL evidence_only=true event=BeginPlay constraint=%s match=%s round=%s attackerLife=%s victimLife=%s peer=%s weapon=%s source=%s ordinal=%s bone=%s targetComponent=%s",
+        c:GetFullName(),tostring(mine.match_id),tostring(mine.round),tostring(mine.life),tostring(theirs.life),tostring(peer),
+        weapon:GetFullName(),tostring(source),tostring(ordinal),c["Bone Name 2"]:ToString(),c["Component 2 (Body)"]:GetFullName())
+end
 
 -- After-callback of Willie_BP "Get Damage" (the call has run).
 local function on_get_damage(selfp, Impulse, Velocity, Location, Normal, bone, RawDamage,
                              CuttingPower, Inside, DamagedMesh, DismBlunt, LowerThreshold,
-                             Shockwave, HitByComponent)
-    if replaying then return end
+                             Shockwave, HitByComponent, Flesh, HitBox, PainRate, ApplyBoneChange, DrawCut, DamageApplied)
+    if replaying then
+        local trace=C3.replay_trace
+        local w=pv(selfp)
+        if trace and w and w:IsValid() and addr_of(w)==trace.pawn then
+            trace.calls=trace.calls+1
+            trace.raw=tonumber(pv(RawDamage));trace.cut=tonumber(pv(CuttingPower))
+            trace.draw=tonumber(pv(DrawCut));trace.applied=pv(DamageApplied)
+            local b=pv(bone);trace.bone=b and b:ToString() or "?"
+        end
+        return
+    end
     if next(puppet_peer) == nil and next(puppet_weapon) == nil then return end
     local w = pv(selfp)
     if not w or not w:IsValid() then return end
+    if pv(Inside)==true then
+        pcall(C3.inside_journal,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(HitBox),
+            pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(ApplyBoneChange))
+    end
     local me = local_pawn()
     if me and same(w, me) then
         local sp = source_standin_peer(pv(HitByComponent))
@@ -1148,6 +1482,20 @@ local function try_hook()
                 or "NOT available yet (retrying)")
         end
     end
+    if complex_hook_ok and not CX.body_hook_ok and retry_now then
+        CX.body_hook_ok = pcall(function()
+            RegisterHook("/Game/Character/Blueprints/Willie_BP.Willie_BP_C:BndEvt__BP_ThirdPersonCharacter_Mesh_K2Node_ComponentBoundEvent_0_ComponentHitSignature__DelegateSignature",
+                function(...) pcall(C3.body_hit, ...) end)
+        end)
+        if CX.body_hook_ok then Log("native body-hit source bone hook registered (after nested DCD)") end
+    end
+    if hook_ok and not CX.constraint_hook_ok and retry_now then
+        CX.constraint_hook_ok=pcall(function()
+            RegisterHook("/Game/Blueprints/Utility/Constraint_Weapon_Stuck_BP.Constraint_Weapon_Stuck_BP_C:ReceiveBeginPlay",
+                function(s) pcall(C3.constraint_begin_journal,s) end)
+        end)
+        if CX.constraint_hook_ok then Log("native stuck-constraint evidence hook registered (no damage forwarding)") end
+    end
     -- The BP classes load with the first arena, which can be long after
     -- mod load (menu / server browser). Retry once a second, FOREVER, until
     -- registered (a failed RegisterHook is one cheap lookup), per function
@@ -1164,7 +1512,14 @@ local function try_hook()
             end
             if death_hooked[fn] then n = n + 1 end
         end
-        death_hook_ok = n == 2
+        if not death_hooked["native_defeat"] then
+            death_hooked["native_defeat"]=pcall(function()
+                RegisterHook("/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Event Lose Match",
+                    function(selfp) pcall(C3.on_native_defeat,selfp) end)
+            end)
+            if death_hooked["native_defeat"] then Log("native Event Lose Match hook registered (verified defeat)") end
+        end
+        death_hook_ok = n == 2 and death_hooked["native_defeat"]
     end
     -- The weapon class loads with the first arena; retry every ~1 s, forever.
     if not weapon_hook_ok and tick_num % 30 == 0 then
@@ -1212,13 +1567,16 @@ local quality = { claims = 0, accepted = 0, confirmed = 0, clashes = 0, rejected
 -- nothing from the stand-in.
 local function send_claim(peer, r)
     local dism = math.max(0, math.min(255, r.dism)) + math.max(0, math.min(255, math.floor(r.kick * 10 + 0.5))) * 256
-        + (r.lower and 65536 or 0) + (r.xhv and 131072 or 0)
+        + (r.lower and 65536 or 0) + (r.xhv and 131072 or 0) + (r.source or 0) + (r.parent and 67108864 or 0)
+        + (r.hit_box or 0) * 134217728
     local cid = cid_seq + 1
     local lage = math.max(0, math.min(1000, now_ms() - r.ats))
     -- The `damage` record (crates/hsmp-ipc schema/combat.rs Damage): hit_id,
     -- round and age_ms are the sidecar's; no delta rows.
     local sent = send_rec("damage", {
         cid = cid, target_peer_id = peer, lage_ms = lage,
+        match_id = r.match_id, round = r.round, attacker_life = r.attacker_life, victim_life = r.victim_life,
+        source_class=r.source_class or "",hit_box_frame=r.hit_box_frame or {0,0,0,0,0,0,0,0,0,0,0,0,0},
         attacker_ts = r.ats, victim_view_ts = r.vts, victim_arm_ts = r.vats,
         dism_blunt = dism, raw_damage = r.vrel or 0, cutting_power = r.cut, pain_rate = r.stab,
         draw_cut = r.draw, damage_out = r.rig,
@@ -1253,21 +1611,28 @@ local episodes = {}        -- (kept for the test api; claims follow the game's o
 -- replay then applies Get Damage's own per-bone gate as solo would. Calls
 -- whose gate state could not be read fall back to the strongest per bone.
 local function flush_claims()
-    local work = {}
-    for nm, list in pairs(CX.pending) do
-        local g, order = {}, {}
-        for _, r in ipairs(list) do
-            local b = g[r.bone]
-            if not b then b = {}; g[r.bone] = b; order[#order + 1] = r.bone end
-            b[#b + 1] = r
-        end
-        if list[1] then work[#work + 1] = { peer = list[1].peer, groups = g, order = order } end
-    end
+    local work, groups = CX.pending, {}
     CX.pending = {}
     if not combat_window then return end
-    for _, wk in ipairs(work) do
-        for _, bone in ipairs(wk.order) do
-            local rs = wk.groups[bone]
+    -- Select within each body/bone's bounded budget, then emit in the original
+    -- callback order. Get Damage remembers the previous damaged bone: grouping
+    -- A/B/A into A/A/B changes which native calls pass that gate.
+    for _, r in ipairs(work) do
+        if r.body_source and not r.source_bone then
+            CX.body_unresolved = (CX.body_unresolved or 0) + 1
+            if CX.body_unresolved <= 5 or CX.body_unresolved % 100 == 0 then
+                Log("body contact velocity unavailable: no original matching physics bone victim=%s (#%d)", r.bone, CX.body_unresolved)
+            end
+        end
+        local by_bone = groups[r.nm]
+        if not by_bone then by_bone = {}; groups[r.nm] = by_bone end
+        local rs = by_bone[r.bone]
+        if not rs then rs = {}; by_bone[r.bone] = rs end
+        rs[#rs + 1] = r
+    end
+    local selected = {}
+    for _, by_bone in pairs(groups) do
+        for _, rs in pairs(by_bone) do
             local known = true
             for _, r in ipairs(rs) do if r.gate == nil then known = false end end
             if not known then
@@ -1291,8 +1656,11 @@ local function flush_claims()
                 for i, r in ipairs(rs) do if keep[i] then out[#out + 1] = r end end
                 rs = out
             end
-            for _, r in ipairs(rs) do send_claim(wk.peer, r) end
+            for _, r in ipairs(rs) do selected[r] = true end
         end
+    end
+    for _, r in ipairs(work) do
+        if selected[r] then send_claim(r.peer, r) end
     end
 end
 
@@ -1352,6 +1720,11 @@ local function emit_quality(force)
         claims = quality.claims, accepted = quality.accepted, rejected_by_reason = quality.rejected,
         confirmed = quality.confirmed, clashes = quality.clashes, pending = quality.pending,
         round = match_round, window_s = QUALITY_S,
+        unsupported_source_colliders = CX.source_skips,
+        owner_replay_by_status = C3.replay_stats,
+        attacker_receipts_by_status = C3.receipt_stats,
+        owner_observed_fields = C3.replay_fields, owner_health_delta = C3.replay_hp,
+        attacker_observed_fields = C3.receipt_fields, attacker_health_delta = C3.receipt_hp,
     }
     local parts = {}
     for k, v in pairs(quality.rejected) do parts[#parts + 1] = k .. "=" .. v end
@@ -1398,6 +1771,18 @@ end
 -- applied on spawn (normally healed by the Tavern innkeeper, which MP never
 -- visits). Never touches the save (no GI "Reset Player Character").
 local function restore_vitals(me, why)
+    -- A number reset cannot rebuild a severed body. Fresh arena lives are
+    -- prepared before possession by the director; keep injuries on this pawn.
+    local severed = false
+    pcall(function() severed = me.Headless == true end)
+    pcall(function()
+        local arr = me["Dismembered Array"]
+        if arr then arr:ForEach(function() severed = true end) end
+    end)
+    if severed then
+        Log("vitals restore skipped (%s): pawn has severed parts", why)
+        return false
+    end
     local d = cdo_defaults()
     if not d then
         Log("vitals restore skipped (%s): Willie_BP CDO not readable", why)
@@ -1422,9 +1807,20 @@ local function own_pawn_tick(me)
         own = { addr = addr, at = os.clock(), hits = 0, passes = 0, live_round = -1,
                 forced_round = -1, died_round = -1 }
         Log("local pawn possessed (state=%s round=%d)", match_state, match_round)
+        C3.ungate(me) -- before any incoming approved hit on the newly possessed pawn
     end
-    -- Never undo real combat damage: only while this pawn took no hit.
-    local untouched = own.hits == 0 and not is_dead(me)
+    if own.defeat_pending and os.clock()>=(own.defeat_retry_at or 0) then
+        local ctx=C3.life_for(my_peer_id,true)
+        local pending=own.defeat_pending
+        if ctx and pending.pawn==addr_of(me) and pending.match_id==ctx.match_id
+            and pending.round==ctx.round and pending.life==ctx.life then C3.on_native_defeat(me)
+        else own.defeat_pending=nil end
+    end
+    -- Accepted network hits are not the only source of injury: falls, props
+    -- and native combat can hurt before a claim arrives. End preparation as
+    -- soon as this pawn enters play, and never heal it again during this life.
+    local untouched = not match_live and own.live_round == -1
+        and own.hits == 0 and not is_dead(me)
     local age = os.clock() - own.at
     if own.passes < #RESTORE_AT and age >= RESTORE_AT[own.passes + 1] then
         own.passes = own.passes + 1
@@ -1432,7 +1828,7 @@ local function own_pawn_tick(me)
     end
     if match_live and own.live_round ~= match_round then
         own.live_round = match_round
-        if untouched then restore_vitals(me, "round " .. match_round .. " start") end
+        own.passes = #RESTORE_AT
     end
 end
 
@@ -1440,12 +1836,34 @@ end
 -- round: kill the pawn even if our own copy still thinks it's alive (e.g. the
 -- window was in the background and the lethal hit wasn't applied yet).
 -- HSMPMatch freezes input from the scoreboard's alive=false.
-local function force_own_death(round, killer, cause)
-    if own.forced_round == round then return end
-    own.forced_round = round
-    own.died_round = round   -- the server already knows; don't re-report
+function C3.death_context(peer, d)
+    local ctx = C3.life_for(peer, peer == my_peer_id)
+    if not ctx then return false, "missing verified life context" end
+    if not d.match_id or d.match_id == 0 or d.match_id ~= ctx.match_id then
+        return false, "different match"
+    end
+    if d.round ~= ctx.round then return false, "different round" end
+    if not d.life or d.life <= 0 or d.life ~= ctx.life then return false, "different life" end
+    return true
+end
+local function force_own_death(round, killer, cause, context)
+    if own.forced_round == round and own.forced_match_id == context.match_id
+        and own.forced_life == context.life then return end
     local me = local_pawn()
     if not me then return end
+    own.defeat_pending=nil
+    if cause==5 or cause==6 then
+        -- Permanent native defeat eliminates gameplay without killing its living pawn.
+        own.forced_round,own.forced_match_id,own.forced_life=round,context.match_id,context.life
+        own.died_round,own.died_match_id,own.died_life=round,context.match_id,context.life
+        own.defeated={match_id=context.match_id,round=round,life=context.life}
+        own.defeat_pending=nil
+        Log("SERVER confirmed native defeat (round %d, killer=%s): native Health/KO retained",round,tostring(killer))
+        return
+    end
+    -- Suppress a redundant report during the native Death callback, but keep
+    -- failed application retryable until the pawn's dead state is observed.
+    own.server_death_pending = {match_id=context.match_id,round=round,life=context.life}
     local hp; pcall(function() hp = tonumber(me.Health) end)
     local was_alive = hp == nil or hp > 0
     pcall(function() me.Health = 0 end)
@@ -1459,25 +1877,89 @@ local function force_own_death(round, killer, cause)
             how = "Death()"
         end
     end
+    local completed = is_dead(me)
+    if not completed then pcall(function() completed = me.DED == true end) end
+    if completed then
+        own.forced_round, own.forced_match_id, own.forced_life = round, context.match_id, context.life
+        own.died_round, own.died_match_id, own.died_life = round, context.match_id, context.life
+        own.server_death_pending = nil
+    else
+        how = how .. " (native application pending; retry allowed)"
+    end
     Log("SERVER declared my death (round %d, killer=%d, cause=%d): hp was %s -> %s",
         round, killer or 0, cause or -1, tostring(hp), how)
+end
+
+-- Exact native loss boundary, distinct from recoverable Fallen/Consciousness zero.
+function C3.on_native_defeat(selfp)
+    local mode=HSESS and HSESS.mode and HSESS.mode()
+    -- Automatic native loss is the Brawl KO rule. Weapon modes continue
+    -- until biological death or a separately verified voluntary surrender.
+    if not mode or mode.mode~=5 then own.defeat_pending=nil;return false end
+    local w=pv(selfp)
+    local me=local_pawn()
+    if not (w and w:IsValid() and me and same(w,me) and combat_window) or is_dead(w) then return false end
+    local ctx=C3.life_for(my_peer_id,true)
+    if not ctx then return false end
+    local ok,confirmed=pcall(function()
+        local gi,gm=w["GI Settings"],w["HS Game Mode"]
+        return w.Player==true and w.DED~=true and w["Give Up"]==true and w["Give Up 2 (Temp)"]==true
+            and gi and gi:IsValid() and tonumber(gi["Current Game Mode enum"])~=nil
+            and tonumber(gi["Current Game Mode enum"])~=5 and gm and gm:IsValid() and gm["Match Won"]==false
+    end)
+    if not ok or not confirmed then return false end
+    if own.defeated and own.defeated.match_id==ctx.match_id and own.defeated.round==ctx.round
+        and own.defeated.life==ctx.life then return true end
+    local row=mode and mode.rows and mode.rows[my_peer_id]
+    if mode and mode.match_id==ctx.match_id and mode.round==ctx.round
+        and row and row.life==ctx.life and row.alive==false then
+        own.defeat_pending=nil
+        return true
+    end
+    local pending=own.defeat_pending
+    if pending and (pending.pawn~=addr_of(w) or pending.match_id~=ctx.match_id
+        or pending.round~=ctx.round or pending.life~=ctx.life) then
+        own.defeat_pending=nil;own.defeat_retry_at=nil
+    end
+    if own.defeat_pending and os.clock()<(own.defeat_retry_at or 0) then return false end
+    own.defeat_retry_at=os.clock()+1
+    own.defeat_pending={match_id=ctx.match_id,round=ctx.round,life=ctx.life,pawn=addr_of(w)}
+    if not send_rec("death_report",{match_id=ctx.match_id,round=ctx.round,life=ctx.life,reason=1}) then return false end
+    own.defeat_reported={match_id=ctx.match_id,round=ctx.round,life=ctx.life}
+    -- IPC acceptance is not authoritative gameplay acknowledgement; retain
+    -- the original event proof and retry until its current life is eliminated.
+    local cap,hp;pcall(function()cap=w["Consciousness Cap"];hp=w.Health end)
+    Log("native Event Lose Match VERIFIED pawn=%s match=%s round=%s life=%s Health=%s ConsciousnessCap=%s -> defeat reported",
+        tostring(wname(w)),tostring(ctx.match_id),tostring(ctx.round),tostring(ctx.life),tostring(hp),tostring(cap))
+    return true
 end
 
 -- Native Death/Dying fired on some Willie.
 function on_native_death(selfp)   -- assigns the forward-declared local
     local w = pv(selfp)
     if not w or not w:IsValid() then return end
+    -- Dying also enters the native downed/loss flow. Only observed
+    -- biological death may produce a death report or replace its baseline.
+    local ded=false;pcall(function() ded=w.DED==true end)
+    if not ded and not is_dead(w) then return end
     local me = local_pawn()
     if me and same(w, me) then
         -- (a hook callback: Death has run) a later echo's undo must not
         -- restore the living pawn of the last baseline
         C3.baseline(me)
-        if combat_window and own.died_round ~= match_round then
-            if send_rec("death_report", { round = math.max(0, match_round) }) then
-                own.died_round = match_round
+        if combat_window then
+            local ctx = C3.life_for(my_peer_id, true)
+            if not ctx then return end
+            local pending = own.server_death_pending
+            if pending and pending.match_id == ctx.match_id and pending.round == ctx.round
+                and pending.life == ctx.life then return end
+            if own.died_round == ctx.round and own.died_match_id == ctx.match_id
+                and own.died_life == ctx.life then return end
+            if send_rec("death_report", { match_id = ctx.match_id, round = ctx.round, life = ctx.life }) then
+                own.died_round, own.died_match_id, own.died_life = ctx.round, ctx.match_id, ctx.life
                 Log("my pawn's native death fired (round %d) -> reported to server", match_round)
             else
-                Log("my pawn's native death fired (round %d) while not connected: not reported (HSMPSync / ping re-report)", match_round)
+                Log("my pawn's native death fired (round %d) while not connected: not reported (scoped HSMPSync fallback retries)", match_round)
             end
         end
         return
@@ -1510,7 +1992,7 @@ end
 -- layout, see send_claim) on mesh `mesh` with geometry `g` (C3.hit_geo) and
 -- striking component `coll` (nil when unknown): 17 inputs + the 6 out-param
 -- slots (inside the table: `f(table.unpack(t), x)` would truncate the unpack).
-function C3.dcd_args(d, mesh, g, coll)
+function C3.dcd_args(d, mesh, g, coll, hit_box)
     local function V(t) return { X = t[1], Y = t[2], Z = t[3] } end
     local bone = type(d.bone) == "string" and d.bone or ""
     local dism_all = math.floor(num(d.dism_blunt))
@@ -1518,8 +2000,8 @@ function C3.dcd_args(d, mesh, g, coll)
     return {
         mesh, coll, FName(bone ~= "" and bone or "pelvis"), V(g.at), V(g.nrm),
         V(g.vel), V(g.imp), num(d.cutting_power), num(d.pain_rate),
-        num(d.damage_out), dism_all % 256, math.floor(dism_all / 65536) % 2 == 1, false,
-        kick, nil, math.floor(dism_all / 131072) % 2 == 1, num(d.draw_cut),
+        num(d.damage_out), dism_all % 256, math.floor(dism_all / 65536) % 2 == 1, math.floor(dism_all / 67108864) % 2 == 1,
+        kick, hit_box, math.floor(dism_all / 131072) % 2 == 1, num(d.draw_cut),
         {}, {}, {}, {}, {}, {},
     }
 end
@@ -1538,6 +2020,7 @@ function C3.hit_geo(w, mesh, d)
             g.at = BF.to_world(fr, off)
             g.nrm, g.vel, g.imp = BF.rot(fr.q, g.nrm), BF.rot(fr.q, g.vel), BF.rot(fr.q, g.imp)
             g.frame = true
+            g.bone_frame=fr
         else
             g.local_lost = true   -- magnitudes still right, directions not
         end
@@ -1549,30 +2032,165 @@ function C3.hit_geo(w, mesh, d)
 end
 function C3.hit_point(w, mesh, d) return C3.hit_geo(w, mesh, d).at end
 
--- The component that struck, as this screen has it: the attacker's weapon
--- (its first collision component) for BF.WEAPON records, else its body mesh.
+-- A mode assignment is a life only after its exact spawn order placed this
+-- native pawn. Death/respawn countdown does not change that identity; only
+-- a new generation does. Never relabel old messages from current Mode.
+function C3.life_for(peer, require_placement)
+    local mode = HSESS and HSESS.mode and HSESS.mode()
+    local view = HSESS and HSESS.view and HSESS.view()
+    peer = tonumber(peer)
+    local row = mode and mode.rows and mode.rows[peer]
+    if not row or not view or mode.match_id ~= view.match_id or mode.round ~= view.round
+        or not row.life or row.life < 1 then return nil end
+    if require_placement then
+        local pawn = local_pawn()
+        local ipc = rawget(_G,"HSMP_IPC")
+        local status = ipc and ipc.bus_table("spawn_status")
+        local order = view.spawns and view.spawns[peer]
+        if not pawn or not status or status.verified ~= true or status.pawn ~= wname(pawn)
+            or status.round ~= mode.round or status.match_id ~= mode.match_id or status.life ~= row.life
+            or not order or status.spawn_id ~= order.spawn_id then return nil end
+    end
+    return { match_id = mode.match_id, round = mode.round, life = row.life }
+end
+
+-- Refresh wrappers before native replay/source access. Actor names survive in
+-- the puppet registry, but a cached UObject wrapper may already be freed.
+function C3.remote_actor(peer)
+    for _,actor in ipairs(FindAllOf("Willie_BP_C") or {}) do
+        local name=wname(actor)
+        if name and puppet_peer[name]==peer then return actor end
+    end
+    return nil
+end
+
+-- Bind a remote actor to the sample actually applied to it, never to Mode's
+-- next assigned generation while the old body still occupies the screen.
+-- New claims need a fresh sample. Already approved delayed trades need only
+-- the immutable actor-generation binding, including its frozen corpse pose.
+function C3.displayed_for(peer,actor,require_fresh)
+    if not actor then return nil end
+    local context=C3.life_for(peer,false)
+    if not context then return nil end
+    local ipc=rawget(_G,"HSMP_IPC")
+    local pb=ipc and ipc.bus_table("playback")
+    if type(pb)~="table" then return nil end
+    local name=wname(actor)
+    for _,row in ipairs(pb.rows or {}) do
+        if row.peer==peer and row.pawn==name and row.match_id==context.match_id
+            and row.round==context.round and row.life==context.life
+            and type(row.local_ms)=="number"
+            and (require_fresh==false or math.abs(now_ms()-row.local_ms)<=250) then
+            return {match_id=row.match_id,round=row.round,life=row.life}
+        end
+    end
+    return nil
+end
+
+local FootReplay = load_module("replay_feet").new({ UEHelpers = UEHelpers, log = Log })
+local BoxReplay = CuttingBox.new({UEHelpers=UEHelpers,log=Log,bf=BF})
+C3.fist_replay=load_module("replay_fists").new({UEHelpers=UEHelpers,log=Log,
+    world_key=function()return WG.key end,
+    current_generation=function(peer)return C3.life_for(peer,false) end,
+    current_actor=function(peer)
+        local pawn=peer==my_peer_id and local_pawn() or C3.remote_actor(peer)
+        local original=pawn and (peer==my_peer_id and C3.life_for(peer,true) or C3.displayed_for(peer,pawn,false))
+        return original and pawn or nil,original
+    end,
+    context=function(pawn)
+        if same(pawn,local_pawn()) then return C3.life_for(my_peer_id,true) end
+        return C3.displayed_for(puppet_peer[wname(pawn)],pawn,false)
+    end})
+
+-- The component that struck, as this screen has it: the exact native weapon
+-- collision-array slot for new BF.WEAPON records, else its body mesh.
+-- Ordinal zero from older senders retains the original first-component fallback.
 -- The attacker is my own pawn or its stand-in here. nil when not found.
 function C3.hitter(attacker, d)
     local a
-    if attacker and attacker == C3.me_id then a = local_pawn() else a = puppet_actor[attacker] end
-    if not (a and a:IsValid()) then return nil end
+    if attacker and attacker == C3.me_id then a = local_pawn() else a = C3.remote_actor(attacker) end
+    if not (a and a:IsValid()) then return nil,"attacker_pawn_unavailable" end
     if math.floor(num(d.flags) / BF.WEAPON) % 2 == 1 then
-        for _, k in ipairs({ "Weapon R", "Weapon L" }) do
+        local meta = math.floor(num(d.dism_blunt))
+        local fist = math.floor(meta / BF.FIST) % 2 == 1
+        local feet = math.floor(meta / BF.FEET) % 2 == 1
+        local ordinal = math.floor(meta / BF.COMPONENT) % 16
+        local left, right = math.floor(meta / BF.LEFT) % 2 == 1, math.floor(meta / BF.RIGHT) % 2 == 1
+        -- Modern ordinals identify a component only within its original hand.
+        -- A dropped actor cannot be represented by selecting another held
+        -- weapon with the same array slot. Ordinal zero remains legacy.
+        if ordinal == 0 or left == right then return nil,"invalid_source_identity" end
+        local fields
+        if feet then fields = left and { "Foot L Weapon" } or right and { "Foot R Weapon" } or {}
+        else fields = left and { "Weapon L" } or right and { "Weapon R" } or { "Weapon R", "Weapon L" } end
+        local reasons={}
+        for _, k in ipairs(fields) do
             local c
-            pcall(function()
+            local reason="component_missing"
+            local ok,err=pcall(function()
                 local wp = a[k]
-                if not (wp and wp:IsValid()) then return end
+                if not (wp and wp:IsValid()) then
+                    reason="held_actor_missing:pawn="..tostring(wname(a))
+                    if not feet then
+                        local alias=a[k.."_0"]
+                        reason=reason..":secondary="..tostring(alias and alias:IsValid() and wname(alias) or "none")
+                    end
+                    if feet then c = FootReplay.component(a, left, ordinal) end
+                    return
+                end
+                if type(d.source_class)=="string" and d.source_class~=""
+                    and wp:GetClass():GetFName():ToString()~=d.source_class then reason="class_mismatch:"..wp:GetClass():GetFName():ToString();return end
+                -- Preserve the source hand and native pseudo-weapon. A fist
+                -- beside a sword must never replay using the sword's component.
+                if fist or feet or left or right then
+                    local cls = wp:GetClass():GetFName():ToString()
+                    local is_fist = cls:find("Fists", 1, true) ~= nil
+                    local is_feet = cls:find("Weapon_Feet", 1, true) ~= nil
+                    if is_fist ~= fist or is_feet ~= feet then reason="native_striker_kind_mismatch:"..cls;return end
+                end
                 local arr = wp["Collision Components Array"]
-                if arr then arr:ForEach(function(_, e) if not c then c = e:get() end end) end
-                if not (c and c:IsValid()) then c = wp:K2_GetRootComponent() end
+                if arr then
+                    local n = 0
+                    arr:ForEach(function(_, e)
+                        n = n + 1
+                        if (ordinal == 0 and not c) or n == ordinal then c = e:get() end
+                    end)
+                    reason="pawn:"..tostring(wname(a))..":weapon:"..tostring(wname(wp))..":array_count:"..n..":selected:"..tostring(c and c:IsValid())
+                else reason="collision_array_missing" end
+                if ordinal == 0 and not (c and c:IsValid()) then c = wp:K2_GetRootComponent() end
             end)
             if c and c:IsValid() then return c end
+            reasons[#reasons+1]=k..":"..(ok and reason or ("native_lookup_error:"..tostring(err)))
         end
-        return nil
+        if fist and not feet and d.source_class=="Weapon_Fists_C" then
+            -- A native fist is temporary. An approved historical punch must
+            -- retain that source even after its actor was dropped/replaced.
+            -- This separate collision-disabled source never replaces a hand.
+            local c=C3.fist_replay.component(a,left,ordinal,
+                {match_id=d.match_id,round=d.round,life=d.attacker_life,peer_id=attacker})
+            if c and c:IsValid() then return c end
+        end
+        return nil,table.concat(reasons,";")
     end
     local m; pcall(function() m = a.Mesh end)
     if m and m:IsValid() then return m end
     return nil
+end
+
+function C3.hit_box(attacker, d, collided)
+    local meta = math.floor(num(d.dism_blunt))
+    local ordinal = (meta >> 27) & 15
+    if ordinal == 0 then return nil end
+    if not NativeModules or not collided or not collided:IsValid() then return nil end
+    local owner=collided:GetOwner()
+    local source=(meta >> 21)&15
+    local box=NativeModules.find(owner,ordinal,source)
+    local ok, exact = pcall(function()
+        return box and box:IsValid() and collided and collided:IsValid()
+            and same(box:GetOwner(), collided:GetOwner())
+            and box:GetClass():GetFName():ToString() == "BoxComponent"
+    end)
+    return ok and exact and box or nil
 end
 
 -- Get Damage's gate: a blow on the bone of the last blow that passed it, while
@@ -1581,11 +2199,23 @@ end
 -- { attacker, ats (its clock), bone, name, ldt }. Returns the gate state
 -- before the call.
 C3.gd_last = nil
+C3.diag_counts,C3.diag_last={},{}
+function C3.diag_length(v)return math.sqrt(v[1]^2+v[2]^2+v[3]^2)end
+function C3.replay_diag(kind,fmt,...)
+    local n=(C3.diag_counts[kind] or 0)+1;C3.diag_counts[kind]=n
+    local at=now_ms()
+    if n<=4 or at-(C3.diag_last[kind] or -1e9)>=1000 then
+        C3.diag_last[kind]=at
+        Log("REPLAY_DIAG kind=%s count=%d "..fmt,kind,n,...)
+    end
+end
 function C3.gd_gate_open(me, attacker, d, bone)
     local ats = math.tointeger(tonumber(d.attacker_ts)) or 0
     local b = bone:lower()
     local gl = C3.gd_last
     local keep = gl ~= nil and gl.attacker == attacker and gl.bone == b and ats > 0
+        and gl.pawn == addr_of(me) and gl.match_id == d.match_id and gl.round == d.round
+        and gl.attacker_life == d.attacker_life and gl.victim_life == d.victim_life
         and ats >= gl.ats and ats - gl.ats < BF.GD_GATE_MS
     if not keep then
         pcall(function() me["Last Damage Taken"] = 0 end)
@@ -1596,38 +2226,57 @@ function C3.gd_gate_open(me, attacker, d, bone)
         pcall(function() me["Last Damage Taken"] = gl.ldt end)
         pcall(function() me["Last Damaged Bone"] = FName(gl.name or bone) end)
     end
-    local s = {}
+    local s = {kept=keep,previous_ats=gl and gl.ats,age=gl and ats-gl.ats}
     pcall(function() s.ldt = tonumber(me["Last Damage Taken"]) end)
     pcall(function() s.ldb = me["Last Damaged Bone"]:ToString():lower() end)
+    pcall(function() s.sustained = tonumber(me["Sustained Damage"]) end)
+    pcall(function() s.invulnerable=me.Invulnerable;s.fallen=me.Fallen;s.consciousness=me.Consciousness end)
+    pcall(function() s.damage_rate=me["Damagr Rste Var"] end)
     return s
 end
 function C3.gd_gate_note(me, attacker, d, bone, s0)
-    local ldt, ldb
+    local ldt, ldb, sustained
     pcall(function() ldt = tonumber(me["Last Damage Taken"]) end)
     pcall(function() ldb = me["Last Damaged Bone"]:ToString():lower() end)
+    pcall(function() sustained = tonumber(me["Sustained Damage"]) end)
     local b = bone:lower()
-    if ldb == b and (ldt ~= s0.ldt or s0.ldb ~= b) then
+    -- Equal-strength contacts pass the native >= gate and retrigger its delay
+    -- even though Last Damage Taken does not change. Sustained Damage records
+    -- that pass, including light contacts that cause no Health loss.
+    local passed_equal = sustained ~= nil and s0.sustained ~= nil and sustained > s0.sustained
+    if ldb == b and (ldt ~= s0.ldt or s0.ldb ~= b or passed_equal) then
         C3.gd_last = { attacker = attacker, ats = math.tointeger(tonumber(d.attacker_ts)) or 0, bone = b,
-                       name = bone, ldt = ldt }
+                       name = bone, ldt = ldt, pawn = addr_of(me), match_id = d.match_id, round = d.round,
+                       attacker_life = d.attacker_life, victim_life = d.victim_life }
     end
 end
 
 -- A hit on MY pawn (`damage_in` record `d`; the attacker is the entry's peer).
 local function apply_hit(d, _attacker)
-    if type(d) ~= "table" then return "hit dropped: no record" end
+    if type(d) ~= "table" then return "hit dropped: no record",3 end
+    local ctx = C3.life_for(my_peer_id,true)
+    if not ctx or d.match_id ~= ctx.match_id or d.round ~= ctx.round or d.victim_life ~= ctx.life then
+        return "hit dropped: stale match or pawn life",3
+    end
+    local src_ctx = _attacker==my_peer_id and C3.life_for(_attacker,true)
+        or C3.displayed_for(_attacker,C3.remote_actor(_attacker),false)
+    if not src_ctx or d.match_id ~= src_ctx.match_id or d.round ~= src_ctx.round or d.attacker_life ~= src_ctx.life then
+        return "hit dropped: stale attacker pawn life",3
+    end
     local hr = math.tointeger(tonumber(d.round)) or 0
     if hr == 0 then hr = nil end   -- 0 = not stamped
     if not combat_window or (hr and hr ~= match_round) then refresh_match() end
-    if not combat_window then return "hit dropped: round not live" end
+    if not combat_window then return "hit dropped: round not live",3 end
     if hr and hr ~= match_round then
-        return string.format("hit dropped: stale round %d (now %d)", hr, match_round)
+        return string.format("hit dropped: stale round %d (now %d)", hr, match_round),3
     end
     local me = local_pawn()
-    if not me then return "no pawn" end
-    if is_dead(me) then return "already dead" end
+    if not me then return "no pawn",5 end
+    if is_dead(me) then return "already dead",5 end
     local bone = type(d.bone) == "string" and d.bone or ""
     local mesh = C3.hit_mesh(me)
     local geo = C3.hit_geo(me, mesh, d)
+    if geo.local_lost then return "hit dropped: victim bone frame unavailable",4 end
     local at = geo.at
     local flags = math.floor(num(d.flags))
     local function bit(n) return math.floor(flags / n) % 2 == 1 end
@@ -1635,10 +2284,26 @@ local function apply_hit(d, _attacker)
     local complex = bit(FLAG_COMPLEX)
     local dism_all = math.floor(num(d.dism_blunt))
     local before = snapshot(me)
+    local coll,source_reason = C3.hitter(_attacker, d)
+    if complex and math.floor(dism_all / BF.COMPONENT) % 16 ~= 0 and not coll then
+        C3.replay_diag("source4","peer=%s hit=%s class=%s meta=%s reason=%s",
+            tostring(_attacker),tostring(d.hit_id),tostring(d.source_class),tostring(dism_all),tostring(source_reason))
+        return "hit dropped: striking component unavailable ("..tostring(source_reason)..")",4
+    end
+    local hit_box = C3.hit_box(_attacker, d, coll)
+    if complex and ((dism_all >> 27) & 15) ~= 0 and not hit_box then
+        return "hit dropped: native cutting HitBox unavailable",4
+    end
+    if hit_box then
+        hit_box=BoxReplay.component(me,d.hit_box_frame,geo.bone_frame,tostring(_attacker)..":"..tostring(dism_all & (BF.LEFT|BF.RIGHT)))
+        if not hit_box then return "hit dropped: historical cutting Box unavailable",4 end
+    end
 
     -- Native replay: my own armour, wounds, bleeding, dismemberment, death.
     replaying = true
     local ok, err, via = false, nil, "Get Damage"
+    local gate0
+    C3.replay_trace={pawn=addr_of(me),calls=0}
     if complex then
         -- Deal Complex Damage's own contact gate already ran on the attacker's
         -- screen (only calls that passed it are claimed): open it here.
@@ -1646,8 +2311,8 @@ local function apply_hit(d, _attacker)
         -- Get Damage's per-bone gate as solo would see it: kept between blows
         -- of one attacker less than 0.2 s apart on ITS clock, reset otherwise
         -- (replays arrive bunched: parry holds, jitter, resends).
-        local gate0 = C3.gd_gate_open(me, _attacker, d, bone)
-        ok, err = bp_call(me, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, C3.hitter(_attacker, d)), 1, 23))
+        gate0 = C3.gd_gate_open(me, _attacker, d, bone)
+        ok, err = bp_call(me, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, coll, hit_box), 1, 23))
         C3.gd_gate_note(me, _attacker, d, bone, gate0)
         via = "Deal Complex Damage"
         -- Never a second application. A call that errored AFTER the
@@ -1659,8 +2324,9 @@ local function apply_hit(d, _attacker)
                 ok, via = true, "Deal Complex Damage (errored after applying)"
             else
                 replaying = false
+                C3.replay_trace=nil
                 Log("armour-stage replay failed (%s): claim dropped, never re-applied through Get Damage", tostring(err))
-                return "hit dropped: armour-stage replay failed (" .. tostring(err) .. ")"
+                return "hit dropped: armour-stage replay failed (" .. tostring(err) .. ")",6
             end
         end
     else
@@ -1676,12 +2342,11 @@ local function apply_hit(d, _attacker)
         if not ok and err ~= "unresolved" then
             if next(diff(before, snapshot(me))) ~= nil then
                 ok, via = true, "Get Damage (errored after applying)"
-            else
-                ok, err = bp_call(me, "Get Damage", table.unpack(args, 1, 18))
-            end
+            end -- A copy-out error can occur after native effects: never call twice.
         end
     end
     replaying = false
+    local trace=C3.replay_trace;C3.replay_trace=nil
     C3.baseline(me)   -- an echo later this frame must not undo this hit
     if not ok and not replay_err_logged then
         replay_err_logged = true
@@ -1689,13 +2354,28 @@ local function apply_hit(d, _attacker)
     end
     own.hits = own.hits + 1
     local after = snapshot(me)
-    local res = string.format("native %s(%s) dmg Health %s [%s] (solo-equivalent)",
+    local res = string.format("native %s(%s) dmg Health %s [%s]",
         via, ok and "ok" or "failed",
         (before[1] and after[1]) and string.format("%+.2f", after[1] - before[1]) or "?",
         fmt_fields(diff(before, after)))
     if after[1] and after[1] <= 0 then res = res .. " LETHAL" end
-    return res
+    local changes = diff(before,after)
+    local mask = 0
+    for i in pairs(changes) do if i<=24 then mask=mask | (1 << (i-1)) end end
+    local hp = before[1] and after[1] and after[1]-before[1] or 0
+    if ok and mask==0 then
+        C3.replay_diag("gate2","peer=%s hit=%s bone=%s ats=%s kept=%s prior_age=%s prior_ldt=%s prior_bone=%s native_calls=%s native_raw=%s native_draw=%s native_applied=%s invulnerable=%s fallen=%s consciousness=%s damage_rate=%s source_vel=%.1f source_imp=%.1f rig=%s",
+            tostring(_attacker),tostring(d.hit_id),bone,tostring(d.attacker_ts),tostring(gate0 and gate0.kept),
+            tostring(gate0 and gate0.age),tostring(gate0 and gate0.ldt),tostring(gate0 and gate0.ldb),
+            tostring(trace and trace.calls),tostring(trace and trace.raw),tostring(trace and trace.draw),
+            tostring(trace and trace.applied),tostring(gate0 and gate0.invulnerable),tostring(gate0 and gate0.fallen),
+            tostring(gate0 and gate0.consciousness),tostring(gate0 and gate0.damage_rate),C3.diag_length(C3.v3(d,"velocity")),C3.diag_length(C3.v3(d,"impulse")),tostring(d.damage_out))
+    end
+    return res, ok and (mask~=0 and 1 or 2) or 6, ok and mask or 0, ok and hp or 0
 end
+
+local ReplayAttempts = load_module("replay_attempts").new({ now=os.clock,send=function(r) return send_rec("replay_outcome",r) end })
+
 
 -- --- vitals + stand-in life ---------------------------------------------------
 
@@ -1738,14 +2418,15 @@ function VQ.record(seq, s)
         local b = bits[string.upper(n)]
         if b then dism = dism | (1 << b) end
     end
-    return { seq = seq, dism = dism, flags = s.f & 31, v = v }
+    return { seq = seq, dism = dism, flags = s.f & 4095, v = v }
 end
 -- A `vitals` / `peer_vitals` record -> {seq, hp, dead, f, v (1-based floats,
 -- nil = unknown), dism (lower-case bone names)}; dead = DEAD flag or Health <= 0.
 function VQ.frame(t)
     if type(t) ~= "table" then return nil end
     local f = math.tointeger(tonumber(t.flags)) or 0
-    local r = { seq = math.tointeger(tonumber(t.seq)) or 0, f = f, v = {}, dism = {} }
+    local r = { seq = math.tointeger(tonumber(t.seq)) or 0, f = f, v = {}, dism = {},
+        match_id = t.match_id, round = t.round, life = t.life }
     local src = type(t.v) == "table" and t.v or {}
     for i = 1, #VITALS do r.v[i] = VQ.dq(src[i]) end
     r.hp = r.v[1]
@@ -1760,8 +2441,13 @@ function VQ.frame(t)
     return r
 end
 
-local dism_cache, dism_tick = {}, -999
+local dism_cache, dism_tick, dism_owner = {}, -999, nil
 local function sample_own_vitals(me)
+    local addr; pcall(function() addr = me:GetAddress() end)
+    local identity = addr or me
+    if dism_owner ~= identity then
+        dism_cache, dism_tick, dism_owner = {}, -999, identity
+    end
     local s = { v = {}, f = 0, dism = nil }
     for i, d in ipairs(VITALS) do
         local x; pcall(function() x = tonumber(me[d[1]]) end)
@@ -1769,23 +2455,28 @@ local function sample_own_vitals(me)
     end
     for _, fl in ipairs(VFLAGS) do
         local b = false; pcall(function() b = me[fl[1]] == true end)
-        if b then s.f = s.f + fl[2] end
+        if b then s.f = s.f | fl[2] end
     end
     if s.v[1] and s.v[1] <= 0 and s.f % 2 == 0 then s.f = s.f + 1 end   -- dead
     if tick_num - dism_tick >= DISM_TICKS then
         dism_tick = tick_num
         local names = {}
-        pcall(function()
+        local read_ok = false
+        local ok = pcall(function()
             local arr = me["Dismembered Array"]
             if arr then
                 arr:ForEach(function(_, e)
-                    local n; pcall(function() n = e:get():ToString() end)
+                    local name_ok, n = pcall(function() return e:get():ToString() end)
+                    if not name_ok or type(n) ~= "string" then error("unreadable dismembered bone") end
                     n = n and n:gsub("[^%w_]", ""):sub(1, 32)
                     if n and n ~= "" and n ~= "None" and #names < 23 then names[#names + 1] = n end
                 end)
+                read_ok = true
             end
         end)
-        dism_cache = names
+        -- A torn/unavailable native array is not evidence that a limb grew
+        -- back. Only a complete read can replace this pawn's last report.
+        if ok and read_ok then dism_cache = names end
     end
     s.dism = dism_cache
     return s
@@ -1804,21 +2495,28 @@ end
 
 local vout = { seq = 0, last = nil, at = -1e9, writes = 0, samples = 0 }
 local function publish_own_vitals(me)
+    local ctx = C3.life_for(my_peer_id,true)
+    if not ctx then return false end
+    local key = tostring(ctx.match_id)..":"..ctx.round..":"..ctx.life
     local s = sample_own_vitals(me)
     vout.samples = vout.samples + 1
     local now = os.clock()
-    if not vitals_changed(s, vout.last) and now - vout.at < VITALS_BEAT_S then return false end
+    if vout.ctx == key and not vitals_changed(s, vout.last) and now - vout.at < VITALS_BEAT_S then return false end
     vout.seq = vout.seq + 1
     -- The game's own `vitals` slot: read by the sidecar (gated, sent C2S) and
     -- by any Lua state (the HUD) through IPC.rec("vitals").
     local ipc = rawget(_G, "HSMP_IPC")
-    if ipc and ipc.put("vitals", VQ.record(vout.seq, s)) then
+    local record = VQ.record(vout.seq,s)
+    record.match_id,record.round,record.life = ctx.match_id,ctx.round,ctx.life
+    if ipc and ipc.put("vitals", record) then
+        vout.ctx = key
         vout.last, vout.at, vout.writes = s, now, vout.writes + 1
         return true
     end
     return false
 end
 
+C3.remote_defeated={}      -- verified permanent loss, still native-alive KO
 local remote_dead = {}     -- peer_id -> true once the owner is dead
 local death_shown = {}     -- peer_id -> true once the stand-in played death
 local server_dead = {}     -- peer_id -> round_key() of the round the SERVER declared it dead
@@ -1826,10 +2524,11 @@ local server_dead = {}     -- peer_id -> round_key() of the round the SERVER dec
 local remote_vitals = {}   -- peer_id -> last frame (logs)
 -- A peer's `peer_vitals` record (the sidecar writes the owner's record as it
 -- came), dequantised once per new record table (IPC.peer_rec caches per version).
-local function read_vitals(peer)
+read_vitals = function(peer)
     local ipc = rawget(_G, "HSMP_IPC")
     local t = ipc and ipc.peer_rec("peer_vitals", peer)
-    if t == nil then return nil end
+    local ctx = C3.life_for(peer,false)
+    if t == nil or not ctx or t.match_id ~= ctx.match_id or t.round ~= ctx.round or t.life ~= ctx.life then return nil end
     local c = VQ.cache[peer]
     if not c or c.src ~= t then
         c = { src = t, r = VQ.frame(t) }
@@ -1872,10 +2571,20 @@ local function set_bone_hidden(w, bone, hide)
 end
 
 local function mirror_vitals(peer, w, r)
+    -- Mode may already assign a new life while this pooled actor still shows
+    -- the preceding body. Never put the new life's injuries onto that body.
+    local shown = C3.displayed_for(peer,w,false)
+    if not r or not shown or r.match_id ~= shown.match_id
+        or r.round ~= shown.round or r.life ~= shown.life then return 0 end
     local addr; pcall(function() addr = w:GetAddress() end)
     local m = mirror[peer]
-    if not m or m.addr ~= addr then
-        m = { addr = addr, seq = -1, tick = -999, hidden = {}, n = 0 }
+    if not m or m.addr ~= addr or m.match_id ~= shown.match_id
+        or m.round ~= shown.round or m.life ~= shown.life then
+        -- Same native actor keeps its hidden-bone bookkeeping so the fresh
+        -- life can explicitly unhide parts instead of forgetting old writes.
+        local hidden = m and m.addr == addr and m.hidden or {}
+        m = { addr = addr, match_id=shown.match_id,round=shown.round,life=shown.life,
+            seq = -1, tick = -999, hidden = hidden, n = 0 }
         mirror[peer] = m
     end
     if not r or not r.v then return 0 end
@@ -1894,10 +2603,16 @@ local function mirror_vitals(peer, w, r)
         local want = {}
         for _, b in ipairs(r.dism) do want[b] = true end
         for b in pairs(want) do
-            if not m.hidden[b] then
+            -- The game's appearance/physics rebuild can unhide a previously
+            -- mirrored bone. Reassert at the same bounded rate as vitals and
+            -- retry a failed lookup rather than treating "fail" as success.
+            do
+                local previous = m.hidden[b]
                 local ok = set_bone_hidden(w, b, true)
                 m.hidden[b] = ok and true or "fail"
-                Log("peer %d severed '%s' -> stand-in bone %s", peer, b, ok and "hidden" or "NOT found on stand-in mesh")
+                if previous ~= m.hidden[b] then
+                    Log("peer %d severed '%s' -> stand-in bone %s", peer, b, ok and "hidden" or "NOT found on stand-in mesh")
+                end
             end
         end
         for b, st in pairs(m.hidden) do
@@ -1966,8 +2681,6 @@ local function update_standins()
     for peer, w in pairs(puppet_actor) do
         if w and w:IsValid() then
             local v = read_vitals(peer)
-            if v and VB.base[peer] == nil then VB.base[peer] = v.seq end
-            local fresh = v and v.seq > (VB.base[peer] or math.huge)
             local wk = WG.key or "?"
             -- A death carried over from another world (round reset) is
             -- re-validated: only the server's verdict for THIS round keeps it.
@@ -1975,7 +2688,7 @@ local function update_standins()
                 if VB.server_dead_now(peer) then remote_dead[peer] = wk
                 else remote_dead[peer], death_shown[peer] = nil, nil end
             end
-            if v and v.dead and (fresh or VB.server_dead_now(peer)) then remote_dead[peer] = wk end
+            if v and v.dead then remote_dead[peer] = wk end
             if v and not v.dead and v.hp and v.hp > 0 then
                 -- New round (fresh owner pawn) — but a server-declared death
                 -- stands for the whole round even if the owner's own copy
@@ -1984,7 +2697,15 @@ local function update_standins()
                     remote_dead[peer], death_shown[peer] = nil, nil
                 end
             end
-            if remote_dead[peer] then
+            local defeated=C3.remote_defeated[peer]
+            local shown=defeated and C3.displayed_for(peer,w,false)
+            if defeated and shown and defeated.match_id==shown.match_id
+                and defeated.round==shown.round and defeated.life==shown.life then
+                -- Preserve the owner's native KO pose. No corpse conversion or HP0.
+                pcall(function() w["Give Up"]=true;w["Give Up 2 (Temp)"]=true end)
+                mirror_vitals(peer,w,v)
+                C3.protect(w,peer);C3.baseline(w)
+            elseif remote_dead[peer] then
                 -- death_shown = the stand-in (FName) that played it: a stand-in
                 -- replaced while the owner is still dead plays it again.
                 local nm = wname(w) or "?"
@@ -2008,7 +2729,13 @@ local function update_standins()
                 -- leak is put back to (the mirrored owner state, this tick).
                 C3.protect(w, peer)
                 C3.baseline(w)
-                if C3.BODY and (tick_num + peer) % C3.BODY.APPLY_TICKS == 0 then C3.body_apply(peer, w) end
+                if C3.BODY then
+                    local ipc = rawget(_G,"HSMP_IPC")
+                    local rec = ipc and ipc.peer_rec and ipc.peer_rec("peer_body2",peer)
+                    local applied = C3.BODY.applied[wname(w)]
+                    if (tick_num + peer) % C3.BODY.APPLY_TICKS == 0
+                        or (rec and (not applied or applied.ver ~= rec.version)) then C3.body_apply(peer,w) end
+                end
             end
         end
     end
@@ -2028,6 +2755,7 @@ function C3.respawns()
         if prev and prev.round == m.round and row.life > prev.life then
             if remote_dead[peer] or death_shown[peer] or server_dead[peer] then changed = true end
             remote_dead[peer], death_shown[peer], server_dead[peer] = nil, nil, nil
+            C3.remote_defeated[peer]=nil
             Log("peer %d respawned (round %d, life %d): its death no longer holds", peer, m.round, row.life)
         end
         C3.lives[peer] = { round = m.round, life = row.life }
@@ -2041,10 +2769,8 @@ end
 -- cursor for each kind now (and dropping whatever is already queued) means
 -- records from before this load are never replayed, while records arriving
 -- before the first poll are kept.
-C3.EVENTS = { "damage_in", "hitfx_in", "damage_verdict", "death" }
+C3.EVENTS = { "damage_in", "hitfx_in", "damage_verdict", "death", "replay_outcome", "replay_outcome_ack" }
 for _, kind in ipairs(C3.EVENTS) do events(kind) end
-local my_peer_id = 0
-
 -- `hitfx_in`: an accepted hit on ANOTHER player (`d.target_peer_id`; the
 -- attacker is the entry's peer), replayed natively on my stand-in of that
 -- player for its blood, wounds, bruises and sounds. The stand-in's damage,
@@ -2056,23 +2782,55 @@ function C3.apply_fx(d, _attacker)
     local target = math.tointeger(tonumber(d.target_peer_id)) or 0
     if target == 0 then return "fx: no target" end
     if target == my_peer_id then return "fx: own hit (applied from damage_in)" end
+    -- Reliable cosmetic packets retain the original native contact generation.
+    -- Undoing numeric values cannot undo wounds painted on a fresh life.
+    local victim_context=C3.displayed_for(target,C3.remote_actor(target),false)
+    local attacker_context=_attacker==my_peer_id and C3.life_for(_attacker,true)
+        or C3.displayed_for(_attacker,C3.remote_actor(_attacker),false)
+    if not victim_context or not attacker_context
+        or d.match_id~=victim_context.match_id or d.round~=victim_context.round or d.victim_life~=victim_context.life
+        or d.match_id~=attacker_context.match_id or d.round~=attacker_context.round or d.attacker_life~=attacker_context.life then
+        return "fx: stale context"
+    end
     local flags = math.floor(num(d.flags))
     if math.floor(flags / FLAG_COMPLEX) % 2 ~= 1 then return "fx: not an armour-stage hit" end
     local hr = math.tointeger(tonumber(d.round)) or 0
     if hr == 0 then hr = nil end
     if not combat_window or (hr and hr ~= match_round) then return "fx: round not live" end
-    local w = puppet_actor[target]
+    local w = C3.remote_actor(target)
     if not (w and w:IsValid()) then return "fx: no stand-in for peer " .. target end
     if remote_dead[target] then return "fx: stand-in dead" end
+    local coll = C3.hitter(_attacker, d)
+    if math.floor(num(d.dism_blunt) / BF.COMPONENT) % 16 ~= 0 and not coll then
+        return "fx: skipped (striking component unavailable)"
+    end
+    local hit_box = C3.hit_box(_attacker, d, coll)
+    if ((math.floor(num(d.dism_blunt)) >> 27) & 15) ~= 0 and not hit_box then
+        return "fx: skipped (native cutting HitBox unavailable)"
+    end
     local mesh = C3.hit_mesh(w)
     local geo = C3.hit_geo(w, mesh, d)
+    if geo.local_lost then return "fx: skipped (victim bone frame unavailable)" end
+    if hit_box then
+        hit_box=BoxReplay.component(local_pawn(),d.hit_box_frame,geo.bone_frame,tostring(_attacker)..":"..tostring(math.floor(num(d.dism_blunt)) & (BF.LEFT|BF.RIGHT)))
+        if not hit_box then return "fx: skipped (historical cutting Box unavailable)" end
+    end
     local s = C3.snap_all(w)
     local inv; pcall(function() inv = w.Invulnerable end)
+    -- Cosmetic replay cannot safely undo structural native changes. Require
+    -- the native guard immediately before every call (pooled pawns can reset
+    -- the creation-time flag); otherwise skip the cosmetic call entirely.
+    local protected = false
+    pcall(function()
+        w["Force Disable Dismemberment"] = true
+        protected = w["Force Disable Dismemberment"] == true
+    end)
+    if not protected then return "fx: skipped (native dismemberment guard unavailable)" end
     pcall(function() w.Invulnerable = false end)
     -- (gates open: this is the blow's look, its damage is the owner's replay)
     pcall(function() w["Last Complex Damage Impulse"] = 0; w["Last Damage Taken"] = 0 end)
     replaying = true
-    local ok, err = bp_call(w, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, C3.hitter(_attacker, d)), 1, 23))
+    local ok, err = bp_call(w, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, coll, hit_box), 1, 23))
     replaying = false
     C3.put_all(w, s)
     pcall(function() w.Invulnerable = (inv == nil) and C3.STANDIN_INVULNERABLE or inv end)
@@ -2087,6 +2845,7 @@ local function clear_death_state(why)
         Log("death state cleared (%s)", why)
     end
     remote_dead, death_shown, server_dead = {}, {}, {}
+    C3.remote_defeated={}
     if sdead.key and sdead.key ~= "" then write_standin_dead(true) end
 end
 
@@ -2139,6 +2898,12 @@ wg_on_drop(function(why)
     CX.pending = {}
     C3.base = {}              -- baselines name actors of the old world
     C3.gated = {}             -- (actor names are reused by the next world)
+    FootReplay.clear(why)
+    BoxReplay.clear(why)
+    C3.fist_replay.clear(why)
+    -- Numeric native-attempt identities outlive object caches, including a
+    -- transient PlayerController miss. Original full match/life keys bound
+    -- every record; dropping the watermark could execute a lost-ACK retry twice.
     -- The per-pawn bookkeeping (spawn heals, the round-start heal) is reset
     -- only by a REAL level change (the OpenLevel / LoadMap pre-hooks) or a
     -- lost world; a "world changed" drop inside one world (a one-tick
@@ -2146,12 +2911,13 @@ wg_on_drop(function(why)
     -- next tick re-runs restore_vitals("round start"): a full mid-round heal.
     -- own_pawn_tick still starts afresh for a new pawn (address + name).
     if why ~= "world changed" then
+        C3.gd_last = nil
         own = { addr = nil, at = 0, hits = 0, passes = 0, live_round = -1, forced_round = -1, died_round = -1 }
     end
     _in_game_tick = -999
     puppets_stale = true
     mirror = {}               -- stand-in actors are gone (hidden-bone state with them)
-    dism_cache, dism_tick = {}, -999
+    dism_cache, dism_tick, dism_owner = {}, -999, nil
     vout.last = nil           -- first sample of the new world goes out at once
     VB.base = {}          -- a dead flag must be re-earned in the new world
     if C3.BODY then C3.BODY.drop() end
@@ -2193,22 +2959,42 @@ local function on_tick()
 
     local me = local_pawn()
     if me then own_pawn_tick(me) end
-    if me and C3.BODY and tick_num % C3.BODY.PUBLISH_TICKS == 0 then C3.body_publish(me) end
+    if me and C3.BODY then C3.body_tick(me) end
     if me and next(C3.gated) ~= nil and tick_num % 5 == 0 then C3.ungate(me) end
 
     read_feedback()
     if match_live then emit_quality(false) end
 
+    for _,e in ipairs(events("replay_outcome_ack")) do ReplayAttempts.ack(e.data or {}) end
+    for _,e in ipairs(events("replay_outcome")) do
+        local r=e.data or {}
+        if r.status then
+            local k=tostring(r.status);C3.receipt_stats[k]=(C3.receipt_stats[k] or 0)+1
+            C3.receipt_fields=C3.receipt_fields | (math.tointeger(r.observed_fields) or 0)
+            C3.receipt_hp=C3.receipt_hp+num(r.health_delta)
+        end
+        Log("OWNER outcome victim=%s attacker=%s #%s match=%s round=%s life=%s status=%s fields=%s hp=%s",
+            tostring(e.peer),tostring(r.attacker),tostring(r.hit_id),tostring(r.match_id),tostring(r.round),
+            tostring(r.victim_life),tostring(r.status),tostring(r.observed_fields),tostring(r.health_delta))
+    end
     local applied = 0
     for _, e in ipairs(events("damage_in")) do
         local d = type(e.data) == "table" and e.data or {}
-        local res = apply_hit(d, e.peer)
-        applied = applied + 1
+        local res, outcome, fresh = ReplayAttempts.run(d,e.peer,function() return apply_hit(d,e.peer) end)
+        replaying = false -- also release the guard after an unexpected Lua failure
+        if fresh then applied = applied + 1 end
+        local stats=C3.replay_stats
+        if fresh then
+            local k=tostring(outcome.status);stats[k]=(stats[k] or 0)+1
+            C3.replay_fields=C3.replay_fields | (math.tointeger(outcome.observed_fields) or 0)
+            C3.replay_hp=C3.replay_hp+num(outcome.health_delta)
+        end
         local v = C3.v3(d, "velocity")
-        Log("HIT from peer %s (#%s) bone=%s vel=%.0f rig=%.2f cut=%.0f stab=%.2f: %s",
+        Log((fresh and "HIT from peer" or "CACHED HIT from peer") .. " %s (#%s) bone=%s vel=%.0f rig=%.2f cut=%.0f stab=%.2f: %s",
             tostring(e.peer), tostring(d.hit_id), tostring(d.bone), math.sqrt(v[1] ^ 2 + v[2] ^ 2 + v[3] ^ 2),
             num(d.damage_out), num(d.cutting_power), num(d.pain_rate), tostring(res))
     end
+    ReplayAttempts.tick()
     -- Blood / wounds of accepted hits on other players, on their stand-ins.
     for _, e in ipairs(events("hitfx_in")) do
         local d = type(e.data) == "table" and e.data or {}
@@ -2220,7 +3006,7 @@ local function on_tick()
     end
     if me then C3.baseline(me) end   -- the echo-undo state, after this tick's replays
 
-    -- Authoritative deaths (`death` records, one per (peer, round)).
+    -- Authoritative deaths are scoped to a server match, round and native life.
     local deaths = events("death")
     if #deaths > 0 then refresh_match() end
     for _, e in ipairs(deaths) do
@@ -2230,27 +3016,36 @@ local function on_tick()
         if r == 0 then r = nil end
         local killer = tonumber(d.killer)
         local cause = tonumber(d.cause)
-        -- Death records carry the server's match_id (the sidecar fills
-        -- it): a new one is a new match context for the round keys.
+        local current, why = C3.death_context(id, d)
+        -- Only a validated current death may advance local bookkeeping.
         local mid = tonumber(d.match_id)
-        if mid and mid ~= 0 then
+        if current and mid and mid ~= 0 then
             if last_death_mid and mid ~= last_death_mid then match_gen = match_gen + 1 end
             last_death_mid = mid
         end
-        if id and id == my_peer_id then
+        if not current then
+            Log("ignored stale death for peer %s: %s", tostring(id), why)
+        elseif id and id == my_peer_id then
             -- Round-gated: never kill a pawn respawned for the next round
             -- (round increments only at "live", so countdown is excluded).
             if r and r == match_round and (match_state == "live" or match_state == "roundover") then
-                force_own_death(r, killer, cause)
+                force_own_death(r, killer, cause, d)
             else
                 Log("ignored stale death line for me (round %s, now %d %s)", tostring(r), match_round, match_state)
             end
         elseif id and (r == nil or r == match_round) then
+            if cause==5 or cause==6 then
+                C3.remote_defeated[id]={match_id=d.match_id,round=d.round,life=d.life}
+                if r then server_dead[id]=round_key(r) end
+                Log("server: peer %d defeated (native KO preserved)",id)
+            else
             if not remote_dead[id] then
                 Log("server: peer %d died (round %s, killer=%s, cause=%s)", id, tostring(r), tostring(killer), tostring(cause))
             end
             remote_dead[id] = WG.key or "?"
             if r then server_dead[id] = round_key(r) end
+            C3.remote_defeated[id]=nil
+            end
         end
     end
 
@@ -2258,6 +3053,8 @@ local function on_tick()
     -- server ledger counts a hit as reflected by the next vitals).
     if me and (applied > 0 or tick_num % VITALS_TICKS == 0) then publish_own_vitals(me) end
     C3.respawns()
+    FootReplay.prune()
+    C3.fist_replay.prune()
     update_standins()
     write_standin_dead(false)   -- heartbeat (no write unless changed / 1 s)
     if tick_num % 150 == 0 then
@@ -2286,7 +3083,7 @@ Log("loaded; state_dir=%s (armour-stage claims, after-call hooks, hit fx)", STAT
 -- Offline test hook (`hsmp-tools lua-test vitals`): never set in game.
 if rawget(_G, "HSMP_COMBAT_TEST") then
     HSMP_COMBAT_TEST.api = {
-        FIELDS = FIELDS, VITALS = VITALS,
+        FIELDS = FIELDS, VITALS = VITALS, is_weapon = BF.is_weapon, source = BF.source, native_hit_box = BF.hit_box,
         refresh_puppets = refresh_puppets, puppet_peers = function() return puppet_peer end,
         sample_own_vitals = sample_own_vitals, vitals_changed = vitals_changed, VQ = VQ,
         publish_own_vitals = publish_own_vitals, read_vitals = read_vitals,
@@ -2301,6 +3098,9 @@ if rawget(_G, "HSMP_COMBAT_TEST") then
         read_feedback = read_feedback, emit_quality = emit_quality, REACT = REACT, REACT_VEC = REACT_VEC,
         C3 = C3, CX = CX, SEND = SEND, discard_outbox = C3.discard_outbox, set_my_peer_id = function(id) my_peer_id = id; C3.me_id = id end,
         own = function() return own end, wg_drop = function(why) WG.drop(why) end,
+        force_own_death = force_own_death,
+        on_native_defeat=C3.on_native_defeat,
+        update_standins=update_standins,
         own_pawn_tick = function(me) own_pawn_tick(me) end,
         quality = function() return quality end,
         set_puppets = function(peers, actors, weapons)

@@ -7,6 +7,45 @@ use super::*;
 use crate::net::conn::{parse_header, Conn, Side};
 use crate::net::crypto;
 
+/// Native damage is stateful: the same-bone gate needs callback order through
+/// both directions of the encrypted connection, despite lost/reordered packets.
+/// Schema route assertions separately bind damage/damage_in to this channel.
+#[test]
+fn ordered_native_contacts_survive_encrypted_packet_loss_and_reordering() {
+    let mut w = World::new(379, Link::new(379, 0.2, 0.1, 20, 70), Link::new(380, 0.2, 0.1, 20, 70), ccfg());
+    assert!(w.run_until(10_000, |w| w.connected()));
+    let cid = w.cid.unwrap();
+    let msg = |kind: u16, id: u32| {
+        let mut m = vec![0; 12];
+        m[..2].copy_from_slice(&kind.to_le_bytes());
+        m[8..].copy_from_slice(&id.to_le_bytes());
+        m
+    };
+    for id in 0..48u32 {
+        w.client.send(SendMode::Ordered, msg(0x0310, id)).unwrap();
+        w.server.send(cid, SendMode::Ordered, msg(0x0311, id)).unwrap();
+        // Alternate long/short datagram delays as well as random jitter:
+        // later packets can arrive before their predecessors in both directions.
+        w.up.delay_ms = if id % 2 == 0 { 100 } else { 1 };
+        w.down.delay_ms = if id % 2 == 0 { 1 } else { 100 };
+        w.step(10);
+    }
+    assert!(w.run_until(20_000, |w| {
+        w.server_in.iter().filter(|d| d.data.len() == 12).count() == 48
+            && w.client_in.iter().filter(|d| d.data.len() == 12).count() == 48
+    }), "all contacts must recover from packet loss");
+    for (deliveries, kind) in [(&w.server_in, 0x0310u16), (&w.client_in, 0x0311u16)] {
+        let contacts: Vec<_> = deliveries.iter().filter(|d| d.data.len() == 12).map(|d| {
+            assert_eq!(d.channel, CH_ORDERED);
+            assert_eq!(u16::from_le_bytes(d.data[..2].try_into().unwrap()), kind);
+            u32::from_le_bytes(d.data[8..].try_into().unwrap())
+        }).collect();
+        assert_eq!(contacts, (0..48).collect::<Vec<_>>(), "native callback order, once each");
+    }
+    assert!(w.server.conn(cid).unwrap().stats().retransmits + w.client.conn().unwrap().stats().retransmits > 0,
+        "test must exercise retransmission, not just a perfect link");
+}
+
 /// (server lost, server retransmits, server packets sent, client lost,
 /// client packets sent) for a clean link of `rtt` ms: one reliable message
 /// every 100 ms from the server for `secs` seconds, plus optional 30 Hz

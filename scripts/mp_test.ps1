@@ -76,6 +76,7 @@
 param(
     [int]$Instances = 2,
     [string]$Scenario = "p0_gate",
+    [ValidateSet("", "duel", "brawl")][string]$CombatMode = "",
     [string]$Netsim = "",
     [string]$Arenas = "",
     [int]$Rounds = 0,
@@ -258,6 +259,12 @@ if ($Rounds -gt 0) { $scArgs += @("--rounds", "$Rounds") }
 $r = Invoke-Gate $scArgs
 if ($r.code -ne 0) { Say "scenario error: $($r.out)" Red; exit 2 }
 $sc = $r.out | ConvertFrom-Json
+if ($CombatMode) {
+    if ($Scenario -ne "combat_manual") { throw '-CombatMode applies only to combat_manual.' }
+    foreach ($step in $sc.steps) {
+        if ($step.do -eq 'rcon' -and $step.cmd -eq 'MODE duel') { $step.cmd = "MODE $CombatMode" }
+    }
+}
 if ($eff -eq "rcon" -and ($sc.requires -contains "debug_verbs") -and -not $caps.debug_verbs -and -not $DryRun) {
     Say "scenario $($sc.name) needs RCON debug verbs (hsmp-server --debug-verbs)" Red; exit 2
 }
@@ -433,7 +440,7 @@ function Collect-State {
         $dst = Join-Path $Run "inst$i"
         New-Item -ItemType Directory -Force $dst | Out-Null
         $files = @(Get-ChildItem -LiteralPath $stateDirs[$i] -Force -File -ErrorAction SilentlyContinue)
-        $files | Where-Object { $_.Name -like "hsmp_events*.jsonl" -or $_.Name -in @(".settings.json", ".career_guard.jsonl", ".sidecar_panic.log") } |
+        $files | Where-Object { $_.Name -like "hsmp_events*.jsonl" -or $_.Name -in @(".settings.json", ".career_guard.jsonl", ".sidecar_panic.log", ".parity_results.txt", ".world_scan.txt") } |
             ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dst -Force }
         if (Test-Path -LiteralPath $stateDirs[$i]) {
             $names = @($files | ForEach-Object { $_.Name } | Sort-Object)

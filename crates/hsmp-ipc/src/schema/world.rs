@@ -61,6 +61,8 @@ pub const OWNERS_MAX: usize = 2048;
 pub const SNAPS_MAX: usize = 1024;
 pub const MANIFEST_MAX: usize = 1536;
 pub const DYN_MAX: usize = 256;
+/// Expanded item passports still fit a reliable transport frame.
+pub const DYN_WIRE_MAX: usize = 32;
 pub const HASH_MAX: usize = 2000;
 pub const VERDICT_MAX: usize = 64;
 pub const REMOTE_MAX: usize = 2560;
@@ -194,6 +196,10 @@ crate::ipc_pod! {
         pub dyn_owner: u32,
         /// Class path to spawn ("/Game/...X.X_C").
         pub class_path: Str<200>,
+        pub has_passport: Bool,
+        pub _r: [u8; 7],
+        /// Exact module geometry/materials of this dynamic id, retained for late join.
+        pub passport: super::loadout::WeaponPass,
     }
 
     /// `world_dyn` head: as `world_manifest`, for dynamic entries.
@@ -382,6 +388,9 @@ fn check_dyn_row(_h: &DynHead, e: &DynEntry) -> Result<(), Invalid> {
     }
     if !pos_ok(&e.pos) {
         return Err(Invalid::Range("pos"));
+    }
+    if e.has_passport.get() {
+        super::loadout::check_weapon(&e.passport, "passport")?;
     }
     Ok(())
 }
@@ -621,7 +630,7 @@ mod tests {
         assert_eq!(size_of::<OwnerRec>(), 16);
         assert_eq!(size_of::<WorldSnap>(), 48);
         assert_eq!(size_of::<ManifestEntry>(), 24);
-        assert_eq!(size_of::<DynEntry>(), 224);
+        assert_eq!(size_of::<DynEntry>(), 1320);
         assert_eq!(size_of::<HashRow>(), 32);
         assert_eq!(size_of::<Mismatch>(), 16);
         assert_eq!(size_of::<VerdictHead>(), 32);
@@ -629,7 +638,7 @@ mod tests {
         // One world_state message (8 B wire header + head + rows) fits one datagram
         // (hsmp-net MAX_UNRELIABLE = 1155); a full reliable set fits one 64 KiB message.
         const { assert!(8 + 24 + STATE_MAX * 32 <= 1155) };
-        for (head, row, max) in [(16, 16, OWNERS_MAX), (16, 48, SNAPS_MAX), (16, 24, MANIFEST_MAX), (16, 224, DYN_MAX),
+        for (head, row, max) in [(16, 16, OWNERS_MAX), (16, 48, SNAPS_MAX), (16, 24, MANIFEST_MAX), (16, 1320, DYN_WIRE_MAX),
                                  (24, 32, HASH_MAX), (32, 16, VERDICT_MAX)] {
             assert!(8 + head + row * max <= 64 * 1024, "{head} + {row} x {max}");
         }
@@ -692,7 +701,7 @@ mod tests {
         assert!(view::<ManifestHead>(&to_payload(&mh, &[ManifestEntry { id: DYN_ID_BIT | 1, ..e }])).is_err(), "dynamic ids go in world_dyn");
 
         let dh = DynHead { level: 1, epoch: 1, req: 0, n: 0, _r: 0 };
-        let d = DynEntry { id: DYN_ID_BIT | (2 << 16) | 1, chash: 1, pos: [5.0; 3], dyn_owner: 2, class_path: Str::new("/Game/A.A_C") };
+        let d = DynEntry { id: DYN_ID_BIT | (2 << 16) | 1, chash: 1, pos: [5.0; 3], dyn_owner: 2, class_path: Str::new("/Game/A.A_C"), ..DynEntry::default() };
         let dp = to_payload(&dh, &[d]);
         assert_eq!(view::<DynHead>(&dp).unwrap().rows[0].class_path, "/Game/A.A_C");
         assert_eq!(view::<DynHead>(&to_payload(&dh, &[DynEntry { class_path: Str::new(""), ..d }])).unwrap_err(), Invalid::Range("class_path"));
@@ -725,6 +734,21 @@ mod tests {
         b.set(&OwnersHead { level: 1, epoch: 1, manifest_len: 9, n: 0, sync: Bool::TRUE, _r: 0 }, &recs);
         assert_eq!(b.payload().len(), 16 + 16 * OWNERS_MAX);
         assert!(view::<OwnersHead>(b.payload()).is_ok());
+        let mut dyns = VarBuf::<DynHead, DYN_MAX>::new_boxed();
+        let mut passport = super::super::loadout::WeaponPass::default();
+        passport.class = Str::new("@Weapons/X");
+        passport.head = Str::new("@Weapons/Blade");
+        passport.mass_head = 1.2;
+        let rows: Vec<DynEntry> = (1..=DYN_MAX as u32).map(|id| DynEntry {
+            id: DYN_ID_BIT | (1 << 16) | id, chash: 1, pos: [5.0; 3], dyn_owner: 1,
+            class_path: Str::new("/Game/Assets/Weapons/X.X_C"), has_passport: Bool::TRUE,
+            _r: [0; 7], passport,
+        }).collect();
+        dyns.set(&DynHead { level: 1, epoch: 1, req: 0, n: 0, _r: 0 }, &rows);
+        assert_eq!(view::<DynHead>(dyns.payload()).unwrap().rows.len(), DYN_MAX);
+        let mut bad = rows[0];
+        bad.passport.mass_head = f32::NAN;
+        assert_eq!(view::<DynHead>(&to_payload(&DynHead::default(), &[bad])).unwrap_err(), Invalid::Float("mass_head"));
     }
 
     /// Golden vectors of the canonical quantisation: tools/hsmp-tools/lua-tests/hsmpworld.lua

@@ -77,6 +77,9 @@ pub(super) fn peer_play_of(peer_id: u32, seq: u64, s: &poseplay::Sample) -> hsmp
         p.b[i][7..].copy_from_slice(&s.vel[i]);
     }
     if let Some(e) = &s.extra {
+        if let Some(c)=e.context {
+            p.match_id=c.match_id; p.round=c.round; p.life=c.life; p.has_context=true.into();
+        }
         p.k = e.k;
         p.st = e.step as f32;
         for (k, w) in e.weapons.iter().enumerate() {
@@ -194,7 +197,9 @@ pub(super) fn spawn_play_writer() -> tokio::task::JoinHandle<()> {
 pub(super) fn on_root(peer: u32, r: &hsmp_ipc::schema::pose::Root, payload: &[u8]) {
     let rxm = mono_ms();
     with_play(|m| {
-        m.entry(peer).or_insert_with(PeerPlay::new).pb.push_root(rxm, r.ts as f64, r.pos, r.vel, poseplay::quat_yaw(r.rot));
+        m.entry(peer).or_insert_with(PeerPlay::new).pb.push_scoped_root(
+            posecodec::v2::Context{match_id:r.match_id,round:r.round,life:r.life},
+            rxm,r.ts as f64,r.pos,r.vel,poseplay::quat_yaw(r.rot));
     });
     let rx = SystemTime::now();
     let rx_ms = rx.duration_since(UNIX_EPOCH).map(|d| d.as_secs_f64() * 1000.0).unwrap_or(0.0);

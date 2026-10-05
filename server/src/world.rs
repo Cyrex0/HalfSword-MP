@@ -154,14 +154,16 @@ pub struct WorldEntry {
     pub dyn_owner: PeerId,
     /// Dynamic items only: class path to spawn ("/Game/...X.X_C"), ≤ 200 B.
     pub class: String,
+    pub passport: Option<hsmp_ipc::schema::loadout::WeaponPass>,
 }
 
 impl WorldEntry {
     pub fn from_static(r: &rec::ManifestEntry) -> WorldEntry {
-        WorldEntry { id: r.id, chash: r.chash, pos: r.pos, dyn_owner: 0, class: String::new() }
+        WorldEntry { id: r.id, chash: r.chash, pos: r.pos, dyn_owner: 0, class: String::new(), passport: None }
     }
     pub fn from_dyn(r: &rec::DynEntry) -> WorldEntry {
-        WorldEntry { id: r.id, chash: r.chash, pos: r.pos, dyn_owner: r.dyn_owner, class: r.class_path.lossy().into_owned() }
+        WorldEntry { id: r.id, chash: r.chash, pos: r.pos, dyn_owner: r.dyn_owner, class: r.class_path.lossy().into_owned(),
+            passport: r.has_passport.get().then_some(r.passport) }
     }
     fn is_dyn(&self) -> bool {
         self.dyn_owner != 0 || self.id & rec::DYN_ID_BIT != 0
@@ -171,7 +173,9 @@ impl WorldEntry {
     }
     fn dyn_row(&self) -> rec::DynEntry {
         rec::DynEntry { id: self.id, chash: self.chash, pos: self.pos, dyn_owner: self.dyn_owner,
-                        class_path: hsmp_ipc::layout::Str::new(&self.class) }
+                        class_path: hsmp_ipc::layout::Str::new(&self.class),
+                        has_passport: hsmp_ipc::layout::Bool::from(self.passport.is_some()), _r: [0; 7],
+                        passport: self.passport.unwrap_or_default() }
     }
 }
 
@@ -296,7 +300,7 @@ impl StaticLevel {
             }
             taken.insert(id);
             entries.push(WorldEntry {
-                id, chash: fnv1a(&format!("{}|{}", o.class, o.comp)), pos: o.pos, dyn_owner: 0, class: String::new(),
+                id, chash: fnv1a(&format!("{}|{}", o.class, o.comp)), pos: o.pos, dyn_owner: 0, class: String::new(), passport: None,
             });
         }
         let vouch: Vec<[f32; 3]> = objs.iter().map(|o| o.pos).filter(|p| !at_origin(*p)).collect();
@@ -785,7 +789,7 @@ impl Msg {
                 for c in st.chunks(rec::MANIFEST_MAX) {
                     out.push(encode(0, 0, &hs, c));
                 }
-                for c in dy.chunks(rec::DYN_MAX) {
+                for c in dy.chunks(rec::DYN_WIRE_MAX) {
                     out.push(encode(0, 0, &hd, c));
                 }
                 // A request is always answered, even when every entry was refused.
@@ -1430,7 +1434,7 @@ mod tests {
     use hsmp_ipc::schema::world::WF_SIM;
 
     fn ent(id: u32, chash: u32, pos: [f32; 3]) -> WorldEntry {
-        WorldEntry { id, chash, pos, dyn_owner: 0, class: String::new() }
+        WorldEntry { id, chash, pos, dyn_owner: 0, class: String::new(), passport: None }
     }
     fn obj(id: u32, pos: [f32; 3], flags: u8) -> WorldObj {
         WorldObj::from_parts(id, pos, [0.0, 0.0, 0.0], [0.0; 3], flags)
@@ -1713,7 +1717,7 @@ mod tests {
         // Dynamic items: id namespace + owner + class enforced.
         // (Not at the origin: that is a destroyed actor, see dyn_entry_ok.)
         let good = WorldEntry { id: 0x8000_0000 | (2 << 16) | 1, chash: 1, pos: [40.0, 0.0, 0.0], dyn_owner: 2,
-                                class: "/Game/Assets/Weapons/X.X_C".into() };
+                                class: "/Game/Assets/Weapons/X.X_C".into(), passport: None };
         let forged = WorldEntry { id: 0x8000_0000 | (1 << 16) | 1, dyn_owner: 1, ..good.clone() };
         let noclass = WorldEntry { id: good.id + 1, class: "C:/evil".into(), ..good.clone() };
         w.manifest(2, 77, e, 10, vec![good.clone(), forged, noclass], t);
@@ -1828,11 +1832,62 @@ mod tests {
     }
 
     #[test]
+    fn dropped_passports_keep_item_identity_through_sync_and_loss() {
+        use hsmp_ipc::layout::Str;
+        use hsmp_ipc::schema::loadout::WeaponPass;
+        use hsmp_net::net::{crypto, Conn, ConnConfig, SendMode, Side};
+        let (mut w, t) = setup(2);
+        let epoch = w.epoch;
+        let make = |i: u32| {
+            let mut passport = WeaponPass::default();
+            passport.class = Str::new("@Weapons/X");
+            passport.head = Str::new(&format!("@Weapons/Blade{i}"));
+            passport.mass_head = i as f32 + 1.0;
+            WorldEntry { id: 0x80010000 | i, chash: 1, pos: [40.0 + i as f32, 0.0, 5.0], dyn_owner: 1,
+                class: "/Game/Assets/Weapons/X.X_C".into(), passport: Some(passport) }
+        };
+        w.manifest(1, 77, epoch, 1, vec![make(1), make(2)], t);
+        // A peer syncing after both drops gets each item's distinct modules,
+        // even though the original owner now holds no weapon of that class.
+        let sync = w.sync(2, 77, t);
+        let rows: Vec<_> = sync.iter().flat_map(|(_, m)| m.encode()).filter_map(|m| {
+            let (h, body) = hsmp_ipc::wire::split(&m).ok()?;
+            (h.kind == rec::K_WORLD_DYN).then(|| hsmp_ipc::record::view::<rec::DynHead>(body).unwrap().rows.to_vec())
+        }).flatten().collect();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].passport.head, "@Weapons/Blade1");
+        assert_eq!(rows[1].passport.head, "@Weapons/Blade2");
+        assert!(rows.iter().all(|r| r.has_passport.get()));
+        // A full multi-peer late-join manifest exercises the actual encrypted
+        // ordered fragmentation/reassembly path with alternate packet loss.
+        let entries: Vec<_> = (1..=96).map(make).collect();
+        let frames = Msg::Manifest { level: 77, epoch, req: 0, entries }.encode();
+        assert_eq!(frames.len(), 3);
+        assert!(frames.iter().all(|f| f.len() <= hsmp_net::net::frag::MAX_MESSAGE));
+        let sec = crypto::derive(&[1; 32], &[2; 32], &[3; 32]);
+        let mut sender = Conn::from_handshake(Side::Server, &sec, 0, ConnConfig::default());
+        let mut receiver = Conn::from_handshake(Side::Client, &sec, 0, ConnConfig::default());
+        for frame in &frames { sender.send(SendMode::Ordered, frame.clone()).unwrap(); }
+        let (mut got, mut n) = (Vec::new(), 0u64);
+        for now in (0..60_000).step_by(5) {
+            while let Some(packet) = sender.poll_transmit(now) {
+                n += 1;
+                if n % 2 == 0 { continue; }
+                got.extend(receiver.recv(now, &packet).unwrap_or_default().into_iter().map(|d| d.data));
+            }
+            while let Some(ack) = receiver.poll_transmit(now) { let _ = sender.recv(now, &ack); }
+            if got.len() == frames.len() { break; }
+        }
+        assert_eq!(got, frames, "exact passports survive fragmented delivery and loss");
+        assert!(sender.is_open() && receiver.is_open());
+    }
+
+    #[test]
     fn every_outbound_message_is_a_valid_record_that_fits_its_channel() {
         let (mut w, t) = setup(2);
         let e = w.epoch;
         let ents: Vec<WorldEntry> = (0..300).map(|i| WorldEntry { id: 0x8000_0000 | (1 << 16) | i, chash: i,
-            pos: [i as f32 * 200.0, 0.0, 0.0], dyn_owner: 1, class: "/Game/".to_string() + &"x".repeat(190) }).collect();
+            pos: [i as f32 * 200.0, 0.0, 0.0], dyn_owner: 1, class: "/Game/".to_string() + &"x".repeat(190), passport: None }).collect();
         let mut out = w.manifest(1, 77, e, 1, ents, t);
         for i in 0..200u32 { w.levels.get_mut(&77).unwrap().freed.insert(5000 + i, i); }
         out.extend(w.tick(t, &present(&[1, 2]), &HashMap::new()));
@@ -1986,7 +2041,7 @@ mod tests {
         assert_eq!(w.levels[&lvl].manifest.len(), 3);
         // Dynamic items keep working on server-built levels.
         let dynok = WorldEntry { id: 0x8000_0000 | (1 << 16) | 1, chash: 1, pos: [10.0, 0.0, 0.0], dyn_owner: 1,
-                                 class: "/Game/Assets/Weapons/X.X_C".into() };
+                                 class: "/Game/Assets/Weapons/X.X_C".into(), passport: None };
         let out = w.manifest(1, lvl, e, 10, vec![dynok.clone()], t);
         assert_eq!(reply_ids(&out, 1, 10), vec![dynok.id]);
     }
@@ -2121,7 +2176,7 @@ mod tests {
         let (mut w, t) = setup(1);
         let e = w.epoch;
         let good = WorldEntry { id: 0x8000_0000 | (1 << 16) | 1, chash: 1, pos: [100.0, 0.0, 5.0], dyn_owner: 1,
-                                class: "/Game/Assets/Weapons/Blueprints/Built_Weapons/ModularWeaponBP_LongSword_T3.ModularWeaponBP_LongSword_T3_C".into() };
+                                class: "/Game/Assets/Weapons/Blueprints/Built_Weapons/ModularWeaponBP_LongSword_T3.ModularWeaponBP_LongSword_T3_C".into(), passport: None };
         let pawn = WorldEntry { id: good.id + 1, class: "/Game/Character/Blueprints/Willie_BP.Willie_BP_C".into(), ..good.clone() };
         let origin = WorldEntry { id: good.id + 2, pos: [0.2, -0.3, 0.0], ..good.clone() };
         let notclass = WorldEntry { id: good.id + 3, class: "/Game/Assets/Weapons/X".into(), ..good.clone() };

@@ -9,6 +9,10 @@
 --                  sees it: equipped classes, worn meshes, proxy collision tags
 --                  (defB / defC / defS / dens), bone mass scales, Team Int,
 --                  passport height / weight, Invulnerable.
+--                  For the separate Avatars dev command `autotest bodyheight
+--                  "<remote peer> <owner passport height>"`, capture kit before,
+--                  during its 2-second window and after automatic restoration.
+--                  This is a geometry experiment, not a production height fix.
 --   spots [deg]    the same blow on my own pawn three ways, per bone and spot:
 --                  solo (the spot itself), "world" (the spot a world-space offset
 --                  lands on when the victim turned `deg`, default 70, since the
@@ -17,8 +21,11 @@
 --                  is put back after each blow.
 --   near <peer>    stand 85 uu in front of peer's stand-in, facing it.
 --   swing <speed>  push my held weapon at the nearest stand-in's chest at
---                  <speed> uu/s for three frames (a real physics blow through
---                  the whole MP path; HSMPCombat logs the claim).
+--                  <speed> uu/s for three frames. Constraints can prevent
+--                  movement; delivery alone is not evidence of a hit.
+--   arm <r|l> <s>  hold the actual arm input axis for up to 2 seconds. It
+--                  overrides that pawn's native input callback, then releases
+--                  back to normal controls. Contacts must be verified in DCD.
 --
 -- Run only inside an MP session: there the career save is redirected
 -- (shared/hsmp_saveguard.lua). The experiments refuse to run otherwise.
@@ -69,7 +76,7 @@ local SESS = HSESS and HSESS.new({})
 
 -- ---- helpers ---------------------------------------------------------------------------
 local function valid(o) local ok, r = pcall(function() return o and o:IsValid() end); return ok and r == true end
-local function nm(o) local s; pcall(function() s = o:GetFName():ToString() end); return s or "?" end
+local function nm(o) if not valid(o) then return "<invalid>" end; local s; pcall(function() s = o:GetFName():ToString() end); return s or "?" end
 local function num(x) return tonumber(x) or 0 end
 local function vec(v) local t; pcall(function() t = { v.X, v.Y, v.Z } end); return t or { 0, 0, 0 } end
 local function V(t) return { X = t[1], Y = t[2], Z = t[3] } end
@@ -156,10 +163,40 @@ local MASS_BONES = { "pelvis", "spine_03", "spine_05", "head", "upperarm_r", "lo
 local function kit_of(label, w)
     local parts = {}
     local function add(k, v) parts[#parts + 1] = k .. "=" .. tostring(v) end
+    local function precise3(v) return string.format("(%.4f,%.4f,%.4f)",v.X,v.Y,v.Z) end
     pcall(function() add("team", w["Team Int"]) end)
     pcall(function() add("invuln", w.Invulnerable) end)
     pcall(function() add("mass_scale_bp", string.format("%.3f", num(w["Mass Scale (Set in BP)"]))) end)
     pcall(function() add("armour_weight", string.format("%.2f", num(w["Armor Weight Body"]))) end)
+    for _, k in ipairs({"All Weapons Weights","Armor Weight Head","Armor Weight Arm R","Armor Weight Arm L","Armor Weight Legs",
+        "Weapons on Waist Weight","Shield On Back Weight","Shield On Shoulder Weight"}) do
+        pcall(function() add(k:gsub("%s",""),string.format("%.4f",num(w[k]))) end)
+    end
+    pcall(function() add("actor_scale",precise3(w:GetActorScale3D())) end)
+    pcall(function() add("mesh_relative_scale",precise3(w.Mesh.RelativeScale3D)) end)
+    pcall(function() add("passport_height",w["Character Passport"]["Height_21_0EB204DF4978B92AD0ED188FD32EEC7B"]) end)
+    pcall(function() add("passport_weight",w["Character Passport"]["Weight_23_65E4C6534D14653F96EB739F159E58CD"]) end)
+    pcall(function()
+        w["Currently Equipped Armor"]:ForEach(function(k,v)
+            local pass = v:get()
+            local row = {"slot=" .. tostring(k:get())}
+            local fields = {
+                {"class","ArmorCore_3_F6B7C69C4BD7D9720DB91EB635EE2B43"},
+                {"removed","CoreRemoved_12_5CFF8F6D4A05C15812594CAF6771C66B"},
+                {"module1","Module1_5_46B7198E4341C93CBF6AE989EF9898E4"},
+                {"module2","Module2_7_5B7940B84CFD673B25103D96E0AFEEB0"},
+                {"module3","Module3_9_E282C465414F6D4EF2A8039FBA847AD2"},
+                {"steel","SteelType_84_7BA6626740476C2CD69648847A1E592F"},
+                {"metal","MetalPiecesType_81_203BFD454D41FA24B0B5C5838898AA60"},
+            }
+            for _,f in ipairs(fields) do pcall(function()
+                local x = pass[f[2]]
+                if f[1] == "class" and valid(x) then x = x:GetFullName() end
+                row[#row+1] = f[1] .. "=" .. tostring(x)
+            end) end
+            Log("KIT_ARMOUR %s %s",label,table.concat(row," "))
+        end)
+    end)
     for _, k in ipairs({ "Height Rate", "Muscle Rate", "Is Zombie?", "Fallen" }) do
         local x; pcall(function() x = w[k] end)
         add(k:gsub("[^%w]", ""), x == nil and "?" or tostring(x))
@@ -184,6 +221,16 @@ local function kit_of(label, w)
             for _, g in ipairs(t) do if g:find("^def") or g:find("^dens") or g:find("_") then keep[#keep + 1] = g end end
             table.sort(keep)
             tags[#tags + 1] = table.concat(keep, ",")
+            table.sort(t)
+            pcall(function()
+                local a = c:GetAttachSocketName():ToString()
+                local tr = c:GetSocketTransform(FName("None"),0)
+                local asset = "?"
+                pcall(function() if valid(c.StaticMesh) then asset=c.StaticMesh:GetFullName() end end)
+                pcall(function() if valid(c.SkeletalMesh) then asset=c.SkeletalMesh:GetFullName() end end)
+                Log("KIT_PROXY %s bone=%s asset=%s p=%s scale=%s tags=[%s]",label,a,asset,
+                    precise3(tr.Translation),precise3(tr.Scale3D),table.concat(t,","))
+            end)
         end)
     end)
     table.sort(tags)
@@ -192,14 +239,79 @@ local function kit_of(label, w)
     pcall(function()
         for _, b in ipairs(MASS_BONES) do
             local m = w.Mesh:GetMassScale(FName(b))
-            local bm = w.Mesh:GetBoneMass(FName(b), true)
-            ms[#ms + 1] = string.format("%s=%.3f/%.2fkg", b, num(m), num(bm))
+            local bm = w.Mesh:GetBoneMass(FName(b), false)
+            local scaled = w.Mesh:GetBoneMass(FName(b), true)
+            ms[#ms + 1] = string.format("%s=%.3f/%.2fkg/scaled=%.2fkg", b, num(m), num(bm), num(scaled))
         end
     end)
     add("mass", table.concat(ms, " "))
+    pcall(function() add("mesh_mass", string.format("%.2fkg", num(w.Mesh:GetMass()))) end)
+    pcall(function()
+        local s = w.Mesh:K2_GetComponentScale()
+        add("mesh_scale", string.format("%.3f,%.3f,%.3f", num(s.X), num(s.Y), num(s.Z)))
+    end)
+    local neck = {}
+    for _, pair in ipairs({ { "spine_05", "neck_01" }, { "neck_01", "neck_02" }, { "neck_02", "head" } }) do
+        pcall(function()
+            local a, b = w.Mesh:GetSocketLocation(FName(pair[1])), w.Mesh:GetSocketLocation(FName(pair[2]))
+            neck[#neck + 1] = string.format("%s=%.2fcm", pair[2], math.sqrt((a.X-b.X)^2 + (a.Y-b.Y)^2 + (a.Z-b.Z)^2))
+            local q = w.Mesh:GetSocketTransform(FName(pair[1]),0).Rotation
+            local x,y,z = b.X-a.X,b.Y-a.Y,b.Z-a.Z
+            local qx,qy,qz,qw = -q.X,-q.Y,-q.Z,q.W
+            local tx,ty,tz = 2*(qy*z-qz*y),2*(qz*x-qx*z),2*(qx*y-qy*x)
+            Log("KIT_NECK %s parent=%s child=%s parent_frame_offset=(%.4f,%.4f,%.4f) world_a=%s world_b=%s",
+                label,pair[1],pair[2],x+qw*tx+qy*tz-qz*ty,y+qw*ty+qz*tx-qx*tz,z+qw*tz+qx*ty-qy*tx,
+                f3(vec(a)),f3(vec(b)))
+        end)
+    end
+    add("neck_joints", table.concat(neck, " "))
+    local injury = {}
+    for _, key in ipairs({ "Health", "Consciousness", "Consciousness Cap", "Consciousness 2 (Legs)", "Bleeding", "Pain", "Fallen", "Head Health", "Head Health (Crush)", "Neck Health", "Back Health", "Arm_R Health", "Arm_L Health",
+                           "Leg_R Health", "Leg_L Health", "Headless", "Neck Dislocated", "Spine Dislocated",
+                           "Neck Snapped", "Back Broken", "Current Game Mode Enum", "Force Disable Dismemberment", "Invulnerable", "DED", "Force Death" }) do
+        pcall(function() injury[#injury + 1] = key:gsub("%s", "") .. ":" .. tostring(w[key]) end)
+    end
+    pcall(function()
+        w["Dismembered Array"]:ForEach(function(_, e) injury[#injury + 1] = "missing:" .. e:get():ToString() end)
+    end)
+    add("injury", table.concat(injury, " "))
+    for _, field in ipairs({ "Weapon R", "Weapon L", "Weapon R_0", "Weapon L_0" }) do
+        pcall(function()
+            local wp = w[field]
+            if not valid(wp) then return end
+            local points = { nm(wp) }
+            local function point(label, obj, actor)
+                pcall(function()
+                    if not valid(obj) then return end
+                    local v = actor and obj:K2_GetActorLocation() or obj:K2_GetComponentLocation()
+                    points[#points+1] = string.format("%s:(%.2f,%.2f,%.2f)", label, v.X, v.Y, v.Z)
+                end)
+            end
+            point("actor", wp, true)
+            point("base", wp["Root Scene"], false)
+            point("tip", wp.TippyTipScene, false)
+            add(field:gsub("%s", ""), table.concat(points, " "))
+        end)
+    end
+    for _,field in ipairs({"Weapon R","Weapon L","Weapon Slot R 1","Weapon Slot R 2","Weapon Slot L 1","Weapon Slot L 2","Weapon Slot Back"}) do
+        pcall(function()
+            local wp = w[field]
+            if valid(wp) and valid(wp.BaseMesh) then
+                Log("KIT_WEIGHT %s field=%s actor=%s mass=%.4f gripR=%s gripL=%s held=%s",label,field,nm(wp),wp.BaseMesh:GetMass(),
+                    tostring(wp["Grip R Hand Default"]),tostring(wp["Grip L Hand Default"]),tostring(wp["Is Held"]))
+            end
+        end)
+    end
     Log("KIT %s %s %s", label, nm(w), table.concat(parts, " "))
 end
 local function exp_kit()
+    pcall(function()
+        local gi = UEHelpers.GetGameInstance()
+        if valid(gi) then
+            Log("KIT_MODE game_instance=%s native_game_mode=%s native_play_mode=%s",
+                nm(gi), tostring(gi["Current Game Mode Enum"]), tostring(gi["Current Play Mode"]))
+        end
+    end)
     local me = me_pawn()
     if me then kit_of("me", me) end
     local ipc = rawget(_G, "HSMP_IPC")
@@ -376,21 +488,529 @@ local function on_dcd(selfp, hc, cc, bone, loc, nrm, vel, imp, cp, stab, rig, bl
     local w = g(selfp)
     local b = "?"; pcall(function() b = g(bone):ToString() end)
     local c = g(cc)
-    local owner = "?"; pcall(function() owner = c:GetOwner():GetClass():GetFName():ToString() end)
+    local actor
+    if valid(c) then pcall(function() actor = c:GetOwner() end) end
+    if not valid(actor) then actor = nil end
+    -- A null UObject is still a truthy userdata; GetClass on it faults in
+    -- native UE4SS code even inside pcall (e.g. a dropped weapon contact).
+    local owner = "?"; if actor then pcall(function() owner = actor:GetClass():GetFName():ToString() end) end
     -- the weapon actor (its name carries the weapon type: hit_vel_factor calibration)
-    local wp = "?"; pcall(function() wp = c:GetOwner():GetFName():ToString() end)
+    local wp = "?"; if actor then pcall(function() wp = actor:GetFName():ToString() end) end
     local cv, wv = { 0, 0, 0 }, { 0, 0, 0 }
-    pcall(function() cv = vec(c:GetPhysicsLinearVelocity(FName("None"))) end)
-    pcall(function() wv = vec(g(hc):GetPhysicsLinearVelocity(g(bone))) end)
+    if valid(c) then pcall(function() cv = vec(c:GetPhysicsLinearVelocity(FName("None"))) end) end
+    local hit = g(hc)
+    if valid(hit) then pcall(function() wv = vec(hit:GetPhysicsLinearVelocity(g(bone))) end) end
     local rel = math.sqrt((cv[1] - wv[1]) ^ 2 + (cv[2] - wv[2]) ^ 2 + (cv[3] - wv[3]) ^ 2)
     local function L(p) local t = vec(g(p)); return math.sqrt(t[1] ^ 2 + t[2] ^ 2 + t[3] ^ 2) end
     Log("DCD on %s bone=%s by %s wp=%s: |vel|=%.0f |imp|=%.0f rel=%.0f cut=%.1f stab=%.2f rig=%.2f kick=%.1f",
         nm(w), b, owner, wp, L(vel), L(imp), rel, num(g(cp)), num(g(stab)), num(g(rig)), num(g(kick)))
+    if actor and valid(c) then pcall(function()
+        local cls=c:GetClass():GetFName():ToString()
+        if not (cls:find("SphereComponent",1,true) or cls:find("BoxComponent",1,true) or cls:find("CapsuleComponent",1,true)) then return end
+        local t=c:GetSocketTransform(FName("None"),0)
+        local p,q,scale=t.Translation,t.Rotation,t.Scale3D
+        local contact=vec(g(loc))
+        local detail=""
+        if cls:find("SphereComponent",1,true) then
+            detail=string.format("radius=%.3f",c:GetScaledSphereRadius())
+        elseif cls:find("BoxComponent",1,true) then
+            local e=c:GetUnscaledBoxExtent()
+            detail=string.format("half=(%.3f,%.3f,%.3f)",e.X*math.abs(scale.X),e.Y*math.abs(scale.Y),e.Z*math.abs(scale.Z))
+        else detail=string.format("radius=%.3f halfheight=%.3f",c:GetScaledCapsuleRadius(),c:GetScaledCapsuleHalfHeight()) end
+        local physical="unavailable"
+        pcall(function()
+            local com=c:GetCenterOfMass(FName("None"))
+            physical=string.format("com=(%.3f,%.3f,%.3f) simulating=%s mass=%.5f",com.X,com.Y,com.Z,tostring(c:IsSimulatingPhysics(FName("None"))),c:GetMass())
+        end)
+        local parent=actor["Parent Actor"]
+        local link="unknown"
+        local own=false
+        if valid(parent) then
+            local me=me_pawn()
+            own=valid(me) and me:GetAddress()==parent:GetAddress()
+            for _,entry in ipairs({{"Weapon R","hand_r"},{"Weapon L","hand_l"},{"Foot R Weapon","foot_r"},{"Foot L Weapon","foot_l"}}) do pcall(function()
+                local held=parent[entry[1]]
+                if valid(held) and held:GetAddress()==actor:GetAddress() then
+                    local mesh=parent.Mesh
+                    if valid(mesh) then
+                        local bt=mesh:GetSocketTransform(FName(entry[2]),0)
+                        link=string.format("%s bone_p=(%.3f,%.3f,%.3f)",entry[1],bt.Translation.X,bt.Translation.Y,bt.Translation.Z)
+                        pcall(function()
+                            local bc=mesh:GetCenterOfMass(FName(entry[2]))
+                            link=link..string.format(" bone_com=(%.3f,%.3f,%.3f)",bc.X,bc.Y,bc.Z)
+                        end)
+                    end
+                end
+            end) end
+        end
+        Log("DCD primitive wp=%s comp=%s class=%s at_ms=%d contact=(%.3f,%.3f,%.3f) p=(%.3f,%.3f,%.3f) q=(%.5f,%.5f,%.5f,%.5f) %s physics=%s parent=%s own_source=%s link=%s",
+            wp,nm(c),cls,math.floor(os.clock()*1000),contact[1],contact[2],contact[3],p.X,p.Y,p.Z,q.X,q.Y,q.Z,q.W,detail,physical,nm(parent),tostring(own),link)
+    end) end
+    -- Capture the weapon geometry in the collision callback itself. A later
+    -- KIT snapshot cannot distinguish a missing haft/guard from a pose that
+    -- moved after this contact. `along` deliberately remains unclamped: a
+    -- negative value identifies a contact behind the streamed root scene.
+    if actor and owner ~= "Willie_BP_C" then pcall(function()
+        local base, tip = actor["Root Scene"], actor.TippyTipScene
+        if not (valid(base) and valid(tip)) then return end
+        local a, z, p = vec(base:K2_GetComponentLocation()), vec(tip:K2_GetComponentLocation()), vec(g(loc))
+        local d = { z[1] - a[1], z[2] - a[2], z[3] - a[3] }
+        local l2 = d[1]^2 + d[2]^2 + d[3]^2
+        if l2 < 1 then return end
+        local u = ((p[1]-a[1])*d[1] + (p[2]-a[2])*d[2] + (p[3]-a[3])*d[3]) / l2
+        local v = math.max(0, math.min(1, u))
+        local ds, dl = 0, 0
+        for i = 1, 3 do
+            ds = ds + (p[i] - a[i] - v*d[i])^2
+            dl = dl + (p[i] - a[i] - u*d[i])^2
+        end
+        Log("DCD geometry wp=%s comp=%s at_ms=%d contact=(%.2f,%.2f,%.2f) base=(%.2f,%.2f,%.2f) tip=(%.2f,%.2f,%.2f) along=%.3f segment=%.2f axis=%.2f",
+            wp, nm(c), math.floor(os.clock()*1000), p[1],p[2],p[3], a[1],a[2],a[3], z[1],z[2],z[3], u, math.sqrt(ds), math.sqrt(dl))
+    end) end
 end
 local hooked = false
 
 -- ---- command channel -------------------------------------------------------------------------
-local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing }
+local ARM_AXIS = {
+    r = "InpAxisEvt_Right Arm Axis_K2Node_InputAxisEvent_2",
+    l = "InpAxisEvt_Left Arm Axis_K2Node_InputAxisEvent_3",
+}
+local arm_drive, arm_injecting = nil, false
+local arm_hooks = {}
+local function arm_axis_after(which, selfp)
+    local s = arm_drive
+    if arm_injecting or not s or s.hand ~= which then return end
+    if WG.key ~= s.key or os.clock() >= s.until_t then
+        arm_drive = nil -- this native callback already restored normal input
+        Log("arm: finished hand=%s injected_frames=%d", s.hand, s.frames)
+        return
+    end
+    local me = me_pawn()
+    local w; pcall(function() w = selfp:get() end)
+    if not (valid(me) and valid(w) and nm(me) == s.name and nm(w) == s.name) then return end
+    arm_injecting = true
+    local ok, err = bp_call(w, ARM_AXIS[which], 1.0)
+    arm_injecting = false
+    if not ok then
+        arm_drive = nil
+        Log("arm: input failed: %s", tostring(err))
+        return
+    end
+    s.frames = s.frames + 1
+end
+local function exp_arm(arg)
+    local hand, seconds = tostring(arg):match("^([rl])%s*([%d%.]*)$")
+    if not hand then Log("arm: expected r or l, optional duration"); return end
+    local me = me_pawn()
+    if not valid(me) then Log("arm: no pawn"); return end
+    if not arm_hooks[hand] then
+        local ok, err = pcall(function()
+            RegisterHook("/Game/Character/Blueprints/Willie_BP.Willie_BP_C:" .. ARM_AXIS[hand],
+                function(selfp) pcall(arm_axis_after, hand, selfp) end)
+        end)
+        if not ok then Log("arm: native input hook unavailable: %s", tostring(err)); return end
+        arm_hooks[hand] = true
+    end
+    arm_drive = { hand=hand, name=nm(me), key=WG.key, frames=0,
+        until_t=os.clock()+math.max(0.1, math.min(2, tonumber(seconds) or 0.5)) }
+    Log("arm: started hand=%s pawn=%s (real input, verify native contacts)", hand, nm(me))
+end
+local function exp_bounds()
+    local me = me_pawn()
+    if not valid(me) then Log("BOUNDS no pawn"); return end
+    for _, field in ipairs({ "Weapon R", "Weapon L" }) do pcall(function()
+        local wp = me[field]
+        if not valid(wp) then return end
+        local arr = wp["Collision Components Array"]
+        if not arr then Log("BOUNDS %s no collision array", nm(wp)); return end
+        arr:ForEach(function(_, e)
+            local c = e:get()
+            if not valid(c) then return end
+            local lo, hi = { X = 0, Y = 0, Z = 0 }, { X = 0, Y = 0, Z = 0 }
+            local ok, why = pcall(function() c:GetLocalBounds(lo, hi) end)
+            if not ok then Log("BOUNDS wp=%s comp=%s unavailable=%s", nm(wp), nm(c), tostring(why)); return end
+            local t = c:GetSocketTransform(FName("None"), 0)
+            local p, q, s = t.Translation, t.Rotation, t.Scale3D
+            Log("BOUNDS wp=%s comp=%s lo=(%.3f,%.3f,%.3f) hi=(%.3f,%.3f,%.3f) p=(%.3f,%.3f,%.3f) q=(%.5f,%.5f,%.5f,%.5f) scale=(%.3f,%.3f,%.3f)",
+                nm(wp), nm(c), lo.X,lo.Y,lo.Z, hi.X,hi.Y,hi.Z, p.X,p.Y,p.Z, q.X,q.Y,q.Z,q.W, s.X,s.Y,s.Z)
+        end)
+    end) end
+end
+local function exp_colliders(arg, probe_weapon)
+    local me
+    if tonumber(arg) then me=standin_of(tonumber(arg)) else me=me_pawn() end
+    if not valid(me) and not valid(probe_weapon) then Log("COLLIDERS no pawn"); return end
+    local function get(f) local ok,v=pcall(f); if ok then return v end end
+    local function vec(v) return v and string.format("(%.3f,%.3f,%.3f)",v.X,v.Y,v.Z) or "none" end
+    local function xf(c,bone)
+        local t=c:GetSocketTransform(bone or FName("None"),0)
+        return string.format("p=%s q=(%.5f,%.5f,%.5f,%.5f) scale=%s",vec(t.Translation),t.Rotation.X,t.Rotation.Y,t.Rotation.Z,t.Rotation.W,vec(t.Scale3D))
+    end
+    local function each(arr,f)
+        local n=0
+        arr:ForEach(function(_,e)
+            n=n+1
+            if n>256 then return end
+            local value=get(function() return e:get() end) or e
+            f(value,n)
+        end)
+        return n
+    end
+    local function aggregate(bs,c,tag,bone)
+        if not valid(bs) then Log("COLLIDERS %s no_body_setup",tag); return end
+        local ag=bs.AggGeom
+        Log("COLLIDERS %s setup=%s bone=%s trace=%s %s",tag,nm(bs),tostring(bone),tostring(get(function()return bs.CollisionTraceFlag end)),xf(c,bone))
+        for _,kind in ipairs({"SphereElems","BoxElems","SphylElems","ConvexElems","TaperedCapsuleElems","LevelSetElems","SkinnedLevelSetElems"}) do
+            local ok,n=pcall(function() return each(ag[kind],function(s,i)
+                local detail=""
+                if kind=="BoxElems" then detail=string.format("center=%s rot=(%.3f,%.3f,%.3f) size=(%.3f,%.3f,%.3f)",vec(s.Center),s.Rotation.Pitch,s.Rotation.Yaw,s.Rotation.Roll,s.X,s.Y,s.Z)
+                elseif kind=="SphereElems" then detail=string.format("center=%s radius=%.3f",vec(s.Center),s.Radius)
+                elseif kind=="SphylElems" or kind=="TaperedCapsuleElems" then
+                    detail=string.format("center=%s rot=(%.3f,%.3f,%.3f) length=%.3f radius=%s radius0=%s radius1=%s",vec(s.Center),s.Rotation.Pitch,s.Rotation.Yaw,s.Rotation.Roll,s.Length,tostring(get(function()return s.Radius end)),tostring(get(function()return s.Radius0 end)),tostring(get(function()return s.Radius1 end)))
+                elseif kind=="ConvexElems" then
+                    local vertices=each(s.VertexData,function()end)
+                    detail=string.format("vertices=%d min=%s max=%s local_p=%s local_scale=%s",vertices,vec(s.ElemBox.Min),vec(s.ElemBox.Max),vec(s.Transform.Translation),vec(s.Transform.Scale3D))
+                end
+                Log("COLLIDERS %s %s[%d] enabled=%s %s",tag,kind,i,tostring(get(function()return s.CollisionEnabled end)),detail)
+            end) end)
+            Log("COLLIDERS %s %s count=%s",tag,kind,ok and tostring(n) or ("ERROR:"..tostring(n)))
+        end
+    end
+    for _,field in ipairs(probe_weapon and {"inventory"} or {"Weapon R","Weapon L","Foot R Weapon","Foot L Weapon"}) do
+        local ok,why=pcall(function()
+            local wp=probe_weapon or me[field]
+            if not valid(wp) then Log("COLLIDERS field=%s absent",field); return end
+            local count=each(wp["Collision Components Array"],function(c,ordinal)
+                local tag=string.format("field=%s wp=%s ordinal=%d comp=%s",field,nm(wp),ordinal,nm(c))
+                local good,err=pcall(function()
+                    if not valid(c) then Log("COLLIDERS %s invalid",tag); return end
+                    local class=nm(c:GetClass())
+                    Log("COLLIDERS %s class=%s enabled=%s %s",tag,class,tostring(c:GetCollisionEnabled()),xf(c))
+                    if class:find("BoxComponent",1,true) then Log("COLLIDERS %s primitive_box_half=%s",tag,vec(c:GetUnscaledBoxExtent()))
+                    elseif class:find("SphereComponent",1,true) then Log("COLLIDERS %s primitive_sphere_radius=%.3f",tag,c:GetUnscaledSphereRadius())
+                    elseif class:find("CapsuleComponent",1,true) then Log("COLLIDERS %s primitive_capsule_radius=%.3f halfheight=%.3f",tag,c:GetUnscaledCapsuleRadius(),c:GetUnscaledCapsuleHalfHeight())
+                    end
+                    local mesh=get(function()return c.StaticMesh end)
+                    if valid(mesh) then aggregate(mesh.BodySetup,c,tag,FName("None")); return end
+                    mesh=get(function()return c:GetSkeletalMeshAsset() end)
+                    if valid(mesh) then
+                        local pa=get(function()return c.PhysicsAssetOverride end)
+                        if not valid(pa) then pa=mesh:GetPhysicsAsset() end
+                        if not valid(pa) then Log("COLLIDERS %s skeletal_no_physics_asset mesh=%s",tag,nm(mesh)); return end
+                        local bodies=each(pa.SkeletalBodySetups,function(bs,bi)
+                            aggregate(bs,c,tag.." body="..bi,bs.BoneName)
+                        end)
+                        Log("COLLIDERS %s physics_asset=%s bodies=%d",tag,nm(pa),bodies)
+                        return
+                    end
+                    local bs=get(function()return c.ShapeBodySetup end)
+                    if valid(bs) then aggregate(bs,c,tag,FName("None")) end
+                end)
+                if not good then Log("COLLIDERS %s ERROR=%s",tag,tostring(err)) end
+            end)
+            Log("COLLIDERS field=%s wp=%s array_count=%d",field,nm(wp),count)
+        end)
+        if not ok then Log("COLLIDERS field=%s ERROR=%s",field,tostring(why)) end
+    end
+end
+local inventory
+local function exp_inventory(arg)
+    if inventory and arg=="stop" then inventory.stop(); return end
+    if arg=="status" then
+        if inventory then inventory.status(WG.key) else Log("INVENTORY status no_owned_actor_in_current_world") end
+        return
+    end
+    local module=load_module("collider_inventory")
+    if not module then Log("INVENTORY diagnostic_module_missing"); return end
+    local live_lookup=load_module("inventory_world_lookup")
+    if not live_lookup then Log("INVENTORY exact_world_lookup_missing");return end
+    local src=debug.getinfo(1,"S").source:gsub("^@","")
+    local dir=src:match("^(.*)[/\\]") or "."
+    local catalog
+    for _,p in ipairs({dir.."/../../HSMPLoadout/Scripts/hsmp_catalog.lua",dir.."/../../../HSMPLoadout/Scripts/hsmp_catalog.lua"}) do
+        local ok,v=pcall(dofile,p)
+        if ok and type(v)=="table" then catalog=v; break end
+    end
+    if not catalog then Log("INVENTORY canonical_catalogue_unavailable"); return end
+    if arg=="extra" then
+        catalog=load_module("native_extra_melee")
+        if not catalog then Log("INVENTORY proven_extra_melee_manifest_unavailable");return end
+        arg=""
+    end
+    inventory=inventory or module.new({log=Log,
+        lookup=function(class) return FindAllOf(class) or {} end,
+        lookup_world=function(ref)
+            return live_lookup.query({world=WG.world,valid=valid,find=StaticFindObject,
+                gameplay_statics=UEHelpers.GetGameplayStatics},ref)
+        end,
+        resolve=function(path)
+            local c=StaticFindObject(path)
+            if not valid(c) then LoadAsset(path:gsub("_C$","")); c=StaticFindObject(path) end
+            return c
+        end,
+        context=function()
+            local me=me_pawn()
+            if not valid(me) then return nil end
+            local p=me:K2_GetActorLocation()
+            return WG.world(),UEHelpers.GetGameplayStatics(),{
+                Translation={X=p.X,Y=p.Y,Z=p.Z+10000},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=1,Y=1,Z=1}}
+        end,
+        inspect=function(actor,id) Log("INVENTORY inspect class=%s actor=%s",id,nm(actor)); exp_colliders(nil,actor) end,
+    })
+    inventory.start(catalog,WG.key,arg)
+end
+local cut_proxy,cut_second
+local function cutproxy_report(stage,c,pawn)
+    if not valid(c) then Log("CUTPROXY stage=%s passed=false factory_unavailable",stage);return end
+    local a=c:GetOwner()
+    local t=c:GetSocketTransform(FName("None"),0)
+    local e=c:GetUnscaledBoxExtent()
+    Log("CUTPROXY stage=%s world=%s pawn=%s pawn_address=%s actor=%s actor_class=%s box=%s box_class=%s actor_collision=%s box_collision=%s simulating=%s extent=%s scale=%s position=%s",
+        stage,tostring(WG.key),nm(pawn),tostring(pawn:GetAddress()),a:GetFullName(),a:GetClass():GetFName():ToString(),
+        c:GetFullName(),c:GetClass():GetFName():ToString(),tostring(a:GetActorEnableCollision()),tostring(c:GetCollisionEnabled()),
+        tostring(c:IsSimulatingPhysics(FName("None"))),f3(vec(e)),f3(vec(t.Scale3D)),f3(vec(t.Translation)))
+end
+local function exp_cutproxy()
+    local pawn=me_pawn()
+    if not valid(pawn) then Log("CUTPROXY passed=false no_current_pawn");return end
+    if not cut_proxy then
+        local src=debug.getinfo(1,"S").source:gsub("^@","")
+        local dir=src:match("^(.*)[/\\]") or "."
+        local module
+        for _,path in ipairs({dir.."/../../HSMPCombat/Scripts/cutting_box.lua",dir.."/../../../HSMPCombat/Scripts/cutting_box.lua"})do
+            local ok,m=pcall(dofile,path)
+            if ok and type(m)=="table" and type(m.new)=="function" then module=m;break end
+        end
+        if not module then Log("CUTPROXY passed=false exact_combat_factory_module_missing");return end
+        cut_proxy=module.new({UEHelpers=UEHelpers,log=Log,bf={to_world=function(f,p)
+            local v=BF.rot(f.q,{p[1]*f.s,p[2]*f.s,p[3]*f.s})
+            return {f.p[1]+v[1],f.p[2]+v[2],f.p[3]+v[3]}
+        end}})
+    end
+    local p=pawn:K2_GetActorLocation()
+    local frame={p={p.X,p.Y,p.Z},q={0,0,0,1},s=1}
+    local c=cut_proxy.component(pawn,{20,10,0,0,0,0,1,2,1,1,30,2,12},frame,"native-factory-smoke")
+    cutproxy_report("first",c,pawn)
+    if not valid(c) then return end
+    cut_second={key=WG.key,pawn=pawn:GetAddress(),name=nm(pawn),box=c:GetAddress(),frame=frame}
+end
+local function cutproxy_tick()
+    local s=cut_second;cut_second=nil
+    if not s then return end
+    local pawn=me_pawn()
+    if WG.key~=s.key or not valid(pawn) or pawn:GetAddress()~=s.pawn or nm(pawn)~=s.name then
+        Log("CUTPROXY passed=false context_changed_before_reuse");return
+    end
+    local c=cut_proxy.component(pawn,{25,12,5,0,0,0,1,1.5,1.25,0.75,20,3,16},s.frame,"native-factory-smoke")
+    cutproxy_report("second",c,pawn)
+    Log("CUTPROXY passed=%s reused_slot=%s native_damage_calls=0 live_weapon_mutations=0",
+        tostring(valid(c) and c:GetAddress()==s.box),tostring(valid(c) and c:GetAddress()==s.box))
+end
+-- Dev-only boundary check: hold the native severe-KO condition, then let
+-- Willie's own delayed loss logic run. Never call Lose Match/Death or send
+-- an outcome record here. This checks outcome wiring, not punch strength.
+local defeat_probe
+local function exp_defeat()
+    local pawn,view,mode=me_pawn(),HSESS and HSESS.view(),HSESS and HSESS.mode()
+    if not (valid(pawn) and view and view.phase==3 and mode and mode.match_id==view.match_id) then
+        Log("DEFEAT_PROBE refused: requires a live isolated multiplayer round");return
+    end
+    if mode.id~="brawl" then Log("DEFEAT_PROBE refused: knockout boundary requires Brawl");return end
+    local row=mode.rows and mode.rows[view.my_peer_id]
+    local ipc=rawget(_G,"HSMP_IPC")
+    local status=ipc and ipc.bus_table and ipc.bus_table("spawn_status")
+    if not (row and row.alive and row.life>0 and mode.round==view.round and status and status.verified==true
+        and status.match_id==view.match_id and status.round==view.round and status.life==row.life and status.pawn==nm(pawn)) then
+        Log("DEFEAT_PROBE refused: original placed life unavailable");return
+    end
+    local cap,hp,player,dead,give,zombie,native_mode
+    pcall(function() cap=tonumber(pawn["Consciousness Cap"]);hp=tonumber(pawn.Health);player=pawn.Player;dead=pawn.DED;give=pawn["Give Up"];zombie=pawn["Is Zombie?"];native_mode=tonumber(pawn["Current Game Mode Enum"]) end)
+    if not (cap and hp and hp>0 and player==true and dead~=true and give==false and zombie~=true and native_mode~=5) or defeat_probe then
+        Log("DEFEAT_PROBE refused: native living player/cap unavailable or probe active");return
+    end
+    defeat_probe={key=WG.key,pawn=pawn:GetAddress(),name=nm(pawn),cap=cap,hp=hp,
+        match_id=view.match_id,round=view.round,life=row.life,peer=view.my_peer_id,until_t=os.clock()+12}
+    Log("DEFEAT_PROBE started pawn=%s match=%s round=%s Health=%.3f native_cap_condition=-60 no_damage_records=true",
+        nm(pawn),tostring(view.match_id),tostring(view.round),hp)
+end
+local function defeat_tick()
+    local s=defeat_probe;if not s then return end
+    local pawn,view,mode=me_pawn(),HSESS and HSESS.view(),HSESS and HSESS.mode()
+    if WG.key~=s.key or not valid(pawn) or pawn:GetAddress()~=s.pawn or nm(pawn)~=s.name then
+        defeat_probe=nil;Log("DEFEAT_PROBE cancelled: pawn/world changed; old objects untouched");return
+    end
+    local row=mode and mode.rows and mode.rows[s.peer]
+    if not view or view.match_id~=s.match_id or view.round~=s.round or view.my_peer_id~=s.peer
+        or not mode or mode.match_id~=s.match_id or mode.round~=s.round or not row or row.life~=s.life then
+        defeat_probe=nil;Log("DEFEAT_PROBE cancelled: original life changed; old cap untouched");return
+    end
+    local give,dead,hp
+    pcall(function()give=pawn["Give Up"];dead=pawn.DED;hp=pawn.Health end)
+    if give==true then
+        defeat_probe=nil
+        Log("DEFEAT_PROBE native_loss_seen pawn=%s Health=%s DED=%s elapsed_condition_complete=true no_damage_records=true",
+            s.name,tostring(hp),tostring(dead));return
+    end
+    if view.phase~=3 or not row.alive or os.clock()>=s.until_t then
+        defeat_probe=nil;pcall(function()pawn["Consciousness Cap"]=s.cap end)
+        Log("DEFEAT_PROBE stopped without native loss; original cap restored");return
+    end
+    pcall(function()pawn["Consciousness Cap"]=-60 end)
+end
+WG.on_drop(function(why)
+    cut_second=nil
+    defeat_probe=nil
+    if cut_proxy then cut_proxy.clear(why) end
+end)
+local function exp_modules(arg)
+    local pawn=tonumber(arg) and standin_of(tonumber(arg)) or me_pawn()
+    local resolver=load_module("native_weapon_modules")
+    if not valid(pawn) or not resolver then Log("MODULES unavailable pawn/resolver");return end
+    for _,field in ipairs({"Weapon R","Weapon L"}) do
+        local ok,err=pcall(function()
+            local weapon=pawn[field]
+            if not valid(weapon) then Log("MODULES field=%s no weapon",field);return end
+            local rows,why=resolver.of(weapon)
+            if not rows then Log("MODULES field=%s weapon=%s REFUSED reason=%s",field,nm(weapon),tostring(why));return end
+            local selected=weapon["Hit Box Collision"]
+            Log("MODULES field=%s weapon=%s rows=%d selected=%s",field,nm(weapon),#rows,nm(selected))
+            for _,r in ipairs(rows) do
+                local c=r.component
+                local is_selected=valid(selected) and selected:GetAddress()==c:GetAddress()
+                Log("MODULES id=%d child_of=%d component=%s class=%s selected=%s",r.id,r.child_of,nm(c),nm(c:GetClass()),tostring(is_selected))
+            end
+        end)
+        if not ok then Log("MODULES field=%s native inspection failed: %s",field,tostring(err)) end
+    end
+end
+local function exp_components()
+    local pawn=me_pawn()
+    local cls=StaticFindObject("/Script/Engine.PhysicsConstraintComponent")
+    if not valid(pawn) or not valid(cls) then Log("COMPONENTS no native pawn/class");return end
+    local actors={pawn}
+    for _,field in ipairs({"Weapon R","Weapon L"}) do
+        local ok,a=pcall(function()return pawn[field]end)
+        if ok and valid(a) then actors[#actors+1]=a end
+    end
+    for _,actor in ipairs(actors) do
+        local ok,err=pcall(function()
+            local result=actor:K2_GetComponentsByClass(cls)
+            if type(result)~="table" then error("unexpected native returned array: "..type(result)) end
+            if #result>64 then error("native component diagnostic capacity exceeded") end
+            Log("COMPONENTS actor=%s returned=table count=%d",nm(actor),#result)
+            for i,wrapped in ipairs(result) do
+                local c=wrapped:get()
+                Log("COMPONENTS actor=%s ordinal=%d unwrapped=%s class=%s",nm(actor),i,nm(c),valid(c) and nm(c:GetClass()) or "invalid")
+            end
+        end)
+        if not ok then Log("COMPONENTS actor=%s REFUSED reason=%s",nm(actor),tostring(err)) end
+    end
+end
+local fist_factory
+local function exp_fists(arg)
+    local pawn=me_pawn()
+    local function context(p)
+        local view,mode=HSESS and HSESS.view(),HSESS and HSESS.mode()
+        local ipc=rawget(_G,"HSMP_IPC")
+        local status=ipc and ipc.bus_table("spawn_status")
+        local row=mode and view and mode.rows and mode.rows[view.my_peer_id]
+        if not valid(p) or p:GetAddress()~=pawn:GetAddress() or not row or not view
+            or not status or status.verified~=true or status.pawn~=nm(p)
+            or mode.match_id~=view.match_id or mode.round~=view.round
+            or status.match_id~=mode.match_id or status.round~=mode.round or status.life~=row.life then return nil end
+        return {match_id=mode.match_id,round=mode.round,life=row.life}
+    end
+    local original=valid(pawn) and context(pawn)
+    if not original then Log("FISTPROBE passed=false original_verified_context_unavailable");return end
+    local src=debug.getinfo(1,"S").source:gsub("^@","")
+    local dir=src:match("^(.*)[/\\]") or "."
+    local factory
+    for _,path in ipairs({dir.."/../../HSMPCombat/Scripts/replay_fists.lua",dir.."/../../../HSMPCombat/Scripts/replay_fists.lua"})do
+        local ok,m=pcall(dofile,path);if ok and type(m)=="table" then factory=m;break end
+    end
+    local smoke=load_module("replay_fists_smoke")
+    if not factory or not smoke then Log("FISTPROBE passed=false exact_factory_missing");return end
+    -- Refresh context callback; no UObject is retained after this command.
+    fist_factory=fist_factory or factory.new({UEHelpers=UEHelpers,log=Log,
+        world_key=function()return WG.key end,context=function(p)
+            local current=me_pawn()
+            if not valid(current) or not valid(p) or current:GetAddress()~=p:GetAddress() then return nil end
+            local view,mode=HSESS.view(),HSESS.mode()
+            local ipc=rawget(_G,"HSMP_IPC");local status=ipc and ipc.bus_table("spawn_status")
+            local row=mode and view and mode.rows and mode.rows[view.my_peer_id]
+            if not row or not status or status.verified~=true or status.pawn~=nm(p)
+                or mode.match_id~=view.match_id or mode.round~=view.round
+                or status.match_id~=mode.match_id or status.round~=mode.round or status.life~=row.life then return nil end
+            return {match_id=mode.match_id,round=mode.round,life=row.life}
+        end})
+    local row,reason=smoke.run({authorized=true,factory=fist_factory,context=context},pawn,arg~="r",original)
+    if not row then Log("FISTPROBE passed=false reason=%s",tostring(reason));return end
+    Log("FISTPROBE passed=true pawn=%s actor=%s component=%s left=%s radius=%s scaled_radius=%s scale=%s collision=%s held_fields_unchanged=%s native_damage_calls=0",
+        row.pawn,row.actor,row.component,tostring(row.left),tostring(row.radius),tostring(row.scaled_radius),f3(row.scale),tostring(row.collision),tostring(row.held_fields_unchanged))
+end
+local function exp_frames(arg)
+    local peer,bone=tostring(arg):match("^(%d+)%s*(%S*)")
+    peer=tonumber(peer) or 0
+    local pawn=peer==0 and me_pawn() or standin_of(peer)
+    local probe,joints=load_module("body_frame_probe"),load_module("body_joint_dictionary")
+    if not valid(pawn) or not probe or not joints then Log("BODYFRAME refused pawn/probe/dictionary unavailable");return end
+    local mesh=pawn.Mesh
+    if not valid(mesh) then Log("BODYFRAME refused primary native mesh unavailable");return end
+    local function current_context()
+        local ipc=rawget(_G,"HSMP_IPC")
+        local view,mode=HSESS and HSESS.view(),HSESS and HSESS.mode()
+        if not view or not mode or mode.match_id~=view.match_id or mode.round~=view.round then return nil end
+        local id=peer==0 and view.my_peer_id or peer
+        local row=mode.rows and mode.rows[id]
+        if not row then return nil end
+        local status
+        if peer==0 then status=ipc and ipc.bus_table("spawn_status")
+        else
+            local pb=ipc and ipc.bus_table("playback")
+            for _,r in ipairs(pb and pb.rows or {})do if r.peer==peer and r.pawn==nm(pawn) then status=r;break end end
+        end
+        if not status or (peer==0 and status.verified~=true) or status.pawn~=nm(pawn)
+            or status.match_id~=mode.match_id or status.round~=mode.round or status.life~=row.life then return nil end
+        return {match_id=mode.match_id,round=mode.round,life=row.life,pawn=nm(pawn),pawn_address=pawn:GetAddress(),
+            display_time=status.body_ts or status.local_ms,world=WG.key}
+    end
+    local original=current_context()
+    if not original then Log("BODYFRAME refused original context unavailable");return end
+    local physics,library
+    pcall(function()local c=StaticFindObject("/Script/Engine.PhysicsObjectBlueprintLibrary");if valid(c) then physics=c:GetCDO() end end)
+    pcall(function()local c=StaticFindObject("/Script/Engine.ConstraintInstanceBlueprintLibrary");if valid(c) then library=c:GetCDO() end end)
+    local allowed={pelvis=true,spine_01=true}
+    for _,j in ipairs(joints)do allowed[j.parent],allowed[j.child]=true,true end
+    local bones=bone and bone~="" and {bone} or {"lowerarm_r","hand_r","lowerarm_l","hand_l","neck_01","neck_02","head"}
+    local result,why=probe.capture(mesh,original,bones,{physics=physics,constraint_library=valid(library) and library or nil,joints=joints,
+        fname=FName,allowed_bone=function(n)return allowed[n]==true end,now=function()return os.clock()*1000 end,
+        current=function(id,m)
+            local fresh=current_context()
+            return fresh and valid(m) and m:GetAddress()==mesh:GetAddress() and fresh.pawn_address==id.pawn_address
+                and fresh.match_id==id.match_id and fresh.round==id.round and fresh.life==id.life and WG.key==original.world
+        end})
+    if not result then Log("BODYFRAME refused %s",tostring(why));return end
+    for _,r in ipairs(result.rows)do
+        local s,p,a=r.socket,r.physics,r.joint_angles_deg
+        local function q(v)return v and string.format("(%.5f,%.5f,%.5f,%.5f)",v[1],v[2],v[3],v[4]) or "unavailable" end
+        Log("BODYFRAME peer=%s pawn=%s match=%s round=%s life=%s bone=%s socket_q=%s physics_q=%s mass=%s angles=%s physics_verified=false read_only=true",
+            tostring(peer),result.pawn,tostring(result.match_id),tostring(result.round),tostring(result.life),r.bone,q(s and s.q),q(p and p.q),tostring(r.mass),
+            a and string.format("(%.3f,%.3f,%.3f)",a.swing1,a.twist,a.swing2) or "unavailable")
+        for k,v in pairs(r.errors)do Log("BODYFRAME_ERROR bone=%s field=%s reason=%s",r.bone,k,v) end
+    end
+    for _,r in ipairs(result.joints or {})do
+        local c=r.current
+        if c then Log("BODYJOINT peer=%s pawn=%s name=%s parent=%s child=%s swing1=%s swing2=%s twist=%s strength=%s damping=%s force=%s read_only=true",
+            tostring(peer),result.pawn,r.name,c.parent,c.child,tostring(c.swing1_limit),tostring(c.swing2_limit),tostring(c.twist_limit),
+            tostring(c.angular_strength),tostring(c.angular_damping),tostring(c.angular_force_limit)) end
+        for k,v in pairs(r.errors)do Log("BODYJOINT_ERROR name=%s field=%s reason=%s",r.name,k,v) end
+    end
+end
+local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, defeat=exp_defeat }
+if rawget(_G, "HSMP_PARITY_TEST") then
+    HSMP_PARITY_TEST.arm = exp_arm
+    HSMP_PARITY_TEST.state = function() return arm_drive end
+end
 local dev_out = {}
 LoopAsync(33, function()
     if not WG.check() then return false end
@@ -400,6 +1020,9 @@ LoopAsync(33, function()
         end)
     end
     swing_tick()
+    cutproxy_tick()
+    defeat_tick()
+    if inventory then inventory.tick(WG.key,WG.settled() and SESS and SESS:live()) end
     local ipc = rawget(_G, "HSMP_IPC")
     if not (ipc and ipc.dev_poll) then return false end
     for i = 1, ipc.dev_poll(8, dev_out) do
@@ -420,4 +1043,4 @@ LoopAsync(33, function()
     return false
 end)
 
-Log("loaded; state_dir=%s (dev_cmd autotest parity <kit|spots|near|swing>)", STATE_DIR)
+Log("loaded; state_dir=%s (dev_cmd autotest parity <kit|spots|near|swing|arm>)", STATE_DIR)

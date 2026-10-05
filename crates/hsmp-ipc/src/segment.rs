@@ -7,10 +7,10 @@ use crate::ring::Ring;
 use crate::schema::bus::{BusDir, BusValue, BUS_KEYS};
 use crate::schema::pose::{PeerDir, PeerPlay, PeerRoot, PoseBuf, PoseLead, Root, Weapon, MAX_PEER_SLOTS};
 use crate::schema::combat::Vitals;
-use crate::schema::loadout::{BodyBuf, KitBuf, KitRules, LoadoutBuf};
+use crate::schema::loadout::{BodyBuf, Body2Buf, KitBuf, KitRules, LoadoutBuf};
 use crate::record::VarBuf;
 use crate::schema::world as w;
-use crate::schema::session::{AdminBuf, Link, SessionBuf};
+use crate::schema::session::{AdminBuf, Link, ModeBuf, SessionBuf, ZoneState};
 use crate::schema::Stamped;
 use crate::seqlock::SeqSlot;
 use crate::triple::TripleBuf;
@@ -45,6 +45,7 @@ crate::ipc_layout! {
         pub kit: SeqSlot<Stamped<KitBuf>>,
         pub kit_rules_req: SeqSlot<Stamped<KitRules>>,
         pub body: SeqSlot<Stamped<BodyBuf>>,
+        pub body2: SeqSlot<Stamped<Body2Buf>>,
     }
 
     /// Game-written large blobs.
@@ -65,6 +66,7 @@ crate::ipc_layout! {
         pub vitals: SeqSlot<Stamped<Vitals>>,
         pub kit: SeqSlot<Stamped<KitBuf>>,
         pub body: SeqSlot<Stamped<BodyBuf>>,
+        pub body2: SeqSlot<Stamped<Body2Buf>>,
     }
 
     #[repr(align(4096))]
@@ -88,6 +90,8 @@ crate::ipc_layout! {
         pub session: SeqSlot<Stamped<SessionBuf>>,
         pub link: SeqSlot<Stamped<Link>>,
         pub admin: SeqSlot<Stamped<AdminBuf>>,
+        pub mode: SeqSlot<Stamped<ModeBuf>>,
+        pub zone: SeqSlot<Stamped<ZoneState>>,
         pub world_remote: TripleBuf<WorldRemoteBuf>,
         pub world_owners: TripleBuf<WorldOwnersBuf>,
         pub world_manifest: TripleBuf<WorldManifestBuf>,
@@ -168,6 +172,8 @@ impl Segment {
             "session" => Some(&self.state.session),
             "link" => Some(&self.state.link),
             "admin" => Some(&self.state.admin),
+            "mode" => Some(&self.state.mode),
+            "zone" => Some(&self.state.zone),
             // loadout domain
             "kit" => Some(&self.game_out.kit),
             "kit_rules_req" => Some(&self.game_out.kit_rules_req),
@@ -177,6 +183,8 @@ impl Segment {
             "peer_loadout" => self.peer_loadouts.slots.get(peer).map(|s| s as &dyn crate::schema::RawSlot),
             "body" => Some(&self.game_out.body),
             "peer_body" => self.peers.slots.get(peer).map(|s| &s.body as &dyn crate::schema::RawSlot),
+            "body2" => Some(&self.game_out.body2),
+            "peer_body2" => self.peers.slots.get(peer).map(|s| &s.body2 as &dyn crate::schema::RawSlot),
             // pose (schema/pose.rs SLOTS)
             "local_root" => Some(&self.game_out.local_root),
             "local_weapon" => Some(&self.game_out.local_weapon),
@@ -230,6 +238,18 @@ const _: () = assert!(SEGMENT_SIZE > 3 * 1024 * 1024 && SEGMENT_SIZE < 6 * 1024 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_declared_record_slot_has_segment_storage() {
+        let mapping = crate::shm::Mapping::anonymous();
+        // Anonymous mappings provide zeroed, segment-aligned storage for these slots.
+        let segment = unsafe { &*mapping.as_ptr().cast::<Segment>() };
+        for info in crate::schema::slots() {
+            if info.form != crate::schema::SlotForm::Bus {
+                assert!(segment.slot_ref(info.name, 0).is_some(), "missing segment slot: {}", info.name);
+            }
+        }
+    }
 
     #[test]
     fn regions_are_page_aligned() {

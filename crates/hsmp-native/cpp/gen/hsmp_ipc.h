@@ -10,8 +10,8 @@
 
 #define HSMP_IPC_ABI_MAJOR 2u
 #define HSMP_IPC_ABI_MINOR 0u
-#define HSMP_IPC_LAYOUT_HASH 0xe66f34519195e128ull
-#define HSMP_IPC_SEGMENT_SIZE 0x39b000u
+#define HSMP_IPC_LAYOUT_HASH 0x9824d6249fd2dc68ull
+#define HSMP_IPC_SEGMENT_SIZE 0x48f000u
 
 #pragma pack(push, 8)
 typedef struct hsmp_SlotMeta {
@@ -113,6 +113,11 @@ HSMP_SA(offsetof(hsmp_PoseLead, lead_ms) == 32, "hsmp_PoseLead.lead_ms offset");
 HSMP_SA(offsetof(hsmp_PoseLead, _r) == 36, "hsmp_PoseLead._r offset");
 
 typedef struct hsmp_PeerPlay {
+    uint64_t match_id;
+    uint32_t round;
+    uint16_t life;
+    uint8_t has_context;
+    uint8_t _context_r;
     hsmp_SlotMeta meta;
     uint32_t peer_id;
     uint32_t mode;
@@ -136,29 +141,34 @@ typedef struct hsmp_PeerPlay {
     hsmp_Control control;
     uint32_t _r2;
 } hsmp_PeerPlay;
-HSMP_SA(sizeof(hsmp_PeerPlay) == 1656, "hsmp_PeerPlay size");
-HSMP_SA(offsetof(hsmp_PeerPlay, meta) == 0, "hsmp_PeerPlay.meta offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, peer_id) == 32, "hsmp_PeerPlay.peer_id offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, mode) == 36, "hsmp_PeerPlay.mode offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, cut) == 40, "hsmp_PeerPlay.cut offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, flags) == 44, "hsmp_PeerPlay.flags offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, play_seq) == 48, "hsmp_PeerPlay.play_seq offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, pt) == 56, "hsmp_PeerPlay.pt offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, age) == 64, "hsmp_PeerPlay.age offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, delay) == 68, "hsmp_PeerPlay.delay offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, jit) == 72, "hsmp_PeerPlay.jit offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, lead) == 76, "hsmp_PeerPlay.lead offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, st) == 80, "hsmp_PeerPlay.st offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, iv) == 84, "hsmp_PeerPlay.iv offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, k) == 88, "hsmp_PeerPlay.k offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, rate) == 92, "hsmp_PeerPlay.rate offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, mask) == 96, "hsmp_PeerPlay.mask offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, vmask) == 100, "hsmp_PeerPlay.vmask offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, root) == 104, "hsmp_PeerPlay.root offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, b) == 120, "hsmp_PeerPlay.b offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, w) == 1420, "hsmp_PeerPlay.w offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, control) == 1500, "hsmp_PeerPlay.control offset");
-HSMP_SA(offsetof(hsmp_PeerPlay, _r2) == 1652, "hsmp_PeerPlay._r2 offset");
+HSMP_SA(sizeof(hsmp_PeerPlay) == 1672, "hsmp_PeerPlay size");
+HSMP_SA(offsetof(hsmp_PeerPlay, match_id) == 0, "hsmp_PeerPlay.match_id offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, round) == 8, "hsmp_PeerPlay.round offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, life) == 12, "hsmp_PeerPlay.life offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, has_context) == 14, "hsmp_PeerPlay.has_context offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, _context_r) == 15, "hsmp_PeerPlay._context_r offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, meta) == 16, "hsmp_PeerPlay.meta offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, peer_id) == 48, "hsmp_PeerPlay.peer_id offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, mode) == 52, "hsmp_PeerPlay.mode offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, cut) == 56, "hsmp_PeerPlay.cut offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, flags) == 60, "hsmp_PeerPlay.flags offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, play_seq) == 64, "hsmp_PeerPlay.play_seq offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, pt) == 72, "hsmp_PeerPlay.pt offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, age) == 80, "hsmp_PeerPlay.age offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, delay) == 84, "hsmp_PeerPlay.delay offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, jit) == 88, "hsmp_PeerPlay.jit offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, lead) == 92, "hsmp_PeerPlay.lead offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, st) == 96, "hsmp_PeerPlay.st offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, iv) == 100, "hsmp_PeerPlay.iv offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, k) == 104, "hsmp_PeerPlay.k offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, rate) == 108, "hsmp_PeerPlay.rate offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, mask) == 112, "hsmp_PeerPlay.mask offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, vmask) == 116, "hsmp_PeerPlay.vmask offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, root) == 120, "hsmp_PeerPlay.root offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, b) == 136, "hsmp_PeerPlay.b offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, w) == 1436, "hsmp_PeerPlay.w offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, control) == 1516, "hsmp_PeerPlay.control offset");
+HSMP_SA(offsetof(hsmp_PeerPlay, _r2) == 1668, "hsmp_PeerPlay._r2 offset");
 
 typedef struct hsmp_PeerDirEntry {
     uint32_t peer_id;
@@ -209,14 +219,22 @@ typedef struct hsmp_Root {
     float pos[3];
     float rot[4];
     float vel[3];
+    uint64_t match_id;
+    uint32_t round;
+    uint16_t life;
+    uint16_t _r;
 } hsmp_Root;
-HSMP_SA(sizeof(hsmp_Root) == 56, "hsmp_Root size");
+HSMP_SA(sizeof(hsmp_Root) == 72, "hsmp_Root size");
 HSMP_SA(offsetof(hsmp_Root, tick) == 0, "hsmp_Root.tick offset");
 HSMP_SA(offsetof(hsmp_Root, ts) == 4, "hsmp_Root.ts offset");
 HSMP_SA(offsetof(hsmp_Root, send_wall_ms) == 8, "hsmp_Root.send_wall_ms offset");
 HSMP_SA(offsetof(hsmp_Root, pos) == 16, "hsmp_Root.pos offset");
 HSMP_SA(offsetof(hsmp_Root, rot) == 28, "hsmp_Root.rot offset");
 HSMP_SA(offsetof(hsmp_Root, vel) == 44, "hsmp_Root.vel offset");
+HSMP_SA(offsetof(hsmp_Root, match_id) == 56, "hsmp_Root.match_id offset");
+HSMP_SA(offsetof(hsmp_Root, round) == 64, "hsmp_Root.round offset");
+HSMP_SA(offsetof(hsmp_Root, life) == 68, "hsmp_Root.life offset");
+HSMP_SA(offsetof(hsmp_Root, _r) == 70, "hsmp_Root._r offset");
 
 typedef struct hsmp_Weapon {
     uint32_t tick;
@@ -255,7 +273,7 @@ typedef struct hsmp_PeerRoot {
     uint32_t _r;
     hsmp_Root root;
 } hsmp_PeerRoot;
-HSMP_SA(sizeof(hsmp_PeerRoot) == 64, "hsmp_PeerRoot size");
+HSMP_SA(sizeof(hsmp_PeerRoot) == 80, "hsmp_PeerRoot size");
 HSMP_SA(offsetof(hsmp_PeerRoot, peer_id) == 0, "hsmp_PeerRoot.peer_id offset");
 HSMP_SA(offsetof(hsmp_PeerRoot, _r) == 4, "hsmp_PeerRoot._r offset");
 HSMP_SA(offsetof(hsmp_PeerRoot, root) == 8, "hsmp_PeerRoot.root offset");
@@ -292,13 +310,23 @@ typedef struct hsmp_PlaybackRow {
     double body_ts;
     double arm_ts;
     double local_ms;
+    uint64_t match_id;
+    uint32_t round;
+    uint16_t life;
+    uint8_t _life_r[2];
+    char pawn[56];
 } hsmp_PlaybackRow;
-HSMP_SA(sizeof(hsmp_PlaybackRow) == 32, "hsmp_PlaybackRow size");
+HSMP_SA(sizeof(hsmp_PlaybackRow) == 104, "hsmp_PlaybackRow size");
 HSMP_SA(offsetof(hsmp_PlaybackRow, peer) == 0, "hsmp_PlaybackRow.peer offset");
 HSMP_SA(offsetof(hsmp_PlaybackRow, _r) == 4, "hsmp_PlaybackRow._r offset");
 HSMP_SA(offsetof(hsmp_PlaybackRow, body_ts) == 8, "hsmp_PlaybackRow.body_ts offset");
 HSMP_SA(offsetof(hsmp_PlaybackRow, arm_ts) == 16, "hsmp_PlaybackRow.arm_ts offset");
 HSMP_SA(offsetof(hsmp_PlaybackRow, local_ms) == 24, "hsmp_PlaybackRow.local_ms offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, match_id) == 32, "hsmp_PlaybackRow.match_id offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, round) == 40, "hsmp_PlaybackRow.round offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, life) == 44, "hsmp_PlaybackRow.life offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, _life_r) == 46, "hsmp_PlaybackRow._life_r offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, pawn) == 48, "hsmp_PlaybackRow.pawn offset");
 
 typedef struct hsmp_Welcome {
     uint64_t server_epoch;
@@ -549,7 +577,9 @@ typedef struct hsmp_GameStatus {
     uint32_t flags;
     uint32_t spawn_id;
     uint8_t load_error;
-    uint8_t _r[7];
+    uint8_t _r;
+    uint16_t life;
+    uint32_t _r2;
     char arena[40];
 } hsmp_GameStatus;
 HSMP_SA(sizeof(hsmp_GameStatus) == 72, "hsmp_GameStatus size");
@@ -560,6 +590,8 @@ HSMP_SA(offsetof(hsmp_GameStatus, flags) == 16, "hsmp_GameStatus.flags offset");
 HSMP_SA(offsetof(hsmp_GameStatus, spawn_id) == 20, "hsmp_GameStatus.spawn_id offset");
 HSMP_SA(offsetof(hsmp_GameStatus, load_error) == 24, "hsmp_GameStatus.load_error offset");
 HSMP_SA(offsetof(hsmp_GameStatus, _r) == 25, "hsmp_GameStatus._r offset");
+HSMP_SA(offsetof(hsmp_GameStatus, life) == 26, "hsmp_GameStatus.life offset");
+HSMP_SA(offsetof(hsmp_GameStatus, _r2) == 28, "hsmp_GameStatus._r2 offset");
 HSMP_SA(offsetof(hsmp_GameStatus, arena) == 32, "hsmp_GameStatus.arena offset");
 
 typedef struct hsmp_Spawned {
@@ -830,7 +862,32 @@ HSMP_SA(offsetof(hsmp_Spectate, alive) == 8, "hsmp_Spectate.alive offset");
 HSMP_SA(offsetof(hsmp_Spectate, _r) == 12, "hsmp_Spectate._r offset");
 HSMP_SA(offsetof(hsmp_Spectate, nick) == 16, "hsmp_Spectate.nick offset");
 
+typedef struct hsmp_SurrenderHold {
+    uint64_t match_id;
+    uint32_t round;
+    uint16_t life;
+    uint8_t active;
+    uint8_t _r;
+    float progress;
+    float remaining_s;
+    double at_ms;
+    char pawn[64];
+} hsmp_SurrenderHold;
+HSMP_SA(sizeof(hsmp_SurrenderHold) == 96, "hsmp_SurrenderHold size");
+HSMP_SA(offsetof(hsmp_SurrenderHold, match_id) == 0, "hsmp_SurrenderHold.match_id offset");
+HSMP_SA(offsetof(hsmp_SurrenderHold, round) == 8, "hsmp_SurrenderHold.round offset");
+HSMP_SA(offsetof(hsmp_SurrenderHold, life) == 12, "hsmp_SurrenderHold.life offset");
+HSMP_SA(offsetof(hsmp_SurrenderHold, active) == 14, "hsmp_SurrenderHold.active offset");
+HSMP_SA(offsetof(hsmp_SurrenderHold, _r) == 15, "hsmp_SurrenderHold._r offset");
+HSMP_SA(offsetof(hsmp_SurrenderHold, progress) == 16, "hsmp_SurrenderHold.progress offset");
+HSMP_SA(offsetof(hsmp_SurrenderHold, remaining_s) == 20, "hsmp_SurrenderHold.remaining_s offset");
+HSMP_SA(offsetof(hsmp_SurrenderHold, at_ms) == 24, "hsmp_SurrenderHold.at_ms offset");
+HSMP_SA(offsetof(hsmp_SurrenderHold, pawn) == 32, "hsmp_SurrenderHold.pawn offset");
+
 typedef struct hsmp_SpawnStatus {
+    uint64_t match_id;
+    uint16_t life;
+    uint8_t _context_r[6];
     double protect_until;
     double t;
     double pos[3];
@@ -853,28 +910,31 @@ typedef struct hsmp_SpawnStatus {
     char why[32];
     char error[128];
 } hsmp_SpawnStatus;
-HSMP_SA(sizeof(hsmp_SpawnStatus) == 360, "hsmp_SpawnStatus size");
-HSMP_SA(offsetof(hsmp_SpawnStatus, protect_until) == 0, "hsmp_SpawnStatus.protect_until offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, t) == 8, "hsmp_SpawnStatus.t offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, pos) == 16, "hsmp_SpawnStatus.pos offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, floor) == 40, "hsmp_SpawnStatus.floor offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, tol_cm) == 48, "hsmp_SpawnStatus.tol_cm offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, protect_ms) == 52, "hsmp_SpawnStatus.protect_ms offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, seq) == 56, "hsmp_SpawnStatus.seq offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, round) == 60, "hsmp_SpawnStatus.round offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, spawn_id) == 64, "hsmp_SpawnStatus.spawn_id offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, tries) == 68, "hsmp_SpawnStatus.tries offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, slot) == 72, "hsmp_SpawnStatus.slot offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, verified) == 76, "hsmp_SpawnStatus.verified offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, clear) == 77, "hsmp_SpawnStatus.clear offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, has_dest) == 78, "hsmp_SpawnStatus.has_dest offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, has_floor) == 79, "hsmp_SpawnStatus.has_floor offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, has_protect_until) == 80, "hsmp_SpawnStatus.has_protect_until offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, _r) == 81, "hsmp_SpawnStatus._r offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, arena) == 88, "hsmp_SpawnStatus.arena offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, pawn) == 136, "hsmp_SpawnStatus.pawn offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, why) == 200, "hsmp_SpawnStatus.why offset");
-HSMP_SA(offsetof(hsmp_SpawnStatus, error) == 232, "hsmp_SpawnStatus.error offset");
+HSMP_SA(sizeof(hsmp_SpawnStatus) == 376, "hsmp_SpawnStatus size");
+HSMP_SA(offsetof(hsmp_SpawnStatus, match_id) == 0, "hsmp_SpawnStatus.match_id offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, life) == 8, "hsmp_SpawnStatus.life offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, _context_r) == 10, "hsmp_SpawnStatus._context_r offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, protect_until) == 16, "hsmp_SpawnStatus.protect_until offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, t) == 24, "hsmp_SpawnStatus.t offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, pos) == 32, "hsmp_SpawnStatus.pos offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, floor) == 56, "hsmp_SpawnStatus.floor offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, tol_cm) == 64, "hsmp_SpawnStatus.tol_cm offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, protect_ms) == 68, "hsmp_SpawnStatus.protect_ms offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, seq) == 72, "hsmp_SpawnStatus.seq offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, round) == 76, "hsmp_SpawnStatus.round offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, spawn_id) == 80, "hsmp_SpawnStatus.spawn_id offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, tries) == 84, "hsmp_SpawnStatus.tries offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, slot) == 88, "hsmp_SpawnStatus.slot offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, verified) == 92, "hsmp_SpawnStatus.verified offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, clear) == 93, "hsmp_SpawnStatus.clear offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, has_dest) == 94, "hsmp_SpawnStatus.has_dest offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, has_floor) == 95, "hsmp_SpawnStatus.has_floor offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, has_protect_until) == 96, "hsmp_SpawnStatus.has_protect_until offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, _r) == 97, "hsmp_SpawnStatus._r offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, arena) == 104, "hsmp_SpawnStatus.arena offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, pawn) == 152, "hsmp_SpawnStatus.pawn offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, why) == 216, "hsmp_SpawnStatus.why offset");
+HSMP_SA(offsetof(hsmp_SpawnStatus, error) == 248, "hsmp_SpawnStatus.error offset");
 
 typedef struct hsmp_SpawnRequest {
     uint32_t seq;
@@ -1089,8 +1149,15 @@ typedef struct hsmp_Damage {
     uint8_t flags;
     uint8_t n;
     uint8_t _r[6];
+    uint64_t match_id;
+    uint16_t attacker_life;
+    uint16_t victim_life;
+    uint8_t _life_r[4];
+    char source_class[48];
+    float hit_box_frame[13];
+    uint8_t _box_r[4];
 } hsmp_Damage;
-HSMP_SA(sizeof(hsmp_Damage) == 160, "hsmp_Damage size");
+HSMP_SA(sizeof(hsmp_Damage) == 280, "hsmp_Damage size");
 HSMP_SA(offsetof(hsmp_Damage, hit_id) == 0, "hsmp_Damage.hit_id offset");
 HSMP_SA(offsetof(hsmp_Damage, cid) == 4, "hsmp_Damage.cid offset");
 HSMP_SA(offsetof(hsmp_Damage, target_peer_id) == 8, "hsmp_Damage.target_peer_id offset");
@@ -1115,6 +1182,13 @@ HSMP_SA(offsetof(hsmp_Damage, bone) == 120, "hsmp_Damage.bone offset");
 HSMP_SA(offsetof(hsmp_Damage, flags) == 152, "hsmp_Damage.flags offset");
 HSMP_SA(offsetof(hsmp_Damage, n) == 153, "hsmp_Damage.n offset");
 HSMP_SA(offsetof(hsmp_Damage, _r) == 154, "hsmp_Damage._r offset");
+HSMP_SA(offsetof(hsmp_Damage, match_id) == 160, "hsmp_Damage.match_id offset");
+HSMP_SA(offsetof(hsmp_Damage, attacker_life) == 168, "hsmp_Damage.attacker_life offset");
+HSMP_SA(offsetof(hsmp_Damage, victim_life) == 170, "hsmp_Damage.victim_life offset");
+HSMP_SA(offsetof(hsmp_Damage, _life_r) == 172, "hsmp_Damage._life_r offset");
+HSMP_SA(offsetof(hsmp_Damage, source_class) == 176, "hsmp_Damage.source_class offset");
+HSMP_SA(offsetof(hsmp_Damage, hit_box_frame) == 224, "hsmp_Damage.hit_box_frame offset");
+HSMP_SA(offsetof(hsmp_Damage, _box_r) == 276, "hsmp_Damage._box_r offset");
 
 typedef struct hsmp_DamageDelta {
     uint8_t i;
@@ -1154,6 +1228,28 @@ HSMP_SA(sizeof(hsmp_DamageAck) == 8, "hsmp_DamageAck size");
 HSMP_SA(offsetof(hsmp_DamageAck, attacker) == 0, "hsmp_DamageAck.attacker offset");
 HSMP_SA(offsetof(hsmp_DamageAck, hit_id) == 4, "hsmp_DamageAck.hit_id offset");
 
+typedef struct hsmp_ReplayOutcome {
+    uint64_t match_id;
+    uint32_t round;
+    uint32_t attacker;
+    uint32_t hit_id;
+    uint16_t victim_life;
+    uint8_t status;
+    uint8_t _r;
+    uint32_t observed_fields;
+    float health_delta;
+} hsmp_ReplayOutcome;
+HSMP_SA(sizeof(hsmp_ReplayOutcome) == 32, "hsmp_ReplayOutcome size");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, match_id) == 0, "hsmp_ReplayOutcome.match_id offset");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, round) == 8, "hsmp_ReplayOutcome.round offset");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, attacker) == 12, "hsmp_ReplayOutcome.attacker offset");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, hit_id) == 16, "hsmp_ReplayOutcome.hit_id offset");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, victim_life) == 20, "hsmp_ReplayOutcome.victim_life offset");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, status) == 22, "hsmp_ReplayOutcome.status offset");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, _r) == 23, "hsmp_ReplayOutcome._r offset");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, observed_fields) == 24, "hsmp_ReplayOutcome.observed_fields offset");
+HSMP_SA(offsetof(hsmp_ReplayOutcome, health_delta) == 28, "hsmp_ReplayOutcome.health_delta offset");
+
 typedef struct hsmp_Clash {
     uint32_t other_peer_id;
     uint32_t my_ts;
@@ -1169,10 +1265,18 @@ HSMP_SA(offsetof(hsmp_Clash, _r) == 12, "hsmp_Clash._r offset");
 typedef struct hsmp_DeathReport {
     uint32_t death_id;
     uint32_t round;
+    uint64_t match_id;
+    uint16_t life;
+    uint8_t reason;
+    uint8_t _life_r[5];
 } hsmp_DeathReport;
-HSMP_SA(sizeof(hsmp_DeathReport) == 8, "hsmp_DeathReport size");
+HSMP_SA(sizeof(hsmp_DeathReport) == 24, "hsmp_DeathReport size");
 HSMP_SA(offsetof(hsmp_DeathReport, death_id) == 0, "hsmp_DeathReport.death_id offset");
 HSMP_SA(offsetof(hsmp_DeathReport, round) == 4, "hsmp_DeathReport.round offset");
+HSMP_SA(offsetof(hsmp_DeathReport, match_id) == 8, "hsmp_DeathReport.match_id offset");
+HSMP_SA(offsetof(hsmp_DeathReport, life) == 16, "hsmp_DeathReport.life offset");
+HSMP_SA(offsetof(hsmp_DeathReport, reason) == 18, "hsmp_DeathReport.reason offset");
+HSMP_SA(offsetof(hsmp_DeathReport, _life_r) == 19, "hsmp_DeathReport._life_r offset");
 
 typedef struct hsmp_DeathAck {
     uint32_t death_id;
@@ -1187,7 +1291,8 @@ typedef struct hsmp_Death {
     uint32_t round;
     uint32_t killer;
     uint8_t cause;
-    uint8_t _r[3];
+    uint8_t _r;
+    uint16_t life;
     uint64_t match_id;
     uint64_t wall_ms;
 } hsmp_Death;
@@ -1197,6 +1302,7 @@ HSMP_SA(offsetof(hsmp_Death, round) == 4, "hsmp_Death.round offset");
 HSMP_SA(offsetof(hsmp_Death, killer) == 8, "hsmp_Death.killer offset");
 HSMP_SA(offsetof(hsmp_Death, cause) == 12, "hsmp_Death.cause offset");
 HSMP_SA(offsetof(hsmp_Death, _r) == 13, "hsmp_Death._r offset");
+HSMP_SA(offsetof(hsmp_Death, life) == 14, "hsmp_Death.life offset");
 HSMP_SA(offsetof(hsmp_Death, match_id) == 16, "hsmp_Death.match_id offset");
 HSMP_SA(offsetof(hsmp_Death, wall_ms) == 24, "hsmp_Death.wall_ms offset");
 
@@ -1205,12 +1311,20 @@ typedef struct hsmp_Vitals {
     uint32_t dism;
     uint16_t flags;
     uint16_t v[19];
+    uint64_t match_id;
+    uint32_t round;
+    uint16_t life;
+    uint8_t _life_r[2];
 } hsmp_Vitals;
-HSMP_SA(sizeof(hsmp_Vitals) == 48, "hsmp_Vitals size");
+HSMP_SA(sizeof(hsmp_Vitals) == 64, "hsmp_Vitals size");
 HSMP_SA(offsetof(hsmp_Vitals, seq) == 0, "hsmp_Vitals.seq offset");
 HSMP_SA(offsetof(hsmp_Vitals, dism) == 4, "hsmp_Vitals.dism offset");
 HSMP_SA(offsetof(hsmp_Vitals, flags) == 8, "hsmp_Vitals.flags offset");
 HSMP_SA(offsetof(hsmp_Vitals, v) == 10, "hsmp_Vitals.v offset");
+HSMP_SA(offsetof(hsmp_Vitals, match_id) == 48, "hsmp_Vitals.match_id offset");
+HSMP_SA(offsetof(hsmp_Vitals, round) == 56, "hsmp_Vitals.round offset");
+HSMP_SA(offsetof(hsmp_Vitals, life) == 60, "hsmp_Vitals.life offset");
+HSMP_SA(offsetof(hsmp_Vitals, _life_r) == 62, "hsmp_Vitals._life_r offset");
 
 typedef struct hsmp_StandinDead {
     uint64_t wall;
@@ -1394,19 +1508,81 @@ HSMP_SA(offsetof(hsmp_DynHead, req) == 8, "hsmp_DynHead.req offset");
 HSMP_SA(offsetof(hsmp_DynHead, n) == 12, "hsmp_DynHead.n offset");
 HSMP_SA(offsetof(hsmp_DynHead, _r) == 14, "hsmp_DynHead._r offset");
 
+typedef struct hsmp_WeaponPass {
+    char class_[128];
+    char head_sub1[128];
+    char head_sub2[128];
+    char head[128];
+    char guard[128];
+    char pommel[128];
+    char grip[128];
+    char name[64];
+    int32_t id;
+    int32_t mat_steel;
+    int32_t mat_colored;
+    int32_t mat_wood;
+    int32_t mat_leather;
+    int32_t tier;
+    float head_size[3];
+    float guard_size[3];
+    float grip_size[3];
+    float pommel_size[3];
+    float mass_head;
+    float mass_guard;
+    float mass_grip;
+    float mass_pommel;
+    float price;
+    float color_wood[4];
+    float color_leather[4];
+    uint32_t _r;
+} hsmp_WeaponPass;
+HSMP_SA(sizeof(hsmp_WeaponPass) == 1088, "hsmp_WeaponPass size");
+HSMP_SA(offsetof(hsmp_WeaponPass, class_) == 0, "hsmp_WeaponPass.class_ offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, head_sub1) == 128, "hsmp_WeaponPass.head_sub1 offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, head_sub2) == 256, "hsmp_WeaponPass.head_sub2 offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, head) == 384, "hsmp_WeaponPass.head offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, guard) == 512, "hsmp_WeaponPass.guard offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, pommel) == 640, "hsmp_WeaponPass.pommel offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, grip) == 768, "hsmp_WeaponPass.grip offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, name) == 896, "hsmp_WeaponPass.name offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, id) == 960, "hsmp_WeaponPass.id offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, mat_steel) == 964, "hsmp_WeaponPass.mat_steel offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, mat_colored) == 968, "hsmp_WeaponPass.mat_colored offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, mat_wood) == 972, "hsmp_WeaponPass.mat_wood offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, mat_leather) == 976, "hsmp_WeaponPass.mat_leather offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, tier) == 980, "hsmp_WeaponPass.tier offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, head_size) == 984, "hsmp_WeaponPass.head_size offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, guard_size) == 996, "hsmp_WeaponPass.guard_size offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, grip_size) == 1008, "hsmp_WeaponPass.grip_size offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, pommel_size) == 1020, "hsmp_WeaponPass.pommel_size offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, mass_head) == 1032, "hsmp_WeaponPass.mass_head offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, mass_guard) == 1036, "hsmp_WeaponPass.mass_guard offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, mass_grip) == 1040, "hsmp_WeaponPass.mass_grip offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, mass_pommel) == 1044, "hsmp_WeaponPass.mass_pommel offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, price) == 1048, "hsmp_WeaponPass.price offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, color_wood) == 1052, "hsmp_WeaponPass.color_wood offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, color_leather) == 1068, "hsmp_WeaponPass.color_leather offset");
+HSMP_SA(offsetof(hsmp_WeaponPass, _r) == 1084, "hsmp_WeaponPass._r offset");
+
 typedef struct hsmp_DynEntry {
     uint32_t id;
     uint32_t chash;
     float pos[3];
     uint32_t dyn_owner;
     char class_path[200];
+    uint8_t has_passport;
+    uint8_t _r[7];
+    hsmp_WeaponPass passport;
 } hsmp_DynEntry;
-HSMP_SA(sizeof(hsmp_DynEntry) == 224, "hsmp_DynEntry size");
+HSMP_SA(sizeof(hsmp_DynEntry) == 1320, "hsmp_DynEntry size");
 HSMP_SA(offsetof(hsmp_DynEntry, id) == 0, "hsmp_DynEntry.id offset");
 HSMP_SA(offsetof(hsmp_DynEntry, chash) == 4, "hsmp_DynEntry.chash offset");
 HSMP_SA(offsetof(hsmp_DynEntry, pos) == 8, "hsmp_DynEntry.pos offset");
 HSMP_SA(offsetof(hsmp_DynEntry, dyn_owner) == 20, "hsmp_DynEntry.dyn_owner offset");
 HSMP_SA(offsetof(hsmp_DynEntry, class_path) == 24, "hsmp_DynEntry.class_path offset");
+HSMP_SA(offsetof(hsmp_DynEntry, has_passport) == 224, "hsmp_DynEntry.has_passport offset");
+HSMP_SA(offsetof(hsmp_DynEntry, _r) == 225, "hsmp_DynEntry._r offset");
+HSMP_SA(offsetof(hsmp_DynEntry, passport) == 232, "hsmp_DynEntry.passport offset");
 
 typedef struct hsmp_HashHead {
     uint32_t level;
@@ -1564,62 +1740,6 @@ HSMP_SA(offsetof(hsmp_KitRules, budget) == 12, "hsmp_KitRules.budget offset");
 HSMP_SA(offsetof(hsmp_KitRules, mode) == 14, "hsmp_KitRules.mode offset");
 HSMP_SA(offsetof(hsmp_KitRules, _r) == 15, "hsmp_KitRules._r offset");
 
-typedef struct hsmp_WeaponPass {
-    char class_[128];
-    char head_sub1[128];
-    char head_sub2[128];
-    char head[128];
-    char guard[128];
-    char pommel[128];
-    char grip[128];
-    char name[64];
-    int32_t id;
-    int32_t mat_steel;
-    int32_t mat_colored;
-    int32_t mat_wood;
-    int32_t mat_leather;
-    int32_t tier;
-    float head_size[3];
-    float guard_size[3];
-    float grip_size[3];
-    float pommel_size[3];
-    float mass_head;
-    float mass_guard;
-    float mass_grip;
-    float mass_pommel;
-    float price;
-    float color_wood[4];
-    float color_leather[4];
-    uint32_t _r;
-} hsmp_WeaponPass;
-HSMP_SA(sizeof(hsmp_WeaponPass) == 1088, "hsmp_WeaponPass size");
-HSMP_SA(offsetof(hsmp_WeaponPass, class_) == 0, "hsmp_WeaponPass.class_ offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, head_sub1) == 128, "hsmp_WeaponPass.head_sub1 offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, head_sub2) == 256, "hsmp_WeaponPass.head_sub2 offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, head) == 384, "hsmp_WeaponPass.head offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, guard) == 512, "hsmp_WeaponPass.guard offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, pommel) == 640, "hsmp_WeaponPass.pommel offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, grip) == 768, "hsmp_WeaponPass.grip offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, name) == 896, "hsmp_WeaponPass.name offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, id) == 960, "hsmp_WeaponPass.id offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, mat_steel) == 964, "hsmp_WeaponPass.mat_steel offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, mat_colored) == 968, "hsmp_WeaponPass.mat_colored offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, mat_wood) == 972, "hsmp_WeaponPass.mat_wood offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, mat_leather) == 976, "hsmp_WeaponPass.mat_leather offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, tier) == 980, "hsmp_WeaponPass.tier offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, head_size) == 984, "hsmp_WeaponPass.head_size offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, guard_size) == 996, "hsmp_WeaponPass.guard_size offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, grip_size) == 1008, "hsmp_WeaponPass.grip_size offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, pommel_size) == 1020, "hsmp_WeaponPass.pommel_size offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, mass_head) == 1032, "hsmp_WeaponPass.mass_head offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, mass_guard) == 1036, "hsmp_WeaponPass.mass_guard offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, mass_grip) == 1040, "hsmp_WeaponPass.mass_grip offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, mass_pommel) == 1044, "hsmp_WeaponPass.mass_pommel offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, price) == 1048, "hsmp_WeaponPass.price offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, color_wood) == 1052, "hsmp_WeaponPass.color_wood offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, color_leather) == 1068, "hsmp_WeaponPass.color_leather offset");
-HSMP_SA(offsetof(hsmp_WeaponPass, _r) == 1084, "hsmp_WeaponPass._r offset");
-
 typedef struct hsmp_LoadoutHead {
     uint32_t version;
     uint16_t n;
@@ -1723,6 +1843,36 @@ HSMP_SA(sizeof(hsmp_BodyBone) == 40, "hsmp_BodyBone size");
 HSMP_SA(offsetof(hsmp_BodyBone, bone) == 0, "hsmp_BodyBone.bone offset");
 HSMP_SA(offsetof(hsmp_BodyBone, mass) == 32, "hsmp_BodyBone.mass offset");
 HSMP_SA(offsetof(hsmp_BodyBone, mass_scale) == 36, "hsmp_BodyBone.mass_scale offset");
+
+typedef struct hsmp_Body2Head {
+    uint64_t match_id;
+    uint32_t round;
+    uint16_t life;
+    uint16_t n;
+    uint32_t version;
+    float height_rate;
+    float muscle_rate;
+    float mass_scale_bp;
+    float char_scale[3];
+    float native_height;
+    float actor_scale[3];
+    uint32_t _r;
+    char pawn[64];
+} hsmp_Body2Head;
+HSMP_SA(sizeof(hsmp_Body2Head) == 128, "hsmp_Body2Head size");
+HSMP_SA(offsetof(hsmp_Body2Head, match_id) == 0, "hsmp_Body2Head.match_id offset");
+HSMP_SA(offsetof(hsmp_Body2Head, round) == 8, "hsmp_Body2Head.round offset");
+HSMP_SA(offsetof(hsmp_Body2Head, life) == 12, "hsmp_Body2Head.life offset");
+HSMP_SA(offsetof(hsmp_Body2Head, n) == 14, "hsmp_Body2Head.n offset");
+HSMP_SA(offsetof(hsmp_Body2Head, version) == 16, "hsmp_Body2Head.version offset");
+HSMP_SA(offsetof(hsmp_Body2Head, height_rate) == 20, "hsmp_Body2Head.height_rate offset");
+HSMP_SA(offsetof(hsmp_Body2Head, muscle_rate) == 24, "hsmp_Body2Head.muscle_rate offset");
+HSMP_SA(offsetof(hsmp_Body2Head, mass_scale_bp) == 28, "hsmp_Body2Head.mass_scale_bp offset");
+HSMP_SA(offsetof(hsmp_Body2Head, char_scale) == 32, "hsmp_Body2Head.char_scale offset");
+HSMP_SA(offsetof(hsmp_Body2Head, native_height) == 44, "hsmp_Body2Head.native_height offset");
+HSMP_SA(offsetof(hsmp_Body2Head, actor_scale) == 48, "hsmp_Body2Head.actor_scale offset");
+HSMP_SA(offsetof(hsmp_Body2Head, _r) == 60, "hsmp_Body2Head._r offset");
+HSMP_SA(offsetof(hsmp_Body2Head, pawn) == 64, "hsmp_Body2Head.pawn offset");
 
 typedef struct hsmp_KitStatus {
     double t;
@@ -2028,7 +2178,7 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_REC_ROOT 0x0110u /* Root */
 #define HSMP_REC_WEAPON 0x0111u /* Weapon */
 #define HSMP_REC_POSE 0x0112u /* PoseHead */
-#define HSMP_REC_POSE_MAX_ROWS 640u
+#define HSMP_REC_POSE_MAX_ROWS 1120u
 #define HSMP_REC_PEER_ROOT 0x0113u /* PeerRoot */
 #define HSMP_REC_PUPPETS 0x0150u /* Puppets */
 #define HSMP_REC_PUPPETS_MAX_ROWS 32u
@@ -2058,6 +2208,7 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_REC_DIRECTOR 0x0231u /* DirectorState */
 #define HSMP_REC_CONN_STATE 0x0232u /* ConnState */
 #define HSMP_REC_SPECTATE 0x0233u /* Spectate */
+#define HSMP_REC_SURRENDER_HOLD 0x023bu /* SurrenderHold */
 #define HSMP_REC_SPAWN_STATUS 0x0234u /* SpawnStatus */
 #define HSMP_REC_SPAWN_REQUEST 0x0235u /* SpawnRequest */
 #define HSMP_REC_TRAVEL_REQUEST 0x0236u /* TravelRequest */
@@ -2076,6 +2227,8 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_REC_HITFX_IN_MAX_ROWS 24u
 #define HSMP_REC_DAMAGE_VERDICT 0x0313u /* DamageVerdict */
 #define HSMP_REC_DAMAGE_ACK 0x0314u /* DamageAck */
+#define HSMP_REC_REPLAY_OUTCOME 0x0315u /* ReplayOutcome */
+#define HSMP_REC_REPLAY_OUTCOME_ACK 0x0316u /* ReplayOutcome */
 #define HSMP_REC_CLASH 0x0318u /* Clash */
 #define HSMP_REC_TOUCH 0x0319u /* Clash */
 #define HSMP_REC_DEATH_REPORT 0x0320u /* DeathReport */
@@ -2114,6 +2267,8 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_REC_LOADOUT_MAX_ROWS 48u
 #define HSMP_REC_BODY 0x0515u /* BodyHead */
 #define HSMP_REC_BODY_MAX_ROWS 24u
+#define HSMP_REC_BODY2 0x0516u /* Body2Head */
+#define HSMP_REC_BODY2_MAX_ROWS 24u
 #define HSMP_REC_KIT_STATUS 0x0520u /* KitStatus */
 #define HSMP_REC_STANDIN_WEAPONS 0x0521u /* StandinWeapons */
 #define HSMP_REC_INTERACT 0x0610u /* Interact */
@@ -2269,6 +2424,13 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_VERDICT_KIND_CONFIRM 1u
 #define HSMP_VERDICT_KIND_FINAL 2u
 #define HSMP_VERDICT_KIND_CLASH 3u
+#define HSMP_REPLAY_STATUS_CHANGED 1u
+#define HSMP_REPLAY_STATUS_NO_OBSERVED_CHANGE 2u
+#define HSMP_REPLAY_STATUS_STALE_CONTEXT 3u
+#define HSMP_REPLAY_STATUS_SOURCE_MISSING 4u
+#define HSMP_REPLAY_STATUS_INACTIVE 5u
+#define HSMP_REPLAY_STATUS_UNCERTAIN 6u
+#define HSMP_REPLAY_STATUS_EXPIRED 7u
 #define HSMP_DAMAGE_REASON_OK 0u
 #define HSMP_DAMAGE_REASON_CONFIRM 1u
 #define HSMP_DAMAGE_REASON_CLASH 2u
@@ -2329,11 +2491,23 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_VITALS_FLAG_DOWNED 4u
 #define HSMP_VITALS_FLAG_HEADLESS 8u
 #define HSMP_VITALS_FLAG_PAIN_SHOCK 16u
+#define HSMP_VITALS_FLAG_HEAD_IMPAIRED 32u
+#define HSMP_VITALS_FLAG_NECK_IMPAIRED 64u
+#define HSMP_VITALS_FLAG_BACK_IMPAIRED 128u
+#define HSMP_VITALS_FLAG_ARM_R_IMPAIRED 256u
+#define HSMP_VITALS_FLAG_ARM_L_IMPAIRED 512u
+#define HSMP_VITALS_FLAG_LEG_R_IMPAIRED 1024u
+#define HSMP_VITALS_FLAG_LEG_L_IMPAIRED 2048u
 #define HSMP_DEATH_CAUSE_REPORTED 0u
 #define HSMP_DEATH_CAUSE_DAMAGE 1u
 #define HSMP_DEATH_CAUSE_VITALS 2u
 #define HSMP_DEATH_CAUSE_LEFT 3u
 #define HSMP_DEATH_CAUSE_ZONE 4u
+#define HSMP_DEATH_CAUSE_DEFEAT 5u
+#define HSMP_DEATH_CAUSE_SURRENDER 6u
+#define HSMP_DEATH_REPORT_REASON_DEATH 0u
+#define HSMP_DEATH_REPORT_REASON_DEFEAT 1u
+#define HSMP_DEATH_REPORT_REASON_SURRENDER 2u
 #define HSMP_WORLD_MODE_FREE 0u
 #define HSMP_WORLD_MODE_TOUCH 1u
 #define HSMP_WORLD_MODE_HOLD_R 2u
@@ -2490,6 +2664,10 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_OFF_GAME_OUT_LOCAL_ROOT_DATA_BODY_VEL 0x1094u
 #define HSMP_STRIDE_GAME_OUT_LOCAL_ROOT_DATA_BODY_VEL 0x4u
 #define HSMP_COUNT_GAME_OUT_LOCAL_ROOT_DATA_BODY_VEL 3u
+#define HSMP_OFF_GAME_OUT_LOCAL_ROOT_DATA_BODY_MATCH_ID 0x10a0u
+#define HSMP_OFF_GAME_OUT_LOCAL_ROOT_DATA_BODY_ROUND 0x10a8u
+#define HSMP_OFF_GAME_OUT_LOCAL_ROOT_DATA_BODY_LIFE 0x10acu
+#define HSMP_OFF_GAME_OUT_LOCAL_ROOT_DATA_BODY__R 0x10aeu
 #define HSMP_OFF_GAME_OUT_LOCAL_WEAPON 0x10c0u
 #define HSMP_OFF_GAME_OUT_LOCAL_WEAPON_SEQ 0x10c0u
 #define HSMP_OFF_GAME_OUT_LOCAL_WEAPON_DATA 0x1100u
@@ -2537,822 +2715,976 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_OFF_GAME_OUT_LOCAL_POSE_DATA_BODY_HEAD__R 0x11eeu
 #define HSMP_OFF_GAME_OUT_LOCAL_POSE_DATA_BODY_ROWS 0x11f0u
 #define HSMP_STRIDE_GAME_OUT_LOCAL_POSE_DATA_BODY_ROWS 0x1u
-#define HSMP_COUNT_GAME_OUT_LOCAL_POSE_DATA_BODY_ROWS 640u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD 0x1480u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_SEQ 0x1480u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA 0x14c0u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META 0x14c0u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_WRITER_EPOCH 0x14c0u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_WORLD_EPOCH 0x14c8u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_SESSION_EPOCH 0x14ccu
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_VALID 0x14d0u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_SAMPLE_SEQ 0x14d4u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_T_US 0x14d8u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_LEAD_MS 0x14e0u
-#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA__R 0x14e4u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS 0x1500u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_SEQ 0x1500u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA 0x1540u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META 0x1540u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_WRITER_EPOCH 0x1540u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_WORLD_EPOCH 0x1548u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_SESSION_EPOCH 0x154cu
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_VALID 0x1550u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_SAMPLE_SEQ 0x1554u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_T_US 0x1558u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_LEN 0x1560u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_KIND 0x1564u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY 0x1568u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_SEQ 0x1568u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_DISM 0x156cu
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_FLAGS 0x1570u
-#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_V 0x1572u
+#define HSMP_COUNT_GAME_OUT_LOCAL_POSE_DATA_BODY_ROWS 1120u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD 0x1680u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_SEQ 0x1680u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA 0x16c0u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META 0x16c0u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_WRITER_EPOCH 0x16c0u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_WORLD_EPOCH 0x16c8u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_SESSION_EPOCH 0x16ccu
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_VALID 0x16d0u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_SAMPLE_SEQ 0x16d4u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_META_T_US 0x16d8u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA_LEAD_MS 0x16e0u
+#define HSMP_OFF_GAME_OUT_POSE_LEAD_DATA__R 0x16e4u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS 0x1700u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_SEQ 0x1700u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA 0x1740u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META 0x1740u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_WRITER_EPOCH 0x1740u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_WORLD_EPOCH 0x1748u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_SESSION_EPOCH 0x174cu
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_VALID 0x1750u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_SAMPLE_SEQ 0x1754u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_META_T_US 0x1758u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_LEN 0x1760u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_KIND 0x1764u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY 0x1768u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_SEQ 0x1768u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_DISM 0x176cu
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_FLAGS 0x1770u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_V 0x1772u
 #define HSMP_STRIDE_GAME_OUT_LOCAL_VITALS_DATA_BODY_V 0x2u
 #define HSMP_COUNT_GAME_OUT_LOCAL_VITALS_DATA_BODY_V 19u
-#define HSMP_OFF_GAME_OUT_KIT 0x15c0u
-#define HSMP_OFF_GAME_OUT_KIT_SEQ 0x15c0u
-#define HSMP_OFF_GAME_OUT_KIT_DATA 0x1600u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_META 0x1600u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_META_WRITER_EPOCH 0x1600u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_META_WORLD_EPOCH 0x1608u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_META_SESSION_EPOCH 0x160cu
-#define HSMP_OFF_GAME_OUT_KIT_DATA_META_VALID 0x1610u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_META_SAMPLE_SEQ 0x1614u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_META_T_US 0x1618u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_LEN 0x1620u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_KIND 0x1624u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY 0x1628u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD 0x1628u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_REV 0x1628u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_SEQ 0x1630u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_N 0x1634u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_VERDICT 0x1636u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD__R 0x1637u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_COS 0x1638u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_MATCH_ID 0x1798u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_ROUND 0x17a0u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY_LIFE 0x17a4u
+#define HSMP_OFF_GAME_OUT_LOCAL_VITALS_DATA_BODY__LIFE_R 0x17a6u
+#define HSMP_STRIDE_GAME_OUT_LOCAL_VITALS_DATA_BODY__LIFE_R 0x1u
+#define HSMP_COUNT_GAME_OUT_LOCAL_VITALS_DATA_BODY__LIFE_R 2u
+#define HSMP_OFF_GAME_OUT_KIT 0x17c0u
+#define HSMP_OFF_GAME_OUT_KIT_SEQ 0x17c0u
+#define HSMP_OFF_GAME_OUT_KIT_DATA 0x1800u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_META 0x1800u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_META_WRITER_EPOCH 0x1800u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_META_WORLD_EPOCH 0x1808u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_META_SESSION_EPOCH 0x180cu
+#define HSMP_OFF_GAME_OUT_KIT_DATA_META_VALID 0x1810u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_META_SAMPLE_SEQ 0x1814u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_META_T_US 0x1818u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_LEN 0x1820u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_KIND 0x1824u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY 0x1828u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD 0x1828u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_REV 0x1828u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_SEQ 0x1830u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_N 0x1834u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_VERDICT 0x1836u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD__R 0x1837u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_COS 0x1838u
 #define HSMP_STRIDE_GAME_OUT_KIT_DATA_BODY_HEAD_COS 0x1u
 #define HSMP_COUNT_GAME_OUT_KIT_DATA_BODY_HEAD_COS 4u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD__R2 0x163cu
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_CLASS 0x1640u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_R 0x1660u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_L 0x1680u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_REASON 0x16a0u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_ROWS 0x1700u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD__R2 0x183cu
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_CLASS 0x1840u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_R 0x1860u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_L 0x1880u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_HEAD_REASON 0x18a0u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_ROWS 0x1900u
 #define HSMP_STRIDE_GAME_OUT_KIT_DATA_BODY_ROWS 0x20u
 #define HSMP_COUNT_GAME_OUT_KIT_DATA_BODY_ROWS 16u
-#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_ROWS_0_ID 0x1700u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ 0x1900u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_SEQ 0x1900u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA 0x1940u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META 0x1940u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_WRITER_EPOCH 0x1940u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_WORLD_EPOCH 0x1948u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_SESSION_EPOCH 0x194cu
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_VALID 0x1950u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_SAMPLE_SEQ 0x1954u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_T_US 0x1958u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_LEN 0x1960u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_KIND 0x1964u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY 0x1968u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY_REV 0x1968u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY_SEQ 0x1970u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY_BUDGET 0x1974u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY_MODE 0x1976u
-#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY__R 0x1977u
-#define HSMP_OFF_GAME_OUT_BODY 0x1980u
-#define HSMP_OFF_GAME_OUT_BODY_SEQ 0x1980u
-#define HSMP_OFF_GAME_OUT_BODY_DATA 0x19c0u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_META 0x19c0u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_META_WRITER_EPOCH 0x19c0u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_META_WORLD_EPOCH 0x19c8u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_META_SESSION_EPOCH 0x19ccu
-#define HSMP_OFF_GAME_OUT_BODY_DATA_META_VALID 0x19d0u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_META_SAMPLE_SEQ 0x19d4u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_META_T_US 0x19d8u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_LEN 0x19e0u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_KIND 0x19e4u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY 0x19e8u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD 0x19e8u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_VERSION 0x19e8u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_N 0x19ecu
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD__R 0x19eeu
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_HEIGHT_RATE 0x19f0u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_MUSCLE_RATE 0x19f4u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_MASS_SCALE_BP 0x19f8u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD__R2 0x19fcu
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_CHAR_SCALE 0x1a00u
+#define HSMP_OFF_GAME_OUT_KIT_DATA_BODY_ROWS_0_ID 0x1900u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ 0x1b00u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_SEQ 0x1b00u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA 0x1b40u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META 0x1b40u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_WRITER_EPOCH 0x1b40u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_WORLD_EPOCH 0x1b48u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_SESSION_EPOCH 0x1b4cu
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_VALID 0x1b50u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_SAMPLE_SEQ 0x1b54u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_META_T_US 0x1b58u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_LEN 0x1b60u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_KIND 0x1b64u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY 0x1b68u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY_REV 0x1b68u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY_SEQ 0x1b70u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY_BUDGET 0x1b74u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY_MODE 0x1b76u
+#define HSMP_OFF_GAME_OUT_KIT_RULES_REQ_DATA_BODY__R 0x1b77u
+#define HSMP_OFF_GAME_OUT_BODY 0x1b80u
+#define HSMP_OFF_GAME_OUT_BODY_SEQ 0x1b80u
+#define HSMP_OFF_GAME_OUT_BODY_DATA 0x1bc0u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_META 0x1bc0u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_META_WRITER_EPOCH 0x1bc0u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_META_WORLD_EPOCH 0x1bc8u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_META_SESSION_EPOCH 0x1bccu
+#define HSMP_OFF_GAME_OUT_BODY_DATA_META_VALID 0x1bd0u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_META_SAMPLE_SEQ 0x1bd4u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_META_T_US 0x1bd8u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_LEN 0x1be0u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_KIND 0x1be4u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY 0x1be8u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD 0x1be8u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_VERSION 0x1be8u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_N 0x1becu
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD__R 0x1beeu
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_HEIGHT_RATE 0x1bf0u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_MUSCLE_RATE 0x1bf4u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_MASS_SCALE_BP 0x1bf8u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD__R2 0x1bfcu
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD_CHAR_SCALE 0x1c00u
 #define HSMP_STRIDE_GAME_OUT_BODY_DATA_BODY_HEAD_CHAR_SCALE 0x4u
 #define HSMP_COUNT_GAME_OUT_BODY_DATA_BODY_HEAD_CHAR_SCALE 3u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD__R3 0x1a0cu
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_ROWS 0x1a10u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_HEAD__R3 0x1c0cu
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_ROWS 0x1c10u
 #define HSMP_STRIDE_GAME_OUT_BODY_DATA_BODY_ROWS 0x28u
 #define HSMP_COUNT_GAME_OUT_BODY_DATA_BODY_ROWS 24u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_ROWS_0_BONE 0x1a10u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_ROWS_0_MASS 0x1a30u
-#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_ROWS_0_MASS_SCALE 0x1a34u
-#define HSMP_OFF_GAME_BLOBS 0x2000u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT 0x2000u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_MIDDLE 0x2000u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_W_BACK 0x2004u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_W_GEN 0x2008u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_R_FRONT 0x200cu
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_R_GEN 0x2010u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS 0x2040u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_ROWS_0_BONE 0x1c10u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_ROWS_0_MASS 0x1c30u
+#define HSMP_OFF_GAME_OUT_BODY_DATA_BODY_ROWS_0_MASS_SCALE 0x1c34u
+#define HSMP_OFF_GAME_OUT_BODY2 0x2000u
+#define HSMP_OFF_GAME_OUT_BODY2_SEQ 0x2000u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA 0x2040u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_META 0x2040u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_META_WRITER_EPOCH 0x2040u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_META_WORLD_EPOCH 0x2048u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_META_SESSION_EPOCH 0x204cu
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_META_VALID 0x2050u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_META_SAMPLE_SEQ 0x2054u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_META_T_US 0x2058u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_LEN 0x2060u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_KIND 0x2064u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY 0x2068u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD 0x2068u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_MATCH_ID 0x2068u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_ROUND 0x2070u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_LIFE 0x2074u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_N 0x2076u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_VERSION 0x2078u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_HEIGHT_RATE 0x207cu
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_MUSCLE_RATE 0x2080u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_MASS_SCALE_BP 0x2084u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_CHAR_SCALE 0x2088u
+#define HSMP_STRIDE_GAME_OUT_BODY2_DATA_BODY_HEAD_CHAR_SCALE 0x4u
+#define HSMP_COUNT_GAME_OUT_BODY2_DATA_BODY_HEAD_CHAR_SCALE 3u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_NATIVE_HEIGHT 0x2094u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_ACTOR_SCALE 0x2098u
+#define HSMP_STRIDE_GAME_OUT_BODY2_DATA_BODY_HEAD_ACTOR_SCALE 0x4u
+#define HSMP_COUNT_GAME_OUT_BODY2_DATA_BODY_HEAD_ACTOR_SCALE 3u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD__R 0x20a4u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_HEAD_PAWN 0x20a8u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_ROWS 0x20e8u
+#define HSMP_STRIDE_GAME_OUT_BODY2_DATA_BODY_ROWS 0x28u
+#define HSMP_COUNT_GAME_OUT_BODY2_DATA_BODY_ROWS 24u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_ROWS_0_BONE 0x20e8u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_ROWS_0_MASS 0x2108u
+#define HSMP_OFF_GAME_OUT_BODY2_DATA_BODY_ROWS_0_MASS_SCALE 0x210cu
+#define HSMP_OFF_GAME_BLOBS 0x3000u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT 0x3000u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_MIDDLE 0x3000u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_W_BACK 0x3004u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_W_GEN 0x3008u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_R_FRONT 0x300cu
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_R_GEN 0x3010u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS 0x3040u
 #define HSMP_STRIDE_GAME_BLOBS_WORLD_OUT_BUFS 0x440u
 #define HSMP_COUNT_GAME_BLOBS_WORLD_OUT_BUFS 3u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META 0x2040u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_WRITER_EPOCH 0x2040u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_WORLD_EPOCH 0x2048u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_SESSION_EPOCH 0x204cu
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_VALID 0x2050u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_SAMPLE_SEQ 0x2054u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_T_US 0x2058u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_LEN 0x2060u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_KIND 0x2064u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY 0x2068u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD 0x2068u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_LEVEL 0x2068u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_EPOCH 0x206cu
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_SEQ 0x2070u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_TS 0x2074u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_N 0x2078u
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD__R 0x207au
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD__R2 0x207cu
-#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_ROWS 0x2080u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META 0x3040u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_WRITER_EPOCH 0x3040u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_WORLD_EPOCH 0x3048u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_SESSION_EPOCH 0x304cu
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_VALID 0x3050u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_SAMPLE_SEQ 0x3054u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_META_T_US 0x3058u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_LEN 0x3060u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_KIND 0x3064u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY 0x3068u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD 0x3068u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_LEVEL 0x3068u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_EPOCH 0x306cu
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_SEQ 0x3070u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_TS 0x3074u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD_N 0x3078u
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD__R 0x307au
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_HEAD__R2 0x307cu
+#define HSMP_OFF_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_ROWS 0x3080u
 #define HSMP_STRIDE_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_ROWS 0x20u
 #define HSMP_COUNT_GAME_BLOBS_WORLD_OUT_BUFS_0_BODY_ROWS 32u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT 0x2d00u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_MIDDLE 0x2d00u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_W_BACK 0x2d04u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_W_GEN 0x2d08u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_R_FRONT 0x2d0cu
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_R_GEN 0x2d10u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS 0x2d40u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT 0x3d00u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_MIDDLE 0x3d00u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_W_BACK 0x3d04u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_W_GEN 0x3d08u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_R_FRONT 0x3d0cu
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_R_GEN 0x3d10u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS 0x3d40u
 #define HSMP_STRIDE_GAME_BLOBS_LOADOUT_BUFS 0x38b0u
 #define HSMP_COUNT_GAME_BLOBS_LOADOUT_BUFS 3u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META 0x2d40u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_WRITER_EPOCH 0x2d40u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_WORLD_EPOCH 0x2d48u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_SESSION_EPOCH 0x2d4cu
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_VALID 0x2d50u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_SAMPLE_SEQ 0x2d54u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_T_US 0x2d58u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_LEN 0x2d60u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_KIND 0x2d64u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY 0x2d68u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD 0x2d68u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_VERSION 0x2d68u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_N 0x2d6cu
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_FLAGS 0x2d6eu
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD__R 0x2d6fu
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_R 0x2d70u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_L 0x31b0u
-#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_ROWS 0x35f0u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META 0x3d40u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_WRITER_EPOCH 0x3d40u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_WORLD_EPOCH 0x3d48u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_SESSION_EPOCH 0x3d4cu
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_VALID 0x3d50u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_SAMPLE_SEQ 0x3d54u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_META_T_US 0x3d58u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_LEN 0x3d60u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_KIND 0x3d64u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY 0x3d68u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD 0x3d68u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_VERSION 0x3d68u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_N 0x3d6cu
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_FLAGS 0x3d6eu
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD__R 0x3d6fu
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_R 0x3d70u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_HEAD_L 0x41b0u
+#define HSMP_OFF_GAME_BLOBS_LOADOUT_BUFS_0_BODY_ROWS 0x45f0u
 #define HSMP_STRIDE_GAME_BLOBS_LOADOUT_BUFS_0_BODY_ROWS 0x100u
 #define HSMP_COUNT_GAME_BLOBS_LOADOUT_BUFS_0_BODY_ROWS 48u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT 0xd780u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_MIDDLE 0xd780u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_W_BACK 0xd784u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_W_GEN 0xd788u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_R_FRONT 0xd78cu
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_R_GEN 0xd790u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS 0xd7c0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT 0xe780u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_MIDDLE 0xe780u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_W_BACK 0xe784u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_W_GEN 0xe788u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_R_FRONT 0xe78cu
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_R_GEN 0xe790u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS 0xe7c0u
 #define HSMP_STRIDE_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS 0x9038u
 #define HSMP_COUNT_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS 3u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META 0xd7c0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_WRITER_EPOCH 0xd7c0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_WORLD_EPOCH 0xd7c8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_SESSION_EPOCH 0xd7ccu
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_VALID 0xd7d0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_SAMPLE_SEQ 0xd7d4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_T_US 0xd7d8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_LEN 0xd7e0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_KIND 0xd7e4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY 0xd7e8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD 0xd7e8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD_LEVEL 0xd7e8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD_EPOCH 0xd7ecu
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD_REQ 0xd7f0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD_N 0xd7f4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD__R 0xd7f6u
-#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_ROWS 0xd7f8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META 0xe7c0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_WRITER_EPOCH 0xe7c0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_WORLD_EPOCH 0xe7c8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_SESSION_EPOCH 0xe7ccu
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_VALID 0xe7d0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_SAMPLE_SEQ 0xe7d4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_META_T_US 0xe7d8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_LEN 0xe7e0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_KIND 0xe7e4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY 0xe7e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD 0xe7e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD_LEVEL 0xe7e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD_EPOCH 0xe7ecu
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD_REQ 0xe7f0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD_N 0xe7f4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_HEAD__R 0xe7f6u
+#define HSMP_OFF_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_ROWS 0xe7f8u
 #define HSMP_STRIDE_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_ROWS 0x18u
 #define HSMP_COUNT_GAME_BLOBS_WORLD_MANIFEST_OUT_BUFS_0_BODY_ROWS 1536u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT 0x28880u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_MIDDLE 0x28880u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_W_BACK 0x28884u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_W_GEN 0x28888u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_R_FRONT 0x2888cu
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_R_GEN 0x28890u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS 0x288c0u
-#define HSMP_STRIDE_GAME_BLOBS_WORLD_DYN_OUT_BUFS 0x1c38u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT 0x29880u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_MIDDLE 0x29880u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_W_BACK 0x29884u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_W_GEN 0x29888u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_R_FRONT 0x2988cu
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_R_GEN 0x29890u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS 0x298c0u
+#define HSMP_STRIDE_GAME_BLOBS_WORLD_DYN_OUT_BUFS 0xa538u
 #define HSMP_COUNT_GAME_BLOBS_WORLD_DYN_OUT_BUFS 3u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META 0x288c0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_WRITER_EPOCH 0x288c0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_WORLD_EPOCH 0x288c8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_SESSION_EPOCH 0x288ccu
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_VALID 0x288d0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_SAMPLE_SEQ 0x288d4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_T_US 0x288d8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_LEN 0x288e0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_KIND 0x288e4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY 0x288e8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD 0x288e8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD_LEVEL 0x288e8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD_EPOCH 0x288ecu
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD_REQ 0x288f0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD_N 0x288f4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD__R 0x288f6u
-#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_ROWS 0x288f8u
-#define HSMP_STRIDE_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_ROWS 0xe0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META 0x298c0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_WRITER_EPOCH 0x298c0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_WORLD_EPOCH 0x298c8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_SESSION_EPOCH 0x298ccu
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_VALID 0x298d0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_SAMPLE_SEQ 0x298d4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_META_T_US 0x298d8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_LEN 0x298e0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_KIND 0x298e4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY 0x298e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD 0x298e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD_LEVEL 0x298e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD_EPOCH 0x298ecu
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD_REQ 0x298f0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD_N 0x298f4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_HEAD__R 0x298f6u
+#define HSMP_OFF_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_ROWS 0x298f8u
+#define HSMP_STRIDE_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_ROWS 0x528u
 #define HSMP_COUNT_GAME_BLOBS_WORLD_DYN_OUT_BUFS_0_BODY_ROWS 32u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH 0x2dd80u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_MIDDLE 0x2dd80u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_W_BACK 0x2dd84u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_W_GEN 0x2dd88u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_R_FRONT 0x2dd8cu
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_R_GEN 0x2dd90u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS 0x2ddc0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH 0x48880u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_MIDDLE 0x48880u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_W_BACK 0x48884u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_W_GEN 0x48888u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_R_FRONT 0x4888cu
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_R_GEN 0x48890u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS 0x488c0u
 #define HSMP_STRIDE_GAME_BLOBS_WORLD_HASH_BUFS 0xfa40u
 #define HSMP_COUNT_GAME_BLOBS_WORLD_HASH_BUFS 3u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META 0x2ddc0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_WRITER_EPOCH 0x2ddc0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_WORLD_EPOCH 0x2ddc8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_SESSION_EPOCH 0x2ddccu
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_VALID 0x2ddd0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_SAMPLE_SEQ 0x2ddd4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_T_US 0x2ddd8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_LEN 0x2dde0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_KIND 0x2dde4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY 0x2dde8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD 0x2dde8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_LEVEL 0x2dde8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_EPOCH 0x2ddecu
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_SEQ 0x2ddf0u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_HASH 0x2ddf4u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_N 0x2ddf8u
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD__R 0x2ddfau
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD__R2 0x2ddfcu
-#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_ROWS 0x2de00u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META 0x488c0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_WRITER_EPOCH 0x488c0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_WORLD_EPOCH 0x488c8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_SESSION_EPOCH 0x488ccu
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_VALID 0x488d0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_SAMPLE_SEQ 0x488d4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_META_T_US 0x488d8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_LEN 0x488e0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_KIND 0x488e4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY 0x488e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD 0x488e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_LEVEL 0x488e8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_EPOCH 0x488ecu
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_SEQ 0x488f0u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_HASH 0x488f4u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD_N 0x488f8u
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD__R 0x488fau
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_HEAD__R2 0x488fcu
+#define HSMP_OFF_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_ROWS 0x48900u
 #define HSMP_STRIDE_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_ROWS 0x20u
 #define HSMP_COUNT_GAME_BLOBS_WORLD_HASH_BUFS_0_BODY_ROWS 2000u
-#define HSMP_OFF_PEERS 0x5d000u
-#define HSMP_OFF_PEERS_DIR 0x5d000u
-#define HSMP_OFF_PEERS_DIR_SEQ 0x5d000u
-#define HSMP_OFF_PEERS_DIR_DATA 0x5d040u
-#define HSMP_OFF_PEERS_DIR_DATA_META 0x5d040u
-#define HSMP_OFF_PEERS_DIR_DATA_META_WRITER_EPOCH 0x5d040u
-#define HSMP_OFF_PEERS_DIR_DATA_META_WORLD_EPOCH 0x5d048u
-#define HSMP_OFF_PEERS_DIR_DATA_META_SESSION_EPOCH 0x5d04cu
-#define HSMP_OFF_PEERS_DIR_DATA_META_VALID 0x5d050u
-#define HSMP_OFF_PEERS_DIR_DATA_META_SAMPLE_SEQ 0x5d054u
-#define HSMP_OFF_PEERS_DIR_DATA_META_T_US 0x5d058u
-#define HSMP_OFF_PEERS_DIR_DATA_COUNT 0x5d060u
-#define HSMP_OFF_PEERS_DIR_DATA_DIR_GEN 0x5d064u
-#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES 0x5d068u
+#define HSMP_OFF_PEERS 0x78000u
+#define HSMP_OFF_PEERS_DIR 0x78000u
+#define HSMP_OFF_PEERS_DIR_SEQ 0x78000u
+#define HSMP_OFF_PEERS_DIR_DATA 0x78040u
+#define HSMP_OFF_PEERS_DIR_DATA_META 0x78040u
+#define HSMP_OFF_PEERS_DIR_DATA_META_WRITER_EPOCH 0x78040u
+#define HSMP_OFF_PEERS_DIR_DATA_META_WORLD_EPOCH 0x78048u
+#define HSMP_OFF_PEERS_DIR_DATA_META_SESSION_EPOCH 0x7804cu
+#define HSMP_OFF_PEERS_DIR_DATA_META_VALID 0x78050u
+#define HSMP_OFF_PEERS_DIR_DATA_META_SAMPLE_SEQ 0x78054u
+#define HSMP_OFF_PEERS_DIR_DATA_META_T_US 0x78058u
+#define HSMP_OFF_PEERS_DIR_DATA_COUNT 0x78060u
+#define HSMP_OFF_PEERS_DIR_DATA_DIR_GEN 0x78064u
+#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES 0x78068u
 #define HSMP_STRIDE_PEERS_DIR_DATA_ENTRIES 0x48u
 #define HSMP_COUNT_PEERS_DIR_DATA_ENTRIES 32u
-#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_PEER_ID 0x5d068u
-#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_GEN 0x5d06cu
-#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_ACTIVE 0x5d070u
-#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_NICK_LEN 0x5d074u
-#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_NICK 0x5d078u
+#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_PEER_ID 0x78068u
+#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_GEN 0x7806cu
+#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_ACTIVE 0x78070u
+#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_NICK_LEN 0x78074u
+#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_NICK 0x78078u
 #define HSMP_STRIDE_PEERS_DIR_DATA_ENTRIES_0_NICK 0x1u
 #define HSMP_COUNT_PEERS_DIR_DATA_ENTRIES_0_NICK 48u
-#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_RTT_MS 0x5d0a8u
-#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0__R_RTT 0x5d0acu
-#define HSMP_OFF_PEERS_KIT_RULES 0x5d980u
-#define HSMP_OFF_PEERS_KIT_RULES_SEQ 0x5d980u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA 0x5d9c0u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_META 0x5d9c0u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_WRITER_EPOCH 0x5d9c0u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_WORLD_EPOCH 0x5d9c8u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_SESSION_EPOCH 0x5d9ccu
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_VALID 0x5d9d0u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_SAMPLE_SEQ 0x5d9d4u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_T_US 0x5d9d8u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_LEN 0x5d9e0u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_KIND 0x5d9e4u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY 0x5d9e8u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY_REV 0x5d9e8u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY_SEQ 0x5d9f0u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY_BUDGET 0x5d9f4u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY_MODE 0x5d9f6u
-#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY__R 0x5d9f7u
-#define HSMP_OFF_PEERS_SLOTS 0x5da00u
-#define HSMP_STRIDE_PEERS_SLOTS 0x1000u
+#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0_RTT_MS 0x780a8u
+#define HSMP_OFF_PEERS_DIR_DATA_ENTRIES_0__R_RTT 0x780acu
+#define HSMP_OFF_PEERS_KIT_RULES 0x78980u
+#define HSMP_OFF_PEERS_KIT_RULES_SEQ 0x78980u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA 0x789c0u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_META 0x789c0u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_WRITER_EPOCH 0x789c0u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_WORLD_EPOCH 0x789c8u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_SESSION_EPOCH 0x789ccu
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_VALID 0x789d0u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_SAMPLE_SEQ 0x789d4u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_META_T_US 0x789d8u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_LEN 0x789e0u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_KIND 0x789e4u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY 0x789e8u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY_REV 0x789e8u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY_SEQ 0x789f0u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY_BUDGET 0x789f4u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY_MODE 0x789f6u
+#define HSMP_OFF_PEERS_KIT_RULES_DATA_BODY__R 0x789f7u
+#define HSMP_OFF_PEERS_SLOTS 0x78a00u
+#define HSMP_STRIDE_PEERS_SLOTS 0x1500u
 #define HSMP_COUNT_PEERS_SLOTS 32u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY 0x5da00u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_SEQ 0x5da00u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA 0x5da40u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META 0x5da40u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_WRITER_EPOCH 0x5da40u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_WORLD_EPOCH 0x5da48u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_SESSION_EPOCH 0x5da4cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_VALID 0x5da50u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_SAMPLE_SEQ 0x5da54u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_T_US 0x5da58u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_PEER_ID 0x5da60u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_MODE 0x5da64u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CUT 0x5da68u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_FLAGS 0x5da6cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_PLAY_SEQ 0x5da70u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_PT 0x5da78u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_AGE 0x5da80u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_DELAY 0x5da84u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_JIT 0x5da88u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_LEAD 0x5da8cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_ST 0x5da90u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_IV 0x5da94u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_K 0x5da98u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_RATE 0x5da9cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_MASK 0x5daa0u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_VMASK 0x5daa4u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_ROOT 0x5daa8u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY 0x78a00u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_SEQ 0x78a00u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA 0x78a40u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_MATCH_ID 0x78a40u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_ROUND 0x78a48u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_LIFE 0x78a4cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_HAS_CONTEXT 0x78a4eu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA__CONTEXT_R 0x78a4fu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META 0x78a50u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_WRITER_EPOCH 0x78a50u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_WORLD_EPOCH 0x78a58u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_SESSION_EPOCH 0x78a5cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_VALID 0x78a60u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_SAMPLE_SEQ 0x78a64u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_META_T_US 0x78a68u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_PEER_ID 0x78a70u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_MODE 0x78a74u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CUT 0x78a78u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_FLAGS 0x78a7cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_PLAY_SEQ 0x78a80u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_PT 0x78a88u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_AGE 0x78a90u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_DELAY 0x78a94u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_JIT 0x78a98u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_LEAD 0x78a9cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_ST 0x78aa0u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_IV 0x78aa4u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_K 0x78aa8u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_RATE 0x78aacu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_MASK 0x78ab0u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_VMASK 0x78ab4u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_ROOT 0x78ab8u
 #define HSMP_STRIDE_PEERS_SLOTS_0_PLAY_DATA_ROOT 0x4u
 #define HSMP_COUNT_PEERS_SLOTS_0_PLAY_DATA_ROOT 4u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_B 0x5dab8u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_B 0x78ac8u
 #define HSMP_STRIDE_PEERS_SLOTS_0_PLAY_DATA_B 0x34u
 #define HSMP_COUNT_PEERS_SLOTS_0_PLAY_DATA_B 25u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_W 0x5dfccu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_W 0x78fdcu
 #define HSMP_STRIDE_PEERS_SLOTS_0_PLAY_DATA_W 0x28u
 #define HSMP_COUNT_PEERS_SLOTS_0_PLAY_DATA_W 2u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL 0x5e01cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_FLAGS 0x5e01cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_GRIP_R 0x5e020u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_GRIP_L 0x5e024u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_IK_WORLD 0x5e028u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_SCALARS 0x5e02cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_AIM 0x5e06cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_CTRL_PITCH 0x5e078u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_CTRL_YAW 0x5e07cu
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_IK 0x5e080u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL__R 0x5e0b0u
-#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA__R2 0x5e0b4u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT 0x5e0c0u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_SEQ 0x5e0c0u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA 0x5e100u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META 0x5e100u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_WRITER_EPOCH 0x5e100u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_WORLD_EPOCH 0x5e108u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_SESSION_EPOCH 0x5e10cu
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_VALID 0x5e110u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_SAMPLE_SEQ 0x5e114u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_T_US 0x5e118u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_LEN 0x5e120u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_KIND 0x5e124u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_BODY 0x5e128u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_BODY_PEER_ID 0x5e128u
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_BODY__R 0x5e12cu
-#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_BODY_ROOT 0x5e130u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS 0x5e180u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_SEQ 0x5e180u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA 0x5e1c0u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META 0x5e1c0u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_WRITER_EPOCH 0x5e1c0u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_WORLD_EPOCH 0x5e1c8u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_SESSION_EPOCH 0x5e1ccu
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_VALID 0x5e1d0u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_SAMPLE_SEQ 0x5e1d4u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_T_US 0x5e1d8u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_LEN 0x5e1e0u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_KIND 0x5e1e4u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY 0x5e1e8u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_SEQ 0x5e1e8u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_DISM 0x5e1ecu
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_FLAGS 0x5e1f0u
-#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_V 0x5e1f2u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT 0x5e240u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_SEQ 0x5e240u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA 0x5e280u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META 0x5e280u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_WRITER_EPOCH 0x5e280u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_WORLD_EPOCH 0x5e288u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_SESSION_EPOCH 0x5e28cu
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_VALID 0x5e290u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_SAMPLE_SEQ 0x5e294u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_T_US 0x5e298u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_LEN 0x5e2a0u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_KIND 0x5e2a4u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_BODY 0x5e2a8u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_BODY_HEAD 0x5e2a8u
-#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_BODY_ROWS 0x5e380u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY 0x5e580u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_SEQ 0x5e580u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA 0x5e5c0u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META 0x5e5c0u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_WRITER_EPOCH 0x5e5c0u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_WORLD_EPOCH 0x5e5c8u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_SESSION_EPOCH 0x5e5ccu
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_VALID 0x5e5d0u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_SAMPLE_SEQ 0x5e5d4u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_T_US 0x5e5d8u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_LEN 0x5e5e0u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_KIND 0x5e5e4u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_BODY 0x5e5e8u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_BODY_HEAD 0x5e5e8u
-#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_BODY_ROWS 0x5e610u
-#define HSMP_OFF_PEER_LOADOUTS 0x7e000u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS 0x7e000u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL 0x7902cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_FLAGS 0x7902cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_GRIP_R 0x79030u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_GRIP_L 0x79034u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_IK_WORLD 0x79038u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_SCALARS 0x7903cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_AIM 0x7907cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_CTRL_PITCH 0x79088u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_CTRL_YAW 0x7908cu
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL_IK 0x79090u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA_CONTROL__R 0x790c0u
+#define HSMP_OFF_PEERS_SLOTS_0_PLAY_DATA__R2 0x790c4u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT 0x79100u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_SEQ 0x79100u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA 0x79140u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META 0x79140u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_WRITER_EPOCH 0x79140u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_WORLD_EPOCH 0x79148u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_SESSION_EPOCH 0x7914cu
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_VALID 0x79150u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_SAMPLE_SEQ 0x79154u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_META_T_US 0x79158u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_LEN 0x79160u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_KIND 0x79164u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_BODY 0x79168u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_BODY_PEER_ID 0x79168u
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_BODY__R 0x7916cu
+#define HSMP_OFF_PEERS_SLOTS_0_ROOT_DATA_BODY_ROOT 0x79170u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS 0x791c0u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_SEQ 0x791c0u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA 0x79200u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META 0x79200u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_WRITER_EPOCH 0x79200u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_WORLD_EPOCH 0x79208u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_SESSION_EPOCH 0x7920cu
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_VALID 0x79210u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_SAMPLE_SEQ 0x79214u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_META_T_US 0x79218u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_LEN 0x79220u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_KIND 0x79224u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY 0x79228u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_SEQ 0x79228u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_DISM 0x7922cu
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_FLAGS 0x79230u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_V 0x79232u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_MATCH_ID 0x79258u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_ROUND 0x79260u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY_LIFE 0x79264u
+#define HSMP_OFF_PEERS_SLOTS_0_VITALS_DATA_BODY__LIFE_R 0x79266u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT 0x79280u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_SEQ 0x79280u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA 0x792c0u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META 0x792c0u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_WRITER_EPOCH 0x792c0u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_WORLD_EPOCH 0x792c8u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_SESSION_EPOCH 0x792ccu
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_VALID 0x792d0u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_SAMPLE_SEQ 0x792d4u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_META_T_US 0x792d8u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_LEN 0x792e0u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_KIND 0x792e4u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_BODY 0x792e8u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_BODY_HEAD 0x792e8u
+#define HSMP_OFF_PEERS_SLOTS_0_KIT_DATA_BODY_ROWS 0x793c0u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY 0x795c0u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_SEQ 0x795c0u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA 0x79600u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META 0x79600u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_WRITER_EPOCH 0x79600u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_WORLD_EPOCH 0x79608u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_SESSION_EPOCH 0x7960cu
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_VALID 0x79610u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_SAMPLE_SEQ 0x79614u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_META_T_US 0x79618u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_LEN 0x79620u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_KIND 0x79624u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_BODY 0x79628u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_BODY_HEAD 0x79628u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY_DATA_BODY_ROWS 0x79650u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2 0x79a40u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_SEQ 0x79a40u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA 0x79a80u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_META 0x79a80u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_META_WRITER_EPOCH 0x79a80u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_META_WORLD_EPOCH 0x79a88u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_META_SESSION_EPOCH 0x79a8cu
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_META_VALID 0x79a90u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_META_SAMPLE_SEQ 0x79a94u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_META_T_US 0x79a98u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_LEN 0x79aa0u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_KIND 0x79aa4u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_BODY 0x79aa8u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_BODY_HEAD 0x79aa8u
+#define HSMP_OFF_PEERS_SLOTS_0_BODY2_DATA_BODY_ROWS 0x79b28u
+#define HSMP_OFF_PEER_LOADOUTS 0xa3000u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS 0xa3000u
 #define HSMP_STRIDE_PEER_LOADOUTS_SLOTS 0xaa80u
 #define HSMP_COUNT_PEER_LOADOUTS_SLOTS 32u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_MIDDLE 0x7e000u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_W_BACK 0x7e004u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_W_GEN 0x7e008u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_R_FRONT 0x7e00cu
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_R_GEN 0x7e010u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS 0x7e040u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_MIDDLE 0xa3000u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_W_BACK 0xa3004u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_W_GEN 0xa3008u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_R_FRONT 0xa300cu
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_R_GEN 0xa3010u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS 0xa3040u
 #define HSMP_STRIDE_PEER_LOADOUTS_SLOTS_0_BUFS 0x38b0u
 #define HSMP_COUNT_PEER_LOADOUTS_SLOTS_0_BUFS 3u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META 0x7e040u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_WRITER_EPOCH 0x7e040u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_WORLD_EPOCH 0x7e048u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_SESSION_EPOCH 0x7e04cu
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_VALID 0x7e050u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_SAMPLE_SEQ 0x7e054u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_T_US 0x7e058u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_LEN 0x7e060u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_KIND 0x7e064u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_BODY 0x7e068u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_BODY_HEAD 0x7e068u
-#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_BODY_ROWS 0x7e8f0u
-#define HSMP_OFF_STATE 0x1d3000u
-#define HSMP_OFF_STATE_SESSION 0x1d3000u
-#define HSMP_OFF_STATE_SESSION_SEQ 0x1d3000u
-#define HSMP_OFF_STATE_SESSION_DATA 0x1d3040u
-#define HSMP_OFF_STATE_SESSION_DATA_META 0x1d3040u
-#define HSMP_OFF_STATE_SESSION_DATA_META_WRITER_EPOCH 0x1d3040u
-#define HSMP_OFF_STATE_SESSION_DATA_META_WORLD_EPOCH 0x1d3048u
-#define HSMP_OFF_STATE_SESSION_DATA_META_SESSION_EPOCH 0x1d304cu
-#define HSMP_OFF_STATE_SESSION_DATA_META_VALID 0x1d3050u
-#define HSMP_OFF_STATE_SESSION_DATA_META_SAMPLE_SEQ 0x1d3054u
-#define HSMP_OFF_STATE_SESSION_DATA_META_T_US 0x1d3058u
-#define HSMP_OFF_STATE_SESSION_DATA_LEN 0x1d3060u
-#define HSMP_OFF_STATE_SESSION_DATA_KIND 0x1d3064u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY 0x1d3068u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD 0x1d3068u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_EPOCH 0x1d3068u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_MATCH_ID 0x1d3070u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_PHASE_DEADLINE_MS 0x1d3078u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_SERVER_TIME_MS 0x1d3080u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_SEQ 0x1d3088u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_ROUND 0x1d308cu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_WORLD_EPOCH 0x1d3090u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_PHASE 0x1d3094u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_WINNER_SEAT 0x1d3095u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_RESULT_REASON 0x1d3096u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_HAS_FROZEN 0x1d3097u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_N 0x1d3098u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD__R 0x1d309au
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD__R2 0x1d309cu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG 0x1d30a0u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_REV 0x1d30a0u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_ROUND_TIME_LIMIT_S 0x1d30a4u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_KIT_BUDGET 0x1d30a6u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_MODE 0x1d30a8u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_BEST_OF 0x1d30a9u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_TEAM_RULE 0x1d30aau
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_TEAMS 0x1d30abu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_KIT_MODE 0x1d30acu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_KIT_FAIRNESS 0x1d30adu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_MAX_FIGHTERS 0x1d30aeu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_MAX_SPECTATORS 0x1d30afu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_COUNTDOWN_S 0x1d30b0u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_ROUNDOVER_S 0x1d30b1u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_MATCHOVER_S 0x1d30b2u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_BARRIER_TIMEOUT_S 0x1d30b3u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_JOIN_IN_PROGRESS 0x1d30b4u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG__R 0x1d30b5u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_ARENA 0x1d30b8u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN 0x1d30e0u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_REV 0x1d30e0u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_ROUND_TIME_LIMIT_S 0x1d30e4u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_KIT_BUDGET 0x1d30e6u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_MODE 0x1d30e8u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_BEST_OF 0x1d30e9u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_TEAM_RULE 0x1d30eau
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_TEAMS 0x1d30ebu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_KIT_MODE 0x1d30ecu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_KIT_FAIRNESS 0x1d30edu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_MAX_FIGHTERS 0x1d30eeu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_MAX_SPECTATORS 0x1d30efu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_COUNTDOWN_S 0x1d30f0u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_ROUNDOVER_S 0x1d30f1u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_MATCHOVER_S 0x1d30f2u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_BARRIER_TIMEOUT_S 0x1d30f3u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_JOIN_IN_PROGRESS 0x1d30f4u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN__R 0x1d30f5u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_ARENA 0x1d30f8u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS 0x1d3120u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META 0xa3040u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_WRITER_EPOCH 0xa3040u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_WORLD_EPOCH 0xa3048u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_SESSION_EPOCH 0xa304cu
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_VALID 0xa3050u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_SAMPLE_SEQ 0xa3054u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_META_T_US 0xa3058u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_LEN 0xa3060u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_KIND 0xa3064u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_BODY 0xa3068u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_BODY_HEAD 0xa3068u
+#define HSMP_OFF_PEER_LOADOUTS_SLOTS_0_BUFS_0_BODY_ROWS 0xa38f0u
+#define HSMP_OFF_STATE 0x1f8000u
+#define HSMP_OFF_STATE_SESSION 0x1f8000u
+#define HSMP_OFF_STATE_SESSION_SEQ 0x1f8000u
+#define HSMP_OFF_STATE_SESSION_DATA 0x1f8040u
+#define HSMP_OFF_STATE_SESSION_DATA_META 0x1f8040u
+#define HSMP_OFF_STATE_SESSION_DATA_META_WRITER_EPOCH 0x1f8040u
+#define HSMP_OFF_STATE_SESSION_DATA_META_WORLD_EPOCH 0x1f8048u
+#define HSMP_OFF_STATE_SESSION_DATA_META_SESSION_EPOCH 0x1f804cu
+#define HSMP_OFF_STATE_SESSION_DATA_META_VALID 0x1f8050u
+#define HSMP_OFF_STATE_SESSION_DATA_META_SAMPLE_SEQ 0x1f8054u
+#define HSMP_OFF_STATE_SESSION_DATA_META_T_US 0x1f8058u
+#define HSMP_OFF_STATE_SESSION_DATA_LEN 0x1f8060u
+#define HSMP_OFF_STATE_SESSION_DATA_KIND 0x1f8064u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY 0x1f8068u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD 0x1f8068u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_EPOCH 0x1f8068u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_MATCH_ID 0x1f8070u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_PHASE_DEADLINE_MS 0x1f8078u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_SERVER_TIME_MS 0x1f8080u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_SEQ 0x1f8088u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_ROUND 0x1f808cu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_WORLD_EPOCH 0x1f8090u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_PHASE 0x1f8094u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_WINNER_SEAT 0x1f8095u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_RESULT_REASON 0x1f8096u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_HAS_FROZEN 0x1f8097u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_N 0x1f8098u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD__R 0x1f809au
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD__R2 0x1f809cu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG 0x1f80a0u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_REV 0x1f80a0u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_ROUND_TIME_LIMIT_S 0x1f80a4u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_KIT_BUDGET 0x1f80a6u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_MODE 0x1f80a8u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_BEST_OF 0x1f80a9u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_TEAM_RULE 0x1f80aau
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_TEAMS 0x1f80abu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_KIT_MODE 0x1f80acu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_KIT_FAIRNESS 0x1f80adu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_MAX_FIGHTERS 0x1f80aeu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_MAX_SPECTATORS 0x1f80afu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_COUNTDOWN_S 0x1f80b0u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_ROUNDOVER_S 0x1f80b1u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_MATCHOVER_S 0x1f80b2u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_BARRIER_TIMEOUT_S 0x1f80b3u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_JOIN_IN_PROGRESS 0x1f80b4u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG__R 0x1f80b5u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_CONFIG_ARENA 0x1f80b8u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN 0x1f80e0u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_REV 0x1f80e0u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_ROUND_TIME_LIMIT_S 0x1f80e4u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_KIT_BUDGET 0x1f80e6u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_MODE 0x1f80e8u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_BEST_OF 0x1f80e9u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_TEAM_RULE 0x1f80eau
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_TEAMS 0x1f80ebu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_KIT_MODE 0x1f80ecu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_KIT_FAIRNESS 0x1f80edu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_MAX_FIGHTERS 0x1f80eeu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_MAX_SPECTATORS 0x1f80efu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_COUNTDOWN_S 0x1f80f0u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_ROUNDOVER_S 0x1f80f1u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_MATCHOVER_S 0x1f80f2u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_BARRIER_TIMEOUT_S 0x1f80f3u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_JOIN_IN_PROGRESS 0x1f80f4u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN__R 0x1f80f5u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_HEAD_FROZEN_ARENA 0x1f80f8u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS 0x1f8120u
 #define HSMP_STRIDE_STATE_SESSION_DATA_BODY_ROWS 0x60u
 #define HSMP_COUNT_STATE_SESSION_DATA_BODY_ROWS 64u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_PEER_ID 0x1d3120u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_LOADED_ROUND 0x1d3124u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_WINS 0x1d3128u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_ID 0x1d312cu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_KIT_REV 0x1d3130u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_PLAYER_ID 0x1d3138u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_POS 0x1d3140u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_YAW 0x1d314cu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_PROTECT_MS 0x1d3150u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SEAT 0x1d3154u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_ROLE 0x1d3155u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_TEAM 0x1d3156u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_ADMIN_ROLE 0x1d3157u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_READY 0x1d3158u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_ALIVE 0x1d3159u
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_CONNECTED 0x1d315au
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_WAITING 0x1d315bu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_SLOT 0x1d315cu
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0__R 0x1d315du
-#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_NICK 0x1d3160u
-#define HSMP_OFF_STATE_LINK 0x1d4940u
-#define HSMP_OFF_STATE_LINK_SEQ 0x1d4940u
-#define HSMP_OFF_STATE_LINK_DATA 0x1d4980u
-#define HSMP_OFF_STATE_LINK_DATA_META 0x1d4980u
-#define HSMP_OFF_STATE_LINK_DATA_META_WRITER_EPOCH 0x1d4980u
-#define HSMP_OFF_STATE_LINK_DATA_META_WORLD_EPOCH 0x1d4988u
-#define HSMP_OFF_STATE_LINK_DATA_META_SESSION_EPOCH 0x1d498cu
-#define HSMP_OFF_STATE_LINK_DATA_META_VALID 0x1d4990u
-#define HSMP_OFF_STATE_LINK_DATA_META_SAMPLE_SEQ 0x1d4994u
-#define HSMP_OFF_STATE_LINK_DATA_META_T_US 0x1d4998u
-#define HSMP_OFF_STATE_LINK_DATA_LEN 0x1d49a0u
-#define HSMP_OFF_STATE_LINK_DATA_KIND 0x1d49a4u
-#define HSMP_OFF_STATE_LINK_DATA_BODY 0x1d49a8u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_SERVER_EPOCH 0x1d49a8u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_METRICS_WALL_MS 0x1d49b0u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_MY_PEER_ID 0x1d49b8u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_STATUS 0x1d49bcu
-#define HSMP_OFF_STATE_LINK_DATA_BODY_STATE 0x1d49bdu
-#define HSMP_OFF_STATE_LINK_DATA_BODY_IS_ADMIN 0x1d49beu
-#define HSMP_OFF_STATE_LINK_DATA_BODY_REASON_CODE 0x1d49bfu
-#define HSMP_OFF_STATE_LINK_DATA_BODY_ATTEMPT 0x1d49c0u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_NEXT_RETRY_MS 0x1d49c4u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_DOWN_MS 0x1d49c8u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_RX_AGE_MS 0x1d49ccu
-#define HSMP_OFF_STATE_LINK_DATA_BODY_RETRY_AFTER_S 0x1d49d0u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_RTO_MS 0x1d49d4u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_PKTS_LOST 0x1d49d8u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_RETRANSMITS 0x1d49dcu
-#define HSMP_OFF_STATE_LINK_DATA_BODY_AEAD_FAILED 0x1d49e0u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_RTT_MS 0x1d49e4u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_CLOCK_OFFSET_MS 0x1d49e8u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_SRTT_MS 0x1d49ecu
-#define HSMP_OFF_STATE_LINK_DATA_BODY_JITTER_MS 0x1d49f0u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_LOSS_PCT 0x1d49f4u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_LOSS_PCT_10S 0x1d49f8u
-#define HSMP_OFF_STATE_LINK_DATA_BODY_CLIENT_PROTOCOL 0x1d49fcu
-#define HSMP_OFF_STATE_LINK_DATA_BODY__R 0x1d49feu
-#define HSMP_OFF_STATE_LINK_DATA_BODY_REASON 0x1d4a00u
-#define HSMP_OFF_STATE_ADMIN 0x1d4a80u
-#define HSMP_OFF_STATE_ADMIN_SEQ 0x1d4a80u
-#define HSMP_OFF_STATE_ADMIN_DATA 0x1d4ac0u
-#define HSMP_OFF_STATE_ADMIN_DATA_META 0x1d4ac0u
-#define HSMP_OFF_STATE_ADMIN_DATA_META_WRITER_EPOCH 0x1d4ac0u
-#define HSMP_OFF_STATE_ADMIN_DATA_META_WORLD_EPOCH 0x1d4ac8u
-#define HSMP_OFF_STATE_ADMIN_DATA_META_SESSION_EPOCH 0x1d4accu
-#define HSMP_OFF_STATE_ADMIN_DATA_META_VALID 0x1d4ad0u
-#define HSMP_OFF_STATE_ADMIN_DATA_META_SAMPLE_SEQ 0x1d4ad4u
-#define HSMP_OFF_STATE_ADMIN_DATA_META_T_US 0x1d4ad8u
-#define HSMP_OFF_STATE_ADMIN_DATA_LEN 0x1d4ae0u
-#define HSMP_OFF_STATE_ADMIN_DATA_KIND 0x1d4ae4u
-#define HSMP_OFF_STATE_ADMIN_DATA_BODY 0x1d4ae8u
-#define HSMP_OFF_STATE_ADMIN_DATA_BODY_HEAD 0x1d4ae8u
-#define HSMP_OFF_STATE_ADMIN_DATA_BODY_HEAD_ADMIN_PEER 0x1d4ae8u
-#define HSMP_OFF_STATE_ADMIN_DATA_BODY_HEAD_N 0x1d4aecu
-#define HSMP_OFF_STATE_ADMIN_DATA_BODY_HEAD__R 0x1d4aeeu
-#define HSMP_OFF_STATE_ADMIN_DATA_BODY_ROWS 0x1d4af0u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_PEER_ID 0x1f8120u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_LOADED_ROUND 0x1f8124u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_WINS 0x1f8128u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_ID 0x1f812cu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_KIT_REV 0x1f8130u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_PLAYER_ID 0x1f8138u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_POS 0x1f8140u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_YAW 0x1f814cu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_PROTECT_MS 0x1f8150u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SEAT 0x1f8154u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_ROLE 0x1f8155u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_TEAM 0x1f8156u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_ADMIN_ROLE 0x1f8157u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_READY 0x1f8158u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_ALIVE 0x1f8159u
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_CONNECTED 0x1f815au
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_WAITING 0x1f815bu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_SPAWN_SLOT 0x1f815cu
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0__R 0x1f815du
+#define HSMP_OFF_STATE_SESSION_DATA_BODY_ROWS_0_NICK 0x1f8160u
+#define HSMP_OFF_STATE_LINK 0x1f9940u
+#define HSMP_OFF_STATE_LINK_SEQ 0x1f9940u
+#define HSMP_OFF_STATE_LINK_DATA 0x1f9980u
+#define HSMP_OFF_STATE_LINK_DATA_META 0x1f9980u
+#define HSMP_OFF_STATE_LINK_DATA_META_WRITER_EPOCH 0x1f9980u
+#define HSMP_OFF_STATE_LINK_DATA_META_WORLD_EPOCH 0x1f9988u
+#define HSMP_OFF_STATE_LINK_DATA_META_SESSION_EPOCH 0x1f998cu
+#define HSMP_OFF_STATE_LINK_DATA_META_VALID 0x1f9990u
+#define HSMP_OFF_STATE_LINK_DATA_META_SAMPLE_SEQ 0x1f9994u
+#define HSMP_OFF_STATE_LINK_DATA_META_T_US 0x1f9998u
+#define HSMP_OFF_STATE_LINK_DATA_LEN 0x1f99a0u
+#define HSMP_OFF_STATE_LINK_DATA_KIND 0x1f99a4u
+#define HSMP_OFF_STATE_LINK_DATA_BODY 0x1f99a8u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_SERVER_EPOCH 0x1f99a8u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_METRICS_WALL_MS 0x1f99b0u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_MY_PEER_ID 0x1f99b8u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_STATUS 0x1f99bcu
+#define HSMP_OFF_STATE_LINK_DATA_BODY_STATE 0x1f99bdu
+#define HSMP_OFF_STATE_LINK_DATA_BODY_IS_ADMIN 0x1f99beu
+#define HSMP_OFF_STATE_LINK_DATA_BODY_REASON_CODE 0x1f99bfu
+#define HSMP_OFF_STATE_LINK_DATA_BODY_ATTEMPT 0x1f99c0u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_NEXT_RETRY_MS 0x1f99c4u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_DOWN_MS 0x1f99c8u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_RX_AGE_MS 0x1f99ccu
+#define HSMP_OFF_STATE_LINK_DATA_BODY_RETRY_AFTER_S 0x1f99d0u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_RTO_MS 0x1f99d4u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_PKTS_LOST 0x1f99d8u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_RETRANSMITS 0x1f99dcu
+#define HSMP_OFF_STATE_LINK_DATA_BODY_AEAD_FAILED 0x1f99e0u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_RTT_MS 0x1f99e4u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_CLOCK_OFFSET_MS 0x1f99e8u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_SRTT_MS 0x1f99ecu
+#define HSMP_OFF_STATE_LINK_DATA_BODY_JITTER_MS 0x1f99f0u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_LOSS_PCT 0x1f99f4u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_LOSS_PCT_10S 0x1f99f8u
+#define HSMP_OFF_STATE_LINK_DATA_BODY_CLIENT_PROTOCOL 0x1f99fcu
+#define HSMP_OFF_STATE_LINK_DATA_BODY__R 0x1f99feu
+#define HSMP_OFF_STATE_LINK_DATA_BODY_REASON 0x1f9a00u
+#define HSMP_OFF_STATE_ADMIN 0x1f9a80u
+#define HSMP_OFF_STATE_ADMIN_SEQ 0x1f9a80u
+#define HSMP_OFF_STATE_ADMIN_DATA 0x1f9ac0u
+#define HSMP_OFF_STATE_ADMIN_DATA_META 0x1f9ac0u
+#define HSMP_OFF_STATE_ADMIN_DATA_META_WRITER_EPOCH 0x1f9ac0u
+#define HSMP_OFF_STATE_ADMIN_DATA_META_WORLD_EPOCH 0x1f9ac8u
+#define HSMP_OFF_STATE_ADMIN_DATA_META_SESSION_EPOCH 0x1f9accu
+#define HSMP_OFF_STATE_ADMIN_DATA_META_VALID 0x1f9ad0u
+#define HSMP_OFF_STATE_ADMIN_DATA_META_SAMPLE_SEQ 0x1f9ad4u
+#define HSMP_OFF_STATE_ADMIN_DATA_META_T_US 0x1f9ad8u
+#define HSMP_OFF_STATE_ADMIN_DATA_LEN 0x1f9ae0u
+#define HSMP_OFF_STATE_ADMIN_DATA_KIND 0x1f9ae4u
+#define HSMP_OFF_STATE_ADMIN_DATA_BODY 0x1f9ae8u
+#define HSMP_OFF_STATE_ADMIN_DATA_BODY_HEAD 0x1f9ae8u
+#define HSMP_OFF_STATE_ADMIN_DATA_BODY_HEAD_ADMIN_PEER 0x1f9ae8u
+#define HSMP_OFF_STATE_ADMIN_DATA_BODY_HEAD_N 0x1f9aecu
+#define HSMP_OFF_STATE_ADMIN_DATA_BODY_HEAD__R 0x1f9aeeu
+#define HSMP_OFF_STATE_ADMIN_DATA_BODY_ROWS 0x1f9af0u
 #define HSMP_STRIDE_STATE_ADMIN_DATA_BODY_ROWS 0x30u
 #define HSMP_COUNT_STATE_ADMIN_DATA_BODY_ROWS 64u
-#define HSMP_OFF_STATE_ADMIN_DATA_BODY_ROWS_0_ENTRY 0x1d4af0u
-#define HSMP_OFF_STATE_WORLD_REMOTE 0x1d5700u
-#define HSMP_OFF_STATE_WORLD_REMOTE_MIDDLE 0x1d5700u
-#define HSMP_OFF_STATE_WORLD_REMOTE_W_BACK 0x1d5704u
-#define HSMP_OFF_STATE_WORLD_REMOTE_W_GEN 0x1d5708u
-#define HSMP_OFF_STATE_WORLD_REMOTE_R_FRONT 0x1d570cu
-#define HSMP_OFF_STATE_WORLD_REMOTE_R_GEN 0x1d5710u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS 0x1d5740u
+#define HSMP_OFF_STATE_ADMIN_DATA_BODY_ROWS_0_ENTRY 0x1f9af0u
+#define HSMP_OFF_STATE_MODE 0x1fa700u
+#define HSMP_OFF_STATE_MODE_SEQ 0x1fa700u
+#define HSMP_OFF_STATE_MODE_DATA 0x1fa740u
+#define HSMP_OFF_STATE_MODE_DATA_META 0x1fa740u
+#define HSMP_OFF_STATE_MODE_DATA_META_WRITER_EPOCH 0x1fa740u
+#define HSMP_OFF_STATE_MODE_DATA_META_WORLD_EPOCH 0x1fa748u
+#define HSMP_OFF_STATE_MODE_DATA_META_SESSION_EPOCH 0x1fa74cu
+#define HSMP_OFF_STATE_MODE_DATA_META_VALID 0x1fa750u
+#define HSMP_OFF_STATE_MODE_DATA_META_SAMPLE_SEQ 0x1fa754u
+#define HSMP_OFF_STATE_MODE_DATA_META_T_US 0x1fa758u
+#define HSMP_OFF_STATE_MODE_DATA_LEN 0x1fa760u
+#define HSMP_OFF_STATE_MODE_DATA_KIND 0x1fa764u
+#define HSMP_OFF_STATE_MODE_DATA_BODY 0x1fa768u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD 0x1fa768u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_MATCH_ID 0x1fa768u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_SERVER_TIME_MS 0x1fa770u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_ROUND_END_MS 0x1fa778u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_SEQ 0x1fa780u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_ROUND 0x1fa784u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_TEAM_WINS 0x1fa788u
+#define HSMP_STRIDE_STATE_MODE_DATA_BODY_HEAD_TEAM_WINS 0x4u
+#define HSMP_COUNT_STATE_MODE_DATA_BODY_HEAD_TEAM_WINS 4u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_TEAM_SCORE 0x1fa798u
+#define HSMP_STRIDE_STATE_MODE_DATA_BODY_HEAD_TEAM_SCORE 0x4u
+#define HSMP_COUNT_STATE_MODE_DATA_BODY_HEAD_TEAM_SCORE 4u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_TARGET_S 0x1fa7a8u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_N 0x1fa7aau
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_ROUND_TIME_S 0x1fa7acu
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_MODE 0x1fa7aeu
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_TEAM_RULE 0x1fa7afu
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_TEAMS 0x1fa7b0u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_FRIENDLY_FIRE 0x1fa7b1u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_SUDDEN_DEATH 0x1fa7b2u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_RESPAWN_S 0x1fa7b3u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_TEAM_ALIVE 0x1fa7b4u
+#define HSMP_STRIDE_STATE_MODE_DATA_BODY_HEAD_TEAM_ALIVE 0x1u
+#define HSMP_COUNT_STATE_MODE_DATA_BODY_HEAD_TEAM_ALIVE 4u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_RESULT 0x1fa7b8u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_WINNER_TEAM 0x1fa7b9u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD__R 0x1fa7bau
+#define HSMP_STRIDE_STATE_MODE_DATA_BODY_HEAD__R 0x1u
+#define HSMP_COUNT_STATE_MODE_DATA_BODY_HEAD__R 6u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_KIT_R 0x1fa7c0u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_KIT_L 0x1fa7e0u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_HEAD_KIT_LABEL 0x1fa800u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS 0x1fa830u
+#define HSMP_STRIDE_STATE_MODE_DATA_BODY_ROWS 0x20u
+#define HSMP_COUNT_STATE_MODE_DATA_BODY_ROWS 64u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_PEER_ID 0x1fa830u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_SCORE 0x1fa834u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_KILLS 0x1fa838u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_DEATHS 0x1fa83au
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_ROUND_KILLS 0x1fa83cu
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_LIFE 0x1fa83eu
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_SEAT 0x1fa840u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_TEAM 0x1fa841u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_ALIVE 0x1fa842u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_RESPAWNING 0x1fa843u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_IN_ZONE 0x1fa844u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0__R 0x1fa845u
+#define HSMP_OFF_STATE_MODE_DATA_BODY_ROWS_0_RESPAWN_AT_MS 0x1fa848u
+#define HSMP_OFF_STATE_ZONE 0x1fb040u
+#define HSMP_OFF_STATE_ZONE_SEQ 0x1fb040u
+#define HSMP_OFF_STATE_ZONE_DATA 0x1fb080u
+#define HSMP_OFF_STATE_ZONE_DATA_META 0x1fb080u
+#define HSMP_OFF_STATE_ZONE_DATA_META_WRITER_EPOCH 0x1fb080u
+#define HSMP_OFF_STATE_ZONE_DATA_META_WORLD_EPOCH 0x1fb088u
+#define HSMP_OFF_STATE_ZONE_DATA_META_SESSION_EPOCH 0x1fb08cu
+#define HSMP_OFF_STATE_ZONE_DATA_META_VALID 0x1fb090u
+#define HSMP_OFF_STATE_ZONE_DATA_META_SAMPLE_SEQ 0x1fb094u
+#define HSMP_OFF_STATE_ZONE_DATA_META_T_US 0x1fb098u
+#define HSMP_OFF_STATE_ZONE_DATA_LEN 0x1fb0a0u
+#define HSMP_OFF_STATE_ZONE_DATA_KIND 0x1fb0a4u
+#define HSMP_OFF_STATE_ZONE_DATA_BODY 0x1fb0a8u
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_MATCH_ID 0x1fb0a8u
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_CENTER 0x1fb0b0u
+#define HSMP_STRIDE_STATE_ZONE_DATA_BODY_CENTER 0x4u
+#define HSMP_COUNT_STATE_ZONE_DATA_BODY_CENTER 3u
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_RADIUS_CM 0x1fb0bcu
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_HALF_HEIGHT_CM 0x1fb0c0u
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_ROUND 0x1fb0c4u
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_HOLDER_SEAT 0x1fb0c8u
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_HOLDER_TEAM 0x1fb0c9u
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_CONTESTED 0x1fb0cau
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_INSIDE 0x1fb0cbu
+#define HSMP_OFF_STATE_ZONE_DATA_BODY__R 0x1fb0ccu
+#define HSMP_OFF_STATE_ZONE_DATA_BODY_ARENA 0x1fb0d0u
+#define HSMP_OFF_STATE_WORLD_REMOTE 0x1fb100u
+#define HSMP_OFF_STATE_WORLD_REMOTE_MIDDLE 0x1fb100u
+#define HSMP_OFF_STATE_WORLD_REMOTE_W_BACK 0x1fb104u
+#define HSMP_OFF_STATE_WORLD_REMOTE_W_GEN 0x1fb108u
+#define HSMP_OFF_STATE_WORLD_REMOTE_R_FRONT 0x1fb10cu
+#define HSMP_OFF_STATE_WORLD_REMOTE_R_GEN 0x1fb110u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS 0x1fb140u
 #define HSMP_STRIDE_STATE_WORLD_REMOTE_BUFS 0x1e038u
 #define HSMP_COUNT_STATE_WORLD_REMOTE_BUFS 3u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META 0x1d5740u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_WRITER_EPOCH 0x1d5740u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_WORLD_EPOCH 0x1d5748u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_SESSION_EPOCH 0x1d574cu
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_VALID 0x1d5750u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_SAMPLE_SEQ 0x1d5754u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_T_US 0x1d5758u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_LEN 0x1d5760u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_KIND 0x1d5764u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY 0x1d5768u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD 0x1d5768u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD_LEVEL 0x1d5768u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD_EPOCH 0x1d576cu
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD_N 0x1d5770u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD__R 0x1d5774u
-#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_ROWS 0x1d5778u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META 0x1fb140u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_WRITER_EPOCH 0x1fb140u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_WORLD_EPOCH 0x1fb148u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_SESSION_EPOCH 0x1fb14cu
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_VALID 0x1fb150u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_SAMPLE_SEQ 0x1fb154u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_META_T_US 0x1fb158u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_LEN 0x1fb160u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_KIND 0x1fb164u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY 0x1fb168u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD 0x1fb168u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD_LEVEL 0x1fb168u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD_EPOCH 0x1fb16cu
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD_N 0x1fb170u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_HEAD__R 0x1fb174u
+#define HSMP_OFF_STATE_WORLD_REMOTE_BUFS_0_BODY_ROWS 0x1fb178u
 #define HSMP_STRIDE_STATE_WORLD_REMOTE_BUFS_0_BODY_ROWS 0x30u
 #define HSMP_COUNT_STATE_WORLD_REMOTE_BUFS_0_BODY_ROWS 2560u
-#define HSMP_OFF_STATE_WORLD_OWNERS 0x22f800u
-#define HSMP_OFF_STATE_WORLD_OWNERS_MIDDLE 0x22f800u
-#define HSMP_OFF_STATE_WORLD_OWNERS_W_BACK 0x22f804u
-#define HSMP_OFF_STATE_WORLD_OWNERS_W_GEN 0x22f808u
-#define HSMP_OFF_STATE_WORLD_OWNERS_R_FRONT 0x22f80cu
-#define HSMP_OFF_STATE_WORLD_OWNERS_R_GEN 0x22f810u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS 0x22f840u
+#define HSMP_OFF_STATE_WORLD_OWNERS 0x255200u
+#define HSMP_OFF_STATE_WORLD_OWNERS_MIDDLE 0x255200u
+#define HSMP_OFF_STATE_WORLD_OWNERS_W_BACK 0x255204u
+#define HSMP_OFF_STATE_WORLD_OWNERS_W_GEN 0x255208u
+#define HSMP_OFF_STATE_WORLD_OWNERS_R_FRONT 0x25520cu
+#define HSMP_OFF_STATE_WORLD_OWNERS_R_GEN 0x255210u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS 0x255240u
 #define HSMP_STRIDE_STATE_WORLD_OWNERS_BUFS 0x8038u
 #define HSMP_COUNT_STATE_WORLD_OWNERS_BUFS 3u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META 0x22f840u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_WRITER_EPOCH 0x22f840u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_WORLD_EPOCH 0x22f848u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_SESSION_EPOCH 0x22f84cu
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_VALID 0x22f850u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_SAMPLE_SEQ 0x22f854u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_T_US 0x22f858u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_LEN 0x22f860u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_KIND 0x22f864u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY 0x22f868u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD 0x22f868u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_LEVEL 0x22f868u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_EPOCH 0x22f86cu
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_MANIFEST_LEN 0x22f870u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_N 0x22f874u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_SYNC 0x22f876u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD__R 0x22f877u
-#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_ROWS 0x22f878u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META 0x255240u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_WRITER_EPOCH 0x255240u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_WORLD_EPOCH 0x255248u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_SESSION_EPOCH 0x25524cu
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_VALID 0x255250u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_SAMPLE_SEQ 0x255254u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_META_T_US 0x255258u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_LEN 0x255260u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_KIND 0x255264u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY 0x255268u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD 0x255268u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_LEVEL 0x255268u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_EPOCH 0x25526cu
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_MANIFEST_LEN 0x255270u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_N 0x255274u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD_SYNC 0x255276u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_HEAD__R 0x255277u
+#define HSMP_OFF_STATE_WORLD_OWNERS_BUFS_0_BODY_ROWS 0x255278u
 #define HSMP_STRIDE_STATE_WORLD_OWNERS_BUFS_0_BODY_ROWS 0x10u
 #define HSMP_COUNT_STATE_WORLD_OWNERS_BUFS_0_BODY_ROWS 2048u
-#define HSMP_OFF_STATE_WORLD_MANIFEST 0x247900u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_MIDDLE 0x247900u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_W_BACK 0x247904u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_W_GEN 0x247908u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_R_FRONT 0x24790cu
-#define HSMP_OFF_STATE_WORLD_MANIFEST_R_GEN 0x247910u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS 0x247940u
+#define HSMP_OFF_STATE_WORLD_MANIFEST 0x26d300u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_MIDDLE 0x26d300u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_W_BACK 0x26d304u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_W_GEN 0x26d308u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_R_FRONT 0x26d30cu
+#define HSMP_OFF_STATE_WORLD_MANIFEST_R_GEN 0x26d310u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS 0x26d340u
 #define HSMP_STRIDE_STATE_WORLD_MANIFEST_BUFS 0x9038u
 #define HSMP_COUNT_STATE_WORLD_MANIFEST_BUFS 3u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META 0x247940u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_WRITER_EPOCH 0x247940u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_WORLD_EPOCH 0x247948u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_SESSION_EPOCH 0x24794cu
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_VALID 0x247950u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_SAMPLE_SEQ 0x247954u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_T_US 0x247958u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_LEN 0x247960u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_KIND 0x247964u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY 0x247968u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD 0x247968u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD_LEVEL 0x247968u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD_EPOCH 0x24796cu
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD_REQ 0x247970u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD_N 0x247974u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD__R 0x247976u
-#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_ROWS 0x247978u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META 0x26d340u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_WRITER_EPOCH 0x26d340u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_WORLD_EPOCH 0x26d348u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_SESSION_EPOCH 0x26d34cu
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_VALID 0x26d350u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_SAMPLE_SEQ 0x26d354u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_META_T_US 0x26d358u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_LEN 0x26d360u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_KIND 0x26d364u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY 0x26d368u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD 0x26d368u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD_LEVEL 0x26d368u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD_EPOCH 0x26d36cu
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD_REQ 0x26d370u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD_N 0x26d374u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_HEAD__R 0x26d376u
+#define HSMP_OFF_STATE_WORLD_MANIFEST_BUFS_0_BODY_ROWS 0x26d378u
 #define HSMP_STRIDE_STATE_WORLD_MANIFEST_BUFS_0_BODY_ROWS 0x18u
 #define HSMP_COUNT_STATE_WORLD_MANIFEST_BUFS_0_BODY_ROWS 1536u
-#define HSMP_OFF_STATE_WORLD_DYN 0x262a00u
-#define HSMP_OFF_STATE_WORLD_DYN_MIDDLE 0x262a00u
-#define HSMP_OFF_STATE_WORLD_DYN_W_BACK 0x262a04u
-#define HSMP_OFF_STATE_WORLD_DYN_W_GEN 0x262a08u
-#define HSMP_OFF_STATE_WORLD_DYN_R_FRONT 0x262a0cu
-#define HSMP_OFF_STATE_WORLD_DYN_R_GEN 0x262a10u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS 0x262a40u
-#define HSMP_STRIDE_STATE_WORLD_DYN_BUFS 0xe038u
+#define HSMP_OFF_STATE_WORLD_DYN 0x288400u
+#define HSMP_OFF_STATE_WORLD_DYN_MIDDLE 0x288400u
+#define HSMP_OFF_STATE_WORLD_DYN_W_BACK 0x288404u
+#define HSMP_OFF_STATE_WORLD_DYN_W_GEN 0x288408u
+#define HSMP_OFF_STATE_WORLD_DYN_R_FRONT 0x28840cu
+#define HSMP_OFF_STATE_WORLD_DYN_R_GEN 0x288410u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS 0x288440u
+#define HSMP_STRIDE_STATE_WORLD_DYN_BUFS 0x52838u
 #define HSMP_COUNT_STATE_WORLD_DYN_BUFS 3u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META 0x262a40u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_WRITER_EPOCH 0x262a40u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_WORLD_EPOCH 0x262a48u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_SESSION_EPOCH 0x262a4cu
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_VALID 0x262a50u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_SAMPLE_SEQ 0x262a54u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_T_US 0x262a58u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_LEN 0x262a60u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_KIND 0x262a64u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY 0x262a68u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD 0x262a68u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD_LEVEL 0x262a68u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD_EPOCH 0x262a6cu
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD_REQ 0x262a70u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD_N 0x262a74u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD__R 0x262a76u
-#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_ROWS 0x262a78u
-#define HSMP_STRIDE_STATE_WORLD_DYN_BUFS_0_BODY_ROWS 0xe0u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META 0x288440u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_WRITER_EPOCH 0x288440u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_WORLD_EPOCH 0x288448u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_SESSION_EPOCH 0x28844cu
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_VALID 0x288450u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_SAMPLE_SEQ 0x288454u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_META_T_US 0x288458u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_LEN 0x288460u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_KIND 0x288464u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY 0x288468u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD 0x288468u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD_LEVEL 0x288468u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD_EPOCH 0x28846cu
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD_REQ 0x288470u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD_N 0x288474u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_HEAD__R 0x288476u
+#define HSMP_OFF_STATE_WORLD_DYN_BUFS_0_BODY_ROWS 0x288478u
+#define HSMP_STRIDE_STATE_WORLD_DYN_BUFS_0_BODY_ROWS 0x528u
 #define HSMP_COUNT_STATE_WORLD_DYN_BUFS_0_BODY_ROWS 256u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY 0x28cb00u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_SEQ 0x28cb00u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA 0x28cb40u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META 0x28cb40u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_WRITER_EPOCH 0x28cb40u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_WORLD_EPOCH 0x28cb48u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_SESSION_EPOCH 0x28cb4cu
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_VALID 0x28cb50u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_SAMPLE_SEQ 0x28cb54u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_T_US 0x28cb58u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_LEN 0x28cb60u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_KIND 0x28cb64u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY 0x28cb68u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD 0x28cb68u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_LEVEL 0x28cb68u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_EPOCH 0x28cb6cu
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_SEQ 0x28cb70u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_OTHER 0x28cb74u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_COMPARED 0x28cb78u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_MISMATCHED_N 0x28cb7cu
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_HASH_MATCH 0x28cb80u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_HASH_EQUAL 0x28cb81u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_N 0x28cb82u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD__R 0x28cb84u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS 0x28cb88u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY 0x37fd00u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_SEQ 0x37fd00u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA 0x37fd40u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META 0x37fd40u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_WRITER_EPOCH 0x37fd40u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_WORLD_EPOCH 0x37fd48u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_SESSION_EPOCH 0x37fd4cu
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_VALID 0x37fd50u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_SAMPLE_SEQ 0x37fd54u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_META_T_US 0x37fd58u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_LEN 0x37fd60u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_KIND 0x37fd64u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY 0x37fd68u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD 0x37fd68u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_LEVEL 0x37fd68u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_EPOCH 0x37fd6cu
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_SEQ 0x37fd70u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_OTHER 0x37fd74u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_COMPARED 0x37fd78u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_MISMATCHED_N 0x37fd7cu
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_HASH_MATCH 0x37fd80u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_HASH_EQUAL 0x37fd81u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD_N 0x37fd82u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_HEAD__R 0x37fd84u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS 0x37fd88u
 #define HSMP_STRIDE_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS 0x10u
 #define HSMP_COUNT_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS 64u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0_ID 0x28cb88u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0_KIND 0x28cb8cu
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0__R 0x28cb8du
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0_DPOS 0x28cb90u
-#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0_DANG 0x28cb94u
-#define HSMP_OFF_G2S 0x28d000u
-#define HSMP_OFF_G2S_RING 0x28d000u
-#define HSMP_OFF_G2S_RING_TAIL 0x28d000u
-#define HSMP_OFF_G2S_RING_HEAD 0x28d040u
-#define HSMP_OFF_G2S_RING_SLOTS 0x28d080u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0_ID 0x37fd88u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0_KIND 0x37fd8cu
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0__R 0x37fd8du
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0_DPOS 0x37fd90u
+#define HSMP_OFF_STATE_WORLD_CONSISTENCY_DATA_BODY_ROWS_0_DANG 0x37fd94u
+#define HSMP_OFF_G2S 0x381000u
+#define HSMP_OFF_G2S_RING 0x381000u
+#define HSMP_OFF_G2S_RING_TAIL 0x381000u
+#define HSMP_OFF_G2S_RING_HEAD 0x381040u
+#define HSMP_OFF_G2S_RING_SLOTS 0x381080u
 #define HSMP_STRIDE_G2S_RING_SLOTS 0x200u
 #define HSMP_COUNT_G2S_RING_SLOTS 512u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR 0x28d080u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_LEN 0x28d080u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_KIND 0x28d082u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_AUX 0x28d084u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_FLAGS 0x28d086u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_PEER 0x28d088u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR__R 0x28d08cu
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_PRODUCER_EPOCH 0x28d090u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_SEQ 0x28d098u
-#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_REQ_ID 0x28d0a0u
-#define HSMP_OFF_G2S_RING_SLOTS_0_PAYLOAD 0x28d0a8u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR 0x381080u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_LEN 0x381080u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_KIND 0x381082u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_AUX 0x381084u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_FLAGS 0x381086u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_PEER 0x381088u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR__R 0x38108cu
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_PRODUCER_EPOCH 0x381090u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_SEQ 0x381098u
+#define HSMP_OFF_G2S_RING_SLOTS_0_HDR_REQ_ID 0x3810a0u
+#define HSMP_OFF_G2S_RING_SLOTS_0_PAYLOAD 0x3810a8u
 #define HSMP_STRIDE_G2S_RING_SLOTS_0_PAYLOAD 0x1u
 #define HSMP_COUNT_G2S_RING_SLOTS_0_PAYLOAD 472u
-#define HSMP_OFF_S2G 0x2ce000u
-#define HSMP_OFF_S2G_RING 0x2ce000u
-#define HSMP_OFF_S2G_RING_TAIL 0x2ce000u
-#define HSMP_OFF_S2G_RING_HEAD 0x2ce040u
-#define HSMP_OFF_S2G_RING_SLOTS 0x2ce080u
+#define HSMP_OFF_S2G 0x3c2000u
+#define HSMP_OFF_S2G_RING 0x3c2000u
+#define HSMP_OFF_S2G_RING_TAIL 0x3c2000u
+#define HSMP_OFF_S2G_RING_HEAD 0x3c2040u
+#define HSMP_OFF_S2G_RING_SLOTS 0x3c2080u
 #define HSMP_STRIDE_S2G_RING_SLOTS 0x200u
 #define HSMP_COUNT_S2G_RING_SLOTS 1024u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR 0x2ce080u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_LEN 0x2ce080u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_KIND 0x2ce082u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_AUX 0x2ce084u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_FLAGS 0x2ce086u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_PEER 0x2ce088u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR__R 0x2ce08cu
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_PRODUCER_EPOCH 0x2ce090u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_SEQ 0x2ce098u
-#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_REQ_ID 0x2ce0a0u
-#define HSMP_OFF_S2G_RING_SLOTS_0_PAYLOAD 0x2ce0a8u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR 0x3c2080u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_LEN 0x3c2080u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_KIND 0x3c2082u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_AUX 0x3c2084u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_FLAGS 0x3c2086u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_PEER 0x3c2088u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR__R 0x3c208cu
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_PRODUCER_EPOCH 0x3c2090u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_SEQ 0x3c2098u
+#define HSMP_OFF_S2G_RING_SLOTS_0_HDR_REQ_ID 0x3c20a0u
+#define HSMP_OFF_S2G_RING_SLOTS_0_PAYLOAD 0x3c20a8u
 #define HSMP_STRIDE_S2G_RING_SLOTS_0_PAYLOAD 0x1u
 #define HSMP_COUNT_S2G_RING_SLOTS_0_PAYLOAD 472u
-#define HSMP_OFF_BUS 0x34f000u
-#define HSMP_OFF_BUS_DIR 0x34f000u
-#define HSMP_OFF_BUS_DIR_SEQ 0x34f000u
-#define HSMP_OFF_BUS_DIR_DATA 0x34f040u
-#define HSMP_OFF_BUS_DIR_DATA_COUNT 0x34f040u
-#define HSMP_OFF_BUS_DIR_DATA__R 0x34f044u
-#define HSMP_OFF_BUS_DIR_DATA_WORLD_SCOPED 0x34f048u
-#define HSMP_OFF_BUS_DIR_DATA_NAMES 0x34f050u
+#define HSMP_OFF_BUS 0x443000u
+#define HSMP_OFF_BUS_DIR 0x443000u
+#define HSMP_OFF_BUS_DIR_SEQ 0x443000u
+#define HSMP_OFF_BUS_DIR_DATA 0x443040u
+#define HSMP_OFF_BUS_DIR_DATA_COUNT 0x443040u
+#define HSMP_OFF_BUS_DIR_DATA__R 0x443044u
+#define HSMP_OFF_BUS_DIR_DATA_WORLD_SCOPED 0x443048u
+#define HSMP_OFF_BUS_DIR_DATA_NAMES 0x443050u
 #define HSMP_STRIDE_BUS_DIR_DATA_NAMES 0x20u
 #define HSMP_COUNT_BUS_DIR_DATA_NAMES 64u
-#define HSMP_OFF_BUS_KEYS 0x34f880u
+#define HSMP_OFF_BUS_KEYS 0x443880u
 #define HSMP_STRIDE_BUS_KEYS 0x1080u
 #define HSMP_COUNT_BUS_KEYS 64u
-#define HSMP_OFF_BUS_KEYS_0_SEQ 0x34f880u
-#define HSMP_OFF_BUS_KEYS_0_DATA 0x34f8c0u
-#define HSMP_OFF_BUS_KEYS_0_DATA_META 0x34f8c0u
-#define HSMP_OFF_BUS_KEYS_0_DATA_META_WRITER_EPOCH 0x34f8c0u
-#define HSMP_OFF_BUS_KEYS_0_DATA_META_WORLD_EPOCH 0x34f8c8u
-#define HSMP_OFF_BUS_KEYS_0_DATA_META_SESSION_EPOCH 0x34f8ccu
-#define HSMP_OFF_BUS_KEYS_0_DATA_META_VALID 0x34f8d0u
-#define HSMP_OFF_BUS_KEYS_0_DATA_META_SAMPLE_SEQ 0x34f8d4u
-#define HSMP_OFF_BUS_KEYS_0_DATA_META_T_US 0x34f8d8u
-#define HSMP_OFF_BUS_KEYS_0_DATA_LEN 0x34f8e0u
-#define HSMP_OFF_BUS_KEYS_0_DATA_KIND 0x34f8e4u
-#define HSMP_OFF_BUS_KEYS_0_DATA_BODY 0x34f8e8u
+#define HSMP_OFF_BUS_KEYS_0_SEQ 0x443880u
+#define HSMP_OFF_BUS_KEYS_0_DATA 0x4438c0u
+#define HSMP_OFF_BUS_KEYS_0_DATA_META 0x4438c0u
+#define HSMP_OFF_BUS_KEYS_0_DATA_META_WRITER_EPOCH 0x4438c0u
+#define HSMP_OFF_BUS_KEYS_0_DATA_META_WORLD_EPOCH 0x4438c8u
+#define HSMP_OFF_BUS_KEYS_0_DATA_META_SESSION_EPOCH 0x4438ccu
+#define HSMP_OFF_BUS_KEYS_0_DATA_META_VALID 0x4438d0u
+#define HSMP_OFF_BUS_KEYS_0_DATA_META_SAMPLE_SEQ 0x4438d4u
+#define HSMP_OFF_BUS_KEYS_0_DATA_META_T_US 0x4438d8u
+#define HSMP_OFF_BUS_KEYS_0_DATA_LEN 0x4438e0u
+#define HSMP_OFF_BUS_KEYS_0_DATA_KIND 0x4438e4u
+#define HSMP_OFF_BUS_KEYS_0_DATA_BODY 0x4438e8u
 #define HSMP_STRIDE_BUS_KEYS_0_DATA_BODY 0x1u
 #define HSMP_COUNT_BUS_KEYS_0_DATA_BODY 4096u
-#define HSMP_OFF_DEVCTL 0x392000u
-#define HSMP_OFF_DEVCTL_RING 0x392000u
-#define HSMP_OFF_DEVCTL_RING_TAIL 0x392000u
-#define HSMP_OFF_DEVCTL_RING_HEAD 0x392040u
-#define HSMP_OFF_DEVCTL_RING_SLOTS 0x392080u
+#define HSMP_OFF_DEVCTL 0x486000u
+#define HSMP_OFF_DEVCTL_RING 0x486000u
+#define HSMP_OFF_DEVCTL_RING_TAIL 0x486000u
+#define HSMP_OFF_DEVCTL_RING_HEAD 0x486040u
+#define HSMP_OFF_DEVCTL_RING_SLOTS 0x486080u
 #define HSMP_STRIDE_DEVCTL_RING_SLOTS 0x200u
 #define HSMP_COUNT_DEVCTL_RING_SLOTS 64u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR 0x392080u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_LEN 0x392080u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_KIND 0x392082u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_AUX 0x392084u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_FLAGS 0x392086u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_PEER 0x392088u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR__R 0x39208cu
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_PRODUCER_EPOCH 0x392090u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_SEQ 0x392098u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_REQ_ID 0x3920a0u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_PAYLOAD 0x3920a8u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR 0x486080u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_LEN 0x486080u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_KIND 0x486082u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_AUX 0x486084u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_FLAGS 0x486086u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_PEER 0x486088u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR__R 0x48608cu
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_PRODUCER_EPOCH 0x486090u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_SEQ 0x486098u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_REQ_ID 0x4860a0u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_PAYLOAD 0x4860a8u
 #define HSMP_STRIDE_DEVCTL_RING_SLOTS_0_PAYLOAD 0x1u
 #define HSMP_COUNT_DEVCTL_RING_SLOTS_0_PAYLOAD 472u
 

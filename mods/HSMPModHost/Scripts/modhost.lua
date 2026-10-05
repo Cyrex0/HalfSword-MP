@@ -212,7 +212,7 @@ function M.new(api)
     -- Load a set (entries in set order: { name, hash }). Returns ok, failed count, text.
     -- ok = false only when a mod's files are missing from the cache.
     function H.load_set(set, entries)
-        if H.set == set then return true, H.failed or 0, "already loaded" end
+        if H.set == set then return H.load_ok == true, H.failed or 0, H.load_text or "already loaded" end
         H.unload_all("a new mod set")
         local failed, missing, names = 0, 0, {}
         for _, e in ipairs(entries) do
@@ -222,16 +222,17 @@ function M.new(api)
             if m.missing then missing = missing + 1 end
         end
         H.set, H.failed = set, failed
-        if missing > 0 then return false, failed, "missing from the cache: " .. table.concat(names, ", ") end
-        if failed > 0 then return true, failed, "failed to start: " .. table.concat(names, ", ") end
-        return true, 0, ""
+        H.load_ok = missing == 0
+        H.load_text = missing > 0 and ("missing from the cache: " .. table.concat(names, ", "))
+            or failed > 0 and ("failed to start: " .. table.concat(names, ", ")) or ""
+        return H.load_ok, failed, H.load_text
     end
 
     function H.unload_all(why)
         if #H.mods == 0 and not H.set then return end
         log("unloading %d server mod(s) (%s)", #H.mods, tostring(why))
         for i = #H.mods, 1, -1 do H.unload_mod(H.mods[i]) end
-        H.mods, H.set, H.failed = {}, nil, nil
+        H.mods, H.set, H.failed, H.load_ok, H.load_text = {}, nil, nil, nil, nil
     end
 
     -- Registrations of unloaded mods that stay with UE4SS (inert) until a game restart.

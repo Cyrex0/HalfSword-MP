@@ -1,5 +1,5 @@
-//! Wire protocol v6: client <-> server messages (docs/development/protocol.md, "v6
-//! records"; docs/development/ipc-shared-memory.md).
+//! Wire protocol v10: life-bound client <-> server records (docs/development/protocol.md;
+//! docs/development/ipc-shared-memory.md).
 //!
 //! The transport (handshake, encryption, channels) lives in `hsmp-net` (`crate::net` on the
 //! server, `sidecar/net.rs` on the client). Every channel message is one typed record:
@@ -7,8 +7,7 @@
 //! `hsmp_ipc::record::view` for its kind. [`record_mode`] picks the channel. There is no
 //! envelope and no session token: the connection authenticates the sender.
 
-/// The header/handshake version (`hsmp_net::net::PROTOCOL_VERSION`). Additions are records
-/// behind capability bits, not bumps.
+/// The negotiated representation version (`hsmp_net::net::PROTOCOL_VERSION`).
 #[allow(dead_code)] // not every binary that includes proto.rs uses it
 pub const PROTOCOL_VERSION: u32 = hsmp_net::net::PROTOCOL_VERSION as u32;
 

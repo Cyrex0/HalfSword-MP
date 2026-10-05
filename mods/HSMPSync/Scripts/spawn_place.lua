@@ -91,9 +91,9 @@ local function dist_xy(ax, ay, bx, by) return math.sqrt((ax - bx) ^ 2 + (ay - by
 -- The plan from the normalised session view (shared/hsmp_session.lua HS.view()):
 -- { round, arena, seq, by_peer = {[peer] = {peer, spawn_id, slot, x, y, z, yaw, protect_ms}}, list }.
 -- round = the round the orders are for (spawn_id >> 8); nil without any order.
-function SP.plan_from_view(v)
+function SP.plan_from_view(v, mode)
     if type(v) ~= "table" or type(v.spawns) ~= "table" then return nil end
-    local p = { round = tonumber(v.spawn_round) or 0, arena = v.arena or "", seq = tonumber(v.seq) or 0,
+    local p = { match_id = v.match_id or 0, round = tonumber(v.spawn_round) or 0, arena = v.arena or "", seq = tonumber(v.seq) or 0,
                 by_peer = {}, list = {} }
     local ids = {}
     for id in pairs(v.spawns) do ids[#ids + 1] = id end
@@ -102,6 +102,17 @@ function SP.plan_from_view(v)
         local s = v.spawns[id]
         local e = { peer = id, spawn_id = s.spawn_id, slot = s.slot or 0, x = s.x, y = s.y, z = s.z,
                     yaw = s.yaw or 0, protect_ms = s.protect_ms or 0 }
+        -- Snapshot the generation belonging to THIS order. Initial round orders
+        -- precede Mode.on_live (which initializes life1); respawns require the
+        -- matching full authoritative generation, not only the wrapped low bits.
+        local sid = math.tointeger(e.spawn_id) or 0
+        e.life = 1
+        if sid & 0x80 ~= 0 then
+            local row = mode and mode.rows and mode.rows[id]
+            local life = row and math.tointeger(row.life) or 0
+            e.life = mode and mode.match_id == p.match_id and mode.round == p.round
+                and life > 0 and (life & 0x7f) == (sid & 0x7f) and life or 0
+        end
         p.by_peer[id] = e
         p.list[#p.list + 1] = e
     end
@@ -243,6 +254,7 @@ function P:reset(why)
     -- The round went Live in this world (protection then ends at until_t;
     -- before that it holds whatever until_t says).
     self.live_seen, self.live_at = false, nil
+    self.respawn_spawn = false
     -- Pairs whose collision we disabled: key -> { actor, t } (UObjects of
     -- this world only; dropped with it, never touched after a world change).
     self.nc = { pairs = {}, next_t = 0, ended_t = nil, ok = nil }
@@ -269,6 +281,7 @@ function P:order()
     if short ~= plan.arena then return nil, nil, "plan is for " .. plan.arena .. ", loaded " .. short end
     local e = plan.by_peer[me]
     if not e then return nil, nil, "no seat for peer " .. me end
+    if (plan.match_id or 0) ~= 0 and (e.life or 0) == 0 then return nil, nil, "waiting for spawn life" end
     return e, plan
 end
 
@@ -279,6 +292,14 @@ function P:order_text()
         e.spawn_id or -1)
 end
 
+-- A server deathmatch life order is distinct from an incidental possession
+-- swap during combat. Only the Director's actual Spawn phase authorizes it.
+function P:respawn_order(e)
+    local id = e and math.tointeger(e.spawn_id) or 0
+    return id ~= nil and id & 0x80 ~= 0 and self.env.director_state
+        and self.env.director_state() == "Spawn" or false
+end
+
 -- Is the local pawn under spawn protection right now? From the first tick an
 -- MP pawn exists until the round goes Live (never into Live; the client
 -- floor protect_ms only bounds a window before Live, e.g. a failed
@@ -286,10 +307,10 @@ end
 function P:protected(now)
     local pr = self.protect
     if not pr then return false end
-    if self.live_seen then return false end
+    if self.live_seen and not pr.respawn then return false end
     now = now or self.env.now()
     if pr.until_t == nil or now < pr.until_t then return true end
-    return pr.until_live == true
+    return not pr.respawn and pr.until_live == true
 end
 
 -- Absolute end of protection (process clock), nil while unbounded (not
@@ -298,6 +319,7 @@ end
 function P:protect_until()
     local pr = self.protect
     if not pr then return nil end
+    if pr.respawn then return pr.until_t end
     if self.live_seen then
         local la = self.live_at or self.env.now()
         return (pr.until_t and pr.until_t < la) and pr.until_t or la
@@ -314,7 +336,7 @@ function P:write_status(c, verified, err)
     local d = c.dest
     local pu = self:protect_until()
     env.put_status({
-        seq = self.status_seq, round = c.plan.round, arena = c.plan.arena or "",
+        seq = self.status_seq, match_id = c.plan.match_id or 0, life = c.e.life or 0, round = c.plan.round, arena = c.plan.arena or "",
         spawn_id = tonumber(c.e.spawn_id) or 0, slot = tonumber(c.e.slot) or -1, pawn = self.pawn_id or "",
         has_dest = d ~= nil, pos = d and { d.X, d.Y, d.Z } or nil, clear = c.clear and true or false,
         why = c.why or "", verified = verified and true or false, tries = c.tries or 0,
@@ -535,7 +557,8 @@ function P:arm_protection(until_t)
         pr = { set_by_us = false, invuln = 0, vitals = 0, since = self.env.now() }
         self.protect = pr
     end
-    pr.until_t = until_t
+    pr.respawn = self.respawn_spawn == true
+    pr.until_t = until_t or (pr.respawn and (self.env.now() + SP.T.protect_max_ms / 1000)) or nil
     pr.ended = false
 end
 
@@ -795,8 +818,9 @@ function P:request_step(now, settled)
     local seq = q and tonumber(q.seq)
     if not seq or seq <= self.req_seq then return end
     if not settled then return end
+    local e, plan, order_why = self:order()
+    if not e and order_why == "waiting for spawn life" then return end
     self.req_seq = seq
-    local e, plan = self:order()
     local r, a = tonumber(q.round), q.arena
     local pw = (q.pawn ~= nil and q.pawn ~= "") and q.pawn or nil
     if not e or r ~= plan.round or a ~= plan.arena or (pw and pw ~= self.pawn_id) then
@@ -903,7 +927,9 @@ function P:tick()
         -- re-possession) is never placed: teleporting the player to the spawn
         -- mid-fight would be a free reset (HSMPCombat would see an 11 m jump).
         -- The watchdog (falls) still runs.
-        if self.live_seen then
+        local incoming = self:order()
+        self.respawn_spawn = self:respawn_order(incoming)
+        if self.live_seen and not self.respawn_spawn then
             self.placed_pawn = pid
             env.log("spawn: new pawn %s during Live: not placed (watchdog only)", pid)
         end
@@ -911,6 +937,7 @@ function P:tick()
     self.pawn = pawn
 
     local e, plan, why = self:order()
+    if not self.protect and self:respawn_order(e) then self.respawn_spawn = true end
     local mstate = env.match()
     if mstate == "countdown" then self.live_seen, self.live_at = false, nil end   -- a new round in the same world
     if mstate == "live" and not self.live_seen then
@@ -928,7 +955,7 @@ function P:tick()
     -- Protection starts as soon as an MP pawn exists, before placement, and
     -- holds until the round goes Live.
     if e and not self.protect then self:arm_protection(nil) end
-    if e and self.protect then self.protect.until_live = true end
+    if e and self.protect then self.protect.until_live = not self.protect.respawn end
     self:protect_step(now)
     self:nocollide_step(now)
     if self.protect and not self.protect.ended and self:protected(now) and self.cur and self.cur.done
@@ -956,7 +983,7 @@ function P:tick()
     end
     -- An order for a NEW round in the same world (live -> countdown without a reload).
     local c = self.cur
-    if e and c and c.e and c.e.spawn_id ~= e.spawn_id and plan.round ~= c.plan.round then
+    if e and c and c.e and ((plan.match_id or 0) ~= (c.plan.match_id or 0) or (c.e.spawn_id ~= e.spawn_id and plan.round ~= c.plan.round)) then
         self:place(pawn, e, plan, "new round")
         return
     end
@@ -986,7 +1013,7 @@ function SP.make_ue_env(ctx)
         local i = ipc()
         return i and i.bus_table("fallback_swap") or nil
     end
-    function env.plan() return SP.plan_from_view(ctx.view and ctx.view()) end
+    function env.plan() return SP.plan_from_view(ctx.view and ctx.view(), ctx.mode and ctx.mode()) end
     function env.request()
         local i = ipc()
         local t = i and i.bus_table("spawn_request")

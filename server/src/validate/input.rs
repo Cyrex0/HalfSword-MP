@@ -109,7 +109,7 @@ mod tests {
     use proptest::prelude::*;
 
     fn root(pos: [f32; 3]) -> Root {
-        Root { tick: 1, ts: 2, send_wall_ms: 3, pos, rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3] }
+        Root { tick: 1, ts: 2, send_wall_ms: 3, pos, rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3], match_id: 1, round: 1, life: 1, _r: 0 }
     }
 
     #[test]

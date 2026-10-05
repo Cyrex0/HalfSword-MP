@@ -10,6 +10,65 @@ use proptest::prelude::*;
 const VIC: PeerId = 0x1A72; // ids no other test module uses: kit facts are global
 const ATT: PeerId = 0x1A71;
 
+#[test]
+fn cutting_bone_frame_uses_delivered_brackets_not_hidden_midframe() {
+    let mut s=Store::default();
+    let frame=|x:f32,q:posecodec::v2::Quat|BoneFrames {
+        p:[[x,0.0,0.0];posecodec::v2::NB],q:[q;posecodec::v2::NB],scale:1.0,
+    };
+    let identity=[0.0,0.0,0.0,1.0];
+    s.peer(VIC).bone_frames.push(1000,frame(0.0,identity));
+    // True source motion contains a nonlinear intermediate twist; decimation
+    // withheld this frame. The receiver interpolates its delivered endpoints.
+    s.peer(VIC).bone_frames.push(1050,frame(80.0,[0.0,0.0,1.0,0.0]));
+    s.peer(VIC).bone_frames.push(1100,frame(0.0,identity));
+    for (ts,b) in s.peers[&VIC].bone_frames.q.clone() {
+        let mut f=posecodec::v2::Full::default();f.ts=ts as f64;
+        for i in 0..posecodec::v2::NB {f.bones[i].p=b.p[i];f.bones[i].q=b.q[i];}
+        s.record_body_strikers(VIC,ts,&f);
+    }
+    s.note_relayed(ATT,VIC,1000,100,1100);
+    s.note_relayed(ATT,VIC,1100,100,1100);
+    let v=&s.peers[&VIC];
+    let shown=s.shown_bone_frames(ATT,VIC,v,1050,0,1100).unwrap();
+    let hidden=v.bone_frames.sample(1050,0).unwrap();
+    let original_world_box=[20.0,0.0,0.0];
+    let captured_local_box=[20.0,0.0,0.0];
+    let reconstructed=|f:BoneFrames|add(f.p[0],posecodec::v2::qrot(f.q[0],captured_local_box));
+    assert!(len(sub(reconstructed(shown),original_world_box))<0.001);
+    assert!(len(sub(reconstructed(hidden),original_world_box))>BODY_TOL);
+    assert_eq!(shown.q[0],identity);
+    // Another viewer that actually received the middle frame sees its twist.
+    s.note_relayed(ATT+1,VIC,1050,50,1100);
+    s.note_relayed(ATT+1,VIC,1100,50,1100);
+    let theirs=s.shown_bone_frames(ATT+1,VIC,&s.peers[&VIC],1050,0,1100).unwrap();
+    assert_eq!(theirs.p[0],hidden.p[0]);
+    assert_eq!(theirs.q[0],hidden.q[0]);
+}
+
+#[test]
+fn cutting_newest_frame_uses_only_delivered_native_derivatives_and_context() {
+    let mut s=Store::default();
+    let context=posecodec::v2::Context{match_id:7,round:2,life:3};
+    assert!(s.bind_pose_context(VIC,Some(context)));
+    for (ts,rotation) in [(950,0.0f32),(1000,0.0),(1030,20.0)] {
+        let mut f=posecodec::v2::Full::default();f.ts=ts as f64;f.context=Some(context);
+        f.bones[0].q=[0.0,0.0,(rotation.to_radians()/2.0).sin(),(rotation.to_radians()/2.0).cos()];
+        s.record_body_strikers(VIC,ts,&f);
+    }
+    s.note_relayed(ATT,VIC,800,50,1100); // irrelevant old entry aged out of cache
+    s.note_relayed(ATT,VIC,950,50,1100);
+    s.note_relayed(ATT,VIC,1000,50,1100);
+    let got=s.shown_bone_frames(ATT,VIC,&s.peers[&VIC],1030,50,1100).unwrap();
+    assert_eq!(got.q[0],[0.0,0.0,0.0,1.0],"hidden1030twist must not alter newest displayed frame");
+    // Cache removal of a needed delivered endpoint is not repaired with a
+    // never-delivered full-rate frame, even though the latter is available.
+    s.peer(VIC).native_frames.remove(&1000);
+    assert!(s.shown_bone_frames(ATT,VIC,&s.peers[&VIC],1030,50,1100).is_none());
+    assert!(s.bind_pose_context(VIC,Some(posecodec::v2::Context{life:4,..context})));
+    assert!(s.peers[&VIC].native_frames.is_empty());
+}
+
 fn hit(target: PeerId, loc: V3, ats: u32, vts: u32) -> DamageEvent {
     DamageEvent::new(crate::proto::Damage {
         hit_id: 1, target_peer_id: target, round: 1, bone: hsmp_ipc::layout::Str::new("spine_02"),
@@ -299,6 +358,376 @@ fn swept_blade_through_capsule_accepted_miss_rejected() {
 }
 
 // ---- blocks, parries, clashes -------------------------------------------------------
+
+#[test]
+fn offhand_strike_uses_its_own_swept_geometry_and_speed() {
+    let attacker = 0x1B81;
+    crate::validate::damage::set_kit(attacker, &crate::loadout::KitSel::new("custom", "w_axe", "w_axe", &[], [0; 4]));
+    let mid = 1972;
+    let mut sc = cut_scene(0.0, 260.0, mid); // main weapon misses the torso
+    let history = sc.s.peers.remove(&ATT).unwrap();
+    sc.s.peers.insert(attacker, history);
+    let h = hit(VIC, [-15.0, 0.0, 130.0], sc.ats(mid + 4), sc.honest_view(mid + 4, 31));
+    assert!(!accepted(&sc.s.evaluate(attacker, &h, sc.now)));
+    let mut t = 0;
+    while t + 20 <= 2000 {
+        let y = ((t - mid) as f32 * 3.0).clamp(-150.0, 150.0);
+        sc.s.record_blade_hand(attacker, (t + A_OFF) as u32,
+            Blade { base: [-40.0, y, 130.0], tip: [60.0, y, 130.0], vel: None }, t + 20, true);
+        t += 16;
+    }
+    let Eval::Accept(i) = sc.s.evaluate(attacker, &h, sc.now) else { panic!("offhand strike rejected: {:?}", sc.s.evaluate(attacker, &h, sc.now)) };
+    assert!(i.swept && !i.unarmed);
+    assert!(i.contact_speed.unwrap() > 1000.0, "offhand speed: {i:?}");
+    let miss = hit(VIC, [-15.0, 90.0, 210.0], h.attacker_ts, h.victim_view_ts);
+    assert!(!accepted(&sc.s.evaluate(attacker, &miss, sc.now)), "adding an offhand must not widen hit geometry");
+    let mut named = h;
+    named.flags = crate::validate::damage::FLAG_COMPLEX | crate::validate::damage::FLAG_WEAPON;
+    named.dism_blunt = crate::validate::damage::SOURCE_LEFT;
+    assert!(accepted(&sc.s.evaluate(attacker, &named, sc.now)), "named offhand must use its own blade");
+    named.dism_blunt = crate::validate::damage::SOURCE_RIGHT;
+    assert!(!accepted(&sc.s.evaluate(attacker, &named, sc.now)), "a main-hand claim cannot borrow the offhand geometry");
+    named.dism_blunt = crate::validate::damage::SOURCE_LEFT;
+    sc.s.peers.get_mut(&attacker).unwrap().offhand.q.clear();
+    assert!(!accepted(&sc.s.evaluate(attacker, &named, sc.now)), "a missing named hand cannot use the legacy main weapon actor");
+    crate::validate::damage::forget(attacker);
+}
+
+#[test]
+fn native_fist_with_held_blade_uses_body_geometry_and_speed() {
+    let mut sc = Scene::new(20, 2000, |_| [-100.0, 0.0, 100.0], |_| None, |_| [-60.0, 0.0, 140.0]);
+    for t in (0..=1975).step_by(25) {
+        // This weapon is outside the permitted class length, but its reach
+        // is unrelated to the separately validated fist beside it.
+        sc.s.record_blade(ATT, (A_OFF + t) as u32,
+            Blade { base: [-150.0, 0.0, 140.0], tip: [150.0, 0.0, 140.0], vel: None }, t + 20);
+    }
+    let mut h = hit(VIC, [-105.0, -20.0, 140.0], sc.ats(1975), sc.honest_view(1975, 31));
+    h.flags = crate::validate::damage::FLAG_COMPLEX | crate::validate::damage::FLAG_WEAPON;
+    h.dism_blunt = crate::validate::damage::SOURCE_FIST | crate::validate::damage::SOURCE_LEFT | (10<<21);
+    h.source_class=hsmp_ipc::layout::Str::new("Weapon_Fists_C");
+    assert!(reason(sc.eval(&h)).contains("exact native body striker history"));
+    h.location = [-40.0, 0.0, 140.0];
+    assert!(!accepted(&sc.eval(&h)), "a fist identity cannot claim remote blade reach");
+}
+
+#[test]
+fn native_feet_with_held_blade_use_body_geometry_without_module_history() {
+    let mut sc=Scene::new(20,2000,|_|[-150.0,0.0,100.0],|_|None,|_|[-60.0,0.0,140.0]);
+    for t in (0..=1975).step_by(25) {
+        sc.s.record_blade(ATT,(A_OFF+t) as u32,Blade {base:[-150.0,0.0,140.0],tip:[150.0,0.0,140.0],vel:None},t+20);
+    }
+    let mut h=hit(VIC,[-150.0,10.0,10.0],sc.ats(1975),sc.honest_view(1975,31));
+    h.bone=hsmp_ipc::layout::Str::new("foot_l");
+    h.flags=crate::validate::damage::FLAG_COMPLEX|crate::validate::damage::FLAG_WEAPON;
+    h.dism_blunt=crate::validate::damage::SOURCE_FEET|crate::validate::damage::SOURCE_LEFT|(15<<21);
+    h.source_class=hsmp_ipc::layout::Str::new("Weapon_Feet_C");
+    assert!(reason(sc.eval(&h)).contains("exact native body striker history"));
+    h.location=[-40.0,0.0,140.0];
+    assert!(!accepted(&sc.eval(&h)),"foot identity cannot borrow held-blade reach");
+}
+
+#[test]
+fn native_fist_sphere_validates_its_swept_source_without_whole_body_widening() {
+    let mut sc=Scene::new(20,2000,|_|[-80.0,-20.0,100.0],|_|None,|_|[-60.0,0.0,140.0]);
+    let mut h=hit(VIC,[-79.0,-20.0,140.0],sc.ats(1975),sc.honest_view(1975,31));
+    h.flags=crate::validate::damage::FLAG_COMPLEX|crate::validate::damage::FLAG_WEAPON;
+    h.dism_blunt=crate::validate::damage::SOURCE_FIST|crate::validate::damage::SOURCE_RIGHT|(10<<21);
+    h.source_class=hsmp_ipc::layout::Str::new("Weapon_Fists_C");
+    assert!(reason(sc.eval(&h)).contains("exact native body striker history"),"named native sphere requires its exact component history");
+    for t in (1000..=1975).step_by(25) {
+        let mut f=posecodec::v2::Full::default();
+        f.bones[16].p=[-105.0,-20.0,140.0];
+        f.strikers=Some(vec![posecodec::v2::BodyStriker {part:1,component:10,kind:0,p:[13.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[13.0;3],..Default::default()}]);
+        sc.s.record_body_strikers(ATT,sc.ats(t),&f);
+    }
+    let Eval::Accept(i)=sc.eval(&h) else {panic!("actual sphere rejected: {:?}",sc.eval(&h))};
+    assert!(i.unarmed && i.swept && !i.parry_possible);
+    assert!(i.weapon_dist<0.01);assert_eq!(i.contact_speed,Some(0.0));
+    h.dism_blunt=crate::validate::damage::SOURCE_FIST|crate::validate::damage::SOURCE_LEFT|(10<<21);
+    assert!(!accepted(&sc.eval(&h)),"left fist cannot borrow right sphere");
+    h.dism_blunt=crate::validate::damage::SOURCE_FIST|crate::validate::damage::SOURCE_RIGHT|(11<<21);
+    assert!(!accepted(&sc.eval(&h)),"another native component cannot borrow Sphere10");
+    h.dism_blunt=crate::validate::damage::SOURCE_FIST|crate::validate::damage::SOURCE_RIGHT|(10<<21);
+    h.location=[-53.0,-20.0,140.0];
+    assert!(!accepted(&sc.eval(&h)),"actual source envelope still bounded");
+}
+
+#[test]
+fn delayed_native_striker_history_waits_instead_of_rejecting_stale_geometry() {
+    let mut sc=Scene::new(20,2000,|_|[-80.0,-20.0,100.0],|_|None,|_|[-60.0,0.0,140.0]);
+    let mut h=hit(VIC,[-79.0,-20.0,140.0],sc.ats(1975),sc.honest_view(1975,31));
+    h.flags=crate::validate::damage::FLAG_COMPLEX|crate::validate::damage::FLAG_WEAPON;
+    h.dism_blunt=crate::validate::damage::SOURCE_FIST|crate::validate::damage::SOURCE_RIGHT|(10<<21);
+    h.source_class=hsmp_ipc::layout::Str::new("Weapon_Fists_C");
+    let mut f=posecodec::v2::Full::default();
+    f.bones[16].p=[-140.0,-20.0,140.0];
+    f.strikers=Some(vec![posecodec::v2::BodyStriker{part:1,component:10,kind:0,p:[13.0,0.0,0.0],half:[13.0;3],q:[0.0,0.0,0.0,1.0],..Default::default()}]);
+    for t in (1000..=1950).step_by(25){sc.s.record_body_strikers(ATT,sc.ats(t),&f);}
+    assert!(matches!(sc.s.evaluate_opts(ATT,&h,sc.now,false),Eval::Wait(_)),"newer root/weapon history cannot make stale fist shape a final miss");
+    assert!(reason(sc.s.evaluate_opts(ATT,&h,sc.now,true)).contains("body_striker_miss"),"final bounded lead still rejects actual old geometry");
+    f.bones[16].p=[-105.0,-20.0,140.0];
+    sc.s.record_body_strikers(ATT,sc.ats(1975),&f);
+    assert!(accepted(&sc.s.evaluate_opts(ATT,&h,sc.now,false)),"delayed exact hit-time shape permits genuine contact without widening");
+}
+
+#[test]
+fn body_striker_sweep_rotation_velocity_and_transient_absence_are_exact() {
+    let mut h=PeerHist::new();
+    let s=posecodec::v2::BodyStriker{part:3,component:10,kind:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],half:[7.475,14.949,7.475],..Default::default()};
+    let mut a=StrikerSet::empty(true);a.shapes[0]=s;a.n=1;
+    let mut b=a;b.shapes[0].p=[50.0,0.0,0.0];b.shapes[0].q=[0.0,0.0,(0.1f32).sin(),(0.1f32).cos()];
+    h.strikers.push(1000,a);h.strikers.push(1100,b);
+    let (d,p,t)=h.striker_contact([25.0,0.0,0.0],1000.0,1100.0,3,10).unwrap();
+    assert!(d<0.01 && t>1000.0 && t<1100.0,"foot crossed point between snapshots");
+    assert!(h.striker_contact([25.0,0.0,0.0],1000.0,1100.0,4,10).is_none());
+    let v=h.striker_velocity(3,10,[0.0,10.0,0.0],1050.0).unwrap();
+    assert!((len(v)-480.1).abs()<0.3,"contact point includes box rotation, not only 500cm/s center: {v:?}");
+    assert!(h.striker_velocity(3,10,p,t).is_some());
+    h.strikers.push(1200,StrikerSet::empty(true));
+    assert!(h.striker_contact([50.0,0.0,0.0],1170.0,1200.0,3,10).is_none(),"destroyed transient foot cannot linger indefinitely");
+    assert!(h.strikers.sample(1050,0).unwrap().get(3,10).is_some(),"historical kick retained after disappearance");
+}
+
+#[test]
+fn native_head_side_contact_uses_only_its_module_envelope() {
+    crate::validate::damage::set_kit(ATT, &crate::loadout::KitSel::new("custom", "w_poleaxe_m", "", &[], [0;4]));
+    let mut sc=Scene::new(20,2000,still,|_|None,|_|[-150.0,0.0,130.0]);
+    let w=posecodec::v2::Weapon {hands:1,p:[-150.0,0.0,130.0],q:[0.0,0.0,0.0,1.0],base:[0.0;3],tip:[200.0,0.0,0.0],
+        boxes:vec![
+            posecodec::v2::WeaponBox {component:1,p:[160.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[22.0,20.0,3.0],class_hash:posecodec::v2::class_hash("ModularWeaponBP_Polearm_Mid_Tier_C"),native_scale:Some([2.0,1.0,1.0]),..Default::default()},
+            posecodec::v2::WeaponBox {component:2,p:[100.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[100.0,2.0,2.0],class_hash:posecodec::v2::class_hash("ModularWeaponBP_Polearm_Mid_Tier_C"),..Default::default()},
+            posecodec::v2::WeaponBox {component:3,p:[160.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[22.0,20.0,3.0],class_hash:posecodec::v2::class_hash("ModularWeaponBP_Polearm_Mid_Tier_C"),native_scale:Some([2.0,1.0,1.0]),child_of:1},
+        ],..Default::default()};
+    for t in (0..=1975).step_by(25) {
+        let (base,tip)=posecodec::v2::blade_world(&w);
+        sc.s.record_blade(ATT,(t+A_OFF)as u32,Blade{base,tip,vel:None},t+20);
+    }
+    let mut h=hit(VIC,[-5.0,19.0,130.0],sc.ats(1975),sc.honest_view(1975,31));
+    h.flags=crate::validate::damage::FLAG_COMPLEX|crate::validate::damage::FLAG_WEAPON;
+    h.dism_blunt=crate::validate::damage::SOURCE_RIGHT;
+    assert!(reason(sc.eval(&h)).contains("blade_miss"),"native Head contact19cm beside shaft reproduced");
+    for t in (1000..=1975).step_by(25) { assert!(sc.s.record_weapon_shape(ATT,(t+A_OFF)as u32,&w,false)); }
+    h.dism_blunt|=1<<21;
+    h.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_Polearm_Mid_Tier_C");
+    let Eval::Accept(i)=sc.eval(&h) else {panic!("head contact: {:?}",sc.eval(&h))};
+    assert_eq!(i.weapon_dist,0.0); assert!(!i.unarmed && i.swept);
+    for t in (1000..=1975).step_by(25) {
+        sc.s.peer(VIC).bone_frames.push((t+V_OFF) as u32,BoneFrames {
+            p:[[-390.0,0.0,130.0];posecodec::v2::NB],q:[[0.0,0.0,0.0,1.0];posecodec::v2::NB],scale:0.9932 });
+    }
+    let mut cutting=h.clone();
+    cutting.flags|=crate::validate::damage::FLAG_LOCAL;
+    cutting.dism_blunt|=3<<27;
+    cutting.hit_box_frame=[400.0,0.0,0.0,0.0,0.0,0.0,1.0,2.0,1.0,1.0,11.0,20.0,3.0];
+    assert!(accepted(&sc.eval(&cutting)),"original native Box frame authenticates");
+    let mut socket_divided=cutting.clone();socket_divided.hit_box_frame[0]/=1.125;
+    assert!(reason(sc.eval(&socket_divided)).contains("cutting geometry differs"),"old socket-divided center cannot match physical history at median skeleton scale0.9932");
+    let mut prior_module=cutting.clone();prior_module.location=[-5.0,0.0,130.0];
+    prior_module.dism_blunt=(prior_module.dism_blunt & !(15<<21)) | (2<<21);
+    assert!(accepted(&sc.eval(&prior_module)),"native selected Box retained from previous Head still authenticates a current Grip contact");
+    let mut child_strike=cutting.clone();child_strike.dism_blunt=(child_strike.dism_blunt & !(15<<21)) | (3<<21);
+    assert!(reason(sc.eval(&child_strike)).contains("source_role"),"cutting-only virtual ID cannot become a striking collider");
+    let mut missing_parent=w.clone();missing_parent.boxes[2].child_of=4;
+    assert!(!sc.s.record_weapon_shape(ATT,sc.ats(1975),&missing_parent,false),"unrepresented cutting parent refused");
+    for (field,value) in [(0,100.0),(7,1.0),(10,22.0),(4,0.4)] {
+        let mut forged=cutting.clone();forged.hit_box_frame[field]=value;
+        assert!(reason(sc.eval(&forged)).contains("cutting geometry differs"),"forged Box field {field}");
+    }
+    let mut rotated=cutting.clone();rotated.hit_box_frame[5]=0.5;rotated.hit_box_frame[6]=(0.75f32).sqrt();
+    assert!(reason(sc.eval(&rotated)).contains("cutting geometry differs"),"normalized forged rotation");
+    let mut reciprocal=cutting.clone();reciprocal.hit_box_frame[7]=1.0;reciprocal.hit_box_frame[10]=22.0;
+    assert!(reason(sc.eval(&reciprocal)).contains("cutting geometry differs"),"scaled extent equality cannot spoof native X-before-scale clamp");
+    let mut wrong_class=cutting.clone();wrong_class.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_ArmingSword_C");
+    assert!(reason(sc.eval(&wrong_class)).contains("class mismatch"));
+    // The same lateral distance remains outside the thin shaft module.
+    h.dism_blunt=crate::validate::damage::SOURCE_RIGHT|(2<<21);
+    assert!(reason(sc.eval(&h)).contains("module_miss"),"head width cannot be borrowed by a Grip claim");
+    let shape=sc.s.peers[&ATT].shapes.sample(sc.ats(1975),0).unwrap();
+    assert!(shape.nearest([-75.0,19.0,130.0],0).0>SWEEP_TOL,"no whole-shaft widening");
+    let mut forged=w.clone(); forged.boxes[0].half[1]=200.0;
+    assert!(!sc.s.record_weapon_shape(ATT,sc.ats(1975),&forged,false),"oversized module refused");
+}
+
+#[test]
+fn module_point_velocity_includes_rotation_and_keeps_source_hand() {
+    let mut h=PeerHist::new();
+    let mut base=WeaponShape {weapon_id:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],boxes:[posecodec::v2::WeaponBox::default();posecodec::v2::MAX_WEAPON_BOXES],n:1};
+    base.boxes[0]=posecodec::v2::WeaponBox {component:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],half:[100.0,2.0,2.0],..Default::default()};
+    h.offhand_shapes.push(1000,base);
+    h.offhand_shapes.push(1100,WeaponShape {q:[0.0,0.0,(0.1f32).sin(),(0.1f32).cos()],..base});
+    let left=BladeView {hist:&h,blade:&h.offhand};
+    assert!((len(left.shape_velocity(1,1,[100.0,0.0,0.0],1050.0).unwrap())-200.0).abs()<0.2);
+    let right=BladeView {hist:&h,blade:&h.blade};
+    assert!(right.shape_velocity(1,1,[100.0,0.0,0.0],1050.0).is_none());
+}
+
+#[test]
+fn articulated_module_sweep_and_speed_follow_the_selected_moving_component() {
+    let mut h=PeerHist::new();
+    let mut a=WeaponShape {weapon_id:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],boxes:[posecodec::v2::WeaponBox::default();posecodec::v2::MAX_WEAPON_BOXES],n:2};
+    a.boxes[0]=posecodec::v2::WeaponBox {component:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],half:[2.0,12.0,2.0],..Default::default()};
+    a.boxes[1]=posecodec::v2::WeaponBox {component:7,p:[0.0;3],q:[0.0,0.0,0.0,1.0],half:[2.0;3],..Default::default()};
+    let mut b=a;
+    // The native flail's Head is an independently simulated static component.
+    // Root/Grip stay still; array storage order is deliberately swapped.
+    b.boxes[0]=a.boxes[1];
+    b.boxes[1]=posecodec::v2::WeaponBox {p:[50.0,0.0,0.0],q:[0.0,0.0,(0.1f32).sin(),(0.1f32).cos()],..a.boxes[0]};
+    h.shapes.push(1000,a); h.shapes.push(1100,b);
+    let view=BladeView {hist:&h,blade:&h.blade};
+    let midway=h.shapes.sample(1050,0).unwrap();
+    assert!((midway.module(1).unwrap().p[0]-25.0).abs()<0.01);
+    assert_eq!(midway.module(7).unwrap().p,[0.0;3]);
+    let (d,p,t,id,weapon_id)=view.shape_contact([25.0,0.0,0.0],1000.0,1100.0,1).unwrap();
+    assert!(d<0.01 && t>1000.0 && t<1100.0 && id==1,"moving head crosses contact between frames");
+    assert!(view.shape_contact([25.0,0.0,0.0],1000.0,1100.0,7).unwrap().0>SWEEP_TOL,"stationary Grip cannot borrow Head motion");
+    assert!(view.shape_contact([25.0,0.0,0.0],1000.0,1100.0,15).is_none());
+    let v=view.shape_velocity(1,1,[0.0,10.0,0.0],1050.0).unwrap();
+    assert!((len(v)-480.1).abs()<0.3,"contact speed includes module translation and rotation: {v:?}");
+    assert!(len(view.shape_velocity(weapon_id,id,p,t).unwrap())>450.0);
+    assert_eq!(view.shape_velocity(1,7,[0.0;3],1050.0),Some([0.0;3]));
+    assert!(view.shape_velocity(1,15,[0.0;3],1050.0).is_none());
+    assert!(view.shape_peak(1,1,[0.0,10.0,0.0],1100).unwrap()>470.0);
+    assert_eq!(view.shape_peak(1,7,[0.0;3],1100),Some(0.0));
+    let legacy=view.shape_contact([25.0,0.0,0.0],1000.0,1100.0,0).unwrap();
+    assert_eq!(legacy.3,1,"legacy unnamed contact retains whichever module actually hit");
+}
+
+#[test]
+fn weapon_class_switch_cannot_synthesize_module_motion() {
+    let mut h=PeerHist::new();
+    let mut a=WeaponShape {weapon_id:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],boxes:[posecodec::v2::WeaponBox::default();posecodec::v2::MAX_WEAPON_BOXES],n:1};
+    a.boxes[0]=posecodec::v2::WeaponBox {component:1,p:[100.0,0.0,0.0],q:[0.0,0.0,0.0,1.0],half:[2.0;3],..Default::default()};
+    let mut b=a; b.weapon_id=2; b.boxes[0].p=[20.0,0.0,0.0];
+    h.shapes.push(1000,a);h.shapes.push(1100,b);
+    let view=BladeView {hist:&h,blade:&h.blade};
+    assert!(h.shapes.sample(1050,0).unwrap().nearest([60.0,0.0,0.0],1).0>SWEEP_TOL,"unrelated heads do not interpolate a fictional midpoint");
+    assert!(view.shape_contact([60.0,0.0,0.0],1000.0,1100.0,1).is_none());
+    assert!(view.shape_velocity(1,1,[0.0;3],1050.0).is_none());
+    assert!(view.shape_velocity(2,1,[0.0;3],1050.0).is_none());
+    assert!(view.shape_velocity(1,1,[0.0;3],1080.0).is_none(),"a historical contact keeps its original weapon class");
+    assert_eq!(view.shape_peak(2,1,[0.0;3],1100),Some(0.0),"class swap cannot create an800cm/s peak");
+}
+
+#[test]
+fn offhand_shield_modules_use_their_own_class_bounds() {
+    use crate::validate::damage::{set_kit,weapon_class_for_hand,WeaponClass};
+    let id=837;
+    set_kit(id,&crate::loadout::KitSel::new("custom","w_arming1","s_buckler3",&[],[0;4]));
+    assert_eq!(weapon_class_for_hand(id,false),WeaponClass::Sword);
+    assert_eq!(weapon_class_for_hand(id,true),WeaponClass::Shield);
+    let mut s=Store::default();
+    s.record_root(id,1000,[0.0,0.0,100.0],1000);
+    let w=posecodec::v2::Weapon {hands:2,p:[0.0,0.0,130.0],q:[0.0,0.0,0.0,1.0],base:[0.0;3],tip:[0.0,0.0,1.0],
+        boxes:vec![posecodec::v2::WeaponBox {component:1,p:[0.0;3],q:[0.0,0.0,0.0,1.0],half:[3.0,35.0,45.0],..Default::default()}],..Default::default()};
+    assert!(s.record_weapon_shape(id,1000,&w,true),"broad shield shape fits the shield hand");
+    assert!(!s.record_weapon_shape(id,1000,&w,false),"a sword cannot borrow its shield's width");
+    crate::validate::damage::forget(id);
+}
+
+#[test]
+fn degenerate_tip_modules_use_the_same_repaired_axis_in_actor_space() {
+    let id = 0x1B82;
+    crate::validate::damage::set_kit(id, &crate::loadout::KitSel::new("custom", "w_poleaxe_m", "", &[], [0;4]));
+    let mut s = Store::default();
+    let base = [30.0, 40.0, 130.0];
+    s.record_root(id, 1000, [30.0, 40.0, 100.0], 1000);
+    let mut w = posecodec::v2::Weapon { hands: 1, p: base,
+        q: [0.0,0.0,std::f32::consts::FRAC_1_SQRT_2,std::f32::consts::FRAC_1_SQRT_2],
+        base: [0.0;3], tip: [1.0,0.0,0.0], boxes: vec![
+            posecodec::v2::WeaponBox { component:1, p:[150.0,0.0,0.0], q:[0.0,0.0,0.0,1.0], half:[20.0,20.0,3.0],..Default::default()},
+            posecodec::v2::WeaponBox { component:7, p:[75.0,0.0,0.0], q:[0.0,0.0,0.0,1.0], half:[75.0,2.0,2.0],..Default::default()},
+        ], ..Default::default() };
+    assert!(!s.record_weapon_shape(id, 1000, &w, false), "the box cannot supply its own unbounded repair axis");
+    s.record_pose(id, &PoseFrame { ts:1000, bones:vec![
+        (PELVIS as u8, [30.0,40.0,100.0], [0.0,0.0,0.0,1.0]),
+        (HAND_R as u8, base, [0.0,0.0,0.0,1.0]),
+        (LOWERARM_R as u8, [30.0,15.0,130.0], [0.0,0.0,0.0,1.0]),
+    ] }, 1000);
+    let (base,tip) = posecodec::v2::blade_world(&w);
+    s.record_blade(id, 1000, Blade { base,tip,vel:None }, 1000);
+    let blade = s.peers[&id].blade.sample(1000,0).unwrap();
+    assert!(len(sub(blade.tip,blade.base)) > 200.0);
+    assert!(s.record_weapon_shape(id, 1000, &w, false), "150cm head must survive the supported 1cm native tip case");
+    let shape = s.peers[&id].shapes.sample(1000,0).unwrap();
+    let head_side = [11.0,190.0,130.0];
+    assert!(shape.nearest(head_side,1).0 < 0.01);
+    assert!(shape.nearest(head_side,7).0 > SWEEP_TOL, "head width does not widen the thin shaft");
+    w.boxes[0].p[1] = 90.0;
+    assert!(!s.record_weapon_shape(id,1000,&w,false), "off-axis head remains bounded");
+    w.boxes[0].p = [330.0,0.0,0.0];
+    assert!(!s.record_weapon_shape(id,1000,&w,false), "repair cannot extend past the weapon class");
+    crate::validate::damage::forget(id);
+}
+
+#[test]
+fn each_hand_uses_its_own_repair_reach_and_hilt_limits() {
+    use crate::validate::damage::{set_kit, weapon_class, WeaponClass};
+    let id = 0x1B83;
+    set_kit(id, &crate::loadout::KitSel::new("custom", "w_arming1", "w_axe", &[], [0;4]));
+    assert_eq!(weapon_class(id),WeaponClass::Axe, "damage ranking differs from sword reach");
+    let mut s = Store::default();
+    for ts in [1000,1100] {
+        s.record_root(id,ts,[0.0,0.0,100.0],ts as i64);
+        s.record_pose(id,&PoseFrame {ts,bones:vec![
+            (PELVIS as u8,[0.0,0.0,100.0],[0.0,0.0,0.0,1.0]),
+            (HAND_R as u8,[0.0,0.0,140.0],[0.0,0.0,0.0,1.0]),
+            (LOWERARM_R as u8,[-25.0,0.0,140.0],[0.0,0.0,0.0,1.0]),
+        ]},ts as i64);
+        for offhand in [false,true] {
+            let tip = if ts==1000 {1.0} else {123.0};
+            s.record_blade_hand(id,ts,Blade {base:[0.0,0.0,140.0],tip:[tip,0.0,140.0],vel:None},ts as i64,offhand);
+        }
+    }
+    let h = &s.peers[&id];
+    let right = BladeView {hist:h,blade:&h.blade};
+    let left = BladeView {hist:h,blade:&h.offhand};
+    assert!((len(sub(right.blade.sample(1000,0).unwrap().tip,[0.0,0.0,140.0]))-125.0/1.15).abs()<0.001);
+    assert!((len(sub(left.blade.sample(1000,0).unwrap().tip,[0.0,0.0,140.0]))-120.0/1.15).abs()<0.001);
+    assert!(s.reach_violation_blade(id,&right,1100).is_none(), "123cm sword is within its own 125cm limit");
+    assert!(s.reach_violation_blade(id,&left,1100).unwrap().contains("max 120"), "axe cannot borrow sword reach");
+    for offhand in [false,true] {
+        s.record_root(id,1200,[0.0,0.0,100.0],1200);
+        s.record_pose(id,&PoseFrame {ts:1200,bones:vec![
+            (PELVIS as u8,[0.0,0.0,100.0],[0.0,0.0,0.0,1.0]),
+            (HAND_R as u8,[0.0,0.0,140.0],[0.0,0.0,0.0,1.0]),
+        ]},1200);
+        s.record_blade_hand(id,1200,Blade {base:[60.0,0.0,140.0],tip:[100.0,0.0,140.0],vel:None},1200,offhand);
+    }
+    let h = &s.peers[&id];
+    assert!(blade_view_unholdable(id,&BladeView {hist:h,blade:&h.blade},1200), "sword cannot borrow axe's 90cm hilt limit");
+    assert!(!blade_view_unholdable(id,&BladeView {hist:h,blade:&h.offhand},1200));
+    crate::validate::damage::forget(id);
+}
+
+#[test]
+fn offhand_stream_requires_a_validated_root_and_bounded_length() {
+    let mut s = Store::default();
+    let b = Blade { base: [0.0, 0.0, 140.0], tip: [100.0, 0.0, 140.0], vel: None };
+    s.record_blade_hand(ATT, 1000, b, 1000, true);
+    assert!(s.peers.get(&ATT).map_or(true, |p| p.offhand.newest().is_none()));
+    s.record_root(ATT, 1000, [0.0, 0.0, 100.0], 1000);
+    s.record_blade_hand(ATT, 1000, Blade { tip: [900.0, 0.0, 140.0], ..b }, 1000, true);
+    assert!(s.peers[&ATT].offhand.newest().is_none());
+    s.record_blade_hand(ATT, 1000, b, 1000, true);
+    assert_eq!(s.peers[&ATT].offhand.newest(), Some(1000));
+    assert!(s.peers[&ATT].blade.newest().is_none(), "hands retain independent histories");
+}
+
+#[test]
+fn offhand_guard_is_considered_for_parry_without_widening_geometry() {
+    let mut sc = Scene::new(20, 2000, still, |_| Some([40.0, 0.0, 300.0]), |_| [-160.0, 0.0, 140.0]);
+    let h = 1980;
+    let hit = hit(VIC, [-5.0, 0.0, 130.0], sc.ats(h), sc.honest_view(h, 31));
+    let Eval::Accept(before) = sc.eval(&hit) else { panic!("baseline hit") };
+    assert!(!before.parry_possible);
+    for t in (25..=1975).step_by(25) {
+        sc.s.record_blade_hand(VIC, (t + V_OFF) as u32,
+            Blade { base: [-40.0, -40.0, 130.0], tip: [-40.0, 40.0, 130.0], vel: None }, t + 20, true);
+    }
+    let Eval::Accept(after) = sc.eval(&hit) else { panic!("offhand guard hit") };
+    assert!(after.parry_possible, "offhand guard must receive defender grace");
+}
 
 #[test]
 fn blade_across_attack_path_is_held_for_a_parry() {
@@ -1228,4 +1657,41 @@ fn history_keeps_every_sample_whatever_the_tick_rate() {
     assert!(base.1 < 1.0 && lin.1 < 5.0, "per-sample history p95 {:.2} / {:.2} uu", base.1, lin.1);
     assert!(by_hz[0].1 > 2.0 * lin.1, "a 30 Hz per-tick history loses half the samples");
     for e in &by_hz { assert!(e.1 >= lin.1 * 0.9, "no per-tick history beats keeping every sample"); }
+}
+
+#[test]
+fn generation_binding_clears_geometry_and_never_downgrades_life() {
+    let mut s=Store::default(); let id=0x1B77;
+    let c=posecodec::v2::Context{match_id:77,round:3,life:1};
+    assert!(s.bind_pose_context(id,Some(c)));
+    for i in 0..3u32 {
+        let ts=1000+i*17;
+        s.record_root(id,ts,[0.0,0.0,100.0],ts as i64);
+        s.record_pose(id,&skeleton(ts,[0.0,0.0,100.0]),ts as i64);
+        s.record_blade(id,ts,Blade{base:[0.0,0.0,140.0],tip:[50.0,0.0,140.0],vel:None},ts as i64);
+        s.record_capsules(id,ts,&[Capsule{a:[0.0,0.0,100.0],b:[0.0,0.0,150.0],r:10.0}],ts as i64);
+    }
+    assert!(!s.peers[&id].pose.q.is_empty() && !s.peers[&id].blade.q.is_empty() && !s.peers[&id].caps.q.is_empty());
+    assert!(s.has_pose_context(id,77,3,1));assert!(!s.has_pose_context(id,77,3,2));
+    assert!(s.bind_pose_context(id,Some(posecodec::v2::Context{life:2,..c})));
+    let p=&s.peers[&id];
+    assert!(p.pose.q.is_empty() && p.blade.q.is_empty() && p.caps.q.is_empty() && p.strikers.q.is_empty());
+    assert!(!s.bind_pose_context(id,Some(c)));assert!(!s.bind_pose_context(id,None));
+    assert!(s.has_pose_context(id,77,3,2));
+}
+
+#[test]
+fn exact_native_registry_includes_verified_extra_melee_only() {
+    let manifest: serde_json::Value=serde_json::from_str(include_str!("../native_melee_classes.json")).unwrap();
+    let rows=manifest.as_array().unwrap();
+    assert_eq!(rows.len(),13);
+    for row in rows {
+        let class=row["class"].as_str().unwrap();
+        assert_eq!(row["parent"].as_str().unwrap(),"BlueprintGeneratedClass'ModularWeaponBP_C'");
+        assert!(registered_native_weapon_class(class),"verified original melee {class}");
+        assert!(class.len()<48,"class must fit exact IPC identity");
+    }
+    for class in ["Weapon_Trap_C","BP_CrossbowBolt_C","Weapon_Quiver_C","CustomSword_C","None",""] {
+        assert!(!registered_native_weapon_class(class),"unregistered source {class}");
+    }
 }

@@ -298,7 +298,7 @@ mod tests {
             let many = (1000..1000 + rec::PROPOSE_MAX as u32 + 10).map(|id| Prop::Static(ManifestEntry { id, chash: 1, pos: [0.0; 3], _r: 0 }));
             wrx::add_proposals(&mut r, 5, 3, many);
             let d = DynEntry { id: rec::DYN_ID_BIT | (2 << 16) | 1, chash: 3, pos: [1.0; 3], dyn_owner: 2,
-                               class_path: hsmp_ipc::layout::Str::new("/Game/A.A_C") };
+                               class_path: hsmp_ipc::layout::Str::new("/Game/A.A_C"), ..DynEntry::default() };
             wrx::add_proposals(&mut r, 5, 3, std::iter::once(Prop::Dyn(d)));
             let msgs = wrx::due_proposals(&mut r, 10_000);
             assert_eq!(msgs.len(), 3, "two static messages + one dynamic");

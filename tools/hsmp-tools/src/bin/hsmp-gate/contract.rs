@@ -110,8 +110,8 @@ pub const CONTRACT: &[Entry] = &[
     e("world_track", L, &["nid", "t", "x", "y", "z", "rest", "level", "epoch"], &["qx", "qy", "qz", "qw", "mode", "owner"]),
     e("world_sync_quality", L, &["hard_snaps"], &["max_off_cm", "lost_races", "takeovers", "poked", "follow_ticks", "window_s", "level", "epoch"]),
     // COMBAT-1 (docs/development/subsystems/combat.md): HSMPCombat every 5 s of combat during Live
-    e("combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s"]),
-    e("x_combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s"]),
+    e("combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s", "owner_replay_by_status", "attacker_receipts_by_status", "owner_observed_fields", "attacker_observed_fields", "owner_health_delta", "attacker_health_delta", "unsupported_source_colliders"]),
+    e("x_combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s", "owner_replay_by_status", "attacker_receipts_by_status", "owner_observed_fields", "attacker_observed_fields", "owner_health_delta", "attacker_health_delta", "unsupported_source_colliders"]),
     e("x_pose_contact", L, &[], &[]),   // stand-in contact impulses (diagnostic, not gated)
     // DoD-8: attributes a career-file mtime change to a pre-session native write (guard off)
     e("x_save_call", L, &["fn", "slot", "active"], &["err"]),

@@ -72,6 +72,17 @@ async fn on_pose(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: Socket
         return Err(super::records::refused(hsmp_ipc::record::Invalid::Range("frame")));
     };
     let Some(sid) = touch_peer(state, from).await else { return Ok(()) };
+    let inner=state.inner.lock().await;
+    {
+        // Paused live rounds retain their existing generation, including DM respawns.
+        let pending=inner.match_state=="countdown";
+        let round=if pending {inner.spawn_round} else {inner.match_round};
+        let life=if pending {1} else {modes::peer_life(&inner,sid)};
+        if !pose_context_matches(full.context,inner.sess.match_id,round,life) {
+            state.relay.note_pose_in(from,false);
+            return Ok(());
+        }
+    }
     crate::stats::pose_in(sid);
     // A frame lag comp rejects (pose not tied to the root) is not relayed either.
     if !crate::lagcomp::record_skeletal_v2(sid, &full) {
@@ -82,11 +93,42 @@ async fn on_pose(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: Socket
     // Codec v2 frames carry the exact blade (grip, tip, tip velocity) and capsules for all 22
     // bodies.
     let x = crate::posecodec::v2::extras_of(&full);
-    if let Some((base, tip, vel)) = x.blade {
-        crate::lagcomp::record_blade(sid, x.ts, crate::lagcomp::Blade { base, tip, vel: Some(vel) });
-    }
+    let blade = |w: &crate::posecodec::v2::Weapon| {
+        let (base, tip) = crate::posecodec::v2::blade_world(w);
+        let r = [tip[0] - w.p[0], tip[1] - w.p[1], tip[2] - w.p[2]];
+        let om = w.w.map(f32::to_radians);
+        let cross = [om[1]*r[2] - om[2]*r[1], om[2]*r[0] - om[0]*r[2], om[0]*r[1] - om[1]*r[0]];
+        crate::lagcomp::Blade { base, tip, vel: Some(std::array::from_fn(|i| w.v[i] + cross[i])) }
+    };
+    crate::lagcomp::record_blades(sid, x.ts,
+        full.weapons.iter().find(|w| w.hands & 1 != 0).map(blade),
+        full.weapons.iter().find(|w| w.hands & 1 == 0 && w.hands & 2 != 0).map(blade));
+    crate::lagcomp::record_weapon_shapes(sid, x.ts, &full.weapons);
     let caps: Vec<crate::lagcomp::Capsule> = x.caps.iter().map(|c| crate::lagcomp::Capsule { a: c.0, b: c.1, r: c.2 }).collect();
     crate::lagcomp::record_capsules(sid, x.ts, &caps);
+    drop(inner);
     relay_pose(socket, state, from, sid, hsmp_ipc::wire::message(K_POSE, 0, sid, payload), x.ts).await;
     Ok(())
+}
+
+fn pose_context_matches(context:Option<crate::posecodec::v2::Context>,match_id:u64,round:u32,life:u16)->bool {
+    match context {
+        Some(c)=>c.valid() && c.match_id==match_id && c.round==round && c.life==life,
+        None=>match_id==0,
+    }
+}
+
+#[cfg(test)]
+mod context_tests {
+    use super::*;
+    #[test]
+    fn old_match_round_and_life_cannot_enter_current_history() {
+        let c=crate::posecodec::v2::Context{match_id:9,round:2,life:3};
+        assert!(pose_context_matches(Some(c),9,2,3));
+        assert!(!pose_context_matches(Some(c),10,2,3));
+        assert!(!pose_context_matches(Some(c),9,3,3));
+        assert!(!pose_context_matches(Some(c),9,2,4));
+        assert!(!pose_context_matches(None,9,2,3));
+        assert!(pose_context_matches(None,0,0,0));
+    }
 }

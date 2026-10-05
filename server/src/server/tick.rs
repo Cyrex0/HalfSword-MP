@@ -308,7 +308,7 @@ pub(super) fn tick_locked(state: &ServerState, inner: &mut Inner, sc: &mut TickS
     if due && matches!(inner.match_state.as_str(), "live" | "roundover" | "match_over") {
         let round = inner.match_round;
         let again: Vec<Vec<u8>> = inner.round_deaths.iter()
-            .map(|&(peer_id, killer, cause)| death_msg(peer_id, round, killer, cause))
+            .map(|&(peer_id, killer, cause, life)| combat_glue::scoped_death_msg(peer_id,round,killer,cause,inner.sess.match_id,life))
             .collect();
         for m in again { inner.out_msgs.push((None, m)); }
     }

@@ -539,7 +539,7 @@ fn version_mismatch_is_reported_before_the_cookie() {
     assert!(w.replies_ok);
     // A newer client with an overlapping range connects at this build's version.
     let mut c = ccfg();
-    c.version_max = 8;
+    c.version_max = crate::net::PROTOCOL_VERSION + 1;
     let mut w = World::new(6, Link::perfect(), Link::perfect(), c);
     assert!(w.run_until(2_000, |w| w.connected()));
     assert!(matches!(w.client_ev[0], ClientEvent::Connected { version: crate::net::PROTOCOL_VERSION, .. }));
