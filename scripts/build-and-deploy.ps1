@@ -628,7 +628,7 @@ $stamp = [ordered]@{
     ipc = $Ipc
     hashes = $hashes
 }
-Write-Text (Join-Path $Win64 "hsmp_deploy.json") ($stamp | ConvertTo-Json -Depth 6)
+Write-Text (Join-Path $Win64 "hsmp_deploy.json") ($stamp | ConvertTo-Json -Depth 12)
 Say "deploy stamp: $($commit.Substring(0, [Math]::Min(10, $commit.Length)))$(if ($dirty) { '+dirty' }) $profileName" Green
 
 Write-Host ""

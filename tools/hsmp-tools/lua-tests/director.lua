@@ -90,6 +90,59 @@ do
     T.check(w.dir.ready_round == 1 and w.dir.state == "Live" and w.frozen == false, "verified native proof releases the current pawn")
 end
 
+T.log("== first Live input release refreshes Ready proof, then ordinary injuries retain control")
+do
+    local fresh, checks, last_context = true, 0, nil
+    local w = to_ready({ setup = function(world)
+        world.env.combat_ready = function(context)
+            checks, last_context = checks + 1, context
+            return fresh, "peer 2 pose source stale/held"
+        end
+    end })
+    T.check(w.dir.state == "Ready" and w.frozen ~= false, "current native proof reached Ready with input frozen")
+    fresh = false
+    w:match("live", "Map_Arena_Pit", 1); w:tick(2)
+    T.check(w.frozen ~= false and w.dir.live_release == nil,
+        "proof lost during Countdown keeps the first Live input release frozen")
+    T.check(T.contains(w:logtext(), "Live input waits for combat spawn proof: peer 2 pose source stale/held"),
+        "the transition identifies the deteriorated proof")
+    T.check(last_context.key == w.dir.ready_context.world and last_context.pawn_id == w.dir.ready_context.pawn
+        and last_context.match_id == w.dir.ready_context.match_id and last_context.round == 1
+        and last_context.verified_life == w.dir.ready_context.life,
+        "Live proof re-check uses the original exact Ready life and pawn")
+    fresh = true; w:tick(1)
+    local released = w.dir.live_release
+    T.check(w.frozen == false and released and released.spawn_id == w.dir.applied_spawn_id,
+        "fresh current proof releases and latches this placed life")
+    local checked = checks
+    fresh = false
+    w.pawn.props.Health, w.pawn.props.Consciousness = 17, 58
+    w:tick(3)
+    T.check(w.frozen == false and checks == checked and w.dir.live_release == released,
+        "ordinary wounded Live keeps control without re-running healthy spawn proof")
+    w:match("paused", "Map_Arena_Pit", 1); w:tick(1)
+    T.check(w.frozen ~= false and w.dir.live_release == nil, "explicit pause freezes and clears the release latch")
+    w:match("live", "Map_Arena_Pit", 1); w:tick(1)
+    T.check(w.frozen ~= false and checks > checked, "resume re-checks current proof and waits if it is stale")
+    fresh = true; w:tick(1)
+    T.check(w.frozen == false and w.dir.live_release ~= nil, "fresh paused-life proof restores control")
+    w:sidecar_status("reconnecting"); w:tick(2)
+    T.check(w.frozen ~= false and w.dir.live_release == nil, "reconnect freezes and clears the release latch")
+    fresh = false
+    w:sidecar_status("connected"); w:tick(8)
+    T.check(w.frozen ~= false and w.dir.live_release == nil, "a restored link still waits for current native proof")
+    fresh = true; w:tick(1)
+    T.check(w.frozen == false, "fresh native proof restores the reconnected life")
+    -- A new full life can reuse a round, pawn and compact spawn ID.
+    -- Its Ready tuple must never borrow the previous life's released latch.
+    fresh = false
+    w.dir.ready_context.life = w.dir.ready_context.life + 128
+    w.dir.sess.life = w.dir.ready_context.life
+    w.dir:update_freeze(w.dir.sess, w.pawn)
+    T.check(w.frozen ~= false and w.dir.live_release == nil,
+        "a different full life on the same world and pawn needs a new release proof")
+end
+
 -- ---------------------------------------------------------------------------
 T.log("== startup, heartbeat, stale request")
 do

@@ -384,3 +384,22 @@ ordered trace hits/tags under probe, using exact claim/life IDs and no extra nat
 damage or trace calls. Actual native hook output and fixed-spawn behavior still
 require a new deployed run. Exact armour-passport verification remains unfinished;
 `gear_verify.lua` is a draft helper, not integrated proof of all loadouts.
+
+Session `native-20261007-05` on deployed `24b97e4e50` recorded 14 successful
+matched sword/cloth spawns through round seven, continuing pose/vitals on both
+owners, and 198 accepted contacts with 197 native replay records. No health-stream
+loss, duplicate AI takeover or old-life death applied to a fresh stand-in was
+observed. AI commands sent before START were refused while the world was unsettled;
+manual reissue enabled both AIs only for rounds three through seven. This is five
+AI rounds, not a full 240 seconds of AI combat. Early rounds ended by explicit
+harness timeout. HUD rendering was not independently inspected.
+
+Review evidence is `test-results/lab/native-20261007-05/spawn-fairness.review.json`:
+clock-reset p90 was zero; honest acceptance was 0.76448 versus the 0.97 bound;
+rotation evidence had only 38 samples and cannot satisfy its 200-sample bound.
+Probe was disabled, so this run cannot establish exact native damage parity.
+The polearm left-arm twist remains a separate physical defect. New read-only
+`parity weaponstate` diagnostics compare actual native weapon physics with cached
+Avatar state before any physics behavior changes. A final Ready-to-Live freshness
+latch now holds initial controls until proof is fresh, retaining control through
+ordinary injuries after release. These new edits still need a matched native run.

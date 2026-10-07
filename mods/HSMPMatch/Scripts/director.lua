@@ -457,6 +457,7 @@ function D.new(env, opts)
     self.counters = { travel = 0, native_rewritten = 0, requests = 0, refused = 0 }
     self.next_ping, self.next_hb = 0, 0
     self.frozen_id = nil
+    self.live_release = nil       -- pure context of the life whose input was released
     self.req_seq = nil             -- last seen travel_request seq
     self.link_lost_at, self.gone_at, self.menu_since = nil, nil, nil
     -- The single connection state shown to the player (docs/development/subsystems/director.md):
@@ -1013,6 +1014,7 @@ function Dir:travel_menu(why, opts)
     self.target = D.MENU_WORLD
     self.ready_round, self.loaded_for, self.loaded_key, self.reloaded_for = 0, 0, nil, nil
     self.ready_context, self.applied_spawn_id, self.place_context = nil, 0, nil
+    self.live_release, self.live_wait_reason = nil, nil
     self.pipe = nil
     if s and s.exists and not opts.no_flag then
         self:return_to_lobby()
@@ -1286,6 +1288,7 @@ function Dir:start_pipeline(w, s, why, serve_round, status_since)
     self.loaded_key = self:round_key(self.loaded_for)
     self.ready_round = 0
     self.ready_context, self.place_context = nil, nil
+    self.live_release, self.live_wait_reason = nil, nil
     self.load_error, self.errors_logged, self.protect_logged = nil, nil, nil
     self.load_context = nil
     self.pipe = { key = w.key, arena = w.short, round = self.loaded_for, match_id = s.match_id,
@@ -1670,6 +1673,7 @@ function Dir:on_world(w, s)
     self.pipe = nil
     self.ready_round = 0
     self.ready_context, self.place_context = nil, nil
+    self.live_release, self.live_wait_reason = nil, nil
     self.frozen_id = nil
     self.applied_spawn_id = 0
     -- The menu world is up, the MP arena is gone: the save guard may
@@ -1759,6 +1763,7 @@ function Dir:bump_match(why)
     self.respawn_for = nil
     self.respawn_life = nil
     self.ready_round, self.applied_spawn_id, self.ready_context, self.place_context = 0, 0, nil, nil
+    self.live_release, self.live_wait_reason = nil, nil
     self.mt.fresh, self.mt.fresh_why = true, why
     self.env.log("director: new match context #%d (%s)", self.match_gen, why)
 end
@@ -1936,11 +1941,45 @@ function Dir:update_freeze(s, pawn)
     local env = self.env
     local in_arena = s.exists and self.wshort ~= nil and self.wshort == self.target and self.in_match
     -- Reconnecting: the world stays as it is, the player cannot act.
-    local verified = self.ready_context and self.ready_context.world == self.wkey
-        and pawn and self.ready_context.pawn == env.pawn_id(pawn) and self.ready_round == s.round
+    local ctx = self.ready_context
+    local verified = ctx and ctx.world == self.wkey and ctx.arena == self.wshort
+        and ctx.match_id == s.match_id and ctx.match_gen == self.match_gen and ctx.round == s.round
+        and (s.life == nil or ctx.life == s.life)
+        and pawn and ctx.pawn == env.pawn_id(pawn) and self.ready_round == s.round
         and self.load_error == nil
-    local frozen = in_arena and not (verified and self.state == "Live" and s.phase == "live" and s.alive[s.my_id] ~= false
-        and self.conn.state == "ok")
+    local released = in_arena and verified and self.state == "Live" and s.phase == "live"
+        and s.alive[s.my_id] ~= false and self.conn.state == "ok"
+    if not released then
+        -- Pause/reconnect must re-establish a current proof on resume. New
+        -- worlds/lives also clear the latch; ordinary wounded Live does not.
+        self.live_release, self.live_wait_reason = nil, nil
+    else
+        local prior = self.live_release
+        local same = prior and prior.match_id == ctx.match_id and prior.match_gen == ctx.match_gen
+            and prior.round == ctx.round and prior.life == ctx.life and prior.world == ctx.world
+            and prior.pawn == ctx.pawn and prior.spawn_id == self.applied_spawn_id
+        if not same then
+            self.live_release = nil
+            local ready, why = true, nil
+            if env.combat_ready then
+                ready, why = env.combat_ready({ key = ctx.world, pawn_id = ctx.pawn, arena = ctx.arena,
+                    match_id = ctx.match_id, match_gen = ctx.match_gen, round = ctx.round,
+                    life = ctx.life, verified_life = ctx.life }, s, pawn)
+            end
+            if ready then
+                self.live_release = { match_id = ctx.match_id, match_gen = ctx.match_gen, round = ctx.round,
+                    life = ctx.life, world = ctx.world, pawn = ctx.pawn, spawn_id = self.applied_spawn_id }
+                self.live_wait_reason = nil
+            else
+                released = false
+                if self.live_wait_reason ~= why then
+                    self.live_wait_reason = why
+                    env.log("director: Live input waits for combat spawn proof: %s", tostring(why))
+                end
+            end
+        end
+    end
+    local frozen = in_arena and not released
     if frozen and pawn then
         local id = env.pawn_id(pawn)
         if self.frozen_id ~= id then

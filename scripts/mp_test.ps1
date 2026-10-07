@@ -170,7 +170,9 @@ $cargo = if ($cargo) { $cargo.Source } else { "$env:USERPROFILE\.cargo\bin\cargo
 if (Test-Path $cargo) {
     Say "building hsmp-gate / hsmp-tools (release, --locked; no-op when current)..."
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    & $cargo build --release --locked --quiet -p hsmp-tools --manifest-path (Join-Path $Repo "Cargo.toml") 2>&1 | ForEach-Object { Write-Host "  $_" }
+    # The live lab owner is another binary in this package. Windows locks its
+    # executable while running; only rebuild the two tools this harness uses.
+    & $cargo build --release --locked --quiet -p hsmp-tools --bin hsmp-gate --bin hsmp-tools --manifest-path (Join-Path $Repo "Cargo.toml") 2>&1 | ForEach-Object { Write-Host "  $_" }
     $buildCode = $LASTEXITCODE
     $ErrorActionPreference = $prev
     if ($buildCode -ne 0) { Say "hsmp-gate / hsmp-tools build failed (exit $buildCode): refusing to judge with stale binaries" Red; Hsmp-ReleaseGameLock $script:RunLock; exit 2 }
@@ -659,7 +661,7 @@ function Wait-Step($step, [int64]$since) {
     return $r
 }
 
-# Lay the game windows out side by side on the primary screen (each renders fully visible, no
+# Lay the game windows out side by side on the smallest secondary screen (each renders fully visible, no
 # overlap). Window placement only (SetWindowPos, no activation, no input, no ini change).
 if (-not ("HsmpWin2" -as [type])) {
     # The game process owns two top-level windows: the UE4SS console (created first, so it is
@@ -691,7 +693,12 @@ function Place-GameWindow([int]$procId, [int]$i, [int]$n) {
     if ($n -lt 2) { return }
     try {
         Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
-        $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+        $screen = [System.Windows.Forms.Screen]::AllScreens |
+            Where-Object { -not $_.Primary } |
+            Sort-Object { $_.Bounds.Width * $_.Bounds.Height } |
+            Select-Object -First 1
+        if (-not $screen) { $screen = [System.Windows.Forms.Screen]::PrimaryScreen }
+        $wa = $screen.WorkingArea
         $w = [int][Math]::Floor($wa.Width / $n)
         $h = [int][Math]::Min($wa.Height, [Math]::Floor($w * 9 / 16) + 32)
         $deadline = (Get-Date).AddSeconds(30)
@@ -702,7 +709,7 @@ function Place-GameWindow([int]$procId, [int]$i, [int]$n) {
             if ($hw -ne [IntPtr]::Zero) {
                 # SWP_NOZORDER 0x4 | SWP_NOACTIVATE 0x10
                 [void][HsmpWin2]::SetWindowPos($hw, [IntPtr]::Zero, $wa.X + ($i - 1) * $w, $wa.Y, $w, $h, 0x14)
-                Say "game$i window placed at x=$($wa.X + ($i - 1) * $w) ($w x $h)"
+                Say "game$i window placed on $($screen.DeviceName) at x=$($wa.X + ($i - 1) * $w) ($w x $h)"
                 return
             }
             Start-Sleep -Milliseconds 250

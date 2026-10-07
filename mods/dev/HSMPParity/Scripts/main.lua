@@ -1007,6 +1007,47 @@ local function exp_frames(arg)
         for k,v in pairs(r.errors)do Log("BODYJOINT_ERROR name=%s field=%s reason=%s",r.name,k,v) end
     end
 end
+-- Snapshot native simulation and grip endpoints without retaining any wrappers.
+local function exp_weaponstate(arg)
+    local probe=load_module("weapon_state_probe")
+    if not probe then Log("weaponstate: diagnostic module unavailable");return end
+    local requested=tonumber(arg)
+    if arg~="" and (not requested or requested<0 or requested%1~=0) then Log("weaponstate: expected [peer], 0=own");return end
+    local ipc=rawget(_G,"HSMP_IPC")
+    local function context(peer,pawn)
+        local view,mode=HSESS and HSESS.view(),HSESS and HSESS.mode()
+        if not view or not valid(pawn) then return nil end
+        local status
+        if peer==0 then status=HW.verified_ai_status(ipc)
+        else for _,row in ipairs((ipc.bus_table("playback") or {}).rows or {}) do if row.peer==peer then status=row;break end end end
+        local round=(view.state=="countdown" or view.state=="loading") and view.spawn_round or view.round
+        local row=mode and mode.rows and mode.rows[peer==0 and view.my_peer_id or peer]
+        local life=mode and mode.match_id==view.match_id and mode.round==round and row and row.life or 1
+        if not status or status.pawn~=nm(pawn) or status.match_id~=view.match_id or status.round~=round or status.life~=life then return nil end
+        return {peer=peer,match_id=status.match_id,round=status.round,life=status.life,pawn=status.pawn,address=pawn:GetAddress(),world=WG.key}
+    end
+    local peers={}
+    if requested then peers[1]=requested
+    else
+        peers[1]=0
+        for _,row in ipairs((ipc.bus_table("puppets") or {}).rows or {}) do peers[#peers+1]=row.peer end
+    end
+    for _,peer in ipairs(peers) do
+        local pawn=peer==0 and me_pawn() or standin_of(peer)
+        local original=pawn and context(peer,pawn)
+        if not original then Log("weaponstate: peer %s refused original verified context unavailable",tostring(peer))
+        else
+            local result,why=probe.capture(pawn,original,{fname=FName,class=function(name)return StaticFindObject("/Script/Engine."..name)end,
+                current=function(id)
+                    if WG.key~=id.world or not WG.settled() then return false end
+                    local fresh=peer==0 and me_pawn() or standin_of(peer)
+                    local now=fresh and context(peer,fresh)
+                    return now and now.address==id.address and now.pawn==id.pawn and now.match_id==id.match_id and now.round==id.round and now.life==id.life
+                end})
+            if result then probe.emit(result,Log) else Log("weaponstate: peer %s refused %s",tostring(peer),tostring(why)) end
+        end
+    end
+end
 -- `ai on [peer]` / `ai off`: hand my pawn to the game's own fighter AI (AI_BP_C, the solo
 -- opponent) and point it at a stand-in. AI_BP_C acts only on the pawn it possesses (its
 -- MoveToLocation, "My Pawn" from K2_GetPawn) and Willie_BP steers from "AI Control Rotation"
@@ -1155,7 +1196,7 @@ local function exp_drive(arg)
     end
     driver.start(arg)
 end
-local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, defeat=exp_defeat, drive=exp_drive, ai=exp_ai }
+local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, weaponstate=exp_weaponstate, defeat=exp_defeat, drive=exp_drive, ai=exp_ai }
 if rawget(_G, "HSMP_PARITY_TEST") then
     HSMP_PARITY_TEST.arm = exp_arm
     HSMP_PARITY_TEST.state = function() return arm_drive end

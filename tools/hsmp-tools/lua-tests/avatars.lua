@@ -37,6 +37,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "bodyheight" })
     T.isolated(T.script, "case", { kind = "ai_owner" })
+    T.isolated(T.script, "case", { kind = "weaponstate" })
     return
 end
 
@@ -53,7 +54,7 @@ local function peer_root(id, tick, x, y, z)
 end
 
 local function boot(register_ok)
-    M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_DEV = opts.kind == "ai_owner" and "1" or nil }, strict = true })
+    M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate") and "1" or nil }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -119,6 +120,25 @@ if opts.kind == "ai_owner" then
     api.PX.restore_spawn_possession(me,M.pc)
     T.check(possessions==1 and M.pc.__props.Pawn==me,
         "normal human stand-in spawning restores the original possessed fighter")
+end
+
+if opts.kind=="weaponstate" then
+    local api=boot(true)
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=94,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=94,round=1,rows={{peer_id=2,life=1}}})
+    local actor=M.new_obj("Willie_BP_C","Puppet");rawset(actor,"__addr",8901)
+    local weapon=M.new_obj("ModularWeaponBP_Polearm_Mid_Tier_C","Polearm");rawset(weapon,"__addr",8902)
+    local root=M.new_obj("StaticMeshComponent","WeaponRoot");rawset(root,"__addr",8903)
+    local base=M.new_obj("StaticMeshComponent","BaseMesh");rawset(base,"__addr",8904)
+    actor.__props["Weapon R"],weapon.__props.RootComponent,weapon.__props.BaseMesh=weapon,root,base
+    M.Methods.IsSimulatingPhysics=function()return true end
+    local c={addr=8902,root_addr=8903,fname="Polearm",sim=false}
+    api.set_puppet(2,{actor=actor,gen=api.generation(),shown={has_context=true,pawn="Puppet",match_id=94,round=1,life=1},body={sv={wc={["Weapon R"]=c}}}})
+    api.PX.weaponstate("2")
+    local log=M.logtext()
+    T.check(T.contains(log,"cached_sim=false actual_root_sim=true actual_base_sim=true"),"dev diagnostic compares cached simulation with two fresh native readbacks",log)
+    T.check(c.sim==false and root:IsSimulatingPhysics("None")==true,"dev simulation mismatch snapshot mutates neither cache nor native physics")
 end
 
 if opts.kind == "hook" then

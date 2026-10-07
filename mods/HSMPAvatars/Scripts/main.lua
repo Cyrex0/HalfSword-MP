@@ -859,6 +859,10 @@ function PX.poll_dev()
         if type(c) == "table" and c.op == 1 and c.key == "bodyheight" then
             PX.bodyheight_request = tostring(c.arg or "")
         end
+        if type(c)=="table" and c.op==1 and c.key=="parity" and os.getenv("HSMP_DEV")=="1" then
+            local exp,rest=tostring(c.arg or ""):match("^(%S+)%s*(.*)$")
+            if exp=="weaponstate" then PX.weaponstate_request=rest end
+        end
         if type(c) == "table" and c.op == 2 then   -- S.ENUMS.dev_op.TUNE
             local k = tostring(c.key or "")
             local v, err = PURE.tune_value(k, tonumber(c.num))
@@ -2117,6 +2121,7 @@ drop_caches = function(reason)
         if p.body and p.body.height_probe then Log("bodyheight probe discarded at world teardown (no old UObject access)") end
     end
     PX.bodyheight_request = nil
+    PX.weaponstate_request = nil
     if next(puppets) ~= nil then Log("dropping all puppet caches (no UE access): %s", reason) end
     puppets, next_claim, warned_none = {}, {}, {}
     _driven = {}
@@ -2459,6 +2464,34 @@ function PX.wc_check(p, field, c)
         wa, root = x, r
     end)
     return wa, root
+end
+-- Synchronous dev snapshot of cache versus fresh native readbacks. It shares
+-- Parity's broadcast command, but reads only after this mod's world guard.
+function PX.weaponstate(arg)
+    if os.getenv("HSMP_DEV")~="1" then return end
+    local session=HSM and HSM.new({every_s=0})
+    if session then session:poll(true) end
+    if not session or not session:live() then return end
+    local requested=tonumber(arg)
+    if arg~="" and (not requested or requested<0 or requested%1~=0) then return end
+    for peer,p in pairs(puppets) do
+        if (requested==nil or requested==peer) and p.gen==world_gen and p.actor and p.actor:IsValid() then
+            local shown=p.shown or p.applied_context
+            if shown and shown.has_context==true and shown.pawn==p.actor:GetFName():ToString() and PURE.pose_context_ok(shown,HSM and HSM.view(),HSM and HSM.mode(),peer) then
+                for _,field in ipairs({"Weapon R","Weapon L"}) do
+                    local c=p.body and p.body.sv and p.body.sv.wc and p.body.sv.wc[field]
+                    local wa,root=PX.wc_check(p,field,c)
+                    local actual,base,base_sim
+                    if wa then
+                        pcall(function()actual=root:IsSimulatingPhysics(fname("None"))end)
+                        pcall(function()base=wa.BaseMesh;if base and base:IsValid() then base_sim=base:IsSimulatingPhysics(fname("None")) end end)
+                    end
+                    Log("WPNCACHE peer=%s pawn=%s match=%s round=%s life=%s field=%s actor_address=%s root_address=%s cached_sim=%s actual_root_sim=%s actual_base_sim=%s servo_at=%s grips=%s read_only=true",
+                        tostring(peer),shown.pawn,tostring(shown.match_id),tostring(shown.round),tostring(shown.life),field,tostring(c and c.addr),tostring(c and c.root_addr),tostring(c and c.sim),tostring(actual),tostring(base_sim),tostring(p.wservo and p.wservo[field]),PX.grips_desc(p))
+                end
+            end
+        end
+    end
 end
 -- The validated weapon entries of a body: stale ones are dropped WITHOUT
 -- being touched, live ones get their root re-taken from the fresh read.
@@ -3980,6 +4013,11 @@ local function on_tick()
         local request = PX.bodyheight_request
         PX.bodyheight_request = nil
         PX.bodyheight(request)
+    end
+    if PX.weaponstate_request then
+        local request=PX.weaponstate_request
+        PX.weaponstate_request=nil
+        PX.weaponstate(request)
     end
     -- A diagnostic must restore even when no fresh pose reaches drive_v2.
     for id,p in pairs(puppets) do

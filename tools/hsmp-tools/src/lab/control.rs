@@ -1,9 +1,9 @@
 use super::{
-    collect::{self, Collector, Summary},
     Recipe,
+    collect::{self, Collector, Summary},
 };
-use anyhow::{ensure, Context, Result};
-use serde_json::{json, Value};
+use anyhow::{Context, Result, ensure};
+use serde_json::{Value, json};
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -192,7 +192,10 @@ impl Live {
         let start = Instant::now();
         loop {
             let v = self.status()?;
-            if v["phase"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(phase)) {
+            if v["phase"]
+                .as_str()
+                .is_some_and(|p| p.eq_ignore_ascii_case(phase))
+            {
                 return Ok(v);
             }
             ensure!(
@@ -224,12 +227,12 @@ impl Live {
         Ok(())
     }
     fn kit(&self, inst: usize, kit: &str) -> Result<()> {
-        use hsmp_ipc::record::{view, Record};
+        use hsmp_ipc::record::{Record, view};
         use hsmp_ipc::schema::{
-            loadout::{Kit, K_KIT, K_KIT_VERDICT, VERDICT_ACCEPTED},
-            pose::PeerDir,
-            session::{sidecar_status, Link, K_LINK},
             SlotMeta,
+            loadout::{K_KIT, K_KIT_VERDICT, Kit, VERDICT_ACCEPTED},
+            pose::PeerDir,
+            session::{K_LINK, Link, sidecar_status},
         };
         use std::sync::atomic::Ordering;
         fn read<R: Record>(
@@ -281,7 +284,10 @@ impl Live {
                 f.seek(SeekFrom::Start(offset))?;
                 let mut tail = String::new();
                 f.read_to_string(&mut tail)?;
-                if let Some(line) = tail.lines().find(|s| s.contains(&needle) && s.contains(" -> ")) {
+                if let Some(line) = tail
+                    .lines()
+                    .find(|s| s.contains(&needle) && s.contains(" -> "))
+                {
                     ensure!(line.ends_with("-> saved"), "kit failed: {line}");
                     saved = true;
                 }
@@ -314,7 +320,15 @@ impl Live {
                                         "kit replaced by server: {}",
                                         receipt.reason.lossy()
                                     );
-                                    ensure!(kit_contents_match(&request, &rows, &receipt, &receipt_rows), "server kit receipt does not match requested class, hands, cosmetics or armour");
+                                    ensure!(
+                                        kit_contents_match(
+                                            &request,
+                                            &rows,
+                                            &receipt,
+                                            &receipt_rows
+                                        ),
+                                        "server kit receipt does not match requested class, hands, cosmetics or armour"
+                                    );
                                     journal(
                                         &self.run.join("lab-actions.jsonl"),
                                         &json!({"at":now_ms(),"action":"kit_ack","instance":inst+1,"peer":link.my_peer_id,"command_id":id,"selection_seq":request.seq,"ack_seq":receipt.seq,"revision":receipt.rev,"kit":kit}),
@@ -374,9 +388,6 @@ impl Live {
                 for (key, v) in &recipe.tune {
                     self.dev(i, &["tune", key, &v.to_string()])?;
                 }
-                if recipe.ai {
-                    self.dev(i, &["autotest", "parity", "ai auto"])?;
-                }
                 self.dev(i, &["autotest", "ready"])?;
             }
             let ready = Instant::now();
@@ -394,7 +405,8 @@ impl Live {
                 );
                 thread::sleep(Duration::from_millis(100));
             }
-            let commit = self.config["deploy"]["commit"].as_str()
+            let commit = self.config["deploy"]["commit"]
+                .as_str()
                 .unwrap_or("unknown deployed build (no commit stamp)");
             let mut c = Collector::new(&self.run, &recipe.name, &commit);
             let paths = collect::sources(&self.run)?;
@@ -405,6 +417,39 @@ impl Live {
             )?;
             self.rcon("START")?;
             let initial = self.wait("Live", 180)?;
+            // Parity refuses commands while the new arena is unsettled. Live
+            // follows verified native readiness, so arm the sticky per-round
+            // AI only here, once; later lives are handled by ai_auto_tick.
+            let ai_log = if recipe.ai {
+                Some(
+                    Path::new(
+                        self.config["game"]
+                            .as_str()
+                            .context("game path for native AI evidence")?,
+                    )
+                    .join("HalfswordUE5/Binaries/Win64/ue4ss/UE4SS.log"),
+                )
+            } else {
+                None
+            };
+            let mut ai_offset = ai_log
+                .as_ref()
+                .map(fs::metadata)
+                .transpose()?
+                .map_or(0, |m| m.len());
+            let mut ai_observed = 0;
+            if recipe.ai {
+                for i in 0..2 {
+                    let id = (hsmp_ipc::shm::random_u64() as u32).max(1).to_string();
+                    self.dev(i, &["--id", &id, "autotest", "parity", "ai auto"])?;
+                    journal(
+                        &self.run.join("lab-actions.jsonl"),
+                        &json!({"at":now_ms(),"action":"ai_auto_command_submitted","instance":i+1,
+                            "command_id":id,"phase":initial["phase"],"round":initial["round"],
+                            "meaning":"DevCtl queued only; native takeover not yet observed"}),
+                    )?;
+                }
+            }
             if let Some(drive) = &recipe.drive {
                 for i in 0..2 {
                     self.dev(i, &["autotest", "parity", &format!("drive {drive}")])?;
@@ -417,6 +462,13 @@ impl Live {
             let mut round = initial["round"].clone();
             while start.elapsed().as_secs() < recipe.duration_s {
                 c.poll(&collect::sources(&self.run)?)?;
+                if let Some(log) = &ai_log {
+                    ai_observed += observe_ai_takeovers(
+                        log,
+                        &mut ai_offset,
+                        &self.run.join("lab-actions.jsonl"),
+                    )?;
+                }
                 let n = c.summary.values("accept").len();
                 if n != claims {
                     claims = n;
@@ -428,7 +480,9 @@ impl Live {
                     round_start = Instant::now();
                     last_claim = round_start;
                 }
-                if status["phase"].as_str().is_some_and(|p| p.eq_ignore_ascii_case("Live"))
+                if status["phase"]
+                    .as_str()
+                    .is_some_and(|p| p.eq_ignore_ascii_case("Live"))
                     && (round_start.elapsed().as_secs() >= recipe.round_timeout_s
                         || (recipe.no_claim_timeout_s > 0
                             && last_claim.elapsed().as_secs() >= recipe.no_claim_timeout_s))
@@ -441,7 +495,10 @@ impl Live {
                     round_start = Instant::now();
                     last_claim = round_start;
                 }
-                if status["phase"].as_str().is_some_and(|p| p.eq_ignore_ascii_case("Lobby")) {
+                if status["phase"]
+                    .as_str()
+                    .is_some_and(|p| p.eq_ignore_ascii_case("Lobby"))
+                {
                     self.rcon("START")?;
                 }
                 for g in &self.games {
@@ -452,6 +509,15 @@ impl Live {
             self.rcon("ABORT")?;
             self.wait("Lobby", 30)?;
             c.poll(&collect::sources(&self.run)?)?;
+            if let Some(log) = &ai_log {
+                ai_observed +=
+                    observe_ai_takeovers(log, &mut ai_offset, &self.run.join("lab-actions.jsonl"))?;
+                journal(
+                    &self.run.join("lab-actions.jsonl"),
+                    &json!({"at":now_ms(),"action":"ai_auto_evidence_summary","native_takeover_log_count":ai_observed,
+                        "instance_attribution":"unavailable in combined native log","observed":ai_observed>0}),
+                )?;
+            }
             c.finish();
             save(out, &c.summary)?;
             journal(
@@ -469,6 +535,47 @@ impl Live {
         }
         result
     }
+}
+
+/// Read complete newly appended native lines. DevCtl queue messages and the
+/// sticky-auto acknowledgement do not establish native controller possession.
+/// The combined log can contain identical pawn names from different processes,
+/// so this evidence deliberately makes no per-instance success claim.
+fn observe_ai_takeovers(log: &Path, offset: &mut u64, actions: &Path) -> Result<usize> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = fs::File::open(log)?;
+    ensure!(
+        file.metadata()?.len() >= *offset,
+        "native AI evidence log truncated during experiment"
+    );
+    file.seek(SeekFrom::Start(*offset))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    let Some(end) = bytes.iter().rposition(|b| *b == b'\n').map(|i| i + 1) else {
+        return Ok(0);
+    };
+    let mut read = 0;
+    let mut observed = 0;
+    for line in bytes[..end].split_inclusive(|b| *b == b'\n') {
+        let text = String::from_utf8_lossy(line);
+        let text = text.trim_end();
+        if text.contains("[HSMPParity] ai: ")
+            && text.contains(" now driven by AI_BP_C_")
+            && text.contains(" target ")
+        {
+            journal(
+                actions,
+                &json!({"at":now_ms(),"action":"native_ai_takeover_observed",
+                "source_file":log,"source_byte_offset":*offset+read,"source_text":text,
+                "combat_initialized":text.contains("(init=true combat=true)"),
+                "instance_attribution":"unavailable in combined native log"}),
+            )?;
+            observed += 1;
+        }
+        read += line.len() as u64;
+    }
+    *offset += end as u64;
+    Ok(observed)
 }
 
 fn kit_contents_match(
@@ -546,6 +653,87 @@ mod kit_receipt_tests {
             &receipt,
             &armour[..1]
         ));
+    }
+}
+
+#[cfg(test)]
+mod ai_evidence_tests {
+    use super::*;
+
+    struct Fixture {
+        dir: PathBuf,
+        log: PathBuf,
+        actions: PathBuf,
+    }
+    impl Fixture {
+        fn new() -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("hsmp_lab_ai_{}", hsmp_ipc::shm::random_u64()));
+            fs::create_dir(&dir).unwrap();
+            Self {
+                log: dir.join("native.log"),
+                actions: dir.join("actions.jsonl"),
+                dir,
+            }
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.log);
+            let _ = fs::remove_file(&self.actions);
+            let _ = fs::remove_dir(&self.dir);
+        }
+    }
+    #[test]
+    fn native_ai_evidence_never_confuses_submission_or_auto_ack_with_takeover() {
+        let f = Fixture::new();
+        fs::write(&f.log,concat!(
+            "AUTOTEST cmd #2: parity ai auto\n",
+            "[HSMPParity] ai: auto - every Live round from now on is fought by the game's own AI\n",
+            "[HSMPParity] refused 'ai': world not settled\n",
+            "[HSMPParity] ai: Willie_BP_C_1 now driven by AI_BP_C_2 (init=true combat=true) target Willie_BP_C_3 team 1 vs 101\n"
+        )).unwrap();
+        let mut offset = 0;
+        assert_eq!(
+            observe_ai_takeovers(&f.log, &mut offset, &f.actions).unwrap(),
+            1
+        );
+        let rows: Vec<Value> = fs::read_to_string(&f.actions)
+            .unwrap()
+            .lines()
+            .map(|s| serde_json::from_str(s).unwrap())
+            .collect();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["action"], "native_ai_takeover_observed");
+        assert_eq!(rows[0]["combat_initialized"], true);
+        assert!(rows[0].get("instance").is_none());
+        assert_eq!(
+            observe_ai_takeovers(&f.log, &mut offset, &f.actions).unwrap(),
+            0
+        );
+    }
+    #[test]
+    fn native_ai_evidence_waits_for_complete_lines_and_keeps_failed_combat_init_honest() {
+        let f = Fixture::new();
+        let line = "[HSMPParity] ai: Willie_BP_C_4 now driven by AI_BP_C_5 (init=true combat=false) target Willie_BP_C_6 team 1 vs 101";
+        fs::write(&f.log, line).unwrap();
+        let mut offset = 0;
+        assert_eq!(
+            observe_ai_takeovers(&f.log, &mut offset, &f.actions).unwrap(),
+            0
+        );
+        assert_eq!(offset, 0);
+        writeln!(OpenOptions::new().append(true).open(&f.log).unwrap()).unwrap();
+        assert_eq!(
+            observe_ai_takeovers(&f.log, &mut offset, &f.actions).unwrap(),
+            1
+        );
+        let row: Value =
+            serde_json::from_str(fs::read_to_string(&f.actions).unwrap().trim()).unwrap();
+        assert_eq!(row["combat_initialized"], false);
+        assert_eq!(row["source_byte_offset"], 0);
+        fs::write(&f.log, b"reset\n").unwrap();
+        assert!(observe_ai_takeovers(&f.log, &mut offset, &f.actions).is_err());
     }
 }
 

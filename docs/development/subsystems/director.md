@@ -113,6 +113,10 @@ Pose clocks and stand-in visibility alone cannot prove this: playback publicatio
 while a stopped sender is extrapolated. The final Ready step re-checks the proof, and input
 remains frozen without Ready evidence for the exact current world and pawn. Older native
 modules without successful-write pose evidence report an unavailable proof and remain blocked.
+The first Live input release re-checks this proof, closing the interval between Ready and the
+end of the countdown. Release is then latched for that exact placed life, so ordinary wounds
+or knockdowns during Live do not re-run spawn proof and freeze controls. Pause/reconnect,
+world changes and a new life clear the latch; their next release requires current proof again.
 
 **Foe count** (GI `Free Mode Foes Amount`) is `max(1, remote fighters in the roster)`. The roster is
 the session snapshot's connected fighter rows. The extra foe in a solo match is a hidden stand-in.
