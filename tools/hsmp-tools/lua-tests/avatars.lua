@@ -39,6 +39,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "bodyheight" })
     T.isolated(T.script, "case", { kind = "ai_owner" })
     T.isolated(T.script, "case", { kind = "weaponstate" })
+    T.isolated(T.script, "case", { kind = "weapon_sim_refresh" })
     T.isolated(T.script, "case", { kind = "spawn_settle" })
     return
 end
@@ -122,6 +123,109 @@ if opts.kind == "ai_owner" then
     api.PX.restore_spawn_possession(me,M.pc)
     T.check(possessions==1 and M.pc.__props.Pawn==me,
         "normal human stand-in spawning restores the original possessed fighter")
+end
+
+if opts.kind == "weapon_sim_refresh" then
+    local api = boot(true)
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=107,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=107,round=1,rows={{peer_id=2,life=1}}})
+    api.on_tick() -- establish the same current-world guard used by production
+    local P,PX = api.PURE,api.PX
+    local actor=M.new_obj("Willie_BP_C","MutablePhysicsPuppet");rawset(actor,"__addr",8701)
+    local weapon=M.new_obj("ModularWeaponBP_Polearm_C","MutablePolearm");rawset(weapon,"__addr",8702)
+    local root=M.new_obj("StaticMeshComponent","MutableRoot");rawset(root,"__addr",8703)
+    local mesh=M.new_obj("SkeletalMeshComponent","CharacterMesh0")
+    actor.__props["Weapon R"],weapon.__props.RootComponent=weapon,root
+    local simulated,unreadable,malformed=false,false,false
+    local sim_reads,com_reads,velocity_sets,policy_sets,authored_sim=0,0,0,0,0
+    M.Methods.IsSimulatingPhysics=function(self)
+        if self~=root then return true end
+        sim_reads=sim_reads+1
+        if unreadable then error("native physics temporarily unavailable") end
+        if malformed then return "true" end
+        return simulated
+    end
+    M.Methods.GetTransform=function()return {Translation={X=0,Y=0,Z=0},Rotation={X=0,Y=0,Z=0,W=1}}end
+    M.Methods.GetCenterOfMass=function()com_reads=com_reads+1;return {X=1,Y=0,Z=0}end
+    M.Methods.GetSocketTransform=M.Methods.GetTransform
+    M.Methods.GetPhysicsLinearVelocity=function()return {X=0,Y=0,Z=0}end
+    M.Methods.SetPhysicsLinearVelocity=function(self)if self==root then velocity_sets=velocity_sets+1 end end
+    M.Methods.SetPhysicsAngularVelocityInDegrees=function()end
+    M.Methods.SetEnableGravity=function(self,on)if self==root then policy_sets=policy_sets+1;rawset(root,"grav",on)end end
+    local channels={}
+    M.Methods.SetCollisionResponseToChannel=function(self,channel,response)if self==root then channels[channel]=response end end
+    M.Methods.SetSimulatePhysics=function()authored_sim=authored_sim+1;error("refresh must never author simulation")end
+    local fn=function(n)return {ToString=function()return n end}end
+    local grip={IsValid=function()return true end,GetAddress=function()return 8710 end,GetFName=function()return fn("MutableGrip")end}
+    local pi={AngularDrive={SlerpDrive={Stiffness=10,Damping=2,MaxForce=100}},
+        LinearLimit={XMotion=2,YMotion=2,ZMotion=2,Limit=31},
+        ConeLimit={Swing1Motion=2,Swing1LimitDegrees=10,Swing2Motion=2,Swing2LimitDegrees=20},
+        TwistLimit={TwistMotion=2,TwistLimitDegrees=30}}
+    grip.ConstraintInstance={ConstraintBone2=fn("hand_r"),ProfileInstance=pi}
+    for _,axis in ipairs({"X","Y","Z"})do grip["SetLinear"..axis.."Limit"]=function(_,mode)pi.LinearLimit[axis.."Motion"]=mode end end
+    grip.SetAngularSwing1Limit=function(_,mode)pi.ConeLimit.Swing1Motion=mode end
+    grip.SetAngularSwing2Limit=function(_,mode)pi.ConeLimit.Swing2Motion=mode end
+    grip.SetAngularTwistLimit=function(_,mode)pi.TwistLimit.TwistMotion=mode end
+    grip.SetAngularDriveParams=function()end
+    M.Methods.K2_GetComponentsByClass=function()return {grip}end
+    local sv={n=6,com={},cmd={},wc={},err={n=0,e=0,emax=0,a=0,amax=0,hmax=0,capped=0}}
+    local slots={}
+    for i in pairs(PX.SETTLE.bones)do sv.com[i]={0,0,0};slots[i]={0,0,0,0,0,0,1,0,0,0,0,0,0}end
+    slots[P.V2_WPN_R]={10,0,0,0,0,0,1,0,0,0,0,0,0}
+    local body={mesh=mesh,sv=sv,field="Mesh",gravity=false,ctl="servo"}
+    local cur={v2=true,has_context=true,match_id=107,round=1,life=1,seq=1,pt=1000,read_at=1000,
+        cut=0,age=0,delay=0,rate=1,st=16,mode="interp",slots=slots,weapons={},nbones=6}
+    local p={actor=actor,body=body,gen=api.generation(),peer=2,driving=true,last=cur}
+    local function drive(now)
+        M.now=now;cur.seq=cur.seq+1;cur.pt,cur.read_at=now,now
+        api.drive_v2(2,p,body,cur,true,now,false,false)
+    end
+    drive(1000)
+    local c=sv.wc["Weapon R"];local original_com=c and c.com
+    local grips=PX.grip_constraints(p,1000)
+    T.check(c and c.sim==false and p.wservo==nil and velocity_sets==0 and not grips[1].freed,
+        "production driver initially respects a native kinematic root with a locked grip")
+    simulated=true;drive(1016);PX.grips_off(p,true)
+    T.check(sv.wc["Weapon R"]==c and c.root==root and c.sim==true and c.com==original_com and com_reads==1,
+        "same actor/root cache refreshes false to true without rebuilding COM")
+    T.check(velocity_sets==1 and p.wservo["Weapon R"]==1016 and p.wservo_actor["Weapon R"]==8702,
+        "fresh simulation resumes the actual production weapon servo in that frame")
+    T.check(root.grav==false and policy_sets==1 and channels[0]==0 and channels[1]==0,
+        "late simulation activation receives the existing gravity and world-response policy")
+    T.check(grips[1].freed and pi.LinearLimit.ZMotion==0,"fresh servo evidence qualifies the existing free-grip policy")
+    drive(1032)
+    T.check(policy_sets==1 and com_reads==1 and velocity_sets==2,"stable true state keeps immutable cache and does not repeat setup writes")
+    simulated=false;drive(1048);PX.grips_off(p,true)
+    T.check(c.sim==false and p.wservo["Weapon R"]==nil and p.wservo_actor["Weapon R"]==nil and velocity_sets==2,
+        "true to false stops physics servo and removes both servo timestamps immediately")
+    T.check(not grips[1].freed and pi.LinearLimit.ZMotion==2 and not p.shown.settle_ready,
+        "native kinematic transition clears qualification and restores the existing grip limits")
+    simulated=true;drive(1064);PX.grips_off(p,true)
+    T.check(c.sim==true and velocity_sets==3 and grips[1].freed and policy_sets==2,
+        "later native simulation activation resumes servo and its existing policy")
+    unreadable=true;drive(1080);PX.grips_off(p,true)
+    T.check(c.sim==nil and c.sim_unavailable and p.wservo["Weapon R"]==nil and velocity_sets==3 and not grips[1].freed,
+        "unreadable fresh state fails closed instead of retaining true or coercing false")
+    T.check(not p.shown.settle_ready and T.contains(table.concat(p.wpn_states," "),"physics-unavailable"),
+        "unreadable state removes physical qualification and is reported separately from kinematic")
+    unreadable=false;malformed=true;drive(1096)
+    T.check(c.sim==nil and velocity_sets==3,"a non-boolean native read is also unavailable")
+    malformed=false;drive(1112)
+    T.check(c.sim==true and not c.sim_unavailable and velocity_sets==4 and c.com==original_com,
+        "unavailable state is retried on the next reuse and recovers without COM recomputation")
+    local reads=sim_reads
+    p.gen=999
+    T.check(api.servo_weapon_parts(p,body,"Weapon R")==nil and sim_reads==reads,"stale world rejects reuse before reading native physics")
+    p.gen=api.generation();cur.life=2
+    T.check(api.servo_weapon_parts(p,body,"Weapon R")==nil and sim_reads==reads,"stale owner life rejects reuse before reading native physics")
+    cur.life=1
+    local old=root;root=M.new_obj("StaticMeshComponent","RebuiltRoot");rawset(root,"__addr",8704)
+    weapon.__props.RootComponent=root;rawset(old,"__dead",true)
+    local fresh=api.servo_weapon_parts(p,body,"Weapon R")
+    T.check(fresh and fresh~=c and fresh.root_addr==8704 and #M.dead_touch==0,
+        "changed root rebuilds from fresh identity and never reads the old freed root",T.repr(M.dead_touch))
+    T.check(authored_sim==0,"the refresh never enables or disables native simulation")
 end
 
 if opts.kind=="weaponstate" then

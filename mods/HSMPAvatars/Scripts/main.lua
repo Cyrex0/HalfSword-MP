@@ -2591,7 +2591,40 @@ function PX.contact_body(mesh, sv, i, cv, near)
     return dv
 end
 
+-- Simulation is mutable on a live weapon root (native pickup / setup can
+-- enable it after this cache was created). Only call with the fresh root
+-- returned by wc_check, or while creating the newly resolved entry.
+function PX.wc_refresh_sim(p, body, field, c, root)
+    local previous, sim = c.sim, nil
+    local ok = pcall(function() sim = root:IsSimulatingPhysics(FN_NONE) end)
+    local unavailable = not ok or type(sim) ~= "boolean"
+    if unavailable then sim = nil end
+    c.sim = sim
+    local changed = previous ~= sim or (unavailable and not c.sim_unavailable)
+    c.sim_unavailable = unavailable or nil
+    if changed or unavailable then
+        if p.wservo then p.wservo[field] = nil end
+        if p.wservo_actor then p.wservo_actor[field] = nil end
+        PX.settle_reset(p, unavailable and "weapon physics unavailable" or "weapon physics changed")
+    end
+    if changed then
+        Log("WPNSIM peer=%s field=%s actor_address=%s root_address=%s previous=%s actual=%s unavailable=%s",
+            tostring(p.peer), field, tostring(c.addr), tostring(c.root_addr), tostring(previous), tostring(sim), tostring(unavailable))
+    end
+    if sim == true and previous ~= true and body.gravity == false then
+        -- The same policy used when a simulated entry is first constructed.
+        pcall(function() root:SetEnableGravity(false) end)
+        pcall(function() root:SetCollisionResponseToChannel(0, 0); root:SetCollisionResponseToChannel(1, 0) end)
+    end
+end
+
 local function servo_weapon_parts(p, body, field)
+    -- Production callers carry both guards. Reject a stale generation / life
+    -- before reading any native actor or root, including a reused entry.
+    if (p.gen ~= nil and (p.gen ~= world_gen or cache_gen ~= world_gen))
+        or (p.peer ~= nil and not PURE.pose_context_ok(p.last, HSM and HSM.view(), HSM and HSM.mode(), p.peer)) then
+        return nil
+    end
     body.wc_owner = p
     local okw, wa = pcall(PX.r_index, p.actor, field)
     if not okw then wa = nil end
@@ -2601,7 +2634,11 @@ local function servo_weapon_parts(p, body, field)
     local c = body.sv.wc[field]
     if c and c.addr == addr and body.sv.wc_gen == PX.wc_gen_poll() then
         local wa2, root = PX.wc_check(p, field, c)
-        if wa2 then c.root = root; return c, wa2 end
+        if wa2 then
+            c.root = root
+            PX.wc_refresh_sim(p, body, field, c, root)
+            return c, wa2
+        end
     end
     body.sv.wc[field] = nil   -- a different / destroyed weapon: forget the old entry untouched
     body.sv.wc_gen = PX.wc_gen_poll()
@@ -2610,7 +2647,6 @@ local function servo_weapon_parts(p, body, field)
     pcall(function() c.root = wa.RootComponent end)
     if not (c.root and c.root:IsValid()) then return nil end
     pcall(function() c.root_addr = c.root:GetAddress() end)
-    pcall(function() c.sim = c.root:IsSimulatingPhysics(FN_NONE) end)
     pcall(function()
         local t = wa:GetTransform()
         local m = c.root:GetCenterOfMass(FN_NONE)
@@ -2619,10 +2655,7 @@ local function servo_weapon_parts(p, body, field)
     end)
     pcall(function() c.base = wa["Root Scene"]; c.tip = wa.TippyTipScene end)
     pcall(function() c.tag = PURE.class_tag(wa:GetClass():GetFName():ToString()) end)
-    if c.sim and body.gravity == false then
-        pcall(function() c.root:SetEnableGravity(false) end)
-        pcall(function() c.root:SetCollisionResponseToChannel(0, 0); c.root:SetCollisionResponseToChannel(1, 0) end)
-    end
+    PX.wc_refresh_sim(p, body, field, c, c.root)
     body.sv.wc[field] = c
     return c, wa
 end
@@ -3296,6 +3329,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 wstate = "missing"
             elseif cur.weapons[s] and c.tag ~= cur.weapons[s][2] then
                 wstate = "other-class"   -- not the sender's weapon: it just follows the hand
+            elseif c.sim == nil then
+                wstate = "physics-unavailable"
             elseif not c.sim then
                 wstate = "kinematic"
             elseif c.com then

@@ -478,3 +478,23 @@ physical reads fail placement verification. Readiness bounds stay unchanged.
 Offline tests and review are prerequisites, not native acceptance. Require a
 matched deployment and first-round polearm actor identity, actual grip limits,
 physical readiness, and repeated AI rounds before calling this defect resolved.
+
+Checkpoint `9953a4c5` passed the clean G0 (54 Lua suites, 1,279 Rust tests), then
+received a matching developer deployment. Native session 13/raw run
+`20261007-224749-4a88dd-combat_manual` reached Live on the first default polearm
+spawn. Its original own weapon actors remained held through the fresh capture;
+one outfit application per client and no re-dress were observed. Actual proxy
+right-hand constraints were free, not merely labelled free. This initial round
+was explicitly aborted after AI combat, not completed through biological defeat.
+
+The separate four-minute polearm recipe had five AI rounds, four natural round
+completions, no load failures, and no observed initial re-dress/recovery loop.
+Normal teardown passed save/process/crash checks. Repeated fairness still failed:
+round two's input release differed by 28.684 seconds. The decisive round-three
+capture at 22:52:16 showed the same valid weapon/root with cached_sim=false but
+actual_root_sim=true, no servo timestamp, and the right grip locked; COM differed
+by only 0.000003 uu. Refreshing this mutable physics state is justified by this
+capture. The earlier session-12 sim=true capture did not prove that transition.
+One later initial pelvis/fence contact was observed despite zero immediate
+placement residual; do not claim the placement correction eliminates all native
+post-teleport contacts. The recovery branch was not exercised by this run.
