@@ -203,7 +203,10 @@ function M.new(o)
         install=function(register)
             for _,event in ipairs(M.HOOKS)do
                 if not installed[event] and not ambiguous[event] then
-                    local path="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..event
+                    -- LuaMod.cpp strips the first "Function " anywhere in the
+                    -- argument. An explicit leading prefix preserves names that
+                    -- themselves contain it, such as Dismember Function Initiate.
+                    local path="Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..event
                     local ok,pre_id,post_id=pcall(register,path,
                         function(...)local args=table.pack(...);safe(function()sever(event,table.unpack(args,1,args.n))end)end)
                     -- Pinned LuaMod.cpp returns the same int32 ID twice for a

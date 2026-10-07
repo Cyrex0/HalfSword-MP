@@ -81,10 +81,22 @@ local b=M.new{enabled=function()return true end,unwrap=unwrap,fname=fn,context=f
     if changed_contexts>1 then c.life=131 end;return c end,log=function()error("mixed life logged")end}
 T.check(b.capture(pawn,"transition")==nil,"context changing during native read drops mixed-life evidence")
 local hooks={};local registrations=0
+-- Pinned LuaMod.cpp:88 uses find-first + substr, not a starts-with test.
+local function native_lookup(path)
+    local _,last=path:find("Function ",1,true)
+    return last and path:sub(last+1) or path
+end
+local function hook_path(event)return "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..event end
+for i,event in ipairs(M.HOOKS)do
+    T.check(native_lookup(hook_path(event))==(i==1 and "Initiate" or "Delayed"),
+        "unprefixed embedded Function name reproduces actual bare native lookup failure")
+    T.check(native_lookup("Function "..hook_path(event))==hook_path(event),
+        "leading supported Function prefix preserves the full reflected target through pinned parser")
+end
 local function missing_class()error("class unavailable")end
 T.check(not a.install(missing_class),"native sever hooks unavailable explicitly until class loads")
 T.check(logs[#logs]:find("error=",1,true) and logs[#logs]:find("class_unavailable",1,true)
-    and logs[#logs]:find('path="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dismember Function Delayed"',1,true),
+    and logs[#logs]:find('path="Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dismember Function Delayed"',1,true),
     "actual native hook failure and unsanitized exact reflected path remain explicit")
 local failed_logs=#logs
 a.install(missing_class)
@@ -92,10 +104,11 @@ T.check(#logs==failed_logs,"same native hook error retries without per-tick log 
 a.install(function()error("function flags unavailable")end)
 T.check(#logs==failed_logs+2 and logs[#logs]:find("function_flags_unavailable",1,true),
     "changed native registration exception is reported independently for both functions")
-T.check(a.install(function(path,callback,post)registrations=registrations+1;hooks[path]=callback
-    T.check(path=="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dismember Function Initiate"
-        or path=="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dismember Function Delayed",
-        "hook registration uses exact reflected spaced function names")
+T.check(a.install(function(path,callback,post)registrations=registrations+1
+    local resolved=native_lookup(path)
+    T.check(resolved==hook_path(M.HOOKS[1]) or resolved==hook_path(M.HOOKS[2]),
+        "actual registration argument resolves to exact reflected spaced function through native parser")
+    hooks[resolved]=callback
     T.check(post==nil,"native Blueprint registration has only its actual POST callback")
     return registrations,registrations end),"both exact native sever hooks retry")
 T.check(logs[#logs]:find("pre_id=2 post_id=2 error=none",1,true),"native hook IDs are reported only from successful registration return values")

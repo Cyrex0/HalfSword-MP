@@ -560,3 +560,17 @@ or completed sever; all sever collections are readable and empty in that slice.
 One initial own-kit recovery explicitly reused the same polearm actor/outfit.
 Twelve native original-false guard restores were verified; final abort refusal
 against a replaced pawn/world is stale-target protection, not a verified write.
+
+Native16 (`9b491cb0`, raw `test-results/20261008-001108-944b10-combat_manual`)
+isolated the sever-hook lookup failure: the engine searched only `Initiate` /
+`Delayed`. Pinned UE4SS `LuaMod.cpp:88` removes the first `Function ` substring
+anywhere in its argument, including inside these Blueprint names. Prefixing
+the full reflected path with `Function ` preserves the actual path through
+that parser. The source fix has focused regression coverage and Astra review;
+matching native registration and completed sever callbacks are still required.
+Read-only owner/proxy arm captures show equal native elbow/wrist limits and
+zero proxy motors versus owner strength 250. Current-angle values are not
+qualified physics evidence, and the moving/drop-repickup slice does not
+reproduce Native15's persistent simulated/free-grip fault. No limits changed.
+Native16 closed normally with no new crash; it was a diagnostic run, not a
+passing all-gear/body/spawn acceptance run.
