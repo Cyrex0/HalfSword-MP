@@ -64,6 +64,9 @@
 .PARAMETER KillPrevious
     Only reap DEAD runs (harness gone: stop the processes they recorded, remove their
     state dirs), then exit. A live run is never touched.
+.PARAMETER ServerArgs
+    Extra hsmp-server flags appended to the dedicated server's command line
+    (e.g. -ServerArgs '--mods-dir','C:\hsmp-test-mods').
 .PARAMETER ServerPort
     Ports default to 0 = a free port picked per run (ServerPort, RconPort, MasterPort, and
     one netsim port per instance). An explicit port must be free or the run refuses to start.
@@ -101,7 +104,8 @@ param(
     [string]$TestCvars = "r.VSync=0;t.MaxFPS=60",
     # Extra .settings.json keys for every instance, as a JSON object (A/B switches such as
     # {"native_sample":true,"native_servo":true}). The instance's nick / server always win.
-    [string]$ExtraSettings = ""
+    [string]$ExtraSettings = "",
+    [string[]]$ServerArgs = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -405,6 +409,8 @@ function Server-Args([int]$gen) {
     $sv = $sc.env.PSObject.Properties | Where-Object { $_.Name -eq "server" }
     if ($sv -and "$($sv.Value.HSMP_TEST_NO_ADMINS)" -eq "1") { $noAdmins = $true }
     if ($caps.admin_keys -and -not $noAdmins) { $a += @("--admins-file", (Join-Path $stateDirs["1"] ".player_key")) }
+    # extra hsmp-server flags for manual sessions (e.g. --mods-dir <dir> --mods-timeout-s 30)
+    if ($ServerArgs.Count -gt 0) { $a += $ServerArgs }
     return $a
 }
 

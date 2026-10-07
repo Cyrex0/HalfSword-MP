@@ -2444,6 +2444,15 @@ local function autotest_dispatch(c)
         else Log("AUTOTEST cmd #%s: move - autotest_mover.lua not found", tostring(c.id)) end
     elseif name == "world_poke" then
         -- HSMPWorld reads it from its own DevCtl cursor (world sync test)
+    elseif name == "team" then
+        -- the GAME MODE screen's YOUR TEAM chip (modes_ui.lua send "set_team")
+        local t = math.tointeger(tonumber(c.arg))
+        if not t then Log("AUTOTEST cmd #%s: team needs a number", tostring(c.id)); return end
+        lobby.note_cmd = cmd_send("set_team", { team = t })
+    elseif name == "mods_accept" or name == "mods_decline" then
+        -- the SERVER MODS screen's ACCEPT & JOIN / DECLINE buttons
+        if not MX.Mods then Log("AUTOTEST cmd #%s: %s - no server_mods module", tostring(c.id), name); return end
+        if name == "mods_accept" then MX.Mods.accept() else MX.Mods.decline() end
     else
         Log("AUTOTEST cmd #%s: unknown cmd %s - ignored", tostring(c.id), tostring(name))
     end

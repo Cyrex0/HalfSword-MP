@@ -18,7 +18,8 @@ param(
     [ValidateRange(1,120)][int]$Minutes = 30,
     [string]$Netsim = 'none',
     [ValidateSet('duel','brawl')][string]$CombatMode = 'duel',
-    [string]$GamePath = ''
+    [string]$GamePath = '',
+    [string[]]$ServerArgs = @()
 )
 $argsForRun = @{
     Instances = 2
@@ -28,6 +29,7 @@ $argsForRun = @{
     HoldScale = $Minutes / 30.0
 }
 if ($GamePath) { $argsForRun.GamePath = $GamePath }
+if ($ServerArgs.Count -gt 0) { $argsForRun.ServerArgs = $ServerArgs }
 $previousPoseTap = $env:HSMP_IPC_TAP_POSES
 try {
     # Preserve each exact transmitted weapon/body frame for contact analysis.
