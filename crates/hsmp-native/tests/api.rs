@@ -2,7 +2,9 @@
 //! attaches to the real named mapping. Lua comes from mlua's vendored 5.4 (ffi only).
 //!
 //! One test function on purpose: the native state is process-global (like in the game).
-//! `cargo test -p hsmp-native --release -- --nocapture` also prints per-call timings.
+//! Correctness and the 10k-frame allocation regression run by default. Timing-only
+//! loops require `HSMP_NATIVE_BENCH=1 cargo test -p hsmp-native --release --test api -- --nocapture`
+//! (PowerShell: set `$env:HSMP_NATIVE_BENCH='1'` before the command, remove it afterward).
 
 use std::ffi::{CStr, CString};
 
@@ -356,7 +358,9 @@ fn lua_api_end_to_end() {
     }
     sc2.publish_session();
 
-    // Allocation-free hot path + timings.
+    // Allocation-free hot path always runs; redundant timing loops are opt-in.
+    let timings = std::env::var("HSMP_NATIVE_BENCH").as_deref() == Ok("1");
+    run(a, &format!("BENCH_TIMINGS = {timings}"));
     run(a, r#"
         local N = HSMPNative; local root_context={match_id=1,round=1,life=1}
         local out, plays, ev, b, w, c = {}, {}, {}, {}, {}, {}
@@ -383,6 +387,8 @@ fn lua_api_end_to_end() {
         local grew = collectgarbage("count") - k0
         collectgarbage("restart")
         assert(grew < 1, "hot path allocated " .. grew .. " KiB over 10k frames")
+        print(string.format("ALLOCATION hot path: %.3f KiB over 10k frames", grew))
+        if BENCH_TIMINGS then
         local function bench(label, n, fn)
             local t0 = N.now_us()
             for i = 1, n do fn() end
@@ -403,6 +409,7 @@ fn lua_api_end_to_end() {
         bench("bus_get unchanged", 20000, function() N.bus_get("playback", bg) end)
         bench("bus_get changed (decode)", 20000, function() N.bus_get("playback", -2) end)
         bench("full frame (8p budget)", 5000, one)
+        end
     "#);
     // Drain what the bench sent so the ring is clean.
     while sc2.pop_g2s().is_some() {}

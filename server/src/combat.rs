@@ -1344,10 +1344,6 @@ impl Ledger {
     pub fn begin_round(&mut self, round: u32, now: Instant) {
         let ids: Vec<PeerId> = self.lives.keys().copied().collect();
         for id in ids {
-            // Tests only: the ledger is process-global; peers with ids from
-            // ISOLATED_TEST_IDS on belong to tests that run rounds of their own.
-            #[cfg(test)]
-            if id >= ISOLATED_TEST_IDS && round < ISOLATED_TEST_IDS { continue; }
             self.life(id, round, now);
         }
     }
@@ -1394,9 +1390,10 @@ pub fn vitals_in(peer: PeerId, round: u32, f: &mut Vitals) -> Option<LedgerVerdi
     // Neck Health gates the Snap Neck rule of the damage cap.
     damage::note_neck_health(peer, vitals::get(f, vitals::I_NECK).unwrap_or(f32::NAN));
     let seq = f.seq;
-    ledger().lock().unwrap().on_frame(peer, round, seq, f, Instant::now())
+    with_ledger(|l| l.on_frame(peer, round, seq, f, Instant::now()))
 }
 
+#[cfg(not(test))]
 fn ledger() -> &'static Mutex<Ledger> {
     static L: OnceLock<Mutex<Ledger>> = OnceLock::new();
     L.get_or_init(|| {
@@ -1407,9 +1404,26 @@ fn ledger() -> &'static Mutex<Ledger> {
     })
 }
 
-/// Turn god-mode enforcement on / off for the process-wide ledger.
+#[cfg(not(test))]
+fn with_ledger<R>(f: impl FnOnce(&mut Ledger) -> R) -> R {
+    f(&mut ledger().lock().unwrap())
+}
+
+// Rust's test harness gives each test its own thread. Server async fixtures use
+// current-thread Tokio runtimes, including their spawned tasks. Keep their ledger
+// local so another fixture's admission or round start cannot reset this life.
+// A future multi-thread fixture must provide explicit shared fixture state.
 #[cfg(test)]
-pub fn ledger_set_enforce_godmode(on: bool) { ledger().lock().unwrap().enforce_godmode = on; }
+fn with_ledger<R>(f: impl FnOnce(&mut Ledger) -> R) -> R {
+    thread_local! {
+        static LEDGER: std::cell::RefCell<Ledger> = std::cell::RefCell::new(Ledger::default());
+    }
+    LEDGER.with(|l| f(&mut l.borrow_mut()))
+}
+
+/// Turn god-mode enforcement on / off for this test's ledger.
+#[cfg(test)]
+pub fn ledger_set_enforce_godmode(on: bool) { with_ledger(|l| l.enforce_godmode = on); }
 
 /// Latest-wins relay gate for the vitals streams: a vitals
 /// packet is relayed only when its seq is newer than the last one relayed for
@@ -1445,35 +1459,60 @@ pub fn vitals_relay_fresh(peer: PeerId, stream: u8, seq: u32) -> bool {
 }
 
 pub fn ledger_forward(attacker: PeerId, round: u32, hit: &DamageEvent) -> LedgerVerdict {
-    ledger().lock().unwrap().on_forward(attacker, round, hit, Instant::now())
+    with_ledger(|l| l.on_forward(attacker, round, hit, Instant::now()))
 }
 pub fn ledger_ack(victim: PeerId, attacker: PeerId, hit_id: u32) {
-    ledger().lock().unwrap().on_ack(victim, attacker, hit_id, Instant::now())
+    with_ledger(|l| l.on_ack(victim, attacker, hit_id, Instant::now()))
 }
 #[cfg(test)]
-pub fn ledger_vitals(peer: PeerId, round: u32, seq: u32, hp: f32, dead: bool) -> Option<LedgerVerdict> {
-    ledger().lock().unwrap().on_vitals(peer, round, seq, hp, dead, Instant::now())
+pub fn ledger_vitals_at(peer: PeerId, round: u32, seq: u32, hp: f32, dead: bool, now: Instant) -> Option<LedgerVerdict> {
+    with_ledger(|l| l.on_vitals(peer, round, seq, hp, dead, now))
 }
 pub fn ledger_last_attacker(victim: PeerId, round: u32) -> PeerId {
-    ledger().lock().unwrap().last_attacker(victim, round)
+    with_ledger(|l| l.last_attacker(victim, round))
 }
 pub fn ledger_forget(peer: PeerId) {
-    ledger().lock().unwrap().forget(peer);
+    with_ledger(|l| l.forget(peer));
     relay_seq().lock().unwrap_or_else(|e| e.into_inner()).forget(peer);
 }
-/// Tests: peer ids (and rounds) from here on are isolated from other tests'
-/// round starts in the process-global ledger (see `Ledger::begin_round`).
-#[cfg(test)]
-pub(crate) const ISOLATED_TEST_IDS: PeerId = 70_000;
-pub fn ledger_begin_round(round: u32) { ledger().lock().unwrap().begin_round(round, Instant::now()) }
+pub fn ledger_begin_round(round: u32) { with_ledger(|l| l.begin_round(round, Instant::now())) }
 /// A deathmatch respawn: `peer` starts a new life inside `round`.
-pub fn ledger_respawn(peer: PeerId, round: u32) { ledger().lock().unwrap().respawn(peer, round, Instant::now()) }
+pub fn ledger_respawn(peer: PeerId, round: u32) { with_ledger(|l| l.respawn(peer, round, Instant::now())) }
 /// Server tick: god-mode verdicts due now (see `Ledger::sweep`).
-pub fn ledger_sweep(round: u32) -> Vec<(PeerId, LedgerVerdict)> { ledger().lock().unwrap().sweep(round, Instant::now()) }
+pub fn ledger_sweep(round: u32) -> Vec<(PeerId, LedgerVerdict)> { with_ledger(|l| l.sweep(round, Instant::now())) }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_server_fixtures_do_not_reset_each_others_ledger() {
+        let ready = std::sync::Barrier::new(2);
+        let reset = std::sync::Barrier::new(2);
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                ledger_set_enforce_godmode(true);
+                ledger_vitals_at(2, 1, 1, 100.0, false, Instant::now());
+                let mut h = hit(1);
+                h.target_peer_id = 2;
+                ledger_forward(1, 1, &h);
+                ready.wait();
+                reset.wait();
+                assert_eq!(ledger_last_attacker(2, 1), 1,
+                    "a concurrent fixture's round start must not erase this hit");
+                assert!(with_ledger(|l| l.enforce_godmode),
+                    "enforcement belongs to this fixture, too");
+            });
+            s.spawn(|| {
+                ready.wait();
+                ledger_set_enforce_godmode(false);
+                ledger_begin_round(2);
+                reset.wait();
+                assert_eq!(ledger_last_attacker(2, 1), 0);
+                assert!(!with_ledger(|l| l.enforce_godmode));
+            });
+        });
+    }
 
     fn ctx(attacker: PeerId) -> Ctx {
         Ctx {

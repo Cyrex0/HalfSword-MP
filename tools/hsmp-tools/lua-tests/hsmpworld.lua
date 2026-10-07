@@ -1,5 +1,5 @@
--- Parse-check every HSMP Lua mod with Lua 5.4 and unit-test the pure logic of
--- HSMPWorld (ids, codecs, manifest binding) without the game.
+-- Unit-test HSMPWorld's pure logic (ids, codecs, manifest binding) without
+-- the game. `hsmp-tools lua-check` owns the workspace-wide syntax check.
 --
 --     hsmp-tools lua-test hsmpworld
 
@@ -8,19 +8,13 @@ local MODS = T.path("mods")
 local WORLD = MODS .. "/HSMPWorld/Scripts/main.lua"
 local function rel(p) return p:sub(#T.root + 2) end
 
--- ---- 1. every mod compiles under Lua 5.4 --------------------------------------
-for _, path in ipairs(T.glob(MODS, "*/Scripts/*.lua")) do
-    local f, err = load(T.read(path), "@" .. rel(path))
-    T.check(f ~= nil, "parse " .. rel(path) .. ": " .. tostring(err))
-end
-
 -- ---- 2. load HSMPWorld in test mode ------------------------------------------
 package.preload["UEHelpers"] = function() return {} end
 -- shared/hsmp_wg.lua (HSMPWorld's world guard; deploy copies it into Scripts/)
 package.path = MODS .. "/shared/?.lua;" .. package.path
 HSMP_WORLD_TEST = true
 function FName(s) return s end
-local W = assert(load(T.read(WORLD), "@" .. rel(WORLD)))()
+local W = assert(load(T.read(WORLD), "@mods/HSMPWorld/Scripts/main.lua"))()
 T.check(W ~= nil, "HSMPWorld returns its test table when HSMP_WORLD_TEST is set")
 
 local function fnv1a(s)

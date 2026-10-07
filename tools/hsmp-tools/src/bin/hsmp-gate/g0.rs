@@ -119,6 +119,38 @@ fn tools_check(repo: &Path, args: &[&str], tail: usize) -> (&'static str, String
     (if code == 0 { "pass" } else { "fail" }, format!("{} ({dt:.1}s)", last_lines(&out, tail)))
 }
 
+/// Assertions inside one scenario are not separate tests. Keep G0's summary
+/// in suite units; `lua-test --json` retains all assertion counts and timings.
+fn check_lua_tests(repo: &Path, details: &std::cell::RefCell<Option<Value>>) -> (&'static str, String) {
+    let Some(t) = hsmp_tools(repo) else {
+        return ("fail", "hsmp-tools not built (cargo build --release -p hsmp-tools)".into());
+    };
+    let dir=std::env::temp_dir().join(format!("hsmp-g0-lua-{}",std::process::id()));
+    let report=dir.join("report.json");
+    let _=std::fs::create_dir_all(&dir);
+    let _=std::fs::remove_file(&report);
+    let (code, out, dt) = run(Command::new(t).args(["lua-test","--json"]).arg(&report).current_dir(repo).env("HSMP_ROOT", repo));
+    let parsed=std::fs::read(&report).ok().and_then(|b|serde_json::from_slice::<Value>(&b).ok());
+    let _=std::fs::remove_file(&report);
+    let _=std::fs::remove_dir(&dir);
+    let summary = out.lines().find_map(|l| l.strip_prefix("Lua suites: "))
+        .and_then(|s| s.split("; assertions:").next())
+        .map(|s| format!("Lua suites: {s} ({dt:.1}s)"))
+        .unwrap_or_else(|| format!("Lua suites: missing suite summary; rebuild hsmp-tools ({dt:.1}s)"));
+    let has_summary = out.lines().any(|l| l.starts_with("Lua suites: "))
+        && parsed.as_ref().is_some_and(|p|p["suites_passed"].as_u64().unwrap_or(0)>0
+            && p["suites_failed"].as_u64()==Some(0) && p["assertions_failed"].as_u64()==Some(0)
+            && p["suites"].as_array().is_some_and(|ss|!ss.is_empty()
+                && ss.iter().all(|s|s["assertions_passed"].as_u64().unwrap_or(0)>0)));
+    *details.borrow_mut()=parsed;
+    if code == 0 && has_summary { ("pass", summary) }
+    else {
+        let failures:Vec<_>=out.lines().filter(|l|l.trim_start().starts_with("FAIL ") || l.starts_with("error:")).take(6).collect();
+        let reason=if failures.is_empty(){last_lines(&out,6)}else{failures.join(" | ")};
+        ("fail",format!("{summary} | {reason}"))
+    }
+}
+
 /// wg: the `check_wg` binary (converted mods must register UObject
 /// caches with the world guard; unconverted mods are advisory TODO notes).
 fn check_wg(repo: &Path) -> (&'static str, String) {
@@ -242,6 +274,8 @@ fn skip_reason(name: &str, o: &Opts) -> Option<&'static str> {
 pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
     type CheckFn = Box<dyn Fn(&Path) -> (&'static str, String)>;
     let strict = o.strict;
+    let lua_details=std::rc::Rc::new(std::cell::RefCell::new(None));
+    let lua_capture=lua_details.clone();
     // Without the game's object dump these checks cannot run: SKIP (visible, and no G0
     // stamp is written), or FAIL under --strict. Never a vacuous PASS.
     let no_dump = move || if strict { ("fail", format!("{NO_DUMP}; --strict")) } else { ("skip", NO_DUMP.to_string()) };
@@ -253,7 +287,7 @@ pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
             }
         })),
         ("lua_check", Box::new(|r: &Path| tools_check(r, &["lua-check"], 2))),
-        ("lua_test", Box::new(|r: &Path| tools_check(r, &["lua-test"], 3))),
+        ("lua_test", Box::new(move |r| check_lua_tests(r,&lua_capture))),
         ("travel", Box::new(check_travel)),
         ("wg", Box::new(check_wg)),
         // unsafe UE4SS API lint (soft params/props, leader pose, pooled destroy,
@@ -336,7 +370,11 @@ pub fn run_g0(repo: &Path, o: &Opts) -> i32 {
             "skip" => skipped.push(name.to_string()),
             _ => {}
         }
-        res.insert(name.to_string(), json!({"status": st, "summary": summary}));
+        let mut entry=json!({"status": st, "summary": summary});
+        if *name=="lua_test" {
+            if let Some(details)=lua_details.borrow().as_ref() { entry["details"]=details.clone(); }
+        }
+        res.insert(name.to_string(),entry);
     }
     let doc = json!({
         "commit": git(repo, &["rev-parse", "HEAD"]),

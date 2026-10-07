@@ -16,6 +16,51 @@ cargo build --release -p hsmp-tools
 | G1 | before a merge to main | `scripts/e2e-test.sh` + G0 | |
 | G2 | before a release | `scripts/mp_test.ps1` gate scenarios, green twice | see §4 |
 
+### During development: check the domains you changed
+
+```powershell
+.\scripts\dev-test.ps1 -List
+.\scripts\dev-test.ps1 -Domain combat
+.\scripts\dev-test.ps1 -Domain modes,mods -Plan    # inspect the selections, start nothing
+.\scripts\dev-test.ps1 -Domain kit
+```
+
+The runner builds the Lua test tool, selects the related Lua suites and Rust test filters,
+and writes command selections, raw output, timings and counts to
+`test-results/dev-check-<id>/report.json`. It fails if a Rust selection runs zero passing
+tests or a selected Lua suite runs no successful assertions. Available domains are
+`combat`, `pose`, `modes`, `mods`, `kit`, `ui`, `ipc`, `launcher` and `world`; multiple
+domains share one deduplicated selection. IPC includes the real sidecar round trip;
+`-Domain ipc -Stress` also runs the cross-process stress scenarios.
+
+This is an **offline development subset**. It does not audit every dependency, write a G0
+stamp, prove native game behavior or pass a release gate. Run full G0 before pushing and
+the appropriate in-game gates before release. For schema/shared-runtime changes or an
+unclear change boundary, broaden the domains or run the full gate. A lab session runs quick
+G0 once at startup; its individual experiments reuse the session without rerunning G0.
+
+Counts use different units: G0 reports **Lua suites** and **Rust tests** separately.
+Assertions inside a Lua scenario are recorded in its detailed report, not presented as
+thousands of independent tests. `hsmp-tools lua-test combat --json <report.json>` writes
+the suite names, assertion totals, failures and timings; G0 retains these under its
+`lua_test.details` field. The full menu/HUD resolution matrix still runs for UI changes
+and in full G0. Workspace Lua syntax checking stays in `lua-check`, so the world suite
+no longer repeats the same syntax scan.
+
+Native binding correctness and allocation checks remain in normal `cargo test`. Their
+timing-only microbenchmarks are opt-in:
+
+```powershell
+$previousNativeBench = $env:HSMP_NATIVE_BENCH
+try {
+    $env:HSMP_NATIVE_BENCH = '1'
+    cargo test --locked -p hsmp-native --test api --test records -- --nocapture
+} finally {
+    if ($null -eq $previousNativeBench) { Remove-Item Env:HSMP_NATIVE_BENCH -ErrorAction SilentlyContinue }
+    else { $env:HSMP_NATIVE_BENCH = $previousNativeBench }
+}
+```
+
 ### Without the game you can run
 
 Everything below works on a machine with no Half Sword install (no `HSMP_GAME_DIR`, no `game/`):

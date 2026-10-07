@@ -612,8 +612,8 @@ pub(crate) mod resume_tests {
         t
     }
 
-    /// Two players in a live duel; peer ids far from other tests' (the combat
-    /// ledger and cheat tables are process-global).
+    /// Two players in a live duel; peer ids far from other tests' (the cheat
+    /// tables are process-global; each fixture has its own combat ledger).
     pub(crate) async fn live_duel(base: PeerId) -> (Arc<UdpSocket>, Arc<ServerState>, TClient, TClient) {
         let state = Arc::new(ServerState::new(8));
         let socket = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
@@ -800,28 +800,12 @@ pub(crate) mod resume_tests {
     /// still declares the death (the ledger survives the resume).
     #[tokio::test]
     async fn rejoin_does_not_reset_the_god_mode_ledger() {
-        // Kills are opt-in (HSMP_GODMODE_ENFORCE=1); this exercises
-        // that mode. (Never turned off again here: concurrent tests that rely
-        // on the default only use their own Ledger instances.)
+        // Kills are opt-in (HSMP_GODMODE_ENFORCE=1); enable them only for
+        // this fixture's ledger. Other tests' round starts cannot reset it.
         crate::combat::ledger_set_enforce_godmode(true);
         let (socket, state, ca, cb) = live_duel(72_001).await;
         let (aid, bid) = (ca.welcome_id().unwrap(), cb.welcome_id().unwrap());
-        // The ledger is process-global and other tests' go_live resets every
-        // life to their round: use a round of our own and retry the scenario
-        // if a concurrent test wiped it mid-way.
-        let round = 72_001;
-        for attempt in 0..5 {
-            if god_mode_scenario(&socket, &state, aid, bid, round).await { return; }
-            eprintln!("ledger reset by a concurrent test (attempt {attempt}); retrying");
-        }
-        panic!("the god-mode bound must still fire after a re-join");
-    }
-
-    /// Book lethal unreflected damage, resume the victim, keep reporting full
-    /// health: true once the ledger declares the death (false: the life was
-    /// reset by another test's round start, inconclusive).
-    async fn god_mode_scenario(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, aid: PeerId, bid: PeerId, round: u32) -> bool {
-        crate::combat::ledger_forget(bid);
+        let round = 1;
         let hit = |id: u32| proto::DamageEvent::new(crate::proto::Damage {
             hit_id: id, target_peer_id: bid, round, bone: hsmp_ipc::layout::Str::new("spine_02"), offset: [0.0; 3],
             location: [0.0; 3], impulse: [0.0; 3], velocity: [0.0; 3], normal: [1.0, 0.0, 0.0],
@@ -829,23 +813,24 @@ pub(crate) mod resume_tests {
             dism_blunt: 0, flags: 0, age_ms: 0,
             attacker_ts: 0, victim_view_ts: 0, victim_arm_ts: 0, ..Default::default()
         }, &crate::proto::deltas_of(&[(crate::combat::FIELD_HEALTH, -70.0)]));
-        assert!(crate::combat::ledger_vitals(bid, round, 1, 100.0, false).is_some());
+        assert!(crate::combat::ledger_vitals_at(bid, round, 1, 100.0, false, std::time::Instant::now()).is_some());
         for id in 1..=3 {
             crate::combat::ledger_forward(aid, round, &hit(id));
             crate::combat::ledger_ack(bid, aid, id);
         }
         // Shortly before the ledger would fire, the client forces a re-handshake.
-        let cb2 = join(socket, state, seed(72_002)).await;
+        let cb2 = join(&socket, &state, seed(72_002)).await;
         assert_eq!(cb2.welcome_id(), Some(bid));
-        // ... and keeps reporting full health.
-        for seq in 2..80u32 {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            if crate::combat::ledger_last_attacker(bid, round) != aid { return false; }
-            if let Some(v) = crate::combat::ledger_vitals(bid, round, seq, 100.0, false) {
-                if v.lethal { assert!(v.forced); return true; }
-            }
-        }
-        false
+        assert_eq!(crate::combat::ledger_last_attacker(bid, round), aid,
+            "the actual admission resume must preserve the booked damage");
+        // Keep reporting full health. Advance the ledger's explicit clock,
+        // exercising both grace boundaries without waiting or retrying.
+        let reflected = std::time::Instant::now() + crate::combat::REFLECT_AFTER;
+        let before = crate::combat::ledger_vitals_at(bid, round, 2, 100.0, false, reflected).unwrap();
+        assert!(!before.lethal && !before.forced, "the owner still gets the grace period");
+        let after = crate::combat::ledger_vitals_at(bid, round, 3, 100.0, false,
+            reflected + crate::combat::GODMODE_GRACE).unwrap();
+        assert!(after.lethal && after.forced, "the god-mode bound must still fire after a re-join");
     }
 
     /// A re-join never resurrects a player the round already
