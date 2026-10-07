@@ -340,11 +340,27 @@ crate::ipc_pod! {
         pub life: u16,
         pub _life_r: [u8; 2],
         pub pawn: crate::layout::Str<56>,
+        /// Native world identity of the measured, previously integrated aim.
+        pub settle_world: crate::layout::Str<192>,
+        pub settle_reason: crate::layout::Str<56>,
+        pub settle_sample_ms: f64,
+        pub settle_stable_ms: f64,
+        pub settle_source_ts: f64,
+        pub settle_source_seq: u64,
+        pub settle_pos_uu: f32,
+        pub settle_rot_deg: f32,
+        pub settle_cut: u32,
+        pub settle_ready: crate::layout::Bool,
+        pub settle_count: u8,
+        pub _settle_r: [u8; 2],
     }
 }
 
 pub const K_PUPPETS: u16 = 0x0150;
 pub const K_PLAYBACK: u16 = 0x0151;
+
+// Max-player playback must fit intact, including every physical proof field.
+const _: () = assert!(crate::record::payload_len::<Playback>(MAX_PEER_SLOTS) <= super::bus::BUS_VALUE_BYTES);
 
 fn check_puppet_row(_h: &Puppets, r: &PuppetRow) -> Result<(), crate::record::Invalid> {
     if r.peer == 0 {
@@ -356,6 +372,15 @@ fn check_puppet_row(_h: &Puppets, r: &PuppetRow) -> Result<(), crate::record::In
 fn check_playback_row(_h: &Playback, r: &PlaybackRow) -> Result<(), crate::record::Invalid> {
     if r.peer == 0 {
         return Err(crate::record::Invalid::Range("peer"));
+    }
+    if r.settle_count > 6 {
+        return Err(crate::record::Invalid::Range("settle_count"));
+    }
+    for (field, value) in [("settle_sample_ms", r.settle_sample_ms), ("settle_stable_ms", r.settle_stable_ms),
+        ("settle_source_ts", r.settle_source_ts), ("settle_pos_uu", r.settle_pos_uu as f64),
+        ("settle_rot_deg", r.settle_rot_deg as f64)] {
+        if !value.is_finite() { return Err(crate::record::Invalid::Float(field)); }
+        if value < 0.0 { return Err(crate::record::Invalid::Range(field)); }
     }
     Ok(())
 }
@@ -478,6 +503,31 @@ mod tests {
         let mut b = PoseBuf::new_boxed();
         b.set(&h, &frame);
         assert_eq!(b.payload(), &p[..]);
+    }
+
+    #[test]
+    fn playback_settlement_round_trip_and_max_bus_capacity() {
+        use crate::layout::{Bool, Str};
+        let row = PlaybackRow { peer: 2, match_id: 9007199254740993, round: 3, life: 130,
+            pawn: Str::new("Willie_BP_C_42"), body_ts: 1250.5, arm_ts: 1250.5, local_ms: 1600.0,
+            settle_world: Str::new("123456@World /Game/Maps/Map_Arena.Map_Arena"),
+            settle_reason: Str::new("settled"), settle_sample_ms: 1600.0, settle_stable_ms: 151.0,
+            settle_source_ts: 1234.5, settle_source_seq: 9007199254740993, settle_pos_uu: 4.5,
+            settle_rot_deg: 9.5, settle_cut: 7, settle_ready: Bool::TRUE, settle_count: 6,
+            ..Default::default() };
+        assert_eq!(core::mem::size_of::<PlaybackRow>(), 400);
+        let rows = vec![row; MAX_PEER_SLOTS];
+        let payload = to_payload(&Playback::default(), &rows);
+        assert_eq!(payload.len(), 12808);
+        assert!(payload.len() <= super::super::bus::BUS_VALUE_BYTES);
+        assert_eq!(view::<Playback>(&payload).unwrap().rows, rows.as_slice());
+        let mut bad = row;
+        bad.settle_count = 7;
+        assert_eq!(view::<Playback>(&to_payload(&Playback::default(), &[bad])).unwrap_err(), Invalid::Range("settle_count"));
+        bad = row; bad.settle_rot_deg = f32::NAN;
+        assert_eq!(view::<Playback>(&to_payload(&Playback::default(), &[bad])).unwrap_err(), Invalid::Float("settle_rot_deg"));
+        bad = row; bad.settle_stable_ms = -1.0;
+        assert_eq!(view::<Playback>(&to_payload(&Playback::default(), &[bad])).unwrap_err(), Invalid::Range("settle_stable_ms"));
     }
 
     #[test]

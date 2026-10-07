@@ -1964,7 +1964,7 @@ function Dir:update_freeze(s, pawn)
             if env.combat_ready then
                 ready, why = env.combat_ready({ key = ctx.world, pawn_id = ctx.pawn, arena = ctx.arena,
                     match_id = ctx.match_id, match_gen = ctx.match_gen, round = ctx.round,
-                    life = ctx.life, verified_life = ctx.life }, s, pawn)
+                    life = ctx.life, verified_life = ctx.life, qualify_settle = true }, s, pawn)
             end
             if ready then
                 self.live_release = { match_id = ctx.match_id, match_gen = ctx.match_gen, round = ctx.round,
@@ -2373,7 +2373,13 @@ function D.make_ue_env(ctx)
             end
         end
         local sampling = I.sample_status and I.sample_status()
-        return spawn_ready:check({ world = p.key, own = { match_id = p.match_id, round = p.round,
+        local native_world
+        pcall(function()
+            local world = WG.world and WG.world() or UEH.GetWorld()
+            if world and world:IsValid() then native_world = tostring(world:GetAddress()) .. "@" .. world:GetFullName() end
+        end)
+        return spawn_ready:check({ world = p.key, native_world = native_world, qualify_settle = p.qualify_settle == true,
+            own = { match_id = p.match_id, round = p.round,
             life = p.verified_life or p.life, pawn = p.pawn_id }, root = I.rec("local_root"),
             pose = sampling and sampling.pose, vitals = I.rec("vitals"), remotes = remotes, now_ms = env.now() * 1000 })
     end

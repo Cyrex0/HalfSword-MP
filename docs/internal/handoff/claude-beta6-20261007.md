@@ -403,3 +403,52 @@ The polearm left-arm twist remains a separate physical defect. New read-only
 Avatar state before any physics behavior changes. A final Ready-to-Live freshness
 latch now holds initial controls until proof is fresh, retaining control through
 ordinary injuries after release. These new edits still need a matched native run.
+
+Checkpoint `fb5e3196` fixes lab AI timing, the first-Live input latch, and persistent
+smallest-secondary-display placement. A matched experimental deployment was made
+before that commit, so session `native-20261007-10` truthfully carries the prior
+commit plus a dirty deploy stamp. Its completed four-minute spawn recipe recorded
+20 observed native AI handovers across ten rounds; both AIs initialized combat
+automatically after Live. There were 494 accepted contacts of 658 decisions.
+The unchanged honest-acceptance metric is 0.77918 and fails its bound. Qualified
+Live-only evidence is 492 accepts of 502 non-parry decisions (98.008%); 130 rejects
+occurred after RoundOver. This separate breakdown does not replace the gate.
+Clock reset p90 is 23.9068/min and remains outside its bound. Rotation p90 is
+50.7455 degrees with only 69 samples, below the required 200.
+
+Repeated native weapon captures showed actual/cached sim=true and free stand-in
+grips, so no speculative cache invalidation was applied. A stronger physical
+readiness gap was observed: round seven Ready at 21:19:33.751/.908, lower-arm stall
+at 21:19:35.270, AI at 21:19:37.555/.564, upper-arm stall at 21:19:38.502. Per-frame
+physical alignment must qualify initial spawn readiness, separately from current
+source/vitals/collision. Do not infer exact fault duration from five-second maxima.
+
+The subsequent native probe records real DCD surface/density and nested wound
+outputs. Ordered trace evidence remains unavailable in that deployment: the native
+POST bridge used Blueprint argument order. Pinned UE4SS `LuaMod.cpp` passes native
+POST context, ReturnValue, then reflected arguments. The bridge signature is now
+corrected and 23 protection checks pass, including real-bridge argument ordering
+and receiver isolation. A new deployment must prove actual ordered trace output.
+
+The next coordinated source checkpoint adds six-limb initial physical qualification
+(5 uu/10 degrees for 150 ms), exact-life qualification retained through wounded
+pause/reconnect resumes, and a LOCAL-only typed playback extension. The maximum
+32-peer record is 12,808 bytes; the bus is 16 KiB, adding 768 KiB to the segment.
+Generated IPC layout hash is `262ac8453e7af06c`; network protocol stays 12. Focused
+native transport tests retain zero allocation growth. Verified AI intent stops
+outside Live and resumes only the same generation; native wounds/physics and
+already captured trades are preserved.
+
+Clock evidence found 146 rapid positive/negative reset pairs with negligible delay
+changes: newly read data was backdated to the frame's earlier physical time. The
+producer now retains actual slot receipt time and projects to physical time using
+that receipt; the 50 ms detector and raw events remain unchanged. A production
+read regression covers the 67 ms oscillation; a real 80 ms shift still resets.
+
+Health audit found 308 exact replay samples with fresh native HIT `+0.00` readings
+wrongly excluded by the changed-field mask; one early origin acknowledgment had
+no native snapshot and remains unavailable. Fresh diagnostic Health now travels
+only as a callback-local fifth return, never in cached ReplayAttempts or the
+production changed mask. The old 59-pair ratio is biased and incomplete. Combat
+327/protection 23 assertions passed; native effects of this entire checkpoint
+still require deployment and real-game validation.

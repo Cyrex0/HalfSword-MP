@@ -500,6 +500,32 @@ fn records_dev_proc_conformance_and_allocations() {
         print(string.format("conformance: %d checks passed", n))
     "#);
 
+    // Production playback is now larger than the former 4 KiB bus. Reusing
+    // tables must still allocate no Lua memory at 1 and 32 peer capacities.
+    run(a, r#"
+        local N = HSMPNative
+        for _, peers in ipairs({1, 32}) do
+            local p, out = {rows={}}, {}
+            for i=1,peers do
+                p.rows[i] = {peer=i,pawn="Willie_BP_C_"..i,match_id=91,round=3,life=130,
+                    body_ts=1200.5,arm_ts=1200.5,local_ms=1600.0,settle_world="123@World Arena",
+                    settle_reason="settled",settle_sample_ms=1600.0,settle_stable_ms=151.0,
+                    settle_source_ts=1199.5,settle_source_seq=30,settle_cut=7,settle_ready=true,
+                    settle_count=6,settle_pos_uu=1.0,settle_rot_deg=1.0}
+            end
+            for _=1,10 do assert(N.bus_put("playback",p)); N.bus_get("playback",-1,out) end
+            collectgarbage("collect"); collectgarbage("stop")
+            local before, start = collectgarbage("count"), N.now_us()
+            for _=1,1000 do N.bus_put("playback",p); N.bus_get("playback",-1,out) end
+            local elapsed, grew = N.now_us()-start, collectgarbage("count")-before
+            collectgarbage("restart")
+            assert(out.n==peers and #out.rows==peers and out.rows[peers].settle_cut==7)
+            assert(grew<1,"physical playback put/get allocated "..grew.." KiB")
+            print(string.format("PLAYBACK peers=%d payload=%d bytes put/get=%.3f us allocation=%.3f KiB/1k",
+                peers,8+400*peers,elapsed/1000,grew))
+        end
+    "#);
+
     // DevCtl fan-out: both states (registered before the commands) see each command once.
     install_h(b);
     run(a, r#"local o = {}; HSMPNative.dev_poll(64, o)"#);

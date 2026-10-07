@@ -1137,7 +1137,9 @@ if C3.armor_audit then
     })
 end
 
-function C3.native_trace_post(_,worldp,startp,endp,radiusp,objectsp,complexp,ignoreactorsp,debugp,hitsp,ignoreselfp,colorp,hitcolorp,timep,returnedp)
+-- Pinned UE4SS native POST hooks pass context, then ReturnValue, then
+-- reflected parameters. Blueprint hooks use a different argument ordering.
+function C3.native_trace_post(_,returnedp,worldp,startp,endp,radiusp,objectsp,complexp,ignoreactorsp,debugp,hitsp,ignoreselfp,colorp,hitcolorp,timep)
     if not C3.native_probe or not replaying or not C3.replay_trace or not C3.armor_audit then return end
     if not WG.check() or not WG.settled() then return end
     local world_context=pv(worldp)
@@ -2697,17 +2699,22 @@ local function apply_hit(d, _attacker)
             tostring(trace and trace.applied),tostring(gate0 and gate0.invulnerable),tostring(gate0 and gate0.fallen),
             tostring(gate0 and gate0.consciousness),tostring(gate0 and gate0.damage_rate),C3.diag_length(C3.v3(d,"velocity")),C3.diag_length(C3.v3(d,"impulse")),tostring(d.damage_out))
     end
-    return res, ok and (mask~=0 and 1 or 2) or 6, ok and mask or 0, ok and hp or 0
+    -- Fresh diagnostic availability is independent of the production changed
+    -- mask. A successfully read unchanged Health is an actual native zero;
+    -- unread fields remain absent. This fifth value is never cached/transported.
+    return res, ok and (mask~=0 and 1 or 2) or 6, ok and mask or 0, ok and hp or 0,
+        before[1] and after[1] and hp or nil
 end
 
 local ReplayAttempts = load_module("replay_attempts").new({ now=os.clock,send=function(r) return send_rec("replay_outcome",r) end })
 
-function C3.log_replay_probe(d,attacker,outcome,text,fresh)
+function C3.log_replay_probe(d,attacker,outcome,text,fresh,native_health)
     if not fresh or not C3.native_probe then return end
     local fields=type(text)=="string" and text:match("%[([^%]]*)%]") or "native fields unavailable"
-    local mask=math.tointeger(outcome.observed_fields) or 0
-    local hp=outcome.health_delta
-    if mask & 1~=0 and type(hp)=="number" and hp==hp and math.abs(hp)<math.huge then
+    -- ReplayOutcome's observed_fields describes changed native fields, not
+    -- snapshot readability. Only this fresh callback's native reads qualify.
+    local hp=native_health
+    if type(hp)=="number" and hp==hp and math.abs(hp)<math.huge then
         Log("LAB_REPLAY attacker=%d cid=%d parent_cid=%d bone=%s dmg Health %+.6f [%s]",
             attacker,num(d.hit_id),num(d.parent_cid),tostring(d.bone),hp,fields)
     else
@@ -3405,8 +3412,13 @@ local function on_tick()
     local applied = 0
     for _, e in ipairs(events("damage_in")) do
         local d = type(e.data) == "table" and e.data or {}
-        local res, outcome, fresh = ReplayAttempts.run(d,e.peer,function() return apply_hit(d,e.peer) end)
-        C3.log_replay_probe(d,e.peer,outcome,res,fresh)
+        local native_health
+        local res, outcome, fresh = ReplayAttempts.run(d,e.peer,function()
+            local text,status,fields,hp,observed_health = apply_hit(d,e.peer)
+            native_health = observed_health
+            return text,status,fields,hp
+        end)
+        C3.log_replay_probe(d,e.peer,outcome,res,fresh,native_health)
         replaying = false -- also release the guard after an unexpected Lua failure
         if fresh then applied = applied + 1 end
         local stats=C3.replay_stats

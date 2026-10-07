@@ -4,7 +4,7 @@ All notable changes to HalfSword-MP are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/). The product version is the `version` in
 `tools/release/release.json`; releases are tagged `v<version>`. The network protocol and the
-game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
+game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ## [Unreleased]
 
@@ -29,6 +29,15 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 - Bind stuck-blade continuations to their exact native origin/module, including suppressed
   origins; reject deferred children if their parent is later parried. Dev AI Duel yield
   counts as scoped surrender; harness timeouts are recorded separately.
+- Enable lab AI only after the arena is live, with native takeover evidence recorded
+  separately from command submission. Pause verified AI attack intent after a round ends.
+- Require fresh current-life streams, native collision and settled arm/hand physics before
+  the initial input unlock; keep ordinary wounded fighters controllable after release.
+- Place two-game tests on the smallest secondary display, with no window activation.
+- Record freshly read unchanged Health as a measured zero and correct native POST armour
+  trace argument ordering; cached or unread values remain unavailable.
+- Keep actual pose receipt time separate from physical frame time so late callbacks do not
+  introduce artificial playback clock jumps.
 
 - Game modes, picked by the host on the lobby's new **GAME MODE** screen (or with `--mode` and
   RCON `MODE`):

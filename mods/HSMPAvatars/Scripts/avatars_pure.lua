@@ -235,13 +235,17 @@ function PURE.display_times(pt, want, horizon, cap, frozen)
     return shown, aim, shown - pt, aim - pt
 end
 
+PURE.SETTLE_FIELDS={"settle_world","settle_sample_ms","settle_stable_ms","settle_ready","settle_count",
+    "settle_pos_uu","settle_rot_deg","settle_reason","settle_source_seq","settle_source_ts","settle_cut"}
 function PURE.playback_row(peer, shown, now, allow_stale)
     if not shown or shown.has_context~=true or not shown.match_id or shown.match_id==0
         or not shown.life or shown.life<1 or type(shown.pawn)~="string" or shown.pawn==""
         or not shown.at or now-shown.at<0 or (not allow_stale and now-shown.at>=250)
         or not math.tointeger(shown.label) or shown.label<1 or shown.label>0xffffffff then return nil end
-    return {peer=peer,body_ts=shown.label,arm_ts=shown.label,local_ms=math.floor(shown.at),
+    local row={peer=peer,body_ts=shown.label,arm_ts=shown.label,local_ms=math.floor(shown.at),
         match_id=shown.match_id,round=shown.round,life=shown.life,pawn=shown.pawn}
+    for _,key in ipairs(PURE.SETTLE_FIELDS) do row[key]=shown[key] end
+    return row
 end
 
 -- A relayed Root carries its original context as plain fields (no has_context flag, unlike

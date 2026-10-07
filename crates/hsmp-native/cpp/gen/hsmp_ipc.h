@@ -10,8 +10,8 @@
 
 #define HSMP_IPC_ABI_MAJOR 2u
 #define HSMP_IPC_ABI_MINOR 0u
-#define HSMP_IPC_LAYOUT_HASH 0x9824d6249fd2dc68ull
-#define HSMP_IPC_SEGMENT_SIZE 0x48f000u
+#define HSMP_IPC_LAYOUT_HASH 0x262ac8453e7af06cull
+#define HSMP_IPC_SEGMENT_SIZE 0x54f000u
 
 #pragma pack(push, 8)
 typedef struct hsmp_SlotMeta {
@@ -315,8 +315,20 @@ typedef struct hsmp_PlaybackRow {
     uint16_t life;
     uint8_t _life_r[2];
     char pawn[56];
+    char settle_world[192];
+    char settle_reason[56];
+    double settle_sample_ms;
+    double settle_stable_ms;
+    double settle_source_ts;
+    uint64_t settle_source_seq;
+    float settle_pos_uu;
+    float settle_rot_deg;
+    uint32_t settle_cut;
+    uint8_t settle_ready;
+    uint8_t settle_count;
+    uint8_t _settle_r[2];
 } hsmp_PlaybackRow;
-HSMP_SA(sizeof(hsmp_PlaybackRow) == 104, "hsmp_PlaybackRow size");
+HSMP_SA(sizeof(hsmp_PlaybackRow) == 400, "hsmp_PlaybackRow size");
 HSMP_SA(offsetof(hsmp_PlaybackRow, peer) == 0, "hsmp_PlaybackRow.peer offset");
 HSMP_SA(offsetof(hsmp_PlaybackRow, _r) == 4, "hsmp_PlaybackRow._r offset");
 HSMP_SA(offsetof(hsmp_PlaybackRow, body_ts) == 8, "hsmp_PlaybackRow.body_ts offset");
@@ -327,6 +339,18 @@ HSMP_SA(offsetof(hsmp_PlaybackRow, round) == 40, "hsmp_PlaybackRow.round offset"
 HSMP_SA(offsetof(hsmp_PlaybackRow, life) == 44, "hsmp_PlaybackRow.life offset");
 HSMP_SA(offsetof(hsmp_PlaybackRow, _life_r) == 46, "hsmp_PlaybackRow._life_r offset");
 HSMP_SA(offsetof(hsmp_PlaybackRow, pawn) == 48, "hsmp_PlaybackRow.pawn offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_world) == 104, "hsmp_PlaybackRow.settle_world offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_reason) == 296, "hsmp_PlaybackRow.settle_reason offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_sample_ms) == 352, "hsmp_PlaybackRow.settle_sample_ms offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_stable_ms) == 360, "hsmp_PlaybackRow.settle_stable_ms offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_source_ts) == 368, "hsmp_PlaybackRow.settle_source_ts offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_source_seq) == 376, "hsmp_PlaybackRow.settle_source_seq offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_pos_uu) == 384, "hsmp_PlaybackRow.settle_pos_uu offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_rot_deg) == 388, "hsmp_PlaybackRow.settle_rot_deg offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_cut) == 392, "hsmp_PlaybackRow.settle_cut offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_ready) == 396, "hsmp_PlaybackRow.settle_ready offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, settle_count) == 397, "hsmp_PlaybackRow.settle_count offset");
+HSMP_SA(offsetof(hsmp_PlaybackRow, _settle_r) == 398, "hsmp_PlaybackRow._settle_r offset");
 
 typedef struct hsmp_Welcome {
     uint64_t server_epoch;
@@ -3653,7 +3677,7 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_STRIDE_BUS_DIR_DATA_NAMES 0x20u
 #define HSMP_COUNT_BUS_DIR_DATA_NAMES 64u
 #define HSMP_OFF_BUS_KEYS 0x443880u
-#define HSMP_STRIDE_BUS_KEYS 0x1080u
+#define HSMP_STRIDE_BUS_KEYS 0x4080u
 #define HSMP_COUNT_BUS_KEYS 64u
 #define HSMP_OFF_BUS_KEYS_0_SEQ 0x443880u
 #define HSMP_OFF_BUS_KEYS_0_DATA 0x4438c0u
@@ -3668,25 +3692,25 @@ HSMP_SA(offsetof(hsmp_ModLoaded, text) == 40, "hsmp_ModLoaded.text offset");
 #define HSMP_OFF_BUS_KEYS_0_DATA_KIND 0x4438e4u
 #define HSMP_OFF_BUS_KEYS_0_DATA_BODY 0x4438e8u
 #define HSMP_STRIDE_BUS_KEYS_0_DATA_BODY 0x1u
-#define HSMP_COUNT_BUS_KEYS_0_DATA_BODY 4096u
-#define HSMP_OFF_DEVCTL 0x486000u
-#define HSMP_OFF_DEVCTL_RING 0x486000u
-#define HSMP_OFF_DEVCTL_RING_TAIL 0x486000u
-#define HSMP_OFF_DEVCTL_RING_HEAD 0x486040u
-#define HSMP_OFF_DEVCTL_RING_SLOTS 0x486080u
+#define HSMP_COUNT_BUS_KEYS_0_DATA_BODY 16384u
+#define HSMP_OFF_DEVCTL 0x546000u
+#define HSMP_OFF_DEVCTL_RING 0x546000u
+#define HSMP_OFF_DEVCTL_RING_TAIL 0x546000u
+#define HSMP_OFF_DEVCTL_RING_HEAD 0x546040u
+#define HSMP_OFF_DEVCTL_RING_SLOTS 0x546080u
 #define HSMP_STRIDE_DEVCTL_RING_SLOTS 0x200u
 #define HSMP_COUNT_DEVCTL_RING_SLOTS 64u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR 0x486080u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_LEN 0x486080u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_KIND 0x486082u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_AUX 0x486084u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_FLAGS 0x486086u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_PEER 0x486088u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR__R 0x48608cu
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_PRODUCER_EPOCH 0x486090u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_SEQ 0x486098u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_REQ_ID 0x4860a0u
-#define HSMP_OFF_DEVCTL_RING_SLOTS_0_PAYLOAD 0x4860a8u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR 0x546080u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_LEN 0x546080u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_KIND 0x546082u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_AUX 0x546084u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_FLAGS 0x546086u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_PEER 0x546088u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR__R 0x54608cu
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_PRODUCER_EPOCH 0x546090u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_SEQ 0x546098u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_HDR_REQ_ID 0x5460a0u
+#define HSMP_OFF_DEVCTL_RING_SLOTS_0_PAYLOAD 0x5460a8u
 #define HSMP_STRIDE_DEVCTL_RING_SLOTS_0_PAYLOAD 0x1u
 #define HSMP_COUNT_DEVCTL_RING_SLOTS_0_PAYLOAD 472u
 

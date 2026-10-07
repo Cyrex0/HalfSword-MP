@@ -839,6 +839,13 @@ end
 -- the grip free, hand and weapon each go exactly where the owner has them.
 
 local PX = {}   -- pose extras (one local: the main chunk is at the 200-locals limit)
+PX.SETTLE = load_module("spawn_settle")
+function PX.settle_reset(p,reason)
+    if PX.SETTLE then
+        PX.SETTLE.invalidate(p.settle_state,reason,now_ms())
+        PX.SETTLE.copy(p.shown,p.settle_state)
+    end
+end
 
 -- Dev tuning knobs for the v2 servo: dev_cmd TUNE records from the DevCtl ring
 -- (`hsmp-tools ipc-ctl --pid <game> tune servo 0`; PURE.tune_value): "servo" 0 stops
@@ -1227,6 +1234,7 @@ end
 
 -- Hand the stand-in back to its own muscles (no fresh pose).
 local function release_standin(p)
+    PX.settle_reset(p,"drive released")
     if PX.height_restore and p.body and p.body.height_probe and p.gen == world_gen and cache_gen == world_gen then
         PX.height_restore(p, "release", false)
     end
@@ -2161,6 +2169,10 @@ local function read_play(id, last_seq)
         local key = tostring(slot) .. ":" .. tostring(e.gen)
         if P.key[id] ~= key then P.key[id], P.seq[id] = key, nil end
         local seq = IPC.peer_play(slot, P.out, P.seq[id])
+        -- PeerPlay is evaluated by a wall-clock sidecar thread. A rendered
+        -- frame can already be late when this slot is read; its physical
+        -- frame timestamp is therefore not the slot's receipt timestamp.
+        local read_at=now_ms()
         if seq == nil then
             if P.seq[id] ~= nil and last_seq ~= nil then return "same" end   -- unchanged
             return nil                                                       -- empty / stale epoch
@@ -2178,7 +2190,7 @@ local function read_play(id, last_seq)
         local into = (P.last[id] == bufs[1]) and bufs[2] or bufs[1]
         if not into.slots then into.slots, into.weapons = {}, {} end
         local t = PURE.play_from_out(P.out, into)
-        if t then P.last[id] = t end
+        if t then t.read_at=read_at; P.last[id] = t end
         return t
     end
     return nil
@@ -2201,6 +2213,7 @@ for i, bn in ipairs(PURE.V2_SLOTS) do _sv_fn[i] = fname(bn) end
 -- mesh snapped onto the target pelvis. `why` (drive start, discontinuity)
 -- also starts the soft servo ramp and the spawn stretch watch.
 function PX.start_repose(p, body, now, why)
+    PX.settle_reset(p,"repose")
     body.repose_at = now
     body.reposes = (body.reposes or 0) + 1
     if why then
@@ -2675,6 +2688,8 @@ PX.CONTACT_BODIES = { 1, 4, 9, 13, 17 }   -- pelvis, spine_03, head, hand_l, han
 function PX.playback_clock(id, p, cur, clk, now, cut_reset, fresh)
     local rate = PURE.clamp(tonumber(cur.rate) or 1, 0.5, 1.5)
     if rate ~= rate or (tonumber(cur.rate) or 0) <= 0 then rate = 1 end
+    -- `now` is the physical frame time. Project the actually received
+    -- sidecar clock back to it when the callback/slot read happened late.
     local expect = cur.pt - (cur.lead or 0) + (now - (cur.read_at or now)) * rate
     local projected = clk and (clk.pt + (now - clk.at) * (clk.r or 1))
     local reset = clk ~= nil and not cut_reset and math.abs(expect - projected) > 50
@@ -2977,6 +2992,9 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     end
     PX.injury_targets(id,p,targets,aim)
     local nat = PX.ns_bodies(mesh, aim, sv, dt, s_capl, s_capa, s_gain, yl, holding)   -- native servo
+    if PX.SETTLE then
+        p.settle_state=PX.SETTLE.begin(p.settle_state,PX.settle_world,p.shown,p.aim,cur,now)
+    end
     local sv_c = sv.c7 or {}
     sv.c7 = sv_c
     for i = 1, PURE.V2_NB do
@@ -3000,6 +3018,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
             else
                 c = xf7(mesh:GetSocketTransform(fn, 0), c)
             end
+            if PX.SETTLE then PX.SETTLE.measure(p.settle_state,i,c,p.aim and p.aim.slots and p.aim.slots[i]) end
             -- Tracking error vs. what we aimed at last frame.
             if prev and prev.slots[i] then
                 local a = prev.slots[i]
@@ -3305,7 +3324,20 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     _probe_buf[#_probe_buf + 1] = table.concat(out, " ")
         probe_flush(id, false)
     end
+    if PX.SETTLE then
+        PX.SETTLE.finish(p.settle_state,now)
+        PX.SETTLE.copy(p.shown,p.settle_state)
+        if p.settle_state.settle_ready and not p.settle_state.logged then
+            p.settle_state.logged=true
+            Log("spawn settle peer=%d pawn=%s match=%s round=%s life=%s ready=%s reason=%s limbs=%d pos=%.2f rot=%.2f stable_ms=%.0f source_seq=%s source_ts=%s",
+                id,tostring(p.shown and p.shown.pawn),tostring(cur.match_id),tostring(cur.round),tostring(cur.life),
+                tostring(p.settle_state.settle_ready),p.settle_state.settle_reason,p.settle_state.settle_count,
+                p.settle_state.settle_pos_uu,p.settle_state.settle_rot_deg,p.settle_state.settle_stable_ms,
+                tostring(p.settle_state.settle_source_seq),tostring(p.settle_state.settle_source_ts))
+        end
+    end
     p.aim = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), aim_label, now)
+    p.aim.world,p.aim.cut,p.aim.seq=PX.settle_world,cur.cut,cur.seq
     p.aim.slots = aim
     return pel_err
 end
@@ -3318,7 +3350,6 @@ local function drive_frame(id, p, now)
     pl.reads = (pl.reads or 0) + 1
     if type(r) == "table" then
         if pl.seq then pl.fresh = (pl.fresh or 0) + 1 end
-        r.read_at = now
         p.last, pl.seq, pl.seq_at = r, r.seq, now
     elseif r == nil then
         pl.bad = (pl.bad or 0) + 1   -- missing or torn record
@@ -3983,6 +4014,7 @@ local function on_tick()
     end
     if not key then cache_gen = -1; _world_name = nil; return end
     cache_gen = world_gen
+    PX.settle_world=wid
     _world_name = wname
     PX.keep_possession()
     local world = wname
@@ -4346,7 +4378,7 @@ if rawget(_G, "HSMP_AVATARS_TEST") then
         parse_standin_dead = DH.parse, combat_declared_dead = DH.declared,
         puppets = function() return puppets end,
         set_puppet = function(id, p) puppets[id] = p end,
-        PX = PX, drive_frame = drive_frame, servo_weapon_parts = servo_weapon_parts, set_gravity = set_gravity,
+        PX = PX, drive_frame = drive_frame, drive_v2 = drive_v2, servo_weapon_parts = servo_weapon_parts, set_gravity = set_gravity,
         generation = function() return world_gen, cache_gen end,
         drop_caches = drop_caches,
         snap_mesh = snap_mesh, release_standin = release_standin,

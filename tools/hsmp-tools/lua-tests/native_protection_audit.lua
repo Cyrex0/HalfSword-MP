@@ -70,3 +70,25 @@ local dead_reads=0
 local invalid={IsValid=function()return false end,GetFullName=function()dead_reads=dead_reads+1;error("invalid weak target")end}
 local missing=a.trace(nil,nil,nil,arr({11}),true,arr({{Component=param(invalid),PhysMaterial=param(invalid)}}),false,false)
 T.check(missing and missing:find("component:unavailable|mesh:unavailable|surface:unavailable",1,true) and dead_reads==0,"expired native weak hit target is never dereferenced or replaced")
+
+-- Exercise the real bridge with the pinned UE4SS native POST convention:
+-- context, return value, reflected parameters. A bool return must never be
+-- mistaken for the WorldContextObject and silently discard every trace.
+local source=assert(io.open(T.path("mods/HSMPCombat/Scripts/main.lua"),"r"))
+local text=source:read("*a");source:close()
+local bridge=assert(text:match("(function C3%.native_trace_post.-\nend)"))
+local trace={pawn=5}
+local state={native_probe=true,replay_trace=trace,armor_audit=a}
+local env={C3=state,replaying=true,WG={check=function()return true end,settled=function()return true end},
+    pv=unwrap,addr_of=function(o)return o:GetAddress()end}
+setmetatable(env,{__index=_G})
+assert(load(bridge,"native_trace_post","t",env))()
+local result=state.native_trace_post(param(obj("Engine context",90)),param(true),param(pawn),
+    param({X=1,Y=2,Z=3}),param({X=4,Y=5,Z=6}),.1,arr({11}),true,arr({}),0,
+    arr({hit}),false,nil,nil,5)
+T.check(result==nil and trace.proxy_trace_calls==1,"native POST bridge preserves return value and observes exactly the owner trace")
+T.check(trace.proxy_trace_samples[1]:find("out:true,hits:1",1,true),"native POST return/output arguments reach actual ordered-hit evidence")
+state.native_trace_post(nil,param(false),param(obj("other pawn",99)))
+T.check(trace.proxy_trace_calls==1,"trace from another native receiver cannot be attributed to owner replay")
+state.native_probe=false
+T.check(pcall(state.native_trace_post,nil,param(true),nil),"disabled bridge reads no native world parameter")

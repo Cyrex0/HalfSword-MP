@@ -109,14 +109,22 @@ exact match/round/life (`sample_status().pose`), a fresh matching local root, an
 known-health vitals for that life. Every living remote fighter must have matching applied
 playback on its named stand-in, a current physical source frame (`PeerPlay` interp/extrap and
 source age within 250 ms), advancing owner vitals, and native alive/physical collision readback.
+Before Ready and the first Live release, all six upper/lower arms and hands must also have fresh
+actual native transforms within 5 uu and 10 degrees of their previously integrated aim for
+150 continuous ms. The typed local playback row binds this evidence to the native world,
+displayed pawn, full match/round/life and source discontinuity; missing samples name their cause
+and cannot be replaced by a timer. This local record does not change network protocol 12.
 Pose clocks and stand-in visibility alone cannot prove this: playback publications continue
 while a stopped sender is extrapolated. The final Ready step re-checks the proof, and input
 remains frozen without Ready evidence for the exact current world and pawn. Older native
 modules without successful-write pose evidence report an unavailable proof and remain blocked.
 The first Live input release re-checks this proof, closing the interval between Ready and the
 end of the countdown. Release is then latched for that exact placed life, so ordinary wounds
-or knockdowns during Live do not re-run spawn proof and freeze controls. Pause/reconnect,
-world changes and a new life clear the latch; their next release requires current proof again.
+or knockdowns during Live do not re-run spawn proof and freeze controls. Pause/reconnect clear
+the input-release latch and require fresh streams again; physical spawn qualification remains
+for the exact already released life, so injured limbs do not prevent that life resuming.
+A different world, owner life/pawn, remote life/pawn or source discontinuity discards the
+corresponding physical qualification and requires new measured settlement.
 
 **Foe count** (GI `Free Mode Foes Amount`) is `max(1, remote fighters in the roster)`. The roster is
 the session snapshot's connected fighter rows. The extra foe in a solo match is a hidden stand-in.

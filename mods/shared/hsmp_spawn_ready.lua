@@ -1,7 +1,8 @@
 -- Spawn proof uses the streams actually sampled/applied for this life. A
 -- visible actor or an input slot populated by a previous life is not proof.
 -- Pure Lua: callers supply current native readbacks; no UObject is retained.
-local R = { POSE_MS = 250, VITALS_MS = 2500 }
+local R = { POSE_MS = 250, VITALS_MS = 2500, SETTLE_MS = 150, POS_UU = 5, ROT_DEG = 10 }
+local function finite(n) return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge end
 local function scoped(record, context)
     return type(record) == "table" and type(context) == "table"
         and (context.match_id or 0) ~= 0 and (context.round or 0) > 0 and (context.life or 0) > 0
@@ -21,9 +22,29 @@ local function vitals(record, context)
     return true
 end
 R.vitals = vitals
+function R.physical(playback, remote, world, now)
+    if type(world) ~= "string" or world == "" or not playback or playback.settle_world ~= world then
+        return false, "physical world unavailable/changed"
+    end
+    if not fresh(now, playback.settle_sample_ms, R.POSE_MS) then return false, "physical sample unavailable/stale/future" end
+    local seq = math.tointeger(tonumber(playback.settle_source_seq))
+    local cut = math.tointeger(tonumber(remote.source and remote.source.cut))
+    if not seq or seq < 0 or not finite(playback.settle_source_ts) or playback.settle_source_ts <= 0
+        or not cut or playback.settle_cut ~= cut then return false, "physical integrated aim unavailable/cut" end
+    if playback.settle_ready ~= true then return false, "physical " .. tostring(playback.settle_reason or "unavailable") end
+    if playback.settle_count ~= 6 then return false, "physical limbs incomplete" end
+    if not finite(playback.settle_stable_ms) or playback.settle_stable_ms < R.SETTLE_MS then return false, "physical stabilizing" end
+    if not finite(playback.settle_pos_uu) or playback.settle_pos_uu < 0 or playback.settle_pos_uu > R.POS_UU then
+        return false, "physical limb position"
+    end
+    if not finite(playback.settle_rot_deg) or playback.settle_rot_deg < 0 or playback.settle_rot_deg > R.ROT_DEG then
+        return false, "physical limb rotation"
+    end
+    return true
+end
 function R.new()
-    local self = { counters = {} }
-    function self:reset() self.counters, self.key = {}, nil end
+    local self = { counters = {}, qualified = {} }
+    function self:reset() self.counters, self.qualified, self.key = {}, {}, nil end
     function self:observe(key, value, now)
         value = math.tointeger(tonumber(value))
         if not value or value < 0 then return false end
@@ -50,6 +71,7 @@ function R.new()
         local own_vok, own_vat
         if scoped(input.vitals, own) then own_vok, own_vat = self:observe("vitals", input.vitals.seq, now) end
         local remote_seen = {}
+        local qualify = {}
         for _, remote in ipairs(input.remotes or {}) do
             if scoped(remote.vitals, remote) then
                 local advanced, at = self:observe("peer:" .. tostring(remote.peer) .. ":" .. tostring(remote.life), remote.vitals.seq, now)
@@ -94,8 +116,22 @@ function R.new()
             if not seen or not seen[1] or not fresh(now, seen[2], R.VITALS_MS) then return false, prefix .. "vitals not sampling" end
             if not remote.native or remote.native.alive ~= true then return false, prefix .. "native pawn unavailable/dead" end
             if remote.native.collision ~= true then return false, prefix .. "native collision unavailable/off" end
+            local cut = math.tointeger(tonumber(source.cut))
+            local token = tostring(input.native_world) .. "|" .. tostring(remote.peer) .. "|" .. tostring(remote.match_id)
+                .. ":" .. tostring(remote.round) .. ":" .. tostring(remote.life) .. "@" .. remote.pawn .. ":" .. tostring(cut)
+            -- Only a successful first release/handover qualifies a life. Ready
+            -- and Countdown keep checking current physical samples. Once
+            -- released, pause/reconnect recheck streams without demanding that
+            -- an injured same-life limb recover its spawn alignment.
+            if self.qualified[remote.peer] ~= token then self.qualified[remote.peer] = nil end
+            if not (input.qualify_settle == true and cut and self.qualified[remote.peer] == token) then
+                ok, why = R.physical(playback, remote, input.native_world, now)
+                if not ok then return false, prefix .. why end
+            end
+            qualify[#qualify + 1] = { peer = remote.peer, token = token }
         end
-        return true, "current life pose/vitals/collision"
+        if input.qualify_settle == true then for _, entry in ipairs(qualify) do self.qualified[entry.peer] = entry.token end end
+        return true, "current life pose/vitals/collision/physical"
     end
     return self
 end

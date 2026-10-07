@@ -1058,6 +1058,79 @@ end
 local AI_AUTO, AI_PENDING = nil, nil
 local AI_READY = load_module("hsmp_spawn_ready")
 local AI_PROOF = AI_READY and AI_READY.new()
+local AI_INTENT
+WG.on_drop(function() AI_INTENT = nil end) -- plain identity/state only; never retain controller wrappers
+-- AI_BP_C ReceiveTick supplies new combat intent. Stop only its controller,
+-- leaving Willie physics, damage continuations, pose and vitals running. These
+-- native methods and the hard BrainComponent ObjectProperty are in the SDK.
+local function ai_intent_tick()
+    if not WG.settled() then AI_INTENT = nil; return end
+    local me = WG.ai_pawn()
+    local ipc = rawget(_G, "HSMP_IPC")
+    local st = HW.verified_ai_status and HW.verified_ai_status(ipc)
+    if not valid(me) or not st or st.pawn ~= nm(me) then AI_INTENT = nil; return end
+    local c, pawn_address, controller_address
+    pcall(function() c = me.Controller; pawn_address = me:GetAddress(); controller_address = c:GetAddress() end)
+    if not valid(c) or not pawn_address or not controller_address then AI_INTENT = nil; return end
+    local key = table.concat({ tostring(WG.key), tostring(st.match_id), tostring(st.round), tostring(st.life),
+        tostring(st.spawn_id), st.pawn, tostring(pawn_address), tostring(controller_address) }, ":")
+    if AI_INTENT and AI_INTENT.key ~= key then AI_INTENT = nil end
+    local view, mode = HSESS and HSESS.view(), HSESS and HSESS.mode()
+    local own = mode and view and mode.rows and mode.rows[view.my_peer_id]
+    local live = SESS and SESS:live() and view and view.state == "live" and view.match_id == st.match_id
+        and view.round == st.round and mode and mode.match_id == st.match_id and mode.round == st.round
+        and own and own.life == st.life and own.alive ~= false and not own.respawning
+    if live and not AI_INTENT then return end
+    local now = os.clock()
+    if AI_INTENT and AI_INTENT.live == live and now < AI_INTENT.retry_at then return end
+    if not AI_INTENT then
+        local ok, ticking = pcall(function() return c:IsActorTickEnabled() end)
+        if not ok or type(ticking) ~= "boolean" then
+            Log("AI_INTENT refused pawn=%s controller=%s reason=native controller tick state unavailable", st.pawn, nm(c)); return
+        end
+        AI_INTENT = { key=key, original_tick=ticking, retry_at=0 }
+    end
+    local state = AI_INTENT
+    state.live = live
+    local brain, brain_address
+    pcall(function() brain = c.BrainComponent; if valid(brain) then brain_address = brain:GetAddress() end end)
+    if live then
+        local restart = "not_stopped"
+        if state.brain_stopped then
+            if valid(brain) and brain_address == state.brain_address then
+                local ok = pcall(function() brain:RestartLogic() end)
+                restart = ok and "submitted" or "failed"
+                if ok then state.brain_stopped = nil end
+            else state.brain_stopped = nil; restart = "identity_changed" end
+        end
+        local set_ok = not state.original_tick or pcall(function() c:SetActorTickEnabled(true) end)
+        local read_ok, ticking = pcall(function() return c:IsActorTickEnabled() end)
+        local restored = set_ok and read_ok and ticking == state.original_tick and not state.brain_stopped
+        Log("AI_INTENT resume pawn=%s controller=%s match=%s round=%s life=%s tick=%s restored=%s brain_restart=%s",
+            st.pawn, nm(c), tostring(st.match_id), tostring(st.round), tostring(st.life), tostring(ticking), tostring(restored), restart)
+        if restored then AI_INTENT = nil else state.retry_at = now + .5 end
+        return
+    end
+    if state.paused then return end
+    local move_ok = pcall(function() c:StopMovement() end)
+    local stop = "not_running"
+    if not state.brain_stopped and valid(brain) and brain_address then
+        local ok, running = pcall(function() return brain:IsRunning() end)
+        if ok and running == true then
+            local stopped = pcall(function() brain:StopLogic(FString("HSMP duel is not Live")) end)
+            stop = stopped and "submitted" or "failed"
+            if stopped then state.brain_stopped, state.brain_address = true, brain_address end
+        elseif not ok then stop = "state_unavailable" end
+    elseif not valid(brain) then stop = "unavailable"
+    elseif state.brain_stopped then stop = "submitted" end
+    local set_ok = pcall(function() c:SetActorTickEnabled(false) end)
+    local read_ok, ticking = pcall(function() return c:IsActorTickEnabled() end)
+    state.paused = move_ok and set_ok and read_ok and ticking == false and stop ~= "failed" and stop ~= "state_unavailable"
+    state.retry_at = state.paused and 0 or now + .5
+    Log("AI_INTENT pause pawn=%s controller=%s match=%s round=%s life=%s phase=%s movement_stop=%s tick=%s paused=%s brain_stop=%s",
+        st.pawn, nm(c), tostring(st.match_id), tostring(st.round), tostring(st.life), tostring(view and view.state),
+        tostring(move_ok), tostring(ticking), tostring(state.paused), stop)
+end
 local function ai_target(peer)
     if peer then return standin_of(peer) end
     local ipc = rawget(_G, "HSMP_IPC")
@@ -1104,16 +1177,22 @@ local function ai_readiness(pc, me, si, peer)
     for _, row in ipairs((ipc.bus_table("playback") or {}).rows or {}) do if row.peer == peer then playback = row; break end end
     local source, slot = {}, ipc.peer_slot and ipc.peer_slot(peer)
     if slot ~= nil and ipc.peer_play then ipc.peer_play(slot, source) end
+    local my_team, si_team
+    pcall(function() my_team, si_team = me["Team Int"], si["Team Int"] end)
+    if type(my_team) ~= "number" or type(si_team) ~= "number" or my_team == si_team then return nil, "native target team not initialized" end
     local sample = ipc.sample_status()
-    local ok, why = AI_PROOF:check({ world = WG.key, now_ms = os.clock() * 1000, own = st,
+    local native_world
+    pcall(function()
+        local world = WG.world and WG.world()
+        if valid(world) then native_world = tostring(world:GetAddress()) .. "@" .. world:GetFullName() end
+    end)
+    local ok, why = AI_PROOF:check({ world = WG.key, native_world = native_world, qualify_settle = true,
+        now_ms = os.clock() * 1000, own = st,
         root = ipc.rec("local_root"), pose = sample and sample.pose, vitals = ipc.rec("vitals"), remotes = {
             { peer = peer, pawn = nm(si), match_id = st.match_id, round = st.round, life = remote.life,
                 playback = playback, source = source, vitals = ipc.peer_rec("peer_vitals", peer), native = ai_native_ready(si) },
         } })
     if not ok then return nil, why end
-    local my_team, si_team
-    pcall(function() my_team, si_team = me["Team Int"], si["Team Int"] end)
-    if type(my_team) ~= "number" or type(si_team) ~= "number" or my_team == si_team then return nil, "native target team not initialized" end
     return st
 end
 local function ai_takeover(pc, me, si)
@@ -1142,6 +1221,7 @@ local function exp_ai(arg)
         Log("ai: on requested; waiting for current fighter pose, vitals and collision")
     elseif mode == "off" then
         AI_AUTO, AI_PENDING = nil, nil
+        AI_INTENT = nil
         if AI_PROOF then AI_PROOF:reset() end
         local me = WG.ai_pawn()
         if not me then Log("ai: no AI-driven pawn of ours"); return end
@@ -1163,6 +1243,7 @@ end
 -- Bind a takeover to its verified world/match/round/life/pawn, never to a
 -- temporary possession created by the native stand-in fallback.
 local function ai_auto_tick()
+    ai_intent_tick()
     if not (AI_AUTO or AI_PENDING) or not (SESS and SESS:live()) or not WG.settled() then return end
     if AI_PENDING and AI_PENDING.world ~= WG.key then AI_PENDING = nil end
     if not (AI_AUTO or AI_PENDING) or valid(WG.ai_pawn()) then return end

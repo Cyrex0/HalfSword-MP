@@ -29,12 +29,15 @@ do
     T.check(R ~= nil, "shared spawn proof helper loaded")
     local proof = R.new()
     local function vital(life, seq) return { match_id = 91, round = 3, life = life, seq = seq, flags = 0, v = { 6400 } } end
-    local input = { world = "arena#1", now_ms = 1000, own = { match_id = 91, round = 3, life = 130, pawn = "owner" },
+    local input = { world = "arena#1", native_world = "123@World arena", now_ms = 1000, own = { match_id = 91, round = 3, life = 130, pawn = "owner" },
         root = { match_id = 91, round = 3, life = 130, ts = 1000 }, vitals = vital(130, 10),
         pose = { match_id = 91, round = 3, life = 130, ts = 1000, tick = 30 },
         remotes = {{ peer = 2, match_id = 91, round = 3, life = 2, pawn = "proxy", vitals = vital(2, 20),
-            source = { match_id = 91, round = 3, life = 2, peer_id = 2, has_context = true, age = 70, mode = "interp" },
-            playback = { match_id = 91, round = 3, life = 2, pawn = "proxy", local_ms = 1000 }, native = { alive = true, collision = true } }} }
+            source = { match_id = 91, round = 3, life = 2, peer_id = 2, has_context = true, age = 70, mode = "interp", cut = 7 },
+            playback = { match_id = 91, round = 3, life = 2, pawn = "proxy", local_ms = 1000,
+                settle_world="123@World arena",settle_sample_ms=1000,settle_stable_ms=150,settle_source_ts=900,
+                settle_source_seq=50,settle_cut=7,settle_ready=true,settle_count=6,settle_pos_uu=5,settle_rot_deg=10,
+                settle_reason="settled" }, native = { alive = true, collision = true } }} }
     local ok, why = proof:check(input)
     T.check(not ok and why == "own pose not sampling", "a retained native pose slot does not release the spawn", why)
     input.now_ms, input.root.ts, input.remotes[1].playback.local_ms = 1100, 1100, 1100
@@ -42,6 +45,50 @@ do
     input.pose.ts, input.pose.tick = 1100, 31
     T.check(proof:check(input), "current-life streams advancing with native collision release the barrier")
     local remote = input.remotes[1]
+    remote.playback.settle_ready, remote.playback.settle_reason = false, "hand_r rotation"
+    ok, why = proof:check(input)
+    T.check(not ok and why == "peer 2 physical hand_r rotation", "fresh visible pose with an actual twisted hand remains frozen", why)
+    remote.playback.settle_ready, remote.playback.settle_stable_ms = true, 149
+    T.check(not proof:check(input), "a momentary close pose cannot replace 150ms of continuous physical stability")
+    remote.playback.settle_stable_ms, remote.playback.settle_count = 150, 5
+    T.check(not proof:check(input), "all six arm and hand bodies are required")
+    remote.playback.settle_count, remote.playback.settle_pos_uu = 6, 5.001
+    T.check(not proof:check(input), "physical position above the existing 5uu bound waits")
+    remote.playback.settle_pos_uu, remote.playback.settle_rot_deg = 5, 10.001
+    T.check(not proof:check(input), "physical angular error above the existing 10degree bound waits")
+    remote.playback.settle_rot_deg, remote.playback.settle_sample_ms = 10, 1101
+    T.check(not proof:check(input), "future actual body evidence does not qualify")
+    remote.playback.settle_sample_ms, remote.playback.settle_world = 1100, "124@World arena"
+    T.check(not proof:check(input), "same named map in another native world cannot borrow physical evidence")
+    remote.playback.settle_world, remote.playback.settle_cut = input.native_world, 6
+    T.check(not proof:check(input), "a discontinuity cannot borrow the prior integrated aim proof")
+    remote.playback.settle_cut = 7
+    T.check(proof:check(input), "exact physical evidence recovers without widening either fairness bound")
+    -- Reaching Ready never qualifies a released life: a late physical fault
+    -- before the first Live release must still be observed.
+    input.qualify_settle = true
+    remote.playback.settle_ready = false
+    T.check(not proof:check(input), "healthy Ready proof lost at first release does not create a qualification latch")
+    remote.playback.settle_ready = true
+    T.check(proof:check(input), "passing first release qualifies only this exact world, life, pawn and cut")
+    remote.playback.settle_ready, remote.playback.settle_rot_deg = false, 173
+    T.check(proof:check(input), "same-life pause or reconnect may resume after injury without demanding healthy spawn limbs")
+    input.qualify_settle = false
+    T.check(not proof:check(input), "Ready always requires current physical evidence even after a release qualification")
+    input.qualify_settle = true
+    remote.pawn, remote.playback.pawn = "replacement proxy", "replacement proxy"
+    T.check(not proof:check(input), "a replacement pawn in the same world and life cannot borrow prior qualification")
+    remote.pawn, remote.playback.pawn = "proxy", "proxy"
+    T.check(not proof:check(input), "returning an old pawn name after replacement does not restore discarded qualification")
+    remote.playback.settle_ready, remote.playback.settle_rot_deg = true, 10
+    T.check(proof:check(input), "new physical evidence can qualify the exact current pawn again")
+    remote.playback.settle_ready, remote.playback.settle_rot_deg = false, 173
+    input.qualify_settle, remote.source.cut = true, 8
+    T.check(not proof:check(input), "a new physical discontinuity cannot reuse released-life qualification")
+    remote.source.cut = 7
+    T.check(not proof:check(input), "returning a previous cut cannot revive its discarded qualification")
+    input.qualify_settle, remote.source.cut = false, 7
+    remote.playback.settle_ready, remote.playback.settle_rot_deg = true, 10
     remote.source.mode = "stale"
     T.check(not proof:check(input), "a freshly republished stale PeerPlay cannot release the spawn")
     remote.source.mode, remote.source.age = "extrap", 251
@@ -66,6 +113,7 @@ do
     T.check(not proof:check(input), "native DED/alive readback must agree before release")
     remote.native.alive = true
     input.now_ms, input.root.ts, remote.playback.local_ms = 3800, 3800, 3800
+    remote.playback.settle_sample_ms = 3800
     input.pose.ts, input.pose.tick = 3800, 32
     ok, why = proof:check(input)
     T.check(not ok and why == "own vitals not sampling", "fresh root/pose cannot cover a stopped vitals stream", why)
@@ -108,7 +156,7 @@ do
         "the transition identifies the deteriorated proof")
     T.check(last_context.key == w.dir.ready_context.world and last_context.pawn_id == w.dir.ready_context.pawn
         and last_context.match_id == w.dir.ready_context.match_id and last_context.round == 1
-        and last_context.verified_life == w.dir.ready_context.life,
+        and last_context.verified_life == w.dir.ready_context.life and last_context.qualify_settle == true,
         "Live proof re-check uses the original exact Ready life and pawn")
     fresh = true; w:tick(1)
     local released = w.dir.live_release

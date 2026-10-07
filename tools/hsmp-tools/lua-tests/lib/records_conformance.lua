@@ -359,6 +359,36 @@ function C.run(N, H, check)
     ver, t = N.bus_get("t_bus_keep", -1, bo)
     check(t == bo and bo.id == 6 and #bo.rows == 2, "bus_get into out", repr(bo))
 
+    -- The production local playback proof survives the real native marshaler,
+    -- not just Lua table copies. All 32 peers must fit the bus intact.
+    local proof_rows = {}
+    for i = 1, 32 do
+        proof_rows[i] = { peer=i, pawn="Willie_BP_C_"..i, match_id=9007199254740993, round=3, life=130,
+            body_ts=1250.5, arm_ts=1250.5, local_ms=1600.0,
+            settle_world="123456@World /Game/Maps/Map_Arena.Map_Arena", settle_reason="settled",
+            settle_sample_ms=1600.0, settle_stable_ms=151.0, settle_source_ts=1234.5,
+            settle_source_seq=9007199254740993, settle_cut=7, settle_pos_uu=4.5, settle_rot_deg=9.5,
+            settle_ready=true, settle_count=6 }
+    end
+    ok, e = N.bus_put("playback", {rows=proof_rows})
+    check(ok == true, "32-peer physical playback fits typed bus", tostring(e))
+    local proof_out = {}
+    ver, t = N.bus_get("playback", -1, proof_out)
+    check(t == proof_out and t.n == 32 and #t.rows == 32, "32-peer playback is not truncated", repr(t and t.n))
+    if t and t.rows and t.rows[32] then
+        local p = t.rows[32]
+        eq(p.match_id, 9007199254740993, "playback full match integer")
+        eq(p.life, 130, "playback full life")
+        eq(p.settle_source_seq, 9007199254740993, "physical source sequence full integer")
+        eq(p.settle_source_ts, 1234.5, "physical integrated sender timestamp")
+        eq(p.settle_sample_ms, 1600.0, "physical actual sample timestamp")
+        eq(p.settle_stable_ms, 151.0, "physical continuous stable duration")
+        check(p.pawn == "Willie_BP_C_32" and p.settle_world == proof_rows[32].settle_world
+            and p.settle_reason == "settled" and p.settle_ready == true and p.settle_count == 6
+            and p.settle_cut == 7 and p.settle_pos_uu == 4.5 and p.settle_rot_deg == 9.5,
+            "physical world, pawn, cut and measured limits survive native transport", repr(p))
+    end
+
     -- world leave: world-scoped game slots and bus keys lose their value
     N.put("t_fixed_out", { u8v = 1 })
     N.world_leaving()
@@ -366,6 +396,7 @@ function C.run(N, H, check)
     ver, t = N.get("t_var_out", -1)
     check(t and t.id == 3, "non-world-scoped blob kept", repr(t))
     check(N.bus_get("t_bus", -1) == 0, "world-scoped bus key cleared")
+    check(N.bus_get("playback", -1) == 0, "physical playback cleared on world leave")
     ver, t = N.bus_get("t_bus_keep", -1)
     check(t and t.id == 6, "non-world-scoped bus key kept", repr(t))
     if N.world_ready then N.world_ready("conformance") end

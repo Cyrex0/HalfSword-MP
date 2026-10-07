@@ -38,6 +38,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "bodyheight" })
     T.isolated(T.script, "case", { kind = "ai_owner" })
     T.isolated(T.script, "case", { kind = "weaponstate" })
+    T.isolated(T.script, "case", { kind = "spawn_settle" })
     return
 end
 
@@ -141,6 +142,86 @@ if opts.kind=="weaponstate" then
     T.check(c.sim==false and root:IsSimulatingPhysics("None")==true,"dev simulation mismatch snapshot mutates neither cache nor native physics")
 end
 
+if opts.kind=="spawn_settle" then
+    T.write(sd.."/.settings.json",'{"avatars":true,"native_servo":false}\n')
+    local api=boot(true)
+    local S=api.PX.SETTLE
+    local world="4096@World Arena"
+    local shown={has_context=true,match_id=100,round=2,life=1,pawn="Puppet",label=100,at=1000}
+    local cur={has_context=true,match_id=100,round=2,life=1,cut=3,mode="interp",age=0}
+    local previous={has_context=true,match_id=100,round=2,life=1,pawn="Puppet",world=world,cut=3,label=100,at=984,seq=31}
+    local actual={0,0,0,0,0,0,1}
+    local s
+    local function sample(now,rotation,missing)
+        s=S.begin(s,world,shown,previous,cur,now)
+        for i in pairs(S.bones) do
+            if i~=missing then
+                local c=(i==13 and rotation) and {0,0,0,math.sin(math.rad(rotation)/2),0,0,math.cos(math.rad(rotation)/2)} or actual
+                S.measure(s,i,c,actual)
+            end
+        end
+        S.finish(s,now)
+        previous.at,previous.label,previous.seq=now,previous.label+16,previous.seq+1
+    end
+    sample(1000,174)
+    T.check(not s.settle_ready and s.settle_rot_deg>173 and s.settle_reason=="hand_l rotation",
+        "actual 174 degree hand twist refuses spawn alignment without joint getters")
+    for now=1016,1160,16 do sample(now) end
+    T.check(not s.settle_ready and s.settle_stable_ms==144,"a near-pose sample does not bypass continuous physical stabilization")
+    sample(1176)
+    T.check(s.settle_ready and s.settle_count==6 and s.settle_stable_ms==160,"all six measured arms and hands converge for at least 150 ms")
+    S.copy(shown,s)
+    local row=api.PURE.playback_row(2,shown,1000,true)
+    T.check(row and row.settle_ready and row.settle_world==world and row.settle_source_seq==s.settle_source_seq
+        and row.settle_source_ts==s.settle_source_ts,"playback retains the actual integrated aim marker and physical proof")
+    sample(1192,nil,13)
+    T.check(not s.settle_ready and s.settle_count==5 and s.settle_reason=="missing hand_l","an unavailable current hand invalidates settled proof")
+    cur.mode="stale";sample(1208)
+    T.check(not s.settle_ready and s.settle_reason=="source held/stale","freshly evaluated stale source cannot build physical stability")
+    cur.mode="interp";previous.life=2;sample(1224)
+    T.check(not s.settle_ready and s.settle_reason=="integrated aim context unavailable","old displayed life cannot relabel another integrated native life")
+    previous.life=1;previous.world="other";sample(1240)
+    T.check(not s.settle_ready and s.settle_reason=="integrated aim context unavailable","another world's aim cannot authorize the current body")
+    previous.world=world;sample(1256)
+    previous.label=s.last_label;sample(1272)
+    T.check(not s.settle_ready and s.settle_stable_ms==0,"an unchanged source label never accrues continuous physical stability")
+    local p={shown=shown,settle_state=s}
+    api.PX.settle_reset(p,"repose")
+    T.check(shown.settle_ready==false and shown.settle_reason=="repose","repose clears the published alignment proof immediately")
+
+    -- The requested pose is close, but the previously integrated aim is far.
+    local actor=M.new_obj("Willie_BP_C","Puppet")
+    local mesh=M.new_obj("SkeletalMeshComponent","CharacterMesh0")
+    local calls,twisted=0,false
+    M.Methods.GetSocketTransform=function(_,bone)
+        local q=(twisted and tostring(bone)=="hand_l") and math.rad(174)/2 or 0
+        return {Translation={X=0,Y=0,Z=0},Rotation={X=math.sin(q),Y=0,Z=0,W=math.cos(q)}}
+    end
+    M.Methods.SetPhysicsLinearVelocity=function()calls=calls+1 end
+    M.Methods.SetPhysicsAngularVelocityInDegrees=function()end
+    M.Methods.GetPhysicsLinearVelocity=function()return {X=0,Y=0,Z=0}end
+    local sv={n=6,com={},cmd={},wc={},err={n=0,e=0,emax=0,a=0,amax=0,hmax=0,capped=0}}
+    local slots,old={},{}
+    for i in pairs(S.bones) do sv.com[i]={0,0,0};slots[i]={0,0,0,0,0,0,1,0,0,0,0,0,0};old[i]={100,0,0,0,0,0,1} end
+    local body={mesh=mesh,sv=sv,field="Mesh"}
+    p={actor=actor,driving=true,aim={has_context=true,match_id=100,round=2,life=1,pawn="Puppet",world=world,cut=3,seq=41,label=1900,at=1984,slots=old}}
+    api.PX.settle_world=world
+    cur.seq,cur.pt,cur.read_at,cur.slots,cur.st=42,2000,2000,slots,16
+    api.drive_v2(2,p,body,cur,true,2000,false,false)
+    T.check(p.shown.settle_pos_uu==100 and not p.shown.settle_ready,
+        "driver measures native transforms against previous integrated aim, not the close incoming target")
+    for now=2016,2176,16 do
+        cur.seq,cur.pt,cur.read_at=cur.seq+1,now,now
+        api.drive_v2(2,p,body,cur,true,now,false,false)
+    end
+    T.check(p.shown.settle_ready and p.shown.settle_count==6,"production driver publishes converged six-limb evidence")
+    twisted=true
+    cur.seq,cur.pt,cur.read_at=cur.seq+1,2192,2192
+    api.drive_v2(2,p,body,cur,true,2192,false,false)
+    T.check(not p.shown.settle_ready and calls>0 and p.driving==true,
+        "a later wounded/live pose clears evidence while ordinary body physics continues")
+end
+
 if opts.kind == "hook" then
     local api = boot(false)
     local log = M.logtext()
@@ -205,6 +286,38 @@ if opts.kind == "clock_probe" then
     collect()
     T.check(#events==2 and events[2].delta_ms==-51 and events[2].fresh==false,
         "backward jumps preserve direction and cached-read attribution")
+
+    -- A sidecar slot is evaluated at wall time 2000, while the late render
+    -- callback still represents physical frame 1933. The next callback is
+    -- quick. Backdating receipt to 1933 produces +67/-67 false phase resets.
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMP_IPC.peer_dir(true)
+    local puppet={}
+    local function source(seq,pt)
+        HSMPNative.sc_peer_play(2,{peer_id=2,seq=seq,v=2,pt=pt,lead=17,rate=1,mode="interp",cut=4,
+            age=0,delay=20,jit=5,iv=17,m=0,B={},has_context=true,match_id=901,round=3,life=2})
+    end
+    M.now=2000;source(61,7017)
+    api.drive_frame(2,puppet,1933)
+    T.check(puppet.last and puppet.last.read_at==2000,
+        "successful production slot read keeps actual host receipt time instead of late physical frame time",T.repr(puppet.last))
+    local clock={pt=6916,at=1916,r=1}
+    local late,late_reset=PX.playback_clock(2,puppet,puppet.last,clock,1933,false,true)
+    T.check(not late_reset and late.pt==6933,"a 67ms late source read projects back to the physical frame without a false forward reset")
+    M.now=2016;source(62,7033)
+    api.drive_frame(2,puppet,2016)
+    local quick,quick_reset=PX.playback_clock(2,puppet,puppet.last,late,2016,false,true)
+    T.check(not quick_reset and quick.pt==7016,"the next quick frame preserves phase instead of reversing by67ms")
+    collect()
+    T.check(#events==2,"late-read and quick-frame pair emits no hidden or threshold-relaxed reset")
+    -- A genuine 80ms buffer-clock shift remains visible to the same detector.
+    M.now=2032;source(63,6969)
+    api.drive_frame(2,puppet,2032)
+    puppet.last.delay=100
+    PX.playback_clock(2,puppet,puppet.last,quick,2032,false,true)
+    collect()
+    T.check(#events==3 and events[3].delta_ms==-80 and events[3].threshold_ms==50 and events[3].delay==100,
+        "real adaptive-delay phase shifts still reset and retain raw signed evidence")
 end
 
 -- Dev tuning knobs: dev_cmd TUNE records (hsmp-tools ipc-ctl tune), no .pose_tune.json.

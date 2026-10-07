@@ -3,8 +3,8 @@
 local S = {}
 S.ABI_MAJOR = 2
 S.ABI_MINOR = 0
-S.LAYOUT_HASH = "9824d6249fd2dc68"
-S.SEGMENT_SIZE = 4780032
+S.LAYOUT_HASH = "262ac8453e7af06c"
+S.SEGMENT_SIZE = 5566464
 
 -- kind name -> { id, cap, dir, form, replaces }
 S.KINDS = {
@@ -226,7 +226,7 @@ S.STRUCTS = {
         { "n", "u16" },
         { "_r", { "u16", 3 } },
     } },
-    PlaybackRow = { size = 104, fields = {
+    PlaybackRow = { size = 400, fields = {
         { "peer", "u32" },
         { "_r", "u32" },
         { "body_ts", "f64" },
@@ -237,6 +237,18 @@ S.STRUCTS = {
         { "life", "u16" },
         { "_life_r", { "u8", 2 } },
         { "pawn", { "str", 56 } },
+        { "settle_world", { "str", 192 } },
+        { "settle_reason", { "str", 56 } },
+        { "settle_sample_ms", "f64" },
+        { "settle_stable_ms", "f64" },
+        { "settle_source_ts", "f64" },
+        { "settle_source_seq", "u64" },
+        { "settle_pos_uu", "f32" },
+        { "settle_rot_deg", "f32" },
+        { "settle_cut", "u32" },
+        { "settle_ready", "bool" },
+        { "settle_count", "u8" },
+        { "_settle_r", { "u8", 2 } },
     } },
     Welcome = { size = 64, fields = {
         { "server_epoch", "u64" },

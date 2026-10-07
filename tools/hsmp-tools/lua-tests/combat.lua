@@ -632,8 +632,9 @@ do
         local args=table.pack(...)
         local array=function(items)return{GetArrayNum=function()return #items end,
             ForEach=function(_,f)for i,v in ipairs(items)do f(i,{get=function()return v end})end end}end
-        api.C3.native_trace_post(nil,ME,zero,zero,.1,array({11}),true,nil,0,array({}),false,nil,nil,5,false)
-        api.C3.native_trace_post(nil,self,zero,zero,.1,array({11}),true,nil,0,array({}),false,nil,nil,5,false)
+        -- UE4SS native POST callbacks place ReturnValue before reflected args.
+        api.C3.native_trace_post(nil,false,ME,zero,zero,.1,array({11}),true,nil,0,array({}),false,nil,nil,5)
+        api.C3.native_trace_post(nil,false,self,zero,zero,.1,array({11}),true,nil,0,array({}),false,nil,nil,5)
         self["Last Hit Body Part"]=2;self.Health=self.Health-.25
         api.on_get_damage(self,zero,zero,zero,zero,FName("spine_03"),123.45678901234567,
             .12345678901234566,false,self.Mesh,0,false,false,args[2],true,nil,1,false,0,true)
@@ -1501,16 +1502,28 @@ do
         T.check(api.C3.probe_last==nil,"Inside samples cannot be reused by the next ordinary DCD")
         local replay_log=#LOGS
         api.C3.log_replay_probe({hit_id=701,parent_cid=700,bone="head"},2,
-            {observed_fields=1,health_delta=-.00123456},"native Get Damage(ok) dmg Health +0.00 [Health-0.0 Pain+2.0]",true)
+            {observed_fields=1,health_delta=-.00123456},"native Get Damage(ok) dmg Health +0.00 [Health-0.0 Pain+2.0]",true,-.00123456)
         T.check(#LOGS==replay_log+1 and T.contains(LOGS[#LOGS],"LAB_REPLAY attacker=2 cid=701 parent_cid=700 bone=head dmg Health -0.001235 [Health-0.0 Pain+2.0]"),
             "fresh owner replay logs original ids and native Health precision beyond legacy two decimals")
         api.C3.log_replay_probe({hit_id=701,parent_cid=700,bone="head"},2,
-            {observed_fields=1,health_delta=-.00123456},"native replay cached",false)
+            {observed_fields=1,health_delta=-.00123456},"native replay cached",false,-.00123456)
         T.check(#LOGS==replay_log+1,"cached owner result cannot double-count a native LAB_REPLAY measurement")
         api.C3.log_replay_probe({hit_id=702,parent_cid=700,bone="head"},2,
             {observed_fields=8192,health_delta=0},"native Get Damage(ok) [Pain+2.0]",true)
         T.check(T.contains(LOGS[#LOGS],"LAB_REPLAY attacker=2 cid=702 parent_cid=700 bone=head dmg Health unavailable [native Health not observed]"),
-            "owner Health absent from observed mask is unavailable instead of inferred zero")
+            "owner Health without fresh native snapshot proof is unavailable instead of inferred zero")
+        api.C3.log_replay_probe({hit_id=703,parent_cid=700,bone="head"},2,
+            {observed_fields=8192,health_delta=0},"native Get Damage(ok) dmg Health +0.00 [Pain+2.0]",true,0)
+        T.check(T.contains(LOGS[#LOGS],"LAB_REPLAY attacker=2 cid=703 parent_cid=700 bone=head dmg Health +0.000000 [Pain+2.0]"),
+            "fresh unchanged native Health is legitimate evidence despite its absent changed-field bit")
+        api.C3.log_replay_probe({hit_id=704,parent_cid=700,bone="head"},2,
+            {observed_fields=0,health_delta=-.00012},"native Get Damage(ok) dmg Health -0.00 [none]",true,-.00012)
+        T.check(T.contains(LOGS[#LOGS],"dmg Health -0.000120 [none]"),
+            "fresh native Health below production change threshold retains diagnostic precision")
+        api.C3.log_replay_probe({hit_id=705,parent_cid=700,bone="head"},2,
+            {observed_fields=1,health_delta=-5},"native result without current reads",true)
+        T.check(T.contains(LOGS[#LOGS],"dmg Health unavailable [native Health not observed]"),
+            "a changed production outcome alone cannot substitute for fresh native snapshot proof")
         api.C3.native_probe=prior_probe;api.C3.protect(SI);api.C3.baseline(SI)
         SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]=original_gate,original_gate_bone
         SI.Mesh.GetAddress=old_mesh_address
@@ -1728,5 +1741,44 @@ do
         T.check(not again and calls==1 and same.status==1,
             "object-cache reset also retains immutable recorded native attempt")
         ME["Deal Complex Damage"]=previous
+        local previous_gd, previous_probe = ME["Get Damage"], api.C3.native_probe
+        api.C3.native_probe = true
+        local native_calls, native_health = 0
+        ME["Get Damage"] = function() native_calls = native_calls + 1 end
+        local unchanged = hit_rec{hit_id=1000002,round=3,target_peer_id=1,bone="pelvis",flags=0}
+        local measured, zero_outcome, actual = attempts.run(unchanged,2,function()
+            local text,status,fields,hp,health = api.apply_hit(unchanged,2)
+            native_health = health
+            return text,status,fields,hp
+        end)
+        T.check(actual and native_calls==1 and native_health==0 and zero_outcome.status==2
+            and zero_outcome.observed_fields==0 and zero_outcome.health_delta==0,
+            "fresh native no-change call proves zero Health without changing outcome status or mask")
+        api.C3.log_replay_probe(unchanged,2,zero_outcome,measured,actual,native_health)
+        T.check(T.contains(LOGS[#LOGS],"LAB_REPLAY attacker=2 cid=1000002 parent_cid=0 bone=pelvis dmg Health +0.000000"),
+            "actual fresh before/after native reads qualify an unchanged owner Health pair")
+        native_health = nil
+        local cached_text, cached_outcome, cached_fresh = attempts.run(unchanged,2,function()
+            error("cached unchanged hit must never run native damage again")
+        end)
+        local cached_logs = #LOGS
+        api.C3.log_replay_probe(unchanged,2,cached_outcome,cached_text,cached_fresh,native_health)
+        T.check(not cached_fresh and native_health==nil and native_calls==1 and #LOGS==cached_logs,
+            "cached zero outcome has no fresh snapshot evidence and never emits another pair")
+        ME["Get Damage"] = function(self) native_calls=native_calls+1; self.Health=self.Health-.00012 end
+        local _, tiny_status, tiny_mask, tiny_hp, tiny_health = api.apply_hit(
+            hit_rec{hit_id=1000003,round=3,target_peer_id=1,bone="pelvis",flags=0},2)
+        T.check(native_calls==2 and tiny_status==2 and tiny_mask==0 and math.abs(tiny_hp+.00012)<1e-9
+            and tiny_health==tiny_hp,
+            "sub-threshold native Health remains measurable while production changed mask stays zero")
+        local present_health = ME.Health
+        ME.Health = nil
+        ME["Get Damage"] = function() native_calls=native_calls+1 end
+        local _, absent_status, absent_mask, absent_hp, absent_health = api.apply_hit(
+            hit_rec{hit_id=1000004,round=3,target_peer_id=1,bone="pelvis",flags=0},2)
+        T.check(native_calls==3 and absent_status==2 and absent_mask==0 and absent_hp==0 and absent_health==nil,
+            "unreadable actual native Health cannot turn a production zero placeholder into diagnostic evidence")
+        ME.Health = present_health
+        ME["Get Damage"], api.C3.native_probe = previous_gd, previous_probe
     end
 end
