@@ -196,7 +196,10 @@ local function get_local_pawn(pc)
     pc = pc or WG.pc()
     if not pc or not pc:IsValid() then return nil end
     local pawn = pc.Pawn
-    if not pawn or not pawn:IsValid() then return nil end
+    if not pawn or not pawn:IsValid() then
+        pawn = WG.ai_pawn()   -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
+        if not pawn then return nil end
+    end
     if pawn ~= _pawn_cache then
         _pawn_cache = pawn
         _mesh_cache = nil   -- re-resolve on identity change
@@ -1064,7 +1067,7 @@ local function in_arena_world()
 end
 
 local spawn_env = SPL and SPL.make_ue_env({
-    UEHelpers = UEHelpers, pc = WG.pc, log = Log, state_dir = STATE_DIR,
+    UEHelpers = UEHelpers, pc = WG.pc, ai_pawn = WG.ai_pawn, log = Log, state_dir = STATE_DIR,
     my_peer_id = get_my_peer_id,   -- re-read every call (0.5 s throttle), never latched
     match = function() return current_match() end,
     world = function()

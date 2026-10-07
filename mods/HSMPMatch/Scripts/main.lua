@@ -211,7 +211,7 @@ local function local_pawn()
     if not pc or not pc:IsValid() then return nil, nil end
     local p = pc.Pawn
     if p and p:IsValid() then return p, pc end
-    return nil, pc
+    return WG.ai_pawn(), pc   -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
 end
 
 local function pawn_health(p)

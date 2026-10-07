@@ -2123,6 +2123,8 @@ function D.make_ue_env(ctx)
                 if pw and pw:IsValid() then p = pw end
             end
         end)
+        -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
+        if not p and WG.ai_pawn then p = WG.ai_pawn() end
         return p
     end
     function env.pawn_id(p)

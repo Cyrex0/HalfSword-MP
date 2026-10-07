@@ -357,7 +357,8 @@ local function local_pawn()
     if not pc or not pc:IsValid() then return nil end
     local p = pc.Pawn
     if p and p:IsValid() then return p end
-    return nil
+    -- the game's own AI drives our pawn (dev, HSMPParity `ai on`; shared/hsmp_wg.lua)
+    return PCF.aip and PCF.aip.ai_pawn_lookup and PCF.aip.ai_pawn_lookup() or nil
 end
 
 local function busy(w)
@@ -1839,6 +1840,7 @@ local SETTLE = (function()
             if ok2 and type(m2) == "table" then m = m2; ok = true; break end
         end
     end
+    if ok and type(m) == "table" then PCF.aip = m end   -- local_pawn's AI-drive fallback
     if ok and type(m) == "table" and m.settle_tracker then return m.settle_tracker(), m.SETTLE_S end
     -- fallback (shared lib missing): the same rule inline
     local st = { key = nil, at = nil }

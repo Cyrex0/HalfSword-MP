@@ -323,7 +323,7 @@ function RD.pc() return UEHelpers.GetPlayerController() end
 function RD.pawn_of(pc)
     pc = pc or UEHelpers.GetPlayerController()
     if pc and pc:IsValid() and pc.Pawn and pc.Pawn:IsValid() then return pc.Pawn end
-    return nil
+    return WG.ai_pawn()   -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
 end
 local function valid(o)
     if o == nil then return false end

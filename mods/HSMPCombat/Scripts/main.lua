@@ -368,7 +368,7 @@ local function local_pawn()
     if not pc or not pc:IsValid() then return nil end
     local p = pc.Pawn
     if p and p:IsValid() then return p end
-    return nil
+    return WG.ai_pawn()   -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
 end
 
 local function body_mesh(w)
@@ -944,7 +944,10 @@ function C3.protect(w, peer)
         end)
     end
     if C3.STANDIN_INVULNERABLE then
-        pcall(function() if w.Invulnerable ~= true then w.Invulnerable = true end end)
+        -- dev `combat_probe`: the game's own Get Damage runs on the stand-in (and is put back,
+        -- C3.standin_hit) so each blow's native result can be logged beside its replay
+        local inv = not C3.native_probe
+        pcall(function() if w.Invulnerable ~= inv then w.Invulnerable = inv end end)
         pcall(function() w["Force Disable Dismemberment"] = true end)
         local nm = wname(w)
         if nm then C3.gated[nm] = true end
@@ -1034,6 +1037,13 @@ function C3.standin_hit(w)
         end
     end
     if not hurt then return end   -- Invulnerable held: nothing to undo
+    if C3.native_probe then
+        -- dev measurement (`autotest combat_probe on`): what the game itself did to this
+        -- body for my blow, logged by the claim this same Deal Complex Damage call makes.
+        local d = diff(b.f, now)
+        C3.probe_last = { name = wname(w), at = now_ms(),
+            text = string.format("dmg Health %s [%s]", (b.f[1] and now[1]) and string.format("%+.2f", now[1] - b.f[1]) or "?", fmt_fields(d)) }
+    end
     -- (runs inside the Deal Complex Damage call too, before its callback reads
     -- the contact gate)
     C3.put_all(w, b, true)
@@ -1238,7 +1248,13 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
     if WG.travel_from ~= nil or WG.key == nil or not WG.settled() then return end
     local coll = pv(CollidedComponent)
     local src = hit_source(coll)
-    if not (me and src and same(src, me)) then return end
+    if not (me and src and same(src, me)) then
+        if src and not me then
+            CX.me_stops = (CX.me_stops or 0) + 1
+            if CX.me_stops <= 5 or CX.me_stops % 500 == 0 then Log("claim stopped: no local pawn resolved (#%d)", CX.me_stops) end
+        end
+        return
+    end
     if gate == false then
         CX.gate_stops = (CX.gate_stops or 0) + 1
         if CX.gate_stops <= 5 or CX.gate_stops % 1000 == 0 then
@@ -1251,7 +1267,23 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
     end
     local peer = puppet_peer[nm]
     local mine, theirs = C3.life_for(my_peer_id,true), C3.displayed_for(peer,w)
-    if not mine or not theirs or mine.match_id ~= theirs.match_id or mine.round ~= theirs.round then return end
+    if not mine or not theirs or mine.match_id ~= theirs.match_id or mine.round ~= theirs.round then
+        CX.ctx_stops = (CX.ctx_stops or 0) + 1
+        if CX.ctx_stops <= 5 or CX.ctx_stops % 500 == 0 then
+            Log("claim context missing: mine=%s theirs=%s peer=%s (#%d)", mine and "ok" or "nil", theirs and "ok" or "nil", tostring(peer), CX.ctx_stops)
+        end
+        return
+    end
+    if C3.native_probe then
+        -- this blow on one line: my native inputs and what the game did to the stand-in
+        local pl = C3.probe_last
+        C3.probe_last = nil
+        local v = vec(pv(HitVelocity))
+        local b = ""; pcall(function() b = pv(HitBone):ToString() end)
+        Log("PROBE native on peer %s bone=%s vel=%.0f rig=%.2f cut=%.0f stab=%.2f: %s", tostring(peer), b,
+            math.sqrt(v[1] ^ 2 + v[2] ^ 2 + v[3] ^ 2), num(pv(Rigidity)), num(pv(CuttingPower)), num(pv(StabRate)),
+            (pl and pl.name == nm and now_ms() - pl.at < 100) and pl.text or "dmg Health +0.00 [none]")
+    end
     CX.input_diag = (CX.input_diag or 0) + 1
     if CX.input_diag <= 10 or CX.input_diag % 100 == 0 then
         pcall(function()
@@ -3078,8 +3110,27 @@ local function on_tick()
     end
 end
 
+-- Dev measurement switch (HSMP_DEV=1 only): `hsmp-tools ipc-ctl --pid <game> autotest
+-- combat_probe on|off` (the DevCtl ring; the native module fans each record out to every
+-- Lua state). On: stand-ins take the game's own damage for my blows, logged as PROBE and
+-- put back (C3.standin_hit), beside the owner's replay of the same claim.
+C3.probe_out = {}
+function C3.poll_probe()
+    if (os.getenv("HSMP_DEV") or "") ~= "1" then return end
+    local ipc = rawget(_G, "HSMP_IPC")
+    if not (ipc and ipc.dev_poll) then return end
+    for i = 1, ipc.dev_poll(8, C3.probe_out) do
+        local d = C3.probe_out[i] and (C3.probe_out[i].data or C3.probe_out[i])
+        if type(d) == "table" and d.op == 1 and d.key == "combat_probe" then
+            C3.native_probe = tostring(d.arg or "") == "on"
+            Log("combat_probe %s: stand-ins %s the game's own damage for my blows (logged as PROBE, put back)",
+                C3.native_probe and "ON" or "OFF", C3.native_probe and "take" or "no longer take")
+        end
+    end
+end
+
 LoopAsync(TICK_MS, function()
-    ExecuteInGameThread(on_tick)
+    ExecuteInGameThread(function() pcall(C3.poll_probe); on_tick() end)
     return false
 end)
 

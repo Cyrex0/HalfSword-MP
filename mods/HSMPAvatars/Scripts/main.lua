@@ -333,7 +333,9 @@ local function local_pawn()
     if not pc then return nil end
     local p = pc.Pawn
     if p and p:IsValid() then return p end
-    return nil
+    -- the game's own AI drives our pawn (dev, HSMPParity `ai on`; shared/hsmp_wg.lua)
+    if TUNE.aip == nil then TUNE.aip = load_module("hsmp_wg") or false end
+    return TUNE.aip and TUNE.aip.ai_pawn_lookup() or nil
 end
 
 -- UObject identity by address: two userdata wrappers of the same object are
@@ -3939,6 +3941,10 @@ local function on_tick()
     -- mistake the other's Willie during spawn.
     local me
     pcall(function() local p = pc.Pawn; if p and p:IsValid() then me = p end end)
+    if not me then   -- our AI-driven pawn (dev `ai on`, shared/hsmp_wg.lua)
+        if TUNE.aip == nil then TUNE.aip = load_module("hsmp_wg") or false end
+        me = TUNE.aip and TUNE.aip.ai_pawn_lookup() or nil
+    end
     if not me then return end
     -- Nothing touches Willies in the first PX.WORLD_SETTLE_S of a world: the
     -- previous world is still being purged incrementally and the new world's

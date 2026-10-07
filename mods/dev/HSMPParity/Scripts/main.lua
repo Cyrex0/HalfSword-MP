@@ -85,7 +85,8 @@ local function me_pawn()
     local pc = WG.pc()
     if not valid(pc) then return nil end
     local p = pc.Pawn
-    return valid(p) and p or nil
+    if valid(p) then return p end
+    return WG.ai_pawn()   -- `ai on`: the game's own AI drives our pawn
 end
 local function bp_call(obj, name, ...)
     local fn
@@ -1006,6 +1007,70 @@ local function exp_frames(arg)
         for k,v in pairs(r.errors)do Log("BODYJOINT_ERROR name=%s field=%s reason=%s",r.name,k,v) end
     end
 end
+-- `ai on [peer]` / `ai off`: hand my pawn to the game's own fighter AI (AI_BP_C, the solo
+-- opponent) and point it at a stand-in. AI_BP_C acts only on the pawn it possesses (its
+-- MoveToLocation, "My Pawn" from K2_GetPawn) and Willie_BP steers from "AI Control Rotation"
+-- only while "Player" is false; AI init destroys a controller whose pawn is player 0's. So:
+-- the PlayerController lets go, SpawnDefaultController() makes the class-default AI_BP_C
+-- possess it, Player = false, Event Initialize AI, Event Get Into Combat State(target).
+-- The mods find our pawn through WG.ai_pawn meanwhile (shared/hsmp_wg.lua). `off` reverses.
+local AI_AUTO = nil   -- `ai auto`: { tried = "<world>:<pawn>" }
+local function exp_ai(arg)
+    local mode, peer = tostring(arg):match("^(%a+)%s*(%d*)$")
+    local pc = WG.pc()
+    if not valid(pc) then Log("ai: no PlayerController"); return end
+    if mode == "on" then
+        local me = pc.Pawn
+        if not valid(me) then Log("ai: no possessed pawn (already AI-driven?)"); return end
+        local si = standin_of(tonumber(peer))
+        if not si then Log("ai: no stand-in to fight"); return end
+        local name = nm(me)
+        pcall(function() pc:UnPossess() end)
+        local ok, err = pcall(function() me:SpawnDefaultController() end)
+        local c; pcall(function() c = me.Controller end)
+        local cls = "none"; pcall(function() cls = c:GetClass():GetFName():ToString() end)
+        if not (ok and valid(c) and cls == "AI_BP_C") then
+            pcall(function() pc:Possess(me) end)
+            Log("ai: refused - SpawnDefaultController gave %s (%s); control returned to the player", cls, tostring(err)); return
+        end
+        pcall(function() me.Player = false end)
+        local i1 = bp_call(c, "Event Initialize AI")
+        local i2 = bp_call(c, "Event Get Into Combat State", 30.0, si, si:K2_GetActorLocation())
+        local my_team, si_team = -1, -1
+        pcall(function() my_team = me["Team Int"]; si_team = si["Team Int"] end)
+        Log("ai: %s now driven by %s (init=%s combat=%s) target %s team %s vs %s", name, nm(c), tostring(i1), tostring(i2), nm(si), tostring(my_team), tostring(si_team))
+    elseif mode == "off" then
+        AI_AUTO = nil
+        local me = WG.ai_pawn()
+        if not me then Log("ai: no AI-driven pawn of ours"); return end
+        local c; pcall(function() c = me.Controller end)
+        pcall(function() c:UnPossess() end)
+        pcall(function() c:K2_DestroyActor() end) -- unsafe: ok the AI_BP_C controller we spawned for our own pawn, never a Willie
+        pcall(function() me.Player = true end)
+        local ok = pcall(function() pc:Possess(me) end)
+        Log("ai: %s back to the player (possess=%s)", nm(me), tostring(ok))
+    elseif mode == "auto" then
+        -- sticky: every round (a round reload makes a fresh pawn) is fought by the AI
+        AI_AUTO = { tried = nil }
+        Log("ai: auto - every Live round from now on is fought by the game's own AI")
+    else
+        Log("ai: expected on [peer] | off | auto")
+    end
+end
+-- `ai auto`: hand each new player-held pawn to the AI once the round is Live and a stand-in
+-- exists (one try per pawn and world; a refusal is logged by exp_ai and not retried).
+local function ai_auto_tick()
+    if not AI_AUTO or not (SESS and SESS:live()) or not WG.settled() then return end
+    local pc = WG.pc()
+    local p = valid(pc) and pc.Pawn or nil
+    if not valid(p) then return end   -- already AI-driven (or no pawn yet)
+    local view = HSESS and HSESS.view and HSESS.view()
+    if not (view and view.state == "live") then return end
+    local key = tostring(WG.key) .. ":" .. nm(p)
+    if AI_AUTO.tried == key or not standin_of(nil) then return end
+    AI_AUTO.tried = key
+    exp_ai("on")
+end
 local driver
 local function exp_drive(arg)
     if not driver then
@@ -1017,7 +1082,7 @@ local function exp_drive(arg)
     end
     driver.start(arg)
 end
-local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, defeat=exp_defeat, drive=exp_drive }
+local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, defeat=exp_defeat, drive=exp_drive, ai=exp_ai }
 if rawget(_G, "HSMP_PARITY_TEST") then
     HSMP_PARITY_TEST.arm = exp_arm
     HSMP_PARITY_TEST.state = function() return arm_drive end
@@ -1031,6 +1096,7 @@ LoopAsync(33, function()
         end)
     end
     swing_tick()
+    pcall(ai_auto_tick)
     cutproxy_tick()
     defeat_tick()
     if inventory then inventory.tick(WG.key,WG.settled() and SESS and SESS:live()) end

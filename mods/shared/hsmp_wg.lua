@@ -44,6 +44,33 @@ local M = { VERSION = 2 }
 
 M.TRAVEL_HOLD_S = 10
 
+-- The local pawn while the game's own AI drives it (dev only, HSMPParity `ai on`): the
+-- PlayerController is unpossessed and an AI_BP_C holds our Willie with "Player" false.
+-- Callers that resolve "my pawn" through PlayerController.Pawn fall back to this when it is
+-- empty. Only the Willie HSMPSync verified as ours this round (bus spawn_status: world-scoped,
+-- written after placement, so past the settle window), found fresh by name, held by AI_BP_C
+-- with Player false. Release builds (no HSMP_DEV=1) never resolve it. Nothing is cached here
+-- (WG.ai_pawn caches per frame).
+local AI_DEV = (os.getenv("HSMP_DEV") or "") == "1"
+function M.ai_pawn_lookup()
+    if not AI_DEV then return nil end
+    local found
+    pcall(function()
+        local ipc = rawget(_G, "HSMP_IPC")
+        local st = ipc and ipc.bus_table and ipc.bus_table("spawn_status")
+        local name = st and st.verified == true and st.pawn
+        if type(name) ~= "string" or name == "" then return end
+        for _, w in pairs(FindAllOf("Willie_BP_C") or {}) do
+            if w:IsValid() and w:GetFName():ToString() == name then
+                local c = w.Controller
+                if c and c:IsValid() and c:GetClass():GetFName():ToString() == "AI_BP_C" and w.Player == false then found = w end
+                break
+            end
+        end
+    end)
+    return found
+end
+
 -- The world-settle rule. Nothing may walk FindAllOf over actors (Willies,
 -- weapons, props) or read their names in the first SETTLE_S of a world: the
 -- previous world is still being purged incrementally and the new player
@@ -137,6 +164,20 @@ function M.new(opts)
         return pc
     end
 
+    -- The local pawn while the game's own AI drives it (dev only, HSMPParity `ai on`): the
+    -- PlayerController is unpossessed and an AI_BP_C holds our Willie with "Player" false.
+    -- Callers that resolve "my pawn" through PlayerController.Pawn fall back to this when it
+    -- is empty. Only the Willie HSMPSync verified as ours this round (bus spawn_status, which
+    -- is world-scoped), looked up fresh by name, held by AI_BP_C with Player false; once per
+    -- frame like WG.pc(). Release builds (no HSMP_DEV=1) never resolve it.
+    local aic = {}
+    function WG.ai_pawn()
+        local f = frame()
+        if aic.frame ~= nil and aic.frame == f and aic.drops == WG.drops then return aic.pawn end
+        local found = M.ai_pawn_lookup()
+        aic.pawn, aic.frame, aic.drops = found, f, WG.drops
+        return found
+    end
     -- The current UWorld through this frame's WG.pc() (UEHelpers.GetWorld()
     -- is another full PlayerController walk); the UEHelpers fallback only
     -- when there is no PlayerController. nil when there is no valid world.
