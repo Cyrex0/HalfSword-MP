@@ -2881,16 +2881,24 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     end
     sv.cmd = sv.cmd or {}
     sv.mass = sv.mass or {}
+    sv.dvp = sv.dvp or {}
     if sv.cmd[1] then
         local idv = TUNE.impact_dv or IMPACT_DV
         for _, i in ipairs(PX.CONTACT_BODIES) do
             local cv = sv.cmd[i]
             if cv then
                 local ok, dv = pcall(PX.contact_body, mesh, sv, i, cv, near)
-                if ok and dv and idv > 0 and dv > idv and not body.ramp_at then
+                -- A blow is a STEP in how far the solver left the body off its command. A limb
+                -- held against a joint or a grip sits a steady ~900 uu/s off the capped servo
+                -- (measured live: an idle stand-in's hand_r 920 uu/s every frame, 438 false
+                -- "struck" in a 70-round gate without one blow), which is no reason to yield.
+                local prev = sv.dvp[i]
+                if ok and dv then sv.dvp[i] = dv end
+                if ok and dv and prev and idv > 0 and dv > idv and dv - prev > idv and not body.ramp_at then
                     if not (p.impact_logged and now - p.impact_logged < 2000) then
                         p.impact_logged = now
-                        Log("pose peer %d: struck (%s %.0f uu/s off the servo): yielding %d ms", id, PURE.V2_SLOTS[i] or "?", dv, TUNE.impact_ms or IMPACT_MS)
+                        Log("pose peer %d: struck (%s %.0f uu/s off the servo, +%.0f in one frame): yielding %d ms", id,
+                            PURE.V2_SLOTS[i] or "?", dv, dv - prev, TUNE.impact_ms or IMPACT_MS)
                     end
                     p.impact_until = now + (TUNE.impact_ms or IMPACT_MS)
                 end
