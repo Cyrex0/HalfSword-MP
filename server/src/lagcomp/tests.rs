@@ -548,9 +548,15 @@ fn native_head_side_contact_uses_only_its_module_envelope() {
     assert!(close(frame,authentic) && dot<0.99,"forged / stand-in rotation is replaced, its error reported");
     let mut denormal=cutting;denormal.hit_box_frame[4]=0.4;
     assert!(reason(sc.eval(&denormal)).contains("cutting geometry differs"),"non-unit Box rotation refused");
+    // Native keeps the last module's Box: a contact elsewhere on the striking module is no
+    // reason to refuse; the owner still replays the authenticated Box frame.
+    // (the authenticated Box spans x -12..32 around (10, 0, 130); the shaft runs along x)
+    let mut shaft=prior_module;shaft.location=[-40.0,0.0,130.0];
+    let (frame,_)=replayed(sc.eval(&shaft));
+    assert!(close(frame,authentic),"a Grip contact 28 cm off the retained Box is accepted and replays the authenticated Box");
     let mut off_box=cutting;off_box.location=[-5.0,19.0,190.0];
     let r=reason(sc.eval(&off_box));
-    assert!(r.contains("off the original cutting Box"),"a contact off the authenticated Box is refused: {r}");
+    assert!(r.contains("module_miss"),"a contact off the striking module is still refused: {r}");
     let mut reciprocal=cutting;reciprocal.hit_box_frame[7]=1.0;reciprocal.hit_box_frame[10]=22.0;
     assert!(reason(sc.eval(&reciprocal)).contains("cutting geometry differs"),"scaled extent equality cannot spoof native X-before-scale clamp");
     let mut wrong_class=cutting;wrong_class.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_ArmingSword_C");

@@ -2554,13 +2554,18 @@ impl Store {
                         return Eval::Reject(format!("hit_box: cutting geometry differs from original hand/component history; center_cm={center_error:.3} rotation_dot={dot:.6} scale_delta={scale_error:?} extent_cm={extent_error:?} attacker_ts={at} victim_ts={} component={component} box={ordinal}",if (9..=16).contains(&bone) {arm} else {view}));
                     }
                     // Where it was: the attacker's authenticated Box in the world. The contact
-                    // lies on it, the same on every screen (the attacker's own weapon).
+                    // need NOT lie on it: ModularWeaponBP writes `Hit Box Collision` only when the
+                    // struck module has a Box child and never resets it, so a haft or grip contact
+                    // carries the head's Box from an earlier module (native-cutting-box proof).
+                    // The contact itself is checked against the striking module below
+                    // (module_miss); live, 35 of 77 honest polearm claims landed 48-178 cm from
+                    // their retained Box and were refused when this was a rejection.
                     let en=expected_norm.sqrt();
                     let eq=[expected_rotation[0]/en,expected_rotation[1]/en,expected_rotation[2]/en,expected_rotation[3]/en];
                     let local=posecodec::v2::qrot(posecodec::v2::qconj(eq),sub(c,expected_center));
                     let outside=len(std::array::from_fn(|i|(local[i].abs()-box_shape.half[i]).max(0.0)));
-                    if outside>BODY_TOL {
-                        return Eval::Reject(format!("hit_box: contact {outside:.1} cm off the original cutting Box; attacker_ts={at} component={component} box={ordinal}"));
+                    if outside>BODY_TOL && crate::validate::rate::log_ok("hit_box_retained") {
+                        tracing::info!(attacker, outside_cm = outside, component, ordinal, "native HitBox retained from another module: contact off the cutting Box");
                     }
                     // The replay frame relative to the victim's real bone, not the stand-in's
                     // (whose rotation error, up to 90 deg at the wrist, it would carry).
