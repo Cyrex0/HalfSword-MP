@@ -234,6 +234,14 @@ if opts.kind == "parse" then
     T.check(not P.pose_context_ok(pose, s, m, 2), "previous round pose is rejected")
     pose.round, pose.has_context = 2, false
     T.check(not P.pose_context_ok(pose, s, m, 2), "active match never accepts an unlabelled pose")
+    -- A relayed peer_root as the native decoder hands it over: plain Root fields, no has_context.
+    local root = { tick = 2600, ts = 65676, pos = { 815.3, 280.4, 377.0 }, rot = { 0, 0, -0.95, 0.30 },
+                   vel = { 0, 0, 0 }, match_id = 901, round = 2, life = 3, send_wall_ms = 1 }
+    T.check(P.pose_context_ok(P.root_context(root), s, m, 2), "stamped peer root of the current life is live (stand-in can spawn)")
+    root.life = 2
+    T.check(not P.pose_context_ok(P.root_context(root), s, m, 2), "peer root of a previous life is rejected")
+    root.life, root.match_id = 3, 0
+    T.check(not P.pose_context_ok(P.root_context(root), s, m, 2), "unstamped peer root is rejected in a match")
     s.state, s.spawn_round, pose.round, pose.life, pose.has_context = "countdown", 3, 3, 1, true
     T.check(P.pose_context_ok(pose, s, m, 2), "next round placement uses its own initial life")
     local shown=P.displayed_pose(pose,"Willie_BP_C_rendered",100,500)

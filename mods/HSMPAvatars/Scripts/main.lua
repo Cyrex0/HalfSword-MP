@@ -450,7 +450,7 @@ local function read_snapshot(id)
         local t = IPC.peer_rec("peer_root", id)
         local r = type(t) == "table" and t.root or nil
         if type(r) ~= "table" or type(r.pos) ~= "table" or not r.tick then return nil end
-        if not PURE.pose_context_ok(r,HSM and HSM.view(),HSM and HSM.mode(),id) then return nil end
+        if not PURE.pose_context_ok(PURE.root_context(r),HSM and HSM.view(),HSM and HSM.mode(),id) then return nil end
         -- yaw (degrees) of the quaternion {x, y, z, w}, as FQuat::Rotator
         local q = type(r.rot) == "table" and r.rot or {}
         local x, y, z, w = tonumber(q[1]) or 0, tonumber(q[2]) or 0, tonumber(q[3]) or 0, tonumber(q[4]) or 1

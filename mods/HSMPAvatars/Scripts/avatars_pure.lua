@@ -235,6 +235,13 @@ function PURE.playback_row(peer, shown, now, allow_stale)
         match_id=shown.match_id,round=shown.round,life=shown.life,pawn=shown.pawn}
 end
 
+-- A relayed Root carries its original context as plain fields (no has_context flag, unlike
+-- PeerPlay): stamped when match_id is set. Returns the table pose_context_ok expects.
+function PURE.root_context(r)
+    local m = type(r) == "table" and math.tointeger(r.match_id) or 0
+    return { has_context = m ~= 0, match_id = r and r.match_id, round = r and r.round, life = r and r.life }
+end
+
 function PURE.pose_context_ok(o, session, mode, peer)
     if type(session) ~= "table" or (session.match_id or 0) == 0 then return true end
     if type(o) ~= "table" or o.has_context ~= true then return false end
