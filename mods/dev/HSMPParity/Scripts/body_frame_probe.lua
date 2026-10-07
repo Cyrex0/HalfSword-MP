@@ -7,6 +7,20 @@ local function num(v)
     return v
 end
 local function vec(v)return {num(v.X),num(v.Y),num(v.Z)}end
+-- A named OutParm from the tables passed to one native call. The pinned UE4SS fills
+-- out-params by name but not necessarily into the table at the same position, so every
+-- table of the call is searched; a miss reports the keys that were actually written.
+local function outp(name,...)
+    local seen={}
+    for i=1,select("#",...)do
+        local t=select(i,...)
+        if type(t)=="table" then
+            if t[name]~=nil then return t[name] end
+            for k in pairs(t)do seen[#seen+1]=tostring(k)end
+        end
+    end
+    error("out-param "..name.." not written (keys: "..table.concat(seen,",")..")")
+end
 local function frame(t)
     local q=t.Rotation
     return {p=vec(t.Translation),q={num(q.X),num(q.Y),num(q.Z),num(q.W)},scale=vec(t.Scale3D)}
@@ -43,7 +57,7 @@ function M.capture(mesh,id,bones,e)
             if not jn then error("no joint dictionary entry with child "..bone) end
             local s1,tw,s2={},{},{}
             mesh:GetCurrentJointAngles(e.fname(jn),s1,tw,s2)
-            return {joint=jn,swing1=num(s1.Swing1Angle),twist=num(tw.TwistAngle),swing2=num(s2.Swing2Angle)}
+            return {joint=jn,swing1=num(outp("Swing1Angle",s1,tw,s2)),twist=num(outp("TwistAngle",s1,tw,s2)),swing2=num(outp("Swing2Angle",s1,tw,s2))}
         end)
         if e.target then attempt(row,"target",function()
             local t=e.target(bone)
@@ -68,7 +82,7 @@ function M.capture(mesh,id,bones,e)
                 local lib=e.constraint_library
                 local parent,child={},{}
                 lib:GetAttachedBodyNames(accessor,parent,child)
-                local pn,cn=parent.ParentBody:ToString(),child.ChildBody:ToString()
+                local pn,cn=outp("ParentBody",parent,child):ToString(),outp("ChildBody",parent,child):ToString()
                 assert(pn==joint.parent and cn==joint.child,"constraint endpoint mismatch")
                 local s1,sl1,s2,sl2,tw,tl={},{},{},{},{},{}
                 lib:GetAngularLimits(accessor,s1,sl1,s2,sl2,tw,tl)
@@ -77,11 +91,11 @@ function M.capture(mesh,id,bones,e)
                 local x,y,z,limit={},{},{},{}
                 lib:GetLinearLimits(accessor,x,y,z,limit)
                 return {parent=pn,child=cn,index=accessor.Index,
-                    swing1_motion=num(s1.Swing1MotionType),swing1_limit=num(sl1.Swing1LimitAngle),
-                    swing2_motion=num(s2.Swing2MotionType),swing2_limit=num(sl2.Swing2LimitAngle),
-                    twist_motion=num(tw.TwistMotionType),twist_limit=num(tl.TwistLimitAngle),
-                    angular_strength=num(ps.OutPositionStrength),angular_damping=num(vs.OutVelocityStrength),angular_force_limit=num(fl.OutForceLimit),
-                    linear_x=num(x.XMotion),linear_y=num(y.YMotion),linear_z=num(z.ZMotion),linear_limit=num(limit.Limit)}
+                    swing1_motion=num(outp("Swing1MotionType",s1,sl1,s2,sl2,tw,tl)),swing1_limit=num(outp("Swing1LimitAngle",s1,sl1,s2,sl2,tw,tl)),
+                    swing2_motion=num(outp("Swing2MotionType",s1,sl1,s2,sl2,tw,tl)),swing2_limit=num(outp("Swing2LimitAngle",s1,sl1,s2,sl2,tw,tl)),
+                    twist_motion=num(outp("TwistMotionType",s1,sl1,s2,sl2,tw,tl)),twist_limit=num(outp("TwistLimitAngle",s1,sl1,s2,sl2,tw,tl)),
+                    angular_strength=num(outp("OutPositionStrength",ps,vs,fl)),angular_damping=num(outp("OutVelocityStrength",ps,vs,fl)),angular_force_limit=num(outp("OutForceLimit",ps,vs,fl)),
+                    linear_x=num(outp("XMotion",x,y,z,limit)),linear_y=num(outp("YMotion",x,y,z,limit)),linear_z=num(outp("ZMotion",x,y,z,limit)),linear_limit=num(outp("Limit",x,y,z,limit))}
             end)
             out.joints[#out.joints+1]=row
         end

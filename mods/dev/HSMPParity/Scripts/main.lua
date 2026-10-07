@@ -1006,7 +1006,18 @@ local function exp_frames(arg)
         for k,v in pairs(r.errors)do Log("BODYJOINT_ERROR name=%s field=%s reason=%s",r.name,k,v) end
     end
 end
-local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, defeat=exp_defeat }
+local driver
+local function exp_drive(arg)
+    if not driver then
+        local m = load_module("duel_driver")
+        if not m then Log("drive: duel_driver.lua missing"); return end
+        driver = m.new({ log = Log, loop = LoopAsync, now = os.clock, world = function() return WG.key end,
+            pawn = function() local pc = WG.pc(); return valid(pc) and pc or nil, me_pawn() end,
+            standin = function() return standin_of(nil) end })
+    end
+    driver.start(arg)
+end
+local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, defeat=exp_defeat, drive=exp_drive }
 if rawget(_G, "HSMP_PARITY_TEST") then
     HSMP_PARITY_TEST.arm = exp_arm
     HSMP_PARITY_TEST.state = function() return arm_drive end
