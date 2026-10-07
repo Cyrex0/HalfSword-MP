@@ -24,6 +24,8 @@
 
 #[cfg(feature = "gui")]
 mod gui;
+#[cfg(feature = "gui")]
+mod render;
 
 use hsmp_launcher::install::{self, Env};
 use hsmp_launcher::{firewall, ops, report, saves, steam, update};
@@ -436,6 +438,11 @@ fn main() {
         {
             if let Err(e) = gui::run() {
                 ops::log_line(&format!("gui error: {e}"));
+                rfd::MessageDialog::new()
+                    .set_title("Half Sword Multiplayer launcher could not open")
+                    .set_level(rfd::MessageLevel::Error)
+                    .set_description(format!("{e}\n\nDetails: %LOCALAPPDATA%\\HSMP\\launcher\\launcher.log\n\nTry the compatibility renderer from PowerShell:\n$env:HSMP_LAUNCHER_RENDERER='glow'; .\\hsmp-launcher.exe\n\nYou can also use the launcher's command-line commands (see --help)."))
+                    .show();
                 std::process::exit(1);
             }
             return;

@@ -25,7 +25,7 @@ path = "src/main.rs"
 
 [features]
 default = ["gui"]
-gui = ["dep:eframe", "dep:rfd"]
+gui = ["dep:eframe", "dep:rfd", "dep:wgpu"]
 
 [dependencies]
 anyhow = "1"
@@ -40,10 +40,13 @@ hsmp-diag = { path = "../crates/hsmp-diag" }
 hsmp-master-core = { path = "../crates/hsmp-master-core" }
 # update check and download: rustls (no OpenSSL), no gzip
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
-eframe = { version = "0.31", optional = true }
+# OpenGL is the portable default; Windows can retry with Direct3D 12.
+eframe = { version = "0.31", optional = true, features = ["wgpu"] }
 rfd = { version = "0.15", optional = true }
 
 [target.'cfg(windows)'.dependencies]
+# eframe disables wgpu's default features; DX12 must be enabled explicitly.
+wgpu = { version = "24", optional = true, default-features = false, features = ["dx12"] }
 winreg = "0.52"
 windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
