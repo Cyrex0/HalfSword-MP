@@ -27,6 +27,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   its original value with fresh ownership and readback checks.
 - Keep confirmed missing-limb servo and physics exclusions through temporary playback
   release; add separate read-only native body and sever-component diagnostics.
+- Correct native sever-hook lookup through UE4SS's function-prefix parser and add
+  explicit topology availability plus optional native damage-caller diagnostics.
 - Add `hsmp-lab` recipe sessions, incremental evidence collectors, bootstrap comparisons,
   explicit baseline promotion, a regression journal and in-session A/B runs.
 - Add isolated modes/server-mods backend smoke and repeatable native deathmatch placement

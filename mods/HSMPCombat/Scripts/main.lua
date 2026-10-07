@@ -1163,11 +1163,12 @@ function C3.body_audit_context(w)
         match_id=ctx.match_id,round=ctx.round,life=ctx.life,pawn=wname(w),actor=addr_of(w),mesh=addr_of(mesh)}
 end
 C3.body_audit=load_module("native_body_audit")
+C3.topology_audit=load_module("native_topology_audit")
 if C3.body_audit then
     C3.body_audit=C3.body_audit.new({
         enabled=function()return os.getenv("HSMP_DEV")=="1" and C3.body_probe
             and WG.check() and WG.settled() end,
-        unwrap=pv,fname=FName,log=Log,context=C3.body_audit_context,
+        unwrap=pv,fname=FName,log=Log,context=C3.body_audit_context,topology_reader=C3.topology_audit,
     })
 end
 function C3.body_replay_meta(d,attacker)

@@ -574,3 +574,33 @@ qualified physics evidence, and the moving/drop-repickup slice does not
 reproduce Native15's persistent simulated/free-grip fault. No limits changed.
 Native16 closed normally with no new crash; it was a diagnostic run, not a
 passing all-gear/body/spawn acceptance run.
+
+Native17 (`b09a57a5`, raw `test-results/20261008-001612-261fa2-combat_manual`)
+closes the hook-registration defect in both clients: actual script IDs 68/68
+for Initiate and 69/69 for Delayed, registered=true, ambiguous=false, error=none.
+No completed sever was captured. Round 1 reproduced the pending spawn failure:
+healthy owner at 100 on every limb, all structural flags false, complete empty
+sever collections; failing proxy hand_r 12.7 cm / 53.5 degrees and lowerarm_r
+27.5 degrees, fresh source at 60 fps. Actual weapon simulation and COM matched,
+and the proxy right grip's six limits/drive were zero. All four frame/joint
+requests refused the pending Loading context; their Native16 results must not
+be substituted. Round 1 timed out; normal teardown reported no new crash.
+The next diagnostic change admits only the exact assigned pending tuple and
+revalidates fresh native world/pawn/Mesh, without granting readiness or changing
+physics. Native cutting continuation, structural wound replication and actual
+sever topology/collision remain open gameplay requirements.
+
+The next combined checkpoint adds a reviewed opt-in native caller journal
+(`HSMP_NATIVE_CALLER_PROBE=1`, default off). It uses the actual pinned DLL's
+legacy script callbacks and pointer-reference frame getters, only after a real
+Native frame established the game thread. Current frame chains are bounded to
+16, native object/class observations are copied scalars, serial-zero function
+roles re-resolve their full paths, and PID+sequence identifies shared-log rows.
+The journal grants no damage/factory authority; sequence is an observation,
+not a causal invocation identifier. Native callback/ancestry proof is pending.
+The harness now preserves HSMPNative.log with raw evidence. The body probe uses
+a separate bounded topology reader preserving 15-part presence versus true
+values and independent availability, while ordinary health/death Vitals stay
+unchanged. Its positive-cut fixtures are mocks. Pending frame/weapon snapshots
+now follow exact assigned Loading/Countdown tuples and fresh world/pawn/Mesh;
+placement verification is explicitly separate from diagnostic admission.

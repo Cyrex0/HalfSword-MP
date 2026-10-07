@@ -19,6 +19,46 @@ fn global() -> &'static Mutex<Native> {
     G.get_or_init(|| Mutex::new(Native::new()))
 }
 
+fn caller_thread_permitted(n: &Native) -> bool {
+    !n.poisoned && n.game_thread.is_some_and(|t| t == std::thread::current().id())
+}
+
+/// The caller journal never establishes a thread or waits for the native lock.
+#[no_mangle]
+pub extern "C" fn hsmp_native_caller_thread_ok() -> c_int {
+    catch_unwind(AssertUnwindSafe(|| match global().try_lock() {
+        Ok(n) => caller_thread_permitted(&n) as c_int,
+        Err(_) => 0,
+    })).unwrap_or(0)
+}
+
+#[cfg(test)]
+mod caller_guard_tests {
+    use super::*;
+    use mlua::ffi;
+    #[test]
+    fn caller_guard_requires_existing_frame_thread() {
+        // Anchor the vendored Lua runtime required by this crate's C entries.
+        let l = unsafe { ffi::luaL_newstate() };
+        assert!(!l.is_null());
+        unsafe { ffi::lua_close(l) };
+        let mut n = Native::new();
+        assert!(!caller_thread_permitted(&n), "probe cannot claim an unknown thread");
+        n.game_thread = Some(std::thread::current().id());
+        assert!(caller_thread_permitted(&n));
+        n.game_thread = Some(std::thread::spawn(|| std::thread::current().id()).join().unwrap());
+        assert!(!caller_thread_permitted(&n));
+        n.game_thread = Some(std::thread::current().id());
+        n.poisoned = true;
+        assert!(!caller_thread_permitted(&n));
+    }
+    #[test]
+    fn caller_guard_busy_is_unavailable() {
+        let _held = global().lock().unwrap();
+        assert_eq!(hsmp_native_caller_thread_ok(), 0);
+    }
+}
+
 /// Which registration path built the table ("F" or "E").
 static IMPL: OnceLock<&'static str> = OnceLock::new();
 

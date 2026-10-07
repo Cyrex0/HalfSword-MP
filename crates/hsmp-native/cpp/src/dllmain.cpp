@@ -67,8 +67,8 @@ namespace
         SYSTEMTIME t;
         GetLocalTime(&t);
         char line[1200];
-        snprintf(line, sizeof line, "[%02d:%02d:%02d.%03d][tid %lu] %s\n", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds,
-                 GetCurrentThreadId(), msg);
+        snprintf(line, sizeof line, "[%02d:%02d:%02d.%03d][pid %lu][tid %lu] %s\n", t.wHour, t.wMinute, t.wSecond, t.wMilliseconds,
+                 GetCurrentProcessId(), GetCurrentThreadId(), msg);
         OutputDebugStringA(line);
         std::lock_guard lk(g_log_mutex);
         if (g_log_path.empty()) return;
@@ -125,6 +125,27 @@ namespace
         GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
                            reinterpret_cast<LPCWSTR>(&pin_self), &h);
     }
+
+    void caller_journal(const HsmpCallerEvent& e)
+    {
+        logf("NATIVE_CALLER seq=%llu observed=%u hook=%u phase=%u role=%u count=%u end=%u chain_complete=%u context=%llu weak=%llu class=%llu class_weak=%llu class_name=%llu class_available=%u actor_kind=%u actor_kind_known=%u context_available=%u persistent=%u lua_post_order=unproved authority=false",
+             static_cast<unsigned long long>(e.seq), e.observed, e.hook, e.phase, e.role, e.count, e.end,
+             e.observed && e.end == 0 ? 1u : 0u, static_cast<unsigned long long>(e.context.address),
+             static_cast<unsigned long long>(e.context.weak), static_cast<unsigned long long>(e.context.class_address),
+             static_cast<unsigned long long>(e.context.class_weak), static_cast<unsigned long long>(e.context.class_name),
+             e.context.class_available, e.context.actor_kind, e.context.actor_kind_known, e.context.available, e.context.persistent);
+        for (uint32_t i = 0; i < e.count; ++i)
+        {
+            const auto& f = e.frames[i];
+            logf("NATIVE_CALLER_FRAME seq=%llu depth=%u role=%u node=%llu node_weak=%llu node_name=%llu node_available=%u object=%llu object_weak=%llu object_name=%llu object_available=%u class=%llu class_weak=%llu class_name=%llu class_available=%u actor_kind=%u actor_kind_known=%u persistent=%u",
+                 static_cast<unsigned long long>(e.seq), i, f.role, static_cast<unsigned long long>(f.node.address),
+                 static_cast<unsigned long long>(f.node.weak), static_cast<unsigned long long>(f.node.name), f.node.available,
+                 static_cast<unsigned long long>(f.object.address), static_cast<unsigned long long>(f.object.weak),
+                 static_cast<unsigned long long>(f.object.name), f.object.available,
+                 static_cast<unsigned long long>(f.object.class_address), static_cast<unsigned long long>(f.object.class_weak),
+                 static_cast<unsigned long long>(f.object.class_name), f.object.class_available, f.object.actor_kind, f.object.actor_kind_known, f.object.persistent);
+        }
+    }
 } // namespace
 
 class HSMPNativeMod final : public CppUserModBase
@@ -162,6 +183,12 @@ class HSMPNativeMod final : public CppUserModBase
     auto on_unreal_init() -> void override
     {
         logf("on_unreal_init");
+        char caller_probe[8]{};
+        if (!m_enabled || GetEnvironmentVariableA("HSMP_NATIVE_CALLER_PROBE", caller_probe, sizeof caller_probe) != 1
+            || caller_probe[0] != '1') return;
+        const char* unavailable = hsmp_reflect_caller_register(caller_journal);
+        logf("native caller journal: %s detail=%s ids=unavailable coverage=unavailable factory=false limit=16 default=off",
+             unavailable ? "unavailable" : "callbacks submitted", unavailable ? unavailable : "await actual callbacks");
     }
 
     auto on_lua_start(StringViewType mod_name, LuaMadeSimple::Lua& lua, LuaMadeSimple::Lua&, LuaMadeSimple::Lua&, LuaMadeSimple::Lua*)

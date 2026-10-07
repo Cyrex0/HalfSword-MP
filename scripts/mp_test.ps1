@@ -970,6 +970,8 @@ foreach ($o in $orphans) { $e = $script:Tracked | Where-Object { $_.pid -eq $o.p
 Collect-State
 $ue4ssLog = Join-Path $Win64 "ue4ss\UE4SS.log"
 if (Test-Path $ue4ssLog) { Copy-Item $ue4ssLog (Join-Path $Run "UE4SS.log") -Force }
+$nativeCppLog = Join-Path $Win64 "ue4ss\Mods\HSMPNative\HSMPNative.log"
+if (Test-Path $nativeCppLog) { Copy-Item $nativeCppLog (Join-Path $Run "HSMPNative.log") -Force }
 
 # a dump written while the game went down lands a few seconds after the last process exit;
 # settle before the crash scan and the triage window end (the window ends now, not earlier)

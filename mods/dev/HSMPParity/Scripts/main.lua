@@ -949,33 +949,41 @@ local function exp_fists(arg)
     Log("FISTPROBE passed=true pawn=%s actor=%s component=%s left=%s radius=%s scaled_radius=%s scale=%s collision=%s held_fields_unchanged=%s native_damage_calls=0",
         row.pawn,row.actor,row.component,tostring(row.left),tostring(row.radius),tostring(row.scaled_radius),f3(row.scale),tostring(row.collision),tostring(row.held_fields_unchanged))
 end
+local DIAGNOSTIC_CONTEXT=load_module("diagnostic_context")
+local function diagnostic_snapshot(peer)
+    if not DIAGNOSTIC_CONTEXT or not WG.check() or not WG.settled() then return nil end
+    local ipc=rawget(_G,"HSMP_IPC")
+    local view,mode=HSESS and HSESS.view(),HSESS and HSESS.mode()
+    local status,pawn
+    if peer==0 then
+        status=ipc and ipc.bus_table("spawn_status")
+        -- Placement diagnostics follow the assigned source even during the
+        -- native stand-in's temporary PlayerController possession swap.
+        if status and type(status.pawn)=="string" and status.pawn~="" then
+            for _,candidate in pairs(FindAllOf("Willie_BP_C") or {})do
+                if valid(candidate) and nm(candidate)==status.pawn then pawn=candidate;break end
+            end
+        end
+    else
+        pawn=standin_of(peer)
+        for _,row in ipairs((ipc and ipc.bus_table("playback") or {}).rows or {})do
+            if row.peer==peer then status=row;break end
+        end
+    end
+    if not valid(pawn) then return nil end
+    local mesh,world=pawn.Mesh,WG.world()
+    if not valid(mesh) or not valid(world) then return nil end
+    local id=DIAGNOSTIC_CONTEXT.resolve({peer=peer,view=view,mode=mode,status=status,
+        pawn=nm(pawn),address=pawn:GetAddress(),mesh=nm(mesh),mesh_address=mesh:GetAddress(),
+        world=tostring(world:GetAddress()).."@"..world:GetFullName(),world_key=WG.key})
+    return id,pawn,mesh
+end
 local function exp_frames(arg)
     local peer,bone=tostring(arg):match("^(%d+)%s*(%S*)")
     peer=tonumber(peer) or 0
-    local pawn=peer==0 and me_pawn() or standin_of(peer)
     local probe,joints=load_module("body_frame_probe"),load_module("body_joint_dictionary")
-    if not valid(pawn) or not probe or not joints then Log("BODYFRAME refused pawn/probe/dictionary unavailable");return end
-    local mesh=pawn.Mesh
-    if not valid(mesh) then Log("BODYFRAME refused primary native mesh unavailable");return end
-    local function current_context()
-        local ipc=rawget(_G,"HSMP_IPC")
-        local view,mode=HSESS and HSESS.view(),HSESS and HSESS.mode()
-        if not view or not mode or mode.match_id~=view.match_id or mode.round~=view.round then return nil end
-        local id=peer==0 and view.my_peer_id or peer
-        local row=mode.rows and mode.rows[id]
-        if not row then return nil end
-        local status
-        if peer==0 then status=ipc and ipc.bus_table("spawn_status")
-        else
-            local pb=ipc and ipc.bus_table("playback")
-            for _,r in ipairs(pb and pb.rows or {})do if r.peer==peer and r.pawn==nm(pawn) then status=r;break end end
-        end
-        if not status or (peer==0 and status.verified~=true) or status.pawn~=nm(pawn)
-            or status.match_id~=mode.match_id or status.round~=mode.round or status.life~=row.life then return nil end
-        return {match_id=mode.match_id,round=mode.round,life=row.life,pawn=nm(pawn),pawn_address=pawn:GetAddress(),
-            display_time=status.body_ts or status.local_ms,world=WG.key}
-    end
-    local original=current_context()
+    if not probe or not joints then Log("BODYFRAME refused probe/dictionary unavailable");return end
+    local original,_,mesh=diagnostic_snapshot(peer)
     if not original then Log("BODYFRAME refused original context unavailable");return end
     local physics,library
     pcall(function()local c=StaticFindObject("/Script/Engine.PhysicsObjectBlueprintLibrary");if valid(c) then physics=c:GetCDO() end end)
@@ -986,11 +994,13 @@ local function exp_frames(arg)
     local result,why=probe.capture(mesh,original,bones,{physics=physics,constraint_library=valid(library) and library or nil,joints=joints,
         fname=FName,allowed_bone=function(n)return allowed[n]==true end,now=function()return os.clock()*1000 end,
         current=function(id,m)
-            local fresh=current_context()
-            return fresh and valid(m) and m:GetAddress()==mesh:GetAddress() and fresh.pawn_address==id.pawn_address
-                and fresh.match_id==id.match_id and fresh.round==id.round and fresh.life==id.life and WG.key==original.world
+            local fresh=diagnostic_snapshot(peer)
+            return DIAGNOSTIC_CONTEXT.same(id,fresh) and m:GetAddress()==fresh.mesh_address and nm(m)==fresh.mesh
         end})
     if not result then Log("BODYFRAME refused %s",tostring(why));return end
+    Log("BODYFRAME_CONTEXT peer=%s pawn=%s actor_address=%s mesh=%s mesh_address=%s match=%s round=%s life=%s world=%s display_time=%s placement_verified=%s read_only=true",
+        tostring(peer),original.pawn,tostring(original.address),original.mesh,tostring(original.mesh_address),tostring(original.match_id),
+        tostring(original.round),tostring(original.life),original.world,tostring(original.display_time),original.placement_verified)
     for _,r in ipairs(result.rows)do
         local s,p,a=r.socket,r.physics,r.joint_angles_deg
         local function q(v)return v and string.format("(%.5f,%.5f,%.5f,%.5f)",v[1],v[2],v[3],v[4]) or "unavailable" end
@@ -1014,18 +1024,6 @@ local function exp_weaponstate(arg)
     local requested=tonumber(arg)
     if arg~="" and (not requested or requested<0 or requested%1~=0) then Log("weaponstate: expected [peer], 0=own");return end
     local ipc=rawget(_G,"HSMP_IPC")
-    local function context(peer,pawn)
-        local view,mode=HSESS and HSESS.view(),HSESS and HSESS.mode()
-        if not view or not valid(pawn) then return nil end
-        local status
-        if peer==0 then status=HW.verified_ai_status(ipc)
-        else for _,row in ipairs((ipc.bus_table("playback") or {}).rows or {}) do if row.peer==peer then status=row;break end end end
-        local round=(view.state=="countdown" or view.state=="loading") and view.spawn_round or view.round
-        local row=mode and mode.rows and mode.rows[peer==0 and view.my_peer_id or peer]
-        local life=mode and mode.match_id==view.match_id and mode.round==round and row and row.life or 1
-        if not status or status.pawn~=nm(pawn) or status.match_id~=view.match_id or status.round~=round or status.life~=life then return nil end
-        return {peer=peer,match_id=status.match_id,round=status.round,life=status.life,pawn=status.pawn,address=pawn:GetAddress(),world=WG.key}
-    end
     local peers={}
     if requested then peers[1]=requested
     else
@@ -1033,17 +1031,15 @@ local function exp_weaponstate(arg)
         for _,row in ipairs((ipc.bus_table("puppets") or {}).rows or {}) do peers[#peers+1]=row.peer end
     end
     for _,peer in ipairs(peers) do
-        local pawn=peer==0 and me_pawn() or standin_of(peer)
-        local original=pawn and context(peer,pawn)
+        local original,pawn=diagnostic_snapshot(peer)
         if not original then Log("weaponstate: peer %s refused original verified context unavailable",tostring(peer))
         else
             local result,why=probe.capture(pawn,original,{fname=FName,class=function(name)return StaticFindObject("/Script/Engine."..name)end,
                 current=function(id)
-                    if WG.key~=id.world or not WG.settled() then return false end
-                    local fresh=peer==0 and me_pawn() or standin_of(peer)
-                    local now=fresh and context(peer,fresh)
-                    return now and now.address==id.address and now.pawn==id.pawn and now.match_id==id.match_id and now.round==id.round and now.life==id.life
+                    return DIAGNOSTIC_CONTEXT.same(id,diagnostic_snapshot(peer))
                 end})
+            if result then Log("WEAPONSTATE_CONTEXT peer=%s mesh=%s mesh_address=%s placement_verified=%s read_only=true",
+                tostring(peer),original.mesh,tostring(original.mesh_address),original.placement_verified) end
             if result then probe.emit(result,Log) else Log("weaponstate: peer %s refused %s",tostring(peer),tostring(why)) end
         end
     end
@@ -1283,6 +1279,8 @@ if rawget(_G, "HSMP_PARITY_TEST") then
     HSMP_PARITY_TEST.state = function() return arm_drive end
     HSMP_PARITY_TEST.ai = exp_ai
     HSMP_PARITY_TEST.ai_tick = ai_auto_tick
+    HSMP_PARITY_TEST.frames = exp_frames
+    HSMP_PARITY_TEST.weaponstate = exp_weaponstate
 end
 local dev_out = {}
 LoopAsync(33, function()

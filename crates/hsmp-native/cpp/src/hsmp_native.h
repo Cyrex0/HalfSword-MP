@@ -16,6 +16,10 @@ int hsmp_native_open(struct lua_State* L, const char* mod_name);
 // when F already registered `HSMPNative` in this state.
 int luaopen_hsmp_lua(struct lua_State* L);
 
+// Diagnostic hooks: only a thread already established by Native::frame().
+// Unknown thread, busy/poisoned state and another thread all return 0.
+int hsmp_native_caller_thread_ok(void);
+
 // hsmp_luauser.c: how lua_lock is resolved ("host ..." or "private ...").
 const char* hsmp_lua_lock_mode(void);
 

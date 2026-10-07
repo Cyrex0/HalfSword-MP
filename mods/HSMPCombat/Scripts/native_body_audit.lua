@@ -16,6 +16,9 @@ M.BONES={"pelvis","spine_01","spine_02","spine_03","spine_04","spine_05","neck_0
     "thigh_l","calf_l","foot_l","thigh_r","calf_r","foot_r"}
 M.CONSTRAINTS={"Dislocated Bone Constraint Arm R","Dislocated Bone Constraint Arm L","Dislocated Bone Constraint Leg R",
     "Dislocated Bone Constraint Leg L","Dislocated Bone Constraint Neck","Dislocated Bone Constraint Back"}
+-- Native topology version1 availability fields; these never form a bone mask.
+M.TOPOLOGY_FLAGS={"Headless","Hand R Torn Off","Hand L Torn Off","Leg R Torn Off","Leg L Torn Off",
+    "Upper Body Spawned","Dismemberment In Process"}
 local function safe(f) local ok,v=pcall(f);if ok then return v end end
 local function field(o,k) return safe(function()return o[k]end) end
 local function number(v) return type(v)=="number" and v==v and math.abs(v)<math.huge and v or nil end
@@ -54,17 +57,25 @@ function M.new(o)
         local complete=ok and n~=nil and n==count
         return {available=complete,count=n,values=complete and values or nil,truncated=count>(limit or 64)}
     end
-    local function parts_map(a)
-        if not a then return {available=false} end
-        local values,count={},0
-        local ok=pcall(function()a:ForEach(function(k,v)
-            count=count+1;if count>15 then error("bounded map exceeded") end
-            k,v=number(o.unwrap(k)),boolean(o.unwrap(v))
-            if not k or k%1~=0 or k<0 or k>14 or v==nil then error("unreadable typed part map") end
-            values[#values+1]={part=k,value=v}
-        end)end)
-        if ok then table.sort(values,function(a,b)return a.part<b.part end) end
-        return {available=ok,count=ok and count or nil,values=ok and values or nil,truncated=count>15}
+    local topology_env={unwrap=o.unwrap,map_count=o.map_count,context=function(w)
+        -- The reader rechecks this before native access; a world-drop during
+        -- capture must not reach an old owner through the supplied context.
+        if not o.enabled() then return nil end
+        return o.context(w)
+    end}
+    local function topology(w,key)
+        if type(o.topology_reader)~="table" or type(o.topology_reader.read)~="function" then
+            return {available=false,reason="reader unavailable",flags={}}
+        end
+        local ok,t,why=pcall(o.topology_reader.read,w,topology_env)
+        if not ok or type(t)~="table" then
+            return {available=false,reason=ok and (why or "reader unavailable") or "reader failed",flags={}}
+        end
+        if t.version~=1 or scope_key(t.context)~=key then
+            return {available=false,reason="reader version or scope mismatch",flags={}}
+        end
+        t.available=true
+        return t
     end
     local function component(c,bones)
         if not valid(c) then return {available=false} end
@@ -117,9 +128,16 @@ function M.new(o)
         local r={seq=seq,event=event,context=c,key=key,meta=meta or {},health={},flags={},components={},constraints={}}
         for _,k in ipairs(M.HEALTH)do r.health[k]=number(field(w,k))end
         for _,k in ipairs(M.FLAGS)do r.flags[k]=boolean(field(w,k))end
-        r.dism_array=array(field(w,"Dismembered Array"),fname)
-        r.dism_bones=array(field(w,"Dismembered Bones"),fname)
-        r.parts=parts_map(field(w,"Dismembered Parts Map"))
+        r.topology=topology(w,key)
+        if not o.enabled() or scope_key(safe(function()return o.context(w)end))~=key then return nil end
+        local function missing()return {available=false,reason=r.topology.reason}end
+        r.dism_array=r.topology.available and r.topology.dism_array or missing()
+        r.dism_bones=r.topology.available and r.topology.dism_bones or missing()
+        r.parts=r.topology.available and r.topology.parts or missing()
+        for _,k in ipairs(M.TOPOLOGY_FLAGS)do
+            local f=r.topology.flags[k]
+            if f and f.available then r.flags[k]=f.value else r.flags[k]=nil end
+        end
         r.spawn_bone=fname(field(w,"Spawn Bone"))
         r.components.Mesh=component(mesh,M.BONES)
         r.components.SK_Skeleton=component(field(w,"SK_Skeleton"),M.BONES)
@@ -158,8 +176,17 @@ function M.new(o)
             "damaged_mesh","hit_by","raw","cut","draw","pain_rate","inside","lower","damage_applied"})do put(k,r.meta[k])end
         for _,k in ipairs(M.HEALTH)do put("hp_"..k:gsub("%W","_"),r.health[k])end
         for _,k in ipairs(M.FLAGS)do put("flag_"..k:gsub("%W","_"),r.flags[k])end
+        put("topology_available",r.topology.available);put("topology_version",r.topology.version)
+        put("topology_read_complete",r.topology.read_complete);put("topology_reason",r.topology.reason)
+        put("native_part_enum",r.topology.part_enum)
+        put("native_part_present_mask",r.parts.present_mask);put("native_part_true_mask",r.parts.true_mask)
+        put("native_part_count_check",r.parts.count_check)
+        for _,k in ipairs(M.TOPOLOGY_FLAGS)do
+            local f=r.topology.flags[k]
+            put("topology_flag_"..k:gsub("%W","_").."_available",f and f.available)
+        end
         local function collection(k,a,convert)
-            put(k.."_available",a.available);put(k.."_n",a.count);put(k.."_truncated",a.truncated)
+            put(k.."_available",a.available);put(k.."_n",a.count);put(k.."_truncated",a.truncated);put(k.."_reason",a.reason)
             local values={};for _,v in ipairs(a.values or {})do values[#values+1]=convert(v)end
             rows[#rows+1]=k.."="..(a.available and ("["..table.concat(values,",").."]") or "unavailable")
         end

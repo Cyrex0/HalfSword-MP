@@ -139,6 +139,10 @@ set_target_properties(harness PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${HARNESS}" RUNTIME_OUTPUT_DIRECTORY_RELEASE "${HARNESS}")
 
 enable_testing()
+add_executable(caller_frame_walk cpp/test/caller_frame_walk.cpp)
+target_include_directories(caller_frame_walk PRIVATE cpp/src)
+target_compile_options(caller_frame_walk PRIVATE /W4 /WX /permissive- /EHsc)
+add_test(NAME caller_frame_walk COMMAND caller_frame_walk)
 add_test(NAME harness_F
     COMMAND harness F "${OUT_DLLS}/main.dll" "${OUT_DLLS}/hsmp_lua.dll" "${FAKE_SIDECAR}"
             "${CMAKE_CURRENT_SOURCE_DIR}/cpp/test/harness_ipc.lua"
