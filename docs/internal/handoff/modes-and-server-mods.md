@@ -27,9 +27,12 @@ connection (32 KiB chunks, SHA-256 checked per file and per mod), stores them in
 DECLINE returns to the browser. Consent is remembered per server key and mod set. Leaving the
 server unloads them as far as UE4SS allows.
 
-**Compatibility:** the current development build requires protocol 8 for every mode because
-placement and cutting claims include their original native evidence. Older protocol clients must update
-before joining. Mode and server-mod capability checks still apply after that protocol check.
+**Compatibility:** every mode requires the protocol range declared by
+`crates/hsmp-net/src/net/mod.rs` (`VERSION_MIN` / `VERSION_MAX`; protocol 12 at this update).
+Placement and cutting claims include their original native evidence. Older protocol clients must
+update before joining, including duel. Mode and server-mod capability checks still apply after
+the protocol check. Use the deployed server's `--build-info` and browser `proto_min` / `proto_max`
+as evidence when the development protocol changes again.
 
 ## 2. Setup
 
@@ -80,7 +83,7 @@ Each test: do the steps, compare with "expect", save evidence (section 4). "P1",
 | A15 | DEATHMATCH, tied score at the clock | "SUDDEN DEATH", 60 s; next kill wins, else draw |
 | A16 | RCON: `MODE koth`, `TEAMS auto 3`, `TEAM 1 2`, `ROUNDTIME 180`, `OPTION koth_target 90`, `OPTION respawn 5`, `STATUS`; then the same during a match | Lobby: OK replies and the GAME MODE screen updates; during a match: ERR (lobby only) |
 | A17 | Leave mid-round in TEAMS (one of two on a team) | Match pauses only when a whole team is gone; a team forfeits only when none of it is left |
-| A18 | Compatibility: a client built from `main` (`67588b0`, beta.5) joins a `teams` server | Refused with "...needs a newer HSMP: update HSMP to join". On a duel server it joins and plays. With it connected, RCON `MODE teams` is refused naming the player |
+| A18 | Compatibility: a client built from `main` (`67588b0`, beta.5) joins a `teams` server, then a duel server | Both are refused by the protocol-version check with a readable update reason. A beta.5 client cannot remain connected while switching modes. Separately, exercise the mode capability refusal using a client on the current protocol with MODES capability omitted; it is refused for teams, and changing from duel to teams names that connected client |
 
 ### B. Server mods
 
@@ -100,8 +103,11 @@ function OnUnload() print("[TestBanner] unloaded") end
 ```
 `TestBanner\Scripts\helper.lua`: `return { tag = "helper ok" }`
 
-`BigData\Scripts\main.lua`: `print("[BigData] loaded")`, plus `BigData\Scripts\blob.txt` of about
-20 MB (any text) to test a real download.
+`BigData\Scripts\main.lua`: `print("[BigData] loaded")`, plus
+`BigData\Scripts\blob-a.txt` and `blob-b.txt`, each 10 MiB (any text), to test a real
+20 MiB download. One 20 MiB file is invalid: the protocol allows at most 16 MiB per file.
+`.\scripts\lab-server-mods-smoke.ps1 -FixturesOnly` creates these fixtures in a fresh
+`test-results\modes-smoke-<id>\fixtures\valid` folder, plus separate invalid and load-error sets.
 
 Start the server with `--mods-dir C:\hsmp-test-mods` (plus the setup flags).
 
@@ -123,7 +129,7 @@ Start the server with `--mods-dir C:\hsmp-test-mods` (plus the setup flags).
 | B14 | Start with `--mods-timeout-s 30` and never click the warning | Kicked after 30 s with "The server's mods were not loaded within 30 s" |
 | B15 | Server-side refusals: add a mod named `HSMPEvil`, then separately a `.dll` file in a mod, then a mod without `Scripts\main.lua` | The server refuses to start each time, naming the mod and file |
 | B16 | A mod that errors (`error("boom")` in main.lua) | The player still joins; the error is logged with the mod name (`x_server_mod_error`); HSMP keeps working |
-| B17 | Compatibility: a beta.5 client joins the mods server | Refused with "This server uses N server mods. Update HalfSword-MP via the launcher to join." |
+| B17 | Compatibility: a beta.5 client joins the mods server | Refused by the protocol-version check with a readable update reason. Separately, a client on the current protocol with SERVER_MODS capability omitted is refused with the server-mod-specific update reason |
 | B18 | Launcher uninstall on a test PC | `Win64\hsmp_mods` is removed |
 | B19 | Mods + modes together: `--mods-dir` and `--mode deathmatch` | Both work; the late joiner loading mods does not take part until loaded |
 
@@ -163,3 +169,38 @@ sidecar `server_mods`; game `respawn`, `x_server_mods_offer`, `x_server_mods_loa
 One line per test: `ID | PASS / FAIL / BLOCKED / NOT RUN | what happened | evidence file`. Then
 for each FAIL: steps to reproduce, expected vs actual, and the log lines around the failure (with
 the file name). Finish with anything odd seen outside the plan.
+
+## 7. Repeatable backend checks (2026-10-07)
+
+These provide evidence for parts of the plan. They do not turn a UI, native combat or
+release-gate acceptance item green.
+
+The lab also waits for the server's acknowledgement of the newly saved kit sequence
+and checks the accepted class, hands, cosmetics and armour before START. Saving the same
+kit twice now updates the game's acknowledgement even when its server revision stays
+unchanged; previously the sidecar kept that newer acknowledgement internally but did not
+publish it to `peer_kit`, leaving the menu or an exact lab waiter stuck.
+
+```powershell
+# No game needed: fresh fixtures, actual dedicated-server startup refusals,
+# lobby TCP RCON and live UDP browser mode/mod metadata.
+.\scripts\lab-server-mods-smoke.ps1
+
+# Existing real two-game hsmp-lab session: same-round native reload and verified
+# placement after five explicit DEBUG KILL deaths per player; lobby-only mode
+# command refusals while Live. Starts no additional game or server processes.
+.\scripts\lab-modes-test.ps1 -Session test-results\lab\session -DeathsPerPlayer 5
+```
+
+The native script takes the lab experiment lock, verifies recorded process identities,
+disables AI, and returns to the lobby. Its timer is **death to server-verified placement**,
+not death to player control. A12 still needs control/HUD, kit, farthest-spawn and actual
+protection-hit evidence; A13/A14 still need remote stand-in and repeated-death visuals.
+`DEBUG KILL` is labelled as the stimulus in every sample and proves no damage or kill-credit
+parity. The report keeps backend subchecks separate from full acceptance verdicts.
+
+Offline run `test-results/modes-smoke-67968ebf/report.json`: 38 backend subchecks PASS,
+including all seven browser/RCON mode labels, the two-mod 20 MiB set, configuration
+options and the three B15 manifest refusals. Binary SHA-256 values and raw RCON/query/server
+logs are in that run. A1-A18, B1-B19 and C1-C2 remain NOT RUN as live acceptance at this
+update. The native script has been parsed but has not run against the game yet.

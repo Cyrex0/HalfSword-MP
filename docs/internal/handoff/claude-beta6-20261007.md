@@ -286,3 +286,50 @@ ida MCP server failed to connect this session, headless idat works). Evidence of
 `test-results/beta6/*` (logs per run: duel-evidence, ai-online-1, ai-probe-*, sword-fixed-*,
 inside-*, rotation-probe, p0_gate logs). Career saves were verified byte-identical before and
 after all runs (GameProgress, Save_GiveUp, Settings).
+
+## 10. Codex continuation: source milestones (2026-10-07)
+
+User clarified that there is no AMD GPU on this PC and requested portable launcher
+rendering. OpenGL remains the default, with automatic Windows DX12 retry before
+the app is created. Native screenshots on the local RTX 3060: OpenGL14 frames,
+DX12 15 frames, injected OpenGL startup failure -> actual DX12 15 frames, each
+exit0. Launcher128 tests and clippy passed. Evidence:
+`test-results/launcher-amd-20261007/` (historical folder name, no AMD fault established).
+
+`hsmp-lab` now supplies session/exp/stop, analyse/compare/review/baseline and AB/BA
+knob experiments. Recipes cover sword/axe/mace/polearm/fists against three armour
+levels and idle/swing poses. Native sessions use the existing save/PID/window harness.
+Kit SAVE waits for an exact current-epoch server receipt; repeated same-kit SAVE
+acknowledgements had failed to publish and are fixed. Four lab checks pass. See
+`docs/development/lab.md`. Configured combat sweep75min plus transitions, idle2min;
+full sweep runtime is not yet measured. Historical cloth3 reference:197 accepted,
+35 rejected (25 no_cover,10 parried),133 unambiguous Health pairs; two signatures
+excluded as ambiguous. This failed/insufficient reference is committed under
+`test-results/lab/baseline/sword-cloth-reference.json`, explicitly unaccepted.
+
+Stuck-blade source fixes and exact native offsets are in
+`stuck-blade-continuation-20261007.md`:44 combat Rust,9 schema,267 combat Lua,
+28 damage-parity checks pass offline. Structural dismemberment and arbitrary
+constraint rebinds remain gaps. Exact physical timestamp sampling also covers
+native broad capsules and displayed main/offhand weapons;61 lagcomp tests,
+7 sampler tests and153 Avatar Lua checks pass offline. Per-reset `x_pose_clock_reset`
+telemetry records buffer/clock/native context before correction; the50ms threshold is unchanged.
+Protocol12 now explicitly rejects11 even with content checking disabled (zero peer admission),
+because display timestamps and origin-only continuations changed semantics. These numbers are not live
+parity evidence and do not close release blockers.
+
+The owner selected native AI yield as surrender in AI-driven Duel tests. The
+dev-only own `AI_BP_C` native lose branch uses `Give Up` (@256919), without the
+player-only `Give Up2`; scoped surrender reason2 preserves native living HP.
+Human Duel KO rules remain unchanged. Harness timeout stimuli have separate journal entries.
+
+Modes/mods offline checks:38 real server RCON/browser/manifest subchecks pass;
+26 modes,18 shared server-mod executions,7 kit-client and38 modes/mods Lua checks pass.
+Evidence `test-results/modes-smoke-67968ebf/report.json`. All39 A/B/C full live
+acceptance items remain NOT RUN pending the native runs. The old20MiB single-file
+fixture exceeded the16MiB file limit; use two10MiB files. Beta.5 is refused on Duel
+as well as other modes by the current universal protocol version check.
+
+Fresh G0, deployment, native lab sessions, typical p0_gate and twice-green release
+scenarios are still required. Version remains beta.5 until beta.6 is justified;
+no main push, tag or release is authorized.

@@ -8,7 +8,27 @@ game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
 
 ## [Unreleased]
 
+### Launcher fixes
+
+- Launcher windows use OpenGL and automatically retry Direct3D 12 on Windows if OpenGL
+  initialization fails. `HSMP_LAUNCHER_RENDERER=glow` or `dx12` explicitly selects a renderer. Startup records the
+  renderer and adapter in `launcher.log`, and graphics initialization errors show a message
+  with recovery instructions instead of silently closing.
+
 ### What's new
+
+- Add `hsmp-lab` recipe sessions, incremental evidence collectors, bootstrap comparisons,
+  explicit baseline promotion, a regression journal and in-session A/B runs.
+- Add isolated modes/server-mods backend smoke and repeatable native deathmatch placement
+  checks; correct compatibility expectations and the test fixture's per-file limits.
+- Fix repeated unchanged kit saves leaving the game acknowledgement stale. The lab waits
+  for the exact accepted server kit before starting an experiment.
+- Publish the stand-in's physical sample time at target construction and reconstruct body,
+  weapon and cutting geometry from delivered physical frames, removing sender-step inversion.
+  Protocol 12 rejects earlier clients because timestamp and continuation meanings changed.
+- Bind stuck-blade continuations to their exact native origin/module, including suppressed
+  origins; reject deferred children if their parent is later parried. Dev AI Duel yield
+  counts as scoped surrender; harness timeouts are recorded separately.
 
 - Game modes, picked by the host on the lobby's new **GAME MODE** screen (or with `--mode` and
   RCON `MODE`):
