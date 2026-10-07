@@ -1034,6 +1034,9 @@ local function exp_ai(arg)
             Log("ai: refused - SpawnDefaultController gave %s (%s); control returned to the player", cls, tostring(err)); return
         end
         pcall(function() me.Player = false end)
+        -- the player keeps watching their own fighter (an unpossessed controller's camera
+        -- would stay where the pawn was taken over)
+        pcall(function() pc:SetViewTargetWithBlend(me, 0.0, 0, 0.0, false) end)
         local i1 = bp_call(c, "Event Initialize AI")
         local i2 = bp_call(c, "Event Get Into Combat State", 30.0, si, si:K2_GetActorLocation())
         local my_team, si_team = -1, -1
