@@ -533,3 +533,30 @@ fresh PRE/POST. A proposed confirmed-mask consumer removes missing-limb servo
 targets and preserves physical exclusion through temporary source release;
 actual collision exclusion/restoration, corrected topology producer, detached
 components and authoritative cutting continuation are still required.
+
+Native15 (clean `5084bb2542`, raw
+`test-results/20261007-235519-c869cf-combat_manual`) confirms protected native
+`Block Spine Breaking=true` becomes actual `false` before Live. It does not
+solve every spawn: default round 2 timed out, and default round 3 retained
+roughly 15–16 cm / 45–48 degree right-hand errors despite fresh source poses,
+healthy owner limbs, complete empty native sever collections and simulated
+weapons. The repeated polearm experiment failed with `RCON START: ERR start
+blocked: 0 of 2 peers ready`; its first combat round used the recorded harness
+timeout/DEBUG KILL, not a natural win. Normal teardown reports no new crashes;
+the manual harness PASS is not spawn, fairness or dismemberment acceptance.
+
+Read-only body diagnostics prove an owner replay hit reduced left-arm health
+100 to 92.9927 with increased bleeding/pain. Native regeneration explains later
+gradual health increases; combat_probe was explicitly off. Detailed body rows
+expand armor/bone readbacks and add overhead, so body_probe was disabled after
+the injury slice (native confirmations 00:02:34–36). Probe-active timings must
+not be promoted as clean performance evidence. Both native sever hooks failed
+registration throughout this run; missing callbacks do not prove absent cuts.
+The next diagnostic repair retains exact reflected names and reports the
+actual registration exception and returned IDs, suppressing identical error
+spam while retrying unavailable hooks. It still needs matching native readback.
+The audit contains 594 body rows and no observed structural break, dislocation
+or completed sever; all sever collections are readable and empty in that slice.
+One initial own-kit recovery explicitly reused the same polearm actor/outfit.
+Twelve native original-false guard restores were verified; final abort refusal
+against a replaced pawn/world is stale-target protection, not a verified write.

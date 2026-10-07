@@ -81,9 +81,38 @@ local b=M.new{enabled=function()return true end,unwrap=unwrap,fname=fn,context=f
     if changed_contexts>1 then c.life=131 end;return c end,log=function()error("mixed life logged")end}
 T.check(b.capture(pawn,"transition")==nil,"context changing during native read drops mixed-life evidence")
 local hooks={};local registrations=0
-T.check(not a.install(function()error("class unavailable")end),"native sever hooks unavailable explicitly until class loads")
+local function missing_class()error("class unavailable")end
+T.check(not a.install(missing_class),"native sever hooks unavailable explicitly until class loads")
+T.check(logs[#logs]:find("error=",1,true) and logs[#logs]:find("class_unavailable",1,true)
+    and logs[#logs]:find('path="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dismember Function Delayed"',1,true),
+    "actual native hook failure and unsanitized exact reflected path remain explicit")
+local failed_logs=#logs
+a.install(missing_class)
+T.check(#logs==failed_logs,"same native hook error retries without per-tick log flooding")
+a.install(function()error("function flags unavailable")end)
+T.check(#logs==failed_logs+2 and logs[#logs]:find("function_flags_unavailable",1,true),
+    "changed native registration exception is reported independently for both functions")
 T.check(a.install(function(path,callback,post)registrations=registrations+1;hooks[path]=callback
-    T.check(post==nil,"native Blueprint registration has only its actual POST callback")end),"both exact native sever hooks retry")
+    T.check(path=="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dismember Function Initiate"
+        or path=="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dismember Function Delayed",
+        "hook registration uses exact reflected spaced function names")
+    T.check(post==nil,"native Blueprint registration has only its actual POST callback")
+    return registrations,registrations end),"both exact native sever hooks retry")
+T.check(logs[#logs]:find("pre_id=2 post_id=2 error=none",1,true),"native hook IDs are reported only from successful registration return values")
+for _,ids in ipairs({{}, {false,false}, {1,nil}, {1,2}, {-2147483649,-2147483649}, {2147483648,2147483648}, {1.5,1.5}})do
+    local calls,ambiguous_logs=0,{}
+    local unknown=M.new{enabled=function()return false end,log=function(f,...)ambiguous_logs[#ambiguous_logs+1]=string.format(f,...)end}
+    local function register_unknown()calls=calls+1;return ids[1],ids[2]end
+    T.check(not unknown.install(register_unknown) and calls==2
+        and ambiguous_logs[1]:find("invoked=true registered=unavailable ambiguous=true",1,true),
+        "successful invocation with unavailable or invalid Blueprint hook IDs is not coverage proof")
+    unknown.install(register_unknown);unknown.clear();unknown.install(register_unknown)
+    T.check(calls==2 and #ambiguous_logs==2,"ambiguous successful registration is never retried or duplicated across world-drop")
+end
+for _,id in ipairs({-2147483648,2147483647})do
+    local boundary=M.new{enabled=function()return false end,log=function()end}
+    T.check(boundary.install(function()return id,id end),"Blueprint IDs retain the pinned API's complete signed int32 return domain")
+end
 a.install(function()registrations=registrations+1 end)
 T.check(registrations==2,"successful native sever registration occurs once per function")
 local first=#logs

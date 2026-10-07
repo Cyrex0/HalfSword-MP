@@ -39,7 +39,8 @@ local function scope_key(c)
     return table.concat({c.world,c.peer,c.match_id,c.round,c.life,c.pawn,tostring(c.actor),tostring(c.mesh)},":")
 end
 function M.new(o)
-    local seq,installed,starts,active_scope=0,{},{},nil
+    local seq,installed,ambiguous,hook_errors,starts,active_scope=0,{},{},{},{},nil
+    local function hook_id(v)return number(v) and v%1==0 and v>=-2147483648 and v<=2147483647 end
     local function array(a,convert,limit)
         if not a then return {available=false} end
         local n=number(safe(function()return a:GetArrayNum()end))
@@ -201,10 +202,26 @@ function M.new(o)
     return {capture=capture,snapshot=snapshot,
         install=function(register)
             for _,event in ipairs(M.HOOKS)do
-                if not installed[event] then
-                    installed[event]=pcall(register,"/Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..event,
+                if not installed[event] and not ambiguous[event] then
+                    local path="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..event
+                    local ok,pre_id,post_id=pcall(register,path,
                         function(...)local args=table.pack(...);safe(function()sever(event,table.unpack(args,1,args.n))end)end)
-                    o.log("LAB_BODY_HOOK event=%s registered=%s convention=Blueprint_POST pre=unavailable",token(event),token(installed[event]))
+                    -- Pinned LuaMod.cpp returns the same int32 ID twice for a
+                    -- Blueprint POST hook. A successful call without those IDs
+                    -- might already have installed a hook: do not retry blindly.
+                    local proven=ok and hook_id(pre_id) and hook_id(post_id) and pre_id==post_id
+                    installed[event]=proven==true
+                    ambiguous[event]=ok and not installed[event]
+                    local err=not ok and token(tostring(pre_id))
+                        or (installed[event] and "none" or "unavailable:Blueprint_hook_ids")
+                    -- Retry failed lookups, but retain the actual engine exception
+                    -- once per distinct failure instead of flooding every tick.
+                    if ok or hook_errors[event]~=err then
+                        o.log("LAB_BODY_HOOK event=%s invoked=%s registered=%s ambiguous=%s path=%q pre_id=%s post_id=%s error=%s convention=Blueprint_POST pre=unavailable",
+                            token(event),token(ok),ambiguous[event] and "unavailable" or token(installed[event]),token(ambiguous[event]),path,ok and token(pre_id) or "unavailable",
+                            ok and token(post_id) or "unavailable",err)
+                    end
+                    hook_errors[event]=err
                 end
             end
             return installed[M.HOOKS[1]] and installed[M.HOOKS[2]]
