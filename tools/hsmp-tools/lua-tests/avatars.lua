@@ -33,6 +33,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "skeleton_ref" })
     T.isolated(T.script, "case", { kind = "body_scale" })
     T.isolated(T.script, "case", { kind = "fist_grip" })
+    T.isolated(T.script, "case", { kind = "grip_reassert" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "bodyheight" })
@@ -134,12 +135,24 @@ if opts.kind=="weaponstate" then
     local base=M.new_obj("StaticMeshComponent","BaseMesh");rawset(base,"__addr",8904)
     actor.__props["Weapon R"],weapon.__props.RootComponent,weapon.__props.BaseMesh=weapon,root,base
     M.Methods.IsSimulatingPhysics=function()return true end
-    local c={addr=8902,root_addr=8903,fname="Polearm",sim=false}
+    M.Methods.GetTransform=function()return {Translation={X=10,Y=20,Z=30},Rotation={X=0,Y=0,Z=math.sqrt(.5),W=math.sqrt(.5)},Scale3D={X=1.2,Y=1.3,Z=1.4}}end
+    M.Methods.GetCenterOfMass=function()return {X=10,Y=35,Z=30}end
+    M.Methods.GetMass=function()return 4.25 end
+    M.Methods.K2_GetComponentScale=function()return {X=1.2,Y=1.3,Z=1.4}end
+    local c={addr=8902,root_addr=8903,fname="Polearm",sim=false,com={5,0,0},nocoll=true,empty_since=91}
+    local before=T.repr(c)
     api.set_puppet(2,{actor=actor,gen=api.generation(),shown={has_context=true,pawn="Puppet",match_id=94,round=1,life=1},body={sv={wc={["Weapon R"]=c}}}})
     api.PX.weaponstate("2")
     local log=M.logtext()
     T.check(T.contains(log,"cached_sim=false actual_root_sim=true actual_base_sim=true"),"dev diagnostic compares cached simulation with two fresh native readbacks",log)
     T.check(c.sim==false and root:IsSimulatingPhysics("None")==true,"dev simulation mismatch snapshot mutates neither cache nor native physics")
+    local cx,cy,cz=log:match("actual_com=%(([^,]+),([^,]+),([^%)]+)%)")
+    T.check(T.contains(log,"cached_com=(5.000000,0.000000,0.000000)") and tonumber(cx)==15 and tonumber(cy)==0 and tonumber(cz)==0
+        and T.contains(log,"com_delta=10.000000"),
+        "read-only COM probe measures the fresh native center in the same rotated servo frame",log)
+    T.check(T.contains(log,"root_mass=4.25 actor_scale=(1.200000,1.300000,1.400000) root_scale=(1.200000,1.300000,1.400000)"),
+        "read-only COM probe captures current root mass and transform scales",log)
+    T.check(T.repr(c)==before,"COM diagnostic preserves cached COM and unmatched-weapon collision bookkeeping")
 end
 
 if opts.kind=="spawn_settle" then
@@ -1057,11 +1070,74 @@ if opts.kind == "body_scale" then
         "a later owner geometry change invalidates a running servo too")
 end
 
+if opts.kind=="grip_reassert" then
+    local api=boot(true)
+    sidecar({{1,"Own"},{2,"Peer"}})
+    api.on_tick() -- validate this native world before a driven-frame callback
+    local function fn(n)return {ToString=function()return n end}end
+    local function grip(name,addr)
+        local c={writes=0,IsValid=function()return true end,GetAddress=function()return addr end,GetFName=function()return fn(name)end}
+        local pi={AngularDrive={SlerpDrive={Stiffness=10,Damping=2,MaxForce=100}},
+            LinearLimit={XMotion=2,YMotion=2,ZMotion=1,Limit=31},
+            ConeLimit={Swing1Motion=2,Swing1LimitDegrees=10,Swing2Motion=2,Swing2LimitDegrees=20},
+            TwistLimit={TwistMotion=2,TwistLimitDegrees=30}}
+        c.ConstraintInstance={ConstraintBone2=fn("hand_r"),ProfileInstance=pi}
+        for _,axis in ipairs({"X","Y","Z"}) do
+            c["SetLinear"..axis.."Limit"]=function(_,mode,value)c.writes=c.writes+1;pi.LinearLimit[axis.."Motion"],pi.LinearLimit.Limit=mode,value end
+        end
+        c.SetAngularSwing1Limit=function(_,mode,value)c.writes=c.writes+1;pi.ConeLimit.Swing1Motion,pi.ConeLimit.Swing1LimitDegrees=mode,value end
+        c.SetAngularSwing2Limit=function(_,mode,value)c.writes=c.writes+1;pi.ConeLimit.Swing2Motion,pi.ConeLimit.Swing2LimitDegrees=mode,value end
+        c.SetAngularTwistLimit=function(_,mode,value)c.writes=c.writes+1;pi.TwistLimit.TwistMotion,pi.TwistLimit.TwistLimitDegrees=mode,value end
+        c.SetAngularDriveParams=function(_,strength,damping,force)c.writes=c.writes+1;c.drive={strength,damping,force}end
+        return c,pi
+    end
+    local old,pi=grip("GripR",501)
+    local current=old
+    local weapon={IsValid=function()return true end,GetAddress=function()return 7001 end,GetClass=function()return {GetFName=function()return fn("ModularWeaponBP_Polearm_C")end}end}
+    local actor={ ["Weapon R"]=weapon,K2_GetComponentsByClass=function()return {current}end }
+    local p={actor=actor,gen=api.generation(),peer=2,driving=true,last={has_context=true,match_id=101,round=1,life=1},
+        wservo={["Weapon R"]=1000},wservo_actor={["Weapon R"]=7001}}
+    M.now=1000
+    local list=api.PX.grip_constraints(p,1000)
+    T.check(list[1].freed and pi.LinearLimit.ZMotion==0,"current real weapon servo qualifies the existing free-grip policy")
+    old:SetLinearZLimit(1,32) -- actual native timeline writer between frames
+    T.check(list[1].freed and pi.LinearLimit.ZMotion==1,"cached free flag cannot describe the native slide-axis limit")
+    M.now=1016;api.PX.grips_off(p,true)
+    T.check(pi.LinearLimit.XMotion==0 and pi.LinearLimit.YMotion==0 and pi.LinearLimit.ZMotion==0 and pi.LinearLimit.Limit==0,
+        "next driven frame reasserts actual free limits after native Z drift before the one-second rescan")
+    local writes=old.writes
+    p.gen=999;api.PX.grips_off(p,true)
+    T.check(old.writes==writes and list[1].c==nil,"a stale world touches no native grip and forgets retained wrappers")
+    p.gen=api.generation()
+    local retained=p.last;p.last=nil;api.PX.grips_off(p,true)
+    T.check(old.writes==writes,"no source pose leaves current native grip untouched")
+    p.last=retained
+    HSMPNative.sc_put("session",{seq=1,match_id=101,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=101,round=1,rows={{peer_id=2,life=2}}})
+    api.PX.grips_off(p,true)
+    T.check(old.writes==writes,"a stale owner life cannot reassert limits on the current native grip")
+    p.last.life=2
+    local rebuilt=grip("GripR_new",501) -- same address, another native identity
+    current=rebuilt;api.PX.grips_off(p,true)
+    T.check(rebuilt.writes==0 and old.writes==writes and list[1].c==nil,"a rebuilt grip at a reused address is never written with the old identity's policy")
+    current=old
+    api.PX.grips_off(p,false)
+    T.check(pi.LinearLimit.XMotion==2 and pi.LinearLimit.YMotion==2 and pi.LinearLimit.ZMotion==1 and pi.LinearLimit.Limit==31
+        and pi.ConeLimit.Swing1LimitDegrees==10 and pi.TwistLimit.TwistLimitDegrees==30 and T.eq(old.drive,{10,2,100}),
+        "release restores first native limits and drive rather than the later timeline drift")
+    old:SetLinearZLimit(1,32)
+    local before=old.writes
+    actor["Weapon R"]={IsValid=function()return true end,GetAddress=function()return 7002 end,GetClass=weapon.GetClass}
+    api.PX.grips_off(p,true)
+    T.check(pi.LinearLimit.ZMotion==1 and old.writes==before+1,"a different unserved weapon is not freed by the previous weapon's servo timestamp")
+end
+
 if opts.kind == "fist_grip" then
     local api = boot(true)
     local states = {}
     local grip = {
         IsValid=function() return true end, GetAddress=function() return 501 end,
+        GetFName=function()return {ToString=function()return "GripR" end}end,
         ConstraintInstance={ ConstraintBone2={ToString=function() return "hand_r" end},
             ProfileInstance={AngularDrive={SlerpDrive={Stiffness=10,Damping=2,MaxForce=100}},
                 LinearLimit={XMotion=2,YMotion=2,ZMotion=2,Limit=1},

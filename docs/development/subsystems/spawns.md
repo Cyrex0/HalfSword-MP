@@ -254,7 +254,9 @@ the solo, lobby and unknown-map case; it never falls back to a local guess.
 - `Weapon_Fists_C` and `Weapon_Feet_C` never count as a held kit weapon. Every `kit_status` write
   re-checks both hands, so `ok` is false whenever a kit hand holds fists, nothing or another class.
   `r_class` / `l_class` are always the real actors' classes.
-- After the 3 s stability window the hands are watched every 0.5 s for the rest of the world:
+- During the initial 3 s stability window a hand-only failure uses the same actor recovery
+  below, retaining the verified outfit. Missing armour still uses the bounded dressing path.
+  After the stability window the hands are watched every 0.5 s for the rest of the world:
   - **Countdown / paused, or inside spawn protection:** a dropped kit weapon is re-equipped at
     once (weapons only, at most 8 times). The dropped actor itself goes back in hand
     (`"Set Up Right/Left Hand Weapon"(Class, Actor, ...)`), and kit.lua checks that this very
@@ -262,13 +264,19 @@ the solo, lobby and unknown-map case; it never falls back to a local guess.
   - **HSMPLoadout never destroys a weapon that left the own hand.** HSMPWorld registers a loose own
     weapon as a dynamic world item 100 ms after it left the hand, and peers spawn copies of it.
     Destroying it would leave a free ghost weapon on every other screen. Re-equipping the same
-    actor is, for HSMPWorld, its own item being picked up again: one weapon on every screen. If
-    the re-equip does not take, or somebody else holds the dropped weapon, a new kit weapon is
-    given and the dropped one stays a replicated world item (`(dropped actor left as a world
-    item)`).
+    actor is, for HSMPWorld, its own item being picked up again: one weapon on every screen.
+    A temporarily unsuccessful equip retains that valid actor for the remaining bounded
+    attempts, and then reports failure. Replacement is allowed only when the original is
+    invalid, another class, or held by somebody else. The recovery log names the retained
+    actor and native address so a native run can check that no second weapon was spawned.
   - **Live, outside protection:** a drop is gameplay, so there is no re-arm. `kit_status` gets
     `ok = false, error = "dropped during Live: R (Weapon_Fists)"` and `pawn_state{at=weapon_drop}`
     is emitted. A kit weapon picked back up reads ok again.
+- The native stand-in fallback can briefly make PlayerController possess its new body.
+  Loadout retains only metadata of the verified assigned fighter: native world generation,
+  match, round, full life, spawn assignment, name and address. During the matching
+  `fallback_swap` window it resolves the original actor fresh. World/life/assignment changes
+  invalidate that binding; a foreign body is never dressed while placement names our fighter.
 
 **`pawn_state` events** (`shared/hsmp_log.lua`): required fields `consciousness, downed,
 weapon_r, weapon_l`; also `at, round, pawn, fallen, health, protected, live, dist_cm`, plus

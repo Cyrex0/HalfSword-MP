@@ -342,8 +342,20 @@ do
     local st = w:status()
     T.check(st.verified == false and T.contains(st.error or "", "body (Mesh pelvis)"),
         "a body far from the destination fails verification, and the error says so", T.repr(st))
-    T.check(T.eq(w.tries_seen, { 1, 2, 3 }), "the teleport is told which try it is (try >= 2 snaps lagging bodies)",
+    T.check(T.eq(w.tries_seen, { 1, 2, 3 }), "the teleport is told which bounded attempt it is",
         T.repr(w.tries_seen))
+end
+
+T.log("== unreadable physical body cannot qualify a capsule-only placement")
+do
+    local w = placed_world()
+    w.env.body_loc = function() return nil, nil, nil, "physical pelvis unavailable" end
+    w:secs(5)
+    local st = w:status()
+    T.check(st and st.verified == false and w.sp.counters.verified == 0,
+        "an explicitly unavailable body read never verifies placement", T.repr(st))
+    T.check(st.tries == SP.T.max_tries and T.contains(st.error or "", "body unavailable: physical pelvis unavailable"),
+        "unavailable physics proof fails after the existing bounded attempts with its reason", T.repr(st))
 end
 
 T.log("== Director retry (.spawn_request.json)")
@@ -873,6 +885,130 @@ do
     live_now = true
     w:secs(3)
     T.check(w.teleports == 1 and w:status() and w:status().verified, "a live session: placed as before", T.repr(w:status()))
+end
+
+T.log("== the real env reads fresh physical pelvis and corrects first-teleport body residual")
+do
+    local saved_sfo, saved_fn = rawget(_G, "StaticFindObject"), rawget(_G, "FName")
+    _G.StaticFindObject = function() return nil end
+    _G.FName = function(n) return n end
+    local env = SP.make_ue_env({ UEHelpers = { GetPlayerController = function() return nil end },
+        log = function() end, state_dir = T.tmpdir("sp_physical_"), my_peer_id = function() return 1 end,
+        match = function() return "countdown" end, world = function() return { key = "k", short = "A" } end })
+    -- Component / animated socket and simulated COM are independent. An actor
+    -- teleport can move the former while its physics body stays at the fence.
+    local function fixture(o, p)
+        o, p = o or {}, p or { x = 100, y = 0, z = 100 }
+        local m = { x = p.x, y = p.y, z = p.z, bx = p.x + 5, by = p.y + 10, bz = p.z + 50,
+            moves = 0, com_reads = 0, socket_reads = 0, sim = o.sim ~= false }
+        p.Mesh = m
+        m.IsValid = function() return true end
+        m.GetAddress = function() return 121 end
+        m.IsSimulatingPhysics = function(_, bone)
+            assert(bone == "pelvis")
+            if o.sim_error then error("physics state unreadable") end
+            if o.sim_unknown then return nil end
+            return m.sim
+        end
+        m.GetCenterOfMass = function(_, bone)
+            assert(bone == "pelvis")
+            m.com_reads = m.com_reads + 1
+            if o.com_error then error("physics COM unreadable") end
+            if o.com_nil then return nil end
+            return { X = o.com_nan and (0/0) or m.bx, Y = m.by, Z = o.com_inf and math.huge or m.bz }
+        end
+        m.GetSocketLocation = function()
+            m.socket_reads = m.socket_reads + 1
+            return { X = m.x, Y = m.y, Z = m.z + 50 }
+        end
+        m.K2_GetComponentLocation = function() return { X = m.x, Y = m.y, Z = m.z } end
+        m.K2_SetWorldLocation = function(_, l, sweep, hit, teleport)
+            assert(sweep == false and teleport == true)
+            local dx, dy, dz = l.X - m.x, l.Y - m.y, l.Z - m.z
+            m.x, m.y, m.z, m.moves = l.X, l.Y, l.Z, m.moves + 1
+            -- Some detached components change location before their physics
+            -- body accompanies the move; the fresh read must catch this too.
+            if not (o.correction_body_lag or (o.first_mesh_body_lag and m.moves == 1)) then
+                m.bx, m.by, m.bz = m.bx + dx, m.by + dy, m.bz + dz
+            end
+        end
+        m.SetAllPhysicsLinearVelocity = function() end
+        m.SetAllPhysicsAngularVelocityInDegrees = function() end
+        p.K2_GetActorLocation = function() return { X = p.x, Y = p.y, Z = p.z } end
+        p.K2_SetActorLocation = function(_, l, sweep, hit, teleport)
+            assert(sweep == false and teleport == true)
+            local dx, dy, dz = l.X - p.x, l.Y - p.y, l.Z - p.z
+            p.x, p.y, p.z = l.X, l.Y, l.Z
+            if not o.detached then m.x, m.y, m.z = m.x + dx, m.y + dy, m.z + dz end
+            if o.body_follows then m.bx, m.by, m.bz = m.bx + dx, m.by + dy, m.bz + dz end
+        end
+        return p, m
+    end
+    local dest = { X = 1100, Y = 500, Z = 100 }
+    local p, m = fixture()
+    local x, y, z = env.body_loc(p)
+    T.check(x == 105 and y == 10 and z == 150 and m.com_reads == 1 and m.socket_reads == 0,
+        "simulated pelvis is read from native COM, independent of its animated socket")
+    local detail = env.teleport(p, dest, nil, 1)
+    T.check(m.bx == 1105 and m.by == 510 and m.bz == 150 and m.moves == 1,
+        "first teleport corrects physics lag when the component followed", T.repr({ m.bx, m.by, m.bz, m.moves, detail }))
+    T.check(T.contains(detail, "Mesh followed; bodies snapped("), "followed branch reports the immediate physical correction", detail)
+    x, y, z = env.body_loc(p)
+    T.check(x == 1105 and y == 510 and z == 150 and m.socket_reads == 0,
+        "placement reads the corrected physical body, even when the animated component differs")
+
+    p, m = fixture({ detached = true, first_mesh_body_lag = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.bx == 1105 and m.by == 510 and m.bz == 150 and m.moves == 2,
+        "first teleport also checks physical lag after moving a detached component", T.repr({ m.bx, m.by, m.bz, m.moves, detail }))
+    T.check(m.x == 2100 and m.y == 1000 and T.contains(detail, "Mesh moved(") and T.contains(detail, "; bodies snapped("),
+        "residual correction uses the fresh component location after its initial move", detail)
+
+    p, m = fixture({ body_follows = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.moves == 0 and m.bx == 1105 and m.by == 510 and not T.contains(detail, "bodies snapped"),
+        "a component and physics body that already followed are not moved twice", detail)
+    p, m = fixture({ detached = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.moves == 1 and m.bx == 1105 and m.by == 510 and not T.contains(detail, "bodies snapped"),
+        "a detached body carried by its initial component move receives no residual move", detail)
+    p, m = fixture({ correction_body_lag = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.moves == 1 and m.bx == 105 and m.by == 10 and T.contains(detail, "body correction unresolved(")
+            and not T.contains(detail, "bodies snapped"),
+        "a successful movement call with unchanged physical COM is reported as unresolved", detail)
+
+    p, m = fixture({ sim = false })
+    x, y, z = env.body_loc(p)
+    T.check(x == 100 and y == 0 and z == 150 and m.com_reads == 0 and m.socket_reads == 1,
+        "explicitly non-simulated mesh retains the visual socket fallback")
+    for _, opts in ipairs({ { sim_error = true }, { sim_unknown = true }, { com_error = true },
+            { com_nil = true }, { com_nan = true }, { com_inf = true } }) do
+        p, m = fixture(opts)
+        local err
+        x, y, z, err = env.body_loc(p)
+        T.check(x == nil and y == nil and z == nil and type(err) == "string" and m.socket_reads == 0,
+            "unreadable simulation / COM never falls back to animated proof: " .. T.repr(opts), err)
+    end
+    p, m = fixture({ com_error = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.moves == 0 and T.contains(detail, "body unavailable: physical pelvis unavailable"),
+        "unknown physical residual is logged and never guessed", detail)
+
+    local w = placed_world()
+    p, m = fixture({}, w.pawn)
+    w.env.body_loc = env.body_loc
+    w.env.teleport = function(pawn, target, yaw, attempt)
+        w.teleports = w.teleports + 1
+        return env.teleport(pawn, target, nil, attempt)
+    end
+    w:secs(4)
+    local st = w:status()
+    T.check(st and st.verified and st.tries == 1 and m.moves == 1 and w.teleports == 1,
+        "first physical correction precedes the placement-complete handshake", T.repr(st))
+    T.check(m.socket_reads == 0 and T.contains(w:logtext(), "bodies snapped("),
+        "the complete placement uses fresh physical proof throughout", w:logtext())
+    _G.StaticFindObject, _G.FName = saved_sfo, saved_fn
 end
 
 T.log("== the real env's teleport / hold carry the held weapon actors")

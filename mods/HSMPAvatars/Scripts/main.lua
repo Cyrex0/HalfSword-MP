@@ -1098,6 +1098,35 @@ function PX.spawn_spot(id, s)
     return at
 end
 PX.TONUS = { "All Body Tonus", "Upper Body Tonus", "Arm R Tonus", "Arm L Tonus", "Leg R Tonus", "Leg L Tonus", "Muscle Power" }
+function PX.grip_want(p,g,now)
+    if not g.lim or TUNE.grips==0 then return false end
+    local field=g.hand=="hand_r" and "Weapon R" or "Weapon L"
+    local wa=p.actor[field] -- current field, never a retained weapon UObject
+    if not (wa and wa:IsValid()) then return false end
+    if wa:GetClass():GetFName():ToString():match("^Weapon_Fists") then return true end
+    local ws=p.wservo and p.wservo[field]
+    return ws and now>=ws and now-ws<500 and p.wservo_actor and p.wservo_actor[field]==wa:GetAddress()
+end
+function PX.grip_identity(g,c)
+    return c and c:IsValid() and c:GetAddress()==g.addr and c:GetFName():ToString()==g.fname
+        and c.ConstraintInstance.ConstraintBone2:ToString()==g.hand
+end
+function PX.grip_limits(p,g,c,now)
+    if PX.grip_want(p,g,now) then
+        c:SetLinearXLimit(0,0);c:SetLinearYLimit(0,0);c:SetLinearZLimit(0,0)
+        c:SetAngularSwing1Limit(0,0);c:SetAngularSwing2Limit(0,0);c:SetAngularTwistLimit(0,0)
+        g.freed=true
+    elseif g.freed and g.lim then
+        local l=g.lim
+        c:SetLinearXLimit(l[1],l[4]);c:SetLinearYLimit(l[2],l[4]);c:SetLinearZLimit(l[3],l[4])
+        c:SetAngularSwing1Limit(l[5],l[6]);c:SetAngularSwing2Limit(l[7],l[8]);c:SetAngularTwistLimit(l[9],l[10])
+        g.freed=nil
+    end
+end
+function PX.grip_drive_current(p)
+    if not p.driving or p.gen~=world_gen or cache_gen~=world_gen or not p.peer or type(p.last)~="table" then return false end
+    return PURE.pose_context_ok(p.last,HSM and HSM.view(),HSM and HSM.mode(),p.peer)
+end
 function PX.grip_constraints(p, now)
     if p.grips and now - p.grips.at < 1000 then return p.grips.list end
     local list = {}
@@ -1115,12 +1144,13 @@ function PX.grip_constraints(p, now)
             local b2 = c.ConstraintInstance.ConstraintBone2:ToString()
             if b2 == "hand_r" or b2 == "hand_l" then
                 local addr = c:GetAddress()
+                local name=c:GetFName():ToString()
                 -- keep the BP values seen first (before we zeroed them) for the restore
                 local o = p.grips and p.grips.by[addr]
-                if o then o.c = c; list[#list + 1] = o else   -- the fresh component, never last scan's pointer
+                if o and o.fname==name and o.hand==b2 then o.c = c; list[#list + 1] = o else   -- the fresh component, never last scan's pointer
                     local pi = c.ConstraintInstance.ProfileInstance
                     local d = pi.AngularDrive.SlerpDrive
-                    local g = { c = c, addr = addr, hand = b2, stiff = d.Stiffness, damp = d.Damping, maxf = d.MaxForce }
+                    local g = { c = c, addr = addr, fname=name, hand = b2, stiff = d.Stiffness, damp = d.Damping, maxf = d.MaxForce }
                     pcall(function()
                         local L, C, T = pi.LinearLimit, pi.ConeLimit, pi.TwistLimit
                         g.lim = { L.XMotion, L.YMotion, L.ZMotion, L.Limit, C.Swing1Motion, C.Swing1LimitDegrees,
@@ -1134,7 +1164,7 @@ function PX.grip_constraints(p, now)
     end
     local by = {}
     local changed = false
-    for _, g in ipairs(list) do by[g.addr] = g; if not (p.grips and p.grips.by[g.addr]) then changed = true end end
+    for _, g in ipairs(list) do by[g.addr] = g; if not (p.grips and p.grips.by[g.addr]==g) then changed = true end end
     if changed then
         Log("pose: stand-in grip constraints driven off: %d (BP slerp drive %s)", #list, tostring(list[1] and list[1].stiff))
     end
@@ -1144,25 +1174,8 @@ function PX.grip_constraints(p, now)
     -- actor fights the hand-bone servo, so driven fists must be free too.
     -- Re-applied each refresh: the BP may re-lock.
     for _, g in ipairs(list) do
-        local field = g.hand == "hand_r" and "Weapon R" or "Weapon L"
-        local ws = p.wservo and p.wservo[field]
-        local fists = false
         pcall(function()
-            local wa = p.actor[field] -- resolve current possession, never an old cached actor
-            if wa and wa:IsValid() then fists = wa:GetClass():GetFName():ToString():match("^Weapon_Fists") ~= nil end
-        end)
-        local want = g.lim and TUNE.grips ~= 0 and (fists or (ws and now - ws < 500))
-        pcall(function()
-            if want then
-                g.c:SetLinearXLimit(0, 0); g.c:SetLinearYLimit(0, 0); g.c:SetLinearZLimit(0, 0)
-                g.c:SetAngularSwing1Limit(0, 0); g.c:SetAngularSwing2Limit(0, 0); g.c:SetAngularTwistLimit(0, 0)
-                g.freed = true
-            elseif g.freed then
-                local l = g.lim
-                g.c:SetLinearXLimit(l[1], l[4]); g.c:SetLinearYLimit(l[2], l[4]); g.c:SetLinearZLimit(l[3], l[4])
-                g.c:SetAngularSwing1Limit(l[5], l[6]); g.c:SetAngularSwing2Limit(l[7], l[8]); g.c:SetAngularTwistLimit(l[9], l[10])
-                g.freed = nil
-            end
+            PX.grip_limits(p,g,g.c,now)
         end)
         g.fresh = nil
     end
@@ -1199,6 +1212,10 @@ local function constraint_bone2(c) return c.ConstraintInstance.ConstraintBone2:T
 function PX.grips_off(p, off)
     local list = p.grips and p.grips.list
     if not list or #list == 0 then return end
+    if (p.gen~=nil and p.gen~=world_gen) or (off and not PX.grip_drive_current(p)) then
+        for _,g in ipairs(list) do g.c=nil end -- forget wrappers without touching stale native objects
+        return
+    end
     local fresh = PX.fresh_grips(p)
     if off then
         -- A grip the BP rebuilt (pick-up, drop, grip change) has a new address: until the
@@ -1216,9 +1233,16 @@ function PX.grips_off(p, off)
     for _, g in ipairs(list) do
         g.c = fresh[g.addr]   -- nil when the BP rebuilt it: never touch the old one
         pcall(function()
-            if not (g.c and g.c:IsValid()) then return end
+            if not PX.grip_identity(g,g.c) then
+                if off then p.grips.at=-math.huge end
+                g.c=nil;return
+            end
             if off then
                 g.c:SetAngularDriveParams(0, 0, 0)
+                -- The native sliding-grip timeline writes Z limits every
+                -- frame. Reassert this same policy on the fresh component,
+                -- including when the retained `freed` flag is already true.
+                PX.grip_limits(p,g,g.c,now_ms())
             else
                 if g.stiff then g.c:SetAngularDriveParams(g.stiff, g.damp or 0, g.maxf or 0) end
                 if g.freed and g.lim then
@@ -1235,6 +1259,7 @@ end
 -- Hand the stand-in back to its own muscles (no fresh pose).
 local function release_standin(p)
     PX.settle_reset(p,"drive released")
+    p.wservo,p.wservo_actor=nil,nil
     if PX.height_restore and p.body and p.body.height_probe and p.gen == world_gen and cache_gen == world_gen then
         PX.height_restore(p, "release", false)
     end
@@ -2214,6 +2239,7 @@ for i, bn in ipairs(PURE.V2_SLOTS) do _sv_fn[i] = fname(bn) end
 -- also starts the soft servo ramp and the spawn stretch watch.
 function PX.start_repose(p, body, now, why)
     PX.settle_reset(p,"repose")
+    p.wservo,p.wservo_actor=nil,nil
     body.repose_at = now
     body.reposes = (body.reposes or 0) + 1
     if why then
@@ -2480,6 +2506,10 @@ function PX.wc_check(p, field, c)
 end
 -- Synchronous dev snapshot of cache versus fresh native readbacks. It shares
 -- Parity's broadcast command, but reads only after this mod's world guard.
+function PX.wc_vec(v)
+    if type(v)~="table" then return "unavailable" end
+    return string.format("(%.6f,%.6f,%.6f)",v[1],v[2],v[3])
+end
 function PX.weaponstate(arg)
     if os.getenv("HSMP_DEV")~="1" then return end
     local session=HSM and HSM.new({every_s=0})
@@ -2495,12 +2525,28 @@ function PX.weaponstate(arg)
                     local c=p.body and p.body.sv and p.body.sv.wc and p.body.sv.wc[field]
                     local wa,root=PX.wc_check(p,field,c)
                     local actual,base,base_sim
+                    local actual_com,com_delta,mass,actor_scale,root_scale,com_error
                     if wa then
                         pcall(function()actual=root:IsSimulatingPhysics(fname("None"))end)
                         pcall(function()base=wa.BaseMesh;if base and base:IsValid() then base_sim=base:IsSimulatingPhysics(fname("None")) end end)
+                        local ok,why=pcall(function()
+                            local t=wa:GetTransform()
+                            local m=root:GetCenterOfMass(fname("None"))
+                            local q={t.Rotation.X,t.Rotation.Y,t.Rotation.Z,t.Rotation.W}
+                            -- Same orientation-frame/world-uu COM used when
+                            -- creating the servo entry; do not divide by scale.
+                            actual_com=PURE.qrot(PURE.qconj(q),{m.X-t.Translation.X,m.Y-t.Translation.Y,m.Z-t.Translation.Z})
+                            if c.com then com_delta=PURE.d3(actual_com,c.com) end
+                            actor_scale={t.Scale3D.X,t.Scale3D.Y,t.Scale3D.Z}
+                        end)
+                        if not ok then com_error=tostring(why) end
+                        pcall(function()mass=root:GetMass()end)
+                        pcall(function()local s=root:K2_GetComponentScale();root_scale={s.X,s.Y,s.Z}end)
                     end
-                    Log("WPNCACHE peer=%s pawn=%s match=%s round=%s life=%s field=%s actor_address=%s root_address=%s cached_sim=%s actual_root_sim=%s actual_base_sim=%s servo_at=%s grips=%s read_only=true",
-                        tostring(peer),shown.pawn,tostring(shown.match_id),tostring(shown.round),tostring(shown.life),field,tostring(c and c.addr),tostring(c and c.root_addr),tostring(c and c.sim),tostring(actual),tostring(base_sim),tostring(p.wservo and p.wservo[field]),PX.grips_desc(p))
+                    Log("WPNCACHE peer=%s pawn=%s match=%s round=%s life=%s world=%s generation=%s field=%s actor_address=%s root_address=%s cached_sim=%s actual_root_sim=%s actual_base_sim=%s servo_at=%s grips=%s cached_com=%s actual_com=%s com_delta=%s root_mass=%s actor_scale=%s root_scale=%s read_only=true",
+                        tostring(peer),shown.pawn,tostring(shown.match_id),tostring(shown.round),tostring(shown.life),tostring(PX.settle_world),tostring(p.gen),field,tostring(c and c.addr),tostring(c and c.root_addr),tostring(c and c.sim),tostring(actual),tostring(base_sim),tostring(p.wservo and p.wservo[field]),PX.grips_desc(p),
+                        PX.wc_vec(c and c.com),PX.wc_vec(actual_com),com_delta and string.format("%.6f",com_delta) or "unavailable",tostring(mass),PX.wc_vec(actor_scale),PX.wc_vec(root_scale))
+                    if com_error then Log("WPNCACHE_ERROR peer=%s pawn=%s field=%s property=COM reason=%s",tostring(peer),shown.pawn,field,com_error) end
                 end
             end
         end
@@ -3284,6 +3330,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 wstate = "servo"
                 p.wservo = p.wservo or {}
                 p.wservo[field] = now
+                p.wservo_actor=p.wservo_actor or {}
+                p.wservo_actor[field]=c.addr
             end
         end
         local cls = PX.wpn_status(c, wa, now)
@@ -3344,6 +3392,7 @@ end
 
 -- Runs every game frame for every claimed puppet.
 local function drive_frame(id, p, now)
+    p.peer=id
     local pl = p.play or {}
     p.play = pl
     local r = read_play(id, pl.seq)

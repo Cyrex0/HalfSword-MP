@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Recover initial dropped kit weapons by re-equipping the same native actor, retaining the
+  outfit and assigned fighter through the stand-in fallback's brief possession swap.
+- Reassert stand-in grip limits after native hand updates and check physical pelvis
+  placement on the first teleport, retaining the existing spawn readiness limits.
 - Add `hsmp-lab` recipe sessions, incremental evidence collectors, bootstrap comparisons,
   explicit baseline promotion, a regression journal and in-session A/B runs.
 - Add isolated modes/server-mods backend smoke and repeatable native deathmatch placement

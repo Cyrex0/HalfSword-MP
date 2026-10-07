@@ -352,14 +352,44 @@ local function in_arena()
     return ok
 end
 
+function PCF.fighter_context()
+    local i = rawget(_G, "HSMP_IPC")
+    if not (i and i.rec and i.bus_table and Kit.fighter_context) then return nil end
+    local w = PCF.world()
+    if not (w and w:IsValid()) then return nil end
+    local world = tostring(world_gen) .. "|" .. tostring(w:GetAddress()) .. "@" .. w:GetFullName()
+    return Kit.fighter_context(i.rec("session"), i.rec("link"), i.rec("mode"), i.bus_table("spawn_status"), world)
+end
+function PCF.describe(pawn)
+    local m
+    pcall(function()
+        if not (pawn and pawn:IsValid()) then return end
+        local w = pawn:GetWorld()
+        if not (w and w:IsValid()) then return end
+        m = { address = tostring(pawn:GetAddress()), name = pawn:GetFName():ToString(),
+            world = tostring(world_gen) .. "|" .. tostring(w:GetAddress()) .. "@" .. w:GetFullName() }
+    end)
+    return m
+end
+function PCF.resolve(name, address)
+    if not (PCF.settled and PCF.settled()) then return nil end
+    for _, pawn in pairs(FindAllOf("Willie_BP_C") or {}) do
+        local m = PCF.describe(pawn)
+        if m and m.name == name and m.address == address then return pawn end
+    end
+end
 local function local_pawn()
     local pc = PCF.get()
     if not pc or not pc:IsValid() then return nil end
     local owned = PCF.aip and PCF.aip.ai_pawn_lookup and PCF.aip.ai_pawn_lookup()
-    if owned then return owned end
-    local p = pc.Pawn
-    if p and p:IsValid() then return p end
-    return nil
+    local p = owned or pc.Pawn
+    if not (p and p:IsValid()) then p = nil end
+    if not Kit.local_fighter then return p end
+    local i = rawget(_G, "HSMP_IPC")
+    local swap = i and i.bus_table and i.bus_table("fallback_swap")
+    local context = PCF.fighter_context()
+    p, PCF.bound = Kit.local_fighter(p, context, PCF.bound, swap, os.clock(), PCF.describe, PCF.resolve)
+    return p
 end
 
 local function busy(w)
@@ -1802,6 +1832,10 @@ Kit.init({
     reveal = reveal, dress_wait = dress_wait, dress_age = dress_age,
     apply_armour = apply_armour, read_pieces = read_pieces, read_source = read_source,
     worn_count = worn_count, in_arena = in_arena, local_pawn = local_pawn, busy = busy,
+    fighter_context = function(pawn)
+        local context, m = PCF.fighter_context(), PCF.describe(pawn)
+        return context and m and context.pawn == m.name and context.world == m.world and context.key or nil
+    end,
     mp_live = mp_live,
 })
 
@@ -1810,6 +1844,7 @@ Kit.init({
 -- Forget everything tied to the old world without touching it. Pure Lua:
 -- safe inside the LoadMap hook.
 local function drop_world_caches()
+    PCF.bound = nil
     applied, tries, dumped_this_arena = {}, {}, false
     dressing, applied_at, puppet_names, seen_vis = {}, {}, {}, {}
     if hair_warmed_here then hair_warm_done = true end
@@ -1850,6 +1885,7 @@ local SETTLE = (function()
     return st, 2.0
 end)()
 local function world_settled() return SETTLE.settled() end
+PCF.settled = world_settled
 SI.world_settled = world_settled
 
 local seen_world = nil

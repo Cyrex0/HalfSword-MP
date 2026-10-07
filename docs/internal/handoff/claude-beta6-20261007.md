@@ -452,3 +452,29 @@ only as a callback-local fifth return, never in cached ReplayAttempts or the
 production changed mask. The old 59-pair ratio is biased and incomplete. Combat
 327/protection 23 assertions passed; native effects of this entire checkpoint
 still require deployment and real-game validation.
+
+### First-round polearm recovery checkpoint
+
+Clean checkpoint `32367829` passed G0. Native session 11 proved the ordered
+Doublet/flesh protection trace and fresh zero-Health diagnostics, but the default
+polearm spawn still failed physical readiness. Sword/cloth produced five AI
+rounds; that does not certify the polearm, all gear, or the release gates.
+
+Session 12 (`20261007-221011-303f48-combat_manual`) reproduced the owner's
+first-round duplicate polearm. Astra's read-only review traced an initial 912 cm
+placement, then a native hand collision with Yard fence actor StaticMeshActor_1061
+nine milliseconds later, followed by weapon drop and whole-kit re-dress. The
+original weapon and replacement had different native actor names. This is evidence
+of duplicate creation through recovery, not evidence of a world-replication clone.
+Captured actual/cached COM differed by less than 0.00002 uu; no cache refresh was
+justified. A separate native grip capture showed actual right linear Z limited
+while our cached intent still said free; native Timeline8 writes that limit.
+
+The focused candidate retains the recoverable actor through hand-only failures,
+preserves kit ownership only through the exact assigned fighter's temporary
+possession context, reasserts existing grip limits on fresh matching components,
+and checks fresh physical pelvis COM on the first placement attempt. Unknown
+physical reads fail placement verification. Readiness bounds stay unchanged.
+Offline tests and review are prerequisites, not native acceptance. Require a
+matched deployment and first-round polearm actor identity, actual grip limits,
+physical readiness, and repeated AI rounds before calling this defect resolved.

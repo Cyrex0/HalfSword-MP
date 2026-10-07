@@ -27,6 +27,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "strip" })
     T.isolated(T.script, "case", { kind = "strip_world_held" })
     T.isolated(T.script, "case", { kind = "publish" })
+    T.isolated(T.script, "case", { kind = "fallback_local" })
     T.isolated(T.script, "case", { kind = "menu_clean" })
     T.isolated(T.script, "case", { kind = "settle" })
     T.isolated(T.script, "case", { kind = "yield_passport" })
@@ -495,6 +496,43 @@ elseif opts.kind == "publish" then
     local now = own_loadout()
     T.check(now and now.r.class:find("/Game/W/B", 1, true) ~= nil and now.version > first.version,
         "a hand change is published within ~100 ms, as a new version", T.repr(now))
+
+elseif opts.kind == "fallback_local" then
+    boot()
+    M.own.__props["Weapon R"] = weapon("A", 7001, "/Game/W/A.A_C")
+    M.standin.__props["Weapon R"] = weapon("Foreign", 7009, "/Game/W/Foreign.Foreign_C")
+    HSMPNative.sc_put("session", { match_id = 9007199254740993, seq = 1, phase = 2, round = 0,
+        rows = { { peer_id = 1, connected = true, spawn_id = 256 } } })
+    HSMPNative.bus_put("spawn_status", { seq = 1, verified = true, match_id = 9007199254740993,
+        round = 1, life = 1, spawn_id = 256, pawn = "Willie_BP_C_3" })
+    run(4300, true)
+    local first = own_loadout()
+    T.check(first and first.r.class:find("/Game/W/A", 1, true), "placed original fighter publishes before fallback")
+    HSMPNative.bus_put("fallback_swap", { keep = "Willie_BP_C_3", until_s = os.clock() + 3 })
+    M.pc.__props.Pawn = M.standin
+    M.own.__props["Weapon R"] = weapon("C", 7003, "/Game/W/C.C_C")
+    run(300, true)
+    local during = own_loadout()
+    T.check(during and during.r.class:find("/Game/W/C", 1, true) and during.version > first.version,
+        "actual main resolver publishes original fighter hand during foreign PC swap", T.repr(during))
+    local status = HSMP_IPC.bus_table("kit_status")
+    T.check(status and status.pawn == "Willie_BP_C_3", "Kit and appearance writer resolve the same original fighter", T.repr(status))
+    HSMPNative.bus_put("spawn_status", { seq = 0 })
+    M.own.__props["Weapon R"] = weapon("D", 7004, "/Game/W/D.D_C")
+    run(300, true)
+    T.check(own_loadout().version == during.version and setup_armor == 0,
+        "repeated missing context during fallback permits no foreign publication or outfit setup")
+    HSMPNative.bus_put("spawn_status", { seq = 2, verified = true, match_id = 9007199254740993,
+        round = 1, life = 1, spawn_id = 256, pawn = "Willie_BP_C_3" })
+    run(1200, true) -- missing-pawn interval resets hand watch; normal 2s writer resumes
+    local restored = own_loadout()
+    T.check(restored.r.class:find("/Game/W/D", 1, true) and restored.version > during.version,
+        "restored exact context resumes original actor publication")
+    HSMPNative.bus_put("fallback_swap", { keep = "Willie_BP_C_3", until_s = os.clock() })
+    M.own.__props["Weapon R"] = weapon("E", 7005, "/Game/W/E.E_C")
+    run(300, true)
+    T.check(own_loadout().version == restored.version,
+        "expired fallback cannot continue accessing original or publish foreign fighter as ours")
 
 elseif opts.kind == "menu_clean" then
     -- a session is being joined from the menu; the kit status (bus key

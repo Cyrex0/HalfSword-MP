@@ -194,7 +194,7 @@ end
 --   world() -> { key=, short= }        (called only while the world guard passed)
 --   my_peer_id() -> n                  match() -> state, round
 --   pawn() -> p | nil   pawn_id(p) -> FName string   pawn_begun(p) -> bool
---   pawn_loc(p) -> x, y, z             body_loc(p) -> x, y, z | nil (Mesh pelvis; optional)
+--   pawn_loc(p) -> x, y, z             body_loc(p) -> x, y, z | nil,nil,nil,error (Mesh pelvis; optional)
 --   ground(p, x, y, z) -> floor_z | nil          (downward trace)
 --   clear(p, x, y, floor_z) -> bool              (capsule sweep)
 --   others(p) -> { {x,y,z}, ... }                (other Willies)
@@ -503,11 +503,11 @@ function P:verify_step(now)
     local x, y, z = env.pawn_loc(self.pawn)
     local d = x and dist_xy(x, y, c.dest.X, c.dest.Y) or math.huge
     local dz = z and math.abs(z - c.dest.Z) or math.huge
-    -- The visible body too (Mesh pelvis): a capsule on the spot with the
+    -- The body too (physical Mesh pelvis when simulated): a capsule on the spot with the
     -- ragdoll left behind is not placed.
-    local bx, by = nil, nil
-    if env.body_loc then bx, by = env.body_loc(self.pawn) end
-    local bd = bx and dist_xy(bx, by, c.dest.X, c.dest.Y) or 0
+    local bx, by, bz, body_err
+    if env.body_loc then bx, by, bz, body_err = env.body_loc(self.pawn) end
+    local bd = bx and dist_xy(bx, by, c.dest.X, c.dest.Y) or (body_err and math.huge or 0)
     if d <= T.verify_tol_cm and dz <= T.verify_dz_cm and bd <= T.verify_body_cm then
         c.checks = c.checks + 1
         if c.checks >= 2 then
@@ -528,7 +528,8 @@ function P:verify_step(now)
     end
     -- It did not stick (snapped back to the old body, pushed, fell).
     local where = x and string.format("(%.0f,%.0f,%.0f), %.0f cm from the destination%s", x, y, z, d,
-        bx and string.format("; body (Mesh pelvis) %.0f cm", bd) or "") or "unknown"
+        bx and string.format("; body (Mesh pelvis) %.0f cm", bd)
+            or (body_err and ("; body unavailable: " .. body_err) or "")) or "unknown"
     if c.tries < T.max_tries then
         self.counters.retries = self.counters.retries + 1
         env.log("spawn: placement did NOT stick: pawn at %s; re-teleporting", where)
@@ -1066,15 +1067,43 @@ function SP.make_ue_env(ctx)
         if l then return l.X, l.Y, l.Z end
         return nil
     end
-    -- Where the visible ragdoll is (Mesh pelvis), nil when unreadable.
-    function env.body_loc(p)
-        local l
-        pcall(function()
-            local m = p.Mesh
-            if m and m:IsValid() then l = m:GetSocketLocation(FName("pelvis")) end
+    local PELVIS = nil
+    local function finite(v)
+        return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+    end
+    -- A simulated body's animated socket may follow the capsule while the
+    -- rigid body is still at the native spawner. COM is a fresh physics read;
+    -- its fixed bone offset cancels when measuring a translation residual.
+    local function pelvis(m)
+        local sim
+        local ok = pcall(function()
+            PELVIS = PELVIS or FName("pelvis")
+            sim = m:IsSimulatingPhysics(PELVIS)
         end)
-        if l and l.X then return l.X, l.Y, l.Z end
-        return nil
+        if not ok or type(sim) ~= "boolean" then return nil, "pelvis simulation state unavailable" end
+        local l
+        ok = pcall(function()
+            if sim then l = m:GetCenterOfMass(PELVIS)
+            else l = m:GetSocketLocation(PELVIS) end
+            -- Copy plain scalars now; no native FVector wrapper is retained.
+            if not (l and finite(l.X) and finite(l.Y) and finite(l.Z)) then l = nil
+            else l = { X = l.X, Y = l.Y, Z = l.Z } end
+        end)
+        if not ok or not l then
+            return nil, sim and "physical pelvis unavailable" or "visual pelvis unavailable"
+        end
+        return l, nil, sim
+    end
+    -- Unknown simulation / physics reads explicitly fail placement proof.
+    function env.body_loc(p)
+        local m
+        pcall(function()
+            if p.Mesh and p.Mesh:IsValid() then m = p.Mesh end
+        end)
+        if not m then return nil, nil, nil, "Mesh unavailable" end
+        local l, err = pelvis(m)
+        if l then return l.X, l.Y, l.Z end
+        return nil, nil, nil, err
     end
     function env.prop_get(p, k) local v; pcall(function() v = p[k] end); return v end
     function env.prop_set(p, k, v) return pcall(function() p[k] = v end) end
@@ -1188,12 +1217,6 @@ function SP.make_ue_env(ctx)
     -- never switched on or off here: switching it off detaches a body for
     -- good, switching it on turns a kinematic copy into a falling ragdoll.
     local MESH_FIELDS = { "Mesh", "SK_Skeleton", "BoneCore", "DriverSkeleton" }
-    local PELVIS = nil
-    local function pelvis(m)
-        PELVIS = PELVIS or FName("pelvis")
-        local l; pcall(function() l = m:GetSocketLocation(PELVIS) end)
-        return (l and l.X) and l or nil
-    end
     -- Willie_BP's own PhysicsHandles hold the pelvis / spine to targets it
     -- keeps in WORLD space and re-derives each tick from the previous target
     -- (bytecode: LowerBody target = VInterpTo(previous target in Mesh space,
@@ -1328,9 +1351,9 @@ function SP.make_ue_env(ctx)
     end
     env.held_weapons, env.carry_weapons = held_weapons, carry_weapons   -- (tests)
 
-    -- try >= 2 (the previous move did not stick): also move a mesh whose
-    -- component followed but whose bodies (pelvis) did not, rigidly by the
-    -- pelvis residual (HSMPAvatars snap_mesh, proven on stand-ins).
+    -- On every attempt, including the first, check the physical pelvis after
+    -- the component moved or followed. Apply the existing rigid residual
+    -- correction once when the simulated body did not accompany that move.
     function env.teleport(p, dest, yaw, try)
         local a0; pcall(function() a0 = p:K2_GetActorLocation() end)
         if not a0 then return "no actor location" end
@@ -1340,7 +1363,11 @@ function SP.make_ue_env(ctx)
             local m; pcall(function() m = p[f] end)
             if m and m:IsValid() then
                 local l; pcall(function() l = m:K2_GetComponentLocation() end)
-                if l then comps[#comps + 1] = { f = f, m = m, x = l.X, y = l.Y, z = l.Z, pel = pelvis(m) } end
+                if l then
+                    local pl, err, sim = pelvis(m)
+                    comps[#comps + 1] = { f = f, m = m, x = l.X, y = l.Y, z = l.Z,
+                        pel = pl, pel_err = err, sim = sim }
+                end
             end
         end
         local skip = {}
@@ -1362,24 +1389,46 @@ function SP.make_ue_env(ctx)
             local l; pcall(function() l = c.m:K2_GetComponentLocation() end)
             local tx, ty, tz = c.x + ox, c.y + oy, c.z + oz
             local lag = l and math.sqrt((l.X - tx) ^ 2 + (l.Y - ty) ^ 2 + (l.Z - tz) ^ 2) or math.huge
+            local note
             if lag > 30 then
                 pcall(function() c.m:K2_SetWorldLocation({ X = tx, Y = ty, Z = tz }, false, {}, true) end)
-                parts[#parts + 1] = string.format("%s moved(%.0fcm)", c.f, lag == math.huge and -1 or lag)
+                note = string.format("%s moved(%.0fcm)", c.f, lag == math.huge and -1 or lag)
             else
-                local note = c.f .. " followed"
-                local pl = (try or 1) >= 2 and c.pel and pelvis(c.m)
-                if pl then
-                    local rx, ry, rz = c.pel.X + ox - pl.X, c.pel.Y + oy - pl.Y, c.pel.Z + oz - pl.Z
-                    local res = math.sqrt(rx * rx + ry * ry + rz * rz)
-                    if res > 100 and l then
-                        pcall(function()
-                            c.m:K2_SetWorldLocation({ X = l.X + rx, Y = l.Y + ry, Z = l.Z + rz }, false, {}, true)
-                        end)
-                        note = string.format("%s bodies snapped(%.0fcm)", c.f, res)
-                    end
-                end
-                parts[#parts + 1] = note
+                note = c.f .. " followed"
             end
+            local pl, err, sim = pelvis(c.m)
+            if c.pel_err or err then
+                note = note .. "; body unavailable: " .. (c.pel_err or err)
+            elseif c.sim ~= sim then
+                note = note .. "; body unavailable: pelvis simulation state changed"
+            elseif c.pel and pl and sim then
+                local rx, ry, rz = c.pel.X + ox - pl.X, c.pel.Y + oy - pl.Y, c.pel.Z + oz - pl.Z
+                local res = math.sqrt(rx * rx + ry * ry + rz * rz)
+                if res > 100 then
+                    -- Read the component again: the moved branch may have
+                    -- changed it already. Never apply the actor offset twice.
+                    local current; pcall(function() current = c.m:K2_GetComponentLocation() end)
+                    if current then
+                        local moved = pcall(function()
+                            c.m:K2_SetWorldLocation({ X = current.X + rx, Y = current.Y + ry, Z = current.Z + rz }, false, {}, true)
+                        end)
+                        local after, after_err, after_sim = pelvis(c.m)
+                        if moved and after and after_sim then
+                            local remaining = math.sqrt((c.pel.X + ox - after.X) ^ 2
+                                + (c.pel.Y + oy - after.Y) ^ 2 + (c.pel.Z + oz - after.Z) ^ 2)
+                            note = note .. string.format("; %s(%.0fcm), physical residual(%.0fcm)",
+                                remaining <= 100 and "bodies snapped" or "body correction unresolved", res, remaining)
+                        else
+                            note = note .. "; body correction unavailable" .. (after_err and (": " .. after_err) or "")
+                        end
+                    else
+                        note = note .. "; body correction unavailable: component location"
+                    end
+                else
+                    note = note .. string.format("; physical residual(%.0fcm)", res)
+                end
+            end
+            parts[#parts + 1] = note
             pcall(function() c.m:SetAllPhysicsLinearVelocity({ X = 0, Y = 0, Z = 0 }, false) end)
             pcall(function() c.m:SetAllPhysicsAngularVelocityInDegrees({ X = 0, Y = 0, Z = 0 }, false) end)
         end
