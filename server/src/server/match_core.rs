@@ -207,6 +207,9 @@ pub(super) fn game_status_in(inner: &mut Inner, id: PeerId, _alive: bool, loaded
 }
 
 /// Placement is proof of a healthy, verified world, not merely a spawn id echo.
+/// A verified placement without LOADED (placed, the game not Ready yet) authorizes the
+/// peer's roots so the others can make its stand-in during their own load; only a LOADED
+/// one counts for the load barrier and spawn protection (the return value).
 pub(super) fn game_status_placed(inner: &mut Inner, id: PeerId, gs: &hsmp_ipc::schema::session::GameStatus) -> bool {
     let arena = gs.arena.as_str().unwrap_or("");
     let expected_life = if matches!(inner.match_state.as_str(),"loading"|"countdown") && gs.round == inner.match_round + 1 {
@@ -214,7 +217,7 @@ pub(super) fn game_status_placed(inner: &mut Inner, id: PeerId, gs: &hsmp_ipc::s
     } else { modes::peer_life(inner, id) };
     if gs.match_id != inner.sess.match_id || gs.spawn_id == 0 || gs.load_error != 0
         || gs.life == 0 || gs.life != expected_life
-        || gs.flags & v5::status_flags::LOADED == 0 || gs.flags & v5::status_flags::DEAD != 0
+        || gs.flags & v5::status_flags::DEAD != 0
         || arena.trim().is_empty() || !arena_matches(inner, Some(arena))
         || !inner.spawn_plan.iter().any(|s| s.peer_id == id && s.spawn_id == gs.spawn_id)
     { return false; }
@@ -230,6 +233,7 @@ pub(super) fn game_status_placed(inner: &mut Inner, id: PeerId, gs: &hsmp_ipc::s
             p.last_valid_pos=None;p.last_root=None;p.last_valid_ms=0;
         }
     }
+    if gs.flags & v5::status_flags::LOADED == 0 { return false; }
     note_placed(inner, id, round);
     if gs.round == inner.match_round { modes::on_placed(inner, id, gs.spawn_id); }
     true

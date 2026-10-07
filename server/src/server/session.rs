@@ -206,6 +206,24 @@ mod root_generation_tests {
         {let mut i=state.inner.lock().await;let mut fresh=gs(2);fresh.life=2;
             assert!(match_core::game_status_placed(&mut i,1,&fresh));assert!(i.peers[&from].last_valid_pos.is_some());}
     }
+    #[tokio::test]
+    async fn placed_before_ready_authorizes_roots_but_not_the_load_barrier() {
+        let state=Arc::new(ServerState::new(8));
+        let from:SocketAddr="127.0.0.1:44992".parse().unwrap();
+        let gs=|flags:u32| rec::GameStatus {match_id:91,round:1,life:1,spawn_id:1<<8,
+            flags,arena:Str::new("Map_Arena_Alley"),..Default::default()};
+        {let mut i=state.inner.lock().await;i.peers.insert(from,match_core::round_tests::peer(1,"p"));
+            i.match_state="countdown".into();i.match_round=0;i.spawn_round=1;
+            i.match_arena="Map_Arena_Alley".into();i.sess.match_id=91;
+            i.spawn_plan=vec![crate::spawns::SpawnAssign {peer_id:1,spawn_id:1<<8,slot:0,pos:[0.0;3],yaw:0.0,protect_ms:3000}];
+            assert!(!match_core::game_status_placed(&mut i,1,&gs(0)),"placed without LOADED is not loaded");
+            assert!(!i.sess.placed.contains_key(&1),"no spawn protection before Ready");}
+        let root=Root {match_id:91,round:1,life:1,pos:[0.0,0.0,100.0],rot:[0.0,0.0,0.0,1.0],..Default::default()};
+        assert!(accept_root(&state,from,root.pos,root).await.is_some(),"a placed peer's root is relayed before Ready");
+        {let mut i=state.inner.lock().await;
+            assert!(match_core::game_status_placed(&mut i,1,&gs(v5::status_flags::LOADED)));
+            assert_eq!(i.peers[&from].last_valid_pos,Some([0.0,0.0,100.0]),"Ready on the same placement keeps the movement limits");}
+    }
 }
 
 /// Liveness bookkeeping for stream packets that need no validation.

@@ -143,6 +143,10 @@ do
     w.kit_status = { pawn = w.pawn.id, ok = false, armour_n = 3, l_class = "Shield", rev = 1, error = "verifying" }
     w:tick(2)
     T.check(w.dir.state == "Spawn", "a not-yet-verified kit holds the pipeline")
+    local pgs = w:sent("game_status")
+    pgs = pgs[#pgs]
+    T.check(pgs and (pgs.flags & S.ENUMS.status_flag.LOADED) == 0 and pgs.spawn_id == 256 and pgs.round == 1 and pgs.life == 1,
+        "placed before Ready: game_status carries the verified order (roots authorized) without LOADED", T.repr(pgs))
     w.kit_status = { pawn = w.pawn.id, ok = true, armour_n = 5, r_class = "Sword", l_class = "Shield", rev = 1, stable = false, t = w.clock }
     w:tick(4)                                        -- 1.0 s: inside the native re-arm window
     T.check(w.dir.state == "Spawn" and D.PIPE[w.dir.pipe.step] == "kit", "a kit verified < 1.5 s ago is not trusted yet")

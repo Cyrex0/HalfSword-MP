@@ -1002,7 +1002,7 @@ function Dir:travel_menu(why, opts)
     self.in_match = false
     self.target = D.MENU_WORLD
     self.ready_round, self.loaded_for, self.loaded_key, self.reloaded_for = 0, 0, nil, nil
-    self.ready_context, self.applied_spawn_id = nil, 0
+    self.ready_context, self.applied_spawn_id, self.place_context = nil, 0, nil
     self.pipe = nil
     if s and s.exists and not opts.no_flag then
         self:return_to_lobby()
@@ -1275,7 +1275,7 @@ function Dir:start_pipeline(w, s, why, serve_round, status_since)
     self.loaded_for = serve_round or (respawn and s.round or (s.pending_round or (s.round + 1)))
     self.loaded_key = self:round_key(self.loaded_for)
     self.ready_round = 0
-    self.ready_context = nil
+    self.ready_context, self.place_context = nil, nil
     self.load_error, self.errors_logged, self.protect_logged = nil, nil, nil
     self.load_context = nil
     self.pipe = { key = w.key, arena = w.short, round = self.loaded_for, match_id = s.match_id,
@@ -1382,6 +1382,12 @@ function Dir:step_pipeline(w, s)
                 p.placed = { st.x, st.y, st.z }
                 p.verified_life = st.life
                 p.place_tol = st.tol
+                -- The verified spawn order authorizes this pawn's roots on the server before
+                -- Ready (ping, without LOADED): peers' stand-ins can be made during the
+                -- census instead of waiting on each other's Ready.
+                self.place_context = (p.order and (p.order.spawn_id or 0) ~= 0) and { match_id = p.match_id or s.match_id,
+                    match_gen = p.match_gen, life = st.life, round = p.round, pawn = p.pawn_id, world = p.key,
+                    arena = p.arena, spawn_id = p.order.spawn_id } or nil
                 self:next_step(string.format("hsmpsync(id=%s tries=%s %.0fcm%s)", tostring(st.spawn_id),
                     tostring(st.tries), d, p.retried and " after retry" or ""))
                 return false
@@ -1637,7 +1643,7 @@ function Dir:on_world(w, s)
     self.pending_travel = nil
     self.pipe = nil
     self.ready_round = 0
-    self.ready_context = nil
+    self.ready_context, self.place_context = nil, nil
     self.frozen_id = nil
     self.applied_spawn_id = 0
     -- The menu world is up, the MP arena is gone: the save guard may
@@ -1726,7 +1732,7 @@ function Dir:bump_match(why)
     -- clearing here must not happen on that late allocation transition.
     self.respawn_for = nil
     self.respawn_life = nil
-    self.ready_round, self.applied_spawn_id, self.ready_context = 0, 0, nil
+    self.ready_round, self.applied_spawn_id, self.ready_context, self.place_context = 0, 0, nil, nil
     self.mt.fresh, self.mt.fresh_why = true, why
     self.env.log("director: new match context #%d (%s)", self.match_gen, why)
 end
@@ -1953,6 +1959,13 @@ function Dir:ping(s, pawn)
     -- same context only while that exact pawn and world remain current.
     if loaded and (not ctx.match_id or ctx.match_id == 0) then ctx.match_id = s.match_id end
     if loaded then flags = flags | code(env, "status_flag", "LOADED", 1) end
+    -- Placed, not yet Ready: the same context checks on the verified placement, no LOADED
+    -- (the load barrier still waits for Ready).
+    local pc = not loaded and self.place_context
+    local placed = pc and pc.match_gen == self.match_gen and pc.life and pc.life > 0
+        and pc.world == self.wkey and pc.arena == self.wshort and pawn
+        and pc.pawn == env.pawn_id(pawn) and self.load_error == nil
+    if placed and (not pc.match_id or pc.match_id == 0) then pc.match_id = s.match_id end
     if dead then flags = flags | code(env, "status_flag", "DEAD", 4) end
     if self.in_match == false and (self.wshort == nil or is_menu(self.wshort)) then
         flags = flags | code(env, "status_flag", "IN_MENU", 8)
@@ -1960,12 +1973,12 @@ function Dir:ping(s, pawn)
     local failed = self.load_error and self.load_context
     local failure_current = failed and failed.match_gen == self.match_gen
     self:send("game_status", {
-        match_id = (loaded and ctx.match_id) or (failed and failed.match_id) or s.match_id or 0,
-        round = loaded and self.ready_round or (failed and failed.round) or 0,
+        match_id = (loaded and ctx.match_id) or (placed and pc.match_id) or (failed and failed.match_id) or s.match_id or 0,
+        round = loaded and self.ready_round or (placed and pc.round) or (failed and failed.round) or 0,
         world_key = D.world_hash(self.wkey), flags = flags,
-        spawn_id = loaded and self.applied_spawn_id or 0,
+        spawn_id = loaded and self.applied_spawn_id or (placed and pc.spawn_id) or 0,
         load_error = D.load_error_code(env, failure_current and self.load_error or nil), arena = arena,
-        life = loaded and ctx.life or 0,
+        life = loaded and ctx.life or (placed and pc.life) or 0,
     })
 end
 
