@@ -693,6 +693,9 @@ function Place-GameWindow([int]$procId, [int]$i, [int]$n) {
 $launchSince = NowMs
 for ($i = 1; $i -le $Instances; $i++) {
     $ie = Inst-Env $i
+    # this instance's own events count from its launch: placing its window waits for the
+    # engine's window, which appears after the game already wrote `_open`
+    $instSince = (NowMs) - 2000
     if ($FakeGame) {
         [void](Start-Tracked "game$i" $Gate @("fake-game") (Join-Path $Run "fakegame$i.log") $Win64 $ie)
     } else {
@@ -702,7 +705,7 @@ for ($i = 1; $i -le $Instances; $i++) {
     $gt = @($script:Tracked | Where-Object { $_.role -eq "game$i" }) | Select-Object -Last 1
     if ($gt -and -not $FakeGame) { Place-GameWindow ([int]$gt.pid) $i $Instances }
     # serialise start-up on the instance's own first event instead of a fixed sleep
-    $w = Wait-Step ([ordered]@{ do = "wait"; ev = "_open"; who = "$i"; timeout_s = $GameStartTimeout }) ((NowMs) - 2000)
+    $w = Wait-Step ([ordered]@{ do = "wait"; ev = "_open"; who = "$i"; timeout_s = $GameStartTimeout }) $instSince
     if ($w.code -ne 0) { Say "instance $i wrote no hsmp_log _open event in ${GameStartTimeout}s (mods not instrumented?) - continuing" Yellow }
     if ($topology -eq "listen" -and $i -eq 1 -and $Instances -gt 1) {
         # the listen host connects first (it owns its server by its player key)
@@ -724,7 +727,10 @@ Place-AllGameWindows
 $script:WindowsReplaced = $false
 
 # --- 6. scenario steps -------------------------------------------------------------------------
-$since = if ($topology -eq "listen") { $launchSince } else { NowMs }
+# From the first launch in every topology: a game can reach its lobby while the later ones
+# are still starting (window placement waits for each engine window), and this run's state
+# dirs are fresh, so no older event can match.
+$since = $launchSince
 $failed = $null
 $cmdSeq = 0
 $quitDone = $false
