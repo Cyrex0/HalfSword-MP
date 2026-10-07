@@ -340,6 +340,15 @@ fn v3_within(v: &[f32; 3], lim: f32) -> bool {
 }
 
 pub fn check_damage(d: &Damage) -> Result<(), Invalid> {
+    // Inside continuations retain their accepted parent's exact weapon module.
+    // This does not admit free-standing legacy weapon damage or cutting boxes.
+    let continuation = d.parent_cid != 0 && d.flags & 1 != 0 && d.flags & 32 == 0;
+    // COMPLEX|INSIDE with no parent is a geometry-checked origin whose DCD
+    // gate stopped damage, never a legacy/raw damage replay.
+    if d.parent_cid == 0 && d.flags & 33 == 33 && (d.flags & 128 == 0
+        || d.match_id == 0 || d.round == 0 || d.attacker_life == 0 || d.victim_life == 0) {
+        return Err(Invalid::Range("flags"));
+    }
     // Armour-stage bits 0..17 are native damage inputs; 18 is a fist
     // pseudo-weapon, 19/20 identify left/right source hand. Old senders have
     // neither hand bit. Bits 21..24 are the native collision array ordinal
@@ -347,7 +356,8 @@ pub fn check_damage(d: &Damage) -> Result<(), Invalid> {
     if d.dism_blunt & (1 << 26) != 0 && d.flags & (1 << 5) == 0 {
         return Err(Invalid::Range("dism_blunt"));
     }
-    if d.dism_blunt & 0x7be0_0000 != 0 && d.flags & ((1 << 5) | (1 << 7)) != ((1 << 5) | (1 << 7)) {
+    if d.dism_blunt & 0x7be0_0000 != 0 && d.flags & ((1 << 5) | (1 << 7)) != ((1 << 5) | (1 << 7))
+        && !(continuation && d.flags & 128 != 0 && d.dism_blunt & 0x7a00_0000 == 0) {
         return Err(Invalid::Range("dism_blunt"));
     }
     if d.flags & (1 << 5) != 0 && (d.dism_blunt < 0
@@ -360,7 +370,9 @@ pub fn check_damage(d: &Damage) -> Result<(), Invalid> {
     }
     let ordinal = (d.dism_blunt >> 21) & 15;
     let box_ordinal = (d.dism_blunt >> 27) & 15;
-    if d.flags & (1<<7) != 0 && (d.flags & (1<<5) == 0 || ordinal==0) {return Err(Invalid::Range("dism_blunt"));}
+    if d.flags & (1<<7) != 0 && ((!continuation && d.flags & (1<<5) == 0) || ordinal==0) {return Err(Invalid::Range("dism_blunt"));}
+    if continuation && (d.dism_blunt < 0 || d.dism_blunt & !0x01fc_00ff != 0
+        || d.dism_blunt & 0x18_0000 == 0x18_0000) {return Err(Invalid::Range("dism_blunt"));}
     if ordinal != 0 && d.dism_blunt & 0x18_0000 == 0 { return Err(Invalid::Range("dism_blunt")); }
     if ordinal != 0 && d.source_class.is_empty() { return Err(Invalid::Range("source_class")); }
     if !d.source_class.as_str().is_some_and(|s|s.bytes().all(|b|b.is_ascii_alphanumeric() || b==b'_')) {
@@ -659,6 +671,33 @@ mod tests {
     }
 
     #[test]
+    fn inside_component_identity_requires_bound_continuation() {
+        let mut d=claim();d.flags=129;d.parent_cid=3;
+        d.dism_blunt=(1<<20)|(1<<21);d.source_class=Str::new("ModularWeaponBP_ArmingSword_T3_C");
+        assert!(check_damage(&d).is_ok());
+        for edit in 0..7 {
+            let mut bad=d;
+            match edit {
+                0=>bad.parent_cid=0,
+                1=>bad.flags &= !1,
+                2=>bad.flags &= !128,
+                3=>bad.dism_blunt|=1<<19,
+                4=>bad.dism_blunt|=1<<27,
+                5=>bad.dism_blunt|=1<<25,
+                _=>bad.source_class=Str::new(""),
+            }
+            assert!(check_damage(&bad).is_err(),"malformed continuation {edit}");
+        }
+        let mut origin=d;origin.parent_cid=0;origin.flags=161;
+        origin.match_id=123;origin.attacker_life=1;origin.victim_life=1;
+        assert!(check_damage(&origin).is_ok(),"exact modern origin is represented without layout changes");
+        origin.flags=33;
+        assert!(check_damage(&origin).is_err(),"origin cannot be a legacy/body damage replay");
+        origin.flags=161;origin.match_id=0;
+        assert!(check_damage(&origin).is_err(),"origin cannot evade modern context/geometry checks");
+    }
+
+    #[test]
     fn damage_round_trip_and_checks() {
         let rows = [DamageDelta::new(0, -35.25), DamageDelta::new(11, 4.0)];
         let p = to_payload(&claim(), &rows);
@@ -675,6 +714,7 @@ mod tests {
         assert_eq!(bad(&|d| d.bone = Str::new("neck\"}")), Invalid::Range("bone"));
         let mut all = claim();
         all.flags = DAMAGE_FLAGS_ALL;
+        all.match_id=123;all.attacker_life=1;all.victim_life=1;
         all.dism_blunt=(1<<20)|(1<<21);all.source_class=Str::new("ModularWeaponBP_ArmingSword_C");
         assert!(view::<Damage>(&to_payload(&all, &[])).is_ok(), "every flag bit is defined");
         assert_eq!(bad(&|d| d.location[1] = 2.0e7), Invalid::Range("location"));

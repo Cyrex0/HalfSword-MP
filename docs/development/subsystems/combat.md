@@ -28,8 +28,10 @@ Damage is owner-authoritative and server-validated:
 3. An accepted claim goes to the victim's owner as `damage_in`. The victim's HSMPCombat **replays
    it natively** through its own pawn's "Deal Complex Damage": its own armour, height, wounds,
    bleeding, dismemberment and death apply exactly as in solo play.
-4. Every other player gets the same record as `hitfx_in` and replays it on its stand-in of the
-   victim for blood, wounds and bruises, then puts the stand-in's damage state back.
+4. After the victim reports an authenticated changed native injury outcome, every other
+   player gets the approved record as `hitfx_in`. It replays cosmetics on its stand-in of
+   the victim, then restores the stand-in's damage state. Transport ACKs and bookkeeping
+   alone do not authorize wounds.
 5. The victim's vitals stream (CON, part health, bleeding, ...) is what every screen shows.
 
 Record flow (G2S = game to sidecar over shared memory, C2S / S2C = network):
@@ -38,7 +40,7 @@ Record flow (G2S = game to sidecar over shared memory, C2S / S2C = network):
 |---|---|---|
 | `damage` | G2S, C2S | the claim; the sidecar fills `hit_id`, `round`, `age_ms` and resends every 120 ms until a final verdict (gives up after 2 s) |
 | `damage_in` | S2C, S2G | the approved claim, to the victim's owner (`WireHdr.peer` = attacker) |
-| `hitfx_in` | S2C, S2G | the approved claim, to every other player that negotiated `caps::HIT_FX` |
+| `hitfx_in` | S2C, S2G | the approved claim after observed native owner injury, to other players with `caps::HIT_FX` |
 | `damage_verdict` | S2C, S2G | `CONFIRM` (first acceptance), `FINAL` (ok or a reason code) or `CLASH` |
 | `damage_ack` | C2S | the victim's sidecar got a `damage_in` |
 | `clash` / `touch` | G2S, C2S | parry evidence: my weapon met theirs / their stand-in reached my body |
@@ -275,7 +277,15 @@ follows from that.
   (Rigidity·|Hit Velocity| first). Each claim carries the game's claim id `cid`
   and `lage_ms` (time held in the game). `attacker_ts = floor(os.clock·1000)` in the callback (the
   pose clock); `victim_view_ts` / `victim_arm_ts` come from HSMPAvatars' `playback` bus key (what the
-  stand-in was displaying). A Get Damage callback is never a claim.
+  stand-in was displaying). These are physical sample times on the owner's clock,
+  including the sender physics step. The servo quantizes the time to whole milliseconds
+  before constructing its targets, so the existing u32 fields carry that exact time;
+  publication never rounds a fractional target or subtracts the selected frame's step.
+  Lag compensation samples that time directly using only the frames relayed to the
+  attacker, and refuses missing delivered endpoints or relay history. Sender frame-start
+  stamps remain the relay/cache keys and clock-estimator inputs. Deploy the Avatar and
+  server changes together: an older Avatar publishes a different timestamp meaning.
+  A Get Damage callback is never a claim.
 - **Verdicts** arrive as `damage_verdict` events: `CONFIRM` the first time the server accepts the
   hit (forwarded or held), `FINAL` with ok or a reason code, and `CLASH` for a validated clash. They
   feed the log and the counters below.
@@ -354,9 +364,18 @@ Vitals take a per-sender budget (`rate::Kind::Vitals`, 40 burst, 25/s; an honest
 The early `CONFIRM` is not final; the sidecar keeps resending. The `FINAL` verdict follows the
 victim's ack. A validated clash produces a `CLASH` verdict (`hit_id` 0) to both players; clashes are
 judged on the server tick (`lagcomp::judge_due`). On the first forward of a hit the glue books it in
-the ledger and sends `hitfx_in` to every other player that negotiated `caps::HIT_FX`, the attacker
-included (its own stand-in of the victim then shows the approved wound). A hit forwarded after the
+the ledger. Cosmetics wait for a fresh authenticated `REPLAY_CHANGED` owner outcome with
+changed injury fields; `damage_ack` alone is insufficient. Then `hitfx_in` goes to other
+players with `caps::HIT_FX`, the attacker included. Duplicate receipts, refused native
+attempts, suppressed origins and bookkeeping-only changes cannot paint a wound. A hit forwarded after the
 round ended or the target died is answered `round over / target down`.
+
+Stand-ins keep native `Force Disable Vertex Paint=true`, which gates DCD armour paint
+before Get Damage's invulnerability gate. Accepted cosmetic replay temporarily opens
+this guard, restores it even on Lua/native errors, and discards wrappers if the world
+guard dropped during replay. Probe damage sampling remains enabled separately. This
+uses the owner's injury outcome to authorize approved-input cosmetic replay; it does
+not yet copy the owner's vertex colors or paint-only outcomes with no sampled injury.
 
 API notes:
 

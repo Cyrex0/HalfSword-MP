@@ -113,6 +113,10 @@ pub const CONTRACT: &[Entry] = &[
     e("combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s", "owner_replay_by_status", "attacker_receipts_by_status", "owner_observed_fields", "attacker_observed_fields", "owner_health_delta", "attacker_health_delta", "unsupported_source_colliders"]),
     e("x_combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s", "owner_replay_by_status", "attacker_receipts_by_status", "owner_observed_fields", "attacker_observed_fields", "owner_health_delta", "attacker_health_delta", "unsupported_source_colliders"]),
     e("x_pose_contact", L, &[], &[]),   // stand-in contact impulses (diagnostic, not gated)
+    e("x_pose_clock_reset", L, &[], &["peer", "threshold_ms", "expect", "projected_clk", "delta_ms",
+        "clk_pt", "clk_at", "clk_rate", "local_ms", "source_pt", "read_at", "rate", "lead", "mode",
+        "age", "delay", "jitter", "iv", "quiet", "cut", "step", "frame", "source_seq", "fresh",
+        "match_id", "round", "life", "has_context"]), // pre-correction clock diagnostic
     // DoD-8: attributes a career-file mtime change to a pre-session native write (guard off)
     e("x_save_call", L, &["fn", "slot", "active"], &["err"]),
     e("x_autotest_cmd", L, &[], &[]),

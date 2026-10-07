@@ -984,17 +984,32 @@ do
     api.C3.protect(S2)
     T.check(S2.Invulnerable == true and SW["Temp Disable Damage"] == true, "protect: stand-in Invulnerable, its weapon gated")
     T.check(S2["Force Disable Dismemberment"] == true, "protect: stand-in native severing guard set")
+    T.check(S2["Force Disable Vertex Paint"] == true,"native stand-in paint guard suppresses speculative armour/skin marks")
+    local probe_before=api.C3.native_probe
+    api.C3.native_probe=true;api.C3.protect(S2)
+    local paints=0
+    S2["Deal Complex Damage"]=function(self)
+        if not self["Force Disable Vertex Paint"] then paints=paints+1 end
+        if not self.Invulnerable then self.Health=self.Health-2 end
+    end
+    S2["Deal Complex Damage"](S2)
+    T.check(S2.Health==998 and paints==0,"probe still samples native damage while speculative paint is disabled")
+    api.C3.native_probe=probe_before
     api.C3.ungate(S2)
     T.check(S2.Invulnerable == false and S2["Force Disable Dismemberment"] == false,
         "pooled stand-in possessed locally regains native injury")
+    T.check(S2["Force Disable Vertex Paint"] == false,"confirmed local pooled pawn regains native paint")
     api.C3.protect(S2) -- re-establish weapon provenance for the pickup checks below
     ME["Weapon R"] = SW                      -- I picked its weapon up
     ME.Invulnerable = true                   -- (the game's own spawn protection: left alone)
     ME["Force Disable Dismemberment"] = true -- not a stand-in pawn: preserve native setting
+    ME["Force Disable Vertex Paint"] = true
     api.C3.ungate(ME)
     T.check(SW["Temp Disable Damage"] == false and ME.Invulnerable == true,
         "a gated stand-in weapon in my hands deals damage again; my own Invulnerable untouched")
     T.check(ME["Force Disable Dismemberment"] == true, "normal own pawn dismemberment setting is untouched")
+    T.check(ME["Force Disable Vertex Paint"] == true,"normal own pawn native paint setting is untouched")
+    ME["Force Disable Vertex Paint"] = nil
     ME["Force Disable Dismemberment"] = false
     SW["Temp Disable Damage"] = true         -- the game's own 0.2 s gate later
     api.C3.ungate(ME)
@@ -1183,9 +1198,12 @@ do
     status.life=1;placed()
     NAT.sc_put("mode", {match_id=12345,seq=102,mode=ES.game_mode.DEATHMATCH,round=3,
         rows={{peer_id=9,seat=0,life=1,alive=true},{peer_id=2,seat=1,life=1,alive=true}}})
-    local fx_calls=0
+    local fx_calls,fx_paints=0,0
     local original_dcd=SI["Deal Complex Damage"]
-    SI["Deal Complex Damage"]=function() fx_calls=fx_calls+1 end
+    SI["Deal Complex Damage"]=function(self)
+        fx_calls=fx_calls+1
+        if self["Force Disable Vertex Paint"]==false then fx_paints=fx_paints+1 end
+    end
     local fx={target_peer_id=2,bone="head",flags=32,match_id=12345,round=3,attacker_life=2,victim_life=1}
     T.check(T.contains(api.C3.apply_fx(fx,9),"stale") and fx_calls==0,"old attacker life cannot paint current stand-in")
     fx.attacker_life=1;fx.victim_life=2
@@ -1194,6 +1212,33 @@ do
     T.check(T.contains(api.C3.apply_fx(fx,9),"stale") and fx_calls==0,"previous match cannot paint same-round stand-in")
     fx.match_id=12345
     T.check(api.C3.apply_fx(fx,9)=="fx: replayed on stand-in" and fx_calls==1,"correct displayed-life cosmetic hit still invokes native replay")
+    T.check(fx_paints==1 and SI["Force Disable Vertex Paint"]==true,
+        "approved owner outcome paint opens only during native replay and closes afterward")
+    SI["Deal Complex Damage"]=function(self)
+        T.check(self["Force Disable Vertex Paint"]==false,"authorized cosmetic error occurs inside scoped paint permission")
+        error("native cosmetic failure")
+    end
+    T.check(T.contains(api.C3.apply_fx(fx,9),"replay failed") and SI["Force Disable Vertex Paint"]==true,
+        "native replay failure always restores stand-in paint guard")
+    local original_args=api.C3.dcd_args
+    api.C3.dcd_args=function()error("argument construction failure")end
+    T.check(T.contains(api.C3.apply_fx(fx,9),"replay failed") and SI["Force Disable Vertex Paint"]==true,
+        "argument failure also closes guard instead of leaving replay permission active")
+    api.C3.dcd_args=original_args
+    local old_mesh_valid=SI.IsValid
+    local own_before_fx=RL.deep(api.own())
+    SI["Deal Complex Damage"]=function()
+        api.wg_drop("level change requested")
+        SI.IsValid=function()error("old-world UObject touched")end
+    end
+    T.check(api.C3.apply_fx(fx,9)=="fx: world changed during replay",
+        "world change during native cosmetics returns without touching discarded target wrappers")
+    SI.IsValid=old_mesh_valid
+    api.set_world("world#1")
+    api.set_puppets({[SI.__name]=2},{[2]=SI},{})
+    api.C3.protect(SI)
+    for k in pairs(api.own())do api.own()[k]=nil end
+    for k,v in pairs(own_before_fx)do api.own()[k]=v end
     SI["Deal Complex Damage"]=original_dcd
     do
         local oldweapon=ME["Weapon R"]
@@ -1212,6 +1257,125 @@ do
         constraint["Bone Name 2"]=FName("spine_03")
         T.check(api.C3.inside_journal(SI,coll,FName("head"),SI.Mesh,nil,1000,1000,0,1,false)==false,
             "wrong constraint target bone cannot be reported as proven")
+        local old_mesh_address=SI.Mesh.GetAddress
+        coll.GetAddress=function()return 7001 end
+        SI.Mesh.GetAddress=function()return 7002 end
+        SI.Mesh.GetFullName=function()return "JournalVictim.Mesh" end
+        constraint["Bone Name 2"]=FName("head")
+        local original_gate,original_gate_bone=SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]
+        SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]=100000,FName("head")
+        api.on_complex(SI,SI.Mesh,coll,FName("head"),zero,zero,
+            {X=100,Y=0,Z=0},{X=1,Y=0,Z=0},40,0,.85,0,false,false,1,nil,false,0)
+        local parent=api.CX.pending[#api.CX.pending]
+        T.check(parent and parent.gate==false and not parent.cid,"suppressed native DCD retained before constraint construction")
+        api.C3.constraint_begin_journal(constraint)
+        T.check(parent and parent.constraint_parent,"exact original source/body callback binds suppressed penetration parent")
+        local before=#sent("damage")
+        local native_normal={X=0,Y=.8,Z=.6}
+        api.C3.inside_forward(SI,coll,FName("head"),SI.Mesh,zero,1000,1000,0,1,false,false,false,false,0,native_normal,zero,zero)
+        T.check(#sent("damage")==before and #(api.CX.inside_queue or {})==1,
+            "initial native Inside before origin flush queues plain data instead of orphaning")
+        api.flush_claims()
+        local emitted=sent("damage")
+        local origin,inside=emitted[before+1],emitted[before+2]
+        T.check(#emitted==before+2 and origin and origin.flags==161 and inside and inside.parent_cid==origin.cid,
+            "suppressed origin is authenticated without damage before its continuation",T.repr({origin,inside}))
+        T.check(inside and inside.flags==129 and inside.source_class=="ArmingSword_C"
+            and inside.dism_blunt==3145728 and math.abs(inside.normal[2]-.8)<1e-6 and math.abs(inside.normal[3]-.6)<1e-6,
+            "continuation preserves exact source hand/module/class and native normal",T.repr(inside))
+        local own_gd,own_dcd=ME["Get Damage"],ME["Deal Complex Damage"]
+        local remote_weapon=SI["Weapon R"]
+        local calls,hit_by,normal=0,nil,nil
+        ME["Get Damage"]=function(self,imp,vel,loc,nrm,bone,raw,cut,inside,mesh,dism,lower,shock,hitter)
+            calls=calls+1;hit_by=hitter;normal=nrm
+        end
+        ME["Deal Complex Damage"]=function()calls=calls+1 end
+        SI["Weapon R"]=weapon
+        if origin then
+            origin.target_peer_id=9
+            local result,status=api.apply_hit(hit_rec(origin),2)
+            T.check(status==2 and calls==0 and T.contains(result,"origin acknowledged"),
+                "suppressed origin owner acknowledgment invokes no native damage",result)
+            origin.target_peer_id=2
+            T.check(api.C3.apply_fx(origin,9)=="fx: native origin without damage",
+                "suppressed origin never paints wounds on a stand-in")
+        end
+        if inside then
+            inside.target_peer_id=9
+            local result=api.apply_hit(hit_rec(inside),2)
+            T.check(calls==1 and hit_by==coll and math.abs(normal.Y-.8)<1e-6 and math.abs(normal.Z-.6)<1e-6,
+                "victim native Get Damage receives exact attacker module and original normal",result)
+            SI["Weapon R"]=nil
+            local _,status=api.apply_hit(hit_rec(inside),2)
+            T.check(status==4 and calls==1,"missing continuation component drops before native damage without a substitute")
+        end
+        ME["Get Damage"],ME["Deal Complex Damage"],SI["Weapon R"]=own_gd,own_dcd,remote_weapon
+        local prior_probe=api.C3.native_probe
+        api.C3.native_probe=true;api.C3.protect(SI);api.C3.baseline(SI)
+        local before_probe_health=SI.Health
+        local before_probe_claims=#sent("damage")
+        local before_probe_logs=#LOGS
+        SI.Health=SI.Health-2 -- Native fixture ran before its POST Get Damage callback.
+        api.on_get_damage(SI,zero,zero,zero,zero,FName("head"),1000,50,false,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+        T.check(SI.Health==before_probe_health,"ordinary exact-id probe captures before backstop and retains damage restoration")
+        SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]=41000,FName("head")
+        api.on_complex(SI,SI.Mesh,coll,FName("head"),zero,zero,
+            {X=1400,Y=0,Z=0},{X=1000,Y=0,Z=0},40,0,.85,0,false,false,1,nil,false,0)
+        api.C3.constraint_begin_journal(constraint)
+        SI.Health=SI.Health-3
+        api.on_get_damage(SI,zero,zero,zero,zero,FName("head"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+        T.check(SI.Health==before_probe_health and #(api.CX.inside_queue or {})==1,
+            "initial Inside measurement queues as plain data before restoration and cid assignment")
+        api.flush_claims()
+        local probe_records=sent("damage")
+        local probe_parent,probe_child=probe_records[before_probe_claims+1],probe_records[before_probe_claims+2]
+        local probe_lines={}
+        for i=before_probe_logs+1,#LOGS do if T.contains(LOGS[i],"LAB_PROBE ")then probe_lines[#probe_lines+1]=LOGS[i]end end
+        T.check(#probe_lines==2 and probe_parent and probe_child and probe_child.parent_cid==probe_parent.cid,
+            "one native DCD and one Inside callback emit exactly two cid-bound probe lines")
+        T.check(probe_parent and T.contains(probe_lines[1] or "",string.format("LAB_PROBE attacker=9 cid=%d parent_cid=0 bone=head dmg Health -2.000000",probe_parent.cid)),
+            "ordinary successful send logs exact original attacker and assigned claim cid",T.repr(probe_lines))
+        T.check(probe_child and T.contains(probe_lines[2] or "",string.format("LAB_PROBE attacker=9 cid=%d parent_cid=%d bone=head dmg Health -3.000000",probe_child.cid,probe_parent.cid)),
+            "queued continuation logs its own cid and exact parent after successful send",T.repr(probe_lines))
+        T.check(probe_child and probe_child.probe==nil and probe_child.probe_attacker==nil,
+            "local probe strings never enter damage transport schema")
+        local tiny_before,tiny_log=SI.Health,#LOGS
+        for _=1,2 do
+            SI.Health=SI.Health-.1
+            api.on_get_damage(SI,zero,zero,zero,zero,FName("head"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+        end
+        local tiny_samples=0
+        for i=tiny_log+1,#LOGS do
+            if T.contains(LOGS[i],"LAB_PROBE ") and T.contains(LOGS[i],"dmg Health -0.100000")then tiny_samples=tiny_samples+1 end
+        end
+        T.check(tiny_samples==2,"two sub-threshold Inside callbacks report each native change once without cumulative double counting")
+        T.check(math.abs(SI.Health-(tiny_before-.2))<1e-6,"probe logging leaves native damage/backstop behavior unchanged")
+        SI.Health=tiny_before;api.C3.baseline(SI)
+        api.C3.base[SI:GetAddress()]=nil
+        local unavailable_at=#LOGS
+        api.on_get_damage(SI,zero,zero,zero,zero,FName("head"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+        local unavailable=false
+        for i=unavailable_at+1,#LOGS do
+            if T.contains(LOGS[i],"LAB_PROBE ") and T.contains(LOGS[i],"dmg Health unavailable [native baseline absent]")then unavailable=true end
+        end
+        T.check(unavailable,"missing native baseline logs unavailable instead of inventing zero damage")
+        T.check(api.C3.probe_last==nil,"Inside samples cannot be reused by the next ordinary DCD")
+        local replay_log=#LOGS
+        api.C3.log_replay_probe({hit_id=701,parent_cid=700,bone="head"},2,
+            {observed_fields=1,health_delta=-.00123456},"native Get Damage(ok) dmg Health +0.00 [Health-0.0 Pain+2.0]",true)
+        T.check(#LOGS==replay_log+1 and T.contains(LOGS[#LOGS],"LAB_REPLAY attacker=2 cid=701 parent_cid=700 bone=head dmg Health -0.001235 [Health-0.0 Pain+2.0]"),
+            "fresh owner replay logs original ids and native Health precision beyond legacy two decimals")
+        api.C3.log_replay_probe({hit_id=701,parent_cid=700,bone="head"},2,
+            {observed_fields=1,health_delta=-.00123456},"native replay cached",false)
+        T.check(#LOGS==replay_log+1,"cached owner result cannot double-count a native LAB_REPLAY measurement")
+        api.C3.log_replay_probe({hit_id=702,parent_cid=700,bone="head"},2,
+            {observed_fields=8192,health_delta=0},"native Get Damage(ok) [Pain+2.0]",true)
+        T.check(T.contains(LOGS[#LOGS],"LAB_REPLAY attacker=2 cid=702 parent_cid=700 bone=head dmg Health unavailable [native Health not observed]"),
+            "owner Health absent from observed mask is unavailable instead of inferred zero")
+        api.C3.native_probe=prior_probe;api.C3.protect(SI);api.C3.baseline(SI)
+        SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]=original_gate,original_gate_bone
+        SI.Mesh.GetAddress=old_mesh_address
+        api.C3.stuck_parent={};api.CX.inside_queue={}
         ME["Weapon R"]=oldweapon
     end
     do
@@ -1233,6 +1397,20 @@ do
         gi["Current Game Mode enum"]=0
         T.check(not api.on_native_defeat(SI),"stand-in Event Lose Match never reports owner's defeat")
         T.check(not api.on_native_defeat(ME) and #sent("death_report")==reports,"automatic native KO cannot eliminate a Duel life")
+        local originalenv=os.getenv
+        local originalcontroller=ME.Controller
+        ME.Controller={IsValid=valid,GetClass=function()return {GetFName=function()return FName("AI_BP_C")end}end}
+        ME.Player=false;ME["Give Up 2 (Temp)"]=false
+        T.check(not api.on_native_defeat(ME),"AI native yield cannot surrender a non-dev Duel")
+        os.getenv=function(k)if k=="HSMP_DEV" then return "1" end return originalenv(k) end
+        ME["Give Up"]=false
+        T.check(not api.on_native_defeat(ME),"AI KO before native Give Up is not surrender")
+        ME["Give Up"]=true
+        T.check(api.on_native_defeat(ME),"own dev AI native yield surrenders Duel without player-only Give Up 2")
+        local ai_report=sent("death_report")[#sent("death_report")]
+        T.check(ai_report.reason==2 and ai_report.match_id==12345 and ai_report.life==1,"AI native yield is scoped surrender, not biological death")
+        api.own().defeat_pending=nil;api.own().defeat_retry_at=nil
+        os.getenv=originalenv;ME.Controller=originalcontroller;ME.Player=true;ME["Give Up 2 (Temp)"]=true
         NAT.sc_put("mode",{match_id=12345,seq=105,mode=ES.game_mode.BRAWL,round=3,
             rows={{peer_id=9,seat=0,life=1,alive=true},{peer_id=2,seat=1,life=1,alive=true}}})
         T.check(api.on_native_defeat(ME),"actual own native lose flags report verified defeat")

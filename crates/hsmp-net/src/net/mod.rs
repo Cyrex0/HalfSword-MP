@@ -31,10 +31,11 @@ mod tests;
 pub use channel::{Delivery, SendError, SendMode, CH_ORDERED, CH_RELIABLE, CH_UNRELIABLE};
 pub use conn::{close_code, Conn, ConnConfig, ConnState, ConnStats, Side};
 pub use endpoint::{Client, ClientConfig, ClientEvent, Incoming, PendingAuth, ServerConfig, ServerEndpoint};
-/// Protocol v11 adds original match/round/life to each native root sample.
+/// Protocol v12 reports physical display sample times and authenticates
+/// geometry-only Inside origins separately from their damage continuations.
 /// Typed records still use the v6 transport and 8-byte application header.
-pub const PROTOCOL_VERSION: u16 = 11;
-/// Older combat record layouts cannot interoperate with authenticated life context.
+pub const PROTOCOL_VERSION: u16 = 12;
+/// Prior combat field meanings cannot interoperate with physical display times.
 pub const VERSION_MIN: u16 = PROTOCOL_VERSION;
 /// Highest protocol version this build speaks.
 pub const VERSION_MAX: u16 = PROTOCOL_VERSION;

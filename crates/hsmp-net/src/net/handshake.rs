@@ -1004,8 +1004,9 @@ mod tests {
         assert_eq!((pr.code, pr.server_min, pr.server_max), (reject_code::VERSION, crate::net::VERSION_MIN, crate::net::VERSION_MAX));
         assert_eq!(pr.echo, old.echo());
         assert!(pr.text.contains("OUTDATED"));
-        // The prior layout lacks native cutting-child parent bindings.
-        // Reject it before incompatible application records arrive.
+        // The prior protocol reports frame-start display labels and does not
+        // distinguish geometry-only Inside origins. Reject incompatible field
+        // meanings before any application records arrive.
         let mut previous = f.hello.clone();
         previous.version_min = crate::net::PROTOCOL_VERSION - 1;
         previous.version_max = crate::net::PROTOCOL_VERSION - 1;

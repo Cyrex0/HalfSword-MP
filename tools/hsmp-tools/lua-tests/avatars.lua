@@ -34,6 +34,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "body_scale" })
     T.isolated(T.script, "case", { kind = "fist_grip" })
     T.isolated(T.script, "case", { kind = "pose_context" })
+    T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "bodyheight" })
     return
 end
@@ -110,6 +111,50 @@ if opts.kind == "hook" then
     M.run(3000)
     T.check(M.hook_calls == n, "no further RegisterHook calls once registered")
     T.check(not T.contains(M.logtext(), "LOOP ERR"), "no loop errors", M.logtext())
+end
+
+if opts.kind == "clock_probe" then
+    local api=boot(true)
+    local PX=api.PX
+    PX.frame_no=81
+    local p={play={seq_at=950}}
+    local cur={pt=300,read_at=990,rate=1.2,lead=20,mode="extrap",age=22,delay=33,jit=14,iv=17,
+        cut=4,st=23,seq=55,match_id=901,round=3,life=2,has_context=true}
+    local prior={pt=100,at=900,r=0.8}
+    local next_clk,reset=PX.playback_clock(2,p,cur,prior,1000,false,true)
+    T.check(reset and next_clk.pt==292 and next_clk.at==1000 and next_clk.r==1.2,
+        "a jump above50ms resets to the existing expected-time formula")
+    T.check(prior.pt==100 and prior.at==900 and prior.r==0.8,"pre-correction clock is not mutated")
+    local events={}
+    local function collect()
+        events={}
+        for line in (T.read(sd.."/hsmp_events.jsonl") or ""):gmatch("[^\n]+") do
+            local e=T.json_decode(line)
+            if e.ev=="x_pose_clock_reset" then events[#events+1]=e end
+        end
+    end
+    collect()
+    local e=events[1]
+    T.check(#events==1 and e.expect==292 and e.projected_clk==180 and e.delta_ms==112 and e.threshold_ms==50,
+        "one reset event captures signed discrepancy before clock correction",T.repr(events))
+    T.check(e.clk_pt==100 and e.clk_at==900 and e.clk_rate==0.8 and e.local_ms==1000 and e.source_pt==300
+        and e.read_at==990 and e.rate==1.2 and e.lead==20 and e.mode=="extrap" and e.age==22
+        and e.delay==33 and e.jitter==14 and e.iv==17 and e.quiet==50 and e.cut==4 and e.step==23,
+        "telemetry preserves source sample and buffer state before reset")
+    T.check(e.peer==2 and e.frame==81 and e.source_seq==55 and e.fresh and e.match_id==901
+        and e.round==3 and e.life==2 and e.has_context,"telemetry retains source frame and native life")
+    cur.pt,cur.read_at,cur.lead,cur.rate=230,1000,0,1
+    next_clk,reset=PX.playback_clock(2,p,cur,prior,1000,false,false)
+    T.check(not reset and next_clk.pt==185 and next_clk.r==0.86,"exactly50ms keeps the original slew")
+    PX.playback_clock(2,p,cur,nil,1000,false,true)
+    PX.playback_clock(2,p,cur,prior,1000,true,true)
+    collect()
+    T.check(#events==1,"initialisation and explicit cuts are not clock-discontinuity events")
+    cur.pt=129
+    PX.playback_clock(2,p,cur,prior,1000,false,false)
+    collect()
+    T.check(#events==2 and events[2].delta_ms==-51 and events[2].fresh==false,
+        "backward jumps preserve direction and cached-read attribution")
 end
 
 -- Dev tuning knobs: dev_cmd TUNE records (hsmp-tools ipc-ctl tune), no .pose_tune.json.
@@ -254,6 +299,21 @@ if opts.kind == "parse" then
     T.check(delayed and delayed.local_ms==500 and delayed.life==1,
         "approved delayed trade retains original timestamp and life without refreshing contact eligibility")
     T.check(P.playback_row(2,shown,499,true)==nil,"retained generation cannot authorize a future timestamp")
+    shown.label=100.75
+    T.check(P.playback_row(2,shown,501)==nil,"a fractional target cannot be silently rounded during publication")
+    local label, aim, ms, ma=P.display_times(40260.75,40269.9,17.7,120,false)
+    T.check(label==40269 and aim==40286 and 40260.75+ms==label and 40260.75+ma==aim,
+        "shown and next-step aim times are quantized before target construction")
+    local tg={0,0,0,0,0,0,1,1000,0,0,0,0,0}
+    T.check(P.advance(tg,ms)[1]==8.25 and P.aim(tg,ms,ma)[1]==25.25,
+        "servo targets use exactly the published physical times, independent of sender step")
+    label,aim,ms,ma=P.display_times(1000.75,1300,80,120,false)
+    T.check(label==1120 and aim==1120 and ms==119.25 and ma==119.25,
+        "a capped prediction publishes the actual capped aim rather than label plus horizon")
+    label,aim,ms,ma=P.display_times(1000.75,1300,80,120,true)
+    T.check(label==1000 and aim==1000 and ms==-0.75 and ma==-0.75,
+        "a frozen target keeps one quantized physical time")
+    shown.label=100
     shown.pawn=""
     T.check(P.playback_row(2,shown,501)==nil,"displayed playback requires exact native actor identity")
     pose.life=1
@@ -573,6 +633,8 @@ if opts.kind == "bodies3" then
     local P = api.puppets()
     T.check(calls[1] == 2, "the first SpawnCombatants call asks for BOTH missing bodies", T.repr(calls))
     T.check(P[2] and P[3] and P[2].actor ~= P[3].actor, "both opponents get a stand-in", T.repr({ calls, P[2] and P[2].addr, P[3] and P[3].addr }))
+    T.check(P[2] and P[3] and P[2].actor["Force Disable Vertex Paint"]==true and P[3].actor["Force Disable Vertex Paint"]==true,
+        "actual stand-in claim suppresses native paint before combat protects it")
     local sl1, sl2 = rawget(sps[1], "loc"), rawget(sps[2], "loc")
     T.check(sl1 and sl2 and (sl1.X ~= sl2.X or sl1.Y ~= sl2.Y), "the spawners go to distinct peer poses (no stacked bodies)", T.repr({ sl1, sl2 }))
     -- the round is Live; a fourth player joins in progress and needs a body

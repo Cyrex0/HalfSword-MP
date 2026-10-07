@@ -1,4 +1,4 @@
-# Wire protocol (v10)
+# Wire protocol (v12)
 
 The UDP protocol between `hsmp-sidecar` (client) and `hsmp-server`.
 
@@ -25,8 +25,26 @@ The UDP protocol between `hsmp-sidecar` (client) and `hsmp-server`.
 - **Three channels** over one connection: unreliable-latest, reliable-unordered and
   reliable-ordered, with fragmentation up to 64 KiB.
 - **Versioning.** `PROTOCOL_VERSION` changes only when the packet header (§4) or handshake (§3)
-  changes, or when the message representation changes. Everything else is added behind a
+  changes, or when the message representation or existing field meaning changes. Everything else is added behind a
   capability bit (§7).
+
+### What changed in v12
+
+Combat `victim_view_ts` / `victim_arm_ts` now name the physical sample time the
+stand-in displays, including the sender physics step. The Avatar quantizes target
+times before constructing its servo poses, so the existing u32 fields carry exact
+whole-millisecond sample times. The server reconstructs delivered body and weapon
+frames at that time directly; it no longer subtracts or guesses the selected step.
+
+`COMPLEX | INSIDE` with `parent_cid = 0` is a geometry-only origin for a native
+contact whose DCD gate suppressed damage. It requires original native life and
+source evidence, and authenticates a parent without replaying its damage; later
+Inside continuations retain that accepted parent's component identity.
+
+These field meanings are incompatible with protocol 11 despite unchanged record
+sizes and IPC layout. Both endpoints require protocol 12, including development
+servers with content checking disabled. Deploy the Lua mods, sidecar and server
+together; unchanged IPC layouts cannot detect an intentionally mixed installation.
 
 ### What changed in v10
 
@@ -36,8 +54,8 @@ both retain the existing 0.1-unit resolution. Quaternion and native-scale
 precision are unchanged. The full maximum frame is 1118 bytes (1179 bytes with
 UDP framing), below the 1200-byte datagram limit. Pose storage allows 1120 bytes.
 The changed bit layout first required protocol 10 at both endpoints. Protocol 11
-also binds every Root record to its original verified match, round and pawn life;
-the current build requires protocol 11 at both endpoints. Delayed records from a
+also binds every Root record to its original verified match, round and pawn life.
+Delayed records from a
 previous pawn generation must not seed a new spawn's movement history.
 
 ### What changed in v9
@@ -854,10 +872,12 @@ and the nick never decide them.
 
 - The Hello carries `version_min..=version_max`. The server picks the highest common version, or
   answers PreReject `VERSION` with its own range and an actionable text.
-- This build: `VERSION_MIN = VERSION_MAX = PROTOCOL_VERSION = 10`
+- This build: `VERSION_MIN = VERSION_MAX = PROTOCOL_VERSION = 12`
   (`crates/hsmp-net/src/net/mod.rs`).
 - New optional record kinds go behind capability bits. Breaking existing record layouts
-  requires a protocol version change and a matching shared-memory layout hash.
+  requires a protocol version change and a matching shared-memory layout hash. Changing
+  an existing field's meaning also requires a protocol version change; an unchanged
+  layout hash does not establish semantic compatibility.
 
 ### 7.2 Capability bits (u64)
 

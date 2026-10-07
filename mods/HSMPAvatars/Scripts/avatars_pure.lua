@@ -227,11 +227,20 @@ function PURE.displayed_pose(pose, pawn, label, at)
         match_id=pose.match_id,round=pose.round,life=pose.life}
 end
 
+-- Combat's u32 timestamps represent whole milliseconds. Quantize the time
+-- BEFORE constructing servo targets, never just their published labels.
+function PURE.display_times(pt, want, horizon, cap, frozen)
+    local shown = math.floor(pt + (frozen and 0 or PURE.clamp(want - pt, -cap, cap)))
+    local aim = math.floor(pt + (frozen and 0 or PURE.clamp(shown - pt + horizon, -cap, cap)))
+    return shown, aim, shown - pt, aim - pt
+end
+
 function PURE.playback_row(peer, shown, now, allow_stale)
     if not shown or shown.has_context~=true or not shown.match_id or shown.match_id==0
         or not shown.life or shown.life<1 or type(shown.pawn)~="string" or shown.pawn==""
-        or not shown.at or now-shown.at<0 or (not allow_stale and now-shown.at>=250) then return nil end
-    return {peer=peer,body_ts=math.floor(shown.label),arm_ts=math.floor(shown.label),local_ms=math.floor(shown.at),
+        or not shown.at or now-shown.at<0 or (not allow_stale and now-shown.at>=250)
+        or not math.tointeger(shown.label) or shown.label<1 or shown.label>0xffffffff then return nil end
+    return {peer=peer,body_ts=shown.label,arm_ts=shown.label,local_ms=math.floor(shown.at),
         match_id=shown.match_id,round=shown.round,life=shown.life,pawn=shown.pawn}
 end
 

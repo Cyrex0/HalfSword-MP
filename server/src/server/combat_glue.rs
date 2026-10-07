@@ -5,7 +5,8 @@
 //! Records in (C2S): `damage` (a claim), `damage_ack` (the victim's sidecar got
 //! it), `clash` / `touch` (parry evidence), `death_report`, `vitals`.
 //! Records out (S2C): `damage_in` to the victim's owner and `hitfx_in` to every
-//! other player (the approved claim, `WireHdr.peer` = attacker), `damage_verdict`
+//! other player after a changed native owner outcome (the approved claim,
+//! `WireHdr.peer` = attacker), `damage_verdict`
 //! to the attacker, `death_ack`, `death` (via `Inner::out_msgs`), `vitals` (relayed,
 //! `WireHdr.peer` = owner, Health clamped in place to the ledger's ceiling).
 //!
@@ -79,6 +80,18 @@ pub(super) async fn handle_record(
                     status=r.status,fields=r.observed_fields,hp_delta=r.health_delta,"owner native replay outcome");
                 let addr={let inner=state.inner.lock().await;inner.peers.iter().find(|(_,p)|p.id==r.attacker).map(|(a,_)|*a)};
                 if let Some(addr)=addr {send_rec(socket,state,addr,wire::message(K_REPLAY_OUTCOME,0,victim,payload)).await;}
+                if let Some(hit)=crate::combat::native_effect_hit(victim,r.attacker,r.hit_id) {
+                    let to={
+                        let inner=state.inner.lock().await;
+                        if hit.match_id==inner.sess.match_id && hit.round==inner.match_round
+                            && hit.attacker_life==modes::peer_life(&inner,r.attacker)
+                            && hit.victim_life==modes::peer_life(&inner,victim) {
+                            hit_fx_recipients(&inner.peers,victim)
+                        } else {Vec::new()}
+                    };
+                    let msg=hit.msg(K_HITFX_IN,r.attacker);
+                    for addr in to {send_rec(socket,state,addr,msg.clone()).await;}
+                }
             }
         }
         K_DAMAGE => {
@@ -212,8 +225,6 @@ pub(super) async fn dispatch_damage(
     verdict: crate::combat::Verdict,
 ) {
     let mut verdict = verdict;
-    // Who gets the hit's visual effects (every other player).
-    let mut fx_to: Vec<SocketAddr> = Vec::new();
     if verdict == crate::combat::Verdict::Forward {
         // First forward (immediately, or after a parry hold): the round may
         // have ended / the target died meanwhile. Otherwise book the hit in
@@ -243,7 +254,6 @@ pub(super) async fn dispatch_damage(
                 info!(victim = hit.target_peer_id, killer = attacker_id, round, est_hp = v.est,
                       "KILL (server ledger): lethal hit accepted");
             }
-            fx_to = hit_fx_recipients(&inner.peers, hit.target_peer_id);
         }
     }
     if verdict == crate::combat::Verdict::Reforward {
@@ -255,15 +265,8 @@ pub(super) async fn dispatch_damage(
             verdict=crate::combat::Verdict::Ack {accepted:false,reason:"stale_life".into()};
         }
     }
-    // Blood / wounds on every other screen's stand-in of the victim (the
-    // approved armour-stage inputs, replayed natively there; see `hitfx_in`).
-    // Once per accepted hit: only the first forward reaches this. One encode.
-    if !fx_to.is_empty() {
-        let m = hit.msg(K_HITFX_IN, attacker_id);
-        for a in fx_to {
-            send_rec(socket, state, a, m.clone()).await;
-        }
-    }
+    // Cosmetic effects wait for K_REPLAY_OUTCOME. Forward/transport ACK proves
+    // delivery only; a stale or refused native replay must never paint a wound.
     // Early confirm (first acceptance, forwarded or held).
     if crate::combat::take_confirm(attacker_id, hit.hit_id) {
         let addr = match attacker_addr {

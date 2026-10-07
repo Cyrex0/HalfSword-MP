@@ -1094,6 +1094,9 @@ impl DelayModel {
 struct RelayLog {
     /// Sender ts of the relayed frames, sorted.
     ts: VecDeque<u32>,
+    /// Physical sample time of each relayed frame, retained even if its
+    /// native geometry ages out. Sender steps can reorder these times.
+    sample_ts: HashMap<u32, f64>,
     /// The pair's relay interval (ms).
     interval: f32,
     model: DelayModel,
@@ -1762,13 +1765,15 @@ impl Store {
         let jv = s.clock.jitter_p90();
         let ja = self.peers.get(&viewer).map_or(0.0, |a| a.clock.jitter_bounded(now_ms));
         let target = display_delay(s, (ja * ja + jv * jv).sqrt(), Some(iv));
+        let sample_ts = s.native_frames.get(&ts).map_or(ts as f64, |f| f.ts);
         let log = self.relayed.entry((viewer, src)).or_insert_with(|| RelayLog {
-            ts: VecDeque::new(), interval: iv, model: DelayModel::new(now_ms),
+            ts: VecDeque::new(), sample_ts: HashMap::new(), interval: iv, model: DelayModel::new(now_ms),
         });
         if let Some(&n) = log.ts.back() {
             if (ts as i64) + RESET_BACKSTEP_MS < n as i64 {
                 // The sender's clock went back (game restart): start over.
                 log.ts.clear();
+                log.sample_ts.clear();
                 log.model = DelayModel::new(now_ms);
             }
         }
@@ -1779,9 +1784,10 @@ impl Store {
         let i = log.ts.partition_point(|&x| x < ts);
         if i < log.ts.len() && log.ts[i] == ts { return; }
         log.ts.insert(i, ts);
+        log.sample_ts.insert(ts, sample_ts);
         let newest = *log.ts.back().unwrap_or(&ts);
         while log.ts.len() > RELAY_LOG_CAP || log.ts.front().map_or(false, |&f| newest.saturating_sub(f) > HISTORY_MS) {
-            log.ts.pop_front();
+            if let Some(old) = log.ts.pop_front() { log.sample_ts.remove(&old); }
         }
         log.interval = iv;
         log.model.on_frame(now_ms, target);
@@ -1806,6 +1812,19 @@ impl Store {
     /// `t` (past its newest one: extrapolated briefly, then held, like
     /// poseplay). Without relay data: the full-rate history.
     fn shown_capsules(&self, viewer: PeerId, src: PeerId, v: &PeerHist, t: u32, lead: i64, now_ms: i64) -> Option<CapSet> {
+        if v.pose_v2==Some(true) || !v.native_frames.is_empty() || v.context.is_some() {
+            let shown=self.shown_bone_frames(viewer,src,v,t,lead,now_ms).ok()?;
+            let mut full=posecodec::v2::Full::default();full.k=shown.scale;
+            for i in 0..posecodec::v2::NB {full.bones[i].p=shown.p[i];full.bones[i].q=shown.q[i];}
+            // Use exactly the same v2 body construction/radii as ingestion,
+            // including the crown, hands and rotated/scaled foot-to-ball axes.
+            let caps=posecodec::v2::extras_of(&full).caps;
+            let mut out=CapSet {c:[Capsule{a:[0.0;3],b:[0.0;3],r:0.0};MAX_CAPSULES],n:caps.len()};
+            for (i,(a,b,r)) in caps.into_iter().enumerate() {out.c[i]=Capsule{a,b,r};}
+            return Some(out);
+        }
+        // Historical v1 fixtures/clients have no native frame stream. Native
+        // production contacts above never use this legacy approximation.
         let full = || v.capsules(t, lead);
         let Some(log) = self.relay_log(viewer, src, now_ms) else { return full() };
         let i = log.ts.partition_point(|&x| x <= t);
@@ -1824,16 +1843,17 @@ impl Store {
     /// Cutting geometry must use the victim frames actually relayed to this
     /// attacker, like shown_capsules. A full-rate intermediate frame that the
     /// attacker never received is not its displayed victim bone frame.
-    fn shown_bone_frames(&self, viewer:PeerId,src:PeerId,v:&PeerHist,t:u32,lead:i64,now_ms:i64)->Result<BoneFrames,&'static str> {
-        let full=||v.bone_frames.sample(t,lead).ok_or("no relay log and no bone history at the view time");
-        let Some(log)=self.relay_log(viewer,src,now_ms) else {return full();};
-        let i=log.ts.partition_point(|&x|x<=t);
+    fn shown_native_sample(&self, viewer:PeerId,src:PeerId,v:&PeerHist,t:u32,now_ms:i64)->Result<hsmp_pose::poseplay::DeliveredSample,&'static str> {
+        let log=self.relay_log(viewer,src,now_ms).ok_or("no relay log for displayed bone history")?;
+        let mut delivered:Vec<(u32,f64)>=log.ts.iter().map(|ts|(*ts,log.sample_ts[ts])).collect();
+        delivered.sort_by(|a,b|a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+        let i=delivered.partition_point(|&(_,at)|at<=t as f64);
         // The enclosing delivered endpoints (and last predecessor for
         // extrapolation) must still exist. Older unrelated relay entries may
         // legitimately have aged out of the full-rate cache.
-        if i>0 {v.native_frames.get(&log.ts[i-1]).ok_or("delivered frame before the view time not cached")?;}
-        if i<log.ts.len() {v.native_frames.get(&log.ts[i]).ok_or("delivered frame after the view time not cached")?;}
-        if i==log.ts.len() && i>1 {v.native_frames.get(&log.ts[i-2]).ok_or("delivered predecessor for extrapolation not cached")?;}
+        if i>0 {v.native_frames.get(&delivered[i-1].0).ok_or("delivered frame before the view time not cached")?;}
+        if i<delivered.len() {v.native_frames.get(&delivered[i].0).ok_or("delivered frame after the view time not cached")?;}
+        if i==delivered.len() && i>1 {v.native_frames.get(&delivered[i-2].0).ok_or("delivered predecessor for extrapolation not cached")?;}
         let mut frames=VecDeque::new();
         for ts in &log.ts {
             let Some(frame)=v.native_frames.get(ts) else {continue;};
@@ -1842,16 +1862,35 @@ impl Store {
             if frames.get(i).is_some_and(|f|f.ts==frame.ts){continue;}
             frames.insert(i,frame.clone());
         }
-        let Some(b)=hsmp_pose::poseplay::sample_delivered_bones(&frames,t as f64) else {
+        let Some(sample)=hsmp_pose::poseplay::sample_delivered(&frames,t as f64) else {
             if crate::validate::rate::log_ok("delivered_sample") {
                 tracing::info!(viewer, src, detail = %hsmp_pose::poseplay::explain_delivered(&frames, t as f64),
                     "delivered frames do not sample at the view time");
             }
             return Err("delivered frames do not sample at the view time");
         };
+        Ok(sample)
+    }
+
+    fn shown_bone_frames(&self,viewer:PeerId,src:PeerId,v:&PeerHist,t:u32,_lead:i64,now_ms:i64)->Result<BoneFrames,&'static str> {
+        let sample=self.shown_native_sample(viewer,src,v,t,now_ms)?;
+        let b=sample.bones;
         Ok(BoneFrames {p:std::array::from_fn(|i|[b[i][0],b[i][1],b[i][2]]),
             q:std::array::from_fn(|i|[b[i][3],b[i][4],b[i][5],b[i][6]]),
-            scale:frames.back().and_then(|f|f.extra.as_ref()).ok_or("cached frame without native extras")?.k})
+            scale:sample.extra.as_ref().ok_or("sample without native extras")?.k})
+    }
+
+    fn shown_blade(&self,viewer:PeerId,src:PeerId,v:&PeerHist,t:u32,offhand:bool,now_ms:i64)->Option<(Blade,bool)> {
+        if v.pose_v2==Some(true) || !v.native_frames.is_empty() || v.context.is_some() {
+            let sample=self.shown_native_sample(viewer,src,v,t,now_ms).ok()?;
+            let slot=if offhand {1} else {0};
+            let (_,_,base,tip)=sample.extra.as_ref()?.weapons[slot]?;
+            let xf=sample.bones[hsmp_pose::poseplay::WPN_R+slot];
+            let p=[xf[0],xf[1],xf[2]];let q=[xf[3],xf[4],xf[5],xf[6]];
+            return Some((Blade {base:add(p,posecodec::v2::qrot(q,base)),tip:add(p,posecodec::v2::qrot(q,tip)),vel:None},true));
+        }
+        let ring=if offhand {&v.offhand} else {&v.blade};
+        (BladeView{hist:v,blade:ring}).blade_at(t,FUTURE_MS)
     }
 
     /// What did `viewer` display of `viewed` at its own time `viewer_ts`?
@@ -2003,9 +2042,14 @@ impl Store {
         for rr in [&r.blade, &r.offhand] {
             let rv = BladeView { hist: r, blade: rr };
             let Some((ra, rb, re)) = blades(&rv, c.my_ts) else { continue };
-            for oo in [&o.blade, &o.offhand] {
+            for (offhand,oo) in [false,true].into_iter().zip([&o.blade, &o.offhand]) {
                 let ov = BladeView { hist: o, blade: oo };
-                let Some((oa, ob, oe)) = blades(&ov, other_t) else { continue };
+                let shown=if o.pose_v2==Some(true) || !o.native_frames.is_empty() || o.context.is_some() {
+                    self.shown_blade(reporter,c.other,o,ts_sub(other_t,fr),offhand,now_ms)
+                        .zip(self.shown_blade(reporter,c.other,o,other_t.saturating_add(fr as u32),offhand,now_ms))
+                        .map(|((a,ea),(b,eb))|(a,b,ea && eb))
+                } else {blades(&ov,other_t)};
+                let Some((oa, ob, oe)) = shown else { continue };
                 // A missing main-hand stream must not substitute its legacy
                 // estimated weapon ahead of a real offhand's exact geometry.
                 if (!re && r.offhand.newest().is_some()) || (!oe && o.offhand.newest().is_some()) { continue; }
@@ -2509,6 +2553,9 @@ impl Store {
         let body = match (&vcaps, &vcaps_arm) {
             (Some(b), Some(x)) => caps_dist(b, c).min(caps_dist(x, c)),
             (Some(b), None) | (None, Some(b)) => caps_dist(b, c),
+            (None, None) if v.pose_v2==Some(true) || !v.native_frames.is_empty() || v.context.is_some() => {
+                return Eval::Reject("no_cover: delivered victim body history does not cover view ts".into());
+            }
             (None, None) => match v.root.sample(view, FUTURE_MS) {
                 Some(r) => {
                     let d = len(sub(c, r));
@@ -2758,8 +2805,8 @@ impl Store {
         // 5. Geometric block / parry plausibility: victim's blade at arm time.
         let mut parry_possible = false;
         let mut parry_d = [f32::INFINITY; 3];
-        for ring in [&v.blade, &v.offhand] {
-          if let Some((vb, exact)) = (BladeView { hist: v, blade: ring }).blade_at(arm, FUTURE_MS) {
+        for offhand in [false,true] {
+          if let Some((vb, exact)) = self.shown_blade(attacker,tgt,v,arm,offhand,now_ms) {
             // The parrying part near the contact: the outer half of a
             // streamed blade, else the weapon actor (the hand is always near
             // the body and proves nothing).

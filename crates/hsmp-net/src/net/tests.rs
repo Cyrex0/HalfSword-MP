@@ -522,6 +522,21 @@ fn rejected_client_gets_an_authenticated_reason() {
 }
 
 #[test]
+fn protocol_11_display_semantics_are_rejected_without_content_check() {
+    // ServerConfig::new disables content checking, like a development server.
+    // Identical record layouts must still not admit the old timestamp meaning.
+    let mut c=ccfg();
+    c.version_min=11;c.version_max=11;
+    let mut w=World::new(12,Link::perfect(),Link::perfect(),c);
+    assert!(w.run_until(2_000,|w|!w.client_ev.is_empty()));
+    assert!(matches!(&w.client_ev[0],ClientEvent::Rejected {code,text,authenticated}
+        if *code==reject_code::VERSION && !authenticated && text.contains("OUTDATED")));
+    assert_eq!(w.server.conn_count(),0,"prior semantics never reach peer admission");
+    assert!(w.up_log.iter().all(|dg|dg[0]!=PT_AUTH),"rejected before authentication");
+    assert!(w.server_in.is_empty() && w.replies_ok);
+}
+
+#[test]
 fn version_mismatch_is_reported_before_the_cookie() {
     let mut c = ccfg();
     c.version_min = 3;

@@ -54,8 +54,8 @@ pub struct Extra {
     /// the clock offset / jitter estimate uses this, whose arrival does not
     /// swing with the frame length.
     pub clock_ts: Option<f64>,
-    /// That step (ms; 0 = none): the game subtracts it from the label it
-    /// reports to lag comp, which keeps the plain frame-start stamps.
+    /// That step (ms; 0 = none). Display labels are physical sample times;
+    /// the server keeps both this time and the original frame-start key.
     pub step: f64,
 }
 
@@ -1518,72 +1518,36 @@ mod replay_tests {
     }
 }
 
-/// Pure playback sampler at an authenticated frame-start display label.
+/// Pure playback sampler at an authenticated physical display sample time.
 /// Inputs contain ONLY accepted complete frames
 /// whose original frame-start timestamps were relayed to this viewer.
 /// No Buffer arrival blend/rate state or native Avatar servo is claimed here.
-pub fn sample_delivered_bones(fr:&VecDeque<Frame>, label:f64)->Option<[Xf;SLOTS]> {
-    if fr.is_empty() || !label.is_finite() {return None;}
-    // Avatar publishes frame-start label: sample clock minus selected Extra.step.
-    // Try the finite set of delivered steps and require the sampler's own
-    // selected Extra to agree. Varying steps can be ambiguous; reject rather
-    // than selecting a hidden/future full-rate frame or guessing.
-    let mut steps=vec![0.0];
-    for f in fr {
-        let step=f.extra.as_ref().map_or(0.0,|e|e.step);
-        if !steps.contains(&step) {steps.push(step);}
-    }
-    // Several self-consistent steps are only ambiguous when they show different poses: the
-    // game's step varies by fractions of a millisecond frame to frame, and candidates that
-    // agree on every bone (1 cm, 1 degree) are the same displayed pose, not a guess. Live
-    // (arming-sword AI duel): 24 of 28 rejections were this, every one "do not sample".
-    // The published label is whole milliseconds (the stand-in's floor of its label): the real
-    // one lies in [label, label + 1), so a step is consistent when some time in that window
-    // selects it (near a frame boundary the floor alone selects the neighbour).
-    let mut answer:Option<[Xf;SLOTS]>=None;
-    for step in steps {
-        let mut consistent=None;
-        for frac in [0.0, 0.5, 0.999] {
-            let at=label+frac+step;
-            let sample=sample_frames_lead(fr,at,(at-fr.back()?.ts).max(0.0),0.0);
-            let selected=sample.extra.as_ref().map_or(0.0,|e|e.step);
-            if (selected-step).abs()<=1e-6 {consistent=Some(sample);break;}
-        }
-        let Some(sample)=consistent else {continue;};
-        match &answer {
-            None=>answer=Some(sample.bones),
-            Some(a) if same_pose(a,&sample.bones)=>{}
-            Some(_)=>return None,
-        }
-    }
-    answer
+pub struct DeliveredSample {
+    pub bones: [Xf; SLOTS],
+    pub extra: Option<Arc<Extra>>,
+}
+
+pub fn sample_delivered(fr:&VecDeque<Frame>, at:f64)->Option<DeliveredSample> {
+    if fr.is_empty() || !at.is_finite() || at < fr.front()?.ts {return None;}
+    // The Avatar quantizes its target time before building the servo target,
+    // so this is exactly its published time. No selected-step inversion, pose
+    // equivalence tolerance, fractional candidate, or hidden frame is needed.
+    let sample=sample_frames_lead(fr,at,(at-fr.back()?.ts).max(0.0),0.0);
+    Some(DeliveredSample {bones:sample.bones,extra:sample.extra})
+}
+
+pub fn sample_delivered_bones(fr:&VecDeque<Frame>, at:f64)->Option<[Xf;SLOTS]> {
+    Some(sample_delivered(fr,at)?.bones)
 }
 
 /// Why [`sample_delivered_bones`] found no pose at `label` (diagnostics only): the delivered
-/// frames around it and what each candidate step selected.
+/// frames around the physical sample time.
 pub fn explain_delivered(fr:&VecDeque<Frame>, label:f64)->String {
     if fr.is_empty() {return "no delivered frames".into();}
     let i=fr.partition_point(|f|f.ts<=label);
     let lo=i.saturating_sub(2);
     let near:Vec<String>=fr.iter().skip(lo).take(4).map(|f|format!("{:.1}/s{:.2}",f.ts,f.extra.as_ref().map_or(-1.0,|e|e.step))).collect();
-    let mut steps=vec![0.0f64];
-    for f in fr { let s=f.extra.as_ref().map_or(0.0,|e|e.step); if !steps.contains(&s) {steps.push(s);} }
-    let tried:Vec<String>=steps.iter().take(6).map(|&s|{
-        let at=label+s;
-        let out=sample_frames_lead(fr,at,(at-fr.back().map_or(at,|f|f.ts)).max(0.0),0.0);
-        format!("{:.2}->{:.2}({:?})",s,out.extra.as_ref().map_or(-1.0,|e|e.step),out.mode)
-    }).collect();
-    format!("label {:.1}, {} frames {:.1}..{:.1}, near [{}], steps {} tried [{}]",label,fr.len(),fr[0].ts,fr.back().unwrap().ts,
-        near.join(" "),steps.len(),tried.join(" "))
-}
-
-/// Every bone within 1 cm and 1 degree (|dot| >= cos 0.5 deg of the half-angle).
-fn same_pose(a:&[Xf;SLOTS], b:&[Xf;SLOTS])->bool {
-    a.iter().zip(b.iter()).all(|(x,y)| {
-        let d=((x[0]-y[0]).powi(2)+(x[1]-y[1]).powi(2)+(x[2]-y[2]).powi(2)).sqrt();
-        let dot=(x[3]*y[3]+x[4]*y[4]+x[5]*y[5]+x[6]*y[6]).abs();
-        d<=1.0 && dot>=(0.5f32).to_radians().cos()
-    })
+    format!("physical time {:.1}, {} frames {:.1}..{:.1}, near [{}]",label,fr.len(),fr[0].ts,fr.back().unwrap().ts,near.join(" "))
 }
 
 #[cfg(test)]mod delivered_stage_tests {
@@ -1601,18 +1565,17 @@ fn same_pose(a:&[Xf;SLOTS], b:&[Xf;SLOTS])->bool {
         assert_eq!(got[0][3..7],[0.0,0.0,0.0,1.0]);
         assert!(got[0][3..7].iter().zip(hidden.b[0][3..7].iter()).map(|(a,b)|a*b).sum::<f32>()<0.99);
     }
-    #[test]fn jittering_steps_with_the_same_pose_are_not_ambiguous(){
-        // 60 Hz with the game's real step jitter (16.5 / 16.9 ms) and slow motion: two
-        // self-consistent steps show the same pose and must not reject the sample
+    #[test]fn jittering_steps_use_the_published_physical_time(){
+        // 60 Hz with the game's real step jitter (16.5 / 16.9 ms): selected
+        // metadata never changes the time at which the delivered pose is sampled.
         let delivered:VecDeque<Frame>=(0..12).map(|k|{
             let ts=1000.0+k as f64*16.7;
             frame(ts,if k%2==0 {16.5} else {16.9},k as f32*0.2,100.0,10.0)
         }).collect();
-        // labels as the stand-in publishes them: sample clock minus the selected frame's step
-        let (mut none,mut t)=(0,1020.0);
+        // Targets are constructed at whole-ms physical times, independent of selected Extra.
+        let (mut none,mut t)=(0,1020.0f64);
         while t<1170.0 {
-            let s=sample_frames_lead(&delivered,t,(t-delivered.back().unwrap().ts).max(0.0),0.0);
-            let label=(t-s.extra.as_ref().map_or(0.0,|e|e.step)).floor();   // published as whole ms
+            let label=t.floor();
             if sample_delivered_bones(&delivered,label).is_none() {none+=1;}
             t+=0.5;
         }
@@ -1621,9 +1584,31 @@ fn same_pose(a:&[Xf;SLOTS], b:&[Xf;SLOTS])->bool {
     #[test]fn newest_uses_native_velocity_angular_and_step(){
         let delivered=VecDeque::from([frame(950.0,10.0,0.0,100.0,90.0),frame(1000.0,10.0,0.0,100.0,90.0)]);
         let got=sample_delivered_bones(&delivered,1030.0).unwrap();
-        // Label1030 +step10 => physical1040; newest physical1010 =>30ms.
-        assert!((got[0][0]-3.0).abs()<0.001);
-        assert!((got[0][5]-(2.7f32.to_radians()/2.0).sin()).abs()<0.00001);
+        // Physical1030; newest physical1010 =>20ms. Never add the selected step again.
+        assert!((got[0][0]-2.0).abs()<0.001);
+        assert!((got[0][5]-(1.8f32.to_radians()/2.0).sin()).abs()<0.00001);
+    }
+    #[test]fn hitch_steps_do_not_alias_distinct_physical_samples(){
+        // sword-fixed-5/server.log: label40259 had self-consistent +10 and
+        // +22 candidates around physical40277/40279.1. Both sample times are
+        // now explicit; their different poses are never collapsed by tolerance.
+        let mut a=frame(40252.3-17.0,17.0,0.0,1000.0,100.0);
+        let mut b=frame(40277.0-10.0,10.0,30.0,1000.0,100.0);
+        let mut c=frame(40279.1-22.0,22.0,60.0,1000.0,100.0);
+        a.b[0][0]=0.0;b.b[0][0]=24.7;c.b[0][0]=26.8;
+        let frames=VecDeque::from([a,b,c]);
+        for at in [40269.0,40281.0] {
+            let expected=sample_frames_lead(&frames,at,(at-frames.back().unwrap().ts).max(0.0),0.0).bones;
+            assert_eq!(sample_delivered_bones(&frames,at),Some(expected));
+        }
+        assert_ne!(sample_delivered_bones(&frames,40269.0),sample_delivered_bones(&frames,40281.0));
+    }
+    #[test]fn sample_before_oldest_delivered_frame_is_not_a_future_fallback(){
+        let frames=VecDeque::from([frame(1000.0,17.0,0.0,0.0,0.0)]);
+        assert!(sample_delivered_bones(&frames,1016.0).is_none());
+        assert!(sample_delivered_bones(&frames,f64::NAN).is_none());
+        assert!(sample_delivered_bones(&VecDeque::new(),1017.0).is_none());
+        assert!(sample_delivered_bones(&frames,1017.0).is_some());
     }
     #[test]fn delivered_interpolation_uses_real_hermite_tangents(){
         let delivered=VecDeque::from([frame(950.0,0.0,0.0,100.0,0.0),frame(1000.0,0.0,0.0,0.0,0.0)]);

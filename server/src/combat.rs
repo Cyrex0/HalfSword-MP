@@ -293,8 +293,11 @@ fn validate(lc: &Store, ctx: &Ctx, hit: &DamageEvent, now_ms: i64) -> Option<Str
     if hit.dism_blunt & damage::DAMAGE_PARENT != 0 && hit.flags & damage::FLAG_COMPLEX == 0 {
         return Some("bad_field: DamageParent requires native contact".into());
     }
+    let continuation = hit.parent_cid != 0 && hit.flags & damage::FLAG_INSIDE != 0 && hit.flags & damage::FLAG_COMPLEX == 0;
     if hit.dism_blunt & (damage::SOURCE_COMPONENT_MASK | damage::SOURCE_FEET | damage::HIT_BOX_MASK) != 0
-        && hit.flags & (damage::FLAG_COMPLEX | damage::FLAG_WEAPON) != (damage::FLAG_COMPLEX | damage::FLAG_WEAPON) {
+        && hit.flags & (damage::FLAG_COMPLEX | damage::FLAG_WEAPON) != (damage::FLAG_COMPLEX | damage::FLAG_WEAPON)
+        && !(continuation && hit.flags & damage::FLAG_WEAPON != 0
+            && hit.dism_blunt & (damage::SOURCE_FEET | damage::HIT_BOX_MASK) == 0) {
         return Some("bad_field: component identity requires native weapon contact".into());
     }
     if hit.flags & damage::FLAG_COMPLEX != 0 {
@@ -340,6 +343,17 @@ fn validate(lc: &Store, ctx: &Ctx, hit: &DamageEvent, now_ms: i64) -> Option<Str
 }
 
 impl Engine {
+    // A continuation can be approved while its parent is in defender grace.
+    // Check again before every delivery, including cached retransmissions.
+    fn rejected_parent(&self, attacker: PeerId, hit: &DamageEvent) -> Option<String> {
+        if hit.parent_cid == 0 { return None; }
+        self.decisions.iter().find_map(|(k, d)| {
+            let parent = d.approved.as_ref().or(d.waiting.as_ref()).or(d.pending.as_ref())?;
+            (k.0 == attacker && parent.cid == hit.parent_cid && parent.parent_cid == 0
+                && !d.accepted && d.waiting.is_none()).then(|| format!("no_parent: parent rejected ({})", d.reason))
+        })
+    }
+
     /// A FLAG_INSIDE claim with `parent_cid`: the attacker's accepted, forwarded hit with that
     /// cid on the same victim, match, round, both lives and bone (the constraint moves a pelvis
     /// hit to spine_02) is its authentication; the native call's own bounds (raw / cut / draw
@@ -349,8 +363,16 @@ impl Engine {
             return Err("bad_field: a continuation is an Inside Get Damage call".into());
         }
         let same_bone = |a: &str, b: &str| a.eq_ignore_ascii_case(b)
-            || (a.eq_ignore_ascii_case("pelvis") && b.eq_ignore_ascii_case("spine_02"));
+            || (a.eq_ignore_ascii_case("pelvis") && b.eq_ignore_ascii_case("spine_02"))
+            // Native @36442 rebinds Bone Name 2 to overlapping bones. The
+            // same exact constraint moves lowerarm_l -> hand_l in inside-2
+            // UE4SS.log:1694,1709. No unmeasured adjacent-bone aliases.
+            || (a.eq_ignore_ascii_case("lowerarm_l") && b.eq_ignore_ascii_case("hand_l"));
         let key = (ctx.attacker_id, hit.parent_cid);
+        if let Some(reason) = self.rejected_parent(ctx.attacker_id, hit) {
+            self.inside.remove(&key);
+            return Err(reason);
+        }
         if self.inside.get(&key).is_some_and(|o| now_ms - o.parent_at > INSIDE_MAX_MS) {
             self.inside.remove(&key);
             return Err("too_late: stuck blade outlived its continuation window".into());
@@ -372,6 +394,11 @@ impl Engine {
         }
         let open = self.inside.get(&key).expect("bound above").clone();
         let p = &open.parent;
+        if hit.flags & damage::FLAG_WEAPON != p.flags & damage::FLAG_WEAPON
+            || (p.flags & damage::FLAG_WEAPON != 0 && (hit.dism_blunt & damage::SOURCE_MASK != p.dism_blunt & damage::SOURCE_MASK
+                || hit.source_class != p.source_class)) {
+            return Err("no_parent: continuation weapon module differs from its parent".into());
+        }
         if !(p.target_peer_id == hit.target_peer_id && p.match_id == hit.match_id && p.round == hit.round
             && p.attacker_life == hit.attacker_life && p.victim_life == hit.victim_life && same_bone(p.bone_str(), hit.bone_str())) {
             return Err(format!("no_parent: not the parent hit's victim, life or bone (parent {} {} life {}, call {} {} life {})",
@@ -407,7 +434,19 @@ impl Engine {
     /// event (damage capped by the plausibility model): forward THAT.
     pub fn on_damage(&mut self, lc: &mut Store, ctx: &Ctx, hit: &mut DamageEvent, now_ms: i64) -> Verdict {
         let key = (ctx.attacker_id, hit.hit_id);
+        if let Some(approved) = self.decisions.get(&key).filter(|d|d.accepted).and_then(|d|d.approved) {
+            if let Some(reason) = self.rejected_parent(ctx.attacker_id, &approved) {
+                tracing::info!(attacker=ctx.attacker_id,target=approved.target_peer_id,hit_id=approved.hit_id,parent_cid=approved.parent_cid,
+                    bone=approved.bone_str(),source=approved.dism_blunt & damage::SOURCE_MASK,stage="delivery",reason,
+                    "stuck blade rejected");
+                self.reject_decision(ctx.attacker_id, approved.hit_id, &reason);
+                return Verdict::Ack { accepted: false, reason };
+            }
+        }
         let mut v = self.on_damage_inner(lc, ctx, hit, now_ms);
+        if matches!(&v, Verdict::Ack { accepted: false, reason } if reason == "parried") {
+            self.reject_decision(ctx.attacker_id, hit.hit_id, "parried");
+        }
         if v == Verdict::Forward && self.blocks_delivery(key, hit) {
             self.defer_delivery(key, *hit);
             v = Verdict::Hold;
@@ -513,6 +552,15 @@ impl Engine {
                 Ok(false) => { if let Some(n) = self.per_attacker.get_mut(&a) { *n = n.saturating_sub(1); } return Verdict::Hold; }
                 Ok(true) => { d.accepted = true; d.approved = Some(*hit); d.forwarded_at = Some(now_ms); Verdict::Forward }
             };
+            match &verdict {
+                Verdict::Forward=>tracing::info!(attacker=ctx.attacker_id,target=hit.target_peer_id,hit_id=hit.hit_id,
+                    parent_cid=hit.parent_cid,bone=hit.bone_str(),source=hit.dism_blunt & damage::SOURCE_MASK,
+                    class=hit.source_class.as_str().unwrap_or(""),stage="decision","stuck blade accepted"),
+                Verdict::Ack{accepted:false,reason}=>tracing::info!(attacker=ctx.attacker_id,target=hit.target_peer_id,
+                    hit_id=hit.hit_id,parent_cid=hit.parent_cid,bone=hit.bone_str(),source=hit.dism_blunt & damage::SOURCE_MASK,
+                    stage="decision",reason,"stuck blade rejected"),
+                _=>{},
+            }
             self.decisions.insert(key, d);
             return verdict;
         }
@@ -564,6 +612,17 @@ impl Engine {
         let keys: Vec<(PeerId, u32)> = self.active.iter().copied().collect();
         for key in keys {
             let attacker = key.0;
+            if let Some(hit) = self.decisions.get(&key).and_then(|d| d.pending) {
+                if let Some(reason) = self.rejected_parent(attacker, &hit) {
+                    tracing::info!(attacker,target=hit.target_peer_id,hit_id=hit.hit_id,parent_cid=hit.parent_cid,
+                        bone=hit.bone_str(),source=hit.dism_blunt & damage::SOURCE_MASK,stage="delivery",reason,
+                        "stuck blade rejected");
+                    self.reject_decision(attacker, key.1, &reason);
+                    self.active.remove(&key);
+                    out.push((attacker, hit, Verdict::Ack { accepted: false, reason }));
+                    continue;
+                }
+            }
             if self.decisions.get(&key).and_then(|d| d.pending.as_ref())
                 .map_or(false, |h| self.blocks_delivery(key, h)) { continue; }
             let Some(d) = self.decisions.get_mut(&key) else { self.active.remove(&key); continue };
@@ -574,9 +633,16 @@ impl Engine {
             } else { None };
             let done = d.waiting.is_none() && d.pending.is_none();
             if let Some((v, hit)) = result {
+                if let Verdict::Ack { accepted: false, reason } = &v {
+                    self.reject_decision(attacker, hit.hit_id, reason);
+                }
                 if v == Verdict::Forward && self.blocks_delivery(key, &hit) {
                     self.defer_delivery(key, hit);
                     continue;
+                }
+                if hit.parent_cid!=0 && v==Verdict::Forward {
+                    tracing::info!(attacker,target=hit.target_peer_id,hit_id=hit.hit_id,parent_cid=hit.parent_cid,
+                        bone=hit.bone_str(),source=hit.dism_blunt & damage::SOURCE_MASK,stage="delivery","stuck blade delivered");
                 }
                 if v != Verdict::Hold { out.push((attacker, hit, v)); }
             }
@@ -594,6 +660,7 @@ impl Engine {
             d.pending = None;
             d.waiting = None;
         }
+        self.inside.retain(|(a, _), open| *a != attacker || open.parent.hit_id != hit_id);
     }
 
     /// The owner acked `(attacker, hit_id)` (trusted caller: the combat
@@ -644,6 +711,20 @@ impl Engine {
         d.owner_outcome=Some(r);Some(true)
     }
 
+    /// Cosmetic replay requires the owner's native result, never its sidecar's
+    /// transport ACK. The glue calls this only for a fresh immutable outcome.
+    pub fn native_effect_hit(&self,victim:PeerId,attacker:PeerId,hit_id:u32)->Option<DamageEvent> {
+        let d=self.decisions.get(&(attacker,hit_id))?;
+        let hit=d.approved?;
+        let outcome=d.owner_outcome?;
+        (d.accepted && d.forwarded_at.is_some() && d.pending.is_none() && d.waiting.is_none()
+            && hit.target_peer_id==victim && outcome.status==hsmp_ipc::schema::combat::REPLAY_CHANGED
+            // FIELDS 0..14 and 18 are native injury/vitals. Sustained Damage,
+            // Damage Taken and Last Damage Taken (15..17) only bookkeep gates.
+            && outcome.observed_fields & (0x7fff | (1<<18))!=0 && hit.flags & damage::FLAG_COMPLEX!=0
+            && hit.flags & damage::FLAG_INSIDE==0).then_some(hit)
+    }
+
     /// One-shot: true the first time `(attacker, hit_id)` is known to be
     /// geometrically accepted (forwarded, or held for the defender grace).
     /// The glue then sends the attacker an early S2CDamageAck{accepted: true,
@@ -659,6 +740,10 @@ impl Engine {
 
 pub fn on_replay_outcome(victim:PeerId,r:hsmp_ipc::schema::combat::ReplayOutcome)->Option<bool> {
     engine().lock().unwrap().on_replay_outcome_by(victim,r)
+}
+
+pub fn native_effect_hit(victim:PeerId,attacker:PeerId,hit_id:u32)->Option<DamageEvent> {
+    engine().lock().unwrap().native_effect_hit(victim,attacker,hit_id)
 }
 
 /// Judge a claim that passed the field checks: lag comp (waiting while the
@@ -753,6 +838,13 @@ fn settle_waiting(lc: &mut Store, attacker: PeerId, d: &mut Decision, now_ms: i6
                 vel_claimed = v0, vel_forwarded = len(hit.velocity), imp_claimed = i0, imp_forwarded = len(hit.impulse),
                 standin_rel = vrs, server_striking = ?speed, server_peak = ?peak, server_relative = ?rel, rel_exact, factor = c.factor,
                 cut = hit.cutting_power, rig = hit.damage_out, "combat: impact rescale");
+        }
+        // COMPLEX|INSIDE with no parent is an authenticated penetration origin
+        // whose native DCD gate suppressed damage. It may bind a constraint,
+        // but the owner acknowledges it without applying/painting a blow.
+        if hit.flags & (damage::FLAG_COMPLEX | damage::FLAG_INSIDE) == (damage::FLAG_COMPLEX | damage::FLAG_INSIDE) {
+            hit.damage_out = 0.0;
+            hit.set_deltas(&[]);
         }
     }
     let held = accepted && hold;
@@ -1460,6 +1552,69 @@ mod tests {
         assert!(matches!(e.on_damage(&mut lc, &c, &mut late, INSIDE_MAX_MS + 1), Verdict::Ack { accepted: false, ref reason } if reason.starts_with("too_late")));
     }
 
+    #[test]
+    fn stuck_blade_continuation_retains_exact_native_module() {
+        let mut e=Engine::default();let mut lc=Store::default();let c=ctx(988);
+        let mut parent=hit(1);parent.cid=7;
+        parent.bone=hsmp_ipc::layout::Str::new("lowerarm_l");
+        parent.flags=damage::FLAG_COMPLEX|damage::FLAG_WEAPON;
+        parent.dism_blunt=damage::SOURCE_RIGHT|(1<<damage::SOURCE_COMPONENT_SHIFT);
+        parent.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_ArmingSword_T3_C");
+        e.decisions.insert((988,1),Decision {accepted:true,reason:String::new(),decided_at:0,first_at:0,
+            waiting:None,target_acked:true,owner_outcome:None,pending:None,grace_ms:0,parryable:true,
+            approved:Some(parent),forwarded_at:Some(0),reforwarded:false,confirmed:false});
+        let mut inside=parent;inside.hit_id=2;inside.cid=8;inside.parent_cid=7;
+        inside.flags=damage::FLAG_INSIDE|damage::FLAG_WEAPON;inside.damage_out=0.0;
+        inside.bone=hsmp_ipc::layout::Str::new("hand_l");
+        assert_eq!(e.on_damage(&mut lc,&c,&mut inside,100),Verdict::Forward,
+            "measured same-constraint lowerarm_l to hand_l rebind retains its module");
+        for edit in 0..5 {
+            let mut bad=inside;bad.hit_id=3+edit;
+            match edit {
+                0=>bad.dism_blunt=damage::SOURCE_RIGHT|(2<<damage::SOURCE_COMPONENT_SHIFT),
+                1=>bad.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_ArmingSword_T2_C"),
+                2=>bad.dism_blunt=damage::SOURCE_LEFT|(1<<damage::SOURCE_COMPONENT_SHIFT),
+                3=>bad.bone=hsmp_ipc::layout::Str::new("hand_r"),
+                _=>{bad.flags=damage::FLAG_INSIDE;bad.dism_blunt=0;bad.source_class=hsmp_ipc::layout::Str::new("");},
+            }
+            assert!(matches!(e.on_damage(&mut lc,&c,&mut bad,100),Verdict::Ack{accepted:false,..}),
+                "continuation cannot borrow another source or unmeasured bone ({edit})");
+        }
+        e.reject_decision(988,1,"parried");
+        assert!(matches!(e.on_damage(&mut lc,&c,&mut inside,101),Verdict::Ack{accepted:false,..}),
+            "cached retransmit of continuation cannot outlive parent rejection");
+    }
+
+    #[test]
+    fn stuck_blade_deferred_continuation_drops_when_parent_is_parried() {
+        lagcomp_world(992,991);
+        let c=ctx_at(991);let mut e=Engine::default();let now=lagcomp::now_ms();
+        lagcomp::with_store(|lc| {
+            let mut parent=ts_hit(1,992);parent.cid=7;
+            assert_eq!(e.on_damage(lc,&c,&mut parent,now),Verdict::Hold);
+            let mut inside=parent;inside.hit_id=2;inside.cid=8;inside.parent_cid=7;
+            inside.flags=damage::FLAG_INSIDE;inside.damage_out=0.0;
+            assert_eq!(e.on_damage(lc,&c,&mut inside,now),Verdict::Hold,
+                "continuation waits behind the parent's defender grace");
+            lc.record_clash(992,991,5300,9180,now+20);
+            let out=e.flush_pending(lc,now+ms(DEFENDER_GRACE)+1);
+            assert_eq!(out.len(),2,"both parent and deferred child receive final rejection");
+            assert!(out.iter().all(|(_,_,v)|matches!(v,Verdict::Ack{accepted:false,..})),"{out:?}");
+            assert!(e.inside.is_empty(),"parried origin leaves no cached constraint authorization");
+            let mut later=inside;later.hit_id=3;
+            assert!(matches!(e.on_damage(lc,&c,&mut later,now+400),Verdict::Ack{accepted:false,..}));
+        });
+    }
+
+    #[test]
+    fn suppressed_native_origin_books_no_damage() {
+        let mut origin=hit(1);origin.flags=damage::FLAG_COMPLEX|damage::FLAG_INSIDE|damage::FLAG_WEAPON;
+        origin.damage_out=0.0;origin.set_deltas(&[]);
+        origin.velocity=[10_000.0,0.0,0.0];origin.impulse=[10_000.0,0.0,0.0];origin.cutting_power=100.0;
+        assert_eq!(hit_loss(&origin),0.0);
+        assert_eq!(trusted_loss(&origin),0.0);
+    }
+
     fn hit(id: u32) -> DamageEvent {
         DamageEvent::new(crate::proto::Damage {
             hit_id: id,
@@ -1505,6 +1660,43 @@ mod tests {
         new=ctx(87);new.match_id=999;
         assert!(matches!(e.on_damage_inner(&mut lc,&new,&mut h,102),Verdict::Ack{accepted:false,..}),
             "same round in another match cannot relabel callback");
+    }
+
+    #[test]
+    fn native_effects_wait_for_changed_owner_result_not_transport_ack() {
+        use hsmp_ipc::schema::combat::*;
+        let mut e=Engine::default();let mut lc=Store::default();let c=ctx(986);
+        for status in REPLAY_CHANGED..=REPLAY_EXPIRED {
+            let mut h=hit(u32::from(status));h.flags=damage::FLAG_COMPLEX;
+            assert_eq!(e.on_damage_inner(&mut lc,&c,&mut h,100),Verdict::Forward);
+            assert!(e.native_effect_hit(2,986,h.hit_id).is_none(),"geometric approval cannot paint");
+            assert!(e.on_owner_ack_by(&mut lc,2,986,h.hit_id,110));
+            assert!(e.native_effect_hit(2,986,h.hit_id).is_none(),"sidecar transport ACK cannot paint");
+            let r=ReplayOutcome{match_id:h.match_id,round:h.round,attacker:986,hit_id:h.hit_id,
+                victim_life:h.victim_life,status,observed_fields:if status==REPLAY_CHANGED {1}else{0},
+                health_delta:if status==REPLAY_CHANGED {-1.0}else{0.0},..Default::default()};
+            assert_eq!(e.on_replay_outcome_by(99,r),None,"another peer cannot authorize a wound");
+            assert_eq!(e.on_replay_outcome_by(2,r),Some(true));
+            assert_eq!(e.native_effect_hit(2,986,h.hit_id).is_some(),status==REPLAY_CHANGED);
+            assert_eq!(e.on_replay_outcome_by(2,r),Some(false),"duplicate receipt cannot trigger another broadcast");
+            if status==REPLAY_CHANGED {
+                let approved=e.native_effect_hit(2,986,h.hit_id).unwrap();
+                assert_eq!(approved.h,h.h,"cosmetic call retains exact approved native inputs");
+                e.decisions.get_mut(&(986,h.hit_id)).unwrap().approved.as_mut().unwrap().flags|=damage::FLAG_INSIDE;
+                assert!(e.native_effect_hit(2,986,h.hit_id).is_none(),"suppressed origin never paints");
+                e.reject_decision(986,h.hit_id,"stale_life");
+                assert!(e.native_effect_hit(2,986,h.hit_id).is_none(),"rejected accepted hit cannot paint");
+            }
+        }
+        for (id,fields,expected) in [(8,(1<<15)|(1<<16)|(1<<17),false),(9,1<<13,true)] {
+            let mut h=hit(id);h.flags=damage::FLAG_COMPLEX;
+            assert_eq!(e.on_damage_inner(&mut lc,&c,&mut h,100),Verdict::Forward);
+            let r=ReplayOutcome{match_id:h.match_id,round:h.round,attacker:986,hit_id:h.hit_id,
+                victim_life:h.victim_life,status:REPLAY_CHANGED,observed_fields:fields,health_delta:0.0,..Default::default()};
+            assert_eq!(e.on_replay_outcome_by(2,r),Some(true));
+            assert_eq!(e.native_effect_hit(2,986,h.hit_id).is_some(),expected,
+                "bookkeeping cannot authorize wounds; native injury can without main Health loss");
+        }
     }
 
     #[test]

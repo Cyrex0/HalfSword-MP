@@ -39,9 +39,9 @@ fn cutting_bone_frame_uses_delivered_brackets_not_hidden_midframe() {
     assert!(len(sub(reconstructed(hidden),original_world_box))>BODY_TOL);
     assert_eq!(shown.q[0],identity);
     // Another viewer that actually received the middle frame sees its twist.
-    s.note_relayed(ATT+1,VIC,1050,50,1100);
-    s.note_relayed(ATT+1,VIC,1100,50,1100);
-    let theirs=s.shown_bone_frames(ATT+1,VIC,&s.peers[&VIC],1050,0,1100).unwrap();
+    s.note_relayed(ATT+2,VIC,1050,50,1100);
+    s.note_relayed(ATT+2,VIC,1100,50,1100);
+    let theirs=s.shown_bone_frames(ATT+2,VIC,&s.peers[&VIC],1050,0,1100).unwrap();
     assert_eq!(theirs.p[0],hidden.p[0]);
     assert_eq!(theirs.q[0],hidden.q[0]);
 }
@@ -67,6 +67,40 @@ fn cutting_newest_frame_uses_only_delivered_native_derivatives_and_context() {
     assert!(s.shown_bone_frames(ATT,VIC,&s.peers[&VIC],1030,50,1100).is_err());
     assert!(s.bind_pose_context(VIC,Some(posecodec::v2::Context{life:4,..context})));
     assert!(s.peers[&VIC].native_frames.is_empty());
+}
+
+#[test]
+fn cutting_physical_endpoints_survive_sender_step_reordering_and_fail_closed() {
+    let mut s=Store::default();
+    // Frame-start order1000,1030 differs from physical order1030,1100.
+    for (ts,step,x) in [(1000,100.0,70.0),(1030,0.0,0.0)] {
+        let mut f=posecodec::v2::Full::default();f.ts=ts as f64;f.step=step;
+        for bone in &mut f.bones {bone.p=[x,0.0,100.0];bone.v=[1000.0,0.0,0.0];}
+        for (hands,y) in [(1,0.0),(2,20.0)] {
+            f.weapons.push(posecodec::v2::Weapon {hands,p:[x,y,100.0],v:[1000.0,0.0,0.0],tip:[100.0,0.0,0.0],..Default::default()});
+        }
+        s.record_body_strikers(VIC,ts,&f);
+        s.note_relayed(ATT,VIC,ts,30,1100);
+    }
+    let got=s.shown_bone_frames(ATT,VIC,&s.peers[&VIC],1040,0,1100).unwrap();
+    assert!((got.p[0][0]-10.0).abs()<0.001,"sample physical1040 directly");
+    let caps=s.shown_capsules(ATT,VIC,&s.peers[&VIC],1040,0,1100).unwrap();
+    assert!((caps.c[0].a[0]-10.0).abs()<0.001 && caps.c[0].r==18.0,
+        "broad body shares physical1040 with unchanged native radius");
+    for (offhand,y) in [(false,0.0),(true,20.0)] {
+        let (blade,exact)=s.shown_blade(ATT,VIC,&s.peers[&VIC],1040,offhand,1100).unwrap();
+        assert!(exact && (blade.base[0]-10.0).abs()<0.001 && (blade.tip[0]-110.0).abs()<0.001 && blade.base[1]==y,
+            "each delivered weapon shares the body physical timeline");
+    }
+    assert!(s.shown_bone_frames(ATT+2,VIC,&s.peers[&VIC],1040,0,1100).is_err(),
+        "missing relay history cannot select hidden full-rate geometry");
+    assert!(s.shown_bone_frames(ATT,VIC,&s.peers[&VIC],1029,0,1100).is_err(),
+        "a future delivered sample cannot cover a time before the oldest frame");
+    s.peer(VIC).native_frames.remove(&1000);
+    assert!(s.shown_capsules(ATT,VIC,&s.peers[&VIC],1040,0,1100).is_none());
+    assert!(s.shown_blade(ATT,VIC,&s.peers[&VIC],1040,false,1100).is_none());
+    assert!(matches!(s.shown_bone_frames(ATT,VIC,&s.peers[&VIC],1040,0,1100),
+        Err("delivered frame after the view time not cached")));
 }
 
 fn hit(target: PeerId, loc: V3, ats: u32, vts: u32) -> DamageEvent {
@@ -535,8 +569,15 @@ fn native_head_side_contact_uses_only_its_module_envelope() {
     let Eval::Accept(i)=sc.eval(&h) else {panic!("head contact: {:?}",sc.eval(&h))};
     assert_eq!(i.weapon_dist,0.0); assert!(!i.unarmed && i.swept);
     for t in (1000..=1975).step_by(25) {
-        sc.s.peer(VIC).bone_frames.push((t+V_OFF) as u32,BoneFrames {
-            p:[[-390.0,0.0,130.0];posecodec::v2::NB],q:[[0.0,0.0,0.0,1.0];posecodec::v2::NB],scale:0.9932 });
+        let ts=(t+V_OFF) as u32;
+        let mut f=posecodec::v2::Full::default();f.ts=ts as f64;f.k=0.9932;
+        for b in &mut f.bones { b.p=[0.0,0.0,130.0]; }
+        // The proxy cutting-offset test uses an intentionally distant source
+        // spine; the remaining delivered body stays at the physical contact.
+        f.bones[2].p=[-390.0,0.0,130.0];
+        f.bones[7].p=[0.0,0.0,180.0];f.bones[8].p=[0.0,0.0,190.0];
+        sc.s.record_body_strikers(VIC,ts,&f);
+        sc.s.note_relayed(ATT,VIC,ts,25,t+20);
     }
     let mut cutting=h;
     cutting.flags|=crate::validate::damage::FLAG_LOCAL;

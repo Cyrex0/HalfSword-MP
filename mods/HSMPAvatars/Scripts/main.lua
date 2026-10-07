@@ -752,6 +752,7 @@ end
 -- owner is authoritative (HSMPCombat replicates real wounds/death).
 local function harden_standin(p)
     pcall(function() p.actor["Force Disable Dismemberment"] = true end)
+    pcall(function() p.actor["Force Disable Vertex Paint"] = true end)
 end
 
 local function set_motor_strength(body, s)
@@ -1913,6 +1914,7 @@ local function claim_puppet(id, needed, ats, peers)
         how = "idle combatant"
     end
     if pick then
+        harden_standin({actor=pick}) -- Before collision/visibility and the first combat tick.
         Log("peer %d -> puppet %s (%s)", id, pick:GetFName():ToString(), how)
         return pick
     end
@@ -2622,6 +2624,30 @@ end
 PX.CONTACT_NEAR_UU = 150
 PX.CONTACT_BODIES = { 1, 4, 9, 13, 17 }   -- pelvis, spine_03, head, hand_l, hand_r
 
+-- Keep the reset decision and its evidence together: emit the pre-correction
+-- clock and playback state exactly once per discontinuity, never per frame.
+function PX.playback_clock(id, p, cur, clk, now, cut_reset, fresh)
+    local rate = PURE.clamp(tonumber(cur.rate) or 1, 0.5, 1.5)
+    if rate ~= rate or (tonumber(cur.rate) or 0) <= 0 then rate = 1 end
+    local expect = cur.pt - (cur.lead or 0) + (now - (cur.read_at or now)) * rate
+    local projected = clk and (clk.pt + (now - clk.at) * (clk.r or 1))
+    local reset = clk ~= nil and not cut_reset and math.abs(expect - projected) > 50
+    if reset then
+        ev("x_pose_clock_reset", {
+            peer=id, threshold_ms=50, expect=expect, projected_clk=projected, delta_ms=expect-projected,
+            clk_pt=clk.pt, clk_at=clk.at, clk_rate=clk.r or 1, local_ms=now,
+            source_pt=cur.pt, read_at=cur.read_at or now, rate=rate, lead=cur.lead or 0,
+            mode=cur.mode, age=cur.age, delay=cur.delay, jitter=cur.jit, iv=cur.iv,
+            quiet=now-((p.play and p.play.seq_at) or now), cut=cur.cut, step=cur.st,
+            frame=PX.frame_no or 0, source_seq=cur.seq, fresh=fresh==true,
+            match_id=cur.match_id, round=cur.round, life=cur.life, has_context=cur.has_context==true,
+        })
+    end
+    if not clk or cut_reset or reset then return {pt=expect,at=now,r=rate}, reset end
+    local r = clk.r or 1
+    return {pt=projected+0.1*(expect-projected),at=now,r=r+0.3*(rate-r)}, false
+end
+
 -- One frame of the v2 driver. `fresh`: a new pose_play sample arrived this frame.
 local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local sv = servo_setup(body)
@@ -2704,18 +2730,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     -- The sidecar's clock runs at cur.rate (slower while its buffer starves,
     -- faster while it catches up): this clock follows that rate, so a stretch
     -- is not read as an error (which would reset the clock again and again).
-    local rate = PURE.clamp(tonumber(cur.rate) or 1, 0.5, 1.5)
-    if rate ~= rate or (tonumber(cur.rate) or 0) <= 0 then rate = 1 end
-    local expect = cur.pt - (cur.lead or 0) + (now - (cur.read_at or now)) * rate
-    local clk = (TUNE.clock ~= 0) and p.clk or nil
-    if not clk or cut_reset or math.abs(expect - (clk.pt + (now - clk.at) * (clk.r or 1))) > 50 then
-        if clk and not cut_reset and body.sv and body.sv.err then body.sv.err.clkr = (body.sv.err.clkr or 0) + 1 end
-        clk = { pt = expect, at = now, r = rate }
-    else
-        local r = clk.r or 1
-        local pt = clk.pt + (now - clk.at) * r
-        clk = { pt = pt + 0.1 * (expect - pt), at = now, r = r + 0.3 * (rate - r) }
-    end
+    local clk, clkr = PX.playback_clock(id, p, cur, (TUNE.clock ~= 0) and p.clk or nil, now, cut_reset, fresh)
+    if clkr and body.sv and body.sv.err then body.sv.err.clkr = (body.sv.err.clkr or 0) + 1 end
     p.clk = clk
     -- A hold sample already stands still (zero velocities): only stale data
     -- freezes the shown time, so leaving a hold does not step it back.
@@ -2753,15 +2769,12 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
         pv.pt = cur.pt
         p.vprev = pv
     end
-    local targets, label, aim
+    local targets, label, aim, aim_label
     if v1aim then
-        targets, label = cur.slots, clk.pt + (TUNE.lead or 0)
-        local ms = label - cur.pt
-        if ms > SERVO_EXTRAP_MS then ms = SERVO_EXTRAP_MS end
-        if ms < -SERVO_EXTRAP_MS then ms = -SERVO_EXTRAP_MS end
-        if frozen then ms = 0 end
-        label = cur.pt + ms
-        if math.abs(ms) > 0.05 then
+        targets = cur.slots
+        local ms
+        label, aim_label, ms = PURE.display_times(cur.pt, clk.pt + (TUNE.lead or 0), 0, SERVO_EXTRAP_MS, frozen)
+        if ms ~= 0 then
             targets = {}
             for s, tg in pairs(cur.slots) do targets[s] = PURE.advance(tg, ms) end
         end
@@ -2769,11 +2782,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     else
         -- label: the time the bodies stand for NOW; aim: the pose at the end
         -- of the coming step, approached with the chord velocity of that step.
-        label = clk.pt + xoff
-        local ms = PURE.clamp(label - cur.pt, -SERVO_EXTRAP_MS, SERVO_EXTRAP_MS)
-        local ma = PURE.clamp(ms + hstep, -SERVO_EXTRAP_MS, SERVO_EXTRAP_MS)
-        if frozen then ms, ma = 0, 0 end
-        label = cur.pt + ms
+        local ms, ma
+        label, aim_label, ms, ma = PURE.display_times(cur.pt, clk.pt + xoff, hstep, SERVO_EXTRAP_MS, frozen)
         -- Target and aim tables come from a per-stand-in ring of 6 sets (2 per drive):
         -- a set is refilled 3 drives later. The targets are read until 2 drives later
         -- (quality history a1 / a2), the aim until the next one (p.aim).
@@ -2813,10 +2823,11 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     -- What is on screen now (contract for bus key "playback" = HSMPCombat's view
     -- time of this peer): v2 aim knows it exactly; v1aim shows last frame's
     -- aim.
-    -- (lag comp keeps the sender's frame-start stamps: the pose shown stands
-    -- for label, which is the frame start + cur.st on that clock)
+    -- Publish the physical sample time used to construct these targets. The
+    -- selected sender step cannot be subtracted: around hitches that mapping
+    -- has several different poses for the same frame-start label.
     if not v1aim then
-        p.shown = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), label - (cur.st or 0), now)
+        p.shown = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), label, now)
         p.applied_context = p.shown
     end
     -- Foot planting: while the owner's foot is planted (its replicated speed
@@ -3248,7 +3259,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     _probe_buf[#_probe_buf + 1] = table.concat(out, " ")
         probe_flush(id, false)
     end
-    p.aim = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), label + hstep, now)
+    p.aim = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), aim_label, now)
     p.aim.slots = aim
     return pel_err
 end

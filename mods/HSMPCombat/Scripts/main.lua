@@ -25,7 +25,7 @@
 --   callback from my per-tick baseline and reported as a "touch" (evidence
 --   for the server that a clash I also saw did not stop the blow).
 --
--- Other screens: every accepted hit is broadcast (S2CHitFx ->
+-- Other screens: a changed native owner injury authorizes broadcast (S2CHitFx ->
 -- `hitfx_in` records) and replayed on my stand-in of its victim for the native
 -- blood, wounds and bruises; the stand-in's damage state is put back at once.
 --
@@ -816,8 +816,8 @@ end
 --     legitimate hit) and reported to the server as a "touch" (evidence
 --     against a parry, lagcomp `parried`). The server-approved replay is the
 --     only damage my pawn takes from another player;
---   * blood, wounds and bruises on stand-ins come from the accepted hits the
---     server broadcasts (`hitfx_in` records), replayed natively on
+--   * blood, wounds and bruises on stand-ins come after actual native owner
+--     injury outcomes (`hitfx_in` records), replayed natively on
 --     the stand-in with its damage state restored right after.
 local C3 = {
     STANDIN_INVULNERABLE = true,
@@ -900,7 +900,10 @@ end
 -- Baseline of `w` (my pawn or a stand-in) as of now.
 function C3.baseline(w)
     local a = addr_of(w)
-    if a then C3.base[a] = C3.snap_all(w) end
+    if a then
+        C3.base[a] = C3.snap_all(w)
+        if C3.probe_after then C3.probe_after[a]=nil end
+    end
 end
 
 -- Stand-ins never take native damage (see the block comment above). The
@@ -935,6 +938,10 @@ function C3.team_for(peer, mine)
     return t
 end
 function C3.protect(w, peer)
+    -- Native DCD @4356/@9789 paints armour before Get Damage's Invulnerable
+    -- gate. This boolean suppresses speculative paint without changing the
+    -- native damage/contact computation (including the dev probe).
+    pcall(function() w["Force Disable Vertex Paint"] = true end)
     if peer then
         pcall(function()
             local me = local_pawn()
@@ -975,6 +982,7 @@ function C3.ungate(me)
         -- pooled stand-in becoming OUR real pawn must regain native severing.
         -- Only touch a pawn recorded as ours to gate, never normal spawn flags.
         pcall(function() me["Force Disable Dismemberment"] = false end)
+        pcall(function() me["Force Disable Vertex Paint"] = false end)
         Log("my pawn %s was a stand-in: Invulnerable and dismemberment guards lifted", nm)
     end
     for _, k in ipairs({ "Weapon R", "Weapon L", "Foot R Weapon", "Foot L Weapon" }) do
@@ -1037,13 +1045,6 @@ function C3.standin_hit(w)
         end
     end
     if not hurt then return end   -- Invulnerable held: nothing to undo
-    if C3.native_probe then
-        -- dev measurement (`autotest combat_probe on`): what the game itself did to this
-        -- body for my blow, logged by the claim this same Deal Complex Damage call makes.
-        local d = diff(b.f, now)
-        C3.probe_last = { name = wname(w), at = now_ms(),
-            text = string.format("dmg Health %s [%s]", (b.f[1] and now[1]) and string.format("%+.2f", now[1] - b.f[1]) or "?", fmt_fields(d)) }
-    end
     -- (runs inside the Deal Complex Damage call too, before its callback reads
     -- the contact gate)
     C3.put_all(w, b, true)
@@ -1051,6 +1052,23 @@ function C3.standin_hit(w)
     if C3.standin_restores <= 5 or C3.standin_restores % 50 == 0 then
         Log("native damage on stand-in %s put back (#%d; Invulnerable did not hold)", wname(w) or "?", C3.standin_restores)
     end
+end
+
+-- POST-only native evidence: measure against the saved stand-in baseline,
+-- before the backstop restores it. Missing baselines/fields are unavailable,
+-- never an invented zero. Each Get Damage sample is consumed by one path.
+function C3.probe_measure(w)
+    if not C3.native_probe then return nil end
+    local baseline=C3.base[addr_of(w)]
+    if not baseline then return "dmg Health unavailable [native baseline absent]" end
+    -- Tiny native changes can stay below the backstop's 0.5 threshold. Use
+    -- the previous callback's actual post-restore state within this tick,
+    -- so a second call cannot count the first one's measured change again.
+    local previous=C3.probe_after and C3.probe_after[addr_of(w)]
+    if previous and previous.tick==tick_num then baseline=previous end
+    local current=snapshot(w)
+    if not (baseline.f[1] and current[1]) then return "dmg Health unavailable [native Health absent]" end
+    return string.format("dmg Health %+.6f [%s]",current[1]-baseline.f[1],fmt_fields(diff(baseline.f,current)))
 end
 
 -- The owner's passport body on stand-ins (standin_body.lua): my own body into
@@ -1232,6 +1250,8 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
     local w = pv(selfp)
     if not w or not w:IsValid() then return end
     local nm = wname(w)
+    local native_probe_sample=C3.probe_last
+    C3.probe_last=nil -- Consume once even if the original DCD cannot be claimed.
     local me = local_pawn()
     if me and same(w, me) then
         local sp = source_standin_peer(pv(CollidedComponent))
@@ -1263,7 +1283,6 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
             Log("native contact gate stopped claim: victim=%s bone=%s priorBone=%s priorImpulse=%s (#%d)",
                 nm,tostring(bone),tostring(last_bone),tostring(last),CX.gate_stops)
         end
-        return
     end
     local peer = puppet_peer[nm]
     local mine, theirs = C3.life_for(my_peer_id,true), C3.displayed_for(peer,w)
@@ -1274,15 +1293,18 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         end
         return
     end
+    local probe_text
     if C3.native_probe then
         -- this blow on one line: my native inputs and what the game did to the stand-in
-        local pl = C3.probe_last
-        C3.probe_last = nil
+        local pl = native_probe_sample
         local v = vec(pv(HitVelocity))
         local b = ""; pcall(function() b = pv(HitBone):ToString() end)
+        probe_text=(gate~=false and pl and pl.name==nm and pl.bone==b and pl.source and pl.source==addr_of(coll)
+            and now_ms()-pl.at>=0 and now_ms()-pl.at<50) and pl.text
+            or "dmg Health unavailable [original native Get Damage sample absent]"
         Log("PROBE native on peer %s bone=%s vel=%.0f rig=%.2f cut=%.0f stab=%.2f: %s", tostring(peer), b,
             math.sqrt(v[1] ^ 2 + v[2] ^ 2 + v[3] ^ 2), num(pv(Rigidity)), num(pv(CuttingPower)), num(pv(StabRate)),
-            (pl and pl.name == nm and now_ms() - pl.at < 100) and pl.text or "dmg Health +0.00 [none]")
+            probe_text)
     end
     CX.input_diag = (CX.input_diag or 0) + 1
     if CX.input_diag <= 10 or CX.input_diag % 100 == 0 then
@@ -1365,6 +1387,7 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         nm = nm, peer = peer, bone = bname, gate = gate, flags = flags, source = source, parent = pv(DamageParent) == true,
         match_id = mine.match_id, round = mine.round, attacker_life = mine.life, victim_life = theirs.life, hit_box = hit_box,
         source_class=source_class,hit_box_frame=box_frame,
+        probe=probe_text,probe_attacker=my_peer_id,
         ats = now_ms(), vts = vts, vats = vats, loc = loc, nrm = nrm, off = off,
     }
     CX.pending[#CX.pending + 1] = rec
@@ -1416,16 +1439,20 @@ function C3.constraint_begin_journal(selfp)
     if not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return end
     local coll=c["Weapon Hit Module"]
     local source,ordinal=BF.source(coll,me)
-    -- The weapon builds the constraint right after this frame's Deal Complex Damage on the
-    -- same body and bone (a pelvis hit sticks in spine_02): that claim is its parent.
+    -- Match the original native call before selection, including a gate-suppressed
+    -- contact. Both component addresses and callback order identify its module.
     pcall(function()
         local nm,b2=wname(w),c["Bone Name 2"]:ToString()
         for i=#CX.pending,1,-1 do
             local r=CX.pending[i]
-            if r.nm==nm and (r.bone==b2 or (r.bone=="pelvis" and b2=="spine_02")) then
+            if r.nm==nm and r.source_address and r.target_address
+                and r.source_address==addr_of(coll) and r.target_address==addr_of(c["Component 2 (Body)"])
+                and r.source==source and source~=0 and os.clock()-r.at>=0 and os.clock()-r.at<=0.05
+                and (r.bone==b2 or (r.bone=="pelvis" and b2=="spine_02")) then
                 C3.stuck_parent=C3.stuck_parent or {}
                 if next(C3.stuck_parent)~=nil and C3.stuck_parent_n and C3.stuck_parent_n>64 then C3.stuck_parent,C3.stuck_parent_n={},0 end
                 C3.stuck_parent[c:GetFullName()]=r
+                r.constraint_parent=true
                 C3.stuck_parent_n=(C3.stuck_parent_n or 0)+1
                 break
             end
@@ -1457,12 +1484,15 @@ local function on_get_damage(selfp, Impulse, Velocity, Location, Normal, bone, R
     if next(puppet_peer) == nil and next(puppet_weapon) == nil then return end
     local w = pv(selfp)
     if not w or not w:IsValid() then return end
+    local native_probe=C3.native_probe and puppet_peer[wname(w) or ""] and C3.probe_measure(w) or nil
     if pv(Inside)==true then
         pcall(C3.inside_journal,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(HitBox),
             pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(ApplyBoneChange))
         pcall(C3.inside_forward,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(Location),
             pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(LowerThreshold),pv(Shockwave),
-            pv(Flesh),pv(ApplyBoneChange),pv(DismBlunt))
+            pv(Flesh),pv(ApplyBoneChange),pv(DismBlunt),pv(Normal),pv(Impulse),pv(Velocity),native_probe)
+    elseif native_probe then
+        C3.probe_last={name=wname(w),at=now_ms(),bone=pv(bone):ToString(),source=addr_of(pv(HitByComponent)),text=native_probe}
     end
     local me = local_pawn()
     if me and same(w, me) then
@@ -1471,7 +1501,16 @@ local function on_get_damage(selfp, Impulse, Velocity, Location, Normal, bone, R
         return
     end
     local nm = wname(w)
-    if nm and puppet_peer[nm] then C3.standin_hit(w) end
+    if nm and puppet_peer[nm] then
+        C3.standin_hit(w)
+        if native_probe then
+            local address=addr_of(w)
+            if address then
+                C3.probe_after=C3.probe_after or {}
+                C3.probe_after[address]={f=snapshot(w),tick=tick_num}
+            end
+        end
+    end
 end
 
 -- Weapon-on-weapon contact between my weapon and a stand-in's (either side
@@ -1549,7 +1588,7 @@ local function try_hook()
             RegisterHook("/Game/Blueprints/Utility/Constraint_Weapon_Stuck_BP.Constraint_Weapon_Stuck_BP_C:ReceiveBeginPlay",
                 function(s) pcall(C3.constraint_begin_journal,s) end)
         end)
-        if CX.constraint_hook_ok then Log("native stuck-constraint evidence hook registered (no damage forwarding)") end
+        if CX.constraint_hook_ok then Log("native stuck-constraint hook registered (exact contact parent binding)") end
     end
     -- The BP classes load with the first arena, which can be long after
     -- mod load (menu / server browser). Retry once a second, FOREVER, until
@@ -1621,6 +1660,7 @@ local quality = { claims = 0, accepted = 0, confirmed = 0, clashes = 0, rejected
 -- victim's native replay is the damage (solo parity), and the server books
 -- nothing from the stand-in.
 local function send_claim(peer, r)
+    if r.cid then return true end
     local dism = math.max(0, math.min(255, r.dism)) + math.max(0, math.min(255, math.floor(r.kick * 10 + 0.5))) * 256
         + (r.lower and 65536 or 0) + (r.xhv and 131072 or 0) + (r.source or 0) + (r.parent and 67108864 or 0)
         + (r.hit_box or 0) * 134217728
@@ -1636,7 +1676,9 @@ local function send_claim(peer, r)
         dism_blunt = dism, raw_damage = r.vrel or 0, cutting_power = r.cut, pain_rate = r.stab,
         draw_cut = r.draw, damage_out = r.rig,
         offset = r.off, location = r.loc, impulse = r.imp, velocity = r.vel, normal = r.nrm,
-        bone = r.bone, flags = r.flags or FLAG_COMPLEX,
+        -- Inside|Complex without parent means the native DCD gate stopped this
+        -- origin. Authenticate its geometry, acknowledge it without replaying.
+        bone = r.bone, flags = (r.flags or FLAG_COMPLEX) + (r.gate==false and 1 or 0),
     })
     if not sent then
         quality.refused = (quality.refused or 0) + 1
@@ -1644,6 +1686,7 @@ local function send_claim(peer, r)
     end
     cid_seq = cid
     r.cid = cid   -- a blade this hit leaves stuck continues under this cid (C3.inside_forward)
+    if r.probe then Log("LAB_PROBE attacker=%d cid=%d parent_cid=0 bone=%s %s",r.probe_attacker or my_peer_id,cid,r.bone,r.probe) end
     claim_peer[cid] = peer
     sent_count = sent_count + 1
     quality.claims = quality.claims + 1
@@ -1663,7 +1706,23 @@ end
 -- Get Damage(.., Raw, Cut, Inside, .., DismBlunt, LowerThreshold, Shockwave, HitBy, Stab?,
 -- HitBox, PainRate, HitFlesh, DrawCut): the legacy replay maps flag bits 1 Inside,
 -- 2 Lower Threshold, 4 Shockwave, 8 Stab, 16 Hit Flesh.
-function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,stab,flesh,dism)
+function C3.inside_send(rec)
+    local parent=rec.parent
+    if not parent.cid then return false end
+    local probe,probe_attacker=rec.probe,rec.probe_attacker
+    rec.parent=nil;rec.probe=nil;rec.probe_attacker=nil;rec.cid=cid_seq+1;rec.parent_cid=parent.cid
+    if not send_rec("damage",rec) then return false end
+    cid_seq=cid_seq+1;claim_peer[cid_seq]=rec.target_peer_id
+    if probe then Log("LAB_PROBE attacker=%d cid=%d parent_cid=%d bone=%s %s",probe_attacker or my_peer_id,cid_seq,parent.cid,rec.bone,probe) end
+    CX.inside_sent=(CX.inside_sent or 0)+1
+    if CX.inside_sent<=5 or CX.inside_sent%200==0 then
+        Log("stuck blade in peer %d bone=%s: Inside Get Damage forwarded under claim #%d (raw %.0f cut %.0f, #%d)",
+            rec.target_peer_id,rec.bone,parent.cid,rec.raw_damage,rec.cutting_power,CX.inside_sent)
+    end
+    return true
+end
+
+function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,stab,flesh,dism,nrm,imp,vel,probe)
     if replaying or not combat_window or not coll or not coll:IsValid() then return end
     local me=local_pawn()
     local peer=puppet_peer[wname(w) or ""]
@@ -1676,10 +1735,13 @@ function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,st
     local arr=weapon["Stuck Constraints Array"]
     if arr then arr:ForEach(function(_,entry)
         local c=entry:get()
-        if not parent and c and c:IsValid() and same(c["Hit Actor"],w) and same(c["Weapon Hit Module"],coll)
+        if not parent and c and c:IsValid() and same(c["My Weapon"],weapon) and same(c["Hit Actor"],w)
+            and same(c["Weapon Hit Module"],coll) and same(c["Component 2 (Body)"],mesh)
             and c["Bone Name 2"]:ToString()==bname then parent=C3.stuck_parent and C3.stuck_parent[c:GetFullName()] end
     end) end
-    if not (parent and parent.cid) then
+    local source,ordinal=BF.source(coll,me)
+    if not (parent and ordinal and source==parent.source and parent.match_id==mine.match_id
+        and parent.round==mine.round and parent.attacker_life==mine.life and parent.victim_life==theirs.life) then
         CX.inside_orphans=(CX.inside_orphans or 0)+1
         if CX.inside_orphans<=5 or CX.inside_orphans%200==0 then
             Log("stuck-blade call not forwarded: no claimed parent hit for this constraint (#%d)",CX.inside_orphans)
@@ -1687,27 +1749,27 @@ function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,st
         return
     end
     local function b(v,n) return v==true and n or 0 end
-    local flags=1+b(lower,2)+b(shock,4)+b(stab,8)+b(flesh,16)
+    local flags=1+b(lower,2)+b(shock,4)+b(stab,8)+b(flesh,16)+BF.WEAPON
     local bp=bone_pos(mesh,bname)
+    if not bp then return end -- No invented bone origin for a native continuation.
     local at=vec(loc)
-    local sent=send_rec("damage",{
-        cid=cid_seq+1,target_peer_id=peer,lage_ms=0,parent_cid=parent.cid,
+    local rec={
+        parent=parent,target_peer_id=peer,lage_ms=0,
+        probe=probe,probe_attacker=my_peer_id,
         match_id=mine.match_id,round=mine.round,attacker_life=mine.life,victim_life=theirs.life,
-        source_class="",hit_box_frame={0,0,0,0,0,0,0,0,0,0,0,0,0},
+        source_class=parent.source_class,hit_box_frame={0,0,0,0,0,0,0,0,0,0,0,0,0},
         attacker_ts=parent.ats or 0,victim_view_ts=parent.vts or 0,victim_arm_ts=parent.vats or 0,
-        dism_blunt=math.max(0,math.min(255,math.floor(num(dism)))),raw_damage=num(raw),cutting_power=num(cut),
+        dism_blunt=math.max(0,math.min(255,math.floor(num(dism))))+source,raw_damage=num(raw),cutting_power=num(cut),
         pain_rate=num(pain),draw_cut=num(draw),damage_out=0,
-        offset=bp and {at[1]-bp[1],at[2]-bp[2],at[3]-bp[3]} or {0,0,0},location=at,
-        impulse={0,0,0},velocity={0,0,0},normal={0,0,1},bone=bname,flags=flags,
-    })
-    if sent then
-        cid_seq=cid_seq+1;claim_peer[cid_seq]=peer
-        CX.inside_sent=(CX.inside_sent or 0)+1
-        if CX.inside_sent<=5 or CX.inside_sent%200==0 then
-            Log("stuck blade in peer %d bone=%s: Inside Get Damage forwarded under claim #%d (raw %.0f cut %.0f, #%d)",
-                peer,bname,parent.cid,num(raw),num(cut),CX.inside_sent)
-        end
-    end
+        offset={at[1]-bp[1],at[2]-bp[2],at[3]-bp[3]},location=at,
+        impulse=imp and vec(imp) or {0,0,0},velocity=vel and vec(vel) or {0,0,0},
+        normal=nrm and vec(nrm) or {0,0,0},bone=bname,flags=flags,
+    }
+    if parent.cid then return C3.inside_send(rec) end
+    -- Native BeginPlay's initial Inside call can run before this tick's flush.
+    -- Queue plain data after its exact origin instead of orphaning it.
+    CX.inside_queue=CX.inside_queue or {}
+    if #CX.inside_queue<128 then CX.inside_queue[#CX.inside_queue+1]=rec end
 end
 
 local episodes = {}        -- (kept for the test api; claims follow the game's own gate)
@@ -1722,7 +1784,7 @@ local episodes = {}        -- (kept for the test api; claims follow the game's o
 local function flush_claims()
     local work, groups = CX.pending, {}
     CX.pending = {}
-    if not combat_window then return end
+    if not combat_window then CX.inside_queue={};return end
     -- Select within each body/bone's bounded budget, then emit in the original
     -- callback order. Get Damage remembers the previous damaged bone: grouping
     -- A/B/A into A/A/B changes which native calls pass that gate.
@@ -1737,14 +1799,16 @@ local function flush_claims()
         if not by_bone then by_bone = {}; groups[r.nm] = by_bone end
         local rs = by_bone[r.bone]
         if not rs then rs = {}; by_bone[r.bone] = rs end
-        rs[#rs + 1] = r
+        if r.gate~=false then rs[#rs + 1] = r end
     end
     local selected = {}
     for _, by_bone in pairs(groups) do
         for _, rs in pairs(by_bone) do
             local known = true
             for _, r in ipairs(rs) do if r.gate == nil then known = false end end
-            if not known then
+            if #rs==0 then
+                rs={}
+            elseif not known then
                 local best
                 for _, r in ipairs(rs) do best = stronger(best, r) end
                 rs = { best }
@@ -1769,8 +1833,10 @@ local function flush_claims()
         end
     end
     for _, r in ipairs(work) do
-        if selected[r] then send_claim(r.peer, r) end
+        if selected[r] or r.constraint_parent then send_claim(r.peer, r) end
     end
+    local inside=CX.inside_queue or {};CX.inside_queue={}
+    for _,rec in ipairs(inside) do C3.inside_send(rec) end
 end
 
 -- --- server feedback: cues, logs, combat_quality ------------------------------------
@@ -2002,17 +2068,27 @@ end
 -- Exact native loss boundary, distinct from recoverable Fallen/Consciousness zero.
 function C3.on_native_defeat(selfp)
     local mode=HSESS and HSESS.mode and HSESS.mode()
-    -- Automatic native loss is the Brawl KO rule. Weapon modes continue
-    -- until biological death or a separately verified voluntary surrender.
-    if not mode or mode.mode~=5 then own.defeat_pending=nil;return false end
     local w=pv(selfp)
     local me=local_pawn()
     if not (w and w:IsValid() and me and same(w,me) and combat_window) or is_dead(w) then return false end
+    -- The owner requested native AI yield as surrender in dev AI duels. The
+    -- nonplayer native lose branch (@256919) sets Give Up only; Give Up 2
+    -- is player-only (@256461). Do not infer yield from Fallen/zero cap.
+    local ai_yield=false
+    if mode and mode.mode==0 and (os.getenv("HSMP_DEV") or "") == "1" then
+        pcall(function()
+            local c=w.Controller
+            ai_yield=w.Player==false and c and c:IsValid()
+                and c:GetClass():GetFName():ToString()=="AI_BP_C"
+        end)
+    end
+    if not mode or (mode.mode~=5 and not ai_yield) then own.defeat_pending=nil;return false end
     local ctx=C3.life_for(my_peer_id,true)
     if not ctx then return false end
     local ok,confirmed=pcall(function()
         local gi,gm=w["GI Settings"],w["HS Game Mode"]
-        return w.Player==true and w.DED~=true and w["Give Up"]==true and w["Give Up 2 (Temp)"]==true
+        return (w.Player==true or ai_yield) and w.DED~=true and w["Give Up"]==true
+            and (ai_yield or w["Give Up 2 (Temp)"]==true)
             and gi and gi:IsValid() and tonumber(gi["Current Game Mode enum"])~=nil
             and tonumber(gi["Current Game Mode enum"])~=5 and gm and gm:IsValid() and gm["Match Won"]==false
     end)
@@ -2033,13 +2109,13 @@ function C3.on_native_defeat(selfp)
     if own.defeat_pending and os.clock()<(own.defeat_retry_at or 0) then return false end
     own.defeat_retry_at=os.clock()+1
     own.defeat_pending={match_id=ctx.match_id,round=ctx.round,life=ctx.life,pawn=addr_of(w)}
-    if not send_rec("death_report",{match_id=ctx.match_id,round=ctx.round,life=ctx.life,reason=1}) then return false end
+    if not send_rec("death_report",{match_id=ctx.match_id,round=ctx.round,life=ctx.life,reason=ai_yield and 2 or 1}) then return false end
     own.defeat_reported={match_id=ctx.match_id,round=ctx.round,life=ctx.life}
     -- IPC acceptance is not authoritative gameplay acknowledgement; retain
     -- the original event proof and retry until its current life is eliminated.
     local cap,hp;pcall(function()cap=w["Consciousness Cap"];hp=w.Health end)
-    Log("native Event Lose Match VERIFIED pawn=%s match=%s round=%s life=%s Health=%s ConsciousnessCap=%s -> defeat reported",
-        tostring(wname(w)),tostring(ctx.match_id),tostring(ctx.round),tostring(ctx.life),tostring(hp),tostring(cap))
+    Log("native Event Lose Match VERIFIED pawn=%s match=%s round=%s life=%s Health=%s ConsciousnessCap=%s -> %s reported",
+        tostring(wname(w)),tostring(ctx.match_id),tostring(ctx.round),tostring(ctx.life),tostring(hp),tostring(cap),ai_yield and "AI yield surrender" or "defeat")
     return true
 end
 
@@ -2391,10 +2467,13 @@ local function apply_hit(d, _attacker)
     local function bit(n) return math.floor(flags / n) % 2 == 1 end
     local function V(t) return { X = t[1], Y = t[2], Z = t[3] } end
     local complex = bit(FLAG_COMPLEX)
+    if complex and bit(1) and num(d.parent_cid)==0 then
+        return "native contact origin acknowledged (DCD gate suppressed damage)",2
+    end
     local dism_all = math.floor(num(d.dism_blunt))
     local before = snapshot(me)
     local coll,source_reason = C3.hitter(_attacker, d)
-    if complex and math.floor(dism_all / BF.COMPONENT) % 16 ~= 0 and not coll then
+    if (complex or num(d.parent_cid)~=0) and math.floor(dism_all / BF.COMPONENT) % 16 ~= 0 and not coll then
         C3.replay_diag("source4","peer=%s hit=%s class=%s meta=%s reason=%s",
             tostring(_attacker),tostring(d.hit_id),tostring(d.source_class),tostring(dism_all),tostring(source_reason))
         return "hit dropped: striking component unavailable ("..tostring(source_reason)..")",4
@@ -2444,7 +2523,7 @@ local function apply_hit(d, _attacker)
             V(C3.v3(d, "impulse")), V(C3.v3(d, "velocity")), V(at), V(C3.v3(d, "normal")),
             FName(bone ~= "" and bone or "pelvis"),
             num(d.raw_damage), num(d.cutting_power), bit(1), mesh,
-            dism_all % 256, bit(2), bit(4), nil, bit(8), nil,
+            dism_all % 256, bit(2), bit(4), num(d.parent_cid)~=0 and coll or nil, bit(8), nil,
             num(d.pain_rate), bit(16), num(d.draw_cut), {},
         }
         ok, err = bp_call(me, "Get Damage", table.unpack(args, 1, 19))
@@ -2484,6 +2563,20 @@ local function apply_hit(d, _attacker)
 end
 
 local ReplayAttempts = load_module("replay_attempts").new({ now=os.clock,send=function(r) return send_rec("replay_outcome",r) end })
+
+function C3.log_replay_probe(d,attacker,outcome,text,fresh)
+    if not fresh or not C3.native_probe then return end
+    local fields=type(text)=="string" and text:match("%[([^%]]*)%]") or "native fields unavailable"
+    local mask=math.tointeger(outcome.observed_fields) or 0
+    local hp=outcome.health_delta
+    if mask & 1~=0 and type(hp)=="number" and hp==hp and math.abs(hp)<math.huge then
+        Log("LAB_REPLAY attacker=%d cid=%d parent_cid=%d bone=%s dmg Health %+.6f [%s]",
+            attacker,num(d.hit_id),num(d.parent_cid),tostring(d.bone),hp,fields)
+    else
+        Log("LAB_REPLAY attacker=%d cid=%d parent_cid=%d bone=%s dmg Health unavailable [native Health not observed]",
+            attacker,num(d.hit_id),num(d.parent_cid),tostring(d.bone))
+    end
+end
 
 
 -- --- vitals + stand-in life ---------------------------------------------------
@@ -2903,6 +2996,7 @@ function C3.apply_fx(d, _attacker)
     end
     local flags = math.floor(num(d.flags))
     if math.floor(flags / FLAG_COMPLEX) % 2 ~= 1 then return "fx: not an armour-stage hit" end
+    if flags & 1 ~= 0 and num(d.parent_cid)==0 then return "fx: native origin without damage" end
     local hr = math.tointeger(tonumber(d.round)) or 0
     if hr == 0 then hr = nil end
     if not combat_window or (hr and hr ~= match_round) then return "fx: round not live" end
@@ -2925,6 +3019,7 @@ function C3.apply_fx(d, _attacker)
         if not hit_box then return "fx: skipped (historical cutting Box unavailable)" end
     end
     local s = C3.snap_all(w)
+    local fx_world,fx_drops = WG.key,WG.drops
     local inv; pcall(function() inv = w.Invulnerable end)
     -- Cosmetic replay cannot safely undo structural native changes. Require
     -- the native guard immediately before every call (pooled pawns can reset
@@ -2932,15 +3027,29 @@ function C3.apply_fx(d, _attacker)
     local protected = false
     pcall(function()
         w["Force Disable Dismemberment"] = true
-        protected = w["Force Disable Dismemberment"] == true
+        w["Force Disable Vertex Paint"] = true
+        protected = w["Force Disable Dismemberment"] == true and w["Force Disable Vertex Paint"] == true
     end)
     if not protected then return "fx: skipped (native dismemberment guard unavailable)" end
     pcall(function() w.Invulnerable = false end)
     -- (gates open: this is the blow's look, its damage is the owner's replay)
     pcall(function() w["Last Complex Damage Impulse"] = 0; w["Last Damage Taken"] = 0 end)
     replaying = true
-    local ok, err = bp_call(w, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, coll, hit_box), 1, 23))
+    local paint_open = false
+    pcall(function() w["Force Disable Vertex Paint"] = false;paint_open = w["Force Disable Vertex Paint"] == false end)
+    local ok, err = false,"native paint guard unavailable"
+    if paint_open then
+        local executed,native_ok,native_err=pcall(function()
+            return bp_call(w, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, coll, hit_box), 1, 23))
+        end)
+        ok=executed and native_ok
+        err=executed and native_err or native_ok
+    end
     replaying = false
+    -- A travel hook drops old-world objects without touching them. Even a
+    -- caught native error must close the paint guard in the same world.
+    if WG.key ~= fx_world or WG.drops ~= fx_drops then return "fx: world changed during replay" end
+    pcall(function() w["Force Disable Vertex Paint"] = true end)
     C3.put_all(w, s)
     pcall(function() w.Invulnerable = (inv == nil) and C3.STANDIN_INVULNERABLE or inv end)
     pcall(function() if (tonumber(w.Health) or 0) < PUPPET_HP_PIN then w.Health = PUPPET_HP_PIN end end)
@@ -3005,6 +3114,10 @@ local puppets_stale = true   -- re-resolve stand-ins on the first tick of a worl
 wg_on_drop(function(why)
     puppet_actor = {}
     CX.pending = {}
+    CX.inside_queue = {}
+    C3.stuck_parent,C3.stuck_parent_n = {},0
+    C3.probe_last=nil
+    C3.probe_after={}
     C3.base = {}              -- baselines name actors of the old world
     C3.gated = {}             -- (actor names are reused by the next world)
     FootReplay.clear(why)
@@ -3090,6 +3203,7 @@ local function on_tick()
     for _, e in ipairs(events("damage_in")) do
         local d = type(e.data) == "table" and e.data or {}
         local res, outcome, fresh = ReplayAttempts.run(d,e.peer,function() return apply_hit(d,e.peer) end)
+        C3.log_replay_probe(d,e.peer,outcome,res,fresh)
         replaying = false -- also release the guard after an unexpected Lua failure
         if fresh then applied = applied + 1 end
         local stats=C3.replay_stats
@@ -3104,7 +3218,7 @@ local function on_tick()
             num(d.damage_out), num(d.cutting_power), num(d.pain_rate), tostring(res))
     end
     ReplayAttempts.tick()
-    -- Blood / wounds of accepted hits on other players, on their stand-ins.
+    -- Blood / wounds after observed native owner injury, on their stand-ins.
     for _, e in ipairs(events("hitfx_in")) do
         local d = type(e.data) == "table" and e.data or {}
         local res = C3.apply_fx(d, e.peer)
