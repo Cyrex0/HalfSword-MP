@@ -489,6 +489,28 @@ fn body_striker_sweep_rotation_velocity_and_transient_absence_are_exact() {
     assert!(h.strikers.sample(1050,0).unwrap().get(3,10).is_some(),"historical kick retained after disappearance");
 }
 
+/// A modular sword's hilt (grip + pommel) sits behind the blade base by up to the class's
+/// grip_max: measured live, a T3 arming sword's grip corner 31.5 cm behind its base was
+/// refused against a blade-only envelope (width 30) and every claim of it found no history.
+#[test]
+fn sword_hilt_behind_the_blade_base_is_inside_the_envelope() {
+    // its own peer: the kit registry is global and the other tests set ATT's kit in parallel
+    const SWORDSMAN: PeerId = 77;
+    crate::validate::damage::set_kit(SWORDSMAN, &crate::loadout::KitSel::new("custom", "w_arming3", "", &[], [0;4]));
+    let mut s=Store::default();
+    for t in (0..=2000u32).step_by(25) { s.record_root(SWORDSMAN, 5000+t, [-150.0,0.0,100.0], t as i64); }
+    let hash=posecodec::v2::class_hash("ModularWeaponBP_ArmingSword_T3_C");
+    let sword=|grip_z:f32|posecodec::v2::Weapon {hands:1,p:[-150.0,0.0,130.0],q:[0.0,0.0,0.0,1.0],base:[0.0;3],tip:[0.0,0.0,110.0],
+        boxes:vec![
+            posecodec::v2::WeaponBox {component:1,p:[0.0,0.0,57.7],q:[0.0,0.0,0.0,1.0],half:[3.3,0.2,52.5],class_hash:hash,..Default::default()},
+            posecodec::v2::WeaponBox {component:7,p:[0.0,0.0,grip_z],q:[0.0,0.0,0.0,1.0],half:[2.0,1.2,15.1],class_hash:hash,..Default::default()},
+        ],..Default::default()};
+    // the measured hilt: grip box centre 16.4 cm behind the base, its far corner 31.5 cm
+    assert!(s.record_weapon_shape(SWORDSMAN,6000,&sword(-16.4),false),"a hilt within grip_max behind the base is recorded");
+    // a module far beyond any hilt (grip_max 45 + width 30) is still refused
+    assert!(!s.record_weapon_shape(SWORDSMAN,6100,&sword(-90.0),false),"a module 105 cm behind the base is refused");
+}
+
 #[test]
 fn native_head_side_contact_uses_only_its_module_envelope() {
     crate::validate::damage::set_kit(ATT, &crate::loadout::KitSel::new("custom", "w_poleaxe_m", "", &[], [0;4]));

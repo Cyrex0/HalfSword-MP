@@ -117,7 +117,13 @@ pub(super) async fn accept_root(state: &Arc<ServerState>, from: SocketAddr, posi
         let placed=inner.sess.root_placed.get(&id).copied();
         let assignment=inner.spawn_plan.iter().find(|a|a.peer_id==id).copied();
         if !context_ok || !placed.is_some_and(|p|p.0==stored.match_id && p.1==stored.round && p.2==stored.life
-            && assignment.is_some_and(|a|a.spawn_id==p.3)) {return None;}
+            && assignment.is_some_and(|a|a.spawn_id==p.3)) {
+            if crate::validate::rate::log_ok("root_context") {
+                tracing::info!(peer_id = id, context_ok, root = ?(stored.match_id, stored.round, stored.life), expected_round = round, expected_life = life,
+                    ?placed, assignment = ?assignment.map(|a| a.spawn_id), state = %inner.match_state, "root dropped: not this placed life");
+            }
+            return None;
+        }
         let p = inner.peers.get_mut(&from)?;
         p.last_seen_ms = st;
         // NaN-safe: a non-finite / out-of-world position is

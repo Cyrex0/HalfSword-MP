@@ -1545,8 +1545,21 @@ impl Store {
             WeaponClass::Sword | WeaponClass::Blunt => 30.0,
             WeaponClass::Dagger | WeaponClass::Unarmed => 20.0,
         };
-        if ts == 0 || w.boxes.is_empty() || w.boxes.len() > posecodec::v2::MAX_WEAPON_BOXES
-            || !finite(&w.p) || self.root_tie(id, ts, w.p, BODY_EXTENT) != Tie::Ok { return false; }
+        // A refused shape leaves the attacker without module history ("no_cover: original
+        // source class unavailable" on every claim of that weapon): say why, rate-limited.
+        let refuse = |why: &str| {
+            if crate::validate::rate::log_ok("weapon_shape_refused") {
+                tracing::warn!(peer_id = id, ?class, offhand, why, "weapon shape refused; its claims will find no module history");
+            }
+            false
+        };
+        if ts == 0 || w.boxes.is_empty() || w.boxes.len() > posecodec::v2::MAX_WEAPON_BOXES || !finite(&w.p) { return refuse("empty, oversized or non-finite"); }
+        match self.root_tie(id, ts, w.p, BODY_EXTENT) {
+            Tie::Ok => {}
+            Tie::Off => return refuse("weapon off the root (too far)"),
+            Tie::Uncovered => return refuse("no root history at the sample time"),
+            Tie::NoPelvis => return refuse("no pelvis sample at the sample time"),
+        }
         let (base, tip) = posecodec::v2::blade_world(w);
         let raw = Blade { base, tip, vel: None };
         // A compact module can still fit the raw bounds without a skeletal
@@ -1556,15 +1569,29 @@ impl Store {
         let inv = posecodec::v2::qconj(w.q);
         let base = posecodec::v2::qrot(inv, sub(blade.base, w.p));
         let tip = posecodec::v2::qrot(inv, sub(blade.tip, w.p));
+        // The envelope runs from the hilt's end to the tip: grip and pommel modules sit
+        // behind the blade base (the guard) by up to the class's grip_max. Measured live: a
+        // modular T3 arming sword's grip corner 31.5 cm behind its base was refused against
+        // the blade-only segment (width 30), so every claim of that sword found no history.
+        let axis = sub(tip, base);
+        let alen = len(axis);
+        let base = if alen > 1e-3 { sub(base, std::array::from_fn(|k| axis[k] / alen * g.grip_max)) } else { base };
         let mut s = WeaponShape { weapon_id:w.id, p: w.p, q: w.q, boxes: [posecodec::v2::WeaponBox::default(); posecodec::v2::MAX_WEAPON_BOXES], n: w.boxes.len() };
         for (i,b) in w.boxes.iter().enumerate() {
-            if !b.valid() { return false; }
+            if !b.valid() { return refuse("invalid box"); }
             if w.boxes.iter().filter(|p|p.component==b.component).count()!=1
-                || (b.child_of!=0 && !w.boxes.iter().any(|p|p.component==b.child_of && p.child_of==0)) {return false;}
+                || (b.child_of!=0 && !w.boxes.iter().any(|p|p.component==b.child_of && p.child_of==0)) {return refuse("duplicate component or orphan cutting child");}
             for bits in 0..8 {
                 let corner = std::array::from_fn(|k| if bits & (1<<k) == 0 { -b.half[k] } else { b.half[k] });
                 let p = add(b.p, posecodec::v2::qrot(b.q,corner));
-                if len(sub(p,base)) > g.blade_max + width || point_seg(p,base,tip) > width { return false; }
+                if len(sub(p,base)) > g.blade_max + g.grip_max + width || point_seg(p,base,tip) > width {
+                    if crate::validate::rate::log_ok("weapon_shape_refused") {
+                        tracing::warn!(peer_id = id, ?class, offhand, component = b.component, from_base = len(sub(p,base)),
+                            blade_max = g.blade_max, off_blade = point_seg(p,base,tip), width, blade_len = len(sub(tip,base)),
+                            "weapon shape refused: module corner outside the class envelope; its claims will find no module history");
+                    }
+                    return false;
+                }
             }
             s.boxes[i] = *b;
         }
