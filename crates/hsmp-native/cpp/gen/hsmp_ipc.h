@@ -1148,7 +1148,8 @@ typedef struct hsmp_Damage {
     char bone[32];
     uint8_t flags;
     uint8_t n;
-    uint8_t _r[6];
+    uint8_t _r[2];
+    uint32_t parent_cid;
     uint64_t match_id;
     uint16_t attacker_life;
     uint16_t victim_life;
@@ -1182,6 +1183,7 @@ HSMP_SA(offsetof(hsmp_Damage, bone) == 120, "hsmp_Damage.bone offset");
 HSMP_SA(offsetof(hsmp_Damage, flags) == 152, "hsmp_Damage.flags offset");
 HSMP_SA(offsetof(hsmp_Damage, n) == 153, "hsmp_Damage.n offset");
 HSMP_SA(offsetof(hsmp_Damage, _r) == 154, "hsmp_Damage._r offset");
+HSMP_SA(offsetof(hsmp_Damage, parent_cid) == 156, "hsmp_Damage.parent_cid offset");
 HSMP_SA(offsetof(hsmp_Damage, match_id) == 160, "hsmp_Damage.match_id offset");
 HSMP_SA(offsetof(hsmp_Damage, attacker_life) == 168, "hsmp_Damage.attacker_life offset");
 HSMP_SA(offsetof(hsmp_Damage, victim_life) == 170, "hsmp_Damage.victim_life offset");

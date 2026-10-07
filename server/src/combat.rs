@@ -217,7 +217,24 @@ pub struct Engine {
     /// grace: the only ones `flush_pending` visits every tick.
     active: std::collections::BTreeSet<(PeerId, u32)>,
     last_prune: Option<i64>,
+    /// Open stuck-blade continuations by (attacker, parent cid): bound to the parent once,
+    /// kept for INSIDE_MAX_MS (the parent decision itself is pruned after DECISION_TTL).
+    inside: HashMap<(PeerId, u32), InsideOpen>,
 }
+
+#[derive(Clone)]
+struct InsideOpen { parent_at: i64, parent: DamageEvent, first: i64, calls: u32 }
+
+/// A stuck blade (native Constraint_Weapon_Stuck) calls the victim's Get Damage with
+/// Inside every tick while embedded (plus head / bone / snap events): at most this many
+/// calls per second and this long after its parent hit.
+pub const INSIDE_MAX_PER_S: f32 = 90.0;
+pub const INSIDE_MAX_MS: i64 = 30_000;
+/// A stuck blade's Get Damage inputs are force-driven, not impact-driven: measured live
+/// (316 native Inside calls, arming sword vs clothing) raw up to 167,935 and cutting power up
+/// to 80,750. Bounds with headroom over that; the ordinary RAW_DAMAGE_CAP does not apply.
+pub const INSIDE_RAW_CAP: f32 = 1_000_000.0;
+pub const INSIDE_CUT_CAP: f32 = 200_000.0;
 
 fn engine() -> &'static Mutex<Engine> {
     static S: OnceLock<Mutex<Engine>> = OnceLock::new();
@@ -299,7 +316,8 @@ fn validate(lc: &Store, ctx: &Ctx, hit: &DamageEvent, now_ms: i64) -> Option<Str
     {
         return Some("bad_field: non-finite field".into());
     }
-    if !(0.0..=RAW_DAMAGE_CAP).contains(&hit.raw_damage) {
+    let raw_cap = if hit.parent_cid != 0 { INSIDE_RAW_CAP } else { RAW_DAMAGE_CAP };
+    if !(0.0..=raw_cap).contains(&hit.raw_damage) {
         return Some(format!("bad_field: raw damage {:.0} out of range", hit.raw_damage));
     }
     if !(0.0..=DAMAGE_OUT_CAP).contains(&hit.damage_out) {
@@ -322,6 +340,61 @@ fn validate(lc: &Store, ctx: &Ctx, hit: &DamageEvent, now_ms: i64) -> Option<Str
 }
 
 impl Engine {
+    /// A FLAG_INSIDE claim with `parent_cid`: the attacker's accepted, forwarded hit with that
+    /// cid on the same victim, match, round, both lives and bone (the constraint moves a pelvis
+    /// hit to spine_02) is its authentication; the native call's own bounds (raw / cut / draw
+    /// / pain) and the per-constraint rate and lifetime caps bound it.
+    fn inside_continuation(&mut self, ctx: &Ctx, hit: &DamageEvent, now_ms: i64) -> Result<bool, String> {
+        if hit.flags & damage::FLAG_INSIDE == 0 || hit.flags & damage::FLAG_COMPLEX != 0 {
+            return Err("bad_field: a continuation is an Inside Get Damage call".into());
+        }
+        let same_bone = |a: &str, b: &str| a.eq_ignore_ascii_case(b)
+            || (a.eq_ignore_ascii_case("pelvis") && b.eq_ignore_ascii_case("spine_02"));
+        let key = (ctx.attacker_id, hit.parent_cid);
+        if self.inside.get(&key).is_some_and(|o| now_ms - o.parent_at > INSIDE_MAX_MS) {
+            self.inside.remove(&key);
+            return Err("too_late: stuck blade outlived its continuation window".into());
+        }
+        self.inside.retain(|_, o| now_ms - o.parent_at <= INSIDE_MAX_MS);
+        if !self.inside.contains_key(&key) {
+            // accepted (forwarded, or held for the defender grace: delivery after it is ordered
+            // by blocks_delivery); still waiting for stream coverage: not decided yet (Hold)
+            let found = self.decisions.iter().find(|(k, d)| k.0 == ctx.attacker_id && d.accepted
+                && d.approved.as_ref().is_some_and(|p| p.cid == hit.parent_cid && p.parent_cid == 0))
+                .and_then(|(_, d)| d.approved.map(|p| (d.first_at, p)));
+            let Some((parent_at, parent)) = found else {
+                if self.decisions.iter().any(|(k, d)| k.0 == ctx.attacker_id && d.waiting.as_ref().is_some_and(|p| p.cid == hit.parent_cid)) {
+                    return Ok(false);
+                }
+                return Err("no_parent: stuck-blade call without its accepted parent hit".into())
+            };
+            self.inside.insert(key, InsideOpen { parent_at, parent, first: now_ms, calls: 0 });
+        }
+        let open = self.inside.get(&key).expect("bound above").clone();
+        let p = &open.parent;
+        if !(p.target_peer_id == hit.target_peer_id && p.match_id == hit.match_id && p.round == hit.round
+            && p.attacker_life == hit.attacker_life && p.victim_life == hit.victim_life && same_bone(p.bone_str(), hit.bone_str())) {
+            return Err(format!("no_parent: not the parent hit's victim, life or bone (parent {} {} life {}, call {} {} life {})",
+                p.target_peer_id, p.bone_str(), p.victim_life, hit.target_peer_id, hit.bone_str(), hit.victim_life));
+        }
+        let parent_at = open.parent_at;
+        if !(0.0..=INSIDE_RAW_CAP).contains(&hit.raw_damage) || !(0.0..=INSIDE_CUT_CAP).contains(&hit.cutting_power)
+            || !(0.0..=1.0).contains(&hit.draw_cut) || !(0.0..=1.0).contains(&hit.pain_rate) || hit.damage_out != 0.0 {
+            return Err("bad_field: stuck-blade call outside the native bounds".into());
+        }
+        if now_ms - parent_at > INSIDE_MAX_MS {
+            return Err("too_late: stuck blade outlived its continuation window".into());
+        }
+        let o = self.inside.get_mut(&key).expect("bound above");
+        o.calls += 1;
+        let secs = ((now_ms - o.first) as f32 / 1000.0).max(1.0);
+        if o.calls as f32 > INSIDE_MAX_PER_S * secs {
+            cheat::bump(ctx.attacker_id, CheatKind::ClaimFlood);
+            return Err("rate_limited: stuck-blade calls above the native tick rate".into());
+        }
+        Ok(true)
+    }
+
     fn take_token(&mut self, attacker: PeerId, now_ms: i64, complex: bool) -> bool {
         let (buckets, cap, refill) = if complex {
             (&mut self.complex_buckets, COMPLEX_BUCKET_CAP, COMPLEX_REFILL_PER_S)
@@ -427,6 +500,22 @@ impl Engine {
             return Verdict::Ignore;
         }
         *self.per_attacker.entry(a).or_insert(0) += 1;
+        if hit.parent_cid != 0 {
+            // A stuck-blade continuation: no contact of its own to rewind (the blade is inside
+            // the body); it stands on its accepted parent hit.
+            let mut d = Decision { accepted: false, reason: String::new(), decided_at: now_ms, first_at: now_ms, target_acked: false,
+                owner_outcome: None, waiting: None, pending: None, grace_ms: 0, parryable: false, approved: None,
+                forwarded_at: None, reforwarded: false, confirmed: false };
+            let checked = match validate(lc, ctx, hit, now_ms) { Some(r) => Err(r), None => self.inside_continuation(ctx, hit, now_ms) };
+            let verdict = match checked {
+                Err(r) => { d.reason = r.clone(); Verdict::Ack { accepted: false, reason: r } }
+                // its parent is still waiting for stream coverage: decide on the resend
+                Ok(false) => { if let Some(n) = self.per_attacker.get_mut(&a) { *n = n.saturating_sub(1); } return Verdict::Hold; }
+                Ok(true) => { d.accepted = true; d.approved = Some(*hit); d.forwarded_at = Some(now_ms); Verdict::Forward }
+            };
+            self.decisions.insert(key, d);
+            return verdict;
+        }
         if sanitize_deltas(hit) > 0 {
             cheat::bump(ctx.attacker_id, CheatKind::DamageClamped);
         }
@@ -1305,6 +1394,70 @@ mod tests {
             match_live: true,
             match_round: 1, match_id: 0, attacker_life: 0, target_life: 0,
         }
+    }
+
+    /// A stuck blade's Inside Get Damage calls stand on the attacker's accepted parent hit.
+    #[test]
+    fn stuck_blade_continuation_needs_its_accepted_parent() {
+        let mut e = Engine::default();
+        let mut lc = Store::default();
+        let c = ctx(41);
+        // the parent: an accepted, forwarded hit with the game's cid 7 on bone pelvis
+        let mut parent = hit(100);
+        parent.cid = 7;
+        parent.bone = hsmp_ipc::layout::Str::new("pelvis");
+        e.decisions.insert((41, 100), Decision { accepted: true, reason: String::new(), decided_at: 0, first_at: 0,
+            waiting: None, target_acked: true, owner_outcome: None, pending: None, grace_ms: 0, parryable: true,
+            approved: Some(parent), forwarded_at: Some(0), reforwarded: false, confirmed: false });
+        let inside = |id: u32, parent_cid: u32, bone: &str| {
+            let mut h = hit(id);
+            h.flags = damage::FLAG_INSIDE;
+            h.parent_cid = parent_cid;
+            h.bone = hsmp_ipc::layout::Str::new(bone);
+            h.raw_damage = 167_935.0; h.cutting_power = 80_750.0; h.draw_cut = 0.5; h.pain_rate = 0.3; h.damage_out = 0.0;   // measured native maxima
+            h
+        };
+        // the constraint moves a pelvis hit to spine_02 (stuck-weapon-native)
+        let mut h = inside(101, 7, "spine_02");
+        assert_eq!(e.on_damage(&mut lc, &c, &mut h, 1000), Verdict::Forward, "continuation of the accepted parent is forwarded");
+        let mut orphan = inside(102, 8, "spine_02");
+        assert!(matches!(e.on_damage(&mut lc, &c, &mut orphan, 1000), Verdict::Ack { accepted: false, ref reason } if reason.starts_with("no_parent")));
+        let mut other_bone = inside(103, 7, "head");
+        assert!(matches!(e.on_damage(&mut lc, &c, &mut other_bone, 1000), Verdict::Ack { accepted: false, .. }), "the stuck bone is the parent's");
+        let mut not_inside = inside(104, 7, "spine_02");
+        not_inside.flags = 0;
+        assert!(matches!(e.on_damage(&mut lc, &c, &mut not_inside, 1000), Verdict::Ack { accepted: false, .. }), "only Inside calls continue");
+        let mut booked = inside(105, 7, "spine_02");
+        booked.damage_out = 30.0;
+        assert!(matches!(e.on_damage(&mut lc, &c, &mut booked, 1000), Verdict::Ack { accepted: false, .. }), "a continuation books nothing itself");
+        // a parent held for the defender grace already binds (delivery is ordered after it) ...
+        let mut held_parent = hit(110);
+        held_parent.cid = 9;
+        e.decisions.insert((41, 110), Decision { accepted: true, reason: String::new(), decided_at: 900, first_at: 900,
+            waiting: None, target_acked: false, owner_outcome: None, pending: Some(held_parent), grace_ms: 150, parryable: true,
+            approved: Some(held_parent), forwarded_at: None, reforwarded: false, confirmed: false });
+        let mut on_held = inside(111, 9, "spine_02");
+        assert!(!matches!(e.on_damage(&mut lc, &c, &mut on_held, 1000), Verdict::Ack { accepted: false, .. }), "a held parent binds its continuation");
+        // ... a parent still waiting for stream coverage leaves its continuation undecided
+        let mut waiting_parent = hit(120);
+        waiting_parent.cid = 10;
+        e.decisions.insert((41, 120), Decision { accepted: false, reason: String::new(), decided_at: 900, first_at: 900,
+            waiting: Some(waiting_parent), target_acked: false, owner_outcome: None, pending: None, grace_ms: 0, parryable: true,
+            approved: None, forwarded_at: None, reforwarded: false, confirmed: false });
+        let mut on_waiting = inside(121, 10, "spine_02");
+        assert_eq!(e.on_damage(&mut lc, &c, &mut on_waiting, 1000), Verdict::Hold, "decided on the resend once the parent is");
+        // the native tick rate bounds a constraint's calls
+        let mut over = 0;
+        for k in 0..200u32 {
+            let mut h = inside(200 + k, 7, "spine_02");
+            if e.on_damage(&mut lc, &c, &mut h, 2000) != Verdict::Forward { over += 1; }
+        }
+        assert!(over > 100 && over < 200, "calls above the native tick rate are refused ({over})");
+        // still bound 15 s on (past DECISION_TTL, the parent decision itself is pruned)
+        let mut held = inside(500, 7, "spine_02");
+        assert_eq!(e.on_damage(&mut lc, &c, &mut held, 15_000), Verdict::Forward, "a blade stuck past the decision TTL continues");
+        let mut late = inside(501, 7, "spine_02");
+        assert!(matches!(e.on_damage(&mut lc, &c, &mut late, INSIDE_MAX_MS + 1), Verdict::Ack { accepted: false, ref reason } if reason.starts_with("too_late")));
     }
 
     fn hit(id: u32) -> DamageEvent {

@@ -1416,6 +1416,21 @@ function C3.constraint_begin_journal(selfp)
     if not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return end
     local coll=c["Weapon Hit Module"]
     local source,ordinal=BF.source(coll,me)
+    -- The weapon builds the constraint right after this frame's Deal Complex Damage on the
+    -- same body and bone (a pelvis hit sticks in spine_02): that claim is its parent.
+    pcall(function()
+        local nm,b2=wname(w),c["Bone Name 2"]:ToString()
+        for i=#CX.pending,1,-1 do
+            local r=CX.pending[i]
+            if r.nm==nm and (r.bone==b2 or (r.bone=="pelvis" and b2=="spine_02")) then
+                C3.stuck_parent=C3.stuck_parent or {}
+                if next(C3.stuck_parent)~=nil and C3.stuck_parent_n and C3.stuck_parent_n>64 then C3.stuck_parent,C3.stuck_parent_n={},0 end
+                C3.stuck_parent[c:GetFullName()]=r
+                C3.stuck_parent_n=(C3.stuck_parent_n or 0)+1
+                break
+            end
+        end
+    end)
     C3.constraint_count=(C3.constraint_count or 0)+1
     if C3.constraint_count>8 and os.clock()<(C3.constraint_diag_at or 0)+1 then return end
     C3.constraint_diag_at=os.clock()
@@ -1445,6 +1460,9 @@ local function on_get_damage(selfp, Impulse, Velocity, Location, Normal, bone, R
     if pv(Inside)==true then
         pcall(C3.inside_journal,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(HitBox),
             pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(ApplyBoneChange))
+        pcall(C3.inside_forward,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(Location),
+            pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(LowerThreshold),pv(Shockwave),
+            pv(Flesh),pv(ApplyBoneChange),pv(DismBlunt))
     end
     local me = local_pawn()
     if me and same(w, me) then
@@ -1625,6 +1643,7 @@ local function send_claim(peer, r)
         return false
     end
     cid_seq = cid
+    r.cid = cid   -- a blade this hit leaves stuck continues under this cid (C3.inside_forward)
     claim_peer[cid] = peer
     sent_count = sent_count + 1
     quality.claims = quality.claims + 1
@@ -1636,6 +1655,59 @@ local function send_claim(peer, r)
             math.sqrt(r.imp[1] ^ 2 + r.imp[2] ^ 2 + r.imp[3] ^ 2), r.rig, r.cut, r.stab, r.draw, r.kick, raw, g, sent_count)
     end
     return true
+end
+
+-- A blade of mine stuck in a stand-in (native Constraint_Weapon_Stuck) calls its Get Damage
+-- with Inside while it stays embedded: the owner gets the same call, as a FLAG_INSIDE claim
+-- under the cid of the hit that stuck it (the server binds it to that accepted hit).
+-- Get Damage(.., Raw, Cut, Inside, .., DismBlunt, LowerThreshold, Shockwave, HitBy, Stab?,
+-- HitBox, PainRate, HitFlesh, DrawCut): the legacy replay maps flag bits 1 Inside,
+-- 2 Lower Threshold, 4 Shockwave, 8 Stab, 16 Hit Flesh.
+function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,stab,flesh,dism)
+    if replaying or not combat_window or not coll or not coll:IsValid() then return end
+    local me=local_pawn()
+    local peer=puppet_peer[wname(w) or ""]
+    local mine,theirs=C3.life_for(my_peer_id,true),C3.displayed_for(peer,w)
+    if not me or not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return end
+    local weapon=coll:GetOwner()
+    if not weapon or not weapon:IsValid() or not same(weapon_parent(weapon),me) then return end
+    local bname=bone:ToString()
+    local parent
+    local arr=weapon["Stuck Constraints Array"]
+    if arr then arr:ForEach(function(_,entry)
+        local c=entry:get()
+        if not parent and c and c:IsValid() and same(c["Hit Actor"],w) and same(c["Weapon Hit Module"],coll)
+            and c["Bone Name 2"]:ToString()==bname then parent=C3.stuck_parent and C3.stuck_parent[c:GetFullName()] end
+    end) end
+    if not (parent and parent.cid) then
+        CX.inside_orphans=(CX.inside_orphans or 0)+1
+        if CX.inside_orphans<=5 or CX.inside_orphans%200==0 then
+            Log("stuck-blade call not forwarded: no claimed parent hit for this constraint (#%d)",CX.inside_orphans)
+        end
+        return
+    end
+    local function b(v,n) return v==true and n or 0 end
+    local flags=1+b(lower,2)+b(shock,4)+b(stab,8)+b(flesh,16)
+    local bp=bone_pos(mesh,bname)
+    local at=vec(loc)
+    local sent=send_rec("damage",{
+        cid=cid_seq+1,target_peer_id=peer,lage_ms=0,parent_cid=parent.cid,
+        match_id=mine.match_id,round=mine.round,attacker_life=mine.life,victim_life=theirs.life,
+        source_class="",hit_box_frame={0,0,0,0,0,0,0,0,0,0,0,0,0},
+        attacker_ts=parent.ats or 0,victim_view_ts=parent.vts or 0,victim_arm_ts=parent.vats or 0,
+        dism_blunt=math.max(0,math.min(255,math.floor(num(dism)))),raw_damage=num(raw),cutting_power=num(cut),
+        pain_rate=num(pain),draw_cut=num(draw),damage_out=0,
+        offset=bp and {at[1]-bp[1],at[2]-bp[2],at[3]-bp[3]} or {0,0,0},location=at,
+        impulse={0,0,0},velocity={0,0,0},normal={0,0,1},bone=bname,flags=flags,
+    })
+    if sent then
+        cid_seq=cid_seq+1;claim_peer[cid_seq]=peer
+        CX.inside_sent=(CX.inside_sent or 0)+1
+        if CX.inside_sent<=5 or CX.inside_sent%200==0 then
+            Log("stuck blade in peer %d bone=%s: Inside Get Damage forwarded under claim #%d (raw %.0f cut %.0f, #%d)",
+                peer,bname,parent.cid,num(raw),num(cut),CX.inside_sent)
+        end
+    end
 end
 
 local episodes = {}        -- (kept for the test api; claims follow the game's own gate)

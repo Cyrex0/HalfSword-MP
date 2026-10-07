@@ -148,7 +148,11 @@ crate::ipc_pod! {
         pub flags: u8,
         /// Delta rows.
         pub n: u8,
-        pub _r: [u8; 6],
+        pub _r: [u8; 2],
+        /// FLAG_INSIDE continuation: the game's claim id (`cid`) of the accepted hit whose
+        /// blade is stuck in the victim (native Constraint_Weapon_Stuck calls Get Damage with
+        /// Inside while it stays embedded). 0 = an ordinary contact.
+        pub parent_cid: u32,
         /// Captured authenticated match and both native pawn generations.
         pub match_id: u64,
         pub attacker_life: u16,
