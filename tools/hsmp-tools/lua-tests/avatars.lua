@@ -41,6 +41,9 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "weaponstate" })
     T.isolated(T.script, "case", { kind = "weapon_sim_refresh" })
     T.isolated(T.script, "case", { kind = "spawn_settle" })
+    T.isolated(T.script, "case", { kind = "injury" })
+    T.isolated(T.script, "case", { kind = "injury", severed_physics = "0" })
+    T.isolated(T.script, "case", { kind = "injury_mesh_swap" })
     return
 end
 
@@ -57,7 +60,8 @@ local function peer_root(id, tick, x, y, z)
 end
 
 local function boot(register_ok)
-    M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate") and "1" or nil }, strict = true })
+    M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_SEVERED_PHYSICS = opts.severed_physics,
+        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate") and "1" or nil }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -123,6 +127,192 @@ if opts.kind == "ai_owner" then
     api.PX.restore_spawn_possession(me,M.pc)
     T.check(possessions==1 and M.pc.__props.Pawn==me,
         "normal human stand-in spawning restores the original possessed fighter")
+end
+
+if opts.kind == "injury" then
+    local api=boot(true)
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=307,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=307,round=1,rows={{peer_id=2,life=1}}})
+    api.on_tick()
+    local actor=M.new_obj("Willie_BP_C","SEVER_PROXY");rawset(actor,"__addr",9301)
+    local mesh=M.new_obj("SkeletalMeshComponent","SEVER_MESH");rawset(mesh,"__addr",9302)
+    actor.__props.Mesh=mesh
+    local P=api.PURE
+    local disabled,calls={},{}
+    local fail_disable,fail_restore=false,false
+    M.Methods.SetAllBodiesBelowPhysicsDisabled=function(self,bone,value,include)
+        T.check(self==mesh and include==true,"production native subtree call targets exact mesh and includes root")
+        if (value and fail_disable)or(not value and fail_restore)then error("native exclusion unavailable")end
+        bone=type(bone)=="string"and bone or bone:ToString();calls[#calls+1]={bone,value}
+        for i,name in ipairs(P.V2_SLOTS)do
+            local n=i
+            while n and n>0 do
+                if P.V2_SLOTS[n]==bone then disabled[name]=value;break end
+                local parent=P.V2_PARENT[n];if parent==n then break end;n=parent
+            end
+        end
+    end
+    M.Methods.IsSimulatingPhysics=function(_,bone)
+        bone=type(bone)=="string"and bone or bone:ToString();return disabled[bone]~=true
+    end
+    M.Methods.SetEnableGravity=function()end
+    M.Methods.SetCollisionEnabled=function()disabled={}end -- a real physics rebuild defeats cached success
+    local p={actor=actor,addr=9301,gen=api.generation(),peer=2,driving=false,
+        shown={has_context=true,match_id=307,round=1,life=1,pawn="SEVER_PROXY"},
+        body={mesh=mesh,field="Mesh",handles={},sims={mesh},motors={},sv={wc={}}}}
+    local function vitals(seq,life,mask)
+        HSMPNative.sc_put("peer_vitals",{seq=seq,match_id=307,round=1,life=life,dism=mask},2)
+    end
+    local function aims()
+        local t={};for i=1,P.V2_NB do t[i]={i,0,0,0,0,0,1}end;return t
+    end
+    vitals(1,1,1<<11)
+    local aim=aims();api.PX.injury_targets(2,p,aim,aim)
+    if opts.severed_physics=="0"then
+        T.check(#calls==0 and aim[12]and aim[13],"explicit diagnostic opt-out retains prior baseline without exclusion")
+        return
+    end
+    T.check(disabled.lowerarm_l and disabled.hand_l and not disabled.upperarm_l,
+        "default production consumes exact owner-confirmed missing subtree")
+    T.check(aim[12]==nil and aim[13]==nil and aim[11]~=nil,"native and Lua servo inputs omit only confirmed severed subtree")
+    vitals(2,2,1<<16);api.PX.injury_targets(2,p,nil,nil)
+    T.check(not disabled.hand_r,"wrong-life severing cannot disable the current body")
+    vitals(3,1,0);api.PX.injury_targets(2,p,nil,nil)
+    T.check(disabled.hand_l and p.body.injury_journal.mask==1<<11,"zero wire mask cannot restore native severed parts")
+    local read=HSMP_IPC.peer_rec;HSMP_IPC.peer_rec=function()return nil end
+    api.PX.injury_targets(2,p,nil,nil);HSMP_IPC.peer_rec=read
+    T.check(disabled.hand_l,"missing or torn Vitals retains last confirmed same-life exclusion")
+    disabled={};api.PX.injury_targets(2,p,nil,nil)
+    T.check(disabled.lowerarm_l and disabled.hand_l,"unchanged confirmed mask reasserts after same-component physics rebuild")
+    fail_disable=true;disabled={};aim=aims();api.PX.injury_targets(2,p,aim,aim)
+    T.check(aim[12]==nil and aim[13]==nil and p.body.injury_error=="disable failed lowerarm_l",
+        "failed native exclusion reports failure and still omits owner-confirmed absent servo bodies")
+    fail_disable=false;api.PX.injury_targets(2,p,nil,nil)
+    p.driving=true;p.body.gravity=false;p.body.ghost_until=1;p.body.coll0=3
+    local before=#calls;api.release_standin(p)
+    local restored=false;for i=before+1,#calls do if calls[i][2]==false then restored=true end end
+    T.check(not restored and disabled.hand_l and p.body.injury_journal.mask==1<<11,
+        "temporary source/range release keeps exclusion even when collision restoration rebuilds physics")
+    p.owner_dead=true;p.driving=true;p.last={v2=true,has_context=true,match_id=307,round=1,life=1}
+    api.drive_frame(2,p,100)
+    T.check(not p.driving and disabled.hand_l,"server-declared owner death releases servo without restoring missing collider")
+    p.owner_dead=false
+    HSMPNative.sc_put("mode",{seq=2,match_id=307,round=1,rows={{peer_id=2,life=2}}})
+    p.shown.life=2;vitals(1,2,0);api.PX.injury_targets(2,p,nil,nil)
+    T.check(disabled.hand_l and p.body.injury_wanted.lowerarm_l,
+        "new full life on reused native body cannot restore exclusion from an unproven zero topology")
+    fail_restore=true
+    T.check(api.release_standin(p,true)==false and p.body.injury_retiring and p.body.injury_disabled.lowerarm_l,
+        "true lease handoff retains failed restoration ownership for retry")
+    fail_restore=false
+    T.check(api.PX.injury_tick(2,p)==true and not disabled.hand_l and not next(p.body.injury_disabled)
+        and p.body.injury_journal==nil,"bookkeeping retries true current-body lease handoff and restores only owned roots")
+    vitals(2,2,1<<11);api.PX.injury_targets(2,p,nil,nil)
+    local field=actor.__props.Mesh;actor.__props.Mesh=nil;before=#calls
+    T.check(api.release_standin(p,true)==false and #calls==before and p.body.injury_disabled.lowerarm_l,
+        "temporarily unavailable current mesh retains restoration ownership without unsafe writes")
+    actor.__props.Mesh=field
+    T.check(api.release_standin(p,true)==true and not disabled.hand_l,
+        "exact current mesh returning permits the retained lease restoration")
+    vitals(3,2,1<<11);api.PX.injury_targets(2,p,nil,nil)
+    local newer=M.new_obj("SkeletalMeshComponent","REPLACEMENT_MESH");rawset(newer,"__addr",9303)
+    actor.__props.Mesh=newer;before=#calls
+    api.PX.injury_targets(2,p,nil,nil);api.release_standin(p,true)
+    T.check(#calls==before,"component replacement discards old ownership without touching old or foreign mesh")
+    actor.__props.Mesh=mesh;p.body.mesh=mesh;vitals(4,2,1<<11);api.PX.injury_targets(2,p,nil,nil)
+    local getworld=M.Methods.GetWorld;M.Methods.GetWorld=function(self)if self==actor then return nil end;return M.world end
+    before=#calls
+    T.check(api.release_standin(p,true)==false and #calls==before and p.body.injury_disabled.lowerarm_l,
+        "unavailable actor world cannot borrow global current world to authorize native restore")
+    M.Methods.GetWorld=getworld
+    T.check(api.release_standin(p,true)==true,"fresh exact actor world returning permits restore retry")
+    p.body.mesh=newer;p.body.injury_disabled={lowerarm_l=true};p.body.injury_wanted={lowerarm_l=true}
+    p.gen=p.gen+1;before=#calls
+    api.release_standin(p,true)
+    T.check(#calls==before,"world-generation mismatch cannot restore through cached mesh")
+    api.set_puppet(2,p);api.drop_caches("injury teardown")
+    T.check(#calls==before and next(api.puppets())==nil,"world teardown forgets injury state without native object access")
+end
+
+if opts.kind=="injury_mesh_swap"then
+    T.write(sd.."/.settings.json",'{"avatars":true,"native_servo":false}\n')
+    local api=boot(true)
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=308,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=308,round=1,rows={{peer_id=2,life=1}}})
+    api.on_tick()
+    -- The legacy file mock omits the native PeerPlay context fields. Supply
+    -- this fixture's original immutable source tuple at the native boundary.
+    local peer_play=HSMPNative.peer_play
+    HSMPNative.peer_play=function(slot,out,last)
+        local seq=peer_play(slot,out,last)
+        if seq then out.has_context=true;out.match_id=308;out.round=1;out.life=1;out.rate=1 end
+        return seq
+    end
+    local actor=M.new_obj("Willie_BP_C","SWAP_PROXY");rawset(actor,"__addr",9401)
+    local old=M.new_obj("SkeletalMeshComponent","ALTERNATE_MESH");rawset(old,"__addr",9402)
+    local visible=M.new_obj("SkeletalMeshComponent","VISIBLE_MESH");rawset(visible,"__addr",9403)
+    actor.__props.SK_Skeleton,actor.__props.Mesh=old,visible
+    local P=api.PURE
+    local p={actor=actor,addr=9401,gen=api.generation(),peer=2,in_range=true,driving=true,claimed_at=0,
+        shown={has_context=true,match_id=308,round=1,life=1,pawn="SWAP_PROXY"},
+        settle_state={settle_ready=true,settle_stable_ms=200,settle_count=6},
+        body={mesh=old,field="SK_Skeleton",ctl="handles",handles={},sims={old},motors={},sv={wc={}},snaps=0,
+            injury_disabled={lowerarm_l=true},injury_wanted={lowerarm_l=true}}}
+    local _,key=api.PX.injury_mesh(p);p.body.injury_key=key
+    api.PX.SETTLE.copy(p.shown,p.settle_state)
+    local failed,restores=true,0
+    M.Methods.SetAllBodiesBelowPhysicsDisabled=function(self,_,value,include)
+        T.check(self==old and value==false and include==true,"pending mesh swap restores only exact alternate body's owned subtree")
+        if failed then error("restore temporarily refused")end
+        restores=restores+1
+    end
+    local names={};for i,bone in ipairs(P.V2_SLOTS)do names[bone]=i end
+    local function current(bone)
+        local t=p.aim and p.aim.slots and p.aim.slots[names[tostring(bone)]]
+        return t or {0,0,0,0,0,0,1}
+    end
+    M.Methods.GetBoneIndex=function(_,bone)return (names[tostring(bone)]or 1)-1 end
+    M.Methods.GetSocketTransform=function(_,bone)
+        local t=current(bone);return {Translation={X=t[1],Y=t[2],Z=t[3]},Rotation={X=t[4],Y=t[5],Z=t[6],W=t[7]}}
+    end
+    M.Methods.GetCenterOfMass=function(_,bone)local t=current(bone);return {X=t[1],Y=t[2],Z=t[3]}end
+    M.Methods.GetSocketLocation=M.Methods.GetCenterOfMass
+    M.Methods.K2_GetComponentLocation=function()return {X=0,Y=0,Z=0}end
+    M.Methods.K2_SetWorldLocation=function()end
+    M.Methods.SetAllPhysicsLinearVelocity=function()end
+    M.Methods.SetSimulatePhysics=function()end
+    M.Methods.SetEnableGravity=function()end
+    M.Methods.GetCollisionResponseToChannel=function()return 2 end
+    M.Methods.SetCollisionResponseToChannel=function()end
+    M.Methods.GetPhysicsLinearVelocity=function()return {X=0,Y=0,Z=0}end
+    local driven={}
+    M.Methods.SetPhysicsLinearVelocity=function(self)driven[#driven+1]=self end
+    M.Methods.SetPhysicsAngularVelocityInDegrees=function()end
+    local seq=0
+    local function frame(now)
+        M.now=now;seq=seq+1
+        local b={};for _=1,23 do for _,v in ipairs({0,0,0,0,0,0,1,0,0,0,0,0,0})do b[#b+1]=v end end
+        HSMPNative.sc_peer_play(2,{peer_id=2,seq=seq,v=2,pt=now,rate=1,mode="interp",age=0,cut=1,
+            has_context=true,match_id=308,round=1,life=1,m=(1<<23)-1,B=b})
+        api.drive_frame(2,p,now)
+    end
+    frame(2000)
+    T.check(p.body.mesh==old and p.body.field=="SK_Skeleton"and p.body.ctl~="servo"and not p.driving,
+        "production failed restoration leaves visible-mesh switch uncommitted and retryable")
+    T.check(p.body.injury_retiring and not p.shown.settle_ready and not p.settle_state.settle_ready,
+        "pending native mesh handoff invalidates previous physical qualification")
+    failed=false
+    T.check(api.PX.injury_tick(2,p)==true and restores==1,"normal bookkeeping restores the pending alternate component")
+    frame(2016)
+    T.check(p.body.mesh==visible and p.body.field=="Mesh"and p.body.ctl=="servo"and p.driving and p.body.repose,
+        "next production frame commits visible Mesh and starts a fresh physical repose after recovery")
+    T.check(not(p.shown and p.shown.settle_ready),"successful component replacement retains unqualified state until fresh measured convergence")
+    for now=2032,2304,16 do frame(now)end
+    local only_visible=#driven>0;for _,mesh in ipairs(driven)do if mesh~=visible then only_visible=false end end
+    T.check(only_visible and p.shown.settle_ready and p.shown.settle_count==6 and p.shown.settle_stable_ms>=150,
+        "recovered production path drives only visible Mesh and qualifies its new six-limb physical samples",T.repr(p.shown))
 end
 
 if opts.kind == "weapon_sim_refresh" then

@@ -32,29 +32,55 @@ T.check(absent==2 and intact==21 and targets[24] and targets[25],"only severed s
 I.omit(targets,{},P.V2_SLOTS,P.V2_PARENT)
 T.check(targets[1]~=nil,"empty injury roots terminate safely on self-parented pelvis")
 local shown={has_context=true,match_id=81,round=2,life=1,pawn="owned-proxy"}
-local v={match_id=81,round=2,life=1,dism=1<<11}
+local v={seq=1,match_id=81,round=2,life=1,dism=1<<11}
 local journal,mask=I.select_mask(nil,shown,true,v,"native-body-A")
 T.check(mask==1<<11,"original displayed generation admits its exact severing mask")
 journal,mask=I.select_mask(journal,shown,true,nil,"native-body-A")
 T.check(mask==1<<11,"missing vitals retains previous verified severing in same life")
 for _,field in ipairs({"match_id","round","life"})do
-    local bad={match_id=81,round=2,life=1,dism=0};bad[field]=bad[field]+1
+    local bad={seq=2,match_id=81,round=2,life=1,dism=0};bad[field]=bad[field]+1
     journal,mask=I.select_mask(journal,shown,true,bad,"native-body-A")
     T.check(mask==1<<11,"stale "..field.." cannot falsely heal current severing")
 end
-journal,mask=I.select_mask(journal,shown,false,{match_id=81,round=2,life=1,dism=0},"native-body-A")
+journal,mask=I.select_mask(journal,shown,false,{seq=2,match_id=81,round=2,life=1,dism=0},"native-body-A")
 T.check(mask==1<<11,"unauthorized or missing current pose context does not heal same-life body")
 shown.life=129
 journal,mask=I.select_mask(journal,shown,true,v,"native-body-A")
-T.check(mask==0 and journal.life==129,"new displayed full life clears previous injury even with aliased spawn order")
+T.check(mask==nil and journal.life==129,"new displayed full life awaits its own snapshot, never invents intact state")
 local calls_before=#calls
 state=I.apply(mesh,{lowerarm_l=true},{},fname)
 T.check(not next(state) and #calls==calls_before+1 and calls[#calls][2]==false,
-    "fresh-life empty mask restores previously disabled owned native subtree")
-local fresh={match_id=81,round=2,life=129,dism=1<<11}
+    "explicit empty desired set restores previously disabled owned native subtree")
+local fresh={seq=1,match_id=81,round=2,life=129,dism=1<<11}
 journal,mask=I.select_mask(journal,shown,true,fresh,"native-body-A")
-fresh.dism=0;journal,mask=I.select_mask(journal,shown,true,fresh,"native-body-A")
-T.check(mask==0,"explicit valid current-life zero mask restores intact state")
-fresh.dism=1<<11;journal,mask=I.select_mask(journal,shown,true,fresh,"native-body-A")
+fresh.seq=2;fresh.dism=0;journal,mask=I.select_mask(journal,shown,true,fresh,"native-body-A")
+T.check(mask==1<<11,"newer same-life zero cannot regrow an owner-confirmed severed part")
+fresh.seq=1;fresh.dism=1<<12;journal,mask=I.select_mask(journal,shown,true,fresh,"native-body-A")
+T.check(mask==1<<11,"older same-life snapshot cannot change confirmed structural state")
+fresh.seq=3;journal,mask=I.select_mask(journal,shown,true,fresh,"native-body-A")
+T.check(mask==((1<<11)|(1<<12)),"later same-life severing accumulates without healing the prior subtree")
 journal,mask=I.select_mask(journal,shown,false,nil,"native-body-B")
 T.check(journal==nil and mask==nil,"new actor or mesh identity cannot inherit old body's injury journal")
+local before=#calls
+state=I.apply(mesh,{hand_l=true},{hand_l=true},fname,true)
+T.check(#calls==before+1 and calls[#calls][2] and state.hand_l,"reassert unchanged exclusion after native physics rebuild")
+local broken={SetAllBodiesBelowPhysicsDisabled=function()error("disable unavailable")end}
+state,why=I.apply(broken,{}, {hand_l=true},fname,true)
+T.check(not next(state) and why=="disable failed hand_l","native disable failure remains explicit, never claims applied physics")
+local readbones={}
+mesh.IsSimulatingPhysics=function(_,bone)
+    readbones[#readbones+1]=bone
+    if bone=="hand_l"then error("native simulation read unavailable")end
+    return false
+end
+local sim=I.simulation(mesh,{lowerarm_l=true},P.V2_SLOTS,P.V2_PARENT,fname)
+T.check(#readbones==2 and sim.lowerarm_l=="false"and sim.hand_l=="unavailable"and sim.pelvis==nil,
+    "native per-bone simulation readback distinguishes unavailable and only samples excluded subtree")
+local wrapping={seq=0xfffffffe,match_id=81,round=2,life=129,dism=1<<11}
+journal,mask=I.select_mask(nil,shown,true,wrapping,"native-body-A")
+wrapping.seq=1;wrapping.dism=1<<12;journal,mask=I.select_mask(journal,shown,true,wrapping,"native-body-A")
+T.check(mask==((1<<11)|(1<<12)),"owner snapshot sequence wrap admits a genuinely advancing severing")
+before=#calls
+state=I.apply(mesh,{lowerarm_l=true},{lowerarm_l=true,hand_r=true},fname,true)
+local enabled=false;for i=before+1,#calls do if calls[i][2]==false then enabled=true end end
+T.check(not enabled and state.lowerarm_l and state.hand_r,"additional severing never temporarily enables an existing missing root")

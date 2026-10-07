@@ -15,7 +15,9 @@
 --   * spawn protection: from the moment the pawn exists until placement +
 --     protect_ms the pawn is "Invulnerable" (Willie_BP "Get Damage" returns
 --     at once when it is set: bytecode, spawns.md 1.6), its vitals are
---     topped up from the CDO and no death is reported;
+--     topped up from the CDO and no death is reported. Before Live only,
+--     "Block Spine Breaking" guards native dislocation checks during
+--     placement; its original value is restored on exit;
 --   * the fall watchdog: a LIVING pawn below the floor is put back on its
 --     order WITHOUT dying (before Live: re-placed, healed, protection
 --     re-armed; during Live: re-placed only). A dead pawn is never moved.
@@ -246,6 +248,7 @@ function P:reset(why)
     self.cur = nil                   -- current placement: { e, plan, dest, floor, tries, ... }
     self.placed_pawn = nil           -- pawn id the current world's placement belongs to
     self.protect = nil               -- { until_t (nil = until placed), set_by_us, ms }
+    self.dislocation_guard = nil     -- original native bool + exact pawn/world/life; forget on drop
     self.no_order_logged = false
     self.world_t0 = nil
     self.next_watch, self.next_vitals, self.next_req = 0, 0, 0
@@ -433,6 +436,22 @@ end
 function P:place(pawn, e, plan, why, no_protect)
     local env = self.env
     local now = env.now()
+    local context = self:dislocation_context(e, plan)
+    local g = self.dislocation_guard
+    if g and not self:same_dislocation_context(g.context, context) then
+        -- The guard owns its original value from the first protected tick,
+        -- including the initial settle before cur exists. Transfer that
+        -- ownership before replacing cur or publishing a new assignment.
+        if g.ended or self:restore_dislocation_guard(g.context, "new placement") then
+            self.dislocation_guard = nil
+        else
+            if not g.transfer_blocked then
+                env.log("spawn: placement held: native dislocation guard restoration unavailable")
+                g.transfer_blocked = true
+            end
+            return false
+        end
+    end
     local dest, floor, clear, off = self:choose(pawn, e, plan)
     if not dest then
         env.log("spawn: round %d slot %d -> (%.0f, %.0f, %.0f) NO GROUND under the server point; not moving (%s)",
@@ -442,6 +461,7 @@ function P:place(pawn, e, plan, why, no_protect)
         self.placed_pawn = self.pawn_id   -- do not retry every tick; the Director may ask again
         self.counters.failed = self.counters.failed + 1
         self:arm_protection(now + SP.protect_ms(e) / 1000)
+        self:dislocation_step(now, e, plan)
         self:write_status(self.cur, false, "no ground under the server point")
         return false
     end
@@ -458,6 +478,7 @@ end
 function P:teleport_try()
     local env, c = self.env, self.cur
     c.tries = c.tries + 1
+    self:dislocation_step(env.now(), c.e, c.plan)
     local detail = env.teleport(self.pawn, c.dest, c.e.yaw, c.tries) or ""
     local now = env.now()
     -- Hold the body on the destination for hold_s before the first check
@@ -548,6 +569,84 @@ function P:verify_step(now)
 end
 
 -- --- spawn protection -------------------------------------------------------------------------
+
+-- Native Event Check Bone Dislocation Status tests !"Block Spine Breaking"
+-- for upperarm_l/r, calf_l/r, neck_02 and spine_04. Invulnerable is not a
+-- predicate there. Use the reflected bool (Willie_BP offset 0x461E), without
+-- changing joint limits or clearing any existing native injury.
+function P:dislocation_context(e, plan)
+    if not e or not plan then return nil end
+    return { world = self.wkey, pawn = self.pawn, pawn_id = self.pawn_id,
+        peer = e.peer or self.env.my_peer_id(), match_id = plan.match_id or 0,
+        round = plan.round, spawn_id = e.spawn_id or 0, life = e.life or 0 }
+end
+
+function P:same_dislocation_context(a, b)
+    return a and b and a.world == b.world and a.pawn == b.pawn and a.pawn_id == b.pawn_id
+        and a.peer == b.peer and a.match_id == b.match_id and a.round == b.round
+        and a.spawn_id == b.spawn_id and a.life == b.life or false
+end
+
+function P:restore_dislocation_guard(context, why)
+    local env, g = self.env, self.dislocation_guard
+    if not g or g.ended then return false end
+    -- Compare only cached identities. Read properties only through the pawn
+    -- found NOW, and only in the exact original world and life assignment.
+    local w = env.world() or {}
+    local fresh = w.key == g.context.world and env.pawn() or nil
+    if not self:same_dislocation_context(g.context, context) or fresh ~= g.context.pawn
+        or not fresh or env.pawn_id(fresh) ~= g.context.pawn_id then
+        if not g.context_unavailable then
+            env.log("spawn: native dislocation guard unavailable (original pawn/world/life no longer current; %s)", why)
+            g.context_unavailable = true
+        end
+        return false
+    end
+    if type(g.original) ~= "boolean" then g.ended = true; return true end -- never guessed or wrote the flag
+    local ok, set = pcall(env.prop_set, fresh, "Block Spine Breaking", g.original)
+    local read_ok, value = pcall(env.prop_get, fresh, "Block Spine Breaking")
+    g.ended = ok and set ~= false and read_ok and value == g.original
+    if g.ended or not g.restore_failed then
+        env.log("spawn: native dislocation guard %s (Block Spine Breaking=%s; %s)",
+            g.ended and "restored" or "unavailable: restore failed", tostring(g.original), why)
+    end
+    g.restore_failed = not g.ended
+    return g.ended
+end
+
+function P:dislocation_step(now, e, plan)
+    local env = self.env
+    local context = self:dislocation_context(e, plan)
+    local g = self.dislocation_guard
+    if g and (g.context.world ~= self.wkey or g.context.pawn ~= self.pawn) then
+        self.dislocation_guard, g = nil, nil -- no old UObject touch on world/pawn replacement
+    end
+    local active = self:protected(now) and not self.live_seen and env.match() ~= "live" and context ~= nil
+    if not active then
+        if g and not g.ended then self:restore_dislocation_guard(context, "protection over") end
+        return
+    end
+    if not g then
+        local ok, original = pcall(env.prop_get, self.pawn, "Block Spine Breaking")
+        g = { context = context }
+        if ok and type(original) == "boolean" then g.original = original end
+        self.dislocation_guard = g
+        if type(g.original) ~= "boolean" then
+            env.log("spawn: native dislocation guard unavailable (Block Spine Breaking original bool unreadable)")
+            return
+        end
+    end
+    if g.ended or g.restore_failed or type(g.original) ~= "boolean"
+        or not self:same_dislocation_context(g.context, context) then return end
+    local ok, value = pcall(env.prop_get, self.pawn, "Block Spine Breaking")
+    if ok and type(value) == "boolean" and not value then
+        local wrote, set = pcall(env.prop_set, self.pawn, "Block Spine Breaking", true)
+        if not (wrote and set ~= false) and not g.write_unavailable then
+            env.log("spawn: native dislocation guard unavailable (Block Spine Breaking write failed)")
+            g.write_unavailable = true
+        end
+    end
+end
 
 function P:arm_protection(until_t)
     -- A Live re-place (a living player fell) never re-arms protection,
@@ -696,9 +795,10 @@ function P:emit_state(at)
         dist_cm = d and math.floor(d + 0.5) or nil,
     }
     if env.ev then pcall(env.ev, "pawn_state", f) end
-    env.log("pawn_state[%s] round %d: consciousness=%s downed=%s fallen=%s health=%s R=%s L=%s protected=%s%s",
+    env.log("pawn_state[%s] round %d: consciousness=%s downed=%s fallen=%s health=%s R=%s L=%s protected=%s block_spine_breaking=%s%s",
         at, f.round, tostring(f.consciousness), tostring(f.downed), tostring(f.fallen), tostring(f.health),
-        f.weapon_r, f.weapon_l, tostring(f.protected), d and string.format(" %.0f cm from the spawn", d) or "")
+        f.weapon_r, f.weapon_l, tostring(f.protected), tostring(s.block_spine_breaking),
+        d and string.format(" %.0f cm from the spawn", d) or "")
     return f
 end
 
@@ -923,6 +1023,7 @@ function P:tick()
         end
         if old and old ~= pawn and next(self.nc.pairs) ~= nil then self:restore_collision("possessed pawn changed") end
         self.cur, self.placed_pawn, self.protect = nil, nil, nil
+        self.dislocation_guard = nil -- the previous actor is not freshly owned; never restore through its cache
         self.nc.pairs = {}
         -- A possession change during Live (a native SpawnCombatants swap, a
         -- re-possession) is never placed: teleporting the player to the spawn
@@ -951,6 +1052,7 @@ function P:tick()
             env.log("spawn: round is Live; spawn protection %s", pu and pu > now
                 and string.format("ends in %.1f s", pu - now) or "ends now")
         end
+        self:dislocation_step(now, e, plan) -- restore before the normal Live pawn diagnostics
         if self.protect then self:emit_state("live") end
     end
     -- Protection starts as soon as an MP pawn exists, before placement, and
@@ -958,6 +1060,7 @@ function P:tick()
     if e and not self.protect then self:arm_protection(nil) end
     if e and self.protect then self.protect.until_live = not self.protect.respawn end
     self:protect_step(now)
+    self:dislocation_step(now, e, plan)
     self:nocollide_step(now)
     if self.protect and not self.protect.ended and self:protected(now) and self.cur and self.cur.done
         and now >= self.next_state then
@@ -1699,6 +1802,10 @@ function SP.make_ue_env(ctx)
         pcall(function() s.downed = p.Downed == true end)
         pcall(function() s.fallen = p.Fallen == true end)
         pcall(function() s.health = tonumber(p.Health) end)
+        pcall(function()
+            local value = p["Block Spine Breaking"]
+            if type(value) == "boolean" then s.block_spine_breaking = value end
+        end)
         for side, f in pairs({ weapon_r = "Weapon R", weapon_l = "Weapon L" }) do
             local x; pcall(function() x = p[f] end)
             s[side] = obj_ok(x) and (wclass(x) or "?") or "None"

@@ -252,7 +252,7 @@ local function now_ms() return os.clock() * 1000 end   -- MSVC clock(): wall ms
 local PURE = load_module("avatars_pure")
 local INJURY = load_module("body_injury")
 local BODY_HEIGHT = load_module("standin_body") -- optional dev-only native height probe helper
-local SEVERED_PHYSICS = os.getenv("HSMP_SEVERED_PHYSICS") == "1" -- opt-in until native restore proof
+local SEVERED_PHYSICS = os.getenv("HSMP_SEVERED_PHYSICS") ~= "0" -- explicit diagnostic opt-out
 if not PURE then error("HSMPAvatars: avatars_pure.lua is missing (deploy copies every Scripts/*.lua)") end
 local quat_to_rot, clamp = PURE.quat_to_rot, PURE.clamp
 
@@ -1257,17 +1257,15 @@ function PX.grips_off(p, off)
 end
 
 -- Hand the stand-in back to its own muscles (no fresh pose).
-local function release_standin(p)
+local function release_standin(p, handoff)
     PX.settle_reset(p,"drive released")
     p.wservo,p.wservo_actor=nil,nil
     if PX.height_restore and p.body and p.body.height_probe and p.gen == world_gen and cache_gen == world_gen then
         PX.height_restore(p, "release", false)
     end
-    if p.body and p.gen == world_gen and cache_gen == world_gen and p.body.mesh and p.body.mesh:IsValid() then
-        p.body.injury_disabled = INJURY.restore(p.body.mesh, p.body.injury_disabled, fname)
-        p.body.injury_probe = nil
-    end
-    if p.driving == false then return end
+    local injury_ok=true
+    if handoff and PX.injury_release then injury_ok=PX.injury_release(p) end
+    if p.driving == false then return injury_ok end
     if p.gen == world_gen and cache_gen == world_gen and p.actor and p.actor:IsValid() then
         PX.grips_off(p, false); PX.close_limits(p, p.body)
         for k, v in pairs(p.tonus0 or {}) do pcall(function() p.actor[k] = v end) end
@@ -1277,7 +1275,7 @@ local function release_standin(p)
     -- Only ever write to a stand-in of the CURRENT world that is still alive.
     if p.gen ~= world_gen or cache_gen ~= world_gen or not (p.actor and p.actor:IsValid()) then
         p.driving = false
-        return
+        return injury_ok
     end
     if p.body then
         release_handles(p.body); set_motor_strength(p.body, 1.0)
@@ -1315,6 +1313,8 @@ local function release_standin(p)
     end
     set_muscles_blocked(p, false)
     p.driving = false
+    if not handoff and PX.injury_targets and p.body then PX.injury_targets(p.peer or 0,p,nil,nil) end
+    return injury_ok
 end
 
 -- Rigidly move every simulated mesh so its pelvis lands on the target.
@@ -1714,11 +1714,81 @@ function PX.bodyheight(arg)
         id, s.name, tostring(s.mesh_addr), height, s.height, tostring(ok), tostring(err))
     if not ok then PX.height_restore(p, "native write failed", false) end
 end
+-- Resolve the current component from its actor field before any injury write.
+-- A world/actor/mesh replacement drops its bookkeeping without touching the old
+-- UObject; only an exact current body may restore a previously owned exclusion.
+function PX.injury_mesh(p)
+    if not (p and p.gen==world_gen and cache_gen==world_gen and p.body) then return nil,nil,"world changed" end
+    local mesh,key,why
+    local ok=pcall(function()
+        local a=p.actor
+        if not p.addr then why="body unavailable";return end
+        if not (a and a:IsValid()) or a:GetAddress()~=p.addr then why="actor changed";return end
+        local w=a:GetWorld()
+        if not (w and w:IsValid()) then why="body unavailable";return end
+        local wid=tostring(w:GetAddress()).."@"..w:GetFullName()
+        if cache_world~=tostring(world_gen).."|"..wid then why="world changed";return end
+        local m=a[p.body.field or "Mesh"]
+        if not (m and m:IsValid()) then why="body unavailable";return end
+        if not (p.body.mesh and p.body.mesh:IsValid()) or m:GetAddress()~=p.body.mesh:GetAddress() then
+            why="mesh changed";return
+        end
+        mesh=m
+        key=a:GetFName():ToString().."@"..tostring(a:GetAddress())
+            ..":"..m:GetFName():ToString().."@"..tostring(m:GetAddress())
+    end)
+    return mesh,key,(not ok and "body unavailable" or why)
+end
+function PX.injury_release(p)
+    local body=p.body
+    if not body then return true end
+    local mesh,key,why=PX.injury_mesh(p)
+    if not mesh or (body.injury_key and body.injury_key~=key) then
+        if why=="body unavailable" and next(body.injury_disabled or {}) then
+            body.injury_retiring,body.injury_error=true,why
+            return false -- unknown is not a lease handoff: retain exact restoration ownership
+        end
+        body.injury_disabled,body.injury_wanted,body.injury_journal={},{},nil
+        body.injury_probe,body.injury_retiring=nil,nil
+        return true -- identity lost: no old UObject access
+    end
+    body.injury_disabled=INJURY.restore(mesh,body.injury_disabled,fname)
+    body.injury_probe=nil
+    body.injury_retiring=next(body.injury_disabled)~=nil
+    if body.injury_retiring then
+        body.injury_error="restore failed"
+        if body.injury_diag_key~="restore failed" then
+            body.injury_diag_key="restore failed"
+            Log("sever physics peer=%d body=%s restore failed; lease retained",p.peer or 0,key)
+        end
+        return false
+    end
+    body.injury_error=nil
+    body.injury_wanted,body.injury_journal,body.injury_diag_key={},nil,nil
+    return true
+end
 function PX.injury_targets(id,p,targets,aim)
     local body = p.body
     if not body then return end
     if not SEVERED_PHYSICS and not body.injury_probe and not next(body.injury_disabled or {}) then return end
-    local want = {}
+    local mesh,key,why=PX.injury_mesh(p)
+    if not mesh then
+        body.injury_error=why
+        INJURY.omit(aim,body.injury_wanted,PURE.V2_SLOTS,PURE.V2_PARENT)
+        INJURY.omit(targets,body.injury_wanted,PURE.V2_SLOTS,PURE.V2_PARENT)
+        INJURY.omit(aim,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+        INJURY.omit(targets,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+        if next(body.injury_wanted or {}) and body.injury_diag_key~=why then
+            body.injury_diag_key=why;Log("sever physics peer=%d unavailable=%s (no native write)",id,tostring(why))
+        end
+        return
+    end
+    if body.injury_key and body.injury_key~=key then
+        body.injury_disabled,body.injury_wanted,body.injury_journal={},{},nil
+    end
+    body.injury_key=key
+    if body.injury_retiring then return end
+    local want = body.injury_wanted or {}
     if SEVERED_PHYSICS then
         local r = HSMP_IPC and HSMP_IPC.peer_rec("peer_vitals",id)
         local shown=p.shown or p.applied_context
@@ -1728,30 +1798,54 @@ function PX.injury_targets(id,p,targets,aim)
             and shown.pawn==p.actor:GetFName():ToString()
             and view and (view.match_id or 0)>0
             and PURE.pose_context_ok(shown,view,HSM and HSM.mode(),id)
-        local key=p.actor:GetFName():ToString().."@"..tostring(p.actor:GetAddress())
-            ..":"..body.mesh:GetFName():ToString().."@"..tostring(body.mesh:GetAddress())
         local mask
         body.injury_journal,mask=INJURY.select_mask(body.injury_journal,shown,allowed,r,key)
         local enums = HSMP_IPC and HSMP_IPC.S and HSMP_IPC.S.ENUMS and HSMP_IPC.S.ENUMS.dism_part
-        if mask and enums then
+        -- Zero has no source availability bit today. It cannot prove that a
+        -- previously missing part regrew; a true lease handoff restores it.
+        if mask and mask>0 and enums then
+            local retained={};for bone in pairs(want)do retained[bone]=true end
+            want=retained
             for name,bit in pairs(enums) do
                 if mask & (1 << bit) ~= 0 then want[name:lower()] = true end
             end
+            body.injury_wanted=want
         end
     end
     local probe = body.injury_probe
     local restored_bone
-    if probe and os.clock() < probe.until_t then want[probe.bone] = true
+    if probe and os.clock() < probe.until_t then
+        local copy={};for bone in pairs(want)do copy[bone]=true end
+        want=copy;want[probe.bone] = true
     elseif probe then
         restored_bone = probe.bone
         body.injury_probe = nil; Log("bodyphysics peer=%d automatic restore",id)
     end
     local err
-    body.injury_disabled,err = INJURY.apply(body.mesh,body.injury_disabled,want,fname)
-    if err then Log("bodyphysics peer=%d %s",id,err) end
+    -- Reassert even with unchanged bookkeeping: collision/simulation toggles
+    -- and native appearance setup may rebuild physics on this same component.
+    body.injury_disabled,err = INJURY.apply(mesh,body.injury_disabled,want,fname,true)
+    body.injury_error=err
+    local signature=tostring(body.injury_journal and body.injury_journal.mask).."|"..tostring(err)
+    if next(want) and (signature~=body.injury_diag_key or now_ms()>=(body.injury_diag_at or 0)) then
+        body.injury_diag_key,body.injury_diag_at=signature,now_ms()+1000
+        local samples=INJURY.simulation(mesh,want,PURE.V2_SLOTS,PURE.V2_PARENT,fname)
+        local parts={};for bone,value in pairs(samples)do parts[#parts+1]=bone.."="..value end;table.sort(parts)
+        Log("sever physics peer=%d body=%s match=%s round=%s life=%s mask=%s simulation=%s collision=unverified error=%s",
+            id,key,tostring(body.injury_journal and body.injury_journal.match_id),tostring(body.injury_journal and body.injury_journal.round),
+            tostring(body.injury_journal and body.injury_journal.life),tostring(body.injury_journal and body.injury_journal.mask),table.concat(parts,","),tostring(err))
+    end
     if restored_bone then PX.injury_diag(id,body,restored_bone,"automatic_restore") end
+    -- Owner-confirmed absence controls servo omission even if native exclusion
+    -- throws; failed restoration also keeps the still-disabled roots omitted.
+    INJURY.omit(aim,want,PURE.V2_SLOTS,PURE.V2_PARENT)
+    INJURY.omit(targets,want,PURE.V2_SLOTS,PURE.V2_PARENT)
     INJURY.omit(aim,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
     INJURY.omit(targets,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+end
+function PX.injury_tick(id,p)
+    if p.body and p.body.injury_retiring then return PX.injury_release(p) end
+    PX.injury_targets(id,p,nil,nil)
 end
 local _driven     = {}   -- actor address -> driven stand-in (ReceiveTick post-hook)
 local next_claim  = {}   -- id -> tick of next claim attempt
@@ -2176,7 +2270,12 @@ end
 local function reset_all(reason)
     if next(puppets) ~= nil then Log("releasing all puppets: %s", reason) end
     if cache_gen == world_gen then
-        for _, p in pairs(puppets) do pcall(release_standin, p) end
+        local restored=true
+        for _, p in pairs(puppets) do
+            local ok,done=pcall(release_standin,p,true)
+            if not ok or done==false then restored=false end
+        end
+        if not restored then return false end -- retry while these bodies still belong to us
     end
     drop_caches(reason)
 end
@@ -3445,6 +3544,7 @@ local function drive_frame(id, p, now)
         pl.seq, pl.seq_at = nil, nil
         return
     end
+    if p.body and p.body.injury_retiring then return end
     if cur and cur.v2 then
         -- Codec v2: velocity servo every frame (replication.md "Driver").
         local quiet = now - (pl.seq_at or -1e9)
@@ -3465,17 +3565,18 @@ local function drive_frame(id, p, now)
         if not body or cur.nbones == 0 then p.cut_seen = cur.cut; return end
         if body.ctl ~= "servo" then
             release_handles(body)
-            body.ctl = "servo"
             p.driving = false
             -- The servo drives the visible ragdoll itself (CharacterMesh0);
             -- head, gore mesh and armour copy their pose from it.
             if body.field ~= "Mesh" then
+                PX.settle_reset(p,"mesh handoff")
                 local m; pcall(function() m = p.actor.Mesh end)
-                if m and m:IsValid() then
-                    body.mesh, body.field, body.sims, body.sv = m, "Mesh", { m }, nil
-                    pcall(function() m:SetSimulatePhysics(true) end)
-                end
+                if not (m and m:IsValid()) then return end
+                if PX.injury_release(p)==false then return end
+                body.mesh, body.field, body.sims, body.sv = m, "Mesh", { m }, nil
+                pcall(function() m:SetSimulatePhysics(true) end)
             end
+            body.ctl = "servo" -- commit only after restoration and the required mesh switch
         end
         if PX.sync_body_scale(id, p, body, now, cur) then return end
         if not p.driving then
@@ -3540,6 +3641,7 @@ local function drive_frame(id, p, now)
             world_collision(body, false)
             body.stall = nil
             if pel and snap_clear(pel) then snap_mesh(body, pel[1], pel[2], pel[3]) end
+            PX.injury_targets(id,p,nil,nil) -- physics reset may have re-enabled missing bodies
             p.qhist, p.idlew, p.qfoot = nil, nil, nil
             p.aim = nil
             -- soft servo for the first moments, and the spawn stretch watch
@@ -3891,6 +3993,7 @@ local function tick_puppet(id, p, me_loc)
     elseif body and body.ctl == nil and not (p.last and p.last.v2) then
         ensure_handles(p, body)   -- prepare control before the first (v1) pose
     end
+    if p.body then PX.injury_targets(id,p,nil,nil) end -- includes released/out-of-range bodies
     -- Server-declared death of the owner (peer_vitals record,
     -- docs/development/subsystems/vitals.md): the stand-in becomes a free
     -- native ragdoll (drive_frame lets go).
@@ -4140,7 +4243,7 @@ local function on_tick()
         PX.height_tick(p)
         if p.gen == world_gen and p.actor and p.actor:IsValid() and p.body and p.body.mesh:IsValid()
             and (p.body.injury_probe or next(p.body.injury_disabled or {})) then
-            PX.injury_targets(id,p,nil,nil)
+            PX.injury_tick(id,p)
         end
     end
     local me_loc = willie_loc(me)
@@ -4224,10 +4327,12 @@ local function on_tick()
             end
             if why then
                 Log("peer %d (%s): %s; re-claiming", id, nick, why)
-                pcall(release_standin, p)
-                puppets[id] = nil; p = nil
-                demand = demand + 1   -- a re-claim needs a body too
-                next_claim[id] = tick_num
+                local ok,restored=pcall(release_standin,p,true)
+                if ok and restored~=false then
+                    puppets[id] = nil; p = nil
+                    demand = demand + 1   -- a re-claim needs a body too
+                    next_claim[id] = tick_num
+                end
             end
         end
 
@@ -4269,9 +4374,8 @@ local function on_tick()
     for id, p in pairs(puppets) do
         if not live[id] then
             Log("peer %d (%s) gone; releasing puppet (left standing)", id, p.nick or "?")
-            if p.actor and p.actor:IsValid() then pcall(release_standin, p) end
-            puppets[id] = nil
-            snap[id] = nil
+            local ok,restored=pcall(release_standin,p,true)
+            if ok and restored~=false then puppets[id]=nil;snap[id]=nil end
         end
     end
 

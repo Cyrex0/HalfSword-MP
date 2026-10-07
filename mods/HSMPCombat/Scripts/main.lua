@@ -1137,6 +1137,45 @@ if C3.armor_audit then
     })
 end
 
+-- Separate read-only body probe: enabling it never makes stand-ins take
+-- damage. Native BP hooks are POST-only; replay invocation snapshots are
+-- labelled separately from the unavailable nested Get Damage PRE state.
+function C3.body_audit_context(w)
+    if not w or not same(w,local_pawn()) then return nil end
+    local ctx=C3.vitals_context and C3.vitals_context(w)
+    if not ctx then
+        -- Preparation telemetry may describe the assigned owner while
+        -- placement is in progress. It authorizes no damage or publication.
+        local ipc=rawget(_G,"HSMP_IPC")
+        local status=ipc and ipc.bus_table and ipc.bus_table("spawn_status")
+        local view=HSESS and HSESS.view and HSESS.view()
+        local order=view and view.spawns and view.spawns[my_peer_id]
+        if not status or not view or not order or status.pawn~=wname(w)
+            or status.match_id~=view.match_id or status.spawn_id~=order.spawn_id
+            or (view.state~="loading" and view.state~="countdown")
+            or status.round~=view.pending_round or status.round~=view.spawn_round or status.life~=1 then return nil end
+        ctx={match_id=status.match_id,round=status.round,life=status.life}
+    end
+    local world=WG.world()
+    local mesh;pcall(function()mesh=w.Mesh end)
+    if not world or not world:IsValid() or not mesh or not mesh:IsValid() then return nil end
+    return {world=tostring(world:GetAddress()).."@"..world:GetFullName(),peer=my_peer_id,
+        match_id=ctx.match_id,round=ctx.round,life=ctx.life,pawn=wname(w),actor=addr_of(w),mesh=addr_of(mesh)}
+end
+C3.body_audit=load_module("native_body_audit")
+if C3.body_audit then
+    C3.body_audit=C3.body_audit.new({
+        enabled=function()return os.getenv("HSMP_DEV")=="1" and C3.body_probe
+            and WG.check() and WG.settled() end,
+        unwrap=pv,fname=FName,log=Log,context=C3.body_audit_context,
+    })
+end
+function C3.body_replay_meta(d,attacker)
+    return {attacker=attacker,hit_id=d.hit_id,cid=d.cid,parent_cid=d.parent_cid,
+        attacker_life=d.attacker_life,source_class=d.source_class,source_meta=d.dism_blunt,bone=d.bone,
+        pre="fresh:owner_replay_invocation"}
+end
+
 -- Pinned UE4SS native POST hooks pass context, then ReturnValue, then
 -- reflected parameters. Blueprint hooks use a different argument ordering.
 function C3.native_trace_post(_,returnedp,worldp,startp,endp,radiusp,objectsp,complexp,ignoreactorsp,debugp,hitsp,ignoreselfp,colorp,hitcolorp,timep)
@@ -1567,6 +1606,20 @@ end
 local function on_get_damage(selfp, Impulse, Velocity, Location, Normal, bone, RawDamage,
                              CuttingPower, Inside, DamagedMesh, DismBlunt, LowerThreshold,
                              Shockwave, HitByComponent, Flesh, HitBox, PainRate, ApplyBoneChange, DrawCut, DamageApplied)
+    if C3.body_audit and C3.body_probe then
+        local meta={}
+        for k,v in pairs(C3.body_replay or {})do meta[k]=v end
+        meta.pre="unavailable:Blueprint_POST"
+        local b=pv(bone);pcall(function()meta.bone=b:ToString()end)
+        pcall(function()
+            local m,h=pv(DamagedMesh),pv(HitByComponent)
+            if m and m:IsValid()then meta.damaged_mesh=addr_of(m)end
+            if h and h:IsValid()then meta.hit_by=addr_of(h)end
+        end)
+        meta.raw,meta.cut,meta.draw,meta.pain_rate=pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate)
+        meta.inside,meta.lower,meta.damage_applied=pv(Inside),pv(LowerThreshold),pv(DamageApplied)
+        pcall(C3.body_audit.capture,pv(selfp),"Get Damage POST",meta)
+    end
     if replaying then
         local trace=C3.replay_trace
         local w=pv(selfp)
@@ -1664,6 +1717,9 @@ local death_hook_ok, death_hook_tries = false, 0
 local death_hooked = {}   -- fn path -> true once registered
 local function try_hook()
     local retry_now = tick_num <= 30 or tick_num % 30 == 0   -- 1 Hz after the first second
+    if C3.body_audit and not C3.body_hook_ok and retry_now then
+        C3.body_hook_ok=C3.body_audit.install(RegisterHook)
+    end
     if C3.armor_audit and not C3.armor_hook_ok and retry_now then
         C3.armor_hook_ok=C3.armor_audit.install(RegisterHook)
         if C3.armor_hook_ok then Log("native armour proxy construction hook registered (developer evidence only)") end
@@ -2628,7 +2684,11 @@ local function apply_hit(d, _attacker)
         -- of one attacker less than 0.2 s apart on ITS clock, reset otherwise
         -- (replays arrive bunched: parry holds, jitter, resends).
         gate0 = C3.gd_gate_open(me, _attacker, d, bone)
+        C3.body_replay=C3.body_replay_meta(d,_attacker)
+        if C3.body_audit then pcall(C3.body_audit.capture,me,"Deal Complex Damage invocation PRE",C3.body_replay) end
         ok, err = bp_call(me, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, coll, hit_box), 1, 23))
+        if C3.body_audit then pcall(C3.body_audit.capture,me,"Deal Complex Damage invocation POST",C3.body_replay) end
+        C3.body_replay=nil
         C3.gd_gate_note(me, _attacker, d, bone, gate0)
         via = "Deal Complex Damage"
         -- Never a second application. A call that errored AFTER the
@@ -2654,7 +2714,11 @@ local function apply_hit(d, _attacker)
             dism_all % 256, bit(2), bit(4), num(d.parent_cid)~=0 and coll or nil, bit(8), nil,
             num(d.pain_rate), bit(16), num(d.draw_cut), {},
         }
+        C3.body_replay=C3.body_replay_meta(d,_attacker)
+        if C3.body_audit then pcall(C3.body_audit.capture,me,"Get Damage invocation PRE",C3.body_replay) end
         ok, err = bp_call(me, "Get Damage", table.unpack(args, 1, 19))
+        if C3.body_audit then pcall(C3.body_audit.capture,me,"Get Damage invocation POST",C3.body_replay) end
+        C3.body_replay=nil
         if not ok and err ~= "unresolved" then
             if next(diff(before, snapshot(me))) ~= nil then
                 ok, via = true, "Get Damage (errored after applying)"
@@ -3322,6 +3386,8 @@ local puppets_stale = true   -- re-resolve stand-ins on the first tick of a worl
 -- without touching it. Stand-in FNames (puppet_peer) are plain strings and
 -- stay, so hits on stand-ins are still recognised until the refresh.
 wg_on_drop(function(why)
+    C3.body_replay=nil
+    if C3.body_audit then C3.body_audit.clear() end
     puppet_actor = {}
     CX.pending = {}
     CX.inside_queue = {}
@@ -3528,6 +3594,11 @@ function C3.poll_probe()
             C3.native_probe = tostring(d.arg or "") == "on"
             Log("combat_probe %s: stand-ins %s the game's own damage for my blows (logged as PROBE, put back)",
                 C3.native_probe and "ON" or "OFF", C3.native_probe and "take" or "no longer take")
+        elseif type(d)=="table" and d.op==1 and d.key=="body_probe" then
+            C3.body_probe=tostring(d.arg or "")=="on"
+            Log("body_probe %s: current-owner native body readback only",C3.body_probe and "ON" or "OFF")
+        elseif type(d)=="table" and d.op==1 and d.key=="body_snapshot" then
+            if C3.body_audit then pcall(C3.body_audit.capture,local_pawn(),"manual readback",{pre="unavailable:manual_read"}) end
         end
     end
 end

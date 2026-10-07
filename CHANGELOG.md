@@ -23,6 +23,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   placement on the first teleport, retaining the existing spawn readiness limits.
 - Refresh a validated weapon root's mutable physics state so native setup enabling
   simulation resumes pose driving instead of retaining an obsolete kinematic cache.
+- Preserve native joint-dislocation protection during non-Live placement and restore
+  its original value with fresh ownership and readback checks.
+- Keep confirmed missing-limb servo and physics exclusions through temporary playback
+  release; add separate read-only native body and sever-component diagnostics.
 - Add `hsmp-lab` recipe sessions, incremental evidence collectors, bootstrap comparisons,
   explicit baseline promotion, a regression journal and in-session A/B runs.
 - Add isolated modes/server-mods backend smoke and repeatable native deathmatch placement

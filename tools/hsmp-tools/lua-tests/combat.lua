@@ -1779,6 +1779,36 @@ do
         T.check(native_calls==3 and absent_status==2 and absent_mask==0 and absent_hp==0 and absent_health==nil,
             "unreadable actual native Health cannot turn a production zero placeholder into diagnostic evidence")
         ME.Health = present_health
+        -- Exercise production ordering around the actual owner native call,
+        -- including its real Blueprint POST callback and receipt cache.
+        local old_audit,old_body_probe=api.C3.body_audit,api.C3.body_probe
+        local body_rows={}
+        api.C3.body_probe=true
+        api.C3.body_audit={capture=function(w,event,meta)
+            local copied={};for k,v in pairs(meta)do copied[k]=v end
+            body_rows[#body_rows+1]={event=event,arm=w["Arm_L Health"],broken=w["Arm L Broken"],meta=copied}
+        end,clear=function()end}
+        ME["Arm_L Health"],ME["Arm L Broken"]=100,false
+        local body_native_calls=0
+        ME["Get Damage"]=function(self,...)
+            body_native_calls=body_native_calls+1
+            self["Arm_L Health"],self["Arm L Broken"]=99,true
+            api.on_get_damage(self,...)
+        end
+        local body_hit=hit_rec{hit_id=1000005,round=3,target_peer_id=1,bone="lowerarm_l",flags=0}
+        local _,body_outcome,body_fresh=attempts.run(body_hit,2,function()return api.apply_hit(body_hit,2)end)
+        T.check(body_fresh and body_outcome.status==1 and body_native_calls==1 and #body_rows==3,
+            "production owner replay records one invocation PRE, actual native GD POST and invocation POST")
+        T.check(body_rows[1].arm==100 and body_rows[1].broken==false and body_rows[2].arm==99
+            and body_rows[2].broken==true and body_rows[3].arm==99,
+            "production body evidence brackets fresh native part and joint changes")
+        T.check(body_rows[1].meta.pre=="fresh:owner_replay_invocation"
+            and body_rows[2].meta.pre=="unavailable:Blueprint_POST" and body_rows[2].meta.hit_id==1000005,
+            "nested Blueprint body POST keeps exact claim but never fabricates a fresh GD PRE")
+        attempts.run(body_hit,2,function()error("duplicate native call")end)
+        T.check(body_native_calls==1 and #body_rows==3 and api.C3.body_replay==nil,
+            "duplicate owner receipt neither repeats native injury nor emits another fresh body pair")
+        api.C3.body_audit,api.C3.body_probe=old_audit,old_body_probe
         ME["Get Damage"], api.C3.native_probe = previous_gd, previous_probe
     end
 end

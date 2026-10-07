@@ -98,7 +98,11 @@ local function new_world(opts)
         return "[Mesh moved(1300cm)]"
     end
     env.prop_get = function(p, k) return p.props[k] end
-    env.prop_set = function(p, k, v) p.props[k] = v; return true end
+    w.prop_writes = {}
+    env.prop_set = function(p, k, v)
+        w.prop_writes[#w.prop_writes + 1] = { pawn = p, key = k, value = v }
+        p.props[k] = v; return true
+    end
     env.cdo_vitals = function() return w.cdo end
     env.native_floor = function() return w.native[3] end
     env.native_point = function() return table.unpack(w.native) end
@@ -125,7 +129,8 @@ local function new_world(opts)
     function w:new_pawn()
         self.npawn = self.npawn + 1
         self.pawn = { id = "Willie_BP_C_" .. (100 + self.npawn), x = 257, y = 415, z = 953, home = { 257, 415, 953 },
-                      props = { Health = 100, ["Neck Health"] = 100, Invulnerable = false, DED = false } }
+                      props = { Health = 100, ["Neck Health"] = 100, Invulnerable = false, DED = false,
+                                ["Block Spine Breaking"] = false } }
         return self.pawn
     end
     function w:tick(n, dt)
@@ -1096,4 +1101,287 @@ do
     T.check(old.match_id==51,"new session never relabels saved old placement")
     w:secs(1.2)
     T.check(w:status().verified and w:status().match_id==52,"new match verifies its own placement")
+end
+
+T.log("== native dislocation guard starts before placement and restores its original bool once")
+do
+    for _, original in ipairs({ false, true }) do
+        local w = placed_world()
+        w.pawn.props["Block Spine Breaking"] = original
+        local teleport = w.env.teleport
+        w.env.teleport = function(p, ...)
+            T.check(p.props["Block Spine Breaking"] == true,
+                "native dislocation guard is active before every first placement teleport")
+            return teleport(p, ...)
+        end
+        w:tick()
+        T.check(w.teleports == 0 and w.pawn.props["Block Spine Breaking"] == true,
+            "native dislocation guard starts on the first protected tick, before settling")
+        w.pawn.props["Block Spine Breaking"] = false -- native animation code can overwrite it
+        w:tick()
+        T.check(w.pawn.props["Block Spine Breaking"] == true,
+            "a native false write is reasserted while protected")
+        w:secs(3.5)
+        local writes = 0
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then writes = writes + 1 end
+        end
+        w:go_live(); w:tick()
+        T.check(w.pawn.props["Block Spine Breaking"] == original,
+            "Live restores the exact original native bool: " .. tostring(original))
+        local after = 0
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then after = after + 1 end
+        end
+        T.check(after == writes + 1, "the original bool is restored with one write at Live")
+        w.pawn.props["Block Spine Breaking"] = not original
+        w:secs(2)
+        local later = 0
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then later = later + 1 end
+        end
+        T.check(later == after and w.pawn.props["Block Spine Breaking"] == not original,
+            "completed guard never restores again or fights later native writes")
+    end
+end
+
+T.log("== an unreadable native dislocation bool is explicit and never guessed")
+do
+    for _, unavailable in ipairs({ "missing", "number", "error" }) do
+        local w = placed_world()
+        local get = w.env.prop_get
+        w.env.prop_get = function(p, key)
+            if key == "Block Spine Breaking" then
+                if unavailable == "error" then error("property unavailable") end
+                return unavailable == "number" and 0 or nil
+            end
+            return get(p, key)
+        end
+        w:secs(3.5); w:go_live(); w:secs(1)
+        local writes = 0
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then writes = writes + 1 end
+        end
+        T.check(writes == 0 and w.pawn.props["Block Spine Breaking"] == false,
+            "no guessed write for an unreadable original bool: " .. unavailable)
+        T.check(T.contains(w:logtext(), "native dislocation guard unavailable"),
+            "unreadable native guard is logged explicitly: " .. unavailable)
+    end
+end
+
+T.log("== native dislocation and dismemberment state stays under the game's control during Live")
+do
+    local w = placed_world()
+    w:secs(3.5); w:go_live(); w:tick()
+    w.pawn.props.Health, w.pawn.props["Arm L Health"] = 27, 4
+    w.pawn.props["Arm L Dislocated"], w.pawn.props["Neck Dislocated"] = true, true
+    w.pawn.props["Dismembered Parts Map"] = { [6] = true }
+    local limbs = w.pawn.props["Dismembered Parts Map"]
+    w.pawn.props["Block Spine Breaking"] = false
+    w:secs(2)
+    T.check(w.pawn.props.Health == 27 and w.pawn.props["Arm L Health"] == 4
+        and w.pawn.props["Arm L Dislocated"] and w.pawn.props["Neck Dislocated"]
+        and w.pawn.props["Dismembered Parts Map"] == limbs and limbs[6],
+        "ordinary Live neither heals nor clears native injury or dismemberment")
+    T.check(w.pawn.props["Block Spine Breaking"] == false,
+        "ordinary Live leaves the native joint-breaking switch alone")
+
+    w.plan.by_peer[1].spawn_id = 386
+    w.director = "Spawn"
+    w:new_pawn(); w:tick()
+    T.check(w.sp:protected() and w.pawn.props["Block Spine Breaking"] == false,
+        "existing Live deathmatch spawn protection never arms the dislocation guard")
+    w.pawn.props["Arm L Dislocated"] = true
+    w.pawn.props["Dismembered Parts Map"] = limbs
+    w:secs(3.5)
+    T.check(w.pawn.props["Block Spine Breaking"] == false and w.pawn.props["Arm L Dislocated"]
+        and w.pawn.props["Dismembered Parts Map"] == limbs,
+        "Live deathmatch placement never clears or freezes native joint injury")
+end
+
+T.log("== native dislocation guard drops world caches without touching an old pawn")
+do
+    local w = placed_world()
+    w:tick()
+    local old = w.pawn
+    old.props = nil
+    setmetatable(old, { __index = function() error("touched an old-world pawn") end })
+    w.wkey = "Map_Arena_Slums#2"
+    w:new_pawn()
+    w.pawn.props["Block Spine Breaking"] = true
+    local ok, err = pcall(function() w:secs(3.5); w:go_live(); w:tick() end)
+    T.check(ok, "world drop never reads or restores the old native guard", tostring(err))
+    T.check(w.pawn.props["Block Spine Breaking"] == true,
+        "the next world's original true value is preserved independently")
+end
+
+T.log("== native dislocation guard transfers its original value before publishing a new assignment")
+do
+    local w = placed_world()
+    w.plan.match_id = 61
+    w:secs(3.5)
+    local before = w:status()
+    T.check(before.match_id == 61 and w.pawn.props["Block Spine Breaking"] == true,
+        "old verified assignment owns the guarded flag")
+    w:spawns(1, "Map_Arena_Slums", 517, 250, 853)
+    w.plan.match_id = 62
+    local teleport = w.env.teleport
+    w.env.teleport = function(p, ...)
+        local last = {}
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then last[#last + 1] = row.value end
+        end
+        T.check(#last >= 3 and last[#last - 1] == false and last[#last] == true,
+            "old false is restored before the new context captures and reasserts it")
+        T.check(w:status().match_id == 61 and p.props["Block Spine Breaking"] == true,
+            "new native guard precedes the new teleport and new status publication")
+        return teleport(p, ...)
+    end
+    w:tick()
+    T.check(w:status().match_id == 62 and not w:status().verified,
+        "new assignment is published only after restoration ownership transfers")
+    w:secs(1.2); w:go_live(); w:tick()
+    T.check(w.pawn.props["Block Spine Breaking"] == false,
+        "new assignment restores false, rather than inheriting the previous temporary true")
+end
+
+T.log("== a changed life cannot restore the preceding life's original native flag")
+do
+    local w = placed_world()
+    w.pawn.props["Block Spine Breaking"] = true
+    w.plan.match_id = 63
+    w:secs(3.5)
+    w.plan.by_peer[1].life = 2 -- a later assignment without the placer's ownership transfer
+    w.pawn.props["Block Spine Breaking"] = false
+    local before = #w.prop_writes
+    w:go_live(); w:tick()
+    local wrote = false
+    for i = before + 1, #w.prop_writes do
+        if w.prop_writes[i].key == "Block Spine Breaking" then wrote = true end
+    end
+    T.check(not wrote and w.pawn.props["Block Spine Breaking"] == false,
+        "same actor in a different full life never receives an old restoration write")
+    T.check(T.contains(w:logtext(), "original pawn/world/life no longer current"),
+        "unproven ownership transfer is explicit, not silently inherited")
+end
+
+T.log("== a new match during initial settling transfers the guard's actual original value")
+do
+    local w = placed_world()
+    w.plan.match_id = 66
+    w:tick()
+    T.check(w.sp.cur == nil and w.sp.dislocation_guard.original == false
+        and w.pawn.props["Block Spine Breaking"] == true,
+        "initial protected tick owns original false before any placement exists")
+    w:spawns(1, "Map_Arena_Slums", 517, 250, 853)
+    w.plan.match_id = 67
+    w:secs(3.5)
+    T.check(w:status() and w:status().verified and w:status().match_id == 67
+        and w.sp.dislocation_guard.context.match_id == 67 and w.sp.dislocation_guard.original == false,
+        "settling-period match replacement transfers original false, never temporary true")
+    w:go_live(); w:tick()
+    T.check(w.pawn.props["Block Spine Breaking"] == false and w.sp.dislocation_guard.ended,
+        "Live after the replacement restores the pawn's actual original false")
+end
+
+T.log("== replacement with the same pawn name never touches a cached native guard actor")
+do
+    local w = placed_world()
+    w:tick()
+    local old, name = w.pawn, w.pawn.id
+    old.props = nil
+    setmetatable(old, { __index = function() error("touched a replaced native guard actor") end })
+    w:new_pawn()
+    w.pawn.id = name
+    w.pawn.props["Block Spine Breaking"] = true
+    local ok, err = pcall(function() w:secs(3.5); w:go_live(); w:tick() end)
+    T.check(ok, "same-name actor replacement uses only the fresh current pawn", tostring(err))
+    T.check(w.pawn.props["Block Spine Breaking"] == true,
+        "replacement's original true never inherits the previous actor's false")
+end
+
+T.log("== a transient native guard restoration failure retries in the exact current Live life")
+do
+    local w = placed_world()
+    w.plan.match_id = 68
+    w:secs(3.5)
+    local set, attempts = w.env.prop_set, 0
+    w.env.prop_set = function(p, key, value)
+        if key == "Block Spine Breaking" and value == false then
+            attempts = attempts + 1
+            if attempts <= 2 then return false end
+        end
+        return set(p, key, value)
+    end
+    w:go_live(); w:tick()
+    T.check(attempts == 2 and w.pawn.props["Block Spine Breaking"] == true
+        and w.sp.dislocation_guard.original == false and not w.sp.dislocation_guard.ended,
+        "failed Live restoration retains the exact original false and stays explicitly incomplete")
+    w:tick()
+    T.check(attempts == 3 and w.pawn.props["Block Spine Breaking"] == false and w.sp.dislocation_guard.ended,
+        "fresh same world, actor, and full life retry restores original false after transient failure")
+    w:secs(1)
+    T.check(attempts == 3, "successful restoration ends retries without further native writes")
+end
+
+T.log("== a permanently failed native guard restoration blocks transfer without recapturing true")
+do
+    local w = placed_world()
+    w.plan.match_id = 64
+    w:secs(3.5)
+    local set, attempts = w.env.prop_set, 0
+    w.env.prop_set = function(p, key, value)
+        if key == "Block Spine Breaking" and value == false then attempts = attempts + 1; return false end
+        return set(p, key, value)
+    end
+    w:go_live(); w:secs(1)
+    T.check(attempts > 1 and T.contains(w:logtext(), "unavailable: restore failed")
+        and not w.sp.dislocation_guard.ended,
+        "permanent Live failure retries while eligible and remains explicitly unavailable")
+    local old_status, old_teleports = w:status(), w.teleports
+    w.mstate, w.mround = "countdown", 0
+    w:spawns(1, "Map_Arena_Slums", 517, 250, 853)
+    w.plan.match_id = 65
+    w:secs(3.5)
+    local g = w.sp.dislocation_guard
+    T.check(g and not g.ended and g.original == false and g.context.match_id == 64,
+        "failed restoration keeps original ownership unavailable instead of recapturing temporary true")
+    T.check(w.teleports == old_teleports and w:status().match_id == old_status.match_id
+        and w.sp.cur.plan.match_id == 64,
+        "new assignment cannot teleport or publish new placement evidence before guard transfer succeeds")
+    T.check(T.contains(w:logtext(), "placement held: native dislocation guard restoration unavailable"),
+        "held startup reports its native restoration blocker explicitly")
+end
+
+T.log("== native guard restoration requires live readback, not only a successful property call")
+do
+    local w = placed_world()
+    w:secs(3.5)
+    local set, ignore = w.env.prop_set, true
+    w.env.prop_set = function(p, key, value)
+        if ignore and key == "Block Spine Breaking" and value == false then return true end
+        return set(p, key, value)
+    end
+    w:go_live(); w:tick()
+    T.check(not w.sp.dislocation_guard.ended and w.pawn.props["Block Spine Breaking"] == true
+        and T.contains(w:logtext(), "unavailable: restore failed"),
+        "a successful setter with unchanged live flag never claims successful restoration")
+    ignore = false
+    w:tick()
+    T.check(w.sp.dislocation_guard.ended and w.pawn.props["Block Spine Breaking"] == false,
+        "retry completes only after the native live flag equals the saved original bool")
+end
+
+T.log("== real pawn diagnostics expose the live native dislocation flag without guessing")
+do
+    local env = SP.make_ue_env({ UEHelpers = {}, log = function() end })
+    local p = { ["Block Spine Breaking"] = false }
+    T.check(env.pawn_state(p).block_spine_breaking == false,
+        "real pawn diagnostics preserve an explicit native false")
+    p["Block Spine Breaking"] = true
+    T.check(env.pawn_state(p).block_spine_breaking == true,
+        "real pawn diagnostics preserve an explicit native true")
+    p["Block Spine Breaking"] = nil
+    T.check(env.pawn_state(p).block_spine_breaking == nil,
+        "missing native flag remains unavailable in pawn diagnostics")
 end

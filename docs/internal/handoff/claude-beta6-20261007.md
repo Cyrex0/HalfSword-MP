@@ -498,3 +498,38 @@ capture. The earlier session-12 sim=true capture did not prove that transition.
 One later initial pelvis/fence contact was observed despite zero immediate
 placement residual; do not claim the placement correction eliminates all native
 post-teleport contacts. The recovery branch was not exercised by this run.
+
+Native session 14/raw `20261007-230249-83f1b6-combat_manual` matched clean
+`6df78e27` (focused checks; full G0 still pending for this commit). Mutable
+simulation refresh executed 54 false-to-true transitions and captured states
+agreed with native reads. The repeat recipe completed six natural combat rounds,
+voided one loading timeout, and aborted its last loading round at its explicit
+240-second boundary. Successful control-release gaps were 37-318 ms. The first
+default loading round also failed: a left lowerarm remained near 178 degrees;
+the final recipe loading round had a right hand near 16 cm/45 degrees. Every
+recipe start had a native pelvis/fence contact. Save/process/crash teardown
+passed, but this is not a passing spawn/fairness acceptance run.
+
+The owner's next explicit priority is complete body/limb damage and native
+dismemberment. Static native proof explains two independent gaps. Joint
+dislocation checks DriverSkeleton/Mesh separation above 15 cm and the native
+`Block Spine Breaking` bool, independently of `Invulnerable` or Health. The
+candidate spawn-only guard preserves that bool through exact fresh ownership
+and restores it with readback before calling Live injury behavior normal.
+Astra found and required fixes for pre-placement reassignment and restoration
+retry leaks; final source approval is only for a matching native trial.
+
+Sharp severing uses separate stuck-weapon marker/geometry checks and delayed
+native component construction; authenticated Inside/GetDamage replay alone
+does not reproduce that path. Current mask sampling reads a legacy array, while
+decoded native completion writes a typed part map. Neither unreadable zero nor
+hidden bones alone proves intact/severed topology (camera hiding is possible).
+New read-only `body_probe`/`body_snapshot` telemetry must establish actual part
+HP, individually readable injury flags, arrays/map, native bones, cut boxes,
+constraints and constructed limb/armor/UpperBodyMesh components. It adds no
+native damage, trace or physics execution. Blueprint arbitrary/nested GD PRE
+remains unavailable; only our existing owner invocation can be bracketed with
+fresh PRE/POST. A proposed confirmed-mask consumer removes missing-limb servo
+targets and preserves physical exclusion through temporary source release;
+actual collision exclusion/restoration, corrected topology producer, detached
+components and authoritative cutting continuation are still required.
