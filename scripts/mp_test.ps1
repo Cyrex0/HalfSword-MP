@@ -105,7 +105,14 @@ param(
     # Extra .settings.json keys for every instance, as a JSON object (A/B switches such as
     # {"native_sample":true,"native_servo":true}). The instance's nick / server always win.
     [string]$ExtraSettings = "",
-    [string[]]$ServerArgs = @()
+    [string[]]$ServerArgs = @(),
+    # combat_manual only: arena, kit rules (free|classes|custom), each player's kit
+    # ("<class> [r=<id>] [l=<id>] [armor=<id,..>]"), and the dev switches after Live.
+    [string]$CombatArena = "",
+    [string]$CombatKit = "",
+    [string]$CombatKitRules = "",
+    [switch]$CombatAi,
+    [switch]$CombatProbe
 )
 
 $ErrorActionPreference = "Stop"
@@ -268,6 +275,32 @@ if ($CombatMode) {
     foreach ($step in $sc.steps) {
         if ($step.do -eq 'rcon' -and $step.cmd -eq 'MODE duel') { $step.cmd = "MODE $CombatMode" }
     }
+}
+if ($CombatArena -or $CombatKit -or $CombatKitRules -or $CombatAi -or $CombatProbe) {
+    # The first match is the real one: arena, kit rules and each player's kit are set in the
+    # lobby BEFORE the first START (no default-kit round to abort), and the dev switches go on
+    # once it is Live (HSMPParity `ai auto` keeps every later round on the AI too).
+    if ($Scenario -ne "combat_manual") { throw '-CombatArena/-CombatKit/-CombatKitRules/-CombatAi/-CombatProbe apply only to combat_manual.' }
+    $steps = New-Object System.Collections.Generic.List[object]
+    foreach ($step in $sc.steps) {
+        if ($CombatArena -and $step.do -eq 'rcon' -and "$($step.cmd)" -like 'MAP *') { $step.cmd = "MAP $CombatArena"; $step.pick = $CombatArena }
+        if ($CombatArena -and $step.do -eq 'mark' -and $step.name -eq 'start') { $step.arena = $CombatArena }
+        if ($step.do -eq 'rcon' -and $step.cmd -eq 'START') {
+            if ($CombatKitRules) { $steps.Add([pscustomobject]@{ do = 'rcon'; cmd = "KIT $CombatKitRules" }) }
+            if ($CombatKit) {
+                for ($k = 1; $k -le $Instances; $k++) { $steps.Add([pscustomobject]@{ do = 'client_cmd'; inst = $k; cmd = 'kit'; arg = $CombatKit }) }
+                $steps.Add([pscustomobject]@{ do = 'hold'; s = 3.0 / [Math]::Max($HoldScale, 0.001); why = 'kit selections reach the server before START (3 s real)' })
+            }
+        }
+        $steps.Add($step)
+        if ($step.do -eq 'mark' -and $step.name -eq 'manual_combat_ready') {
+            for ($k = 1; $k -le $Instances; $k++) {
+                if ($CombatAi) { $steps.Add([pscustomobject]@{ do = 'client_cmd'; inst = $k; cmd = 'parity'; arg = 'ai auto' }) }
+                if ($CombatProbe) { $steps.Add([pscustomobject]@{ do = 'client_cmd'; inst = $k; cmd = 'combat_probe'; arg = 'on' }) }
+            }
+        }
+    }
+    $sc.steps = $steps.ToArray()
 }
 if ($eff -eq "rcon" -and ($sc.requires -contains "debug_verbs") -and -not $caps.debug_verbs -and -not $DryRun) {
     Say "scenario $($sc.name) needs RCON debug verbs (hsmp-server --debug-verbs)" Red; exit 2
@@ -606,9 +639,30 @@ function Wait-Step($step, [int64]$since) {
 
 # Lay the game windows out side by side on the primary screen (each renders fully visible, no
 # overlap). Window placement only (SetWindowPos, no activation, no input, no ini change).
-if (-not ("HsmpWin" -as [type])) {
-    Add-Type -Namespace "" -Name HsmpWin -MemberDefinition @"
-[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool SetWindowPos(System.IntPtr h, System.IntPtr after, int x, int y, int cx, int cy, uint flags);
+if (-not ("HsmpWin2" -as [type])) {
+    # The game process owns two top-level windows: the UE4SS console (created first, so it is
+    # Process.MainWindowHandle) and the game's own "UnrealWindow". Only the latter is placed.
+    Add-Type -TypeDefinition @"
+using System; using System.Text; using System.Runtime.InteropServices;
+public static class HsmpWin2 {
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    public static IntPtr GameWindow(uint pid) {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((h, l) => {
+            uint p; GetWindowThreadProcessId(h, out p);
+            if (p != pid || !IsWindowVisible(h)) return true;
+            var sb = new StringBuilder(64); GetClassName(h, sb, 64);
+            if (sb.ToString() == "UnrealWindow") { found = h; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+}
 "@
 }
 function Place-GameWindow([int]$procId, [int]$i, [int]$n) {
@@ -622,10 +676,10 @@ function Place-GameWindow([int]$procId, [int]$i, [int]$n) {
         do {
             $pr = Get-Process -Id $procId -ErrorAction SilentlyContinue
             if (-not $pr) { return }
-            $hw = $pr.MainWindowHandle
+            $hw = [HsmpWin2]::GameWindow([uint32]$procId)
             if ($hw -ne [IntPtr]::Zero) {
                 # SWP_NOZORDER 0x4 | SWP_NOACTIVATE 0x10
-                [void][HsmpWin]::SetWindowPos($hw, [IntPtr]::Zero, $wa.X + ($i - 1) * $w, $wa.Y, $w, $h, 0x14)
+                [void][HsmpWin2]::SetWindowPos($hw, [IntPtr]::Zero, $wa.X + ($i - 1) * $w, $wa.Y, $w, $h, 0x14)
                 Say "game$i window placed at x=$($wa.X + ($i - 1) * $w) ($w x $h)"
                 return
             }
@@ -656,6 +710,18 @@ for ($i = 1; $i -le $Instances; $i++) {
         if ($w.code -ne 0) { Say "listen host never reached its lobby: $($w.out)" Red; HEvent "step_failed" @{ step = "host lobby_ready"; detail = $w.out } }
     }
 }
+
+# The engine re-applies its own window size/position while it finishes starting up (the
+# early placement above is undone and the windows end up stacked): place them again now
+# that every game is open, and once more when they first reach the lobby.
+function Place-AllGameWindows {
+    if ($FakeGame) { return }
+    foreach ($e in @($script:Tracked | Where-Object { $_.role -match '^game\d+$' })) {
+        if (Same-Process $e) { Place-GameWindow ([int]$e.pid) ([int]($e.role -replace '^game', '')) $Instances }
+    }
+}
+Place-AllGameWindows
+$script:WindowsReplaced = $false
 
 # --- 6. scenario steps -------------------------------------------------------------------------
 $since = if ($topology -eq "listen") { $launchSince } else { NowMs }
@@ -760,6 +826,7 @@ foreach ($s in $sc.steps) {
             $w = Wait-Step $s $since
             if ($w.code -ne 0) { $failed = $s; HEvent "step_failed" @{ step = $sj; detail = $w.out } ; Say "  FAILED: $($w.out)" Red }
             Discover-Children
+            if ($s.ev -eq "lobby_ready" -and -not $script:WindowsReplaced) { $script:WindowsReplaced = $true; Place-AllGameWindows }
         }
         "rcon" {
             $rr = Invoke-Gate @("rcon", "--addr", "127.0.0.1:$RconPort", "--password", $RconPw, $s.cmd)

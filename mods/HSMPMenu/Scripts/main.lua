@@ -2449,6 +2449,11 @@ local function autotest_dispatch(c)
         local t = math.tointeger(tonumber(c.arg))
         if not t then Log("AUTOTEST cmd #%s: team needs a number", tostring(c.id)); return end
         lobby.note_cmd = cmd_send("set_team", { team = t })
+    elseif name == "kit" then
+        -- the LOADOUT screen's class card + SAVE (classes.lua): worn from the next spawn
+        local ok, why = false, "no classes module"
+        if Classes and Classes.autotest_kit then ok, why = Classes.autotest_kit(tostring(c.arg or "")) end   -- "<class> [r=..] [l=..] [armor=a,b]"
+        Log("AUTOTEST cmd #%s: kit %s -> %s", tostring(c.id), tostring(c.arg), ok and "saved" or tostring(why))
     elseif name == "mods_accept" or name == "mods_decline" then
         -- the SERVER MODS screen's ACCEPT & JOIN / DECLINE buttons
         if not MX.Mods then Log("AUTOTEST cmd #%s: %s - no server_mods module", tostring(c.id), name); return end
