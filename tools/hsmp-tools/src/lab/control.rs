@@ -56,6 +56,17 @@ pub fn session(repo: &Path, dir: &Path, seconds: u64, fake: bool, server_args: &
     fs::create_dir_all(dir)?;
     let dir = dir.canonicalize()?;
     let mut cmd = Command::new("powershell.exe");
+    // Windows PowerShell must load its own built-in modules before inherited
+    // PowerShell 7 modules (the desktop runtime can place those first).
+    #[cfg(windows)]
+    if let Some(root) = std::env::var_os("SystemRoot") {
+        let builtin = PathBuf::from(root).join("System32/WindowsPowerShell/v1.0/Modules");
+        let mut paths = vec![builtin];
+        if let Some(inherited) = std::env::var_os("PSModulePath") {
+            paths.extend(std::env::split_paths(&inherited));
+        }
+        cmd.env("PSModulePath", std::env::join_paths(paths)?);
+    }
     cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(repo.join("scripts/mp_test.ps1"))
         .args([
@@ -84,7 +95,9 @@ pub fn session(repo: &Path, dir: &Path, seconds: u64, fake: bool, server_args: &
         extra.iter().all(|s| !s.contains(['\r', '\n'])),
         "invalid server argument"
     );
-    cmd.arg("-LabServerArgsJson").arg(server_args);
+    if !extra.is_empty() {
+        cmd.arg("-LabServerArgsJson").arg(server_args);
+    }
     quiet(&mut cmd);
     let mut child = cmd.spawn().context("start lab harness")?;
     let start = Instant::now();
@@ -179,7 +192,7 @@ impl Live {
         let start = Instant::now();
         loop {
             let v = self.status()?;
-            if v["phase"] == phase {
+            if v["phase"].as_str().is_some_and(|p| p.eq_ignore_ascii_case(phase)) {
                 return Ok(v);
             }
             ensure!(
@@ -268,7 +281,7 @@ impl Live {
                 f.seek(SeekFrom::Start(offset))?;
                 let mut tail = String::new();
                 f.read_to_string(&mut tail)?;
-                if let Some(line) = tail.lines().find(|s| s.contains(&needle)) {
+                if let Some(line) = tail.lines().find(|s| s.contains(&needle) && s.contains(" -> ")) {
                     ensure!(line.ends_with("-> saved"), "kit failed: {line}");
                     saved = true;
                 }
@@ -381,8 +394,8 @@ impl Live {
                 );
                 thread::sleep(Duration::from_millis(100));
             }
-            let commit = Command::new("git").args(["rev-parse", "HEAD"]).output()?;
-            let commit = String::from_utf8_lossy(&commit.stdout).trim().to_string();
+            let commit = self.config["deploy"]["commit"].as_str()
+                .unwrap_or("unknown deployed build (no commit stamp)");
             let mut c = Collector::new(&self.run, &recipe.name, &commit);
             let paths = collect::sources(&self.run)?;
             c.prime(&paths)?;
@@ -415,7 +428,7 @@ impl Live {
                     round_start = Instant::now();
                     last_claim = round_start;
                 }
-                if status["phase"] == "Live"
+                if status["phase"].as_str().is_some_and(|p| p.eq_ignore_ascii_case("Live"))
                     && (round_start.elapsed().as_secs() >= recipe.round_timeout_s
                         || (recipe.no_claim_timeout_s > 0
                             && last_claim.elapsed().as_secs() >= recipe.no_claim_timeout_s))
@@ -428,7 +441,7 @@ impl Live {
                     round_start = Instant::now();
                     last_claim = round_start;
                 }
-                if status["phase"] == "Lobby" {
+                if status["phase"].as_str().is_some_and(|p| p.eq_ignore_ascii_case("Lobby")) {
                     self.rcon("START")?;
                 }
                 for g in &self.games {

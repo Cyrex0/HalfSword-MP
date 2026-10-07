@@ -333,3 +333,35 @@ as well as other modes by the current universal protocol version check.
 Fresh G0, deployment, native lab sessions, typical p0_gate and twice-green release
 scenarios are still required. Version remains beta.5 until beta.6 is justified;
 no main push, tag or release is authorized.
+
+### 11. Native reproduction and focused development checks (2026-10-07)
+
+Test workflow milestone `db4860ee`: focused combat checks ran six Lua suites and
+115 Rust tests in 8.2 seconds including rebuild. Launcher ran 128 tests in 7.6 seconds.
+Full G0 remains the push checkpoint. Lua assertion counts are distinct from suite counts;
+native timing benchmarks are opt-in while allocation and delivery checks remain enabled.
+The reconnect ledger regression no longer retries after interference from other tests.
+
+Native session `test-results/lab/native-20261007-04` reached both real game instances
+and ran a five-minute sword/clothing recipe against deployed `9ccf61d15d`. Raw run:
+`test-results/20261007-200119-fc7120-combat_manual`. The owner observed repeated missing
+opponent health/HUD/collision and twisted spawn arms. The log reproduces one owner's
+vitals sampling stopping and the remote pose becoming stale, then releasing the stand-in.
+Round 9 recorded two AI handovers to different pawns less than one second apart; the
+first targeted a same-team pawn before the remote stand-in became ready. Ownership and
+fresh current-life readiness are under repair; this run does not certify fairness.
+
+The summary contains 435 exact native/replay claim pairs, but only 53 observed Health
+pairs. Their replay/native sum ratio is 0.8551 (exploratory bootstrap interval
+0.7498–0.9431), below the requested parity band and below the 200-pair minimum.
+Clock reset rate p90 is 23.93/min over 34 windows, above the 1/min bound. Rotation
+error at hits is unavailable. Acceptance is unavailable: inherited `RUST_LOG=warn`
+suppressed accepted decision records. Observed refusals remain recorded; lab startup
+now explicitly requests server INFO logging, and missing accepted logs cannot become
+a fabricated zero-percent acceptance result.
+
+The session closed normally: no new crash dumps; CRASH, DoD-12, NETSIM and STATE-1
+passed. That manual-harness verdict is not a p0, spawn, combat-parity or release verdict.
+User priority is real native evidence and playable/fair spawns before expanding gear
+sweeps. Three Sol agents at extra-high reasoning own pose/AI ownership, readiness/gear
+proof, and native combat diagnostics respectively. No main/tag/release is authorized.

@@ -314,6 +314,10 @@ if ($CombatArena -or $CombatKit -or $CombatKitRules -or $CombatAi -or $CombatPro
 if ($LabSession) {
     if ($Scenario -ne 'combat_manual' -or $LabOwnerPid -le 0) { throw 'Lab requires combat_manual and its owner PID.' }
     $LabSession = [IO.Path]::GetFullPath($LabSession)
+    # Rust canonical paths carry Win32 extended prefixes; Windows PowerShell's
+    # filesystem provider cannot Join-Path these even when .NET accepts them.
+    if ($LabSession.StartsWith('\\?\UNC\')) { $LabSession = '\\' + $LabSession.Substring(8) }
+    elseif ($LabSession.StartsWith('\\?\')) { $LabSession = $LabSession.Substring(4) }
     New-Item -ItemType Directory -Force $LabSession | Out-Null
     foreach ($step in $sc.steps) {
         if ($step.do -eq 'hold' -and $step.s -eq 1800) { $step.do = 'lab_session' }
@@ -613,6 +617,7 @@ if (Test-Path $MasterExe) {
     [void](Start-Tracked "master" $MasterExe @("--bind", "127.0.0.1:$MasterPort") (Join-Path $Run "master.log"))
 }
 $serverEnv = @{ NO_COLOR = "1"; HSMP_MASTER_URL = "http://127.0.0.1:$MasterPort" }
+if ($LabSession) { $serverEnv.RUST_LOG = 'hsmp_server=info' } # acceptance denominators require accepted-hit records
 if ($topology -eq "dedicated") {
     if (-not $caps.server_found) { Say "hsmp-server not found in $BinDir" Red; exit 2 }
     [void](Start-Tracked "server" $ServerExe (Server-Args 1) (Join-Path $Run "server.log") $Run $serverEnv)

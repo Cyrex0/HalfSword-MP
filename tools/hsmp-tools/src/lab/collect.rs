@@ -442,6 +442,18 @@ impl Collector {
         }
     }
     pub fn finish(&mut self) {
+        // A inherited WARN filter can hide accepted decisions while native
+        // replays still occur. Rejections alone cannot form an acceptance rate.
+        if self.summary.attackers.values().all(|a| a.accepted == 0)
+            && self.summary.counters.get("replay_blows").copied().unwrap_or(0) > 0
+        {
+            self.summary.metrics.remove("accept");
+            self.summary.metrics.remove("honest_accept");
+            let note = "Native replays exist but no accepted server decisions were logged; acceptance rates are unavailable (check the server log filter).";
+            if !self.summary.limitations.iter().any(|s| s == note) {
+                self.summary.limitations.push(note.into());
+            }
+        }
         self.summary.pairs.clear();
         self.summary.pair_evidence.clear();
         let mut ambiguous = 0;
@@ -602,6 +614,17 @@ mod tests {
             line,
             text: text.into(),
         }
+    }
+    #[test]
+    fn warn_only_decisions_do_not_report_zero_acceptance_when_replays_exist() {
+        let mut c = Collector::new(Path::new("fixture"), "sword-cloth", "abc");
+        c.ingest(ev("damage rejected attacker_id=1 target=2 hit_id=7 reason=parried", 1));
+        c.ingest(ev("HIT from peer 1 (#8) bone=head vel=450 rig=0.50 cut=20 stab=0.00: dmg Health -1.00 [Health-1.0]", 2));
+        c.finish();
+        assert_eq!(c.summary.attackers["1"].rejected, 1);
+        assert!(c.summary.values("accept").is_empty());
+        assert!(c.summary.values("honest_accept").is_empty());
+        assert!(c.summary.limitations.iter().any(|s| s.contains("acceptance rates are unavailable")));
     }
     #[test]
     fn duplicate_cached_and_ambiguous_blows_do_not_inflate_parity() {
