@@ -50,6 +50,16 @@ D.HS = (function()
     end
     return nil
 end)()
+D.SpawnReady = (function()
+    local ok, module = pcall(require, "hsmp_spawn_ready")
+    if ok and type(module) == "table" then return module end
+    local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+    local directory = source:match("^(.*)[/\\]") or "."
+    for _, path in ipairs({ directory .. "/hsmp_spawn_ready.lua", directory .. "/../../shared/hsmp_spawn_ready.lua" }) do
+        local loaded, value = pcall(dofile, path)
+        if loaded and type(value) == "table" then return value end
+    end
+end)()
 
 -- The IPC facade the Director talks through: env.ipc (tests) or this Lua
 -- state's shared/hsmp_ipc.lua (HSMP_IPC). nil = IPC unavailable.
@@ -1460,10 +1470,16 @@ function Dir:step_pipeline(w, s)
         local pawn = env.pawn()
         if not pawn or env.pawn_id(pawn) ~= p.pawn_id then return self:restart_pawn() end
         local vis, detail = env.census(pawn)
+        local combat_ready, combat_why = true, nil
+        if env.combat_ready then combat_ready, combat_why = env.combat_ready(p, s, pawn) end
+        if not combat_ready and p.combat_wait_reason ~= combat_why then
+            p.combat_wait_reason = combat_why
+            env.log("director: Ready waits for combat spawn proof: %s", tostring(combat_why))
+        end
         if vis == nil then
             -- The world is still settling (no Willie walk yet): wait;
             -- give up only well past the census window
-            if age > D.T.census_s + 5 then self:next_step("unavailable(" .. tostring(detail) .. ")") end
+            if not env.combat_ready and age > D.T.census_s + 5 then self:next_step("unavailable(" .. tostring(detail) .. ")") end
             return false
         end
         local expected = s.remote_fighters or 0
@@ -1477,7 +1493,7 @@ function Dir:step_pipeline(w, s)
         -- census_missing_s (far inside the server's 45 s load barrier);
         -- extras are judged at census_s.
         local limit = (vis or 0) < expected and D.T.census_missing_s or D.T.census_s
-        if settled or age > limit then
+        if (settled and combat_ready) or (not env.combat_ready and age > limit) then
             local extras = math.max(0, (vis or 0) - expected)
             self:ev("willie_census", { visible = (vis or 0) + 1, expected = expected + 1, extras = extras,
                 missing = math.max(0, expected - (vis or 0)), at = "ready", round = p.round, detail = detail })
@@ -1491,6 +1507,16 @@ function Dir:step_pipeline(w, s)
     elseif step == "ready" then
         local pawn = env.pawn()
         if not pawn or env.pawn_id(pawn) ~= p.pawn_id then return self:restart_pawn() end
+        if env.combat_ready then
+            local ready, why = env.combat_ready(p, s, pawn)
+            if not ready then
+                if p.combat_wait_reason ~= why then
+                    p.combat_wait_reason = why
+                    env.log("director: Ready waits for combat spawn proof: %s", tostring(why))
+                end
+                return false
+            end
+        end
         -- HSMPSync's watchdog may be re-placing the pawn right now (pushed off
         -- its spawn after the place step): Ready waits for that placement to be
         -- verified and then reports against its destination. Reporting in the
@@ -1910,7 +1936,10 @@ function Dir:update_freeze(s, pawn)
     local env = self.env
     local in_arena = s.exists and self.wshort ~= nil and self.wshort == self.target and self.in_match
     -- Reconnecting: the world stays as it is, the player cannot act.
-    local frozen = in_arena and not (self.state == "Live" and s.phase == "live" and s.alive[s.my_id] ~= false
+    local verified = self.ready_context and self.ready_context.world == self.wkey
+        and pawn and self.ready_context.pawn == env.pawn_id(pawn) and self.ready_round == s.round
+        and self.load_error == nil
+    local frozen = in_arena and not (verified and self.state == "Live" and s.phase == "live" and s.alive[s.my_id] ~= false
         and self.conn.state == "ok")
     if frozen and pawn then
         local id = env.pawn_id(pawn)
@@ -2116,6 +2145,10 @@ function D.make_ue_env(ctx)
     -- Fresh lookup every call: a pawn is never cached across ticks here.
     function env.pawn()
         local p
+        -- A native stand-in spawn can temporarily possess another Willie.
+        -- The verified AI-held fighter remains this life's owner throughout.
+        if WG.ai_pawn then p = WG.ai_pawn() end
+        if p then return p end
         pcall(function()
             local pc = (WG.pc and WG.pc() or UEH.GetPlayerController())
             if pc and pc:IsValid() then
@@ -2124,7 +2157,6 @@ function D.make_ue_env(ctx)
             end
         end)
         -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
-        if not p and WG.ai_pawn then p = WG.ai_pawn() end
         return p
     end
     function env.pawn_id(p)
@@ -2247,6 +2279,64 @@ function D.make_ue_env(ctx)
             end
         end)
         return vis, table.concat(parts, ",")
+    end
+
+    local spawn_ready = D.SpawnReady and D.SpawnReady.new()
+    function env.combat_ready(p, s, own)
+        if not spawn_ready then return false, "spawn proof helper unavailable" end
+        if WG and WG.settled and not WG.settled() then return false, "world settling" end
+        local I = ipc_of(env)
+        if not I or not I.rec or not I.peer_rec or not I.bus_table then return false, "spawn proof IPC unavailable" end
+        local mode = D.HS and D.HS.mode and D.HS.mode({ ipc = I, clock = env.now })
+        local names, playback, actors = {}, {}, {}
+        for _, row in ipairs((I.bus_table("puppets") or {}).rows or {}) do names[row.peer] = row.name end
+        for _, row in ipairs((I.bus_table("playback") or {}).rows or {}) do playback[row.peer] = row end
+        -- Look up this world's actors once. No UObject survives this call.
+        local read = pcall(function()
+            for _, actor in pairs(FindAllOf("Willie_BP_C") or {}) do
+                if actor and actor:IsValid() then actors[env.pawn_id(actor)] = actor end
+            end
+        end)
+        if not read then return false, "native stand-in lookup unavailable" end
+        local remotes = {}
+        for _, row in ipairs(s.roster or {}) do
+            local mode_row = mode and mode.match_id == p.match_id and mode.round == p.round and mode.rows[row.id]
+            local participating = s.phase ~= "live" or (row.alive ~= false
+                and (not mode_row or (mode_row.alive ~= false and mode_row.respawning ~= true)))
+            if row.id ~= s.my_id and row.role == "fighter" and participating then
+                local id, name = row.id, names[row.id]
+                local source = {}
+                local slot = I.peer_slot and I.peer_slot(id)
+                if slot ~= nil and I.peer_play then I.peer_play(slot, source) end
+                local life = mode_row and mode_row.life or (p.round ~= s.round and 1 or nil)
+                local actor, native = name and actors[name], {}
+                if actor and actor ~= own then
+                    pcall(function() native.alive = actor.Health > 0 and actor.DED == false end)
+                    local best, best_score
+                    for _, field in ipairs({ "SK_Skeleton", "BoneCore", "DriverSkeleton", "Mesh" }) do
+                        pcall(function()
+                            local mesh = actor[field]
+                            if mesh and mesh:IsValid() then
+                                local sim = mesh:IsSimulatingPhysics(FName("Pelvis")) == true
+                                local score = (sim and 2 or 0) + (mesh:IsVisible() == true and 1 or 0)
+                                if best_score == nil or score > best_score then best, best_score = mesh, score end
+                            end
+                        end)
+                    end
+                    pcall(function()
+                        local collision = best and best:GetCollisionEnabled()
+                        native.collision = actor:GetActorEnableCollision() == true
+                            and best:IsSimulatingPhysics(FName("Pelvis")) == true and (collision == 2 or collision == 3)
+                    end)
+                end
+                remotes[#remotes + 1] = { peer = id, pawn = name, match_id = p.match_id, round = p.round,
+                    life = life, source = source, playback = playback[id], vitals = I.peer_rec("peer_vitals", id), native = native }
+            end
+        end
+        local sampling = I.sample_status and I.sample_status()
+        return spawn_ready:check({ world = p.key, own = { match_id = p.match_id, round = p.round,
+            life = p.verified_life or p.life, pawn = p.pawn_id }, root = I.rec("local_root"),
+            pose = sampling and sampling.pose, vitals = I.rec("vitals"), remotes = remotes, now_ms = env.now() * 1000 })
     end
 
     function env.freeze(p, on)

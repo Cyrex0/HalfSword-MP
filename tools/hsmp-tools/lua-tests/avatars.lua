@@ -36,6 +36,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "bodyheight" })
+    T.isolated(T.script, "case", { kind = "ai_owner" })
     return
 end
 
@@ -52,7 +53,7 @@ local function peer_root(id, tick, x, y, z)
 end
 
 local function boot(register_ok)
-    M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7" }, strict = true })
+    M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_DEV = opts.kind == "ai_owner" and "1" or nil }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -79,16 +80,45 @@ local function boot(register_ok)
     return HSMP_AVATARS_TEST.api
 end
 
--- The sidecar (typed): its `link` record + header heartbeat, and the peer directory
--- (the sidecar allocates an entry for every connected roster peer, lobby included).
--- peers: { {id, nick}, ... }
+-- The sidecar (typed): its link + header heartbeat and peer directory.
 local function sidecar(peers)
     local N = _G.HSMPNative
-    N.sc_put("link", { status = 1, state = 1, my_peer_id = 1 })   -- CONNECTED, UP
+    N.sc_put("link", { status = 1, state = 1, my_peer_id = 1 })
     N._st.hb_age = 0.05
     local e = {}
     for _, p in ipairs(peers) do e[#e + 1] = { id = p[1], nick = p[2] } end
     N.sc_peer_dir(e)
+end
+
+if opts.kind == "ai_owner" then
+    local api = boot(true)
+    local me = M.new_obj("Willie_BP_C", "AI_OWNER"); rawset(me, "__addr", 7701)
+    local foreign = M.new_obj("Willie_BP_C", "TEMPORARY"); rawset(foreign, "__addr", 7702)
+    local ai = M.new_obj("AI_BP_C", "AI_CONTROLLER")
+    me.__props.Health, me.__props.Player, me.__props.Controller = 100, false, ai
+    foreign.__props.Controller, M.pc.__props.Pawn = M.pc, foreign
+    FindAllOf = function(c) if c == "Willie_BP_C" then return {me, foreign} end end
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session", {seq=1,match_id=93,round=1,phase=3,rows={{peer_id=1,spawn_id=256}}})
+    HSMPNative.sc_put("mode", {seq=1,match_id=93,round=1,rows={{peer_id=1,life=1}}})
+    HSMP_IPC.bus_put("spawn_status", {verified=true,pawn="AI_OWNER",match_id=93,round=1,life=1,spawn_id=256})
+    local releases, possessions = 0, 0
+    M.Methods.UnPossess = function(self)
+        releases = releases + 1
+        if self.__props.Pawn then self.__props.Pawn.__props.Controller = nil end
+        self.__props.Pawn = nil
+    end
+    M.Methods.Possess = function(self,pawn) possessions=possessions+1;self.__props.Pawn=pawn;pawn.__props.Controller=self end
+    T.check(api.local_pawn() == me, "verified AI fighter takes priority over a temporary native PC pawn")
+    api.PX.keep_pawn = {pawn=me,gen=api.generation(),until_tick=9999}
+    api.PX.keep_possession()
+    T.check(releases==1 and possessions==0 and M.pc.__props.Pawn==nil and me.__props.Controller==ai,
+        "delayed stand-in swap releases only the foreign PC possession and preserves the fighter AI")
+    M.pc.__props.Pawn = foreign; foreign.__props.Controller = M.pc
+    me.__props.Player, me.__props.Controller = true, nil
+    api.PX.restore_spawn_possession(me,M.pc)
+    T.check(possessions==1 and M.pc.__props.Pawn==me,
+        "normal human stand-in spawning restores the original possessed fighter")
 end
 
 if opts.kind == "hook" then

@@ -355,10 +355,11 @@ end
 local function local_pawn()
     local pc = PCF.get()
     if not pc or not pc:IsValid() then return nil end
+    local owned = PCF.aip and PCF.aip.ai_pawn_lookup and PCF.aip.ai_pawn_lookup()
+    if owned then return owned end
     local p = pc.Pawn
     if p and p:IsValid() then return p end
-    -- the game's own AI drives our pawn (dev, HSMPParity `ai on`; shared/hsmp_wg.lua)
-    return PCF.aip and PCF.aip.ai_pawn_lookup and PCF.aip.ai_pawn_lookup() or nil
+    return nil
 end
 
 local function busy(w)

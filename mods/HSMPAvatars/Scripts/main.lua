@@ -328,14 +328,16 @@ local function local_pc()
     return nil
 end
 
-local function local_pawn()
-    local pc = local_pc()
+local function local_pawn(pc)
+    pc = pc or local_pc()
     if not pc then return nil end
-    local p = pc.Pawn
-    if p and p:IsValid() then return p end
     -- the game's own AI drives our pawn (dev, HSMPParity `ai on`; shared/hsmp_wg.lua)
     if TUNE.aip == nil then TUNE.aip = load_module("hsmp_wg") or false end
-    return TUNE.aip and TUNE.aip.ai_pawn_lookup() or nil
+    local ai = TUNE.aip and TUNE.aip.ai_pawn_lookup() or nil
+    if ai then return ai end
+    local p = pc.Pawn
+    if p and p:IsValid() then return p end
+    return nil
 end
 
 -- UObject identity by address: two userdata wrappers of the same object are
@@ -1756,6 +1758,22 @@ local function candidate_willies()
     return ai, idle
 end
 
+-- A native stand-in spawn may possess its new body even while the original
+-- fighter is AI-driven. Release that foreign possession without stealing the
+-- original fighter back from its verified AI controller. Human control keeps
+-- the normal restoration path.
+function PX.restore_spawn_possession(pawn, pc)
+    if not (pc and pc:IsValid() and pawn and pawn:IsValid() and (willie_health(pawn) or 1) > 0) then return nil end
+    if TUNE.aip == nil then TUNE.aip = load_module("hsmp_wg") or false end
+    local ai = TUNE.aip and TUNE.aip.ai_pawn_lookup() or nil
+    if ai and same(ai, pawn) then
+        pc:UnPossess()
+        return "released the temporary pawn; original fighter keeps its AI"
+    end
+    pc:Possess(pawn)
+    return "re-possessed the original pawn"
+end
+
 -- Last resort: have the arena spawn more natively booted foes.
 -- count: how many bodies are missing in total (every fresh peer without a
 -- stand-in, not the running count of the claim loop); ats: the poses of the
@@ -1867,10 +1885,10 @@ local function request_native_foes(count, ats, peers)
     local ok = pcall(function() lm["Spawn Combatants"](lm) end)
     Log("fallback: BP_LevelManager:SpawnCombatants(%d) call %d/%d ok=%s",
         count, spawn_calls, SPAWN_MAX, tostring(ok))
-    local after = local_pawn()
-    if pc and before and before:IsValid() and not same(after, before) then
-        pcall(function() pc:Possess(before) end)
-        Log("fallback: SpawnCombatants changed our pawn; re-possessed the original")
+    local after; pcall(function() after = pc and pc.Pawn end)
+    if pc and before and before:IsValid() and after and after:IsValid() and not same(after, before) then
+        local ok, how = pcall(PX.restore_spawn_possession, before, pc)
+        Log("fallback: SpawnCombatants changed our possession; %s", ok and how or "original pawn unavailable")
     end
     -- The native spawn possesses its new pawn a few frames LATER (36 ms after
     -- this call, past the check above). Guard the original (already placed)
@@ -1887,16 +1905,11 @@ function PX.keep_possession()
     local k = PX.keep_pawn
     if not k then return end
     if k.gen ~= world_gen or tick_num > k.until_tick then PX.keep_pawn = nil; return end
-    local cur = local_pawn()
-    if cur and not same(cur, k.pawn) then
-        local ok = false
-        pcall(function()
-            if k.pawn:IsValid() and (willie_health(k.pawn) or 1) > 0 then
-                local pc = local_pc()
-                if pc and pc:IsValid() then pc:Possess(k.pawn); ok = true end
-            end
-        end)
-        Log("fallback: native spawn swapped our possession; %s", ok and "re-possessed the original pawn" or "original pawn gone - kept the new one")
+    local pc, cur = local_pc(), nil
+    pcall(function() cur = pc and pc.Pawn end)
+    if cur and cur:IsValid() and not same(cur, k.pawn) then
+        local ok, how = pcall(PX.restore_spawn_possession, k.pawn, pc)
+        Log("fallback: native spawn swapped our possession; %s", ok and how or "original pawn gone - kept the new one")
         PX.keep_pawn = nil
     end
 end
@@ -3950,12 +3963,7 @@ local function on_tick()
     end
     -- Let HSMPSync finish possessing our own Willie first, so neither mod can
     -- mistake the other's Willie during spawn.
-    local me
-    pcall(function() local p = pc.Pawn; if p and p:IsValid() then me = p end end)
-    if not me then   -- our AI-driven pawn (dev `ai on`, shared/hsmp_wg.lua)
-        if TUNE.aip == nil then TUNE.aip = load_module("hsmp_wg") or false end
-        me = TUNE.aip and TUNE.aip.ai_pawn_lookup() or nil
-    end
+    local me = local_pawn(pc)
     if not me then return end
     -- Nothing touches Willies in the first PX.WORLD_SETTLE_S of a world: the
     -- previous world is still being purged incrementally and the new world's
@@ -4296,7 +4304,7 @@ Log("loaded; state_dir=%s (puppet mode, per-frame PhysicsHandle pose control fro
 -- Offline test hook (`hsmp-tools lua-test avatars`): never set in game.
 if rawget(_G, "HSMP_AVATARS_TEST") then
     HSMP_AVATARS_TEST.api = {
-        tick_hook = tick_hook, on_tick = on_tick,
+        tick_hook = tick_hook, on_tick = on_tick, local_pawn = local_pawn,
         parse_standin_dead = DH.parse, combat_declared_dead = DH.declared,
         puppets = function() return puppets end,
         set_puppet = function(id, p) puppets[id] = p end,

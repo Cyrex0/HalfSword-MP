@@ -365,3 +365,22 @@ passed. That manual-harness verdict is not a p0, spawn, combat-parity or release
 User priority is real native evidence and playable/fair spawns before expanding gear
 sweeps. Three Sol agents at extra-high reasoning own pose/AI ownership, readiness/gear
 proof, and native combat diagnostics respectively. No main/tag/release is authorized.
+
+The next source checkpoint fixes verified AI ownership across temporary native PC
+possession, queues AI takeover until fresh current-life pose/vitals/native collision,
+and binds takeover once to the verified fighter life. Director readiness uses actual
+successful pose writes and advancing vitals on both sides rather than visible census
+or elapsed time. Pending placed vitals and poses relay during Loading; verified DM
+respawn initialization relays without reviving the seat or mutating the combat ledger.
+Old-round/life death state cannot mark a newly displayed pending stand-in dead.
+
+Focused evidence: pose domain four Lua suites/115 Rust tests in 10.5 seconds;
+Director/kit/loadout 462 checks; Combat 319 and protection/trace 19 checks; four real
+server record-flow tests including initial/DM initialization; native API/sampling
+tests retain zero allocation growth over 10,000 frames. These are offline checks.
+`spawn-fairness` is a 240-second AI recipe with probe disabled for the next native
+spawn/collision run. Native diagnostics record DCD outputs, nested GD values and
+ordered trace hits/tags under probe, using exact claim/life IDs and no extra native
+damage or trace calls. Actual native hook output and fixed-spawn behavior still
+require a new deployed run. Exact armour-passport verification remains unfinished;
+`gear_verify.lua` is a draft helper, not integrated proof of all loadouts.

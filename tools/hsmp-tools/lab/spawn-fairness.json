@@ -1,0 +1,39 @@
+{
+  "name": "spawn-fairness",
+  "arena": "Yard",
+  "mode": "duel",
+  "kit_rules": "custom",
+  "kits": [
+    "duelist r=w_arming3 l= armor=b_tunic,l_hosen3,f_shoes1",
+    "duelist r=w_arming3 l= armor=b_tunic,l_hosen3,f_shoes1"
+  ],
+  "ai": true,
+  "probe": false,
+  "tune": {
+    "impact_dv": 300,
+    "impact_ms": 200,
+    "grips": 1,
+    "downed_world": 1
+  },
+  "duration_s": 240,
+  "round_timeout_s": 60,
+  "no_claim_timeout_s": 45,
+  "commands": [],
+  "bounds": {
+    "proxy.rotation_deg": {
+      "max": 10,
+      "min": null,
+      "min_samples": 200
+    },
+    "clock_resets_per_min": {
+      "max": 1,
+      "min": null,
+      "min_samples": 20
+    },
+    "honest_accept": {
+      "max": null,
+      "min": 0.97,
+      "min_samples": 200
+    }
+  }
+}

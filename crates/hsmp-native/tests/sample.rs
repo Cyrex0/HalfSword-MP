@@ -480,6 +480,9 @@ fn native_sampling_g1() {
             weapon_actor = WEAPON, weapon_tick = 1, weapon_ts = 1000, weapon_id = 5, weapon_held = 1 }
         local mask, err = N.sample_local(a)
         assert(mask == 7 and err == nil, "mask " .. tostring(mask) .. " " .. tostring(err) .. " " .. repr(N.sample_status()))
+        local proof = N.sample_status().pose
+        assert(proof and proof.tick == 1 and proof.ts == 1000.5 and proof.match_id == 1
+            and proof.round == 1 and proof.life == 1, "actual native pose write has original generation")
         local wrong={root_pawn=WEAPON,pawn=PAWN,root_tick=2,root_ts=1001,context=a.context}
         local wrong_mask,wrong_err=N.sample_local(wrong)
         assert(wrong_mask==0 and wrong_err=="skip:root_context_pawn","root must use original pose pawn")
@@ -505,6 +508,7 @@ fn native_sampling_g1() {
         for i = 6, 37 do c[i] = 0 end
         c[20], c[21], c[22], c[23], c[24], c[25], c[26], c[27] = 1, 0, 0, 10, 20, 5, 6, 7
         assert(N.put_pose(1, 1000.5, 16, 0, b, w, c,nil,nil,a.context))
+        assert(same(N.sample_status().pose, proof), "Lua pose writer publishes the same actual write proof")
         local _, root_l = N.get("local_root", -1)
         local _, wpn_l = N.get("local_weapon", -1)
         local _, pose_l = N.get("local_pose", -1)
@@ -533,10 +537,15 @@ fn native_sampling_g1() {
         assert(not N.put_pose(1,1000.5,16,0,b,ww,c,{boxes,boxes},strikers,context),"invalid explicit generation must fail, not become legacy")
         local _, unchanged=N.get("local_pose",-1)
         assert(same(unchanged,shaped_lua),"invalid context must not replace last valid pose")
+        assert(N.sample_status().pose.life == 65535, "refused write cannot replace successful proof")
         context.life=65535
+        assert(N.put_root(2,1001,100,200,300,1,2,3,7,8,9,{match_id=1,round=1,life=2}))
+        assert(N.sample_status().pose == nil, "new root generation invalidates prior pose proof")
+        assert(N.put_pose(2,1001,16,0,b,ww,c,{boxes,boxes},strikers,context))
 
         -- world rules
         assert(N.world_leaving())
+        assert(N.sample_status().pose == nil, "world leave clears pose write proof")
         local m3, e3 = N.sample_local(a)
         assert(m3 == nil and e3 == "world", tostring(e3))
         assert(N.world_ready("w2"))

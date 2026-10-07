@@ -364,11 +364,16 @@ end
 -- FindAllOf per Get Damage call; the hooks bail before calling this when no
 -- stand-in exists (single-player, the menu).
 local function local_pawn()
+    -- A dev AI takeover deliberately unpossesses our verified pawn. Native
+    -- Spawn Combatants can briefly possess another Willie during stand-in
+    -- allocation; that controller pawn must not replace our body/vitals owner.
+    local ai = WG.ai_pawn()
+    if ai then return ai end
     local pc = WG.pc()
     if not pc or not pc:IsValid() then return nil end
     local p = pc.Pawn
     if p and p:IsValid() then return p end
-    return WG.ai_pawn()   -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
+    return nil
 end
 
 local function body_mesh(w)
@@ -1071,6 +1076,81 @@ function C3.probe_measure(w)
     return string.format("dmg Health %+.6f [%s]",current[1]-baseline.f[1],fmt_fields(diff(baseline.f,current)))
 end
 
+-- Developer-only plain scalar evidence. The six DCD outputs are reflected
+-- enum/double/bool params, never armour inventory guesses or SoftObject values.
+function C3.native_scalar(v)
+    if type(v)=="boolean" then return tostring(v) end
+    if type(v)=="number" and v==v and math.abs(v)<math.huge then return string.format("%.17g",v) end
+    return "unavailable"
+end
+function C3.native_zone(w)
+    local value;pcall(function() value=w["Last Hit Body Part"] end)
+    return C3.native_scalar(value)
+end
+function C3.dcd_evidence(args,hook)
+    local names={"Hit Surface","Damage Out","Cutting Rate Out","Rigidity Out","Material Density Out","Lower Threshold Out"}
+    local keys={"surface","damage","cp","rigidity","density","lower"}
+    local rows={}
+    for i,name in ipairs(names) do
+        local value
+        if hook then value=pv(args[i]) else
+            -- UE4SS copies out params into named fields of supplied tables.
+            -- Search all six slots; absent/copy-out-failed stays unavailable.
+            for slot=18,23 do
+                local out=args[slot]
+                if type(out)=="table" and out[name]~=nil then value=out[name];break end
+            end
+        end
+        rows[#rows+1]="dcd_"..keys[i].."="..C3.native_scalar(value)
+    end
+    return table.concat(rows," ")
+end
+function C3.gd_evidence(w,bone,raw,cut,draw,pain,inside,lower,applied)
+    local b;pcall(function() b=pv(bone):ToString() end)
+    return string.format("bone:%s,zone:%s,raw:%s,cp:%s,draw:%s,pain:%s,inside:%s,lower:%s,out:%s",
+        tostring(b or "unavailable"),C3.native_zone(w),C3.native_scalar(pv(raw)),C3.native_scalar(pv(cut)),
+        C3.native_scalar(pv(draw)),C3.native_scalar(pv(pain)),C3.native_scalar(pv(inside)),
+        C3.native_scalar(pv(lower)),C3.native_scalar(pv(applied)))
+end
+function C3.log_native_evidence(side,d,attacker,detail,cid)
+    if not C3.native_probe then return end
+    Log("LAB_NATIVE side=%s attacker=%s target=%s cid=%s parent_cid=%s match=%s round=%s attacker_life=%s victim_life=%s bone=%s %s",
+        side,tostring(attacker),tostring(d.target_peer_id or d.peer or my_peer_id),tostring(cid or d.hit_id or d.cid),
+        tostring(d.parent_cid or 0),tostring(d.match_id),tostring(d.round),tostring(d.attacker_life),tostring(d.victim_life),
+        tostring(d.bone),detail or "native_evidence=unavailable")
+end
+
+-- POST armour construction: installed proxy meshes/tags/passports, separate
+-- from the layers crossed by a particular DCD trace. Disabled probes read no
+-- parameters; the hook owns no UObject cache across callbacks/worlds.
+C3.armor_audit = load_module("native_protection_audit")
+if C3.armor_audit then
+    C3.armor_audit=C3.armor_audit.new({
+        enabled=function() return C3.native_probe and WG.check() and WG.settled() end,
+        unwrap=pv,log=Log,
+        context=function(w)
+            local own_pawn=local_pawn()
+            local peer=own_pawn and same(w,own_pawn) and my_peer_id or puppet_peer[wname(w) or ""]
+            local ctx=peer and (peer==my_peer_id and C3.life_for(peer,true) or C3.displayed_for(peer,w)) or nil
+            return {peer=peer,match_id=ctx and ctx.match_id,round=ctx and ctx.round,life=ctx and ctx.life}
+        end,
+    })
+end
+
+function C3.native_trace_post(_,worldp,startp,endp,radiusp,objectsp,complexp,ignoreactorsp,debugp,hitsp,ignoreselfp,colorp,hitcolorp,timep,returnedp)
+    if not C3.native_probe or not replaying or not C3.replay_trace or not C3.armor_audit then return end
+    if not WG.check() or not WG.settled() then return end
+    local world_context=pv(worldp)
+    local trace=C3.replay_trace
+    if not world_context or not world_context:IsValid() or addr_of(world_context)~=trace.pawn then return end
+    trace.proxy_trace_calls=(trace.proxy_trace_calls or 0)+1
+    trace.proxy_trace_samples=trace.proxy_trace_samples or {}
+    if #trace.proxy_trace_samples<8 then
+        trace.proxy_trace_samples[#trace.proxy_trace_samples+1]=C3.armor_audit.trace(startp,endp,radiusp,objectsp,complexp,hitsp,ignoreselfp,returnedp)
+            or "native_trace=unavailable"
+    else trace.proxy_trace_truncated=true end
+end
+
 -- The owner's passport body on stand-ins (standin_body.lua): my own body into
 -- the `body2` slot, each peer's `peer_body2` onto its proven stand-in life.
 C3.BODY = load_module("standin_body")
@@ -1244,8 +1324,19 @@ end
 -- After-callback of Willie_BP "Deal Complex Damage" (the call has run).
 local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Location, Normal,
                           HitVelocity, HitImpulse, CuttingPower, StabRate, Rigidity, BluntInt,
-                          LowerThreshold, DamageParent, KickPower, HitBox, ExtraHigh, DrawCut)
-    if replaying then return end
+                          LowerThreshold, DamageParent, KickPower, HitBox, ExtraHigh, DrawCut,
+                          HitSurfaceOut, DamageOut, CuttingOut, RigidityOut, DensityOut, LowerOut)
+    if replaying then
+        if C3.native_probe and C3.replay_trace then
+            local w=pv(selfp)
+            local trace=C3.replay_trace
+            if w and w:IsValid() and addr_of(w)==trace.pawn then
+                trace.dcd_calls=(trace.dcd_calls or 0)+1
+                trace.dcd=C3.dcd_evidence({HitSurfaceOut,DamageOut,CuttingOut,RigidityOut,DensityOut,LowerOut},true)
+            end
+        end
+        return
+    end
     if next(puppet_peer) == nil and next(puppet_weapon) == nil then return end
     local w = pv(selfp)
     if not w or not w:IsValid() then return end
@@ -1299,9 +1390,10 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         local pl = native_probe_sample
         local v = vec(pv(HitVelocity))
         local b = ""; pcall(function() b = pv(HitBone):ToString() end)
-        probe_text=(gate~=false and pl and pl.name==nm and pl.bone==b and pl.source and pl.source==addr_of(coll)
-            and now_ms()-pl.at>=0 and now_ms()-pl.at<50) and pl.text
-            or "dmg Health unavailable [original native Get Damage sample absent]"
+        local matched=gate~=false and pl and pl.name==nm and pl.bone==b and pl.source and pl.source==addr_of(coll)
+            and now_ms()-pl.at>=0 and now_ms()-pl.at<50
+        probe_text=matched and pl.text or "dmg Health unavailable [original native Get Damage sample absent]"
+        if not matched then native_probe_sample=nil end
         Log("PROBE native on peer %s bone=%s vel=%.0f rig=%.2f cut=%.0f stab=%.2f: %s", tostring(peer), b,
             math.sqrt(v[1] ^ 2 + v[2] ^ 2 + v[3] ^ 2), num(pv(Rigidity)), num(pv(CuttingPower)), num(pv(StabRate)),
             probe_text)
@@ -1388,6 +1480,9 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         match_id = mine.match_id, round = mine.round, attacker_life = mine.life, victim_life = theirs.life, hit_box = hit_box,
         source_class=source_class,hit_box_frame=box_frame,
         probe=probe_text,probe_attacker=my_peer_id,
+        native_evidence=C3.native_probe and ("last_zone="..C3.native_zone(w).." "..
+            C3.dcd_evidence({HitSurfaceOut,DamageOut,CuttingOut,RigidityOut,DensityOut,LowerOut},true)..
+            " gd="..(native_probe_sample and native_probe_sample.trace or "unavailable")) or nil,
         ats = now_ms(), vts = vts, vats = vats, loc = loc, nrm = nrm, off = off,
     }
     CX.pending[#CX.pending + 1] = rec
@@ -1478,6 +1573,11 @@ local function on_get_damage(selfp, Impulse, Velocity, Location, Normal, bone, R
             trace.raw=tonumber(pv(RawDamage));trace.cut=tonumber(pv(CuttingPower))
             trace.draw=tonumber(pv(DrawCut));trace.applied=pv(DamageApplied)
             local b=pv(bone);trace.bone=b and b:ToString() or "?"
+            if C3.native_probe then
+                trace.samples=trace.samples or {}
+                if #trace.samples<32 then trace.samples[#trace.samples+1]=C3.gd_evidence(w,bone,RawDamage,CuttingPower,DrawCut,PainRate,Inside,LowerThreshold,DamageApplied)
+                else trace.truncated=true end
+            end
         end
         return
     end
@@ -1485,14 +1585,15 @@ local function on_get_damage(selfp, Impulse, Velocity, Location, Normal, bone, R
     local w = pv(selfp)
     if not w or not w:IsValid() then return end
     local native_probe=C3.native_probe and puppet_peer[wname(w) or ""] and C3.probe_measure(w) or nil
+    local gd_trace=native_probe and C3.gd_evidence(w,bone,RawDamage,CuttingPower,DrawCut,PainRate,Inside,LowerThreshold,DamageApplied) or nil
     if pv(Inside)==true then
         pcall(C3.inside_journal,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(HitBox),
             pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(ApplyBoneChange))
         pcall(C3.inside_forward,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(Location),
             pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(LowerThreshold),pv(Shockwave),
-            pv(Flesh),pv(ApplyBoneChange),pv(DismBlunt),pv(Normal),pv(Impulse),pv(Velocity),native_probe)
+            pv(Flesh),pv(ApplyBoneChange),pv(DismBlunt),pv(Normal),pv(Impulse),pv(Velocity),native_probe,gd_trace)
     elseif native_probe then
-        C3.probe_last={name=wname(w),at=now_ms(),bone=pv(bone):ToString(),source=addr_of(pv(HitByComponent)),text=native_probe}
+        C3.probe_last={name=wname(w),at=now_ms(),bone=pv(bone):ToString(),source=addr_of(pv(HitByComponent)),text=native_probe,trace=gd_trace}
     end
     local me = local_pawn()
     if me and same(w, me) then
@@ -1561,6 +1662,17 @@ local death_hook_ok, death_hook_tries = false, 0
 local death_hooked = {}   -- fn path -> true once registered
 local function try_hook()
     local retry_now = tick_num <= 30 or tick_num % 30 == 0   -- 1 Hz after the first second
+    if C3.armor_audit and not C3.armor_hook_ok and retry_now then
+        C3.armor_hook_ok=C3.armor_audit.install(RegisterHook)
+        if C3.armor_hook_ok then Log("native armour proxy construction hook registered (developer evidence only)") end
+    end
+    if C3.armor_audit and not C3.trace_hook_ok and retry_now then
+        C3.trace_hook_ok=pcall(function()
+            RegisterHook("/Script/Engine.KismetSystemLibrary:SphereTraceMultiForObjects",function()end,
+                function(...) pcall(C3.native_trace_post,...) end)
+        end)
+        if C3.trace_hook_ok then Log("native armour trace POST hook registered (active owner replay evidence only)") end
+    end
     if not hook_ok and retry_now then
         -- A BP function: the callback runs AFTER the body (see above).
         hook_ok = pcall(function()
@@ -1687,6 +1799,7 @@ local function send_claim(peer, r)
     cid_seq = cid
     r.cid = cid   -- a blade this hit leaves stuck continues under this cid (C3.inside_forward)
     if r.probe then Log("LAB_PROBE attacker=%d cid=%d parent_cid=0 bone=%s %s",r.probe_attacker or my_peer_id,cid,r.bone,r.probe) end
+    if r.native_evidence then C3.log_native_evidence("probe",r,r.probe_attacker or my_peer_id,r.native_evidence,cid) end
     claim_peer[cid] = peer
     sent_count = sent_count + 1
     quality.claims = quality.claims + 1
@@ -1709,11 +1822,12 @@ end
 function C3.inside_send(rec)
     local parent=rec.parent
     if not parent.cid then return false end
-    local probe,probe_attacker=rec.probe,rec.probe_attacker
-    rec.parent=nil;rec.probe=nil;rec.probe_attacker=nil;rec.cid=cid_seq+1;rec.parent_cid=parent.cid
+    local probe,probe_attacker,evidence=rec.probe,rec.probe_attacker,rec.native_evidence
+    rec.parent=nil;rec.probe=nil;rec.probe_attacker=nil;rec.native_evidence=nil;rec.cid=cid_seq+1;rec.parent_cid=parent.cid
     if not send_rec("damage",rec) then return false end
     cid_seq=cid_seq+1;claim_peer[cid_seq]=rec.target_peer_id
     if probe then Log("LAB_PROBE attacker=%d cid=%d parent_cid=%d bone=%s %s",probe_attacker or my_peer_id,cid_seq,parent.cid,rec.bone,probe) end
+    if evidence then C3.log_native_evidence("probe",rec,probe_attacker or my_peer_id,evidence,cid_seq) end
     CX.inside_sent=(CX.inside_sent or 0)+1
     if CX.inside_sent<=5 or CX.inside_sent%200==0 then
         Log("stuck blade in peer %d bone=%s: Inside Get Damage forwarded under claim #%d (raw %.0f cut %.0f, #%d)",
@@ -1722,7 +1836,7 @@ function C3.inside_send(rec)
     return true
 end
 
-function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,stab,flesh,dism,nrm,imp,vel,probe)
+function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,stab,flesh,dism,nrm,imp,vel,probe,gd_trace)
     if replaying or not combat_window or not coll or not coll:IsValid() then return end
     local me=local_pawn()
     local peer=puppet_peer[wname(w) or ""]
@@ -1731,13 +1845,23 @@ function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,st
     local weapon=coll:GetOwner()
     if not weapon or not weapon:IsValid() or not same(weapon_parent(weapon),me) then return end
     local bname=bone:ToString()
-    local parent
+    local parent,constraint_evidence
     local arr=weapon["Stuck Constraints Array"]
     if arr then arr:ForEach(function(_,entry)
         local c=entry:get()
         if not parent and c and c:IsValid() and same(c["My Weapon"],weapon) and same(c["Hit Actor"],w)
             and same(c["Weapon Hit Module"],coll) and same(c["Component 2 (Body)"],mesh)
-            and c["Bone Name 2"]:ToString()==bname then parent=C3.stuck_parent and C3.stuck_parent[c:GetFullName()] end
+            and c["Bone Name 2"]:ToString()==bname then
+            parent=C3.stuck_parent and C3.stuck_parent[c:GetFullName()]
+            if C3.native_probe then
+                local rows={"constraint="..c:GetFullName():gsub("%s","_")}
+                for _,key in ipairs({"Material Density","Distance","Draw Cut","Edge Sharpness","Tip Sharpness","Thrust?","Stuck In Bone","Spikes (temp)"}) do
+                    local value;pcall(function() value=c[key] end)
+                    rows[#rows+1]=key:gsub("%W","_").."="..C3.native_scalar(value)
+                end
+                constraint_evidence=table.concat(rows," ")
+            end
+        end
     end) end
     local source,ordinal=BF.source(coll,me)
     if not (parent and ordinal and source==parent.source and parent.match_id==mine.match_id
@@ -1756,6 +1880,7 @@ function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,st
     local rec={
         parent=parent,target_peer_id=peer,lage_ms=0,
         probe=probe,probe_attacker=my_peer_id,
+        native_evidence=C3.native_probe and ("gd="..(gd_trace or "unavailable").." "..(constraint_evidence or "constraint=unavailable")) or nil,
         match_id=mine.match_id,round=mine.round,attacker_life=mine.life,victim_life=theirs.life,
         source_class=parent.source_class,hit_box_frame={0,0,0,0,0,0,0,0,0,0,0,0,0},
         attacker_ts=parent.ats or 0,victim_view_ts=parent.vts or 0,victim_arm_ts=parent.vats or 0,
@@ -2228,6 +2353,7 @@ function C3.life_for(peer, require_placement)
     if not row or not view or mode.match_id ~= view.match_id or mode.round ~= view.round
         or not row.life or row.life < 1 then return nil end
     if require_placement then
+        if row.respawning then return nil end -- Preparation vitals use their separate publication context.
         local pawn = local_pawn()
         local ipc = rawget(_G,"HSMP_IPC")
         local status = ipc and ipc.bus_table("spawn_status")
@@ -2535,6 +2661,18 @@ local function apply_hit(d, _attacker)
     end
     replaying = false
     local trace=C3.replay_trace;C3.replay_trace=nil
+    if C3.native_probe then
+        C3.log_native_evidence("replay",d,_attacker,
+            "last_zone="..C3.native_zone(me).." "..(trace and trace.dcd or "dcd=unavailable")..
+            " dcd_calls="..tostring(trace and trace.dcd_calls or 0)..
+            " gd_calls="..tostring(trace and trace.calls or 0)..
+            " gd="..(trace and trace.samples and table.concat(trace.samples,";") or "unavailable")..
+            " gd_truncated="..tostring(trace and trace.truncated==true)..
+            " trace_hook="..(C3.trace_hook_ok and "registered" or "unavailable")..
+            " trace_calls="..tostring(trace and trace.proxy_trace_calls or 0)..
+            " trace="..(trace and trace.proxy_trace_samples and table.concat(trace.proxy_trace_samples,";") or "unavailable")..
+            " trace_truncated="..tostring(trace and trace.proxy_trace_truncated==true))
+    end
     C3.baseline(me)   -- an echo later this frame must not undo this hit
     if not ok and not replay_err_logged then
         replay_err_logged = true
@@ -2696,8 +2834,38 @@ local function vitals_changed(a, b)   -- a = new sample, b = last written
 end
 
 local vout = { seq = 0, last = nil, at = -1e9, writes = 0, samples = 0 }
+-- Preparation needs the newly placed native owner's vitals before Live has
+-- installed its Mode life. This publication context does not authorize hits,
+-- deaths or replays: those continue to require C3.life_for's current Mode.
+function C3.vitals_context(me)
+    if not me or not same(me,local_pawn()) then return nil end
+    local current=C3.life_for(my_peer_id,true)
+    if current then return current end
+    local ipc=rawget(_G,"HSMP_IPC")
+    local status=ipc and ipc.bus_table("spawn_status")
+    local view=HSESS and HSESS.view and HSESS.view()
+    local phase=view and view.state
+    local order=view and view.spawns and view.spawns[my_peer_id]
+    if not status or status.verified~=true or status.pawn~=wname(me)
+        or not view or not status.match_id or status.match_id==0 or status.match_id~=view.match_id
+        or not order or status.spawn_id~=order.spawn_id then return nil end
+    if phase=="live" then
+        local mode=HSESS and HSESS.mode and HSESS.mode()
+        local row=mode and mode.rows and mode.rows[my_peer_id]
+        if mode and mode.id=="deathmatch" and row and row.respawning==true
+            and mode.match_id==status.match_id and mode.round==view.round and status.round==view.round
+            and row.life==status.life and status.life>=1 then
+            return {match_id=status.match_id,round=status.round,life=status.life}
+        end
+        return nil
+    end
+    if phase~="loading" and phase~="countdown" then return nil end
+    if status.round~=view.spawn_round or status.life~=1 then return nil end
+    if status.round~=view.pending_round then return nil end
+    return {match_id=status.match_id,round=status.round,life=status.life}
+end
 local function publish_own_vitals(me)
-    local ctx = C3.life_for(my_peer_id,true)
+    local ctx = C3.vitals_context(me)
     if not ctx then return false end
     local key = tostring(ctx.match_id)..":"..ctx.round..":"..ctx.life
     local s = sample_own_vitals(me)
@@ -2724,12 +2892,37 @@ local death_shown = {}     -- peer_id -> true once the stand-in played death
 local server_dead = {}     -- peer_id -> round_key() of the round the SERVER declared it dead
 
 local remote_vitals = {}   -- peer_id -> last frame (logs)
+C3.server_death_context={}
+C3.remote_dead_context={}
+-- Initialization mirrors follow the actual actor-generation published by
+-- Avatars from a PeerPlay sample with has_context=true. Pending round vitals
+-- never borrow the previous live Mode; combat displayed_for stays strict.
+function C3.mirror_context(peer,w)
+    local view=HSESS and HSESS.view and HSESS.view()
+    local phase=view and view.state
+    if phase~="loading" and phase~="countdown" then return C3.displayed_for(peer,w,false) end
+    local order=view.spawns and view.spawns[peer]
+    if not order or not view.match_id or view.match_id==0 or not view.spawn_round
+        or view.spawn_round~=view.pending_round then return nil end
+    local ipc=rawget(_G,"HSMP_IPC")
+    local pb=ipc and ipc.bus_table("playback")
+    local name=w and wname(w)
+    for _,row in ipairs(pb and pb.rows or {})do
+        if name and row.peer==peer and row.pawn==name and row.match_id==view.match_id
+            and row.round==view.spawn_round and row.life==1
+            and type(row.body_ts)=="number" and row.body_ts>0 and type(row.local_ms)=="number"
+            and now_ms()-row.local_ms>=0 and now_ms()-row.local_ms<=250 then
+            return {match_id=row.match_id,round=row.round,life=row.life}
+        end
+    end
+    return nil
+end
 -- A peer's `peer_vitals` record (the sidecar writes the owner's record as it
 -- came), dequantised once per new record table (IPC.peer_rec caches per version).
-read_vitals = function(peer)
+read_vitals = function(peer,w)
     local ipc = rawget(_G, "HSMP_IPC")
     local t = ipc and ipc.peer_rec("peer_vitals", peer)
-    local ctx = C3.life_for(peer,false)
+    local ctx = C3.mirror_context(peer,w or puppet_actor[peer])
     if t == nil or not ctx or t.match_id ~= ctx.match_id or t.round ~= ctx.round or t.life ~= ctx.life then return nil end
     local c = VQ.cache[peer]
     if not c or c.src ~= t then
@@ -2775,7 +2968,7 @@ end
 local function mirror_vitals(peer, w, r)
     -- Mode may already assign a new life while this pooled actor still shows
     -- the preceding body. Never put the new life's injuries onto that body.
-    local shown = C3.displayed_for(peer,w,false)
+    local shown = C3.mirror_context(peer,w)
     if not r or not shown or r.match_id ~= shown.match_id
         or r.round ~= shown.round or r.life ~= shown.life then return 0 end
     local addr; pcall(function() addr = w:GetAddress() end)
@@ -2874,40 +3067,48 @@ local VB = { base = {} }   -- base: peer -> vitals seq first seen in this world
 -- then re-claims a DED puppet at Live, which can steal the local possession
 -- and teleport the new pawn). A countdown (or the lobby) is never part of a
 -- dead round.
-function VB.server_dead_now(peer)
+function VB.server_dead_now(peer,shown)
+    local ctx=C3.server_death_context[peer]
     return server_dead[peer] ~= nil and server_dead[peer] == round_key(match_round)
-        and match_state ~= "countdown" and match_state ~= "lobby"
+        and match_state ~= "loading" and match_state ~= "countdown" and match_state ~= "lobby"
+        and ctx and shown and ctx.match_id==shown.match_id and ctx.round==shown.round and ctx.life==shown.life
 end
 
 local function update_standins()
     for peer, w in pairs(puppet_actor) do
         if w and w:IsValid() then
-            local v = read_vitals(peer)
+            local shown=C3.mirror_context(peer,w)
+            local v = read_vitals(peer,w)
             local wk = WG.key or "?"
+            local old=C3.remote_dead_context[peer]
+            if shown and old and (old.match_id~=shown.match_id or old.round~=shown.round or old.life~=shown.life) then
+                remote_dead[peer],death_shown[peer]=nil,nil
+                C3.remote_dead_context[peer]=nil
+            end
             -- A death carried over from another world (round reset) is
             -- re-validated: only the server's verdict for THIS round keeps it.
             if remote_dead[peer] and remote_dead[peer] ~= wk then
-                if VB.server_dead_now(peer) then remote_dead[peer] = wk
+                if VB.server_dead_now(peer,shown) then remote_dead[peer] = wk
                 else remote_dead[peer], death_shown[peer] = nil, nil end
             end
-            if v and v.dead then remote_dead[peer] = wk end
+            if v and v.dead then remote_dead[peer] = wk;C3.remote_dead_context[peer]={match_id=v.match_id,round=v.round,life=v.life} end
             if v and not v.dead and v.hp and v.hp > 0 then
                 -- New round (fresh owner pawn) — but a server-declared death
                 -- stands for the whole round even if the owner's own copy
                 -- still reports health (background window / not applied yet).
-                if remote_dead[peer] and not VB.server_dead_now(peer) then
+                if remote_dead[peer] and not VB.server_dead_now(peer,shown) then
                     remote_dead[peer], death_shown[peer] = nil, nil
                 end
             end
             local defeated=C3.remote_defeated[peer]
-            local shown=defeated and C3.displayed_for(peer,w,false)
-            if defeated and shown and defeated.match_id==shown.match_id
-                and defeated.round==shown.round and defeated.life==shown.life then
+            local defeated_shown=defeated and shown
+            if defeated and defeated_shown and defeated.match_id==defeated_shown.match_id
+                and defeated.round==defeated_shown.round and defeated.life==defeated_shown.life then
                 -- Preserve the owner's native KO pose. No corpse conversion or HP0.
                 pcall(function() w["Give Up"]=true;w["Give Up 2 (Temp)"]=true end)
                 mirror_vitals(peer,w,v)
                 C3.protect(w,peer);C3.baseline(w)
-            elseif remote_dead[peer] then
+            elseif remote_dead[peer] and shown then
                 -- death_shown = the stand-in (FName) that played it: a stand-in
                 -- replaced while the owner is still dead plays it again.
                 local nm = wname(w) or "?"
@@ -2957,6 +3158,7 @@ function C3.respawns()
         if prev and prev.round == m.round and row.life > prev.life then
             if remote_dead[peer] or death_shown[peer] or server_dead[peer] then changed = true end
             remote_dead[peer], death_shown[peer], server_dead[peer] = nil, nil, nil
+            C3.remote_dead_context[peer],C3.server_death_context[peer]=nil,nil
             C3.remote_defeated[peer]=nil
             Log("peer %d respawned (round %d, life %d): its death no longer holds", peer, m.round, row.life)
         end
@@ -3063,6 +3265,7 @@ local function clear_death_state(why)
         Log("death state cleared (%s)", why)
     end
     remote_dead, death_shown, server_dead = {}, {}, {}
+    C3.remote_dead_context,C3.server_death_context={},{}
     C3.remote_defeated={}
     if sdead.key and sdead.key ~= "" then write_standin_dead(true) end
 end
@@ -3266,7 +3469,9 @@ local function on_tick()
                 Log("server: peer %d died (round %s, killer=%s, cause=%s)", id, tostring(r), tostring(killer), tostring(cause))
             end
             remote_dead[id] = WG.key or "?"
+            C3.remote_dead_context[id]={match_id=d.match_id,round=d.round,life=d.life}
             if r then server_dead[id] = round_key(r) end
+            C3.server_death_context[id]={match_id=d.match_id,round=d.round,life=d.life}
             C3.remote_defeated[id]=nil
             end
         end
@@ -3338,7 +3543,8 @@ if rawget(_G, "HSMP_COMBAT_TEST") then
                                       death_shown = death_shown } end,
         flush_claims = flush_claims, on_weapon_hit = on_weapon_hit, on_native_death = function(s) on_native_death(s) end,
         read_feedback = read_feedback, emit_quality = emit_quality, REACT = REACT, REACT_VEC = REACT_VEC,
-        C3 = C3, CX = CX, SEND = SEND, discard_outbox = C3.discard_outbox, set_my_peer_id = function(id) my_peer_id = id; C3.me_id = id end,
+        C3 = C3, CX = CX, SEND = SEND, WG=WG,local_pawn=local_pawn,
+        discard_outbox = C3.discard_outbox, set_my_peer_id = function(id) my_peer_id = id; C3.me_id = id end,
         own = function() return own end, wg_drop = function(why) WG.drop(why) end,
         force_own_death = force_own_death,
         on_native_defeat=C3.on_native_defeat,

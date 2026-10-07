@@ -97,12 +97,22 @@ round and serves the next one.
 | vitals | the Willie_BP CDO values (`Health`, every `* Health`, `Consciousness`, `Bleeding`, `Pain`, `Stamina`, `Exhaustion`, ...) written and read back, after the BP reset functions (`Reset Sustained Damage`, `Reset Last Damage Taken`, `Reset Blood Bleed`, `Reset Latest Complex Damage`) | 4 s → `vitals` |
 | place | HSMPSync's `spawn_status` for this round, arena and pawn with `verified=true`, **and** the pawn still within 100 cm (XY) of that spot | no verified placement after 8 s (or HSMPSync reported a failure) → one `spawn_request` retry; no order for 20 s → `no_order`; an order but no verified placement after 20 s → `spawn_timeout` |
 | kit | HSMPLoadout's `kit_status` with `ok=true` for this pawn, written for this world load (`t` ≥ pipeline start − 0.5 s; pooled Willie FNames come back after a reload), that has held for 1.5 s or is `stable` | no status for 4 s → `unavailable`; 15 s → `kit_error` |
-| census | visible Willies other than mine == remote fighters | 8 s → defect logged, continue; a stand-in still **missing** is waited for up to 18 s |
+| census | visible Willies other than mine == remote fighters, and current-life combat proof below | keeps waiting with the explicit missing proof; elapsed time cannot release Ready |
 | ready | waits for any HSMPSync re-placement in progress, then final vitals and GI read-back (re-applied once if they drifted) | emits the events |
 
 Input is frozen from the moment the pawn exists until `Live`, and stays frozen in a `live` phase while
 the pipeline has not finished. The **first** load error of a world load is kept and reported to the
 server. Later errors are only logged.
+
+The native combat proof requires a successful, advancing pose write for the placed owner's
+exact match/round/life (`sample_status().pose`), a fresh matching local root, and advancing
+known-health vitals for that life. Every living remote fighter must have matching applied
+playback on its named stand-in, a current physical source frame (`PeerPlay` interp/extrap and
+source age within 250 ms), advancing owner vitals, and native alive/physical collision readback.
+Pose clocks and stand-in visibility alone cannot prove this: playback publications continue
+while a stopped sender is extrapolated. The final Ready step re-checks the proof, and input
+remains frozen without Ready evidence for the exact current world and pawn. Older native
+modules without successful-write pose evidence report an unavailable proof and remain blocked.
 
 **Foe count** (GI `Free Mode Foes Amount`) is `max(1, remote fighters in the roster)`. The roster is
 the session snapshot's connected fighter rows. The extra foe in a solo match is a hidden stand-in.

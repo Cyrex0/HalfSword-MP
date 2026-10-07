@@ -84,7 +84,7 @@ local function f3(t) return string.format("(%.1f,%.1f,%.1f)", t[1], t[2], t[3]) 
 local function me_pawn()
     local pc = WG.pc()
     if not valid(pc) then return nil end
-    local p = pc.Pawn
+    local p = WG.ai_pawn and WG.ai_pawn() or pc.Pawn
     if valid(p) then return p end
     return WG.ai_pawn()   -- `ai on`: the game's own AI drives our pawn
 end
@@ -1014,36 +1014,94 @@ end
 -- the PlayerController lets go, SpawnDefaultController() makes the class-default AI_BP_C
 -- possess it, Player = false, Event Initialize AI, Event Get Into Combat State(target).
 -- The mods find our pawn through WG.ai_pawn meanwhile (shared/hsmp_wg.lua). `off` reverses.
-local AI_AUTO = nil   -- `ai auto`: { tried = "<world>:<pawn>" }
+local AI_AUTO, AI_PENDING = nil, nil
+local AI_READY = load_module("hsmp_spawn_ready")
+local AI_PROOF = AI_READY and AI_READY.new()
+local function ai_target(peer)
+    if peer then return standin_of(peer) end
+    local ipc = rawget(_G, "HSMP_IPC")
+    local view, mode = HSESS and HSESS.view(), HSESS and HSESS.mode()
+    local own = mode and view and mode.rows and mode.rows[view.my_peer_id]
+    for _, row in ipairs((ipc and ipc.bus_table("puppets") or {}).rows or {}) do
+        local remote = mode and mode.rows and mode.rows[row.peer]
+        if own and remote and remote.alive ~= false and not remote.respawning
+            and not (own.team and own.team > 0 and own.team == remote.team) then return standin_of(row.peer) end
+    end
+end
+local function ai_native_ready(actor)
+    local native, best, best_score = {}, nil, nil
+    pcall(function() native.alive = actor.Health > 0 and actor.DED == false end)
+    for _, field in ipairs({ "SK_Skeleton", "BoneCore", "DriverSkeleton", "Mesh" }) do
+        pcall(function()
+            local mesh = actor[field]
+            if valid(mesh) then
+                local sim = mesh:IsSimulatingPhysics(FName("Pelvis")) == true
+                local score = (sim and 2 or 0) + (mesh:IsVisible() == true and 1 or 0)
+                if best_score == nil or score > best_score then best, best_score = mesh, score end
+            end
+        end)
+    end
+    pcall(function()
+        local collision = best and best:GetCollisionEnabled()
+        native.collision = actor:GetActorEnableCollision() == true
+            and best:IsSimulatingPhysics(FName("Pelvis")) == true and (collision == 2 or collision == 3)
+    end)
+    return native
+end
+local function ai_readiness(pc, me, si, peer)
+    local ipc = rawget(_G, "HSMP_IPC")
+    local st = HW.verified_ai_status and HW.verified_ai_status(ipc)
+    local view, mode = HSESS and HSESS.view(), HSESS and HSESS.mode()
+    if not st or st.pawn ~= nm(me) or not view or view.state ~= "live" then return nil, "own verified Live pawn" end
+    local own = mode and mode.rows and mode.rows[view.my_peer_id]
+    local remote = mode and mode.rows and mode.rows[peer]
+    if not own or own.alive == false or own.respawning or not remote or remote.alive == false or remote.respawning
+        or mode.match_id ~= st.match_id or mode.round ~= st.round then return nil, "current fighter life" end
+    if own.team and own.team > 0 and own.team == remote.team then return nil, "target is a teammate" end
+    if not AI_PROOF or not ipc.sample_status then return nil, "spawn proof unavailable" end
+    local playback
+    for _, row in ipairs((ipc.bus_table("playback") or {}).rows or {}) do if row.peer == peer then playback = row; break end end
+    local source, slot = {}, ipc.peer_slot and ipc.peer_slot(peer)
+    if slot ~= nil and ipc.peer_play then ipc.peer_play(slot, source) end
+    local sample = ipc.sample_status()
+    local ok, why = AI_PROOF:check({ world = WG.key, now_ms = os.clock() * 1000, own = st,
+        root = ipc.rec("local_root"), pose = sample and sample.pose, vitals = ipc.rec("vitals"), remotes = {
+            { peer = peer, pawn = nm(si), match_id = st.match_id, round = st.round, life = remote.life,
+                playback = playback, source = source, vitals = ipc.peer_rec("peer_vitals", peer), native = ai_native_ready(si) },
+        } })
+    if not ok then return nil, why end
+    local my_team, si_team
+    pcall(function() my_team, si_team = me["Team Int"], si["Team Int"] end)
+    if type(my_team) ~= "number" or type(si_team) ~= "number" or my_team == si_team then return nil, "native target team not initialized" end
+    return st
+end
+local function ai_takeover(pc, me, si)
+    local name = nm(me)
+    pcall(function() pc:UnPossess() end)
+    local ok, err = pcall(function() me:SpawnDefaultController() end)
+    local c; pcall(function() c = me.Controller end)
+    local cls = "none"; pcall(function() cls = c:GetClass():GetFName():ToString() end)
+    if not (ok and valid(c) and cls == "AI_BP_C") then
+        pcall(function() pc:Possess(me) end)
+        Log("ai: refused - SpawnDefaultController gave %s (%s); control returned to the player", cls, tostring(err)); return
+    end
+    pcall(function() me.Player = false end)
+    pcall(function() pc:SetViewTargetWithBlend(me, 0.0, 0, 0.0, false) end)
+    local i1 = bp_call(c, "Event Initialize AI")
+    local i2 = bp_call(c, "Event Get Into Combat State", 30.0, si, si:K2_GetActorLocation())
+    Log("ai: %s now driven by %s (init=%s combat=%s) target %s team %s vs %s", name, nm(c), tostring(i1), tostring(i2), nm(si), tostring(me["Team Int"]), tostring(si["Team Int"]))
+end
 local function exp_ai(arg)
     local mode, peer = tostring(arg):match("^(%a+)%s*(%d*)$")
     local pc = WG.pc()
     if not valid(pc) then Log("ai: no PlayerController"); return end
     if mode == "on" then
-        local me = pc.Pawn
-        if not valid(me) then Log("ai: no possessed pawn (already AI-driven?)"); return end
-        local si = standin_of(tonumber(peer))
-        if not si then Log("ai: no stand-in to fight"); return end
-        local name = nm(me)
-        pcall(function() pc:UnPossess() end)
-        local ok, err = pcall(function() me:SpawnDefaultController() end)
-        local c; pcall(function() c = me.Controller end)
-        local cls = "none"; pcall(function() cls = c:GetClass():GetFName():ToString() end)
-        if not (ok and valid(c) and cls == "AI_BP_C") then
-            pcall(function() pc:Possess(me) end)
-            Log("ai: refused - SpawnDefaultController gave %s (%s); control returned to the player", cls, tostring(err)); return
-        end
-        pcall(function() me.Player = false end)
-        -- the player keeps watching their own fighter (an unpossessed controller's camera
-        -- would stay where the pawn was taken over)
-        pcall(function() pc:SetViewTargetWithBlend(me, 0.0, 0, 0.0, false) end)
-        local i1 = bp_call(c, "Event Initialize AI")
-        local i2 = bp_call(c, "Event Get Into Combat State", 30.0, si, si:K2_GetActorLocation())
-        local my_team, si_team = -1, -1
-        pcall(function() my_team = me["Team Int"]; si_team = si["Team Int"] end)
-        Log("ai: %s now driven by %s (init=%s combat=%s) target %s team %s vs %s", name, nm(c), tostring(i1), tostring(i2), nm(si), tostring(my_team), tostring(si_team))
+        if valid(WG.ai_pawn()) then Log("ai: verified own fighter is already AI-driven"); return end
+        AI_PENDING = { peer = tonumber(peer), world = WG.key }
+        Log("ai: on requested; waiting for current fighter pose, vitals and collision")
     elseif mode == "off" then
-        AI_AUTO = nil
+        AI_AUTO, AI_PENDING = nil, nil
+        if AI_PROOF then AI_PROOF:reset() end
         local me = WG.ai_pawn()
         if not me then Log("ai: no AI-driven pawn of ours"); return end
         local c; pcall(function() c = me.Controller end)
@@ -1055,24 +1113,36 @@ local function exp_ai(arg)
     elseif mode == "auto" then
         -- sticky: every round (a round reload makes a fresh pawn) is fought by the AI
         AI_AUTO = { tried = nil }
+        AI_PENDING = nil
         Log("ai: auto - every Live round from now on is fought by the game's own AI")
     else
         Log("ai: expected on [peer] | off | auto")
     end
 end
--- `ai auto`: hand each new player-held pawn to the AI once the round is Live and a stand-in
--- exists (one try per pawn and world; a refusal is logged by exp_ai and not retried).
+-- Bind a takeover to its verified world/match/round/life/pawn, never to a
+-- temporary possession created by the native stand-in fallback.
 local function ai_auto_tick()
-    if not AI_AUTO or not (SESS and SESS:live()) or not WG.settled() then return end
+    if not (AI_AUTO or AI_PENDING) or not (SESS and SESS:live()) or not WG.settled() then return end
+    if AI_PENDING and AI_PENDING.world ~= WG.key then AI_PENDING = nil end
+    if not (AI_AUTO or AI_PENDING) or valid(WG.ai_pawn()) then return end
     local pc = WG.pc()
     local p = valid(pc) and pc.Pawn or nil
     if not valid(p) then return end   -- already AI-driven (or no pawn yet)
     local view = HSESS and HSESS.view and HSESS.view()
     if not (view and view.state == "live") then return end
-    local key = tostring(WG.key) .. ":" .. nm(p)
-    if AI_AUTO.tried == key or not standin_of(nil) then return end
-    AI_AUTO.tried = key
-    exp_ai("on")
+    local si, peer = ai_target(AI_PENDING and AI_PENDING.peer)
+    if not si then return end
+    local context, why = ai_readiness(pc, p, si, peer)
+    if not context then
+        local owner = AI_PENDING or AI_AUTO
+        if owner.wait ~= why then owner.wait = why; Log("ai: waiting for %s", tostring(why)) end
+        return
+    end
+    local key = tostring(WG.key) .. ":" .. context.match_id .. ":" .. context.round .. ":" .. context.life .. ":" .. context.pawn
+    if AI_AUTO and AI_AUTO.tried == key then return end
+    if AI_AUTO then AI_AUTO.tried = key; AI_AUTO.wait = nil end
+    AI_PENDING = nil
+    ai_takeover(pc, p, si)
 end
 local driver
 local function exp_drive(arg)
@@ -1089,6 +1159,8 @@ local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_sw
 if rawget(_G, "HSMP_PARITY_TEST") then
     HSMP_PARITY_TEST.arm = exp_arm
     HSMP_PARITY_TEST.state = function() return arm_drive end
+    HSMP_PARITY_TEST.ai = exp_ai
+    HSMP_PARITY_TEST.ai_tick = ai_auto_tick
 end
 local dev_out = {}
 LoopAsync(33, function()

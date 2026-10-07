@@ -209,9 +209,11 @@ local session = director.get_session()
 local function local_pawn()
     local pc = WG.pc()
     if not pc or not pc:IsValid() then return nil, nil end
+    local owned = WG.ai_pawn()
+    if owned then return owned, pc end
     local p = pc.Pawn
     if p and p:IsValid() then return p, pc end
-    return WG.ai_pawn(), pc   -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
+    return nil, pc
 end
 
 local function pawn_health(p)

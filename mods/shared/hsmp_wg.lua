@@ -46,19 +46,47 @@ M.TRAVEL_HOLD_S = 10
 
 -- The local pawn while the game's own AI drives it (dev only, HSMPParity `ai on`): the
 -- PlayerController is unpossessed and an AI_BP_C holds our Willie with "Player" false.
--- Callers that resolve "my pawn" through PlayerController.Pawn fall back to this when it is
--- empty. Only the Willie HSMPSync verified as ours this round (bus spawn_status: world-scoped,
+-- Callers prefer this over PlayerController.Pawn during a native stand-in spawn's temporary
+-- possession swap. Only the Willie HSMPSync verified as ours this round (bus spawn_status: world-scoped,
 -- written after placement, so past the settle window), found fresh by name, held by AI_BP_C
 -- with Player false. Release builds (no HSMP_DEV=1) never resolve it. Nothing is cached here
 -- (WG.ai_pawn caches per frame).
 local AI_DEV = (os.getenv("HSMP_DEV") or "") == "1"
+-- A world-scoped placement is necessary but not sufficient after a same-world
+-- respawn. Never let the old AI fighter become the owner of the new native life.
+function M.verified_ai_status(ipc)
+    if not (ipc and ipc.bus_table and ipc.rec) then return nil end
+    local st, session, link = ipc.bus_table("spawn_status"), ipc.rec("session"), ipc.rec("link")
+    if not (st and st.verified == true and type(st.pawn) == "string" and st.pawn ~= ""
+        and session and link and (link.my_peer_id or 0) > 0 and (st.match_id or 0) ~= 0
+        and st.match_id == session.match_id and (st.life or 0) > 0) then return nil end
+    local phase = session.phase
+    if phase == 0 or phase == nil then return nil end
+    local round = (phase == 1 or phase == 2) and session.round + 1 or session.round
+    if st.round ~= round then return nil end
+    local order
+    for _, row in ipairs(session.rows or {}) do
+        if row.peer_id == link.my_peer_id then order = row; break end
+    end
+    if not order or st.spawn_id ~= order.spawn_id then return nil end
+    if phase >= 3 and phase <= 7 then
+        local mode = ipc.rec("mode")
+        if not mode or mode.match_id ~= st.match_id or mode.round ~= st.round then return nil end
+        local own
+        for _, row in ipairs(mode.rows or {}) do
+            if row.peer_id == link.my_peer_id then own = row; break end
+        end
+        if not own or own.life ~= st.life or own.respawning == true then return nil end
+    elseif st.life ~= 1 then return nil end
+    return st
+end
 function M.ai_pawn_lookup()
     if not AI_DEV then return nil end
     local found
     pcall(function()
         local ipc = rawget(_G, "HSMP_IPC")
-        local st = ipc and ipc.bus_table and ipc.bus_table("spawn_status")
-        local name = st and st.verified == true and st.pawn
+        local st = M.verified_ai_status(ipc)
+        local name = st and st.pawn
         if type(name) ~= "string" or name == "" then return end
         for _, w in pairs(FindAllOf("Willie_BP_C") or {}) do
             if w:IsValid() and w:GetFName():ToString() == name then
@@ -166,8 +194,9 @@ function M.new(opts)
 
     -- The local pawn while the game's own AI drives it (dev only, HSMPParity `ai on`): the
     -- PlayerController is unpossessed and an AI_BP_C holds our Willie with "Player" false.
-    -- Callers that resolve "my pawn" through PlayerController.Pawn fall back to this when it
-    -- is empty. Only the Willie HSMPSync verified as ours this round (bus spawn_status, which
+    -- This takes priority over PlayerController.Pawn: SpawnCombatants can briefly possess a
+    -- newly spawned stand-in while our verified fighter remains held by its AI. Only the
+    -- Willie HSMPSync verified as ours this round and life (bus spawn_status, which
     -- is world-scoped), looked up fresh by name, held by AI_BP_C with Player false; once per
     -- frame like WG.pc(). Release builds (no HSMP_DEV=1) never resolve it.
     local aic = {}

@@ -94,6 +94,17 @@ if fn == nil then return end
 fn()
 local api = HSMP_COMBAT_TEST.api
 api.set_world("world#1")
+
+do
+    local original_ai,original_pc=api.WG.ai_pawn,PC.Pawn
+    local foreign=mk_willie("Willie_BP_C_native_fallback",{Health=0,DED=true})
+    PC.Pawn=foreign
+    api.WG.ai_pawn=function()return ME end
+    T.check(api.local_pawn()==ME,"verified AI owner survives native fallback possession of another Willie")
+    api.WG.ai_pawn=function()return nil end
+    T.check(api.local_pawn()==foreign,"normal controller possession remains the local pawn without verified AI owner")
+    api.WG.ai_pawn,PC.Pawn=original_ai,original_pc
+end
 do
     local previous_pawn=PC.Pawn
     local victim=mk_willie("Willie_BP_C_force_retry")
@@ -611,6 +622,43 @@ T.check(got ~= nil and got.vel == 1500 and got.imp == 900 and got.cut == 120 and
     and got.dism == 2 and got.lower == true and got.kick == 1.0 and got.parent == true, "victim replays Deal Complex Damage with the decoded inputs", T.repr(got))
 T.check(VX.Health == 97.5 and T.contains(r2, "Deal Complex Damage(ok)"),
     "only the victim's own armour stage decided the damage", T.repr({ VX.Health, r2 }))
+do
+    local previous_probe,previous_dcd=api.C3.native_probe,VX["Deal Complex Damage"]
+    local previous_guard=api.WG.check;api.WG.check=function()return true end
+    api.C3.native_probe=true
+    local native_calls,log_start=0,#LOGS
+    VX["Deal Complex Damage"]=function(self,...)
+        native_calls=native_calls+1
+        local args=table.pack(...)
+        local array=function(items)return{GetArrayNum=function()return #items end,
+            ForEach=function(_,f)for i,v in ipairs(items)do f(i,{get=function()return v end})end end}end
+        api.C3.native_trace_post(nil,ME,zero,zero,.1,array({11}),true,nil,0,array({}),false,nil,nil,5,false)
+        api.C3.native_trace_post(nil,self,zero,zero,.1,array({11}),true,nil,0,array({}),false,nil,nil,5,false)
+        self["Last Hit Body Part"]=2;self.Health=self.Health-.25
+        api.on_get_damage(self,zero,zero,zero,zero,FName("spine_03"),123.45678901234567,
+            .12345678901234566,false,self.Mesh,0,false,false,args[2],true,nil,1,false,0,true)
+        api.on_complex(self,args[1],args[2],args[3],args[4],args[5],args[6],args[7],args[8],args[9],
+            args[10],args[11],args[12],args[13],args[14],args[15],args[16],args[17],
+            2,123.45678901234567,.12345678901234566,.85,7800.125,true)
+    end
+    local before=VX.Health
+    api.apply_hit(hit_rec(inl),7)
+    local evidence
+    for i=log_start+1,#LOGS do if T.contains(LOGS[i],"LAB_NATIVE side=replay ")then evidence=LOGS[i]end end
+    T.check(native_calls==1 and VX.Health==before-.25,"native evidence hooks never add another damage application")
+    T.check(evidence and T.contains(evidence,"attacker=7") and T.contains(evidence,"cid=5 parent_cid=0")
+        and T.contains(evidence,"match=4242 round=3 attacker_life=1 victim_life=1"),
+        "native replay evidence retains exact original hit and life identity",evidence)
+    T.check(evidence and T.contains(evidence,"dcd_surface=2") and T.contains(evidence,"dcd_density=7800.125")
+        and T.contains(evidence,"dcd_cp="..api.C3.native_scalar(.12345678901234566)),
+        "owner replay records actual armour-stage output doubles at full precision",evidence)
+    T.check(evidence and T.contains(evidence,"dcd_calls=1 gd_calls=1") and T.contains(evidence,"bone:spine_03,zone:2")
+        and T.contains(evidence,"out:true"),"owner replay pairs successful nested native Get Damage with body zone",evidence)
+    T.check(evidence and T.contains(evidence,"trace_calls=1") and T.contains(evidence,"objects:11")
+        and T.contains(evidence,"hits:0"),"only exact active owner context captures existing native trace output",evidence)
+    api.C3.native_probe,VX["Deal Complex Damage"]=previous_probe,previous_dcd
+    api.WG.check=previous_guard
+end
 PC.Pawn = ME
 
 -- ---- typed records, session and death-state guards ------------------------------------
@@ -1130,6 +1178,88 @@ do
     local status = {match_id=12345,life=1,round=3,spawn_id=768,pawn=ME.__name,verified=true}
     local function placed() NAT.bus_put("spawn_status", status) end
     placed()
+    do
+        local original_phase,original_round=SESS.phase,SESS.round
+        SESS.phase,SESS.round=1,2;publish() -- Server Loading for the verified round3 order.
+        T.check(real_life_for(9,true)==nil,"Loading spawn has no live combat life before Mode transition")
+        local preparation=api.C3.vitals_context(ME)
+        T.check(preparation and preparation.match_id==12345 and preparation.round==3 and preparation.life==1,
+            "verified pending native spawn supplies separate preparation vitals context",T.repr(preparation))
+        T.check(api.publish_own_vitals(ME),"native owner health publishes while new spawn is still Loading")
+        local record=NAT._rec.slots.vitals and NAT._rec.slots.vitals.t
+        T.check(record and record.match_id==12345 and record.round==3 and record.life==1,
+            "preparation vitals carry the verified pending spawn identity",T.repr(record))
+        local pending_pose={peer=2,pawn=SI.__name,match_id=12345,round=3,life=1,
+            body_ts=100,arm_ts=100,local_ms=math.floor(CLOCK*1000)}
+        NAT.bus_put("playback",{rows={pending_pose}})
+        local pending_vitals=api.VQ.record(200,{v={[1]=100,[18]=7},f=0,dism={}})
+        pending_vitals.match_id,pending_vitals.round,pending_vitals.life=12345,3,1
+        NAT.sc_peer_dir({{id=2,slot=2,nick="pending owner"}})
+        IPCF.peer_dir(true)
+        NAT.sc_put("peer_vitals",pending_vitals,2)
+        local observed=api.read_vitals(2,SI)
+        T.check(observed and observed.round==3 and observed.life==1 and observed.hp==100,
+            "pending receiver consumes only health for actual newly displayed native generation",
+            T.repr({context=api.C3.mirror_context(2,SI),raw=IPCF.peer_rec("peer_vitals",2),observed=observed}))
+        local oldhp,oldpain,olddeath=SI.Health,SI.Pain,SI.Death
+        local deaths=0;SI.Death=function()deaths=deaths+1 end
+        api.state().remote_dead[2]="world#1";api.session().server_dead[2]=api.round_key(2)
+        api.C3.remote_dead_context[2]={match_id=12345,round=2,life=1}
+        api.C3.server_death_context[2]={match_id=12345,round=2,life=1}
+        api.update_standins()
+        T.check(deaths==0 and SI.Health==oldhp and SI.Pain==7 and not api.state().remote_dead[2],
+            "previous round death cannot kill fresh pending actor; actual new owner vitals mirror")
+        pending_pose.round=2;NAT.bus_put("playback",{rows={pending_pose}})
+        T.check(api.read_vitals(2,SI)==nil,"previous displayed generation cannot borrow pending owner vitals")
+        pending_pose.round=3;pending_pose.pawn="PreviousStandin";NAT.bus_put("playback",{rows={pending_pose}})
+        T.check(api.read_vitals(2,SI)==nil,"pending owner vitals cannot bind another native actor")
+        pending_pose.pawn=SI.__name;pending_pose.local_ms=pending_pose.local_ms-251;NAT.bus_put("playback",{rows={pending_pose}})
+        T.check(api.read_vitals(2,SI)==nil,"stalled pending display cannot initialize new owner health")
+        SI.Health,SI.Pain,SI.Death=oldhp,oldpain,olddeath
+        api.state().remote_dead[2],api.session().server_dead[2],api.session().death_shown[2]=nil,nil,nil
+        api.C3.remote_dead_context[2],api.C3.server_death_context[2]=nil,nil
+        status.verified=false;placed()
+        T.check(api.C3.vitals_context(ME)==nil,"unverified preparation cannot publish owner vitals")
+        status.verified=true;status.pawn="PreviousWillie";placed()
+        T.check(api.C3.vitals_context(ME)==nil,"previous native pawn cannot supply pending owner vitals")
+        status.pawn=ME.__name;status.spawn_id=769;placed()
+        T.check(api.C3.vitals_context(ME)==nil,"wrong pending spawn order cannot supply owner vitals")
+        status.spawn_id=768;status.life=2;placed()
+        T.check(api.C3.vitals_context(ME)==nil,"preparation never borrows a respawned Mode life")
+        status.life=1;status.match_id=54321;placed()
+        T.check(api.C3.vitals_context(ME)==nil,"previous match cannot supply pending owner vitals")
+        status.match_id=12345;status.round=2;placed()
+        T.check(api.C3.vitals_context(ME)==nil,"previous round cannot supply pending owner vitals")
+        status.round=3;placed()
+        SESS.phase=7;publish()
+        T.check(api.C3.vitals_context(ME)==nil,"Paused cannot relabel pending placement as server-supported preparation vitals")
+        SESS.phase=3;publish()
+        T.check(api.C3.vitals_context(ME)==nil,"Live cannot fall back to preparation instead of exact Mode life")
+        SESS.phase,SESS.round=original_phase,original_round;publish()
+    end
+    do
+        local original_mode=RL.deep(NAT._rec.slots.mode.t)
+        local old_order=SESS.rows[1].spawn_id
+        SESS.rows[1].spawn_id=769;publish()
+        status.spawn_id,status.life=769,2;placed()
+        NAT.sc_put("mode",{match_id=12345,seq=1001,mode=ES.game_mode.DEATHMATCH,round=3,
+            rows={{peer_id=9,seat=0,life=2,alive=false,respawning=true},{peer_id=2,seat=1,life=1,alive=true}}})
+        T.check(real_life_for(9,true)==nil,"assigned Deathmatch respawn still has no strict combat context")
+        local respawn=api.C3.vitals_context(ME)
+        T.check(respawn and respawn.round==3 and respawn.life==2 and api.publish_own_vitals(ME),
+            "exact verified assigned Deathmatch spawn publishes preparation health before LOADED")
+        status.spawn_id=768;placed()
+        T.check(api.C3.vitals_context(ME)==nil,"Deathmatch preparation requires exact newly assigned spawn order")
+        status.spawn_id=769;status.life=1;placed()
+        T.check(api.C3.vitals_context(ME)==nil,"Deathmatch preparation cannot borrow old native life")
+        status.life=2;placed()
+        local not_dm=RL.deep(original_mode);not_dm.mode=ES.game_mode.DUEL;not_dm.rows[1].life=2;not_dm.rows[1].respawning=true
+        NAT.sc_put("mode",not_dm)
+        T.check(api.C3.vitals_context(ME)==nil,"respawn preparation is limited to the server Deathmatch contract")
+        NAT.sc_put("mode",original_mode)
+        SESS.rows[1].spawn_id=old_order;publish()
+        status.spawn_id,status.life=768,1;placed()
+    end
     T.check(real_life_for(9,true) ~= nil, "exact verified own pawn/order/match/life binds")
     status.verified=false; placed()
     T.check(real_life_for(9,true) == nil, "unverified own placement cannot send combat")
@@ -1339,6 +1469,15 @@ do
             "queued continuation logs its own cid and exact parent after successful send",T.repr(probe_lines))
         T.check(probe_child and probe_child.probe==nil and probe_child.probe_attacker==nil,
             "local probe strings never enter damage transport schema")
+        api.C3.probe_last={name=SI.__name,at=math.floor(CLOCK*1000),bone="head",source=99999,text="wrong native sample",trace="wrong-source"}
+        local pending_before=#api.CX.pending
+        api.on_complex(SI,SI.Mesh,coll,FName("head"),zero,zero,
+            {X=1400,Y=0,Z=0},{X=1000,Y=0,Z=0},40,0,.85,0,false,false,1,nil,false,0)
+        local unpaired=api.CX.pending[pending_before+1]
+        T.check(unpaired and T.contains(unpaired.native_evidence,"gd=unavailable")
+            and not T.contains(unpaired.native_evidence,"wrong-source"),
+            "a different native source cannot attach its Get Damage evidence to this DCD")
+        api.CX.pending[pending_before+1]=nil
         local tiny_before,tiny_log=SI.Health,#LOGS
         for _=1,2 do
             SI.Health=SI.Health-.1

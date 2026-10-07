@@ -191,10 +191,20 @@ pub(super) async fn handle_record(
                 if !super::dispatch::within_budget(state, pid, crate::validate::rate::Kind::Vitals, 1.0) {
                     return Ok(());
                 }
-                let round = inner.match_round;
-                if f.match_id != inner.sess.match_id || f.round != round || f.life != modes::peer_life(&inner,pid)
-                    || modes::respawning(&inner,pid) { return Ok(()); }
-                if let Some(v) = crate::combat::vitals_in(pid, round, &mut f) {
+                let pending = matches!(inner.match_state.as_str(), "loading" | "countdown");
+                let initializing = pending || modes::respawning(&inner, pid);
+                let round = if pending { inner.spawn_round } else { inner.match_round };
+                let life = if pending { 1 } else { modes::peer_life(&inner, pid) };
+                if f.match_id != inner.sess.match_id || f.round != round || f.life != life { return Ok(()); }
+                if initializing {
+                    // New-life initialization can reach the other client before
+                    // READY. It must belong to this verified placement and must
+                    // not mutate the live combat ledger or declare a death.
+                    let placed = inner.sess.root_placed.get(&pid).copied();
+                    let assignment = inner.spawn_plan.iter().find(|a| a.peer_id == pid);
+                    if !placed.is_some_and(|p| p.0 == f.match_id && p.1 == f.round && p.2 == f.life
+                        && assignment.is_some_and(|a| a.spawn_id == p.3)) { return Ok(()); }
+                } else if let Some(v) = crate::combat::vitals_in(pid, round, &mut f) {
                     super::dispatch::on_ledger_verdict(&mut inner, pid, round, &v, f.dead());
                 }
                 if !crate::combat::vitals_relay_fresh(pid, 1, f.seq) { return Ok(()); }
@@ -439,6 +449,79 @@ mod record_flow_tests {
 
     fn recs(t: &super::super::dispatch::resume_tests::TClient, kind: u16) -> Vec<&Vec<u8>> {
         t.records.iter().filter(|m| wire::kind_of(m) == kind).collect()
+    }
+
+    #[tokio::test]
+    async fn loading_vitals_require_verified_pending_placement_and_do_not_book_combat() {
+        let (socket, state, ca, mut cb) = live_duel(76_401).await;
+        let aid = ca.welcome_id().unwrap();
+        let mid = {
+            let mut inner = state.inner.lock().await;
+            inner.match_state = "loading".into();
+            inner.spawn_round = 2;
+            inner.spawn_plan = vec![crate::spawns::SpawnAssign {
+                peer_id: aid, spawn_id: 2 << 8, slot: 0, pos: [0.0; 3], yaw: 0.0, protect_ms: 3000,
+            }];
+            inner.sess.root_placed.clear();
+            inner.sess.match_id
+        };
+        let mut f = crate::proto::vitals::unknown();
+        f.match_id = mid; f.round = 2; f.life = 1; f.seq = 1;
+        crate::proto::vitals::set(&mut f, 0, 88.0);
+        let send = |f: &Vitals| wire::encode(0, 0, f, &[]);
+        let msg = send(&f);
+        let (h, p) = wire::split(&msg).unwrap();
+        handle_record(&socket, &state, ca.addr, h, p).await.unwrap();
+        cb.pump(&socket, &state).await;
+        assert!(recs(&cb, K_VITALS).is_empty(), "unplaced pawn cannot initialize a peer");
+        {
+            let mut inner = state.inner.lock().await;
+            inner.sess.root_placed.insert(aid, (mid, 2, 1, 2 << 8));
+        }
+        for (round, life) in [(1, 1), (2, 2), (3, 1)] {
+            let mut stale = f; stale.round = round; stale.life = life;
+            let msg = send(&stale);
+            let (h, p) = wire::split(&msg).unwrap();
+            handle_record(&socket, &state, ca.addr, h, p).await.unwrap();
+        }
+        cb.pump(&socket, &state).await;
+        assert!(recs(&cb, K_VITALS).is_empty(), "only this pending round and life can relay");
+        let msg = send(&f);
+        let (h, p) = wire::split(&msg).unwrap();
+        handle_record(&socket, &state, ca.addr, h, p).await.unwrap();
+        for _ in 0..4 { cb.pump(&socket, &state).await; }
+        let got = recs(&cb, K_VITALS);
+        assert_eq!(got.len(), 1);
+        assert_eq!(&got[0][wire::HDR..], p, "initial vitals relay without a ledger clamp");
+        let inner = state.inner.lock().await;
+        assert_eq!(inner.match_state, "loading");
+        assert!(inner.peers[&ca.addr].alive, "pending initialization cannot declare a combat death");
+        assert!(inner.round_deaths.is_empty());
+        drop(inner);
+        // A same-round DM respawn also needs initialization before LOADED;
+        // receipt of its vitals must not itself revive the dead seat.
+        let spawn_id = modes::respawn_spawn_id(2, 2);
+        {
+            let mut inner = state.inner.lock().await;
+            inner.match_state = "live".into(); inner.match_round = 2;
+            let key = super::super::session::peer_key(&inner.peers[&ca.addr]);
+            inner.modes.stats.entry(key).or_default().life = 2;
+            inner.peers.get_mut(&ca.addr).unwrap().alive = false;
+            inner.modes.respawns.insert(aid, modes::Respawn { at_ms: 0, spawn_id });
+            inner.spawn_plan[0].spawn_id = spawn_id;
+            inner.sess.root_placed.insert(aid, (mid, 2, 2, spawn_id));
+        }
+        f.life = 2; f.seq = 2;
+        let msg = send(&f);
+        let (h, p) = wire::split(&msg).unwrap();
+        handle_record(&socket, &state, ca.addr, h, p).await.unwrap();
+        for _ in 0..4 { cb.pump(&socket, &state).await; }
+        let got = recs(&cb, K_VITALS);
+        assert_eq!(got.len(), 2, "placed respawn initialization reaches the peer");
+        assert_eq!(&got[1][wire::HDR..], p);
+        let inner = state.inner.lock().await;
+        assert!(!inner.peers[&ca.addr].alive, "initial vitals do not replace the LOADED acknowledgement");
+        assert!(modes::respawning(&inner, aid));
     }
 
     #[tokio::test]

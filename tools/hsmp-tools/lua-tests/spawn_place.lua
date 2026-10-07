@@ -20,6 +20,16 @@ local R = require("hsmp_native_records")
 local NS = require("hsmp_native_mock").S
 local SD = "S"
 
+do
+    local owner = { IsValid=function() return true end }
+    local temporary = { IsValid=function() return true end }
+    local pc = { IsValid=function() return true end, Pawn=temporary }
+    local env = SP.make_ue_env({UEHelpers={},pc=function() return pc end,ai_pawn=function() return owner end})
+    T.check(env.pawn()==owner,"real spawn environment preserves verified AI ownership during native stand-in possession")
+    local human = SP.make_ue_env({UEHelpers={},pc=function() return pc end,ai_pawn=function() return nil end})
+    T.check(human.pawn()==temporary,"real spawn environment keeps ordinary human possession when no verified AI owns the life")
+end
+
 local function new_world(opts)
     opts = opts or {}
     local w = {

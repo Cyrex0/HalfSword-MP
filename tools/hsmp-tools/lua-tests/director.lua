@@ -23,6 +23,73 @@ local DW = require("dir_world")
 local D, SD, S = DW.D, DW.SD, DW.S
 local new_world, to_ready = DW.new, DW.to_ready
 
+T.log("== combat spawn proof binds native collision and advancing streams to the displayed life")
+do
+    local R = D.SpawnReady
+    T.check(R ~= nil, "shared spawn proof helper loaded")
+    local proof = R.new()
+    local function vital(life, seq) return { match_id = 91, round = 3, life = life, seq = seq, flags = 0, v = { 6400 } } end
+    local input = { world = "arena#1", now_ms = 1000, own = { match_id = 91, round = 3, life = 130, pawn = "owner" },
+        root = { match_id = 91, round = 3, life = 130, ts = 1000 }, vitals = vital(130, 10),
+        pose = { match_id = 91, round = 3, life = 130, ts = 1000, tick = 30 },
+        remotes = {{ peer = 2, match_id = 91, round = 3, life = 2, pawn = "proxy", vitals = vital(2, 20),
+            source = { match_id = 91, round = 3, life = 2, peer_id = 2, has_context = true, age = 70, mode = "interp" },
+            playback = { match_id = 91, round = 3, life = 2, pawn = "proxy", local_ms = 1000 }, native = { alive = true, collision = true } }} }
+    local ok, why = proof:check(input)
+    T.check(not ok and why == "own pose not sampling", "a retained native pose slot does not release the spawn", why)
+    input.now_ms, input.root.ts, input.remotes[1].playback.local_ms = 1100, 1100, 1100
+    input.vitals.seq, input.remotes[1].vitals.seq = 11, 21
+    input.pose.ts, input.pose.tick = 1100, 31
+    T.check(proof:check(input), "current-life streams advancing with native collision release the barrier")
+    local remote = input.remotes[1]
+    remote.source.mode = "stale"
+    T.check(not proof:check(input), "a freshly republished stale PeerPlay cannot release the spawn")
+    remote.source.mode, remote.source.age = "extrap", 251
+    T.check(not proof:check(input), "a clock advancing on an old physical frame is not fresh pose proof")
+    remote.source.mode, remote.source.age = "interp", 70
+    remote.source.age = -12
+    T.check(proof:check(input), "a native interpolated frame slightly ahead of the corrected sender clock is current")
+    remote.source.age = 70
+    remote.playback.life = 130
+    ok, why = proof:check(input)
+    T.check(not ok and why == "peer 2 displayed pawn/life", "reused compact life or pawn cannot relabel old playback", why)
+    remote.playback.life, remote.playback.pawn = 2, "other proxy"
+    T.check(not proof:check(input), "correct life on a different proxy does not count")
+    remote.playback.pawn, remote.native.collision = "proxy", false
+    ok, why = proof:check(input)
+    T.check(not ok and why == "peer 2 native collision unavailable/off", "a visible pose with collision off does not release", why)
+    remote.native.collision, remote.playback.local_ms = true, 1101
+    T.check(not proof:check(input), "future playback is not fresh")
+    remote.playback.local_ms, remote.vitals.v[1] = 1100, 65535
+    T.check(not proof:check(input), "unknown owner health cannot prove a ready opponent")
+    remote.vitals.v[1], remote.native.alive = 6400, false
+    T.check(not proof:check(input), "native DED/alive readback must agree before release")
+    remote.native.alive = true
+    input.now_ms, input.root.ts, remote.playback.local_ms = 3800, 3800, 3800
+    input.pose.ts, input.pose.tick = 3800, 32
+    ok, why = proof:check(input)
+    T.check(not ok and why == "own vitals not sampling", "fresh root/pose cannot cover a stopped vitals stream", why)
+    input.vitals.seq, remote.vitals.seq = 12, 22
+    T.check(proof:check(input), "new native samples recover readiness without a timeout release")
+    input.world = "arena#2"
+    T.check(not proof:check(input), "a new world with reused pawn and life must observe new samples")
+end
+
+T.log("== visible census cannot release Live while combat spawn proof is missing")
+do
+    local ready = false
+    local w = to_ready({ setup = function(world)
+        world.env.combat_ready = function() return ready, "peer 2 native collision unavailable/off" end
+    end })
+    w:tick(40)
+    T.check(w.dir.state == "Spawn" and w.dir.ready_round == 0, "proof waits past the old census timeout")
+    T.check(T.contains(w:logtext(), "Ready waits for combat spawn proof: peer 2 native collision unavailable/off"), "blocked proof names its cause")
+    w:match("live", "Map_Arena_Pit", 1); w:tick(2)
+    T.check(w.frozen ~= false and w.dir.ready_round == 0, "a server Live snapshot cannot release this unverified pawn")
+    ready = true; w:tick(2)
+    T.check(w.dir.ready_round == 1 and w.dir.state == "Live" and w.frozen == false, "verified native proof releases the current pawn")
+end
+
 -- ---------------------------------------------------------------------------
 T.log("== startup, heartbeat, stale request")
 do

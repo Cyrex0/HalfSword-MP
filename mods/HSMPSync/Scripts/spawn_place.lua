@@ -1043,7 +1043,8 @@ function SP.make_ue_env(ctx)
 
     -- ctx.pc = the mod's WG.pc (one PlayerController lookup per frame).
     function env.pawn()
-        local p
+        local p = ctx.ai_pawn and ctx.ai_pawn() or nil
+        if p then return p end -- verified AI ownership survives a native stand-in possession swap
         pcall(function()
             local pc = ctx.pc and ctx.pc() or UEH.GetPlayerController()
             if pc and pc:IsValid() then
@@ -1051,8 +1052,6 @@ function SP.make_ue_env(ctx)
                 if pw and pw:IsValid() then p = pw end
             end
         end)
-        -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
-        if not p and ctx.ai_pawn then p = ctx.ai_pawn() end
         return p
     end
     function env.pawn_id(p) local id = "?"; pcall(function() id = p:GetFName():ToString() end); return id end

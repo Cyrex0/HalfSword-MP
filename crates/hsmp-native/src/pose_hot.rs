@@ -151,6 +151,9 @@ impl Native {
         if !put_slot(self.seg(), "local_root", meta, K_ROOT, bytemuck::bytes_of(&r), &mut self.pose.stamped) {
             return Err(HotErr::NotOpen);
         }
+        if self.sample.pose_written.is_some_and(|pose| pose.context != c) {
+            self.sample.pose_written = None;
+        }
         self.wrote = true;
         Ok(())
     }
@@ -191,15 +194,17 @@ impl Native {
         if !sample::encode_pose_with_context(&a, &mut p.enc, &mut p.buf, boxes, strikers, context) {
             return Err(HotErr::Bad("b"));
         }
-        self.publish_pose()
+        self.publish_pose(tick, ts_ms, context)
     }
 
-    fn publish_pose(&mut self) -> Result<(), HotErr> {
+    fn publish_pose(&mut self, tick: u32, ts: f64, context: Option<hsmp_pose::posecodec::v2::Context>) -> Result<(), HotErr> {
         let (meta, seg) = (self.meta(), self.seg());
         let p = &mut *self.pose;
         if !put_slot(seg, "local_pose", meta, K_POSE, p.buf.payload(), &mut p.stamped) {
             return Err(HotErr::NotOpen);
         }
+        self.sample.pose_written = context.filter(|context| context.valid())
+            .map(|context| crate::sample::PoseWritten { tick, ts, context });
         self.wrote = true;
         Ok(())
     }
@@ -294,7 +299,7 @@ impl Native {
             if !sample::encode_pose_with_context(&a, &mut p.enc, &mut p.buf, &boxes, strikers.as_deref(), context) {
                 return nil_err(L, "bad:b");
             }
-            let r = self.publish_pose();
+            let r = self.publish_pose(tick as u32, ts, context);
             hot_result(L, r)
         }
     }

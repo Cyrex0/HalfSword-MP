@@ -75,7 +75,7 @@ async fn on_pose(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: Socket
     let inner=state.inner.lock().await;
     {
         // Paused live rounds retain their existing generation, including DM respawns.
-        let pending=inner.match_state=="countdown";
+        let pending=matches!(inner.match_state.as_str(),"loading"|"countdown");
         let round=if pending {inner.spawn_round} else {inner.match_round};
         let life=if pending {1} else {modes::peer_life(&inner,sid)};
         if !pose_context_matches(full.context,inner.sess.match_id,round,life) {

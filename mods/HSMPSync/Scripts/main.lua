@@ -195,10 +195,9 @@ local _mesh_cache = nil
 local function get_local_pawn(pc)
     pc = pc or WG.pc()
     if not pc or not pc:IsValid() then return nil end
-    local pawn = pc.Pawn
+    local pawn = WG.ai_pawn() or pc.Pawn
     if not pawn or not pawn:IsValid() then
-        pawn = WG.ai_pawn()   -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
-        if not pawn then return nil end
+        return nil
     end
     if pawn ~= _pawn_cache then
         _pawn_cache = pawn
