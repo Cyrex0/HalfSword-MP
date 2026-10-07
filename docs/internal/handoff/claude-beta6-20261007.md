@@ -13,10 +13,9 @@ only (no AI trailers). No Python anywhere (tools and tests are Rust/C++, mods ar
 scripts PowerShell / POSIX shell). Never inject OS input; drive the game through mod hooks,
 the DevCtl ring (`hsmp-tools ipc-ctl`) and RCON.
 
-Last state of this session: everything up to `306618bb` is committed on local `dev`; the push
-of the last two commits (`f7f3f98e`, `306618bb`) was rejected by GitHub with "Internal Server
-Error" three times (G0 passed each time, GitHub status green). Push them first:
-`git push origin refs/heads/dev:refs/heads/dev`.
+Last state of this session: everything is pushed to `origin` `dev` (this handoff included). GitHub
+once rejected three pushes in a row with "Internal Server Error" while G0 passed; a later retry
+with the explicit refspec went through.
 
 **Verdict: `dev` is NOT ready to ship as 0.1.0-beta.6.** Blockers are listed in section 6.
 "Passes tests", "verified live" and "matches solo" are kept apart everywhere below.
