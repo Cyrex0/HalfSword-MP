@@ -1824,27 +1824,34 @@ impl Store {
     /// Cutting geometry must use the victim frames actually relayed to this
     /// attacker, like shown_capsules. A full-rate intermediate frame that the
     /// attacker never received is not its displayed victim bone frame.
-    fn shown_bone_frames(&self, viewer:PeerId,src:PeerId,v:&PeerHist,t:u32,lead:i64,now_ms:i64)->Option<BoneFrames> {
-        let full=||v.bone_frames.sample(t,lead);
+    fn shown_bone_frames(&self, viewer:PeerId,src:PeerId,v:&PeerHist,t:u32,lead:i64,now_ms:i64)->Result<BoneFrames,&'static str> {
+        let full=||v.bone_frames.sample(t,lead).ok_or("no relay log and no bone history at the view time");
         let Some(log)=self.relay_log(viewer,src,now_ms) else {return full();};
         let i=log.ts.partition_point(|&x|x<=t);
         // The enclosing delivered endpoints (and last predecessor for
         // extrapolation) must still exist. Older unrelated relay entries may
         // legitimately have aged out of the full-rate cache.
-        if i>0 {v.native_frames.get(&log.ts[i-1])?;}
-        if i<log.ts.len() {v.native_frames.get(&log.ts[i])?;}
-        if i==log.ts.len() && i>1 {v.native_frames.get(&log.ts[i-2])?;}
+        if i>0 {v.native_frames.get(&log.ts[i-1]).ok_or("delivered frame before the view time not cached")?;}
+        if i<log.ts.len() {v.native_frames.get(&log.ts[i]).ok_or("delivered frame after the view time not cached")?;}
+        if i==log.ts.len() && i>1 {v.native_frames.get(&log.ts[i-2]).ok_or("delivered predecessor for extrapolation not cached")?;}
         let mut frames=VecDeque::new();
         for ts in &log.ts {
             let Some(frame)=v.native_frames.get(ts) else {continue;};
-            if frame.extra.as_ref()?.context!=v.context {return None;}
+            if frame.extra.as_ref().ok_or("cached frame without native extras")?.context!=v.context {return Err("a delivered frame belongs to another life");}
             let i=frames.partition_point(|f:&hsmp_pose::poseplay::Frame|f.ts<frame.ts);
             if frames.get(i).is_some_and(|f|f.ts==frame.ts){continue;}
             frames.insert(i,frame.clone());
         }
-        let b=hsmp_pose::poseplay::sample_delivered_bones(&frames,t as f64)?;
-        Some(BoneFrames {p:std::array::from_fn(|i|[b[i][0],b[i][1],b[i][2]]),
-            q:std::array::from_fn(|i|[b[i][3],b[i][4],b[i][5],b[i][6]]),scale:frames.back()?.extra.as_ref()?.k})
+        let Some(b)=hsmp_pose::poseplay::sample_delivered_bones(&frames,t as f64) else {
+            if crate::validate::rate::log_ok("delivered_sample") {
+                tracing::info!(viewer, src, detail = %hsmp_pose::poseplay::explain_delivered(&frames, t as f64),
+                    "delivered frames do not sample at the view time");
+            }
+            return Err("delivered frames do not sample at the view time");
+        };
+        Ok(BoneFrames {p:std::array::from_fn(|i|[b[i][0],b[i][1],b[i][2]]),
+            q:std::array::from_fn(|i|[b[i][3],b[i][4],b[i][5],b[i][6]]),
+            scale:frames.back().and_then(|f|f.extra.as_ref()).ok_or("cached frame without native extras")?.k})
     }
 
     /// What did `viewer` display of `viewed` at its own time `viewer_ts`?
@@ -2559,8 +2566,9 @@ impl Store {
                         return Eval::Reject("hit_box: original cutting parent absent from history".into());
                     }
                     let Some(bone)=posecodec::v2::BONES.iter().position(|b|b.eq_ignore_ascii_case(hit.bone_str())) else {return Eval::Reject("hit_box: unknown victim bone".into());};
-                    let Some(vf)=self.shown_bone_frames(attacker,tgt,v,if (9..=16).contains(&bone) {arm} else {view},FUTURE_MS,now_ms) else {
-                        return if allow_lead {Eval::Reject("no_cover: historical victim bone frame absent".into())} else {Eval::Wait("historical victim bone frame not covered yet")};
+                    let vf=match self.shown_bone_frames(attacker,tgt,v,if (9..=16).contains(&bone) {arm} else {view},FUTURE_MS,now_ms) {
+                        Ok(vf)=>vf,
+                        Err(why)=>return if allow_lead {Eval::Reject(format!("no_cover: historical victim bone frame absent ({why})"))} else {Eval::Wait("historical victim bone frame not covered yet")},
                     };
                     let h=&hit.hit_box_frame;
                     let norm=h[3..7].iter().map(|v|v*v).sum::<f32>();

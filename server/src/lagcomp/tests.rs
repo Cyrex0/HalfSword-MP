@@ -64,7 +64,7 @@ fn cutting_newest_frame_uses_only_delivered_native_derivatives_and_context() {
     // Cache removal of a needed delivered endpoint is not repaired with a
     // never-delivered full-rate frame, even though the latter is available.
     s.peer(VIC).native_frames.remove(&1000);
-    assert!(s.shown_bone_frames(ATT,VIC,&s.peers[&VIC],1030,50,1100).is_none());
+    assert!(s.shown_bone_frames(ATT,VIC,&s.peers[&VIC],1030,50,1100).is_err());
     assert!(s.bind_pose_context(VIC,Some(posecodec::v2::Context{life:4,..context})));
     assert!(s.peers[&VIC].native_frames.is_empty());
 }

@@ -1533,16 +1533,57 @@ pub fn sample_delivered_bones(fr:&VecDeque<Frame>, label:f64)->Option<[Xf;SLOTS]
         let step=f.extra.as_ref().map_or(0.0,|e|e.step);
         if !steps.contains(&step) {steps.push(step);}
     }
-    let mut answer=None;
+    // Several self-consistent steps are only ambiguous when they show different poses: the
+    // game's step varies by fractions of a millisecond frame to frame, and candidates that
+    // agree on every bone (1 cm, 1 degree) are the same displayed pose, not a guess. Live
+    // (arming-sword AI duel): 24 of 28 rejections were this, every one "do not sample".
+    // The published label is whole milliseconds (the stand-in's floor of its label): the real
+    // one lies in [label, label + 1), so a step is consistent when some time in that window
+    // selects it (near a frame boundary the floor alone selects the neighbour).
+    let mut answer:Option<[Xf;SLOTS]>=None;
     for step in steps {
-        let at=label+step;
-        let sample=sample_frames_lead(fr,at,(at-fr.back()?.ts).max(0.0),0.0);
-        let selected=sample.extra.as_ref().map_or(0.0,|e|e.step);
-        if (selected-step).abs()>1e-6 {continue;}
-        if answer.is_some() {return None;}
-        answer=Some(sample.bones);
+        let mut consistent=None;
+        for frac in [0.0, 0.5, 0.999] {
+            let at=label+frac+step;
+            let sample=sample_frames_lead(fr,at,(at-fr.back()?.ts).max(0.0),0.0);
+            let selected=sample.extra.as_ref().map_or(0.0,|e|e.step);
+            if (selected-step).abs()<=1e-6 {consistent=Some(sample);break;}
+        }
+        let Some(sample)=consistent else {continue;};
+        match &answer {
+            None=>answer=Some(sample.bones),
+            Some(a) if same_pose(a,&sample.bones)=>{}
+            Some(_)=>return None,
+        }
     }
     answer
+}
+
+/// Why [`sample_delivered_bones`] found no pose at `label` (diagnostics only): the delivered
+/// frames around it and what each candidate step selected.
+pub fn explain_delivered(fr:&VecDeque<Frame>, label:f64)->String {
+    if fr.is_empty() {return "no delivered frames".into();}
+    let i=fr.partition_point(|f|f.ts<=label);
+    let lo=i.saturating_sub(2);
+    let near:Vec<String>=fr.iter().skip(lo).take(4).map(|f|format!("{:.1}/s{:.2}",f.ts,f.extra.as_ref().map_or(-1.0,|e|e.step))).collect();
+    let mut steps=vec![0.0f64];
+    for f in fr { let s=f.extra.as_ref().map_or(0.0,|e|e.step); if !steps.contains(&s) {steps.push(s);} }
+    let tried:Vec<String>=steps.iter().take(6).map(|&s|{
+        let at=label+s;
+        let out=sample_frames_lead(fr,at,(at-fr.back().map_or(at,|f|f.ts)).max(0.0),0.0);
+        format!("{:.2}->{:.2}({:?})",s,out.extra.as_ref().map_or(-1.0,|e|e.step),out.mode)
+    }).collect();
+    format!("label {:.1}, {} frames {:.1}..{:.1}, near [{}], steps {} tried [{}]",label,fr.len(),fr[0].ts,fr.back().unwrap().ts,
+        near.join(" "),steps.len(),tried.join(" "))
+}
+
+/// Every bone within 1 cm and 1 degree (|dot| >= cos 0.5 deg of the half-angle).
+fn same_pose(a:&[Xf;SLOTS], b:&[Xf;SLOTS])->bool {
+    a.iter().zip(b.iter()).all(|(x,y)| {
+        let d=((x[0]-y[0]).powi(2)+(x[1]-y[1]).powi(2)+(x[2]-y[2]).powi(2)).sqrt();
+        let dot=(x[3]*y[3]+x[4]*y[4]+x[5]*y[5]+x[6]*y[6]).abs();
+        d<=1.0 && dot>=(0.5f32).to_radians().cos()
+    })
 }
 
 #[cfg(test)]mod delivered_stage_tests {
@@ -1559,6 +1600,23 @@ pub fn sample_delivered_bones(fr:&VecDeque<Frame>, label:f64)->Option<[Xf;SLOTS]
         let got=sample_delivered_bones(&delivered,1030.0).unwrap();
         assert_eq!(got[0][3..7],[0.0,0.0,0.0,1.0]);
         assert!(got[0][3..7].iter().zip(hidden.b[0][3..7].iter()).map(|(a,b)|a*b).sum::<f32>()<0.99);
+    }
+    #[test]fn jittering_steps_with_the_same_pose_are_not_ambiguous(){
+        // 60 Hz with the game's real step jitter (16.5 / 16.9 ms) and slow motion: two
+        // self-consistent steps show the same pose and must not reject the sample
+        let delivered:VecDeque<Frame>=(0..12).map(|k|{
+            let ts=1000.0+k as f64*16.7;
+            frame(ts,if k%2==0 {16.5} else {16.9},k as f32*0.2,100.0,10.0)
+        }).collect();
+        // labels as the stand-in publishes them: sample clock minus the selected frame's step
+        let (mut none,mut t)=(0,1020.0);
+        while t<1170.0 {
+            let s=sample_frames_lead(&delivered,t,(t-delivered.back().unwrap().ts).max(0.0),0.0);
+            let label=(t-s.extra.as_ref().map_or(0.0,|e|e.step)).floor();   // published as whole ms
+            if sample_delivered_bones(&delivered,label).is_none() {none+=1;}
+            t+=0.5;
+        }
+        assert_eq!(none,0,"published labels without a pose");
     }
     #[test]fn newest_uses_native_velocity_angular_and_step(){
         let delivered=VecDeque::from([frame(950.0,10.0,0.0,100.0,90.0),frame(1000.0,10.0,0.0,100.0,90.0)]);
