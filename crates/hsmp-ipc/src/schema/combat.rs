@@ -643,7 +643,7 @@ mod tests {
             victim_view_ts: 90, victim_arm_ts: 95, dism_blunt: 2561, raw_damage: 5.0, cutting_power: 6.0,
             pain_rate: 0.5, draw_cut: 0.0, damage_out: 0.8, offset: [1.0; 3], location: [2.0; 3],
             impulse: [3.0; 3], velocity: [4.0; 3], normal: [0.0, 0.0, 1.0], bone: Str::new("neck_01"),
-            flags: 32, n: 0, _r: [0; 6], ..Default::default()
+            flags: 32, n: 0, _r: [0; 2], ..Default::default()
         }
     }
 
