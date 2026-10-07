@@ -60,6 +60,9 @@ struct KitSync {
     acked: HashMap<u32, u32>,
     /// Highest kit rev written per peer.
     rev: HashMap<u32, u64>,
+    /// Highest acknowledgement published at that revision. Saving an unchanged
+    /// kit advances seq without changing rev, and the game still needs the ack.
+    published_ack: HashMap<u32, u32>,
     rules_rev: u64,
     rules: Option<(u8, u16)>,
     /// Newest loadout version written per peer.
@@ -238,15 +241,20 @@ pub fn on_kit_verdict(peer: u32, payload: &[u8]) {
     let (rev, ack) = (v.head.rev, v.head.seq);
     {
         let mut s = sync();
+        if s.rev.get(&peer).is_some_and(|r| *r > rev) {
+            return; // Reordered old state cannot replace the current kit or ack.
+        }
         let a = s.acked.entry(peer).or_insert(0);
         *a = (*a).max(ack);
-        if s.rev.get(&peer).is_some_and(|r| *r >= rev) {
-            return; // periodic re-broadcast / duplicate / reordered older state
+        if s.rev.get(&peer) == Some(&rev) && s.published_ack.get(&peer).is_some_and(|a| *a >= ack) {
+            return; // Same kit revision and no newer acknowledgement.
         }
+        let Some(l) = crate::ipc_shm::link() else { return };
+        if !l.try_post_record("peer_kit", Some(peer), K_KIT_VERDICT, payload) { return; }
+        // Commit only after queueing succeeds: a later retransmit can retry a
+        // temporarily absent/full peer slot even when its seq was already acked.
         s.rev.insert(peer, rev);
-    }
-    if let Some(l) = crate::ipc_shm::link() {
-        l.post_record("peer_kit", Some(peer), K_KIT_VERDICT, payload);
+        s.published_ack.insert(peer, ack);
     }
     if v.head.verdict == 0 {
         info!(peer, rev, class = %v.head.class.lossy(), "kit received");
@@ -384,6 +392,25 @@ mod kit_client_tests {
         r.class = Str::new("@Armor/X/BP_Torso");
         r.flags = ROW_PIECE;
         to_payload(&h, &[r])
+    }
+
+    #[tokio::test]
+    async fn saving_an_unchanged_kit_publishes_its_new_ack_without_a_new_revision() {
+        let _serial = crate::ipc_shm::ShmLink::test_lock();
+        let l = crate::ipc_shm::ShmLink::test_global();
+        reset_session();
+        on_kit_verdict(2, &verdict("knight", 50, 7));
+        on_kit_verdict(2, &verdict("knight", 50, 8));
+        assert_eq!(sync().acked.get(&2), Some(&8));
+        assert_eq!(l.test_slot("peer_kit", Some(2)), Some((K_KIT_VERDICT, verdict("knight", 50, 8))),
+            "the game and lab receive the repeated SAVE acknowledgement");
+        on_kit_verdict(2, &verdict("knight", 50, 7));
+        on_kit_verdict(2, &verdict("duelist", 49, 99));
+        assert_eq!(sync().acked.get(&2), Some(&8), "old revision cannot poison the ack high-water mark");
+        assert_eq!(l.test_slot("peer_kit", Some(2)), Some((K_KIT_VERDICT, verdict("knight", 50, 8))));
+        on_kit_verdict(2, &verdict("duelist", 51, 8));
+        assert_eq!(l.test_slot("peer_kit", Some(2)), Some((K_KIT_VERDICT, verdict("duelist", 51, 8))),
+            "changed rules still publish a new revision at the same acknowledgement");
     }
 
     /// After a server restart revs restart at 1; a reset makes the

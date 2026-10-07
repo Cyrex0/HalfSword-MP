@@ -22,3 +22,4 @@ pub mod luatest;
 pub mod paths;
 pub mod pyfmt;
 pub mod synth;
+pub mod lab;

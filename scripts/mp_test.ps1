@@ -112,10 +112,19 @@ param(
     [string]$CombatKit = "",
     [string]$CombatKitRules = "",
     [switch]$CombatAi,
-    [switch]$CombatProbe
+    [switch]$CombatProbe,
+    # Lab session reuses this harness's save guard, process identities and teardown.
+    [string]$LabSession = "",
+    [int]$LabOwnerPid = 0,
+    [string]$LabServerArgsJson = ""
 )
 
 $ErrorActionPreference = "Stop"
+if ($LabServerArgsJson) {
+    $labExtraArgs = @($LabServerArgsJson | ConvertFrom-Json)
+    if (-not $LabServerArgsJson.TrimStart().StartsWith('[') -or @($labExtraArgs | Where-Object { $_ -isnot [string] -or $_ -match '[\r\n]' }).Count) { throw 'Lab server args must be a JSON array of strings.' }
+    $ServerArgs += @($labExtraArgs)
+}
 $Repo = Split-Path -Parent $PSScriptRoot
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 if (-not $RunRoot) { $RunRoot = Join-Path $Repo "test-results" }
@@ -301,6 +310,14 @@ if ($CombatArena -or $CombatKit -or $CombatKitRules -or $CombatAi -or $CombatPro
         }
     }
     $sc.steps = $steps.ToArray()
+}
+if ($LabSession) {
+    if ($Scenario -ne 'combat_manual' -or $LabOwnerPid -le 0) { throw 'Lab requires combat_manual and its owner PID.' }
+    $LabSession = [IO.Path]::GetFullPath($LabSession)
+    New-Item -ItemType Directory -Force $LabSession | Out-Null
+    foreach ($step in $sc.steps) {
+        if ($step.do -eq 'hold' -and $step.s -eq 1800) { $step.do = 'lab_session' }
+    }
 }
 if ($eff -eq "rcon" -and ($sc.requires -contains "debug_verbs") -and -not $caps.debug_verbs -and -not $DryRun) {
     Say "scenario $($sc.name) needs RCON debug verbs (hsmp-server --debug-verbs)" Red; exit 2
@@ -861,6 +878,21 @@ foreach ($s in $sc.steps) {
             $secs = [double]$s.s * $HoldScale
             HEvent "hold" @{ s = $secs; why = $s.why }
             Start-Sleep -Milliseconds ([int]($secs * 1000))
+        }
+        "lab_session" {
+            $labOwner = Get-Process -Id $LabOwnerPid -ErrorAction Stop
+            $labIdentity = Hsmp-ProcRecord $labOwner 'lab'
+            Write-Utf8 (Join-Path $LabSession 'ready.json') (ConvertTo-Json -InputObject @{ run = $Run; owner = $labIdentity } -Depth 4)
+            HEvent 'mark' @{ name = 'lab_ready'; arena = $CombatArena }
+            Say "lab ready: $LabSession (experiments use RCON and DevCtl)" Cyan
+            # Poll a condition, never a fixed startup/round sleep. If the owner
+            # exits, normal harness teardown still restores its own save guard.
+            while (-not (Test-Path (Join-Path $LabSession 'stop')) -and (Same-Process $labIdentity)) {
+                Discover-Children
+                $dead = @($script:Tracked | Where-Object { $_.role -match '^game\d+$' } | Where-Object { -not (Same-Process $_) })
+                if ($dead.Count) { throw 'A lab game exited before session teardown.' }
+                Start-Sleep -Milliseconds 250
+            }
         }
         { $_ -in @("kill", "restart") } {
             $e = @($script:Tracked | Where-Object { $_.role -eq $s.role }) | Select-Object -Last 1

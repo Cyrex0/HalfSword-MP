@@ -1,0 +1,9008 @@
+{
+  "schema": 1,
+  "recipe": "sword-cloth",
+  "run": "test-results/beta6/ai-probe-cloth3",
+  "commit": "unknown archived build (no deploy stamp)",
+  "metrics": {
+    "accept": [
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 203,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 206,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 220,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 221,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 222,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 244,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 245,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 248,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 249,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 250,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 252,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 253,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 258,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 259,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 260,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 261,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 262,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 264,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 270,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 273,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 275,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 277,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 279,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 280,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 283,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 285,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 293,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 295,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 296,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 300,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 306,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 311,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 313,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 315,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 327,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 331,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 332,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 338,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 340,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 341,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 354,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 355,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 356,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 358,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 359,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 360,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 361,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 362,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 363,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 370,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 371,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 377,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 379,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 383,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 390,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 396,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 403,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 406,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 408,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 410,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 412,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 414,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 416,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 420,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 427,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 429,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 432,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 436,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 438,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 443,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 446,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 449,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 451,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 456,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 466,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 468,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 469,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 470,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 475,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 477,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 480,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 483,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 485,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 488,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 489,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 492,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 493,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 494,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 500,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 501,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 502,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 503,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 504,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 505,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 506,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 507,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 508,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 521,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 524,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 528,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 530,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 533,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 535,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 537,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 539,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 541,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 543,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 545,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 553,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 557,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 562,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 567,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 569,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 575,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 578,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 579,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 582,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 584,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 589,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 591,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 594,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 598,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 606,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 611,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 613,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 614,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 617,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 619,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 634,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 638,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 639,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 641,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 642,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 646,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 648,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 650,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 655,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 656,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 662,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 664,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 675,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 676,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 677,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 678,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 683,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 685,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 686,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 689,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 703,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 720,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 721,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 722,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 723,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 724,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 733,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 734,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 735,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 736,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 737,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 743,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 749,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 751,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 754,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 758,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 761,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 763,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 769,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 771,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 775,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 790,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 792,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 793,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 796,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 798,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 803,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 811,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 816,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 818,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 838,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 839,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 840,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 841,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 842,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 843,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 847,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 851,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 853,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 856,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 857,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 860,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 864,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 872,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 873,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 877,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 881,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 886,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 914,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 915,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 916,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 917,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 918,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 921,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 926,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 927,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 930,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 932,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 934,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 936,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1019,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1020,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1028,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1032,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1040,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1042,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1044,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1048,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1050,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1052,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1053,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1068,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1072,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1073,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1074,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1075,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1077,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1079,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1080,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1084,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1087,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1090,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1091,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1092,
+          "text": ""
+        }
+      }
+    ],
+    "attacker.1.accept": [
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 203,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 206,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 273,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 275,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 277,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 280,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 283,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 285,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 296,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 315,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 338,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 341,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 354,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 355,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 356,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 358,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 359,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 360,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 361,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 362,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 363,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 370,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 371,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 396,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 406,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 410,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 414,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 416,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 420,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 427,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 432,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 438,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 443,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 446,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 449,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 451,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 456,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 470,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 477,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 483,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 485,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 528,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 533,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 562,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 567,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 569,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 578,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 582,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 594,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 598,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 606,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 611,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 613,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 619,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 650,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 655,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 662,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 664,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1040,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1050,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1053,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1068,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1077,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1079,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1080,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1084,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1087,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1090,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1091,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1092,
+          "text": ""
+        }
+      }
+    ],
+    "attacker.2.accept": [
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 220,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 221,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 222,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 244,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 245,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 248,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 249,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 250,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 252,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 253,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 258,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 259,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 260,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 261,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 262,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 264,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 270,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 279,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 293,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 295,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 300,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 306,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 311,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 313,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 327,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 331,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 332,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 340,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 377,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 379,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 383,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 390,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 403,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 408,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 412,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 429,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 436,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 466,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 468,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 469,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 475,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 480,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 488,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 489,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 492,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 493,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 494,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 500,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 501,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 502,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 503,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 504,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 505,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 506,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 507,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 508,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 521,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 524,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 530,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 535,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 537,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 539,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 541,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 543,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 545,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 553,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 557,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 575,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 579,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 584,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 589,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 591,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 614,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 617,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 634,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 638,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 639,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 641,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 642,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 646,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 648,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 656,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 675,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 676,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 677,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 678,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 683,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 685,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 686,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 689,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 703,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 720,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 721,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 722,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 723,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 724,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 733,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 734,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 735,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 736,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 737,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 743,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 749,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 751,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 754,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 758,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 761,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 763,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 769,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 771,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 775,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 790,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 792,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 793,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 796,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 798,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 803,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 811,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 816,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 818,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 838,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 839,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 840,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 841,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 842,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 843,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 847,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 851,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 853,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 856,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 857,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 860,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 864,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 872,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 873,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 877,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 881,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 886,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 914,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 915,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 916,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 917,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 918,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 921,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 926,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 927,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 930,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 932,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 934,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 936,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1019,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1020,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1028,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1032,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1042,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1044,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1048,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1052,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1072,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1073,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1074,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1075,
+          "text": ""
+        }
+      }
+    ],
+    "calibration.factor": [
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 211,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 215,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 219,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 227,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 230,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 233,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 237,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 241,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 288,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 291,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 299,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 305,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 310,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 329,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 335,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 337,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 346,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.5379936695098877,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 348,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 376,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 382,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.8738760352134705,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 389,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 395,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 400,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.6743677854537964,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 419,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 424,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 426,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 435,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 442,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 454,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 458,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 460,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 463,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.9807789325714111,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 465,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 499,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 520,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.17820771038532257,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 527,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 550,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 552,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 556,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 561,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 566,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 573,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 588,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.683339536190033,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 597,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 602,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 605,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 609,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.87381911277771,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 623,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 626,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.9622381925582886,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 629,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 632,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.911111056804657,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 637,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.9661223292350769,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 654,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 661,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.9688059091567993,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 668,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.2655966579914093,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 670,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.28454911708831787,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 673,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 702,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 706,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 709,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 713,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.9672461748123169,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 716,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.964055061340332,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 719,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 746,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.6860390901565552,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 748,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.7555891871452332,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 756,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.6997576355934143,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 760,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 766,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.761344313621521,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 768,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 774,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.6843052506446838,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 780,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.7857231497764587,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 783,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 786,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.8869733214378357,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 789,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 802,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 807,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 810,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 815,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 822,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 826,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 828,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.8360128402709961,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 831,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.8466749787330627,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 834,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 863,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 868,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 871,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 880,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 885,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.7072847485542297,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 901,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 904,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 907,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 910,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.9592337012290955,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 913,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1014,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1018,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.5614766478538513,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1025,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.30888479948043823,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1027,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.2856549620628357,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1031,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1035,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.4353475272655487,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1039,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1058,
+          "text": ""
+        }
+      },
+      {
+        "value": 0.9436964988708496,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1061,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1063,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1065,
+          "text": ""
+        }
+      },
+      {
+        "value": 1.0,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1067,
+          "text": ""
+        }
+      }
+    ],
+    "proxy.center_cm": [
+      {
+        "value": 13.74841594696045,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 201,
+          "text": ""
+        }
+      },
+      {
+        "value": 16.92683219909668,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 204,
+          "text": ""
+        }
+      },
+      {
+        "value": 13.88229751586914,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 208,
+          "text": ""
+        }
+      },
+      {
+        "value": 20.59933090209961,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 212,
+          "text": ""
+        }
+      },
+      {
+        "value": 18.591100692749023,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 216,
+          "text": ""
+        }
+      },
+      {
+        "value": 10.942126274108887,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 234,
+          "text": ""
+        }
+      },
+      {
+        "value": 12.789827346801758,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 238,
+          "text": ""
+        }
+      },
+      {
+        "value": 13.415188789367676,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 242,
+          "text": ""
+        }
+      },
+      {
+        "value": 4.172535419464111,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 255,
+          "text": ""
+        }
+      },
+      {
+        "value": 4.368590354919434,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 344,
+          "text": ""
+        }
+      },
+      {
+        "value": 8.603829383850098,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 392,
+          "text": ""
+        }
+      },
+      {
+        "value": 5.710572719573975,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 401,
+          "text": ""
+        }
+      },
+      {
+        "value": 8.493599891662598,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 710,
+          "text": ""
+        }
+      },
+      {
+        "value": 9.452947616577148,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 777,
+          "text": ""
+        }
+      },
+      {
+        "value": 4.738044738769531,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 823,
+          "text": ""
+        }
+      },
+      {
+        "value": 7.503408908843994,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1012,
+          "text": ""
+        }
+      },
+      {
+        "value": 3.6886634826660156,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1015,
+          "text": ""
+        }
+      }
+    ],
+    "proxy.rotation_deg": [
+      {
+        "value": 32.6227387926895,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 201,
+          "text": ""
+        }
+      },
+      {
+        "value": 22.014896449317522,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 204,
+          "text": ""
+        }
+      },
+      {
+        "value": 29.959100929106093,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 208,
+          "text": ""
+        }
+      },
+      {
+        "value": 34.982808004612394,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 212,
+          "text": ""
+        }
+      },
+      {
+        "value": 56.53888033865348,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 216,
+          "text": ""
+        }
+      },
+      {
+        "value": 19.456631043478186,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 234,
+          "text": ""
+        }
+      },
+      {
+        "value": 28.673580563600808,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 238,
+          "text": ""
+        }
+      },
+      {
+        "value": 30.961671407410595,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 242,
+          "text": ""
+        }
+      },
+      {
+        "value": 23.533796846901264,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 255,
+          "text": ""
+        }
+      },
+      {
+        "value": 19.190720785935337,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 344,
+          "text": ""
+        }
+      },
+      {
+        "value": 25.51549377066365,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 392,
+          "text": ""
+        }
+      },
+      {
+        "value": 24.98459523197351,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 401,
+          "text": ""
+        }
+      },
+      {
+        "value": 16.678307209630844,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 710,
+          "text": ""
+        }
+      },
+      {
+        "value": 19.821200816888442,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 777,
+          "text": ""
+        }
+      },
+      {
+        "value": 18.690798695573257,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 823,
+          "text": ""
+        }
+      },
+      {
+        "value": 31.95531935292992,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1012,
+          "text": ""
+        }
+      },
+      {
+        "value": 52.94460717084131,
+        "evidence": {
+          "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+          "line": 1015,
+          "text": ""
+        }
+      }
+    ]
+  },
+  "attackers": {
+    "1": {
+      "accepted": 56,
+      "rejected": 14,
+      "reasons": {
+        "no_cover: historical victim bone frame absent": 10,
+        "parried": 4
+      }
+    },
+    "2": {
+      "accepted": 141,
+      "rejected": 21,
+      "reasons": {
+        "no_cover: historical victim bone frame absent": 15,
+        "parried": 6
+      }
+    }
+  },
+  "reasons": {
+    "inside.native": [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2587,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2598,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2603,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2605,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2608,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2609,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2611,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2699,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2712,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3275,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3378,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3594,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3708,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3814,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4121,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4218,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4323,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4421,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4691,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4836,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5741,
+        "text": ""
+      }
+    ],
+    "no_cover: historical victim bone frame absent": [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 275,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 295,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 327,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 340,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 354,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 355,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 432,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 449,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 456,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 524,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 537,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 541,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 569,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 582,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 594,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 634,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 754,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 758,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 796,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 838,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 853,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 877,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 1072,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 1073,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 1077,
+        "text": ""
+      }
+    ],
+    "parried": [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 203,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 206,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 293,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 331,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 533,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 535,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 539,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 543,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 545,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\server.log",
+        "line": 578,
+        "text": ""
+      }
+    ],
+    "pose.diagnostic": [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1411,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1426,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1431,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1450,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1492,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1493,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1494,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1495,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1496,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1500,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1501,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1502,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1503,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1834,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 1883,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2309,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2345,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2348,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2358,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2371,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2404,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2405,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2406,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2407,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2499,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2500,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2501,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2502,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2503,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2523,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2524,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2525,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2528,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2534,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2535,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2536,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2539,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2589,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2795,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2963,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2964,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2965,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2967,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2970,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3169,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3170,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3171,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3173,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3176,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3410,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3650,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3651,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3652,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3654,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3658,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3740,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3741,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3742,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3744,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3748,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4106,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4107,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4108,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4110,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4113,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4152,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4180,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4181,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4182,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4184,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4187,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4349,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4413,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4482,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4483,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4484,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4486,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4489,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4536,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4537,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4538,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4540,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4543,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4645,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4762,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4763,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4764,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4766,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4769,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4784,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4785,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4786,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4788,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4791,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4822,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4823,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4824,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4828,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4835,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4939,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4940,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4941,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4943,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4946,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4955,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4999,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5000,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5001,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5003,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5006,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5012,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5013,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5014,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5016,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5019,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5323,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5444,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5447,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5448,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5449,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5450,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5451,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5457,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5493,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5553,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5561,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5562,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5563,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5566,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5595,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5601,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5602,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5603,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5606,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5663,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5664,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5665,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5667,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5670,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5742,
+        "text": ""
+      }
+    ]
+  },
+  "pairs": {
+    "Arm_R Health": [
+      [
+        -7.1,
+        -7.1
+      ],
+      [
+        -2.9,
+        -2.9
+      ],
+      [
+        -3.2,
+        -3.2
+      ]
+    ],
+    "Back Health": [
+      [
+        -0.2,
+        -0.8
+      ],
+      [
+        -14.0,
+        -14.3
+      ],
+      [
+        -2.8,
+        -2.7
+      ]
+    ],
+    "Bleeding": [
+      [
+        4.9,
+        4.9
+      ],
+      [
+        6.5,
+        6.8
+      ],
+      [
+        0.8,
+        0.8
+      ],
+      [
+        41.0,
+        41.0
+      ],
+      [
+        0.3,
+        0.6
+      ],
+      [
+        0.7,
+        0.7
+      ],
+      [
+        0.3,
+        0.3
+      ],
+      [
+        0.5,
+        0.5
+      ],
+      [
+        0.6,
+        0.6
+      ],
+      [
+        -0.4,
+        0.1
+      ],
+      [
+        0.7,
+        0.7
+      ],
+      [
+        39.5,
+        39.5
+      ],
+      [
+        1.4,
+        1.4
+      ],
+      [
+        7.9,
+        8.3
+      ],
+      [
+        7.5,
+        7.5
+      ],
+      [
+        1.5,
+        1.5
+      ],
+      [
+        1.7,
+        1.7
+      ],
+      [
+        6.8,
+        7.0
+      ],
+      [
+        1.1,
+        1.4
+      ],
+      [
+        7.6,
+        7.6
+      ],
+      [
+        42.0,
+        42.0
+      ],
+      [
+        41.9,
+        41.9
+      ],
+      [
+        2.3,
+        2.5
+      ],
+      [
+        38.9,
+        39.0
+      ],
+      [
+        41.3,
+        41.3
+      ],
+      [
+        11.3,
+        11.7
+      ],
+      [
+        0.8,
+        0.8
+      ],
+      [
+        0.8,
+        0.8
+      ],
+      [
+        0.8,
+        0.8
+      ],
+      [
+        -0.2,
+        0.1
+      ],
+      [
+        0.2,
+        0.2
+      ],
+      [
+        0.4,
+        0.4
+      ],
+      [
+        0.6,
+        0.6
+      ],
+      [
+        31792.7,
+        0.0
+      ],
+      [
+        0.2,
+        0.2
+      ],
+      [
+        12.0,
+        12.0
+      ],
+      [
+        18.2,
+        18.2
+      ],
+      [
+        7.7,
+        7.7
+      ],
+      [
+        0.5,
+        0.5
+      ],
+      [
+        0.3,
+        0.3
+      ],
+      [
+        8.2,
+        8.2
+      ],
+      [
+        12.8,
+        12.7
+      ]
+    ],
+    "Body Lower Health": [
+      [
+        -1.4,
+        -1.4
+      ],
+      [
+        -2.1,
+        -2.1
+      ]
+    ],
+    "Body Upper Health": [
+      [
+        -3.1,
+        -3.1
+      ],
+      [
+        -2.8,
+        -2.8
+      ],
+      [
+        -7.2,
+        -7.2
+      ],
+      [
+        -7.2,
+        -7.2
+      ],
+      [
+        -2.7,
+        -2.7
+      ],
+      [
+        -7.9,
+        -7.9
+      ]
+    ],
+    "Consciousness": [
+      [
+        -26.7,
+        -26.7
+      ],
+      [
+        -32.0,
+        -32.0
+      ],
+      [
+        -2.0,
+        -5.1
+      ],
+      [
+        -5.5,
+        -5.2
+      ],
+      [
+        -1.1,
+        -1.2
+      ],
+      [
+        -0.1,
+        -0.4
+      ],
+      [
+        -1.4,
+        -1.1
+      ],
+      [
+        -1.0,
+        -2.3
+      ],
+      [
+        -0.9,
+        -0.9
+      ],
+      [
+        -0.9,
+        -1.0
+      ],
+      [
+        0.5,
+        -0.7
+      ],
+      [
+        -0.5,
+        -0.5
+      ],
+      [
+        -3.5,
+        -3.5
+      ],
+      [
+        -12.2,
+        -12.2
+      ],
+      [
+        -11.7,
+        -11.7
+      ],
+      [
+        -0.1,
+        -0.6
+      ],
+      [
+        -4.0,
+        -4.5
+      ],
+      [
+        -12.8,
+        -12.8
+      ],
+      [
+        1.2,
+        -2.0
+      ],
+      [
+        -31.7,
+        -31.7
+      ],
+      [
+        -2.5,
+        -2.5
+      ],
+      [
+        -0.7,
+        -0.8
+      ],
+      [
+        1.1,
+        -0.1
+      ],
+      [
+        -2.3,
+        -2.3
+      ],
+      [
+        -2.3,
+        -1.7
+      ],
+      [
+        -1.7,
+        -1.7
+      ]
+    ],
+    "Damage Taken": [
+      [
+        0.2,
+        0.2
+      ],
+      [
+        0.1,
+        0.1
+      ],
+      [
+        0.1,
+        0.1
+      ],
+      [
+        0.1,
+        0.1
+      ],
+      [
+        0.4,
+        0.4
+      ],
+      [
+        0.4,
+        0.2
+      ],
+      [
+        0.1,
+        0.1
+      ],
+      [
+        0.4,
+        0.4
+      ]
+    ],
+    "Health": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.02,
+        0.0
+      ],
+      [
+        -1.76,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.03,
+        -0.03
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -1.53,
+        -1.53
+      ],
+      [
+        -3.29,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.62,
+        0.0
+      ],
+      [
+        -1.98,
+        -1.4
+      ],
+      [
+        -0.03,
+        -0.03
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -4.12,
+        0.0
+      ],
+      [
+        -0.05,
+        0.0
+      ],
+      [
+        -0.07,
+        -0.07
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.03,
+        -0.03
+      ],
+      [
+        -1.68,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.06,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.03,
+        -0.03
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.72,
+        0.0
+      ],
+      [
+        -0.72,
+        -0.72
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.13,
+        0.0
+      ],
+      [
+        -0.62,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -1.34,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -1.04,
+        -1.04
+      ],
+      [
+        -3.6,
+        -3.6
+      ],
+      [
+        -3.62,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.44,
+        0.0
+      ],
+      [
+        -1.64,
+        -1.33
+      ],
+      [
+        -3.95,
+        -0.16
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.18,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.07,
+        -0.07
+      ],
+      [
+        -0.03,
+        -0.03
+      ],
+      [
+        -0.07,
+        -0.07
+      ],
+      [
+        -0.85,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -1.98,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.76,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -1.57,
+        0.0
+      ],
+      [
+        -0.03,
+        -0.03
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -1.06,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.75,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.07,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -6.11,
+        0.0
+      ],
+      [
+        -4.72,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.6,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        -0.85,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ],
+    "Last Damage Taken": [
+      [
+        643.9,
+        589.3
+      ],
+      [
+        765.2,
+        765.2
+      ],
+      [
+        95.4,
+        52.1
+      ],
+      [
+        1246.6,
+        168.4
+      ],
+      [
+        -79.7,
+        -410.3
+      ],
+      [
+        1224.6,
+        1224.6
+      ],
+      [
+        43.2,
+        9.2
+      ],
+      [
+        1121.5,
+        1121.5
+      ],
+      [
+        1078.3,
+        1078.3
+      ],
+      [
+        2845.4,
+        2845.4
+      ],
+      [
+        670.6,
+        670.6
+      ],
+      [
+        1148.3,
+        477.7
+      ],
+      [
+        165.1,
+        165.1
+      ],
+      [
+        684.8,
+        684.8
+      ],
+      [
+        1266.1,
+        -1579.3
+      ],
+      [
+        -257.8,
+        -257.8
+      ],
+      [
+        177.9,
+        177.9
+      ],
+      [
+        487.2,
+        487.2
+      ],
+      [
+        1144.2,
+        -1845.5
+      ],
+      [
+        256.3,
+        440.6
+      ],
+      [
+        272.8,
+        -1207.3
+      ],
+      [
+        334.9,
+        334.9
+      ],
+      [
+        247.1,
+        141.4
+      ],
+      [
+        1480.1,
+        1480.1
+      ],
+      [
+        2876.5,
+        150.1
+      ],
+      [
+        2899.5,
+        -261.4
+      ],
+      [
+        134.3,
+        93.8
+      ],
+      [
+        1060.7,
+        1060.7
+      ],
+      [
+        3160.9,
+        284.4
+      ],
+      [
+        122.3,
+        352.9
+      ],
+      [
+        2989.7,
+        1765.2
+      ],
+      [
+        1123.3,
+        -1824.2
+      ],
+      [
+        2730.8,
+        1484.1
+      ],
+      [
+        384.3,
+        110.9
+      ],
+      [
+        689.2,
+        689.2
+      ],
+      [
+        -58.0,
+        -58.0
+      ],
+      [
+        614.0,
+        29.9
+      ],
+      [
+        784.0,
+        -54.6
+      ],
+      [
+        -50.6,
+        7.3
+      ],
+      [
+        1012.6,
+        1012.6
+      ],
+      [
+        41876.4,
+        511.0
+      ],
+      [
+        141.2,
+        -980.2
+      ],
+      [
+        330.5,
+        330.5
+      ],
+      [
+        622.2,
+        622.2
+      ],
+      [
+        34.0,
+        34.0
+      ],
+      [
+        733.4,
+        106.9
+      ],
+      [
+        626.4,
+        626.4
+      ],
+      [
+        141.4,
+        100.6
+      ],
+      [
+        -156.2,
+        105.1
+      ],
+      [
+        36.0,
+        36.0
+      ],
+      [
+        569.3,
+        158.2
+      ],
+      [
+        378.2,
+        -355.2
+      ],
+      [
+        93.2,
+        -88.0
+      ],
+      [
+        40.8,
+        40.8
+      ]
+    ],
+    "Leg_L Health": [
+      [
+        -3.1,
+        -3.1
+      ],
+      [
+        -2.7,
+        -2.7
+      ],
+      [
+        -7.5,
+        -7.5
+      ],
+      [
+        -2.8,
+        -2.8
+      ],
+      [
+        -6.8,
+        -6.8
+      ],
+      [
+        -2.5,
+        -2.5
+      ]
+    ],
+    "Pain": [
+      [
+        0.7,
+        0.7
+      ],
+      [
+        -6.2,
+        0.9
+      ],
+      [
+        2.0,
+        2.0
+      ],
+      [
+        -4.2,
+        2.0
+      ],
+      [
+        1.1,
+        1.1
+      ],
+      [
+        0.5,
+        1.7
+      ],
+      [
+        3.1,
+        3.1
+      ],
+      [
+        1.1,
+        1.1
+      ],
+      [
+        1.7,
+        1.7
+      ],
+      [
+        0.7,
+        0.7
+      ],
+      [
+        1.9,
+        1.9
+      ],
+      [
+        0.4,
+        0.5
+      ],
+      [
+        -1.6,
+        0.2
+      ],
+      [
+        0.8,
+        0.8
+      ],
+      [
+        -4.8,
+        1.4
+      ],
+      [
+        0.5,
+        0.5
+      ],
+      [
+        0.5,
+        0.5
+      ],
+      [
+        -3.2,
+        0.5
+      ],
+      [
+        -1.0,
+        0.3
+      ],
+      [
+        1.9,
+        1.9
+      ],
+      [
+        3.6,
+        3.6
+      ],
+      [
+        3.7,
+        3.7
+      ],
+      [
+        0.2,
+        0.2
+      ],
+      [
+        -5.5,
+        1.8
+      ],
+      [
+        3.9,
+        3.9
+      ],
+      [
+        -2.1,
+        0.7
+      ],
+      [
+        3.7,
+        3.7
+      ],
+      [
+        1.8,
+        1.8
+      ],
+      [
+        3.4,
+        3.4
+      ],
+      [
+        -0.9,
+        0.5
+      ],
+      [
+        0.9,
+        0.9
+      ],
+      [
+        1.0,
+        1.0
+      ],
+      [
+        -0.6,
+        0.8
+      ],
+      [
+        1.6,
+        1.6
+      ],
+      [
+        850.1,
+        0.5
+      ],
+      [
+        0.3,
+        0.8
+      ],
+      [
+        0.6,
+        0.6
+      ],
+      [
+        0.9,
+        0.9
+      ],
+      [
+        1.0,
+        1.0
+      ],
+      [
+        0.6,
+        0.6
+      ],
+      [
+        0.1,
+        0.1
+      ],
+      [
+        0.6,
+        0.6
+      ],
+      [
+        0.4,
+        0.5
+      ],
+      [
+        0.3,
+        0.6
+      ]
+    ],
+    "Sustained Damage": [
+      [
+        1104.0,
+        643.9
+      ],
+      [
+        765.2,
+        765.2
+      ],
+      [
+        95.4,
+        95.4
+      ],
+      [
+        1246.6,
+        1246.6
+      ],
+      [
+        223.2,
+        223.2
+      ],
+      [
+        1224.6,
+        1224.6
+      ],
+      [
+        43.2,
+        43.2
+      ],
+      [
+        1121.5,
+        1121.5
+      ],
+      [
+        1078.3,
+        1078.3
+      ],
+      [
+        2845.4,
+        2845.4
+      ],
+      [
+        670.6,
+        670.6
+      ],
+      [
+        1148.3,
+        1148.3
+      ],
+      [
+        165.1,
+        165.1
+      ],
+      [
+        684.8,
+        684.8
+      ],
+      [
+        1266.1,
+        1266.1
+      ],
+      [
+        277.1,
+        277.1
+      ],
+      [
+        177.9,
+        177.9
+      ],
+      [
+        503.6,
+        503.6
+      ],
+      [
+        1144.2,
+        1144.2
+      ],
+      [
+        440.6,
+        440.6
+      ],
+      [
+        457.1,
+        457.1
+      ],
+      [
+        334.9,
+        334.9
+      ],
+      [
+        247.1,
+        247.1
+      ],
+      [
+        1664.4,
+        1664.4
+      ],
+      [
+        2876.5,
+        2876.5
+      ],
+      [
+        2899.5,
+        2899.5
+      ],
+      [
+        134.3,
+        134.3
+      ],
+      [
+        1060.7,
+        1060.7
+      ],
+      [
+        3160.9,
+        3160.9
+      ],
+      [
+        483.3,
+        483.3
+      ],
+      [
+        2989.7,
+        2989.7
+      ],
+      [
+        1123.3,
+        1123.3
+      ],
+      [
+        2730.8,
+        2730.8
+      ],
+      [
+        1522.1,
+        384.3
+      ],
+      [
+        689.2,
+        689.2
+      ],
+      [
+        614.0,
+        614.0
+      ],
+      [
+        1622.5,
+        784.0
+      ],
+      [
+        7.3,
+        7.3
+      ],
+      [
+        1012.6,
+        1012.6
+      ],
+      [
+        141.2,
+        141.2
+      ],
+      [
+        633.4,
+        633.4
+      ],
+      [
+        622.2,
+        622.2
+      ],
+      [
+        34.0,
+        34.0
+      ],
+      [
+        733.4,
+        733.4
+      ],
+      [
+        626.4,
+        626.4
+      ],
+      [
+        141.4,
+        141.4
+      ],
+      [
+        667.3,
+        386.2
+      ],
+      [
+        36.0,
+        36.0
+      ],
+      [
+        569.3,
+        569.3
+      ],
+      [
+        378.2,
+        378.2
+      ],
+      [
+        924.0,
+        418.0
+      ],
+      [
+        40.8,
+        40.8
+      ]
+    ]
+  },
+  "pair_evidence": [
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4211,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4239,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4829,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4870,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4201,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4226,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4921,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4932,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4514,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4528,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4139,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4167,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4459,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4471,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4050,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4102,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4505,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4521,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4546,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4577,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4916,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4926,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3359,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3395,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3367,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3404,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3345,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3381,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4136,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4164,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4499,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4511,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2643,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2711,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2647,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2728,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2651,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2737,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2692,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2805,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2695,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2808,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2663,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2750,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2659,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2747,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4882,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4895,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2580,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2632,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2569,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2628,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3810,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3835,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3704,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3728,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5608,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5620,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5611,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5623,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4873,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4889,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4041,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4088,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2829,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2849,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2885,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2908,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3208,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3232,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2591,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2635,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3271,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3297,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2976,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2989,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3135,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3157,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3130,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3145,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3144,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3166,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3922,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3954,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3371,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3428,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4552,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4587,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5683,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5715,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2686,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2791,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2680,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2786,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2674,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2776,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4379,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4391,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3495,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3592,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2677,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2781,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4703,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4720,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2639,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2708,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4038,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4076,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2670,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2753,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4808,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4852,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4814,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4858,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3975,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4000,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4634,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4648,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4686,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4695,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4811,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4855,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2689,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2794,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4319,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4344,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4278,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4291,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4549,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4582,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5737,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5794,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4142,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4170,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3463,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3522,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3456,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3516,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3114,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3141,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4730,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4739,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3913,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3935,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3450,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3500,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4356,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4367,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4740,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4750,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4117,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4126,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4256,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4272,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3756,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3782,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2896,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2924,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4706,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4723,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3447,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3494,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2928,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2953,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2917,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2941,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3180,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3201,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3356,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3389,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4044,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4094,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3698,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3723,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3859,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3888,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3195,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3224,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4897,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4904,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4905,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4915,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3871,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3900,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3260,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3290,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2994,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3014,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2832,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2853,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2984,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3011,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3581,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3598,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5725,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5766,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3420,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3445,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5686,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5709,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3307,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3319,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3333,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3353,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3312,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3332,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3246,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3265,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3963,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3982,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2880,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2903,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2931,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2960,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5747,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5807,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3364,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3390,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3717,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3752,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3282,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3303,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5754,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5816,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3045,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3096,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3006,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3065,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5767,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5820,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5778,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5837,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3733,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3777,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2842,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2875,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5680,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5704,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2837,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2862,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3891,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3906,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3855,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3876,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2719,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 2827,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3372,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3419,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3851,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3867,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3862,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3882,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3983,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4011,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3186,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3213,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3994,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 4017,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3412,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3435,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3972,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 3991,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5744,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5799,
+        "text": ""
+      }
+    ],
+    [
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5775,
+        "text": ""
+      },
+      {
+        "file": "test-results/beta6/ai-probe-cloth3\\UE4SS.log",
+        "line": 5830,
+        "text": ""
+      }
+    ]
+  ],
+  "counters": {
+    "calibration_samples": 105,
+    "claim_asymmetry_max": 162,
+    "claim_asymmetry_min": 70,
+    "inside.native": 21,
+    "pair_ambiguous_signatures": 2,
+    "pose.diagnostic": 140,
+    "probe_blows": 241,
+    "replay_blows": 196
+  },
+  "limitations": [
+    "Legacy PROBE pairing uses unique rounded input signatures in a two-player run; ambiguous signatures are excluded. It cannot prove causality or continuation parity.",
+    "Per-hit bootstrap intervals are exploratory: blows within a round are correlated. Use independent repeated experiments for acceptance."
+  ],
+  "accepted_baseline": false,
+  "status": "historical failed reference; no fresh build attribution or release certification"
+}

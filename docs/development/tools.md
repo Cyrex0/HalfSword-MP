@@ -9,6 +9,9 @@ libraries incl. `debug`, like UE4SS).
 
 ## Build
 
+`hsmp-lab` keeps a two-game session alive for recipe experiments, incremental
+combat/pose analysis, bootstrap comparisons and reviews. See [Native combat lab](lab.md).
+
 ```powershell
 cargo build --release -p hsmp-tools
 # binaries: target/release/hsmp-tools.exe, hsmp-gate.exe, check_travel.exe, check_wg.exe,
