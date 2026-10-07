@@ -32,6 +32,10 @@ use std::sync::{Mutex, OnceLock};
 mod native_damage_classes;
 use native_damage_classes::native_source_class;
 
+/// The damage class of an exact native weapon class name ("ModularWeaponBP_Polearm_Mid_Tier_C"),
+/// from the audited registry; None for anything it does not list.
+pub fn native_class(name: &str) -> Option<WeaponClass> { native_source_class(name) }
+
 /// Index of `Health` in the shared HSMPCombat FIELDS table.
 pub const FIELD_HEALTH: u8 = 0;
 /// Hard per-hit ceiling (Willie Health is 100; one blow may kill).

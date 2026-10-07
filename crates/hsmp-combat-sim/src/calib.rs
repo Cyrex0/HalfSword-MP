@@ -108,8 +108,15 @@ fn num(s: Option<&str>) -> Option<f32> {
 /// Weapon class from a weapon actor / class name in a game log ("ModularWeaponBP_Mace_T2_C",
 /// a Willie for body contacts).
 pub fn class_of_name(name: &str) -> WeaponClass {
-    let n = name.to_ascii_lowercase();
-    if n.starts_with("willie") { return WeaponClass::Unarmed; }
+    // An actor name is its class plus an instance suffix ("..._C_2147481047"): the exact
+    // native class first (the server's audited registry), then the body strikers.
+    let class = match name.rfind("_C_") {
+        Some(i) if name[i + 3..].bytes().all(|b| b.is_ascii_digit()) => &name[..i + 2],
+        _ => name,
+    };
+    if let Some(c) = crate::validate::damage::native_class(class) { return c; }
+    let n = class.to_ascii_lowercase();
+    if n.starts_with("willie") || n.starts_with("weapon_fists") || n.starts_with("weapon_feet") { return WeaponClass::Unarmed; }
     class_of(&n)
 }
 

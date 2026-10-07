@@ -10,6 +10,12 @@ fn parses_the_game_and_server_lines() {
     assert_eq!((s.class, s.vel, s.imp, s.rel, s.source), (WeaponClass::Blunt, 2650.0, 2650.0, 1100.0, Source::Game));
     let fist = "[HSMPParity] DCD on Willie_BP_C_3 bone=head by Willie_BP_C: |vel|=900 |imp|=1400 rel=700 cut=8.0";
     assert_eq!(parse_parity_line(fist).unwrap().class, WeaponClass::Unarmed);
+    // Live HSMPParity lines name the actor (class + instance suffix): the exact native class
+    // decides, and the fists pseudo-weapon is unarmed.
+    let pole = "[HSMPParity] DCD on Willie_BP_C_2147481010 bone=pelvis by ModularWeaponBP_Polearm_Mid_Tier_C wp=ModularWeaponBP_Polearm_Mid_Tier_C_2147480958: |vel|=812 |imp|=163 rel=700 cut=12.0";
+    assert_eq!(parse_parity_line(pole).unwrap().class, WeaponClass::Polearm);
+    let fists = "[HSMPParity] DCD on Willie_BP_C_2147481010 bone=head by Weapon_Fists_C wp=Weapon_Fists_C_2147480963: |vel|=300 |imp|=400 rel=250 cut=0.0";
+    assert_eq!(parse_parity_line(fists).unwrap().class, WeaponClass::Unarmed);
     let srv = "2026-10-04T12:00:00Z  INFO hsmp_server::combat: combat: impact rescale attacker=3 target=4 hit_id=9 bone=\"spine_03\" class=Sword vel_claimed=2900.5 vel_forwarded=2700 imp_claimed=3100 imp_forwarded=3100 standin_rel=1500 server_striking=Some(1450.0) server_peak=Some(1500.0) server_relative=Some(1400.0) rel_exact=true factor=0.93";
     let s = parse_rescale_line(srv).unwrap();
     assert_eq!((s.class, s.vel, s.rel, s.peak), (WeaponClass::Sword, 2900.5, 1400.0, Some(1500.0)));
