@@ -1110,3 +1110,59 @@ Fresh native ready state/numeric heartbeat and module current-version Mode
 views guard admission/end. Both probes default OFF; no restore,paint,damage or
 factory calls were added. Native28 must establish actual availability and hand
 fault state before any six-bit suppression correction.
+
+### Native28/29: separate hand faults and unqualified damage observer
+
+Commit20dcd0f1 passed strict G0:61 Lua suites,1,279 Rust tests/75 binaries,
+95 production Lua parses,clippy0errors/2warnings. Normal RequireG0 deployment
+linked the real native DLL and deployed matching compiled content; log:
+`test-results/lab/integration/native28-deploy.log`. Native28 launch quickG0
+FAILED one fixture because opt-in grip environment leaked through mocked getenv.
+The failed evidence is retained. A fixture isolation correction passes both
+ambient probe enabled/disabled runs; production capture remains default OFF.
+
+Native28:`test-results/lab/native-20261008-28`,raw:
+`test-results/20261008-061636-000e38-combat_manual`. Both windows DISPLAY1;
+caller/body/armor/localdamage probes OFF, bounded grip probe ON. Two physical
+respawns completed in12,860ms and12,664ms; third attempt failed35s placement.
+Full modes acceptance remains NOT RUN. Normal teardown,0newcrashes/noorphans;
+limited manual PASS does not override physical or modes failure.
+
+Two distinct fault states are now observed; do not conflate their causes:
+- Inst2 peer1 round2life2 hand_r13.7uu/51.3deg at06:19:32 (UE4SS4688).
+  Fresh post-BP/post-policy groups49/51 show current same constraint77, held
+  polearm BaseMesh->Mesh hand_r, XYZposition+velocity enabled,k7500,d0.
+  This supports a competing grip motor hypothesis,not measured solver force.
+- Inst1 peer2 round2life2 hand_l0.2uu/174.1deg at06:20:11 (UE4SS6209).
+  Group62 is current/complete/same-pair: Fists BaseMesh->CharacterMesh0 hand_l,
+  all XYZ position/velocity disabled,k50,d1,all limits free,angular0. Native
+  owner peer2 instead has left constraint on held polearm with position enabled
+  andk7500. Right motor hask0 by group62. A transient right lock during repose
+  cannot explain sustained left174deg; suppressing linear enables alone cannot
+  resolve this second state. No physical policy or tolerances changed.
+
+Cloth90 probe-on metrics:0clock resets/17windows,honest167/183=.91256831,
+rotation30.32mean/52.83max(n11),33Insideaccepted/24delivery/20native records.
+Second cloth90:0resets/14windows,honest219/250=.876,rotation32.57/72.38(n35),
+43Insideaccepted/31delivery/14native records. Both0exactclaimpairs. These
+unpaired log layers and different workloads do not prove damage or pose parity.
+GRIPCALL includes capture/log overhead,not baseline callback cost or rendererFPS.
+
+Native29:`test-results/lab/native-20261008-29`,raw:
+`test-results/20261008-064040-1913dd-combat_manual`. Probe OFF,controlled AI OFF.
+Box enrollment06:44:40.752 was positively Live (06:44:14->06:46:14),but refused
+without stage detail. Owner weaponstate06:45:45 proves held native axe/grip1;
+remaining nativeBox/module/header/context predicate is unknown. Native28's two
+refusals occurred in Lobby/LoadingReady. Across both sessions0BOXOBSstarted,
+0PAIR: actual native pre/post scope,serial availability and Box lifecycle remain
+UNVERIFIED. Native29 normal QuitGame06:48:40,0newcrashes/noorphans. Ignored scalar
+`checkpoint-summary.json` files retain metrics and limitations for both sessions.
+
+Cooked native solo initialization uses RthenL. Remote omitted-L appearance
+instead synthesizes Fists and calls valid left setup,which clears offhand
+constraints and R Two Handed Grip; own empty-L kit does not call that branch.
+This is a proved topology mutation difference,not proof of174deg causation.
+Universal L-first reorder would alter legitimate dual wielding and is not
+justified. Next work is stage-coded Box refusal diagnostics and bounded copies
+of actual hand decoded/final/prior/current quaternions and body simulation state,
+followed by Astra review and real paired evidence. Main/release remain blocked.

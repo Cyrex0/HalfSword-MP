@@ -54,10 +54,13 @@ function M.new(api)
         api.log("BOXOBS stopped reason=%s authority=false",reason or "developer")
     end
     local function fresh()
-        if not active then return nil end
-        local ok,s=pcall(api.snapshot,active.scope.peer,active.scope.side)
-        s=ok and copy(s) or nil
-        if not same(active.scope,s) then return nil end
+        if not active then return nil,"inactive" end
+        local ok,s,reason=pcall(api.snapshot,active.scope.peer,active.scope.side)
+        if not ok then return nil,"snapshot_exception" end
+        if not s then return nil,reason or "snapshot_unavailable" end
+        s=copy(s)
+        if not s then return nil,"snapshot_fields" end
+        if not same(active.scope,s) then return nil,"scope_changed" end
         return s
     end
     local function mark(role,ctx,box_param)
@@ -66,8 +69,8 @@ function M.new(api)
         local admitted,status=pcall(n.status)
         if not admitted or type(status)~="table" or status.active~=true
             or type(status.pending)~="number" or status.pending<1 or status.pending_role~=role then return end
-        local s=fresh()
-        if not s then stop("fresh context unavailable");return end
+        local s,reason=fresh()
+        if not s then stop(reason);return end
         local ok,p,b=pcall(function()return ctx:get(),box_param:get()end)
         if not ok or not p or not b or not p:IsValid() or not b:IsValid()
             or p:GetAddress()~=s.pawn.address or b:GetAddress()~=s.box.address then return end
@@ -106,8 +109,11 @@ function M.new(api)
         end
         if active then stop("re-enrollment") end
         local n=native();if not n then api.log("BOXOBS unavailable native API");return end
-        local ok,s=pcall(api.snapshot,peer,side);s=ok and copy(s) or nil
-        if not s then api.log("BOXOBS refused fresh verified owner/displayed victim/held Box unavailable");return end
+        local ok,s,reason=pcall(api.snapshot,peer,side)
+        if not ok then reason="snapshot_exception"
+        elseif s then s=copy(s);if not s then reason="snapshot_fields" end
+        else reason=reason or "snapshot_unavailable" end
+        if not ok or not s then api.log("BOXOBS refused reason=%s authority=false",reason);return end
         s.duration_ms,s.calls=seconds*1000,32
         local started,yes,why=pcall(n.begin,s)
         if not started or yes~=true then api.log("BOXOBS unavailable enrollment=%s",tostring(why or yes));return end
@@ -119,7 +125,8 @@ function M.new(api)
     function out.tick()
         if not active then return end
         local n=native();if not n then active=nil;return end
-        if not fresh() then stop("world/actor/mesh/held weapon/match/round/life changed");return end
+        local current,reason=fresh()
+        if not current then stop(reason);return end
         drain(n)
         local ok,s=pcall(n.status)
         if not ok or type(s)~="table" or s.active~=true then

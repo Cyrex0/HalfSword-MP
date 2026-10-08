@@ -59,6 +59,9 @@ signed.command("off")
 
 -- Actual Parity snapshot/enrollment path follows assigned fighter despite a foreign PC Pawn.
 local game_logs,loop={},nil
+local function refused(reason)
+    return (game_logs[#game_logs] or ""):find("BOXOBS refused reason="..reason.." authority=false",1,true)~=nil
+end
 os.getenv=function(k)if k=="HSMP_DEV" or k=="HSMP_INST" then return "1" elseif k=="HSMP_STATE_DIR" then return T.tmpdir("boxobs_")end end
 os.clock=function()return 10 end
 print=function(s)game_logs[#game_logs+1]=s end
@@ -112,7 +115,8 @@ package.preload.hsmp_session=function()return {new=function(opts)
     end
     return session
 end,view=function()return view end,mode=function()return mode end}end
-package.preload.native_weapon_modules=function()return {of=function(w)T.check(w==weapon,"only exact held native weapon is traversed");return {{component=box,id=12,child_of=1}}end}end
+local native_modules={{component=box,id=12,child_of=1}}
+package.preload.native_weapon_modules=function()return {of=function(w)T.check(w==weapon,"only exact held native weapon is traversed");return native_modules end}end
 FindAllOf=function()return {foreign_pawn,own,pawn}end
 LoopAsync=function(_,f)loop=f end
 RegisterHook=function(_,second)T.check(type(second)=="function","production hook has a real second callback");return 1,1 end
@@ -126,20 +130,33 @@ HSMP_PARITY_TEST.boxobserve("2 r 1")
 T.check(enroll_options and enroll_options.pawn.address==2 and enroll_options.box_owner.address==5
     and enroll_options.owner_pawn==20 and enroll_options.box.address==4,"production enrollment binds displayed victim and assigned owner/held Box, never foreign PC")
 enroll_options=nil;stream.mode="stale";HSMP_PARITY_TEST.boxobserve("2 r 1")
-T.check(enroll_options==nil,"publication-fresh but held physical source is unavailable")
+T.check(enroll_options==nil and refused("peer_stream_mode"),"publication-fresh held source refuses with its stream-mode stage")
 stream.mode="interp";owner_status.verified=false;HSMP_PARITY_TEST.boxobserve("2 r 1")
-T.check(enroll_options==nil,"unverified assigned fighter never authorizes enrollment")
+T.check(enroll_options==nil and refused("owner_context"),"unverified assigned fighter reports unavailable owner context before enrollment")
 owner_status.verified=true;own.R_GripType_Current=0;HSMP_PARITY_TEST.boxobserve("2 r 1")
-T.check(enroll_options==nil,"valid remembered weapon with absent native held grip is not enrolled")
+T.check(enroll_options==nil and refused("held_grip"),"remembered weapon with absent native grip reports held-grip refusal")
 own.R_GripType_Current=14
+view.phase=0;HSMP_PARITY_TEST.boxobserve("2 r 1")
+T.check(enroll_options==nil and refused("live_phase"),"retained otherwise-valid actors cannot enroll outside Live")
+view.phase=3;shown.local_ms=9000;HSMP_PARITY_TEST.boxobserve("2 r 1")
+T.check(enroll_options==nil and refused("playback"),"stale displayed sample reports playback refusal without enrollment")
+shown.local_ms=10000;native_modules=nil;HSMP_PARITY_TEST.boxobserve("2 r 1")
+T.check(enroll_options==nil and refused("native_modules"),"unavailable native module traversal is distinguished from missing membership")
+native_modules={{component=weapon,id=1,child_of=0}};HSMP_PARITY_TEST.boxobserve("2 r 1")
+T.check(enroll_options==nil and refused("box_membership"),"valid traversal without the held Box reports membership refusal")
+native_modules={{component=box,id=12,child_of=1}}
+local box_full_name=box.GetFullName;box.GetFullName=function()return "Object box"end
+HSMP_PARITY_TEST.boxobserve("2 r 1")
+T.check(enroll_options==nil and refused("identity_box"),"missing exact native Box path reports scalar-identity refusal")
+box.GetFullName=box_full_name
 link_connected=false;HSMP_PARITY_TEST.boxobserve("2 r 1")
-T.check(enroll_options==nil,"disconnected link refuses retained exact Mode/playback and verified spawn rows")
+T.check(enroll_options==nil and refused("session_start"),"disconnected retained records report initial session refusal")
 link_connected=true;heartbeat_fresh=false;HSMP_PARITY_TEST.boxobserve("2 r 1")
 T.check(enroll_options==nil,"expired heartbeat refuses retained otherwise-fresh displayed tuple")
 heartbeat_fresh=true
 weapon.GetWorld=function()link_connected=false;return world end
 HSMP_PARITY_TEST.boxobserve("2 r 1")
-T.check(enroll_options==nil,"link loss during native held-Box inspection fails final current session recheck")
+T.check(enroll_options==nil and refused("session_end"),"link loss during held-Box inspection reports final session refusal")
 link_connected=true;weapon.GetWorld=function()return world end
 native_header.sidecar_hb_age_s=6
 HSMP_PARITY_TEST.boxobserve("2 r 1")
@@ -168,6 +185,10 @@ native_header={sidecar_state=2,sidecar_hb_age_s=0};mode.rows[2].life=4
 HSMP_PARITY_TEST.boxobserve("2 r 1")
 T.check(enroll_options==nil,"current Mode new life rejects retained old placement/playback without a view cadence fallback")
 mode.rows[2].life=3
+weapon.GetWorld=function()owner_status.life=8;return world end
+HSMP_PARITY_TEST.boxobserve("2 r 1")
+T.check(enroll_options==nil and refused("revalidation"),"owner context change during native inspection reports revalidation refusal")
+owner_status.life=7;weapon.GetWorld=function()return world end
 HSMP_PARITY_TEST.boxobserve("2 r 1")
 T.check(enroll_options~=nil,"current numeric ready state is accepted with complete exact context")
 local control_ns=false

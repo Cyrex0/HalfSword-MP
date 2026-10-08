@@ -1010,42 +1010,49 @@ local function box_observer_live()
     return box_session:live()==true
 end
 local function box_observer_snapshot(peer,side)
-    if not box_observer_live() then return nil end
+    if not box_observer_live() then return nil,"session_start" end
     local own,source=diagnostic_snapshot(0)
     local shown,pawn,mesh=diagnostic_snapshot(peer)
     local view,mode=HSESS and HSESS.view(),HSESS and HSESS.mode()
     local row=mode and mode.rows and mode.rows[peer]
     local owner_row=mode and view and mode.rows and mode.rows[view.my_peer_id]
-    if not own or own.placement_verified~="true" or not shown or not row or not row.alive or row.respawning
-        or not owner_row or not owner_row.alive or owner_row.respawning
-        or not view or view.phase~=3 or not mode or own.match_id~=shown.match_id or own.round~=shown.round then return nil end
+    if not own then return nil,"owner_context" end
+    if own.placement_verified~="true" then return nil,"owner_unverified" end
+    if not shown then return nil,"displayed_context" end
+    if not row or not row.alive or row.respawning then return nil,"victim_mode" end
+    if not owner_row or not owner_row.alive or owner_row.respawning then return nil,"owner_mode" end
+    if not view or view.phase~=3 or not mode then return nil,"live_phase" end
+    if own.match_id~=shown.match_id or own.round~=shown.round then return nil,"context_tuple" end
     local ipc=rawget(_G,"HSMP_IPC")
     local play
     for _,r in ipairs((ipc and ipc.bus_table("playback") or {}).rows or {})do if r.peer==peer then play=r;break end end
     local now=os.clock()*1000
     if not play or type(play.local_ms)~="number" or now<play.local_ms or now-play.local_ms>250
-        or play.pawn~=shown.pawn or play.match_id~=shown.match_id or play.round~=shown.round or play.life~=shown.life then return nil end
+        or play.pawn~=shown.pawn or play.match_id~=shown.match_id or play.round~=shown.round or play.life~=shown.life then return nil,"playback" end
     local stream,slot={},ipc and ipc.peer_slot and ipc.peer_slot(peer)
-    if slot==nil or not ipc.peer_play then return nil end
+    if slot==nil or not ipc.peer_play then return nil,"peer_stream_unavailable" end
     ipc.peer_play(slot,stream)
     if stream.has_context~=true or stream.peer_id~=peer or stream.match_id~=shown.match_id
-        or stream.round~=shown.round or stream.life~=shown.life or (stream.mode~="interp" and stream.mode~="extrap")
-        or type(stream.age)~="number" or stream.age~=stream.age or math.abs(stream.age)>250 then return nil end
+        or stream.round~=shown.round or stream.life~=shown.life then return nil,"peer_stream_context" end
+    if stream.mode~="interp" and stream.mode~="extrap" then return nil,"peer_stream_mode" end
+    if type(stream.age)~="number" or stream.age~=stream.age or math.abs(stream.age)>250 then return nil,"peer_stream_age" end
     local weapon=source[side=="l" and "Weapon L" or "Weapon R"]
     local grip=source[side=="l" and "L_GripType_Current" or "R_GripType_Current"]
-    if not valid(weapon) or type(grip)~="number" or grip<=0 or grip>=math.huge or grip%1~=0 then return nil end
+    if not valid(weapon) then return nil,"held_weapon" end
+    if type(grip)~="number" or grip<=0 or grip>=math.huge or grip%1~=0 then return nil,"held_grip" end
     local box=weapon["Hit Box Collision"]
-    if not valid(box) or not valid(box:GetOwner()) or box:GetOwner():GetAddress()~=weapon:GetAddress() then return nil end
+    if not valid(box) then return nil,"held_box" end
+    if not valid(box:GetOwner()) or box:GetOwner():GetAddress()~=weapon:GetAddress() then return nil,"box_owner" end
     local resolver=load_module("native_weapon_modules")
     local rows=resolver and resolver.of(weapon)
     local found=false
     for _,r in ipairs(rows or {})do if valid(r.component) and r.component:GetAddress()==box:GetAddress() then found=true end end
-    if not found then return nil end
+    if not found then return nil,rows and "box_membership" or "native_modules" end
     local world=WG.world()
-    if not valid(world) then return nil end
-    if not valid(mesh:GetOwner()) or mesh:GetOwner():GetAddress()~=pawn:GetAddress() then return nil end
-    for _,o in ipairs({source,pawn,weapon})do
-        local w=o:GetWorld();if not valid(w) or w:GetAddress()~=world:GetAddress() then return nil end
+    if not valid(world) then return nil,"world" end
+    if not valid(mesh:GetOwner()) or mesh:GetOwner():GetAddress()~=pawn:GetAddress() then return nil,"mesh_owner" end
+    for i,o in ipairs({source,pawn,weapon})do
+        local w=o:GetWorld();if not valid(w) or w:GetAddress()~=world:GetAddress() then return nil,"actor_world_"..i end
     end
     local function ref(o)
         local full=o:GetFullName()
@@ -1056,13 +1063,16 @@ local function box_observer_snapshot(peer,side)
     local result={world=ref(world),pawn=ref(pawn),mesh=ref(mesh),box=ref(box),box_owner=ref(weapon),
         match_id=shown.match_id,round=shown.round,life=shown.life,world_key=WG.key,
         owner_life=own.life,owner_pawn=own.address,owner_mesh=own.mesh_address,peer=peer,side=side}
+    for _,k in ipairs({"world","pawn","mesh","box","box_owner"})do
+        if not result[k] then return nil,"identity_"..k end
+    end
     local fresh_own=diagnostic_snapshot(0)
     local fresh_shown=diagnostic_snapshot(peer)
     if not DIAGNOSTIC_CONTEXT.same(own,fresh_own) or not DIAGNOSTIC_CONTEXT.same(shown,fresh_shown)
         or not valid(source[side=="l" and "Weapon L" or "Weapon R"])
         or source[side=="l" and "Weapon L" or "Weapon R"]:GetAddress()~=weapon:GetAddress()
-        or not valid(weapon["Hit Box Collision"]) or weapon["Hit Box Collision"]:GetAddress()~=box:GetAddress() then return nil end
-    if not box_observer_live() then return nil end
+        or not valid(weapon["Hit Box Collision"]) or weapon["Hit Box Collision"]:GetAddress()~=box:GetAddress() then return nil,"revalidation" end
+    if not box_observer_live() then return nil,"session_end" end
     return result
 end
 local function exp_boxobserve(arg)
