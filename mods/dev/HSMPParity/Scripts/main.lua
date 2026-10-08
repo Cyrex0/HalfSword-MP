@@ -1022,7 +1022,7 @@ function box_playback.refuse(reason,detail,peer,shown,play,now,generation)
         reason,detail,tostring(peer),box_playback.logs,table.concat(fields," "),local_ms,tostring(la),at,tostring(na),age,tostring(ga))
     return nil,reason,trace
 end
-function box_playback.check(peer,shown)
+function box_playback.check(peer,shown,pending)
     local ipc=rawget(_G,"HSMP_IPC")
     local ok,play,generation=pcall(function()
         local rows,gen
@@ -1036,7 +1036,16 @@ function box_playback.check(peer,shown)
     if type(play.local_ms)~="number" then return box_playback.refuse("playback_unavailable","local_ms_unavailable",peer,shown,play,now,generation) end
     -- Preserve the original predicate order/coercion; diagnostic availability is not admission.
     if now<play.local_ms then return box_playback.refuse("playback_timefuture","future",peer,shown,play,now,generation) end
-    if now-play.local_ms>250 then return box_playback.refuse("playback_timeage","age_over250",peer,shown,play,now,generation) end
+    if now-play.local_ms>250 then
+        if pending then
+            -- Pending setup may observe a stale row, but cannot borrow a different life/actor tuple.
+            for _,key in ipairs({"pawn","match_id","round","life"})do
+                if play[key]~=shown[key] then return box_playback.refuse("playback_"..(key=="match_id" and "match" or key),
+                    play[key]==nil and "field_missing" or "field_changed",peer,shown,play,now,generation) end
+            end
+        end
+        return box_playback.refuse("playback_timeage","age_over250",peer,shown,play,now,generation)
+    end
     for _,key in ipairs({"pawn","match_id","round","life"})do
         if play[key]~=shown[key] then
             return box_playback.refuse("playback_"..(key=="match_id" and "match" or key),
@@ -1072,7 +1081,7 @@ local function box_observer_live()
     box_session:poll(true)
     return box_session:live()==true
 end
-local function box_observer_snapshot(peer,side)
+local function box_observer_snapshot(peer,side,pending)
     if not box_observer_live() then return nil,"session_start" end
     local own,source=diagnostic_snapshot(0)
     local shown,pawn,mesh=diagnostic_snapshot(peer)
@@ -1087,8 +1096,8 @@ local function box_observer_snapshot(peer,side)
     if not view or view.phase~=3 or not mode then return nil,"live_phase" end
     if own.match_id~=shown.match_id or own.round~=shown.round then return nil,"context_tuple" end
     local ipc=rawget(_G,"HSMP_IPC")
-    local playback_ok,playback_reason,playback_trace=box_playback.check(peer,shown)
-    if not playback_ok then return nil,playback_reason,playback_trace end
+    local playback_ok,playback_reason,playback_trace=box_playback.check(peer,shown,pending==true)
+    if not playback_ok and not (pending==true and playback_reason=="playback_timeage") then return nil,playback_reason,playback_trace,false end
     local stream,slot={},ipc and ipc.peer_slot and ipc.peer_slot(peer)
     if slot==nil or not ipc.peer_play then return nil,"peer_stream_unavailable" end
     ipc.peer_play(slot,stream)
@@ -1122,7 +1131,7 @@ local function box_observer_snapshot(peer,side)
     end
     local result={world=ref(world),pawn=ref(pawn),mesh=ref(mesh),box=ref(box),box_owner=ref(weapon),
         match_id=shown.match_id,round=shown.round,life=shown.life,world_key=WG.key,
-        owner_life=own.life,owner_pawn=own.address,owner_mesh=own.mesh_address,peer=peer,side=side}
+        owner_life=own.life,owner_pawn=own.address,owner_mesh=own.mesh_address,peer=peer,side=side,grip=grip}
     for _,k in ipairs({"world","pawn","mesh","box","box_owner"})do
         if not result[k] then return nil,"identity_"..k end
     end
@@ -1131,9 +1140,11 @@ local function box_observer_snapshot(peer,side)
     if not DIAGNOSTIC_CONTEXT.same(own,fresh_own) or not DIAGNOSTIC_CONTEXT.same(shown,fresh_shown)
         or not valid(source[side=="l" and "Weapon L" or "Weapon R"])
         or source[side=="l" and "Weapon L" or "Weapon R"]:GetAddress()~=weapon:GetAddress()
-        or not valid(weapon["Hit Box Collision"]) or weapon["Hit Box Collision"]:GetAddress()~=box:GetAddress() then return nil,"revalidation" end
+        or not valid(weapon["Hit Box Collision"]) or weapon["Hit Box Collision"]:GetAddress()~=box:GetAddress()
+        or source[side=="l" and "L_GripType_Current" or "R_GripType_Current"]~=grip then return nil,"revalidation" end
     if not box_observer_live() then return nil,"session_end" end
-    return result,nil,playback_trace
+    -- A pending context-only snapshot is never eligibility when its original playback is stale.
+    return result,playback_reason,playback_trace,playback_ok==true
 end
 local function exp_boxobserve(arg)
     if not box_observer then

@@ -175,6 +175,34 @@ bool scope_current(Reason& why)
     if (object_at(p,pawn_mesh)!=m || owner(m)!=p || owner(b)!=o) { why=Reason::Scope; return false; }
     return true;
 }
+bool same_property(const HsmpProp& a,const HsmpProp& b)
+{
+    return a.name==b.name && a.cls==b.cls && a.sub==b.sub && a.offset==b.offset && a.size==b.size
+        && a.bool_offset==b.bool_offset && a.bool_mask==b.bool_mask;
+}
+bool prepared_current(const Scope& expected,Reason& why)
+{
+    if (expected!=enrolled) { why=Reason::Scope; return false; }
+    HsmpProp field{}; unsigned size{};
+    void* pawn=current(enrolled.pawn); void* box=current(enrolled.box);
+    if (!pawn || !box) { why=Reason::Identity; return false; }
+    if (!property(pawn,L"Mesh",field,size) || size!=pawn_size || !same_property(field,pawn_mesh)
+        || !property(box,L"BoxExtent",field,size) || size!=box_size || !same_property(field,extent))
+    { why=Reason::Params; return false; }
+    for (unsigned i=0;i<2;++i)
+    {
+        const auto& f=targets[i]; void* object=current(f.id);
+        auto* parms=object ? api.parms(object) : nullptr;
+        if (!object || !parms || *parms!=f.size
+            || !formal(object,L"Hit Box",field,f.size) || !same_property(field,f.box)
+            || !formal(object,i==0 ? L"Hit Component" : L"Damaged Mesh",field,f.size) || !same_property(field,f.mesh))
+        { why=Reason::Params; return false; }
+    }
+    void* owner=current(owner_function); auto* parms=owner ? api.parms(owner) : nullptr;
+    if (!owner || !parms || *parms!=owner_size || !formal(owner,L"ReturnValue",field,owner_size,true)
+        || !same_property(field,owner_return)) { why=Reason::Params; return false; }
+    return scope_current(why);
+}
 bool enroll(const Enrollment& in,Scope& out,Reason& why)
 {
     enrollment_costs.begin();
@@ -275,8 +303,13 @@ bool safe_snapshot(const Key& k,void* frame,Snapshot& out,Reason& why)
     reading=true; struct Guard { ~Guard() { reading=false; } } guard;
     return snapshot(k,frame,out,why);
 }
+bool safe_prepared_current(const Scope& expected,Reason& why)
+{
+    reading=true; struct Guard { ~Guard() { reading=false; } } guard;
+    return prepared_current(expected,why);
+}
 bool thread_ok() { return hsmp_native_caller_thread_ok()!=0; }
 std::uint64_t now_ms() { return GetTickCount64(); }
-const Provider provider{thread_ok,now_ms,safe_enroll,submit,key,safe_snapshot,enrollment_detail,enrollment_timing};
+const Provider provider{thread_ok,now_ms,safe_enroll,submit,key,safe_snapshot,enrollment_detail,enrollment_timing,safe_prepared_current};
 }
 const hsmp_box::Provider& hsmp_reflect_box_provider() { return provider; }

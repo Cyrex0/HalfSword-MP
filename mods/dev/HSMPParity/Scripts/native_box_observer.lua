@@ -1,7 +1,7 @@
 -- Bounded read-only control. Native entry/post pairs are never restoration or damage authority.
 local M={}
 local objects={"world","pawn","mesh","box","box_owner"}
-local fields={"match_id","round","life","world_key","owner_life","owner_pawn","owner_mesh","peer","side"}
+local fields={"match_id","round","life","world_key","owner_life","owner_pawn","owner_mesh","peer","side","grip"}
 local function positive(v)return type(v)=="number" and v>0 and v<math.huge and v%1==0 end
 local function hook_id(v)return type(v)=="number" and v%1==0 and v>=-2147483648 and v<=2147483647 end
 local function copy(s)
@@ -13,7 +13,7 @@ local function copy(s)
         c[k]=v
     end
     if not positive(c.match_id) or not positive(c.round) or not positive(c.life) or not positive(c.owner_life)
-        or not positive(c.owner_pawn) or not positive(c.owner_mesh) or not positive(c.peer)
+        or not positive(c.owner_pawn) or not positive(c.owner_mesh) or not positive(c.peer) or not positive(c.grip)
         or c.world_key=="" or (c.side~="r" and c.side~="l") then return nil end
     for _,k in ipairs(objects)do
         local o=s[k]
@@ -30,7 +30,8 @@ local function same(a,b)
     return true
 end
 function M.new(api)
-    local active,hooks=nil,{}
+    local active,pending,hooks=nil,nil,{}
+    local control_epoch=0
     local timing_count,timing_id=0,0
     local function clock()
         local ok,v=pcall(api.clock_ms or function()return os.clock()*1000 end)
@@ -46,9 +47,10 @@ function M.new(api)
             fields[#fields+1]=key.."="..(available and tostring(value) or "unknown").." "..key.."_available="..tostring(available)
         end
         for _,key in ipairs({"command_enter_ms","snapshot_enter_ms","snapshot_exit_ms","begin_enter_ms","begin_exit_ms",
-            "install_enter_ms","install_exit_ms","fresh_enter_ms","fresh_exit_ms"})do field(key,t[key])end
+            "install_enter_ms","install_exit_ms","fresh_enter_ms","fresh_exit_ms","activate_enter_ms","activate_exit_ms"})do field(key,t[key])end
         for _,p in ipairs({{"snapshot_ms","snapshot_enter_ms","snapshot_exit_ms"},{"begin_ms","begin_enter_ms","begin_exit_ms"},
-            {"install_ms","install_enter_ms","install_exit_ms"},{"fresh_ms","fresh_enter_ms","fresh_exit_ms"}})do
+            {"install_ms","install_enter_ms","install_exit_ms"},{"fresh_ms","fresh_enter_ms","fresh_exit_ms"},
+            {"activate_ms","activate_enter_ms","activate_exit_ms"}})do
             local a,b=t[p[2]],t[p[3]];field(p[1],a and b and b>=a and b-a or nil)
         end
         for _,key in ipairs({"local_ms","sample_now_ms","age_ms","generation"})do
@@ -59,7 +61,7 @@ function M.new(api)
     end
     local function native()
         local n=api.native()
-        return type(n)=="table" and type(n.begin)=="function" and type(n.mark)=="function"
+        return type(n)=="table" and type(n.begin)=="function" and type(n.prepare)=="function" and type(n.activate)=="function" and type(n.mark)=="function"
             and type(n.stop)=="function" and type(n.read)=="function" and type(n.status)=="function" and n or nil
     end
     local function drain(n)
@@ -74,9 +76,10 @@ function M.new(api)
         end
     end
     local function stop(reason)
+        control_epoch=control_epoch+1
         local n=native()
         if n then pcall(n.stop);drain(n) end
-        active=nil
+        active,pending=nil,nil
         api.log("BOXOBS stopped reason=%s authority=false",reason or "developer")
     end
     local function fresh(caller)
@@ -84,10 +87,11 @@ function M.new(api)
         local t=active.timing
         local first=t and not t.fresh_seen
         if first then t.fresh_seen=true;t.fresh_enter_ms=clock()end
-        local ok,s,reason,play=pcall(api.snapshot,active.scope.peer,active.scope.side)
+        local ok,s,reason,play,eligible=pcall(api.snapshot,active.scope.peer,active.scope.side)
         if first then t.fresh_exit_ms=clock();timing(t,caller or "first_fresh",ok and s and "snapshot_passed" or "snapshot_failed",play)end
         if not ok then return nil,"snapshot_exception" end
         if not s then return nil,reason or "snapshot_unavailable" end
+        if eligible~=true then return nil,"snapshot_eligibility_unavailable" end
         s=copy(s)
         if not s then return nil,"snapshot_fields" end
         if not same(active.scope,s) then return nil,"scope_changed" end
@@ -108,10 +112,11 @@ function M.new(api)
         pcall(n.mark,{world=s.world.address,pawn=s.pawn.address,mesh=s.mesh.address,box=s.box.address,
             box_owner=s.box_owner.address,match_id=s.match_id,round=s.round,life=s.life,role=role,marker=0})
     end
-    local function install()
+    local function install(epoch)
         local paths={"/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Deal Complex Damage",
             "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Get Damage"}
         for role,path in ipairs(paths)do
+            if control_epoch~=epoch then return false end
             if hooks[role]=="uncertain" then return false end
             if not hooks[role] then
                 -- A thrown/ambiguous submission might already have registered. Never retry it.
@@ -122,6 +127,7 @@ function M.new(api)
                     -- Pinned UE4SS Blueprint POST is the SECOND callback; no third callback.
                     pcall(mark,role,ctx,select(15,...))
                 end)
+                if control_epoch~=epoch then return false end
                 if not ok or not hook_id(first) or not hook_id(second) or first~=second then return false end
                 hooks[role]=true
             end
@@ -138,35 +144,69 @@ function M.new(api)
         if not positive(peer) or not positive(seconds) or seconds>15 then
             api.log("BOXOBS refused use <peer> <r|l> <seconds1..15> or off");return
         end
-        if active then stop("re-enrollment") end
+        if active or pending then stop("re-enrollment") end
+        control_epoch=control_epoch+1
+        local epoch=control_epoch
         local n=native();if not n then api.log("BOXOBS unavailable native API");return end
         timing_id=timing_id+1
         local t={id=timing_id,command_enter_ms=command_enter}
         t.snapshot_enter_ms=clock()
-        local ok,s,reason,play=pcall(api.snapshot,peer,side)
+        local ok,s,reason,play,eligible=pcall(api.snapshot,peer,side)
         t.snapshot_exit_ms=clock()
+        if control_epoch~=epoch then return end
         if not ok then reason="snapshot_exception"
-        elseif s then s=copy(s);if not s then reason="snapshot_fields" end
+        elseif s then s=copy(s);if not s then reason="snapshot_fields" elseif eligible~=true then s=nil;reason="snapshot_eligibility_unavailable" end
         else reason=reason or "snapshot_unavailable" end
         if not ok or not s then api.log("BOXOBS refused reason=%s authority=false",reason);return end
         s.duration_ms,s.calls=seconds*1000,32
         t.begin_enter_ms=clock()
-        local started,yes,why=pcall(n.begin,s)
+        local started,yes,token=pcall(n.prepare,s)
         t.begin_exit_ms=clock()
-        if not started or yes~=true then
+        if control_epoch~=epoch then return end
+        if not started or yes~=true or not positive(token) then
             timing(t,"enrollment","begin_failed",play)
-            api.log("BOXOBS unavailable enrollment=%s",tostring(why or yes));return
+            api.log("BOXOBS unavailable enrollment=%s",tostring(token or yes));return
         end
-        active={scope=copy(s),drained=0,timing=t}
         t.install_enter_ms=clock()
-        local installed=install()
+        local installed=install(epoch)
         t.install_exit_ms=clock()
+        if control_epoch~=epoch then return end
         timing(t,"enrollment",installed and "installed" or "install_failed",play)
+        if control_epoch~=epoch then return end
         if not installed then stop("Lua POST hook unavailable");return end
-        api.log("BOXOBS started peer=%s side=%s seconds=%s calls=32 qualified=unavailable_until_pair authority=false",
-            tostring(peer),side,tostring(seconds))
+        if not t.install_exit_ms then stop("preparation_clock_unavailable");return end
+        pending={scope=copy(s),token=token,cutoff=t.install_exit_ms,deadline=t.install_exit_ms+250,timing=t,epoch=epoch}
+        api.log("BOXOBS prepared peer=%s side=%s seconds=%s wait_ms=250 eligible=false authority=false",tostring(peer),side,tostring(seconds))
     end
     function out.tick()
+        if pending then
+            local p=pending
+            local now=clock()
+            if pending~=p or control_epoch~=p.epoch then return end
+            if not now or now<p.cutoff or now>p.deadline then stop("preparation_expired");return end
+            local n=native();if not n then stop("native API unavailable");return end
+            local ok,s,reason,play,eligible=pcall(api.snapshot,p.scope.peer,p.scope.side,true)
+            if pending~=p or control_epoch~=p.epoch then return end
+            s=ok and copy(s) or nil
+            if not s then stop(ok and (reason or "snapshot_fields") or "snapshot_exception");return end
+            if not same(p.scope,s) then stop("scope_changed");return end
+            if eligible~=true then
+                if eligible==false and reason=="playback_timeage" then return end
+                stop("pending_eligibility_unavailable");return
+            end
+            local applied=type(play)=="table" and play.local_ms
+            if type(applied)~="number" or applied~=applied or math.abs(applied)==math.huge then stop("playback_timestamp_unavailable");return end
+            if applied<=p.cutoff then return end -- The original applied timestamp must advance after setup.
+            p.timing.activate_enter_ms=clock()
+            local activated,yes,why=pcall(n.activate,p.token,s)
+            p.timing.activate_exit_ms=clock()
+            if pending~=p or control_epoch~=p.epoch then return end
+            if not activated or yes~=true then stop("activation_"..tostring(why or yes));return end
+            pending=nil;active={scope=s,drained=0,timing=p.timing}
+            timing(p.timing,"activation","activated",play)
+            api.log("BOXOBS started peer=%s side=%s calls=32 qualified=unavailable_until_pair authority=false",tostring(s.peer),s.side)
+            return
+        end
         if not active then return end
         local n=native();if not n then active=nil;return end
         local current,reason=fresh("first_tick")
@@ -182,7 +222,7 @@ function M.new(api)
             active=nil
         end
     end
-    function out.drop()if active then stop("world leave")end end
+    function out.drop()stop("world leave")end
     return out
 end
 return M

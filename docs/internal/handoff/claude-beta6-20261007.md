@@ -1534,3 +1534,65 @@ No stage tables are allocated in the existing hot status path. Native provider
 and probe compile /W4 /WX;121 focused checks pass, with root independent CTest
 PASS. Astra approves the source. No caching, qualification, publication or
 physics change; matching Native36 stages still needed for cost attribution.
+
+### Native36: identity lookup dominates enrollment
+
+Clean deployed `b20d339d`, full G0/dev push/normal deployment passed; raw
+`test-results/20261008-104829-76521c-combat_manual`, session
+`test-results/lab/native-20261008-36`, all GRIP/HAND/LIMB flags off. Initial
+polearm spawn waits approximately31 seconds for the left arm before settling
+and releasing control; not a quick/reliable spawn acceptance.
+
+Inst1 exact native enrollment at10:51:06.474:14 stages, no overflow,
+scope_identity203ms, DCD function15ms, GD function32ms; initialization,
+properties, all formal scans, owner function/return and current-scope checks
+measure0ms at GetTickCount64 resolution. Total250ms; Lua bracket239ms, then
+first playback refusal age300ms with exact tuple. Native wall and process-clock
+brackets are distinct clocks; do not claim submillisecond zero work. Inst2
+refuses held_box in the same control attempt; only one native stage capture.
+The bridge uses StaticFindObject_InternalSlow. Identity lookup dominates this
+capture, not formal enumeration or hook registration. Zero qualified pairs.
+
+Cloth:218/245=.889796 acceptance; claim rotation mean25.796/max50.882 degrees
+over20 samples; zero clock resets over24 windows. Combat bounds remain unmet.
+Normal menu quit both, zero new crashes/orphans/forced kills.
+
+Next candidate is separated preparation and activation: costly lookup/metadata
+setup with observation disabled, then a bounded wait for an actually newer
+current playback sample and fast full native identity/ownership revalidation
+before activation. Preserve250ms freshness, tuple and serial-zero qualification
+rules. A positive-serial-only lookup cache may not help the actual newly spawned
+objects; do not assume cache hits or relax identity proof. No implementation or
+release claim yet. IDA plugin is installed, no GUI process currently open and
+no IDA tools are exposed to this session; no shipping disassembly was performed.
+
+### Native37 preparation: disabled setup, fresh activation
+
+The seven-file setup fix is frozen and Astra approved. Native begin remains
+available; prepare performs costly path/layout proof and hook submission with
+observation disabled, then issues one VM-owned single-use token with250ms
+GetTickCount64 expiry. Lua installs hooks while inactive and waits at most250ms
+for an original applied timestamp strictly newer than its post-install cutoff.
+Pending age rows are explicitly ineligible and still audit the full current
+tuple, grip, held Box, module membership, world and session. Identity/life/Box
+changes stop setup. Activation re-resolves current native identities and freshly
+rebuilds property/formal scalar descriptors without slow path lookup before
+enabling observation. Existing250ms freshness and serial-zero qualification
+remain unchanged; no old timestamps are refreshed.
+
+World drop during prepare/install/activation cancels setup. Native in-flight
+guards survive stop and prevent nested prepare from replacing metadata being
+read by an outer provider. DEV/game-thread refusal precedes the non-atomic
+guard; no engine work follows optional logging. Owner and root independently
+compile current provider/probe /W4 /WX and pass141 native assertions; root
+passes239 observer Lua assertions and three parses. Actual activation duration,
+callback ordering, extent samples and qualified pairs remain unproved until
+the matching Native37 capture. No cache, physical policy, sever or release change.
+
+IDA feasibility attempt used installed idat9.1 and a real independent2.2GB copy
+under ignored `workspace/ida/native-evidence-20261008/name-query-986bdca44322`.
+No-save directives and name-only bounded IDC were verified against installed
+references. Headless startup did not reach the query/log within120 seconds;
+only owned PID23568 was stopped, no IDA process remains. Original and clone
+SHA256 are unchanged. Runtime/license/name results are unavailable, not zero
+matches; no binary address, body-pose API or allocator proof was obtained.

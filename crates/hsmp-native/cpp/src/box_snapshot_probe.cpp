@@ -15,6 +15,22 @@ using namespace hsmp_box;
 State state;
 lua_State* owner_state{};
 bool submitted{};
+struct Prepared
+{
+    Scope scope{};
+    std::array<std::wstring,5> paths{};
+    std::uint64_t token{}, deadline{}, duration{};
+    unsigned limit{};
+} prepared;
+std::uint64_t control_version{}, token_id{};
+bool control_busy{};
+struct InFlight
+{
+    bool held=true;
+    InFlight() { control_busy=true; }
+    void release() { if (held) { control_busy=false; held=false; } }
+    ~InFlight() { release(); }
+};
 unsigned timing_prints{}; // Fixed process budget; never reset by activation or world changes.
 std::atomic<bool> enabled{};
 std::atomic<unsigned> deferred_failure{};
@@ -24,13 +40,13 @@ lua_State* vm(lua_State* L)
     lua_rawgeti(L,LUA_REGISTRYINDEX,LUA_RIDX_MAINTHREAD);
     auto* main=lua_tothread(L,-1); lua_pop(L,1); return main;
 }
+void disable(Reason why=Reason::Off)
+{ enabled.store(false); state.stop(why); prepared={}; ++control_version; }
 void synchronize()
 {
     const auto failure=deferred_failure.exchange(0);
-    if (failure) state.stop(static_cast<Reason>(failure));
+    if (failure) disable(static_cast<Reason>(failure));
 }
-void disable(Reason why=Reason::Off)
-{ enabled.store(false); state.stop(why); }
 void rawfield(lua_State* L,int table,const char* key)
 { lua_pushstring(L,key); lua_rawget(L,table); }
 bool integer(lua_State* L,int table,const char* key,std::uint64_t& out,bool zero=false)
@@ -163,14 +179,17 @@ void observe(unsigned phase,void* context,void* frame)
     }
     catch (...) { disable(Reason::Unavailable); }
 }
-int begin_impl(lua_State* L)
+int begin_impl(lua_State* L,bool prepare_only=false)
 {
     char dev[8]{};
     if (GetEnvironmentVariableA("HSMP_DEV",dev,sizeof dev)!=1 || dev[0]!='1') return unavailable(L,"developer mode required");
     if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    if (control_busy) return unavailable(L,"observer setup busy");
+    InFlight guard;
     synchronize();
-    if (state.active && owner_state!=vm(L)) return unavailable(L,"another developer state owns the observer");
+    if ((state.active || prepared.token) && owner_state!=vm(L)) return unavailable(L,"another developer state owns the observer");
     disable(Reason::Scope);
+    const auto version=control_version;
     if (!lua_istable(L,1)) return unavailable(L,"enrollment table required");
     Enrollment input{}; std::wstring paths[5]; std::uint64_t round{},life{},duration{},limit{};
     if (!integer(L,1,"match_id",input.match_id) || !integer(L,1,"round",round) || !integer(L,1,"life",life)
@@ -180,6 +199,8 @@ int begin_impl(lua_State* L)
         || !object(L,1,"mesh",input.mesh,paths[2]) || !object(L,1,"box",input.box,paths[3])
         || !object(L,1,"box_owner",input.box_owner,paths[4])) return unavailable(L,reason_name(Reason::BadInput));
     input.round=static_cast<std::uint32_t>(round); input.life=static_cast<std::uint32_t>(life);
+    if (control_version!=version) return unavailable(L,"observer setup cancelled");
+    owner_state=vm(L);
     Scope enrolled{}; Reason why=Reason::Unavailable;
     // Re-enrollment must never leave an older binding active after a failed path/identity check.
     const bool enrolled_ok=provider().enroll(input,enrolled,why);
@@ -187,6 +208,7 @@ int begin_impl(lua_State* L)
     const auto* measured=costs(); EnrollmentTiming copied{};
     if (measured) copied=*measured;
     const auto* timing=measured ? &copied : nullptr;
+    if (control_version!=version) return unavailable(L,"observer setup cancelled");
     if (!enrolled_ok)
     {
         std::string reason=reason_name(why);
@@ -195,18 +217,72 @@ int begin_impl(lua_State* L)
             const char* detail=provider().enrollment_detail();
             if (detail && *detail) { reason+=" ["; reason.append(detail,strnlen_s(detail,512)); reason+="]"; }
         }
-        unavailable(L,reason.c_str()); print_costs(L,timing,false); return 2;
+        unavailable(L,reason.c_str()); guard.release(); print_costs(L,timing,false); return 2;
     }
     if (!provider().submit(observe,why))
-    { unavailable(L,reason_name(why)); print_costs(L,timing,true); return 2; }
+    { unavailable(L,reason_name(why)); guard.release(); print_costs(L,timing,true); return 2; }
     submitted=true;
+    if (control_version!=version) return unavailable(L,"observer setup cancelled");
+    if (prepare_only)
+    {
+        const auto now=provider().now_ms();
+        if (now>UINT64_MAX-250 || token_id>=static_cast<std::uint64_t>(LUA_MAXINTEGER))
+            return unavailable(L,"observer preparation unavailable");
+        prepared.scope=enrolled; prepared.token=++token_id; prepared.deadline=now+250;
+        prepared.duration=duration; prepared.limit=static_cast<unsigned>(limit);
+        for (unsigned i=0;i<5;++i) prepared.paths[i]=paths[i];
+        lua_pushboolean(L,1); lua_pushinteger(L,static_cast<lua_Integer>(prepared.token)); cost_table(L,timing);
+        guard.release(); print_costs(L,timing,true); return 3;
+    }
     if (!state.begin(enrolled,provider().now_ms(),duration,static_cast<unsigned>(limit)))
-    { unavailable(L,reason_name(Reason::BadInput)); print_costs(L,timing,true); return 2; }
+    { unavailable(L,reason_name(Reason::BadInput)); guard.release(); print_costs(L,timing,true); return 2; }
     owner_state=vm(L); enabled.store(true); lua_pushboolean(L,1); cost_table(L,timing);
-    print_costs(L,timing,true); return 2; // No engine reads or re-enable after a Lua callback.
+    guard.release(); print_costs(L,timing,true); return 2; // No engine reads or re-enable after a Lua callback.
 }
 int begin(lua_State* L)
 { try { return begin_impl(L); } catch (...) { disable(Reason::Unavailable); return unavailable(L,"observer unavailable"); } }
+int prepare(lua_State* L)
+{ try { return begin_impl(L,true); } catch (...) { disable(Reason::Unavailable); return unavailable(L,"observer unavailable"); } }
+int activate_impl(lua_State* L)
+{
+    char dev[8]{};
+    if (GetEnvironmentVariableA("HSMP_DEV",dev,sizeof dev)!=1 || dev[0]!='1') return unavailable(L,"developer mode required");
+    if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    if (control_busy) return unavailable(L,"observer setup busy");
+    InFlight guard;
+    synchronize();
+    if (owner_state!=vm(L)) return unavailable(L,"observer owner required");
+    const auto token=lua_isinteger(L,1) ? lua_tointeger(L,1) : 0;
+    if (token<=0 || !prepared.token || static_cast<std::uint64_t>(token)!=prepared.token)
+        return unavailable(L,"observer preparation token unavailable");
+    const auto version=control_version;
+    const auto expected=prepared; prepared={}; // Every exact-token activation attempt consumes it.
+    if (provider().now_ms()>expected.deadline) return unavailable(L,"observer preparation expired");
+    if (!lua_istable(L,2)) return unavailable(L,reason_name(Reason::BadInput));
+    std::uint64_t value{};
+    const char* tuple[]={"match_id","round","life"};
+    const std::uint64_t values[]={expected.scope.match_id,expected.scope.round,expected.scope.life};
+    for (unsigned i=0;i<3;++i)
+        if (!integer(L,2,tuple[i],value) || value!=values[i]) return unavailable(L,reason_name(Reason::Scope));
+    const char* names[]={"world","pawn","mesh","box","box_owner"};
+    const Identity ids[]={expected.scope.world,expected.scope.pawn,expected.scope.mesh,expected.scope.box,expected.scope.box_owner};
+    for (unsigned i=0;i<5;++i)
+    {
+        ObjectInput input{}; std::wstring path;
+        if (!object(L,2,names[i],input,path) || input.address!=ids[i].address || path!=expected.paths[i])
+            return unavailable(L,reason_name(Reason::Scope));
+    }
+    if (control_version!=version) return unavailable(L,"observer preparation cancelled");
+    Reason why=Reason::Unavailable;
+    if (!provider().prepared_current || !provider().prepared_current(expected.scope,why)) return unavailable(L,reason_name(why));
+    if (control_version!=version) return unavailable(L,"observer preparation cancelled");
+    const auto now=provider().now_ms();
+    if (now>expected.deadline) return unavailable(L,"observer preparation expired");
+    if (!state.begin(expected.scope,now,expected.duration,expected.limit)) return unavailable(L,reason_name(Reason::BadInput));
+    enabled.store(true); lua_pushboolean(L,1); return 1;
+}
+int activate(lua_State* L)
+{ try { return activate_impl(L); } catch (...) { disable(Reason::Unavailable); return unavailable(L,"observer unavailable"); } }
 int stop(lua_State* L)
 {
     if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
@@ -273,9 +349,9 @@ void hsmp_box_probe_install(lua_State* L)
     const auto top=lua_gettop(L);
     if (lua_getglobal(L,"HSMPNative")==LUA_TTABLE)
     {
-        lua_createtable(L,0,5);
+        lua_createtable(L,0,7);
         struct Entry { const char* name; lua_CFunction fn; };
-        for (const auto& e : {Entry{"begin",begin},Entry{"stop",stop},Entry{"status",status},Entry{"read",read},Entry{"mark",mark}})
+        for (const auto& e : {Entry{"begin",begin},Entry{"prepare",prepare},Entry{"activate",activate},Entry{"stop",stop},Entry{"status",status},Entry{"read",read},Entry{"mark",mark}})
         { lua_pushcfunction(L,e.fn); lua_setfield(L,-2,e.name); }
         lua_setfield(L,-2,"box_probe");
     }

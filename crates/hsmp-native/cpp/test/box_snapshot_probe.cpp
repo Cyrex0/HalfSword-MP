@@ -10,9 +10,12 @@
 namespace
 {
 using namespace hsmp_box;
-unsigned checks{}, reads{}, keys{}, enrolls{}, submissions{};
+unsigned checks{}, reads{}, keys{}, enrolls{}, submissions{}, validations{};
 bool good_thread=true, bad_enrollment{}, bad_snapshot{}, serial_zero{};
 bool malformed_costs{};
+bool bad_prepared{};
+lua_State* stop_during_validation{};
+lua_State* reenter_during_enrollment{};
 EnrollmentTiming measured{};
 const EnrollmentTiming* enrollment_timing() { return &measured; }
 const char* diagnostic{};
@@ -30,6 +33,8 @@ std::uint64_t now() { return time_ms; }
 bool enroll(const Enrollment& e,Scope& out,Reason& why)
 {
     ++enrolls;
+    if (reenter_during_enrollment && luaL_dostring(reenter_during_enrollment,
+        "assert(N.stop()); local ok,why=N.prepare(a); assert(ok==nil and why=='observer setup busy'); assert(N.begin(a)==nil and N.activate(1,a)==nil)")!=LUA_OK) std::exit(1);
     measured.begin(); measured.stage("initialize",1000); measured.stage("scope_identity",1004); measured.finish(1009);
     if (malformed_costs) measured.count=99;
     if (bad_enrollment || e.pawn.address!=2 || !e.pawn.path || std::wcscmp(e.pawn.path,L"/pawn")!=0)
@@ -51,7 +56,16 @@ bool snapshot(const Key& k,void* frame,Snapshot& out,Reason& why)
     if (f.wrong_box) { why=Reason::Params; return false; } // Foreign formal never dereferenced.
     out={scoped,id(k.node),{f.x,f.y,f.z},true,Reason::None}; return true;
 }
-const Provider fake{on_thread,now,enroll,submit,key,snapshot,enrollment_detail,enrollment_timing};
+bool prepared_current(const Scope& expected,Reason& why)
+{
+    ++validations;
+    if (stop_during_validation && luaL_dostring(stop_during_validation,
+        "assert(N.stop()); local ok,why=N.prepare(a); assert(ok==nil and why=='observer setup busy'); assert(N.begin(a)==nil and N.activate(1,a)==nil)")!=LUA_OK) std::exit(1);
+    if (bad_prepared) { why=Reason::Params; return false; }
+    if (expected!=scoped) { why=Reason::Identity; return false; }
+    return true;
+}
+const Provider fake{on_thread,now,enroll,submit,key,snapshot,enrollment_detail,enrollment_timing,prepared_current};
 void check(bool ok,const char* message)
 { ++checks; if (!ok) { std::fprintf(stderr,"FAIL %s\n",message); std::exit(1); } }
 void lua(lua_State* L,const char* code)
@@ -116,6 +130,31 @@ int main()
     malformed_costs=false;
     lua(L,"local saved=print; print=function() error('optional print failed') end; local ok,c=N.begin(a); print=saved; assert(ok==true and c.rows[1].elapsed_ms==4 and N.status().active)");
     lua(L,"local saved=print; print=function() assert(N.stop()==true) end; local ok,c=N.begin(a); print=saved; assert(ok==true and c.rows[2].elapsed_ms==5 and not N.status().active)");
+    lua(L,"local ok; ok,ticket=N.prepare(a); assert(ok==true and math.type(ticket)=='integer' and ticket>0 and not N.status().active)");
+    Frame prep_frame{1,90}; unsigned prep_reads=reads; event(1,prep_frame);
+    check(reads==prep_reads,"prepared observer never reads native frames before activation");
+    const auto prep_enrolls=enrolls;
+    lua(L,"assert(N.activate(ticket,a)==true and N.status().active); assert(N.activate(ticket,a)==nil)");
+    check(enrolls==prep_enrolls && validations==1,"activation revalidates without repeating path enrollment");
+    lua(L,"local ok; ok,ticket=N.prepare(a); assert(ok); assert(N.stop()); assert(N.activate(ticket,a)==nil and not N.status().active)");
+    lua(L,"local saved=print; print=function() assert(N.stop()) end; local ok; ok,ticket=N.prepare(a); print=saved; assert(ok and N.activate(ticket,a)==nil and not N.status().active)");
+    lua(L,"local ok; ok,ticket=N.prepare(a); assert(ok)"); time_ms+=251;
+    lua(L,"local ok,why=N.activate(ticket,a); assert(ok==nil and why=='observer preparation expired' and not N.status().active)");
+    lua(L,"local ok; ok,ticket=N.prepare(a); assert(ok); a.box.address=99; assert(N.activate(ticket,a)==nil); a.box.address=4; assert(N.activate(ticket,a)==nil)");
+    lua(L,"local ok; ok,ticket=N.prepare(a); assert(ok)"); bad_prepared=true;
+    lua(L,"local ok,why=N.activate(ticket,a); assert(ok==nil and why=='formal parameters unavailable' and not N.status().active)"); bad_prepared=false;
+    lua(L,"local ok; ok,ticket=N.prepare(a); assert(ok)"); stop_during_validation=L;
+    unsigned busy_enrolls=enrolls;
+    lua(L,"assert(N.activate(ticket,a)==nil and not N.status().active)"); stop_during_validation=nullptr;
+    check(enrolls==busy_enrolls,"stop during activation cannot allow nested setup to overwrite provider metadata");
+    reenter_during_enrollment=L;busy_enrolls=enrolls;
+    lua(L,"assert(N.prepare(a)==nil and not N.status().active)"); reenter_during_enrollment=nullptr;
+    check(enrolls==busy_enrolls+1,"stop during enrollment retains in-flight guard against nested provider mutation");
+    lua(L,"local ok; ok,ticket=N.prepare(a); assert(ok)");
+    lua_State* prepared_foreign=luaL_newstate();luaL_openlibs(prepared_foreign);lua_newtable(prepared_foreign);lua_setglobal(prepared_foreign,"HSMPNative");hsmp_box_probe_install(prepared_foreign);
+    lua(prepared_foreign,"N=HSMPNative.box_probe; assert(N.prepare({})==nil and N.begin({})==nil and N.activate(1,{})==nil and N.stop()==nil)");
+    lua_close(prepared_foreign); time_ms+=250;
+    lua(L,"assert(N.activate(ticket,a)==true and N.status().active)");
     lua(L,start);
     Frame outer{1,10},inner{2,11,20,1,25}; event(1,outer); event(1,inner);
     lua(L,"assert(N.mark({world=1,pawn=2,mesh=3,box=4,box_owner=5,match_id=123456789,round=1,life=1,role=2,marker=778}))");

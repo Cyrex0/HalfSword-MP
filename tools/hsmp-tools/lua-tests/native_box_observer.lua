@@ -1,9 +1,10 @@
 local M=dofile(T.path("mods/dev/HSMPParity/Scripts/native_box_observer.lua"))
 local logs,emitted,hooks,begin_count,mark_count,stop_count={},{},{},0,0,0
-local scope={match_id=123,round=2,life=3,owner_life=7,owner_pawn=20,owner_mesh=30,world_key="world#1",peer=2,side="r"}
+local scope={match_id=123,round=2,life=3,owner_life=7,owner_pawn=20,owner_mesh=30,world_key="world#1",peer=2,side="r",grip=14}
 for i,k in ipairs({"world","pawn","mesh","box","box_owner"})do scope[k]={address=i,path="/"..k}end
 local function clone(s)local r={};for k,v in pairs(s)do r[k]=type(v)=="table" and {path=v.path,address=v.address} or v end;return r end
 local native_active=false
+local fixture_at=1000
 local pending,pending_role,resolves=1,1,0
 local queued={}
 local native={begin=function(s)begin_count=begin_count+1;native_active=true;T.check(s.calls==32 and s.duration_ms<=15000,"activation retains fixed native budget");return true end,
@@ -11,16 +12,21 @@ local native={begin=function(s)begin_count=begin_count+1;native_active=true;T.ch
     status=function()return {active=native_active,pending=pending,pending_role=pending_role,reason="capture budget",entries=2,unmatched=0,discarded=0}end,
     read=function()local r=queued;queued={};return r end,
     mark=function(s)mark_count=mark_count+1;T.check(s.role==1 or s.role==2,"Lua POST marks explicit native function kind");return nil,"no active exact entry" end}
+native.prepare=function(s)native.begin(s);native_active=false;return true,begin_count end
+native.activate=function()native_active=true;return true end
 local dev=true
 local current=scope
 local observer=M.new({developer=function()return dev end,native=function()return native end,
-    snapshot=function()resolves=resolves+1;return current and clone(current)end,
+    clock_ms=function()return fixture_at end,
+    snapshot=function()resolves=resolves+1;return current and clone(current),nil,{local_ms=fixture_at},true end,
     register=function(path,second,third)T.check(type(second)=="function" and third==nil,"only pinned Blueprint second callback is registered");hooks[path]=second;return 1,1 end,
     log=function(fmt,...)logs[#logs+1]=string.format(fmt,...)end,emit=function(r)emitted[#emitted+1]=r end})
 observer.tick();T.check(begin_count==0,"default idle does not enroll native objects")
 dev=false;observer.command("2 r 15");T.check(begin_count==0,"nondeveloper control cannot enroll")
 dev=true;observer.command("2 r 16");T.check(begin_count==0,"oversize duration refuses before native begin")
 observer.command("2 r 15");T.check(begin_count==1,"explicit bounded activation enrolls once")
+T.check(not native_active,"costly preparation keeps native observation disabled")
+fixture_at=fixture_at+33;observer.tick()
 local function param(a)return {get=function()return {IsValid=function()return true end,GetAddress=function()return a end}end}end
 local dcd="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Deal Complex Damage"
 local gd="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Get Damage"
@@ -38,20 +44,20 @@ current=clone(scope);observer.command("2 r 1");current.mesh.address=33;observer.
 T.check(stop_count==2,"same pawn mesh replacement cancels exact native scope")
 current=clone(scope);observer.command("2 r 1");current=nil;observer.drop()
 T.check(stop_count==3,"world leave stops scalar observer without touching cached UObjects")
-current=clone(scope);observer.command("2 r 1");native_active=false;observer.tick()
+current=clone(scope);observer.command("2 r 1");fixture_at=fixture_at+33;observer.tick();native_active=false;observer.tick()
 T.check(logs[#logs]:find("BOXOBS finished",1,true)~=nil,"native expiry/budget completion is reported explicitly")
 local before_resolves=resolves;hooks[dcd](param(2),table.unpack(args))
 T.check(resolves==before_resolves,"finished native budget skips full callback resolver")
 local foreign={};for i=1,33 do foreign[i]={}end;queued=foreign
-observer.command("2 r 1");observer.tick();T.check(#emitted==1,"oversize native readback is refused without truncation")
+observer.command("2 r 1");fixture_at=fixture_at+33;observer.tick();observer.tick();T.check(#emitted==1,"oversize native readback is refused without truncation")
 observer.command("off")
 local registrations=0
-local ambiguous=M.new({developer=function()return true end,native=function()return native end,snapshot=function()return clone(scope)end,
+local ambiguous=M.new({developer=function()return true end,native=function()return native end,snapshot=function()return clone(scope),nil,nil,true end,
     register=function()registrations=registrations+1;return nil,nil end,log=function()end,emit=function()end})
 ambiguous.command("2 r 1");ambiguous.command("2 r 1")
 T.check(registrations==1,"ambiguous successful hook submission is never retried")
 local signed_registrations=0
-local signed=M.new({developer=function()return true end,native=function()return native end,snapshot=function()return clone(scope)end,
+local signed=M.new({developer=function()return true end,native=function()return native end,snapshot=function()return clone(scope),nil,nil,true end,
     register=function()signed_registrations=signed_registrations+1;return -2147483648,-2147483648 end,log=function()end,emit=function()end})
 signed.command("2 r 1")
 T.check(signed_registrations==2,"equal signed int32 Blueprint IDs are accepted")
@@ -60,14 +66,16 @@ signed.command("off")
 -- Optional timing must measure each stage independently and never control enrollment.
 local function timed_fixture(clock_throw,log_throw)
     local at,rows,callbacks=1000,{},{}
-    local counts={begin=0,snapshot=0,mark=0}
+    local counts={begin=0,snapshot=0,mark=0,activate=0}
     local n={begin=function()counts.begin=counts.begin+1;at=at+40;return true end,stop=function()return true end,
         status=function()return {active=true,pending=1,pending_role=1}end,read=function()return {}end,
         mark=function()counts.mark=counts.mark+1 end}
+    n.prepare=function()n.begin();return true,counts.begin end
+    n.activate=function()counts.activate=counts.activate+1;return true end
     local o=M.new({developer=function()return true end,native=function()return n end,
         clock_ms=function()if clock_throw then error("clock unavailable")end;return at end,
         snapshot=function()counts.snapshot=counts.snapshot+1;at=at+7;return clone(scope),nil,
-            {local_ms=999,sample_now_ms=at,age_ms=at-999,generation=17}end,
+            {local_ms=counts.snapshot==1 and 999 or at,sample_now_ms=at,age_ms=counts.snapshot==1 and at-999 or 0,generation=17},true end,
         register=function(path,f)callbacks[path]=f;at=at+3;return 1,1 end,
         log=function(fmt,...)
             if log_throw and fmt:find("BOXOBS_TIMING",1,true)then error("optional log unavailable")end
@@ -83,16 +91,61 @@ T.check(tc.begin==1 and timing_row:find("snapshot_ms=7 snapshot_ms_available=tru
     and timing_row:find("install_ms=6 install_ms_available=true",1,true),"timing separates snapshot, native enrollment and hook registration costs")
 T.check(timing_row:find("command_enter_ms=1000",1,true) and timing_row:find("playback_local_ms=999",1,true)
     and timing_row:find("playback_generation=17 playback_generation_available=true",1,true),"timing preserves original same-read sample and generation without refreshing its timestamp")
-timed.tick()
-T.check(tr[#tr]:find("stage=first_tick",1,true) and tr[#tr]:find("fresh_ms=7 fresh_ms_available=true",1,true),
-    "first freshness read has its own entry/exit interval")
+timed.tick();timed.tick()
+T.check(tc.activate==1 and tr[#tr]:find("stage=first_tick",1,true) and tr[#tr]:find("fresh_ms=7 fresh_ms_available=true",1,true),
+    "post-prepare application activates before the first active freshness interval")
 timed,tc,tr,th=timed_fixture(false,true)
-timed.command("2 r 1");th[dcd](param(2),table.unpack(args))
-T.check(tc.begin==1 and tc.mark==1 and tc.snapshot==2,"throwing optional timing log cannot interrupt enrollment or first native marker")
+timed.command("2 r 1");timed.tick();th[dcd](param(2),table.unpack(args))
+T.check(tc.begin==1 and tc.activate==1 and tc.mark==1 and tc.snapshot==3,"throwing optional timing log cannot interrupt preparation, activation or first native marker")
 timed,tc,tr,th=timed_fixture(true,false)
 timed.command("2 r 1");timed.tick()
-T.check(tc.begin==1 and tc.snapshot==2 and tr[#tr]:find("begin_ms=unknown begin_ms_available=false",1,true)
-    and tr[#tr]:find("fresh_ms=unknown fresh_ms_available=false",1,true),"throwing clock remains unavailable without changing enrollment or tick eligibility")
+T.check(tc.begin==1 and tc.activate==0 and tr[#tr]:find("preparation_clock_unavailable",1,true),
+    "missing functional cutoff clock refuses activation after bounded preparation")
+
+-- Staging never promotes stale context-only evidence or refreshes its applied timestamp.
+local function staged_fixture(drop_stage)
+    local state={at=1000,stamp=950,eligible=true,scope=clone(scope),prepares=0,activates=0,stops=0,registers=0}
+    local o
+    local n={begin=function()end,prepare=function()
+        state.prepares=state.prepares+1;state.at=state.at+239
+        if drop_stage=="prepare" then o.drop()end
+        return true,state.prepares
+    end,activate=function()
+        state.activates=state.activates+1
+        if drop_stage=="activate" then o.drop()end
+        return true
+    end,stop=function()state.stops=state.stops+1;return true end,read=function()return {}end,
+        status=function()return {active=true}end,mark=function()end}
+    o=M.new({developer=function()return true end,native=function()return n end,clock_ms=function()return state.at end,
+        snapshot=function(_,_,is_pending)
+            local eligible=state.eligible;if not is_pending then eligible=true end
+            return clone(state.scope),is_pending and state.eligible==false and "playback_timeage" or nil,
+                {local_ms=state.stamp},eligible
+        end,register=function()
+            state.registers=state.registers+1
+            if drop_stage=="install" then o.drop()end
+            return 1,1
+        end,log=function()end,emit=function()end})
+    return o,state
+end
+local staged,ss=staged_fixture();staged.command("2 r 1");ss.eligible=false;staged.tick()
+T.check(ss.prepares==1 and ss.activates==0 and ss.stops==0 and ss.stamp==950,"stale complete pending context waits with its original applied timestamp and native capture disabled")
+ss.eligible=true;ss.stamp=ss.at;staged.tick()
+T.check(ss.activates==0,"an applied timestamp equal to the post-install cutoff cannot activate")
+ss.at=ss.at+33;ss.stamp=ss.at;staged.tick()
+T.check(ss.activates==1,"only a strictly newer qualified applied sample activates prepared native capture")
+staged,ss=staged_fixture();staged.command("2 r 1");ss.eligible=false;ss.scope.box.address=44;staged.tick()
+T.check(ss.activates==0 and ss.stops==1,"held Box replacement is fatal even while stale pending context would otherwise wait")
+staged,ss=staged_fixture();staged.command("2 r 1");ss.eligible="false";staged.tick()
+T.check(ss.activates==0 and ss.stops==1,"nonboolean eligibility never promotes context-only pending data")
+staged,ss=staged_fixture();staged.command("2 r 1");ss.at=ss.at+251;staged.tick()
+T.check(ss.activates==0 and ss.stops==1,"pending wait has one fixed250ms deadline with no restart")
+staged,ss=staged_fixture("prepare");staged.command("2 r 1");ss.at=ss.at+33;ss.stamp=ss.at;staged.tick()
+T.check(ss.activates==0 and ss.registers==0 and ss.stops==1,"world drop during synchronous prepare invalidates setup before hook installation")
+staged,ss=staged_fixture("install");staged.command("2 r 1");ss.at=ss.at+33;ss.stamp=ss.at;staged.tick()
+T.check(ss.activates==0 and ss.registers==1 and ss.stops==1,"world drop during hook installation prevents stale pending assignment and further registration")
+staged,ss=staged_fixture("activate");staged.command("2 r 1");ss.at=ss.at+33;ss.stamp=ss.at;staged.tick();staged.tick()
+T.check(ss.activates==1 and ss.stops==1,"reentrant activation stop cannot republish an active Lua observer")
 
 -- Actual Parity snapshot/enrollment path follows assigned fighter despite a foreign PC Pawn.
 local game_logs,loop={},nil
@@ -166,9 +219,11 @@ FindAllOf=function()return {foreign_pawn,own,pawn}end
 LoopAsync=function(_,f)loop=f end
 RegisterHook=function(_,second)T.check(type(second)=="function","production hook has a real second callback");return 1,1 end
 FName=function(s)return s end
-local enroll_options,enroll_count=nil,0
+local enroll_options,enroll_count,native_activations=nil,0,0
 HSMPNative={box_probe={begin=function(s)enroll_options=s;enroll_count=enroll_count+1;return true end,stop=function()return true end,
     status=function()return {active=true}end,read=function()return {}end,mark=function()return true end}}
+HSMPNative.box_probe.prepare=function(s)HSMPNative.box_probe.begin(s);return true,enroll_count end
+HSMPNative.box_probe.activate=function()native_activations=native_activations+1;return true end
 HSMP_PARITY_TEST={}
 dofile(T.path("mods/dev/HSMPParity/Scripts/main.lua"))
 HSMP_PARITY_TEST.boxobserve("2 r 1")
@@ -236,6 +291,7 @@ T.check(enroll_options==nil and refused("revalidation"),"owner context change du
 owner_status.life=7;weapon.GetWorld=function()return world end
 HSMP_PARITY_TEST.boxobserve("2 r 1")
 T.check(enroll_options~=nil,"current numeric ready state is accepted with complete exact context")
+game_clock=10.033;shown.local_ms=10033;playback_reads=0;loop()
 local control_ns=false
 for _,line in ipairs(game_logs)do if line:find("BOXOBS started",1,true) and line:find("inst=1",1,true) then control_ns=true end end
 T.check(control_ns,"Box control logs include public instance namespace")
@@ -245,6 +301,7 @@ local pair_ns=false
 for _,line in ipairs(game_logs)do if line:find("BOXOBS_PAIR",1,true) and line:find("inst=1",1,true)
     and line:find('"instance":"1"',1,true) then pair_ns=true end end
 T.check(pair_ns,"copied Box pair JSON and log line retain the same instance namespace")
+game_clock=10;shown.local_ms=10000
 
 -- The first bus read proves the displayed snapshot; the independently fresh second
 -- read can expire/change before a command or active observer tick. Do not borrow
@@ -323,10 +380,27 @@ T.check(enroll_options==nil and refused("playback_unavailable") and d:find("deta
 second_playback=nil;playback_reads=0;enroll_options=nil;shown.local_ms=9750
 HSMP_PARITY_TEST.boxobserve("2 r 1")
 T.check(enroll_options~=nil,"exact250ms boundary preserves successful original admission")
+local pending_activations=native_activations
+game_clock=10.033;playback_reads=0;game_logs={}
+second_playback=function()local p=clone(shown);p.local_ms=9700;return {rows={p}}end
+local pending_modules=module_reads;loop()
+local pending_stopped=false
+for _,s in ipairs(game_logs)do if s:find("BOXOBS stopped",1,true) then pending_stopped=true end end
+T.check(native_activations==pending_activations and not pending_stopped and module_reads>pending_modules,
+    "production stale pending row remains context-only while exact held Box is freshly audited")
+playback_reads=0;game_logs={}
+second_playback=function()local p=clone(shown);p.local_ms=9700;p.life=4;return {rows={p}}end
+loop()
+local wrong_life_stopped=false
+for _,s in ipairs(game_logs)do if s:find("BOXOBS stopped reason=playback_life",1,true) then wrong_life_stopped=true end end
+T.check(native_activations==pending_activations and wrong_life_stopped,
+    "changed actual life behind a stale timestamp is fatal rather than waiting on age")
+game_clock=10;second_playback=nil
 shown.local_ms=10000
 -- Reproduce enrollment followed46ms later by stale second playback, while the
 -- displayed first snapshot and exact native identities are still unchanged.
 playback_reads=0;HSMP_PARITY_TEST.boxobserve("2 r 1")
+game_clock=10.016;shown.local_ms=10016;playback_reads=0;loop()
 game_clock=10.046;playback_reads=0;game_logs={}
 second_playback=function()local p=clone(shown);p.local_ms=9700;return {rows={p}}end
 loop()
@@ -335,7 +409,7 @@ local precise_stop=false
 for _,s in ipairs(game_logs)do if s:find("BOXOBS stopped reason=playback_timeage",1,true)then precise_stop=true end end
 T.check(precise_stop and d:find("local_ms=9700",1,true) and d:find("age_ms=346",1,true),
     "active observer stops on the precise actual stale timestamp after enrollment")
-game_clock=10;second_playback=nil
+game_clock=10;shown.local_ms=10000;second_playback=nil
 -- Fixed total diagnostic budget and bounded bytes, even under repeated commands.
 local diag_rows,max_bytes,enroll_before=0,0,enroll_count
 for _=1,50 do

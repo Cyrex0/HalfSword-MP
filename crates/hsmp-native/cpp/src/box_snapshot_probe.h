@@ -24,6 +24,8 @@ struct Provider
     // Optional bounded scalar detail for a failed enrollment, never runtime authority.
     const char* (*enrollment_detail)(){};
     const EnrollmentTiming* (*enrollment_timing)(){};
+    // Revalidate prepared identities/layouts without repeating path lookups.
+    bool (*prepared_current)(const Scope&,Reason&){};
 };
 }
 // ue4ss_reflect_box.cpp provides the pinned host; tests supply a bounded fake.
