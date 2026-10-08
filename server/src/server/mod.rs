@@ -248,10 +248,13 @@ impl ServerState {
     }
 
     pub(crate) fn with_native(max_peers: usize, net: crate::net::Net, bridge: Arc<crate::native_service::Bridge>, arena: &str) -> Self {
+        Self::with_native_mode(max_peers, net, bridge, arena, crate::native_mode::Mode::Diagnostic)
+    }
+    pub(crate) fn with_native_mode(max_peers: usize, net: crate::net::Net, bridge: Arc<crate::native_service::Bridge>, arena: &str, mode: crate::native_mode::Mode) -> Self {
         let state = Self::with_net(max_peers, net);
         if let Ok(mut inner) = state.inner.try_lock() {
             inner.match_arena = arena.to_owned();
-            inner.native = Some(native_glue::NativeCore::new(bridge, state.net.epoch(), arena));
+            inner.native = Some(native_glue::NativeCore::new_mode(bridge, state.net.epoch(), arena, mode));
         }
         state
     }

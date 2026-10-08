@@ -99,7 +99,7 @@ target_compile_options(hsmp_ipc_header_check PRIVATE /W4 /WX)
 
 # --------------------------------------------- option F: HSMPNative main.dll
 add_library(HSMPNative SHARED cpp/src/dllmain.cpp cpp/src/ue4ss_reflect.cpp
-    cpp/src/box_snapshot_probe.cpp cpp/src/ue4ss_reflect_box.cpp)
+    cpp/src/box_snapshot_probe.cpp cpp/src/ue4ss_reflect_box.cpp cpp/src/native_presentation.cpp)
 add_dependencies(HSMPNative rust_libs ue4ss_implib hsmp_ipc_header_check)
 target_include_directories(HSMPNative PRIVATE cpp cpp/abi cpp/src)
 target_compile_options(HSMPNative PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /EHsc /utf-8)
@@ -141,6 +141,10 @@ set_target_properties(harness PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${HARNESS}" RUNTIME_OUTPUT_DIRECTORY_RELEASE "${HARNESS}")
 
 enable_testing()
+add_executable(native_presentation_check cpp/test/native_presentation.cpp)
+target_include_directories(native_presentation_check PRIVATE cpp/src)
+target_compile_options(native_presentation_check PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+add_test(NAME native_presentation_check COMMAND native_presentation_check)
 add_executable(box_formal cpp/test/box_formal.cpp)
 target_include_directories(box_formal PRIVATE cpp/src)
 target_compile_options(box_formal PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
@@ -151,7 +155,7 @@ target_link_libraries(box_snapshot_probe PRIVATE lua_vm_host)
 target_compile_options(box_snapshot_probe PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
 add_test(NAME box_snapshot_probe COMMAND box_snapshot_probe)
 # Compile the actual provider without building/linking the game DLL or the Rust ALL target.
-add_library(box_provider_compile OBJECT cpp/src/ue4ss_reflect_box.cpp cpp/src/ue4ss_reflect.cpp cpp/src/dllmain.cpp)
+add_library(box_provider_compile OBJECT cpp/src/ue4ss_reflect_box.cpp cpp/src/ue4ss_reflect.cpp cpp/src/dllmain.cpp cpp/src/native_presentation.cpp)
 target_include_directories(box_provider_compile PRIVATE cpp cpp/src cpp/abi)
 target_link_libraries(box_provider_compile PRIVATE lua_vm_host)
 target_compile_options(box_provider_compile PRIVATE /W4 /WX /permissive- /EHsc /utf-8)

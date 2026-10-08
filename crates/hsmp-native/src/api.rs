@@ -220,6 +220,15 @@ entry! {
     l_host_parent_alive => Guard::GameThread, |n, L| n.host_parent_alive(L);
     l_native_input => Guard::GameThread, |n, L| n.native_input(L);
     l_native_snapshot => Guard::GameThread, |n, L| n.native_snapshot(L);
+    l_native_inspect_component => Guard::GameThread, |n,L| n.native_inspect_component(L);
+    l_host_describe => Guard::GameThread, |n,L| n.host_describe(L);
+    l_native_capture_render => Guard::GameThread, |n,L| n.native_capture_render(L);
+    l_native_scene => Guard::GameThread, |n,L| n.native_scene(L);
+    l_native_present => Guard::GameThread, |n,L| n.native_present(L);
+    l_native_clear_mirrors => Guard::GameThread, |n,L| n.native_clear_mirrors(L);
+    l_native_client_status => Guard::GameThread, |n,L| n.native_client_status(L);
+    l_native_key_state => Guard::GameThread, |n,L| n.native_key_state(L);
+    l_native_scene_assets => Guard::GameThread, |n,L| n.native_scene_assets(L);
     l_servo_config => Guard::GameThread, |n, L| n.servo_config(L);
     l_servo_bodies => Guard::GameThread, |n, L| n.servo_bodies(L);
     l_servo_weapon => Guard::GameThread, |n, L| n.servo_weapon(L);
@@ -291,6 +300,15 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("host_parent_alive", l_host_parent_alive),
     ("native_input", l_native_input),
     ("native_snapshot", l_native_snapshot),
+    ("native_inspect_component",l_native_inspect_component),
+    ("host_describe",l_host_describe),
+    ("native_capture_render",l_native_capture_render),
+    ("native_scene",l_native_scene),
+    ("native_present",l_native_present),
+    ("native_clear_mirrors",l_native_clear_mirrors),
+    ("native_client_status",l_native_client_status),
+    ("native_key_state",l_native_key_state),
+    ("native_scene_assets",l_native_scene_assets),
     ("servo_config", l_servo_config),
     ("servo_bodies", l_servo_bodies),
     ("servo_weapon", l_servo_weapon),

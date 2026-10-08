@@ -19,6 +19,8 @@ impl Default for ServiceState{
     }
 }
 impl ServiceState {
+    pub(crate) fn is_host(&self)->bool{self.role==RuntimeRole::Host}
+    pub(crate) fn is_client(&self)->bool{self.role==RuntimeRole::Client}
     pub fn publish_world(&self, world: World) -> Result<(), &'static str> { self.host.as_ref().ok_or("not a native host")?.publish_world(world) }
     pub fn directory(&self) -> Option<w::Directory> { self.host.as_ref().and_then(HostHandle::directory).or_else(|| self.client.as_ref().and_then(ClientHandle::directory)) }
     fn parent_alive(&mut self)->bool {
@@ -56,6 +58,10 @@ unsafe fn push_decoded_pose(L:*mut lua_State,row:c_int,pose:&[u8],tick:u32){
     }
 }
 impl Native {
+    pub unsafe fn native_client_status(&mut self,L:*mut lua_State)->c_int{unsafe{
+        let Some(c)=self.native_host.client.as_ref() else{return nil_err(L,"not a native client");};
+        lua_createtable(L,0,3);let t=lua_gettop(L);set_bool(L,t,"connected",c.connected());set_int(L,t,"peer_id",c.peer_id() as i64);set_str(L,t,"error",&c.error());1
+    }}
     pub unsafe fn host_world_changed(&mut self,L:*mut lua_State)->c_int{
         unsafe{let Some(h)=self.native_host.host.as_ref() else{return nil_err(L,"not a native host");};h.world_changed();lua_pushboolean(L,1);1}
     }
@@ -76,7 +82,8 @@ impl Native {
             if self.native_host.host.is_some() { lua_pushboolean(L,1); return 1; }
             let (Some(bind),Some(dir),Some(arena))=(arg_str(L,1),arg_str(L,2),arg_str(L,3)) else { return nil_err(L,"host arguments"); };
             let Ok(bind)=bind.parse() else {return nil_err(L,"host bind");};
-            match HostHandle::start_with_parent(bind,Path::new(dir),arena,self.native_host.parent.clone()) {
+            let mode = match hsmp_server::native_mode::Mode::parse(arg_str(L,4).unwrap_or("pvp")) { Ok(mode) => mode, Err(reason) => return nil_err(L,reason) };
+            match HostHandle::start_with_parent_mode(bind,Path::new(dir),arena,self.native_host.parent.clone(),mode) {
                 Ok(h)=>{self.native_host.host=Some(h);lua_pushboolean(L,1);1},
                 Err(e)=>nil_err(L,&format!("native host: {e}")),
             }
@@ -94,7 +101,7 @@ impl Native {
                 Some(s)=>{if s.len()!=64 {return nil_err(L,"server key");} let mut key=[0u8;32];
                     for (i,x) in key.iter_mut().enumerate(){let Some(part)=s.get(i*2..i*2+2) else{return nil_err(L,"server key");}; let Ok(v)=u8::from_str_radix(part,16) else{return nil_err(L,"server key");}; *x=v;} Some(key)},
             };
-            match ClientHandle::start(addr,Path::new(dir),nick,pinned) { Ok(c)=>{self.native_host.client=Some(c);lua_pushboolean(L,1);1},Err(e)=>nil_err(L,&format!("native client: {e}")) }
+            match ClientHandle::start_presentation(addr,Path::new(dir),nick,pinned) { Ok(c)=>{self.native_host.client=Some(c);lua_pushboolean(L,1);1},Err(e)=>nil_err(L,&format!("native client: {e}")) }
         }
     }
     pub unsafe fn host_directory(&mut self, L: *mut lua_State) -> c_int {
@@ -105,7 +112,7 @@ impl Native {
             set_str(L,t,"arena",&d.arena);set_str(L,t,"error",&d.error);
             if let Some(c)=self.native_host.client.as_ref(){set_int(L,t,"peer_id",c.peer_id() as i64);set_bool(L,t,"connected",c.connected());}
             lua_createtable(L,d.entities.len() as c_int,0);let rows=lua_gettop(L);
-            for (i,e) in d.entities.iter().enumerate(){lua_createtable(L,0,9);let row=lua_gettop(L);push_ref(L,row,e.reference);set_int(L,row,"owner_peer",e.owner_peer as i64);set_int(L,row,"slot",e.slot as i64);set_int(L,row,"kind",e.kind as i64);set_int(L,row,"controller",e.controller as i64);set_int(L,row,"team",e.team as i64);lua_rawseti(L,rows,i as i64+1);}
+            for (i,e) in d.entities.iter().enumerate(){lua_createtable(L,0,9);let row=lua_gettop(L);push_ref(L,row,e.reference);set_int(L,row,"owner_peer",e.owner_peer as i64);set_int(L,row,"slot",e.slot as i64);set_int(L,row,"kind",e.kind as i64);set_int(L,row,"controller",e.controller as i64);set_bool(L,row,"team_known",e.team.is_some());if let Some(team)=e.team{set_int(L,row,"team",team as i64);}lua_rawseti(L,rows,i as i64+1);}
             rawset_str(L,t,"entities");1
         }
     }
@@ -121,7 +128,7 @@ impl Native {
         unsafe {
             let Some(h)=self.native_host.host.as_ref() else{return nil_err(L,"not a native host");};
             let Some(state)=arg_str(L,1) else{return nil_err(L,"host state");};
-            let code=match state{"native_ready"=>w::READY,"error"=>w::FAULT,"boot"|"travel"|"wait_world"|"native_spawn"|"stopped"=>w::BOOTING,_=>return nil_err(L,"host state")};
+            let code=match state{"native_ready"=>w::READY,"live"=>w::LIVE,"victory"=>w::VICTORY,"defeat"=>w::DEFEAT,"error"=>w::FAULT,"boot"|"travel"|"wait_world"|"native_spawn"|"stopped"=>w::BOOTING,_=>return nil_err(L,"host state")};
             let error=arg_str(L,2).unwrap_or("");match h.status(code,error){Ok(())=>{lua_pushboolean(L,1);1},Err(e)=>nil_err(L,e)}
         }
     }

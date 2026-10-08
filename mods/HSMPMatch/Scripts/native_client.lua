@@ -1,0 +1,107 @@
+-- Normal rendered game client. The headless engine owns every combatant and impact.
+local M={}
+local started=false
+local function module(name,path)
+    local ok,v=pcall(require,name)
+    if ok and type(v)=="table"then return v end
+    local source=(debug.getinfo(1,"S").source or ""):gsub("^@","")
+    local dir=source:match("^(.*)[/\\]") or "."
+    ok,v=pcall(dofile,dir.."/"..(path or name..".lua"))
+    if ok and type(v)=="table"then return v end
+end
+function M.start()
+    if started then return false,"already started"end
+    started=true
+    local Role,HW,IPC,SG,D,Core,Input=module("hsmp_runtime_role"),module("hsmp_wg"),module("hsmp_ipc"),module("hsmp_saveguard"),module("director"),module("native_client_core"),module("native_client_input")
+    local Presentation=module("native_presentation","../../HSMPAvatars/Scripts/native_presentation.lua")
+    if not Role or not Role.presentation()or not HW or not IPC or not SG or not D or not Core or not Input or not Presentation or not LoopInGameThreadWithDelay then print("[HSMPNativeClient] startup refused: client dependencies unavailable\n");return end
+    local UEH=require("UEHelpers")
+    local state_dir=(os.getenv("HSMP_STATE_DIR")or"hsmp_state"):gsub("\\","/")
+    local log=function(format,...)print(string.format("[HSMPNativeClient] "..format.."\n",...))end
+    IPC.init({mod="HSMPMatch",state_dir=state_dir,log=log});IPC.frame()
+    local N=IPC.N
+    if not N or not N.client_start or not N.native_present then log("startup refused: native scene API unavailable");return end
+    local HL=module("hsmp_log");if HL then HL.init({mod="HSMPMatch",state_dir=state_dir})end
+    SG.install({mod="HSMPMatch",state_dir=state_dir,log=HL,fresh_per_session=false,reload_gi_on_exit=false});SG.set_active(true)
+    local WG=HW.new({log=log,UEHelpers=UEH})
+    local stop_file=os.getenv("HSMP_NATIVE_STOP_FILE")
+    local identity=os.getenv("HSMP_NATIVE_IDENTITY_DIR")or state_dir
+    local address=os.getenv("HSMP_NATIVE_SERVER")or"127.0.0.1:7777"
+    local nick=os.getenv("HSMP_NATIVE_NICK")or"native-client"
+    local brain=os.getenv("HSMP_NATIVE_CLIENT_AI")=="1"
+    local function now()return N.now_us()/1000000 end
+    local mapping,last_key,loop
+    local view=Presentation.new({native=N,world=function()if not WG.check()or not WG.settled()then return nil end;return WG.world(),WG.token()end,same=WG.same})
+    WG.on_drop(function()mapping=nil;last_key=nil;view:drop();IPC.world_leaving()end,"native_client")
+    local env=D.make_ue_env({WG=WG,UEHelpers=UEH,log=log,SG=SG,state_dir=state_dir})
+    local controller,isolation_token,isolation_at
+    local function isolated()
+        local token=WG.token();local world=WG.world();if not world or not WG.same(token)then return false end
+        if isolation_token and WG.same(isolation_token)and now()<(isolation_at or 0)then return true end
+        local gs=UEH.GetGameplayStatics();local gm=gs:GetGameMode(world)
+        if not gm or not gm:IsValid()or not WG.same(token)or gm:GetClass():GetFName():ToString()~="GameModeBase"then return false end
+        -- This game mode does not run Half Sword's fighter/win/spawn state machine.
+        -- A locally spawned fighter is a hard refusal rather than a duplicate authority world.
+        for _,pawn in pairs(FindAllOf("Willie_BP_C")or{})do
+            if pawn and pawn:IsValid()then
+                local own=pawn:GetWorld()
+                if not WG.same(token)then return false end
+                if own and own:IsValid()and own:GetAddress()==world:GetAddress()then
+                    if not pawn:ActorHasTag(FName("Persistent"))or not WG.same(token)then return false end
+                    local mesh=pawn.Mesh
+                    if not mesh or not mesh:IsValid()or not WG.same(token)or mesh:IsVisible()or not WG.same(token)then return false end
+                    if pawn:GetActorEnableCollision()or not WG.same(token)or mesh:IsSimulatingPhysics(FName("None"))or not WG.same(token)then return false end
+                end
+            end
+        end
+        local pc=WG.pc();if not pc or not pc:IsValid()or not WG.same(token)then return false end
+        pc:SetIgnoreMoveInput(true);if not WG.same(token)then return false end
+        pc=WG.pc();pc:SetIgnoreLookInput(true)
+        if not WG.same(token)then return false end
+        isolation_token=token;isolation_at=now()+1
+        return true
+    end
+    local function each(array,fn)
+        if not array then error("native input mappings unavailable")end
+        array:ForEach(function(_,v)local value=v;if v and v.get then value=v:get()end;fn(value)end)
+    end
+    controller=Core.new({now=now,link=N.native_client_status,directory=N.host_directory,scene=N.native_scene,
+        world=function()if not WG.check()then return nil end;return{ready=WG.settled(),arena=WG.short(),key=WG.key}end,
+        travel=function(arena)
+            for _,row in ipairs({{"Free Mode Activated",false},{"FreeMode Multiplayer",false},{"Progression Multiplayer",false},{"Free Mode Foes Amount",0}})do
+                if not env.gi_set(row[1],row[2])or env.gi_get(row[1])~=row[2]then return false end
+            end
+            view:clear();return D.native_client_travel(env,arena)
+        end,
+        isolated=isolated,present=function()return view:apply()end,clear=function()view:clear()end,
+        close=function()N.host_stop();env.quit_native_worker()end,send=N.native_input,
+        input=function(scene,own)
+            if brain then return Input.ai(scene,own,now())end
+            if not mapping then
+                local settings=StaticFindObject("/Script/Engine.Default__InputSettings")
+                if not settings or not settings:IsValid()then return nil,"native input settings unavailable"end
+                local why;mapping,why=Input.mapping(settings,each);if not mapping then return nil,why end
+            end
+            local pc=WG.pc();if not pc or not pc:IsValid()then return nil,"input controller unavailable"end
+            local token=WG.token();local values,why=N.native_key_state(pc:GetAddress(),mapping.keys)
+            if not values or not WG.same(token)then return nil,why or"world changed during engine input sample"end
+            return Input.frame(mapping,values)
+        end,
+        report=function(state,reason,scene,own)
+            log("state=%s reason=%s frame=%s",state,tostring(reason or""),tostring(scene and scene.frame_seq or 0))
+            if HL then HL.event("x_native_client",{state=state,reason=reason or"",epoch=scene and scene.epoch or 0,dir_seq=scene and scene.dir_seq or 0,frame_seq=scene and scene.frame_seq or 0,own_entity=own and own.id or 0,own_incarnation=own and own.incarnation or 0})end
+        end})
+    local ok,why=N.client_start(address,identity,nick,os.getenv("HSMP_NATIVE_SERVER_KEY"))
+    if ok~=true then log("startup refused: %s",tostring(why));return end
+    loop=LoopInGameThreadWithDelay(16,function()
+        local passed,reason=pcall(function()
+            SG.tick();if stop_file and IPC.read(stop_file)then controller:stop("stop requested");env.quit_native_worker();return end
+            if WG.check()then if WG.key~=last_key then last_key=WG.key;IPC.world_ready(WG.key)end;IPC.frame(WG.key)end
+            controller:tick()
+        end)
+        if not passed then log("client stopped: %s",tostring(reason));controller:stop(tostring(reason))end
+        return controller.stopped
+    end)
+    return true
+end
+return M

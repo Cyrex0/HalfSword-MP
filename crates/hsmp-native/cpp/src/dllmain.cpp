@@ -28,6 +28,7 @@
 #include "gen/hsmp_ipc.h"
 #include "hsmp_native.h"
 #include "ue4ss_reflect.h"
+#include "native_presentation.h"
 #include "box_snapshot_probe.h"
 #include "ue4ss_abi.hpp"
 #include "ue4ss_pins.h"
@@ -172,6 +173,7 @@ class HSMPNativeMod final : public CppUserModBase
         if (m_enabled)
         {
             const char* missing = hsmp_reflect_register();
+            if(!missing) hsmp_presentation_register(hsmp_reflect_table());
             logf("native sampling: %s%s", missing ? "unavailable, missing UE4SS export " : "engine reflection registered", missing ? missing : "");
         }
     }

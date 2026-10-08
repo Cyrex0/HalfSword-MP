@@ -227,7 +227,7 @@ pub struct SampleState {
     pub(crate) input: crate::worker_input::WorkerInputState,
     native_guard: Option<NativeGuard>,
     native_sampling_active: bool,
-    native_pending: Option<(hsmp_server::native_wire::World, Vec<u8>)>,
+    pub(crate) native_pending: Option<(hsmp_server::native_wire::World, Vec<u8>)>,
     native_bindings: HashMap<hsmp_server::native_wire::EntityRef, NativeEntityBinding>,
 }
 
@@ -455,7 +455,7 @@ pub(crate) unsafe fn call_fn(vt: &HsmpReflect, params: &mut Params, h: (u64, [i3
 }
 
 impl Native {
-    fn native_guard_ok(&self, vt: &HsmpReflect) -> bool {
+    pub(crate) fn native_guard_ok(&self, vt: &HsmpReflect) -> bool {
         if !self.sample.world_ok { return false; }
         let Some(g) = &self.sample.native_guard else { return !self.sample.native_sampling_active; };
         unsafe {
@@ -1233,7 +1233,14 @@ impl Native {
             if std::env::var("HSMP_RUNTIME_ROLE").as_deref()!=Ok("native_worker"){return nil_err(L,"role");}
             let Some((world,key))=self.sample.native_pending.take() else{return nil_err(L,"no staged world");};
             if !self.sample.world_ok || self.world_key.as_deref()!=Some(key.as_slice()){return nil_err(L,"world");}
-            match self.native_host.publish_world(world){Ok(())=>{lua_pushboolean(L,1);1},Err(error)=>nil_err(L,error)}
+            let render=self.presentation.pending.take();
+            let generation=(world.epoch,world.directory_seq,world.frame_seq);
+            match self.native_host.publish_world(world){Ok(())=>{
+                if let Some(render)=render {
+                    if (render.world.epoch,render.world.directory_seq,render.world.frame_seq)!=generation{return nil_err(L,"render/core staging generation");}
+                    if let Some(host)=self.native_host.host.as_ref(){if let Err(error)=host.publish_render(render){return nil_err(L,error);}}
+                }
+                lua_pushboolean(L,1);1},Err(error)=>nil_err(L,error)}
         }
     }
 

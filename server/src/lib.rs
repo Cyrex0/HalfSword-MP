@@ -28,6 +28,8 @@ mod server_report;
 mod stats;
 mod server_mods;
 pub mod native_wire;
+pub mod native_mode;
+pub mod native_descriptor;
 pub mod native_service;
 #[cfg(test)]
 mod alloc_count;

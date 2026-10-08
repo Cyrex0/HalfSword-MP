@@ -37,6 +37,9 @@ pub fn record_mode(kind: u16, peer: PeerId) -> Option<hsmp_net::net::SendMode> {
         0x0A80 => return Some(SendMode::Ordered),
         0x0A10 => return Some(SendMode::ReliableLatest { key: key(0x92, 0) }),
         0x0AC0 => return Some(SendMode::ReliableLatest { key: key(0x93, 0) }),
+        0x0AC1 => return Some(SendMode::Reliable),
+        0x0A11 => return Some(SendMode::Latest { key: key(0x94, 0) }),
+        0x0A81 => return Some(SendMode::Ordered),
         _ => {}
     }
     Some(match hsmp_ipc::schema::record_info(kind)?.chan {

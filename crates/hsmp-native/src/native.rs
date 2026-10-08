@@ -89,6 +89,7 @@ pub struct Native {
     pub(crate) procs: crate::proc::ProcState,
     pub(crate) sample: crate::sample::SampleState,
     pub(crate) native_host: crate::native_host::ServiceState,
+    pub(crate) presentation: crate::native_presentation::State,
 }
 
 impl Default for Native {
@@ -134,6 +135,7 @@ impl Native {
             procs: Default::default(),
             sample: Default::default(),
             native_host: Default::default(),
+            presentation: Default::default(),
         }
     }
 
@@ -326,6 +328,7 @@ impl Native {
                     }
                     flags |= sc::FLAG_WORLD_CHANGED;
                     self.sample.drop_world(false);
+                    self.presentation.drop_world();
                     self.world_key = Some(k.to_vec());
                     self.left_world = false;
                 }
@@ -466,6 +469,7 @@ impl Native {
             }
             self.invalidate_world_records(we);
             self.sample.drop_world(true);
+            self.presentation.drop_world();
             // world-scoped bus keys
             let n = (self.bus_dir.count as usize).min(BUS_KEYS);
             let mut clear = Vec::new();
