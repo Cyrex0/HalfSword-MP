@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "actor_class": "/Game/Test/Source.Source_C",
+  "team": 1,
+  "passport": {
+    "actor_class": "/Game/Test/Source.Source_C", "id": 1, "name": "Offline fixture",
+    "height": 0.500000000000123, "weight": 0.25, "skill": 0.75,
+    "equipment": {"armor": [], "sheaths": [], "hands": []},
+    "face_type": 0, "eye_color": 0, "hair_color": [0.2, 0.3, 0.4, 1.0], "hair_length": 0.25
+  },
+  "construction": {
+    "start_body_condition": [100.0,100.0,100.0,100.0,100.0,100.0,100.0,100.0],
+    "is_zombie": false, "scale_mutation_inhibitor": 0.5, "spawn_in_pants": true,
+    "bolts_in_quiver": 0, "blossfechten_gear": false,
+    "actor_scale": [0.9375,0.9375,0.9375], "character_scale": [1.0,1.0,1.0],
+    "height_rate": 0.5, "muscle_rate": 0.25, "mass_scale": 1.0625
+  },
+  "equipment": {"armor": [], "weapons": [], "hands": [], "sheaths": []},
+  "components": [{
+    "id": 1, "owner": 0, "name": "FixtureMesh", "role": "body", "kind": "skeletal", "geometry": "cooked",
+    "asset": "/Game/Test/Body.Body", "skeleton": "/Game/Test/Skeleton.Skeleton", "physics_asset": "/Game/Test/Physics.Physics",
+    "parent": 0, "socket": "None", "relative": {"translation":[0.0,0.0,0.0],"rotation":[0.0,0.0,0.0,1.0],"scale":[1.0,1.0,1.0]},
+    "visible": true, "hidden": false,
+    "collision": {"enabled":3,"object_type":3,"profile":"Fixture","responses":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],"simulating":true},
+    "bones":[{"name":"root","parent":-1},{"name":"pelvis","parent":0}],
+    "materials":[], "morphs":[], "hidden_bones":[], "groom":[], "vertex_state":"native_asset", "vertex_colors":[], "deformer":"", "cloth":false
+  }],
+  "topology": {"in_process":false,"parts":[],"dismembered_bones":[],"detached":[],"gore":[],"vertex_state":"native_asset"}
+}

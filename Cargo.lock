@@ -2011,6 +2011,7 @@ dependencies = [
  "hsmp-pose",
  "hsmp-server",
  "mlua",
+ "serde_json",
 ]
 
 [[package]]

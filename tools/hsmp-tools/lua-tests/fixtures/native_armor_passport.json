@@ -1,0 +1,9 @@
+{
+  "class":"/Game/Test/Armor.Armor_C", "id":4, "core_removed":false,
+  "module1":0, "module2":1, "module3":2,
+  "bg_color":[1.0,0.5,0.25,1.0], "leather_color":[0.25,0.2,0.1,1.0],
+  "fabric1":[0.3,0.2,0.1,1.0], "fabric2":[0.6,0.5,0.4,1.0], "fabric3":[0.9,0.8,0.7,1.0],
+  "steel":0, "metal":1, "rust":false, "dirt":true, "price":100.00000000000001,
+  "pslot":2, "up_ap":true, "low_ap":false, "req_up_ap":false, "req_low_ap":false,
+  "slots_blocked":[{"slot":2,"value":false},{"slot":5,"value":true}], "req_hier":true, "tier":1
+}
