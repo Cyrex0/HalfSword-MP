@@ -658,6 +658,13 @@
      "timeout_s": 150
     },
     {
+     "do": "wait",
+     "ev": "cmd_result",
+     "who": "each",
+     "where": { "cmd": "ready", "ok": "true", "source": "server" },
+     "timeout_s": 60
+    },
+    {
      "do": "rcon",
      "cmd": "MAP Alley",
      "pick": "Alley"
@@ -721,6 +728,13 @@
      "ev": "lobby_ready",
      "who": "each",
      "timeout_s": 150
+    },
+    {
+     "do": "wait",
+     "ev": "cmd_result",
+     "who": "each",
+     "where": { "cmd": "ready", "ok": "true", "source": "server" },
+     "timeout_s": 60
     },
     {
      "do": "rcon",

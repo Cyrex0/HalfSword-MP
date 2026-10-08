@@ -133,8 +133,46 @@ pub fn local_weapon_from(v: &J) -> Weapon {
 /// `put_pose`'s record (the codec v2 frame, encoded once) from the `.skeletal.json` v2 shape:
 /// `{"tick","ts","dt","b":[23*13],"w":[[21]...],"c":{"f","gr","gl","s":[16],"aim":[3],"cr":[2],"ik":[12]}}`,
 /// or with `"bones":{"pelvis":[7 or 13], ...}` (POSE_BONES names; missing bones are zero, a
-/// missing rotation is the identity). `None` if a number is not finite.
+/// missing rotation is the identity). Optional `context` holds the original integer
+/// `match_id`, `round`, `life`; `strikers` holds native BodyStriker fields. Explicit invalid
+/// or partial identity/geometry is refused, never filled from the current session.
 pub fn local_pose_from(v: &J) -> Option<Box<PoseBuf>> {
+    use hsmp_pose::posecodec::v2::{BodyStriker, Context, MAX_BODY_STRIKERS};
+    let context = match v.get("context") {
+        None => None,
+        Some(c) => {
+            let c = Context { match_id: c["match_id"].as_u64()?,
+                round: u32::try_from(c["round"].as_u64()?).ok()?,
+                life: u16::try_from(c["life"].as_u64()?).ok()? };
+            if !c.valid() { return None; }
+            Some(c)
+        }
+    };
+    fn vector<const N: usize>(v: &J) -> Option<[f32; N]> {
+        let a = v.as_array()?;
+        if a.len() != N { return None; }
+        let mut out = [0.0; N];
+        for (o, x) in out.iter_mut().zip(a) { *o = x.as_f64()? as f32; }
+        out.iter().all(|x| x.is_finite()).then_some(out)
+    }
+    let strikers = match v.get("strikers") {
+        None => None,
+        Some(a) => {
+            let a = a.as_array()?;
+            if a.len() > MAX_BODY_STRIKERS { return None; }
+            let mut out: Vec<BodyStriker> = Vec::with_capacity(a.len());
+            for s in a {
+                let s = BodyStriker {
+                    part: u8::try_from(s["part"].as_u64()?).ok()?,
+                    component: u8::try_from(s["component"].as_u64()?).ok()?,
+                    kind: u8::try_from(s["kind"].as_u64()?).ok()?,
+                    p: vector(&s["p"])?, q: vector(&s["q"])?, half: vector(&s["half"])? };
+                if !s.valid() || out.iter().any(|o| o.part == s.part && o.component == s.component) { return None; }
+                out.push(s);
+            }
+            Some(out)
+        }
+    };
     let mut b = [0f64; hsmp_pose::sample::BONE_NUMS];
     for i in 0..NB {
         b[i * 13 + 6] = 1.0;
@@ -179,7 +217,8 @@ pub fn local_pose_from(v: &J) -> Option<Box<PoseBuf>> {
     }
     let a = hsmp_pose::sample::PoseArgs { tick: f(&v["tick"]), ts: f(&v["ts"]), dt: f(&v["dt"]), b: &b, w: &ws, c: c.is_object().then_some(&cv) };
     let mut out = PoseBuf::new_boxed();
-    hsmp_pose::sample::encode_pose(&a, &mut hsmp_pose::sample::Scratch::default(), &mut out).then_some(out)
+    hsmp_pose::sample::encode_pose_with_context(&a, &mut hsmp_pose::sample::Scratch::default(), &mut out,
+        &[], strikers.as_deref(), context).then_some(out)
 }
 
 /// Read a hot record slot: (meta, version, payload).
@@ -879,6 +918,37 @@ mod tests {
         assert_eq!(out["life"],513);
         let legacy=local_root_from(&json!({"tick":17,"ts":1234,"pos":[1,2,3],"rot":[0,0,0],"vel":[0,0,0]}));
         assert_eq!((legacy.match_id,legacy.round,legacy.life),(0,0,0),"tools never restamp missing context from a current session");
+    }
+
+    #[test]
+    fn pose_tools_preserve_original_context_and_exact_native_striker() {
+        use hsmp_pose::posecodec::v2::{self, Context};
+        let original = 0xfedc_ba98_7654_3210u64;
+        let mut v = json!({"tick":17,"ts":1234,"dt":16,
+            "context":{"match_id":original,"round":29,"life":513},
+            "strikers":[{"part":1,"component":10,"kind":0,"p":[13,0,0],"q":[0,0,0,1],"half":[13,13,13]}]});
+        let p = local_pose_from(&v).unwrap();
+        let decoded = v2::decode(p.used()).unwrap();
+        assert_eq!(decoded.context, Some(Context {match_id:original,round:29,life:513}));
+        let s = decoded.strikers.unwrap();
+        assert_eq!((s[0].part,s[0].component,s[0].kind),(1,10,0));
+        assert_eq!(s[0].p,[13.0,0.0,0.0]);
+        assert_eq!(s[0].half,[13.0;3]);
+        for invalid in [json!({"match_id":original,"round":29}),
+            json!({"match_id":original,"round":29,"life":0}),
+            json!({"match_id":original,"round":29,"life":65536}),
+            json!({"match_id":original,"round":4294967296u64,"life":1})] {
+            v["context"] = invalid;
+            assert!(local_pose_from(&v).is_none(), "partial or overflowing context cannot become unscoped");
+        }
+        v.as_object_mut().unwrap().remove("context");
+        assert_eq!(v2::decode(local_pose_from(&v).unwrap().used()).unwrap().context,None);
+        v["strikers"][0]["component"] = json!(0);
+        assert!(local_pose_from(&v).is_none(), "invalid native identity cannot be dropped silently");
+        v["strikers"][0]["component"] = json!(10);
+        let duplicate = v["strikers"][0].clone();
+        v["strikers"].as_array_mut().unwrap().push(duplicate);
+        assert!(local_pose_from(&v).is_none(), "duplicate native component cannot overwrite geometry");
     }
 
     /// The generic ABI-2 machinery: records by name into the G2S / DevCtl rings, rendered back

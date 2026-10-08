@@ -389,7 +389,7 @@ local Cmd, Travel, Legacy     -- commands.lua, travel.lua, legacy_travel.lua (lo
 
 -- A new MP session (HOST / JOIN / CANCEL): forget the previous session's
 -- commands, travel latch and lobby_ready event.
-local function reset_lobby_session(is_host, chosen)
+local function reset_lobby_session(is_host, chosen, keep_commands)
     lobby.serial     = lobby.serial + 1
     lobby.is_host    = is_host
     lobby.is_ready   = false
@@ -412,7 +412,7 @@ local function reset_lobby_session(is_host, chosen)
     -- The previous session's host rules request must not be re-sent to
     -- another server when this player becomes admin there.
     if HSMP_IPC then HSMP_IPC.put("kit_rules_req", { seq = 0 }) end   -- the kit_rules_req slot: seq 0 = no request
-    if Cmd then Cmd.reset() end
+    if Cmd and not keep_commands then Cmd.reset() end
     if MX.Mods then MX.Mods.reset() end   -- server mods: the last server's offer is gone
 end
 
@@ -984,7 +984,7 @@ if Cmd then
             if c.kind == "start" and c.state == "refused" then
                 Log("START: server did not start the match (reply: %s)", tostring(c.reason))
             end
-            if state.screen_active == "lobby" then pcall(refresh_screen) end
+            if not Cmd.closing and state.screen_active == "lobby" then pcall(refresh_screen) end
         end,
     })
 end
@@ -2021,6 +2021,9 @@ local function teardown_finish(reason, serial, server_grace, on_done)
         if on_done then pcall(on_done) end
         return
     end
+    -- The leave poll has finished: consume its last queued answers before refusing
+    -- unanswered commands. No widget refresh or command retry runs while closing.
+    if Cmd then Cmd.reset(true) end
     -- Stop the hsmp-sidecar / hsmp-server THIS game spawned, by our process
     -- handles (IPC.proc_kill). Never by image name: another
     -- instance's processes on the same machine are left alone, and with
@@ -2061,19 +2064,25 @@ MX.LEAVE_ABSENT_READS = 3
 local function session_teardown(reason, opts)
     opts = opts or {}
     Log("closing the MP session (%s)", tostring(reason))
+    if Cmd then Cmd.begin_close() end
     local live = read_sidecar_status()
     if live == "connected" then
         if Cmd then Cmd.fire("ready", { value = false }) end    -- best effort, untracked: the session is being closed
     end
     lobby.active = false
-    reset_lobby_session(false, lobby.chosen_map)
+    reset_lobby_session(false, lobby.chosen_map, true)
     local serial = lobby.serial
     local wait = live ~= nil and live ~= "ended" and not opts.no_leave
     if wait then write_leave_request(reason) end
-    if not wait then teardown_finish(reason, nil, false, opts.on_done); return end
+    if not wait then teardown_finish(reason, serial, false, opts.on_done); return end
     local t0 = os.clock()
     local absent = 0
     local function poll()
+        if serial ~= lobby.serial then
+            Log("leave (%s): a new session started meanwhile - its processes are left alone", tostring(reason))
+            return
+        end
+        if Cmd then Cmd.drain_results() end
         local st = read_sidecar_status()
         absent = (st == nil) and (absent + 1) or 0
         local gone = absent >= MX.LEAVE_ABSENT_READS

@@ -104,6 +104,7 @@ local function test_static_no_local_travel()
 end
 
 if mode == "dump" then T.isolated(T.script, "case", { kind = "dump" }); return end
+if mode == "close" then T.isolated(T.script, "case", { kind = "proc", n = 4 }); return end
 if mode ~= "case" then
     -- ---- 0. every HSMPMenu file parses ------------------------------------------
     for _, n in ipairs({ "main.lua", "ui_kit.lua", "classes.lua", "browser.lua", "commands.lua", "travel.lua", "legacy_travel.lua",
@@ -138,7 +139,7 @@ if mode ~= "case" then
     for n = 1, 5 do T.isolated(T.script, "case", { kind = "nav", n = n }) end
     for n = 1, 2 do T.isolated(T.script, "case", { kind = "settings", n = n }) end
     for n = 1, 12 do T.isolated(T.script, "case", { kind = "lobby", n = n }) end
-    for n = 1, 3 do T.isolated(T.script, "case", { kind = "proc", n = n }) end
+    for n = 1, 4 do T.isolated(T.script, "case", { kind = "proc", n = n }) end
     T.isolated(T.script, "case", { kind = "perf" })
     return
 end
@@ -3146,6 +3147,76 @@ proc[2] = function(tag)
         tag .. ": the game quits after the graceful leave")
 end
 
+-- The actual main.lua quit callback and existing 100 ms leave poll keep pending
+-- command IDs until their server replies arrive or the original 1.5 s bound ends.
+proc[4] = function(tag)
+    local function result(id)
+        return T.filter(evs("cmd_result"), function(e) return e.cmd_id == id end)
+    end
+    local function start_quit(queued)
+        boot(1920, 1080, 1.0)
+        host_lobby()
+        local C = package.loaded.commands
+        C.INFER_GRACE_S = 2.0
+        local id = cmd_send("ready", { value = true }, "test")
+        if queued then append(".cmd_results.jsonl", pyjson({ "cmd_id", id, "ok", true }) .. "\n") end
+        exit_screen()
+        M.execs = {}
+        local rib = T.filter(M.live(), function(w) return startswith(tostring(w.name), "HSMPBtn_top5") end)
+        M.click(rib[1].obj)
+        check(C.closing and not HSMP_MENU_TEST.lobby.active and #kills() == 0,
+            tag .. ": quit closes admission immediately and preserves the existing leave wait")
+        return C, id
+    end
+    local function end_quit()
+        write(".sidecar.json", '{"status":"ended","peer_id":1,"peers":[]}\n')
+        M.run(700) -- existing leave poll plus existing 400 ms listen-server grace
+    end
+
+    local C, id = start_quit(true)
+    check(#result(id) == 1 and result(id)[1].ok and result(id)[1].source == "server",
+        tag .. ": quit consumes an already queued server reply")
+    end_quit()
+    check(#result(id) == 1 and C.closing and cmd_send("ready", { value = true }, "test") == nil,
+        tag .. ": final reset keeps commands closed until a new session starts")
+
+    C, id = start_quit(false)
+    local sent = #evs("cmd_sent")
+    check(C.status(id).state == "pending" and #result(id) == 0, tag .. ": pending ID survives quit before the next poll")
+    check(cmd_send("ready", { value = true }, "test") == nil, tag .. ": new readiness cannot be submitted while closing")
+    append(".cmd_results.jsonl", pyjson({ "cmd_id", id, "ok", true }) .. "\n")
+    M.run(100)
+    check(#result(id) == 1 and result(id)[1].ok and result(id)[1].source == "server",
+        tag .. ": the inactive lobby consumes a delayed reply during the existing leave poll")
+    append(".cmd_results.jsonl", pyjson({ "cmd_id", id, "ok", true }) .. "\n")
+    end_quit()
+    check(#result(id) == 1 and #evs("cmd_sent") == sent and result(id)[1].tries == 1,
+        tag .. ": delayed and duplicate answers produce one result with no new command or retry")
+
+    C, id = start_quit(false)
+    M.run(1600)
+    local rs = result(id)
+    check(#rs == 1 and not rs[1].ok and rs[1].source == "local" and rs[1].reason == "session closed",
+        tag .. ": unanswered readiness is explicitly refused at the original teardown bound")
+    check(rs[1].ms >= 1500 and rs[1].ms < 1700 and rs[1].tries == 1 and C.closing,
+        tag .. ": no longer wait, inferred success, or retry")
+
+    C, id = start_quit(false)
+    -- A new session invalidates the old delayed callback. Its queued answers and
+    -- process handles must be left alone even when the old world's objects died.
+    HSMP_MENU_TEST.lobby.serial = HSMP_MENU_TEST.lobby.serial + 1
+    C.reset()
+    local next_id = cmd_send("best_of", { n = 9 }, "test")
+    append(".cmd_results.jsonl", pyjson({ "cmd_id", next_id, "ok", true }) .. "\n")
+    M.premap()
+    M.kill_all()
+    M.run(1600)
+    check(C.status(next_id).state == "pending" and #result(next_id) == 0 and #kills() == 0,
+        tag .. ": the superseded teardown neither drains the new session nor kills its processes")
+    check(#T.list(M.dead_touch) == 0 and not contains(logtext(), "LOOP ERR") and not contains(logtext(), "DELAY ERR"),
+        tag .. ": teardown after a session/world change reuses no old UObject")
+    check(#result(id) == 1, tag .. ": session replacement still resolves the old ID exactly once")
+end
 -- perf: an idle lobby rebuilds nothing and writes no widget; the cost is logged every 10 s
 local function test_perf(tag)
     boot(1920, 1080, 1.0)

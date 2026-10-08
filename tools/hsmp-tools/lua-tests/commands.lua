@@ -146,4 +146,48 @@ do
         T.repr(st) .. " sent=" .. #w.sent)
 end
 
+T.log("== closing drains queued and delayed answers without retries or new commands")
+do
+    local w = new_env(true)
+    local queued = w.C.send("best_of", { n = 5 })
+    w:answer(queued, true)
+    w.C.begin_close()
+    T.check(w.C.status(queued).source == "server", "closing consumes the already queued server answer")
+    local blocked, why = w.C.send("ready", { value = true })
+    T.check(blocked == nil and why == "session closing" and #w.sent == 1, "closing refuses new tracked commands before allocating or sending")
+    w:run(7, LOBBY5)
+    T.check(#w.sent == 1 and #w:results(queued) == 1, "closing never retries or creates a second result")
+    w.C.reset()
+    T.check(not w.C.closing and #w:results(queued) == 1, "final reset preserves the one server result")
+
+    w = new_env(true)
+    local delayed = w.C.send("ready", { value = true })
+    w.C.begin_close()
+    w:run(0.5, { state = "lobby", ready = {} })
+    T.check(w.C.status(delayed).state == "pending", "closing retains the unanswered command")
+    w:answer(delayed, true)
+    w.C.drain_results()
+    w:answer(delayed, true)
+    w.C.reset()
+    local rs = w:results(delayed)
+    T.check(#rs == 1 and rs[1].f.ok and rs[1].f.source == "server", "a delayed answer resolves once before the final reset", T.repr(rs))
+    T.check(#w.sent == 1, "delayed close answer needed no resend")
+end
+
+T.log("== closing does not infer an answer and final reset refuses unanswered IDs once")
+do
+    local w = new_env(true)
+    local id = w.C.send("best_of", { n = 5 })
+    w.C.begin_close()
+    w:run(7, LOBBY5)
+    T.check(w.C.status(id).state == "pending" and #w.sent == 1, "closing neither infers nor applies the normal timeout")
+    w.C.reset()
+    w:answer(id, true)
+    w.C.drain_results()
+    w.C.reset()
+    local rs = w:results(id)
+    T.check(#rs == 1 and not rs[1].f.ok and rs[1].f.source == "local" and rs[1].f.reason == "session closed",
+        "the teardown bound produces exactly one explicit local refusal", T.repr(rs))
+    T.check(w.C.send("ready", { value = true }) ~= nil, "a new session can send after reset")
+end
 _G.HSMP_IPC = nil

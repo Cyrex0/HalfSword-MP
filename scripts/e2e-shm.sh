@@ -78,10 +78,7 @@ if ! "$HSMP_TOOLS" ipc-ctl --name "$(cat "$SHMA/ipc.name")" tdiag maybe >/dev/nu
 else fail "S3e ipc-ctl validation" "tdiag maybe was accepted"; fi
 
 if shm_has "$SHMA" POSE; then
-  # S6: root snapshot A -> B (PeerRoot), no me_*.json written on either side
-  shm_put "$SHMA" local_root '{"tick":42,"ts":1000,"pos":[500.0,0.0,100.0],"rot":[0.0,0.0,0.0],"vel":[0.0,0.0,0.0]}'
-  if e2e_wait_file 5 "$SHMB/view.jsonl" '"ev":"peer_root".*"pos":\[500\.0'; then pass "S6 root over shm: A pos=500 reaches B's PeerRoot"
-  else fail "S6 root over shm" "$(grep '"ev":"peer' "$SHMB/view.jsonl" | tail -3 | head -c 400)"; fi
+  # S6 runs after S10 starts a match: lobby roots have no placed pawn generation.
   # S9: local pose frames A -> B's PeerPlay (playback evaluated by B's sidecar)
   for k in $(seq 1 12); do
     shm_put "$SHMA" local_pose "{\"tick\":$k,\"ts\":$((2000 + k * 16)),\"dt\":8.3,\"bones\":{\"pelvis\":[0,0,100,0,0,0,1,0,0,0,0,0,0],\"head\":[0,0,180,0,0,0,1,0,0,0,0,0,0],\"hand_r\":[30,10,140,0,0,0,1,0,0,0,0,0,0]}}"
@@ -204,6 +201,20 @@ if shm_has "$SHMA" QUEUES && shm_has "$SHMA" STATE; then
   else fail "S10t tap g2s" "$(tail -c 300 "$SHMA/ipc_tap.jsonl" 2>/dev/null)"; fi
 else
   shm_skip "S10: QUEUES/STATE not negotiated (commands and session records)"
+fi
+
+# S6: exact assigned root over shm after a healthy original-life placement report.
+# No me_*.json is involved, and every context field must survive the relay.
+if shm_has "$SHMA" POSE; then
+  rec_wait 3 pawn_scope "$SHMA"
+  send_loaded_status "$SHMA" 0 "$(sess_arena "$SHMA")"
+  send_loaded_status "$SHMB" 0 "$(sess_arena "$SHMB")"
+  pawn_scope "$SHMA"
+  S6_ROOT=$(fixture_root "$SHMA" 42 "$REC_POS" 1000)
+  shm_put "$SHMA" local_root "$S6_ROOT"
+  if rec_wait 5 root_relayed "$SHMB" "$(link_get "$SHMA" my_peer_id)" "$S6_ROOT"; then
+    pass "S6 root over shm: A's exact placed-life root reaches B's PeerRoot"
+  else fail "S6 root over shm" "$(grep '"ev":"peer' "$SHMB/view.jsonl" | tail -3 | head -c 400)"; fi
 fi
 
 # S11: the game dies -> its sidecar leaves and exits (parent watch)
