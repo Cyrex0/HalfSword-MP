@@ -35,6 +35,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "body_scale" })
     T.isolated(T.script, "case", { kind = "fist_grip" })
     T.isolated(T.script, "case", { kind = "grip_reassert" })
+    T.isolated(T.script, "case", { kind = "grip_linear" })
     T.isolated(T.script, "case", { kind = "grip_probe" })
     T.isolated(T.script, "case", { kind = "grip_probe", gate = "off" })
     T.isolated(T.script, "case", { kind = "grip_probe", gate = "no_dev" })
@@ -2103,8 +2104,12 @@ if opts.kind=="grip_probe"then
     M.Methods.SetAllMotorsAngularDriveParams=function()writes=writes+1 end
     M.Methods.K2_GetComponentsByClass=function(a)return {a["PhysicsConstraint R Hand"],a["PhysicsConstraint L Hand"]}end
     M.Methods.SetLinearDriveParams=function()error("probe must never write linear params")end
-    M.Methods.SetLinearPositionDrive=function()error("probe must never change position enables")end
-    M.Methods.SetLinearVelocityDrive=function()error("probe must never change velocity enables")end
+    M.Methods.SetLinearPositionDrive=function(c,x,y,z)
+        for i,axis in ipairs({"XDrive","YDrive","ZDrive"})do c.ConstraintInstance.ProfileInstance.LinearDrive[axis].bEnablePositionDrive=({x,y,z})[i]end
+    end
+    M.Methods.SetLinearVelocityDrive=function(c,x,y,z)
+        for i,axis in ipairs({"XDrive","YDrive","ZDrive"})do c.ConstraintInstance.ProfileInstance.LinearDrive[axis].bEnableVelocityDrive=({x,y,z})[i]end
+    end
     local p={actor=pawn,addr=9711,gen=api.generation(),peer=2,driving=true,
         last={has_context=true,match_id=317,round=1,life=3,cut=5,seq=61,mode="interp",age=0},
         shown={has_context=true,match_id=317,round=1,life=3,pawn="GRIP_PROXY",cut=5},
@@ -2119,9 +2124,9 @@ if opts.kind=="grip_probe"then
         "actual second-slot post callback captures an admitted before/after policy pair")
     local before,after=records[1].joints[1],records[2].joints[1]
     T.check(before.complete and after.complete and after.same_pair and before.angular[1]==800 and after.angular[1]==0
-        and after.linear.XDrive.position and not after.linear.XDrive.velocity and after.linear.XDrive.stiffness==1200
+        and not after.linear.XDrive.position and not after.linear.XDrive.velocity and after.linear.XDrive.stiffness==1200
         and after.limits[1]==0 and after.linear.XDrive.max_force==0,
-        "fresh free limits and zero angular drive preserve evidence of the native enabled linear motor without changing it")
+        "read-only snapshot distinguishes native enables from the six-flag policy while strength and limits stay unchanged")
     T.check(records[2].joints[2].complete and records[2].joints[2].weapon_field=="Weapon R"
         and after.binding.owner1.address==9713 and after.binding.owner2.address==9711,
         "native left hand binding to the right weapon has exact component/owner provenance")
@@ -2133,9 +2138,10 @@ if opts.kind=="grip_probe"then
     end
     T.check(probe_rows==19 and namespaced and records[1].instance=="7","every probe header, joint, axis and callback row carries the native instance namespace")
     local count=reads;M.now=1016;M.bp_tick(pawn)
-    T.check(reads==count and #records==2 and PX.grip_probe_state.used==2,"cadence refuses optional native getter reads before admission")
+    T.check(reads>count and #records==2 and PX.grip_probe_state.used==2,"cadence refuses optional capture while mandatory current motor binding proof continues")
+    count=reads
     PX.GRIP_PROBE=false;M.now=7000;M.bp_tick(pawn)
-    T.check(reads==count and #records==2,"disabled probe adds no binding reads to the normal physical callback")
+    T.check(reads>count and #records==2,"disabled probe adds no optional capture to the normal physical callback")
     PX.GRIP_PROBE=true;PX.grip_probe_state=nil
     local q=PX.grip_probe_begin(pawn,9711,"GRIP_PROXY",p)
     local wrote=writes
@@ -2271,6 +2277,160 @@ if opts.kind=="grip_probe"then
         "last single budget slot cannot admit half a driven before/after pair")
     PX.grip_probe_state={used=0,started=M.now-180000,at={}}
     T.check(PX.grip_probe_begin(pawn,9711,"GRIP_PROXY",p)==nil and reads==count,"hard expiry refuses native reads despite a new callback identity")
+end
+
+if opts.kind=="grip_linear" then
+    T.write(sd.."/.settings.json",'{"avatars":true,"native_neutralise":false,"native_servo":false}\n')
+    local api=boot(true);local PX=api.PX
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=517,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=517,round=1,rows={{peer_id=1,life=3},{peer_id=2,life=3}}})
+    api.on_tick()
+    local function fn(s)return {ToString=function()return s end}end
+    local function obj(cls,name,addr,owner)
+        local o=M.new_obj(cls,name);rawset(o,"__addr",addr);o.__props.Owner=owner;return o
+    end
+    M.Methods.GetOwner=function(o)return o.__props.Owner end
+    M.Methods.GetWorld=function(o)return o.__props.NativeWorld or M.world end
+    local pawn=obj("Willie_BP_C","LINEAR_PROXY",9911)
+    local mesh=obj("SkeletalMeshComponent","LINEAR_MESH",9912,pawn);pawn.__props.Mesh=mesh
+    local weapon=obj("ModularWeaponBP_Polearm_C","LINEAR_WEAPON",9913,pawn)
+    local root=obj("StaticMeshComponent","LINEAR_BASE",9914,weapon);weapon.__props.BaseMesh=root;pawn.__props["Weapon R"]=weapon
+    local originals={true,false,true,false,true,false}
+    local function grip(name,addr,hand)
+        local c=obj("PhysicsConstraintComponent",name,addr,pawn)
+        local ld={PositionTarget={X=7,Y=8,Z=9},VelocityTarget={X=1,Y=2,Z=3}}
+        for i,axis in ipairs({"XDrive","YDrive","ZDrive"})do
+            ld[axis]={bEnablePositionDrive=originals[i],bEnableVelocityDrive=originals[i+3],Stiffness=({7500,1200,0})[i],Damping=i-1,MaxForce=i*11}
+        end
+        c.__props.ConstraintInstance={ConstraintBone1=fn("None"),ConstraintBone2=fn(hand),ProfileInstance={LinearDrive=ld,
+            AngularDrive={SlerpDrive={Stiffness=10,Damping=2,MaxForce=100}}}}
+        c.__props.Endpoints={one=root,two=mesh,bone1="None",bone2=hand}
+        return c,ld
+    end
+    local right,rld=grip("LINEAR_R",9915,"hand_r")
+    local left,lld=grip("LINEAR_L",9916,"hand_l")
+    pawn.__props["PhysicsConstraint R Hand"],pawn.__props["PhysicsConstraint L Hand"]=right,left
+    local calls,fail,lie=0,nil,false
+    M.Methods.K2_GetComponentsByClass=function(a)return {a["PhysicsConstraint R Hand"],a["PhysicsConstraint L Hand"]}end
+    M.Methods.GetConstrainedComponents=function(c,a,b,x,y)
+        assert(a==b and a==x and a==y,"all four scalar outputs share one fresh container")
+        local e=c.__props.Endpoints
+        a.OutComponent1,a.OutBoneName1,a.OutComponent2,a.OutBoneName2=e.one,fn(e.bone1),e.two,fn(e.bone2)
+        if c.__props.DuringBinding then c.__props.DuringBinding()end
+    end
+    M.Methods.SetLinearDriveParams=function()error("linear strengths are not owned")end
+    M.Methods.SetLinearPositionDrive=function(c,x,y,z)
+        calls=calls+1
+        if not lie then for i,axis in ipairs({"XDrive","YDrive","ZDrive"})do c.ConstraintInstance.ProfileInstance.LinearDrive[axis].bEnablePositionDrive=({x,y,z})[i]end end
+        if fail=="position"then error("position setter failed after native success")end
+    end
+    M.Methods.SetLinearVelocityDrive=function(c,x,y,z)
+        calls=calls+1
+        if fail=="velocity"then error("velocity setter refused")end
+        if not lie then for i,axis in ipairs({"XDrive","YDrive","ZDrive"})do c.ConstraintInstance.ProfileInstance.LinearDrive[axis].bEnableVelocityDrive=({x,y,z})[i]end end
+    end
+    local p={actor=pawn,addr=9911,gen=api.generation(),peer=2,driving=true,
+        last={has_context=true,match_id=517,round=1,life=3},shown={has_context=true,match_id=517,round=1,life=3,pawn="LINEAR_PROXY"},
+        body={mesh=mesh,mesh_addr=9912,mesh_fname="LINEAR_MESH",field="Mesh",ctl="servo",motors={},handles={},sims={}}}
+    api.set_puppet(2,p);api.set_driven(p)
+    local function flags(ld)
+        local t={};for i,axis in ipairs({"XDrive","YDrive","ZDrive"})do t[i],t[i+3]=ld[axis].bEnablePositionDrive,ld[axis].bEnableVelocityDrive end;return t
+    end
+    local function native(ld,values)
+        for i,axis in ipairs({"XDrive","YDrive","ZDrive"})do ld[axis].bEnablePositionDrive,ld[axis].bEnableVelocityDrive=values[i],values[i+3]end
+    end
+    local function untouched(ld)
+        for i,axis in ipairs({"XDrive","YDrive","ZDrive"})do
+            local d=ld[axis];if d.Stiffness~=({7500,1200,0})[i]or d.Damping~=i-1 or d.MaxForce~=i*11 then return false end
+        end
+        return T.eq(ld.PositionTarget,{X=7,Y=8,Z=9})and T.eq(ld.VelocityTarget,{X=1,Y=2,Z=3})
+    end
+    M.now=1000;M.bp_tick(pawn)
+    local lease=p.linear_grip_leases["PhysicsConstraint R Hand"]
+    T.check(T.eq(flags(rld),{false,false,false,false,false,false}) and T.eq(flags(lld),{false,false,false,false,false,false})
+        and lease.status=="off_confirmed" and T.eq(lease.flags,originals),"actual Blueprint POST callback reads and confirms all six flags off with immutable mixed originals")
+    T.check(p.linear_grip_leases["PhysicsConstraint L Hand"].binding.weapon_field=="Weapon R" and untouched(rld) and untouched(lld),
+        "native offhand bound to right weapon is supported without changing distinct per-axis strengths or targets")
+    local function plain(t)
+        if type(t)~="table"then return type(t)~="userdata"and type(t)~="function"end
+        if rawget(t,"__cls")then return false end
+        for _,v in pairs(t)do if not plain(v)then return false end end;return true
+    end
+    T.check(plain(p.linear_grip_leases),"retained flag leases contain only scalar identities and flags")
+    local function notes(state)
+        local n=0;for _,line in ipairs(M.logs)do
+            if line:find("linear grip",1,true)and line:find("state="..state,1,true)then n=n+1 end
+        end;return n
+    end
+    T.check(notes("off_confirmed")==2,"first confirmed suppression logs both current hands once")
+    M.now=1016;M.bp_tick(pawn,function()native(rld,{true,true,true,true,true,true});native(lld,{true,true,true,true,true,true})end)
+    T.check(T.eq(flags(rld),{false,false,false,false,false,false})and p.linear_grip_leases["PhysicsConstraint R Hand"]==lease
+        and T.eq(lease.flags,originals),"later native BP drift is reasserted without recapturing our false flags or overwriting originals")
+    T.check(notes("off_confirmed")==2,"steady BP reassertions do not produce per-frame confirmation logs")
+    fail="velocity";local done=api.release_standin(p)
+    T.check(done==false and p.driving==false and p.grips==nil and p.linear_grip_leases and lease.status=="restore_pending",
+        "partial release retains independent restoration debt after the grip cache is discarded")
+    local n=calls;fail=nil;M.now=1500
+    T.check(api.release_standin(p)==false and calls==n,"failed restoration retry is bounded to one attempt per second")
+    M.now=2101
+    T.check(api.release_standin(p)==true and not p.linear_grip_leases and T.eq(flags(rld),originals)and T.eq(flags(lld),originals)
+        and untouched(rld)and untouched(lld),"already-released body retries and confirms exact false/true originals with zero-strength axis preserved")
+    T.check(notes("restored")==2,"verified exact restoration is emitted once per original lease")
+    p.driving=true;M.now=3000;fail="position";M.bp_tick(pawn)
+    lease=p.linear_grip_leases["PhysicsConstraint R Hand"]
+    T.check(lease and lease.status=="off_pending"and T.eq(lease.flags,originals)and T.eq(flags(rld),{false,false,false,false,true,false}),
+        "setter throwing after partial native success retains originals before the first write")
+    fail=nil;M.now=3016;M.bp_tick(pawn)
+    T.check(lease.status=="off_confirmed"and T.eq(lease.flags,originals),"partial suppression retry uses the original lease and verifies readback")
+    lie=true;native(rld,originals);M.now=3032;M.bp_tick(pawn)
+    T.check(lease.status=="off_pending"and p.linear_grip_error=="linear readback unavailable","successful setters without changed flags remain explicitly unconfirmed")
+    lie=false;M.now=3048;M.bp_tick(pawn)
+    local binding_reads=0
+    right.__props.DuringBinding=function()
+        binding_reads=binding_reads+1;if binding_reads==4 then rld.XDrive.bEnablePositionDrive=true end
+    end
+    M.now=3050;PX.grip_linear(p,true)
+    T.check(lease.status=="off_pending","native flag drift in final binding getter cannot yield a false confirmed readback")
+    right.__props.DuringBinding=nil;M.now=3052;PX.grip_linear(p,true)
+    local rebuilt,newld=grip("LINEAR_R_REBUILT",9915,"hand_r");rawset(right,"__dead",true);pawn.__props["PhysicsConstraint R Hand"]=rebuilt
+    n=calls;M.now=3064;M.bp_tick(pawn)
+    T.check(not p.linear_grip_leases["PhysicsConstraint R Hand"]and T.eq(flags(newld),originals)and #M.dead_touch==0,
+        "same address with a new constraint name forgets old debt without touching the dead wrapper or mutating replacement")
+    M.now=3080;M.bp_tick(pawn)
+    lease=p.linear_grip_leases["PhysicsConstraint R Hand"]
+    rebuilt.__props.Endpoints.one=mesh -- same constraint rebound is a different native binding
+    M.now=3096;M.bp_tick(pawn)
+    T.check(not p.linear_grip_leases["PhysicsConstraint R Hand"]and #M.dead_touch==0,"rebound endpoints cannot inherit or restore the old flags")
+    rebuilt.__props.Endpoints.one=root;native(newld,originals);newld.YDrive.bEnableVelocityDrive=nil
+    n=calls;M.now=3112;PX.grip_linear(p,true)
+    T.check(not p.linear_grip_leases["PhysicsConstraint R Hand"]and calls==n+2,"one missing actual boolean refuses both setters for that hand without blocking the other exact hand")
+    newld.YDrive.bEnableVelocityDrive=true;M.now=3128;PX.grip_linear(p,true)
+    local fresh=obj("SkeletalMeshComponent","NEW_LINEAR_MESH",9912,pawn);pawn.__props.Mesh=fresh;rawset(mesh,"__dead",true)
+    n=calls;M.now=3144;PX.grip_linear(p,true)
+    T.check(not p.linear_grip_leases and calls==n and #M.dead_touch==0,"replaced Mesh refuses all linear writes before touching its dead retained wrapper")
+    pawn.__props.Mesh=mesh;rawset(mesh,"__dead",false)
+    native(newld,originals);native(lld,originals);p.body.mesh_fname="LINEAR_MESH";p.driving=true
+    M.now=3160;PX.grip_linear(p,true);n=calls
+    p.last.life=4;p.shown.life=4;M.now=3176;PX.grip_linear(p,true)
+    T.check(not p.linear_grip_leases and calls==n,"changed full source life forgets old flags without restoring them into another life")
+    p.last.life=3;p.shown.life=3;p.peer=1;n=calls;PX.grip_linear(p,true)
+    T.check(not p.linear_grip_leases and calls==n,"actual local source peer is never eligible for grip suppression")
+    p.peer=2
+    local foreign=obj("World","LINEAR_FOREIGN_WORLD",9999)
+    rebuilt.__props.DuringBinding=function()
+        M.pc.__props.NativeWorld=foreign
+        rawset(root,"__dead",true);rawset(mesh,"__dead",true)
+    end
+    n=calls;M.now=3200;PX.grip_linear(p,true)
+    T.check(calls==n and #M.dead_touch==0 and not p.linear_grip_leases,
+        "PC-world-only reentry refuses before touching returned dead endpoints or issuing either flag setter")
+    rebuilt.__props.DuringBinding=nil;M.pc.__props.NativeWorld=nil
+    rawset(root,"__dead",false);rawset(mesh,"__dead",false)
+    local previous=PX.linear_grip_notes;PX.linear_grip_notes=64
+    local note_count=#M.logs;PX.grip_linear_note(p,"PhysicsConstraint R Hand",nil,"new_cap_case","unavailable")
+    T.check(#M.logs==note_count and PX.linear_grip_notes==64,"process-total diagnostic cap refuses additional rows without any native reads")
+    PX.linear_grip_notes=previous
 end
 
 if opts.kind=="grip_reassert" then

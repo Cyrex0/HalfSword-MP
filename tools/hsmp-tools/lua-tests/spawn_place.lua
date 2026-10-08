@@ -1016,6 +1016,119 @@ do
     _G.StaticFindObject, _G.FName = saved_sfo, saved_fn
 end
 
+T.log("== bounded protected drift observation uses physical COM before the existing correction")
+do
+    local saved_fn=rawget(_G,"FName");_G.FName=function(n)return n end
+    local function make(opts)
+        opts=opts or {}
+        local w=new_world();w:spawns(1,"Map_Arena_Slums",517,250,855);w.plan.match_id=7
+        local p=w:new_pawn();local original={};local changed={};local pc={Pawn=p,NativeWorld=original}
+        local native_reads,body_reads,old_reads,rows=0,0,0,{}
+        local function live()
+            native_reads=native_reads+1
+            if pc.NativeWorld~=original then old_reads=old_reads+1;error("old world touch")end
+        end
+        local function identity(o,address,name)
+            o.IsValid=function()live();return true end
+            o.GetAddress=function()live();return address end
+            o.GetFName=function()live();return {ToString=function()live();return name end}end
+        end
+        identity(original,1,"World Slums");identity(p,101,p.id)
+        p.GetWorld=function()live();return original end
+        local m={};identity(m,121,"CharacterMesh0");p.Mesh=m
+        m.GetOwner=function()live();return p end
+        m.IsSimulatingPhysics=function()
+            live();if opts.sim_flip then pc.NativeWorld=changed end
+            return opts.visual~=true
+        end
+        m.GetCenterOfMass=function()
+            live();body_reads=body_reads+1
+            if opts.com_flip then pc.NativeWorld=changed end
+            if opts.com_error then error("COM unavailable")end
+            return {X=opts.com_nan and 0/0 or (p.bx or p.x),Y=p.by or p.y,Z=p.z+50}
+        end
+        m.GetSocketLocation=function()live();error("diagnostic must not read visual socket")end
+        pc.IsValid=function()return true end;pc.GetWorld=function()return pc.NativeWorld end
+        local ctx={UEHelpers={},pc=function()return pc end,drift_probe=true,
+            drift_drops=function()return 0 end,
+            drift_world_current=function(key,drops)return key==w.wkey and drops==0 and pc:GetWorld()==original end}
+        local real=SP.make_ue_env(ctx)
+        real.now=w.env.now -- the production caller and native adapter share os.clock
+        -- Verification's body coordinates are existing gameplay reads. The
+        -- production optional path, including its guard, is used only at drift.
+        w.env.drift_probe=opts.off~=true
+        w.env.drift_snapshot=real.drift_snapshot
+        w.env.drift_log=function(row)
+            rows[#rows+1]=R.deep(row)
+            if opts.log_flip then pc.NativeWorld=changed end
+            if opts.log_error then error("logging unavailable")end
+        end
+        w:start();w:secs(3.5)
+        function w:trigger_drift()
+            self.pawn.x=self.sp.cur.dest.X+70;self.pawn.y=self.sp.cur.dest.Y
+            self.pawn.bx=self.sp.cur.dest.X+5;self.pawn.by=self.sp.cur.dest.Y
+            self.sp.next_watch,self.sp.last_fall=0,-1e9
+            self.sp:watch_step(self.clock)
+        end
+        function w:reads()return native_reads,body_reads,old_reads end
+        w.rows,w.pc,w.real,w.mesh=rows,pc,real,m
+        return w
+    end
+    local w=make();local before=w.teleports;w:trigger_drift()
+    local row=w.rows[1]
+    T.check(w.teleports==before+1 and row.available and row.scope_current and row.attempt==1,
+        "available diagnostic preserves the original single protected correction")
+    T.check(row.capsule_target_xy_cm==70 and row.body_target_xy_cm==5 and row.body_capsule_delta[1]==-65,
+        "same callback distinguishes a70cm capsule displacement from a5cm physical pelvis displacement")
+    T.check(row.body_basis=="physical pelvis center of mass" and row.phase=="protected_drift_before_correction"
+        and row.body[1]~=w.pawn.x and select(2,w:reads())==1,
+        "one native COM observation is copied before the existing teleport, not relabeled as a bone origin")
+    T.check(row.actor.address==101 and row.mesh.name=="CharacterMesh0" and row.native_world.address==1
+        and row.peer==1 and row.match_id==7 and row.round==1 and row.life==1 and row.spawn_id==256,
+        "observation retains exact current native identities and the actual pending assignment")
+    T.check(row.verified_baseline.copied_ms<row.observed_ms and row.verified_baseline.capsule[1]==517
+        and row.verified_baseline.same_mesh_available==false and row.verified_baseline.reason=="historical Mesh identity unavailable",
+        "historical placement coordinates retain their separate time and unavailable Mesh continuity")
+    for i=2,4 do w:secs(2.1);w:trigger_drift()end
+    T.check(#w.rows==3 and select(2,w:reads())==3 and w.sp.drift_attempts==3,
+        "whole process cap is consumed before a fourth optional body read",T.repr({rows=#w.rows,body=select(2,w:reads()),attempts=w.sp.drift_attempts,logs=w:logtext()}))
+    w.sp:reset("test world drop");T.check(w.sp.drift_attempts==3,"travel/reset cannot rearm the three-attempt budget")
+    w=make({off=true});before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before+1 and #w.rows==0 and select(1,w:reads())==0,
+        "default-off path performs no diagnostic native reads or row allocations")
+    for _,opts in ipairs({{com_error=true},{com_nan=true},{visual=true},{log_error=true}})do
+        w=make(opts);before=w.teleports;w:trigger_drift()
+        T.check(w.teleports==before+1 and #w.rows==1 and w.rows[1].scope_current,
+            "ordinary unavailable body/log evidence leaves the original correction unchanged: "..T.repr(opts))
+        if not opts.log_error then
+            T.check(not w.rows[1].available and not w.rows[1].body and type(w.rows[1].reason)=="string",
+                "missing or nonphysical COM is explicit unavailable, never zero/visual proof")
+        end
+    end
+    for _,opts in ipairs({{sim_flip=true},{com_flip=true},{log_flip=true}})do
+        w=make(opts);before=w.teleports;w:trigger_drift()
+        T.check(w.teleports==before and select(3,w:reads())==0 and w.sp.drift_attempts==1,
+            "PC-world loss during optional observation/logging prevents old-world correction and later old-object reads: "..T.repr(opts))
+        if opts.sim_flip then T.check(select(2,w:reads())==0,"simulation getter world loss prevents the COM call")end
+    end
+    w=make();before=w.teleports
+    w.mesh.GetCenterOfMass=function()
+        w.pawn.Mesh={IsValid=function()return true end,GetAddress=function()return 121 end,
+            GetFName=function()return {ToString=function()return "ReplacementMesh"end}end}
+        return {X=522,Y=250,Z=1000}
+    end
+    w:trigger_drift()
+    T.check(w.teleports==before and w.rows[1].scope_current==false and not w.rows[1].available,
+        "same-address/new-name Mesh replacement refuses the pending correction")
+    w=make();before=w.teleports
+    w.mesh.GetCenterOfMass=function()w.plan.by_peer[1].life=2;return {X=522,Y=250,Z=1000}end
+    w:trigger_drift()
+    T.check(w.teleports==before and not w.rows[1].scope_current,"assignment life change during COM read prevents relabeling/correction")
+    w=make();w:go_live();w:tick(1);before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before and #w.rows==0 and select(1,w:reads())==0,"Live drift never admits this protected-spawn observer")
+    _G.FName=saved_fn
+end
+
 T.log("== the real env's teleport / hold carry the held weapon actors")
 do
     local saved_sfo = rawget(_G, "StaticFindObject")

@@ -1218,12 +1218,14 @@ function PX.grip_probe_id(o)
     return {address=addr,name=name}
 end
 function PX.grip_probe_same(a,b)return a and b and a.address==b.address and a.name==b.name or false end
-function PX.grip_probe_binding(c)
-    local a,b,x,y={},{},{},{}
-    c:GetConstrainedComponents(a,b,x,y) -- proven native hard component/FName outputs
-    local function out(k)return a[k] or b[k] or x[k] or y[k]end
-    local one,two=out("OutComponent1"),out("OutComponent2")
-    local b1,b2=out("OutBoneName1"):ToString(),out("OutBoneName2"):ToString()
+function PX.grip_probe_binding(c,current)
+    -- Pinned UE4SS scalar-Outs retain the first stack table. One fresh shared
+    -- container gives all four named outputs an unambiguous destination.
+    local out={}
+    c:GetConstrainedComponents(out,out,out,out)
+    if current then current() end -- native reentry: qualify before touching returned wrappers
+    local one,two=out.OutComponent1,out.OutComponent2
+    local b1,b2=out.OutBoneName1:ToString(),out.OutBoneName2:ToString()
     if type(b1)~="string" or b1=="" or type(b2)~="string" or b2==""then error("bone unavailable",0)end
     return {one=PX.grip_probe_id(one),two=PX.grip_probe_id(two),bone1=b1,bone2=b2,
         owner1=PX.grip_probe_id(one:GetOwner()),owner2=PX.grip_probe_id(two:GetOwner())}
@@ -1449,9 +1451,12 @@ PX.LIMB_BURST=PX.LIMB_BURST_MODULE and PX.LIMB_BURST_MODULE.new(function(row)
     if HL and HL.encode then Log("LIMBBURST %s",HL.encode(row))end
 end)or nil
 PX.JOINT_PROFILE_MODULE=os.getenv("HSMP_DEV")=="1"and os.getenv("HSMP_JOINT_PROFILE_PROBE")=="1"and load_module("joint_profile_probe")or nil
-PX.JOINT_PROFILE=PX.JOINT_PROFILE_MODULE and PX.JOINT_PROFILE_MODULE.new(function(row)
-    if HL and HL.encode then Log("JOINTPROFILE %s",HL.encode(row))end
-end)or nil
+if PX.JOINT_PROFILE_MODULE then
+    PX.JOINT_PROFILE,PX.JOINT_PROFILE_REASON=PX.JOINT_PROFILE_MODULE.new(function(row)
+        if HL and HL.encode then Log("JOINTPROFILE %s",HL.encode(row))end
+    end,os.getenv("HSMP_JOINT_PROFILE_FOCUS"))
+    if PX.JOINT_PROFILE_REASON then Log("JOINTPROFILE refused stage=config reason=%s",PX.JOINT_PROFILE_REASON)end
+end
 function PX.hand_pipeline_copy(v,n)
     local ok,out=pcall(function()
         if type(v)~="table"then return nil end
@@ -1869,9 +1874,220 @@ function PX.fresh_grips(p)
     return fresh
 end
 local function constraint_bone2(c) return c.ConstraintInstance.ConstraintBone2:ToString() end
+-- Plain restoration leases, independent of the disposable p.grips scan.
+-- Only the six native enable flags are owned: per-axis strengths, targets and
+-- the existing angular/limit policy are never changed by this lease.
+function PX.grip_linear_equal(a,b)
+    if type(a)~=type(b) then return false end
+    if type(a)~="table" then return a==b end
+    for k,v in pairs(a) do if not PX.grip_linear_equal(v,b[k]) then return false end end
+    for k in pairs(b) do if a[k]==nil then return false end end
+    return true
+end
+function PX.grip_linear_flags(c)
+    local d=c.ConstraintInstance.ProfileInstance.LinearDrive
+    local flags={}
+    for i,axis in ipairs({"XDrive","YDrive","ZDrive"}) do
+        local p,v=d[axis].bEnablePositionDrive,d[axis].bEnableVelocityDrive
+        if type(p)~="boolean" or type(v)~="boolean" then error("linear flags unavailable",0) end
+        flags[i],flags[i+3]=p,v
+    end
+    return flags
+end
+function PX.grip_linear_note(p,field,lease,status,reason,actual)
+    -- Process-total cap; logs use only copied flags/identities, never getters.
+    -- A repeated BP reassertion or unavailable restoration cannot flood logs.
+    local seen=lease and lease.notes
+    if not seen then
+        if lease then seen={};lease.notes=seen else
+            p.linear_grip_refusals=p.linear_grip_refusals or {}
+            local scope=p.last or {}
+            local key=tostring(p.gen)..":"..tostring(scope.match_id)..":"..tostring(scope.round)..":"..tostring(scope.life)
+            local old=p.linear_grip_refusals[field]
+            if not old or old.scope~=key then old={scope=key};p.linear_grip_refusals[field]=old end
+            seen=old
+        end
+    end
+    if seen[status] or (PX.linear_grip_notes or 0)>=64 then return end
+    seen[status]=true;PX.linear_grip_notes=(PX.linear_grip_notes or 0)+1
+    pcall(function()
+        local function flags(v)
+            if type(v)~="table" then return "unavailable" end
+            local out={};for i=1,6 do out[i]=type(v[i])=="boolean" and (v[i] and "1" or "0") or "?" end
+            return table.concat(out)
+        end
+        local q=lease and lease.binding or {};local source=p.last or {}
+        Log("linear grip inst=%s peer=%s field=%s pawn=%s match=%s round=%s life=%s constraint=%s state=%s reason=%s original=%s actual=%s",
+            tostring(os.getenv("HSMP_INST") or "unknown"),tostring(p.peer),field,
+            tostring(q.pawn and q.pawn.name or "unavailable"):sub(1,96),tostring(q.match_id or source.match_id or "unavailable"),
+            tostring(q.round or source.round or "unavailable"),tostring(q.life or source.life or "unavailable"),
+            tostring(q.constraint and q.constraint.address or "unavailable"),status,tostring(reason or "none"):sub(1,96),
+            flags(lease and lease.flags),flags(actual))
+    end)
+end
+function PX.grip_linear_resolve(p,field,expected,off)
+    local c,q,lost
+    local ok,why=pcall(function()
+        local function changed(reason) lost=true;error(reason,0) end
+        if p.gen~=world_gen or cache_gen~=world_gen then changed("world changed") end
+        if type(p.peer)~="number" or not math.tointeger(p.peer) or p.peer<=0 then error("peer unavailable",0) end
+        local own_peer=HSM and HSM.my_peer_id()
+        if type(own_peer)~="number" or own_peer<=0 then error("own peer unavailable",0) end
+        if p.peer==own_peer then changed("source pawn refused") end
+        local peer=p.peer
+        local _,wid=world_identity(local_pc())
+        if not wid then error("world unavailable",0) end
+        if cache_world~=tostring(world_gen).."|"..wid then changed("world changed") end
+        local source=p.last
+        if type(source)~="table" or source.has_context~=true then error("life unavailable",0) end
+        for _,k in ipairs({"match_id","round","life"}) do
+            if type(source[k])~="number" or not math.tointeger(source[k]) or source[k]<=0 then error("life unavailable",0) end
+        end
+        local match_id,round,life=source.match_id,source.round,source.life
+        if not PURE.pose_context_ok(source,HSM and HSM.view(),HSM and HSM.mode(),p.peer) then changed("life changed") end
+        if off and (not PX.grip_drive_current(p) or not p.body or p.body.ctl~="servo") then error("drive unavailable",0) end
+        local actor=p.actor
+        local pawn=PX.grip_probe_id(actor)
+        if pawn.address~=p.addr then changed("pawn changed") end
+        local aw=actor:GetWorld()
+        if not aw or aw:IsValid()~=true then error("pawn world unavailable",0) end
+        if tostring(aw:GetAddress()).."@"..aw:GetFullName()~=wid then changed("pawn world changed") end
+        local shown=p.shown
+        if shown and (shown.has_context~=true or shown.match_id~=source.match_id or shown.round~=source.round
+            or shown.life~=source.life or shown.pawn~=pawn.name) then changed("display life changed") end
+        local mesh,_,reason=PX.injury_mesh(p)
+        if not mesh then
+            if reason~="body unavailable" then changed(reason or "mesh changed") end
+            error("mesh unavailable",0)
+        end
+        local body=PX.grip_probe_id(mesh)
+        if not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),pawn) then changed("mesh owner changed") end
+        local body_record=p.body
+        local function current()
+            local _,fresh_world=world_identity(local_pc())
+            if not fresh_world then error("world unavailable",0) end
+            if fresh_world~=wid or p.gen~=world_gen or cache_gen~=world_gen
+                or cache_world~=tostring(world_gen).."|"..fresh_world then changed("world changed") end
+            if p.actor~=actor or p.body~=body_record or p.last~=source or p.peer~=peer or HSM.my_peer_id()~=own_peer
+                or body_record.mesh_addr~=body.address or body_record.mesh_fname~=body.name
+                or source.match_id~=match_id or source.round~=round or source.life~=life
+                or (off and not p.driving) then changed("scope changed") end
+            if p.shown and (p.shown.has_context~=true or p.shown.match_id~=match_id or p.shown.round~=round
+                or p.shown.life~=life or p.shown.pawn~=pawn.name) then changed("display life changed") end
+        end
+        c=actor[field] -- fresh field only; never a retained constraint wrapper
+        local constraint=PX.grip_probe_id(c)
+        local owner=PX.grip_probe_id(c:GetOwner())
+        if not PX.grip_probe_same(owner,pawn) then changed("constraint owner changed") end
+        local class=c:GetClass():GetFName():ToString()
+        if type(class)~="string" or class=="" then error("constraint class unavailable",0) end
+        local binding=PX.grip_probe_binding(c,current)
+        local hand=field=="PhysicsConstraint R Hand" and "hand_r" or "hand_l"
+        if binding.bone2~=hand or not PX.grip_probe_same(binding.two,body)
+            or not PX.grip_probe_same(binding.owner2,pawn) then changed("body binding changed") end
+        local ci=c.ConstraintInstance
+        if ci.ConstraintBone1:ToString()~=binding.bone1 or ci.ConstraintBone2:ToString()~=binding.bone2 then changed("bone changed") end
+        local weapon,weapon_field,root
+        for _,wf in ipairs({"Weapon R","Weapon L"}) do
+            local wa=actor[wf]
+            if wa and wa:IsValid()==true and PX.grip_probe_same(PX.grip_probe_id(wa),binding.owner1) then
+                if weapon then error("weapon binding ambiguous",0) end
+                local wr=wa.BaseMesh
+                if not PX.grip_probe_same(PX.grip_probe_id(wr),binding.one)
+                    or not PX.grip_probe_same(PX.grip_probe_id(wr:GetOwner()),binding.owner1)
+                    or not PX.grip_probe_same(PX.grip_probe_id(wa:GetOwner()),pawn) then changed("weapon owner changed") end
+                local w=wa:GetWorld()
+                if not w or w:IsValid()~=true then error("weapon world unavailable",0) end
+                if tostring(w:GetAddress()).."@"..w:GetFullName()~=wid then changed("weapon world changed") end
+                weapon,weapon_field,root=PX.grip_probe_id(wa),wf,PX.grip_probe_id(wr)
+            end
+        end
+        if not weapon then changed("held weapon changed") end
+        q={generation=world_gen,world=cache_world,peer=peer,pawn=pawn,body=body,
+            match_id=match_id,round=round,life=life,field=field,
+            constraint=constraint,class=class,owner=owner,binding=binding,weapon=weapon,weapon_field=weapon_field,root=root}
+        if expected and not PX.grip_linear_equal(q,expected) then changed("binding changed") end
+        -- GetConstrainedComponents is a native call: check the plain scope and
+        -- fresh fields again before returning a component eligible for a write.
+        current()
+        if p.last~=source or source.match_id~=q.match_id or source.round~=q.round or source.life~=q.life
+            or p.gen~=q.generation or cache_gen~=q.generation or cache_world~=q.world
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[field]),constraint)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[p.body.field or "Mesh"]),body)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[weapon_field]),weapon)
+            or not PX.grip_probe_same(PX.grip_probe_id(c:GetOwner()),pawn)
+            or not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),pawn)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[weapon_field].BaseMesh),root)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[weapon_field]:GetOwner()),pawn)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[weapon_field].BaseMesh:GetOwner()),weapon)
+            or c.ConstraintInstance.ConstraintBone1:ToString()~=binding.bone1
+            or c.ConstraintInstance.ConstraintBone2:ToString()~=binding.bone2
+            or (p.shown and (p.shown.match_id~=match_id or p.shown.round~=round or p.shown.life~=life
+                or p.shown.has_context~=true or p.shown.pawn~=pawn.name)) then changed("scope changed") end
+        if not PURE.pose_context_ok(source,HSM and HSM.view(),HSM and HSM.mode(),p.peer)
+            or (off and not PX.grip_drive_current(p)) then changed("life changed") end
+        current()
+    end)
+    if not ok then return nil,nil,tostring(why),lost end
+    return c,q
+end
+function PX.grip_linear(p,off)
+    local leases=p.linear_grip_leases or {}
+    p.linear_grip_leases=leases
+    for _,field in ipairs({"PhysicsConstraint R Hand","PhysicsConstraint L Hand"}) do
+        local lease=leases[field]
+        if off or lease then
+            local c,q,why,lost=PX.grip_linear_resolve(p,field,lease and lease.binding,off)
+            if not c then
+                if lost then leases[field]=nil end -- changed binding: no old-object access or restoration
+                p.linear_grip_error=why
+                PX.grip_linear_note(p,field,lease,lost and "binding_lost" or "refused",why)
+            else
+                local ok,err=pcall(function()
+                    if not lease then
+                        local flags=PX.grip_linear_flags(c) -- all six exact booleans BEFORE either setter
+                        c=PX.grip_linear_resolve(p,field,q,off)
+                        if not c then error("snapshot binding changed",0) end
+                        lease={binding=q,flags=flags,status="pending"}
+                        leases[field]=lease -- persist originals before any partial native success
+                    end
+                    local want=off and {false,false,false,false,false,false} or lease.flags
+                    lease.status=off and "off_pending" or "restore_pending"
+                    c:SetLinearPositionDrive(want[1],want[2],want[3])
+                    c=PX.grip_linear_resolve(p,field,lease.binding,off)
+                    if not c then error("position binding changed",0) end
+                    c:SetLinearVelocityDrive(want[4],want[5],want[6])
+                    c=PX.grip_linear_resolve(p,field,lease.binding,off)
+                    if not c then error("velocity binding changed",0) end
+                    local actual=PX.grip_linear_flags(c)
+                    c=PX.grip_linear_resolve(p,field,lease.binding,off)
+                    if not c or not PX.grip_linear_equal(actual,want)
+                        or not PX.grip_linear_equal(PX.grip_linear_flags(c),want) then error("linear readback unavailable",0) end
+                    lease.status=off and "off_confirmed" or "restored"
+                    if not off then leases[field]=nil end
+                    PX.grip_linear_note(p,field,lease,lease.status,nil,actual)
+                end)
+                if not ok then
+                    p.linear_grip_error=tostring(err)
+                    PX.grip_linear_note(p,field,lease,"refused",tostring(err))
+                end
+            end
+        end
+    end
+    if next(leases)==nil then p.linear_grip_leases=nil end
+    return p.linear_grip_leases==nil
+end
+function PX.grip_linear_restore(p)
+    if not p.linear_grip_leases then return true end
+    local now=now_ms()
+    if not p.driving and p.linear_grip_restore_at and now>=p.linear_grip_restore_at
+        and now-p.linear_grip_restore_at<1000 then return false end
+    p.linear_grip_restore_at=now
+    return PX.grip_linear(p,false) -- at most two exact bindings, once/s after a release failure
+end
 function PX.grips_off(p, off)
     local list = p.grips and p.grips.list
-    if not list or #list == 0 then return end
+    if not list or #list == 0 then if off then PX.grip_linear(p,true) end;return end
     if (p.gen~=nil and p.gen~=world_gen) or (off and not PX.grip_drive_current(p)) then
         for _,g in ipairs(list) do g.c=nil end -- forget wrappers without touching stale native objects
         return
@@ -1914,6 +2130,7 @@ function PX.grips_off(p, off)
             end
         end)
     end
+    if off then PX.grip_linear(p,true) end
 end
 
 -- Hand the stand-in back to its own muscles (no fresh pose).
@@ -1925,7 +2142,8 @@ local function release_standin(p, handoff)
     end
     local injury_ok=true
     if handoff and PX.injury_release then injury_ok=PX.injury_release(p) end
-    if p.driving == false then return injury_ok end
+    local linear_ok=PX.grip_linear_restore(p)
+    if p.driving == false then return injury_ok and linear_ok end
     if p.gen == world_gen and cache_gen == world_gen and p.actor and p.actor:IsValid() then
         PX.grips_off(p, false); PX.close_limits(p, p.body)
         for k, v in pairs(p.tonus0 or {}) do pcall(function() p.actor[k] = v end) end
@@ -1935,7 +2153,7 @@ local function release_standin(p, handoff)
     -- Only ever write to a stand-in of the CURRENT world that is still alive.
     if p.gen ~= world_gen or cache_gen ~= world_gen or not (p.actor and p.actor:IsValid()) then
         p.driving = false
-        return injury_ok
+        return injury_ok and linear_ok
     end
     if p.body then
         release_handles(p.body); set_motor_strength(p.body, 1.0)
@@ -1974,7 +2192,7 @@ local function release_standin(p, handoff)
     set_muscles_blocked(p, false)
     p.driving = false
     if not handoff and PX.injury_targets and p.body then PX.injury_targets(p.peer or 0,p,nil,nil) end
-    return injury_ok
+    return injury_ok and linear_ok
 end
 
 -- Rigidly move every simulated mesh so its pelvis lands on the target.
@@ -5101,6 +5319,7 @@ local function on_tick()
     -- Stand-ins the ReceiveTick post-hook neutralises (address -> puppet).
     _driven = {}
     for _, p in pairs(puppets) do
+        if not p.driving and p.linear_grip_leases then PX.grip_linear_restore(p) end
         if p.driving and p.addr and p.gen == world_gen and p.body and p.body.ctl == "servo" then _driven[p.addr] = p end
     end
 

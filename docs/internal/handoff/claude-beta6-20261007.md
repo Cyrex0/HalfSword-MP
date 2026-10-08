@@ -2059,3 +2059,52 @@ those fail. Explicitly disclose remaining cuts/all-gear parity rather than claim
 them complete. Optional cut-descriptor implementation suspended with no partial edits.
 The prior broader combat/gear/dismemberment work remains backlog, not a reason to
 override this newer requested order. Subsequent handoffs/heartbeat must preserve it.
+
+### Native44 preparation: grip motors and fault-side source evidence
+
+cbe95b23 full G0/dev push passed69Lua suites,1283Rust tests/75binaries,
+clippy0errors2warnings; no skips. This is the contact-return checkpoint; native
+deployment/test now uses the combined subsequent spawn milestone.
+
+Proxy grip motor-off policy previously zeroed angular motors while leaving native
+linear enable flags active. Native28 right-hand fault retained XYZ position/velocity
+true with stiffness7500. New flags-only lease disables those six enables while the
+current proxy hand servo runs. All native per-axis strengths, targets, modes and
+existing limits are preserved. Originals are captured before either setter, and
+independent plain restoration debt survives p.grips disposal/partial failure and
+retries once/s. Fresh exact constraint/endpoints/bones/owners/body/held root/world/
+full life bind every mutation and restoration; changed bindings never inherit old
+flags. Source local peer refuses. Readback is required for off_confirmed/restored.
+Bounded64 process-total once-per-lease scalar logs distinguish actual000000 from
+refusal. Fresh PC-world/plain scope is checked immediately after endpoint getter,
+before returned object access, and at final validation; actual-main regression
+changes PC-world only while cached WG remains old and returns dead endpoints.
+
+This is a supported right-hand conflict repair, not yet a native convergence or
+FPS result. Full binding resolution repeats four times per steady hand application
+in current frame/BP policy paths; Native44 must measure cost rather than claim it
+cheap. Native43 round6 was separate left upperarm12.9–14.4degrees while hands were
+close; linear flags alone cannot explain that failure. Native Set Up Armor resets
+Bone Constraints Current from Ded, applies minima for equipped armor and writes
+current limb limits. Asset defaults/name agreement alone cannot prove runtime parity.
+
+Developer double-opt-in joint focus upperarm_l selects only nativeUserConstraint_14
+with actual parentclavicle_l/childupperarm_l in both independent roles. Cooked
+asset and prior native capture agree; runtime accessor owner/index/endpoints and
+before/after asset/freshness/loss checks remain mandatory. Fixed selection copied
+once; arbitrary names refuse. Default three right joints unchanged. Source guards,
+250ms limits and capture budgets unchanged; no cached native values.
+
+Separate HSMP_DEV=1+HSMP_SPAWN_DRIFT_PROBE=1 captures at most3 already-triggered
+protected drift corrections per process. It compares fresh physical pelvis COM
+with already-read capsule and destination before existing correction, with exact
+current assignment/pawn/Mesh/world guards before/after reads and logging. Historical
+verified coordinates retain separate time and explicit unknown Mesh continuity.
+Ordinary unavailable COM does not widen proof; scope loss prevents old-world moves.
+DefaultOFF adds no reads, and no new physics setters or placement tolerances exist.
+
+Root final4Lua suites800assertions(Avatar451,profile51,session33,placement265),
+7parses, state-files and diff-check pass. Astra independently approves all3scopes.
+Native44 must prove flags really execute, frame/callback cost, actual6-limb settling
+and the remaining left-shoulder/capsule-body mechanism. Until then no spawn closure,
+main merge or release. Main/release checks stay distinct from manual-lab PASS.

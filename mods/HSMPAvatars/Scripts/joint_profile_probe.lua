@@ -2,6 +2,9 @@
 -- different peers; counterpart rows must be joined across clients, not by time.
 local M={MAX_ATTEMPTS=3,JOINTS={{"UserConstraint_10","clavicle_r","upperarm_r"},
     {"UserConstraint_11","upperarm_r","lowerarm_r"},{"UserConstraint_12","lowerarm_r","hand_r"}}}
+-- Cooked primary asset and native limb capture agree on this name/endpoints.
+-- The runtime accessor still proves its owner, index and both actual bodies.
+M.LEFT_UPPERARM={{"UserConstraint_14","clavicle_l","upperarm_l"}}
 local function number(v)
     assert(type(v)=="number"and v==v and math.abs(v)<math.huge,"number unavailable");return v
 end
@@ -113,7 +116,7 @@ local function joint(e,j,label)
     assert(same(before.owner,after.owner)and before.index==after.index and before.parent==after.parent and before.child==after.child,"accessor changed")
     return r
 end
-local function row(c,e,all_current,stage,label,on_loss)
+local function row(c,e,all_current,stage,label,on_loss,selection,side)
     local lost=false;local old=e.current
     e=setmetatable({stage=stage,current=function()
         if lost then return false end
@@ -126,7 +129,7 @@ local function row(c,e,all_current,stage,label,on_loss)
     stage(label..":scope_before")
     assert(e.current(),"scope changed")
     local r=copy(c);r.admission_ms=r.observed_ms;r.observed_ms=number(e.now())
-    r.side="right";r.phase="pre_driver_configuration_observation";r.authority=false;r.joints={}
+    r.side=side;r.phase="pre_driver_configuration_observation";r.authority=false;r.joints={}
     stage(label..":asset_before")
     local before=asset(e.mesh,e);assert(e.current(),"scope changed");r.asset=before
     r.hand={}
@@ -141,7 +144,7 @@ local function row(c,e,all_current,stage,label,on_loss)
         end)
         assert(e.current(),"scope changed")
     end
-    for _,j in ipairs(M.JOINTS)do
+    for _,j in ipairs(selection)do
         stage(label..":"..j[1])
         assert(e.current(),"scope changed")
         local jr={name=j[1]};attempt(jr,"current",function()return joint(e,j,label..":"..j[1])end);r.joints[#r.joints+1]=jr
@@ -153,7 +156,13 @@ local function row(c,e,all_current,stage,label,on_loss)
     r.observed_end_ms=number(e.now());assert(r.observed_end_ms>=r.observed_ms,"observation clock regressed")
     return copy(r)
 end
-function M.new(emit)
+function M.new(emit,focus)
+    local selection,side,coverage
+    if focus==nil or focus==""or focus=="right"then
+        selection,side,coverage=copy(M.JOINTS),"right","right_only"
+    elseif focus=="upperarm_l"then
+        selection,side,coverage=copy(M.LEFT_UPPERARM),"left","left_upperarm_only"
+    else return nil,"unsupported joint focus"end
     local s={attempts=0,used=false}
     function s:attempt()
         if self.used or self.attempts>=M.MAX_ATTEMPTS then return false end
@@ -197,10 +206,10 @@ function M.new(emit)
                 assert(source[k]~=nil and source[k]==proxy[k],"source/proxy scope disagreement")
             end
             local function set_stage(value)stage=value end
-            local a=row(source,se,current,set_stage,"source",on_loss);assert(current(),"scope changed")
-            local b=row(proxy,pe,current,set_stage,"proxy",on_loss);assert(current(),"scope changed")
+            local a=row(source,se,current,set_stage,"source",on_loss,selection,side);assert(current(),"scope changed")
+            local b=row(proxy,pe,current,set_stage,"proxy",on_loss,selection,side);assert(current(),"scope changed")
             stage="pair:complete"
-            return {instance=source.instance,coverage="right_only",comparison="different_peers_same_process; correlate counterpart peer across clients",
+            return {instance=source.instance,coverage=coverage,comparison="different_peers_same_process; correlate counterpart peer across clients",
                 temporal_pairing=false,authority=false,source=a,proxy=b,observation_separation_ms=b.observed_ms-a.observed_ms}
         end)
         if not ok then

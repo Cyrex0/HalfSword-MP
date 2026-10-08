@@ -1077,6 +1077,15 @@ local spawn_env = SPL and SPL.make_ue_env({
     mode = function() return HS and HS.mode() end,   -- the session record (spawn plan)
     session_live = session_live,         -- no order without a live MP session
     connected = function() return session_live() and my_peer_status == "connected" end,
+    drift_probe = os.getenv("HSMP_DEV") == "1" and os.getenv("HSMP_SPAWN_DRIFT_PROBE") == "1",
+    drift_drops = function() return WG.drops end,
+    drift_world_current = function(key, drops)
+        return WG.key == key and WG.drops == drops and WG.world_key(WG.pc()) == key
+    end,
+    drift_log = function(row)
+        local hl = load_shared("hsmp_log")
+        if hl and hl.encode then Log("SPAWNDRIFT %s", hl.encode(row)) end
+    end,
 })
 local spawn = SPL and SPL.new(spawn_env, { state_dir = STATE_DIR })
 

@@ -223,6 +223,7 @@ function SP.new(env, opts)
     self.env = env
     self.dir = (opts and opts.state_dir) or "hsmp_state"
     self.status_seq = 0
+    self.drift_attempts = 0 -- whole process budget; deliberately survives reset/travel
     -- Last handled spawn request seq (bus `spawn_request`); a request left over
     -- from an earlier run is never acted on.
     local r = env.request and env.request()
@@ -533,6 +534,15 @@ function P:verify_step(now)
         c.checks = c.checks + 1
         if c.checks >= 2 then
             c.done, c.verified_at = true, now
+            if env.drift_probe and self.drift_attempts < 3 then
+                -- These coordinates were already read for placement, not by
+                -- the probe. Their original Mesh incarnation was not sampled.
+                c.drift_baseline = { tick_ms=now*1000, copied_ms=env.now()*1000,
+                    capsule={x,y,z}, body=bx and {bx,by,bz} or nil,
+                    world=self.wkey, pawn=self.pawn_id, match_id=c.plan.match_id, round=c.plan.round,
+                    life=c.e.life, spawn_id=c.e.spawn_id, same_mesh_available=false,
+                    reason="historical Mesh identity unavailable" }
+            end
             self.counters.verified = self.counters.verified + 1
             self:arm_protection(now + SP.protect_ms(c.e) / 1000)
             env.log("spawn: placement verified round %d slot %d id=%d at (%.0f,%.0f,%.0f), %.0f cm from the destination, "
@@ -843,6 +853,33 @@ function P:fall_z(e)
     return lo and (lo - T.fall_margin_cm) or -10000
 end
 
+-- Diagnostic work is admitted only at an existing correction boundary. A
+-- failed measurement never changes the drift limit or makes placement proof.
+function P:observe_drift(c, e, plan, x, y, z, now, capsule_read_ms)
+    local env = self.env
+    if not env.drift_probe or self.drift_attempts >= 3 then return true end
+    self.drift_attempts = self.drift_attempts + 1
+    local expected = { world=self.wkey, pawn=self.pawn_id, peer=e and e.peer,
+        match_id=plan and plan.match_id, round=plan and plan.round, life=e and e.life,
+        spawn_id=e and e.spawn_id, attempt=self.drift_attempts, watch_tick_ms=now*1000,capsule_read_ms=capsule_read_ms,
+        capsule={x,y,z}, target={c.dest.X,c.dest.Y,c.dest.Z}, floor=c.floor, slot=c.e.slot,
+        verified_baseline=c.drift_baseline }
+    local function current()
+        if self.cur ~= c or self.wkey ~= expected.world or self.pawn_id ~= expected.pawn then return false end
+        local own, active = self:order()
+        return own and active and active.match_id==expected.match_id and active.round==expected.round
+            and own.peer==expected.peer and own.life==expected.life and own.spawn_id==expected.spawn_id
+            and env.match()~="live" and self:protected() or false
+    end
+    local ok, row, recheck = pcall(env.drift_snapshot, self.pawn, expected, current)
+    if ok and type(row)=="table" and env.drift_log then pcall(env.drift_log,row) end
+    -- Logging or an unavailable diagnostic must not bypass the independent
+    -- native world/actor/Mesh guard returned by the admitted snapshot.
+    if not ok or type(recheck)~="function" then return false end
+    local safe, value = pcall(recheck)
+    return safe and value==true
+end
+
 function P:watch_step(now)
     local env, T = self.env, SP.T
     local prot = self:protected(now)
@@ -850,6 +887,7 @@ function P:watch_step(now)
     self.next_watch = now + (prot and T.watch_protect_s or T.watch_s)
     if now - self.last_fall < T.fall_cooldown_s then return end
     local x, y, z = env.pawn_loc(self.pawn)
+    local capsule_read_ms=env.drift_probe and self.drift_attempts<3 and env.now()*1000 or nil
     if not z then return end
     local e, plan = self:order()
     local c = self.cur
@@ -872,6 +910,7 @@ function P:watch_step(now)
         return
     end
     self.dead_fall_logged = nil
+    if drift and not self:observe_drift(c,e,plan,x,y,z,now,capsule_read_ms) then return end
     self.last_fall = now
     self.counters.falls = self.counters.falls + 1
     -- During Live a fall is part of the fight: the living player is put back
@@ -1107,6 +1146,8 @@ function SP.make_ue_env(ctx)
     env.my_peer_id = ctx.my_peer_id
     env.match = ctx.match
     env.world = ctx.world
+    env.drift_probe = ctx.drift_probe == true
+    env.drift_log = ctx.drift_log
 
     -- Shared-memory IPC: typed records. The plan comes from the session record
     -- (ctx.view = shared/hsmp_session.lua HS.view), the request / status / director
@@ -1177,17 +1218,25 @@ function SP.make_ue_env(ctx)
     -- A simulated body's animated socket may follow the capsule while the
     -- rigid body is still at the native spawner. COM is a fresh physics read;
     -- its fixed bone offset cancels when measuring a translation residual.
-    local function pelvis(m)
+    local function pelvis(m, guard, physical_only)
+        local function read(f)
+            if guard and guard()~=true then error("scope changed",0) end
+            local ok, value=pcall(f)
+            if guard and guard()~=true then error("scope changed",0) end
+            if not ok then error("native body read failed",0) end
+            return value
+        end
         local sim
         local ok = pcall(function()
             PELVIS = PELVIS or FName("pelvis")
-            sim = m:IsSimulatingPhysics(PELVIS)
+            sim = read(function() return m:IsSimulatingPhysics(PELVIS) end)
         end)
         if not ok or type(sim) ~= "boolean" then return nil, "pelvis simulation state unavailable" end
+        if physical_only and not sim then return nil,"physical simulation unavailable" end
         local l
         ok = pcall(function()
-            if sim then l = m:GetCenterOfMass(PELVIS)
-            else l = m:GetSocketLocation(PELVIS) end
+            if sim then l = read(function() return m:GetCenterOfMass(PELVIS) end)
+            else l = read(function() return m:GetSocketLocation(PELVIS) end) end
             -- Copy plain scalars now; no native FVector wrapper is retained.
             if not (l and finite(l.X) and finite(l.Y) and finite(l.Z)) then l = nil
             else l = { X = l.X, Y = l.Y, Z = l.Z } end
@@ -1198,15 +1247,124 @@ function SP.make_ue_env(ctx)
         return l, nil, sim
     end
     -- Unknown simulation / physics reads explicitly fail placement proof.
-    function env.body_loc(p)
+    function env.body_loc(p, guard, physical_only)
         local m
         pcall(function()
-            if p.Mesh and p.Mesh:IsValid() then m = p.Mesh end
+            if guard and guard()~=true then return end
+            local candidate=p.Mesh
+            if guard and guard()~=true then return end
+            if candidate and candidate:IsValid() then m=candidate end
+            if guard and guard()~=true then m=nil end
         end)
         if not m then return nil, nil, nil, "Mesh unavailable" end
-        local l, err = pelvis(m)
+        local l, err = pelvis(m, guard, physical_only)
         if l then return l.X, l.Y, l.Z end
         return nil, nil, nil, err
+    end
+
+    -- Called at most three times, synchronously before an already warranted
+    -- protected drift correction. No native wrapper escapes this call.
+    function env.drift_snapshot(p, expected, placement_current)
+        local closed, pawn_id, mesh_id, world_id=false,nil,nil,nil
+        local drops=ctx.drift_drops and ctx.drift_drops()
+        local function base()
+            if closed then return false end
+            local ok, value=pcall(function()
+                return ctx.drift_world_current and ctx.drift_world_current(expected.world,drops)==true
+                    and placement_current()==true
+            end)
+            if not ok or value~=true then closed=true;return false end
+            return true
+        end
+        local function read(f)
+            assert(base(),"scope changed")
+            local ok,value=pcall(f)
+            assert(base(),"scope changed")
+            if not ok then error("native identity read unavailable",0) end
+            return value
+        end
+        local function identity(o)
+            assert(o and read(function() return o:IsValid() end)==true,"identity unavailable")
+            local address=read(function() return o:GetAddress() end)
+            local fn=read(function() return o:GetFName() end)
+            local name=read(function() return fn:ToString() end)
+            assert(finite(address) and math.tointeger(address) and address>0
+                and type(name)=="string" and name~="" and #name<=512 and not name:find("\0",1,true),"identity unavailable")
+            return {address=address,name=name}
+        end
+        local function same(a,b)return a and b and a.address==b.address and a.name==b.name end
+        local function current()
+            if not base() then return false end
+            local ok,value=pcall(function()
+                if not pawn_id or not mesh_id or not world_id then return false end
+                local own=read(function() return env.pawn() end)
+                if not same(identity(own),pawn_id) then return false end
+                if not same(identity(read(function() return own:GetWorld() end)),world_id) then return false end
+                local mesh=read(function() return own.Mesh end)
+                return same(identity(mesh),mesh_id)
+                    and same(identity(read(function() return mesh:GetOwner() end)),pawn_id)
+            end)
+            if not ok or value~=true then closed=true;return false end
+            return true
+        end
+        local function xyz(a)
+            if type(a)=="table" and finite(a[1]) and finite(a[2]) and finite(a[3]) then return {a[1],a[2],a[3]} end
+        end
+        local function number(v)return finite(v) and v or nil end
+        local row={inst=(os.getenv("HSMP_INST") or ""):sub(1,16),phase="protected_drift_before_correction",
+            authority=false,available=false,attempt=expected.attempt,world=expected.world,pawn=expected.pawn,
+            peer=number(expected.peer),match_id=number(expected.match_id),round=number(expected.round),life=number(expected.life),
+            spawn_id=number(expected.spawn_id),slot=number(expected.slot),watch_tick_ms=number(expected.watch_tick_ms),
+            capsule_read_ms=number(expected.capsule_read_ms),
+            capsule=xyz(expected.capsule),target=xyz(expected.target),floor=finite(expected.floor) and expected.floor or nil,
+            body_basis="physical pelvis center of mass"}
+        local started=env.now()
+        row.observed_ms=number(started) and started*1000 or nil
+        local ok,why=pcall(function()
+            assert(row.capsule and row.target,"position unavailable")
+            for _,k in ipairs({"peer","match_id","round","life","spawn_id"}) do
+                assert(finite(row[k]) and math.tointeger(row[k]) and row[k]>0,"assignment unavailable")
+            end
+            local pc=read(function() return ctx.pc and ctx.pc() or UEH.GetPlayerController() end)
+            world_id=identity(read(function() return pc:GetWorld() end))
+            pawn_id=identity(p)
+            assert(pawn_id.name==expected.pawn,"pawn changed")
+            assert(same(identity(read(function() return env.pawn() end)),pawn_id),"pawn changed")
+            assert(same(identity(read(function() return p:GetWorld() end)),world_id),"pawn world changed")
+            local mesh=read(function() return p.Mesh end)
+            mesh_id=identity(mesh)
+            assert(same(identity(read(function() return mesh:GetOwner() end)),pawn_id),"Mesh owner changed")
+            row.native_world,row.actor,row.mesh=world_id,pawn_id,mesh_id
+            assert(current(),"scope changed")
+            row.body_read_start_ms=number(env.now()*1000)
+            local x,y,z,err=env.body_loc(p,current,true)
+            row.body_read_end_ms=number(env.now()*1000)
+            assert(current(),"scope changed")
+            assert(finite(x) and finite(y) and finite(z),err or "physical body unavailable")
+            -- body_loc's normal visual fallback is useful for placement, but
+            -- cannot constitute this physical-only diagnostic observation.
+            row.body={x,y,z};row.available=true
+            row.capsule_target_xy_cm=dist_xy(row.capsule[1],row.capsule[2],row.target[1],row.target[2])
+            row.body_target_xy_cm=dist_xy(x,y,row.target[1],row.target[2])
+            row.body_capsule_delta={x-row.capsule[1],y-row.capsule[2],z-row.capsule[3]}
+            assert(finite(row.capsule_target_xy_cm) and finite(row.body_target_xy_cm) and xyz(row.body_capsule_delta),
+                "derived position unavailable")
+            local prior=expected.verified_baseline
+            if type(prior)=="table" then
+                row.verified_baseline={tick_ms=number(prior.tick_ms),copied_ms=number(prior.copied_ms),
+                    capsule=xyz(prior.capsule),body=xyz(prior.body),world=prior.world,pawn=prior.pawn,
+                    match_id=number(prior.match_id),round=number(prior.round),life=number(prior.life),spawn_id=number(prior.spawn_id),
+                    same_mesh_available=false,reason="historical Mesh identity unavailable"}
+            end
+        end)
+        if not ok then
+            row.available=false;row.body=nil;row.capsule_target_xy_cm,row.body_target_xy_cm,row.body_capsule_delta=nil,nil,nil
+            row.reason=tostring(why):gsub("[%c]"," "):sub(1,192)
+        end
+        local finished=env.now()
+        if finite(started) and finite(finished) and finished>=started then row.capture_elapsed_ms=(finished-started)*1000 end
+        row.scope_current=current()
+        return row,current
     end
     function env.prop_get(p, k) local v; pcall(function() v = p[k] end); return v end
     function env.prop_set(p, k, v) return pcall(function() p[k] = v end) end

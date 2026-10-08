@@ -1,5 +1,5 @@
 local P=dofile(T.path("mods/HSMPAvatars/Scripts/joint_profile_probe.lua"))
-local function fixture()
+local function fixture(focus)
     local x={records={},reads=0,current=true,time=100}
     local function obj(name,addr)
         return {IsValid=function()x.reads=x.reads+1;return true end,GetAddress=function()x.reads=x.reads+1;return addr end,
@@ -15,6 +15,7 @@ local function fixture()
         end
         e.mesh.SkeletalMesh=sk;e.mesh.PhysicsAssetOverride={GetAddress=function()return 0 end}
         local binding={};for i,j in ipairs(P.JOINTS)do binding[j[1]]={index=i+7,parent=j[2],child=j[3]}end
+        for i,j in ipairs(P.LEFT_UPPERARM)do binding[j[1]]={index=i+14,parent=j[2],child=j[3]}end
         e.mesh.GetConstraintByName=function(_,name)
             x.reads=x.reads+1;local b=assert(binding[name]);return {Owner={get=function()return e.mesh end},Index=x.change_index and b.index+1 or b.index}
         end
@@ -53,7 +54,7 @@ local function fixture()
             pawn={address=peer*10,name="Pawn"..peer},mesh={address=peer*10+1,name="Mesh"..peer},observed_ms=90,
             sample_ms=80,qualification=peer==1,role=peer==1 and "local_source"or "remote_proxy"}
     end
-    x.sc,x.pc=context(1),context(2);x.probe=P.new(function(row)x.records[#x.records+1]=row end)
+    x.sc,x.pc=context(1),context(2);x.probe=P.new(function(row)x.records[#x.records+1]=row end,focus)
     function x:run()self.probe:attempt();return self.probe:capture(self.sc,self.pc,self.source,self.proxy)end
     return x
 end
@@ -152,3 +153,21 @@ e.source.current=function()return false,f end
 value,reason,detail=e:run()
 T.check(#detail.first_failure.observed==120 and detail.first_failure.observed_truncated,
     "bounded scalar text explicitly retains its truncation flag through helper forwarding")
+
+e=fixture("upperarm_l");r=e:run()
+T.check(r and r.coverage=="left_upperarm_only"and r.source.side=="left"and r.proxy.side=="left"
+    and #r.source.joints==1 and #r.proxy.joints==1,"fixed left focus observes one joint in both independent roles")
+T.check(r.source.joints[1].name=="UserConstraint_14"and r.source.joints[1].current.value.binding.index==15
+    and r.source.joints[1].current.value.binding.parent=="clavicle_l"
+    and r.source.joints[1].current.value.binding.child=="upperarm_l","left focus validates actual returned accessor and endpoints")
+T.check(#e.calls==10 and #P.JOINTS==3 and P.JOINTS[1][1]=="UserConstraint_10",
+    "focused capture reduces getters without altering the default selection")
+e=fixture("upperarm_l");e.bad_endpoint=true;r=e:run()
+T.check(r and not r.source.joints[1].current.available,"left focus cannot substitute an incorrect native endpoint")
+e=fixture("upperarm_l");e.getter_flip=true;r=e:run()
+T.check(r==nil and #e.calls==1 and #e.records==0,"left focus retains the first scope-loss latch and stops later reads")
+local invalid,invalid_reason=P.new(function()error("must not emit")end,"UserConstraint_14")
+T.check(invalid==nil and invalid_reason=="unsupported joint focus","arbitrary constraint names are refused before capture")
+e=fixture("upperarm_l");local saved_name=P.LEFT_UPPERARM[1][1]
+P.LEFT_UPPERARM[1][1]="WrongAfterConstruction";r=e:run();P.LEFT_UPPERARM[1][1]=saved_name
+T.check(r and r.source.joints[1].name==saved_name,"probe owns a copied selection unaffected by later table edits")

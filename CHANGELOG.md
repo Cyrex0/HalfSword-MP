@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Disable native linear grip motors on a driven proxy using six verified enable
+  flags, preserving native strengths and restoring exact flags to the same binding.
+- Add focused developer observations for the left shoulder and three protected
+  spawn corrections, retaining native body and capsule positions separately.
 - Preserve a stuck blade's original pelvis contact separately from its initial
   spine anchor, allowing the same validated constraint to return to that contact.
 - Retain stuck-blade continuations while their known parent awaits pose coverage,
