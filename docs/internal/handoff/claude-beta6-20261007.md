@@ -957,3 +957,34 @@ server/sidecar identities fail before game writes, unchanged reuse and normal
 builds succeed, relativeBinDir uses Win64-relative paths, DryRun stays read-only.
 Astra approved. Real matching deploy and stale-check refusal should be recorded
 at the next checkpoint; Native24's failure is retained as the before evidence.
+
+The stuck-membership correction is now frozen and Astra-reviewed: one bounded
+complete scan is shared by journal and forwarding; missing/unreadable/stale/
+overflowed membership or conflicting full parent tuples refuses. Multiple
+memberships with one exact parent may forward one GD with emitting-constraint
+identity unavailable. Native actor/component world/owner/address/name and full
+current match/round/lives are revalidated; target component must belong to victim.
+Constraint actor GetOwner is not assumed. Diagnostic admission precedes optional
+reads; queued send uses a wire copy retaining validation metadata on refusal.
+This does not add automatic retries after IPC facade refusal (the existing queue
+flush clears entries; ring-full facade queuing returns success).
+
+Astra caught and the correction preserves the already-proved SAME-constraint
+lowerarm_l->hand_l native rebind, retaining the immutable original binding/header
+for parent validation. Reused-name replacement, reverse, unproved right-arm alias
+and mid-read changes refuse. Candidate50ms origin binding remains nonauthoritative
+for caller/marker/sever lineage. Root independently passed407 focused assertions
+(Combat364+resolver43),2production parses; agent also parsedbothtestfiles. Native
+callback cost and forwarding require Native26; no physical factory/event added.
+
+Read-only Native25 geometry follow-up found original source cutting/paint Box
+extent growth after proxy hits. Source1 native snapshots grow from(6,1,10) up to
+(20,1,47.44),source2 up toZ21.04. Cooked DCD andGD resize caller Box then proxy
+ForceDisableVertexPaint branches exit before native restore. Inst1 cid711 cut74.48
+changesZ14.96971->26.30335; server8682-8685 rejects711-713 with extent difference
+11.303345 matching that delta. This proves a native damage-sampling Box lifecycle
+gap, not enlargement of the main static-mesh striking collider and not the
+separate75degree quaternion correction. A safe restore needs a true before-native
+snapshot+exact post scope; Blueprint Lua callbacks are POST. No stale/CDO restore,
+paint reenablement or physical change is justified. TargetedC++hook feasibility
+is under read-only investigation; global caller probe remainsOFF.

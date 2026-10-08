@@ -17,6 +17,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Resolve stuck-blade memberships once with bounded reads and explicit parent ambiguity,
+  retaining the proven same-constraint left-arm rebind and validation metadata on refusal.
 - Publish verified deathmatch respawn preparation frames before the loaded acknowledgement,
   while keeping death reporting restricted to the active life.
 - Refuse developer deployments with incompatible compiled content before changing game files,

@@ -1415,13 +1415,33 @@ do
     SI["Deal Complex Damage"]=original_dcd
     do
         local oldweapon=ME["Weapon R"]
+        local original_pc_world=PC.GetWorld
+        local original_world_key=api.WG.key
+        local original_native={ME.GetFullName,ME.GetWorld,SI.GetFullName,SI.GetWorld,
+            SI.Mesh.GetAddress,SI.Mesh.GetFullName,SI.Mesh.GetOwner}
+        local native_world={IsValid=valid,GetAddress=function()return 6000 end,GetFullName=function()return "World Journal"end}
+        PC.GetWorld=function()return native_world end
+        local native_key=api.WG.world_key();api.set_world(native_key)
+        ME.GetFullName=function()return ME.__name end;ME.GetWorld=function()return native_world end
+        SI.GetFullName=function()return SI.__name end;SI.GetWorld=function()return native_world end
+        SI.Mesh.GetAddress=function()return 7002 end;SI.Mesh.GetFullName=function()return "JournalVictim.Mesh"end
+        SI.Mesh.GetOwner=function()return SI end
         local weapon={IsValid=valid,["Parent Actor"]=ME,GetClass=function()return{GetFName=function()return FName("ArmingSword_C")end}end,
-            GetFullName=function()return "ArmingSword_Journal"end}
-        local coll={IsValid=valid,GetOwner=function()return weapon end,GetFullName=function()return "ArmingSword_Journal.Box"end}
+            GetFullName=function()return "ArmingSword_Journal"end,GetAddress=function()return 7000 end,GetWorld=function()return native_world end}
+        local coll={IsValid=valid,GetOwner=function()return weapon end,GetFullName=function()return "ArmingSword_Journal.Box"end,
+            GetAddress=function()return 7001 end}
         local constraint={IsValid=valid,["My Weapon"]=weapon,["Weapon Hit Module"]=coll,["Hit Actor"]=SI,
-            ["Component 2 (Body)"]=SI.Mesh,["Bone Name 2"]=FName("head"),GetFullName=function()return "Stuck_Journal"end}
+            ["Component 2 (Body)"]=SI.Mesh,["Bone Name 2"]=FName("head"),GetFullName=function()return "Stuck_Journal"end,
+            GetAddress=function()return 7003 end,GetWorld=function()return native_world end,
+            GetOwner=function()error("native constraint actor owner is not membership evidence")end}
         weapon["Collision Components Array"]={ForEach=function(_,f)f(0,{get=function()return coll end})end}
-        weapon["Stuck Constraints Array"]={ForEach=function(_,f)f(0,{get=function()return constraint end})end}
+        local constraints,scans={constraint},0
+        weapon["Stuck Constraints Array"]={GetArrayNum=function()return #constraints end,
+            GetArrayAddress=function()return 7100 end,GetArrayDataAddress=function()return 7200 end,
+            ForEach=function(_,f)
+                scans=scans+1
+                for i,c in ipairs(constraints)do if f(i,{get=function()return c end})==true then break end end
+            end}
         ME["Weapon R"]=weapon
         local claims=#sent("damage")
         T.check(api.C3.inside_journal(SI,coll,FName("head"),SI.Mesh,nil,1000,1000,0,1,false)==true,
@@ -1430,10 +1450,6 @@ do
         constraint["Bone Name 2"]=FName("spine_03")
         T.check(api.C3.inside_journal(SI,coll,FName("head"),SI.Mesh,nil,1000,1000,0,1,false)==false,
             "wrong constraint target bone cannot be reported as proven")
-        local old_mesh_address=SI.Mesh.GetAddress
-        coll.GetAddress=function()return 7001 end
-        SI.Mesh.GetAddress=function()return 7002 end
-        SI.Mesh.GetFullName=function()return "JournalVictim.Mesh" end
         constraint["Bone Name 2"]=FName("head")
         local original_gate,original_gate_bone=SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]
         SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]=100000,FName("head")
@@ -1456,6 +1472,27 @@ do
         T.check(inside and inside.flags==129 and inside.source_class=="ArmingSword_C"
             and inside.dism_blunt==3145728 and math.abs(inside.normal[2]-.8)<1e-6 and math.abs(inside.normal[3]-.6)<1e-6,
             "continuation preserves exact source hand/module/class and native normal",T.repr(inside))
+        if inside then
+            local retry={};for k,v in pairs(inside)do retry[k]=v end
+            local ctx=api.C3.inside_context(SI,coll,FName("head"),SI.Mesh)
+            retry.cid=nil;retry.parent_cid=nil;retry.parent=parent;retry.parent_context=ctx
+            retry.parent_header=api.C3.stuck_resolver.header(parent,ctx);retry.probe="retry diagnostic"
+            local ipc=rawget(_G,"HSMP_IPC")
+            local original_send=ipc.send;ipc.send=function()return nil,"unavailable"end
+            local count=#sent("damage")
+            T.check(api.C3.inside_send(retry)==false and #sent("damage")==count and retry.parent==parent
+                and retry.parent_header and retry.parent_context==ctx and retry.probe=="retry diagnostic" and retry.cid==nil,
+                "refused continuation retains its exact queued parent/scope/probe metadata without consuming a cid")
+            ipc.send=original_send
+            local ats=parent.ats;parent.ats=ats+1
+            T.check(api.C3.inside_send(retry)==false and #sent("damage")==count,
+                "refused-send retry revalidates the original full parent header before sending")
+            parent.ats=ats
+            local accepted=api.C3.inside_send(retry);local wire=sent("damage")[count+1]
+            T.check(accepted==true and wire and wire.parent_cid==parent.cid and wire.parent==nil and wire.parent_header==nil
+                and wire.parent_context==nil and wire.probe==nil,
+                "successful retry emits only wire fields once under the unchanged exact parent")
+        end
         local own_gd,own_dcd=ME["Get Damage"],ME["Deal Complex Damage"]
         local remote_weapon=SI["Weapon R"]
         local calls,hit_by,normal=0,nil,nil
@@ -1512,6 +1549,38 @@ do
             "queued continuation logs its own cid and exact parent after successful send",T.repr(probe_lines))
         T.check(probe_child and probe_child.probe==nil and probe_child.probe_attacker==nil,
             "local probe strings never enter damage transport schema")
+        local optional_reads=0
+        setmetatable(constraint,{__index=function()optional_reads=optional_reads+1;return nil end})
+        api.C3.inside_count=9;api.C3.inside_diag_at=CLOCK
+        local scan_before,forward_before,log_before=scans,#sent("damage"),#LOGS
+        api.on_get_damage(SI,zero,zero,zero,zero,FName("head"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+        local journals=0
+        for i=log_before+1,#LOGS do if T.contains(LOGS[i],"INSIDE_JOURNAL ")then journals=journals+1 end end
+        T.check(scans==scan_before+1 and #sent("damage")==forward_before+1 and journals==0 and optional_reads==0,
+            "rate-limited diagnostic and forwarding share one scan with no optional constraint reads")
+        local second={}
+        for k,v in pairs(constraint)do second[k]=v end
+        second.GetAddress=function()return 7004 end;second.GetFullName=function()return "Stuck_Journal_2"end
+        local resolver=api.C3.stuck_resolver
+        local ctx=api.C3.inside_context(SI,coll,FName("head"),SI.Mesh)
+        local bound=api.C3.stuck_parent[resolver.key(resolver.reference(constraint),ctx)]
+        api.C3.stuck_parent[resolver.key(resolver.reference(second),ctx)]=resolver.bind({bound.parent},resolver.reference(second),ctx,CLOCK)
+        constraints={constraint,second}
+        scan_before,forward_before,log_before=scans,#sent("damage"),#LOGS
+        api.on_get_damage(SI,zero,zero,zero,zero,FName("head"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+        local unavailable_constraint=false
+        for i=log_before+1,#LOGS do
+            if T.contains(LOGS[i],"constraint=unavailable:multiple_memberships") and T.contains(LOGS[i],"lineage=candidate_only")then unavailable_constraint=true end
+        end
+        T.check(scans==scan_before+1 and #sent("damage")==forward_before+1 and unavailable_constraint,
+            "multiple exact memberships sharing a full parent forward once with emitting constraint unavailable")
+        local other={};for k,v in pairs(bound.parent)do other[k]=v end;other.cid=bound.parent.cid+10000
+        api.C3.stuck_parent[resolver.key(resolver.reference(second),ctx)]=resolver.bind({other},resolver.reference(second),ctx,CLOCK)
+        scan_before,forward_before=scans,#sent("damage")
+        api.on_get_damage(SI,zero,zero,zero,zero,FName("head"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+        T.check(scans==scan_before+1 and #sent("damage")==forward_before,
+            "distinct complete native membership parents cannot forward a chosen first or last claim")
+        constraints={constraint};setmetatable(constraint,nil)
         api.C3.probe_last={name=SI.__name,at=math.floor(CLOCK*1000),bone="head",source=99999,text="wrong native sample",trace="wrong-source"}
         local pending_before=#api.CX.pending
         api.on_complex(SI,SI.Mesh,coll,FName("head"),zero,zero,
@@ -1566,9 +1635,61 @@ do
             {observed_fields=1,health_delta=-5},"native result without current reads",true)
         T.check(T.contains(LOGS[#LOGS],"dmg Health unavailable [native Health not observed]"),
             "a changed production outcome alone cannot substitute for fresh native snapshot proof")
+        do
+            api.C3.native_probe=false
+            constraint["Bone Name 2"]=FName("lowerarm_l")
+            api.on_complex(SI,SI.Mesh,coll,FName("lowerarm_l"),zero,zero,
+                {X=1400,Y=0,Z=0},{X=1000,Y=0,Z=0},40,0,.85,0,false,false,1,nil,false,0)
+            local arm_parent=api.CX.pending[#api.CX.pending]
+            api.C3.constraint_begin_journal(constraint)
+            local original_context=api.C3.inside_context(SI,coll,FName("lowerarm_l"),SI.Mesh)
+            local original_binding=resolver and api.C3.stuck_parent[resolver.key(resolver.reference(constraint),original_context)]
+            constraint["Bone Name 2"]=FName("hand_l")
+            local count=#sent("damage")
+            api.on_get_damage(SI,zero,zero,zero,zero,FName("hand_l"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+            api.flush_claims()
+            local rows=sent("damage");local child=rows[count+2]
+            T.check(#rows==count+2 and child and child.bone=="hand_l" and child.parent_cid==arm_parent.cid
+                and original_binding and original_binding.context.bone=="lowerarm_l" and original_binding.header.bone=="lowerarm_l",
+                "same native constraint forearm-to-hand rebind forwards after origin flush without rewriting its original binding")
+            local replacement={};for k,v in pairs(constraint)do replacement[k]=v end
+            replacement.GetAddress=function()return 7005 end -- same name, new native object
+            local ctx=api.C3.inside_context(SI,coll,FName("hand_l"),SI.Mesh)
+            api.C3.stuck_parent[resolver.key(resolver.reference(replacement),ctx)]=original_binding
+            constraints={replacement};count=#sent("damage")
+            api.on_get_damage(SI,zero,zero,zero,zero,FName("hand_l"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+            T.check(#sent("damage")==count and #(api.CX.inside_queue or {})==0,
+                "replacement native constraint with reused name cannot inherit the old rebind parent")
+            constraints={constraint};constraint["Bone Name 2"]=FName("hand_l")
+            api.on_complex(SI,SI.Mesh,coll,FName("hand_l"),zero,zero,
+                {X=1400,Y=0,Z=0},{X=1000,Y=0,Z=0},40,0,.85,0,false,false,1,nil,false,0)
+            api.C3.constraint_begin_journal(constraint)
+            constraint["Bone Name 2"]=FName("lowerarm_l");count=#sent("damage")
+            api.on_get_damage(SI,zero,zero,zero,zero,FName("lowerarm_l"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+            T.check(#sent("damage")==count and #(api.CX.inside_queue or {})==0,
+                "reverse hand-to-forearm native rebind cannot emit a continuation")
+            api.flush_claims();constraint["Bone Name 2"]=FName("head")
+            api.C3.native_probe=true
+        end
+        local original_resolve=api.C3.inside_resolve
+        local attempts=0;api.C3.inside_resolve=function()attempts=attempts+1;return nil end
+        api.C3.inside_count=0
+        scan_before,forward_before=scans,#sent("damage")
+        api.on_get_damage(SI,zero,zero,zero,zero,FName("head"),1000,1000,true,SI.Mesh,0,false,false,coll,false,nil,1,false,0,0)
+        T.check(attempts==1 and scans==scan_before and #sent("damage")==forward_before,
+            "unavailable shared resolution cannot trigger diagnostic or forwarding fallback scans")
+        api.C3.inside_resolve=original_resolve
+        local stable_context=api.C3.inside_context(SI,coll,FName("head"),SI.Mesh)
+        PC.GetWorld=function()return {IsValid=valid,GetAddress=function()return 6001 end,GetFullName=function()return "World Journal"end}end
+        T.check(not api.C3.inside_scope_valid(stable_context),
+            "fresh native world change refuses continuation even before the world guard drops its old key")
+        PC.GetWorld=function()return native_world end
         api.C3.native_probe=prior_probe;api.C3.protect(SI);api.C3.baseline(SI)
         SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]=original_gate,original_gate_bone
-        SI.Mesh.GetAddress=old_mesh_address
+        PC.GetWorld=original_pc_world
+        api.set_world(original_world_key)
+        ME.GetFullName,ME.GetWorld,SI.GetFullName,SI.GetWorld=original_native[1],original_native[2],original_native[3],original_native[4]
+        SI.Mesh.GetAddress,SI.Mesh.GetFullName,SI.Mesh.GetOwner=original_native[5],original_native[6],original_native[7]
         api.C3.stuck_parent={};api.CX.inside_queue={}
         ME["Weapon R"]=oldweapon
     end

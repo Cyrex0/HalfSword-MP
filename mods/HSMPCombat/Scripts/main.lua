@@ -826,6 +826,7 @@ end
 --     injury outcomes (`hitfx_in` records), replayed natively on
 --     the stand-in with its damage state restored right after.
 local C3 = {
+    stuck_resolver = load_module("stuck_membership"),
     STANDIN_INVULNERABLE = true,
     TOUCH_GAP_MS = 50,          -- per-peer touch report rate limit
     -- Bookkeeping Deal Complex Damage / Get Damage write besides FIELDS: their
@@ -1573,6 +1574,7 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         kick = num(pv(KickPower)), xhv = pv(ExtraHigh) == true, draw = num(pv(DrawCut)),
         nm = nm, peer = peer, bone = bname, gate = gate, flags = flags, source = source, parent = pv(DamageParent) == true,
         match_id = mine.match_id, round = mine.round, attacker_life = mine.life, victim_life = theirs.life, hit_box = hit_box,
+        world=WG.key,drops=WG.drops,attacker_peer=my_peer_id,
         source_class=source_class,hit_box_frame=box_frame,
         probe=probe_text,probe_attacker=my_peer_id,
         native_evidence=C3.native_probe and ("last_zone="..C3.native_zone(w).." "..
@@ -1584,36 +1586,74 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
 end
 CX.pre = function(...) pcall(on_complex, ...) end   -- (name kept: the hook wrapper)
 
--- Evidence only: embedded-weapon GD is not an ordinary impact claim. Resolve
--- original native constraint membership synchronously; retain no UObject.
-function C3.inside_journal(w,coll,bone,mesh,box,raw,cut,draw,pain,apply)
-    if not combat_window or not coll or not coll:IsValid() then return end
+function C3.inside_scope_valid(c)
+    if not c or replaying or not combat_window or WG.travel_from~=nil or WG.key~=c.world or WG.drops~=c.drops then return false end
+    if not WG.same({key=c.world,drops=c.drops})then return false end
+    local mine,theirs=C3.life_for(c.attacker_peer,true),C3.life_for(c.victim_peer,false)
+    if not mine or not theirs or mine.match_id~=c.match_id or mine.round~=c.round or mine.life~=c.attacker_life
+        or theirs.match_id~=c.match_id or theirs.round~=c.round or theirs.life~=c.victim_life then return false end
+    return C3.stuck_resolver.same(C3.stuck_resolver.reference(WG.world()),c.native_world)
+end
+function C3.inside_context(w,coll,bone,mesh)
+    if replaying or not combat_window or WG.key==nil or WG.travel_from~=nil or not C3.stuck_resolver then return end
+    if not WG.same(WG.token())then return end
     local me=local_pawn()
     local peer=puppet_peer[wname(w) or ""]
     local mine,theirs=C3.life_for(my_peer_id,true),C3.displayed_for(peer,w)
     if not me or not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return end
+    if not coll or not coll:IsValid() or not mesh or not mesh:IsValid() then return end
     local weapon=coll:GetOwner()
     if not weapon or not weapon:IsValid() or not same(weapon_parent(weapon),me) then return end
     local source,ordinal=BF.source(coll,me)
-    local matched,n=nil,0
-    local arr=weapon["Stuck Constraints Array"]
-    if arr then arr:ForEach(function(_,entry)
-        n=n+1;if n>128 then return end
-        local c=entry:get()
-        if c and c:IsValid() and same(c["My Weapon"],weapon) and same(c["Weapon Hit Module"],coll)
-            and same(c["Hit Actor"],w) and same(c["Component 2 (Body)"],mesh)
-            and c["Bone Name 2"]:ToString()==bone:ToString() then matched=c:GetFullName() end
-    end) end
+    if not ordinal or not source or source==0 then return end
+    local world=C3.stuck_resolver.reference(WG.world())
+    local class=weapon:GetClass():GetFName():ToString()
+    local sa,ta=addr_of(coll),addr_of(mesh)
+    if not world or not sa or not ta or type(class)~="string" or class=="" or #class>=48 then return end
+    return {world=WG.key,drops=WG.drops,native_world=world,match_id=mine.match_id,round=mine.round,
+        attacker_peer=my_peer_id,victim_peer=peer,attacker_life=mine.life,victim_life=theirs.life,
+        victim_name=wname(w),source_address=sa,target_address=ta,source=source,ordinal=ordinal,
+        source_class=class,bone=bone:ToString()},weapon
+end
+function C3.inside_diag_admit()
     C3.inside_count=(C3.inside_count or 0)+1
-    if C3.inside_count>8 and os.clock()<(C3.inside_diag_at or 0)+1 then return end
+    if C3.inside_count>8 and os.clock()<(C3.inside_diag_at or 0)+1 then return false end
     C3.inside_diag_at=os.clock()
+    return true
+end
+function C3.inside_resolve(w,coll,bone,mesh,diagnostic)
+    local c,weapon=C3.inside_context(w,coll,bone,mesh);if not c then return end
+    local resolver=C3.stuck_resolver
+    return resolver.resolve({context=c,world=c.native_world,weapon=weapon,collider=coll,victim=w,body=mesh},{
+        guard=function()return C3.inside_scope_valid(c)end,unwrap=function(v)return v:get()end,
+        parent=function(id,ctx)return C3.stuck_parent and C3.stuck_parent[resolver.key(id,ctx)]end,
+        evidence=diagnostic and C3.native_probe and function(con)
+            local rows={}
+            for _,key in ipairs({"Material Density","Distance","Draw Cut","Edge Sharpness","Tip Sharpness","Thrust?","Stuck In Bone","Spikes (temp)"})do
+                if not C3.inside_scope_valid(c)then error("scope changed",0)end
+                local value;pcall(function()value=con[key]end)
+                rows[#rows+1]=key:gsub("%W","_").."="..C3.native_scalar(value)
+            end
+            return table.concat(rows," ")
+        end or nil})
+end
+-- Evidence only. Diagnostic admission precedes the optional cutting-box read;
+-- the production callback supplies its one shared resolution to both consumers.
+function C3.inside_journal(w,coll,bone,mesh,box,raw,cut,draw,pain,apply,resolution,admitted)
+    if admitted==nil then admitted=C3.inside_diag_admit()end
+    if not admitted then return end
+    local r=resolution;if r==nil then r=C3.inside_resolve(w,coll,bone,mesh,true)end
+    if type(r)~="table" or not C3.inside_scope_valid(r.context)then return end
+    local c=r.context
     local frame=CuttingBox.capture(box,BF.of(mesh,bone:ToString()),BF)
-    Log("INSIDE_JOURNAL evidence_only=true match=%s round=%s attackerLife=%s victimLife=%s peer=%s source=%s ordinal=%s class=%s constraint=%s bone=%s raw=%s cut=%s draw=%s pain=%s applyBone=%s boxFrame=%s collider=%s",
-        tostring(mine.match_id),tostring(mine.round),tostring(mine.life),tostring(theirs.life),tostring(peer),
-        tostring(source),tostring(ordinal),tostring(weapon:GetClass():GetFName():ToString()),tostring(matched or "UNPROVEN"),
+    if not C3.inside_scope_valid(c)then return end
+    Log("INSIDE_JOURNAL evidence_only=true match=%s round=%s attackerLife=%s victimLife=%s peer=%s source=%s ordinal=%s class=%s constraint=%s membership=%s complete=%s matches=%s constraintAuthority=%s lineage=candidate_only bone=%s raw=%s cut=%s draw=%s pain=%s applyBone=%s boxFrame=%s collider=%s",
+        tostring(c.match_id),tostring(c.round),tostring(c.attacker_life),tostring(c.victim_life),tostring(c.victim_peer),
+        tostring(c.source),tostring(c.ordinal),tostring(c.source_class),tostring(r.constraint and r.constraint.name or "UNAVAILABLE"),
+        r.state,tostring(r.complete),tostring(r.matches),r.authority,
         bone:ToString(),tostring(raw),tostring(cut),tostring(draw),tostring(pain),tostring(apply),
-        frame and table.concat(frame,",") or "nil_or_unrepresentable",coll:GetFullName())
-    return matched~=nil
+        frame and table.concat(frame,",") or "nil_or_unrepresentable",tostring(r.inputs.collider and r.inputs.collider.name))
+    return r.complete and r.matches>0
 end
 
 function C3.constraint_begin_journal(selfp)
@@ -1629,24 +1669,20 @@ function C3.constraint_begin_journal(selfp)
     if not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return end
     local coll=c["Weapon Hit Module"]
     local source,ordinal=BF.source(coll,me)
-    -- Match the original native call before selection, including a gate-suppressed
-    -- contact. Both component addresses and callback order identify its module.
+    -- Recent exact inputs establish a candidate association, not native caller
+    -- or marker lineage. More than one eligible origin is not a unique parent.
     pcall(function()
-        local nm,b2=wname(w),c["Bone Name 2"]:ToString()
-        for i=#CX.pending,1,-1 do
-            local r=CX.pending[i]
-            if r.nm==nm and r.source_address and r.target_address
-                and r.source_address==addr_of(coll) and r.target_address==addr_of(c["Component 2 (Body)"])
-                and r.source==source and source~=0 and os.clock()-r.at>=0 and os.clock()-r.at<=0.05
-                and (r.bone==b2 or (r.bone=="pelvis" and b2=="spine_02")) then
-                C3.stuck_parent=C3.stuck_parent or {}
-                if next(C3.stuck_parent)~=nil and C3.stuck_parent_n and C3.stuck_parent_n>64 then C3.stuck_parent,C3.stuck_parent_n={},0 end
-                C3.stuck_parent[c:GetFullName()]=r
-                r.constraint_parent=true
-                C3.stuck_parent_n=(C3.stuck_parent_n or 0)+1
-                break
-            end
-        end
+        local ctx,current_weapon=C3.inside_context(w,coll,c["Bone Name 2"],c["Component 2 (Body)"])
+        local id=C3.stuck_resolver.reference(c);if not ctx or not id or not C3.inside_scope_valid(ctx)then return end
+        if not C3.stuck_resolver.same(C3.stuck_resolver.reference(weapon),C3.stuck_resolver.reference(current_weapon))then return end
+        if not C3.stuck_resolver.same(C3.stuck_resolver.reference(c:GetWorld()),ctx.native_world)then return end
+        local binding=C3.stuck_resolver.bind(CX.pending,id,ctx,os.clock())
+        if not C3.inside_scope_valid(ctx) or not C3.stuck_resolver.same(id,C3.stuck_resolver.reference(c))then return end
+        C3.stuck_parent=C3.stuck_parent or {}
+        if (C3.stuck_parent_n or 0)>64 then C3.stuck_parent,C3.stuck_parent_n={},0 end
+        C3.stuck_parent[C3.stuck_resolver.key(id,ctx)]=binding
+        if binding.parent then binding.parent.constraint_parent=true end
+        C3.stuck_parent_n=(C3.stuck_parent_n or 0)+1
     end)
     C3.constraint_count=(C3.constraint_count or 0)+1
     if C3.constraint_count>8 and os.clock()<(C3.constraint_diag_at or 0)+1 then return end
@@ -1696,11 +1732,13 @@ local function on_get_damage(selfp, Impulse, Velocity, Location, Normal, bone, R
     local native_probe=C3.native_probe and puppet_peer[wname(w) or ""] and C3.probe_measure(w) or nil
     local gd_trace=native_probe and C3.gd_evidence(w,bone,RawDamage,CuttingPower,DrawCut,PainRate,Inside,LowerThreshold,DamageApplied) or nil
     if pv(Inside)==true then
+        local admitted=C3.inside_diag_admit()
+        local resolved;pcall(function()resolved=C3.inside_resolve(w,pv(HitByComponent),pv(bone),pv(DamagedMesh),admitted)end)
         pcall(C3.inside_journal,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(HitBox),
-            pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(ApplyBoneChange))
+            pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(ApplyBoneChange),resolved or false,admitted)
         pcall(C3.inside_forward,w,pv(HitByComponent),pv(bone),pv(DamagedMesh),pv(Location),
             pv(RawDamage),pv(CuttingPower),pv(DrawCut),pv(PainRate),pv(LowerThreshold),pv(Shockwave),
-            pv(Flesh),pv(ApplyBoneChange),pv(DismBlunt),pv(Normal),pv(Impulse),pv(Velocity),native_probe,gd_trace)
+            pv(Flesh),pv(ApplyBoneChange),pv(DismBlunt),pv(Normal),pv(Impulse),pv(Velocity),native_probe,gd_trace,resolved or false)
     elseif native_probe then
         C3.probe_last={name=wname(w),at=now_ms(),bone=pv(bone):ToString(),source=addr_of(pv(HitByComponent)),text=native_probe,trace=gd_trace}
     end
@@ -1933,10 +1971,18 @@ end
 -- 2 Lower Threshold, 4 Shockwave, 8 Stab, 16 Hit Flesh.
 function C3.inside_send(rec)
     local parent=rec.parent
-    if not parent.cid then return false end
+    if not parent or not parent.cid or not C3.inside_scope_valid(rec.parent_context)
+        or not C3.stuck_resolver.parent_current(rec.parent_header,parent,rec.parent_context)then return false end
+    if rec.cid then return true end
     local probe,probe_attacker,evidence=rec.probe,rec.probe_attacker,rec.native_evidence
-    rec.parent=nil;rec.probe=nil;rec.probe_attacker=nil;rec.native_evidence=nil;rec.cid=cid_seq+1;rec.parent_cid=parent.cid
-    if not send_rec("damage",rec) then return false end
+    local wire={}
+    for k,v in pairs(rec)do
+        if k~="parent" and k~="parent_header" and k~="parent_context" and k~="probe"
+            and k~="probe_attacker" and k~="native_evidence"then wire[k]=v end
+    end
+    wire.cid=cid_seq+1;wire.parent_cid=parent.cid
+    if not send_rec("damage",wire) then return false end -- retain retry validation metadata
+    rec.cid=wire.cid;rec.parent_cid=wire.parent_cid
     cid_seq=cid_seq+1;claim_peer[cid_seq]=rec.target_peer_id
     if probe then Log("LAB_PROBE attacker=%d cid=%d parent_cid=%d bone=%s %s",probe_attacker or my_peer_id,cid_seq,parent.cid,rec.bone,probe) end
     if evidence then C3.log_native_evidence("probe",rec,probe_attacker or my_peer_id,evidence,cid_seq) end
@@ -1948,55 +1994,37 @@ function C3.inside_send(rec)
     return true
 end
 
-function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,stab,flesh,dism,nrm,imp,vel,probe,gd_trace)
-    if replaying or not combat_window or not coll or not coll:IsValid() then return end
-    local me=local_pawn()
-    local peer=puppet_peer[wname(w) or ""]
-    local mine,theirs=C3.life_for(my_peer_id,true),C3.displayed_for(peer,w)
-    if not me or not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return end
-    local weapon=coll:GetOwner()
-    if not weapon or not weapon:IsValid() or not same(weapon_parent(weapon),me) then return end
-    local bname=bone:ToString()
-    local parent,constraint_evidence
-    local arr=weapon["Stuck Constraints Array"]
-    if arr then arr:ForEach(function(_,entry)
-        local c=entry:get()
-        if not parent and c and c:IsValid() and same(c["My Weapon"],weapon) and same(c["Hit Actor"],w)
-            and same(c["Weapon Hit Module"],coll) and same(c["Component 2 (Body)"],mesh)
-            and c["Bone Name 2"]:ToString()==bname then
-            parent=C3.stuck_parent and C3.stuck_parent[c:GetFullName()]
-            if C3.native_probe then
-                local rows={"constraint="..c:GetFullName():gsub("%s","_")}
-                for _,key in ipairs({"Material Density","Distance","Draw Cut","Edge Sharpness","Tip Sharpness","Thrust?","Stuck In Bone","Spikes (temp)"}) do
-                    local value;pcall(function() value=c[key] end)
-                    rows[#rows+1]=key:gsub("%W","_").."="..C3.native_scalar(value)
-                end
-                constraint_evidence=table.concat(rows," ")
-            end
-        end
-    end) end
-    local source,ordinal=BF.source(coll,me)
-    if not (parent and ordinal and source==parent.source and parent.match_id==mine.match_id
-        and parent.round==mine.round and parent.attacker_life==mine.life and parent.victim_life==theirs.life) then
+function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,stab,flesh,dism,nrm,imp,vel,probe,gd_trace,resolution)
+    local r=resolution;if r==nil then r=C3.inside_resolve(w,coll,bone,mesh,false)end
+    if type(r)~="table" or not r.complete or r.state~="unique" or not C3.inside_scope_valid(r.context)then
         CX.inside_orphans=(CX.inside_orphans or 0)+1
         if CX.inside_orphans<=5 or CX.inside_orphans%200==0 then
-            Log("stuck-blade call not forwarded: no claimed parent hit for this constraint (#%d)",CX.inside_orphans)
+            Log("stuck-blade call not forwarded: membership/parent unavailable or ambiguous (#%d)",CX.inside_orphans)
         end
         return
     end
+    local context,weapon=C3.inside_context(w,coll,bone,mesh)
+    local q={context=context,world=context and context.native_world,weapon=weapon,collider=coll,victim=w,body=mesh}
+    local guard=function()return C3.inside_scope_valid(r.context)end
+    if not C3.stuck_resolver.current(q,r,guard)then return end
+    local c,parent=r.context,r.parent
+    local bname=c.bone
     local function b(v,n) return v==true and n or 0 end
     local flags=1+b(lower,2)+b(shock,4)+b(stab,8)+b(flesh,16)+BF.WEAPON
     local bp=bone_pos(mesh,bname)
     if not bp then return end -- No invented bone origin for a native continuation.
+    if not C3.stuck_resolver.current(q,r,guard)then return end
     local at=vec(loc)
+    local constraint_evidence=r.constraint and ("constraint="..r.constraint.name:gsub("%s","_").." "..(r.evidence or "details=unavailable"))
+        or "constraint=unavailable:multiple_memberships"
     local rec={
-        parent=parent,target_peer_id=peer,lage_ms=0,
+        parent=parent,parent_header=r.header,parent_context=r.parent_context,target_peer_id=c.victim_peer,lage_ms=0,
         probe=probe,probe_attacker=my_peer_id,
-        native_evidence=C3.native_probe and ("gd="..(gd_trace or "unavailable").." "..(constraint_evidence or "constraint=unavailable")) or nil,
-        match_id=mine.match_id,round=mine.round,attacker_life=mine.life,victim_life=theirs.life,
+        native_evidence=C3.native_probe and ("gd="..(gd_trace or "unavailable").." "..constraint_evidence.." lineage=candidate_only") or nil,
+        match_id=c.match_id,round=c.round,attacker_life=c.attacker_life,victim_life=c.victim_life,
         source_class=parent.source_class,hit_box_frame={0,0,0,0,0,0,0,0,0,0,0,0,0},
-        attacker_ts=parent.ats or 0,victim_view_ts=parent.vts or 0,victim_arm_ts=parent.vats or 0,
-        dism_blunt=math.max(0,math.min(255,math.floor(num(dism))))+source,raw_damage=num(raw),cutting_power=num(cut),
+        attacker_ts=parent.ats,victim_view_ts=parent.vts,victim_arm_ts=parent.vats,
+        dism_blunt=math.max(0,math.min(255,math.floor(num(dism))))+c.source,raw_damage=num(raw),cutting_power=num(cut),
         pain_rate=num(pain),draw_cut=num(draw),damage_out=0,
         offset={at[1]-bp[1],at[2]-bp[2],at[3]-bp[3]},location=at,
         impulse=imp and vec(imp) or {0,0,0},velocity=vel and vec(vel) or {0,0,0},
