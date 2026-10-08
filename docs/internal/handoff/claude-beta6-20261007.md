@@ -1308,3 +1308,70 @@ absent-right behaviour is unchanged and remains a separate parity limitation.
 Final Astra source and production-fixture review approved the clean checkpoint.
 Native grip binding, mass stability and physical readiness remain pending the
 matching native32 run.
+
+### Native32: empty-left verified, physical and replay gaps remain
+
+Clean `ea9ecf738f1e39d3b0447be796abe1afdbcd7797` passes strict G0
+(62 Lua suites, 96 parses, 1,279 Rust tests / 75 binaries, clippy no errors /
+two warnings), with a matching full native/Rust/mod deployment. Session:
+`test-results/lab/native-20261008-32`; raw:
+`test-results/20261008-084604-53d186-combat_manual`. Both windows were on
+DISPLAY1 at x=-1760/-880, 880x527. HAND/GRIP were bounded opt-ins; expensive
+caller/body/armour/localdamage probes stayed off.
+
+Remote L is now genuinely None: initial dressing reports R=ok L=none and
+weapon-state capture no longer finds a generated Fists L. However proxies
+still resolve R14 to R3, with twohand/offhand false and no valid current L
+constraint. Initial owner1 also loses offhand while retaining R14; owner2
+retains it. Round2 owners have R14 and both flags true, proxies remain R3.
+Cooked native Tick requires Arm L Tonus>0.25 OR an existing offhand attachment
+to retain the two-handed default; Avatar neutralisation zeros that tone.
+Source controls carry tone/grip data but Avatar does not consume them. This is
+a semantic mismatch mechanism, not proof that restoring one scalar fixes the
+limb fault. Both proxies share the mismatch, yet only one initially stalls.
+
+Initial round1 failed physical readiness after successful placement; round2
+reached Live. Pending HAND now honestly captures the failed initial interval:
+source/display round1/life1 and current Session spawn256, actual Mode round0 /
+life0, qualification=false and authority=false. Groups7–9 show lowerarm_l
+returned-world versus aim error175.26–175.39 degrees, while decoded-to-aim
+differs only0.044–0.141 degrees. Astra recomputed group7's existing servo:
+with dt approximately1/60 and correction cap900, post-driver angular velocity
+matches the intended output within about0.00008 degrees/s. That proves this
+sample's write/readback, not next-step integration or physical body/frame
+equivalence. Next diagnostic must observe exact limb constraints and fresh
+PhysicalAnimation state, preserving all scope checks and existing policy.
+
+Repeated-death subcheck completed four respawns (14,840 / 11,888 / 12,299 /
+12,903ms), then failed its35-second physical readiness wait. Full modes,
+HUD/control acceptance and release gates remain NOT RUN. Two completed cloth
+120s recipes report honest acceptance250/291=0.8591 and264/309=0.8544;
+rotation means25.01 /29.49deg, maxima46.72 /105.35deg (27 /45 samples), with
+zero clock resets across22 windows each. The plate90s recipe reports
+484/504=0.9603 acceptance; rotation mean32.71deg /max121.84deg (123 samples),
+clock-reset rate mean0.597/max11.950 across20 windows. These fail agreed
+combat/pose bounds; no recipe certifies native damage parity.
+
+Actual wire evidence confirms an ongoing Inside geometry loss: parent56
+contains its complete13-field cutting Box frame, flags224, ordinal12 and
+collider10. Children58–60 retain collider10 but transmit all13 Box values as
+zero, despite observed current constraint Box frames with extents6/1/10.
+Those child positions/rotations change, so the parent frame cannot substitute.
+Native initial Inside passes None; ongoing Inside passes its constraint Box.
+Owner replay still changes injury on some boxed children, so this is a proven
+lost native input/area branch, not a blanket claim of no damage. Current
+schema/server contracts reject continuation Box representation; coordinated
+changes require exact constraint-owned Box and callback proof first.
+
+The formal reader correction reaches actual native enrollment twice:
+08:58:33.890 and09:01:06.676 (inst1 peer2/r). Both captures stop on playback
+qualification after roughly46/58ms, with zero qualified pairs. There is no
+new formal-parameter refusal, but serial/callback ordering/extent qualification
+remain unproved. Split the generic playback refusal into exact observed
+failure fields without loosening its250ms/current-life guard.
+
+Normal menu QuitGame09:03:36, zero new crashes/orphans/forced game kills.
+Limited combat_manual DoD12 PASS does not override the failures above. No
+main/PR/tag/release action. Native33 preparation is read-only bounded limb/PA
+and playback-refusal diagnostics; no guessed remap, forced grip flags,
+unverified PhysicsObject/GetCurrentJointAngles, or wider damage change.
