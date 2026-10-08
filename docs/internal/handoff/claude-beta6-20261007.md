@@ -1375,3 +1375,32 @@ Limited combat_manual DoD12 PASS does not override the failures above. No
 main/PR/tag/release action. Native33 preparation is read-only bounded limb/PA
 and playback-refusal diagnostics; no guessed remap, forced grip flags,
 unverified PhysicsObject/GetCurrentJointAngles, or wider damage change.
+
+### Native33 diagnostic checkpoint preparation
+
+Committed `b14ce975` preserves Box enrollment predicates while replacing generic
+playback refusals with exact missing/time/pawn/match/round/life reasons. At most
+32 bounded text rows report independently available actual/expected fields and
+signed age. Astra approved both source files; root independently passes212
+assertions and two parses. Neither46ms nor58ms Native32 stop can be attributed
+to a specific predicate from the old logs, so no reason is guessed.
+
+The four-file limb diagnostic is frozen with430 root-verified assertions
+(Avatar386/helper44) and four parses. It requires HSMP_DEV=1 and
+HSMP_LIMB_BURST_PROBE=1, attempts at most24 admissions, and records one
+three-drive burst of at most12 phase rows over500ms. It uses current verified
+constraint accessors14/15/16 and their exact endpoints, assets, limits and
+drive settings, plus fresh PhysicalAnimation/Phys Anim Array bindings and
+strength compared with scalar IDs captured at fresh body construction.
+It logs actual computed driver parameters and separately available native
+ReceiveTick DeltaSeconds, without claiming a physics boundary or render FPS.
+Unavailable APIs/fields stay unavailable; optional read/log failures cannot
+interrupt the normal driver. Fresh PC world precedes old object access, and
+mesh/world changes during a read prevent writing through earlier wrappers.
+The default path adds no diagnostic parameter allocations, setters or policy
+change. A failed or throwing current-scope check latches the burst closed;
+getter/accessor and PA guards prevent later reads even if a synthetic scope
+appears healthy again. False/throw/recovery regressions prove zero subsequent
+old reads and no mixed row. Final Astra review approved the four-file source;
+native output usefulness and rigid-body authority remain unproved until the
+matching Native33 capture.

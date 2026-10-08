@@ -41,6 +41,16 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "hand_pipeline" })
     T.isolated(T.script, "case", { kind = "hand_pipeline", gate = "off" })
     T.isolated(T.script, "case", { kind = "hand_pipeline", gate = "no_dev" })
+    T.isolated(T.script, "case", { kind = "limb_burst" })
+    T.isolated(T.script, "case", { kind = "limb_burst", gate = "off" })
+    T.isolated(T.script, "case", { kind = "limb_burst", gate = "no_dev" })
+    T.isolated(T.script, "case", { kind = "limb_burst", change = "mesh" })
+    T.isolated(T.script, "case", { kind = "limb_burst", change = "world" })
+    T.isolated(T.script, "case", { kind = "limb_burst", change = "logging" })
+    T.isolated(T.script, "case", { kind = "limb_burst", change = "admission_mesh" })
+    T.isolated(T.script, "case", { kind = "limb_burst", change = "admission_world" })
+    T.isolated(T.script, "case", { kind = "limb_burst", change = "mode_unavailable" })
+    T.isolated(T.script, "case", { kind = "limb_burst", change = "pc_world" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "clock_epoch" })
@@ -69,9 +79,10 @@ end
 
 local function boot(register_ok)
     M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_SEVERED_PHYSICS = opts.severed_physics,
-        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or (opts.kind=="grip_probe" or opts.kind=="hand_pipeline") and opts.gate~="no_dev") and "1" or "0",
+        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or (opts.kind=="grip_probe" or opts.kind=="hand_pipeline" or opts.kind=="limb_burst") and opts.gate~="no_dev") and "1" or "0",
         HSMP_GRIP_PROBE = opts.kind=="grip_probe" and opts.gate~="off" and "1" or "0",
-        HSMP_HAND_PIPELINE_PROBE = opts.kind=="hand_pipeline" and opts.gate~="off" and "1" or "0" }, strict = true })
+        HSMP_HAND_PIPELINE_PROBE = opts.kind=="hand_pipeline" and opts.gate~="off" and "1" or "0",
+        HSMP_LIMB_BURST_PROBE = opts.kind=="limb_burst" and opts.gate~="off" and "1" or "0" }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -1550,10 +1561,14 @@ if opts.kind == "body_scale" then
         "a later owner geometry change invalidates a running servo too")
 end
 
-if opts.kind=="hand_pipeline"then
+if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"then
     T.write(sd.."/.settings.json",'{"avatars":true,"native_neutralise":false,"native_servo":false}\n')
     local api=boot(true);local PX,P=api.PX,api.PURE
     if opts.gate then
+        if opts.kind=="limb_burst"then
+            T.check(not PX.LIMB_BURST and PX.limb_burst_row(nil)==nil,"limb burst requires developer mode and explicit flag")
+            return
+        end
         T.check(not PX.HAND_PIPELINE_PROBE and PX.hand_pipeline_begin(nil,nil,nil,nil)==nil and PX.hand_pipeline_state==nil,
             "hand pipeline requires both developer mode and explicit opt-in before optional reads")
         return
@@ -1609,6 +1624,109 @@ if opts.kind=="hand_pipeline"then
         M.now=now;cur.seq=cur.seq+1;cur.pt,cur.read_at=now,now;PX.frame_no=(PX.frame_no or 0)+1
         cur.slots[13][1]=cur.seq-1
         api.drive_v2(2,p,body,cur,true,now,false,false)
+    end
+    if opts.kind=="limb_burst"then
+        cur.slots[17][6],cur.slots[17][7]=0,1 -- only the measured left hand is faulted.
+        M.Methods.GetSocketTransform=function(_,bone,space)
+            sockets=sockets+1;assert(space==0);return {Translation={X=0,Y=0,Z=0},Rotation={X=0,Y=0,Z=0,W=1}}
+        end
+        local pa=M.new_obj("PhysicalAnimationComponent","OLD_PA");rawset(pa,"__addr",9941)
+        pa.__props.Owner=actor;pa.__props.SkeletalMeshComponent=mesh;pa.__props.StrengthMultiplyer=0
+        local fresh=M.new_obj("PhysicalAnimationComponent","FRESH_PA");rawset(fresh,"__addr",9942)
+        fresh.__props.Owner=actor;fresh.__props.SkeletalMeshComponent=mesh;fresh.__props.StrengthMultiplyer=2
+        body.motors={pa};body.motor_ids={{address=9941,name="OLD_PA"}}
+        actor.__props.PhysicalAnimation=fresh
+        actor.__props["Phys Anim Array"]={fresh,ForEach=function(_,f)f(nil,{get=function()return fresh end})end}
+        actor.__props.DriverSkeleton=M.new_obj("SkeletalMeshComponent","DRIVER_MESH")
+        actor.__props.DriverSkeleton.__props.Owner=actor
+        M.Methods.SetStrengthMultiplyer=function(o,v)o.__props.StrengthMultiplyer=v end
+        local limb_records={}
+        PX.LIMB_BURST=PX.LIMB_BURST_MODULE.new(function(r)limb_records[#limb_records+1]=r end)
+        drive(1000);drive(1016)
+        T.check(#limb_records==0 and p.settle_state.settle_rot_deg>10,"existing actual driver error triggers diagnostic without onset native reads")
+        local before=writes
+        if opts.change=="logging"then PX.LIMB_BURST=PX.LIMB_BURST_MODULE.new(function()error("log unavailable")end)end
+        if opts.change=="admission_mesh"or opts.change=="admission_world"then
+            local info=HSMP_IPC.N.ipc_info
+            HSMP_IPC.N.ipc_info=function()
+                if opts.change=="admission_mesh"then
+                    local replacement=M.new_obj("SkeletalMeshComponent","EARLY_REPLACED_MESH");rawset(replacement,"__addr",9990)
+                    replacement.__props.Owner=actor;actor.__props.Mesh=replacement
+                else actor.__props.NativeWorld=M.new_obj("World","EARLY_FOREIGN_WORLD");rawset(actor.__props.NativeWorld,"__addr",9991)end
+                return info()
+            end
+        elseif opts.change=="mode_unavailable"then HSMPNative._rec.slots.mode=nil end
+        local original_velocity=M.Methods.GetPhysicsAngularVelocityInDegrees
+        local changed=false
+        local old_touches=0
+        local native_world=M.Methods.GetWorld
+        if opts.change=="pc_world"then
+            M.Methods.GetWorld=function(o)
+                if changed and o==actor then old_touches=old_touches+1 end
+                return native_world(o)
+            end
+            local socket=M.Methods.GetSocketTransform
+            M.Methods.GetSocketTransform=function(...)
+                if changed then old_touches=old_touches+1 end
+                return socket(...)
+            end
+        end
+        M.Methods.GetPhysicsAngularVelocityInDegrees=function(...)
+            if not changed and opts.change=="mesh"then
+                changed=true;local replacement=M.new_obj("SkeletalMeshComponent","REPLACED_MESH");rawset(replacement,"__addr",9990)
+                replacement.__props.Owner=actor;actor.__props.Mesh=replacement
+            elseif not changed and opts.change=="world"then
+                changed=true;actor.__props.NativeWorld=M.new_obj("World","FOREIGN_WORLD");rawset(actor.__props.NativeWorld,"__addr",9991)
+            elseif not changed and opts.change=="pc_world"then
+                changed=true;M.pc.__props.NativeWorld=M.new_obj("World","NEW_PC_WORLD");rawset(M.pc.__props.NativeWorld,"__addr",9991)
+            end
+            return original_velocity(...)
+        end
+        drive(1032)
+        if opts.change=="pc_world"then
+            T.check(writes==before and #limb_records==0 and old_touches==0,
+                "changed PC world with valid old actor is rejected before another old-body read or writer")
+            return
+        end
+        if opts.change=="admission_mesh"or opts.change=="admission_world"then
+            T.check(writes==before and #limb_records==0,"early admission "..opts.change.." replacement aborts old-body writer despite unavailable audit")
+            return
+        elseif opts.change=="mode_unavailable"then
+            T.check(writes==before+12 and #limb_records==0,"unavailable diagnostic Mode does not introduce a new normal physical eligibility gate")
+            return
+        end
+        if opts.change=="mesh"or opts.change=="world"then
+            T.check(writes==before and PX.LIMB_BURST.closed and #limb_records==0,
+                "actual "..opts.change.." replacement during optional read aborts existing driver before stale writes")
+            return
+        elseif opts.change=="logging"then
+            T.check(writes==before+12,"diagnostic emit exception remains contained and normal driver continues under fresh scope")
+            return
+        end
+        local r=limb_records[1]
+        T.check(r and r.phase=="pre_driver"and r.params.dt_s==0.0167 and r.params.gain==0.3 and r.params.cap_ang==900
+            and r.params.holding==false and r.audit.mode_life==2,"actual production capture copies computed driver parameters and raw current Mode",T.repr(r))
+        T.check(#limb_records==2 and limb_records[2].phase=="post_driver"and limb_records[2].params.native_servo==false,
+            "existing Lua setter boundary creates two ordered actual phase records")
+        if not r then return end
+        T.check(r.physical_animation.available and r.physical_animation.value.entries[1].cached==false
+            and r.physical_animation.value.entries[1].binding.value.strength==2,
+            "fresh uncached PA remains visibly nonzero in read-only evidence")
+        api.set_driven(p)
+        local hook=M.hooks["/Game/Character/Blueprints/Willie_BP.Willie_BP_C:ReceiveTick"]
+        hook.callback({get=function()return actor end},{get=function()return 0.024 end})
+        T.check(#limb_records==4 and limb_records[3].phase=="bp_post"and limb_records[4].phase=="policy_post"
+            and limb_records[3].params.receive_tick_delta_s==0.024 and limb_records[3].params.receive_tick_delta_available,
+            "actual registered Blueprint POST and existing policy capture validated native DeltaSeconds separately")
+        T.check(limb_records[4].physical_animation.value.entries[1].binding.value.strength==2
+            and pa.__props.StrengthMultiplyer==0,"diagnostic never repairs a fresh component absent from original policy cache")
+        drive(1048);hook.callback({get=function()return actor end},0.017)
+        drive(1064);hook.callback({get=function()return actor end},nil)
+        T.check(#limb_records==12 and limb_records[9].source_seq>limb_records[1].source_seq
+            and not limb_records[11].params.receive_tick_delta_available,"three real driver frames preserve advancing source seq and unavailable callback delta")
+        local count=velocity_reads;drive(1080);hook.callback({get=function()return actor end},0.017)
+        T.check(#limb_records==12 and velocity_reads==count,"fourth drive/BP callback perform no optional native reads")
+        return
     end
     drive(1000)
     local r=records[1]

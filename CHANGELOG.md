@@ -17,6 +17,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Add bounded developer captures for limb constraints and current animation-drive
+  components, and precise playback refusal details for native damage observations.
 - Preserve a truly empty remote left hand instead of creating a fist weapon,
   retaining native polearm offhand setup. Recovery separates refused calls from
   attempted native operations to avoid repeating uncertain mass changes.

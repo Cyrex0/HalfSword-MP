@@ -651,11 +651,19 @@ local function puppet_body(p)
         if idx and idx >= 0 then bones[#bones + 1] = bn end
     end
     local motors = {}
+    local motor_ids=os.getenv("HSMP_DEV")=="1"and os.getenv("HSMP_LIMB_BURST_PROBE")=="1"and {}or nil
     pcall(function() local pa = actor.PhysicalAnimation; if pa and pa:IsValid() then motors[#motors + 1] = pa end end)
     pcall(function()
         local arr = actor["Phys Anim Array"]
         if arr then arr:ForEach(function(_, e) local pa = e:get(); if pa and pa:IsValid() then motors[#motors + 1] = pa end end) end
     end)
+    if motor_ids and #motors>8 then motor_ids=nil end
+    if motor_ids then
+        for _,pa in ipairs(motors)do
+            local ok,id=pcall(function()return {address=pa:GetAddress(),name=pa:GetFName():ToString()}end)
+            if ok then motor_ids[#motor_ids+1]=id else motor_ids=nil;break end
+        end
+    end
     -- Reuse handle components across re-claims of the same actor (they are
     -- real components on it; creating new ones each time would leak).
     local key; pcall(function() key = actor:GetAddress() end)
@@ -665,7 +673,7 @@ local function puppet_body(p)
     local lens, nlens = measure_lengths(pick)
     local mesh_addr,mesh_fname
     pcall(function()mesh_addr=pick:GetAddress();mesh_fname=pick:GetFName():ToString()end)
-    p.body = { mesh = pick, field = field_name, sims = sims, bones = bones, motors = motors,
+    p.body = { mesh = pick, field = field_name, sims = sims, bones = bones, motors = motors,motor_ids=motor_ids,
                mesh_addr=mesh_addr,mesh_fname=mesh_fname,
                handles = hs.bones, wpn = hs.wpn, cache = hs, ctl = nil, snaps = 0,
                lens = lens, err_since = nil, made_at = now_ms(), stiff = stiff_mult }
@@ -1436,6 +1444,10 @@ end
 -- Current c7 is the existing World-space socket return, not a joint/body angle.
 PX.HAND_PIPELINE_PROBE=os.getenv("HSMP_DEV")=="1" and os.getenv("HSMP_HAND_PIPELINE_PROBE")=="1"
 PX.HAND_PIPELINE_SLOTS={11,12,13,15,16,17} -- upperarms anchor the two forearm parents
+PX.LIMB_BURST_MODULE=os.getenv("HSMP_DEV")=="1" and os.getenv("HSMP_LIMB_BURST_PROBE")=="1" and load_module("limb_burst_probe") or nil
+PX.LIMB_BURST=PX.LIMB_BURST_MODULE and PX.LIMB_BURST_MODULE.new(function(row)
+    if HL and HL.encode then Log("LIMBBURST %s",HL.encode(row))end
+end)or nil
 function PX.hand_pipeline_copy(v,n)
     local ok,out=pcall(function()
         if type(v)~="table"then return nil end
@@ -1517,6 +1529,57 @@ function PX.hand_pipeline_current(q)
     for k,v in pairs(a)do if q.audit[k]~=v then return false end end
     for k,v in pairs(q.audit)do if a[k]~=v then return false end end
     return true
+end
+function PX.limb_writer_current(q)
+    local ok,valid=pcall(function()
+        local _,wid=world_identity(local_pc())
+        if not wid or tostring(world_gen).."|"..wid~=q.world then return false end
+        local p=q.p
+        if p.actor~=q.actor or not p.driving or p.gen~=world_gen or cache_gen~=world_gen
+            or cache_world~=q.world or world_gen~=q.generation then return false end
+        local source,shown=p.last,p.shown or p.applied_context
+        if not source or not shown or source.seq~=q.source_seq or source.cut~=q.source_cut or shown.pawn~=q.pawn.name then return false end
+        for _,k in ipairs({"match_id","round","life"})do if source[k]~=q[k]or shown[k]~=q[k]then return false end end
+        local mesh=PX.injury_mesh(p)
+        return mesh~=nil and PX.grip_probe_same(PX.grip_probe_id(q.actor),q.pawn)
+            and PX.grip_probe_same(PX.grip_probe_id(mesh),q.body)and PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),q.pawn)
+    end)
+    return ok and valid==true
+end
+function PX.limb_burst_row(p,phase,params,aim)
+    local probe=PX.LIMB_BURST
+    if not probe or not p or not probe:attempt(p.settle_state,now_ms())then return nil,true end
+    local cur,body,shown=p.last,p.body,p.shown or p.applied_context
+    if not cur or not body or not shown or cur.has_context~=true or (cur.mode~="interp"and cur.mode~="extrap")
+        or type(cur.age)~="number"or cur.age~=cur.age or math.abs(cur.age)>250 then return nil,true end
+    if not probe.key then
+        local fault=p.settle_state
+        if not fault or fault.match_id~=cur.match_id or fault.round~=cur.round or fault.life~=cur.life
+            or fault.pawn~=shown.pawn or fault.world~=PX.settle_world or fault.cut~=cur.cut then return nil,true end
+    end
+    local q={actor=p.actor,p=p,pawn={address=p.addr,name=shown.pawn},body={address=body.mesh_addr,name=body.mesh_fname},
+        peer=p.peer,world=cache_world,generation=world_gen,match_id=cur.match_id,round=cur.round,life=cur.life,
+        cut=shown.cut,source_cut=cur.cut,source_seq=cur.seq,display={match_id=shown.match_id,round=shown.round,life=shown.life,cut=shown.cut}}
+    q.audit=PX.hand_pipeline_scope(q)
+    if not q.audit then
+        pcall(Log,"LIMBBURST refused inst=%s phase=%s reason=diagnostic_scope_unavailable",os.getenv("HSMP_INST")or "unavailable",phase)
+        return nil,PX.limb_writer_current(q)
+    end
+    local context={instance=os.getenv("HSMP_INST")or "unavailable",pawn=q.pawn,mesh=q.body,world=q.world,generation=q.generation,
+        peer=q.peer,match_id=q.match_id,round=q.round,life=q.life,source_cut=q.source_cut,source_seq=q.source_seq,
+        source_mode=cur.mode,source_age=cur.age,source_pt=cur.pt,at=now_ms(),frame=PX.frame_no or 0,audit=q.audit}
+    local mesh=PX.injury_mesh(p);if not mesh then return nil,false end
+    local library
+    pcall(function()library=StaticFindObject("/Script/Engine.Default__ConstraintInstanceBlueprintLibrary")end)
+    local prior=p.aim
+    local ok,record=pcall(probe.capture,probe,context,phase,{actor=p.actor,mesh=mesh,library=library,cached=body.motor_ids,fname=fname,
+        current=function()return PX.hand_pipeline_current(q)end,
+        pose=function(bone)
+            local i=bone=="upperarm_l"and 11 or bone=="lowerarm_l"and 12 or 13
+            return {decoded=cur.slots[i],aim=aim and aim[i],prior=prior and prior.slots and prior.slots[i]}
+        end},params,p.settle_state)
+    if not ok then pcall(Log,"LIMBBURST refused inst=%s phase=%s reason=capture_exception",context.instance,phase)end
+    return ok and record or nil,PX.limb_writer_current(q)
 end
 function PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
     if not PX.HAND_PIPELINE_PROBE then return nil end
@@ -3635,6 +3698,13 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     end
     PX.injury_targets(id,p,targets,aim)
     local hand_pipeline=PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
+    local limb_params
+    if PX.LIMB_BURST then
+        limb_params={dt_s=dt,gain=s_gain,cap_lin=s_capl,cap_ang=s_capa,holding=holding==true,yielding=yl~=nil,
+            ramp=body.ramp_at~=nil,ramp_at=body.ramp_at,driver_ms=now}
+        local _,current=PX.limb_burst_row(p,"pre_driver",limb_params,aim)
+        if current==false then return end -- optional reads changed the exact body; never write the earlier wrapper.
+    end
     local nat = PX.ns_bodies(mesh, aim, sv, dt, s_capl, s_capa, s_gain, yl, holding)   -- native servo
     if PX.SETTLE then
         p.settle_state=PX.SETTLE.begin(p.settle_state,PX.settle_world,p.shown,p.aim,cur,now)
@@ -3984,6 +4054,11 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 p.settle_state.settle_pos_uu,p.settle_state.settle_rot_deg,p.settle_state.settle_stable_ms,
                 tostring(p.settle_state.settle_source_seq),tostring(p.settle_state.settle_source_ts))
         end
+    end
+    if limb_params then
+        limb_params.native_servo=nat~=nil
+        local _,current=PX.limb_burst_row(p,"post_driver",limb_params,aim)
+        if current==false then return end
     end
     p.aim = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), aim_label, now)
     p.aim.world,p.aim.cut,p.aim.seq=PX.settle_world,cur.cut,cur.seq
@@ -4965,7 +5040,7 @@ hook_note[#hook_note + 1] = "EndPlay=" .. tostring(ok_end)
 -- Pinned UE4SS script hooks execute argument #2 AFTER the Blueprint; the
 -- native-only third callback slot is ignored for this non-native function.
 tick_hook.FN = "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:ReceiveTick"
-function tick_hook.post(ctx)
+function tick_hook.post(ctx,delta_seconds)
     if next(_driven) == nil and not PX.GRIP_PROBE or cache_gen ~= world_gen then return end
     local hook_started=PX.GRIP_PROBE and os.clock() or nil
     pcall(function()
@@ -5002,7 +5077,19 @@ function tick_hook.post(ctx)
             if not mesh then return end
         end
         PX.hook_hits=(PX.hook_hits or 0)+1
+        local limb_bp
+        if PX.LIMB_BURST then
+            limb_bp={receive_tick_delta_available=false}
+            local ok,value=pcall(function()return type(delta_seconds)=="number"and delta_seconds or delta_seconds:get()end)
+            if ok and type(value)=="number"and value==value and value>0 and value<math.huge then
+                limb_bp.receive_tick_delta_available=true;limb_bp.receive_tick_delta_s=value
+            end
+            local _,current=PX.limb_burst_row(p,"bp_post",limb_bp)
+            if current==false then return end
+            mesh=PX.injury_mesh(p);if not mesh then return end
+        end
         neutralise_bp(p, {mesh=mesh,motors=body.motors}) -- current wrapper, no retained body-mesh access
+        if limb_bp then PX.limb_burst_row(p,"policy_post",limb_bp)end
         if q then
             local after,after_why=PX.grip_probe_capture(q,"post_policy")
             PX.grip_probe_emit(before,before_why,q,"post_bp")
