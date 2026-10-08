@@ -20,6 +20,8 @@ struct Provider
     // Returns no role for a non-target function, without a global role/name lookup.
     bool (*key)(void* context,void* frame,Key&,Reason&);
     bool (*snapshot)(const Key&,void* frame,Snapshot&,Reason&);
+    // Optional bounded scalar detail for a failed enrollment, never runtime authority.
+    const char* (*enrollment_detail)(){};
 };
 }
 // ue4ss_reflect_box.cpp provides the pinned host; tests supply a bounded fake.

@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include "lua.hpp"
 #include "box_snapshot_probe.h"
 namespace
@@ -11,6 +12,8 @@ namespace
 using namespace hsmp_box;
 unsigned checks{}, reads{}, keys{}, enrolls{}, submissions{};
 bool good_thread=true, bad_enrollment{}, bad_snapshot{}, serial_zero{};
+const char* diagnostic{};
+const char* enrollment_detail() { return diagnostic; }
 std::uint64_t time_ms=1000;
 Sink callback{};
 Scope scoped{};
@@ -43,7 +46,7 @@ bool snapshot(const Key& k,void* frame,Snapshot& out,Reason& why)
     if (f.wrong_box) { why=Reason::Params; return false; } // Foreign formal never dereferenced.
     out={scoped,id(k.node),{f.x,f.y,f.z},true,Reason::None}; return true;
 }
-const Provider fake{on_thread,now,enroll,submit,key,snapshot};
+const Provider fake{on_thread,now,enroll,submit,key,snapshot,enrollment_detail};
 void check(bool ok,const char* message)
 { ++checks; if (!ok) { std::fprintf(stderr,"FAIL %s\n",message); std::exit(1); } }
 void lua(lua_State* L,const char* code)
@@ -140,7 +143,16 @@ int main()
     lua(L,start); event(1,outer); good_thread=false; previous=keys; event(2,outer);
     check(keys==previous,"foreign thread callback never reads FFrame"); good_thread=true;
     lua(L,"assert(not N.status().active and N.status().reason=='game thread unavailable' and #N.read()==0)");
-    lua(L,start); bad_enrollment=true; lua(L,"assert(N.begin(a)==nil and not N.status().active)"); bad_enrollment=false;
+    lua(L,start); bad_enrollment=true; lua(L,"assert(N.begin(a)==nil and not N.status().active)");
+    diagnostic="stage=gd_hit_box failure=children_limit children=1070";
+    previous=submissions;
+    lua(L,"local ok,why=N.begin(a); assert(ok==nil and why=='identity unavailable [stage=gd_hit_box failure=children_limit children=1070]' and not N.status().active)");
+    check(submissions==previous,"failed enrollment diagnostics never submit callbacks");
+    const std::string long_detail(1024,'x'); diagnostic=long_detail.c_str();
+    lua(L,"local ok,why=N.begin(a); assert(ok==nil and #why==#'identity unavailable ['+512+1)");
+    diagnostic=nullptr;
+    lua(L,"local ok,why=N.begin(a); assert(ok==nil and why=='identity unavailable')");
+    bad_enrollment=false;
     lua(L,"a.duration_ms=15001; assert(N.begin(a)==nil); a.duration_ms=15000; a.calls=33; assert(N.begin(a)==nil)");
     lua(L,"a.calls=32; a.pawn.address=1.5; assert(N.begin(a)==nil); a.pawn.address=2; a.pawn.path='/pawn'..string.char(0)..'x'; assert(N.begin(a)==nil)");
     lua(L,start); lua(L,"assert(N.stop()==true and not N.status().active)");

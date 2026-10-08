@@ -140,6 +140,10 @@ set_target_properties(harness PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${HARNESS}" RUNTIME_OUTPUT_DIRECTORY_RELEASE "${HARNESS}")
 
 enable_testing()
+add_executable(box_formal cpp/test/box_formal.cpp)
+target_include_directories(box_formal PRIVATE cpp/src)
+target_compile_options(box_formal PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+add_test(NAME box_formal COMMAND box_formal)
 add_executable(box_snapshot_probe cpp/test/box_snapshot_probe.cpp cpp/src/box_snapshot_probe.cpp)
 target_include_directories(box_snapshot_probe PRIVATE cpp/src)
 target_link_libraries(box_snapshot_probe PRIVATE lua_vm_host)

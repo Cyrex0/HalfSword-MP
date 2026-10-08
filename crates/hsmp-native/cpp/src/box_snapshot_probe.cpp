@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <cstring>
 #include <string>
 #include <limits>
 #include <atomic>
@@ -129,7 +130,17 @@ int begin_impl(lua_State* L)
     input.round=static_cast<std::uint32_t>(round); input.life=static_cast<std::uint32_t>(life);
     Scope enrolled{}; Reason why=Reason::Unavailable;
     // Re-enrollment must never leave an older binding active after a failed path/identity check.
-    if (!provider().enroll(input,enrolled,why) || !provider().submit(observe,why)) return unavailable(L,reason_name(why));
+    if (!provider().enroll(input,enrolled,why))
+    {
+        std::string reason=reason_name(why);
+        if (provider().enrollment_detail)
+        {
+            const char* detail=provider().enrollment_detail();
+            if (detail && *detail) { reason+=" ["; reason.append(detail,strnlen_s(detail,512)); reason+="]"; }
+        }
+        return unavailable(L,reason.c_str());
+    }
+    if (!provider().submit(observe,why)) return unavailable(L,reason_name(why));
     submitted=true;
     if (!state.begin(enrolled,provider().now_ms(),duration,static_cast<unsigned>(limit)))
         return unavailable(L,reason_name(Reason::BadInput));

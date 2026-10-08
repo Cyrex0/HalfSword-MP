@@ -3,7 +3,9 @@
 #define NOMINMAX
 #include <windows.h>
 #include <cstring>
+#include <cstdio>
 #include <functional>
+#include "box_formal.hpp"
 #include "box_snapshot_probe.h"
 #include "box_snapshot_exports.h"
 #include "hsmp_native.h"
@@ -34,8 +36,19 @@ std::uint64_t object_property{}, struct_property{}, vector_name{};
 Sink sink{};
 bool resolved{}, submitted{}, uncertain{};
 thread_local bool reading{};
-// Positive values from local CUE4Parse EPropertyFlags and pinned LuaMod formal-param use.
-constexpr std::uint64_t kParm=0x80, kOut=0x100, kReturn=0x400, kReference=0x08000000;
+const char* enrollment_stage="none";
+FormalDiagnostic formal_detail{};
+void stage(const char* name,const char* failure="unavailable")
+{ enrollment_stage=name; formal_detail={}; formal_detail.failure=failure; }
+const char* enrollment_detail()
+{
+    static char detail[512]{};
+    std::snprintf(detail,sizeof detail,
+        "stage=%s failure=%s children=%d copied=%d visited=%u storage=%d copied_storage=%d parms=%u offset=%d size=%d matches=%u",
+        enrollment_stage,formal_detail.failure,formal_detail.count,formal_detail.copied,formal_detail.visited,
+        formal_detail.storage,formal_detail.copied_storage,formal_detail.parms_size,formal_detail.offset,formal_detail.size,formal_detail.matches);
+    return detail;
+}
 std::uint64_t fname(const wchar_t* text) { return vt->fname(reinterpret_cast<const std::uint16_t*>(text),1); }
 void* find(const wchar_t* text) { return vt->find(reinterpret_cast<const std::uint16_t*>(text)); }
 bool pinned(HMODULE host)
@@ -108,34 +121,30 @@ bool property(void* obj,const wchar_t* name,HsmpProp& p,unsigned& size)
 }
 bool formal(void* f,const wchar_t* name,HsmpProp& p,unsigned size,bool returns=false)
 {
-    const auto wanted=fname(name);
-    HsmpProp props[512]{}; std::int32_t storage{};
-    const auto count=vt->props(f,props,512,&storage);
-    if (count<=0 || count>512 || storage<static_cast<std::int32_t>(size)) return false;
-    unsigned matches=0, i=0;
-    // The chain is activation-only. Refuse corruption/oversize rather than truncate to success.
-    for (void* field=*api.children(f);field;field=api.next(field))
+    struct Ops
     {
-        if (i>=static_cast<unsigned>(count)) return false;
-        const auto named=props[i++];
-        if (named.name != wanted) continue;
-        ++matches; p=named;
-        const bool parm=api.flags(field,kParm);
-        // A by-value native ReturnValue may carry OutParm as well as ReturnParm.
-        const bool indirect=api.flags(field,kReference) || (!returns && api.flags(field,kOut|kReturn));
-        if (!input_bounds(p.offset,p.size,size,p.cls==object_property,parm,indirect)
-            || (returns && !api.flags(field,kReturn))) return false;
-    }
-    return i==static_cast<unsigned>(count) && matches == 1;
+        std::int32_t props(void* object,HsmpProp* out,std::int32_t cap,std::int32_t* storage)
+        { return vt->props(object,out,cap,storage); }
+        void* first(void* object) { return *api.children(object); }
+        void* next(void* field) { return api.next(field); }
+        bool flags(void* field,std::uint64_t mask) { return api.flags(field,mask); }
+    } ops;
+    return read_formal(ops,f,fname(name),object_property,size,returns,p,formal_detail);
 }
-bool function(const wchar_t* path,Function& f,const wchar_t* mesh)
+bool function(const wchar_t* path,Function& f,const wchar_t* mesh,
+              const char* function_stage,const char* box_stage,const char* mesh_stage)
 {
+    stage(function_stage,"function_lookup");
     void* p=find(path); void* c=find(L"/Script/CoreUObject.Function");
     if (!p || !c || !vt->is_a(p,c)) return false;
     f.id=identity(p); auto* size=api.parms(p);
+    formal_detail.failure="function_identity_or_size";
     if (!f.id.present() || !size || *size == 0) return false;
     f.size=*size;
-    return formal(p,L"Hit Box",f.box,f.size) && formal(p,mesh,f.mesh,f.size);
+    stage(box_stage);
+    if (!formal(p,L"Hit Box",f.box,f.size)) return false;
+    stage(mesh_stage);
+    return formal(p,mesh,f.mesh,f.size);
 }
 void* object_at(void* object,const HsmpProp& field)
 {
@@ -163,8 +172,10 @@ bool scope_current(Reason& why)
 }
 bool enroll(const Enrollment& in,Scope& out,Reason& why)
 {
+    stage("initialize");
     if (!initialize()) { why=Reason::Unavailable; return false; }
     Scope s{}; s.match_id=in.match_id; s.round=in.round; s.life=in.life;
+    stage("scope_identity");
     if (!input_object(in.world,L"/Script/Engine.World",s.world)
         || !input_object(in.pawn,L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C",s.pawn)
         || !input_object(in.mesh,L"/Script/Engine.SkeletalMeshComponent",s.mesh)
@@ -172,21 +183,32 @@ bool enroll(const Enrollment& in,Scope& out,Reason& why)
         || !input_object(in.box_owner,L"/Script/Engine.Actor",s.box_owner) || !s.present())
     { why=Reason::Identity; return false; }
     auto* p=reinterpret_cast<void*>(s.pawn.address); auto* b=reinterpret_cast<void*>(s.box.address);
-    if (!property(p,L"Mesh",pawn_mesh,pawn_size) || pawn_mesh.cls!=object_property
-        || pawn_mesh.size!=sizeof(void*) || !property(b,L"BoxExtent",extent,box_size)
-        || extent.cls!=struct_property || extent.sub!=vector_name || (extent.size!=12 && extent.size!=24)
-        || !function(L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Deal Complex Damage",targets[0],L"Hit Component")
-        || !function(L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Get Damage",targets[1],L"Damaged Mesh"))
+    stage("pawn_mesh");
+    if (!property(p,L"Mesh",pawn_mesh,pawn_size) || pawn_mesh.cls!=object_property || pawn_mesh.size!=sizeof(void*))
     { why=Reason::Params; return false; }
+    stage("box_extent");
+    if (!property(b,L"BoxExtent",extent,box_size) || extent.cls!=struct_property
+        || extent.sub!=vector_name || (extent.size!=12 && extent.size!=24))
+    { why=Reason::Params; return false; }
+    if (!function(L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Deal Complex Damage",targets[0],L"Hit Component",
+                  "dcd_function","dcd_hit_box","dcd_hit_component")
+        || !function(L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Get Damage",targets[1],L"Damaged Mesh",
+                     "gd_function","gd_hit_box","gd_damaged_mesh"))
+    { why=Reason::Params; return false; }
+    stage("owner_function","function_lookup");
     void* own=find(L"/Script/Engine.ActorComponent:GetOwner");
     void* fn_class=find(L"/Script/CoreUObject.Function");
     if (!own || !fn_class || !vt->is_a(own,fn_class)) { why=Reason::Params; return false; }
     owner_function=identity(own); auto* os=own ? api.parms(own) : nullptr;
+    formal_detail.failure="function_identity_or_size";
     if (!owner_function.present() || !os || *os==0 || *os>64) { why=Reason::Params; return false; }
     owner_size=*os;
+    stage("owner_return");
     if (!formal(own,L"ReturnValue",owner_return,owner_size,true)) { why=Reason::Params; return false; }
     enrolled=s;
+    stage("scope_current");
     if (!scope_current(why)) { enrolled={}; return false; }
+    stage("complete","none");
     out=s; return true;
 }
 bool key(void* context,void* frame,Key& out,Reason& why)
@@ -248,6 +270,6 @@ bool safe_snapshot(const Key& k,void* frame,Snapshot& out,Reason& why)
 }
 bool thread_ok() { return hsmp_native_caller_thread_ok()!=0; }
 std::uint64_t now_ms() { return GetTickCount64(); }
-const Provider provider{thread_ok,now_ms,safe_enroll,submit,key,safe_snapshot};
+const Provider provider{thread_ok,now_ms,safe_enroll,submit,key,safe_snapshot,enrollment_detail};
 }
 const hsmp_box::Provider& hsmp_reflect_box_provider() { return provider; }
