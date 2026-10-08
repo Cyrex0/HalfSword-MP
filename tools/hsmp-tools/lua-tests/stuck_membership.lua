@@ -188,3 +188,61 @@ do
     x.env.evidence=function()c["Bone Name 2"]={ToString=function()return "hand_l"end};return "observed"end
     r=x.run();T.check(not r.complete and not r.parent,"constraint bone changing during final evidence invalidates the captured membership")
 end
+
+local function original_pelvis_return(parent_bone)
+    local x=fixture();x.context.bone="spine_02"
+    local p=x.parent(39);p.bone=parent_bone or "pelvis"
+    local c=x.constraint(30,p);x.list={c}
+    local binding=x.parents[M.key(M.reference(c),x.context)]
+    x.context.bone="pelvis";c["Bone Name 2"]={ToString=function()return x.context.bone end}
+    return x,p,c,binding
+end
+do
+    local x,p,c,binding=original_pelvis_return()
+    local r=x.run()
+    T.check(r.complete and r.state=="unique" and r.parent==p and r.constraint.address==30
+        and r.header.bone=="pelvis" and r.parent_context.bone=="spine_02" and r.context.bone=="pelvis",
+        "same native constraint can return from its factory spine anchor to the immutable original pelvis contact")
+    T.check(binding.context.bone=="spine_02" and binding.header.bone=="pelvis" and p.bone=="pelvis"
+        and M.parent_current(r.header,p,r.parent_context),
+        "original-contact return preserves distinct binding anchor and parent/header contact without rewriting either")
+    x,p,c,binding=original_pelvis_return("spine_02");r=x.run()
+    T.check(r.complete and r.state=="unavailable" and not r.parent,
+        "an original spine contact cannot borrow the pelvis-contact return rule")
+    for _,field in ipairs({"bone","ats"})do
+        x,p,c,binding=original_pelvis_return()
+        p[field]=field=="bone" and "spine_02" or p[field]+1;r=x.run()
+        T.check(r.complete and r.state=="unavailable" and not r.parent,
+            "mutated original parent "..field.." refuses the return")
+        x,p,c,binding=original_pelvis_return()
+        binding.header[field]=field=="bone" and "spine_02" or binding.header[field]+1;r=x.run()
+        T.check(r.complete and r.state=="unavailable" and not r.parent,
+            "mutated captured header "..field.." refuses the return")
+    end
+    for _,identity in ipairs({"address","name"})do
+        x,p,c,binding=original_pelvis_return()
+        if identity=="address" then c.GetAddress=function()return 32 end
+        else c.GetFullName=function()return "Replacement constraint"end end
+        x.parents[M.key(M.reference(c),x.context)]=binding;r=x.run()
+        T.check(r.complete and r.state=="unavailable" and not r.parent,
+            "replacement constraint "..identity.." cannot reuse the original-contact binding")
+    end
+    for _,field in ipairs({"world","drops","attacker_peer","victim_peer","match_id","round",
+        "attacker_life","victim_life","source","source_class","ordinal"})do
+        x,p,c,binding=original_pelvis_return()
+        x.context[field]=type(x.context[field])=="number" and x.context[field]+1 or x.context[field].." changed"
+        -- Retained metadata found under another lookup key must still fail its full-scope proof.
+        x.parents[M.key(M.reference(c),x.context)]=binding;r=x.run()
+        T.check(r.complete and r.state=="unavailable" and not r.parent,
+            "changed return scope "..field.." cannot inherit the original parent")
+    end
+    x,p,c,binding=original_pelvis_return()
+    c["Weapon Hit Module"]=obj(12,"Weapon other.Box",nil,{GetOwner=function()return x.weapon end});r=x.run()
+    T.check(r.complete and r.state=="none" and not r.parent,
+        "different current weapon module cannot acquire the original pelvis contact")
+    for _,bone in ipairs({"spine_01","spine_03","hand_l","hand_r"})do
+        x,p,c,binding=original_pelvis_return();x.context.bone=bone;r=x.run()
+        T.check(r.complete and r.state=="unavailable" and not r.parent,
+            "original pelvis contact does not authorize a return to "..bone)
+    end
+end

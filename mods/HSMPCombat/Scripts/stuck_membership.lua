@@ -33,12 +33,18 @@ local function snapshot_context(c)
     for _,k in ipairs(context_fields)do out[k]=c[k]end
     return out
 end
-local function binding_context(original,current)
+local function binding_context(original,current,header,parent)
     if not original or not current or not M.same(original.native_world,current.native_world)then return false end
     for _,k in ipairs(context_fields)do if k~="bone" and original[k]~=current[k]then return false end end
     -- Native inside-2 rebinds this same constraint lowerarm_l -> hand_l
-    -- (UE4SS.log:1694,1709; server combat.rs). No reverse/adjacent aliases.
-    return original.bone==current.bone or original.bone=="lowerarm_l" and current.bone=="hand_l"
+    -- (UE4SS.log:1694,1709; server combat.rs).
+    if original.bone==current.bone or original.bone=="lowerarm_l" and current.bone=="hand_l" then return true end
+    -- The native factory anchors a pelvis contact at spine_02; its overlap
+    -- update can return the same constraint to that original contact. Require
+    -- both captured and current origin records, never a general reverse alias.
+    return original.bone=="spine_02" and current.bone=="pelvis"
+        and type(header)=="table" and header.bone=="pelvis"
+        and type(parent)=="table" and parent.bone=="pelvis"
 end
 -- UE4SS's GetWorld helper is an AActor API. Components use the reflected
 -- ActorComponent.GetOwner, and that actor's world; constraint Owner is irrelevant.
@@ -180,7 +186,7 @@ function M.resolve(q,env)
                     r.constraint=id;first_constraint=c
                 else r.constraint=nil;first_constraint=nil end
                 local h=binding and binding.state=="unique" and M.same(binding.constraint,id)
-                    and binding_context(binding.context,q.context)
+                    and binding_context(binding.context,q.context,binding.header,binding.parent)
                     and M.header(binding.parent,binding.context)
                 if not h or not M.parent_current(binding.header,binding.parent,binding.context)then bad=bad or "parent unavailable or stale"
                 elseif selected and not M.equal_parent(header,selected,h,binding.parent)then bad="distinct parents"

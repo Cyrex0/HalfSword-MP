@@ -17,6 +17,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Preserve a stuck blade's original pelvis contact separately from its initial
+  spine anchor, allowing the same validated constraint to return to that contact.
 - Retain stuck-blade continuations while their known parent awaits pose coverage,
   preserving source delivery order without requiring a child resend.
 - Reuse developer joint-capture session readers while preserving fresh native

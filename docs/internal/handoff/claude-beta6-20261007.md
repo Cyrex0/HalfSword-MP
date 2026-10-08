@@ -2017,3 +2017,45 @@ input is consistent with clampedHP0 but cannot authenticate prior wear. No force
 cut or threshold adjustment is warranted. Full owner-authorized cutting transaction,
 detached head/limb/torso geometry and all-gear runtime validation remain open.
 Co-op Abyss multiplayer AI waves follows those blockers. No PR/main/tag/release.
+
+### Native43 completed; user reprioritizes fair spawning before release and co-op
+
+be58307d full G0/dev push/normal deploy passed69Lua suites,1283Rust tests in75
+binaries, clippy0errors2warnings; no skips. Raw20261008-150436-e8260e-combat_manual,
+session native-20261008-43. Root used the wrong joint-capture environment variable,
+so this run is probes-OFF gameplay evidence, not cached-reader performance proof.
+Correct next run flag is HSMP_JOINT_PROFILE_PROBE=1, with HSMP_GRIP_PROBE,
+HSMP_HAND_PIPELINE_PROBE and HSMP_LIMB_BURST_PROBE=0. Expensive native caller stays off.
+Both windows were on smallest secondary DISPLAY1,880x527. Owner/exp exit0,
+normal menu_quit both, no new crashes/orphans/forced kills. Manual harness PASS
+certifies cleanup/basic state only, not fair spawning or release gates.
+
+Recipe194/196=.989796, below200minimum; Box rotation mean30.606/max106.586degrees
+(37samples), clock resets0(24windows). All-run unique owner receipts194=
+123changed+70no-observed-change+1dropped, expired0. This is observed absence of
+the prior inversion refusal, not proof that every server ordering branch occurred.
+Load failures r1peer2/r6peer1 timeout;30twisted-arm reposes. Native42 source audit
+also finds fresh upperarm_l123.3degrees/hand_l52uu divergence and protected owner
+drift corrections61–78cm. Repose resets continuous150ms settling qualification;
+source placement resets publication. Existing refusal is appropriate; native physical
+cause remains unproved. Artifacts native43/native-audit.json and native42-spawn-readiness-audit.json.
+
+Cooked constructor maps pelvis contact to spine_02 constraint anchor; actual same
+constraint can return to the original pelvis contact. Source membership confused
+that immutable contact with initial anchor and refused the Native42 continuation.
+New narrow branch requires original anchor spine_02, current pelvis, original
+captured header AND current parent contact pelvis, plus every existing exact
+constraint/module/world/full-life/header check. No server bone-policy change;
+no marker wear/cut authority. Wrong original bones, changed parent/header/life/module,
+replacement constraint and unrelated bones refuse. Sol68assertions/2parses and
+Astra approval. Artifact native43-original-contact-return.json.
+
+LATEST HUMAN INSTRUCTION supersedes the earlier perfection-before-release ordering:
+fix body spawning and twisted arms, then merge main and produce the release build,
+then implement co-op Abyss multiplayer waves against AI. Prioritize that concrete
+spawn/pose repair now. Release authorization remains conditional on demonstrating
+fair stable spawning and required G0/G1/native G2 checks; do not merge/release while
+those fail. Explicitly disclose remaining cuts/all-gear parity rather than claiming
+them complete. Optional cut-descriptor implementation suspended with no partial edits.
+The prior broader combat/gear/dismemberment work remains backlog, not a reason to
+override this newer requested order. Subsequent handoffs/heartbeat must preserve it.
