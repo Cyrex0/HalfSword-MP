@@ -10,7 +10,10 @@ function M.assess(info)
     for _,p in ipairs(info.willies or{})do
         local name=value(p.name)or"unavailable"
         if not p.persistent or p.persistent.known~=true then return false,"isolation_persistent_tag_unavailable:"..name end
-        if p.persistent.value~=true then return false,"isolation_local_fighter:"..name end
+        if p.persistent.value~=true then
+            if not p.retired or p.retired.known~=true or p.retired.value~=true then return false,"isolation_local_fighter:"..name end
+            if not p.complete_inert or p.complete_inert.known~=true or p.complete_inert.value~=true then return false,"isolation_retired_fighter_readback:"..name end
+        end
         for _,field in ipairs({"mesh_visible","actor_collision","mesh_simulating"})do
             if not p[field]or p[field].known~=true then return false,"isolation_"..field.."_unavailable:"..name end
             if p[field].value~=false then return false,"isolation_"..field..":"..name end
@@ -88,6 +91,10 @@ function M.inspect(env)
                 if not owner_address.known or not world_address.known then info.census_error="world identity unavailable";break end
                 if owner_address.value==world_address.value then
                     local row={name=name(pawn),class=class(pawn),persistent=read(function()return pawn:ActorHasTag(env.FName("Persistent"))end,"boolean",pawn),actor_hidden=read(function()return pawn.bHidden end,"boolean",pawn),actor_collision=read(function()return pawn:GetActorEnableCollision()end,"boolean",pawn)}
+                    if env.suppression then
+                        row.retired=read(function()return env.suppression:retirement(pawn:GetAddress(),pawn:GetFName():ToString())end,"boolean",pawn)
+                        row.complete_inert=read(function()return env.suppression:proof(pawn)end,"boolean",pawn)
+                    end
                     local mesh,mesh_why=object(function()return pawn.Mesh end)
                     row.mesh=mesh and name(mesh)or unknown(mesh_why)
                     row.mesh_visible=mesh and read(function()return mesh:IsVisible()end,"boolean",mesh)or unknown(mesh_why)
