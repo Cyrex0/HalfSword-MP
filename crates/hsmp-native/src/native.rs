@@ -88,6 +88,7 @@ pub struct Native {
     pub(crate) dev: crate::dev::DevState,
     pub(crate) procs: crate::proc::ProcState,
     pub(crate) sample: crate::sample::SampleState,
+    pub(crate) native_host: crate::native_host::ServiceState,
 }
 
 impl Default for Native {
@@ -132,6 +133,7 @@ impl Native {
             dev: Default::default(),
             procs: Default::default(),
             sample: Default::default(),
+            native_host: Default::default(),
         }
     }
 

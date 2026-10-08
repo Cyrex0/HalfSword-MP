@@ -207,6 +207,19 @@ entry! {
     l_sample_config => Guard::GameThread, |n, L| n.sample_config(L);
     l_sample_local => Guard::GameThread, |n, L| n.sample_local(L);
     l_sample_status => Guard::GameThread, |n, L| n.sample_status(L);
+    l_worker_input => Guard::GameThread, |n, L| n.worker_input(L);
+    l_native_sample_world => Guard::GameThread, |n, L| n.native_sample_world(L);
+    l_native_commit_world => Guard::GameThread, |n, L| n.native_commit_world(L);
+    l_host_start => Guard::GameThread, |n, L| n.host_start(L);
+    l_client_start => Guard::GameThread, |n, L| n.client_start(L);
+    l_host_directory => Guard::GameThread, |n, L| n.host_directory(L);
+    l_host_inputs => Guard::GameThread, |n, L| n.host_inputs(L);
+    l_host_status => Guard::GameThread, |n, L| n.host_status(L);
+    l_host_stop => Guard::GameThread, |n, L| n.host_stop(L);
+    l_host_world_changed => Guard::GameThread, |n, L| n.host_world_changed(L);
+    l_host_parent_alive => Guard::GameThread, |n, L| n.host_parent_alive(L);
+    l_native_input => Guard::GameThread, |n, L| n.native_input(L);
+    l_native_snapshot => Guard::GameThread, |n, L| n.native_snapshot(L);
     l_servo_config => Guard::GameThread, |n, L| n.servo_config(L);
     l_servo_bodies => Guard::GameThread, |n, L| n.servo_bodies(L);
     l_servo_weapon => Guard::GameThread, |n, L| n.servo_weapon(L);
@@ -265,6 +278,19 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("sample_config", l_sample_config),
     ("sample_local", l_sample_local),
     ("sample_status", l_sample_status),
+    ("worker_input", l_worker_input),
+    ("native_sample_world", l_native_sample_world),
+    ("native_commit_world", l_native_commit_world),
+    ("host_start", l_host_start),
+    ("client_start", l_client_start),
+    ("host_directory", l_host_directory),
+    ("host_inputs", l_host_inputs),
+    ("host_status", l_host_status),
+    ("host_stop", l_host_stop),
+    ("host_world_changed", l_host_world_changed),
+    ("host_parent_alive", l_host_parent_alive),
+    ("native_input", l_native_input),
+    ("native_snapshot", l_native_snapshot),
     ("servo_config", l_servo_config),
     ("servo_bodies", l_servo_bodies),
     ("servo_weapon", l_servo_weapon),

@@ -2009,6 +2009,7 @@ dependencies = [
  "bytemuck",
  "hsmp-ipc",
  "hsmp-pose",
+ "hsmp-server",
  "mlua",
 ]
 

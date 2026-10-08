@@ -1,3 +1,14 @@
+-- Select the process role before registering client hooks or mutating actors.
+do
+    local ok, role = pcall(require, "hsmp_runtime_role") -- unsafe: ok audited pure role module: startup env and scalar predicates only
+    if not ok then
+        local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+        local directory = source:match("^(.*)[/\\]") or "."
+        ok, role = pcall(dofile, directory .. "/../../../shared/hsmp_runtime_role.lua") -- unsafe: ok same audited pure role module
+    end
+    if not ok or type(role) ~= "table" or not role.client() then return end
+end
+
 -- HSMPDiag (dev only) — on entering an arena, dumps every reflected property
 -- of the GameInstance, GameMode and BP_LevelManager to
 -- <state_dir>/.state_dump_<epoch>.txt so two runs can be diffed.

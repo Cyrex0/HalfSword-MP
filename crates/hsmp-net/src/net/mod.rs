@@ -125,6 +125,9 @@ pub mod caps {
     pub const BODY: u64 = 1 << 17;
     /// Original-generation native passport body snapshots.
     pub const BODY2: u64 = 1 << 19;
+    /// Embedded native authority: entity directory, ordered input and native world snapshots.
+    /// This capability grants clients only input ownership, never snapshot authority.
+    pub const NATIVE_WORLD: u64 = 1 << 20;
     /// Application: server-served mods (`mod_manifest` / `mod_files` / `mod_chunk` down,
     /// `mod_chunk_req` / `mod_ready` up; docs/hosting/server-mods.md). The server offers it
     /// only when it has a `--mods-dir`, the sidecar always; a server with mods refuses a

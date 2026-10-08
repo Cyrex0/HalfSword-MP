@@ -1,3 +1,14 @@
+-- Select the process role before registering client hooks or mutating actors.
+do
+    local ok, role = pcall(require, "hsmp_runtime_role") -- unsafe: ok audited pure role module: startup env and scalar predicates only
+    if not ok then
+        local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+        local directory = source:match("^(.*)[/\\]") or "."
+        ok, role = pcall(dofile, directory .. "/../../shared/hsmp_runtime_role.lua") -- unsafe: ok same audited pure role module
+    end
+    if not ok or type(role) ~= "table" or not role.client() then return end
+end
+
 -- HSMPModHost -- runs the server mods the player accepted (docs/hosting/server-mods.md).
 --
 -- The sidecar downloads a server's mods into the verified cache (hsmp_cfg mods_cache_dir,

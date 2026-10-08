@@ -78,3 +78,8 @@ fs:server/src/sidecar/mods_cache.rs
 fs:server/src/proc_util.rs
 fs:server/src/server/admin.rs
 fs:server/src/server/tick.rs
+# Native supervisor lifecycle/admin files live outside HSMP_STATE_DIR. They contain
+# process diagnostics and a stop request only; no gameplay/input/world state.
+fs:server/src/native_supervisor.rs
+# Bounded native test report only; cannot publish authoritative state.
+fs:server/src/native_probe.rs

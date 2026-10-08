@@ -68,6 +68,7 @@ pub(crate) async fn peer_leave(
 /// so anything left behind grows with every reconnect. The loadout chunk
 /// store (async lock) is dropped by the caller with `loadout::forget`.
 pub(crate) fn forget_peer_locked(inner: &mut Inner, id: PeerId) {
+    super::native_glue::left(inner, id);
     inner.match_peers.remove(&id);
     inner.sess.load_errors.remove(&id);
     inner.sess.placed.remove(&id);

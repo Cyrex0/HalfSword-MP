@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Add an experimental native authority host: embed the network service inside
+  HSMPNative, isolate its worker role from client policies, and supervise the
+  licensed headless game through `hsmp-server native`. Native gameplay and
+  complete co-op presentation remain under live verification.
 - Preserve complete session and mode state during developer wrist captures while
   allowing sequence and server-clock heartbeats, retaining strict gameplay guards;
   bound loading-phase retries and record the transported grip without changing it.

@@ -24,6 +24,15 @@ pub(super) async fn handle(
     h: hsmp_ipc::wire::WireHdr,
     payload: &[u8],
 ) -> anyhow::Result<()> {
+    if state.inner.lock().await.native.is_some() {
+        // Connection-derived player identity remains enforced inside native_glue.
+        // Native mode has no client-authored physics/combat domain.
+        if h.kind >> 8 == 0x0A { return super::native_glue::handle(state, from, h.kind, payload).await; }
+        if h.kind >> 8 != 0x02 { anyhow::bail!("native session refuses client authority records"); }
+        if !matches!(h.kind, hsmp_ipc::schema::session::K_LEAVE | hsmp_ipc::schema::session::K_PING | hsmp_ipc::schema::session::K_CHAT) {
+            return Ok(());
+        }
+    }
     let _ = (socket, state, from, payload);
     // A player still loading the server's mods sends nothing else (mods_glue.rs).
     if super::mods_glue::gate(state, from, h.kind).await {

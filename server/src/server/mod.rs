@@ -39,6 +39,7 @@ mod pose_glue; // protocol v6: root / weapon / pose records
 mod session_records; // session domain records (0x02xx): builders + C2S handlers
 mod modes; // game modes: teams, King of the hill, roulette / brawl kits, deathmatch respawns
 mod mods_glue; // server mods (0x09xx): join gating, manifest, chunk serving
+mod native_glue;
 
 // Siblings share each other's items through `use super::*`.
 use session::*;
@@ -110,6 +111,7 @@ pub struct ServerState {
 }
 
 pub(crate) struct Inner {
+    native: Option<native_glue::NativeCore>,
     pub peers: HashMap<SocketAddr, PeerState>,
     next_peer_id: PeerId,
     /// Ticks run so far (stats only: no timer counts ticks).
@@ -203,6 +205,7 @@ impl ServerState {
     pub fn with_net(max_peers: usize, net: crate::net::Net) -> Self {
         Self {
             inner: Mutex::new(Inner {
+                native: None,
                 peers: HashMap::new(),
                 next_peer_id: 1,
                 server_tick: 0,
@@ -242,6 +245,15 @@ impl ServerState {
             relay_batch: std::sync::Mutex::new(None),
             mods: std::sync::OnceLock::new(),
         }
+    }
+
+    pub(crate) fn with_native(max_peers: usize, net: crate::net::Net, bridge: Arc<crate::native_service::Bridge>, arena: &str) -> Self {
+        let state = Self::with_net(max_peers, net);
+        if let Ok(mut inner) = state.inner.try_lock() {
+            inner.match_arena = arena.to_owned();
+            inner.native = Some(native_glue::NativeCore::new(bridge, state.net.epoch(), arena));
+        }
+        state
     }
 
     /// True while no match runs (config, kit rules may change).

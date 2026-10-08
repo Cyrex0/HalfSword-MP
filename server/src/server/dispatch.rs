@@ -314,6 +314,11 @@ pub(crate) fn same_host_count<'a>(addrs: impl Iterator<Item = &'a SocketAddr>, f
 /// Admission for a verified v5 Auth: ban, full, duplicate
 /// key (the reconnect replaces the old connection), then accept + Welcome.
 pub(super) async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<PendingAuth>) {
+    if state.inner.lock().await.native.is_some() && p.caps & hsmp_net::net::caps::NATIVE_WORLD == 0 {
+        let out = state.net.reject(p, reject_code::VERSION, "native authority capability required");
+        send_out(socket, state, out).await;
+        return;
+    }
     let from = p.addr;
     let key = p.player_key();
     let fp = hsmp_net::net::handshake::player_fingerprint(&key);
@@ -436,6 +441,7 @@ pub(super) async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: 
     // joining changes who is admin: everyone's S2CAdminState follows.
     let admins_changed = refresh_admins(&mut inner);
     on_joined(&mut inner, from); // seat by player key, wins restored on reconnect
+    super::native_glue::joined(&mut inner, id, false);
     let seat = inner.sess.seats.get(&key).copied().unwrap_or(0xFF);
     inner.match_state_dirty = true;
     let admin_state = admin_state_for(&inner, from);
@@ -523,6 +529,7 @@ async fn resume(
     forget_stream_limits(&old);
     crate::interact::note_caps(id, caps);
     session::on_resumed(&mut inner, from, old);
+    super::native_glue::joined(&mut inner, id, true);
     let seat = inner.sess.seats.get(&peer_key_of(&inner, from)).copied().unwrap_or(0xFF);
     let admin_state = admin_state_for(&inner, from);
     drop(inner);

@@ -2433,3 +2433,148 @@ the original measured fault via an explicit fixture-local oracle and proves no
 second lookup/capture. It does not refresh sample timestamps or change production
 fault predicates. Semantic snapshot and retry behavior are developer-only;
 ordinary gameplay/readiness/writer guards and all physics remain unchanged.
+
+### Latest human priority: accept PvP backlog; native headless authority and co-op Abyss
+
+The human explicitly accepted the current issues for later optimization and made
+co-op Abyss the next focus. They then required a headless server executable,
+authorizing necessary rewrites, and asked to move companion logic into the game
+to remove the structural gap. Finally they prohibited Astra agents: use only
+Sol 6.1 at high or extra-high. This supersedes the prior spawn-perfection-first
+ordering. Preserve issues honestly; do not continue the old wrist probe campaign
+or claim it is fixed. Main/release still needs its documented checks; current
+work focuses on the requested native authority implementation.
+
+Native49 commit 8b2fa47b passed full G0 and RequireG0 deployment. Raw run:
+test-results/20261008-184554-4f5fad-combat_manual. Cloth/axe rounds 1 and 3 became
+Live with AI; rounds 2 and 4 failed readiness with the same right-hand fault.
+356 early read-only bus snapshots captured durable release ACKs for rounds 1/3
+and later same-process 150ms/5uu/10degree settling evidence. One-Hz observations
+do not prove exact input-release timing or every native binding. All six wrist
+captures exhausted the unchanged own-source 250ms freshness budget after
+236-242ms on the source row; no complete native grip/constraint row exists.
+Do not infer a current-grip mismatch or clamping from these failures. Root
+saved UE4SS.log, experiment summary and cleanup report; games stopped cleanly.
+Known backlog includes wrist/spawn presentation, active balancing/hold cost,
+complete gear parity, native full head/torso sever topology and render FPS.
+
+First actual headless smoke used the same verified build with two -NullRHI
+instances, no sound, unattended, all expensive probes off. Raw run:
+test-results/20261008-190029-a542b0-p0_gate. Both had no main window and native/mod
+ticks continued, but normal client lobby_ready timed out before any gameplay.
+This is a failed startup test, not proof that native AI/physics/damage/animation
+work headlessly. The none netsim profile also cannot certify the ordinary G2
+gate. Logs/report saved and owned processes cleaned up. A worker startup must
+bypass normal UMG lobby/client policies and prove simulation separately.
+
+New design: gameplay authority, native physics/AI/gear/damage/severs and canonical
+world state live inside the game process. Reuse the existing Rust networking as
+an embedded library, with bounded in-process immutable inputs/snapshots and no
+UObject access from network threads. server.exe is startup/admin supervision;
+do not implement the superseded external-worker/shared-memory snapshot broker.
+Network entity identity and incarnation/authority epochs remain necessary; never
+weaken socket-authenticated source ownership or accept client hit claims as native
+authority. Current sampled Control is output, not an ordered raw-input protocol.
+Initial real slice: native PC0/PC1 controlled independently by two remote clients,
+plus one native enemy, all physically simulated in one world; then native Abyss
+wave construction and consistent client topology/damage/gear presentation.
+
+Primary native route: BP_LevelManager sets local multiplayer and calls
+CreatePlayer(-1,true); BP_SpawnerPoint_Willies possesses controllers 0 and 1.
+Free Mode Foes Amount=2 means three combatants: second becomes PC1, third AI.
+Abyss has its own dynamic SpawnNPC/tile/boss-arena path; it is not an empty mode.
+Worker role must be chosen before client mod initialization, disabling PvP AI
+cleanup, forced Enemy Count, puppet invulnerability/sever suppression and client
+damage authority. Headless meshes need actual bone-refresh/physics proof. Native
+RVP/render targets participate in construction/cutting: prove those under
+NullRHI or retain necessary offscreen rendering; never fake wear or disable cuts.
+No .uproject/Server.Target.cs is present, so no claim of a compiled UE server
+target. Do not redistribute the licensed game executable/assets.
+
+Only active implementation agents are explicit gpt-6.1-sol extra-high:
+native_host_sol61 (worker/native role/bootstrap/input/sampling) and
+headless_net_sol61 (embedded networking/server library/wire entity/input model).
+Root and cross-review replace Astra. Root owns actual native runs, documentation,
+supervisor integration, final checks/commits/deploy. Author Cyrex0, no AI trailers.
+No Python, OS input, kill by image, save deletion or secret output. Both visible
+test windows stay on the smallest secondary display; caller probe stays off.
+
+User authorized one earned usage reset at 1% remaining. Account originally showed
+96% used with one available credit; later read showed 1% used (99% remaining), a
+new reset time and zero credits. Root did not redeem a credit: do not claim that
+action. Account is already reset; no second reset is needed. Continue monitoring
+only at useful work boundaries and do not consume before the requested threshold.
+
+### Native authority implementation checkpoint (awaiting live startup proof)
+
+The embedded Rust service and supervisor source now compile. Server logic moved
+from the CLI main into a reusable library; legacy CLI behavior delegates to that
+library. `hsmp-server native` starts one licensed game with immutable worker role,
+checks clean full-G0 deployment and every deployed hash plus its own executable
+hash, and owns shutdown by its child handle. The native endpoint uses bounded
+immutable queues, authenticated two-human seats and server-assigned references;
+world changes and reconnects rotate incarnations and clear old input/publication.
+No IPC schema/layout change or external world-state broker was added.
+
+Worker startup bypasses client mods before hooks, preserves native AI and native
+damage, selects the cooked local-multiplayer spawner route, and requires exactly
+two current human pawns and one live native enemy. Mesh/pawn preparation uses
+fresh binding checks, including after reflected calls. The input bridge checks
+the native generated UFunction ABI (eight float axes; FKey24 on seven press/release
+actions), current possession, single-consumption mouse deltas and silence release.
+Missing native health data refuses sampling. Binding replacement cannot silently
+reuse a network incarnation. Parent monitoring uses a captured process handle.
+
+Focused evidence so far: 26 Rust native service/boundary/codec/regression tests
+passed, four supervisor/process unit tests passed, and the isolated native-input
+reflection fixture passed. Avatar/Director/worker Lua suites passed (524/335/37
+assertions). These are offline checks, including real UDP with fixture world DTOs;
+they are not native gameplay or release-gate proof. Full G0 and the first deployed
+worker run are still pending at this entry.
+
+Primary co-op faction evidence: BP_SpawnerPoint_Willies.txt lines134-149 selects
+team1 for the native humans when more than two combatants spawn, FreeMode
+Multiplayer is active and combat mode is not Carnage; the later AI receives team2.
+BP_LevelManager.txt lines672,689-690 derives three combatants from FoesAmount2.
+This is cooked Blueprint evidence; actual AI targeting still needs observation.
+
+Root added `scripts/native_host_test.ps1` and `hsmp-server native-probe`: one
+bounded authority, two authenticated network observers, optional independent
+raw-input exercise, same-frame source equality, native-ready event, save hashes,
+crash retention and owned-process cleanup. The report distinguishes submission
+from native dispatch and makes no combat/display claim. Shutdown/admin files live
+outside the game's state directory. Both Unreal NullRHI and RenderOffScreen flags
+are documented by Epic; actual render-target/cut support remains unverified.
+
+Current source intentionally does not supply a complete native-client presentation
+runtime, dynamic Abyss entity lifecycle, complete gear/body/passport descriptors,
+full severed-component topology or all native weapon boxes. The old pose weapon
+tag is not a unique gear identifier; worker uses unknown tag0 rather than a hashed
+guess. The native source dismemberment mask is still explicitly incomplete.
+Do not call this fully functional or release-ready from the fixed three-entity
+probe. Native client mode explicitly refuses startup until its runtime exists.
+
+Final source review requires a two-step in-process publication: native sampling
+stages an immutable frame, Lua rechecks the original world token, then the native
+commit publishes without additional engine getters. A world loss cancels staging
+and repeats invalidation after any reentrant native mutex refusal. The standalone
+native-input reflection fixture and existing sampler fixture both passed.
+Final worker regression suite passes44 checks, including publication cancellation
+and held-button release across incarnation/owner changes. Parent review switched
+native vitals encoding to the existing per-field schema helper, preserving the
+distinct non-health/stamina ranges instead of applying stamina's cap everywhere.
+
+Read-only Abyss analysis establishes further required work, not completion:
+native Abyss possesses only PC0 and has no FreeModeMultiplayer/CreatePlayer path.
+PlayMode Abyss is enum2; enum0 selects progression's Hell passport route. Native
+Spawn NPC creates Willie_BP_Zombie with Team Int2 and a complete native passport.
+The wave director caps ordinary active enemies at clamp(tier+2,2,6), removes DED
+entries and counts kills, then starts/finishes boss assaults before tier advance.
+The fixed-three NativeCore cannot drive those waves: dynamic source entity
+registration/retirement and explicit native director phase must replace its
+"no living AI means victory" shortcut. Empty spawn intervals are not victory.
+Native cleanup/streaming centers only on PC0 (enemy distance1666, tile distance
+4000), so both human locations must be considered for full co-op terrain/enemy
+lifetime. Source: native50-abyss-cooked-functions.txt, offsets/lines in the Sol
+analysis report; native AI team filter rejects same-team targets and accepts
+different-team targets (AI_BP ExecuteUbergraph62332-62486).

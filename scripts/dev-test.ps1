@@ -31,21 +31,21 @@ $utf8=New-Object Text.UTF8Encoding $false
 # Each Rust row is an exact cargo argument array, not shell command text.
 $domains=[ordered]@{
     combat=@{ description='Hit validation, replay, cuts and native defeat'; lua=@('combat','damage_parity','replay_attempts','body_injury','weapon_bounds','collider_inventory'); rust=@(
-        @('-p','hsmp-server','--bin','hsmp-server','combat::'),
-        @('-p','hsmp-server','--bin','hsmp-server','lagcomp::'),
-        @('-p','hsmp-server','--bin','hsmp-server','combat_glue::')) }
+        @('-p','hsmp-server','--lib','combat::'),
+        @('-p','hsmp-server','--lib','lagcomp::'),
+        @('-p','hsmp-server','--lib','combat_glue::')) }
     pose=@{ description='Pose sampling, playback and avatar geometry'; lua=@('avatars','pose','pose_context','framecost'); rust=@(
-        @('-p','hsmp-pose'),@('-p','hsmp-server','--bin','hsmp-server','lagcomp::')) }
+        @('-p','hsmp-pose'),@('-p','hsmp-server','--lib','lagcomp::')) }
     modes=@{ description='Mode rules, lobby commands and the spawn/respawn Director'; lua=@('modes_ui','director','commands'); rust=@(
-        @('-p','hsmp-server','--bin','hsmp-server','server::modes::tests'),
-        @('-p','hsmp-server','--bin','hsmp-server','server::session::tests')) }
+        @('-p','hsmp-server','--lib','server::modes::tests'),
+        @('-p','hsmp-server','--lib','server::session::tests')) }
     mods=@{ description='Server-mod manifests, consent, transfers, caching and hosting'; lua=@('server_mods','modhost'); rust=@(
-        @('-p','hsmp-server','--bin','hsmp-server','server_mods::'),
-        @('-p','hsmp-server','--bin','hsmp-server','server::mods_glue::tests'),
+        @('-p','hsmp-server','--lib','server_mods::'),
+        @('-p','hsmp-server','--lib','server::mods_glue::tests'),
         @('-p','hsmp-server','--bin','hsmp-sidecar','mods_client::tests'),
         @('-p','hsmp-server','--bin','hsmp-sidecar','mods_cache::tests')) }
     kit=@{ description='Kit validation, equipment verification and exact SAVE acknowledgements'; lua=@('kit_status','loadout'); rust=@(
-        @('-p','hsmp-server','--bin','hsmp-server','loadout::kit_tests'),
+        @('-p','hsmp-server','--lib','loadout::kit_tests'),
         @('-p','hsmp-server','--bin','hsmp-sidecar','loadout_client::kit_client_tests'),
         @('-p','hsmp-tools','--lib','kit_receipt_tests')) }
     ui=@{ description='Complete menu/HUD layout, scaling and behavior matrix'; lua=@('menu_ui','ui_scale'); rust=,@('-p','hsmp-hud-test') }
@@ -53,7 +53,7 @@ $domains=[ordered]@{
         @('-p','hsmp-ipc'),@('-p','hsmp-native'),@('-p','hsmp-server','--test','sidecar_shm')) }
     launcher=@{ description='Launcher installation, updates, manifests and recovery'; lua=@(); rust=,@('-p','hsmp-launcher') }
     world=@{ description='World records, ownership, lifetime guards and mocked physics'; lua=@('hsmpworld','world_state','world_guard'); rust=@(
-        @('-p','hsmpworld-tests'),@('-p','hsmp-server','--bin','hsmp-server','world::tests')) }
+        @('-p','hsmpworld-tests'),@('-p','hsmp-server','--lib','world::tests')) }
 }
 if ($List) {
     foreach($name in $domains.Keys) { Write-Output "$name - $($domains[$name].description)" }

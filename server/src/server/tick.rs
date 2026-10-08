@@ -287,6 +287,13 @@ pub(super) struct TickOut {
 /// (`advance`), the kit round lock, free viewers for the relay, death repeats, the `session`
 /// record, timeouts.
 pub(super) fn tick_locked(state: &ServerState, inner: &mut Inner, sc: &mut TickScratch, now: u64) -> TickOut {
+    if inner.native.is_some() {
+        super::native_glue::tick(inner, now);
+        let gone: Vec<_> = inner.peers.iter().filter(|(_, p)| now.saturating_sub(p.last_seen_ms) > PEER_TIMEOUT_MS).map(|(a, p)| (*a, p.id)).collect();
+        for (addr, id) in &gone { inner.peers.remove(addr); session::forget_peer_locked(inner, *id); state.relay.forget(addr); }
+        state.net.reconcile(&inner.peers);
+        return TickOut { timed_out: gone, match_result: None, session: None, admin_promoted: false, kit: None };
+    }
     std::mem::swap(&mut inner.sess.kits, &mut sc.kits);
     let match_result = advance(inner, now);
     // Kit facts are frozen while a round is fought.

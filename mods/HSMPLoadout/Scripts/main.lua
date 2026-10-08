@@ -1,3 +1,14 @@
+-- Select the process role before registering client hooks or mutating actors.
+do
+    local ok, role = pcall(require, "hsmp_runtime_role") -- unsafe: ok audited pure role module: startup env and scalar predicates only
+    if not ok then
+        local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+        local directory = source:match("^(.*)[/\\]") or "."
+        ok, role = pcall(dofile, directory .. "/../../shared/hsmp_runtime_role.lua") -- unsafe: ok same audited pure role module
+    end
+    if not ok or type(role) ~= "table" or not role.client() then return end
+end
+
 -- HSMPLoadout — makes each peer's stand-in wear the real player's gear.
 --
 -- Writer (every 2 s in an arena): reads the local Willie's armour from every
@@ -2245,5 +2256,3 @@ LoopAsync(2000, function()
 end)
 
 Log("loaded; state_dir=%s (Ctrl+F7 = gear dump + re-apply own kit)", STATE_DIR)
-
-

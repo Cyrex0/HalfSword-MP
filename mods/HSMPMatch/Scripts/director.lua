@@ -2195,6 +2195,16 @@ function D.make_ue_env(ctx)
         return ok
     end
 
+    function env.quit_native_worker()
+        local world = WG.check() and WG.world() or nil
+        if not world or not world:IsValid() then return false end
+        local pc = WG.pc()
+        local ksl = UEH.GetKismetSystemLibrary()
+        if not pc or not pc:IsValid() or not ksl or not ksl:IsValid() then return false end
+        ksl:QuitGame(world, pc, 0, true)
+        return true
+    end
+
     -- Fresh lookup every call: a pawn is never cached across ticks here.
     function env.pawn()
         local p
@@ -2454,6 +2464,71 @@ function D.make_ue_env(ctx)
         end)
     end
     return env
+end
+
+-- Native authority boot: bypasses the client session/spawn pipeline. Travel
+-- stays here, and the game's own local-multiplayer spawners create both pawns.
+D.NATIVE_WORKER_PROFILE = {
+    { "Current Game Mode Enum", 0 }, { "Current Combat Mode", 0 },
+    { "Current Play Mode", 0 }, { "Free Mode Activated", true },
+    { "FreeMode Multiplayer", true }, { "Progression Multiplayer", false },
+    { "Free Mode Foes Amount", 2 }, { "Free Mode Carnage", false },
+    { "Free Mode Brawling", false }, { "Free Mode Blossfechten", false },
+    { "Rounds To WIn", 0 }, { "Rounds Won", 0 },
+}
+function D.new_native_worker(env, opts)
+    opts = opts or {}
+    local arena = opts.arena or "Map_Arena_Yard"
+    local self = { state = "boot", arena = arena, stopped = false }
+    local function transition(state, reason)
+        self.state, self.reason = state, reason
+        if env.native_status then env.native_status(state, reason) end
+    end
+    if not arena:match("^Map_Arena_[%w_]+$") then transition("error", "unsupported native bootstrap arena") end
+    function self:stop()
+        self.stopped = true
+        transition("stopped", "worker stopped")
+    end
+    function self:tick()
+        if self.stopped or self.state == "error" then return false end
+        local world = env.world()
+        if not world or not world.ok then return false end
+        if self.state == "boot" then
+            if env.native_settled and not env.native_settled() then return false end
+            if not env.sg_force or not env.sg_active then transition("error", "save guard unavailable"); return false end
+            env.sg_force(true)
+            if not env.sg_active() then transition("error", "save guard refused"); return false end
+            for _, row in ipairs(D.NATIVE_WORKER_PROFILE) do
+                if not env.gi_set(row[1], row[2]) or env.gi_get(row[1]) ~= row[2] then
+                    transition("error", "native GI profile: " .. row[1]); return false
+                end
+            end
+            self.from_key = world.key
+            transition("travel")
+        end
+        if self.state == "travel" then
+            if env.travel_hold and env.travel_hold("native worker bootstrap") then return false end
+            self.issued_at = env.now()
+            if not env.open_level(self.arena) then transition("error", "native arena travel refused"); return false end
+            if env.travel_issued then env.travel_issued() end
+            transition("wait_world")
+        elseif self.state == "wait_world" then
+            if world.key ~= self.from_key and world.short == self.arena then
+                self.key = world.key
+                transition("native_spawn")
+            elseif env.now() - self.issued_at > 30 then transition("error", "native arena travel timed out") end
+        elseif self.state == "native_spawn" or self.state == "native_ready" then
+            if world.key ~= self.key or world.short ~= self.arena then
+                transition("error", "native world changed")
+            elseif self.state == "native_spawn" and env.native_settled and env.native_settled() then
+                local ready, why = env.native_players_ready()
+                if ready then transition("native_ready")
+                elseif env.now() - self.issued_at > 45 then transition("error", why or "native players did not spawn") end
+            end
+        end
+        return self.state == "native_ready"
+    end
+    return self
 end
 
 return D

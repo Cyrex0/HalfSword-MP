@@ -32,6 +32,13 @@ pub fn record_mode(kind: u16, peer: PeerId) -> Option<hsmp_net::net::SendMode> {
     use hsmp_ipc::schema::Chan;
     use hsmp_net::net::SendMode;
     use hsmp_net::proto_v5::keys::key;
+    // Additive native DTOs are network-only; the shared-memory schema stays unchanged.
+    match kind {
+        0x0A80 => return Some(SendMode::Ordered),
+        0x0A10 => return Some(SendMode::ReliableLatest { key: key(0x92, 0) }),
+        0x0AC0 => return Some(SendMode::ReliableLatest { key: key(0x93, 0) }),
+        _ => {}
+    }
     Some(match hsmp_ipc::schema::record_info(kind)?.chan {
         Chan::None => return None,
         Chan::Latest(s) => SendMode::Latest { key: key(s, peer) },

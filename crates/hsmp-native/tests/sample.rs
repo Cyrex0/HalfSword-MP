@@ -29,6 +29,8 @@ struct Engine {
     /// Velocity sets: (bone FName, 0 = linear / 1 = angular) -> value.
     sets: HashMap<(u64, u8), [f64; 3]>,
     motors_off: u32,
+    inputs: Vec<(usize, String, Vec<u8>)>,
+    input_swap: Option<(usize, usize)>,
 }
 
 struct Obj {
@@ -217,6 +219,13 @@ unsafe extern "C" fn f_call(obj: *mut c_void, func: *mut c_void, params: *mut c_
             let v = [get_f64(b, 0), get_f64(b, 8), get_f64(b, 16)];
             assert_eq!(b[24], 0, "bAddToCurrent false");
             e.sets.insert((name_at(b, 32), kind), v);
+        }
+        other if other.starts_with("InpAxisEvt_") || other.starts_with("InpActEvt_") => {
+            e.inputs.push((oi, other.to_string(), b[..size].to_vec()));
+            if let Some((controller, pawn)) = e.input_swap.take() {
+                let address = ptr(&e, pawn) as u64;
+                e.objs[controller].data[..8].copy_from_slice(&address.to_le_bytes());
+            }
         }
         other => panic!("unexpected ProcessEvent {}", other),
     }
@@ -733,4 +742,93 @@ fn native_sampling_g1() {
     "#
     ));
     unsafe { ffi::lua_close(a) };
+}
+
+#[test]
+fn native_worker_input_g1() {
+    // Native API state is process-global. Keep this fixture isolated from the
+    // sampler fixture and give only its child the explicit worker role.
+    if std::env::var("HSMP_WORKER_INPUT_FIXTURE").as_deref() != Ok("1") {
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "native_worker_input_g1", "--nocapture"])
+            .env("HSMP_WORKER_INPUT_FIXTURE", "1").env("HSMP_RUNTIME_ROLE", "native_worker")
+            .status().unwrap();
+        assert!(status.success(), "isolated native input fixture");
+        return;
+    }
+    let world = build(false);
+    let (pc, other, key_struct) = {
+        let mut e = eng().lock().unwrap();
+        let new = |e: &mut Engine, path: &str, class: Option<usize>, size: i32, props: Vec<HsmpProp>| {
+            let name = name_id(e, path.rsplit(':').next().unwrap(), true);
+            e.objs.push(Box::new(Obj { path: path.into(), name, class, size, props, ..Default::default() }));
+            let index = e.objs.len()-1; e.by_path.insert(path.into(), index); index
+        };
+        let property = |e: &mut Engine, name: &str, class: &str, sub: u64, offset: i32, size: i32| HsmpProp {
+            name: name_id(e,name,true), cls:name_id(e,class,true), sub, offset, size, ..Default::default()
+        };
+        let willie = e.by_path["Willie_BP_C"];
+        e.by_path.insert("/Game/Character/Blueprints/Willie_BP.Willie_BP_C".into(),willie);
+        let data_offset=std::mem::offset_of!(Obj,data) as i32;
+        let controller_property=property(&mut e,"Controller","ObjectProperty",0,data_offset+96,8);
+        e.objs[willie].props.push(controller_property);
+        let pawn_property=property(&mut e,"Pawn","ObjectProperty",0,data_offset,8);
+        let pc_class=new(&mut e,"/Script/Engine.PlayerController",None,128,vec![pawn_property]);
+        let pc=new(&mut e,"pc0",Some(pc_class),128,vec![]);
+        let other=new(&mut e,"other_willie",Some(willie),128,vec![]);
+        let pawn_address=ptr(&e,world.pawn) as u64;
+        let pc_address=ptr(&e,pc) as u64;
+        e.objs[pc].data[..8].copy_from_slice(&pawn_address.to_le_bytes());
+        e.objs[world.pawn].data[96..104].copy_from_slice(&pc_address.to_le_bytes());
+        let key_name=property(&mut e,"KeyName","NameProperty",0,0,8);
+        let key_struct=new(&mut e,"/Script/InputCore.Key",None,24,vec![key_name]);
+        e.objs[key_struct].name=name_id(&mut e,"Key",true);
+        let axes=["Move Forward / Backward_14","Move Right / Left_19","Turn Right / Left Mouse_16","Look Up / Down Mouse_17",
+            "Right Guard Axis_6","Left Guard Axis_7","Right Arm Axis_2","Left Arm Axis_3"];
+        for axis in axes {
+            let (name,suffix)=axis.rsplit_once('_').unwrap();
+            let path=format!("/Game/Character/Blueprints/Willie_BP.Willie_BP_C:InpAxisEvt_{name}_K2Node_InputAxisEvent_{suffix}");
+            let parameter=property(&mut e,"AxisValue","FloatProperty",0,0,4);
+            new(&mut e,&path,None,4,vec![parameter]);
+        }
+        for (name,press,release) in [("Run",4,5),("Crouch Hold",9,10),("Thrust",0,1),("Jump",14,15),("Grab Right",20,21),("Grab Left",18,19),("Talk",22,23)] {
+            for suffix in [press,release] {
+                let path=format!("/Game/Character/Blueprints/Willie_BP.Willie_BP_C:InpActEvt_{name}_K2Node_InputActionEvent_{suffix}");
+                let sub=e.objs[key_struct].name;
+                let parameter=property(&mut e,"Key","StructProperty",sub,0,24);
+                new(&mut e,&path,None,24,vec![parameter]);
+            }
+        }
+        (pc,other,key_struct)
+    };
+    unsafe { hsmp_native_set_reflect(&VT) };
+    let lua=new_state("HSMPMatch");
+    let (pawn_address,pc_address)={let e=eng().lock().unwrap();(ptr(&e,world.pawn) as u64,ptr(&e,pc) as u64)};
+    run(lua,&format!("N=HSMPNative; assert(N.ipc_open()); assert(N.world_ready('worker1')); A={{pawn={pawn_address},controller={pc_address},axes={{1,0,2,3,1,0,0,0}},changed=65,buttons=65}}; assert(N.worker_input(A))"));
+    {
+        let e=eng().lock().unwrap();
+        assert_eq!(e.inputs.len(),10,"eight axes plus two native press edges");
+        assert!(e.inputs.iter().all(|(actor,_,_)|*actor==world.pawn),"independent pawn untouched");
+        assert!(e.inputs[8].1.ends_with("Run_K2Node_InputActionEvent_4"));
+        assert!(e.inputs[9].1.ends_with("Talk_K2Node_InputActionEvent_22"));
+        assert!(e.inputs[8].2.iter().all(|byte|*byte==0),"default FKey fully initialized");
+        assert_eq!(f32::from_le_bytes(e.inputs[2].2[..4].try_into().unwrap()),2.0,"mouse axis native float");
+    }
+    run(lua,"A.changed=65;A.buttons=0;A.axes={0,0,0,0,0,0,0,0};assert(N.worker_input(A))");
+    {
+        let mut e=eng().lock().unwrap();
+        assert!(e.inputs[18].1.ends_with("Run_K2Node_InputActionEvent_5"));
+        assert!(e.inputs[19].1.ends_with("Talk_K2Node_InputActionEvent_23"));
+        e.inputs.clear();e.input_swap=Some((pc,other));
+    }
+    run(lua,"local ok,why=N.worker_input(A);assert(ok==nil and why=='possession',tostring(why))");
+    {
+        let mut e=eng().lock().unwrap();
+        assert_eq!(e.inputs.len(),1,"possession reentry stops before the second old-pawn call");
+        e.objs[pc].data[..8].copy_from_slice(&pawn_address.to_le_bytes());
+        e.inputs.clear();e.objs[key_struct].size=16;
+    }
+    run(lua,"assert(N.world_leaving());assert(N.world_ready('worker2'));local ok,why=N.worker_input(A);assert(ok==nil and why=='FKey ABI',tostring(why))");
+    assert!(eng().lock().unwrap().inputs.is_empty(),"ABI refusal makes zero engine input calls");
+    unsafe {ffi::lua_close(lua)};
 }
