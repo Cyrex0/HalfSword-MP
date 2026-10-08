@@ -83,6 +83,7 @@ C.by_id = {}
 C.order = {}            -- ids, oldest first
 C.last_by_kind = {}     -- kind -> newest id
 C.n = 0
+C.closing = false
 
 
 local function now_s() return ctx.now() end
@@ -182,6 +183,7 @@ end
 function C.send(kind, args, via)
     local k = C.KINDS[kind]
     if not k then error("unknown command kind " .. tostring(kind)) end
+    if C.closing then return nil, "session closing" end
     args = args or {}
     C.n = C.n + 1
     local id = C.base + C.n
@@ -241,13 +243,15 @@ function C.pending(kind)
     return c ~= nil and c.state == "pending"
 end
 
--- Forget every command (new session: HOST / JOIN / CANCEL).
-function C.reset()
+-- Forget every command after teardown, or when HOST / JOIN starts a new session.
+function C.reset(keep_closed)
+    if C.closing then C.drain_results() end
     for _, id in ipairs(C.order) do
         local c = C.by_id[id]
         if c and c.state == "pending" then resolve(c, "refused", "session closed", "local") end
     end
     C.by_id, C.order, C.last_by_kind = {}, {}, {}
+    C.closing = keep_closed == true
 end
 
 -- ---------------------------------------------------------------------------------------
@@ -272,6 +276,27 @@ function C.consume_result(r)
         reason = S and S.ENUM_NAMES.cmd_reason[r.reason_code] or nil
     end
     resolve(cmd, ok and "accepted" or "refused", (not ok) and (reason or "refused by the server") or nil, "server")
+end
+
+-- Read only actual server answers. Closing never infers, retries or times out a
+-- command; the existing leave poll owns the final reset and its bounded refusal.
+function C.drain_results()
+    scan_results()
+    for _, id in ipairs(C.order) do
+        local cmd = C.by_id[id]
+        if cmd and cmd.state == "pending" and cmd.backend == "net" then
+            local r; pcall(function() r = ctx.net.cmd_result(cmd.id) end)
+            if type(r) == "table" then
+                resolve(cmd, r.ok and "accepted" or "refused",
+                    (not r.ok) and (r.reason_text or r.reason_code or "refused by the server") or nil, "server")
+            end
+        end
+    end
+end
+
+function C.begin_close()
+    C.closing = true
+    C.drain_results()
 end
 
 local function in_list(list, v)
@@ -349,19 +374,15 @@ end
 -- poll does, every 500 ms). match_st: main.lua's read_match_state(); srv_arena:
 -- the server's arena (MAP_PRESETS path) or nil.
 function C.tick(match_st, srv_arena)
-    scan_results()
-    local net = ctx.net
+    C.drain_results()
+    if C.closing then return end
     for _, id in ipairs(C.order) do
         local cmd = C.by_id[id]
         if cmd and cmd.state == "pending" then
             local k = C.KINDS[cmd.kind]
             local age = now_s() - cmd.t0
             if cmd.backend == "net" then
-                local r; pcall(function() r = net.cmd_result(cmd.id) end)
-                if type(r) == "table" then
-                    resolve(cmd, r.ok and "accepted" or "refused",
-                        (not r.ok) and (r.reason_text or r.reason_code or "refused by the server") or nil, "server")
-                elseif age >= k.timeout_s then
+                if age >= k.timeout_s then
                     resolve(cmd, "refused", timeout_reason(cmd), "timeout")
                 end
             else

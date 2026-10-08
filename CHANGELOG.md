@@ -32,6 +32,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Finish pending readiness commands from server replies during the existing bounded
+  quit teardown, without sending new commands or retrying while the session closes.
 - Preserve complete session and mode state during developer wrist captures while
   allowing sequence and server-clock heartbeats, retaining strict gameplay guards;
   bound loading-phase retries and record the transported grip without changing it.
