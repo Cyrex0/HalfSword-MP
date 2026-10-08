@@ -35,6 +35,9 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "body_scale" })
     T.isolated(T.script, "case", { kind = "fist_grip" })
     T.isolated(T.script, "case", { kind = "grip_reassert" })
+    T.isolated(T.script, "case", { kind = "grip_probe" })
+    T.isolated(T.script, "case", { kind = "grip_probe", gate = "off" })
+    T.isolated(T.script, "case", { kind = "grip_probe", gate = "no_dev" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "clock_epoch" })
@@ -63,7 +66,8 @@ end
 
 local function boot(register_ok)
     M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_SEVERED_PHYSICS = opts.severed_physics,
-        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate") and "1" or nil }, strict = true })
+        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or opts.kind=="grip_probe" and opts.gate~="no_dev") and "1" or nil,
+        HSMP_GRIP_PROBE = opts.kind=="grip_probe" and opts.gate~="off" and "1" or nil }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -1540,6 +1544,216 @@ if opts.kind == "body_scale" then
     body.sv, p.aim = {}, {}
     T.check(api.PX.sync_body_scale(2, p, body, 2000, pose) and body.sv == nil and p.aim == nil and #calls == 4,
         "a later owner geometry change invalidates a running servo too")
+end
+
+if opts.kind=="grip_probe"then
+    T.write(sd.."/.settings.json",'{"avatars":true,"native_neutralise":false,"native_servo":false}\n')
+    local api=boot(true);local PX=api.PX
+    if opts.gate then
+        T.check(not PX.GRIP_PROBE and PX.grip_probe_begin(nil,nil,nil,nil)==nil and PX.grip_probe_state==nil,
+            "grip snapshot requires both developer mode and explicit opt-in before any optional reads")
+        return
+    end
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=317,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=317,round=1,rows={{peer_id=1,life=3},{peer_id=2,life=3}}})
+    api.on_tick()
+    local function fn(n)return {ToString=function()return n end}end
+    local function obj(cls,name,addr,owner)
+        local o=M.new_obj(cls,name);rawset(o,"__addr",addr);o.__props.Owner=owner;return o
+    end
+    local pawn=obj("Willie_BP_C","GRIP_PROXY",9711)
+    local mesh=obj("SkeletalMeshComponent","GRIP_MESH",9712,pawn);pawn.__props.Mesh=mesh
+    local weapon=obj("ModularWeaponBP_Polearm_C","GRIP_WEAPON",9713,pawn)
+    local base=obj("StaticMeshComponent","GRIP_BASE",9714,weapon);weapon.__props.BaseMesh=base;pawn.__props["Weapon R"]=weapon
+    local reads,writes=0,0
+    M.Methods.GetOwner=function(o)return o.__props.Owner end
+    M.Methods.GetWorld=function(o)return o.__props.NativeWorld or M.world end
+    M.Methods.GetConstrainedComponents=function(c,a,b,x,y)
+        reads=reads+1
+        local e=c.__props.Endpoints
+        if c.__props.OnBinding then c.__props.OnBinding()end
+        a.OutComponent1,b.OutBoneName1,x.OutComponent2,y.OutBoneName2=e.one,fn(e.bone1),e.two,fn(e.bone2)
+    end
+    local function grip(name,addr,bone)
+        local c=obj("PhysicsConstraintComponent",name,addr,pawn)
+        local v={X=1,Y=2,Z=3}
+        local ld={PositionTarget=v,VelocityTarget={X=0,Y=0,Z=0}}
+        for _,axis in ipairs({"XDrive","YDrive","ZDrive"})do
+            ld[axis]={bEnablePositionDrive=true,bEnableVelocityDrive=false,Stiffness=1200,Damping=0,MaxForce=0}
+        end
+        local pi={LinearDrive=ld,AngularDrive={SlerpDrive={Stiffness=10,Damping=2,MaxForce=100}},
+            LinearLimit={XMotion=0,YMotion=0,ZMotion=0,Limit=0},ConeLimit={Swing1Motion=0,Swing1LimitDegrees=0,Swing2Motion=0,Swing2LimitDegrees=0},
+            TwistLimit={TwistMotion=0,TwistLimitDegrees=0}}
+        c.__props.ConstraintInstance={ConstraintBone1=fn("None"),ConstraintBone2=fn(bone),Pos1=v,PriAxis1=v,SecAxis1=v,Pos2=v,PriAxis2=v,SecAxis2=v,ProfileInstance=pi}
+        c.__props.Endpoints={one=base,two=mesh,bone1="None",bone2=bone}
+        return c,pi
+    end
+    local right,rpi=grip("NATIVE_RIGHT",9715,"hand_r")
+    local left,lpi=grip("NATIVE_LEFT",9716,"hand_l")
+    pawn.__props["PhysicsConstraint R Hand"],pawn.__props["PhysicsConstraint L Hand"]=right,left
+    M.Methods.SetAngularDriveParams=function(c,k,d,f)writes=writes+1;local s=c.ConstraintInstance.ProfileInstance.AngularDrive.SlerpDrive;s.Stiffness,s.Damping,s.MaxForce=k,d,f end
+    M.Methods.SetAllMotorsAngularDriveParams=function()writes=writes+1 end
+    M.Methods.K2_GetComponentsByClass=function(a)return {a["PhysicsConstraint R Hand"],a["PhysicsConstraint L Hand"]}end
+    M.Methods.SetLinearDriveParams=function()error("probe must never write linear params")end
+    M.Methods.SetLinearPositionDrive=function()error("probe must never change position enables")end
+    M.Methods.SetLinearVelocityDrive=function()error("probe must never change velocity enables")end
+    local p={actor=pawn,addr=9711,gen=api.generation(),peer=2,driving=true,
+        last={has_context=true,match_id=317,round=1,life=3,cut=5,seq=61,mode="interp",age=0},
+        shown={has_context=true,match_id=317,round=1,life=3,pawn="GRIP_PROXY",cut=5},
+        body={mesh=mesh,mesh_addr=9712,mesh_fname="GRIP_MESH",field="Mesh",ctl="servo",motors={}}}
+    api.set_puppet(2,p);api.set_driven(p)
+    p.grips={at=1000,list={{addr=9715,fname="NATIVE_RIGHT",hand="hand_r"},{addr=9716,fname="NATIVE_LEFT",hand="hand_l"}},by={[9715]=true,[9716]=true}}
+    local records={};local emit=PX.grip_probe_emit
+    PX.grip_probe_emit=function(r,why,q,stage)records[#records+1]=r or {unavailable=why};emit(r,why,q,stage)end
+    M.now=1000
+    M.bp_tick(pawn,function()rpi.AngularDrive.SlerpDrive.Stiffness=800;lpi.AngularDrive.SlerpDrive.Stiffness=600 end)
+    T.check(#records==2 and records[1].stage=="post_bp" and records[2].stage=="post_policy" and records[1].group==records[2].group,
+        "actual second-slot post callback captures an admitted before/after policy pair")
+    local before,after=records[1].joints[1],records[2].joints[1]
+    T.check(before.complete and after.complete and after.same_pair and before.angular[1]==800 and after.angular[1]==0
+        and after.linear.XDrive.position and not after.linear.XDrive.velocity and after.linear.XDrive.stiffness==1200
+        and after.limits[1]==0 and after.linear.XDrive.max_force==0,
+        "fresh free limits and zero angular drive preserve evidence of the native enabled linear motor without changing it")
+    T.check(records[2].joints[2].complete and records[2].joints[2].weapon_field=="Weapon R"
+        and after.binding.owner1.address==9713 and after.binding.owner2.address==9711,
+        "native left hand binding to the right weapon has exact component/owner provenance")
+    local probe_rows,namespaced=0,true
+    for _,line in ipairs(M.logs)do
+        if line:find("GRIPSTATE",1,true) or line:find("GRIPJOINT",1,true) or line:find("GRIPAXIS",1,true) or line:find("GRIPCALL",1,true)then
+            probe_rows=probe_rows+1;namespaced=namespaced and line:find("inst=7",1,true)~=nil
+        end
+    end
+    T.check(probe_rows==19 and namespaced and records[1].instance=="7","every probe header, joint, axis and callback row carries the native instance namespace")
+    local count=reads;M.now=1016;M.bp_tick(pawn)
+    T.check(reads==count and #records==2 and PX.grip_probe_state.used==2,"cadence refuses optional native getter reads before admission")
+    PX.GRIP_PROBE=false;M.now=7000;M.bp_tick(pawn)
+    T.check(reads==count and #records==2,"disabled probe adds no binding reads to the normal physical callback")
+    PX.GRIP_PROBE=true;PX.grip_probe_state=nil
+    local q=PX.grip_probe_begin(pawn,9711,"GRIP_PROXY",p)
+    local wrote=writes
+    local sample=PX.grip_probe_capture(q,"post_bp")
+    T.check(sample.joints[1].complete and writes==wrote,"snapshot helpers make no physical writes")
+    local function plain(v)
+        if type(v)~="table"then return type(v)~="userdata" and type(v)~="function"end
+        if rawget(v,"__cls")then return false end
+        for _,x in pairs(v)do if not plain(x)then return false end end
+        return true
+    end
+    T.check(plain(sample) and plain(PX.grip_probe_state),"published records and retained cadence state contain no native wrappers")
+    rpi.LinearDrive.XDrive.bEnablePositionDrive=nil
+    rpi.LinearDrive.YDrive.Damping="0"
+    rpi.LinearDrive.ZDrive.Stiffness=0/0
+    sample=PX.grip_probe_capture(q,"post_bp")
+    T.check(sample.joints[1].binding_current and not sample.joints[1].complete and sample.joints[1].linear.XDrive==nil
+        and sample.joints[1].linear.YDrive==nil and sample.joints[1].linear.ZDrive==nil,
+        "missing booleans, numeric strings and nonfinite drive values remain explicitly unavailable")
+    rpi.LinearDrive.XDrive.bEnablePositionDrive=false;rpi.LinearDrive.YDrive.Damping=0;rpi.LinearDrive.ZDrive.Stiffness=1200
+    sample=PX.grip_probe_capture(q,"post_bp")
+    T.check(sample.joints[1].complete and sample.joints[1].linear.XDrive.position==false,"actual false is readable evidence rather than unavailable")
+    right.__props.OnBinding=function()right.__props.Endpoints.bone2="lowerarm_r"end
+    sample=PX.grip_probe_capture(q,"post_bp")
+    T.check(not sample.joints[1].binding_current and not sample.joints[1].complete,"constraint bone changes during capture cannot qualify a mixed binding")
+    right.__props.OnBinding=nil;right.__props.Endpoints.bone2="hand_r"
+    base.__props.Owner=pawn
+    sample=PX.grip_probe_capture(q,"post_bp")
+    T.check(not sample.joints[1].binding_current,"a component with the wrong actual weapon owner cannot qualify by its field name")
+    base.__props.Owner=weapon
+    weapon.__props.NativeWorld=obj("World","FOREIGN_GRIP_WORLD",9800)
+    sample=PX.grip_probe_capture(q,"post_bp")
+    T.check(not sample.joints[1].binding_current,"a weapon from another exact native world cannot qualify the binding")
+    weapon.__props.NativeWorld=nil
+    p.last.cut=6;local changed=PX.grip_probe_capture(q,"post_bp")
+    T.check(changed==nil,"a same-life source discontinuity invalidates the admitted capture scope")
+    p.last.cut=5
+    q.before=PX.grip_probe_capture(q,"post_bp")
+    local rebuilt=grip("REBUILT_RIGHT",9715,"hand_r")
+    rawset(right,"__dead",true);pawn.__props["PhysicsConstraint R Hand"]=rebuilt
+    sample=PX.grip_probe_capture(q,"post_policy")
+    T.check(sample.joints[1].binding_current and not sample.joints[1].same_pair and not sample.joints[1].complete and #M.dead_touch==0,
+        "fresh rebuilt field never touches the dead cached wrapper or inherits the prior pair's identity")
+    p.last.life=2;local result,why=PX.grip_probe_capture(q,"post_bp")
+    T.check(result==nil and why=="scope changed","old source life rejects the whole diagnostic snapshot")
+    p.last.life=3;p.body.mesh_addr=9999
+    result=PX.grip_probe_capture(q,"post_bp")
+    T.check(result==nil and #M.dead_touch==0,"a body identity change rejects the original snapshot without touching retained components")
+    p.body.mesh_addr=9712
+    PX.grip_probe_state=nil;records={};wrote=writes
+    rebuilt.__props.OnBinding=function()HSMPNative.sc_put("mode",{seq=2,match_id=317,round=1,rows={{peer_id=1,life=3},{peer_id=2,life=4}}})end
+    M.bp_tick(pawn)
+    T.check(writes==wrote and #records==1 and records[1].unavailable=="scope changed",
+        "a life change during admitted native reads fails before the existing physical writer")
+    rebuilt.__props.OnBinding=nil
+    HSMPNative.sc_put("mode",{seq=3,match_id=317,round=1,rows={{peer_id=1,life=3},{peer_id=2,life=3}}})
+    local own=obj("Willie_BP_C","OWN_GRIP",9811);local own_mesh=obj("SkeletalMeshComponent","OWN_MESH",9812,own)
+    own.__props.Mesh=own_mesh;M.pc.__props.Pawn=own
+    HSMP_IPC.bus_put("spawn_status",{seq=1,verified=true,pawn="OWN_GRIP",match_id=317,round=1,life=3})
+    PX.grip_probe_state=nil;records={};wrote=writes;M.bp_tick(own)
+    T.check(#records==1 and records[1].role=="owner" and records[1].stage=="post_bp" and not records[1].joints[1].complete and writes==wrote,
+        "verified current native owner is sampled read-only with absent hand fields explicitly unavailable")
+    PX.grip_probe_state=nil
+    local oq=PX.grip_probe_begin(own,9811,"OWN_GRIP",nil)
+    local function refused(label)
+        T.check(not PX.grip_probe_current(q) and not PX.grip_probe_current(oq),label)
+    end
+    local session_slot=HSMPNative._rec.slots.session
+    HSMPNative._rec.slots.session=nil
+    refused("owner and driven snapshots require an available published session")
+    HSMPNative._rec.slots.session=session_slot
+    HSMPNative.sc_put("session",{seq=2,match_id=0,round=1,phase=3})
+    refused("a zero-match session cannot certify retained spawn and pose tuples")
+    HSMPNative.sc_put("session",{seq=3,match_id=317,round=1,phase=3})
+    local mode_slot=HSMPNative._rec.slots.mode
+    HSMPNative._rec.slots.mode=nil
+    refused("owner and driven snapshots require the current Mode record")
+    HSMPNative._rec.slots.mode=mode_slot
+    HSMPNative.sc_put("mode",{seq=4,match_id=317,round=1,rows={}})
+    refused("retained native bodies cannot invent a missing current Mode life row")
+    HSMPNative.sc_put("mode",{seq=5,match_id=317,round=1,rows={{peer_id=1,life=0},{peer_id=2,life=0}}})
+    refused("a zero life row cannot certify either role")
+    HSMPNative.sc_put("mode",{seq=6,match_id=317,round=1,rows={{peer_id=1,life=3},{peer_id=2,life=3}}})
+    HSMPNative.sc_put("link",{status=0,state=0,my_peer_id=1})
+    refused("disconnected retained session/mode/spawn slots remain unavailable")
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative._st.hb_age=10
+    refused("an expired heartbeat cannot certify an otherwise matching retained life")
+    HSMPNative._st.hb_age=.05
+    local native_info=HSMPNative.ipc_info;HSMPNative.ipc_info=function()return nil end
+    refused("an unavailable fresh IPC header cannot borrow cached healthy connection data")
+    HSMPNative.ipc_info=function()return {sidecar_hb_age_s=.05}end
+    refused("missing current sidecar state cannot certify a retained connected link")
+    HSMPNative.ipc_info=native_info
+    T.check(PX.grip_probe_current(q) and PX.grip_probe_current(oq),"restoring fresh exact session and Mode permits both current roles")
+    local retained_mode=require("hsmp_session").mode()
+    HSMPNative.sc_put("mode",{seq=7,match_id=317,round=1,rows={{peer_id=1,life=4},{peer_id=2,life=4}}})
+    T.check(retained_mode.rows[1].life==3 and retained_mode.rows[2].life==3 and not PX.grip_probe_current(q) and not PX.grip_probe_current(oq),
+        "healthy cached default Mode cannot mask newly published life rows without an on_tick or cache reset")
+    HSMPNative.sc_put("mode",{seq=8,match_id=317,round=1,rows={{peer_id=1,life=3},{peer_id=2,life=3}}})
+    T.check(PX.grip_probe_current(q) and PX.grip_probe_current(oq),"module record views immediately observe restored native versions")
+    -- Prepare publishes the next spawn order while session.round still names
+    -- the completed round. Only Mode for that exact spawn round may certify it.
+    HSMPNative.sc_put("session",{seq=4,match_id=317,round=1,phase=1,rows={{peer_id=1,connected=true,spawn_id=512},{peer_id=2,connected=true,spawn_id=513}}})
+    p.last.round,p.shown.round,q.round,oq.round=2,2,2,2
+    p.last.life,p.shown.life,q.life,oq.life=1,1,1,1
+    HSMP_IPC.bus_put("spawn_status",{seq=2,verified=true,pawn="OWN_GRIP",match_id=317,round=2,life=1})
+    refused("Prepare cannot inherit previous-round Mode or its default life1 fallback")
+    HSMPNative.sc_put("mode",{seq=7,match_id=317,round=2,rows={{peer_id=1,life=1},{peer_id=2,life=1}}})
+    T.check(PX.grip_probe_current(q) and PX.grip_probe_current(oq),"Prepare uses exact positive spawn_round and published next-round life rows")
+    HSMPNative.sc_put("session",{seq=5,match_id=317,round=1,phase=2,rows={{peer_id=1,connected=true,spawn_id=512},{peer_id=2,connected=true,spawn_id=513}}})
+    T.check(PX.grip_probe_current(q) and PX.grip_probe_current(oq),"Countdown preserves the same exact authoritative spawn-round selection")
+    HSMPNative.sc_put("session",{seq=6,match_id=317,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=8,match_id=317,round=1,rows={{peer_id=1,life=3},{peer_id=2,life=3}}})
+    p.last.round,p.shown.round,q.round,oq.round=1,1,1,1
+    p.last.life,p.shown.life,q.life,oq.life=3,3,3,3
+    HSMP_IPC.bus_put("spawn_status",{seq=3,verified=true,pawn="OWN_GRIP",match_id=317,round=1,life=3})
+    HSMP_IPC.bus_put("spawn_status",{seq=2,verified=true,pawn="OWN_GRIP",match_id=317,round=1,life=2})
+    M.now=13000;records={};M.bp_tick(own)
+    T.check(#records==0,"owner spawn status cannot relabel the authoritative current life")
+    PX.grip_probe_state={used=119,started=M.now,at={}}
+    count=reads;T.check(PX.grip_probe_begin(pawn,9711,"GRIP_PROXY",p)==nil and reads==count,
+        "last single budget slot cannot admit half a driven before/after pair")
+    PX.grip_probe_state={used=0,started=M.now-180000,at={}}
+    T.check(PX.grip_probe_begin(pawn,9711,"GRIP_PROXY",p)==nil and reads==count,"hard expiry refuses native reads despite a new callback identity")
 end
 
 if opts.kind=="grip_reassert" then

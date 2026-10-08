@@ -1035,3 +1035,78 @@ Final two-file Avatar correction is Astra-approved and root-independently
 passes278 focused assertions and2 Lua parses. The actual callback is exercised
 after simulated Blueprint writes,including dead retained mesh and reused-address
 replacement refusals. Source approval is not native readiness or parity proof.
+
+### Native27: real Blueprint hook execution, remaining grip motor hypothesis
+
+Commit094dc6de passed strict G0 (60 Lua suites,1,279 Rust tests in75 binaries,
+94Lua parses,clippy0errors/2warnings). The initial sandbox pass could not write
+the .git stamp; normal RequireG0 deployment repeated the full gate and recorded
+its clean pass before rebuilding matching content. Future root gates must use
+the authorized Git write path to avoid this duplicate. Deployment log:
+`test-results/lab/integration/native27-deploy.log`.
+
+Session:`test-results/lab/native-20261008-27`;raw:
+`test-results/20261008-052544-36d4fc-combat_manual`. Both DISPLAY1 and all costly
+caller/body/armor/local-damage probes OFF. Actual callback execution is now
+proved:135 logged windows,69,672calls,34,416qualified hits,36,848driver frames,
+0deferred. Weighted driver mean0.824397ms,max window mean1.513ms. These counters
+do NOT include callback elapsed time or renderer FPS. Before Native26:89windows,
+23,494drives,0hook calls/hits,driver weighted mean0.784714ms. Different workloads
+prevent a general performance comparison. Five-deaths-per-player plan again
+completed only HSMP1 first respawn (12,852ms); secondHSMP2 failed physical hand
+readiness at35s. Actual hooks run despite hand_r12.7cm/51.8deg and laterhand_l
+171.1deg errors. No physical readiness acceptance or tolerance change.
+
+Cloth90s:clock resets0/16windows,honest acceptance154/173,proxyrotation mean
+20.03/max27.13degrees(n20),27Insideaccepted/21delivery/14native records and
+55Inside rejections. Plate180s:clock resets0/56windows,honest acceptance0.94045911(n1394),
+proxyrotation mean28.54/max105.84degrees(n168),468calibration samples and0exact
+claimpairs. These are log-layer records rather than paired native/replay damage
+results; low cloth rotation sample count and persistent plate/spawn failure
+preclude a general pose/parity improvement claim. Normal teardown0newcrashes,
+noorphans,limited manual PASS; modes runner FAIL/full modes acceptance NOT RUN.
+Complete scalar summary:`checkpoint-summary.json`.
+
+Astra's next read-only review identified a concrete competing writer: grips_off
+zeros angular params and frees six limits but never disables linear drives.
+Cooked native Willie writes both-hand SetLinearDriveParams and enables left
+SetLinearPositionDrive(true,true,true). Free limits do not disable a position
+motor. Fresh fault-state LinearDrive.X/Y/Z enable flags,stiffness/damping/maxforce
+and exact constrained-component/bone pairing are required before a corrective
+lease. A possible minimal correction disables only position/velocity enables,
+preserving params/targets/mode and restoring six proven original flags on the
+same exact pair; no physical change has been made. Do not treat cached
+grips_desc `free` as a fresh motor readback. True Box observer implementation
+remains default-OFF/proof-only and cannot authorize restore or damage.
+
+The next bounded observers are frozen and Astra-approved. Root independently
+passed Avatar317 assertions/2parses and Box106 C++ API/pair checks with mock
+provider,161 Lua assertions (new observer87+frames26+AI43+input5),3Lua parses.
+Actual provider/reflection/registration translation units compile /W4 /WX;
+8 pinned optional export signatures exist in offline DLL mapping. Full native
+DLL linking/deployment and actual pre/post argument/order/serial availability
+remain pending Native28. No IPC/protocol layout or physical policy changes.
+
+Grip capture requires HSMP_DEV=1 and HSMP_GRIP_PROBE=1 on each game. It admits
+5s per-role/peer/pawn/full-life snapshots,120groups/240jointrows maximum,
+180s expiry from first admitted group. Two fresh named hand fields only; driven
+post-BP/post-policy pairs use exact current endpoints/owners/bones and same-pair
+readback. Linear XYZ booleans,finite strengths/targets and reference/limit/angular
+state are scalar observations. GRIPCALL elapsed includes capture overhead,
+not renderer FPS. Every row carries HSMP_INST for unambiguous process grouping.
+Current native header reads bypass the facade's retained 1s cache on failed
+refresh; positive session/effective round/Mode full life and live link are
+required. Missing modes never inherit PURE's optional-session/life1 defaults.
+
+Box capture uses dev parity `boxobserve <peer> <r|l> <1..15>` and at most32
+native entries with depth8. Enrollment resolves exact paths before addresses;
+formal fields require reflected ObjectProperty/CPF_Parm/bounds. Scope reads
+are copied only from enrolled objects. Same-role nesting aborts even beyond
+budget; marks are pending-scope only and tied to the owner main Lua VM,
+allowing pinned same-VM hook coroutines. Ambiguous hook submission never retries.
+Object/class/function lifetime serials must be signed-positive for qualification;
+zero/negative serials remain unqualified diagnostics,authority alwaysfalse.
+Fresh native ready state/numeric heartbeat and module current-version Mode
+views guard admission/end. Both probes default OFF; no restore,paint,damage or
+factory calls were added. Native28 must establish actual availability and hand
+fault state before any six-bit suppression correction.

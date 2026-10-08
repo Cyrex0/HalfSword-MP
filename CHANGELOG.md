@@ -17,6 +17,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Add bounded developer captures for current hand grip motor settings and native
+  damage-sampling hit-box changes, with explicit identity and availability checks.
 - Run stand-in arm neutralisation in the actual Blueprint ReceiveTick callback slot,
   validating the current pawn, life, world and mesh before applying the existing policy.
 - Resolve stuck-blade memberships once with bounded reads and explicit parent ambiguity,

@@ -1191,6 +1191,247 @@ function PX.grips_desc(p)
     end
     return #t > 0 and table.concat(t, ",") or "none"
 end
+
+-- Bounded developer evidence only. Read the two native hand fields after BP
+-- writes and (for a driven body) after our existing policy in the same callback.
+-- SDK LinearDriveConstraint/ConstraintDrive and cooked Willie hand setup prove
+-- these fields and bindings; free limits alone do not describe motor enables.
+PX.GRIP_PROBE = os.getenv("HSMP_DEV")=="1" and os.getenv("HSMP_GRIP_PROBE")=="1"
+function PX.grip_probe_number(v)
+    if type(v)~="number" or v~=v or math.abs(v)==math.huge then error("number unavailable",0)end
+    return v
+end
+function PX.grip_probe_id(o)
+    if not o or o:IsValid()~=true then error("object unavailable",0)end
+    local addr,name=o:GetAddress(),o:GetFName():ToString()
+    if type(addr)~="number" or addr<=0 or not math.tointeger(addr) or type(name)~="string" or name==""then
+        error("identity unavailable",0)
+    end
+    return {address=addr,name=name}
+end
+function PX.grip_probe_same(a,b)return a and b and a.address==b.address and a.name==b.name or false end
+function PX.grip_probe_binding(c)
+    local a,b,x,y={},{},{},{}
+    c:GetConstrainedComponents(a,b,x,y) -- proven native hard component/FName outputs
+    local function out(k)return a[k] or b[k] or x[k] or y[k]end
+    local one,two=out("OutComponent1"),out("OutComponent2")
+    local b1,b2=out("OutBoneName1"):ToString(),out("OutBoneName2"):ToString()
+    if type(b1)~="string" or b1=="" or type(b2)~="string" or b2==""then error("bone unavailable",0)end
+    return {one=PX.grip_probe_id(one),two=PX.grip_probe_id(two),bone1=b1,bone2=b2,
+        owner1=PX.grip_probe_id(one:GetOwner()),owner2=PX.grip_probe_id(two:GetOwner())}
+end
+function PX.grip_probe_current(q)
+    local ok,current=pcall(function()
+        if cache_gen~=world_gen or q.generation~=world_gen or q.world~=cache_world then return false end
+        -- PURE permits unstamped/no-session driving outside an active match.
+        -- Evidence requires the fresh published session and exact Mode life
+        -- in every phase, including the next spawn round during preparation.
+        -- The normal facade caches its header for 1s and retains it on a failed
+        -- refresh. This admitted diagnostic uses an actual current header;
+        -- the session reader still owns connected/heartbeat qualification.
+        local info=HSMP_IPC and HSMP_IPC.N and HSMP_IPC.N.ipc_info()
+        if type(info)~="table"then return false end
+        if info.sidecar_state~="ready" and info.sidecar_state~=2 or type(info.sidecar_hb_age_s)~="number"
+            or PX.grip_probe_number(info.sidecar_hb_age_s)<0 then return false end
+        local reader=HSM and HSM.new({every_s=0,ipc={S=HSMP_IPC.S,rec=HSMP_IPC.rec,refresh_info=function()return info end}})
+        if not reader then return false end
+        reader:poll(true)
+        if not reader:live()then return false end
+        local session,mode=HSM.view(),HSM.mode()
+        local function positive(v)return type(v)=="number" and v>0 and math.tointeger(v)~=nil end
+        if type(session)~="table" or not positive(session.seq) or not positive(session.match_id)then return false end
+        local round=session.round
+        if (session.state=="countdown" or session.state=="paused") and positive(session.spawn_round)then round=session.spawn_round end
+        local row=type(mode)=="table" and type(mode.rows)=="table" and mode.rows[q.peer]
+        if not positive(round) or session.match_id~=q.match_id or round~=q.round or not row
+            or mode.match_id~=q.match_id or mode.round~=q.round or not positive(row.life) or row.life~=q.life then return false end
+        local pc=local_pc()
+        local _,wid=world_identity(pc)
+        if not wid or q.world~=tostring(world_gen).."|"..wid then return false end
+        if not PX.grip_probe_same(PX.grip_probe_id(q.actor),q.pawn)then return false end
+        local w=q.actor:GetWorld()
+        if not w or w:IsValid()~=true or tostring(world_gen).."|"..tostring(w:GetAddress()).."@"..w:GetFullName()~=q.world then return false end
+        if q.p then
+            local shown=q.p.shown or q.p.applied_context
+            if not PX.grip_drive_current(q.p) or not shown or shown.pawn~=q.pawn.name
+                or not PURE.pose_context_ok(shown,HSM and HSM.view(),HSM and HSM.mode(),q.peer)then return false end
+            for _,k in ipairs({"match_id","round","life"})do if shown[k]~=q[k] or q.p.last[k]~=q[k]then return false end end
+            if shown.cut~=q.cut or q.p.last.cut~=q.source_cut then return false end
+            local mesh=PX.injury_mesh(q.p)
+            if not mesh or not PX.grip_probe_same(PX.grip_probe_id(mesh),q.body)
+                or not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),q.pawn)then return false end
+        else
+            if not PX.grip_probe_same(PX.grip_probe_id(local_pawn(pc)),q.pawn)then return false end
+            local s=HSMP_IPC and HSMP_IPC.bus_table("spawn_status")
+            if not s or s.verified~=true or s.pawn~=q.pawn.name then return false end
+            for _,k in ipairs({"match_id","round","life"})do if s[k]~=q[k]then return false end end
+            if not PURE.pose_context_ok(q,HSM and HSM.view(),HSM and HSM.mode(),q.peer)then return false end
+        end
+        return true
+    end)
+    return ok and current==true
+end
+function PX.grip_probe_begin(a,addr,name,p)
+    if not PX.GRIP_PROBE then return nil end
+    local now=now_ms()
+    local state=PX.grip_probe_state or {used=0,at={}}
+    PX.grip_probe_state=state -- only bounded scalar cadence/budget state persists
+    local groups=p and 2 or 1
+    if state.used+groups>120 or state.started and (now<state.started or now-state.started>=180000)then return nil end
+    local context=p and (p.shown or p.applied_context) or HSMP_IPC and HSMP_IPC.bus_table("spawn_status")
+    local peer=p and p.peer or HSM and HSM.my_peer_id()
+    if not context or not peer or peer<=0 or not math.tointeger(peer)then return nil end
+    if not p and (context.verified~=true or context.pawn~=name)then return nil end
+    for _,k in ipairs({"match_id","round","life"})do
+        local v=context[k];if type(v)~="number" or v<=0 or not math.tointeger(v)then return nil end
+    end
+    local role=p and "driven" or "owner"
+    local key=role..":"..peer
+    local identity=name.."@"..tostring(addr)..":"..context.match_id..":"..context.round..":"..context.life
+    local prior=state.at[key]
+    if prior and prior.identity==identity and now-prior.at<5000 then return nil end
+    state.at[key]={identity=identity,at=now};state.started=state.started or now;state.used=state.used+groups
+    state.sequence=(state.sequence or 0)+1
+    local q={actor=a,p=p,pawn={address=addr,name=name},role=role,peer=peer,world=cache_world,generation=world_gen,
+        match_id=context.match_id,round=context.round,life=context.life,has_context=true,
+        group=state.sequence,frame=PX.frame_no or 0,at=now,instance=os.getenv("HSMP_INST") or "unavailable"}
+    if p then q.body={address=p.body.mesh_addr,name=p.body.mesh_fname}end
+    if p then q.cut,q.source_cut,q.source_seq,q.source_mode,q.source_age=context.cut,p.last.cut,p.last.seq,p.last.mode,p.last.age end
+    if not PX.grip_probe_current(q)then return nil end
+    return q -- synchronous callback-local view; never cached or queued
+end
+function PX.grip_probe_capture(q,stage)
+    local result={role=q.role,peer=q.peer,pawn=q.pawn,world=q.world,generation=q.generation,
+        match_id=q.match_id,round=q.round,life=q.life,group=q.group,frame=q.frame,at=q.at,stage=stage,joints={},
+        cut=q.cut,source_cut=q.source_cut,source_seq=q.source_seq,source_mode=q.source_mode,source_age=q.source_age,instance=q.instance}
+    if not PX.grip_probe_current(q)then return nil,"scope changed"end
+    local function id(o)return PX.grip_probe_id(o)end
+    local function vector(v)return {PX.grip_probe_number(v.X),PX.grip_probe_number(v.Y),PX.grip_probe_number(v.Z)}end
+    local function read(row,key,f)
+        local ok,v=pcall(f)
+        if ok then row[key]=v else row.errors[key]="unavailable"end
+    end
+    for _,field in ipairs({"PhysicsConstraint R Hand","PhysicsConstraint L Hand"})do
+        local row={field=field,errors={},linear={errors={}}};result.joints[#result.joints+1]=row
+        local ok=pcall(function()
+            local c=q.actor[field] -- fresh native field; no retained p.grips wrapper
+            row.constraint=id(c)
+            row.owner=id(c:GetOwner())
+            if not PX.grip_probe_same(row.owner,q.pawn)then error("constraint owner mismatch",0)end
+            local mesh=q.actor.Mesh;row.mesh=id(mesh)
+            if not PX.grip_probe_same(id(mesh:GetOwner()),q.pawn)then error("mesh owner mismatch",0)end
+            if q.p then local m=PX.injury_mesh(q.p);row.driver_mesh=id(m)end
+            row.binding=PX.grip_probe_binding(c)
+            if not PX.grip_probe_same(row.binding.two,row.mesh) or not PX.grip_probe_same(row.binding.owner2,q.pawn)then
+                error("body binding mismatch",0)
+            end
+            for _,weapon_field in ipairs({"Weapon R","Weapon L"})do
+                local wa=q.actor[weapon_field]
+                if wa and wa:IsValid()==true and PX.grip_probe_same(id(wa),row.binding.owner1)then
+                    if not PX.grip_probe_same(id(wa.BaseMesh),row.binding.one) or not PX.grip_probe_same(id(wa:GetOwner()),q.pawn)then
+                        error("weapon binding mismatch",0)
+                    end
+                    local w=wa:GetWorld()
+                    if not w or w:IsValid()~=true or tostring(world_gen).."|"..tostring(w:GetAddress()).."@"..w:GetFullName()~=q.world then
+                        error("weapon world mismatch",0)
+                    end
+                    row.weapon_field,row.weapon=weapon_field,id(wa)
+                end
+            end
+            if not row.weapon then error("weapon binding unavailable",0)end
+            local ci=c.ConstraintInstance
+            if ci.ConstraintBone1:ToString()~=row.binding.bone1 or ci.ConstraintBone2:ToString()~=row.binding.bone2 then
+                error("bone binding mismatch",0)
+            end
+            local pi=ci.ProfileInstance
+            read(row,"reference",function()return {vector(ci.Pos1),vector(ci.PriAxis1),vector(ci.SecAxis1),
+                vector(ci.Pos2),vector(ci.PriAxis2),vector(ci.SecAxis2)}end)
+            read(row,"limits",function()
+                local l,co,t=pi.LinearLimit,pi.ConeLimit,pi.TwistLimit
+                return {PX.grip_probe_number(l.XMotion),PX.grip_probe_number(l.YMotion),PX.grip_probe_number(l.ZMotion),PX.grip_probe_number(l.Limit),
+                    PX.grip_probe_number(co.Swing1Motion),PX.grip_probe_number(co.Swing1LimitDegrees),PX.grip_probe_number(co.Swing2Motion),
+                    PX.grip_probe_number(co.Swing2LimitDegrees),PX.grip_probe_number(t.TwistMotion),PX.grip_probe_number(t.TwistLimitDegrees)}
+            end)
+            read(row,"angular",function()
+                local d=pi.AngularDrive.SlerpDrive
+                return {PX.grip_probe_number(d.Stiffness),PX.grip_probe_number(d.Damping),PX.grip_probe_number(d.MaxForce)}
+            end)
+            read(row,"targets",function()return {vector(pi.LinearDrive.PositionTarget),vector(pi.LinearDrive.VelocityTarget)}end)
+            for _,axis in ipairs({"XDrive","YDrive","ZDrive"})do
+                read(row.linear,axis,function()
+                    local d=pi.LinearDrive[axis]
+                    if type(d.bEnablePositionDrive)~="boolean" or type(d.bEnableVelocityDrive)~="boolean"then error("enable unavailable",0)end
+                    return {position=d.bEnablePositionDrive,velocity=d.bEnableVelocityDrive,stiffness=PX.grip_probe_number(d.Stiffness),
+                        damping=PX.grip_probe_number(d.Damping),max_force=PX.grip_probe_number(d.MaxForce)}
+                end)
+            end
+            -- Re-resolve the field and its actual binding after the reads;
+            -- an address reused/rebound during capture cannot become evidence.
+            local current=q.actor[field]
+            if not PX.grip_probe_same(id(current),row.constraint) or not PX.grip_probe_same(id(current:GetOwner()),row.owner)then
+                error("constraint changed",0)
+            end
+            local binding=PX.grip_probe_binding(current)
+            for _,k in ipairs({"one","two","owner1","owner2"})do
+                if not PX.grip_probe_same(binding[k],row.binding[k])then error("binding changed",0)end
+            end
+            if binding.bone1~=row.binding.bone1 or binding.bone2~=row.binding.bone2 then error("bone changed",0)end
+            if current.ConstraintInstance.ConstraintBone1:ToString()~=binding.bone1
+                or current.ConstraintInstance.ConstraintBone2:ToString()~=binding.bone2 then error("current bone changed",0)end
+            local weapon=q.actor[row.weapon_field]
+            local weapon_id=id(weapon)
+            local w=weapon:GetWorld()
+            if not PX.grip_probe_same(id(q.actor.Mesh),row.mesh) or not PX.grip_probe_same(weapon_id,row.weapon)
+                or not PX.grip_probe_same(id(weapon.BaseMesh),row.binding.one) or not PX.grip_probe_same(id(weapon:GetOwner()),q.pawn)
+                or not w or w:IsValid()~=true or tostring(world_gen).."|"..tostring(w:GetAddress()).."@"..w:GetFullName()~=q.world then
+                error("current field changed",0)
+            end
+            row.binding_current=true
+            if stage=="post_policy"then
+                local previous=q.before and q.before.joints[#result.joints]
+                row.same_pair=previous and previous.binding_current==true and PX.grip_probe_same(previous.constraint,row.constraint)
+                    and PX.grip_probe_same(previous.owner,row.owner) or false
+                for _,k in ipairs({"one","two","owner1","owner2"})do
+                    row.same_pair=row.same_pair and PX.grip_probe_same(previous.binding[k],row.binding[k])
+                end
+                row.same_pair=row.same_pair and previous.binding.bone1==row.binding.bone1 and previous.binding.bone2==row.binding.bone2
+            end
+        end)
+        if not ok then row.binding_current=false;row.errors.binding="unavailable"end
+        row.complete=row.binding_current==true and next(row.errors)==nil and next(row.linear.errors)==nil
+            and (stage~="post_policy" or row.same_pair==true)
+    end
+    if not PX.grip_probe_current(q)then return nil,"scope changed"end
+    return result
+end
+function PX.grip_probe_emit(r,why,q,stage)
+    local function ident(v)return v and v.name.."@"..v.address or "unavailable"end
+    local function values(v)
+        if not v then return "unavailable"end
+        local out={};for _,x in ipairs(v)do out[#out+1]=type(x)=="table" and values(x) or tostring(x)end
+        return "("..table.concat(out,",")..")"
+    end
+    local c=r or q
+    Log("GRIPSTATE inst=%s role=%s peer=%s pawn=%s match=%s round=%s life=%s world=%s gen=%s group=%s frame=%s at_ms=%s stage=%s available=%s reason=%s cut=%s source_cut=%s source_seq=%s source_mode=%s source_age=%s read_only=true",
+        tostring(c.instance),c.role,tostring(c.peer),ident(c.pawn),tostring(c.match_id),tostring(c.round),tostring(c.life),tostring(c.world),tostring(c.generation),
+        tostring(c.group),tostring(c.frame),tostring(c.at),r and r.stage or stage,tostring(r~=nil),why or "none",tostring(c.cut),tostring(c.source_cut),
+        tostring(c.source_seq),tostring(c.source_mode),tostring(c.source_age))
+    for _,g in ipairs(r and r.joints or {})do
+        local b=g.binding
+        local unavailable={};for _,k in ipairs({"binding","reference","limits","angular","targets"})do if g.errors[k]then unavailable[#unavailable+1]=k end end
+        Log("GRIPJOINT inst=%s group=%s stage=%s field=%s component=%s owner=%s binding_current=%s same_pair=%s complete=%s unavailable=%s one=%s owner1=%s bone1=%s two=%s owner2=%s bone2=%s native_mesh=%s driven_mesh=%s weapon_field=%s weapon=%s limits=%s angular=%s targets=%s reference=%s",
+            tostring(r.instance),tostring(r.group),r.stage,g.field,ident(g.constraint),ident(g.owner),tostring(g.binding_current),tostring(g.same_pair),tostring(g.complete),table.concat(unavailable,","),ident(b and b.one),ident(b and b.owner1),
+            tostring(b and b.bone1),ident(b and b.two),ident(b and b.owner2),tostring(b and b.bone2),ident(g.mesh),ident(g.driver_mesh),g.weapon_field or "unavailable",ident(g.weapon),
+            g.binding_current and values(g.limits) or "unavailable",g.binding_current and values(g.angular) or "unavailable",
+            g.binding_current and values(g.targets) or "unavailable",g.binding_current and values(g.reference) or "unavailable")
+        for _,axis in ipairs({"XDrive","YDrive","ZDrive"})do
+            local d=g.binding_current and g.linear[axis]
+            Log("GRIPAXIS inst=%s group=%s stage=%s component=%s axis=%s available=%s position=%s velocity=%s stiffness=%s damping=%s max_force=%s",
+                tostring(r.instance),tostring(r.group),r.stage,ident(g.constraint),axis,tostring(d~=nil),d and tostring(d.position) or "unavailable",d and tostring(d.velocity) or "unavailable",
+                d and tostring(d.stiffness) or "unavailable",d and tostring(d.damping) or "unavailable",d and tostring(d.max_force) or "unavailable")
+        end
+    end
+end
 -- The grip constraints of a stand-in, as FRESH components keyed by
 -- address. The BP destroys and rebuilds them on a pick-up / drop / disarm;
 -- a pointer kept from the last 1 s scan can be freed by GC by then, and
@@ -4515,7 +4756,8 @@ hook_note[#hook_note + 1] = "EndPlay=" .. tostring(ok_end)
 -- native-only third callback slot is ignored for this non-native function.
 tick_hook.FN = "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:ReceiveTick"
 function tick_hook.post(ctx)
-    if next(_driven) == nil or cache_gen ~= world_gen then return end
+    if next(_driven) == nil and not PX.GRIP_PROBE or cache_gen ~= world_gen then return end
+    local hook_started=PX.GRIP_PROBE and os.clock() or nil
     pcall(function()
         local _,wid=world_identity(local_pc())
         if not wid or cache_world~=tostring(world_gen).."|"..wid then return end
@@ -4523,6 +4765,14 @@ function tick_hook.post(ctx)
         if not (a and a:IsValid())then return end
         local addr,name=a:GetAddress(),a:GetFName():ToString()
         local p=_driven[addr]
+        if not p and PX.GRIP_PROBE then
+            local q=PX.grip_probe_begin(a,addr,name,nil)
+            if q then
+                local sample,why=PX.grip_probe_capture(q,"post_bp")
+                PX.grip_probe_emit(sample,why,q,"post_bp")
+                Log("GRIPCALL inst=%s group=%s role=owner elapsed_ms=%.6f includes_probe=true",tostring(q.instance),tostring(q.group),(os.clock()-hook_started)*1000)
+            end
+        end
         if not p or not p.body or p.body.ctl~="servo" or not PX.grip_drive_current(p)then return end
         local shown=p.shown or p.applied_context
         if not shown or shown.pawn~=name or not PURE.pose_context_ok(shown,HSM and HSM.view(),HSM and HSM.mode(),p.peer)then return end
@@ -4533,8 +4783,22 @@ function tick_hook.post(ctx)
         local body=p.body
         local fresh,fresh_key=PX.injury_mesh(p)
         if fresh~=mesh and not same(fresh,mesh) or fresh_key~=key or not PX.grip_drive_current(p)then return end
+        local q=PX.grip_probe_begin(a,addr,name,p)
+        local before,before_why
+        if q then
+            before,before_why=PX.grip_probe_capture(q,"post_bp");q.before=before
+            if not PX.grip_probe_current(q)then PX.grip_probe_emit(nil,"scope changed",q,"post_bp");return end
+            mesh=PX.injury_mesh(p) -- only the freshly verified body reaches the existing writer
+            if not mesh then return end
+        end
         PX.hook_hits=(PX.hook_hits or 0)+1
         neutralise_bp(p, {mesh=mesh,motors=body.motors}) -- current wrapper, no retained body-mesh access
+        if q then
+            local after,after_why=PX.grip_probe_capture(q,"post_policy")
+            PX.grip_probe_emit(before,before_why,q,"post_bp")
+            PX.grip_probe_emit(after,after_why,q,"post_policy")
+            Log("GRIPCALL inst=%s group=%s role=driven elapsed_ms=%.6f includes_probe=true",tostring(q.instance),tostring(q.group),(os.clock()-hook_started)*1000)
+        end
         if TUNE.tdiag then
             pcall(function()
                 local gs = PX.gs
