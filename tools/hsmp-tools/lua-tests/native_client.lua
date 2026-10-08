@@ -48,4 +48,74 @@ local travel=Core.new({now=function()return 0 end,link=function()return{connecte
 check(not travel:tick()and travels==1,"same arena still travels to the isolated game mode")
 check(not travel:tick()and travels==1,"pending travel cannot repeat against the old world")
 key="new";clean=true;check(travel:tick()and travels==1,"new isolated world can create mirrors")
+local Isolation=dofile("mods/HSMPMatch/Scripts/native_client_isolation.lua")
+do
+    local valid=true
+    local function obj(name,path)
+        return{IsValid=function()return true end,GetFName=function()return{ToString=function()return name end}end,
+            GetClass=function()return{IsValid=function()return true end,GetFullName=function()return"Class "..path end}end}
+    end
+    local world=obj("Map_Arena_Yard","/Script/Engine.World")
+    world.GetFullName=function()return"World /Game/Maps/Arenas/Map_Arena_Yard.Map_Arena_Yard"end
+    world.GetAddress=function()return 1234 end
+    local gm=obj("GameModeBase_1","/Script/Engine.GameModeBase");gm.OptionsString="?game=/Script/Engine.GameModeBase"
+    local pc=obj("PlayerController_1","/Script/Engine.PlayerController")
+    pc.K2_GetPawn=function()return nil end
+    pc.SetIgnoreMoveInput=function(self)self.move=true end;pc.SetIgnoreLookInput=function(self)self.look=true end
+    pc.IsMoveInputIgnored=function(self)return self.move end;pc.IsLookInputIgnored=function(self)return self.look end
+    local mesh=obj("Mesh","/Script/Engine.SkeletalMeshComponent")
+    mesh.IsVisible=function()return false end;mesh.IsSimulatingPhysics=function()return false end;mesh.GetCollisionEnabled=function()return 0 end
+    local pawn=obj("Willie_BP_C_0","/Game/Character/Blueprints/Willie_BP.Willie_BP_C")
+    pawn.Mesh=mesh;pawn.bHidden=true;pawn.GetWorld=function()return world end
+    pawn.ActorHasTag=function(_,tag)return tag=="Persistent"end;pawn.GetActorEnableCollision=function()return false end
+    local env={WG={token=function()return 1 end,same=function()return valid end,world=function()return world end,pc=function()return pc end},
+        UEHelpers={GetGameplayStatics=function()return{IsValid=function()return true end,GetGameMode=function()return gm end}end},
+        find_all=function()return{pawn}end,FName=function(s)return s end}
+    local ok,why,facts=Isolation.inspect(env)
+    check(ok and facts.game_mode_class.value=="/Script/Engine.GameModeBase"and facts.game_mode_options.value==gm.OptionsString,"isolation captures exact native class and options")
+    check(facts.willies[1].mesh_visible.known and facts.willies[1].mesh_visible.value==false and facts.willies[1].actor_collision.value==false,"native false values remain known false in diagnostics")
+    check(facts.controller_class.value=="/Script/Engine.PlayerController"and facts.move_ignored.value==true and facts.look_ignored.value==true,"controller input suppression requires actual readback")
+    gm.GetClass=function()return{IsValid=function()return true end,GetFullName=function()return"Class /Game/Blueprints/Utility/BP_HalfSwordGameMode.BP_HalfSwordGameMode_C"end}end
+    ok,why,facts=Isolation.inspect(env)
+    check(not ok and why=="isolation_game_mode_mismatch:"..facts.game_mode_class.value,"wrong game mode refuses with exact original class")
+    gm.GetClass=function()return{IsValid=function()return true end,GetFullName=function()return"Class /Script/Engine.GameModeBase"end}end
+    pawn.ActorHasTag=function()return false end
+    ok,why=Isolation.inspect(env);check(not ok and why=="isolation_local_fighter:Willie_BP_C_0","hidden nonpersistent fighters still refuse")
+    pawn.ActorHasTag=function()return true end;mesh.IsVisible=function()return 0 end
+    ok,why,facts=Isolation.inspect(env);check(not ok and why=="isolation_mesh_visible_unavailable:Willie_BP_C_0"and facts.willies[1].mesh_visible.known==false,"nonboolean native data never becomes a false proof")
+    mesh.IsVisible=function()return false end;pawn.GetActorEnableCollision=function()return true end
+    ok,why=Isolation.inspect(env);check(not ok and why=="isolation_actor_collision:Willie_BP_C_0","colliding persistent actor refuses")
+    pawn.GetActorEnableCollision=function()return false end;mesh.IsSimulatingPhysics=function()return true end
+    ok,why=Isolation.inspect(env);check(not ok and why=="isolation_mesh_simulating:Willie_BP_C_0","simulating persistent actor refuses")
+    env.find_all=function()return nil end
+    ok,why=Isolation.inspect(env);check(not ok and why=="isolation_census_incomplete","missing census is never guessed empty")
+    env.find_all=function()local rows={};for i=1,65 do rows[i]=pawn end;return rows end
+    ok,why,facts=Isolation.inspect(env);check(not ok and why=="isolation_census_incomplete"and facts.census_error=="Willie census exceeds64","diagnostic census is bounded without truncating into success")
+    valid=false;ok,why=Isolation.inspect(env);check(not ok and why=="isolation_world_unavailable","world invalidation refuses before engine getters")
+end
+do
+    local reason,key="isolation_mesh_simulating:Willie_BP_C_0","before"
+    local stopped_reason
+    local boot=Core.new({now=function()return 0 end,link=function()return{connected=true}end,directory=function()return directory end,
+        world=function()return{ready=true,arena=directory.arena,key=key}end,isolated=function()return false,reason end,
+        travel=function()return true end,report=function(_,why)stopped_reason=why end,clear=function()end,close=function()end})
+    boot:tick();key="after";boot:tick()
+    check(boot.stopped and stopped_reason==reason,"post-travel refusal preserves the exact native reason")
+end
+do
+    local Director=dofile("mods/HSMPMatch/Scripts/director.lua")
+    local old_name,old_string=FName,FString
+    FName=function(s)return s end;FString=function(s)return s end
+    local accepted,console,options=false,0,nil
+    local object={IsValid=function()return true end}
+    local gs={IsValid=object.IsValid,OpenLevel=function(_,_,_,_,value)options=value;if not accepted then error("OpenLevel unavailable")end end}
+    local ksl={IsValid=object.IsValid,ExecuteConsoleCommand=function()console=console+1 end}
+    local env=Director.make_ue_env({WG={world=function()return object end,pc=function()return object end},
+        UEHelpers={GetGameplayStatics=function()return gs end,GetKismetSystemLibrary=function()return ksl end},log=function()end,state_dir="unused"})
+    check(not Director.native_client_travel(env,"Map_Arena_Yard")and console==0,"mandatory game-mode option cannot fall back to an optionless travel")
+    check(env.open_level("Map_Arena_Yard")==true and console==1,"legacy empty-option console fallback remains supported")
+    accepted=true
+    check(Director.native_client_travel(env,"Map_Arena_Yard")==true and options=="game=/Script/Engine.GameModeBase"and console==1,"native OpenLevel receives the exact mandatory option")
+    FName,FString=old_name,old_string
+end
 print(string.format("native_client: %d checks passed",n))

@@ -13,8 +13,9 @@ function M.start()
     if started then return false,"already started"end
     started=true
     local Role,HW,IPC,SG,D,Core,Input=module("hsmp_runtime_role"),module("hsmp_wg"),module("hsmp_ipc"),module("hsmp_saveguard"),module("director"),module("native_client_core"),module("native_client_input")
+    local Isolation=module("native_client_isolation")
     local Presentation=module("native_presentation","../../HSMPAvatars/Scripts/native_presentation.lua")
-    if not Role or not Role.presentation()or not HW or not IPC or not SG or not D or not Core or not Input or not Presentation or not LoopInGameThreadWithDelay then print("[HSMPNativeClient] startup refused: client dependencies unavailable\n");return end
+    if not Role or not Role.presentation()or not HW or not IPC or not SG or not D or not Core or not Input or not Isolation or not Presentation or not LoopInGameThreadWithDelay then print("[HSMPNativeClient] startup refused: client dependencies unavailable\n");return end
     local UEH=require("UEHelpers")
     local state_dir=(os.getenv("HSMP_STATE_DIR")or"hsmp_state"):gsub("\\","/")
     local log=function(format,...)print(string.format("[HSMPNativeClient] "..format.."\n",...))end
@@ -34,30 +35,19 @@ function M.start()
     local view=Presentation.new({native=N,world=function()if not WG.check()or not WG.settled()then return nil end;return WG.world(),WG.token()end,same=WG.same})
     WG.on_drop(function()mapping=nil;last_key=nil;view:drop();IPC.world_leaving()end,"native_client")
     local env=D.make_ue_env({WG=WG,UEHelpers=UEH,log=log,SG=SG,state_dir=state_dir})
-    local controller,isolation_token,isolation_at
+    local controller,isolation_token,isolation_at,isolation_report
     local function isolated()
-        local token=WG.token();local world=WG.world();if not world or not WG.same(token)then return false end
+        local token=WG.token();local world=WG.world();if not world or not WG.same(token)then return false,"isolation_world_unavailable"end
         if isolation_token and WG.same(isolation_token)and now()<(isolation_at or 0)then return true end
-        local gs=UEH.GetGameplayStatics();local gm=gs:GetGameMode(world)
-        if not gm or not gm:IsValid()or not WG.same(token)or gm:GetClass():GetFName():ToString()~="GameModeBase"then return false end
-        -- This game mode does not run Half Sword's fighter/win/spawn state machine.
-        -- A locally spawned fighter is a hard refusal rather than a duplicate authority world.
-        for _,pawn in pairs(FindAllOf("Willie_BP_C")or{})do
-            if pawn and pawn:IsValid()then
-                local own=pawn:GetWorld()
-                if not WG.same(token)then return false end
-                if own and own:IsValid()and own:GetAddress()==world:GetAddress()then
-                    if not pawn:ActorHasTag(FName("Persistent"))or not WG.same(token)then return false end
-                    local mesh=pawn.Mesh
-                    if not mesh or not mesh:IsValid()or not WG.same(token)or mesh:IsVisible()or not WG.same(token)then return false end
-                    if pawn:GetActorEnableCollision()or not WG.same(token)or mesh:IsSimulatingPhysics(FName("None"))or not WG.same(token)then return false end
-                end
-            end
+        local ok,reason,info=Isolation.inspect({WG=WG,UEHelpers=UEH,find_all=FindAllOf,FName=FName})
+        local key=tostring(WG.key)..":"..tostring(reason or"isolated")
+        if isolation_report~=key then
+            isolation_report=key
+            info.ok=ok;info.reason=reason or""
+            log("isolation=%s reason=%s gm=%s fighters=%s",tostring(ok),tostring(reason or""),tostring(info.game_mode_class and info.game_mode_class.value or"unavailable"),tostring(info.willie_count or"unavailable"))
+            if HL then HL.event("x_native_client_isolation",info)end
         end
-        local pc=WG.pc();if not pc or not pc:IsValid()or not WG.same(token)then return false end
-        pc:SetIgnoreMoveInput(true);if not WG.same(token)then return false end
-        pc=WG.pc();pc:SetIgnoreLookInput(true)
-        if not WG.same(token)then return false end
+        if not ok then return false,reason end
         isolation_token=token;isolation_at=now()+1
         return true
     end

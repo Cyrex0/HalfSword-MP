@@ -37,11 +37,13 @@ function M.new(env)
             end
             self.travel_pending=nil
             if world.arena~=directory.arena then self:stop("client arrived in the wrong source arena");return false end
-            if not env.isolated()then self:stop("local authority suppression refused after travel");return false end
+            local isolated,why=env.isolated()
+            if not isolated then self:stop(why or"local authority suppression refused after travel");return false end
         end
-        local isolated=world.arena==directory.arena and env.isolated()
+        local isolated,isolation_reason
+        if world.arena==directory.arena then isolated,isolation_reason=env.isolated()end
         if world.arena~=directory.arena or not isolated then
-            if not env.travel or not env.travel(directory.arena) then report("error","client arena isolation refused");self:stop("travel refused");return false end
+            if not env.travel or not env.travel(directory.arena) then report("error",isolation_reason or"client arena isolation refused");self:stop(isolation_reason or"travel refused");return false end
             self.scope=nil;self.travel_pending={key=world.key,at=env.now()};report("travel",nil);return false
         end
         local scene=env.scene()
