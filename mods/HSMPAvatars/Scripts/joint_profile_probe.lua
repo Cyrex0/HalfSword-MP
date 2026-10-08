@@ -72,10 +72,10 @@ local spec={
 }
 local order={"angular_limits","angular_drive","soft_swing","soft_twist","projection"}
 local function joint(e,j,label)
-    e.stage(label..".accessor_before")
+    e.stage(label..":accessor_before")
     local ref,before=accessor(e,j);local r={name=j[1],binding=before,complete=true}
     for _,key in ipairs(order)do
-        e.stage(label.."."..key)
+        e.stage(label..":"..key)
         assert(e.current(),"scope changed")
         attempt(r,key,function()
             local s=spec[key];local args={};for i=1,#s[2]do args[i]={}end
@@ -90,7 +90,7 @@ local function joint(e,j,label)
         end)
         assert(e.current(),"scope changed");r.complete=r.complete and r[key].available
     end
-    e.stage(label..".accessor_after")
+    e.stage(label..":accessor_after")
     local _,after=accessor(e,j)
     assert(same(before.owner,after.owner)and before.index==after.index and before.parent==after.parent and before.child==after.child,"accessor changed")
     return r
@@ -105,15 +105,15 @@ local function row(c,e,all_current,stage,label)
         if not ok2 or v2~=true then lost=true;return false end
         return true
     end},{__index=e})
-    stage(label..".scope_before")
+    stage(label..":scope_before")
     assert(e.current(),"scope changed")
     local r=copy(c);r.admission_ms=r.observed_ms;r.observed_ms=number(e.now())
     r.side="right";r.phase="pre_driver_configuration_observation";r.authority=false;r.joints={}
-    stage(label..".asset_before")
+    stage(label..":asset_before")
     local before=asset(e.mesh,e);assert(e.current(),"scope changed");r.asset=before
     r.hand={}
     for _,field in ipairs({"R_GripType_Current","L_GripType_Current","R Two Handed Grip","L Hand In Offhand Attached"})do
-        stage(label..".hand."..field)
+        stage(label..":hand:"..field)
         assert(e.current(),"scope changed")
         attempt(r.hand,field,function()
             local v=e.actor[field]
@@ -124,12 +124,12 @@ local function row(c,e,all_current,stage,label)
         assert(e.current(),"scope changed")
     end
     for _,j in ipairs(M.JOINTS)do
-        stage(label.."."..j[1])
+        stage(label..":"..j[1])
         assert(e.current(),"scope changed")
-        local jr={name=j[1]};attempt(jr,"current",function()return joint(e,j,label.."."..j[1])end);r.joints[#r.joints+1]=jr
+        local jr={name=j[1]};attempt(jr,"current",function()return joint(e,j,label..":"..j[1])end);r.joints[#r.joints+1]=jr
         assert(e.current(),"scope changed")
     end
-    stage(label..".asset_after")
+    stage(label..":asset_after")
     assert(e.current(),"scope changed");local after=asset(e.mesh,e);assert(e.current(),"scope changed")
     assert(equal_asset(before,after),"asset changed")
     r.observed_end_ms=number(e.now());assert(r.observed_end_ms>=r.observed_ms,"observation clock regressed")
@@ -144,7 +144,7 @@ function M.new(emit)
     function s:capture(source,proxy,se,pe)
         if self.used or self.attempts<1 then return nil end
         self.used=true -- all optional native reads, including failed reads, are once-only.
-        local stage="pair.scope"
+        local stage="pair:scope"
         local function clock()
             local ok,v=pcall(se.now)
             return ok and type(v)=="number"and v==v and math.abs(v)<math.huge and v or nil
@@ -167,7 +167,7 @@ function M.new(emit)
             local function set_stage(value)stage=value end
             local a=row(source,se,current,set_stage,"source");assert(current(),"scope changed")
             local b=row(proxy,pe,current,set_stage,"proxy");assert(current(),"scope changed")
-            stage="pair.complete"
+            stage="pair:complete"
             return {instance=source.instance,coverage="right_only",comparison="different_peers_same_process; correlate counterpart peer across clients",
                 temporal_pairing=false,authority=false,source=a,proxy=b,observation_separation_ms=b.observed_ms-a.observed_ms}
         end)

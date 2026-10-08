@@ -1726,3 +1726,18 @@ UE reads or loosened scope; root35helper+410Avatar/four parses, Astra approved.
 Parity STOP copies native scalars, finishes stop/protected drain, clears state,
 then protected optional logs; reentry guard prevents repeated cleanup. Root252
 checks/two parses, Astra approved. All source frozen for native verification.
+
+084fd52e dev push blocked solely by G0 state_files: opaque dot-prefixed profile
+stage labels were classified as new filenames. No deployment/push occurred.
+Other G0 checks passed. Renamed stage separators to colons, matching fixtures
+only; direct state-files passes, root35helper+410Avatar/three parses pass, Astra
+approved. No lint exception, I/O, scope or gameplay changes.
+
+Native39 replay status7 correction: this status is a below-watermark/dedup expiry,
+not a TTL. Four accepted positive IDs arrive out of order before surrender in
+same live match/round/life: attacker2→victim1 id2 after3; attacker1→victim2 ids19
+after21,20after22,33after35. S2G ingress already inverted; server accept/forward
+logs show same order. Source emissions ordered, ages126/8/6/123ms. Session Live,
+both Mode alive, no world drop. replay_attempts refuses before native callback.
+Thus these four are measured pre-terminal execution loss, not expected transition
+expiry. Next bounded at-most-once reorder design must preserve replay protection.
