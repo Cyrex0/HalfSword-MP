@@ -173,6 +173,7 @@ fn game_command(exe: &Path, win64: &Path, state: &Path, identity: &Path, args: &
             if args.boot_only { "1" } else { "0" },
         )
         .env("HSMP_NATIVE_CALLER_PROBE", "0")
+        .env("HSMP_NATIVE_PROBE", "0")
         .env("HSMP_DEV_CALLER_PROBE", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -275,6 +276,7 @@ pub fn run() -> Result<()> {
                         return Ok(());
                     }
                     if args.run_seconds.is_some_and(|seconds| started.elapsed() >= Duration::from_secs(seconds)) { break; }
+                    if run.join("stop.request").exists() { break; }
                 }
             }
         }

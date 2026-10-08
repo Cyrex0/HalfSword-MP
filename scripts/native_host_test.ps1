@@ -48,6 +48,11 @@ function Quote-Arg([string]$value) {
     if ($value.Contains('"') -or $value.Contains("`r") -or $value.Contains("`n")) { throw "Unsupported diagnostic argument." }
     return '"' + $value.TrimEnd('\') + '"'
 }
+function Process-Path([string]$path) {
+    if ($path.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { $path = '\\' + $path.Substring(8) }
+    elseif ($path.StartsWith('\\?\', [StringComparison]::Ordinal)) { $path = $path.Substring(4) }
+    return [IO.Path]::GetFullPath($path)
+}
 function Crashes-Snapshot {
     $root = Join-Path $env:LOCALAPPDATA "HalfswordUE5\Saved\Crashes"
     if (Test-Path -LiteralPath $root) { return @(Get-ChildItem -LiteralPath $root -Directory | ForEach-Object Name) }
@@ -80,7 +85,11 @@ try {
     if (-not $native.Count) { throw "Supervisor did not record an owned native game process." }
     $record = Get-Content -Raw -LiteralPath $native[0].FullName | ConvertFrom-Json
     $gameProcess = Get-Process -Id ([int]$record.pid) -ErrorAction Stop
-    if ($gameProcess.Path -ine $record.exe -or $gameProcess.StartTime -lt $supervisor.StartTime) { throw "Native process identity changed before observation." }
+    if (((Process-Path $gameProcess.Path) -ine (Process-Path $record.exe)) -or
+        $gameProcess.StartTime -lt $supervisor.StartTime -or
+        $gameProcess.StartTime.ToUniversalTime() -gt $native[0].LastWriteTimeUtc) {
+        throw "Native process identity changed before observation."
+    }
     [void]$tracked.Add((Hsmp-ProcRecord $gameProcess "native_authority"))
     Write-Json (Join-Path $Run "processes.json") @($tracked)
     if (-not $BootOnly) {
@@ -119,12 +128,21 @@ finally {
                 if ($event.ev -eq "x_native_worker" -and $event.state -eq "native_ready") { $readyObserved = $true }
             }
         }
-        $allStopped = @($tracked | Where-Object { Hsmp-SameProcess $_ }).Count -eq 0
+        # Every supervisor child record must have been qualified/tracked; a path
+        # comparison failure must never be reported as successful child cleanup.
+        $unobservedChildren = @()
+        foreach ($control in @(Get-ChildItem -LiteralPath (Join-Path $Run "host") -Filter "native_process.json" -Recurse -ErrorAction SilentlyContinue)) {
+            try {
+                $childRecord = Get-Content -Raw -LiteralPath $control.FullName | ConvertFrom-Json
+                if (-not @($tracked | Where-Object { $_.pid -eq $childRecord.pid }).Count) { $unobservedChildren += $childRecord.pid }
+            } catch { $unobservedChildren += "invalid_record" }
+        }
+        $allStopped = @($tracked | Where-Object { Hsmp-SameProcess $_ }).Count -eq 0 -and $unobservedChildren.Count -eq 0
         if (-not $readyObserved -and -not $failure) { $failure = "Native worker never reported native_ready." }
         if ($newCrashes.Count -and -not $failure) { $failure = "Native game created a crash report." }
         if (-not $savesMatch -and -not $failure) { $failure = "A player save changed during the native run; retained for investigation." }
         Write-Json (Join-Path $Run "native_test.json") @{evidence_level="actual game bootstrap/network only"; backend=$Backend; boot_only=[bool]$BootOnly;
-            failure=$failure; own_saves_unchanged=$savesMatch; processes_stopped=$allStopped; new_crashes=$newCrashes;
+            failure=$failure; own_saves_unchanged=$savesMatch; processes_stopped=$allStopped; unobserved_children=$unobservedChildren; new_crashes=$newCrashes;
             native_ready_observed=$readyObserved; pass=($null -eq $failure -and $allStopped -and $savesMatch -and $readyObserved -and $newCrashes.Count -eq 0)}
     }
     Hsmp-UnregisterRun $registry

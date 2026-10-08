@@ -6,19 +6,29 @@ do
     local ok, role = pcall(require, "hsmp_runtime_role") -- unsafe: ok audited pure role module: startup env and scalar predicates only
     if not ok then ok, role = pcall(dofile, directory .. "/../../shared/hsmp_runtime_role.lua") end -- unsafe: ok same audited pure role module
     if not ok or type(role) ~= "table" then return end
+    local function start_once(adapter)
+        local started, handle = false, nil
+        handle = LoopInGameThreadWithDelay(16, function()
+            if started then return true end
+            started = true -- cancellation may reenter this callback
+            if handle then CancelDelayedAction(handle) end
+            adapter.start()
+            return true
+        end)
+    end
     if role.worker() then
         local loaded, worker = pcall(require, "headless_worker") -- unsafe: ok module defines adapters only; start runs in the explicit game-thread loop below
         if not loaded then loaded, worker = pcall(dofile, directory .. "/headless_worker.lua") end -- unsafe: ok same definitions-only module
-        if loaded and type(worker) == "table" and worker.start and LoopInGameThreadWithDelay then
-            LoopInGameThreadWithDelay(16, function() worker.start(); return true end)
+        if loaded and type(worker) == "table" and worker.start and LoopInGameThreadWithDelay and CancelDelayedAction then
+            start_once(worker)
         else print("[HSMPMatch] native worker unavailable; authority startup refused\n") end
         return
     end
     if role.presentation() then
         local loaded, client = pcall(require, "native_client") -- unsafe: ok definitions-only adapter; start is invoked on the game thread below
         if not loaded then loaded, client = pcall(dofile, directory .. "/native_client.lua") end -- unsafe: ok same definitions-only adapter
-        if loaded and type(client) == "table" and client.start and LoopInGameThreadWithDelay then
-            LoopInGameThreadWithDelay(16, function() client.start(); return true end)
+        if loaded and type(client) == "table" and client.start and LoopInGameThreadWithDelay and CancelDelayedAction then
+            start_once(client)
         else print("[HSMPMatch] native client unavailable; presentation startup refused\n") end
         return
     end

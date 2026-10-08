@@ -1,6 +1,7 @@
 -- One native authority world. This entry bypasses all client-only mods and
 -- starts without a menu, viewport, sidecar or client session/spawn pipeline.
 local M = {}
+local started = false
 local function load_module(name)
     local ok, value = pcall(require, name)
     if ok and type(value) == "table" then return value end
@@ -12,6 +13,8 @@ local function load_module(name)
     end
 end
 function M.start()
+    if started then return false, "already started" end
+    started = true -- never reinstall hooks or listeners after startup/refusal
     local Role, HW, IPC, SG, D, Control, Prepare, PoseConfig, Boundary = load_module("hsmp_runtime_role"), load_module("hsmp_wg"),
         load_module("hsmp_ipc"), load_module("hsmp_saveguard"), load_module("director"), load_module("headless_control"), load_module("headless_prepare"), load_module("hsmp_pose_config"), load_module("headless_sample_boundary")
     local function log(format, ...) print(string.format("[HSMPNativeWorker] " .. format .. "\n", ...)) end
@@ -27,6 +30,9 @@ function M.start()
     IPC.init({ mod = "HSMPMatch", state_dir = state_dir, log = log })
     local N = IPC.N
     if not N or not N.worker_input then log("startup refused: native input binding unavailable"); return end
+    -- The first frame captures native game-thread admission before any host
+    -- endpoint, parent watchdog, or reflected native helper can be called.
+    IPC.frame()
     local HL = load_module("hsmp_log")
     if HL then HL.init({ mod = "HSMPMatch", state_dir = state_dir }) end
     SG.install({ mod = "HSMPMatch", state_dir = state_dir, log = HL, fresh_per_session = false, reload_gi_on_exit = false })
@@ -36,7 +42,7 @@ function M.start()
     local RVP = RVPModule and RVPModule.new({ log = log, ev = function(name, fields) if HL then HL.event(name, fields) end end })
     if RVP then pcall(function() RegisterLoadMapPreHook(function() RVP.on_loadmap() end) end) end
     local stopped, hosted, last_key, last_state, last_report, last_stop_poll = false, false, nil, nil, -1e9, -1e9
-    local bootstrap, controller
+    local bootstrap, controller, loop_handle
     local sample_configured, frame_seq, sample_at, first_ai_name = false, 0, -1e9, nil
     local entity_bindings = {}
     local metrics = { sample_ok=0, sample_refused=0, dispatch=0, active_dispatch=0, input_refused=0, sample_min_ms=nil, sample_max_ms=0, last_input_error=nil, last_sample_error=nil }
@@ -277,6 +283,7 @@ function M.start()
     M.stop = function(reason, fault)
         if stopped then return end
         stopped = true -- stop admission before endpoint teardown or engine callbacks
+        if loop_handle and CancelDelayedAction then CancelDelayedAction(loop_handle) end
         controller:stop()
         bootstrap.stopped = true
         if fault then env.native_status("error",fault)
@@ -286,10 +293,14 @@ function M.start()
         if not ok or quit ~= true then log("graceful native quit unavailable: %s",tostring(quit)) end
     end
     log("starting native authority: arena=%s bind=%s boot_only=%s", arena, bind, tostring(boot_only))
-    LoopInGameThreadWithDelay(16, function()
+    loop_handle = LoopInGameThreadWithDelay(16, function()
         if stopped then return true end
         local ok, err = pcall(function()
-            if N.host_parent_alive and N.host_parent_alive() ~= true then M.stop("native supervisor exited");return end
+            if N.host_parent_alive then
+                local alive, why = N.host_parent_alive()
+                if alive == false then M.stop("native supervisor exited");return end
+                if alive ~= true then error("native supervisor check refused: " .. tostring(why)) end
+            end
             if stop_file and os.clock() - last_stop_poll >= 0.25 then
                 last_stop_poll = os.clock()
                 if IPC.read(stop_file) then M.stop("stop requested"); return end

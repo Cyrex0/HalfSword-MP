@@ -26,6 +26,80 @@ controls:tick() -- fresh binding, no input yet
 local function frame(id, delivery, axes, buttons)
     return {epoch=44,id=id,incarnation=1,delivery_seq=delivery,buttons=buttons or 0,flags=0,axes=axes or {1,0,2,3,1,0,0,0}}
 end
+
+-- Use the actual Match entry with a scheduler that ignores callback returns.
+-- Cancellation reentry must also observe the latch before invoking start.
+for _, branch in ipairs({"worker","presentation"}) do
+    local callback, starts, cancelled, queued = nil, 0, 0, 0
+    local fake = setmetatable({debug=debug,pcall=pcall,type=type,
+        require=function(name)
+            if name=="hsmp_runtime_role" then return {worker=function()return branch=="worker"end,
+                presentation=function()return branch=="presentation"end,client=function()return false end} end
+            if name=="headless_worker" or name=="native_client" then return {start=function()
+                T.check(cancelled==1,"Match cancels "..branch.." startup loop before adapter initialization")
+                starts=starts+1
+            end} end
+            error("unexpected client import "..name)
+        end,
+        LoopInGameThreadWithDelay=function(_,fn)queued=queued+1;callback=fn;return 77 end,
+        CancelDelayedAction=function(handle)
+            T.check(handle==77,"Match cancels its exact startup handle")
+            cancelled=cancelled+1;callback()
+        end,
+    },{__index=function(_,key)error("Match accessed client API "..key)end})
+    assert(loadfile("mods/HSMPMatch/Scripts/main.lua","t",fake))()
+    T.check(starts==0 and queued==1,"Match defers "..branch.." initialization onto the game thread")
+    for _=1,5 do callback() end
+    T.check(starts==1 and cancelled==1,"ignored loop return cannot repeat "..branch.." initialization")
+end
+
+-- Exercise the actual worker adapter while the world is unavailable. Native
+-- admission precedes host/watchdog calls; refusals retain their exact reason.
+for _, parent_result in ipairs({"alive","refused","dead"}) do
+    local callback,frames,installs,loops,hosts,stops,quits= nil,0,0,0,0,0,0
+    local lines={}
+    local N={worker_input=function()return true end,
+        host_parent_alive=function()
+            T.check(frames>0,"native admission precedes supervisor watchdog")
+            if parent_result=="refused"then return nil,"wrong thread"end
+            return parent_result=="alive"
+        end,
+        host_start=function()
+            T.check(frames>0,"native admission precedes embedded endpoint start")
+            hosts=hosts+1;return true
+        end,
+        host_stop=function()stops=stops+1;return true end,
+    }
+    local wg={check=function()return false end,settled=function()return false end,on_drop=function()end}
+    local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={},
+        hsmp_wg={new=function()return wg end},hsmp_ipc={N=N,init=function()end,frame=function()frames=frames+1 end},
+        hsmp_saveguard={install=function()installs=installs+1 end,set_active=function()end,tick=function()end},
+        director={make_ue_env=function()return {quit_native_worker=function()quits=quits+1;return true end}end,
+            new_native_worker=function()return {state="boot",tick=function()return false end}end},
+        headless_control=Control,headless_prepare=Prepare,hsmp_pose_config={},headless_sample_boundary=Boundary}
+    local fake=setmetatable({debug=debug,os={getenv=function()return nil end,clock=function()return 1 end},
+        require=function(name)if modules[name]then return modules[name]end;error("optional module absent")end,
+        dofile=function()error("optional module absent")end,
+        print=function(line)lines[#lines+1]=line end,
+        LoopInGameThreadWithDelay=function(_,fn)loops=loops+1;callback=fn;return 81 end,
+        CancelDelayedAction=function(handle)assert(handle==81);callback()end,
+    },{__index=_G})
+    local worker=assert(loadfile("mods/HSMPMatch/Scripts/headless_worker.lua","t",fake))()
+    worker.start();worker.start()
+    T.check(installs==1 and loops==1 and frames==1,"worker singleton prevents repeated frame, save hooks, and tick loops")
+    callback();callback()
+    local logs=table.concat(lines,"\n")
+    if parent_result=="alive"then
+        T.check(hosts==1 and stops==0 and quits==0,"living supervisor starts one embedded endpoint")
+    elseif parent_result=="refused"then
+        T.check(hosts==0 and stops==1 and quits==1 and logs:find("state=error",1,true)
+            and logs:find("native supervisor check refused: wrong thread",1,true)
+            and not logs:find("native supervisor exited",1,true),"nil watchdog refusal preserves fault and quits once")
+    else
+        T.check(hosts==0 and stops==1 and quits==1 and logs:find("state=stopped reason=native supervisor exited",1,true),
+            "false watchdog result means confirmed supervisor exit and one graceful quit")
+    end
+end
 T.check(controls:receive(frame(1, 1, nil, 5)), "owned human input accepted")
 T.check(not controls:receive(frame(3, 1)), "AI cannot receive a player input")
 controls:tick()

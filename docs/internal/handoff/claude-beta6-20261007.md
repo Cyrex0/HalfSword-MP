@@ -2589,3 +2589,38 @@ The native DLL link also exposed missing winmm/timeBeginPeriod and
 iphlpapi/GetBestRoute imports from the embedded library; CMake now links both
 system libraries. These failures are build/fixture findings, with no live game
 or deployment run yet. Rerun normal full G0 after this fixup.
+
+### First deployed native worker run: startup/runner failure, not gameplay proof
+
+dcaf5e96 passed full G0 (71 Lua suites;1294 Rust tests; clippy no errors) and
+RequireG0 deployment. All nine pinned native DLL CTest cases passed after the
+legacy sampling fixture received its required original context. Actual run:
+test-results/20261008-202102-73fcd9-native-host, NullRHI, expensive probes0.
+The runner compared Process.Path's normal Windows path against the supervisor's
+canonical verbatim \\?\ path and falsely rejected the original owned child44896.
+No network probe started and no native_ready was verified. It wrote stop.request
+immediately; the Match startup loop continued calling worker.start every~20ms
+because returning true does not cancel this pinned UE4SS loop implementation.
+Many overlapping workers repeatedly installed/reinitialized state. Later parent
+exit reports followed the runner's supervisor fallback stop; the log alone does
+not prove an initial native thread-admission refusal.
+
+The first report's processes_stopped=true covered only its tracked supervisor,
+and was incomplete: game44896 was still live. Root verified its PID, normalized
+exe path and creation time against the original supervisor record, stopped only
+that exact process, retained UE4SS.after-owned-cleanup.log and wrote the separate
+cleanup_correction.json. Both original process IDs are now absent, no crash was
+reported, and original player save hashes remain unchanged. Never present that
+original cleanup claim as valid child cleanup.
+
+Fixes for retry: latch/cancel the exact one-shot startup before adapter.start;
+worker singleton latch before dependencies/hooks; explicit first native frame
+before host/watchdog helpers; distinguish nil API refusal from an explicit false
+parent handle. Stop cancels the worker loop before teardown/quit. Actual-entry
+regressions (callbacks ignoring return/reentrant cancellation) pass63 checks.
+Runner normalizes equivalent verbatim paths, checks image/start time against
+the original child record, tracks the child and refuses to report complete
+cleanup for unobserved records. Supervisor also watches its administrative stop
+file, enforcing its ten-second owned-child fallback even if native quit fails.
+The regular native IPC probe is explicitly disabled as well as the caller probe.
+Native spawning, frame publication, input, damage/cuts and Abyss remain unproved.
