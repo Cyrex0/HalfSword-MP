@@ -91,8 +91,15 @@ All are double properties. The names are checked by `hsmp-tools lua-test vitals`
 
 The owner also sets bit 1 when Health ≤ 0. None of the flags are written on a stand-in.
 
-**Dismemberment:** the owner reads `Dismembered Array` (a `TArray<FName>`) at about 5 Hz and sets
-one bit per severed part in `dism`. The 23 parts are the Willie bone names in `DISM_PARTS`
+**Dismemberment:** the owner reads the native typed `Dismembered Parts Map` at about 5 Hz.
+Only completed true entries with an actually hidden distal root on the same fresh owner Mesh
+can add a whole-region bit. `Dismemberment In Process` must be false around the read; world,
+actor, Mesh, peer, match, round and full life must match. The conservative native mappings are
+3→lowerarm_r, 4→hand_r, 6→lowerarm_l, 7→hand_l, 9→calf_r, 10→foot_r,
+12→calf_l and 13→foot_l. Native partial cuts use geometry and have no whole-root projection.
+Confirmed positives survive unavailable reads within that body and cannot cross into a new
+publication life. Protocol 12 has no independent topology-unknown field: initial zero is not
+proof of an intact body. Its 23 representable parts are the Willie bone names in `DISM_PARTS`
 (`pelvis`, `spine_01` .. `spine_05`, `neck_01`, `neck_02`, `head`, the clavicles, arms, hands,
 thighs, calves and feet).
 
@@ -143,9 +150,11 @@ declared, or a trusted dead flag), the stand-in plays its death once instead.
 already shows the owner's real posture, and the native get-up logic would fight the stand-in drive.
 Limb values still feed the Blueprint's tonus and blood logic.
 
-**Severed parts:** `HideBoneByName(bone, PBO_None)` on the stand-in's `Mesh` / `SK_Skeleton`, only
-if `GetBoneIndex` finds the bone. Physics bodies stay. The bone is un-hidden when the owner's mask
-clears it. A real native dismember of the stand-in is not triggered: HSMPAvatars sets
+**Severed parts:** Combat hides the confirmed root on the stand-in's `Mesh` / `SK_Skeleton`, only
+if `GetBoneIndex` finds the bone. Avatar playback excludes confirmed missing descendants from
+servo targets and attempts native physical-body exclusion, including temporary release and
+same-actor reuse. Actual contact exclusion/restoration requires native acceptance. The bone is
+un-hidden when a verified new body's owner mask clears it. A real native dismember of the stand-in is not triggered: HSMPAvatars sets
 `Force Disable Dismemberment`, and `Dismember Function Initiate` needs markers and collision boxes.
 
 ## Stamina

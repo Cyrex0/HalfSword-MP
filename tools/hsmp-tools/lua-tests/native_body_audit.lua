@@ -8,7 +8,7 @@ local function arr(v,n)return {GetArrayNum=function()return n or #v end,
 local function map(v)return {ForEach=function(_,f)for _,x in ipairs(v)do f(param(x[1]),param(x[2]))end end}end
 local function obj(id,name,fields)
     local x=fields or {};x.IsValid=function()return true end;x.GetAddress=function()return id end
-    x.GetFullName=function()return name end;return x
+    x.GetFullName=function()return name end;x.GetFName=function()return fn(name)end;return x
 end
 local physics=obj(30,"PhysicsAsset capsules")
 local asset=obj(31,"SkeletalMesh Willie",{PhysicsAsset=physics})
@@ -193,6 +193,158 @@ a.install(function()registrations=registrations+1 end)
 T.check(registrations==2,"successful native sever registration occurs once per function")
 local first=#logs
 local prefix="/Game/Character/Blueprints/Willie_BP.Willie_BP_C:"
+local world=obj(10,"World arena")
+pawn.GetWorld=function()return world end
+local parent=obj(50,"SceneComponent arm parent",{GetWorld=function()return world end})
+local primitive_class=obj(51,"Class /Script/Engine.PrimitiveComponent")
+local box_class=obj(52,"Class /Script/Engine.BoxComponent")
+local mesh_class=obj(53,"Class /Script/Engine.SkeletalMeshComponent")
+local function xf(x)
+    return {Translation={X=x,Y=2,Z=3},Scale3D={X=1,Y=2,Z=3},Rotation={X=0,Y=0,Z=0,W=1}}
+end
+local function geometry(c,kind,x,tags)
+    c.GetClass=function()return kind=="box" and box_class or kind=="mesh" and mesh_class or primitive_class end
+    c.IsA=function(_,wanted)
+        return wanted=="/Script/Engine.PrimitiveComponent" or wanted=="/Script/Engine.BoxComponent" and kind=="box"
+            or wanted=="/Script/Engine.SkeletalMeshComponent" and kind=="mesh"
+    end
+    c.GetWorld=function()return world end;c.GetOwner=function()return pawn end
+    c.GetAttachParent=function()return parent end;c.GetAttachSocketName=function()return fn("lowerarm_l")end
+    c.ComponentTags=arr(tags or {fn("Arm_L"),fn("HP34.5")})
+    c.K2_GetComponentToWorld=function()return xf(x)end
+    c.GetCollisionEnabled=function()return 3 end
+    if kind=="box"then c.GetUnscaledBoxExtent=function()return {X=4,Y=500,Z=6}end end
+    return c
+end
+geometry(mesh,"mesh",1,{fn("Dismember Pass")})
+local attach=geometry(obj(60,"PrimitiveComponent attach marker"),"primitive",4)
+local marker1=geometry(obj(61,"PrimitiveComponent near marker"),"primitive",5,{fn("Arm_L"),fn("HP90")})
+local marker2=geometry(obj(62,"PrimitiveComponent far marker"),"primitive",6,{fn("Arm_L"),fn("HP0")})
+local box1=geometry(obj(63,"BoxComponent cut one"),"box",7)
+local box2=geometry(obj(64,"BoxComponent cut two"),"box",8)
+local weapon=geometry(obj(65,"PrimitiveComponent source blade"),"primitive",9)
+pawn["Currently Dismembered Part"],pawn["Currently Dismembered Mesh"],pawn["Setup Armor in Process"]=6,mesh,false
+local function sever(event,part,markers,b1,b2)
+    return a.sever_snapshot(event,param(pawn),param(mesh),param(part or 8),param(attach),
+        param(markers or arr({marker2,marker1})),param(b1 or box1),param(b2 or box2),param(weapon))
+end
+local initial=sever(M.HOOKS[1])
+T.check(initial.sever_inputs.part.available and initial.sever_inputs.part.value==8
+    and initial.sever_inputs.current_part.value==6,"native callback part and mutable selected part remain separate POST evidence")
+local inputs=initial.sever_inputs
+T.check(inputs.version==1 and inputs.read_complete and inputs.observation=="Blueprint_POST" and inputs.eligibility=="unavailable",
+    "all seven actual Blueprint inputs can be captured without claiming native eligibility or PRE marker wear")
+T.check(inputs.master.identity.address==2 and inputs.attach_marker.identity.address==60
+    and inputs.box1.identity.address==63 and inputs.box2.identity.address==64 and inputs.weapon.identity.address==65,
+    "seven-input callback retains distinct typed master, attach, box and weapon identities in SDK parameter order")
+T.check(inputs.master.class_match and inputs.master.asset.address==31 and inputs.master.physics_asset.address==32,
+    "actual master body section and effective physics asset are read independently from the owner's primary mesh")
+T.check(inputs.attach_marker.parent.address==50 and inputs.attach_marker.socket=="lowerarm_l"
+    and inputs.attach_marker.tags.values[2]=="HP34.5","native marker attachment and exact HP/part tags are copied without interpreting them as damage eligibility")
+T.check(inputs.overlapped_markers.available and inputs.overlapped_markers.count==2
+    and inputs.overlapped_markers.values[1].index==1 and inputs.overlapped_markers.values[1].identity.address==62
+    and inputs.overlapped_markers.values[2].identity.address==61,"pinned one-based native marker-array order is preserved without sorting")
+T.check(inputs.box1.extent.available and inputs.box1.extent.Y==500 and inputs.box1.transform.scale.Y==2,
+    "native unscaled box extent is distinguished from transform scale")
+box1.K2_GetComponentToWorld=function()return xf(77)end
+local delayed=sever(M.HOOKS[2],8,nil,box2,box1)
+T.check(delayed.sever_inputs.box1.identity.address==64 and delayed.sever_inputs.box2.transform.translation.X==77
+    and inputs.box1.transform.translation.X==7,"Delayed takes fresh selected-box order and transforms without mutating the Initiate snapshot")
+T.check(logs[#logs]:find("sever_observation=Blueprint_POST sever_eligibility=unavailable",1,true)
+    and logs[#logs]:find("sever_markers_available=true sever_markers_n=2",1,true)
+    and logs[#logs]:find("unscaled_extent:true/4/500/6",1,true),"native sever log includes explicit POST-only geometry and actual ordered marker availability")
+local exact_tags={"Arm L","Arm_L",'HP|;,="\\\n\t[]:/',string.rep("x",300),"臂左"}
+local native_tags={};for _,v in ipairs(exact_tags)do native_tags[#native_tags+1]=fn(v)end
+attach.ComponentTags=arr(native_tags)
+local exact=sever(M.HOOKS[1])
+local persisted=logs[#logs]:match("sever_attach_marker=([^ ]+)")
+local json_tags=persisted and persisted:match("tags:true/5/(%b[])")
+local decoded=json_tags and T.json_decode(json_tags)
+T.check(decoded and decoded[1]==exact_tags[1] and decoded[2]==exact_tags[2] and decoded[1]~=decoded[2],
+    "persisted quoted tags keep native spaces distinct from underscores")
+T.check(decoded and decoded[3]==exact_tags[3] and decoded[5]==exact_tags[5]
+    and not json_tags:find("\n",1,true),"persisted tags round-trip delimiters, quotes, backslashes, control bytes and UTF-8 exactly without splitting log rows")
+T.check(decoded and decoded[4]==exact_tags[4] and #decoded[4]==300
+    and exact.sever_inputs.attach_marker.tags.available and exact.sever_inputs.read_complete,
+    "available tag longer than the display-token limit persists in full")
+attach.ComponentTags=arr({fn(string.rep("x",M.SEVER_TAG_BYTES+1))})
+local oversized=sever(M.HOOKS[1])
+T.check(not oversized.sever_inputs.attach_marker.tags.available and oversized.sever_inputs.attach_marker.tags.values==nil
+    and oversized.sever_inputs.attach_marker.tags.truncated and not oversized.sever_inputs.read_complete,
+    "over-limit native tag makes the collection explicitly unavailable rather than publishing a truncated exact tag")
+T.check(logs[#logs]:find("tags_encoding:json|tags_byte_limit:1024|tags_truncated:true|tags_reason:tag_byte_limit_exceeded",1,true),
+    "persisted tag limit failure reports its bound and truncation reason")
+attach.ComponentTags=arr({fn("Arm_L"),fn("HP34.5")})
+local partial=sever(M.HOOKS[1],8,arr({marker1},2))
+T.check(not partial.sever_inputs.overlapped_markers.available and partial.sever_inputs.overlapped_markers.values==nil
+    and partial.health.Health==100,"partial native marker-array iteration stays unavailable while fresh body health is retained")
+local overflow=sever(M.HOOKS[1],8,{GetArrayNum=function()return 65 end,
+    ForEach=function()error("over-limit native marker array iterated")end})
+T.check(not overflow.sever_inputs.overlapped_markers.available and overflow.sever_inputs.overlapped_markers.count==65
+    and overflow.sever_inputs.overlapped_markers.values==nil,"observed over-limit native count is retained without iterating or truncating the marker array")
+local stopped=sever(M.HOOKS[1],8,{GetArrayNum=function()return 2 end,
+    ForEach=function(_,f)f(1,param(marker1));error("native reference array interrupted")end})
+T.check(not stopped.sever_inputs.overlapped_markers.available and stopped.sever_inputs.overlapped_markers.values==nil,
+    "failed native out/reference array read never publishes its partial first marker")
+local tag_count=0
+marker1.ComponentTags={GetArrayNum=function()tag_count=tag_count+1;return tag_count end,
+    ForEach=function(_,f)f(1,param(fn("HP50")))end}
+local moving_tags=sever(M.HOOKS[1])
+T.check(not moving_tags.sever_inputs.overlapped_markers.values[2].tags.available,
+    "native marker tags changing count across iteration remain explicitly unavailable")
+marker1.ComponentTags=arr({fn("Arm_L"),fn("HP90")})
+local bad_type=sever(M.HOOKS[1],8,nil,weapon)
+T.check(not bad_type.sever_inputs.box1.available and bad_type.sever_inputs.box1.class_match==false
+    and bad_type.sever_inputs.box1.extent==nil,"wrong actual component class cannot become a valid box or guessed extent")
+weapon.GetWorld=function()return obj(99,"World departed")end
+local wrong_world=sever(M.HOOKS[1])
+T.check(not wrong_world.sever_inputs.weapon.available and not wrong_world.sever_inputs.read_complete,
+    "callback weapon in a foreign native world cannot supply current geometry")
+weapon.GetWorld=function()return world end
+box1.GetUnscaledBoxExtent=function()error("native extent unavailable")end
+local no_extent=sever(M.HOOKS[1])
+T.check(no_extent.sever_inputs.box1.available and not no_extent.sever_inputs.box1.extent.available
+    and no_extent.sever_inputs.box1.extent.X==nil and not no_extent.sever_inputs.read_complete,
+    "unreadable box extent never falls back to a default or guessed cut size")
+box1.GetUnscaledBoxExtent=function()return {X=4,Y=500,Z=6}end
+marker1.ComponentTags=nil
+local no_tags=sever(M.HOOKS[1])
+T.check(no_tags.sever_inputs.overlapped_markers.available and not no_tags.sever_inputs.overlapped_markers.read_complete
+    and not no_tags.sever_inputs.overlapped_markers.values[2].tags.available,
+    "valid array identity/count does not hide unavailable individual marker tags")
+marker1.ComponentTags=arr({fn("Arm_L"),fn("HP90")})
+local invalid_part=a.sever_snapshot(M.HOOKS[1],param(pawn),param(mesh),param(23))
+T.check(not invalid_part.sever_inputs.part.available and invalid_part.sever_inputs.part.value==nil
+    and not invalid_part.sever_inputs.overlapped_markers.available,"wire bone key and missing callback inputs never become native part zero or an empty array")
+local function plain(v)
+    if type(v)=="table"then
+        if getmetatable(v)then return false end
+        for k,x in pairs(v)do if not plain(k) or not plain(x)then return false end end
+        return true
+    end
+    return type(v)=="string" or type(v)=="number" or type(v)=="boolean" or v==nil
+end
+T.check(plain(inputs),"sever evidence contains only copied scalar identities/geometry and no native objects or wrappers")
+local disabled_unwraps=0
+local disabled=M.new{enabled=function()return false end,unwrap=function()disabled_unwraps=disabled_unwraps+1;error("disabled callback touched")end}
+T.check(disabled.sever_snapshot(M.HOOKS[1],param(pawn))==nil and disabled_unwraps==0,
+    "disabled native sever audit unwraps none of the seven input wrappers")
+local original_enabled=enabled
+local before_drop=#logs
+box1.K2_GetComponentToWorld=function()enabled=false;return xf(7)end
+T.check(sever(M.HOOKS[1])==nil and #logs==before_drop,"world/admission loss during geometry drops the whole row rather than mixing lifetimes")
+enabled=original_enabled;box1.K2_GetComponentToWorld=function()return xf(7)end
+local source_ctx={};for k,v in pairs(ctx)do source_ctx[k]=v end;source_ctx.peer=2;source_ctx.side="source"
+local source=M.new{enabled=function()return true end,unwrap=unwrap,fname=fn,topology_reader=TOPOLOGY,
+    context=function()return nil end,source_context=function()return source_ctx end,
+    log=function(f,...)logs[#logs+1]=string.format(f,...)end}
+T.check(source.capture(pawn,"manual source") == nil,"manual/replay body admission stays owner-only when source callback admission exists")
+local source_row=source.sever_snapshot(M.HOOKS[1],param(pawn),param(mesh),param(8),param(attach),
+    param(arr({marker2,marker1})),param(box1),param(box2),param(weapon))
+T.check(source_row.context.peer==2 and source_row.context.side=="source" and source_row.sever_inputs.read_complete
+    and logs[#logs]:find("sever_side=source",1,true),"source callback uses separately supplied full-scope diagnostic admission with no owner fallback")
+-- Existing hook-order/correlation checks still use the actual production bridge.
+first=#logs
 hooks[prefix..M.HOOKS[1]](param(pawn),param(mesh),param(8),nil,nil,nil,nil,param(mesh))
 hooks[prefix..M.HOOKS[2]](param(pawn),param(mesh),param(8),nil,nil,nil,nil,param(mesh))
 T.check(logs[first+1]:find("part=8 master=2 weapon=2",1,true) and logs[first+2]:find("part=8 master=2 weapon=2",1,true),"Blueprint hook argument order has no inserted ReturnValue")

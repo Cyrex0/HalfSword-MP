@@ -20,7 +20,8 @@
 --
 -- Owner side (a hit on my real character arrives as a `damage_in` record):
 --   replay it natively through my own pawn's "Deal Complex Damage" (my armour,
---   my height, my wounds, bleeding, dismemberment, death): solo parity.
+--   my height, my wounds, bleeding and death). Native cutting/constraint
+--   construction is a separate path and is not reproduced by scalar replay.
 --   A stand-in's blow that lands on my pawn locally (an echo) is undone in the
 --   callback from my per-tick baseline and reported as a "touch" (evidence
 --   for the server that a clash I also saw did not stop the blow).
@@ -32,7 +33,7 @@
 -- Vitals (docs/development/subsystems/vitals.md): ~15 Hz on change, this mod samples OUR
 -- pawn's Health, every limb health, Consciousness, Stamina/Exhaustion,
 -- Bleeding/Blood Rate, Pain, DED/Fallen/Downed/Headless/Pain Shock and the
--- "Dismembered Array" into the `vitals` record (quantised); the server relays it (only a
+-- confirmed native completed distal cuts into the `vitals` record (quantised); the server relays it (only a
 -- heal faster than any game heal is clamped); each stand-in mirrors its
 -- owner's frame (never lethally). Peers see the victim's own values.
 --
@@ -289,7 +290,7 @@ local VFLAGS = {
 }
 local VITALS_TICKS    = 2      -- sample every 2nd 33 ms tick (~15 Hz)
 local VITALS_BEAT_S   = 1.0    -- heartbeat (server ledger reflection)
-local DISM_TICKS      = 6      -- "Dismembered Array" read at ~5 Hz
+local DISM_TICKS      = 6      -- completed native distal ledger read at ~5 Hz
 local STANDIN_FLOOR   = 1.0    -- a mirrored limb/consciousness never reaches 0 locally
 local MIRROR_REASSERT = 10     -- ticks: re-assert mirrored values (native regen drifts them)
 local MIRROR_DISMEMBER = true  -- hide the owner's severed bones on the stand-in (visual only)
@@ -1162,13 +1163,38 @@ function C3.body_audit_context(w)
     return {world=tostring(world:GetAddress()).."@"..world:GetFullName(),peer=my_peer_id,
         match_id=ctx.match_id,round=ctx.round,life=ctx.life,pawn=wname(w),actor=addr_of(w),mesh=addr_of(mesh)}
 end
+-- Sever callbacks also describe source-native attempts on displayed stand-ins.
+-- This diagnostic admission grants no damage, publication or readiness authority.
+function C3.body_sever_context(w)
+    if not WG.check() or not WG.settled() or not w or not w:IsValid() then return nil end
+    local ctx,peer,side
+    if same(w,local_pawn()) then
+        ctx,peer,side=C3.body_audit_context(w),my_peer_id,"owner"
+    else
+        local name=wname(w)
+        peer=name and puppet_peer[name]
+        if not peer or peer==my_peer_id then return nil end
+        ctx,side=C3.displayed_for(peer,w,true),"source"
+    end
+    if not ctx then return nil end
+    local world=WG.world()
+    local mesh,actor_world,mesh_world
+    local ok=pcall(function()mesh=w.Mesh;actor_world=w:GetWorld();mesh_world=mesh:GetWorld()end)
+    if not ok or not world or not world:IsValid() or not mesh or not mesh:IsValid()
+        or not actor_world or not actor_world:IsValid() or not mesh_world or not mesh_world:IsValid()
+        or not same(world,actor_world) or not same(world,mesh_world)
+        or actor_world:GetFullName()~=world:GetFullName() or mesh_world:GetFullName()~=world:GetFullName() then return nil end
+    return {world=tostring(world:GetAddress()).."@"..world:GetFullName(),peer=peer,
+        match_id=ctx.match_id,round=ctx.round,life=ctx.life,pawn=wname(w),actor=addr_of(w),mesh=addr_of(mesh),side=side}
+end
 C3.body_audit=load_module("native_body_audit")
 C3.topology_audit=load_module("native_topology_audit")
 if C3.body_audit then
     C3.body_audit=C3.body_audit.new({
         enabled=function()return os.getenv("HSMP_DEV")=="1" and C3.body_probe
             and WG.check() and WG.settled() end,
-        unwrap=pv,fname=FName,log=Log,context=C3.body_audit_context,topology_reader=C3.topology_audit,
+        unwrap=pv,fname=FName,log=Log,context=C3.body_audit_context,source_context=C3.body_sever_context,
+        topology_reader=C3.topology_audit,
     })
 end
 function C3.body_replay_meta(d,attacker)
@@ -2853,12 +2879,35 @@ function VQ.frame(t)
     return r
 end
 
+local SeverProjection=load_module("native_sever_projection")
+local dism_projection=SeverProjection and SeverProjection.new()
 local dism_cache, dism_tick, dism_owner = {}, -999, nil
-local function sample_own_vitals(me)
-    local addr; pcall(function() addr = me:GetAddress() end)
-    local identity = addr or me
-    if dism_owner ~= identity then
+function C3.sever_projection_context(me)
+    if not WG.check() or not WG.settled() or not me or not same(me,local_pawn()) then return nil end
+    local c=C3.vitals_context and C3.vitals_context(me)
+    if not c then return nil end
+    local ok,r=pcall(function()
+        local world,mesh=WG.world(),me.Mesh
+        if not world or not world:IsValid() or not mesh or not mesh:IsValid()
+            or not same(world,me:GetWorld()) or not same(world,mesh:GetWorld()) then return nil end
+        return {world=tostring(world:GetAddress()).."@"..world:GetFullName(),peer=my_peer_id,
+            match_id=c.match_id,round=c.round,life=c.life,pawn=wname(me),actor=addr_of(me),
+            mesh=addr_of(mesh),mesh_name=mesh:GetFName():ToString()}
+    end)
+    return ok and r or nil
+end
+local function sever_scope_same(a,b)
+    if not a or not b then return false end
+    for _,k in ipairs({"world","peer","match_id","round","life","pawn","actor","mesh","mesh_name"})do
+        if a[k]~=b[k] then return false end
+    end
+    return true
+end
+local function sample_own_vitals(me,publication)
+    local identity=C3.sever_projection_context(me)
+    if identity and not sever_scope_same(dism_owner,identity) then
         dism_cache, dism_tick, dism_owner = {}, -999, identity
+        if dism_projection then dism_projection.reset() end
     end
     local s = { v = {}, f = 0, dism = nil }
     for i, d in ipairs(VITALS) do
@@ -2872,25 +2921,45 @@ local function sample_own_vitals(me)
     if s.v[1] and s.v[1] <= 0 and s.f % 2 == 0 then s.f = s.f + 1 end   -- dead
     if tick_num - dism_tick >= DISM_TICKS then
         dism_tick = tick_num
-        local names = {}
-        local read_ok = false
-        local ok = pcall(function()
-            local arr = me["Dismembered Array"]
-            if arr then
-                arr:ForEach(function(_, e)
-                    local name_ok, n = pcall(function() return e:get():ToString() end)
-                    if not name_ok or type(n) ~= "string" then error("unreadable dismembered bone") end
-                    n = n and n:gsub("[^%w_]", ""):sub(1, 32)
-                    if n and n ~= "" and n ~= "None" and #names < 23 then names[#names + 1] = n end
-                end)
-                read_ok = true
+        if dism_projection and C3.topology_audit and identity then
+            local function guard(expected)
+                local fresh=C3.sever_projection_context(me)
+                return sever_scope_same(expected,fresh) and me["Dismemberment In Process"]==false
             end
-        end)
-        -- A torn/unavailable native array is not evidence that a limb grew
-        -- back. Only a complete read can replace this pawn's last report.
-        if ok and read_ok then dism_cache = names end
+            local ok,names,available,reason=pcall(function()
+                local topology
+                if guard(identity) then
+                    topology=C3.topology_audit.read(me,{context=C3.sever_projection_context,unwrap=pv})
+                end
+                return dism_projection.observe(identity,topology,{guard=guard,
+                    hidden=function(bone,expected)
+                        if not guard(expected) then return nil end
+                        return me.Mesh:IsBoneHiddenByName(FName(bone))
+                    end})
+            end)
+            if ok then
+                dism_cache=names
+                C3.sever_projection_available=available
+                C3.sever_projection_reason=reason
+            end
+        end
     end
-    s.dism = dism_cache
+    -- Preserve prior evidence internally across unavailable Mesh reads, but
+    -- never stamp an old body's missing limbs onto a newly assigned life.
+    local outbound=publication or (C3.vitals_context and C3.vitals_context(me))
+    local cached=dism_owner and outbound and dism_owner.peer==my_peer_id and dism_owner.match_id==outbound.match_id
+        and dism_owner.round==outbound.round and dism_owner.life==outbound.life
+    if cached and not identity then
+        local ok,current=pcall(function()
+            local world=WG.world()
+            return WG.settled() and world and world:IsValid() and me:IsValid()
+                and same(world,me:GetWorld()) and addr_of(me)==dism_owner.actor
+                and wname(me)==dism_owner.pawn
+                and tostring(world:GetAddress()).."@"..world:GetFullName()==dism_owner.world
+        end)
+        cached=ok and current==true
+    end
+    s.dism = cached and dism_cache or {}
     return s
 end
 
@@ -2940,7 +3009,7 @@ local function publish_own_vitals(me)
     local ctx = C3.vitals_context(me)
     if not ctx then return false end
     local key = tostring(ctx.match_id)..":"..ctx.round..":"..ctx.life
-    local s = sample_own_vitals(me)
+    local s = sample_own_vitals(me,ctx)
     vout.samples = vout.samples + 1
     local now = os.clock()
     if vout.ctx == key and not vitals_changed(s, vout.last) and now - vout.at < VITALS_BEAT_S then return false end
@@ -3251,8 +3320,9 @@ for _, kind in ipairs(C3.EVENTS) do events(kind) end
 -- attacker is the entry's peer), replayed natively on my stand-in of that
 -- player for its blood, wounds, bruises and sounds. The stand-in's damage,
 -- reaction, life and gate state is put back right after (the owner's vitals
--- stream stays the authority; dismemberment comes from its "Dismembered
--- Array" mirror: stand-ins have Force Disable Dismemberment).
+-- stream stays the authority; whole distal missing regions come from the
+-- owner's completed-cut ledger projection; native partial/detached geometry
+-- still needs separate topology replication. Stand-ins disable local severing.
 function C3.apply_fx(d, _attacker)
     if type(d) ~= "table" then return "fx: no record" end
     local target = math.tointeger(tonumber(d.target_peer_id)) or 0
@@ -3417,6 +3487,7 @@ wg_on_drop(function(why)
     puppets_stale = true
     mirror = {}               -- stand-in actors are gone (hidden-bone state with them)
     dism_cache, dism_tick, dism_owner = {}, -999, nil
+    if dism_projection then dism_projection.reset() end
     vout.last = nil           -- first sample of the new world goes out at once
     VB.base = {}          -- a dead flag must be re-earned in the new world
     if C3.BODY then C3.BODY.drop() end

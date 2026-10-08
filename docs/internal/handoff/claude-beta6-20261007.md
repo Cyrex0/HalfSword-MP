@@ -604,3 +604,63 @@ values and independent availability, while ordinary health/death Vitals stay
 unchanged. Its positive-cut fixtures are mocks. Pending frame/weapon snapshots
 now follow exact assigned Loading/Countdown tuples and fresh world/pawn/Mesh;
 placement verification is explicitly separate from diagnostic admission.
+
+Native18 (`637e04b5`, raw `test-results/20261008-005617-d355a6-combat_manual`)
+ran with the caller journal enabled. After the saved byte boundary, 1,242
+observations and 3,171 frames demonstrate actual Get Damage -> Deal Complex
+Damage ancestry and 14 cross-object weapon/Willie chains. All recorded chains
+completed; absent sever/constraint roles do not establish absence because the
+journal samples. All three Loading rounds timed out, with frame gaps up to
+43.941 seconds. Joint requests refused world-not-settled; they do not validate
+or invalidate pending-context admission. No new crash was recorded.
+
+Native19 (same commit, caller journal disabled, raw
+`test-results/20261008-010529-4ab8c8-combat_manual`) reached Live. The first
+180-second sword/cloth recipe completed five rounds through actual native AI
+yield (server cause 6), with ten actual takeover records and no harness kill.
+Round 2 failed readiness and was voided; round 7 ended at the recipe boundary.
+There were 254 owner replay outcomes, including 28 negative Health deltas.
+Surrenders at Health 95.83 and 84.54 are not biological-death evidence. The
+body probe was off throughout that recipe, so structural damage and completed
+severing remain unproved. Honest acceptance was approximately 88.8%; proxy
+rotation median 26.52 degrees/max 96.19, based on only 47 samples. A left-arm
+readiness failure persisted despite simulated sword/free grips. Maximum frame
+gap was 1.128 seconds; warmer loading confounds comparison with Native18.
+The later 60-second capture attempt was interrupted by normal session expiry
+and returned ERR no players connected, not a completed experiment. Four valid
+pending BODYFRAME_CONTEXT captures at 01:13:09.241-.299 match
+4007177418340735/round2/life1: exact owners have placement_verified=true and
+fresh displayed proxies have separate unknown placement. This is native proof
+of pending diagnostic admission. Arm limits match (shoulder75/75/45,
+elbow75/30/30, wrist45/75/85); owner strength500/250/250,damping1 versus proxy0.
+Socket quaternions closely match, while current-angle queries remain implausible
+and physics_verified=false. These are not qualified actual joint angles. Root
+sent the body diagnostic under the wrong DevCtl key; no body snapshots resulted.
+Normal teardown reported no new crash. Do not count this session as body,
+dismemberment, fair-spawn, or all-gear acceptance.
+
+The next producer correction is deliberately limited to native whole distal
+regions. Cooked Willie Delayed's Hide Bone Local at offset2298 maps parts
+3/4/6/7/9/10/12/13 to lowerarm_r/hand_r/lowerarm_l/hand_l/calf_r/foot_r/calf_l/
+foot_l. Spawn Bone is a different, proximal attachment/cut root and must not
+be used here. Parts0/1/2/5/8/11/14 use None; arbitrary head/torso/partial cuts
+need independent topology geometry. Delayed hides the distal root before
+Map_Add(part,true) at24563. Publication requires complete typed entries,
+process=false before/after, same fresh owner/world/Mesh/full life and the
+mapped root actually hidden on that Mesh. Key presence/false and camera hiding
+alone never qualify. Confirmed positives survive unavailable reads within the
+same body; a new publication life cannot borrow them. Scalar Vitals continue.
+Protocol12 cannot represent unknown topology independently of its zero bone
+mask: initial unavailable/unsupported regions are not intact-body proof.
+Matched natural distal-sever/collision acceptance remains pending.
+
+The same checkpoint captures all seven reflected sever inputs (Master Mesh,
+native part, Attach Marker, ordered Overlapped Markers, Box1, Box2, Weapon) as
+bounded typed identity/geometry observations. Owner and exact displayed source
+contexts are separate and freshly validate actor/Mesh/world and full life.
+Blueprint snapshots are POST-only; no pre-marker wear or accepted eligibility
+is inferred. No native sever/factory call is added. Stand-in local sever guards
+still prevent completed source cuts, so absent callbacks do not prove coverage.
+Focused checkpoint: four Lua suites, 556 assertions, zero failures; four changed
+Lua files parse; C++ caller walker/admission has 26 focused checks and CTest pass.
+These are assertion counts, not 556 independent real-game experiments.

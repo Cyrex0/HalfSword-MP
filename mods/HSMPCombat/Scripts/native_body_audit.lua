@@ -8,7 +8,7 @@ M.FLAGS={"Invulnerable","Block Spine Breaking","Head Broken","Neck Snapped","Nec
     "Spine Dislocated","Arm R Broken","Arm R Dislocated","Arm L Broken","Arm L Dislocated",
     "Leg R Broken","Leg R Dislocated","Leg L Broken","Leg L Dislocated","Headless",
     "Hand R Torn Off","Hand L Torn Off","Leg R Torn Off","Leg L Torn Off","Upper Body Spawned",
-    "Dismemberment In Process","Force Disable Dismemberment","Force Disable Vertex Paint"}
+    "Dismemberment In Process","Force Disable Dismemberment","Force Disable Vertex Paint","Setup Armor in Process"}
 -- These are actual skeleton names, queried independently. They are not a
 -- mapping from the native 15-part enum to the 23-bit network bone mask.
 M.BONES={"pelvis","spine_01","spine_02","spine_03","spine_04","spine_05","neck_01","neck_02","head",
@@ -19,6 +19,10 @@ M.CONSTRAINTS={"Dislocated Bone Constraint Arm R","Dislocated Bone Constraint Ar
 -- Native topology version1 availability fields; these never form a bone mask.
 M.TOPOLOGY_FLAGS={"Headless","Hand R Torn Off","Hand L Torn Off","Leg R Torn Off","Leg L Torn Off",
     "Upper Body Spawned","Dismemberment In Process"}
+M.SEVER_MARKER_LIMIT=64
+M.SEVER_TAG_BYTES=1024
+M.SEVER_TYPES={master="/Script/Engine.SkeletalMeshComponent",attach_marker="/Script/Engine.PrimitiveComponent",
+    box1="/Script/Engine.BoxComponent",box2="/Script/Engine.BoxComponent",weapon="/Script/Engine.PrimitiveComponent"}
 local function safe(f) local ok,v=pcall(f);if ok then return v end end
 local function field(o,k) return safe(function()return o[k]end) end
 local function number(v) return type(v)=="number" and v==v and math.abs(v)<math.huge and v or nil end
@@ -28,6 +32,16 @@ local function token(v)
     if number(v) then return string.format("%.17g",v) end
     if type(v)=="string" then return v:gsub("[%s|;,=]","_"):sub(1,256) end
     return "unavailable"
+end
+-- Exact JSON string, including separators used by the surrounding log row.
+-- Native UTF-8 bytes remain intact; whitespace/control bytes never split rows.
+local escaped_tag_bytes={[34]=true,[92]=true,[124]=true,[59]=true,[44]=true,[61]=true,
+    [91]=true,[93]=true,[58]=true,[47]=true}
+local function quote_tag(v)
+    return '"'..v:gsub(".",function(ch)
+        local b=ch:byte()
+        return (b<=32 or escaped_tag_bytes[b]) and string.format("\\u%04x",b) or ch
+    end)..'"'
 end
 local function valid(o) return o and safe(function()return o:IsValid()end)==true end
 local function address(o) return valid(o) and safe(function()return o:GetAddress()end) or nil end
@@ -57,16 +71,15 @@ function M.new(o)
         local complete=ok and n~=nil and n==count
         return {available=complete,count=n,values=complete and values or nil,truncated=count>(limit or 64)}
     end
-    local topology_env={unwrap=o.unwrap,map_count=o.map_count,context=function(w)
-        -- The reader rechecks this before native access; a world-drop during
-        -- capture must not reach an old owner through the supplied context.
-        if not o.enabled() then return nil end
-        return o.context(w)
-    end}
-    local function topology(w,key)
+    local function topology(w,key,current_context)
         if type(o.topology_reader)~="table" or type(o.topology_reader.read)~="function" then
             return {available=false,reason="reader unavailable",flags={}}
         end
+        local topology_env={unwrap=o.unwrap,map_count=o.map_count,context=function(actor)
+            -- Recheck the admission that originally selected owner/source.
+            if not o.enabled() then return nil end
+            return current_context(actor)
+        end}
         local ok,t,why=pcall(o.topology_reader.read,w,topology_env)
         if not ok or type(t)~="table" then
             return {available=false,reason=ok and (why or "reader unavailable") or "reader failed",flags={}}
@@ -116,9 +129,10 @@ function M.new(o)
             swing1=number(safe(function()return c:GetCurrentSwing1()end)),
             swing2=number(safe(function()return c:GetCurrentSwing2()end)),twist=number(safe(function()return c:GetCurrentTwist()end))}
     end
-    local function snapshot(w,event,meta)
+    local function snapshot(w,event,meta,current_context)
+        current_context=current_context or o.context
         if not o.enabled() then return nil end
-        local c=safe(function()return o.context(w)end)
+        local c=safe(function()return current_context(w)end)
         local key=scope_key(c);if not key then return nil end
         if address(w)~=c.actor then return nil end
         local mesh=field(w,"Mesh")
@@ -128,8 +142,8 @@ function M.new(o)
         local r={seq=seq,event=event,context=c,key=key,meta=meta or {},health={},flags={},components={},constraints={}}
         for _,k in ipairs(M.HEALTH)do r.health[k]=number(field(w,k))end
         for _,k in ipairs(M.FLAGS)do r.flags[k]=boolean(field(w,k))end
-        r.topology=topology(w,key)
-        if not o.enabled() or scope_key(safe(function()return o.context(w)end))~=key then return nil end
+        r.topology=topology(w,key,current_context)
+        if not o.enabled() or scope_key(safe(function()return current_context(w)end))~=key then return nil end
         local function missing()return {available=false,reason=r.topology.reason}end
         r.dism_array=r.topology.available and r.topology.dism_array or missing()
         r.dism_bones=r.topology.available and r.topology.dism_bones or missing()
@@ -162,9 +176,159 @@ function M.new(o)
         r.constraints.dismembered={available=cok==true,count=cok and cn or nil,values=cok and cv or nil,truncated=cn>32}
         -- Native construction callbacks are synchronous here, but a stale
         -- identity halfway through a read must never become a qualified row.
-        local after=safe(function()return o.context(w)end)
+        local after=safe(function()return current_context(w)end)
         if scope_key(after)~=key then return nil end
         return r
+    end
+    -- Local SDK: seven reflected inputs at 0/8/10/18/28/30/38 (hex), no
+    -- ReturnValue. Pinned script_hook passes the reference array's live out
+    -- address. These are POST observations, never eligible-cut/PRE evidence.
+    local function sever_inputs(w,args,r,current_context)
+        local invalid
+        local function guard()
+            if invalid then return false end
+            if not o.enabled() or scope_key(safe(function()return current_context(w)end))~=r.key then
+                invalid="scope changed";return false
+            end
+            return true
+        end
+        local function read(f)if guard() then return safe(f)end end
+        local function unknown(reason)return {available=false,reason=reason or invalid or "unavailable"}end
+        local function integer(v,max)
+            return number(v) and v%1==0 and v>=0 and (not max or v<=max) and v or nil
+        end
+        local function text_value(v)
+            return type(v)=="string" and v~="" and #v<=1024 and not v:find("\0",1,true) and v or nil
+        end
+        local function world_key(c)
+            if not valid(c) then return nil end
+            local id,nm=address(c),text_value(name(c))
+            return id and nm and tostring(id).."@"..nm or nil
+        end
+        local function ref(c)
+            if read(function()return valid(c)end)~=true then return unknown()end
+            local id=integer(read(function()return address(c)end))
+            if id==0 then id=nil end
+            local nm=read(function()return text_value(name(c))end)
+            local fn=read(function()return text_value(fname(c:GetFName()))end)
+            return {available=id~=nil and nm~=nil and fn~=nil,address=id,name=nm,fname=fn}
+        end
+        local function names(a)
+            local n=integer(read(function()return a:GetArrayNum()end))
+            if n==nil then return unknown("count unavailable")end
+            if n>M.SEVER_MARKER_LIMIT then return {available=false,reason="tag count limit exceeded",count=n,truncated=true}end
+            local values,count={},0
+            local limited=false
+            local ok=pcall(function()a:ForEach(function(i,v)
+                if not guard() then error(invalid)end
+                count=count+1
+                if count>n or i~=count then error("array order/count mismatch")end
+                local raw=fname(o.unwrap(v))
+                if type(raw)=="string" and #raw>M.SEVER_TAG_BYTES then limited=true;error("tag byte limit exceeded")end
+                local value=text_value(raw)
+                if not value then error("name unavailable")end
+                values[count]=value
+            end)end)
+            local after=integer(read(function()return a:GetArrayNum()end),M.SEVER_MARKER_LIMIT)
+            if not ok or after~=n or count~=n then
+                return {available=false,reason=limited and "tag byte limit exceeded" or "iteration incomplete or count changed",
+                    count=n,truncated=limited}
+            end
+            return {available=true,count=n,values=values,truncated=false}
+        end
+        local function vector(v,axes)
+            local t={available=true}
+            for _,k in ipairs(axes)do
+                t[k]=read(function()return number(field(v,k))end)
+                if t[k]==nil then t.available=false end
+            end
+            return t
+        end
+        local function geometry(c,expected)
+            if not guard() then return unknown()end
+            local id=ref(c)
+            if not id.available then return unknown("native component identity unavailable")end
+            local cw=read(function()return world_key(c:GetWorld())end)
+            local class=read(function()return c:GetClass()end)
+            local class_ref=ref(class)
+            local typed=read(function()return boolean(c:IsA(expected))end)
+            local g={available=false,identity=id,class=class_ref,expected=expected,class_match=typed,world=cw}
+            if cw~=r.context.world then g.reason="native component world unavailable or changed";return g end
+            if typed~=true then g.reason="native component type unavailable or mismatched";return g end
+            g.available=true
+            local owner=read(function()return c:GetOwner()end)
+            g.owner=ref(owner)
+            if g.owner.available then
+                g.owner.world=read(function()return world_key(owner:GetWorld())end)
+                if g.owner.world~=r.context.world then g.owner=unknown("owner world unavailable or changed")end
+            end
+            local parent=read(function()return c:GetAttachParent()end)
+            g.parent=ref(parent)
+            if g.parent.available then
+                g.parent.world=read(function()return world_key(parent:GetWorld())end)
+                if g.parent.world~=r.context.world then g.parent=unknown("attachment world unavailable or changed")end
+            end
+            g.socket=text_value(read(function()return fname(c:GetAttachSocketName())end))
+            g.socket_available=g.socket~=nil
+            g.tags=names(read(function()return field(c,"ComponentTags")end))
+            local xf=read(function()return c:K2_GetComponentToWorld()end)
+            g.transform={translation=vector(read(function()return field(xf,"Translation")end),{"X","Y","Z"}),
+                rotation=vector(read(function()return field(xf,"Rotation")end),{"X","Y","Z","W"}),
+                scale=vector(read(function()return field(xf,"Scale3D")end),{"X","Y","Z"})}
+            g.transform.available=g.transform.translation.available and g.transform.rotation.available and g.transform.scale.available
+            g.collision=read(function()return number(c:GetCollisionEnabled())end)
+            g.collision_available=g.collision~=nil
+            if expected==M.SEVER_TYPES.box1 then
+                g.extent=vector(read(function()return c:GetUnscaledBoxExtent()end),{"X","Y","Z"})
+            elseif expected==M.SEVER_TYPES.master then
+                local asset=read(function()return c:GetSkeletalMeshAsset()end)
+                local override=read(function()return field(c,"PhysicsAssetOverride")end)
+                g.asset=ref(asset)
+                g.physics_asset=ref(read(function()return valid(override) and override or field(asset,"PhysicsAsset")end))
+            end
+            local after=ref(c)
+            if after.address~=id.address or after.fname~=id.fname or after.name~=id.name
+                or read(function()return world_key(c:GetWorld())end)~=cw then return unknown("native component identity changed")end
+            g.read_complete=class_ref.available and g.owner.available and g.parent.available and g.socket_available
+                and g.tags.available and g.transform.available and g.collision_available
+                and (not g.extent or g.extent.available)
+                and (not g.asset or (g.asset.available and g.physics_asset.available))
+            return g
+        end
+        local inputs={version=1,observation="Blueprint_POST",eligibility="unavailable",read_complete=true}
+        local selected=integer(read(function()return field(w,"Currently Dismembered Part")end),14)
+        inputs.current_part={available=selected~=nil,value=selected}
+        inputs.current_master=ref(read(function()return field(w,"Currently Dismembered Mesh")end))
+        local part=integer(read(function()return o.unwrap(args[2])end),14)
+        inputs.part={available=part~=nil,value=part}
+        for _,entry in ipairs({{"master",1},{"attach_marker",3},{"box1",5},{"box2",6},{"weapon",7}})do
+            inputs[entry[1]]=geometry(read(function()return o.unwrap(args[entry[2]])end),M.SEVER_TYPES[entry[1]])
+        end
+        local a=read(function()return o.unwrap(args[4])end)
+        local n=integer(read(function()return a:GetArrayNum()end))
+        local markers=unknown("count unavailable")
+        if n and n>M.SEVER_MARKER_LIMIT then markers={available=false,reason="limit exceeded",count=n}
+        elseif n~=nil then
+            local values,count,complete={},0,true
+            local ok=pcall(function()a:ForEach(function(i,v)
+                if not guard() then error(invalid)end
+                count=count+1
+                if count>n or i~=count then error("array order/count mismatch")end
+                values[count]=geometry(o.unwrap(v),M.SEVER_TYPES.attach_marker)
+                values[count].index=i -- pinned TArray ForEach is one-based
+                if not values[count].read_complete then complete=false end
+            end)end)
+            local after=integer(read(function()return a:GetArrayNum()end),M.SEVER_MARKER_LIMIT)
+            if ok and count==n and after==n then markers={available=true,count=n,values=values,read_complete=complete}
+            else markers=unknown("iteration incomplete or count changed")end
+        end
+        inputs.overlapped_markers=markers
+        for _,key in ipairs({"part","master","attach_marker","overlapped_markers","box1","box2","weapon"})do
+            local v=inputs[key]
+            if not v.available or (key~="part" and not v.read_complete)then inputs.read_complete=false end
+        end
+        if not guard() then return nil end
+        return inputs
     end
     local function emit(r)
         if not r then return end
@@ -213,20 +377,76 @@ function M.new(o)
         end
         for _,k in ipairs(M.CONSTRAINTS)do rows[#rows+1]=k:gsub("%W","_").."="..con(r.constraints[k])end
         collection("dism_constraints",r.constraints.dismembered,function(v)return token(v.bone)..":"..con(v.component)end)
+        if r.sever_inputs then
+            local s=r.sever_inputs
+            put("sever_inputs_version",s.version);put("sever_observation",s.observation)
+            put("sever_eligibility",s.eligibility);put("sever_inputs_read_complete",s.read_complete)
+            put("sever_side",r.context.side or "owner")
+            put("sever_part_available",s.part.available);put("sever_part",s.part.value)
+            put("sever_current_part_available",s.current_part.available);put("sever_current_part",s.current_part.value)
+            put("sever_current_master",s.current_master.address)
+            local function reference(v)
+                return table.concat({token(v.available),token(v.address),token(v.name),token(v.fname)},"/")
+            end
+            local function vec(v,axes)
+                local out={token(v.available)}
+                for _,k in ipairs(axes)do out[#out+1]=token(v[k])end
+                return table.concat(out,"/")
+            end
+            local function geom(g)
+                local parts={"available:"..token(g.available),"reason:"..token(g.reason),
+                    "expected:"..token(g.expected),"class_match:"..token(g.class_match),"identity:"..reference(g.identity or {}),
+                    "class:"..reference(g.class or {}),"world:"..token(g.world),"complete:"..token(g.read_complete)}
+                if g.available then
+                    parts[#parts+1]="owner:"..reference(g.owner).."/"..token(g.owner.world)
+                    parts[#parts+1]="parent:"..reference(g.parent).."/"..token(g.parent.world)
+                    parts[#parts+1]="socket:"..token(g.socket_available).."/"..token(g.socket)
+                    local tags={};for _,v in ipairs(g.tags.values or {})do tags[#tags+1]=quote_tag(v)end
+                    parts[#parts+1]="tags:"..token(g.tags.available).."/"..token(g.tags.count).."/["..table.concat(tags,",").."]"
+                    parts[#parts+1]="tags_encoding:json|tags_byte_limit:"..M.SEVER_TAG_BYTES
+                        .."|tags_truncated:"..token(g.tags.truncated).."|tags_reason:"..token(g.tags.reason)
+                    parts[#parts+1]="position:"..vec(g.transform.translation,{"X","Y","Z"})
+                    parts[#parts+1]="quat:"..vec(g.transform.rotation,{"X","Y","Z","W"})
+                    parts[#parts+1]="scale:"..vec(g.transform.scale,{"X","Y","Z"})
+                    parts[#parts+1]="collision:"..token(g.collision_available).."/"..token(g.collision)
+                    if g.extent then parts[#parts+1]="unscaled_extent:"..vec(g.extent,{"X","Y","Z"})end
+                    if g.asset then
+                        parts[#parts+1]="asset:"..reference(g.asset)
+                        parts[#parts+1]="physics_asset:"..reference(g.physics_asset)
+                    end
+                end
+                return table.concat(parts,"|")
+            end
+            for _,key in ipairs({"master","attach_marker","box1","box2","weapon"})do
+                rows[#rows+1]="sever_"..key.."="..geom(s[key])
+            end
+            put("sever_markers_read_complete",s.overlapped_markers.read_complete)
+            collection("sever_markers",s.overlapped_markers,function(v)return v.index..":"..geom(v)end)
+        end
         o.log("%s",table.concat(rows," "))
     end
     local function capture(w,event,meta) local r=snapshot(w,event,meta);emit(r);return r end
-    local function sever(event,selfp,masterp,partp,_,__,___,____,weaponp)
+    local function sever(event,selfp,masterp,partp,attachp,markersp,box1p,box2p,weaponp)
         if not o.enabled() then return end
-        local w,master,part,weapon=o.unwrap(selfp),o.unwrap(masterp),number(o.unwrap(partp)),o.unwrap(weaponp)
-        local meta={part=part,master=address(master),weapon=address(weapon),pre="unavailable:Blueprint_POST"}
-        local r=snapshot(w,event,meta);if not r then return end
-        local key=r.key..":"..token(meta.master)..":"..token(part)
-        if event==M.HOOKS[1] then starts[key]=r.seq;meta.pair=r.seq
-        else meta.pair=starts[key];starts[key]=nil end
+        local w=o.unwrap(selfp)
+        local current_context=o.source_context or o.context
+        local meta={pre="unavailable:Blueprint_POST"}
+        local r=snapshot(w,event,meta,current_context);if not r then return end
+        r.sever_inputs=sever_inputs(w,{masterp,partp,attachp,markersp,box1p,box2p,weaponp},r,current_context)
+        if not r.sever_inputs then return end
+        local s=r.sever_inputs
+        meta.part,meta.master,meta.weapon=s.part.value,s.master.identity and s.master.identity.address,s.weapon.identity and s.weapon.identity.address
+        -- This remains an observed POST-pair hint, not a causal native
+        -- operation ID or proof that Initiate passed its native gates.
+        if s.part.available and s.master.available then
+            local key=r.key..":"..token(meta.master)..":"..token(meta.part)
+            if event==M.HOOKS[1] then starts[key]=r.seq;meta.pair=r.seq
+            else meta.pair=starts[key];starts[key]=nil end
+        end
         emit(r)
+        return r
     end
-    return {capture=capture,snapshot=snapshot,
+    return {capture=capture,snapshot=snapshot,sever_snapshot=sever,
         install=function(register)
             for _,event in ipairs(M.HOOKS)do
                 if not installed[event] and not ambiguous[event] then

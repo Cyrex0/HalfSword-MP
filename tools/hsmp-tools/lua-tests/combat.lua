@@ -94,6 +94,10 @@ if fn == nil then return end
 fn()
 local api = HSMP_COMBAT_TEST.api
 api.set_world("world#1")
+-- This general damage fixture has no native UWorld/mesh identities. Keep the
+-- independent native-topology reader unavailable; dedicated fixtures below
+-- supply its full body-life scope without weakening the production guard.
+api.C3.sever_projection_context=function()return nil end
 
 do
     local original_ai,original_pc=api.WG.ai_pawn,PC.Pawn
@@ -1280,6 +1284,44 @@ do
     local function displayed() NAT.bus_put("playback",{rows={rendered}}) end
     displayed()
     T.check(real_displayed_for(2,SI)~=nil,"exact original rendered pose binds native contact")
+    do
+        local original_world,original_check,original_settled=api.WG.world,api.WG.check,api.WG.settled
+        local actor_world,mesh_world,mesh_address=SI.GetWorld,SI.Mesh.GetWorld,SI.Mesh.GetAddress
+        local world={IsValid=valid,GetAddress=function()return 771 end,GetFullName=function()return "World sever arena"end}
+        api.WG.world=function()return world end;api.WG.check=function()return true end;api.WG.settled=function()return true end
+        SI.GetWorld=function()return world end;SI.Mesh.GetWorld=function()return world end
+        SI.Mesh.GetAddress=function()return 772 end
+        local hp,disable,paint=SI.Health,SI["Force Disable Dismemberment"],SI["Force Disable Vertex Paint"]
+        local source=api.C3.body_sever_context(SI)
+        T.check(source and source.side=="source" and source.peer==2 and source.match_id==12345
+            and source.round==3 and source.life==1 and source.actor==SI:GetAddress() and source.mesh==772
+            and source.world=="771@World sever arena","source sever diagnostics bind actual displayed full life and fresh native world/actor/Mesh")
+        T.check(api.C3.body_audit_context(SI)==nil,"source sever admission does not widen owner manual/replay body admission")
+        T.check(SI.Health==hp and SI["Force Disable Dismemberment"]==disable and SI["Force Disable Vertex Paint"]==paint,
+            "source diagnostic context never changes stand-in damage, paint or sever gates")
+        for _,k in ipairs({"match_id","round","life","pawn"})do
+            local previous=rendered[k];rendered[k]=type(previous)=="string" and "PreviousStandin" or previous+1;displayed()
+            T.check(api.C3.body_sever_context(SI)==nil,"source sever diagnostics reject displayed "..k.." mismatch")
+            rendered[k]=previous;displayed()
+        end
+        rendered.local_ms=rendered.local_ms-251;displayed()
+        T.check(api.C3.body_sever_context(SI)==nil,"source sever diagnostics require fresh display rather than delayed-trade admission")
+        rendered.local_ms=math.floor(CLOCK*1000);displayed()
+        local departed={IsValid=valid,GetAddress=function()return 900 end,GetFullName=function()return "World departed"end}
+        SI.GetWorld=function()return departed end
+        T.check(api.C3.body_sever_context(SI)==nil,"source sever diagnostics refuse actor from another native world")
+        SI.GetWorld=function()return world end;SI.Mesh.GetWorld=function()return departed end
+        T.check(api.C3.body_sever_context(SI)==nil,"source sever diagnostics refuse current Mesh from another native world")
+        SI.Mesh.GetWorld=function()return world end
+        local unknown=mk_willie("Willie_untracked")
+        unknown.GetWorld=function()error("untracked actor world touched")end
+        T.check(api.C3.body_sever_context(unknown)==nil,"untracked native victim never falls back to owner's diagnostic life")
+        api.WG.check=function()return false end
+        local stale={IsValid=function()error("old-world wrapper touched")end}
+        T.check(api.C3.body_sever_context(stale)==nil,"world-drop stops source callback admission before touching the old native wrapper")
+        api.WG.world,api.WG.check,api.WG.settled=original_world,original_check,original_settled
+        SI.GetWorld,SI.Mesh.GetWorld,SI.Mesh.GetAddress=actor_world,mesh_world,mesh_address
+    end
     rendered.life=2;displayed()
     T.check(real_displayed_for(2,SI)==nil,"same actor's other displayed life cannot be relabelled as current")
     rendered.life=1;rendered.pawn="PreviousStandin";displayed()
@@ -1811,4 +1853,61 @@ do
         api.C3.body_audit,api.C3.body_probe=old_audit,old_body_probe
         ME["Get Damage"], api.C3.native_probe = previous_gd, previous_probe
     end
+end
+
+-- Completed native distal cuts enter the actual Vitals producer, while
+-- ordinary scalar damage survives unknown/partial topology and new lives.
+do
+    local prior_context,prior_topology,prior_vitals=api.C3.sever_projection_context,api.C3.topology_audit,api.C3.vitals_context
+    local prior_world,prior_settled=api.WG.world,api.WG.settled
+    local prior_me_world,prior_process,prior_hidden=ME.GetWorld,ME["Dismemberment In Process"],ME.Mesh.IsBoneHiddenByName
+    local world={IsValid=function()return true end,GetAddress=function()return 99 end,GetFullName=function()return "World Yard" end}
+    local original_peer=api.session().my_peer_id
+    local scope={world="99@World Yard",peer=original_peer,match_id=88991,round=2,life=130,
+        pawn=ME.__name,actor=ME.__addr,mesh=70001,mesh_name="Mesh_1"}
+    local readable,rows=true,{{part=3,value=true}}
+    api.C3.sever_projection_context=function()
+        if not readable then return nil end
+        local fresh={};for k,v in pairs(scope)do fresh[k]=v end;return fresh
+    end
+    api.C3.vitals_context=function()return {match_id=scope.match_id,round=scope.round,life=scope.life} end
+    api.WG.world=function()return world end;api.WG.settled=function()return true end
+    ME.GetWorld=function()return world end
+    ME["Dismemberment In Process"]=false
+    ME.Mesh.IsBoneHiddenByName=function(_,bone)return bone:ToString()=="lowerarm_r" end
+    api.C3.topology_audit={read=function()
+        return {context=scope,parts={available=true,count=#rows,values=rows},
+            flags={["Dismemberment In Process"]={available=true,value=false}}}
+    end}
+    api.set_tick(50000)
+    local sample=api.sample_own_vitals(ME)
+    T.check(#sample.dism==1 and sample.dism[1]=="lowerarm_r","production publisher uses actual native distal map with physical hide")
+    T.check(api.publish_own_vitals(ME),"native completed cut publishes through actual Vitals slot")
+    local record=NAT._rec.slots.vitals.t
+    local bit=IPCF.S.ENUMS.dism_part.LOWERARM_R
+    T.check(record.life==130 and record.dism==(1<<bit),"production wire carries exact life130 and distal root")
+    readable=false;api.set_tick(50010)
+    sample=api.sample_own_vitals(ME)
+    T.check(#sample.dism==1,"temporary unreadable mesh retains known limb on exact outbound body")
+    api.set_my_peer_id(original_peer+1)
+    sample=api.sample_own_vitals(ME)
+    T.check(#sample.dism==0,"reassigned peer cannot borrow previous peer's retained topology")
+    api.set_my_peer_id(original_peer)
+    scope.life=131
+    ME.Pain=ME.Pain+1
+    T.check(api.publish_own_vitals(ME),"ordinary health and pain publication continues when topology is unavailable")
+    record=NAT._rec.slots.vitals.t
+    T.check(record.life==131 and record.dism==0,"old life130 sever cannot be retagged into unreadable life131")
+    scope.life=130;api.set_tick(50020)
+    sample=api.sample_own_vitals(ME)
+    T.check(#sample.dism==1,"retained metadata can recover exact previous body after temporary read failure")
+    scope.life=131;readable=true;rows={};api.set_tick(50030)
+    sample=api.sample_own_vitals(ME)
+    T.check(#sample.dism==0,"verified new full life clears prior body's irreversible cut")
+    rows={{part=2,value=true}};api.set_tick(50040)
+    sample=api.sample_own_vitals(ME)
+    T.check(#sample.dism==0 and sample.v[1]==ME.Health,"native partial torso cut never guesses pelvis or blocks scalar health")
+    api.C3.sever_projection_context,api.C3.topology_audit,api.C3.vitals_context=prior_context,prior_topology,prior_vitals
+    api.WG.world,api.WG.settled=prior_world,prior_settled
+    ME.GetWorld,ME["Dismemberment In Process"],ME.Mesh.IsBoneHiddenByName=prior_me_world,prior_process,prior_hidden
 end

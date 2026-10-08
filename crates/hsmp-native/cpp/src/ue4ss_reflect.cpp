@@ -245,6 +245,7 @@ namespace
         {L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C:Dismember Function Delayed",0,0,0,0,0,0,16},
         {L"/Game/Assets/Weapons/Blueprints/ModularWeaponBP.ModularWeaponBP_C:ExecuteUbergraph_ModularWeaponBP",0,0,0,0,0,0,4},
     };
+    static_assert(sizeof(g_caller_roles) / sizeof(g_caller_roles[0]) <= 32);
     hsmp_caller::Getters g_caller_getters{};
     HsmpCallerSink g_caller_sink{};
     bool g_caller_submitted = false;
@@ -300,12 +301,13 @@ namespace
         }
         return out;
     }
-    unsigned caller_role(void* node, ULONGLONG now)
+    uint32_t caller_candidates(void* node, ULONGLONG now)
     {
         if (!node) return 0;
         // Node belongs to the live engine frame. Reject unrelated names before
         // GUObjectArray/class reads or StaticFindObject on this very hot hook.
         const uint64_t name = pack(*g_api.name_private(node));
+        uint32_t candidates = 0;
         for (unsigned i = 0; i < sizeof(g_caller_roles) / sizeof(g_caller_roles[0]); ++i)
         {
             auto& r = g_caller_roles[i];
@@ -314,26 +316,41 @@ namespace
                 r.named_at = now;
                 r.name = make_fname(std::wcsrchr(r.path, L':') + 1, 0); // FNAME_Find only; no engine-name additions.
             }
-            if (r.name != name) continue;
-            const auto id = caller_identity(node);
-            if (!id.available) return 0;
-            const bool nonpersistent = r.weak && !(r.weak >> 32);
-            // A zero serial cannot prove cross-callback identity. Resolve the
-            // complete reflected path afresh instead of trusting slot/address reuse.
-            void* actual = r.weak && !nonpersistent ? r_resolve(r.weak) : nullptr;
-            if (!actual || reinterpret_cast<uint64_t>(actual) != r.address)
+            if (r.name && r.name == name)
             {
-                if (!nonpersistent && r.looked && now - r.looked < 1000) continue;
-                r.looked = now;
-                actual = g_api.static_find(nullptr, nullptr, r.path, false);
-                const auto found = caller_identity(actual);
-                r.weak = found.available ? found.weak : 0;
-                r.address = found.available ? found.address : 0;
-                r.name = found.available ? found.name : 0;
-                if (!found.available) actual = nullptr;
+                if (hsmp_caller::defer_different_node(reinterpret_cast<uint64_t>(node), r.address, r.looked, now)) continue;
+                candidates |= 1u << i;
             }
-            if (actual == node) return i + 1;
         }
+        return candidates;
+    }
+    bool caller_verify(void* node, ULONGLONG now, unsigned candidate)
+    {
+        auto& r = g_caller_roles[candidate - 1];
+        const auto id = caller_identity(node);
+        if (!id.available) return 0;
+        const bool nonpersistent = r.weak && !(r.weak >> 32);
+        // A zero serial cannot prove cross-callback identity. Resolve the
+        // complete reflected path afresh for every eligible observation.
+        void* actual = r.weak && !nonpersistent ? r_resolve(r.weak) : nullptr;
+        if (!actual || reinterpret_cast<uint64_t>(actual) != r.address)
+        {
+            if (!nonpersistent && r.looked && now - r.looked < 1000) return 0;
+            r.looked = now;
+            actual = g_api.static_find(nullptr, nullptr, r.path, false);
+            const auto found = caller_identity(actual);
+            r.weak = found.available ? found.weak : 0;
+            r.address = found.available ? found.address : 0;
+            r.name = found.available ? found.name : 0;
+            if (!found.available) actual = nullptr;
+        }
+        return actual == node;
+    }
+    unsigned caller_role(void* node, ULONGLONG now)
+    {
+        const uint32_t candidates = caller_candidates(node, now);
+        for (unsigned i = 0; i < sizeof(g_caller_roles) / sizeof(g_caller_roles[0]); ++i)
+            if ((candidates & (1u << i)) && caller_verify(node, now, i + 1)) return i + 1;
         return 0;
     }
     void caller_observe(unsigned hook, unsigned phase, RC::Unreal::UObject* context, RC::Unreal::FFrame& frame)
@@ -348,12 +365,11 @@ namespace
             void** slot = g_caller_getters.node(&frame);
             if (!slot || !*slot) return;
             const ULONGLONG now = GetTickCount64();
-            const unsigned role = caller_role(*slot, now);
+            const uint32_t candidates = caller_candidates(*slot, now);
+            const unsigned role = hsmp_caller::sample_candidates(candidates,
+                sizeof(g_caller_roles) / sizeof(g_caller_roles[0]), g_caller_roles, now,
+                [&](unsigned candidate) { return caller_verify(*slot, now, candidate); });
             if (!role) return;
-            auto& budget = g_caller_roles[role - 1];
-            if (now - budget.window >= 1000) { budget.window = now; budget.emitted = 0; }
-            if (budget.emitted >= budget.limit) return;
-            ++budget.emitted;
             HsmpCallerEvent event{};
             event.seq = ++g_caller_seq;
             event.hook = hook; event.phase = phase; event.role = role; event.observed = 1;

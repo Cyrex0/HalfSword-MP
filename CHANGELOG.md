@@ -29,6 +29,11 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   release; add separate read-only native body and sever-component diagnostics.
 - Correct native sever-hook lookup through UE4SS's function-prefix parser and add
   explicit topology availability plus optional native damage-caller diagnostics.
+- Read completed native distal cuts from the typed ledger with fresh body-life
+  and physical hiding checks, instead of the legacy unwritten array. Partial
+  cut geometry and detached components remain separate replication work.
+- Check diagnostic sample budgets before native function lookup to bound work
+  in hot weapon callbacks while retaining exact native identity validation.
 - Add `hsmp-lab` recipe sessions, incremental evidence collectors, bootstrap comparisons,
   explicit baseline promotion, a regression journal and in-session A/B runs.
 - Add isolated modes/server-mods backend smoke and repeatable native deathmatch placement
