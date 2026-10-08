@@ -36,6 +36,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "grip_reassert" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
+    T.isolated(T.script, "case", { kind = "clock_epoch" })
     T.isolated(T.script, "case", { kind = "bodyheight" })
     T.isolated(T.script, "case", { kind = "ai_owner" })
     T.isolated(T.script, "case", { kind = "weaponstate" })
@@ -558,7 +559,7 @@ if opts.kind == "clock_probe" then
     local p={play={seq_at=950}}
     local cur={pt=300,read_at=990,rate=1.2,lead=20,mode="extrap",age=22,delay=33,jit=14,iv=17,
         cut=4,st=23,seq=55,match_id=901,round=3,life=2,has_context=true}
-    local prior={pt=100,at=900,r=0.8}
+    local prior={pt=100,at=900,r=0.8,has_context=true,match_id=901,round=3,life=2,cut=4}
     local next_clk,reset=PX.playback_clock(2,p,cur,prior,1000,false,true)
     T.check(reset and next_clk.pt==292 and next_clk.at==1000 and next_clk.r==1.2,
         "a jump above50ms resets to the existing expected-time formula")
@@ -608,7 +609,7 @@ if opts.kind == "clock_probe" then
     api.drive_frame(2,puppet,1933)
     T.check(puppet.last and puppet.last.read_at==2000,
         "successful production slot read keeps actual host receipt time instead of late physical frame time",T.repr(puppet.last))
-    local clock={pt=6916,at=1916,r=1}
+    local clock={pt=6916,at=1916,r=1,has_context=true,match_id=901,round=3,life=2,cut=4}
     local late,late_reset=PX.playback_clock(2,puppet,puppet.last,clock,1933,false,true)
     T.check(not late_reset and late.pt==6933,"a 67ms late source read projects back to the physical frame without a false forward reset")
     M.now=2016;source(62,7033)
@@ -625,6 +626,93 @@ if opts.kind == "clock_probe" then
     collect()
     T.check(#events==3 and events[3].delta_ms==-80 and events[3].threshold_ms==50 and events[3].delay==100,
         "real adaptive-delay phase shifts still reset and retain raw signed evidence")
+end
+
+if opts.kind=="clock_epoch" then
+    T.write(sd.."/.settings.json",'{"avatars":true,"native_servo":false}\n')
+    local api=boot(true)
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=308,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=308,round=1,rows={{peer_id=2,life=1}}})
+    api.on_tick()
+    local tuple={match_id=308,round=1,life=1}
+    local peer_play=HSMPNative.peer_play
+    HSMPNative.peer_play=function(slot,out,last)
+        local seq=peer_play(slot,out,last)
+        if seq then out.has_context=true;out.match_id=tuple.match_id;out.round=tuple.round;out.life=tuple.life;out.rate=1 end
+        return seq
+    end
+    local actor=M.new_obj("Willie_BP_C","CLOCK_PROXY");rawset(actor,"__addr",9501)
+    local mesh=M.new_obj("SkeletalMeshComponent","CLOCK_MESH");rawset(mesh,"__addr",9502)
+    actor.__props.Mesh=mesh
+    local sv={n=23,com={},err={n=0,e=0,emax=0,a=0,amax=0,hmax=0,capped=0},wc={}}
+    for i=1,23 do sv.com[i]={0,0,0}end
+    local old={pt=1100,at=2000,r=1,has_context=true,match_id=308,round=1,life=1,cut=1}
+    local p={actor=actor,addr=9501,gen=api.generation(),peer=2,in_range=true,driving=true,claimed_at=0,cut_seen=1,clk=old,
+        body={mesh=mesh,field="Mesh",ctl="servo",handles={},sims={mesh},motors={},sv=sv,snaps=0}}
+    M.Methods.GetSocketTransform=function()return {Translation={X=0,Y=0,Z=0},Rotation={X=0,Y=0,Z=0,W=1}}end
+    M.Methods.GetCenterOfMass=function()return {X=0,Y=0,Z=0}end
+    M.Methods.GetSocketLocation=M.Methods.GetCenterOfMass
+    M.Methods.K2_GetComponentLocation=M.Methods.GetCenterOfMass
+    M.Methods.K2_SetWorldLocation=function()end
+    M.Methods.SetAllPhysicsLinearVelocity=function()end
+    M.Methods.SetSimulatePhysics=function()end
+    M.Methods.SetEnableGravity=function()end
+    M.Methods.GetCollisionResponseToChannel=function()return 2 end
+    M.Methods.SetCollisionResponseToChannel=function()end
+    M.Methods.GetPhysicsLinearVelocity=M.Methods.GetCenterOfMass
+    local drives=0
+    M.Methods.SetPhysicsLinearVelocity=function()drives=drives+1 end
+    M.Methods.SetPhysicsAngularVelocityInDegrees=function()end
+    local seq=0
+    local function frame(now,cut,pt)
+        M.now=now;seq=seq+1
+        local b={};for _=1,23 do for _,v in ipairs({0,0,0,0,0,0,1,0,0,0,0,0,0})do b[#b+1]=v end end
+        HSMPNative.sc_peer_play(2,{peer_id=2,seq=seq,v=2,pt=pt,rate=1,mode="interp",age=0,cut=cut,
+            has_context=true,match_id=tuple.match_id,round=tuple.round,life=tuple.life,m=(1<<23)-1,B=b})
+        api.drive_frame(2,p,now)
+    end
+    local function resets()
+        local out={};for line in (T.read(sd.."/hsmp_events.jsonl")or""):gmatch("[^\n]+")do
+            local e=T.json_decode(line);if e.ev=="x_pose_clock_reset"then out[#out+1]=e end
+        end;return out
+    end
+    -- Native22 OFF and Native23 pre-probe cuts took these two return paths
+    -- before the first servo tick, consuming cut_seen but retaining old clk.
+    frame(2000,2,1140)
+    T.check(p.cut_seen==2 and p.body.repose and p.clk==old and drives==0,
+        "production cut frame advances body cut_seen but does not integrate the playback clock")
+    frame(2016,2,1156)
+    T.check(not p.body.repose and p.clk==old and drives==0,
+        "production physics-on repose frame still leaves the clock integration pending")
+    frame(2032,2,1172)
+    T.check(drives>0 and p.clk~=old and p.clk.pt==1172 and p.clk.at==2032 and p.clk.cut==2
+        and p.clk.match_id==308 and p.clk.round==1 and p.clk.life==1,
+        "first actual servo tick binds new cut and resets even a sub50ms old-epoch phase error",T.repr(p.clk))
+    T.check(#resets()==0,"known lifecycle clock initialization is not misreported as a same-epoch discontinuity")
+    frame(2048,2,1268)
+    local e=resets()
+    T.check(#e==1 and e[1].delta_ms==80 and e[1].threshold_ms==50 and e[1].cut==2 and p.clk.pt==1268,
+        "same-epoch80ms shift still emits raw evidence and resets through actual production drive",T.repr(e))
+    local before=drives;tuple.life=2
+    frame(2064,2,1284)
+    T.check(drives==before and not p.driving and p.last==nil and p.clk.life==1,
+        "production admission rejects unapproved life without relabeling its playback clock")
+    local PX=api.PX
+    local cur={pt=1400,read_at=2100,rate=1,cut=2,has_context=true,match_id=308,round=1,life=1}
+    for _,key in ipairs({"match_id","round","life","cut"})do
+        local prior={pt=1300,at=2100,r=1,has_context=true,match_id=308,round=1,life=1,cut=2}
+        prior[key]=prior[key]+1
+        local c,reset=PX.playback_clock(2,p,cur,prior,2100,false,true)
+        T.check(not reset and c.pt==1400 and c[key]==cur[key],"clock scope independently resets changed "..key)
+    end
+    cur.has_context=false
+    local unscoped=PX.playback_clock(2,p,cur,nil,2100,false,true)
+    T.check(unscoped.has_context==nil and unscoped.match_id==nil,
+        "unavailable context never becomes a bound clock epoch")
+    cur.has_context=true;cur.life=0/0
+    local invalid=PX.playback_clock(2,p,cur,nil,2100,false,true)
+    T.check(invalid.has_context==nil and invalid.life==nil,"invalid life cannot authorize clock scope")
 end
 
 -- Dev tuning knobs: dev_cmd TUNE records (hsmp-tools ipc-ctl tune), no .pose_tune.json.

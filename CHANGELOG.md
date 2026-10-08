@@ -17,6 +17,11 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Start playback clocks from the current match, round, life and pose discontinuity
+  after placement returns; preserve the existing timing detector within that generation.
+- Keep the fixed Rondel dagger's native weapon passport instead of replacing it
+  with a sword recipe from merchant stock; incomplete native defaults still refuse equip.
+
 - Harvest the local game's complete indexed gear dependency set offline, with
   inherited class defaults, native enum mappings and explicit coverage gaps.
 - Preserve native armor passports for items outside tier templates and verify

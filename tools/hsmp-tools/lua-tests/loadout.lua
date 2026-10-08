@@ -47,11 +47,12 @@ if mode ~= "case" then
     end
     T.isolated(T.script, "case", { kind = "weapon_native_source" })
     T.isolated(T.script, "case", { kind = "weapon_gi_source" })
+    T.isolated(T.script, "case", { kind = "weapon_fixed_rondel" })
     T.isolated(T.script, "case", { kind = "empty_source_unavailable" })
     return
 end
 
-if opts.kind=="passport_variant" or opts.kind=="weapon_native_source" or opts.kind=="weapon_gi_source" then
+if opts.kind=="passport_variant" or opts.kind=="weapon_native_source" or opts.kind=="weapon_gi_source" or opts.kind=="weapon_fixed_rondel" then
     package.path=T.path("mods/HSMPLoadout/Scripts/?.lua")..";"..T.path("mods/shared/?.lua")..";"..package.path
 end
 
@@ -132,6 +133,7 @@ local function boot(world)
             local native = {}
             for key, value in pairs(pass) do native[key] = value end
             local name = native["Name_57_3729B51148E846FE8DD336B9419BCEE1"]
+            if type(name) ~= "string" then name = name:ToString() end
             native["Name_57_3729B51148E846FE8DD336B9419BCEE1"] = { ToString = function() return name end }
             fresh.__props["Weapon Passport"] = native
             pawn.__props["Weapon " .. side] = fresh
@@ -303,6 +305,75 @@ if opts.kind == "armour_defaults" or opts.kind == "armour_defaults_unavailable" 
         T.check(setup_armor > before and T.contains(M.logtext(), "exact=false") and T.contains(M.logtext(), "TestCore passport"),
             "same-class same-count armor with wrong native " .. key .. " fails full output verification", M.logtext())
     end
+    return
+end
+
+if opts.kind == "weapon_fixed_rondel" then
+    boot()
+    -- The general UMG mock uses strings for FNames. This native struct case
+    -- needs the reflected ToString contract, including a nonempty name.
+    FName = function(value) return { ToString = function() return value end } end
+    local Kit = require("kit")
+    local short = "@Weapons/Blueprints/Built_Weapons/Reforged/ModularWeaponBP_DaggerRondel"
+    local path = "/Game/Assets/Weapons/Blueprints/Built_Weapons/Reforged/ModularWeaponBP_DaggerRondel.ModularWeaponBP_DaggerRondel_C"
+    local source = native_weapon_default()
+    source["Name_57_3729B51148E846FE8DD336B9419BCEE1"] = { ToString = function() return "Rondel Dagger" end }
+    for _,v in ipairs({ { "MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36", 11 },
+        { "MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2", 4 },
+        { "MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A", 3 },
+        { "MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB", 2 } }) do source[v[1]] = v[2] end
+    source["ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743"] = { R = 1, G = 1, B = 1, A = 1 }
+    source["ColorLeather_48_DC45F07E4C0C3280278212A7158EE638"] = { R = 0.186343, G = 0.074751, B = 0.06444, A = 1 }
+    local cls = { IsValid = function() return true end, GetFullName = function() return "BlueprintGeneratedClass " .. path end,
+        GetFName = function() return { ToString = function() return "ModularWeaponBP_DaggerRondel_C" end } end,
+        GetCDO = function() return { IsValid = function() return true end, ["Weapon Passport"] = source } end }
+    local find = StaticFindObject
+    StaticFindObject = function(p) return p == path and cls or find(p) end
+    local merchant = native_weapon_default()
+    merchant["HeadModule_11_62DF53134688807E1DA7F4A20E9F7139"] = find("/Game/Assets/Weapons/Modules/Sword_Blade_Test.Sword_Blade_Test_C")
+    merchant["MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36"] = 4
+    merchant["CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7"] = 1.25
+    local original = weapon("merchant-contaminated-rondel", 9600, path)
+    local polluted = {}; for key, value in pairs(merchant) do polluted[key] = value end
+    polluted["WeaponClass_54_B478ECF7499977809745A3973AD678EC"] = cls
+    original.__props["Weapon Passport"] = polluted; M.standin.__props["Weapon R"] = original
+    local gi_reads, writes, setups = 0, 0, 0
+    require("UEHelpers").GetGameInstance = function()
+        gi_reads = gi_reads + 1
+        return { IsValid = function() return true end, ["Available Weapons 1H"] = { merchant }, ["Available Weapons 2H"] = {} }
+    end
+    local equip = M.Methods["Set Up Right Hand Weapon"]
+    M.Methods["Set Up Right Hand Weapon"] = function(...) setups = setups + 1; return equip(...) end
+    M.standin.__props["Character Passport"]["Equipment_26_741A2FC641801842FE691295645C604F"]
+        ["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"].Add = function() writes = writes + 1 end
+    local result = Kit.give_weapon(M.standin, "R", short)
+    T.check(result == "ok" and gi_reads == 0 and writes == 1 and setups == 1,
+        "proved fixed Rondel equips from complete native defaults without reading merchant stock",
+        result .. " gi=" .. gi_reads .. " writes=" .. writes .. " setups=" .. setups)
+    local held = M.standin.__props["Weapon R"]
+    local pass = held.__props["Weapon Passport"]
+    T.check(held ~= original, "same-class Rondel with a merchant sword passport is replaced instead of reused")
+    T.check(pass["HeadModule_11_62DF53134688807E1DA7F4A20E9F7139"] == nil
+        and pass["Name_57_3729B51148E846FE8DD336B9419BCEE1"]:ToString() == "Rondel Dagger"
+        and pass["MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36"] == 11
+        and pass["CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7"] == 0,
+        "Rondel retains its fixed native passport instead of the available sword head, material and mass")
+    T.check(Kit.give_weapon(M.standin, "R", short) == "same" and writes == 2 and setups == 1 and gi_reads == 0,
+        "exact fixed Rondel passport remains reusable without merchant recipe changes")
+    local native = source
+    for _,bad in ipairs({ {}, { ["Name_57_3729B51148E846FE8DD336B9419BCEE1"] = native["Name_57_3729B51148E846FE8DD336B9419BCEE1"] } }) do
+        source = bad
+        T.check(Kit.give_weapon(M.standin, "R", short) == "FAIL native weapon defaults unavailable"
+            and M.standin.__props["Weapon R"] == held and held:IsValid() and #destroyed == 0
+            and writes == 2 and setups == 1 and gi_reads == 0,
+            "unreadable or partial Rondel CDO refuses equip before any mutation despite valid merchant stock")
+    end
+    -- Identical leaf name in another package is not the harvested fixed class.
+    source = native;path = "/Game/Assets/Weapons/Other/ModularWeaponBP_DaggerRondel.ModularWeaponBP_DaggerRondel_C"
+    T.check(Kit.give_weapon(M.standin, "R", "@Weapons/Other/ModularWeaponBP_DaggerRondel") == "ok" and gi_reads == 1,
+        "fixed-class exemption requires exact native package identity, not a matching DaggerRondel name")
+    T.check(M.standin.__props["Weapon R"].__props["Weapon Passport"]["HeadModule_11_62DF53134688807E1DA7F4A20E9F7139"] ~= nil,
+        "unproved other-package class retains the existing validated modular-family behavior")
     return
 end
 

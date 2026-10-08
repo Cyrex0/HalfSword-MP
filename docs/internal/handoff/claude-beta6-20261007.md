@@ -826,3 +826,71 @@ components need distinct fresh identities and the current pawn owner/world.
 Missing or changing inputs stay unavailable; sampled predicates never authorize
 an event. Astra approved source; focused body+combat checks passed483 assertions
 (130+353). A positive matching native diagnostic capture remains pending.
+
+### Native23: positive native arm-input capture and current overnight scope
+
+Commit22ea6bef passed full strict G0 and matching RequireG0 deploy. Its dev push
+completed with the pre-push G0 passing (59 Lua suites,1,279 Rust tests in75
+binaries, clippy0errors/2warnings); origin/dev now matches22ea6bef. The source
+tree was clean at that checkpoint. No main push, PR, tag or release occurred.
+
+The new lab wrapper drove a real session, experiment and normal stop without
+an executable-lock or stale-controller-layout failure. Raw run:
+`test-results/20261008-032557-453bc1-combat_manual`; experiment:
+`test-results/lab/native-20261008-23/axe-cloth-arm.json`. Both windows stayed on
+the smaller DISPLAY1; the caller journal and local damage probe stayed off.
+The60-second cloth/axe recipe recorded6 actual native AI takeover notifications.
+This is a takeover count, not evidence of6 completed rounds.
+
+The read-only body audit recorded368 samples with qualified distinct current
+Mesh/DriverSkeleton component identities and parent-bone-space3 positions.
+Right-arm distance max0.18755255, left max0.19035925; zero samples exceeded the
+native15-unit threshold. All368 complete dislocation predicates remained
+unavailable because native completed-map inputs were unavailable. Neither an
+actual dislocation nor a fracture/cut is proved. The probe was enabled for
+approximately2minutes including idle and combat, then disabled; this run is
+not an uninstrumented performance comparison. Detailed summary:
+`test-results/lab/native-20261008-23/body-input-summary.json`.
+
+Fairness remains below acceptance: honest acceptance0.91044776(n134), proxy
+rotation mean31.82884/max137.75492degrees(n32), clock resets mean6.48309/min(n11).
+The sample does not meet the200-pose minimum. Exact claim pairs remain0;65
+calibration samples and3 delivered inside continuations do not establish solo
+parity. The manual report passed only its limited crash, teardown, network and
+state checks, with0 new crashes and normal menu quits. All game/server/sidecar
+processes stopped. This is not a p0 or release verdict.
+
+Astra's read-only native-angle investigation found local cooked frame2 axes
+reproduce all four Native16 joint-angle triples when Euler degrees are converted
+as radians. UE5.3 source getters use stored frame2 Euler values and the engine
+wrapper applies RadiansToDegrees. Shipping5.4 attribution remains an inference,
+not a machine-code inspection. Dividing by57.2958 would still yield stored
+frame angles, not verified live joint angles. Keep physics_verified=false;
+this does not explain away the independent pose failures or justify relaxed
+joint limits. Local evidence: body-primary-joint-dictionary.json and Native16.
+
+The owner subsequently authorized continued overnight iteration and conditionally
+PR/main/release/update only once intended behavior is verified. That condition
+is not met. A30-minute heartbeat continues this same chat, notifying only on
+meaningful changes. Next bounded work: fixed Rondel weapon-passport selection,
+explicit native modular recipes, pose/display-time fairness, accepted-parent
+physical damage/constraint lineage, and the outstanding modes/native gates.
+
+The next bounded clock correction was reproduced in probe-OFF Native22: all5
+cloth reset events align with source cuts (inst1 event lines337/350/509;
+inst2 lines236/248). Native23 inst2 event71 also shows cut2 reset149.071ms at
+t27311 before body_probe ON event121 at t64812. drive_frame consumed cut_seen
+on placement/repose returns before its clock integrated, leaving the clock from
+the previous generation. The correction independently binds each clock record
+to validated match/round/life/cut on its first actual drive. The50ms same-generation
+detector is unchanged. The actual-drive regression covers cut, repose return,
+sub50ms stale phase replacement, and a same-generation80ms error still reported.
+Focused Avatar262 checks and Loadout143 checks passed independently at root.
+
+The exact harvested fixed Rondel class now bypasses merchant-family lookup and
+uses its complete runtime native passport. Partial/unavailable defaults still
+fail before any mutation, and another package with the same leaf name has no
+exemption. Astra approved this bounded correction; regression covers replacing
+a polluted same-class passport and exact reuse. General modular preset/tier
+recipe selection remains open. Actual Rondel equip and uninstrumented clock
+behavior still need the matching Native24 capture before live improvement claims.

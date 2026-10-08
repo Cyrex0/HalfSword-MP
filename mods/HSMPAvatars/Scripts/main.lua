@@ -2870,7 +2870,17 @@ function PX.playback_clock(id, p, cur, clk, now, cut_reset, fresh)
     -- sidecar clock back to it when the callback/slot read happened late.
     local expect = cur.pt - (cur.lead or 0) + (now - (cur.read_at or now)) * rate
     local projected = clk and (clk.pt + (now - clk.at) * (clk.r or 1))
-    local reset = clk ~= nil and not cut_reset and math.abs(expect - projected) > 50
+    local epoch = cur.has_context==true and type(cur.match_id)=="number" and cur.match_id>0
+        and cur.match_id<math.huge and cur.match_id==math.floor(cur.match_id)
+        and type(cur.round)=="number" and cur.round>0 and cur.round<math.huge and cur.round==math.floor(cur.round)
+        and type(cur.life)=="number" and cur.life>0 and cur.life<math.huge and cur.life==math.floor(cur.life)
+        and type(cur.cut)=="number" and cur.cut>=0 and cur.cut<math.huge and cur.cut==math.floor(cur.cut)
+    -- cut_seen belongs to the body lifecycle: its cut/repose frames return
+    -- before this clock integrates. Bind the clock's own generation on the
+    -- first actual drive instead of reusing its previous cut's phase.
+    local new_epoch = epoch and not (clk and clk.has_context==true and clk.match_id==cur.match_id
+        and clk.round==cur.round and clk.life==cur.life and clk.cut==cur.cut)
+    local reset = clk ~= nil and not cut_reset and not new_epoch and math.abs(expect - projected) > 50
     if reset then
         ev("x_pose_clock_reset", {
             peer=id, threshold_ms=50, expect=expect, projected_clk=projected, delta_ms=expect-projected,
@@ -2882,9 +2892,16 @@ function PX.playback_clock(id, p, cur, clk, now, cut_reset, fresh)
             match_id=cur.match_id, round=cur.round, life=cur.life, has_context=cur.has_context==true,
         })
     end
-    if not clk or cut_reset or reset then return {pt=expect,at=now,r=rate}, reset end
-    local r = clk.r or 1
-    return {pt=projected+0.1*(expect-projected),at=now,r=r+0.3*(rate-r)}, false
+    local result
+    if not clk or cut_reset or new_epoch or reset then result={pt=expect,at=now,r=rate}
+    else
+        local r = clk.r or 1
+        result={pt=projected+0.1*(expect-projected),at=now,r=r+0.3*(rate-r)}
+    end
+    if epoch then
+        result.has_context,result.match_id,result.round,result.life,result.cut=true,cur.match_id,cur.round,cur.life,cur.cut
+    end
+    return result, reset
 end
 
 -- One frame of the v2 driver. `fresh`: a new pose_play sample arrived this frame.

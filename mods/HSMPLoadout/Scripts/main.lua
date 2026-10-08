@@ -1167,6 +1167,13 @@ local WEAPON_FAMILIES = {
     { "Falchion", "Falchion_Blade" }, { "Messer", "Langmesser" }, { "Dagger", "Sword_Blade" },
     { "Polearm", "Polearm_Head" }, { "Polearm", "PA_Head" }, { "Mace", "Mace" }, { "Hafted", "Hafted_Head" },
 }
+-- Harvested Reforged DaggerRondel has a fixed Blade1 SCS mesh
+-- SM_Weapon_Dagger_Rondell_A_001 and its own passport Name override. Its
+-- complete runtime CDO passport is authoritative even with empty modules;
+-- a "Dagger" family match must not attach a merchant sword recipe to it.
+local FIXED_WEAPON_CLASSES = {
+    ["@Weapons/Blueprints/Built_Weapons/Reforged/ModularWeaponBP_DaggerRondel"] = true,
+}
 local module_templates = nil   -- head-module path -> encoded passport (GI lists, read once per process)
 local function weapon_templates()
     if module_templates then return module_templates end
@@ -1193,6 +1200,7 @@ local function weapon_templates()
     return list
 end
 local function module_template_for(cls)
+    if FIXED_WEAPON_CLASSES[class_path(cls)] then return nil, false end
     local named, cn = pcall(function() return cls:GetFName():ToString() end)
     if not named or type(cn) ~= "string" or cn == "" then return nil, true end
     local list = weapon_templates()
