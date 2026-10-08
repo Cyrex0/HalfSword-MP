@@ -2001,6 +2001,45 @@ do
             "duplicate owner receipt neither repeats native injury nor emits another fresh body pair")
         api.C3.body_audit,api.C3.body_probe=old_audit,old_body_probe
         ME["Get Damage"], api.C3.native_probe = previous_gd, previous_probe
+        -- Drain actual typed events through the production tick and owner replay,
+        -- retaining its real watermark and native-call boundary.
+        local old_world,old_name=PC.GetWorld,PC.GetFName
+        local world={IsValid=valid,GetFullName=function()return "World /Game/Maps/Arenas/Batch.Batch"end,
+            GetAddress=function()return 99001 end}
+        PC.GetWorld=function()return world end
+        PC.GetFName=function()return FName("PlayerController_Batch")end
+        CLOCK=710;api.set_tick(40001);api.on_tick()
+        api.set_world(api.WG.key)
+        match("live",3);api.refresh_match();sidecar("connected",1);api.refresh_session()
+        api.set_my_peer_id(1);ME.Health=100;ME.DED=false;ME["Force Death"]=false
+        api.set_puppets({[SI.__name]=2},{[2]=SI})
+        local native_order={}
+        local old_gd,old_diag=ME["Get Damage"],api.C3.replay_diag
+        ME["Get Damage"]=function(self)
+            native_order[#native_order+1]=api.C3.body_replay.hit_id
+            self.Health=self.Health-1
+        end
+        api.C3.replay_diag=function()error("optional log unavailable")end
+        local function enqueue(id)
+            NAT.sc_rec_event("damage_in",hit_rec{hit_id=id,round=3,target_peer_id=1,bone="pelvis",
+                flags=0,attacker_ts=id},2)
+        end
+        for _,id in ipairs({1000011,1000013,1000012,1000012})do enqueue(id)end
+        api.set_tick(40003);api.on_tick()
+        T.check(table.concat(native_order,",")=="1000011,1000012,1000013",
+            "actual tick sorts drained typed hits and executes the native callback once per ID despite logger failure",T.repr(native_order))
+        enqueue(1000012);enqueue(1000010)
+        api.set_tick(40006);api.on_tick()
+        T.check(#native_order==3,"actual next tick retains duplicate and unseen below-watermark refusal")
+        local last_outcome=sent("replay_outcome")
+        local found_expired=false
+        for _,r in ipairs(last_outcome)do
+            if r.hit_id==1000010 and r.status==7 then found_expired=true end
+        end
+        T.check(found_expired,"actual typed outcome explicitly reports later-batch watermark refusal")
+        ME["Get Damage"],api.C3.replay_diag=old_gd,old_diag
+        PC.GetWorld,PC.GetFName=old_world,old_name
+        api.set_world("native-once-world")
     end
 end
 

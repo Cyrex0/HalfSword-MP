@@ -57,6 +57,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "joint_profile", change = "pc_world" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "lookup_pc_world" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "refusal" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "predicate" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "clock_epoch" })
@@ -1672,6 +1673,25 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
                 return nil,"actual native\nread failed\t"..string.rep("q",140),
                     {stage="source:asset_before",elapsed_available=true,capture_elapsed_ms=2.75}
             end
+            if opts.change=="predicate"then
+                sample_age=251.125
+                local valid,failure=se.current()
+                T.check(valid==false and failure.validator=="source"and failure.predicate=="source_sample_age"
+                    and failure.field=="sample_age_ms"and failure.observed==251.125,
+                    "actual source validator reports its existing expired sample age without changing freshness")
+                sample_age=.375
+                HSMPNative.sc_put("mode",{seq=3,match_id=419,round=0,rows={{peer_id=1,life=0},{peer_id=2,life=0}}})
+                valid,failure=pe.current()
+                T.check(valid==false and failure.validator=="proxy"and failure.predicate=="audit_changed"
+                    and failure.field=="mode_seq"and failure.expected==2 and failure.observed==3,
+                    "actual proxy validator attributes same-life audit sequence publication exactly")
+                HSMPNative.sc_put("mode",{seq=3,match_id=419,round=1,rows={{peer_id=1,life=1},{peer_id=2,life=2}}})
+                valid,failure=se.current()
+                T.check(valid==false and failure.predicate=="context_changed"and failure.field=="qualification"
+                    and failure.expected_available and failure.expected==false and failure.observed==true,
+                    "actual pending qualification transition reports typed false-to-true without inventing a new life")
+                return nil,"scope changed",{stage="proxy:asset_after",elapsed_available=true,capture_elapsed_ms=3.5,first_failure=failure}
+            end
             if opts.change=="pc_world"then
                 M.pc.__props.NativeWorld=M.new_obj("World","PROFILE_NEW_WORLD");rawset(M.pc.__props.NativeWorld,"__addr",19991)
             end
@@ -1690,6 +1710,14 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
             return
         end
         T.check(captures==1 and writes==before+12,"actual admitted pair does not change normal servo writes")
+        if opts.change=="predicate"then
+            local log=M.logtext()
+            T.check(T.contains(log,"JOINTPROFILE predicate inst=")and T.contains(log,'"validator":"source"')
+                and T.contains(log,'"predicate":"context_changed"')and T.contains(log,'"expected":false'),
+                "actual refusal logs its first source predicate separately from the active proxy read stage")
+            drive(1032);T.check(captures==1,"predicate diagnostics preserve once-only capture and normal writer")
+            return
+        end
         if opts.change=="refusal"then
             local log=M.logtext()
             T.check(T.contains(log,"stage=source:asset_before capture_elapsed_ms=2.75 reason=actual native read failed "),

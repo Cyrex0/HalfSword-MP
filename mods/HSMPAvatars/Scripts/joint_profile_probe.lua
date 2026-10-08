@@ -32,6 +32,22 @@ function M.reason(v)
     if not ok then return "diagnostic reason unavailable"end
     return text:gsub("[%c]"," "):sub(1,120)
 end
+M.AUDIT_FIELDS={"session_seq","session_match","session_round","session_phase","effective_round","pending",
+    "spawn_id","spawn_peer","mode_present","mode_seq","mode_match","mode_round","mode_row_available",
+    "mode_peer","mode_life","mode_available","qualification","qualification_reason"}
+function M.failure(validator,predicate,field,expected,observed)
+    local function scalar(v)
+        if type(v)=="boolean"then return true,v,false end
+        if type(v)=="string"then return true,M.reason(v),#v>120 end
+        if type(v)=="number"and v==v and math.abs(v)<math.huge then return true,v,false end
+        return false,nil,false
+    end
+    local ea,ev,et=scalar(expected);local oa,ov,ot=scalar(observed)
+    return {validator=validator=="source"and "source"or validator=="proxy"and "proxy"or "unavailable",
+        predicate=type(predicate)=="string"and M.reason(predicate)or "predicate unavailable",
+        field=type(field)=="string"and M.reason(field)or "unavailable",
+        expected_available=ea,expected=ev,expected_truncated=et,observed_available=oa,observed=ov,observed_truncated=ot}
+end
 local function attempt(r,key,fn)
     local ok,v=pcall(fn);r[key]=ok and {available=true,value=v}or {available=false,reason=tostring(v):sub(1,120)}
 end
@@ -95,12 +111,12 @@ local function joint(e,j,label)
     assert(same(before.owner,after.owner)and before.index==after.index and before.parent==after.parent and before.child==after.child,"accessor changed")
     return r
 end
-local function row(c,e,all_current,stage,label)
+local function row(c,e,all_current,stage,label,on_loss)
     local lost=false;local old=e.current
     e=setmetatable({stage=stage,current=function()
         if lost then return false end
-        local ok,v=pcall(old)
-        if not ok or v~=true then lost=true;return false end
+        local ok,v,why=pcall(old)
+        if not ok or v~=true then lost=true;on_loss(label,ok,ok and why or v);return false end
         local ok2,v2=pcall(all_current)
         if not ok2 or v2~=true then lost=true;return false end
         return true
@@ -150,13 +166,27 @@ function M.new(emit)
             return ok and type(v)=="number"and v==v and math.abs(v)<math.huge and v or nil
         end
         local started=clock()
-        local lost=false
+        local lost,first_failure=false,nil
+        local function on_loss(validator,ok,why)
+            if first_failure then return end
+            if not ok then
+                first_failure=M.failure(validator,"validator_exception","exception",nil,type(why)=="string"and why or nil)
+            elseif type(why)=="table"then
+                local expected,observed
+                if rawget(why,"expected_available")==true then expected=rawget(why,"expected")end
+                if rawget(why,"observed_available")==true then observed=rawget(why,"observed")end
+                first_failure=M.failure(validator,rawget(why,"predicate"),rawget(why,"field"),
+                    expected,observed)
+                first_failure.expected_truncated=first_failure.expected_truncated or rawget(why,"expected_truncated")==true
+                first_failure.observed_truncated=first_failure.observed_truncated or rawget(why,"observed_truncated")==true
+            else first_failure=M.failure(validator,"predicate unavailable","unavailable",nil,nil)end
+        end
         local function current()
             if lost then return false end
-            local ok,a=pcall(se.current)
-            if not ok or a~=true then lost=true;return false end
-            local ok2,b=pcall(pe.current)
-            if not ok2 or b~=true then lost=true;return false end
+            local ok,a,why=pcall(se.current)
+            if not ok or a~=true then lost=true;on_loss("source",ok,ok and why or a);return false end
+            local ok2,b,why2=pcall(pe.current)
+            if not ok2 or b~=true then lost=true;on_loss("proxy",ok2,ok2 and why2 or b);return false end
             return true
         end
         local ok,result=pcall(function()
@@ -165,8 +195,8 @@ function M.new(emit)
                 assert(source[k]~=nil and source[k]==proxy[k],"source/proxy scope disagreement")
             end
             local function set_stage(value)stage=value end
-            local a=row(source,se,current,set_stage,"source");assert(current(),"scope changed")
-            local b=row(proxy,pe,current,set_stage,"proxy");assert(current(),"scope changed")
+            local a=row(source,se,current,set_stage,"source",on_loss);assert(current(),"scope changed")
+            local b=row(proxy,pe,current,set_stage,"proxy",on_loss);assert(current(),"scope changed")
             stage="pair:complete"
             return {instance=source.instance,coverage="right_only",comparison="different_peers_same_process; correlate counterpart peer across clients",
                 temporal_pairing=false,authority=false,source=a,proxy=b,observation_separation_ms=b.observed_ms-a.observed_ms}
@@ -174,7 +204,8 @@ function M.new(emit)
         if not ok then
             local finished=clock();local available=started~=nil and finished~=nil and finished>=started
             -- Total capture-entry-to-refusal time, not a per-stage duration.
-            return nil,M.reason(result),{stage=stage,elapsed_available=available,capture_elapsed_ms=available and finished-started or nil}
+            return nil,M.reason(result),{stage=stage,elapsed_available=available,capture_elapsed_ms=available and finished-started or nil,
+                first_failure=first_failure}
         end
         pcall(emit,result);return result
     end

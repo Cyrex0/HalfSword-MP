@@ -1741,3 +1741,94 @@ logs show same order. Source emissions ordered, ages126/8/6/123ms. Session Live,
 both Mode alive, no world drop. replay_attempts refuses before native callback.
 Thus these four are measured pre-terminal execution loss, not expected transition
 expiry. Next bounded at-most-once reorder design must preserve replay protection.
+
+### Native40: terminal claim admission verified, foreign callback counts measured
+
+Clean b2287d6a full G0 retry/dev push/normal deploy passed; raw
+test-results/20261008-125147-5a5b8f-combat_manual, session native-20261008-40.
+Only JOINT_PROFILE on, GRIP/HAND/LIMB off. New source claim target_down veto
+actually logs round2 (#1–3). Cloth239/243=.983539, compared to previous170/230;
+aggregate improvement supports the fix, not complete native body/gear parity.
+Claim Box rotation mean34.483/max73.156degrees,21samples, remains over target;
+zero clock resets22windows. Physical limb rotation is a separate measurement.
+
+Profile emits no pairs: inst1 proxy:UserConstraint_11:accessor_before, total148ms;
+inst2 proxy:asset_after, total191ms. Both actual reason scope changed. These
+are total capture durations, not getter costs; failed current predicate remains
+unknown. Do not infer getter unavailability or source/proxy equality. Next narrow
+diagnostic should report which current proof failed, not expand native reads.
+
+Native observer inst1 starts12:53:54.585 after227ms preparation and fresh51ms
+actual playback; capture budget completes12:53:55.165, entries32, unpaired1,
+discarded0. Proven OS TID28820, foreign_callbacks_process_total12580,
+same_thread_unavailable_process_total0, unknown_thread_callbacks_process_total0.
+Foreign targets remain unknown; no worker callback coverage claim. Actual32rows
+are saved, scalar extent/lifetime summary pending. This run proves different-thread
+callbacks are common and excluded without same-thread failure; it does not identify
+Native37's exact rejected event. Byte-cursor watcher stops first activation and
+does not re-enroll an active capture. Completion logging saves counters here;
+no STOP status row was expected after budget had already cleared active state.
+
+Both normal menu_quit, zero new crashes/orphans/forced kills; owner exit0. No
+release/main/PR. User asked percentage/release: no defensible overall completion
+percentage; zero of two required full release-acceptance runs completed. Latest
+98.35% is claim acceptance only. Quiet existing heartbeat continues native-first
+iteration; current next work is exact profile predicate and bounded replay ordering.
+
+Native40 final corpus supplements:32emitted paired rows (20DCD/12GD),18 readable
+PRE/POST all6/1/10 unchanged and LuaInside,14formal-parameter-unavailable; zero
+lifetime/qualified rows. Completion's unpaired1 is an event counter, not an
+unpaired emitted row. Class serial0 remains explicit; no allocator attempts.
+Artifact test-results/dev-feature-checks/native40-box-pair-native-summary.json.
+
+Read-only participation audit: all246positive-cid source claims checked, zero
+new emissions after exact full-life Mode eliminated either participant. Typed
+verdicts246=239accepted+3parried+2round-over/target-down+1future(view167ms)+
+1body_strike_miss(12uu). Owner239=150changed+87no-observed-change+1stale_context+
+1expired. Terminal ids65/66 were emitted125/75ms before surrender, so queued
+pre-down records remain intact. Expired75 is another lower-ID ordering refusal;
+stale145 cause remains pending, do not invent transition/TTL attribution.
+
+Next profile proposal is ignored native40-profile-failed-predicate-proposal.json:
+preserve optional first-failure reason/scalars from existing source/proxy checks,
+not repeated diagnosis or additional native getters. Session/Mode sequence
+comparison, sample freshness and pending qualification are candidates, not proven.
+The active proxy stage still checks source first, so it cannot attribute failure.
+Replay exact batch membership is also unproved: ingress before a replay RESULT
+is before callback completion, not necessarily before batch snapshot/entry. Do
+not claim sorting necessarily repairs all four Native39 cases. Bounded retired
+window initialization0 preserves prior wrap behavior but across-batch older
+timestamps can change native damage-gate ordering; design not yet implemented.
+
+Saved final audit: test-results/lab/native-20261008-40/participation-native-audit.json,
+plus replay-order-design.json. Independently237native(ok) logs match150changed+
+87no-observed-change; no suppressed-origin acknowledgements. Expired75 arrives
+after77. Stale145 ingress12:55:47.628 precedes server abort47.630923; refusal
+47.695 follows director quiesce47.680. Exact ctx-nil versus tuple-mismatch remains
+unavailable; abort-transition timing is measured, not an inferred TTL failure.
+
+### Native41 preparation: conservative batch order and first failed predicate
+
+User accepts 98.35% claim acceptance, conditional on all armor/clothing/weapons
+and faithful slashing, piercing, body/limb damage and dismemberment. Do not add
+a 100% claim gate or call this overall completion. Native gear/body requirements
+and documented pose/spawn/scenario gates remain open; no release authorization
+conditions have yet been satisfied.
+
+Root adds replay_batch: stable source-ID order only inside one already-drained
+dense batch of at most1024 events, grouped by match/round/attacker/full lives.
+Unambiguous modular ID span and positive nondecreasing raw source timestamps
+are required. Different stream slots and immutable records are preserved; unknown
+or regressing groups retain arrival order. Original ReplayAttempts watermark,
+eviction, duplicate cache, native GD gate and later-batch refusals are unchanged.
+No waiting or extra native calls are introduced. Exact Native39/40 batch membership
+remains unproved, so this does not claim to fix across-batch ordering loss.
+
+Spawn diagnostic reports actual first source/proxy predicate failure with bounded
+already-read scalars, including sample age, Mode/Session versions and qualification.
+Guards, getter order, freshness and capture budgets remain unchanged. Astra approves
+both production deltas. Focused4suites861assertions(28batch+371Combat+43profile+
+419Avatar),8parses and direct state-files pass; actual main typed-event fixture
+proves batch ordering, once-only native execution even when optional logging throws,
+and next-batch older-ID refusal. Artifact native41-focused.json. Native41 is pending,
+and no native material/sever/physical parity is inferred from these fixtures.

@@ -99,3 +99,41 @@ e=fixture();e.sc.match_id=999;e.source.now=function()error("clock unavailable")e
 value,reason,detail=e:run()
 T.check(value==nil and detail.stage=="pair:scope"and detail.elapsed_available==false and detail.capture_elapsed_ms==nil,
     "unavailable diagnostic clock does not invent an elapsed interval or suppress actual refusal")
+e=fixture();local source_lost=false
+local failure=P.failure("source","source_sample_age","sample_age_ms","0..250",251.25)
+e.source.current=function()if source_lost then return false,failure end;return true end
+local prior=e.proxy.library.GetAngularLimits
+e.proxy.library.GetAngularLimits=function(...)prior(...);source_lost=true end
+value,reason,detail=e:run()
+T.check(value==nil and detail.stage=="proxy:UserConstraint_10:angular_limits"
+    and detail.first_failure.validator=="source"and detail.first_failure.predicate=="source_sample_age",
+    "source-first loss during a proxy getter reports the source validator rather than inferring from stage")
+T.check(detail.first_failure.observed_available and detail.first_failure.observed==251.25
+    and detail.first_failure.expected=="0..250"and #e.calls==16 and #e.records==0,
+    "first failed predicate uses copied existing sample age and stops every later getter")
+failure.observed=0;T.check(detail.first_failure.observed==251.25,"failure output owns its bounded scalar data")
+e=fixture();e.proxy.current=function()return false,P.failure("proxy","audit_changed","mode_seq",2,3)end
+value,reason,detail=e:run()
+T.check(value==nil and e.reads==0 and detail.first_failure.validator=="proxy"
+    and detail.first_failure.field=="mode_seq"and detail.first_failure.expected==2 and detail.first_failure.observed==3,
+    "first changed audit scalar is retained without any diagnostic native read")
+e=fixture();e.source.current=function()error("current\nvalidator\tfailed")end
+value,reason,detail=e:run()
+T.check(value==nil and detail.first_failure.validator=="source"and detail.first_failure.predicate=="validator_exception"
+    and detail.first_failure.observed:find("[%c]")==nil and e.reads==0,
+    "thrown validator remains explicit and sanitized instead of inventing a predicate")
+local f=P.failure("source","context_changed","qualification",false,true)
+e=fixture();e.source.current=function()return false,f end
+value,reason,detail=e:run()
+T.check(detail.first_failure.expected_available and detail.first_failure.expected==false
+    and detail.first_failure.observed_available and detail.first_failure.observed==true,
+    "available false qualification survives first-failure forwarding")
+local touches=0;local wrapper=setmetatable({},{__tostring=function()touches=touches+1;error("native wrapper")end})
+f=P.failure("source",string.rep("x",200),"field",wrapper,0/0)
+T.check(#f.predicate==120 and not f.expected_available and not f.observed_available and touches==0,
+    "failure fields bound text and reject wrappers/nonfinite numbers without touching native objects")
+e=fixture();f=P.failure("source","scope_exception","exception",nil,string.rep("q",200))
+e.source.current=function()return false,f end
+value,reason,detail=e:run()
+T.check(#detail.first_failure.observed==120 and detail.first_failure.observed_truncated,
+    "bounded scalar text explicitly retains its truncation flag through helper forwarding")

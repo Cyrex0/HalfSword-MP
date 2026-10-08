@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Restore source order within a single drained batch of approved hits when the
+  full life context and source timestamps agree, preserving duplicate protection.
+- Identify the first failed developer joint-capture guard from existing sampled
+  values, without adding native reads or changing capture limits.
 - Stop creating new hit claims after a fighter's confirmed elimination while
   preserving claims already queued for trade resolution.
 - Preserve precise bounded developer capture refusals, and finish capture cleanup

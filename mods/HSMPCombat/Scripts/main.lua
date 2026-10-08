@@ -828,6 +828,7 @@ end
 local C3 = {
     stuck_resolver = load_module("stuck_membership"),
     participation = load_module("claim_participation"),
+    replay_batch = load_module("replay_batch"),
     STANDIN_INVULNERABLE = true,
     TOUCH_GAP_MS = 50,          -- per-peer touch report rate limit
     -- Bookkeeping Deal Complex Damage / Get Damage write besides FIELDS: their
@@ -3624,7 +3625,15 @@ local function on_tick()
             tostring(r.victim_life),tostring(r.status),tostring(r.observed_fields),tostring(r.health_delta))
     end
     local applied = 0
-    for _, e in ipairs(events("damage_in")) do
+    local damage_batch=events("damage_in")
+    if C3.replay_batch then
+        local ok,reordered,moved=pcall(C3.replay_batch.order,damage_batch)
+        if ok then
+            damage_batch=reordered
+            if moved>0 then pcall(C3.replay_diag,"batch_order","records=%d moved=%d scope=one_drained_batch",#damage_batch,moved)end
+        end
+    end
+    for _, e in ipairs(damage_batch) do
         local d = type(e.data) == "table" and e.data or {}
         local native_health
         local res, outcome, fresh = ReplayAttempts.run(d,e.peer,function()
