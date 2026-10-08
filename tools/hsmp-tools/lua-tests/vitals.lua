@@ -34,9 +34,15 @@ function FName(s) return { s = s, ToString = function(self) return self.s end } 
 
 local addr = 1000
 local function valid() return true end
+local native_world={IsValid=valid,GetAddress=function()return 999 end,GetFullName=function()return "World VitalsFixture" end}
 function mk_mesh(bones)
-    local m = { bones = bones or {}, hidden = {} }
+    addr=addr+1
+    local m = { bones = bones or {}, hidden = {},__addr=addr }
     m.IsValid = valid
+    m.GetAddress=function(self)return self.__addr end
+    m.GetFName=function(self)return FName("Mesh_"..self.__addr)end
+    m.GetWorld=function()return native_world end
+    m.IsBoneHiddenByName=function(self,n)return self.hidden[n.s]~=nil end
     m.GetBoneIndex = function(self, n) return self.bones[n.s] or -1 end
     m.HideBoneByName = function(self, n, opt) self.hidden[n.s] = opt end
     m.UnHideBoneByName = function(self, n) self.hidden[n.s] = nil end
@@ -44,9 +50,16 @@ function mk_mesh(bones)
     return m
 end
 function mk_arr(items)
-    return { items = items, ForEach = function(self, fn)
+    return { items = items,GetArrayNum=function(self)return #self.items end, ForEach = function(self, fn)
         for i, n in ipairs(self.items) do fn(i, { get = function() return FName(n) end }) end
     end }
+end
+local function mk_parts(items)
+    return {items=items,ForEach=function(self,fn)
+        for _,row in ipairs(self.items)do
+            fn({get=function()return row[1]end},{get=function()return row[2]end})
+        end
+    end}
 end
 function mk_willie(name, vals)
     addr = addr + 1
@@ -56,8 +69,12 @@ function mk_willie(name, vals)
     w.GetAddress = function(self) return self.__addr end
     w.GetFName = function(self) return FName(self.__name) end
     w.GetClass = function(self) return { GetFName = function() return FName("Willie_BP_C") end } end
-    w.Mesh = mk_mesh({ head = 5, lowerarm_l = 9, hand_l = 10 })
+    w.GetWorld=function()return native_world end
+    w.Mesh = mk_mesh({ head = 5, lowerarm_l = 9, hand_l = 10,hand_r=11,lowerarm_r=12 })
     w["Dismembered Array"] = mk_arr({})
+    w["Dismembered Bones"]=mk_arr({})
+    w["Dismembered Parts Map"]=mk_parts({})
+    w["Dismemberment In Process"]=false
     w["Death"] = function(self) self.calls.death = (self.calls.death or 0) + 1; self.DED = true end
     return w
 end
@@ -103,6 +120,10 @@ fn()
 local api = HSMP_COMBAT_TEST.api
 T.check(api ~= nil, "test api exported")
 api.set_world("world#1")
+-- Real topology/world-guard behavior has separate bounded suites. This fixture
+-- supplies native-world identities while preserving its synthetic session key.
+api.WG.check=function()return true end
+api.WG.world=function()return native_world end
 
 local function write(name, text) T.write(STATE .. "/" .. name, text) end
 -- Typed session state: the sidecar's `link` record + the server's `session`
@@ -151,7 +172,7 @@ local missing = {}
 local names = {}
 for _, n in ipairs(vit) do names[#names + 1] = n end
 for _, n in ipairs(fld) do names[#names + 1] = n end
-for _, n in ipairs({ "DED", "Fallen", "Downed", "Headless", "Pain Shock", "Dismembered Array" }) do names[#names + 1] = n end
+for _, n in ipairs({ "DED", "Fallen", "Downed", "Headless", "Pain Shock", "Dismembered Array", "Dismembered Parts Map", "Dismemberment In Process" }) do names[#names + 1] = n end
 for _, n in ipairs(names) do if not real[n] then missing[#missing + 1] = n end end
 T.check(#missing == 0, "every vitals/field name is a real Willie_BP_C property", T.repr(missing))
 T.check(#vit == 19, "19 vitals scalars (= schema/combat.rs VITALS_N)", #vit)
@@ -198,7 +219,8 @@ T.check(N.sc_get("vitals").v[14] == q(99.4), "stamina quantised (99.4 * 64 round
 CLOCK = 101.5
 T.check(api.publish_own_vitals(ME) == true, "heartbeat after 1 s without change")
 ME["Fallen"] = true
-ME["Dismembered Array"]["items"][1] = "lowerarm_l"
+ME["Dismembered Parts Map"].items={{6,true}}
+ME.Mesh.hidden.lowerarm_l=1
 api.set_tick(20)
 api.publish_own_vitals(ME)
 rec = N.sc_get("vitals")
@@ -209,22 +231,27 @@ api.publish_own_vitals(ME)
 rec = N.sc_get("vitals")
 T.check(rec.flags == 3 and rec.v[1] == 0, "dead: DED + Health 0 -> flag bit 1, v[1] 0", T.repr(rec))
 ME["Health"], ME["DED"], ME["Fallen"] = 100, false, false
-ME["Dismembered Array"]["items"] = {}
+ME["Dismembered Parts Map"].items={}
 api.set_tick(40)
 api.publish_own_vitals(ME)
 
 do
     local old = mk_willie("Willie_BP_C_OLD_BODY", full_vitals())
-    old["Dismembered Array"].items = { "hand_r" }
+    old["Dismembered Parts Map"].items={{4,true}}
+    old.Mesh.hidden.hand_r=1
     local fresh = mk_willie("Willie_BP_C_FRESH_BODY", full_vitals())
+    local previous_pawn=PC.Pawn
+    PC.Pawn=old
     local a = api.sample_own_vitals(old)
-    old["Dismembered Array"] = { ForEach = function() error("native array temporarily unavailable") end }
+    old["Dismembered Parts Map"] = { ForEach = function() error("native map temporarily unavailable") end }
     api.set_tick(47)
     local unavailable = api.sample_own_vitals(old)
-    T.check(T.eq(unavailable.dism, { "hand_r" }), "an unreadable native array cannot regrow a missing limb")
+    T.check(T.eq(unavailable.dism, { "hand_r" }), "an unreadable native ledger cannot regrow a missing limb")
+    PC.Pawn=fresh
     local b = api.sample_own_vitals(fresh)
     T.check(T.eq(a.dism, { "hand_r" }) and #b.dism == 0,
         "a new pawn immediately samples its own missing parts instead of inheriting the old pawn's cache")
+    PC.Pawn=previous_pawn
     api.sample_own_vitals(ME)
     api.set_tick(40)
 end
