@@ -71,14 +71,15 @@ local HL = load_shared("hsmp_log")
 
 ## 2. Getting a change into the game
 
-`scripts/build-and-deploy.ps1` is the developer deploy (players use the launcher). For a Lua-only
-change:
+`scripts/build-and-deploy.ps1` is the developer deploy (players use the launcher). Changed Lua
+also changes the content fingerprint embedded in the Rust binaries, so rebuild it:
 
 ```powershell
-.\scripts\build-and-deploy.ps1 -SkipBuild -Dev
+.\scripts\build-and-deploy.ps1 -Dev -RequireG0
 ```
 
-- `-SkipBuild` skips `cargo build`; the binaries already in `Binaries\Win64\hsmp\` stay, and
+- `-SkipBuild` reuses binaries only when their compiled content fingerprint matches the source.
+  It skips `cargo build`; the binaries already in `Binaries\Win64\hsmp\` stay, and
   HSMPNative is taken from the previous CMake build in the target dir.
 - HSMPNative is required: without a native build the deploy fails, unless `-SkipNative` asks for
   a deploy without it (`HSMPNative : 0`, no multiplayer). The CMake build needs an RE-UE4SS

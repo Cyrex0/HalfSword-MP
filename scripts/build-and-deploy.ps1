@@ -25,7 +25,8 @@
     Idempotent. Safe to re-run.
 
 .PARAMETER SkipBuild
-    Skip cargo build (Lua-only change).
+    Reuse binaries only when their compiled content identity matches the source.
+    Changes to shipped Lua or map content require a normal rebuild.
 .PARAMETER Dev
     Developer profile: enables the "dev" template entries (HSMPDiag probes for the
     gate, UE4SS Keybinds). Use it before running scripts\mp_test.ps1.
@@ -56,7 +57,7 @@
     Print what would change; write nothing.
 
 .EXAMPLE
-    PS> .\scripts\build-and-deploy.ps1 -SkipBuild -Dev
+    PS> .\scripts\build-and-deploy.ps1 -Dev -RequireG0
 #>
 [CmdletBinding()]
 param(
@@ -97,6 +98,21 @@ function Invoke-Git([string[]]$a) {
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     try { $o = & git -C $Repo @a 2>$null; if ($LASTEXITCODE -ne 0) { return "" }; return ($o -join "`n").Trim() }
     catch { return "" } finally { $ErrorActionPreference = $prev }
+}
+function Read-ContentIdentity([string]$exe,[string[]]$arguments,[string]$label) {
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { Fail "$label unavailable; rebuild the release binaries without -SkipBuild" }
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    try { $text = (@(& $exe @arguments 2>$null) -join "`n"); $code = $LASTEXITCODE }
+    catch { $code = -1; $text = "" }
+    finally { $ErrorActionPreference = $prev }
+    if ($code -ne 0) { Fail "$label unavailable (exit $code); rebuild the release binaries without -SkipBuild" }
+    try { $identity = $text | ConvertFrom-Json -ErrorAction Stop }
+    catch { Fail "$label malformed; rebuild the release binaries without -SkipBuild" }
+    if ($identity -isnot [pscustomobject] -or $identity.content_hash -isnot [string] -or
+        $identity.content_hash -notmatch '^[0-9a-fA-F]{64}$') {
+        Fail "$label missing a valid content hash; rebuild the release binaries without -SkipBuild"
+    }
+    return $identity.content_hash.ToLowerInvariant()
 }
 
 # ----- 0. locate the game -------------------------------------------------
@@ -200,6 +216,31 @@ if (-not $SkipBuild) {
     Say "-SkipBuild: not re-running cargo"
 }
 
+# Verify the actual candidate binaries before the first game directory copy or
+# write. G0 tests and file checksums cannot prove that their embedded content
+# identity matches freshly deployed Lua/maps; --mods-identity hashes the source
+# at runtime, while --build-info reports what server/build.rs embedded.
+$ShipDir = Join-Path $Win64 "hsmp"
+# The configured relative bin_dir is relative to Win64, as it is for the game.
+# Keep its spelling for hsmp.cfg, but inspect/run that actual directory.
+$DeployBinDir = if ($BinDir) {
+    if ([IO.Path]::IsPathRooted($BinDir)) { $BinDir } else { Join-Path $Win64 $BinDir }
+} else { $ShipDir }
+$ContentBinDir = if ($BinDir) { $DeployBinDir } elseif ($SkipBuild) { $ShipDir } else { $CargoOut }
+if ($DryRun) {
+    Say "  (dry run) would verify compiled server/sidecar content against source before any deployment writes" DarkGray
+} else {
+    $ContentServer = Join-Path $ContentBinDir "hsmp-server.exe"
+    $ContentSidecar = Join-Path $ContentBinDir "hsmp-sidecar.exe"
+    $sourceContent = Read-ContentIdentity $ContentServer @('--mods-identity',$Repo) 'source mods identity'
+    $serverContent = Read-ContentIdentity $ContentServer @('--build-info') 'compiled server identity'
+    $sidecarContent = Read-ContentIdentity $ContentSidecar @('--build-info') 'compiled sidecar identity'
+    if ($serverContent -ne $sourceContent -or $sidecarContent -ne $sourceContent) {
+        Fail "compiled server/sidecar content does not match current Lua/maps; rebuild without -SkipBuild before deploying (no game files changed)"
+    }
+    Say "compiled server/sidecar content matches source" Green
+}
+
 # ----- 1b. ship the binaries into Win64\hsmp ---------------------------------
 # The game never runs the live cargo output (<repo>\target\release): a later `cargo build` from
 # any checkout would silently change the binaries under test while the stamp still named the
@@ -208,7 +249,6 @@ if (-not $SkipBuild) {
 $StampPath = Join-Path $Win64 "hsmp_deploy.json"
 $prevStamp = $null
 if (Test-Path $StampPath) { try { $prevStamp = Get-Content $StampPath -Raw | ConvertFrom-Json } catch { $prevStamp = $null } }
-$ShipDir = Join-Path $Win64 "hsmp"
 $binsCommit = "unknown"
 if (-not $BinDir) {
     if (-not $SkipBuild) {
@@ -233,13 +273,13 @@ if (-not $BinDir) {
     }
 }
 # the binaries are valid for this commit when built from it, or when nothing they are built
-# from (server/, crates/, the workspace manifest, lock and toolchain) changed between their
+# from (server/, crates/, mods/, the workspace manifest, lock and toolchain) changed between their
 # commit and this one
 $binsMatch = $false
 if ($binsCommit -eq $commit -and -not $dirty) { $binsMatch = $true }
 elseif ($binsCommit -match '^[0-9a-f]{40}$' -and $commit -and -not $dirty) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    & git -C $Repo diff --quiet $binsCommit $commit -- server crates Cargo.toml Cargo.lock rust-toolchain.toml 2>$null
+    & git -C $Repo diff --quiet $binsCommit $commit -- server crates mods Cargo.toml Cargo.lock rust-toolchain.toml 2>$null
     $binsMatch = ($LASTEXITCODE -eq 0)
     $ErrorActionPreference = $prevEap
 }
@@ -376,7 +416,7 @@ foreach ($m in $mods) {
 # hsmp_build_id.lua in every mod (HSMPMenu compares it with `hsmp-sidecar --build-info` and
 # refuses multiplayer on a mismatch) and hsmp\build.json (the installed version, for the
 # launcher). The content hash is computed from this checkout, not taken from the binary.
-$IdExe = Join-Path $(if ($BinDir) { $BinDir } else { $ShipDir }) "hsmp-server.exe"
+$IdExe = Join-Path $DeployBinDir "hsmp-server.exe"
 if (Test-Path -LiteralPath $IdExe) {
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
     $idLua = (& $IdExe --mods-identity-lua $Repo 2>$null) -join "`n"
@@ -391,7 +431,7 @@ if (Test-Path -LiteralPath $IdExe) {
         $sd = Join-Path $ModsDst "$n\Scripts"
         if ($DryRun -or (Test-Path $sd)) { Write-Text (Join-Path $sd "hsmp_build_id.lua") ($idLua + "`n") }
     }
-    $IdDir = if ($BinDir) { $BinDir } else { $ShipDir }
+    $IdDir = $DeployBinDir
     if ($DryRun -or (Test-Path $IdDir)) { Write-Text (Join-Path $IdDir "build.json") ($idJson + "`n") }
     Say "build identity: $idJson" Green
 } else {
@@ -475,7 +515,7 @@ if (Test-Path $ModsJson) {
 $cfgPath = Join-Path $Win64 "hsmp.cfg"
 # bin_dir: the shipped copies (relative "hsmp", as the launcher writes it), or an explicit -BinDir
 $BinDirCfg = if ($BinDir) { $BinDir -replace '\\', '/' } else { "hsmp" }
-if (-not $BinDir) { $BinDir = $ShipDir }
+$BinDir = $DeployBinDir
 if ($WriteCfg -or -not (Test-Path $cfgPath)) {
     $cfg = @(
         "# hsmp.cfg - read by mods through shared/hsmp_cfg.lua (written by build-and-deploy.ps1)",

@@ -17,6 +17,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Refuse developer deployments with incompatible compiled content before changing game files,
+  and resolve custom binary paths consistently with the game configuration.
 - Start playback clocks from the current match, round, life and pose discontinuity
   after placement returns; preserve the existing timing detector within that generation.
 - Keep the fixed Rondel dagger's native weapon passport instead of replacing it

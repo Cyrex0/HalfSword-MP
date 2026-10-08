@@ -566,6 +566,13 @@ Without WSL, the Linux job is first seen on the push.
   copies the binaries into `Binaries\Win64\hsmp\` (the layout the launcher installs) and points `hsmp.cfg`
   `bin_dir` at `hsmp` (relative), so a later `cargo build` elsewhere can never change the binaries under test.
   `-BinDir` writes an explicit folder instead (not stamped). `mp_test.ps1` reads `bin_dir` from there too.
+  Shipped Lua and map content is embedded in these binaries' content identity;
+  changing it requires a normal rebuild even when no Rust source changed.
+  Before any deployment copy/write, the script compares the actual server and
+  sidecar compiled identities with the source mods identity. `-SkipBuild` works
+  only when these identities still match; malformed, missing or stale identities
+  stop the deploy before changing game files. G0 and matching file checksums alone
+  do not establish that compatibility.
 * Copies every `Scripts/*.lua` of each `mods/HSMP*` and `mods/dev/HSMP*` mod and then `mods/shared/*.lua` into the
   mod's deployed `Scripts/`. Retired mods (`HSMPLobby`, `HSMPAdmin`, `HSMPCharacter`, `HSMPSettings`, `HSMPChat`)
   are not deployed.
