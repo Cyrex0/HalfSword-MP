@@ -15,10 +15,10 @@ end
 function M.start()
     if started then return false, "already started" end
     started = true -- never reinstall hooks or listeners after startup/refusal
-    local Role, HW, IPC, SG, D, Control, Prepare, PoseConfig, Boundary = load_module("hsmp_runtime_role"), load_module("hsmp_wg"),
-        load_module("hsmp_ipc"), load_module("hsmp_saveguard"), load_module("director"), load_module("headless_control"), load_module("headless_prepare"), load_module("hsmp_pose_config"), load_module("headless_sample_boundary")
+    local Role, HW, IPC, SG, D, Control, Prepare, PoseConfig, Boundary, SpawnDiagnostics = load_module("hsmp_runtime_role"), load_module("hsmp_wg"),
+        load_module("hsmp_ipc"), load_module("hsmp_saveguard"), load_module("director"), load_module("headless_control"), load_module("headless_prepare"), load_module("hsmp_pose_config"), load_module("headless_sample_boundary"), load_module("headless_spawn_diagnostics")
     local function log(format, ...) print(string.format("[HSMPNativeWorker] " .. format .. "\n", ...)) end
-    if not Role or not Role.worker() or not HW or not IPC or not SG or not D or not Control or not Prepare or not PoseConfig or not Boundary
+    if not Role or not Role.worker() or not HW or not IPC or not SG or not D or not Control or not Prepare or not PoseConfig or not Boundary or not SpawnDiagnostics
         or not LoopInGameThreadWithDelay then log("startup refused: worker dependencies unavailable"); return end
     local UEH = require("UEHelpers")
     local state_dir = (os.getenv("HSMP_STATE_DIR") or "hsmp_state"):gsub("\\", "/")
@@ -27,6 +27,7 @@ function M.start()
     local arena = os.getenv("HSMP_NATIVE_ARENA") or "Map_Arena_Yard"
     local bind = os.getenv("HSMP_NATIVE_BIND") or "127.0.0.1:7777"
     local boot_only = os.getenv("HSMP_NATIVE_BOOT_ONLY") == "1"
+    local native_mode = os.getenv("HSMP_NATIVE_MODE") or "pvp"
     IPC.init({ mod = "HSMPMatch", state_dir = state_dir, log = log })
     local N = IPC.N
     if not N or not N.worker_input then log("startup refused: native input binding unavailable"); return end
@@ -42,10 +43,10 @@ function M.start()
     local RVP = RVPModule and RVPModule.new({ log = log, ev = function(name, fields) if HL then HL.event(name, fields) end end })
     if RVP then pcall(function() RegisterLoadMapPreHook(function() RVP.on_loadmap() end) end) end
     local stopped, hosted, last_key, last_state, last_report, last_stop_poll = false, false, nil, nil, -1e9, -1e9
-    local bootstrap, controller, loop_handle
+    local bootstrap, controller, loop_handle, source_lifecycle
     local sample_configured, frame_seq, sample_at, first_ai_name = false, 0, -1e9, nil
     local entity_bindings = {}
-    local metrics = { sample_ok=0, sample_refused=0, dispatch=0, active_dispatch=0, input_refused=0, sample_min_ms=nil, sample_max_ms=0, last_input_error=nil, last_sample_error=nil }
+    local metrics = { sample_ok=0, sample_refused=0, dispatch=0, active_dispatch=0, active_pc0=0, active_pc1=0, input_refused=0, sample_min_ms=nil, sample_max_ms=0, last_input_error=nil, last_sample_error=nil }
     local function same_world(world, actor)
         if stopped or not WG.check() or not WG.settled() then return false end
         local token = WG.token()
@@ -147,22 +148,42 @@ function M.start()
         no_rate_skip = function(_, mesh) mesh.object.bEnableUpdateRateOptimizations = false; return mesh.object.bEnableUpdateRateOptimizations == false end,
         tick_enabled = function(_, mesh) mesh.object:SetComponentTickEnabled(true); return true end,
     })
+    local function census_player(index)
+        local pc, pawn, world = player(index)
+        if not pc or not pawn then return nil end
+        -- Only scalar/native property reads after the final possession lookup.
+        -- Never carry this pawn wrapper through the next reflected player call.
+        local health, team = pawn.Health, pawn["Team Int"]
+        return { pc = pc:GetAddress(), pawn = pawn:GetAddress(), name = pawn:GetFName():ToString(),
+            world = world, health = health, dead = pawn.DED, team = team }
+    end
     local function census()
         if stopped or not WG.check() or not WG.settled() then return nil, "world settling" end
-        local pc0, pawn0, world = player(0)
-        local pc1, pawn1 = player(1)
-        if not pawn0 then return nil, "native PC0 has no Willie" end
-        if not pawn1 then return nil, "native PC1 has no Willie" end
-        if pawn0:GetAddress() == pawn1:GetAddress() or pc0:GetAddress() == pc1:GetAddress() then return nil, "native players share a binding" end
+        local token = WG.token()
+        local p0, p1 = census_player(0), census_player(1)
+        if not p0 then return nil, "native PC0 has no Willie" end
+        if not p1 then return nil, "native PC1 has no Willie" end
+        if not WG.same(token) then return nil, "world changed during player census" end
+        if p0.pawn == p1.pawn or p0.pc == p1.pc then return nil, "native players share a binding" end
         if not preparation:prepare(0) or not preparation:prepare(1) then return nil, "native animation/input preparation refused" end
-        pc0, pawn0, world = player(0)
-        pc1, pawn1 = player(1)
-        if not pawn0 or not pawn1 then return nil,"native players changed during preparation" end
+        local a0, a1 = census_player(0), census_player(1)
+        if not a0 or not a1 or not WG.same(token) or a0.pawn ~= p0.pawn or a1.pawn ~= p1.pawn
+            or a0.name ~= p0.name or a1.name ~= p1.name then return nil,"native players changed during preparation" end
         local ai, ai_count = nil, 0
-        for _, pawn in pairs(FindAllOf("Willie_BP_C") or {}) do
-            if not same_world(world, pawn0) then return nil, "world changed during census" end
-            if pawn and pawn:IsValid() and same_world(world, pawn) and pawn:GetAddress() ~= pawn0:GetAddress()
-                and pawn:GetAddress() ~= pawn1:GetAddress() and pawn.DED == false and pawn.Health > 0 then
+        for _, candidate in pairs(FindAllOf("Willie_BP_C") or {}) do
+            if not WG.same(token) then return nil, "world changed during census" end
+            local pawn
+            if candidate and candidate:IsValid() then
+                local address, name = candidate:GetAddress(), candidate:GetFName():ToString()
+                if same_world(a0.world, candidate) and WG.same(token) then
+                    for _, fresh in pairs(FindAllOf("Willie_BP_C") or {}) do
+                        if fresh and fresh:IsValid() and fresh:GetAddress() == address and fresh:GetFName():ToString() == name then pawn = fresh; break end
+                    end
+                end
+            end
+            if not WG.same(token) then return nil, "world changed during census" end
+            if pawn and pawn:GetAddress() ~= a0.pawn
+                and pawn:GetAddress() ~= a1.pawn and pawn.DED == false and pawn.Health > 0 then
                 local owner = pawn.Controller
                 if owner and owner:IsValid() and owner:GetClass():GetFName():ToString() == "AI_BP_C" then
                     ai_count = ai_count + 1
@@ -170,14 +191,128 @@ function M.start()
                     -- Same animation qualification, retaining native AI input
                     -- and possession throughout (no DisableInput on an AI).
                     if not preparation:prepare(pawn:GetFName():ToString()) then return nil,"native AI animation preparation refused" end
+                else return nil, "untracked living native fighter" end
+            end
+        end
+        local fresh0, fresh1 = census_player(0), census_player(1)
+        if not fresh0 or not fresh1 or not WG.same(token) or fresh0.pawn ~= a0.pawn or fresh1.pawn ~= a1.pawn
+            or fresh0.name ~= a0.name or fresh1.name ~= a1.name then return nil, "native players changed during census" end
+        for _, row in ipairs({fresh0, fresh1}) do
+            if type(row.health) ~= "number" or row.health ~= row.health or row.health <= 0 or row.dead ~= false then return nil, "native player is not living" end
+        end
+        local expected_ai = native_mode == "diagnostic" and 1 or 0
+        if ai_count ~= expected_ai then return nil, ai_count < expected_ai and "native diagnostic AI missing" or "extra active native AI in authority bootstrap" end
+        local team0, team1 = fresh0.team, fresh1.team
+        if type(team0) ~= "number" or team0 % 1 ~= 0 or team0 < -2147483648 or team0 > 2147483647 or
+            type(team1) ~= "number" or team1 % 1 ~= 0 or team1 < -2147483648 or team1 > 2147483647 then return nil, "native player team unavailable" end
+        if native_mode == "pvp" and team0 == team1 then return nil, "native PvP players share a native team" end
+        if not first_ai_name then first_ai_name = ai end
+        return { players = 2, ai = ai_count, pawn0 = fresh0.name, pawn1 = fresh1.name, first_ai = ai or "", team0 = team0, team1 = team1 }
+    end
+    local env = D.make_ue_env({ WG = WG, UEHelpers = UEH, log = log, SG = SG, RVP = RVP })
+    -- Capture the failed native path before changing it. All actor reads below
+    -- use a fresh world-qualified lookup after GetWorld can reenter engine code.
+    local function diagnostic_actor(class, address, name, token)
+        local actor
+        for _, candidate in pairs(FindAllOf(class) or {}) do
+            if not WG.same(token) then return nil end
+            if candidate and candidate:IsValid() and (not address or candidate:GetAddress() == address)
+                and (not name or candidate:GetFName():ToString() == name) then
+                local a, n = candidate:GetAddress(), candidate:GetFName():ToString()
+                if same_world(WG.world(), candidate) and WG.same(token) then
+                    for _, fresh in pairs(FindAllOf(class) or {}) do
+                        if fresh and fresh:IsValid() and fresh:GetAddress() == a and fresh:GetFName():ToString() == n then actor = fresh; break end
+                    end
+                    if actor then break end
                 end
             end
         end
-        if ai_count ~= 1 then return nil, ai_count < 1 and "native AI missing" or "extra active native AI in three-entity bootstrap" end
-        if not first_ai_name then first_ai_name = ai end
-        return { players = 2, ai = ai_count, pawn0 = pawn0:GetFName():ToString(), pawn1 = pawn1:GetFName():ToString(), first_ai = ai }
+        return WG.same(token) and actor or nil
     end
-    local env = D.make_ue_env({ WG = WG, UEHelpers = UEH, log = log, SG = SG, RVP = RVP })
+    local function diagnostic_flags(class, fields, token)
+        local actor = diagnostic_actor(class, nil, nil, token)
+        if not actor then return { state = "missing" } end
+        local result = { name = actor:GetFName():ToString(), address = actor:GetAddress() }
+        for _, field in ipairs(fields) do
+            local value = actor[field]
+            result[field] = (type(value) == "boolean" or type(value) == "number") and value or "unavailable"
+        end
+        return result
+    end
+    env.native_spawn_diagnostics = function(reason)
+        if stopped or not WG.check() or not WG.settled() then return end
+        local token = WG.token()
+        local readers = { same = WG.same, world_key = function() return WG.key end,
+            profile = function()
+                local result = {}
+                for _, row in ipairs(D.native_worker_profile(native_mode) or {}) do
+                    if not WG.same(token) then return nil, "world changed during GI profile" end
+                    local value = env.gi_get(row[1])
+                    result[row[1]] = (type(value) == "boolean" or type(value) == "number") and value or "unavailable"
+                end
+                return result
+            end,
+            controllers = function()
+                local result = {}
+                local world, gs = WG.world(), UEH.GetGameplayStatics()
+                if not WG.same(token) or not world or not world:IsValid() or not gs or not gs:IsValid() then return nil, "controller lookup unavailable" end
+                for index = 0, 1 do
+                    local row = { pc = "missing", pawn = "missing" }
+                    result[index + 1] = row
+                    local pc = gs:GetPlayerController(world, index)
+                    if not WG.same(token) then return nil end
+                    if pc and pc:IsValid() then
+                        local address, name = pc:GetAddress(), pc:GetFName():ToString()
+                        if not same_world(world, pc) or not WG.same(token) then return nil end
+                        pc = gs:GetPlayerController(world, index)
+                        if not WG.same(token) then return nil end
+                        if not pc or not pc:IsValid() or pc:GetAddress() ~= address or pc:GetFName():ToString() ~= name then return nil, "controller binding changed" end
+                        row.pc, row.pc_address, row.pc_class = name, address, pc:GetClass():GetFName():ToString()
+                        local pawn = pc.Pawn
+                        if pawn and pawn:IsValid() then
+                            local pawn_address, pawn_name = pawn:GetAddress(), pawn:GetFName():ToString()
+                            if not same_world(world, pawn) or not WG.same(token) then return nil end
+                            pc = gs:GetPlayerController(world, index)
+                            if not WG.same(token) then return nil end
+                            if not pc or not pc:IsValid() or pc:GetAddress() ~= address or pc:GetFName():ToString() ~= name then return nil, "controller binding changed" end
+                            pawn = pc.Pawn
+                            if not pawn or not pawn:IsValid() or pawn:GetAddress() ~= pawn_address or pawn:GetFName():ToString() ~= pawn_name then return nil, "pawn binding changed" end
+                            row.pawn, row.pawn_address, row.pawn_class = pawn_name, pawn_address, pawn:GetClass():GetFName():ToString()
+                            if row.pawn_class == "Willie_BP_C" then
+                                local team = pawn["Team Int"]
+                                row.team = type(team) == "number" and team % 1 == 0 and team or "unavailable"
+                            end
+                        end
+                    end
+                end
+                return result
+            end,
+            mode = function(t) return diagnostic_flags("BP_HalfSwordGameMode_C", { "Local Multiplayer", "Enemy Count", "All Enemies Dead", "Player DED" }, t) end,
+            level = function(t) return diagnostic_flags("BP_LevelManager_C", { "Player Spawned", "P2 Spawned", "Amount of Characters to Spawn" }, t) end,
+            willies = function(t)
+                local result = { total = 0, ai = 0, alive_ai = 0, unpossessed = 0 }
+                for _, candidate in pairs(FindAllOf("Willie_BP_C") or {}) do
+                    if not WG.same(t) then return nil end
+                    if candidate and candidate:IsValid() then
+                        local pawn = diagnostic_actor("Willie_BP_C", candidate:GetAddress(), candidate:GetFName():ToString(), t)
+                        if pawn then
+                            result.total = result.total + 1
+                            local owner = pawn.Controller
+                            if not owner or not owner:IsValid() then result.unpossessed = result.unpossessed + 1
+                            elseif owner:GetClass():GetFName():ToString() == "AI_BP_C" then
+                                result.ai = result.ai + 1
+                                if type(pawn.Health) == "number" and pawn.Health > 0 and pawn.DED == false then result.alive_ai = result.alive_ai + 1 end
+                            end
+                        end
+                    end
+                end
+                return result
+            end,
+        }
+        local rows, why = SpawnDiagnostics.capture(readers, token, reason)
+        if rows then log("native spawn diagnostic: %s", SpawnDiagnostics.format(rows))
+        else log("native spawn diagnostic refused: %s", why or "binding changed") end
+    end
     env.native_settled = WG.settled
     env.native_players_ready = function() local rows, reason = census(); return rows ~= nil, reason end
     env.native_status = function(state, reason)
@@ -186,20 +321,14 @@ function M.start()
         if HL then HL.event("x_native_worker", { state = state, reason = reason or "", arena = arena }) end
         if hosted and N.host_status then N.host_status(state, reason or "") end
     end
+    local control_bindings = {resolve=resolve,prepare=function(index)return preparation:prepare(index)end}
     controller = Control.new({ now_ms = function() return os.clock() * 1000 end,
         running = function() return not stopped and bootstrap and bootstrap.state == "native_ready" and WG.check() and WG.settled() end,
         binding = function(row)
-            local pc, pawn, world = player(row.controller)
-            if not pc or not preparation:prepare(row.controller) then return nil end
-            return { key = WG.key .. ":" .. tostring(pc:GetAddress()) .. ":" .. tostring(pawn:GetAddress()) .. ":" .. pawn:GetFName():ToString(),
-                world_key = WG.key, world = world, pc = pc, pawn = pawn, pawn_name = pawn:GetFName():ToString(),
-                pc_address = pc:GetAddress(), pawn_address = pawn:GetAddress(), entity_id = row.id, incarnation = row.incarnation, controller_index = row.controller }
+            return Control.fresh_binding(row,control_bindings)
         end,
         same = function(binding)
-            if stopped or binding.world_key ~= WG.key or not same_world(binding.world, binding.pawn) then return false end
-            return binding.pawn:GetFName():ToString() == binding.pawn_name and binding.pawn:GetAddress() == binding.pawn_address
-                and binding.pc:GetAddress() == binding.pc_address and binding.pc.Pawn:GetAddress() == binding.pawn_address
-                and binding.pawn.Controller:GetAddress() == binding.pc_address
+            return not stopped and Control.binding_matches(binding,control_bindings)
         end,
         invoke = function(binding, axes, changed, buttons)
             local accepted, why = N.worker_input({ pawn = binding.pawn_address, controller = binding.pc_address, axes = axes, changed = changed, buttons = buttons })
@@ -207,7 +336,11 @@ function M.start()
                 metrics.dispatch = metrics.dispatch + 1
                 local active = changed ~= 0 or buttons ~= 0
                 for _, axis in ipairs(axes) do if axis ~= 0 then active = true end end
-                if active then metrics.active_dispatch = metrics.active_dispatch + 1 end
+                if active then
+                    metrics.active_dispatch = metrics.active_dispatch + 1
+                    local key = binding.controller_index == 0 and "active_pc0" or "active_pc1"
+                    metrics[key] = metrics[key] + 1
+                end
                 metrics.last_dispatched_entity, metrics.last_dispatched_controller = binding.entity_id, binding.controller_index
             else
                 metrics.input_refused = metrics.input_refused + 1
@@ -224,6 +357,20 @@ function M.start()
             sample_configured = true
         end
         local token, actors = WG.token(), {}
+        if native_mode ~= "diagnostic" then
+            if not N.host_describe or not N.native_capture_render then return false, "native source/render APIs unavailable" end
+            if not source_lifecycle then
+                local Adapter, Lifecycle = load_module("native_source_adapter"), load_module("headless_source_lifecycle")
+                if not Adapter or not Lifecycle then return false, "native source descriptor modules unavailable" end
+                local adapter = Adapter.new({ resolve=resolve, WG=WG })
+                source_lifecycle = Lifecycle.new({ resolve=resolve,same=WG.same,now_ms=function()return os.clock()*1000 end,
+                    index=function(row)return row.kind==0 and row.controller or first_ai_name end,
+                    capture=adapter.capture,describe=N.host_describe,
+                    invalidate=function()if hosted and N.host_world_changed then N.host_world_changed() end;IPC.world_leaving()end })
+            end
+            local described, reason = source_lifecycle.ensure(directory,token,frame_seq+1)
+            if described ~= true then return false, reason end
+        end
         for _, row in ipairs(directory.entities or {}) do
             if not WG.same(token) then return false, "world changed during actor lookup" end
             local binding = resolve(row.kind==0 and row.controller or first_ai_name)
@@ -260,6 +407,8 @@ function M.start()
         local now_ms = os.clock()*1000
         local before = os.clock()*1000
         local ok, why = Boundary.sample({sample=N.native_sample_world,commit=N.native_commit_world,same=WG.same,
+            render=native_mode~="diagnostic" and N.native_capture_render or nil,allow_core_only=native_mode=="diagnostic",
+            refresh=function()if source_lifecycle then source_lifecycle.refresh() end end,
             invalidate=function()if hosted and N.host_world_changed then N.host_world_changed() end;IPC.world_leaving()end},token,
             {epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq,ts_ms=now_ms,dt_ms=sample_at > 0 and now_ms-sample_at or 0,actors=actors})
         local elapsed = os.clock()*1000-before
@@ -270,11 +419,12 @@ function M.start()
         end
         return ok == true, why
     end
-    bootstrap = D.new_native_worker(env, { arena = arena })
+    bootstrap = D.new_native_worker(env, { arena = arena, mode = native_mode })
     WG.on_drop(function()
         preparation:drop()
         last_key = nil
         first_ai_name, entity_bindings = nil, {}
+        if source_lifecycle then source_lifecycle.drop() end
         sample_at = -1e9
         controller:drop()
         if hosted and N.host_world_changed then N.host_world_changed() end
@@ -292,7 +442,7 @@ function M.start()
         local ok, quit = pcall(env.quit_native_worker)
         if not ok or quit ~= true then log("graceful native quit unavailable: %s",tostring(quit)) end
     end
-    log("starting native authority: arena=%s bind=%s boot_only=%s", arena, bind, tostring(boot_only))
+    log("starting native authority: mode=%s arena=%s bind=%s boot_only=%s", native_mode, arena, bind, tostring(boot_only))
     loop_handle = LoopInGameThreadWithDelay(16, function()
         if stopped then return true end
         local ok, err = pcall(function()
@@ -307,7 +457,7 @@ function M.start()
             end
             if not hosted and not boot_only then
                 if not N.host_start then error("embedded native endpoint unavailable") end
-                local started, why = N.host_start(bind, identity_dir, arena)
+                local started, why = N.host_start(bind, identity_dir, arena, native_mode)
                 if started ~= true then error("native endpoint refused: " .. tostring(why)) end
                 hosted = true
                 if last_state and N.host_status then N.host_status(last_state, "") end
@@ -346,9 +496,12 @@ function M.start()
                     log("native census: players=%d ai=%d pc0=%s pc1=%s first_ai=%s world=%s", rows.players, rows.ai, rows.pawn0, rows.pawn1, rows.first_ai, WG.key)
                     if HL then HL.event("x_native_worker_census", rows) end
                 else log("native census unavailable: %s", why or "unknown") end
-                log("native evidence: sampled=%d refused=%d sample_ms_min=%.3f sample_ms_max=%.3f dispatched=%d active_dispatched=%d input_refused=%d last_entity=%s last_controller=%s",
-                    metrics.sample_ok,metrics.sample_refused,metrics.sample_min_ms or 0,metrics.sample_max_ms,metrics.dispatch,metrics.active_dispatch,metrics.input_refused,
-                    tostring(metrics.last_dispatched_entity or ""),tostring(metrics.last_dispatched_controller or ""))
+                log("native evidence: sampled=%d refused=%d sample_ms_min=%.3f sample_ms_max=%.3f dispatched=%d active_dispatched=%d active_pc0=%d active_pc1=%d input_refused=%d last_entity=%s last_controller=%s",
+                    metrics.sample_ok,metrics.sample_refused,metrics.sample_min_ms or 0,metrics.sample_max_ms,metrics.dispatch,metrics.active_dispatch,
+                    metrics.active_pc0,metrics.active_pc1,metrics.input_refused,tostring(metrics.last_dispatched_entity or ""),tostring(metrics.last_dispatched_controller or ""))
+                if HL then HL.event("x_native_worker", {state="native_evidence",reason="",arena=arena,frame_seq=frame_seq,
+                    sampled=metrics.sample_ok,refused=metrics.sample_refused,active_pc0=metrics.active_pc0,active_pc1=metrics.active_pc1,
+                    dispatched=metrics.dispatch,input_refused=metrics.input_refused}) end
             end
         end)
         if not ok then log("worker stopped: %s", tostring(err)); M.stop(nil,tostring(err)); return true end

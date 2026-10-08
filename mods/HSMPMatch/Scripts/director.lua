@@ -2169,13 +2169,13 @@ function D.make_ue_env(ctx)
         return { ok = ok, short = ok and WG.short() or nil, key = ok and WG.key or nil }
     end
 
-    function env.open_level(name)
+    function env.open_level(name, options)
         local ok = false
         pcall(function()
             local gs = UEH.GetGameplayStatics()
             local world = (WG.world and WG.world() or UEH.GetWorld())
             if gs and gs:IsValid() and world and world:IsValid() then
-                gs:OpenLevel(world, FName(name), true, FString(""))
+                gs:OpenLevel(world, FName(name), true, FString(options or ""))
                 ok = true
             end
         end)
@@ -2472,19 +2472,30 @@ D.NATIVE_WORKER_PROFILE = {
     { "Current Game Mode Enum", 0 }, { "Current Combat Mode", 0 },
     { "Current Play Mode", 0 }, { "Free Mode Activated", true },
     { "FreeMode Multiplayer", true }, { "Progression Multiplayer", false },
-    { "Free Mode Foes Amount", 2 }, { "Free Mode Carnage", false },
+    { "Free Mode Foes Amount", 1 }, { "Free Mode Carnage", false },
     { "Free Mode Brawling", false }, { "Free Mode Blossfechten", false },
     { "Rounds To WIn", 0 }, { "Rounds Won", 0 },
 }
+function D.native_worker_profile(mode)
+    if mode ~= "pvp" and mode ~= "diagnostic" then return nil end
+    local profile = {}
+    for _, row in ipairs(D.NATIVE_WORKER_PROFILE) do
+        profile[#profile + 1] = { row[1], row[1] == "Free Mode Foes Amount" and (mode == "pvp" and 1 or 2) or row[2] }
+    end
+    return profile
+end
 function D.new_native_worker(env, opts)
     opts = opts or {}
     local arena = opts.arena or "Map_Arena_Yard"
-    local self = { state = "boot", arena = arena, stopped = false }
+    local mode = opts.mode or "pvp"
+    local profile = D.native_worker_profile(mode)
+    local self = { state = "boot", arena = arena, mode = mode, profile = profile, stopped = false }
     local function transition(state, reason)
         self.state, self.reason = state, reason
         if env.native_status then env.native_status(state, reason) end
     end
     if not arena:match("^Map_Arena_[%w_]+$") then transition("error", "unsupported native bootstrap arena") end
+    if not profile then transition("error", "unsupported native authority mode") end
     function self:stop()
         self.stopped = true
         transition("stopped", "worker stopped")
@@ -2498,7 +2509,7 @@ function D.new_native_worker(env, opts)
             if not env.sg_force or not env.sg_active then transition("error", "save guard unavailable"); return false end
             env.sg_force(true)
             if not env.sg_active() then transition("error", "save guard refused"); return false end
-            for _, row in ipairs(D.NATIVE_WORKER_PROFILE) do
+            for _, row in ipairs(profile) do
                 if not env.gi_set(row[1], row[2]) or env.gi_get(row[1]) ~= row[2] then
                     transition("error", "native GI profile: " .. row[1]); return false
                 end
@@ -2522,6 +2533,11 @@ function D.new_native_worker(env, opts)
                 transition("error", "native world changed")
             elseif self.state == "native_spawn" and env.native_settled and env.native_settled() then
                 local ready, why = env.native_players_ready()
+                if not ready and env.native_spawn_diagnostics and
+                    (why ~= self.diagnostic_reason or env.now() - (self.diagnostic_at or -1e9) >= 5 or env.now() - self.issued_at > 45) then
+                    self.diagnostic_reason, self.diagnostic_at = why, env.now()
+                    env.native_spawn_diagnostics(why)
+                end
                 if ready then transition("native_ready")
                 elseif env.now() - self.issued_at > 45 then transition("error", why or "native players did not spawn") end
             end
@@ -2531,4 +2547,10 @@ function D.new_native_worker(env, opts)
     return self
 end
 
+-- A presentation process follows the authority arena with a noncombat engine
+-- GameMode. The caller must verify that override and a zero-fighter census.
+function D.native_client_travel(env,arena)
+    if type(arena)~="string" or not arena:match("^Map_Arena_[%w_]+$")then return false end
+    return env.open_level(arena,"game=/Script/Engine.GameModeBase")
+end
 return D

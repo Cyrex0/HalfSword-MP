@@ -34,6 +34,29 @@ local function newer(a, b)
     return delta > 0 and delta < 0x80000000
 end
 local function zero() return {0, 0, 0, 0, 0, 0, 0, 0} end
+local binding_fields = { "index", "world_key", "pc_address", "pc_name", "pawn_address", "pawn_name" }
+function M.fresh_binding(row, env)
+    if env.prepare(row.controller) ~= true then return nil end
+    -- Preparation may enter native callbacks and change possession. Resolve
+    -- afterwards and retain only the newly qualified scalar identity.
+    local fresh = env.resolve(row.controller)
+    if not fresh then return nil end
+    local binding = {}
+    for _, field in ipairs(binding_fields) do
+        if fresh[field] == nil then return nil end
+        binding[field] = fresh[field]
+    end
+    binding.key = binding.world_key .. ":" .. tostring(binding.pc_address) .. ":" .. binding.pc_name
+        .. ":" .. tostring(binding.pawn_address) .. ":" .. binding.pawn_name
+    binding.entity_id, binding.incarnation, binding.controller_index = row.id, row.incarnation, row.controller
+    return binding
+end
+function M.binding_matches(binding, env)
+    local fresh = env.resolve(binding.index)
+    if not fresh then return false end
+    for _, field in ipairs(binding_fields) do if binding[field] == nil or binding[field] ~= fresh[field] then return false end end
+    return true
+end
 function M.new(env)
     local self = { directory = nil, entities = {}, states = {}, stopped = false }
     -- World drop intentionally performs no engine call. An old pawn may already
