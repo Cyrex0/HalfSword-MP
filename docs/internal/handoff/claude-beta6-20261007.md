@@ -1218,3 +1218,50 @@ socket-quaternion getter,joint-angle API,physics setter or driver policy change.
 Unknown/missing/nonfinite/stale data stays unavailable. Native execution and
 causal interpretation remain pending Native31.
 Final Astra HAND source review approved the frozen two-file diagnostic for matching Native31; native verification remains pending.
+
+### Native31: runtime grip mismatch and diagnostic coverage gaps
+
+Clean fbcb5dd3 strictG0 passed61Lua suites,1,279Rust tests/75binaries,
+95parses,clippy0errors/2warnings. Matching fullnative/Rust/mod deployment
+completed. Session:`test-results/lab/native-20261008-31`,raw:
+`test-results/20261008-072148-a909f6-combat_manual`;bothDISPLAY1,HAND+GRIP
+boundedopt-insON,costlycaller/body/armor/localdamageOFF.
+
+Round1 failed despite both native placements verifying: HSMP2 proxy peer1
+upperarm_l~87.7deg,lowerarm_l~178.4,hand_l~24.6 withfresh60/s source persisted
+through reposes. Detailed capture correctly refused because Mode stillheld
+round0/life0 until result/load_failed07:23:16.734,while pending source/display
+wasround1/life1. This is physical readiness failure,notfailed native placement.
+Round2 later reachedLive07:23:33.502 and produced qualifiedhealthy HAND:
+23samples/bone/instance through07:25:33,maxhandworlderrors(inst1)L.229/R.574deg,
+(inst2)L.206/R.944deg,decoded->aim max<=.357deg,allfourbones simtrue,norm1.
+These healthy samples do NOT explain the failed initial preparation.
+
+Two exact WPNHAND scopes in both processes (07:24:38,match8750572547180498/r2/
+life1 and07:26:41,match4601685102968841/r1/life1) independently show owners
+currentR/L14/0,twohand/offhand true;proxies3/0,bothfalse. Current hand-field IDs
+join actual native endpoints: ownerL->samepolearm asR;proxyL->Fists. Allfour
+actualpolearmactors have defaultR14/L3. CurrentR3 is runtime state,notdifferent
+weapon defaults. Firstscope persists24qualified owner/proxy endpoint snapshots
+perinstance (proxiesbothpost-BP/post-policy,samepairtrue). Cooked native offhand
+loss branch can set CurrentR toWeaponR's defaultL thenbreakoffhand; whichtrigger
+occurred remains unobserved. No flags or loadoutorder were forced.
+
+Five-deaths-per-player subcheck completed3 respawns:12,862/18,731/12,701ms,
+then35sphysicaltimeout. One completedplacement exceeds15s target. Laterhand_l
+171.5–174.5deg fault recurred07:27:35–54,afterglobal180s HAND/GRIP captureexpiry.
+Full modesacceptanceNOTRUN. Thus neither fault interval has qualified HAND
+causeevidence; onlyhealthyLive capture is verified. Next diagnostic work must
+explicitly cover pending-source versus actualMode mismatch without claiming
+authority,and choose a bounded window that overlaps the actual fault.
+
+Ashortbounded12-attempt Box sequence07:30:26–35 firstrefusedheld_box,then both
+sourcesbecame valid07:30:28.957/.032 and native enrollment refused formal
+parametersunavailable.0started/0PAIR;exactparameterreflection now needs provider
+investigation,withallnativegatespreserved. Cloth120recipe didnotcomplete before
+owner deadline; no completedrecipe summary exists and no fullrecipe metrics
+are claimed. NormalQuitGame07:31:08,0newcrashes/noorphans;limitedmanualPASSdoes
+not overrideinitial/readiness/modes/observerfailures. Ignoredscalar summary:
+`checkpoint-summary.json`. No main/PR/tag/release action; shipping remainsNO.
+Native31 provider follow-up: cooked Get Damage has1,070 childproperties including Blueprint locals,while formal() rejects>512; inputs remain valid8-byteObjectProperty/Parm bounds. Preserved22Boxrows comprise6held_box and16formal-enrollment refusals,0starts/PAIR. A complete bounded enumeration with unchanged input checks needs a production-helper regression and native retry.
+Owner sleep instruction conditionally authorizes PR/main merge and coordinated release/update only after intended gameplay and all required acceptance gates genuinely pass. That condition remains unmet; continue dev checkpoints and native debugging without further permission requests.
