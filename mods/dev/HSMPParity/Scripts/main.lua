@@ -982,6 +982,58 @@ local box_observer
 local box_instance=os.getenv("HSMP_INST")
 if box_instance~="1" and box_instance~="2" then box_instance="unavailable" end
 local function box_log(fmt,...)Log("inst=%s "..fmt,box_instance,...)end
+local box_playback={logs=0}
+function box_playback.scalar(v,kind)
+    if kind=="number" and type(v)=="number" and v==v and math.abs(v)<math.huge then return tostring(v),true end
+    if kind=="string" and type(v)=="string" and v~="" then
+        -- Lua %q can quote LF with a backslash plus physical LF. Escape controls first.
+        local text=v:sub(1,128):gsub("%c",function(c)return string.format("\\x%02X",c:byte())end)
+        return string.format("%q",text),true
+    end
+    return "unknown",false
+end
+function box_playback.refuse(reason,detail,peer,shown,play,now)
+    -- Existing scalar snapshots only: explaining a refusal performs no native reads.
+    -- Fixed total budget, no world/command reset; strings and row size are bounded too.
+    if box_playback.logs>=32 then return nil,reason end
+    box_playback.logs=box_playback.logs+1
+    local actual_row=type(play)=="table" and play or nil
+    local fields={}
+    for _,key in ipairs({"pawn","match_id","round","life"})do
+        local kind=key=="pawn" and "string" or "number"
+        local actual,aa=box_playback.scalar(actual_row and rawget(actual_row,key),kind)
+        local expected,ea=box_playback.scalar(shown and shown[key],kind)
+        fields[#fields+1]=string.format("actual_%s=%s actual_%s_available=%s expected_%s=%s expected_%s_available=%s",
+            key,actual,key,tostring(aa),key,expected,key,tostring(ea))
+    end
+    local timestamp=actual_row and rawget(actual_row,"local_ms")
+    local local_ms,la=box_playback.scalar(timestamp,"number")
+    local at,na=box_playback.scalar(now,"number")
+    local age,ga=box_playback.scalar(la and na and now-timestamp or nil,"number")
+    box_log("BOXOBS_PLAYBACK reason=%s detail=%s peer=%s record=%d %s local_ms=%s local_ms_available=%s now=%s now_available=%s age_ms=%s age_available=%s authority=false",
+        reason,detail,tostring(peer),box_playback.logs,table.concat(fields," "),local_ms,tostring(la),at,tostring(na),age,tostring(ga))
+    return nil,reason
+end
+function box_playback.check(peer,shown)
+    local ipc=rawget(_G,"HSMP_IPC")
+    local ok,play=pcall(function()
+        for _,r in ipairs((ipc and ipc.bus_table("playback") or {}).rows or {})do if r.peer==peer then return r end end
+    end)
+    local now=os.clock()*1000
+    if not ok then return box_playback.refuse("playback_unavailable","read_failed",peer,shown,nil,now) end
+    if not play then return box_playback.refuse("playback_unavailable","row_missing",peer,shown,nil,now) end
+    if type(play.local_ms)~="number" then return box_playback.refuse("playback_unavailable","local_ms_unavailable",peer,shown,play,now) end
+    -- Preserve the original predicate order/coercion; diagnostic availability is not admission.
+    if now<play.local_ms then return box_playback.refuse("playback_timefuture","future",peer,shown,play,now) end
+    if now-play.local_ms>250 then return box_playback.refuse("playback_timeage","age_over250",peer,shown,play,now) end
+    for _,key in ipairs({"pawn","match_id","round","life"})do
+        if play[key]~=shown[key] then
+            return box_playback.refuse("playback_"..(key=="match_id" and "match" or key),
+                play[key]==nil and "field_missing" or "field_changed",peer,shown,play,now)
+        end
+    end
+    return true
+end
 local box_session,box_session_ipc
 local function box_observer_live()
     if not HSESS then return false end
@@ -1024,11 +1076,8 @@ local function box_observer_snapshot(peer,side)
     if not view or view.phase~=3 or not mode then return nil,"live_phase" end
     if own.match_id~=shown.match_id or own.round~=shown.round then return nil,"context_tuple" end
     local ipc=rawget(_G,"HSMP_IPC")
-    local play
-    for _,r in ipairs((ipc and ipc.bus_table("playback") or {}).rows or {})do if r.peer==peer then play=r;break end end
-    local now=os.clock()*1000
-    if not play or type(play.local_ms)~="number" or now<play.local_ms or now-play.local_ms>250
-        or play.pawn~=shown.pawn or play.match_id~=shown.match_id or play.round~=shown.round or play.life~=shown.life then return nil,"playback" end
+    local playback_ok,playback_reason=box_playback.check(peer,shown)
+    if not playback_ok then return nil,playback_reason end
     local stream,slot={},ipc and ipc.peer_slot and ipc.peer_slot(peer)
     if slot==nil or not ipc.peer_play then return nil,"peer_stream_unavailable" end
     ipc.peer_play(slot,stream)

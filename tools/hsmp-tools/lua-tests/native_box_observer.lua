@@ -59,11 +59,12 @@ signed.command("off")
 
 -- Actual Parity snapshot/enrollment path follows assigned fighter despite a foreign PC Pawn.
 local game_logs,loop={},nil
+local game_clock=10
 local function refused(reason)
     return (game_logs[#game_logs] or ""):find("BOXOBS refused reason="..reason.." authority=false",1,true)~=nil
 end
 os.getenv=function(k)if k=="HSMP_DEV" or k=="HSMP_INST" then return "1" elseif k=="HSMP_STATE_DIR" then return T.tmpdir("boxobs_")end end
-os.clock=function()return 10 end
+os.clock=function()return game_clock end
 print=function(s)game_logs[#game_logs+1]=s end
 local world
 local function object(name,address,path)
@@ -86,7 +87,14 @@ local view={state="live",phase=3,match_id=123,round=2,my_peer_id=1,spawns={[1]={
 local mode={match_id=123,round=2,rows={[1]={life=7,alive=true},[2]={life=3,alive=true}}}
 local bus={spawn_status=owner_status,playback={rows={shown}},puppets={rows={{peer=2,name="shown"}}}}
 local stream={peer_id=2,match_id=123,round=2,life=3,has_context=true,mode="interp",age=0}
-HSMP_IPC={bus_table=function(k)return bus[k]end,peer_slot=function()return 0 end,peer_play=function(_,out)for k,v in pairs(stream)do out[k]=v end end}
+local playback_reads,second_playback=0,nil
+HSMP_IPC={bus_table=function(k)
+    if k=="playback" then
+        playback_reads=playback_reads+1
+        if playback_reads==2 and second_playback then return second_playback()end
+    end
+    return bus[k]
+end,peer_slot=function()return 0 end,peer_play=function(_,out)for k,v in pairs(stream)do out[k]=v end end}
 local native_header={sidecar_state="ready",sidecar_hb_age_s=0}
 local native_header_fails=false
 local cached_healthy={sidecar_state="ready",sidecar_hb_age_s=0}
@@ -121,8 +129,8 @@ FindAllOf=function()return {foreign_pawn,own,pawn}end
 LoopAsync=function(_,f)loop=f end
 RegisterHook=function(_,second)T.check(type(second)=="function","production hook has a real second callback");return 1,1 end
 FName=function(s)return s end
-local enroll_options
-HSMPNative={box_probe={begin=function(s)enroll_options=s;return true end,stop=function()return true end,
+local enroll_options,enroll_count=nil,0
+HSMPNative={box_probe={begin=function(s)enroll_options=s;enroll_count=enroll_count+1;return true end,stop=function()return true end,
     status=function()return {active=true}end,read=function()return {}end,mark=function()return true end}}
 HSMP_PARITY_TEST={}
 dofile(T.path("mods/dev/HSMPParity/Scripts/main.lua"))
@@ -139,7 +147,7 @@ own.R_GripType_Current=14
 view.phase=0;HSMP_PARITY_TEST.boxobserve("2 r 1")
 T.check(enroll_options==nil and refused("live_phase"),"retained otherwise-valid actors cannot enroll outside Live")
 view.phase=3;shown.local_ms=9000;HSMP_PARITY_TEST.boxobserve("2 r 1")
-T.check(enroll_options==nil and refused("playback"),"stale displayed sample reports playback refusal without enrollment")
+T.check(enroll_options==nil and refused("playback_timeage"),"stale displayed sample reports exact time-age refusal without enrollment")
 shown.local_ms=10000;native_modules=nil;HSMP_PARITY_TEST.boxobserve("2 r 1")
 T.check(enroll_options==nil and refused("native_modules"),"unavailable native module traversal is distinguished from missing membership")
 native_modules={{component=weapon,id=1,child_of=0}};HSMP_PARITY_TEST.boxobserve("2 r 1")
@@ -200,3 +208,105 @@ local pair_ns=false
 for _,line in ipairs(game_logs)do if line:find("BOXOBS_PAIR",1,true) and line:find("inst=1",1,true)
     and line:find('"instance":"1"',1,true) then pair_ns=true end end
 T.check(pair_ns,"copied Box pair JSON and log line retain the same instance namespace")
+
+-- The first bus read proves the displayed snapshot; the independently fresh second
+-- read can expire/change before a command or active observer tick. Do not borrow
+-- the first tuple to hide that refusal, and never inspect a native Box to explain it.
+HSMPNative.box_probe.read=function()return {}end
+local module_reads=0
+package.loaded.native_weapon_modules={of=function(w)
+    module_reads=module_reads+1;T.check(w==weapon,"diagnostic keeps the exact held weapon")
+    return native_modules
+end}
+local function playback_diag()
+    for i=#game_logs,1,-1 do if game_logs[i]:find("BOXOBS_PLAYBACK ",1,true)then return game_logs[i]end end
+end
+local function playback_case(changes,reason,detail)
+    local actual=clone(shown)
+    for k,v in pairs(changes or {})do actual[k]=v end
+    game_logs={};enroll_options=nil;playback_reads=0
+    second_playback=function()return {rows={actual}}end
+    local before=module_reads
+    HSMP_PARITY_TEST.boxobserve("2 r 1")
+    local d=playback_diag()or ""
+    T.check(enroll_options==nil and refused(reason) and module_reads==before,
+        "fresh playback "..reason.." fails before native cutting inspection/enrollment")
+    T.check(d:find("reason="..reason.." detail="..detail,1,true) and d:find("inst=1",1,true)
+        and d:find("expected_round=2 expected_round_available=true",1,true),
+        "refusal carries bounded actual/expected context and fixed stage")
+    second_playback=nil
+    return d
+end
+local d=playback_case({local_ms=10001},"playback_timefuture","future")
+T.check(d:find("local_ms=10001 local_ms_available=true now=10000 now_available=true age_ms=-1",1,true),
+    "future time logs actual signed age without clamping")
+d=playback_case({local_ms=9749},"playback_timeage","age_over250")
+T.check(d:find("age_ms=251 age_available=true",1,true),"251ms fails the unchanged250ms limit")
+d=playback_case({local_ms="10000"},"playback_unavailable","local_ms_unavailable")
+T.check(d:find("local_ms=unknown local_ms_available=false",1,true) and d:find("age_ms=unknown age_available=false",1,true),
+    "nonnumeric time remains independently unavailable without default zero")
+d=playback_case({pawn="new-pawn"},"playback_pawn","field_changed")
+T.check(d:find('actual_pawn="new-pawn" actual_pawn_available=true expected_pawn="shown"',1,true),
+    "pawn refusal records actual replacement separately from expected assigned pawn")
+d=playback_case({pawn="shown\n\r\t"..string.char(0,1,127).."tail"},"playback_pawn","field_changed")
+T.check(not d:gsub("\n$",""):find("%c") and d:find("x0A",1,true) and d:find("x0D",1,true),
+    "newline CR and control bytes stay escaped on one physical bounded row; full original scalar still refuses")
+d=playback_case({match_id=0},"playback_match","field_changed")
+T.check(d:find("actual_match_id=0 actual_match_id_available=true expected_match_id=123",1,true),
+    "actual zero match is available data, never replaced with expected or unknown")
+playback_case({round=3},"playback_round","field_changed")
+playback_case({life=4},"playback_life","field_changed")
+d=playback_case({life=false},"playback_life","field_changed")
+T.check(d:find("actual_life=unknown actual_life_available=false expected_life=3 expected_life_available=true",1,true),
+    "nonnumeric life remains unknown separately from the proved expected life")
+d=playback_case({local_ms=math.huge},"playback_timefuture","future")
+T.check(d:find("local_ms=unknown local_ms_available=false",1,true) and d:find("age_ms=unknown age_available=false",1,true),
+    "nonfinite time keeps the existing future predicate but diagnostic arithmetic remains unknown")
+d=playback_case({local_ms=0/0,life=4},"playback_life","field_changed")
+T.check(d:find("local_ms=unknown local_ms_available=false",1,true) and d:find("age_ms=unknown age_available=false",1,true),
+    "typed logging does not invent a new eligibility predicate for NaN or fabricate its age")
+game_logs={};enroll_options=nil;playback_reads=0
+second_playback=function()local p=clone(shown);p.life=nil;return {rows={p}}end
+HSMP_PARITY_TEST.boxobserve("2 r 1")
+d=playback_diag()or ""
+T.check(enroll_options==nil and refused("playback_life") and d:find("detail=field_missing",1,true)
+    and d:find("actual_life=unknown actual_life_available=false",1,true),"missing actual life is distinguished from changed or nonnumeric life")
+game_logs={};enroll_options=nil;playback_reads=0
+second_playback=function()error("private exception text")end
+HSMP_PARITY_TEST.boxobserve("2 r 1")
+d=playback_diag()or ""
+T.check(enroll_options==nil and refused("playback_unavailable") and d:find("detail=read_failed",1,true)
+    and not d:find("private exception",1,true),"read exception reports fixed stage without leaking exception text")
+game_logs={};enroll_options=nil;playback_reads=0
+second_playback=function()return {rows={}}end
+HSMP_PARITY_TEST.boxobserve("2 r 1")
+d=playback_diag()or ""
+T.check(enroll_options==nil and refused("playback_unavailable") and d:find("detail=row_missing",1,true)
+    and d:find("actual_pawn=unknown actual_pawn_available=false",1,true),"missing second row is distinguished from a changed pawn")
+second_playback=nil;playback_reads=0;enroll_options=nil;shown.local_ms=9750
+HSMP_PARITY_TEST.boxobserve("2 r 1")
+T.check(enroll_options~=nil,"exact250ms boundary preserves successful original admission")
+shown.local_ms=10000
+-- Reproduce enrollment followed46ms later by stale second playback, while the
+-- displayed first snapshot and exact native identities are still unchanged.
+playback_reads=0;HSMP_PARITY_TEST.boxobserve("2 r 1")
+game_clock=10.046;playback_reads=0;game_logs={}
+second_playback=function()local p=clone(shown);p.local_ms=9700;return {rows={p}}end
+loop()
+d=playback_diag()or ""
+local precise_stop=false
+for _,s in ipairs(game_logs)do if s:find("BOXOBS stopped reason=playback_timeage",1,true)then precise_stop=true end end
+T.check(precise_stop and d:find("local_ms=9700",1,true) and d:find("age_ms=346",1,true),
+    "active observer stops on the precise actual stale timestamp after enrollment")
+game_clock=10;second_playback=nil
+-- Fixed total diagnostic budget and bounded bytes, even under repeated commands.
+local diag_rows,max_bytes,enroll_before=0,0,enroll_count
+for _=1,50 do
+    playback_reads=0;second_playback=function()local p=clone(shown);p.pawn=string.rep("p",4096);return {rows={p}}end
+    local from=#game_logs+1;HSMP_PARITY_TEST.boxobserve("2 r 1")
+    for i=from,#game_logs do if game_logs[i]:find("BOXOBS_PLAYBACK ",1,true)then
+        diag_rows=diag_rows+1;max_bytes=math.max(max_bytes,#game_logs[i])
+    end end
+end
+T.check(diag_rows>0 and diag_rows<=32 and max_bytes<1600,"refusal records and formatted row bytes remain bounded")
+T.check(enroll_count==enroll_before and refused("playback_pawn"),"exhausted diagnostic budget still refuses; no new native enrollment")
