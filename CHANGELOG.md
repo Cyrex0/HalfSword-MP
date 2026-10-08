@@ -17,6 +17,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Distinguish confirmed foreign-thread damage callbacks from unavailable admission
+  on the proven game thread, retaining fail-closed handling and explicit coverage gaps.
 - Prepare native damage observations with sampling disabled, then activate after
   fresh playback and current character, weapon and hit-box bindings are verified.
 - Measure bounded native damage-observer enrollment stages to diagnose setup stalls.

@@ -1596,3 +1596,38 @@ references. Headless startup did not reach the query/log within120 seconds;
 only owned PID23568 was stopped, no IDA process remains. Original and clone
 SHA256 are unchanged. Runtime/license/name results are unavailable, not zero
 matches; no binary address, body-pose API or allocator proof was obtained.
+
+### Native37: fresh activation works, native admission fails next
+
+Clean deployed `4c9dce85`, full G0/dev push/normal deployment passed; raw
+`test-results/20261008-113030-41978f-combat_manual`, session
+`test-results/lab/native-20261008-37`, all GRIP/HAND/LIMB off. Inst1 id6 prepares
+at11:33:30.339 and activates11:33:30.427: native preparation218ms, post-install
+cutoff160522, actual original playback160559 (37ms newer), age50ms. Activation
+160610→160610 is0ms at the available process-clock resolution, not zero work.
+First active refresh remains fresh at49ms. Thus the setup fix reaches real
+fresh activation without changing250ms or refreshing an old timestamp.
+
+At11:33:30.475, capture finishes `game thread unavailable`, entries0/unpaired0/
+discarded0; no qualified pairs. The generic observer aborts before target
+filtering when hsmp_native_caller_thread_ok returns0. That Rust API also returns0
+for native mutex contention, poisoning or unknown thread. Therefore this event
+does not prove a foreign animation callback or identify a target function.
+Next distinguish a proven Win32 thread identity from generic admission failure:
+confirmed different-thread callbacks may be ignored/count-only with no
+context/frame/state/object reads; same-thread unavailable retains fail-closed
+handling. Coverage gaps remain explicit; no skipped-target completeness claim.
+
+Cloth234/280=.835714 acceptance; claim rotation mean27.471/max61.313 degrees
+over40 samples; zero clock resets over20 windows. Combat acceptance still fails.
+Both normal menu quit; zero new crashes/orphans/forced kills. No PR/main/release.
+
+Native38 preparation: observer records a positive Win32 thread ID only after
+successful existing native admission. Different proven callback threads increment
+a saturating atomic process total and return before provider, frame or state
+reads; skipped targets remain unknown. Same-thread unavailable and unset-thread
+identity retain fail-closed aborts with distinct reasons. Status counters are
+process totals; current Lua completion logging prints reasons, not these totals.
+Astra approved the frozen three-file change. Root rebuilt current targets and
+verified149 focused C++ checks; provider compilation also passed. This is a
+diagnostic classification change, not native callback coverage or combat proof.

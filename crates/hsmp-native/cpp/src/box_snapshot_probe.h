@@ -5,6 +5,9 @@
 struct lua_State;
 namespace hsmp_box
 {
+enum class CallbackThread { Unknown, Same, Different };
+inline CallbackThread callback_thread(std::uint32_t proven,std::uint32_t actual)
+{ return !proven || !actual ? CallbackThread::Unknown : proven==actual ? CallbackThread::Same : CallbackThread::Different; }
 struct ObjectInput { const wchar_t* path{}; std::uint64_t address{}; };
 struct Enrollment
 {

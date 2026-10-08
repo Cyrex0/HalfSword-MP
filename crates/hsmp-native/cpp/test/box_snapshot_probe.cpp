@@ -5,12 +5,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
+#include <atomic>
 #include "lua.hpp"
 #include "box_snapshot_probe.h"
 namespace
 {
 using namespace hsmp_box;
 unsigned checks{}, reads{}, keys{}, enrolls{}, submissions{}, validations{};
+std::atomic<unsigned> admission_reads{};
 bool good_thread=true, bad_enrollment{}, bad_snapshot{}, serial_zero{};
 bool malformed_costs{};
 bool bad_prepared{};
@@ -28,7 +31,7 @@ Identity id(std::uint64_t a)
 Scope sample_scope()
 { return {id(1),id(2),id(3),id(4),id(5),123456789,1,1}; }
 struct Frame { unsigned role{}; std::uint64_t token{}; double x{6},y{1},z{10}; bool wrong_box{}; };
-bool on_thread() { return good_thread; }
+bool on_thread() { ++admission_reads; return good_thread; }
 std::uint64_t now() { return time_ms; }
 bool enroll(const Enrollment& e,Scope& out,Reason& why)
 {
@@ -93,6 +96,10 @@ const hsmp_box::Provider& hsmp_reflect_box_provider() { return fake; }
 int main()
 {
     using namespace hsmp_box;
+    check(callback_thread(0,10)==CallbackThread::Unknown && callback_thread(10,0)==CallbackThread::Unknown,
+        "unset callback thread identity is unavailable");
+    check(callback_thread(10,10)==CallbackThread::Same && callback_thread(10,11)==CallbackThread::Different,
+        "only a different positively captured OS thread is classified foreign");
     EnrollmentTiming timing{}; timing.stage("off",10); timing.finish(11);
     check(timing.count==0 && !timing.active(),"timing is off before explicit enrollment");
     timing.begin(); timing.stage("first",10); timing.stage("second",14); timing.finish(19);
@@ -164,6 +171,13 @@ int main()
       assert(r[1].qualified and r[2].qualified and r[2].lua_inside and r[2].marker==777)
       assert(r[2].authority==false and r[2].context_declared and r[2].lifetime_available)
       assert(#N.read()==0))");
+    const auto thread_reads=admission_reads.load(); unsigned foreign_keys=keys, foreign_reads=reads;
+    std::thread([&] { callback(1,reinterpret_cast<void*>(2),&outer); callback(2,reinterpret_cast<void*>(2),&outer); }).join();
+    check(admission_reads.load()==thread_reads && keys==foreign_keys && reads==foreign_reads,
+        "foreign callbacks never consult native admission, frame keys, snapshots or game-thread state");
+    lua(L,"local s=N.status(); assert(s.active and s.proven_thread_id>0 and s.foreign_callbacks_process_total==2 and not s.foreign_callback_targets_known and s.same_thread_unavailable_process_total==0)");
+    event(1,outer); lua(L,mark1); event(2,outer);
+    lua(L,"local r=N.read(); assert(#r==1 and r[1].qualified and r[1].lua_inside)");
     lua(L,"assert(N.mark({world=1,pawn=2,mesh=3,box=4,box_owner=5,match_id=123456789,round=1,life=1,role=1,marker=0})==nil)");
     // A late Lua POST cannot retrospectively qualify the completed call.
     event(1,outer); event(2,outer);
@@ -203,7 +217,7 @@ int main()
     lua(L,"assert(not N.status().active and N.status().reason=='unpaired ordering')");
     lua(L,start); event(1,outer); good_thread=false; previous=keys; event(2,outer);
     check(keys==previous,"foreign thread callback never reads FFrame"); good_thread=true;
-    lua(L,"assert(not N.status().active and N.status().reason=='game thread unavailable' and #N.read()==0)");
+    lua(L,"local s=N.status(); assert(not s.active and s.reason=='same proven thread admission unavailable' and s.same_thread_unavailable_process_total==1 and s.foreign_callbacks_process_total==2 and #N.read()==0)");
     lua(L,start); bad_enrollment=true; lua(L,"assert(N.begin(a)==nil and not N.status().active)");
     diagnostic="stage=gd_hit_box failure=children_limit children=1070";
     previous=submissions;

@@ -34,6 +34,14 @@ struct InFlight
 unsigned timing_prints{}; // Fixed process budget; never reset by activation or world changes.
 std::atomic<bool> enabled{};
 std::atomic<unsigned> deferred_failure{};
+std::atomic<DWORD> proven_thread{};
+std::atomic<unsigned> foreign_callbacks{}, same_thread_unavailable{}, unknown_thread_callbacks{}, thread_failure_kind{};
+// Saturating process totals, never reset by activation/world changes. No frame/engine reads.
+void count_callback(std::atomic<unsigned>& counter)
+{
+    auto value=counter.load(std::memory_order_relaxed);
+    while (value<UINT32_MAX && !counter.compare_exchange_weak(value,value+1,std::memory_order_relaxed)) {}
+}
 const Provider& provider() { return hsmp_reflect_box_provider(); }
 lua_State* vm(lua_State* L)
 {
@@ -157,9 +165,20 @@ void print_costs(lua_State* L,const EnrollmentTiming* t,bool enrollment_ok)
 void observe(unsigned phase,void* context,void* frame)
 {
     if (!enabled.load()) return;
-    // A foreign callback must never read/write the game-thread state or touch FFrame/UObjects.
+    // Classify using only the positively admitted OS thread ID. Foreign targets remain unknown.
+    const auto thread=callback_thread(proven_thread.load(),GetCurrentThreadId());
+    if (thread==CallbackThread::Different) { count_callback(foreign_callbacks); return; }
+    if (thread==CallbackThread::Unknown)
+    {
+        count_callback(unknown_thread_callbacks); thread_failure_kind.store(1);
+        deferred_failure.store(static_cast<unsigned>(Reason::Thread)); enabled.store(false); return;
+    }
+    // Same OS thread is insufficient by itself: keep the existing Rust admission guard.
     if (!provider().on_thread())
-    { deferred_failure.store(static_cast<unsigned>(Reason::Thread)); enabled.store(false); return; }
+    {
+        count_callback(same_thread_unavailable); thread_failure_kind.store(2);
+        deferred_failure.store(static_cast<unsigned>(Reason::Thread)); enabled.store(false); return;
+    }
     synchronize();
     const auto now=provider().now_ms(); state.poll(now);
     if (!state.active) { enabled.store(false); return; }
@@ -184,6 +203,7 @@ int begin_impl(lua_State* L,bool prepare_only=false)
     char dev[8]{};
     if (GetEnvironmentVariableA("HSMP_DEV",dev,sizeof dev)!=1 || dev[0]!='1') return unavailable(L,"developer mode required");
     if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    proven_thread.store(GetCurrentThreadId()); // Proven by the existing Native::frame thread guard.
     if (control_busy) return unavailable(L,"observer setup busy");
     InFlight guard;
     synchronize();
@@ -248,6 +268,7 @@ int activate_impl(lua_State* L)
     char dev[8]{};
     if (GetEnvironmentVariableA("HSMP_DEV",dev,sizeof dev)!=1 || dev[0]!='1') return unavailable(L,"developer mode required");
     if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    proven_thread.store(GetCurrentThreadId());
     if (control_busy) return unavailable(L,"observer setup busy");
     InFlight guard;
     synchronize();
@@ -294,13 +315,22 @@ int status(lua_State* L)
 {
     if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
     synchronize();
-    state.poll(provider().now_ms()); lua_createtable(L,0,13);
+    state.poll(provider().now_ms()); lua_createtable(L,0,20);
     boolean(L,"active",state.active); boolean(L,"submitted",submitted); boolean(L,"authority",false);
-    boolean(L,"qualified",false); text(L,"reason",reason_name(state.last)); number(L,"deadline_ms",state.deadline);
+    boolean(L,"qualified",false);
+    const auto thread_failure=thread_failure_kind.load();
+    text(L,"reason",state.last==Reason::Thread ? (thread_failure==1 ? "callback thread identity unavailable" :
+        thread_failure==2 ? "same proven thread admission unavailable" : reason_name(state.last)) : reason_name(state.last));
+    number(L,"deadline_ms",state.deadline);
     number(L,"entries",state.entries); number(L,"completed",state.completed()); number(L,"pending",state.pending());
     number(L,"pending_role",state.pending_role());
     number(L,"unmatched",state.unmatched); number(L,"discarded",state.discarded); number(L,"marks_outside",state.marks_outside);
     number(L,"max_pairs",kMaxPairs); number(L,"max_depth",kMaxDepth);
+    number(L,"proven_thread_id",proven_thread.load());
+    number(L,"foreign_callbacks_process_total",foreign_callbacks.load());
+    number(L,"same_thread_unavailable_process_total",same_thread_unavailable.load());
+    number(L,"unknown_thread_callbacks_process_total",unknown_thread_callbacks.load());
+    boolean(L,"foreign_callback_targets_known",false);
     return 1;
 }
 int read(lua_State* L)
