@@ -13,6 +13,7 @@
 
 local mode, opts = ...
 local LO = T.path("mods/HSMPLoadout/Scripts/main.lua")
+package.path=T.path("mods/shared/?.lua")..";"..package.path
 
 if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "m15" })
@@ -35,6 +36,12 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "weapon_gen" })
     T.isolated(T.script, "case", { kind = "record" })
     T.isolated(T.script, "case", { kind = "native_empty_fists" })
+    T.isolated(T.script, "case", { kind = "native_empty_left" })
+    T.isolated(T.script, "case", { kind = "empty_left_attempted" })
+    T.isolated(T.script, "case", { kind = "empty_left_armour_retry" })
+    for _, failure in ipairs({"field_nil","field_missing","playback_missing","life_changed","header_expired"}) do
+        T.isolated(T.script, "case", { kind = "empty_left_refusal", failure = failure })
+    end
     T.isolated(T.script, "case", { kind = "passport_write_retry" })
     T.isolated(T.script, "case", { kind = "passport_variant" })
     T.isolated(T.script, "case", { kind = "armour_defaults" })
@@ -52,7 +59,8 @@ if mode ~= "case" then
     return
 end
 
-if opts.kind=="passport_variant" or opts.kind=="weapon_native_source" or opts.kind=="weapon_gi_source" or opts.kind=="weapon_fixed_rondel" then
+if opts.kind=="passport_variant" or opts.kind=="weapon_native_source" or opts.kind=="weapon_gi_source" or opts.kind=="weapon_fixed_rondel"
+    or opts.kind=="native_empty_left" or opts.kind=="empty_left_attempted" or opts.kind=="empty_left_armour_retry" then
     package.path=T.path("mods/HSMPLoadout/Scripts/?.lua")..";"..T.path("mods/shared/?.lua")..";"..package.path
 end
 
@@ -117,6 +125,8 @@ local function boot(world)
     end
     Mt.GetAddress = function(self) return rawget(self, "__addr") or 4096 end
     Mt.GetWorld = function() return M.world end
+    Mt.GetOwner = function(self) return self.__props.Owner end
+    Mt.IsActorBeingDestroyed = function(self) return rawget(self, "__pk") == true end
     Mt.GetClass = function(self)
         local c = rawget(self, "__cls")
         local path = rawget(self, "__clspath") or ("/Game/X/" .. tostring(c):gsub("_C$", "") .. "." .. tostring(c))
@@ -127,6 +137,12 @@ local function boot(world)
     Mt["Set Up Armor"] = function() setup_armor = setup_armor + 1 end
     for _, side in ipairs({ "R", "L" }) do
         Mt["Set Up " .. (side == "R" and "Right" or "Left") .. " Hand Weapon"] = function(pawn, cls, actor, _, _, pass)
+            if cls == nil then
+                local old=pawn.__props["Weapon "..side]
+                if old and old:IsValid() then old:K2_DestroyActor() end
+                pawn.__props["Weapon "..side]=M.null_object
+                return
+            end
             local path = cls:GetFullName():match("^%S+%s+(.+)$")
             local fresh = actor or M.new_obj(path:match("([^%.]+)$"), "NativeHand_" .. side)
             rawset(fresh, "__clspath", path)
@@ -136,6 +152,7 @@ local function boot(world)
             if type(name) ~= "string" then name = name:ToString() end
             native["Name_57_3729B51148E846FE8DD336B9419BCEE1"] = { ToString = function() return name end }
             fresh.__props["Weapon Passport"] = native
+            fresh.__props["Parent Actor"] = pawn
             pawn.__props["Weapon " .. side] = fresh
         end
     end
@@ -152,6 +169,10 @@ local function boot(world)
     _G.RegisterHook = function() return 1, 2 end
     M.own = M.new_obj("Willie_BP_C", "Willie_BP_C_3"); rawset(M.own, "__addr", 1003)
     M.standin = M.new_obj("Willie_BP_C", "Willie_BP_C_9"); rawset(M.standin, "__addr", 1009)
+    M.null_object = { GetAddress=function()return 0 end, IsValid=function()return false end }
+    M.standin.__props["Weapon L"] = M.null_object
+    M.standin.__props.Mesh = M.new_obj("SkeletalMeshComponent", "CharacterMesh0")
+    M.standin.__props.Mesh.__props.Owner = M.standin
     -- Every native Willie has the equipment passport map. A missing map
     -- must fail dressing rather than letting an empty write look successful.
     M.standin.__props["Character Passport"] = { ["Equipment_26_741A2FC641801842FE691295645C604F"] = {
@@ -214,6 +235,7 @@ local function weapon(name, addr, clspath)
     end
     pass["WeaponClass_54_B478ECF7499977809745A3973AD678EC"] = w:GetClass()
     w.__props["Weapon Passport"] = pass
+    w.__props["Parent Actor"] = M.standin
     return w
 end
 
@@ -228,6 +250,20 @@ local function beat()
     NAT._st.hb_age = 0.01
     -- The sidecar's peer directory (IPC.peer_dir): peer 2 has a peer slot.
     NAT.sc_peer_dir({ { id = 2, nick = "B" } })
+    -- Model the exact current pose/life that the production absent-L
+    -- transaction requires. A missing native hand is a nullptr wrapper.
+    if not NAT.sc_get("session") then
+        NAT.sc_put("session", {seq=1,match_id=77,phase=3,round=1,rows={
+            {peer_id=1,seat=0,role=0,connected=true,spawn_id=256,spawn_pos={0,0,0}},
+            {peer_id=2,seat=1,role=0,connected=true,spawn_id=257,spawn_pos={0,0,0}}}})
+        NAT.sc_put("mode", {seq=1,match_id=77,round=1,rows={{peer_id=1,seat=0,life=1},{peer_id=2,seat=1,life=1}}})
+    end
+    if M.standin and not M.no_playback_refresh then
+        local v=HSMP_IPC and require("hsmp_session").view()
+        local m=HSMP_IPC and require("hsmp_session").mode()
+        if v then NAT.bus_put("playback", {rows={{peer=2,pawn=M.standin:GetFName():ToString(),match_id=v.match_id,
+            round=v.spawn_round~=0 and v.spawn_round or v.round,life=M.playback_life_override or m and m.rows[2] and m.rows[2].life or 1,local_ms=os.clock()*1000}}}) end
+    end
 end
 local function run(ms, live)
     for _ = 1, math.floor(ms / 100) do
@@ -462,7 +498,7 @@ if opts.kind == "empty_source_unavailable" then
         GetCDO = function() return { IsValid = function() return true end, ["Weapon Passport"] = {} } end }
     local find = StaticFindObject; StaticFindObject = function(p) return p == path and cls or find(p) end
     local right = weapon("retain-right", 9700, "/Game/Assets/Weapons/Existing.Existing_C")
-    local left = weapon("retain-incomplete-fist", 9701, path); left.__props["Weapon Passport"] = {}
+    local left = M.null_object
     M.standin.__props["Weapon R"], M.standin.__props["Weapon L"] = right, left
     local writes, setups = 0, 0
     M.standin.__props["Character Passport"]["Equipment_26_741A2FC641801842FE691295645C604F"]
@@ -473,9 +509,9 @@ if opts.kind == "empty_source_unavailable" then
     remote(1, nil); run(4300, true)
     T.check(writes == 0 and setups == 0 and #destroyed == 0
         and M.standin.__props["Weapon R"] == right and M.standin.__props["Weapon L"] == left,
-        "empty replacement and same-class empty reuse both fail before mutation when native fists passport is unavailable")
-    T.check(T.contains(M.logtext(), "R=FAIL native weapon defaults unavailable L=FAIL native weapon defaults unavailable"),
-        "both empty-hand paths report unavailable native source", M.logtext())
+        "unavailable native R fists source does not replace either hand; actual empty L needs no invented fists source")
+    T.check(T.contains(M.logtext(), "R=FAIL native weapon defaults unavailable L=none"),
+        "remaining absent-R path reports source unavailable while native None L succeeds", M.logtext())
     return
 end
 
@@ -632,26 +668,216 @@ if opts.kind == "native_empty_fists" then
     remote(1, nil)
     run(4500, true)
     local r, l = M.standin.__props["Weapon R"], M.standin.__props["Weapon L"]
-    T.check(r and l and rawget(r, "__clspath") == fists_path and rawget(l, "__clspath") == fists_path,
-        "empty appearance creates native fists symmetrically")
+    T.check(r and l==M.null_object and rawget(r, "__clspath") == fists_path,
+        "both-empty appearance keeps the existing R fists path but preserves native None L")
     T.check(T.any(destroyed, function(n) return n == "OriginalSword" end), "empty desired hand strips real arena weapon")
-    T.check(M.standin.__props["All Weapons Weights"] == 1 and M.standin.__props["Armor Weight Body"] == 21,
-        "native replacement subtracts old sword weight before adding fists")
+    T.check(M.standin.__props["All Weapons Weights"] == 0.5 and M.standin.__props["Armor Weight Body"] == 20.5,
+        "native replacement subtracts old sword weight without inventing L fist weight")
     T.check(not r.__props["Weapon Passport"].HeadSize_21_2D425E61473B8F64FBAB51B223459D57 or r.__props["Weapon Passport"].HeadSize_21_2D425E61473B8F64FBAB51B223459D57.X ~= 9,
         "native fists use their own template without the previous sword head size")
     local gen = HSMPNative.sc_get("standin_weapons")
     T.check(gen and gen.gen == 1, "native replacement invalidates cached hand components")
     local n = setups
     remote(2, nil); run(1600, true)
-    T.check(setups == n and r:IsValid() and l:IsValid(), "repeated empty snapshot retains fists without actor churn")
-    T.check(r.__props["Parent Actor"] == M.standin and l.__props["Parent Actor"] == M.standin,
-        "native setup retains the correct parent identity")
+    T.check(setups == n and r:IsValid() and l==M.null_object, "repeated empty snapshot has no extra left setup or actor churn")
+    T.check(r.__props["Parent Actor"] == M.standin, "native R setup retains the correct parent identity")
     remote(3, "@Weapons/ModularWeaponBP_Sword"); run(1600, true)
     T.check(rawget(M.standin.__props["Weapon R"], "__clspath") == sword_path and not r:IsValid(),
         "later real weapon replaces the fist through native setup")
-    T.check(l:IsValid(), "other empty hand keeps its fist")
-    T.check(M.standin.__props["All Weapons Weights"] == 5.5 and M.standin.__props["Armor Weight Body"] == 25.5,
+    T.check(M.standin.__props["Weapon L"]==M.null_object, "other empty hand remains native None")
+    T.check(M.standin.__props["All Weapons Weights"] == 5 and M.standin.__props["Armor Weight Body"] == 25,
         "native sword replacement subtracts fist weight exactly once")
+    return
+end
+
+if opts.kind == "native_empty_left" or opts.kind == "empty_left_attempted" or opts.kind == "empty_left_armour_retry" then
+    local events={}
+    package.loaded.hsmp_log={init=function()end,event=function(kind,fields)events[#events+1]={kind=kind,fields=fields}end}
+    boot()
+    HSMPNative.sc_put("session",{seq=1,match_id=77,phase=1,round=0,rows={
+        {peer_id=1,seat=0,role=0,connected=true,spawn_id=256,spawn_pos={0,0,0}},
+        {peer_id=2,seat=1,role=0,connected=true,spawn_id=257,spawn_pos={0,0,0}}}})
+    HSMPNative.sc_put("mode",{seq=1,match_id=77,round=0,rows={{peer_id=2,seat=1,life=0}}})
+    M.playback_life_override=1
+    local short="@Weapons/Blueprints/Built_Weapons/Polearm_Test"
+    local path="/Game/Assets/Weapons/Blueprints/Built_Weapons/Polearm_Test.Polearm_Test_C"
+    local head="/Game/Assets/Weapons/Modules/PA_Head.PA_Head_C"
+    local original=weapon("OriginalPolearm",8100,path)
+    original.__props["Weapon Passport"]["HeadModule_11_62DF53134688807E1DA7F4A20E9F7139"]=StaticFindObject(head)
+    local unwanted=weapon("InventedLeftFist",8101,"/Game/Assets/Weapons/Blueprints/Built_Weapons/Weapon_Fists.Weapon_Fists_C")
+    unwanted.__props["Grip R Hand Default"]=0
+    M.standin.__props["Weapon R"],M.standin.__props["Weapon L"]=original,unwanted
+    M.standin.__props.R_GripType_Current=3
+    local cleanups,rebinds,created,weight=0,0,0,5
+    local fail_preflight=opts.kind=="native_empty_left"
+    local fail_attempted=opts.kind=="empty_left_attempted"
+    local Kit=require("kit")
+    local kit_api
+    for i=1,20 do local name,value=debug.getupvalue(Kit.reequip,i);if name=="api"then kit_api=value;break end end
+    assert(kit_api,"production Kit API upvalue")
+    local field=kit_api.field
+    local refusals=0
+    kit_api.field=function(pawn,key)
+        if pawn==M.standin and key=="R_GripType_Current" and fail_preflight then refusals=refusals+1;return 0 end
+        return field(pawn,key)
+    end
+    local hands={[1]={class="old invented fists"}}
+    local cp=M.standin.__props["Character Passport"]["Equipment_26_741A2FC641801842FE691295645C604F"]
+    cp["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"]={
+        Add=function(_,key,pass)hands[key]=pass end,Remove=function(_,key)hands[key]=nil end}
+    local armor_input,equipped={},{}
+    local function each(values,fn)
+        for key,value in pairs(values)do fn({get=function()return key end},{get=function()return value end})end
+    end
+    cp["ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358"]={
+        Empty=function()armor_input={}end,Add=function(_,slot,pass)armor_input[slot]=pass end,
+        ForEach=function(_,fn)each(armor_input,fn)end}
+    M.standin.__props["Currently Equipped Armor"]={ForEach=function(_,fn)each(equipped,fn)end}
+    M.Methods["Set Up Armor"]=function()
+        setup_armor=setup_armor+1;equipped={};for slot,pass in pairs(armor_input)do equipped[slot]=pass end
+    end
+    M.Methods["Set Up Left Hand Weapon"]=function(pawn,cls,actor,dropped,destroy_previous,pass)
+        local old=pawn.__props["Weapon L"]
+        if cls==nil then
+            T.check(actor==nil and not dropped and destroy_previous and pass[weapon_fields[1][1]]==nil,
+                "production None cleanup uses the native no-class/no-actor destroy branch")
+            cleanups=cleanups+1
+            if old:IsValid()then
+                weight=weight-(old.__props["Grip R Hand Default"]~=0 and 2 or 0)
+                old:K2_DestroyActor()
+            end
+            pawn.__props["Weapon L"]=M.null_object
+            return
+        end
+        created=created+1
+        local p=cls:GetFullName():gsub("^BlueprintGeneratedClass ","")
+        if old:IsValid()then
+            weight=weight-(old.__props["Grip R Hand Default"]~=0 and 2 or 0)
+            if old.__props["Grip R Hand Default"]==0 or destroy_previous then old:K2_DestroyActor()end
+        end
+        local fresh=weapon("ExplicitLeft"..created,8200+created,p)
+        fresh.__props["Grip R Hand Default"]=p:find("Weapon_Fists",1,true) and 0 or 3
+        weight=weight+(fresh.__props["Grip R Hand Default"]~=0 and 2 or 0)
+        local text=pass["Name_57_3729B51148E846FE8DD336B9419BCEE1"] or ""
+        pass["Name_57_3729B51148E846FE8DD336B9419BCEE1"]={ToString=function()return text end}
+        fresh.__props["Weapon Passport"]=pass;fresh.__props["Parent Actor"]=pawn
+        pawn.__props["Weapon L"]=fresh
+    end
+    M.Methods["Set Up Right Hand Weapon"]=function(pawn,cls,actor,dropped,destroy_previous,pass)
+        rebinds=rebinds+1
+        local old=pawn.__props["Weapon R"]
+        -- Honour the actual native OR condition; a wrong flag destroys the
+        -- retained input actor before its subsequent validation.
+        if destroy_previous or pawn.__props.R_GripType_Current==0 then old:K2_DestroyActor()end
+        T.check(actor==original and old==original and not destroy_previous and actor:IsValid(),
+            "production same-R rebind cannot destroy or replace the original polearm")
+        weight=weight-5 -- native R subtracts the old weapon before later setup work
+        if fail_attempted then error("native setup failed after weight subtraction")end
+        local text=pass["Name_57_3729B51148E846FE8DD336B9419BCEE1"] or ""
+        pass["Name_57_3729B51148E846FE8DD336B9419BCEE1"]={ToString=function()return text end}
+        pawn.__props["Weapon R"]=actor;actor.__props["Weapon Passport"]=pass
+        pawn.__props.R_GripType_Current=14 -- native function reads actual actor default
+        weight=weight+5
+    end
+    local function snapshot(v,left,armor)
+        HSMPNative.sc_put("peer_loadout",{version=v,flags=left and 3 or 1,
+            r={class=short,head="@Weapons/Modules/PA_Head",color_wood={0,0,0,1},color_leather={0,0,0,1}},
+            l=left and {class=left,color_wood={0,0,0,1},color_leather={0,0,0,1}},rows=armor or {}},2)
+    end
+    HSMPNative.bus_put("puppets",{rows={{peer=2,name="Willie_BP_C_9"}}})
+    snapshot(1);run(2800,true)
+    local function successes()
+        local n=0;for _,event in ipairs(events)do if event.kind=="kit_verified" and event.fields.who=="peer:2" and event.fields.ok then n=n+1 end end;return n
+    end
+    if opts.kind=="empty_left_attempted"then
+        T.check(cleanups==1 and rebinds==1 and weight==0 and original:IsValid() and successes()==0,
+            "actual main adapter propagates attempted R failure after one native weight subtraction")
+        local armor=setup_armor
+        fail_attempted=false;run(2000,true);snapshot(2);run(1000,true)
+        T.check(rebinds==1 and weight==0 and created==0 and setup_armor==armor and successes()==0,
+            "uncertain native completion never retries accounting, redresses armour, or reports kit success")
+        return
+    end
+    if opts.kind=="empty_left_armour_retry"then
+        T.check(successes()==1 and rebinds==1 and weight==5,"armour-only regression starts with a fully verified native kit")
+        local leftover=weapon("ArmourResetLeft",8500,"/Game/Assets/Weapons/Blueprints/Built_Weapons/Weapon_Fists.Weapon_Fists_C")
+        leftover.__props["Grip R Hand Default"]=0;M.standin.__props["Weapon L"]=leftover
+        fail_preflight=true
+        snapshot(2,nil,{{slot=4,class="@Armor/Helmet_Test",flags=1}});run(1000,true)
+        local armor=setup_armor
+        T.check(cleanups==2 and rebinds==1 and refusals>0 and successes()==1 and not leftover:IsValid(),
+            "armour-only update with unchanged weapon key cannot reuse old hand success after preflight refusal")
+        fail_preflight=false;run(1000,true)
+        T.check(successes()==2 and rebinds==2 and setup_armor==armor and created==0
+            and M.standin.__props["Weapon R"]==original and weight==5,
+            "actual main retries only incomplete hands after armour-only change, forwards complete stage, and retains actor")
+        return
+    end
+    T.check(cleanups==1 and not unwanted:IsValid() and weight==5 and hands[1]==nil,"actual main clears absent L once, including its native mass/passport")
+    T.check(require("hsmp_session").mode().round==0 and require("hsmp_session").mode().rows[2].life==0,
+        "pending applied round1/life1 authorizes initial dressing without rewriting or requiring positive Mode")
+    T.check(M.standin.__props["Weapon R"]==original and original:IsValid() and rebinds==0 and refusals>0,
+        "actual Kit preflight stage crosses the main adapter without invoking native setup")
+    T.check(successes()==0,"failed hand transaction emits no successful peer kit event")
+    local armour=setup_armor
+    fail_preflight=false;run(800,true)
+    T.check(M.standin.__props["Weapon R"]==original and original:IsValid() and M.standin.__props.R_GripType_Current==14,
+        "actual main retries the pending native rebind even though R Passport/class is already same")
+    T.check(setup_armor==armour and created==0 and cleanups==1,"retained-R recovery retries only hands without redressing armour or spawning another weapon")
+    T.check(successes()==1,"first successful peer kit evidence appears after the hands-only recovery completes")
+    local n=rebinds
+    snapshot(2);run(1000,true)
+    T.check(rebinds==n and cleanups==1 and weight==5 and successes()==1,"new identical appearance snapshots cannot replay completed cleanup/rebind or duplicate success evidence")
+    for _,left in ipairs({"@Weapons/Blueprints/Built_Weapons/Weapon_Fists","@Weapons/Blueprints/Built_Weapons/Weapon_Sword",
+        "@Weapons/Blueprints/Built_Weapons/Weapon_Buckler"})do
+        snapshot(3+created,left);run(800,true)
+        T.check(M.standin.__props["Weapon L"]:GetClass():GetFName():ToString()==left:match("([^/]+)$").."_C"
+            and rebinds==n,"explicit Fists/dual weapon/shield keeps its real nonempty native setup: "..left)
+    end
+    local world_actor=M.standin.__props["Weapon L"]
+    HSMP_IPC.bus_put("world_held",{rows={{peer=2,nid=66,hand=1,actor=world_actor:GetFName():ToString()}}})
+    snapshot(20);run(800,true)
+    T.check(world_actor:IsValid() and M.standin.__props["Weapon L"]==world_actor and cleanups==1 and rebinds==n,
+        "world-held L is excluded from None cleanup and retained-R rebind")
+    -- A later native hand now contains a separate unwanted loadout actor;
+    -- the world's former actor remains HSMPWorld's, never ours to retire.
+    HSMP_IPC.bus_put("world_held",{})
+    local leftover=weapon("UnwantedNativeShield",8400,"/Game/Assets/Weapons/Blueprints/Built_Weapons/Weapon_Buckler.Weapon_Buckler_C")
+    leftover.__props["Grip R Hand Default"]=3;M.standin.__props["Weapon L"]=leftover
+    snapshot(21);run(800,true)
+    T.check(cleanups==2 and weight==5 and not leftover:IsValid() and world_actor:IsValid() and M.standin.__props["Weapon L"]==M.null_object
+        and M.standin.__props["Weapon R"]==original and rebinds==n+1,
+        "actual nonzero-weight loadout cleanup subtracts once/rebinds the same R without retiring the world's actor")
+    return
+end
+
+if opts.kind == "empty_left_refusal" then
+    boot();beat()
+    local left=weapon("UnwantedLeft",8300,"/Game/Assets/Weapons/Blueprints/Built_Weapons/Weapon_Fists.Weapon_Fists_C")
+    M.standin.__props["Weapon L"]=left
+    local writes,setups=0,0
+    local map=M.standin.__props["Character Passport"]["Equipment_26_741A2FC641801842FE691295645C604F"]
+        ["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"]
+    map.Add=function()writes=writes+1 end;map.Remove=function()writes=writes+1 end
+    M.Methods["Set Up Right Hand Weapon"]=function()setups=setups+1 end
+    M.Methods["Set Up Left Hand Weapon"]=function()setups=setups+1 end
+    HSMPNative.bus_put("puppets",{rows={{peer=2,name="Willie_BP_C_9"}}})
+    remote(1,nil)
+    if opts.failure=="field_nil"then M.standin.__props["Weapon L"]=nil
+    elseif opts.failure=="field_missing"then M.standin.__props["Weapon L"]={GetAddress=function()return -1 end}
+    elseif opts.failure=="playback_missing"then M.no_playback_refresh=true;HSMPNative.bus_put("playback",{})
+    elseif opts.failure=="life_changed"then
+        M.playback_life_override=1
+        HSMPNative.sc_put("mode",{seq=2,match_id=77,round=1,rows={{peer_id=2,seat=1,life=2}}})
+    else
+        local read=HSMP_IPC.N.ipc_info
+        HSMP_IPC.N.ipc_info=function()local t=read();t.sidecar_hb_age_s=6;return t end
+        HSMP_IPC.refresh_info=function()return {sidecar_state="ready",sidecar_hb_age_s=0.01}end -- retained healthy facade header
+    end
+    run(4500,true)
+    T.check(writes==0 and setups==0 and left:IsValid(),"actual main "..opts.failure.." cannot authorize a hand passport/setup write")
+    T.check(not T.contains(M.logtext(),'"who":"peer:2"') and T.contains(M.logtext(),"FAIL"),
+        "actual main "..opts.failure.." remains unavailable without successful kit evidence",M.logtext())
     return
 end
 

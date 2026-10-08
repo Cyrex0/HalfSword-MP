@@ -772,28 +772,39 @@ end
 
 -- Put the dropped actor itself back in hand (the same "Set Up ...
 -- Hand Weapon" call the actor form of give_weapon uses). Returns a result
--- string, or nil when it did not end up in hand.
+-- string, or nil when it did not end up in hand. The optional second result
+-- distinguishes a refusal before native setup from attempted, unproved native
+-- completion: native setup can subtract weight before a later failure.
 function Kit.reequip(pawn, side, actor, path)
-    if not api.valid(actor) then return nil end
-    local cls = api.resolve_class(path)
-    if not cls then return nil end
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
-    local pass = api.weapon_passport_for and api.weapon_passport_for(cls, actor)
-    if not pass then return nil end
-    if api.set_hand_passport and not api.set_hand_passport(pawn, side, cls, pass) then return nil end
-    local same = same_actor(current_weapon(pawn, side), actor)
-    -- Native setup destroys the previous hand actor before validating its
-    -- input actor. Reusing that same actor must take the detach/reuse branch.
-    -- A native grip0 also destroys it regardless of Destroy Previous.
-    if same then
-        local read, grip = pcall(api.field, pawn, side .. "_GripType_Current")
-        if not read or type(grip) ~= "number" or not math.tointeger(grip) or grip <= 0 or grip > 255 then return nil end
+    local prepared, input = pcall(function()
+        if not api.valid(actor) then return nil end
+        local cls = api.resolve_class(path)
+        if not cls then return nil end
+        local pass = api.weapon_passport_for and api.weapon_passport_for(cls, actor)
+        if not pass then return nil end
+        local same = same_actor(current_weapon(pawn, side), actor)
+        -- The native OR condition destroys grip0 even with Destroy Previous
+        -- false. Refuse it before changing the hand passport.
+        if same then
+            local grip = api.field(pawn, side .. "_GripType_Current")
+            if type(grip) ~= "number" or not math.tointeger(grip) or grip <= 0 or grip > 255 then return nil end
+        end
+        if api.set_hand_passport and not api.set_hand_passport(pawn, side, cls, pass) then return nil end
+        return {cls=cls,pass=pass,same=same}
+    end)
+    if not prepared or not input then return nil, "preflight" end
+    local ok = pcall(api.bp_call, pawn, fname, input.cls, actor, false, not input.same, input.pass)
+    if not ok then return nil, "attempted" end
+    local read, result = pcall(function()
+        if api.valid(actor) and same_actor(current_weapon(pawn, side), actor) then
+            return "ok(same actor) retained=" .. nm(actor) .. "@" .. pawn_addr(actor)
+        end
+    end)
+    if read and result then
+        return result, "complete"
     end
-    local ok = pcall(api.bp_call, pawn, fname, cls, actor, false, not same, pass)
-    if ok and api.valid(actor) and same_actor(current_weapon(pawn, side), actor) then
-        return "ok(same actor) retained=" .. nm(actor) .. "@" .. pawn_addr(actor)
-    end
-    return nil
+    return nil, "attempted"
 end
 
 -- Contract (docs/development/subsystems/spawns.md): a kit weapon that left the

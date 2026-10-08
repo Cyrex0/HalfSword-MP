@@ -1265,3 +1265,46 @@ not overrideinitial/readiness/modes/observerfailures. Ignoredscalar summary:
 `checkpoint-summary.json`. No main/PR/tag/release action; shipping remainsNO.
 Native31 provider follow-up: cooked Get Damage has1,070 childproperties including Blueprint locals,while formal() rejects>512; inputs remain valid8-byteObjectProperty/Parm bounds. Preserved22Boxrows comprise6held_box and16formal-enrollment refusals,0starts/PAIR. A complete bounded enumeration with unchanged input checks needs a production-helper regression and native retry.
 Owner sleep instruction conditionally authorizes PR/main merge and coordinated release/update only after intended gameplay and all required acceptance gates genuinely pass. That condition remains unmet; continue dev checkpoints and native debugging without further permission requests.
+
+### Native32 preparation: complete reflection and pending hand observations
+
+Committed `c6c75483` enumerates the entire bounded native function property chain
+instead of refusing Get Damage's 1,070 descriptors at the old 512 cutoff. Exact
+input-name uniqueness, ObjectProperty/Parm flags, by-value pointer and parameter
+buffer bounds remain mandatory. The production helper and Lua API observer
+fixtures pass 140 assertions across two native tests; changed provider sources
+compile with warnings treated as errors. Real enrollment and native callback
+ordering remain unverified until matching deployment.
+
+Committed `9a25ce65` records pending hand drive observations only under fresh,
+exact positive source/display and Session spawn assignments. It records the
+actual Mode tuple, including zero/mismatching values, as unqualified and
+non-authoritative rather than inventing Mode readiness. Strict Live and GRIP
+qualification is unchanged. Focused Avatar fixtures pass 362 assertions with
+ambient diagnostic flags both enabled and disabled; Astra approved the source.
+
+The remote empty-left correction is being finalized separately. Native31 proved
+that a generated left Fists actor displaced the polearm offhand arrangement on
+proxies. Review requires native-null proof, complete world/pawn/mesh/life/spawn
+scope, separate armour/hand success markers, and no retry of uncertain native
+mass accounting. Fresh native acceptance remains pending; these offline checks
+do not establish fair spawning, native damage parity or release readiness.
+
+The six-file loadout/fixture correction is frozen: root independently passes
+388 assertions (helper 47, production loadout 180, Kit 161) and six Lua parses.
+Positive native nullptr leaves L genuinely empty without entering Left setup.
+An actual unwanted L uses the exported native None cleanup literal; only its
+completed cleanup can authorize guarded reuse of the exact retained R actor.
+Scope includes Mesh address and FName plus actual positive Playback life and
+Session spawn assignment. A failed hand operation clears previous hand success
+while retaining successful armour, so recovery retries hands only. Kit's
+compatible first return now has a second preflight/attempted/complete stage;
+the production adapter forwards both. Attempted failures and uncertain
+post-call readbacks latch against further accounting on the same full scope.
+Fixtures model weight subtraction before a throw, preflight refusal followed
+by success, and an armour-only change with an unchanged hand key. Explicit
+left fists, dual weapons, shields and world-held items retain their paths;
+absent-right behaviour is unchanged and remains a separate parity limitation.
+Final Astra source and production-fixture review approved the clean checkpoint.
+Native grip binding, mass stability and physical readiness remain pending the
+matching native32 run.

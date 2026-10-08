@@ -227,7 +227,8 @@ do
     T.check(w.Kit.give_weapon(pawn, "R", path) == "FAIL native weapon defaults unavailable",
         "unavailable canonical passport is reported by own hand give")
     T.check(not w.Kit.hands_check(pawn, w.peer_kit[1]), "unavailable canonical passport cannot verify an existing same-class actor")
-    T.check(w.Kit.reequip(pawn, "R", original, path) == nil, "unavailable dropped-actor passport prevents native re-equip")
+    local reequipped, stage = w.Kit.reequip(pawn, "R", original, path)
+    T.check(reequipped == nil and stage == "preflight", "unavailable dropped-actor passport reports refusal before native re-equip")
     T.check(writes == 0 and spawn_attempts == 0 and w.equips == nil and pawn.props["Weapon R"] == original
         and not original.destroyed, "all unavailable-source paths leave hand passport and current actor untouched")
     w.api.weapon_passport_for = nil
@@ -392,10 +393,32 @@ do
                 end
             else w.pawn.props[side .. "_GripType_Current"] = bad end
             local calls, spawns = #w.equips, w.spawns
-            local result = w.Kit.reequip(w.pawn, side, actor, actor.cls.path)
-            T.check(result == nil and #w.equips == calls and w.spawns == spawns and actor:IsValid(),
+            local result, stage = w.Kit.reequip(w.pawn, side, actor, actor.cls.path)
+            T.check(result == nil and stage == "preflight" and #w.equips == calls and w.spawns == spawns and actor:IsValid(),
                 side .. " " .. tostring(bad) .. ": fail closed before destructive native previous-weapon lifecycle")
         end
+    end
+end
+
+T.log("== native reuse reports entered calls separately from preflight refusal")
+do
+    for _, outcome in ipairs({ "complete", "throws", "readback" }) do
+        local w = new_env()
+        w:new_pawn(1); w:kit("man_at_arms", 3); w:tick(6)
+        local actor, calls, spawns = w.pawn.props["Weapon R"], 0, w.spawns
+        local equip = w.api.bp_call
+        w.api.bp_call = function(p, name, cls, original, ...)
+            calls = calls + 1
+            if outcome == "throws" then error("native operation entered before failure") end
+            equip(p, name, cls, original, ...)
+            if outcome == "readback" then p.props["Weapon R"] = nil end
+        end
+        local result, stage = w.Kit.reequip(w.pawn, "R", actor, actor.cls.path)
+        T.check(calls == 1 and w.spawns == spawns and not actor.destroyed,
+            outcome .. ": native reuse enters once without creating another weapon")
+        T.check(outcome == "complete" and result ~= nil and stage == "complete"
+            or outcome ~= "complete" and result == nil and stage == "attempted",
+            outcome .. ": native execution failure cannot masquerade as retryable preflight refusal")
     end
 end
 

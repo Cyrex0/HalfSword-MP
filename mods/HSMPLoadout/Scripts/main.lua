@@ -775,7 +775,18 @@ local tries   = {}   -- peer_id -> { key, n, next_at }
 --   dyn_raw   last world_dyn record version
 --   hand      own hands' address signature (publish on change)
 local SI = { aw = {}, strip = {}, dyn_seen = nil, dyn_raw = nil, hand = nil }
-function SI.reset() SI.aw, SI.strip, SI.dyn_seen, SI.dyn_raw, SI.hand = {}, {}, nil, nil, nil end
+function SI.reset()
+    SI.aw, SI.strip, SI.dyn_seen, SI.dyn_raw, SI.hand = {}, {}, nil, nil, nil
+    if SI.empty_left then SI.empty_left:reset() end
+end
+SI.empty_left_module = (function()
+    local ok, value = pcall(require, "remote_empty_left")
+    if ok and type(value) == "table" then return value end
+    local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+    local directory = source:match("^(.*)[/\\]") or "."
+    local loaded, module = pcall(dofile, directory .. "/remote_empty_left.lua")
+    if loaded and type(module) == "table" then return module end
+end)()
 SI.weapon_equal = (function()
     local ok, value = pcall(require, 'weapon_passport_equal')
     if ok and type(value) == 'table' then return value end
@@ -1396,19 +1407,40 @@ local function apply_weapons(puppet, L, id, strip)
     local wR = not (strip and strip.R) and w.R or nil
     local wL = not (strip and strip.L) and w.L or nil
     local held = id and world_held(id)
+    local absent_left = not (held and held.L) and ((strip and strip.L)
+        or (L.kit_w and L.kit_w.L == nil) or (not L.kit_w and wL == nil))
+    local wanted
+    if absent_left and not (held and held.R) and not (strip and strip.R) then
+        local path = L.kit_w and L.kit_w.R or wR and wR.class
+        if path and path ~= "" and not Kit.is_bare(path) then wanted = { class = path, record = not L.kit_w and wR or nil } end
+    end
+    if absent_left then
+        if not SI.empty_left then return false, "FAIL empty L helper unavailable", "FAIL empty L helper unavailable" end
+        local ok, result = SI.empty_left:prepare(puppet, tonumber(id), wanted)
+        if not ok then return false, "FAIL R not attempted", result end
+        wl = result
+    elseif SI.empty_left then
+        local ok, reason = SI.empty_left:allow(puppet, tonumber(id))
+        if not ok then return false, "FAIL R not attempted", reason end
+        SI.empty_left:forget(tonumber(id))
+    end
     if held and (held.R or held.L) then
         local kw = L.kit_w
         wr = held.R and yield_hand(puppet, "R", held.R)
             or (kw and Kit.give_weapon(puppet, "R", kw.R) or apply_weapon(puppet, "R", wR))
-        wl = held.L and yield_hand(puppet, "L", held.L)
+        wl = wl or held.L and yield_hand(puppet, "L", held.L)
             or (kw and Kit.give_weapon(puppet, "L", kw.L) or apply_weapon(puppet, "L", wL))
     elseif L.kit_w then
         -- Synthesised from the validated kit (no appearance received yet).
         wr = (strip and strip.R) and apply_weapon(puppet, "R", nil) or Kit.give_weapon(puppet, "R", L.kit_w.R)
-        wl = (strip and strip.L) and apply_weapon(puppet, "L", nil) or Kit.give_weapon(puppet, "L", L.kit_w.L)
+        wl = wl or Kit.give_weapon(puppet, "L", L.kit_w.L)
     else
         wr = apply_weapon(puppet, "R", wR)
-        wl = apply_weapon(puppet, "L", wL)
+        wl = wl or apply_weapon(puppet, "L", wL)
+    end
+    if absent_left and not wr:find("^FAIL") then
+        local ok, result = SI.empty_left:finish(puppet, tonumber(id), wanted)
+        if not ok or result then wr = result end
     end
     return not wr:find("^FAIL") and not wl:find("^FAIL"), wr, wl
 end
@@ -1422,7 +1454,7 @@ local function apply_loadout(puppet, L, id, strip)
     local summary = string.format("pieces=%d %s worn %d->%d weapons R=%s L=%s hair=%s%s",
         npieces, ares, before, after, wr, wl, hair,
         L.cos_kit and (" kit=" .. tostring(L.cos_kit.class)) or "")
-    return armour_ok and wok, summary
+    return armour_ok and wok, summary, armour_ok
 end
 
 -- --- invisible dressing ---------------------------------------------------------
@@ -1460,6 +1492,47 @@ end
 -- while its pawn was hidden (dressing), or a pooled weapon actor that the
 -- census hid on an extra (HSMPAvatars remove_willie), can stay hidden: no
 -- weapon shows although the kit verified it in hand.
+-- Current applied pose + server life, with native world/actor/mesh checked
+-- again before each empty-L passport write or retained-R rebind.
+function SI.remote_hand_context(pawn, peer)
+    local I = ipc()
+    local hs = Kit._HS and Kit._HS()
+    if not (I and I.N and I.N.ipc_info and hs and hs.view and hs.mode and mp_live()) then return nil end
+    local info = I.N.ipc_info()
+    local age = type(info) == "table" and info.sidecar_hb_age_s
+    if type(info) ~= "table" or (info.sidecar_state ~= "ready" and info.sidecar_state ~= 2)
+        or type(age) ~= "number" or age ~= age or age < 0 or age > 5 then return nil end
+    local v, mode = hs.view(), hs.mode()
+    local me, world = PCF.describe(pawn), PCF.world()
+    if not (v and me and world and valid(world) and v.by_peer and v.by_peer[peer]
+        and v.by_peer[peer].role == 0 and v.match_id and v.match_id > 0
+        and me.world == tostring(world_gen) .. "|" .. tostring(world:GetAddress()) .. "@" .. world:GetFullName()) then return nil end
+    local round = (v.state == "countdown" or v.state == "paused") and v.spawn_round or v.round
+    if not round or round <= 0 then return nil end
+    local playback = I.bus_table("playback")
+    local shown
+    for _, row in ipairs(playback and playback.rows or {}) do
+        if row.peer == peer and row.pawn == me.name then shown = row; break end
+    end
+    local now = os.clock() * 1000
+    if not shown or shown.match_id ~= v.match_id or shown.round ~= round
+        or type(shown.life) ~= "number" or not math.tointeger(shown.life) or shown.life <= 0
+        or type(shown.local_ms) ~= "number" or shown.local_ms ~= shown.local_ms
+        or shown.local_ms > now or now - shown.local_ms > 250 then return nil end
+    local assigned = v.spawns and v.spawns[peer]
+    if not assigned or type(assigned.spawn_id) ~= "number" or not math.tointeger(assigned.spawn_id)
+        or assigned.spawn_id <= 0 or assigned.spawn_id >> 8 ~= round then return nil end
+    if mode and mode.match_id == v.match_id and mode.round == round then
+        local row = mode.rows and mode.rows[peer]
+        if not row or row.life ~= shown.life then return nil end
+    elseif not (v.state == "countdown" and v.spawn_round == v.pending_round) then return nil end
+    local mesh = pawn.Mesh
+    if not valid(mesh) or mesh:GetOwner():GetAddress() ~= pawn:GetAddress() then return nil end
+    return { world = me.world, world_address = world:GetAddress(), pawn = me.name, address = pawn:GetAddress(),
+        mesh = mesh:GetAddress(), mesh_name = mesh:GetFName():ToString(), peer = peer,
+        match_id = v.match_id, round = round, life = shown.life, spawn_id = assigned.spawn_id }
+end
+
 local CARRIED_FIELDS = { "Weapon R", "Weapon L", "Weapon R_0", "Weapon L_0",
     "Weapon Slot R 1", "Weapon Slot R 2", "Weapon Slot L 1", "Weapon Slot L 2", "Weapon Slot Back" }
 
@@ -1704,7 +1777,17 @@ local function apply_remote()
                         t.n = t.n + 1
                         t.next_at = now + 0.5
                         local ok, wr, wl = apply_weapons(w, L, id, st)
-                        if ok then SI.aw[id] = wkey end
+                        if ok then
+                            SI.aw[id] = wkey
+                            local aa = applied_at[id]
+                            if aa and not aa.verified then
+                                aa.verified, aa.hands = true, SI.hands_sig(w)
+                                reveal(w, "dressed after hands retry")
+                                local Rw, Lw = held_weapons(w)
+                                late.ev("kit_verified", { who = "peer:" .. tostring(id), armour_n = #current_passports(w),
+                                    r_class = Rw and cls_name(Rw) or "None", l_class = Lw and cls_name(Lw) or "None", ok = true })
+                            end
+                        end
                         Log("peer %s: hands only on %s (try %d): R=%s L=%s%s", id, name, t.n, wr, wl,
                             ok and "" or " - will retry")
                     end
@@ -1726,11 +1809,18 @@ local function apply_remote()
                     elseif w and not same(w, me) and hp > 0 then
                         t.n = t.n + 1
                         t.next_at = now + 0.5
-                        local ok, res = apply_loadout(w, L, id, st)
+                        local ok, res, armour_ok = apply_loadout(w, L, id, st)
+                        if armour_ok then
+                            -- A failed hand transaction retries only hands; do
+                            -- not respawn successful armour to finish its debt.
+                            applied[id] = key
+                            SI.aw[id] = nil -- an old success for the same hand key cannot cover this failed attempt
+                            applied_at[id] = { t = now, expect = #current_passports(w), hands = ok and SI.hands_sig(w) or nil, verified = ok }
+                        end
                         if ok then
                             applied[id], SI.aw[id] = key, wkey
                             local neq = #current_passports(w)
-                            applied_at[id] = { t = now, expect = neq, hands = SI.hands_sig(w) }
+                            applied_at[id] = { t = now, expect = neq, hands = SI.hands_sig(w), verified = true }
                             local ms = reveal(w, "dressed")
                             local R, Lw = held_weapons(w)
                             -- Where the stand-in's weapons
@@ -1801,12 +1891,19 @@ function SI.strip_dropped()
                     end
                 end
                 if cur and cls_name(cur) == e.leaf then
-                    local res = apply_weapon(w, side, nil)
                     local R = remote_loadout(id)
                     local v = (R and R.v) or 0
                     local st = SI.strip[id]
                     if not st or st.v ~= v then st = { v = v }; SI.strip[id] = st end
                     st[side] = true
+                    local res
+                    if side == "L" then
+                        local L = Kit.effective_remote(id, R)
+                        if L then
+                            local ok, wr, wl = apply_weapons(w, L, id, st)
+                            res = tostring(wl) .. " R=" .. tostring(wr) .. (ok and "" or " - will retry")
+                        else res = "FAIL missing appearance/kit for None cleanup" end
+                    else res = apply_weapon(w, side, nil) end
                     Log("peer %s dropped %s (world item %d): stand-in %s hand %s %s at once", id, e.leaf, e.id,
                         tostring(name), side, res)
                 end
@@ -1907,6 +2004,26 @@ Kit.init({
     end,
     mp_live = mp_live,
 })
+if SI.empty_left_module then
+    SI.empty_left = SI.empty_left_module.new({
+        context = SI.remote_hand_context,
+        wanted_key = function(w) return w.class .. "|" .. (w.record and Kit.weapon_passport_key(w.record) or "kit") end,
+        matches = function(actor, wanted)
+            if class_path(actor:GetClass()) ~= wanted.class then return false end
+            if wanted.record then return SI.weapon_equal and SI.weapon_equal.matches(field(actor, "Weapon Passport"), wanted.record, WEAPON_FIELDS, class_path) end
+            local cls = resolve_class(wanted.class)
+            local pass = cls and weapon_passport_for(cls)
+            return SI.weapon_passport_matches(actor, pass)
+        end,
+        clear_passport = function(pawn) return set_hand_passport(pawn, "L", nil) end,
+        cleanup = function(pawn, record) bp_call(pawn, "Set Up Left Hand Weapon", nil, nil, false, true, dec_struct(record, WEAPON_FIELDS)) end,
+        reequip = function(pawn, actor, wanted)
+            if type(Kit.reequip) ~= "function" then return nil, "preflight" end
+            return Kit.reequip(pawn, "R", actor, wanted.class)
+        end,
+        replaced = bump_weapon_generation,
+    })
+end
 
 -- --- loops -----------------------------------------------------------------------
 

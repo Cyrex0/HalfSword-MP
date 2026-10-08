@@ -17,6 +17,12 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Preserve a truly empty remote left hand instead of creating a fist weapon,
+  retaining native polearm offhand setup. Recovery separates refused calls from
+  attempted native operations to avoid repeating uncertain mass changes.
+- Read the complete bounded native function property chain when validating damage
+  observer inputs, including Blueprint locals. Pending hand diagnostics record
+  actual Mode mismatches without treating them as authoritative gameplay state.
 - Add bounded developer captures for current hand grip motor settings and native
   damage-sampling hit-box changes, with explicit identity and availability checks.
   Observer refusals identify their failed stage; unavailable grip axes remain
