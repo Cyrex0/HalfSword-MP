@@ -37,10 +37,21 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "native_empty_fists" })
     T.isolated(T.script, "case", { kind = "passport_write_retry" })
     T.isolated(T.script, "case", { kind = "passport_variant" })
+    T.isolated(T.script, "case", { kind = "armour_defaults" })
+    T.isolated(T.script, "case", { kind = "armour_defaults_unavailable" })
+    for _, flag in ipairs({ "Unlocks Upper Arming Points", "Unlocks Lower Arming Points",
+        "Requires Upper Arming Points", "Requires Lower Arming Points" }) do
+        for _, failure in ipairs({ "missing", "nonbool", "throws" }) do
+            T.isolated(T.script, "case", { kind = "armour_flag_unavailable", flag = flag, failure = failure })
+        end
+    end
+    T.isolated(T.script, "case", { kind = "weapon_native_source" })
+    T.isolated(T.script, "case", { kind = "weapon_gi_source" })
+    T.isolated(T.script, "case", { kind = "empty_source_unavailable" })
     return
 end
 
-if opts.kind=="passport_variant"then
+if opts.kind=="passport_variant" or opts.kind=="weapon_native_source" or opts.kind=="weapon_gi_source" then
     package.path=T.path("mods/HSMPLoadout/Scripts/?.lua")..";"..T.path("mods/shared/?.lua")..";"..package.path
 end
 
@@ -49,10 +60,56 @@ local sd = T.tmpdir("hsmp_lo_sd_")
 local la = T.tmpdir("hsmp_lo_la_")
 
 local setup_armor, destroyed = 0, {}
+local weapon_fields = assert(load("return " .. T.read(LO):match("local WEAPON_FIELDS = (%b{})")))()
+local function native_weapon_default()
+    local pass = {}
+    for _, fd in ipairs(weapon_fields) do
+        if fd[2] == "int" or fd[2] == "num" then pass[fd[1]] = 0
+        elseif fd[2] == "name" then pass[fd[1]] = { ToString = function() return "" end }
+        elseif fd[2] == "vec" then pass[fd[1]] = { X = 0, Y = 0, Z = 0 }
+        elseif fd[2] == "color" then pass[fd[1]] = { R = 0, G = 0, B = 0, A = 1 } end
+    end
+    return pass
+end
 local function boot(world)
     M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_HAIR_SETTLE_S = opts.settle, HSMP_HAIR_WARM_S = opts.warm }, strict = true })
     local wname = world or "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     local Mt = M.Methods
+    local find = StaticFindObject
+    local armor_classes = {}
+    local armor_fields = assert(load("return " .. T.read(LO):match("local ARMOR_FIELDS = (%b{})")))()
+    local function armor_default()
+        local pass = {}
+        for _, fd in ipairs(armor_fields) do
+            if fd[2] == "int" or fd[2] == "num" then pass[fd[1]] = 0
+            elseif fd[2] == "bool" then pass[fd[1]] = false
+            elseif fd[2] == "color" then pass[fd[1]] = { R = 0, G = 0, B = 0, A = 1 } end
+        end
+        pass["SteelType_84_7BA6626740476C2CD69648847A1E592F"] = 3
+        pass["MetalPiecesType_81_203BFD454D41FA24B0B5C5838898AA60"] = 2
+        pass["Module1_5_46B7198E4341C93CBF6AE989EF9898E4"] = 1
+        return pass
+    end
+    _G.StaticFindObject = function(path)
+        if path:match("^/Game/Assets/Weapons/") then
+            return { IsValid = function() return true end,
+                GetFullName = function() return "BlueprintGeneratedClass " .. path end,
+                GetFName = function() return { ToString = function() return path:match("([^%.]+)$") end } end,
+                GetCDO = function() return { IsValid = function() return true end, ["Weapon Passport"] = native_weapon_default() } end }
+        end
+        if not path:match("^/Game/Assets/Armor/") then return find(path) end
+        if not armor_classes[path] then
+            armor_classes[path] = { IsValid = function() return true end,
+                GetFullName = function() return "BlueprintGeneratedClass " .. path end,
+                GetFName = function() return FName(path:match("([^%.]+)$")) end,
+                GetCDO = function()
+                    return { IsValid = function() return true end, ["Armor Passport"] = armor_default(),
+                        ["Unlocks Upper Arming Points"] = false, ["Unlocks Lower Arming Points"] = false,
+                        ["Requires Upper Arming Points"] = true, ["Requires Lower Arming Points"] = false }
+                end }
+        end
+        return armor_classes[path]
+    end
     Mt.GetFullName = function(self)
         if rawget(self, "__cls") == "World" then return wname end
         return "Obj " .. tostring(rawget(self, "__name"))
@@ -67,6 +124,19 @@ local function boot(world)
                  GetFullName = function() return "BlueprintGeneratedClass " .. path end }
     end
     Mt["Set Up Armor"] = function() setup_armor = setup_armor + 1 end
+    for _, side in ipairs({ "R", "L" }) do
+        Mt["Set Up " .. (side == "R" and "Right" or "Left") .. " Hand Weapon"] = function(pawn, cls, actor, _, _, pass)
+            local path = cls:GetFullName():match("^%S+%s+(.+)$")
+            local fresh = actor or M.new_obj(path:match("([^%.]+)$"), "NativeHand_" .. side)
+            rawset(fresh, "__clspath", path)
+            local native = {}
+            for key, value in pairs(pass) do native[key] = value end
+            local name = native["Name_57_3729B51148E846FE8DD336B9419BCEE1"]
+            native["Name_57_3729B51148E846FE8DD336B9419BCEE1"] = { ToString = function() return name end }
+            fresh.__props["Weapon Passport"] = native
+            pawn.__props["Weapon " .. side] = fresh
+        end
+    end
     -- A destroyed actor is pending kill (IsValid false; UPROPERTY references
     -- are nulled by the next GC), not freed memory.
     Mt.K2_DestroyActor = function(self) destroyed[#destroyed + 1] = rawget(self, "__name"); rawset(self, "__pk", true) end
@@ -97,7 +167,8 @@ local function boot(world)
     if opts.kind == "strip" or opts.kind == "weapon_gen" then
         local path = "/Game/Assets/Weapons/Blueprints/Built_Weapons/Weapon_Fists.Weapon_Fists_C"
         local fc = { IsValid=function()return true end, GetFullName=function()return "BlueprintGeneratedClass "..path end,
-            GetCDO=function()return {IsValid=function()return true end,["Weapon Passport"]={}} end }
+            GetFName=function()return {ToString=function()return "Weapon_Fists_C"end}end,
+            GetCDO=function()return {IsValid=function()return true end,["Weapon Passport"]=native_weapon_default()} end }
         local find = StaticFindObject
         _G.StaticFindObject=function(p)return p==path and fc or find(p) end
         for _,side in ipairs({"R","L"}) do
@@ -105,7 +176,7 @@ local function boot(world)
                 local old=pawn.__props["Weapon "..side]
                 if old and old:IsValid() then old:K2_DestroyActor() end
                 local a=M.new_obj("Weapon_Fists_C","NativeFist_"..side)
-                rawset(a,"__clspath",path); a.__props["Weapon Passport"]={}
+                rawset(a,"__clspath",path); a.__props["Weapon Passport"]=native_weapon_default()
                 pawn.__props["Weapon "..side]=a
             end
         end
@@ -131,7 +202,16 @@ local function weapon(name, addr, clspath)
     local leaf = clspath:match("([^%./]+)$")
     local w = M.new_obj(leaf, name)
     rawset(w, "__addr", addr); rawset(w, "__clspath", clspath)
-    w.__props["Weapon Passport"] = {}
+    local pass = {}
+    local fields = assert(load("return " .. T.read(LO):match("local WEAPON_FIELDS = (%b{})")))()
+    for _, fd in ipairs(fields) do
+        if fd[2] == "int" or fd[2] == "num" then pass[fd[1]] = 0
+        elseif fd[2] == "name" then pass[fd[1]] = { ToString = function() return "" end }
+        elseif fd[2] == "vec" then pass[fd[1]] = { X = 0, Y = 0, Z = 0 }
+        elseif fd[2] == "color" then pass[fd[1]] = { R = 0, G = 0, B = 0, A = 1 } end
+    end
+    pass["WeaponClass_54_B478ECF7499977809745A3973AD678EC"] = w:GetClass()
+    w.__props["Weapon Passport"] = pass
     return w
 end
 
@@ -155,7 +235,177 @@ local function run(ms, live)
 end
 -- The sidecar publishes peer 2's `loadout` record into its per-peer blob (slot 2 in the mock).
 local function remote(v, R)
-    HSMPNative.sc_put("peer_loadout", { version = v, flags = R and 1 or 0, r = R and { class = R } or nil, rows = {} }, 2)
+    HSMPNative.sc_put("peer_loadout", { version = v, flags = R and 1 or 0,
+        r = R and { class = R, color_wood = { 0, 0, 0, 1 }, color_leather = { 0, 0, 0, 1 } } or nil, rows = {} }, 2)
+end
+
+if opts.kind == "armour_defaults" or opts.kind == "armour_defaults_unavailable" or opts.kind == "armour_flag_unavailable" then
+    boot()
+    local path = "/Game/Assets/Armor/TestCore.TestCore_C"
+    local cls = StaticFindObject(path)
+    local read_cdo = cls.GetCDO
+    if opts.kind == "armour_defaults_unavailable" then cls.GetCDO = function() return { IsValid = function() return true end } end end
+    if opts.kind == "armour_flag_unavailable" then
+        cls.GetCDO = function()
+            local cdo = read_cdo()
+            if opts.failure == "nonbool" then cdo[opts.flag] = 0
+            else cdo[opts.flag] = nil end
+            if opts.failure == "throws" then setmetatable(cdo, { __index = function(_, key)
+                if key == opts.flag then error("unavailable native flag") end
+            end }) end
+            return cdo
+        end
+    end
+    local equipment = M.standin.__props["Character Passport"]["Equipment_26_741A2FC641801842FE691295645C604F"]
+    local input, actual, wrong_field, armor_writes = {}, {}, nil, 0
+    local function each(values, fn)
+        for key, value in pairs(values) do fn({ get = function() return key end }, { get = function() return value end }) end
+    end
+    equipment["ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358"] = {
+        Empty = function() input = {}; armor_writes = armor_writes + 1 end,
+        Add = function(_, slot, pass) input[slot] = pass; armor_writes = armor_writes + 1 end,
+        ForEach = function(_, fn) each(input, fn) end }
+    M.standin.__props["Currently Equipped Armor"] = { ForEach = function(_, fn) each(actual, fn) end }
+    M.Methods["Set Up Armor"] = function()
+        setup_armor = setup_armor + 1
+        actual = {}
+        for slot, pass in pairs(input) do
+            local result = {}; for key, value in pairs(pass) do result[key] = value end
+            if wrong_field then result[wrong_field] = 0 end
+            actual[slot] = result
+        end
+    end
+    HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
+    local function publish(version)
+        HSMPNative.sc_put("peer_loadout", { version = version, flags = 0,
+            rows = { { flags = version == 1 and 1 or 3, slot = 9, class = "@Armor/TestCore",
+                id = version, steel = 3, metal = 2, module1 = 1, req_up_ap = true } } }, 2)
+    end
+    publish(1); run(4300, true)
+    if opts.kind ~= "armour_defaults" then
+        T.check(setup_armor == 0 and armor_writes == 0 and T.contains(M.logtext(), "native armour defaults unavailable"),
+            "unavailable passport or " .. (opts.flag or "CDO") .. " " .. (opts.failure or "missing") .. " fails before armor write/setup")
+        cls.GetCDO = read_cdo; run(1500, true)
+        T.check(setup_armor > 0, "the same loadout retries when native class defaults become readable")
+        return
+    end
+    local pass = input[9]
+    T.check(pass and pass["SteelType_84_7BA6626740476C2CD69648847A1E592F"] == 3
+        and pass["MetalPiecesType_81_203BFD454D41FA24B0B5C5838898AA60"] == 2
+        and pass["Module1_5_46B7198E4341C93CBF6AE989EF9898E4"] == 1,
+        "class-only armor preserves native CDO steel, metal and module indices")
+    T.check(pass and pass["RequiresUpperAP_38_079BBCD74D92FB832584E8B776EC8A6E"] == true,
+        "class-only armor uses actual class arming-point defaults")
+    T.check(T.contains(M.logtext(), "exact=true"), "native output full passport matches the supplied native defaults")
+    for i, key in ipairs({ "SteelType_84_7BA6626740476C2CD69648847A1E592F", "Module1_5_46B7198E4341C93CBF6AE989EF9898E4" }) do
+        wrong_field = key; local before = setup_armor
+        publish(1 + i); run(1400, true)
+        T.check(setup_armor > before and T.contains(M.logtext(), "exact=false") and T.contains(M.logtext(), "TestCore passport"),
+            "same-class same-count armor with wrong native " .. key .. " fails full output verification", M.logtext())
+    end
+    return
+end
+
+if opts.kind == "weapon_native_source" or opts.kind == "weapon_gi_source" then
+    boot()
+    local Kit = require("kit")
+    local path = opts.kind == "weapon_gi_source" and "/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C"
+        or "/Game/Assets/Weapons/FixedTest.FixedTest_C"
+    local short = opts.kind == "weapon_gi_source" and "@Weapons/ModularWeaponBP_Sword" or "@Weapons/FixedTest"
+    local source = native_weapon_default()
+    local cls = { IsValid = function() return true end,
+        GetFullName = function() return "BlueprintGeneratedClass " .. path end,
+        GetFName = function() return { ToString = function() return path:match("([^%.]+)$") end } end,
+        GetCDO = function() return { IsValid = function() return true end, ["Weapon Passport"] = source } end }
+    local find = StaticFindObject
+    StaticFindObject = function(p) return p == path and cls or find(p) end
+    local original = weapon("retain-existing", 9600, "/Game/Assets/Weapons/Existing.Existing_C")
+    M.standin.__props["Weapon R"] = original
+    local writes, setups = 0, 0
+    local equip = M.Methods["Set Up Right Hand Weapon"]
+    M.Methods["Set Up Right Hand Weapon"] = function(...)
+        setups = setups + 1; return equip(...)
+    end
+    M.standin.__props["Character Passport"]["Equipment_26_741A2FC641801842FE691295645C604F"]
+        ["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"].Add = function() writes = writes + 1 end
+    local function unavailable(label)
+        local result = Kit.give_weapon(M.standin, "R", short)
+        T.check(result == "FAIL native weapon defaults unavailable" and writes == 0 and setups == 0
+            and M.standin.__props["Weapon R"] == original and original:IsValid() and #destroyed == 0,
+            label .. " leaves the current actor and character passport untouched", result)
+    end
+    if opts.kind == "weapon_native_source" then
+        source = nil; unavailable("missing native passport")
+        for _, key in ipairs({ "MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36",
+            "CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7", "Name_57_3729B51148E846FE8DD336B9419BCEE1" }) do
+            source = native_weapon_default(); source[key] = nil; unavailable("missing native " .. key)
+        end
+        source = native_weapon_default(); source["HeadSize_21_2D425E61473B8F64FBAB51B223459D57"].Y = nil
+        unavailable("missing native vector component")
+        source = native_weapon_default(); source["ColorLeather_48_DC45F07E4C0C3280278212A7158EE638"].A = nil
+        unavailable("missing native color component")
+        source = native_weapon_default(); source["MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB"] = "0"
+        unavailable("non-numeric native material")
+        source = native_weapon_default(); source["CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7"] = nil
+        setmetatable(source, { __index = function(_, key)
+            if key == "CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7" then error("unreadable native mass") end
+        end }); unavailable("throwing native field")
+        source = native_weapon_default()
+        T.check(Kit.give_weapon(M.standin, "R", short) == "ok" and writes == 1 and setups == 1,
+            "complete readable native CDO permits one passport write and native hand setup")
+    else
+        local gi = { IsValid = function() return true end, ["Available Weapons 1H"] = {}, ["Available Weapons 2H"] = {} }
+        require("UEHelpers").GetGameInstance = function() return gi end
+        local head = find("/Game/Assets/Weapons/Modules/Sword_Blade_Test.Sword_Blade_Test_C")
+        local function template()
+            local pass = native_weapon_default()
+            pass["HeadModule_11_62DF53134688807E1DA7F4A20E9F7139"] = head
+            pass["HeadSize_21_2D425E61473B8F64FBAB51B223459D57"] = { X = 1, Y = 1.0001, Z = 1 }
+            pass["CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7"] = 1.25
+            pass["MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36"] = 4
+            return pass
+        end
+        unavailable("complete but module-empty CDO with no native family template")
+        local bad = template(); bad["CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7"] = nil
+        gi["Available Weapons 1H"] = { bad }; unavailable("GI head with unreadable mass")
+        bad = template(); bad["MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36"] = nil
+        gi["Available Weapons 1H"] = { bad }; unavailable("GI head with unreadable material")
+        source = {}; gi["Available Weapons 1H"] = { bad }; unavailable("incomplete CDO and incomplete GI")
+        gi["Available Weapons 1H"], gi["Available Weapons 2H"] = nil, { bad, template() }
+        T.check(Kit.give_weapon(M.standin, "R", short) == "ok" and writes == 1 and setups == 1,
+            "complete GI template permits setup despite unavailable other list and invalid preceding entries")
+        local pass = M.standin.__props["Weapon R"].__props["Weapon Passport"]
+        T.check(pass["MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36"] == 4
+            and pass["CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7"] == 1.25
+            and string.pack("<f", pass["HeadSize_21_2D425E61473B8F64FBAB51B223459D57"].Y) == string.pack("<f", 1.0001),
+            "validated GI fallback preserves native material, mass and exact size")
+    end
+    return
+end
+
+if opts.kind == "empty_source_unavailable" then
+    boot()
+    local path = "/Game/Assets/Weapons/Blueprints/Built_Weapons/Weapon_Fists.Weapon_Fists_C"
+    local cls = { IsValid = function() return true end, GetFullName = function() return "BlueprintGeneratedClass " .. path end,
+        GetFName = function() return { ToString = function() return "Weapon_Fists_C" end } end,
+        GetCDO = function() return { IsValid = function() return true end, ["Weapon Passport"] = {} } end }
+    local find = StaticFindObject; StaticFindObject = function(p) return p == path and cls or find(p) end
+    local right = weapon("retain-right", 9700, "/Game/Assets/Weapons/Existing.Existing_C")
+    local left = weapon("retain-incomplete-fist", 9701, path); left.__props["Weapon Passport"] = {}
+    M.standin.__props["Weapon R"], M.standin.__props["Weapon L"] = right, left
+    local writes, setups = 0, 0
+    M.standin.__props["Character Passport"]["Equipment_26_741A2FC641801842FE691295645C604F"]
+        ["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"].Add = function() writes = writes + 1 end
+    M.Methods["Set Up Right Hand Weapon"] = function() setups = setups + 1 end
+    M.Methods["Set Up Left Hand Weapon"] = function() setups = setups + 1 end
+    HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
+    remote(1, nil); run(4300, true)
+    T.check(writes == 0 and setups == 0 and #destroyed == 0
+        and M.standin.__props["Weapon R"] == right and M.standin.__props["Weapon L"] == left,
+        "empty replacement and same-class empty reuse both fail before mutation when native fists passport is unavailable")
+    T.check(T.contains(M.logtext(), "R=FAIL native weapon defaults unavailable L=FAIL native weapon defaults unavailable"),
+        "both empty-hand paths report unavailable native source", M.logtext())
+    return
 end
 
 if opts.kind=="passport_variant"then
@@ -172,8 +422,8 @@ if opts.kind=="passport_variant"then
     local function class(path)
         if not classes[path]then classes[path]={IsValid=function()return true end,
             GetFullName=function()return "BlueprintGeneratedClass "..path end,
-            GetFName=function()return FName(path:match("([^%.]+)$"))end,
-            GetCDO=function()return {IsValid=function()return true end,["Weapon Passport"]={}}end}end
+            GetFName=function()return {ToString=function()return path:match("([^%.]+)$")end}end,
+            GetCDO=function()return {IsValid=function()return true end,["Weapon Passport"]=native_weapon_default()}end}end
         return classes[path]
     end
     StaticFindObject=function(path)return class(path)end
@@ -208,7 +458,10 @@ if opts.kind=="passport_variant"then
         end
         fresh.__props["Weapon Passport"]=pass;w.__props["Weapon R"]=fresh
     end
-    M.Methods["Set Up Left Hand Weapon"]=function()end
+    M.Methods["Set Up Left Hand Weapon"]=function(w,cls)
+        local path=cls:GetFullName():match("^%S+%s+(.+)$")
+        w.__props["Weapon L"]=weapon("native-bare-left",9200,path)
+    end
     HSMPNative.bus_put("puppets",{rows={{peer=2,name="Willie_BP_C_9"}}})
     local function publish_variant(version)
         HSMPNative.sc_put("peer_loadout",{version=version,flags=1,r=wanted,rows={}},2)
@@ -274,8 +527,8 @@ if opts.kind == "native_empty_fists" then
     for _, path in ipairs({fists_path, sword_path}) do
         classes[path] = { IsValid = function() return true end,
             GetFullName = function() return "BlueprintGeneratedClass " .. path end,
-            GetFName = function() return FName(path:match("([^%.]+)$")) end,
-            GetCDO = function() return { IsValid = function() return true end, ["Weapon Passport"] = {} } end }
+            GetFName = function() return { ToString = function() return path:match("([^%.]+)$") end } end,
+            GetCDO = function() return { IsValid = function() return true end, ["Weapon Passport"] = native_weapon_default() } end }
     end
     local find = StaticFindObject
     _G.StaticFindObject = function(path) return classes[path] or find(path) end
@@ -455,7 +708,7 @@ elseif opts.kind == "hair_round_reset" then
 
 elseif opts.kind == "strip" then
     boot()
-    local sw = weapon("Sword_9", 9001, "/Game/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C")
+    local sw = weapon("Sword_9", 9001, "/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C")
     M.standin.__props["Weapon R"] = sw
     HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
     remote(1, "@Weapons/ModularWeaponBP_Sword")
@@ -463,7 +716,7 @@ elseif opts.kind == "strip" then
     T.check(#destroyed == 0, "dressed; the sword stays in the stand-in's hand", T.repr(destroyed))
     -- peer 2's sword leaves their hand: HSMPWorld's manifest gets a dynamic entry
     HSMP_IPC.N.sc_put("world_dyn", { level = 3, epoch = 2, rows = { { id = 2147549185, chash = 77, pos = { -10.5, 20.0, 5.0 },
-        dyn_owner = 2, class_path = "/Game/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C" } } })
+        dyn_owner = 2, class_path = "/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C" } } })
     run(200, true)
     T.check(destroyed[1] == "Sword_9", "the stand-in's copy is stripped at once", T.repr(destroyed))
     T.check(T.contains(M.logtext(), "peer 2 dropped ModularWeaponBP_Sword_C"), "logged", M.logtext())
@@ -471,7 +724,7 @@ elseif opts.kind == "strip" then
 
 elseif opts.kind == "strip_world_held" then
     boot()
-    local sw = weapon("Sword_9", 9001, "/Game/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C")
+    local sw = weapon("Sword_9", 9001, "/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C")
     M.standin.__props["Weapon R"] = sw
     HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
     HSMP_IPC.bus_put("world_held", { rows = { { peer = 2, nid = 123, hand = 0, actor = "Sword_9" } } })   -- HSMPWorld shows a world item there
@@ -479,7 +732,7 @@ elseif opts.kind == "strip_world_held" then
     run(3000, true)
     local n0 = #destroyed
     HSMP_IPC.N.sc_put("world_dyn", { level = 3, epoch = 2, rows = { { id = 2147549185, chash = 77, pos = { -10.5, 20.0, 5.0 },
-        dyn_owner = 2, class_path = "/Game/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C" } } })
+        dyn_owner = 2, class_path = "/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C" } } })
     run(300, true)
     T.check(#destroyed == n0 and not T.contains(M.logtext(), "peer 2 dropped"),
         "a hand that shows a world item (world_held) is never stripped", T.repr(destroyed))
@@ -582,7 +835,7 @@ if opts.kind == "yield_passport" then
     local hands = { Add = function(_, k, v) added[#added + 1] = k end, Remove = function(_, k) removed[#removed + 1] = k end }
     M.standin.__props["Character Passport"] = { ["Equipment_26_741A2FC641801842FE691295645C604F"] =
         { ["WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"] = hands } }
-    local sw = weapon("Sword_9", 9001, "/Game/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C")
+    local sw = weapon("Sword_9", 9001, "/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C")
     M.standin.__props["Weapon R"] = sw
     HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
     HSMP_IPC.bus_put("world_held", { rows = { { peer = 2, nid = 123, hand = 0, actor = "WorldSword_5" } } })   -- a world item shows in that hand
@@ -610,7 +863,7 @@ if opts.kind == "weapon_gen" then
     -- Every hand-weapon destroy bumps the bus key standin_weapons so
     -- HSMPAvatars drops its cached weapon components at once.
     boot()
-    local sw = weapon("Sword_9", 9001, "/Game/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C")
+    local sw = weapon("Sword_9", 9001, "/Game/Assets/Weapons/ModularWeaponBP_Sword.ModularWeaponBP_Sword_C")
     M.standin.__props["Weapon R"] = sw
     HSMPNative.bus_put("puppets", { rows = { { peer = 2, name = "Willie_BP_C_9" } } })
     remote(1, "@Weapons/ModularWeaponBP_Sword")
@@ -620,7 +873,7 @@ if opts.kind == "weapon_gen" then
     run(1500, true)
     T.check(T.any(destroyed, function(x) return x == "Sword_9" end), "the stand-in's sword is destroyed", T.repr(destroyed))
     local g = HSMPNative.sc_get("standin_weapons")
-    T.check(g and g.gen == 1, "standin_weapons bumped to gen 1", T.repr(g))
+    T.check(g and g.gen == 1, "standin_weapons bumped to gen 1", T.repr(g) .. M.logtext())
 end
 
 if opts.kind == "record" then

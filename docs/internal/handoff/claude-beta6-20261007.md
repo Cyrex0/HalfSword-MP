@@ -664,3 +664,91 @@ still prevent completed source cuts, so absent callbacks do not prove coverage.
 Focused checkpoint: four Lua suites, 556 assertions, zero failures; four changed
 Lua files parse; C++ caller walker/admission has 26 focused checks and CTest pass.
 These are assertion counts, not 556 independent real-game experiments.
+
+### Native20–21: caller cost and real body observations (2026-10-08)
+
+Native20 (`2b3dcf0c`, raw `test-results/20261008-013833-ddbfc6-combat_manual`)
+reproduced the owner's severe slowdown with the optional caller journal enabled.
+After the saved log boundary it produced 5,329 observations/15,884 frames, but
+both clients timed out Loading. Maximum heartbeat gaps were 7.105/6.638 seconds;
+pose transmission averaged only 0.756/2.051 Hz over the measured intervals.
+Those are network pose rates, not renderer FPS. Normal verified-PID DevCtl quit
+stopped both clients. The earlier lookup budget change did not solve the cost;
+keep HSMP_NATIVE_CALLER_PROBE disabled for gameplay validation.
+
+Native21 (same deployed commit, journal disabled, raw
+`test-results/20261008-014254-a01555-combat_manual`) completed the 600-second
+session normally with no new crash. The initial default round still had a peer
+Loading timeout. The subsequent 150-second axe/cloth recipe completed six rounds
+through verified native AI yield, with twelve actual AI takeovers. Yield is not
+biological death. Heartbeat maxima were 1.054/1.594 seconds, with no measured
+gap over two seconds; pose transmission averaged 44.86/37.51 Hz including travel.
+This demonstrates usable gameplay with diagnostics disabled, not renderer FPS
+or a controlled single-variable performance acceptance.
+
+The brief cloth body capture contains 420 actual LAB_BODY observations, including
+129 matched native Deal Complex Damage PRE/POST pairs, two Get Damage PRE/POST
+pairs and one displayed-source Dismember Function Initiate POST. Fifteen matched
+complex-damage pairs reduced Health and none increased it. Exact owner peer2,
+match5606929952832964/round2/life1, Get Damage cid99 reduced Arm_R from82.58257
+to0. All observed structural flags remained false and completed-cut maps were
+readable and empty: limb HP zero alone does not prove fracture or severing.
+
+The actual source Initiate at01:46:14.4413429 supplied part4 and eight readable
+lowerarm markers, including DM_Sphere_Lowerarm_R_13 with tags Lowerarm R/HP000,
+plus real same-Mesh lowerarm cutting boxes and axe mesh. Its source guards still
+had ForceDisableDismemberment=true and Current Part remained0. This verifies the
+POST argument binding; it does not establish accepted eligibility, a causal
+damage parent or an owner completed cut. Unknown Master/parent fields stay
+explicitly unavailable. No native factory or sever invocation is introduced.
+
+Fairness remains failing: cloth honest acceptance0.73574 (333 observations),
+proxy rotation median30.49 degrees/p95 74.66/max131.16 (46 samples), and mean
+clock resets6.60 (27 windows). The plate recipe also finished, but sampled
+owner/peer Vitals were from unmatched Loading/world/round transitions and cannot
+be used as a matched damage comparison. Neither recipe establishes solo parity.
+Plate round1 and round2 specifically ended by recorded 60-second harness
+timeouts (lab-actions.jsonl rows27/30, policy DEBUG KILL1), not native AI yield
+or natural death. Plate honest acceptance was0.718137 (816 observations), proxy
+rotation median32.18/p95 89.62/max166.69 degrees (188 samples, below200), and
+mean clock resets20.04/min (39 windows). These fail the recipe's fairness bounds.
+
+### Offline inventory checkpoint (2026-10-08)
+
+`tools/mapdump/inventory.ps1` extends the existing read-only cooked parser.
+Final fresh output: `test-results/dev-feature-checks/inventory-harvest-20261008/`.
+13,029 effective indexed packages balance as10,536 exported,0 failed and2,493
+explicitly skipped. The selected closure contains10,549 packages, including13
+map bodies explicitly outside inventory scope. All indexed gear roots were
+selected; there are zero missing strong object dependencies. There remain2,027
+weak name-table candidate observations (307 distinct paths), not proven live
+dependencies. LogicMods and shadowed archive entries are outside this effective
+top-level game-package scope. Raw copyrighted exports remain ignored locally.
+
+The canonical catalogue retains883 full package/class rows:154 built weapons,
+397 weapon module variants plus4 module bases, and324 armor gear classes, including
+134 built armor/clothing items (28 clothing),126 cores and62 modules. One weapon
+animation row and one armor animation row are separate from playable gear. Short names collide;
+package-qualified class identities must be used. All883 game-class ancestor
+chains now reach positively resolved native endpoints; engine defaults remain
+unavailable. Unique observed cut/stab/blunt defaults are available on314 rows
+each. Missing/ambiguous fields remain unavailable, with candidates/provenance.
+The quaternion magnitude incorrectly labeled size was removed; no canonical
+gear-size value is currently proved. Native enum Names establishes Steel value3
+as Bare, independently of its enumerator suffix.
+
+This proves offline package/class/default coverage, not runtime constructed
+protection/density, every module combination, decoded complex collision
+triangles, or combat parity. Raw component/SCS/BodySetup references are retained.
+Focused extractor build and24 ledger/provenance regressions passed. Loadout and
+armor observer checkpoint:6 Lua suites,714 assertions passed;5 production Lua
+files parse. Astra reviewed the loadout and read-only observer; a matching
+native clothing/plate trace and actual equipped-passport check remain pending.
+
+Read-only follow-up identified a remaining fairness defect in class-only modular
+weapon setup: GI Available Weapons1H/2H are merchant/save stock, not class-default
+recipes. Selecting the first family passport is not a canonical tier choice.
+Cooked free-mode inventory data assets contain complete native presets, while
+tier class CDOs can expose a grip without a head. These require explicit recipe
+mapping; neither a tier suffix nor an empty head may be guessed. The current
+passport identity checks do not close this recipe-selection gap.

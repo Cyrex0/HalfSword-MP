@@ -788,6 +788,14 @@ end)()
 Kit.weapon_passport_key = function(record)
     return SI.weapon_equal and SI.weapon_equal.signature(record, WEAPON_FIELDS) or "unavailable"
 end
+function SI.native_passport_record(pass, fields)
+    if not pass or not SI.weapon_equal then return nil end
+    local ok, record = pcall(enc_struct, pass, fields, true)
+    if not ok then return nil end
+    local read, matches = pcall(SI.weapon_equal.matches, pass, record, fields, class_path)
+    if not read or not matches then return nil end
+    return record
+end
 
 -- HSMPAvatars' stand-ins (bus key "puppets", typed rows {peer, name}) as
 -- { ["<peer id>"] = "<Willie FName>" }; nil = never written.
@@ -864,7 +872,7 @@ end
 --
 -- Passport contents come from the game's own loadout data assets
 -- (DA_Equipment_Loadout_Tier_*: ArmorinSlots, real modules/colours/steel);
--- an item no tier loadout uses gets a synthesised passport (core only).
+-- an item no tier loadout uses keeps its own class's native passport defaults.
 
 local TIER_DAS = { "Beggar", "Peasant", "Commoner", "Militia", "Soldier", "ManAtArms", "Veteran", "Knight" }
 local pass_tmpl, pass_tmpl_n = nil, 0
@@ -885,8 +893,8 @@ local function harvest_templates()
             nda = nda + 1
             local lo = field(da, "Loadout")
             map_each(lo and field(lo, EQ_ARMOR_IN), function(_, pass)
-                local enc = enc_struct(pass, ARMOR_FIELDS)
-                if enc.class and enc.class ~= "" and not t[enc.class] then
+                local enc = SI.native_passport_record(pass, ARMOR_FIELDS)
+                if enc and enc.class and enc.class ~= "" and not t[enc.class] then
                     t[enc.class] = enc
                     pass_tmpl_n = pass_tmpl_n + 1
                 end
@@ -899,14 +907,6 @@ local function harvest_templates()
     return t
 end
 
-local DEFAULT_PASSPORT_COLOURS = {
-    { 0, 0, 0, 1 },                 -- background
-    { 0.22, 0.13, 0.07, 1 },        -- leather
-    { 0.42, 0.37, 0.29, 1 },        -- fabric 1
-    { 0.30, 0.26, 0.20, 1 },        -- fabric 2
-    { 0.20, 0.17, 0.13, 1 },        -- fabric 3
-}
-
 -- Encoded passport (ARMOR_FIELDS order) for armour class `path` in `slot`.
 local function make_passport(slot, path, tint)
     local tm = harvest_templates()[path]
@@ -914,29 +914,53 @@ local function make_passport(slot, path, tint)
     if tm then
         arr = copy_pass(tm)
     else
-        local C = DEFAULT_PASSPORT_COLOURS
-        local function col(i) return { C[i][1], C[i][2], C[i][3], C[i][4] } end
-        arr = { class = path, id = 0, core_removed = false, module1 = 0, module2 = 0, module3 = 0,
-                bg_color = col(1), leather_color = col(2), fabric1 = col(3), fabric2 = col(4), fabric3 = col(5),
-                steel = 0, metal = 0, rust = false, dirt = false, price = 0, pslot = slot,
-                up_ap = false, low_ap = false, req_up_ap = false, req_low_ap = false, req_hier = false, tier = 0 }
-        -- Arming-point flags from the armour class defaults.
+        -- Modular Core UserConstructionScript consumes the passport's steel,
+        -- materials and module indices before native protection is built.
+        -- A fabricated steel=0 changes that protection; copy the native CDO.
         local cls = resolve_class(path)
         local cdo; pcall(function() cdo = cls:GetCDO() end)
-        if valid(cdo) then
-            local function b(n) local v; pcall(function() v = cdo[n] end); return v == true end
-            arr.up_ap = b("Unlocks Upper Arming Points")
-            arr.low_ap = b("Unlocks Lower Arming Points")
-            arr.req_up_ap = b("Requires Upper Arming Points")
-            arr.req_low_ap = b("Requires Lower Arming Points")
+        local pass = valid(cdo) and field(cdo, "Armor Passport")
+        if not pass then return nil, false end
+        arr = SI.native_passport_record(pass, ARMOR_FIELDS)
+        if not arr then return nil, false end
+        for _, flag in ipairs({ { "up_ap", "Unlocks Upper Arming Points" }, { "low_ap", "Unlocks Lower Arming Points" },
+            { "req_up_ap", "Requires Upper Arming Points" }, { "req_low_ap", "Requires Lower Arming Points" } }) do
+            local read, value = pcall(function() return cdo[flag[2]] end)
+            if not read or type(value) ~= "boolean" then return nil, false end
+            arr[flag[1]] = value
         end
     end
-    arr.class, arr.core_removed, arr.pslot = path, false, slot
+    arr.class, arr.pslot = path, slot
     if tint then
         local col, dark = tint[1], tint[2]
         arr.leather_color, arr.fabric1, arr.fabric2, arr.fabric3 = dark, col, dark, col
     end
     return arr, tm ~= nil
+end
+
+-- Count/class checks cannot establish native modules or material. Compare the
+-- game's result with every field we supplied, rather than the input slot map.
+function SI.armour_passports_match(pawn, want)
+    local have, missing = {}, {}
+    map_each(field(pawn, "Currently Equipped Armor"), function(slot, pass)
+        have[tonumber(slot) or -1] = pass
+    end)
+    for slot, pass in pairs(want) do
+        if not SI.weapon_equal or not SI.weapon_equal.matches(have[slot], pass, ARMOR_FIELDS, class_path) then
+            missing[#missing + 1] = (pass.class or "?"):match("([^/]+)$") .. " passport"
+        end
+    end
+    table.sort(missing)
+    return #missing == 0, missing
+end
+function SI.kit_armour_match(pawn, pieces, tint)
+    local want = {}
+    for _, piece in ipairs(pieces) do
+        local pass = make_passport(piece[1], piece[2], tint)
+        if not pass then return false, { piece[2]:match("([^/]+)$") .. " defaults unavailable" } end
+        want[piece[1]] = pass
+    end
+    return SI.armour_passports_match(pawn, want)
 end
 
 -- Native passports a pawn had before we first dressed it (underwear / base
@@ -1063,6 +1087,7 @@ local function apply_armour(puppet, L)
             want[slot] = g
         else
             local enc, from_tmpl = make_passport(slot, path, L.tint)
+            if not enc then return false, #pieces, "FAIL native armour defaults unavailable: " .. path end
             if from_tmpl then nt = nt + 1 else ns = ns + 1 end
             want[slot] = enc
         end
@@ -1107,9 +1132,11 @@ local function apply_armour(puppet, L)
         built = #current_passports(puppet)
         mode = "nocheck"
     end
-    res[#res + 1] = string.format("built=%d/%d(tmpl=%d synth=%d base=%d %s)", built, wrote, nt, ns, #base_pass[key], mode)
+    local exact, missing = SI.armour_passports_match(puppet, want)
+    res[#res + 1] = string.format("built=%d/%d(tmpl=%d defaults=%d base=%d %s) exact=%s", built, wrote, nt, ns, #base_pass[key], mode, tostring(exact))
+    if not exact then res[#res + 1] = "mismatch=" .. table.concat(missing, ",") end
     res[#res + 1] = "SetUpArmor=" .. (ok and "ok" or ("FAIL " .. tostring(err)))
-    return ok and built >= wrote, #pieces, table.concat(res, " ")
+    return ok and built >= wrote and exact, #pieces, table.concat(res, " ")
 end
 
 -- The pawn's own "Character Passport".Equipment.WeaponinHands (key 0 = right,
@@ -1132,6 +1159,9 @@ local WP_CLASS = "WeaponClass_54_B478ECF7499977809745A3973AD678EC"
 -- without a head module takes its modules (and sizes, materials) from the
 -- first of those whose head module belongs to the same weapon family; the
 -- weapon class stays the kit's.
+-- This legacy family fallback reads merchant/save stock, not canonical class
+-- defaults. Full source validation below does not prove tier/recipe identity;
+-- replacing it with explicitly identified native presets remains open.
 local WEAPON_FAMILIES = {
     { "Sword", "Sword_Blade" }, { "LongSword", "Sword_Blade" }, { "GreatSword", "Sword_Blade" },
     { "Falchion", "Falchion_Blade" }, { "Messer", "Langmesser" }, { "Dagger", "Sword_Blade" },
@@ -1145,11 +1175,14 @@ local function weapon_templates()
         local gi = UEHelpers.GetGameInstance()
         if not valid(gi) then return end
         for _, key in ipairs({ "Available Weapons 1H", "Available Weapons 2H" }) do
-            local arr = gi[key]
-            for i = 1, #arr do
-                local e
-                pcall(function() e = enc_struct(arr[i], WEAPON_FIELDS, true) end)
-                if e and e.head and e.head ~= "" then list[#list + 1] = e end
+            local arr = field(gi, key)
+            local counted, n = pcall(function() return #arr end)
+            if counted then
+                for i = 1, n do
+                    local e
+                    pcall(function() e = SI.native_passport_record(arr[i], WEAPON_FIELDS) end)
+                    if e and e.head and e.head ~= "" then list[#list + 1] = e end
+                end
             end
         end
     end)
@@ -1160,41 +1193,61 @@ local function weapon_templates()
     return list
 end
 local function module_template_for(cls)
-    local cn = ""; pcall(function() cn = cls:GetFName():ToString() end)
+    local named, cn = pcall(function() return cls:GetFName():ToString() end)
+    if not named or type(cn) ~= "string" or cn == "" then return nil, true end
     local list = weapon_templates()
+    local needs_modules = false
     for _, fam in ipairs(WEAPON_FAMILIES) do
         if cn:find(fam[1], 1, true) then
+            needs_modules = true
             for _, e in ipairs(list) do
-                if tostring(e.head):find(fam[2], 1, true) then return e end
+                if tostring(e.head):find(fam[2], 1, true) then return e, true end
             end
         end
     end
-    return nil
+    return nil, needs_modules
 end
 
 local function weapon_passport_for(cls, from_actor)
     local src = from_actor
     if not valid(src) then pcall(function() src = cls:GetCDO() end) end
-    local e
-    pcall(function() e = enc_struct(src["Weapon Passport"], WEAPON_FIELDS) end)
+    local e = valid(src) and SI.native_passport_record(field(src, "Weapon Passport"), WEAPON_FIELDS)
     if not e or not e.head or e.head == "" then
-        local tm = module_template_for(cls)
+        local tm, needs_modules = module_template_for(cls)
         if tm then
             e = copy_pass(tm)
+        elseif needs_modules then
+            return nil
         end
     end
-    local t = {}
-    if e then pcall(function() t = dec_struct(e, WEAPON_FIELDS) end) end
+    if not e then return nil end
+    local decoded, t = pcall(dec_struct, e, WEAPON_FIELDS)
+    if not decoded or type(t) ~= "table" then return nil end
     t[WP_CLASS] = cls
     return t
 end
 
+function SI.weapon_passport_matches(actor, pass)
+    return pass ~= nil and valid(actor) and SI.weapon_equal ~= nil and
+        SI.weapon_equal.matches(field(actor, "Weapon Passport"), enc_struct(pass, WEAPON_FIELDS, true), WEAPON_FIELDS, class_path)
+end
+function SI.hand_passport_matches(pawn, side, path, pass, bare)
+    local actor = field(pawn, "Weapon " .. side)
+    if not valid(actor) then actor = field(pawn, "Weapon " .. side .. "_0") end
+    local actual = ""; pcall(function() actual = class_path(actor:GetClass()) end)
+    return actual == path and (bare or SI.weapon_passport_matches(actor, pass))
+end
+
 local function set_hand_passport(pawn, side, cls, pass)
     local key = side == "R" and 0 or 1
+    if cls then
+        pass = pass or weapon_passport_for(cls)
+        if not pass then return false end
+    end
     return pcall(function()
         local cp = pawn["Character Passport"]
         local m = cp[CP_EQUIPMENT][EQ_WEAPON_HANDS]
-        if cls then m:Add(key, pass or weapon_passport_for(cls)) else m:Remove(key) end
+        if cls then m:Add(key, pass) else m:Remove(key) end
     end)
 end
 
@@ -1251,24 +1304,29 @@ local function apply_weapon(puppet, side, entry)
         -- weight and destroys it through Destroy Previous=true.
     end
     local cls = resolve_class(entry.class)
-    if not cls then return "noclass" end
+    if not cls then return "FAIL noclass" end
     if cur then
         local cp = ""; pcall(function() cp = class_path(cur:GetClass()) end)
         if cp == entry.class and (empty_hand or SI.weapon_equal.matches(field(cur, "Weapon Passport"), entry, WEAPON_FIELDS, class_path)) then
-            local reused = empty_hand and weapon_passport_for(cls, cur) or dec_struct(entry, WEAPON_FIELDS)
+            local reused
+            if empty_hand then reused = weapon_passport_for(cls, cur) else reused = dec_struct(entry, WEAPON_FIELDS) end
+            if not reused then return "FAIL native weapon defaults unavailable" end
             reused[WP_CLASS] = cls
             if not set_hand_passport(puppet, side, cls, reused) then return "FAIL hand passport" end
             return "same"
         end
     end
-    local pass = empty_hand and weapon_passport_for(cls) or dec_struct(entry, WEAPON_FIELDS)
+    local pass
+    if empty_hand then pass = weapon_passport_for(cls) else pass = dec_struct(entry, WEAPON_FIELDS) end
+    if not pass then return "FAIL native weapon defaults unavailable" end
     pass[WP_CLASS] = cls
-    set_hand_passport(puppet, side, cls, pass)
+    if not set_hand_passport(puppet, side, cls, pass) then return "FAIL hand passport" end
     local ok, err = pcall(bp_call, puppet, fname, cls, nil, false, true, pass)
-    if ok then
-        if cur then bump_weapon_generation() end
+    if ok and cur then bump_weapon_generation() end
+    if ok and SI.hand_passport_matches(puppet, side, entry.class, pass, empty_hand) then
         return "ok"
     end
+    if ok then err = "native hand passport mismatch" end
     -- nil actor rejected by the reflection layer: spawn it ourselves and hand
     -- the actor to the same BP function.
     local a
@@ -1276,9 +1334,10 @@ local function apply_weapon(puppet, side, entry)
         a = spawn_weapon_actor(puppet, cls, pass)
         if not a then error("spawn failed") end
         bp_call(puppet, fname, cls, a, false, true, pass)
+        if cur then bump_weapon_generation() end
+        if not SI.hand_passport_matches(puppet, side, entry.class, pass, empty_hand) then error("native hand passport mismatch") end
     end)
     if ok2 then
-        if cur then bump_weapon_generation() end
         return "ok(spawned)"
     end
     if valid(a) then pcall(function() a:K2_DestroyActor() end) end
@@ -1828,7 +1887,9 @@ Kit.init({
     class_path = class_path, bp_call = bp_call, spawn_weapon_actor = spawn_weapon_actor,
     enc_struct = enc_struct, dec_struct = dec_struct, WEAPON_FIELDS = WEAPON_FIELDS,
     set_hand_passport = set_hand_passport, weapon_passport_for = weapon_passport_for,
+    weapon_passport_matches = SI.weapon_passport_matches, armour_passports_match = SI.kit_armour_match,
     destroy_hand_weapon = destroy_hand_weapon, weapon_shown = weapon_shown,
+    hand_weapon_replaced = bump_weapon_generation,
     reveal = reveal, dress_wait = dress_wait, dress_age = dress_age,
     apply_armour = apply_armour, read_pieces = read_pieces, read_source = read_source,
     worn_count = worn_count, in_arena = in_arena, local_pawn = local_pawn, busy = busy,

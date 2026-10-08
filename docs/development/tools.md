@@ -163,3 +163,36 @@ by path (`hsmp-tools = { path = "../tools/hsmp-tools" }`, adjusted to
 your crate's depth) and add the crate to the root `Cargo.toml` `members`.
 
 Thin `.ps1`/`.sh` wrappers only where something calls a tool by path.
+
+### Offline gear inventory
+
+The existing MapDump parser also harvests inventory from the locally mounted
+cooked game packages, without launching the game:
+
+```powershell
+./tools/mapdump/inventory.ps1
+./tools/mapdump/inventory.ps1 -SelfTest
+```
+
+Use `-Dotnet <path>` for an existing .NET10 SDK, `-SkipBuild` for its already-built
+parser, and `-Out <directory>` for another local output directory. Existing parser
+authentication stays in initialization; keys are not passed on the command line
+or copied into inventory reports. Outputs default to ignored `test-results/`.
+
+`coverage-manifest.json` accounts for every effective mounted package as exported,
+failed or explicitly skipped, with reference provenance. Strong object references
+and weak name-table candidates are separate. Parser diagnostics and incomplete
+export iteration cannot become clean package successes.
+
+`canonical-inventory.json` lists observed gear class defaults, module families,
+inherited property provenance and stat availability. `native-enums.json` preserves
+the game's numeric enum mapping; enumerator name suffixes are not numeric values.
+`class-cdo-overrides.json`, `class-ancestry.json` and per-package `exports/` retain
+the underlying observations. Ambiguous stat aliases stay unavailable with all
+candidates retained. Missing native defaults never become invented zero values.
+
+This harvest covers serialized class/default dependencies. Blueprint construction
+can change protection, density and module geometry; the catalogue does not claim
+those runtime values or every Cartesian module combination. Complex collision
+triangles/cooked physics payloads remain explicitly undecoded. Validate native
+equipped passports and contact layers in the game before claiming combat parity.

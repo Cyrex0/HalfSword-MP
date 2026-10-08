@@ -17,6 +17,12 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Harvest the local game's complete indexed gear dependency set offline, with
+  inherited class defaults, native enum mappings and explicit coverage gaps.
+- Preserve native armor passports for items outside tier templates and verify
+  complete equipped armor/weapon passports, including modules and materials.
+- Add short read-only armor trace bursts with bounded native reads and explicit
+  availability, independent of the stand-in damage probe.
 - Recover initial dropped kit weapons by re-equipping the same native actor, retaining the
   outfit and assigned fighter through the stand-in fallback's brief possession swap.
 - Reassert stand-in grip limits after native hand updates and check physical pelvis

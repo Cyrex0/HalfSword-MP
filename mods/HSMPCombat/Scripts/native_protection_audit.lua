@@ -104,23 +104,51 @@ function M.new(opts)
         end
         opts.log("%s",table.concat(parts," "))
     end
+    local function trace_array(a,limit,convert)
+        local function count()return safe(function()return a:GetArrayNum()end)end
+        local n=count()
+        if type(n)~="number" or n~=n or math.abs(n)==math.huge or n%1~=0 or n<0 then
+            return {available=false,observed=0,reason="count_unavailable"}
+        end
+        if n>limit then return {available=false,count=n,observed=0,truncated=true,reason="count_over_limit"}end
+        local values,observed,why={},0,nil
+        local ok=pcall(function()a:ForEach(function(i,e)
+            observed=observed+1
+            if observed>n or observed>limit or i~=observed then why="iteration_count_or_order_changed";return true end
+            local read,v=pcall(convert,e,i)
+            if not read or v==nil then why="entry_read_failed";return true end
+            values[#values+1]=v
+            -- Pinned LuaTArray.cpp:158-160 breaks on a true callback result.
+        end)end)
+        local after=count()
+        if not ok then why="iteration_failed"
+        elseif after~=n then why="count_changed"
+        elseif observed~=n and not why then why="iteration_incomplete"end
+        return {available=why==nil,count=n,post_count=after,observed=observed,truncated=observed>limit,
+            reason=why,values=not why and values or nil}
+    end
     local function trace(startp,endp,radiusp,objectsp,complexp,hitsp,ignorep,returnedp)
         if not opts.enabled() then return nil end
         local start,finish,radius,objects,complex,hits,ignore,returned=
             opts.unwrap(startp),opts.unwrap(endp),opts.unwrap(radiusp),opts.unwrap(objectsp),
             opts.unwrap(complexp),opts.unwrap(hitsp),opts.unwrap(ignorep),opts.unwrap(returnedp)
-        local rows,types,layers,n={},{},{},0
+        local rows={}
         local function put(k,v) rows[#rows+1]=k..":"..value(v) end
-        each(objects,function(_,e)if #types<32 then types[#types+1]=value(opts.unwrap(e)) end end)
-        put("objects",#types>0 and table.concat(types,",") or nil)
+        local types=trace_array(objects,32,function(e)
+            local v=opts.unwrap(e)
+            if type(v)=="number" and v==v and math.abs(v)<math.huge and v%1==0 then return value(v)end
+        end)
+        put("objects",types.available and (#types.values>0 and table.concat(types.values,",") or "[]") or nil)
         put("radius",radius);put("complex",complex);put("ignore_self",ignore);put("out",returned)
-        put("hits",array_n(hits))
         for _,p in ipairs({{"start",start},{"end",finish}}) do
             for _,axis in ipairs({"X","Y","Z"})do put(p[1]..axis,field(p[2],axis))end
         end
-        each(hits,function(_,entry)
-            n=n+1
-            if n<=128 then
+        local function finite(v)return type(v)=="number" and v==v and math.abs(v)<math.huge end
+        local complete=finite(radius) and type(complex)=="boolean" and type(ignore)=="boolean" and type(returned)=="boolean"
+        for _,axis in ipairs({"X","Y","Z"})do
+            if not finite(field(start,axis)) or not finite(field(finish,axis))then complete=false end
+        end
+        local layers=trace_array(hits,128,function(entry,n)
                 local hit=opts.unwrap(entry)
                 -- These are proven FWeakObjectProperty fields (not SoftObject):
                 -- UE4SS FWeakObjectPtr.get resolves them, then validity gates
@@ -128,18 +156,32 @@ function M.new(opts)
                 local comp=opts.unwrap(field(hit,"Component"))
                 local mat=opts.unwrap(field(hit,"PhysMaterial"))
                 local mesh=valid(comp) and field(comp,"StaticMesh") or nil
-                local tags,tags_truncated="unavailable",false
-                if valid(comp) then tags,tags_truncated=tags_of(comp,opts.unwrap) end
+                local tags=trace_array(valid(comp) and field(comp,"ComponentTags") or nil,32,function(e)
+                    local s=opts.unwrap(e):ToString()
+                    if type(s)=="string" then return value(s)end
+                end)
+                if not tags.available then complete=false end
                 local bone=field(hit,"BoneName")
-                layers[#layers+1]=table.concat({"i:"..n,"component:"..value(name(comp)),"mesh:"..value(name(mesh)),
-                    "surface:"..value(valid(mat) and field(mat,"SurfaceType") or nil),"tags:"..value(tags),
-                    "tags_truncated:"..value(tags_truncated),"bone:"..value(safe(function()return bone:ToString()end)),
-                    "distance:"..value(field(hit,"Distance")),"blocking:"..value(field(hit,"bBlockingHit")),
-                    "initial_overlap:"..value(field(hit,"bStartPenetrating"))},"|")
-            end
+                local comp_name,surface=name(comp),valid(mat) and field(mat,"SurfaceType") or nil
+                local bone_name=safe(function()return bone:ToString()end)
+                local distance,blocking,overlap=field(hit,"Distance"),field(hit,"bBlockingHit"),field(hit,"bStartPenetrating")
+                if not comp_name or not finite(surface) or type(bone_name)~="string" or not finite(distance)
+                    or type(blocking)~="boolean" or type(overlap)~="boolean" then complete=false end
+                return table.concat({"i:"..n,"component:"..value(comp_name),"mesh:"..value(name(mesh)),
+                    "surface:"..value(surface),"tags:"..(tags.available and (#tags.values>0 and table.concat(tags.values,",") or "[]") or "unavailable"),
+                    "tags_truncated:"..value(tags.truncated==true),"bone:"..value(bone_name),
+                    "distance:"..value(distance),"blocking:"..value(blocking),
+                    "initial_overlap:"..value(overlap),
+                    "tags_read_complete:"..value(tags.available),"tags_count:"..value(tags.count),
+                    "tags_post_count:"..value(tags.post_count),"tags_observed:"..value(tags.observed),"tags_reason:"..value(tags.reason)},"|")
         end)
-        put("truncated",n>128)
-        rows[#rows+1]="ordered_hits:"..(#layers>0 and table.concat(layers,"/") or "unavailable")
+        -- Keep the legacy header fields contiguous for existing diagnostics.
+        table.insert(rows,6,"hits:"..value(layers.count))
+        put("objects_read_complete",types.available);put("objects_post_count",types.post_count);put("objects_observed",types.observed);put("objects_reason",types.reason)
+        put("hits_read_complete",layers.available);put("hits_post_count",layers.post_count);put("hits_observed",layers.observed);put("hits_reason",layers.reason)
+        put("truncated",layers.truncated==true or types.truncated==true)
+        put("read_complete",types.available and layers.available and complete)
+        rows[#rows+1]="ordered_hits:"..(layers.available and (#layers.values>0 and table.concat(layers.values,"/") or "[]") or "unavailable")
         return table.concat(rows,",")
     end
     return {

@@ -29,11 +29,14 @@ local function new_env()
         return { path = path, GetCDO = function() return { ["Armor Slot"] = 3 } end,
                  GetFName = function() return { ToString = function() return path:match("([^/]+)$") .. "_C" end } end }
     end
+    local function native_passport(path)
+        return { class = path, head = "native head", material = 3, head_size = 1.00001, mass_head = 1 }
+    end
     local function weapon(path)
         w.spawns = (w.spawns or 0) + 1
         local cls = class_obj(path)
         return { cls = cls, bHidden = w.spawn_hidden == true, GetClass = function(self) return self.cls end,
-                 props = { ["Is Held"] = true },
+                 props = { ["Is Held"] = true, ["Weapon Passport"] = native_passport(path) },
                  IsValid = function(self) return not self.destroyed end,
                  K2_DestroyActor = function(self) self.destroyed = true; w.destroyed = (w.destroyed or 0) + 1 end,
                  GetFName = function() return { ToString = function() return "W_" .. path:match("([^/]+)$") end } end }
@@ -57,7 +60,7 @@ local function new_env()
         class_path = function(cls) return cls and cls.path or "" end,
         -- "Set Up Right/Left Hand Weapon"(Class, Actor, ...): the actor form
         -- puts that very actor in hand (the re-arm re-equips the dropped one).
-        bp_call = function(p, fname, cls, actor, _, destroy_previous)
+        bp_call = function(p, fname, cls, actor, _, destroy_previous, pass)
             if not w.equip_ok then return end
             local side = fname:find("Right") and "Weapon R" or "Weapon L"
             local hand = fname:find("Right") and "R" or "L"
@@ -71,11 +74,25 @@ local function new_env()
                 p.props[side] = nil
             end
             local equipped = actor and not actor.destroyed and actor or weapon(cls.path)
+            if pass then
+                equipped.props["Weapon Passport"] = {}
+                for key, value in pairs(pass) do equipped.props["Weapon Passport"][key] = value end
+                if w.bad_passport then equipped.props["Weapon Passport"][w.bad_passport] = "wrong native output" end
+            end
             equipped.props["Is Held"] = true
             p.props[side] = equipped
             p.props[hand .. "_GripType_Current"] = cls.path:find("Weapon_Fists", 1, true) and 0 or 14
         end,
         spawn_weapon_actor = function() return nil end,
+        weapon_passport_for = function(cls, actor)
+            return actor and actor.props["Weapon Passport"] or native_passport(cls.path)
+        end,
+        weapon_passport_matches = function(actor, wanted)
+            local pass = actor and actor.props["Weapon Passport"]
+            if not pass then return false end
+            for key, value in pairs(wanted) do if pass[key] ~= value then return false end end
+            return true
+        end,
         apply_armour = function(p, L)
             w.applies = w.applies + 1
             p.equipped = {}
@@ -159,6 +176,79 @@ local function new_env()
     function w:logtext() return table.concat(self.logs, "\n") end
     w:match("countdown", 0)
     return w
+end
+
+T.log("== own kit requires the complete native weapon passport")
+do
+    local w = new_env()
+    local pawn = w:new_pawn(1)
+    w:kit("duelist", 3)
+    local path = w.Cat.items[w.peer_kit[1].r].path
+    local previous = w.weapon(path)
+    pawn.props["Weapon R"] = previous
+    T.check(w.Kit.give_weapon(pawn, "R", path) == "same", "identical full passport keeps the same weapon")
+    for _, key in ipairs({ "head", "material", "head_size", "mass_head" }) do
+        local actor = pawn.props["Weapon R"]
+        actor.props["Weapon Passport"][key] = key == "head_size" and 1.00002 or "different variant"
+        T.check(not w.Kit.hands_check(pawn, w.peer_kit[1]), "same-class " .. key .. " mismatch fails native verification")
+        T.check(w.Kit.give_weapon(pawn, "R", path) == "ok" and pawn.props["Weapon R"] ~= actor,
+            "same-class " .. key .. " mismatch replaces through native setup")
+    end
+    local actor = pawn.props["Weapon R"]
+    actor.props["Weapon Passport"].material = 0
+    w.bad_passport = "material"
+    T.check(w.Kit.give_weapon(pawn, "R", path):find("^FAIL") ~= nil,
+        "a successful native call with a wrong output passport is not accepted")
+    T.check(not w.Kit.hands_check(pawn, w.peer_kit[1]), "native output remains unverified after the failed setup")
+    w.bad_passport, w.equip_ok = nil, false
+    w.api.spawn_weapon_actor = function(_, cls, pass)
+        T.check(pass and pass.head == "native head", "fallback actor receives the complete canonical passport before construction")
+        return w.weapon(cls.path)
+    end
+    T.check(w.Kit.give_weapon(pawn, "R", path):find("^FAIL") ~= nil,
+        "a successful actor-form call which never equips its actor fails post-setup verification")
+    local writes = 0
+    w.api.set_hand_passport = function() writes = writes + 1; return false end
+    T.check(w.Kit.give_weapon(pawn, "R", path) == "FAIL hand passport" and writes == 1,
+        "failed character hand passport write cannot report a successful apply")
+end
+
+T.log("== unavailable canonical weapon source fails before any hand mutation")
+do
+    local w = new_env()
+    local pawn = w:new_pawn(1); w:kit("duelist", 3)
+    local path = w.Cat.items[w.peer_kit[1].r].path
+    local original = w.weapon(path)
+    pawn.props["Weapon R"] = original
+    local writes, spawn_attempts = 0, 0
+    w.api.set_hand_passport = function() writes = writes + 1; return true end
+    w.api.spawn_weapon_actor = function() spawn_attempts = spawn_attempts + 1; return w.weapon(path) end
+    w.api.weapon_passport_for = function() return nil end
+    T.check(w.Kit.give_weapon(pawn, "R", path) == "FAIL native weapon defaults unavailable",
+        "unavailable canonical passport is reported by own hand give")
+    T.check(not w.Kit.hands_check(pawn, w.peer_kit[1]), "unavailable canonical passport cannot verify an existing same-class actor")
+    T.check(w.Kit.reequip(pawn, "R", original, path) == nil, "unavailable dropped-actor passport prevents native re-equip")
+    T.check(writes == 0 and spawn_attempts == 0 and w.equips == nil and pawn.props["Weapon R"] == original
+        and not original.destroyed, "all unavailable-source paths leave hand passport and current actor untouched")
+    w.api.weapon_passport_for = nil
+    T.check(w.Kit.give_weapon(pawn, "R", path) == "FAIL native weapon defaults unavailable" and writes == 0,
+        "a missing passport provider also cannot substitute an empty table")
+end
+
+T.log("== armor class/count cannot override full native passport evidence")
+do
+    local w = new_env()
+    w:new_pawn(1); w:kit("duelist", 3)
+    w.api.armour_passports_match = function()
+        return w.bad_armor ~= true, w.bad_armor and { "native armor material" } or {}
+    end
+    w:tick(6)
+    T.check(w:status().ok and w.pawn.worn == #w.peer_kit[1].rows, "native full-passport evidence verifies the initial kit")
+    w.bad_armor = true; w:tick(4)
+    T.check(w:status().ok == false and w.pawn.worn == #w.peer_kit[1].rows,
+        "same armor class/count becomes unverified when native passport evidence differs", T.repr(w:status()))
+    w.bad_armor = false; w:tick(12)
+    T.check(w:status().ok, "correct full native passport evidence completes the bounded retry")
 end
 
 T.log("== current assigned fighter survives only the exact protected fallback window")

@@ -40,6 +40,20 @@ public static class Program
 
     public static int Main(string[] args)
     {
+        if (args.FirstOrDefault() == "--inventory-selftest") return InventoryHarvester.SelfTest();
+        if (args.FirstOrDefault() == "--inventory-catalogue")
+        {
+            if (args.Length != 2) { Console.Error.WriteLine("Usage: --inventory-catalogue directory"); return 1; }
+            return InventoryHarvester.RefreshCatalogue(Path.GetFullPath(args[1]));
+        }
+        if (args.FirstOrDefault() == "--inventory")
+        {
+            var inventoryOut = Path.Combine(RepoRoot, "test-results", "dev-feature-checks", "inventory-harvest");
+            if (args.Length == 3 && args[1] == "--out") inventoryOut = Path.GetFullPath(args[2]);
+            else if (args.Length != 1) { Console.Error.WriteLine("Usage: --inventory [--out directory]"); return 1; }
+            if (!InventoryHarvester.InitializeQuietly(Init)) return 1;
+            return InventoryHarvester.Run(Provider, inventoryOut);
+        }
         string outDir = Path.Combine(RepoRoot, "docs", "arena_static");
         bool all = false;
         var maps = new List<string>();

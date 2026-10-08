@@ -1199,13 +1199,40 @@ if C3.body_audit then
 end
 function C3.body_replay_meta(d,attacker)
     return {attacker=attacker,hit_id=d.hit_id,cid=d.cid,parent_cid=d.parent_cid,
+        match_id=d.match_id,round=d.round,victim_life=d.victim_life,
         attacker_life=d.attacker_life,source_class=d.source_class,source_meta=d.dism_blunt,bone=d.bone,
         pre="fresh:owner_replay_invocation"}
+end
+
+-- Independent read-only armor trace bursts. This never enables stand-in
+-- damage; the existing native trace callback supplies already computed hits.
+C3.armor_trace_module=load_module("native_armor_trace")
+if C3.armor_trace_module and C3.armor_audit then
+    local function enabled()
+        return os.getenv("HSMP_DEV")=="1" and WG.check() and WG.settled()
+    end
+    local formatter=load_module("native_protection_audit").new({enabled=enabled,unwrap=pv,log=Log})
+    C3.armor_trace=C3.armor_trace_module.new({enabled=enabled,clock=now_ms,unwrap=pv,
+        context=C3.body_sever_context,format_trace=formatter.trace,log=Log,
+        invocation=function(w,ctx)
+            local meta,trace=C3.body_replay,C3.replay_trace
+            if not replaying or not meta or not trace or ctx.side~="owner"
+                or trace.pawn~=ctx.actor or addr_of(w)~=trace.pawn
+                or meta.match_id~=ctx.match_id or meta.round~=ctx.round
+                or meta.victim_life~=ctx.life then return nil end
+            local context={};for k,v in pairs(ctx)do context[k]=v end
+            local out={pawn=trace.pawn,context=context}
+            for k,v in pairs(meta)do out[k]=v end
+            return out
+        end})
 end
 
 -- Pinned UE4SS native POST hooks pass context, then ReturnValue, then
 -- reflected parameters. Blueprint hooks use a different argument ordering.
 function C3.native_trace_post(_,returnedp,worldp,startp,endp,radiusp,objectsp,complexp,ignoreactorsp,debugp,hitsp,ignoreselfp,colorp,hitcolorp,timep)
+    if C3.armor_trace then
+        pcall(C3.armor_trace.capture,returnedp,worldp,startp,endp,radiusp,objectsp,complexp,hitsp,ignoreselfp)
+    end
     if not C3.native_probe or not replaying or not C3.replay_trace or not C3.armor_audit then return end
     if not WG.check() or not WG.settled() then return end
     local world_context=pv(worldp)
@@ -3671,6 +3698,17 @@ function C3.poll_probe()
             Log("body_probe %s: current-owner native body readback only",C3.body_probe and "ON" or "OFF")
         elseif type(d)=="table" and d.op==1 and d.key=="body_snapshot" then
             if C3.body_audit then pcall(C3.body_audit.capture,local_pawn(),"manual readback",{pre="unavailable:manual_read"}) end
+        elseif type(d)=="table" and d.op==1 and d.key=="armor_probe" then
+            if C3.armor_trace then
+                if tostring(d.arg or "")=="on" then
+                    Log("armor_probe: read-only burst armed=%s (15 seconds; native damage unchanged)",tostring(C3.armor_trace.start()))
+                else
+                    C3.armor_trace.stop()
+                    Log("armor_probe: OFF")
+                end
+            else
+                Log("armor_probe: unavailable")
+            end
         end
     end
 end

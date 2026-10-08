@@ -295,14 +295,13 @@ local function current_weapon(pawn, side)
 end
 
 -- Give `pawn` the weapon class `path` in hand `side` ("R"/"L"); nil = empty hand.
--- The weapon actor is spawned first so it builds from its own Blueprint
--- defaults; the actor and its own passport then go to the game's equip
--- function ("Set Up Right Hand Weapon" / "Set Up Left Hand Weapon").
+-- The native equip function builds from the complete canonical passport.
+-- The actor fallback receives that same passport before native construction.
 function Kit.give_weapon(pawn, side, path)
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
     local cur = current_weapon(pawn, side)
     if not path then
-        if api.set_hand_passport then api.set_hand_passport(pawn, side, nil) end
+        if api.set_hand_passport and not api.set_hand_passport(pawn, side, nil) then return "FAIL hand passport" end
         if cur then
             if api.destroy_hand_weapon then api.destroy_hand_weapon(cur)   -- bumps standin_weapons
             else pcall(function() cur:K2_DestroyActor() end) end   -- unsafe: ok a hand weapon actor, never a Willie
@@ -311,29 +310,38 @@ function Kit.give_weapon(pawn, side, path)
         return "none"
     end
     local cls = api.resolve_class(path)
-    if not cls then return "noclass" end
+    if not cls then return "FAIL noclass" end
     -- The game re-arms the hands from the character passport after a setup;
     -- keep it in line with the kit (see main.lua set_hand_passport).
-    local pass = api.weapon_passport_for and api.weapon_passport_for(cls) or {}
-    if api.set_hand_passport then api.set_hand_passport(pawn, side, cls, pass) end
+    local pass = api.weapon_passport_for and api.weapon_passport_for(cls)
+    if not pass then return "FAIL native weapon defaults unavailable" end
+    if api.set_hand_passport and not api.set_hand_passport(pawn, side, cls, pass) then return "FAIL hand passport" end
     if cur then
         local cp = ""; pcall(function() cp = api.class_path(cur:GetClass()) end)
-        if cp == path then return "same" end
+        if cp == path and api.weapon_passport_matches and api.weapon_passport_matches(cur, pass) then return "same" end
     end
     -- The class form: the game spawns the weapon from the class/passport
     -- itself and attaches it to the hand socket.
     local ok, err = pcall(api.bp_call, pawn, fname, cls, nil, false, true, pass)
+    if ok and cur and api.hand_weapon_replaced then api.hand_weapon_replaced() end
     if ok then
         local now = current_weapon(pawn, side)
         local np = ""; pcall(function() np = api.class_path(now:GetClass()) end)
-        if np == path then return "ok" end
+        if np == path and api.weapon_passport_matches and api.weapon_passport_matches(now, pass) then return "ok" end
+        err = "native hand passport mismatch"
     end
     -- Fallback: spawn the actor ourselves and hand it over.
     local a
     local ok2, err2 = pcall(function()
-        a = api.spawn_weapon_actor(pawn, cls, nil)
+        a = api.spawn_weapon_actor(pawn, cls, pass)
         if not a then error("spawn failed") end
-        api.bp_call(pawn, fname, cls, a, false, true, api.weapon_passport_for and api.weapon_passport_for(cls, a) or pass)
+        api.bp_call(pawn, fname, cls, a, false, true, pass)
+        if cur and api.hand_weapon_replaced then api.hand_weapon_replaced() end
+        local now = current_weapon(pawn, side)
+        local np = now and api.class_path(now:GetClass()) or ""
+        if np ~= path or not api.weapon_passport_matches or not api.weapon_passport_matches(now, pass) then
+            error("native hand passport mismatch")
+        end
     end)
     if ok2 then return "ok(actor)" end
     if api.valid(a) then pcall(function() a:K2_DestroyActor() end) end
@@ -498,13 +506,16 @@ Kit.is_bare = is_bare
 -- own results: "Currently Equipped Armor", which "Set Up Armor" fills with
 -- the pieces it actually spawned (source "equipped")
 -- when it reports anything, else the count of worn armour meshes.
--- A hand counts only when it holds the kit class (never fists).
+-- A hand counts only when it holds the kit class and complete native passport.
 local function weapon_ok(pawn, side, path)
     local cur = current_weapon(pawn, side)
     local cp = ""
     if cur then pcall(function() cp = api.class_path(cur:GetClass()) end) end
     if not path then return is_bare(cp), cp end
-    return cp == path and not is_bare(cp), cp
+    if cp ~= path or is_bare(cp) then return false, cp end
+    local cls = api.resolve_class(path)
+    local pass = cls and api.weapon_passport_for and api.weapon_passport_for(cls)
+    return pass ~= nil and api.weapon_passport_matches ~= nil and api.weapon_passport_matches(cur, pass), cp
 end
 
 -- Both hands against the kit: ok, { "R (Weapon_Fists_C)", ... }, { "R", ... }.
@@ -583,6 +594,12 @@ local function verify(pawn, kit, retain_weapon)
 end
 
 verify_armour = function(pawn, kit)
+    if api.armour_passports_match then
+        local pieces, unresolved = Kit.pieces(kit)
+        local ok, missing = api.armour_passports_match(pawn, pieces, Kit.tint(kit))
+        for _, id in ipairs(unresolved) do missing[#missing + 1] = id .. " unresolved" end
+        return ok and #unresolved == 0, missing, api.worn_count(pawn)
+    end
     local want = kit_paths(kit)
     local nwant = 0; for _ in pairs(want) do nwant = nwant + 1 end
     local worn = api.worn_count(pawn)
@@ -761,8 +778,9 @@ function Kit.reequip(pawn, side, actor, path)
     local cls = api.resolve_class(path)
     if not cls then return nil end
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
-    local pass = api.weapon_passport_for and api.weapon_passport_for(cls, actor) or {}
-    if api.set_hand_passport then api.set_hand_passport(pawn, side, cls, pass) end
+    local pass = api.weapon_passport_for and api.weapon_passport_for(cls, actor)
+    if not pass then return nil end
+    if api.set_hand_passport and not api.set_hand_passport(pawn, side, cls, pass) then return nil end
     local same = same_actor(current_weapon(pawn, side), actor)
     -- Native setup destroys the previous hand actor before validating its
     -- input actor. Reusing that same actor must take the detach/reuse branch.

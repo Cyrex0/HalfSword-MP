@@ -225,3 +225,25 @@ construction observations must never be reported as combat passes.
 `scripts/analyze_weapon_inventory.py <run>` joins observations to all 154 classes and explicitly
 keeps construction/retirement separate from native combat parity. The opt-in combat pose tap
 retains each exact transmitted frame; `combat_pose_decode` decodes it using the production codec.
+
+## Read-only native armor trace bursts
+
+In a developer build, `hsmp-tools ipc-ctl --pid <verified-game-pid> autotest
+armor_probe on` observes existing object-query11 complex traces for15 seconds.
+`armor_probe off` cancels the burst. This does not enable the stand-in damage
+probe or execute a new native trace. Keep the optional C++ caller journal off:
+the Native20 session reproduced severe gameplay stalls with it enabled.
+
+`LAB_ARMOR_TRACE` records the exact world, peer, match, round, life, pawn and Mesh,
+ordered existing hit components/tags/materials and independent read availability.
+The observer limits total records48, records per full body scope16, interval250ms
+and detail16KiB. Native arrays are preflighted, stopped on inconsistent entries,
+and count-checked afterward. Partial reads remain incomplete; a changing body
+scope discards the row. Inactive bursts avoid context/native reads entirely.
+
+An owner replay span is recorded only while the matching full-life native replay
+is active. `dcd_caller` and `source_parent` remain unavailable: the native trace
+callback alone cannot establish its Blueprint caller or accepted source lineage.
+Rows are evidence only and cannot authorize damage or dismemberment. Positive
+native clothing/mail/plate and exposed-region captures are still required before
+claiming protection or soft-spot parity.

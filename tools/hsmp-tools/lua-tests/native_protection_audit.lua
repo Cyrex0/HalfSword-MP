@@ -10,7 +10,7 @@ end
 local function param(x)return{get=function()return x end}end
 local function unwrap(p)if type(p)=="table" and p.get then return p:get() end;return p end
 local function arr(items)
-    return{GetArrayNum=function()return #items end,ForEach=function(_,f)for i,v in ipairs(items)do f(i,param(v))end end}
+    return{GetArrayNum=function()return #items end,ForEach=function(_,f)for i,v in ipairs(items)do if f(i,param(v))==true then break end end end}
 end
 local core=obj("Class /Game/Armor.Armor_C",1)
 local pass={ArmorCore_3_F6B7C69C4BD7D9720DB91EB635EE2B43=core,
@@ -92,3 +92,47 @@ state.native_trace_post(nil,param(false),param(obj("other pawn",99)))
 T.check(trace.proxy_trace_calls==1,"trace from another native receiver cannot be attributed to owner replay")
 state.native_probe=false
 T.check(pcall(state.native_trace_post,nil,param(true),nil),"disabled bridge reads no native world parameter")
+
+local point={X=0,Y=0,Z=0}
+local function formatted(h,types)return a.trace(point,point,1,types or arr({11}),true,h,false,true)end
+local iterations=0
+local huge={GetArrayNum=function()return 129 end,ForEach=function()iterations=iterations+1;error("must preflight")end}
+local capped=formatted(huge)
+T.check(iterations==0 and capped:find("hits_read_complete:false",1,true)and capped:find("hits_reason:count_over_limit",1,true)
+    and capped:find("ordered_hits:unavailable",1,true),"over-limit native hits never enter iteration or expose partial layers")
+local too_many_types={GetArrayNum=function()return 33 end,ForEach=function()iterations=iterations+1;error("must preflight")end}
+local capped_types=formatted(arr({}),too_many_types)
+T.check(iterations==0 and capped_types:find("objects_reason:count_over_limit",1,true)
+    and capped_types:find("read_complete:false",1,true),"object-type count is bounded before native iteration")
+local bad_count={GetArrayNum=function()return 1.5 end,ForEach=function()iterations=iterations+1 end}
+T.check(formatted(bad_count):find("hits_reason:count_unavailable",1,true)and iterations==0,"fractional native count is unavailable before iteration")
+local failed_hits={GetArrayNum=function()return 2 end,ForEach=function(_,f)f(1,param(hit));error("native iteration failed")end}
+local partial=formatted(failed_hits)
+T.check(partial:find("hits_observed:1,hits_reason:iteration_failed",1,true)and partial:find("ordered_hits:unavailable",1,true),"throwing iteration cannot report a partial list as complete")
+local count_reads=0
+local changed_hits={GetArrayNum=function()count_reads=count_reads+1;return count_reads==1 and 1 or 2 end,
+    ForEach=function(_,f)f(1,param(hit))end}
+local changed=formatted(changed_hits)
+T.check(changed:find("hits_post_count:2,hits_observed:1,hits_reason:count_changed",1,true)
+    and changed:find("ordered_hits:unavailable",1,true),"post-count mutation discards the native hit list")
+local stops=0
+local bad_entry={GetArrayNum=function()return 2 end,ForEach=function(_,f)
+    stops=stops+1;if f(1,{get=function()error("broken native parameter")end})==true then return end
+    stops=stops+1;f(2,param(hit))
+end}
+local stopped=formatted(bad_entry)
+T.check(stops==1 and stopped:find("hits_reason:entry_read_failed",1,true),"failed entry uses pinned true-break semantics to stop native work")
+local old_tags=comp.ComponentTags
+comp.ComponentTags={GetArrayNum=function()return 33 end,ForEach=function()iterations=iterations+1;error("must preflight")end}
+local tag_capped=formatted(arr({hit}))
+T.check(iterations==0 and tag_capped:find("tags:unavailable|tags_truncated:true",1,true)
+    and tag_capped:find("tags_read_complete:false",1,true)and tag_capped:find("read_complete:false",1,true),"over-limit protection tags perform no iteration and invalidate completeness")
+comp.ComponentTags={GetArrayNum=function()return 2 end,ForEach=function(_,f)f(1,param({ToString=function()return "defB10"end}));error("tag iteration failed")end}
+local tag_failed=formatted(arr({hit}))
+T.check(tag_failed:find("tags:unavailable",1,true)and tag_failed:find("tags_reason:iteration_failed",1,true),"failed protection tag iteration is explicitly unavailable")
+local tag_counts=0
+comp.ComponentTags={GetArrayNum=function()tag_counts=tag_counts+1;return tag_counts==1 and 1 or 0 end,
+    ForEach=function(_,f)f(1,param({ToString=function()return "defC200"end}))end}
+T.check(formatted(arr({hit})):find("tags_reason:count_changed",1,true),"changing native tag count cannot qualify partial armor protection")
+comp.ComponentTags=old_tags
+T.check(formatted(arr({})):find("read_complete:true,ordered_hits:[]",1,true),"complete native empty trace is distinct from unavailable output")
