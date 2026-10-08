@@ -113,6 +113,21 @@ function Native-ClientStatus($client) {
     }
     return $latest
 }
+function Native-AuthorityEvidence([string]$runPath) {
+    $result = @{ ready=$false; active=@(0, 0) }
+    # The shared UE4SS log and client streams cannot prove source dispatch.
+    foreach ($events in @(Get-ChildItem -LiteralPath (Join-Path $runPath "host") -Filter "hsmp_events*.jsonl" -Recurse -ErrorAction SilentlyContinue)) {
+        foreach ($line in @(Get-Content -LiteralPath $events.FullName)) {
+            try { $event = $line | ConvertFrom-Json } catch { continue }
+            if ($event.ev -eq "x_native_worker" -and $event.state -eq "native_ready") { $result.ready = $true }
+            if ($event.ev -eq "x_native_worker" -and $event.state -eq "native_evidence") {
+                $result.active[0] = [Math]::Max($result.active[0], [int]$event.active_pc0)
+                $result.active[1] = [Math]::Max($result.active[1], [int]$event.active_pc1)
+            }
+        }
+    }
+    return $result
+}
 function Stop-NativeClients {
     if ($script:clientStopAttempted) { return $script:clientStopResult }
     $script:clientStopAttempted = $true
@@ -235,26 +250,9 @@ finally {
         $newCrashes = @(Crashes-Snapshot | Where-Object { $crashBaseline -notcontains $_ })
         $log = Join-Path $Win64 "ue4ss\UE4SS.log"
         if (Test-Path -LiteralPath $log) { Copy-Item -LiteralPath $log -Destination (Join-Path $Run "UE4SS.log") }
-        $readyObserved = $false
-        $activeDispatch = @(0, 0)
-        if (Test-Path -LiteralPath $log) {
-            foreach ($line in @(Get-Content -LiteralPath $log)) {
-                if ($line -match '\[HSMPNativeWorker\].*active_pc0=(\d+) active_pc1=(\d+)') {
-                    $activeDispatch[0] = [Math]::Max($activeDispatch[0], [int]$Matches[1])
-                    $activeDispatch[1] = [Math]::Max($activeDispatch[1], [int]$Matches[2])
-                }
-            }
-        }
-        foreach ($events in @(Get-ChildItem -LiteralPath (Join-Path $Run "host") -Filter "hsmp_events*.jsonl" -Recurse -ErrorAction SilentlyContinue)) {
-            foreach ($line in @(Get-Content -LiteralPath $events.FullName)) {
-                try { $event = $line | ConvertFrom-Json } catch { continue }
-                if ($event.ev -eq "x_native_worker" -and $event.state -eq "native_ready") { $readyObserved = $true }
-                if ($event.ev -eq "x_native_worker" -and $event.state -eq "native_evidence") {
-                    $activeDispatch[0] = [Math]::Max($activeDispatch[0], [int]$event.active_pc0)
-                    $activeDispatch[1] = [Math]::Max($activeDispatch[1], [int]$event.active_pc1)
-                }
-            }
-        }
+        $authorityEvidence = Native-AuthorityEvidence $Run
+        $readyObserved = $authorityEvidence.ready
+        $activeDispatch = $authorityEvidence.active
         # Every supervisor child record must have been qualified/tracked; a path
         # comparison failure must never be reported as successful child cleanup.
         $unobservedChildren = @()

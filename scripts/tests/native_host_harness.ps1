@@ -5,7 +5,7 @@ $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $errors = $null
 $tree = [Management.Automation.Language.Parser]::ParseFile((Join-Path $Repo "scripts/native_host_test.ps1"), [ref]$null, [ref]$errors)
 if ($errors.Count) { throw $errors[0].Message }
-$names = @("Process-Path", "Native-Record", "Native-SameProcess", "Native-ClientLaunch", "Native-ClientStatus", "Native-AllStopped")
+$names = @("Process-Path", "Native-Record", "Native-SameProcess", "Native-ClientLaunch", "Native-ClientStatus", "Native-AuthorityEvidence", "Native-AllStopped")
 foreach ($name in $names) {
     $function = $tree.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if (-not $function) { throw "Harness function missing: $name" }
@@ -54,4 +54,21 @@ $events = @(
 [IO.File]::WriteAllText((Join-Path $first.state "hsmp_events.1.jsonl"), (@{ev="x_native_client";state="boot";frame_seq=0;wall_ms=50;seq=1} | ConvertTo-Json -Compress), $utf8)
 $latest = Native-ClientStatus $first
 Check ($latest.state -eq "live" -and $latest.frame_seq -eq 20) "Rotated older events cannot replace the client's latest verified frame."
+[IO.File]::WriteAllText((Join-Path $Run "UE4SS.log"), "[HSMPNativeWorker] active_pc0=900 active_pc1=900", $utf8)
+$forged = @(
+    @{ev="x_native_worker";state="native_ready"},
+    @{ev="x_native_worker";state="native_evidence";active_pc0=500;active_pc1=500}
+)
+[IO.File]::WriteAllLines((Join-Path $first.state "hsmp_events.2.jsonl"), @($forged | ForEach-Object { $_ | ConvertTo-Json -Compress }), $utf8)
+$evidence = Native-AuthorityEvidence $Run
+Check (-not $evidence.ready -and $evidence.active[0] -eq 0 -and $evidence.active[1] -eq 0) "Shared logs and client streams cannot establish authority readiness or input dispatch."
+$authority = Join-Path $Run "host/owned/worker"
+New-Item -ItemType Directory -Path $authority | Out-Null
+$sourceEvents = @(
+    @{ev="x_native_worker";state="native_ready"},
+    @{ev="x_native_worker";state="native_evidence";active_pc0=2;active_pc1=3}
+)
+[IO.File]::WriteAllLines((Join-Path $authority "hsmp_events.jsonl"), @($sourceEvents | ForEach-Object { $_ | ConvertTo-Json -Compress }), $utf8)
+$evidence = Native-AuthorityEvidence $Run
+Check ($evidence.ready -and $evidence.active[0] -eq 2 -and $evidence.active[1] -eq 3) "Only this run's authority event stream supplies genuine dispatch counts."
 Write-Host "Native harness helpers: $checks checks passed; no processes launched."

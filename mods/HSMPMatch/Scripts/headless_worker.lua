@@ -518,10 +518,14 @@ function M.start()
                     for _, frame in ipairs(N.host_inputs(32) or {}) do controller:receive(frame) end
                     if os.clock()*1000-sample_at >= 33 then
                         local sampled, why = sample_world(directory)
-                        if sampled then metrics.sample_ok=metrics.sample_ok+1
+                        if sampled then metrics.sample_ok=metrics.sample_ok+1;metrics.last_sample_error=nil
                         else
                             metrics.sample_refused=metrics.sample_refused+1
-                            if why~=metrics.last_sample_error then log("canonical sample refused: %s",tostring(why));metrics.last_sample_error=why end
+                            -- A bounded descriptor retry keeps the actual capture
+                            -- refusal available instead of replacing it with a wait.
+                            if why~="source descriptor retry pending" or not metrics.last_sample_error then
+                                if why~=metrics.last_sample_error then log("canonical sample refused: %s",tostring(why));metrics.last_sample_error=why end
+                            end
                             if why=="canonical incarnation changed" or why=="native incarnation changed" or why=="native Health unavailable" or why=="native Health invalid" then
                                 if N.host_world_changed then N.host_world_changed() end
                                 error(why)
@@ -540,7 +544,7 @@ function M.start()
                 log("native evidence: sampled=%d refused=%d sample_ms_min=%.3f sample_ms_max=%.3f dispatched=%d active_dispatched=%d active_pc0=%d active_pc1=%d input_refused=%d last_entity=%s last_controller=%s",
                     metrics.sample_ok,metrics.sample_refused,metrics.sample_min_ms or 0,metrics.sample_max_ms,metrics.dispatch,metrics.active_dispatch,
                     metrics.active_pc0,metrics.active_pc1,metrics.input_refused,tostring(metrics.last_dispatched_entity or ""),tostring(metrics.last_dispatched_controller or ""))
-                if HL then HL.event("x_native_worker", {state="native_evidence",reason="",arena=arena,frame_seq=frame_seq,
+                if HL then HL.event("x_native_worker", {state="native_evidence",reason=tostring(metrics.last_sample_error or ""),arena=arena,frame_seq=frame_seq,
                     sampled=metrics.sample_ok,refused=metrics.sample_refused,active_pc0=metrics.active_pc0,active_pc1=metrics.active_pc1,
                     dispatched=metrics.dispatch,input_refused=metrics.input_refused}) end
             end

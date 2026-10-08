@@ -124,6 +124,47 @@ for _, parent_result in ipairs({"alive","refused","dead"}) do
             "false watchdog result means confirmed supervisor exit and one graceful quit")
     end
 end
+
+-- The actual worker loop emits the latest sampling refusal to its own stream.
+-- A later successful sample clears the reason without clearing refusal counts.
+do
+    local callback, clock, refusal, events = nil, 1, "source vertex colours unavailable", {}
+    local N={worker_input=function()return true end,host_start=function()return true end,
+        host_directory=function()return {epoch=44,seq=1,entities={}}end,host_inputs=function()return {}end,
+        sample_config=function()return true end,native_sample_world=function()return refusal==nil,refusal end,
+        native_commit_world=function()return true end}
+    local world={IsValid=function()return true end}
+    local wg={key="native#2",check=function()return true end,settled=function()return true end,
+        world=function()return world end,token=function()return 1 end,same=function(token)return token==1 end,
+        on_drop=function()end}
+    local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()return nil end},
+        hsmp_wg={new=function()return wg end},
+        hsmp_ipc={N=N,init=function()end,frame=function()end,world_ready=function()end},
+        hsmp_log={init=function()end,event=function(name,fields)
+            if name=="x_native_worker" and fields.state=="native_evidence" then events[#events+1]=fields end
+        end},hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},
+        director={make_ue_env=function()return {apply_cvars=function()end}end,
+            new_native_worker=function()return {state="native_ready",tick=function()return true end}end},
+        headless_control={new=function()return {set_directory=function()return true end,tick=function()end}end},
+        headless_prepare=Prepare,hsmp_pose_config={},headless_sample_boundary=Boundary,headless_spawn_diagnostics=SpawnDiagnostics}
+    local fake=setmetatable({debug=debug,os={getenv=function(key)if key=="HSMP_NATIVE_MODE"then return "diagnostic"end end,
+        clock=function()return clock end},require=function(name)if modules[name]then return modules[name]end;error("optional module absent")end,
+        dofile=function()error("optional module absent")end,print=function()end,
+        LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 82 end}, {__index=_G})
+    assert(loadfile("mods/HSMPMatch/Scripts/headless_worker.lua","t",fake))().start()
+    callback()
+    T.check(#events==1 and events[1].reason==refusal and events[1].refused==1 and events[1].sampled==0,
+        "authority evidence retains the exact canonical sampling refusal")
+    clock=2;refusal="source descriptor retry pending";callback()
+    T.check(#events==2 and events[2].reason==events[1].reason and events[2].refused==2,
+        "bounded descriptor retry retains the original capture failure in the authority stream")
+    clock=3;refusal=nil;callback()
+    T.check(#events==3 and events[3].reason=="" and events[3].refused==2 and events[3].sampled==1,
+        "successful canonical sampling clears the prior diagnostic reason")
+    clock=4;refusal="native render changed";callback()
+    T.check(#events==4 and events[4].reason==refusal and events[4].refused==3 and events[4].sampled==1,
+        "a later canonical refusal replaces the old cause in the authority stream")
+end
 T.check(controls:receive(frame(1, 1, nil, 5)), "owned human input accepted")
 T.check(not controls:receive(frame(3, 1)), "AI cannot receive a player input")
 controls:tick()
