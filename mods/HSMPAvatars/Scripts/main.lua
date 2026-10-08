@@ -1425,7 +1425,7 @@ function PX.grip_probe_emit(r,why,q,stage)
             g.binding_current and values(g.limits) or "unavailable",g.binding_current and values(g.angular) or "unavailable",
             g.binding_current and values(g.targets) or "unavailable",g.binding_current and values(g.reference) or "unavailable")
         for _,axis in ipairs({"XDrive","YDrive","ZDrive"})do
-            local d=g.binding_current and g.linear[axis]
+            local d=g.binding_current==true and type(g.linear)=="table" and type(g.linear[axis])=="table" and g.linear[axis] or nil
             Log("GRIPAXIS inst=%s group=%s stage=%s component=%s axis=%s available=%s position=%s velocity=%s stiffness=%s damping=%s max_force=%s",
                 tostring(r.instance),tostring(r.group),r.stage,ident(g.constraint),axis,tostring(d~=nil),d and tostring(d.position) or "unavailable",d and tostring(d.velocity) or "unavailable",
                 d and tostring(d.stiffness) or "unavailable",d and tostring(d.damping) or "unavailable",d and tostring(d.max_force) or "unavailable")

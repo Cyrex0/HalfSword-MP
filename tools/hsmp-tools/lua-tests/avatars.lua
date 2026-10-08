@@ -66,8 +66,8 @@ end
 
 local function boot(register_ok)
     M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_SEVERED_PHYSICS = opts.severed_physics,
-        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or opts.kind=="grip_probe" and opts.gate~="no_dev") and "1" or nil,
-        HSMP_GRIP_PROBE = opts.kind=="grip_probe" and opts.gate~="off" and "1" or nil }, strict = true })
+        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or opts.kind=="grip_probe" and opts.gate~="no_dev") and "1" or "0",
+        HSMP_GRIP_PROBE = opts.kind=="grip_probe" and opts.gate~="off" and "1" or "0" }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -1658,6 +1658,16 @@ if opts.kind=="grip_probe"then
     base.__props.Owner=pawn
     sample=PX.grip_probe_capture(q,"post_bp")
     T.check(not sample.joints[1].binding_current,"a component with the wrong actual weapon owner cannot qualify by its field name")
+    local log_at=#M.logs;PX.grip_probe_emit(sample)
+    local unavailable_axes,availability_ok=0,true
+    for i=log_at+1,#M.logs do
+        if M.logs[i]:find("GRIPAXIS",1,true)then
+            unavailable_axes=unavailable_axes+1
+            availability_ok=availability_ok and M.logs[i]:find("available=false",1,true)~=nil
+                and M.logs[i]:find("position=unavailable velocity=unavailable stiffness=unavailable",1,true)~=nil
+        end
+    end
+    T.check(unavailable_axes==6 and availability_ok,"unavailable native bindings emit unavailable axes rather than treating boolean false as a drive table")
     base.__props.Owner=weapon
     weapon.__props.NativeWorld=obj("World","FOREIGN_GRIP_WORLD",9800)
     sample=PX.grip_probe_capture(q,"post_bp")
