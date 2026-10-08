@@ -20,7 +20,12 @@ package.preload.hsmp_session = function() return { new = function() return {} en
 HSMP_PARITY_TEST = {}
 os.clock = function() return clock end
 local stateDir = T.tmpdir("parity_input_")
-os.getenv = function() return stateDir end
+os.getenv = function(key)
+    if key == "HSMP_STATE_DIR" then return stateDir end
+    if key == "HSMP_RUNTIME_ROLE" then return "client" end
+    return nil
+end
+package.loaded.hsmp_runtime_role = nil
 LoopAsync = function() end
 RegisterHook = function(name, callback) hooks[name] = callback; installed = installed + 1 end
 dofile(T.path("mods/dev/HSMPParity/Scripts/main.lua"))

@@ -446,12 +446,12 @@ local function boot(vw, vh, scale, env, pre_lua, extra_path, scripts_dir)
                 HSMP_SIDECAR_EXE = false, HSMP_QUERY_EXE = false, HSMP_NETSIM_ADDR = false, HSMP_LOBBY_MAP = false,
                 HSMP_LEGACY_TRAVEL = false, HSMP_BIN_DIR = false, HSMP_CFG = dev_cfg(), HSMP_AUTOTEST_ADDR = false,
                 HSMP_AUTOTEST_EXTERNAL = false, HSMP_AUTOTEST_READY = false, HSMP_AUTOTEST_WAIT_MS = false,
-                HSMP_INST = false, HSMP_DEV = false, HSMP_LOG_ECHO = false }
+                HSMP_INST = false, HSMP_DEV = false, HSMP_LOG_ECHO = false, HSMP_RUNTIME_ROLE = "client" }
     for k, v in pairs(env or {}) do e[k] = v end
     hook_native()
     -- a second boot in one case starts from scratch (no module state carried over)
     for _, n in ipairs({ "ui_kit", "browser", "classes", "settings", "commands", "travel", "legacy_travel", "local_master",
-                         "jsonlite", "hsmp_cfg", "hsmp_log", "hsmp_net", "hsmp_arenas", "hsmp_catalog" }) do
+                         "jsonlite", "hsmp_cfg", "hsmp_log", "hsmp_net", "hsmp_arenas", "hsmp_catalog", "hsmp_runtime_role" }) do
         package.loaded[n] = nil
     end
     HSMP_MENU_TEST = nil
@@ -1379,9 +1379,9 @@ local function isolated_scripts()
     for _, p in ipairs(T.glob(SCRIPTS, "*.lua")) do
         T.write(dir .. "/" .. p:match("([^/\\]+)$"), T.read(p))
     end
-    -- The IPC facade is mandatory (the deploy copies it like every
-    -- shared lib); the isolated copy hides hsmp_cfg / hsmp_log only.
-    for _, n in ipairs({ "hsmp_ipc", "hsmp_ipc_schema" }) do
+    -- The IPC facade and immutable process role are mandatory (deployment
+    -- copies them); this fixture hides the optional hsmp_cfg / hsmp_log only.
+    for _, n in ipairs({ "hsmp_ipc", "hsmp_ipc_schema", "hsmp_runtime_role" }) do
         T.write(dir .. "/" .. n .. ".lua", T.read(T.path("mods/shared/" .. n .. ".lua")))
     end
     return dir, base

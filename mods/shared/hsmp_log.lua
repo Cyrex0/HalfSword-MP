@@ -38,6 +38,8 @@ M.FILE_NAME = "hsmp_events.jsonl"
 -- documented in docs/development/testing.md. A missing required field does not drop the
 -- event; it is written with "_missing":[...] so the assert step reports it.
 M.EVENTS = {
+    x_native_worker         = { "state", "reason", "arena" },
+    x_native_worker_census  = { "players", "ai", "pawn0", "pawn1", "first_ai" },
     lobby_ready             = {},
     cmd_sent                = { "cmd", "cmd_id" },
     cmd_result              = { "cmd", "cmd_id", "ok" },

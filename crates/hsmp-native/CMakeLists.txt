@@ -62,7 +62,8 @@ add_custom_target(rust_libs ALL
     USES_TERMINAL)
 # from `cargo rustc -p hsmp-native --crate-type staticlib -- --print native-static-libs`
 # (windows.0.52.0.lib = windows-sys import umbrella -> the system import libs below)
-set(RUST_SYSLIBS kernel32 advapi32 bcrypt ntdll userenv ws2_32 dbghelp)
+# Embedded server/native networking also imports multimedia timer and route APIs.
+set(RUST_SYSLIBS kernel32 advapi32 bcrypt ntdll userenv ws2_32 dbghelp winmm iphlpapi)
 
 # ------------------------------------------- UE4SS import lib (from .def)
 set(UE4SS_IMPLIB "${CMAKE_BINARY_DIR}/implib/UE4SS.lib")

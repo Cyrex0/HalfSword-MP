@@ -2578,3 +2578,14 @@ Native cleanup/streaming centers only on PC0 (enemy distance1666, tile distance
 lifetime. Source: native50-abyss-cooked-functions.txt, offsets/lines in the Sol
 analysis report; native AI team filter rejects same-team targets and accepts
 different-team targets (AI_BP ExecuteUbergraph62332-62486).
+
+Checkpoint1497ca57's first full G0 blocked its push: menu_ui isolated fixtures
+omitted the mandatory role module, parity_input's getenv stub returned a path
+for every key, and two new worker events were missing from the gate contract.
+The corrected fixtures pin the actual client role and copy the real role module;
+runtime fail-closed guards are retained. menu_ui/parity_input/worker suites pass,
+and the contract tree test passes after registration of exact event fields.
+The native DLL link also exposed missing winmm/timeBeginPeriod and
+iphlpapi/GetBestRoute imports from the embedded library; CMake now links both
+system libraries. These failures are build/fixture findings, with no live game
+or deployment run yet. Rerun normal full G0 after this fixup.
