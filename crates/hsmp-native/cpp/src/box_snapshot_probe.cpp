@@ -1,4 +1,4 @@
-// Lua control/lookup for a default-OFF proof-only observer. No engine writes, files or logging.
+// Lua control/lookup for a default-OFF proof-only observer. No engine writes or files.
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -6,6 +6,7 @@
 #include <string>
 #include <limits>
 #include <atomic>
+#include <cstdio>
 #include "lua.hpp"
 #include "box_snapshot_probe.h"
 namespace
@@ -14,6 +15,7 @@ using namespace hsmp_box;
 State state;
 lua_State* owner_state{};
 bool submitted{};
+unsigned timing_prints{}; // Fixed process budget; never reset by activation or world changes.
 std::atomic<bool> enabled{};
 std::atomic<unsigned> deferred_failure{};
 const Provider& provider() { return hsmp_reflect_box_provider(); }
@@ -86,6 +88,56 @@ void extent(lua_State* L,const char* key,const Snapshot& s)
     for (int i=0;i<3;++i) { lua_pushnumber(L,values[i]); lua_rawseti(L,-2,i+1); }
     lua_setfield(L,-2,key);
 }
+const EnrollmentTiming* costs()
+{ return provider().enrollment_timing ? provider().enrollment_timing() : nullptr; }
+void cost_table(lua_State* L,const EnrollmentTiming* t)
+{
+    if (!t) { lua_pushnil(L); return; }
+    lua_createtable(L,0,5); text(L,"clock","GetTickCount64"); boolean(L,"authority",false);
+    const unsigned count=t->count<EnrollmentTiming::kLimit ? t->count : EnrollmentTiming::kLimit;
+    number(L,"count",count); boolean(L,"overflow",t->overflow || t->count>EnrollmentTiming::kLimit);
+    lua_createtable(L,static_cast<int>(count),0);
+    for (unsigned i=0;i<count;++i)
+    {
+        const auto& r=t->rows[i]; lua_createtable(L,0,5);
+        lua_pushlstring(L,r.name ? r.name : "unknown",r.name ? strnlen_s(r.name,48) : 7); lua_setfield(L,-2,"stage");
+        number(L,"start_ms",r.start_ms); number(L,"end_ms",r.end_ms);
+        const bool available=r.available && r.end_ms>=r.start_ms;
+        boolean(L,"elapsed_available",available);
+        if (available) number(L,"elapsed_ms",r.end_ms-r.start_ms);
+        lua_rawseti(L,-2,static_cast<lua_Integer>(i)+1);
+    }
+    lua_setfield(L,-2,"rows");
+}
+void print_costs(lua_State* L,const EnrollmentTiming* t,bool enrollment_ok)
+{
+    if (!t || timing_prints>=32) return;
+    ++timing_prints;
+    char instance[8]{},line[2048]{};
+    const DWORD n=GetEnvironmentVariableA("HSMP_INST",instance,sizeof instance);
+    const char* inst=n==1 && (instance[0]=='1' || instance[0]=='2') ? instance : "unknown";
+    const unsigned count=t->count<EnrollmentTiming::kLimit ? t->count : EnrollmentTiming::kLimit;
+    int used=std::snprintf(line,sizeof line,"BOXOBS_ENROLL_COST inst=%s record=%u enrollment_ok=%s clock=GetTickCount64 count=%u overflow=%s authority=false",
+        inst,timing_prints,enrollment_ok ? "true" : "false",count,(t->overflow || t->count>EnrollmentTiming::kLimit) ? "true" : "false");
+    for (unsigned i=0;i<count && used>0 && static_cast<std::size_t>(used)<sizeof line;++i)
+    {
+        const auto& r=t->rows[i];
+        const bool available=r.available && r.end_ms>=r.start_ms;
+        const auto remaining=sizeof line-static_cast<std::size_t>(used);
+        int added;
+        if (available) added=std::snprintf(line+used,remaining," %.*s_ms=%llu",48,r.name ? r.name : "unknown",
+            static_cast<unsigned long long>(r.end_ms-r.start_ms));
+        else added=std::snprintf(line+used,remaining," %.*s_ms=unknown",48,r.name ? r.name : "unknown");
+        if (added<0 || static_cast<std::size_t>(added)>=remaining) break;
+        used+=added;
+    }
+    // Look up the exact global without invoking _G.__index. Logging runs after state work.
+    lua_rawgeti(L,LUA_REGISTRYINDEX,LUA_RIDX_GLOBALS);
+    lua_pushliteral(L,"print"); lua_rawget(L,-2); lua_remove(L,-2);
+    if (!lua_isfunction(L,-1)) { lua_pop(L,1); return; }
+    lua_pushstring(L,line);
+    if (lua_pcall(L,1,0,0)!=LUA_OK) lua_pop(L,1);
+}
 void observe(unsigned phase,void* context,void* frame)
 {
     if (!enabled.load()) return;
@@ -130,7 +182,12 @@ int begin_impl(lua_State* L)
     input.round=static_cast<std::uint32_t>(round); input.life=static_cast<std::uint32_t>(life);
     Scope enrolled{}; Reason why=Reason::Unavailable;
     // Re-enrollment must never leave an older binding active after a failed path/identity check.
-    if (!provider().enroll(input,enrolled,why))
+    const bool enrolled_ok=provider().enroll(input,enrolled,why);
+    // Copy before optional Lua logging can re-enter control or replace provider diagnostics.
+    const auto* measured=costs(); EnrollmentTiming copied{};
+    if (measured) copied=*measured;
+    const auto* timing=measured ? &copied : nullptr;
+    if (!enrolled_ok)
     {
         std::string reason=reason_name(why);
         if (provider().enrollment_detail)
@@ -138,13 +195,15 @@ int begin_impl(lua_State* L)
             const char* detail=provider().enrollment_detail();
             if (detail && *detail) { reason+=" ["; reason.append(detail,strnlen_s(detail,512)); reason+="]"; }
         }
-        return unavailable(L,reason.c_str());
+        unavailable(L,reason.c_str()); print_costs(L,timing,false); return 2;
     }
-    if (!provider().submit(observe,why)) return unavailable(L,reason_name(why));
+    if (!provider().submit(observe,why))
+    { unavailable(L,reason_name(why)); print_costs(L,timing,true); return 2; }
     submitted=true;
     if (!state.begin(enrolled,provider().now_ms(),duration,static_cast<unsigned>(limit)))
-        return unavailable(L,reason_name(Reason::BadInput));
-    owner_state=vm(L); enabled.store(true); lua_pushboolean(L,1); return 1;
+    { unavailable(L,reason_name(Reason::BadInput)); print_costs(L,timing,true); return 2; }
+    owner_state=vm(L); enabled.store(true); lua_pushboolean(L,1); cost_table(L,timing);
+    print_costs(L,timing,true); return 2; // No engine reads or re-enable after a Lua callback.
 }
 int begin(lua_State* L)
 { try { return begin_impl(L); } catch (...) { disable(Reason::Unavailable); return unavailable(L,"observer unavailable"); } }
@@ -165,7 +224,8 @@ int status(lua_State* L)
     number(L,"entries",state.entries); number(L,"completed",state.completed()); number(L,"pending",state.pending());
     number(L,"pending_role",state.pending_role());
     number(L,"unmatched",state.unmatched); number(L,"discarded",state.discarded); number(L,"marks_outside",state.marks_outside);
-    number(L,"max_pairs",kMaxPairs); number(L,"max_depth",kMaxDepth); return 1;
+    number(L,"max_pairs",kMaxPairs); number(L,"max_depth",kMaxDepth);
+    return 1;
 }
 int read(lua_State* L)
 {

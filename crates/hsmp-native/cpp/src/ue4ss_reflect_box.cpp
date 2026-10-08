@@ -38,8 +38,13 @@ bool resolved{}, submitted{}, uncertain{};
 thread_local bool reading{};
 const char* enrollment_stage="none";
 FormalDiagnostic formal_detail{};
+EnrollmentTiming enrollment_costs{};
 void stage(const char* name,const char* failure="unavailable")
-{ enrollment_stage=name; formal_detail={}; formal_detail.failure=failure; }
+{
+    if (enrollment_costs.active()) enrollment_costs.stage(name,GetTickCount64());
+    enrollment_stage=name; formal_detail={}; formal_detail.failure=failure;
+}
+const EnrollmentTiming* enrollment_timing() { return &enrollment_costs; }
 const char* enrollment_detail()
 {
     static char detail[512]{};
@@ -172,6 +177,8 @@ bool scope_current(Reason& why)
 }
 bool enroll(const Enrollment& in,Scope& out,Reason& why)
 {
+    enrollment_costs.begin();
+    struct Finish { ~Finish() { enrollment_costs.finish(GetTickCount64()); } } finish;
     stage("initialize");
     if (!initialize()) { why=Reason::Unavailable; return false; }
     Scope s{}; s.match_id=in.match_id; s.round=in.round; s.life=in.life;
@@ -270,6 +277,6 @@ bool safe_snapshot(const Key& k,void* frame,Snapshot& out,Reason& why)
 }
 bool thread_ok() { return hsmp_native_caller_thread_ok()!=0; }
 std::uint64_t now_ms() { return GetTickCount64(); }
-const Provider provider{thread_ok,now_ms,safe_enroll,submit,key,safe_snapshot,enrollment_detail};
+const Provider provider{thread_ok,now_ms,safe_enroll,submit,key,safe_snapshot,enrollment_detail,enrollment_timing};
 }
 const hsmp_box::Provider& hsmp_reflect_box_provider() { return provider; }

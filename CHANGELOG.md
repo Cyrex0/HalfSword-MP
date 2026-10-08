@@ -17,6 +17,7 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Measure bounded native damage-observer enrollment stages to diagnose setup stalls.
 - Read native limb target outputs in their actual struct format, and measure
   damage-observer setup stages without changing playback freshness checks.
 - Add bounded developer captures for limb constraints and current animation-drive

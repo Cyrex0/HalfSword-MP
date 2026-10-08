@@ -1471,3 +1471,66 @@ five parses. Timing is bounded to32 rows per observer lifetime; optional clock,
 formatting and log failures cannot alter enrollment, marking or refresh control.
 Astra approves both frozen code changes; next measure Native35 on the matching
 clean deployed checkpoint. No gameplay publication or physics policy changed.
+
+### Native35: repeated native enrollment stall isolated
+
+Clean deployed `f487492a`, full prepush G0 PASS and normal build/deploy; raw
+`test-results/20261008-102359-f81c87-combat_manual`, session
+`test-results/lab/native-20261008-35`. GRIP/HAND off, one bounded LIMB burst per
+process enabled. All69 native joint snapshots across23 rows read both targets
+available as[0,0,0]; this verifies direct-struct adapter behavior, not a default.
+Inst2 has11 pending-Mode rows; inst1 has12 exact-Mode rows. All authority=false.
+Fresh PA binding is complete23/23. Native post-driver angular velocity persists
+through BP/policy callbacks; PA strength rises in BP and returns0 at policy POST.
+Long burst tick steps are instrumented data, not normal render performance.
+
+At10:25:34.629/.676 local time, inst1/2 enrollment costs are snapshot1/2ms,
+native begin226/228ms, Lua hook installation1/1ms. First refresh takes1ms each,
+then refuses playback ages287/298ms with exact identity tuples. Bus generation
+advances1946→1948 and sample advances~50ms, but remains from before native begin.
+A warmed inst2 enrollment at10:26:47.893 repeats225ms native begin, snapshot1ms,
+install0ms, refresh0ms, refusalage290ms. Thus expensive native begin repeats
+after hooks exist and dominates the stale interval; this is not solely initial
+hook registration, the Lua snapshot, or optional limb diagnostic cost. Zero
+qualified pairs. Native substage costs still need proof before choosing metadata
+reuse or staged setup. Do not freshen old applied timestamps or widen250ms.
+
+Cloth metrics:258/280=.921429 honest acceptance; claim reconstruction rotation
+mean35.159/max78.753 degrees over31 samples; clock-reset rate mean.566332/max
+11.893 over21 windows. Combat acceptance is not achieved. Normal menu quit both
+clients; zero new crashes/orphans/forced kills. No PR/main/tag/release.
+
+Offline cooked cut-path audit is ignored local evidence at
+`test-results/dev-feature-checks/native35-cut-eligibility-audit.json`:
+speculative proxy severing/painting is intentionally suppressed, while gated
+local pawns are ungated for approved owner replay. DCD computes actual component
+protection/density tags; soft-spot equivalence still needs source/owner trace
+provenance. Native marker wear in Constraint_Weapon_Stuck_BP:Dismemberment Check
+precedes sever eligibility and is not established through replay. Next observe
+that exact8-byte Damage input and current parent/marker wear before/after; no
+guessed topology, factory or sever call. Existing owner-confirmed distal injury
+mirroring does not provide detached-limb/armour transport or complete force
+history. Body/limb/dismemberment100% remains unmet.
+
+Spawn/HUD follow-up: ignored `native35-spawn-discriminator.json` proposes bounded
+source/proxy reference transforms, exact asset-template joint frames and current
+limits/projection under fresh full-life identities. Template DefaultInstance is
+not a live runtime bind frame; matching templates cannot prove physics versus
+animation-blend causality. No raw per-bone physics pose API/offset is invented.
+Opponent HUD bars follow roster rows, not actor-attached widgets. Current
+readiness proves life-scoped vitals and named actor collision configuration;
+it does not prove rendered bars, per-bone collision response or necessarily
+the exact driven-Mesh identity. A future small evidence capture should compare
+fresh roster/vitals/displayed-pawn tuples with current HUD host/row/bar
+validity, visibility and fill. Keep widget state distinct from rendered pixels.
+
+Native36 preparation: frozen five-file C++ diagnostic adds at most16 scalar
+GetTickCount64 stage intervals during explicit developer enrollment, with32
+bounded print emissions per process. No engine reads or writes are added.
+Copied stage costs and failure details precede Lua callbacks; all native state
+and return construction completes before raw-global protected print. Reentrant
+print->stop remains stopped, and throwing print cannot change activation.
+No stage tables are allocated in the existing hot status path. Native provider
+and probe compile /W4 /WX;121 focused checks pass, with root independent CTest
+PASS. Astra approves the source. No caching, qualification, publication or
+physics change; matching Native36 stages still needed for cost attribution.

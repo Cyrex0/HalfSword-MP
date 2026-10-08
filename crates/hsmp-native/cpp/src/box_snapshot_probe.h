@@ -1,6 +1,7 @@
 // Optional proof-only native Box observer. Never writes engine state.
 #pragma once
 #include "box_snapshot_pair.hpp"
+#include "box_enrollment_timing.hpp"
 struct lua_State;
 namespace hsmp_box
 {
@@ -22,6 +23,7 @@ struct Provider
     bool (*snapshot)(const Key&,void* frame,Snapshot&,Reason&);
     // Optional bounded scalar detail for a failed enrollment, never runtime authority.
     const char* (*enrollment_detail)(){};
+    const EnrollmentTiming* (*enrollment_timing)(){};
 };
 }
 // ue4ss_reflect_box.cpp provides the pinned host; tests supply a bounded fake.

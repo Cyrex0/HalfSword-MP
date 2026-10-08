@@ -12,6 +12,9 @@ namespace
 using namespace hsmp_box;
 unsigned checks{}, reads{}, keys{}, enrolls{}, submissions{};
 bool good_thread=true, bad_enrollment{}, bad_snapshot{}, serial_zero{};
+bool malformed_costs{};
+EnrollmentTiming measured{};
+const EnrollmentTiming* enrollment_timing() { return &measured; }
 const char* diagnostic{};
 const char* enrollment_detail() { return diagnostic; }
 std::uint64_t time_ms=1000;
@@ -27,6 +30,8 @@ std::uint64_t now() { return time_ms; }
 bool enroll(const Enrollment& e,Scope& out,Reason& why)
 {
     ++enrolls;
+    measured.begin(); measured.stage("initialize",1000); measured.stage("scope_identity",1004); measured.finish(1009);
+    if (malformed_costs) measured.count=99;
     if (bad_enrollment || e.pawn.address!=2 || !e.pawn.path || std::wcscmp(e.pawn.path,L"/pawn")!=0)
     { why=Reason::Identity; return false; }
     out=sample_scope(); out.match_id=e.match_id; out.round=e.round; out.life=e.life; scoped=out; return true;
@@ -46,7 +51,7 @@ bool snapshot(const Key& k,void* frame,Snapshot& out,Reason& why)
     if (f.wrong_box) { why=Reason::Params; return false; } // Foreign formal never dereferenced.
     out={scoped,id(k.node),{f.x,f.y,f.z},true,Reason::None}; return true;
 }
-const Provider fake{on_thread,now,enroll,submit,key,snapshot,enrollment_detail};
+const Provider fake{on_thread,now,enroll,submit,key,snapshot,enrollment_detail,enrollment_timing};
 void check(bool ok,const char* message)
 { ++checks; if (!ok) { std::fprintf(stderr,"FAIL %s\n",message); std::exit(1); } }
 void lua(lua_State* L,const char* code)
@@ -74,6 +79,16 @@ const hsmp_box::Provider& hsmp_reflect_box_provider() { return fake; }
 int main()
 {
     using namespace hsmp_box;
+    EnrollmentTiming timing{}; timing.stage("off",10); timing.finish(11);
+    check(timing.count==0 && !timing.active(),"timing is off before explicit enrollment");
+    timing.begin(); timing.stage("first",10); timing.stage("second",14); timing.finish(19);
+    check(timing.count==2 && timing.rows[0].end_ms-timing.rows[0].start_ms==4
+        && timing.rows[1].end_ms-timing.rows[1].start_ms==5 && !timing.active(),"stage transition and failure finish close exact elapsed values");
+    timing.begin(); timing.stage("backwards",20); timing.finish(19);
+    check(!timing.rows[0].available,"backwards clock remains unavailable");
+    timing.begin(); for (unsigned i=0;i<17;++i) timing.stage("bounded",i); timing.finish(99);
+    check(timing.count==16 && timing.overflow && !timing.active() && timing.rows[15].end_ms==16,"fixed stage limit does not overwrite or reopen rows");
+    timing.begin(); check(timing.count==0 && !timing.overflow,"next explicit enrollment resets stage costs only");
     check(input_bounds(8,8,16,true,true,false),"exact in-bounds formal ObjectProperty");
     check(!input_bounds(12,8,16,true,true,false),"formal overrun unavailable");
     check(!input_bounds(-1,8,16,true,true,false),"negative formal offset unavailable");
@@ -90,11 +105,18 @@ int main()
     lua_State* L=luaL_newstate(); luaL_openlibs(L);
     lua_newtable(L); lua_setglobal(L,"HSMPNative");
     hsmp_box_probe_install(L); check(lua_gettop(L)==0,"installer balances stack");
-    lua(L,"N=HSMPNative.box_probe; assert(N.status().active==false and N.status().submitted==false)");
+    lua(L,"N=HSMPNative.box_probe; assert(N.status().active==false and N.status().submitted==false and N.status().enrollment_costs==nil); real_print=print; cost_logs={}; print=function(s) if s:find('BOXOBS_ENROLL_COST',1,true) then cost_logs[#cost_logs+1]=s end end");
     check(keys==0 && reads==0 && enrolls==0,"default OFF makes no engine/frame reads");
     SetEnvironmentVariableA("HSMP_DEV",nullptr);
     lua(L,"assert(N.begin({})==nil)"); check(enrolls==0,"production activation refused before enrollment");
-    SetEnvironmentVariableA("HSMP_DEV","1"); lua(L,start);
+    SetEnvironmentVariableA("HSMP_DEV","1"); SetEnvironmentVariableA("HSMP_INST","bad"); lua(L,start);
+    lua(L,"local ok,c=N.begin(a); assert(ok==true and c.clock=='GetTickCount64' and not c.authority and c.count==2 and #c.rows==2 and c.rows[1].elapsed_ms==4 and c.rows[2].elapsed_ms==5 and cost_logs[#cost_logs]:find('inst=unknown',1,true))");
+    SetEnvironmentVariableA("HSMP_INST","2"); malformed_costs=true;
+    lua(L,"local ok,c=N.begin(a); assert(ok==true and c.count==16 and c.overflow and #c.rows==16 and cost_logs[#cost_logs]:find('inst=2',1,true) and #cost_logs[#cost_logs]<2048)");
+    malformed_costs=false;
+    lua(L,"local saved=print; print=function() error('optional print failed') end; local ok,c=N.begin(a); print=saved; assert(ok==true and c.rows[1].elapsed_ms==4 and N.status().active)");
+    lua(L,"local saved=print; print=function() assert(N.stop()==true) end; local ok,c=N.begin(a); print=saved; assert(ok==true and c.rows[2].elapsed_ms==5 and not N.status().active)");
+    lua(L,start);
     Frame outer{1,10},inner{2,11,20,1,25}; event(1,outer); event(1,inner);
     lua(L,"assert(N.mark({world=1,pawn=2,mesh=3,box=4,box_owner=5,match_id=123456789,round=1,life=1,role=2,marker=778}))");
     inner.z=31; event(2,inner); lua(L,mark1); outer.x=20; outer.z=31; event(2,outer);
@@ -157,6 +179,7 @@ int main()
     lua(L,"a.calls=32; a.pawn.address=1.5; assert(N.begin(a)==nil); a.pawn.address=2; a.pawn.path='/pawn'..string.char(0)..'x'; assert(N.begin(a)==nil)");
     lua(L,start); lua(L,"assert(N.stop()==true and not N.status().active)");
     previous=keys; event(1,outer); check(keys==previous,"stopped observer skips all frame reads");
+    lua(L,"for i=1,40 do assert(N.begin(a)==true) end; assert(#cost_logs<=32); local n=#cost_logs; assert(N.begin(a)==true and #cost_logs==n); assert(N.stop()==true); print=real_print");
     lua_close(L); SetEnvironmentVariableA("HSMP_DEV",nullptr);
     std::printf("box_snapshot_probe: %u checks passed (actual Lua API, mock provider)\n",checks);
 }
