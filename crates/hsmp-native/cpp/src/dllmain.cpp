@@ -28,6 +28,7 @@
 #include "gen/hsmp_ipc.h"
 #include "hsmp_native.h"
 #include "ue4ss_reflect.h"
+#include "box_snapshot_probe.h"
 #include "ue4ss_abi.hpp"
 #include "ue4ss_pins.h"
 
@@ -214,6 +215,7 @@ class HSMPNativeMod final : public CppUserModBase
             lua_setfield(L, -2, "ue4ss");
         }
         lua_settop(L, top);
+        hsmp_box_probe_install(L); // Default OFF; explicit bounded developer enrollment only.
         logf("registered HSMPNative into Lua mod '%s' (L=%p, lock=%s)", name.c_str(), (void*)L, hsmp_lua_lock_mode());
     }
 };

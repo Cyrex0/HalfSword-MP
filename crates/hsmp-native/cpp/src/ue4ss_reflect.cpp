@@ -416,6 +416,11 @@ const char* hsmp_reflect_register()
     return nullptr;
 }
 
+const HsmpReflect* hsmp_reflect_table()
+{
+    return g_api.internal_index ? &g_vt : nullptr;
+}
+
 const char* hsmp_reflect_caller_register(HsmpCallerSink sink)
 {
     if (g_caller_submitted) return "caller callbacks already submitted";

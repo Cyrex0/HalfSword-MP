@@ -44,6 +44,8 @@ void hsmp_native_set_reflect(const HsmpReflect* vt);
 // ue4ss_reflect.cpp: resolve the UE4SS exports and register; nullptr = registered, else the
 // first missing export's name.
 const char* hsmp_reflect_register();
+// Optional native observers borrow the registered provider; no reflection ABI change.
+const HsmpReflect* hsmp_reflect_table();
 
 // Opt-in observational journal. Every pointer is borrowed only inside a live
 // script-hook callback; the sink receives scalar observations synchronously.

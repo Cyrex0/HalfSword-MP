@@ -97,7 +97,8 @@ target_include_directories(hsmp_ipc_header_check PRIVATE cpp)
 target_compile_options(hsmp_ipc_header_check PRIVATE /W4 /WX)
 
 # --------------------------------------------- option F: HSMPNative main.dll
-add_library(HSMPNative SHARED cpp/src/dllmain.cpp cpp/src/ue4ss_reflect.cpp)
+add_library(HSMPNative SHARED cpp/src/dllmain.cpp cpp/src/ue4ss_reflect.cpp
+    cpp/src/box_snapshot_probe.cpp cpp/src/ue4ss_reflect_box.cpp)
 add_dependencies(HSMPNative rust_libs ue4ss_implib hsmp_ipc_header_check)
 target_include_directories(HSMPNative PRIVATE cpp cpp/abi cpp/src)
 target_compile_options(HSMPNative PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /EHsc /utf-8)
@@ -139,6 +140,21 @@ set_target_properties(harness PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${HARNESS}" RUNTIME_OUTPUT_DIRECTORY_RELEASE "${HARNESS}")
 
 enable_testing()
+add_executable(box_snapshot_probe cpp/test/box_snapshot_probe.cpp cpp/src/box_snapshot_probe.cpp)
+target_include_directories(box_snapshot_probe PRIVATE cpp/src)
+target_link_libraries(box_snapshot_probe PRIVATE lua_vm_host)
+target_compile_options(box_snapshot_probe PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+add_test(NAME box_snapshot_probe COMMAND box_snapshot_probe)
+# Compile the actual provider without building/linking the game DLL or the Rust ALL target.
+add_library(box_provider_compile OBJECT cpp/src/ue4ss_reflect_box.cpp cpp/src/ue4ss_reflect.cpp cpp/src/dllmain.cpp)
+target_include_directories(box_provider_compile PRIVATE cpp cpp/src cpp/abi)
+target_link_libraries(box_provider_compile PRIVATE lua_vm_host)
+target_compile_options(box_provider_compile PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+add_executable(box_exports cpp/test/box_exports.cpp)
+target_include_directories(box_exports PRIVATE cpp/src)
+if(UE4SS_DLL)
+    add_test(NAME box_exports_real COMMAND box_exports "${UE4SS_DLL}")
+endif()
 add_executable(caller_frame_walk cpp/test/caller_frame_walk.cpp)
 target_include_directories(caller_frame_walk PRIVATE cpp/src)
 target_compile_options(caller_frame_walk PRIVATE /W4 /WX /permissive- /EHsc)

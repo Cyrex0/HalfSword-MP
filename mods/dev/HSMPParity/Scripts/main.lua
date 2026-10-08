@@ -978,6 +978,111 @@ local function diagnostic_snapshot(peer)
         world=tostring(world:GetAddress()).."@"..world:GetFullName(),world_key=WG.key})
     return id,pawn,mesh
 end
+local box_observer
+local box_instance=os.getenv("HSMP_INST")
+if box_instance~="1" and box_instance~="2" then box_instance="unavailable" end
+local function box_log(fmt,...)Log("inst=%s "..fmt,box_instance,...)end
+local box_session,box_session_ipc
+local function box_observer_live()
+    if not HSESS then return false end
+    local ipc=rawget(_G,"HSMP_IPC")
+    if not ipc or not ipc.N or type(ipc.N.ipc_info)~="function" then return false end
+    if not box_session then
+        -- The shared facade may return cached healthy info even after a forced
+        -- read fails. This diagnostic admission requires the current native header.
+        box_session_ipc={rec=function(...)
+            local current=rawget(_G,"HSMP_IPC")
+            if current and current.rec then return current.rec(...) end
+        end,refresh_info=function()
+            local current=rawget(_G,"HSMP_IPC")
+            local n=current and current.N
+            if not n or type(n.ipc_info)~="function" then return nil end
+            local ok,info=pcall(n.ipc_info)
+            if not ok or type(info)~="table" or (info.sidecar_state~="ready" and info.sidecar_state~=2) then return nil end
+            local age=info.sidecar_hb_age_s
+            if type(age)~="number" or age~=age or age<0 or age>=math.huge then return nil end
+            return info
+        end}
+        box_session=HSESS.new({ipc=box_session_ipc})
+    end
+    box_session_ipc.S=ipc.S
+    box_session:poll(true)
+    return box_session:live()==true
+end
+local function box_observer_snapshot(peer,side)
+    if not box_observer_live() then return nil end
+    local own,source=diagnostic_snapshot(0)
+    local shown,pawn,mesh=diagnostic_snapshot(peer)
+    local view,mode=HSESS and HSESS.view(),HSESS and HSESS.mode()
+    local row=mode and mode.rows and mode.rows[peer]
+    local owner_row=mode and view and mode.rows and mode.rows[view.my_peer_id]
+    if not own or own.placement_verified~="true" or not shown or not row or not row.alive or row.respawning
+        or not owner_row or not owner_row.alive or owner_row.respawning
+        or not view or view.phase~=3 or not mode or own.match_id~=shown.match_id or own.round~=shown.round then return nil end
+    local ipc=rawget(_G,"HSMP_IPC")
+    local play
+    for _,r in ipairs((ipc and ipc.bus_table("playback") or {}).rows or {})do if r.peer==peer then play=r;break end end
+    local now=os.clock()*1000
+    if not play or type(play.local_ms)~="number" or now<play.local_ms or now-play.local_ms>250
+        or play.pawn~=shown.pawn or play.match_id~=shown.match_id or play.round~=shown.round or play.life~=shown.life then return nil end
+    local stream,slot={},ipc and ipc.peer_slot and ipc.peer_slot(peer)
+    if slot==nil or not ipc.peer_play then return nil end
+    ipc.peer_play(slot,stream)
+    if stream.has_context~=true or stream.peer_id~=peer or stream.match_id~=shown.match_id
+        or stream.round~=shown.round or stream.life~=shown.life or (stream.mode~="interp" and stream.mode~="extrap")
+        or type(stream.age)~="number" or stream.age~=stream.age or math.abs(stream.age)>250 then return nil end
+    local weapon=source[side=="l" and "Weapon L" or "Weapon R"]
+    local grip=source[side=="l" and "L_GripType_Current" or "R_GripType_Current"]
+    if not valid(weapon) or type(grip)~="number" or grip<=0 or grip>=math.huge or grip%1~=0 then return nil end
+    local box=weapon["Hit Box Collision"]
+    if not valid(box) or not valid(box:GetOwner()) or box:GetOwner():GetAddress()~=weapon:GetAddress() then return nil end
+    local resolver=load_module("native_weapon_modules")
+    local rows=resolver and resolver.of(weapon)
+    local found=false
+    for _,r in ipairs(rows or {})do if valid(r.component) and r.component:GetAddress()==box:GetAddress() then found=true end end
+    if not found then return nil end
+    local world=WG.world()
+    if not valid(world) then return nil end
+    if not valid(mesh:GetOwner()) or mesh:GetOwner():GetAddress()~=pawn:GetAddress() then return nil end
+    for _,o in ipairs({source,pawn,weapon})do
+        local w=o:GetWorld();if not valid(w) or w:GetAddress()~=world:GetAddress() then return nil end
+    end
+    local function ref(o)
+        local full=o:GetFullName()
+        local path=type(full)=="string" and full:match("^%S+ (/.+)$")
+        if not path then return nil end
+        return {path=path,address=o:GetAddress()}
+    end
+    local result={world=ref(world),pawn=ref(pawn),mesh=ref(mesh),box=ref(box),box_owner=ref(weapon),
+        match_id=shown.match_id,round=shown.round,life=shown.life,world_key=WG.key,
+        owner_life=own.life,owner_pawn=own.address,owner_mesh=own.mesh_address,peer=peer,side=side}
+    local fresh_own=diagnostic_snapshot(0)
+    local fresh_shown=diagnostic_snapshot(peer)
+    if not DIAGNOSTIC_CONTEXT.same(own,fresh_own) or not DIAGNOSTIC_CONTEXT.same(shown,fresh_shown)
+        or not valid(source[side=="l" and "Weapon L" or "Weapon R"])
+        or source[side=="l" and "Weapon L" or "Weapon R"]:GetAddress()~=weapon:GetAddress()
+        or not valid(weapon["Hit Box Collision"]) or weapon["Hit Box Collision"]:GetAddress()~=box:GetAddress() then return nil end
+    if not box_observer_live() then return nil end
+    return result
+end
+local function exp_boxobserve(arg)
+    if not box_observer then
+        local m,log=load_module("native_box_observer"),load_module("hsmp_log")
+        if not m or not log then box_log("BOXOBS unavailable dev observer/logger");return end
+        box_observer=m.new({developer=function()return os.getenv("HSMP_DEV")=="1"end,
+            native=function()local n=rawget(_G,"HSMPNative");return n and n.box_probe end,
+            snapshot=box_observer_snapshot,register=RegisterHook,log=box_log,emit=function(row)
+                -- FName/weak bits remain exact even beyond JSON's integer range.
+                for _,k in ipairs({"world","pawn","mesh","box","box_owner","function"})do
+                    for key,value in pairs(row[k] or {})do if type(value)=="number" then row[k][key]=tostring(value) end end
+                end
+                row.instance=box_instance
+                box_log("BOXOBS_PAIR %s",log.encode(row))
+            end})
+    end
+    box_observer.command(arg)
+end
+WG.on_drop(function()if box_observer then box_observer.drop()end end)
 local function exp_frames(arg)
     local peer,bone=tostring(arg):match("^(%d+)%s*(%S*)")
     peer=tonumber(peer) or 0
@@ -1273,7 +1378,7 @@ local function exp_drive(arg)
     end
     driver.start(arg)
 end
-local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, weaponstate=exp_weaponstate, defeat=exp_defeat, drive=exp_drive, ai=exp_ai }
+local EXPS = { kit = exp_kit, spots = exp_spots, near = exp_near, swing = exp_swing, arm = exp_arm, bounds = exp_bounds, colliders = exp_colliders, modules=exp_modules, components=exp_components, inventory = exp_inventory, cutproxy=exp_cutproxy, fists=exp_fists, frames=exp_frames, weaponstate=exp_weaponstate, defeat=exp_defeat, drive=exp_drive, ai=exp_ai,boxobserve=exp_boxobserve }
 if rawget(_G, "HSMP_PARITY_TEST") then
     HSMP_PARITY_TEST.arm = exp_arm
     HSMP_PARITY_TEST.state = function() return arm_drive end
@@ -1281,6 +1386,7 @@ if rawget(_G, "HSMP_PARITY_TEST") then
     HSMP_PARITY_TEST.ai_tick = ai_auto_tick
     HSMP_PARITY_TEST.frames = exp_frames
     HSMP_PARITY_TEST.weaponstate = exp_weaponstate
+    HSMP_PARITY_TEST.boxobserve = exp_boxobserve
 end
 local dev_out = {}
 LoopAsync(33, function()
@@ -1294,6 +1400,7 @@ LoopAsync(33, function()
     pcall(ai_auto_tick)
     cutproxy_tick()
     defeat_tick()
+    if box_observer then box_observer.tick()end
     if inventory then inventory.tick(WG.key,WG.settled() and SESS and SESS:live()) end
     local ipc = rawget(_G, "HSMP_IPC")
     if not (ipc and ipc.dev_poll) then return false end
