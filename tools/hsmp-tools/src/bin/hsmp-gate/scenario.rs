@@ -165,6 +165,22 @@ mod tests {
         }
     }
     #[test]
+    fn connectivity_start_waits_for_ready_without_changing_refusal_test() {
+        for name in ["host_leave", "server_restart"] {
+            let sc = expand(name, 2, None, None, "rcon").unwrap();
+            let steps = sc["steps"].as_array().unwrap();
+            let ready = steps.iter().position(|s| s["ev"] == "cmd_result" && s["where"]["cmd"] == "ready").unwrap();
+            let start = steps.iter().position(|s| s["cmd"] == "START").unwrap();
+            assert!(ready < start, "{name}: START requires both readiness replies");
+            assert_eq!(steps[ready]["who"], "each");
+            assert_eq!(steps[ready]["where"]["ok"], "true");
+            assert_eq!(steps[ready]["where"]["source"], "server");
+        }
+        let refused = expand("start_refused", 2, None, None, "rcon").unwrap();
+        assert_eq!(refused["env"]["2"]["HSMP_AUTOTEST_READY"], "0");
+        assert!(!refused["steps"].as_array().unwrap().iter().any(|s| s["ev"] == "cmd_result" && s["where"]["cmd"] == "ready"));
+    }
+    #[test]
     fn p0_gate_has_70_alternating_kills() {
         let sc = expand("p0_gate", 2, Some("all"), Some(10), "rcon").unwrap();
         let kills: Vec<String> = sc["steps"]
