@@ -80,3 +80,35 @@ remain untouched and must pass their own inert proof. Pooled inactive fighters
 require the original scalar retirement identity and complete fresh checks;
 ordinary hidden actors cannot qualify. The new behavior still needs a fresh
 exact G0 deployment and three-game run. Do not claim playable mirroring yet.
+
+## Actual suppression-candidate run
+
+Exact clean gated/deployed f826b657 ran the requested two normal game clients
+and one NullRHI authority in `test-results/20261009-004058-646bf3-native-host`.
+The authority reached native_ready at9.885s with two opposed native human
+fighters, Team Int1/2 and no native AI. Both clients stopped at14.727/14.556s
+because native_client.lua:38 invoked `ForEach` on a native component getter
+result that was an ordinary Lua table. The source independently refused capture at
+native_source_render.lua:33: the actual K2_GetComponentsByClass return also
+had no `GetArrayNum` method. These are binding representation errors, not
+evidence that suppression or complete rendering passed.
+
+Authority-owned JSONL records zero canonical samples/frames, 156 refusals and
+active native input dispatch [0,0]. The 312 total dispatches were neutral
+control frames and do not demonstrate AI input. All four owned process records
+were independently absent after cleanup, original player save hashes remained
+unchanged, and crash/unobserved-child lists were empty. Shared UE4SS.log must
+not contribute to active-input pass criteria; use the authority's own event
+file for attribution. The next candidate corrects function-returned Lua tables
+separately from reflected property TArray wrappers, using the pinned UE4SS
+binding implementation and realistic fixtures.
+
+Corrective candidates: 0e73b15d uses the actual function-return representation
+for client component retirement and input mappings; ee51b5ba does so for source
+components, morphs and vertex colors and reads the actual component physics
+override or qualified skeletal asset physics getter. Focused fixtures now use
+the pinned return representation and trap the unavailable component getter.
+3844ee71 removes shared-log input attribution and retains the latest concrete
+source refusal in authority-owned native_evidence. These fixes require a new
+exact deployment and actual three-game proof; their offline checks do not
+establish live presentation or controls.
