@@ -46,6 +46,8 @@ pub mod reject_code {
     pub const SERVER_CLOSING: u8 = 8;
     pub const DUPLICATE_PLAYER: u8 = 9;
     pub const RATE_LIMITED: u8 = 10;
+    /// The server serves mods and the client cannot take them (no `caps::SERVER_MODS`).
+    pub const MODS_REQUIRED: u8 = 11;
     pub const INTERNAL: u8 = 255;
 }
 
@@ -1002,9 +1004,21 @@ mod tests {
         assert_eq!((pr.code, pr.server_min, pr.server_max), (reject_code::VERSION, crate::net::VERSION_MIN, crate::net::VERSION_MAX));
         assert_eq!(pr.echo, old.echo());
         assert!(pr.text.contains("OUTDATED"));
+        // The prior protocol reports frame-start display labels and does not
+        // distinguish geometry-only Inside origins. Reject incompatible field
+        // meanings before any application records arrive.
+        let mut previous = f.hello.clone();
+        previous.version_min = crate::net::PROTOCOL_VERSION - 1;
+        previous.version_max = crate::net::PROTOCOL_VERSION - 1;
+        let prior = hello_datagram(&previous);
+        let HelloOutcome::Reject(rejected) = f.server.on_hello(1_000_000, a, &prior, &mut f.rng).unwrap() else {
+            panic!("previous combat layout must be rejected")
+        };
+        assert!(rejected.len() <= prior.len());
+        assert_eq!(parse_pre_reject(&rejected).unwrap().code, reject_code::VERSION);
         // Newer client, overlapping range: negotiated down to this build's version.
         let mut newer = f.hello.clone();
-        newer.version_max = 9;
+        newer.version_max = crate::net::PROTOCOL_VERSION + 1;
         let HelloOutcome::Challenge(ch) = f.server.on_hello(1_000_000, a, &hello_datagram(&newer), &mut f.rng).unwrap() else {
             panic!()
         };

@@ -3,6 +3,8 @@
 --
 --   local id = Cmd.send(kind, args)      -- kind: pick_arena{arena} | best_of{n} | kit_rules{mode,budget}
 --                                        --       start | abort | ready{value=bool} | kick{peer} | promote{peer}
+--                                        --       game_mode{mode} | teams{rule, n} | round_time{s}
+--                                        --       set_team{team, peer (nil = me)} | set_option{opt, value}
 --   local st = Cmd.status(id)            -- { id, kind, args, state, reason, source,
 --                                        --   tries, age_s }   state: "pending" |
 --                                        --   "accepted" | "refused" | "superseded"
@@ -45,6 +47,11 @@ C.KINDS = {
     ban        = { resend_s = 2, max_tries = 2, timeout_s = 6 },
     unban      = { resend_s = 2, max_tries = 2, timeout_s = 6 },
     reset_match = { resend_s = 2, max_tries = 2, timeout_s = 6 },
+    game_mode  = { resend_s = 2, max_tries = 2, timeout_s = 6 },
+    teams      = { resend_s = 2, max_tries = 2, timeout_s = 6 },
+    round_time = { resend_s = 2, max_tries = 2, timeout_s = 6 },
+    set_team   = { resend_s = 2, max_tries = 2, timeout_s = 6 },
+    set_option = { resend_s = 2, max_tries = 2, timeout_s = 6 },
 }
 
 -- A pick is a ONE-SHOT request, never a desired state the menu enforces: it
@@ -54,11 +61,13 @@ C.KINDS = {
 -- Commands where only the newest one matters: a newer command of the same
 -- kind supersedes a pending older one (record backend stops resending it, so
 -- an old pick can never overwrite a newer one on the server).
-local SUPERSEDE = { pick_arena = true, best_of = true, ready = true, kit_rules = true }
+local SUPERSEDE = { pick_arena = true, best_of = true, ready = true, kit_rules = true, game_mode = true, teams = true,
+                    round_time = true, set_team = true }
 
 -- SERVER chat replies (server.rs handle_match_verb / admin verbs) -> refusal.
 local HOST_ONLY = { pick_arena = true, start = true, abort = true, best_of = true, kit_rules = true, kick = true, promote = true,
-                    ban = true, unban = true, reset_match = true }
+                    ban = true, unban = true, reset_match = true, game_mode = true, teams = true, round_time = true,
+                    set_option = true }
 local REFUSAL_PATTERNS = {
     start      = { "^start blocked" },
     pick_arena = { "^map can only be changed", "^unknown arena", "^set_arena" },
@@ -74,6 +83,7 @@ C.by_id = {}
 C.order = {}            -- ids, oldest first
 C.last_by_kind = {}     -- kind -> newest id
 C.n = 0
+C.closing = false
 
 
 local function now_s() return ctx.now() end
@@ -84,7 +94,12 @@ local function args_str(kind, a)
     elseif kind == "ready" then return tostring(a.value)
     elseif kind == "kick" or kind == "promote" or kind == "ban" then return tostring(a.peer)
     elseif kind == "unban" then return tostring(a.entry)
-    elseif kind == "kit_rules" then return tostring(a.mode) .. "/" .. tostring(a.budget) end
+    elseif kind == "kit_rules" then return tostring(a.mode) .. "/" .. tostring(a.budget)
+    elseif kind == "game_mode" then return tostring(a.mode)
+    elseif kind == "teams" then return tostring(a.rule) .. "/" .. tostring(a.n)
+    elseif kind == "round_time" then return tostring(a.s)
+    elseif kind == "set_team" then return tostring(a.team) .. (a.peer and ("@" .. tostring(a.peer)) or "")
+    elseif kind == "set_option" then return tostring(a.opt) .. "=" .. tostring(a.value) end
     return ""
 end
 
@@ -112,6 +127,17 @@ function C.record(cmd)
         r.op, r.peer_id, r.role = OP.PROMOTE, tonumber(a.peer) or 0, (S and S.ENUMS.admin_role.ADMIN) or 2
     elseif k == "kit_rules" then
         r.op, r.patch = OP.SET_CONFIG, { mask = CFG.KIT_RULES, kit_mode = tonumber(a.mode) or 0, kit_budget = tonumber(a.budget) or 0 }
+    elseif k == "game_mode" then
+        r.op, r.patch = OP.SET_CONFIG, { mask = CFG.MODE, mode = tonumber(a.mode) or 0 }
+    elseif k == "teams" then
+        r.op, r.patch = OP.SET_CONFIG, { mask = (CFG.TEAM_RULE or 0) | (a.n and (CFG.TEAMS or 0) or 0),
+                                         team_rule = tonumber(a.rule) or 0, teams = tonumber(a.n) or 0 }
+    elseif k == "round_time" then
+        r.op, r.patch = OP.SET_CONFIG, { mask = CFG.ROUND_TIME, round_time_limit_s = tonumber(a.s) or 0 }
+    elseif k == "set_team" then
+        r.op, r.role, r.peer_id = OP.SET_TEAM, tonumber(a.team) or 0, tonumber(a.peer) or 0
+    elseif k == "set_option" then
+        r.op, r.choice, r.ballot = OP.SET_OPTION, tonumber(a.opt) or 0, tonumber(a.value) or 0
     end
     return r
 end
@@ -157,6 +183,7 @@ end
 function C.send(kind, args, via)
     local k = C.KINDS[kind]
     if not k then error("unknown command kind " .. tostring(kind)) end
+    if C.closing then return nil, "session closing" end
     args = args or {}
     C.n = C.n + 1
     local id = C.base + C.n
@@ -216,13 +243,15 @@ function C.pending(kind)
     return c ~= nil and c.state == "pending"
 end
 
--- Forget every command (new session: HOST / JOIN / CANCEL).
-function C.reset()
+-- Forget every command after teardown, or when HOST / JOIN starts a new session.
+function C.reset(keep_closed)
+    if C.closing then C.drain_results() end
     for _, id in ipairs(C.order) do
         local c = C.by_id[id]
         if c and c.state == "pending" then resolve(c, "refused", "session closed", "local") end
     end
     C.by_id, C.order, C.last_by_kind = {}, {}, {}
+    C.closing = keep_closed == true
 end
 
 -- ---------------------------------------------------------------------------------------
@@ -247,6 +276,27 @@ function C.consume_result(r)
         reason = S and S.ENUM_NAMES.cmd_reason[r.reason_code] or nil
     end
     resolve(cmd, ok and "accepted" or "refused", (not ok) and (reason or "refused by the server") or nil, "server")
+end
+
+-- Read only actual server answers. Closing never infers, retries or times out a
+-- command; the existing leave poll owns the final reset and its bounded refusal.
+function C.drain_results()
+    scan_results()
+    for _, id in ipairs(C.order) do
+        local cmd = C.by_id[id]
+        if cmd and cmd.state == "pending" and cmd.backend == "net" then
+            local r; pcall(function() r = ctx.net.cmd_result(cmd.id) end)
+            if type(r) == "table" then
+                resolve(cmd, r.ok and "accepted" or "refused",
+                    (not r.ok) and (r.reason_text or r.reason_code or "refused by the server") or nil, "server")
+            end
+        end
+    end
+end
+
+function C.begin_close()
+    C.closing = true
+    C.drain_results()
 end
 
 local function in_list(list, v)
@@ -285,6 +335,9 @@ local function infer(cmd, match_st, srv_arena)
     elseif cmd.kind == "promote" then
         -- the server moved the admin role to the peer (we lose it)
         if ctx.admin_of and ctx.admin_of(a.peer) == true then return "accepted" end
+    elseif cmd.kind == "game_mode" then
+        if match_st and match_st.mode == a.mode then return "accepted" end
+        if match_st and match_st.state ~= "lobby" then return "refused", "match config is frozen until the lobby" end
     elseif cmd.kind == "kit_rules" then
         local r = ctx.kit_rules and ctx.kit_rules()
         if r and r.mode == a.mode and (a.mode ~= 2 or r.budget == a.budget) then return "accepted" end
@@ -321,19 +374,15 @@ end
 -- poll does, every 500 ms). match_st: main.lua's read_match_state(); srv_arena:
 -- the server's arena (MAP_PRESETS path) or nil.
 function C.tick(match_st, srv_arena)
-    scan_results()
-    local net = ctx.net
+    C.drain_results()
+    if C.closing then return end
     for _, id in ipairs(C.order) do
         local cmd = C.by_id[id]
         if cmd and cmd.state == "pending" then
             local k = C.KINDS[cmd.kind]
             local age = now_s() - cmd.t0
             if cmd.backend == "net" then
-                local r; pcall(function() r = net.cmd_result(cmd.id) end)
-                if type(r) == "table" then
-                    resolve(cmd, r.ok and "accepted" or "refused",
-                        (not r.ok) and (r.reason_text or r.reason_code or "refused by the server") or nil, "server")
-                elseif age >= k.timeout_s then
+                if age >= k.timeout_s then
                     resolve(cmd, "refused", timeout_reason(cmd), "timeout")
                 end
             else

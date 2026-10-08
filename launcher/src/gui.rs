@@ -125,11 +125,56 @@ struct App {
 }
 
 pub fn run() -> Result<(), String> {
+    let override_value = std::env::var("HSMP_LAUNCHER_RENDERER").ok();
+    let backend = crate::render::Backend::from_override(override_value.as_deref())?;
+    let explicit = override_value.as_deref().is_some_and(|v| !v.trim().is_empty());
+    let created = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    match run_backend(backend, created.clone()) {
+        Ok(()) => Ok(()),
+        Err(first) => {
+            let Some(fallback) = backend.fallback(explicit, created.load(std::sync::atomic::Ordering::Relaxed)) else { return Err(first) };
+            ops::log_line(&format!("gui startup failed: {first}; retrying {}", fallback.name()));
+            // eframe's run-and-return path reuses its event loop for another window.
+            run_backend(fallback, created).map_err(|second| format!("{first}\n{second}"))
+        }
+    }
+}
+
+fn run_backend(backend: crate::render::Backend, created: Arc<std::sync::atomic::AtomicBool>) -> Result<(), String> {
+    ops::log_line(&format!("gui starting: renderer={}", backend.name()));
+    let mut setup = eframe::egui_wgpu::WgpuSetupCreateNew::default();
+    if backend == crate::render::Backend::Dx12 {
+        // Explicitly avoid OpenGL and Vulkan driver initialization on Windows.
+        // This affects the launcher window only, never Half Sword's renderer.
+        setup.instance_descriptor.backends = eframe::wgpu::Backends::DX12;
+    }
     let opts = eframe::NativeOptions {
+        run_and_return: true,
+        renderer: match backend {
+            crate::render::Backend::Glow => eframe::Renderer::Glow,
+            _ => eframe::Renderer::Wgpu,
+        },
+        wgpu_options: eframe::egui_wgpu::WgpuConfiguration { wgpu_setup: setup.into(), ..Default::default() },
         viewport: egui::ViewportBuilder::default().with_inner_size([820.0, 780.0]).with_min_inner_size([620.0, 520.0]).with_title(format!("Half Sword Multiplayer - launcher {LAUNCHER_VERSION}")),
         ..Default::default()
     };
-    eframe::run_native("hsmp-launcher", opts, Box::new(|_cc| Ok(Box::new(App::new())))).map_err(|e| e.to_string())
+    eframe::run_native("hsmp-launcher", opts, Box::new(move |cc| {
+        // Smoke-only fault injection exercises the real event-loop retry after
+        // graphics initialization, before any app settings or game operations.
+        if backend == crate::render::Backend::Glow && std::env::var_os("HSMP_LAUNCHER_SMOKE_FRAMES").is_some() && std::env::var_os("HSMP_LAUNCHER_SMOKE_FAIL_GLOW").is_some() {
+            return Err("injected OpenGL startup failure (smoke test)".into());
+        }
+        if let Some(state) = &cc.wgpu_render_state {
+            ops::log_line(&format!("gui adapter: {}", eframe::egui_wgpu::adapter_info_summary(&state.adapter.get_info())));
+        } else if let Some(gl) = &cc.gl {
+            use eframe::glow::HasContext;
+            // SAFETY: eframe made this GL context current before calling the creator.
+            let info = unsafe { format!("{} / {} / {}", gl.get_parameter_string(eframe::glow::VENDOR), gl.get_parameter_string(eframe::glow::RENDERER), gl.get_parameter_string(eframe::glow::VERSION)) };
+            ops::log_line(&format!("gui adapter: OpenGL {info}"));
+        }
+        created.store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(Box::new(App::new()))
+    })).map_err(|e| format!("{} startup failed: {e}", backend.name()))
 }
 
 impl App {

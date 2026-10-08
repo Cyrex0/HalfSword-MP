@@ -18,6 +18,7 @@ On this page:
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | "Windows protected your PC" when you start the launcher | The launcher is not code-signed yet, so SmartScreen does not know it. | Click **More info**, then **Run anyway**. Only do this for a zip whose SHA-256 matches the release page (see [Install](install.md#install)). |
+| The launcher window does not open, or reports a graphics startup error | The launcher's graphics driver initialization failed. | The launcher uses OpenGL and retries Direct3D 12 on Windows if OpenGL cannot initialize. Try an explicit renderer below, and include `launcher.log` when reporting the problem. |
 | Your antivirus deletes or quarantines `dwmapi.dll`, or warns about it | `dwmapi.dll` is the UE4SS mod loader. Antivirus programs often flag it. It is a false positive. | Restore the file from quarantine and allow it, then click **Repair** in the launcher. |
 | The red line **"Half Sword was updated. HSMP ... does not support this game build yet"** | Steam updated Half Sword after this HSMP release came out. | Wait for an HSMP update that supports the new build. **Install** and **Update** are blocked until then, unless you tick **Try anyway**. The game still starts from Steam, but menus or matches may break. |
 | The HSMP buttons do not appear on the main menu | The game was not started with HSMP installed, or a file is missing. | Open the launcher. If the status line says files are changed or missing, click **Repair**. Then start Half Sword from Steam. |
@@ -25,6 +26,24 @@ On this page:
 | The game crashes about a second after a round ends, while the arena reloads | A bug in the game's blood and wound painting: paint work still queued for the old arena runs after that arena is gone. Before every level change HSMP stops new paint work and waits (at most 2.5 seconds) until the queue is empty, which prevents this crash in normal cases. | [Report it](#sending-us-a-bug-report) with a crash report from the launcher. |
 
 ## Launcher messages
+
+If the launcher window cannot open, run this in PowerShell from the extracted release folder
+to explicitly select its OpenGL renderer (or use `'dx12'` on Windows):
+
+```powershell
+$env:HSMP_LAUNCHER_RENDERER = 'glow'
+.\hsmp-launcher.exe
+```
+
+Remove that override to restore automatic selection:
+
+```powershell
+Remove-Item Env:HSMP_LAUNCHER_RENDERER
+```
+
+The launcher records its renderer, graphics adapter, and startup error in
+`%LOCALAPPDATA%\HSMP\launcher\launcher.log`. This setting only changes the launcher window.
+The command-line commands also work without a graphics window (`.\hsmp-launcher.exe --help`).
 
 | Message | What to do |
 |---|---|

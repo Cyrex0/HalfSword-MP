@@ -25,8 +25,8 @@ There is **no Python** anywhere in this project, and none may be added: tooling 
 
 ```sh
 cargo build --workspace                        # debug build of everything
-cargo test --workspace --locked                # all Rust tests and the Lua harnesses
-cargo clippy --workspace --all-targets --locked
+# During development: run scripts/dev-test.ps1 -Domain <changed domain> in PowerShell.
+# At a push checkpoint, G0 already includes workspace tests and clippy:
 cargo build --release --locked -p hsmp-tools
 target/release/hsmp-gate g0                    # the G0 gate (see below)
 ```
@@ -97,7 +97,9 @@ before changing a mod. The short version:
 ## Pull requests
 
 1. Fork, create a branch from `main`, keep the change focused.
-2. Run `cargo test --workspace --locked` and `hsmp-gate g0` (or let the pre-push hook do it).
+2. Run focused development checks for the changed domain. At the push checkpoint, run
+   `hsmp-gate g0` (or let the pre-push hook do it); it includes workspace tests and clippy,
+   so do not run those full checks separately immediately beforehand.
 3. Add or update tests: Rust unit tests, a Lua suite in `tools/hsmp-tools/lua-tests/`, or an e2e case.
 4. Update the docs when behaviour, flags, ports or file formats change, and add a line to
    `CHANGELOG.md` under "Unreleased".

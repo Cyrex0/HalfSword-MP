@@ -109,6 +109,11 @@ pub struct Listing {
     /// The server said it takes punch requests.
     #[serde(default)]
     pub punch: bool,
+    /// Server mods (count, bytes); 0 = none.
+    #[serde(default)]
+    pub mods: u32,
+    #[serde(default)]
+    pub mods_bytes: u64,
 }
 
 /// One `GET /v1/servers` entry. Same fields as hsmp-master's, plus `server_key`,
@@ -143,6 +148,19 @@ pub struct Entry {
     /// A punch request reaches this server right now (its listen socket is open).
     #[serde(default)]
     pub punch: bool,
+    /// Server mods it serves: count and bytes (absent = none; older readers ignore them).
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub mods: u32,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub mods_bytes: u64,
+}
+
+fn is_zero_u32(x: &u32) -> bool {
+    *x == 0
+}
+
+fn is_zero_u64(x: &u64) -> bool {
+    *x == 0
 }
 
 /// Announcement bookkeeping for one listing (persisted so a restart does not repeat "up").
@@ -388,6 +406,8 @@ impl Registry {
                 age_s: now.saturating_sub(l.last_seen_ms) / 1000,
                 nat: l.nat.clone(),
                 punch: l.punch && self.listeners.contains(&l.server_id),
+                mods: l.mods,
+                mods_bytes: l.mods_bytes,
             })
             .collect()
     }
@@ -514,6 +534,8 @@ impl Registry {
             last_ts: ts,
             nat: f.nat,
             punch: f.punch,
+            mods: f.mods,
+            mods_bytes: f.mods_bytes,
         };
         self.rows.insert(id.clone(), l.clone());
         self.stored_seen.insert(id.clone(), now);

@@ -3,8 +3,8 @@
 local S = {}
 S.ABI_MAJOR = 2
 S.ABI_MINOR = 0
-S.LAYOUT_HASH = "e66f34519195e128"
-S.SEGMENT_SIZE = 3780608
+S.LAYOUT_HASH = "262ac8453e7af06c"
+S.SEGMENT_SIZE = 5566464
 
 -- kind name -> { id, cap, dir, form, replaces }
 S.KINDS = {
@@ -130,7 +130,12 @@ S.STRUCTS = {
         { "lead_ms", "f32" },
         { "_r", "u32" },
     } },
-    PeerPlay = { size = 1656, fields = {
+    PeerPlay = { size = 1672, fields = {
+        { "match_id", "u64" },
+        { "round", "u32" },
+        { "life", "u16" },
+        { "has_context", "bool" },
+        { "_context_r", "u8" },
         { "meta", "SlotMeta" },
         { "peer_id", "u32" },
         { "mode", "u32" },
@@ -175,13 +180,17 @@ S.STRUCTS = {
         { "world_scoped", "u64" },
         { "names", { { "u8", 32 }, 64 } },
     } },
-    Root = { size = 56, fields = {
+    Root = { size = 72, fields = {
         { "tick", "u32" },
         { "ts", "u32" },
         { "send_wall_ms", "u64" },
         { "pos", { "f32", 3 } },
         { "rot", { "f32", 4 } },
         { "vel", { "f32", 3 } },
+        { "match_id", "u64" },
+        { "round", "u32" },
+        { "life", "u16" },
+        { "_r", "u16" },
     } },
     Weapon = { size = 56, fields = {
         { "tick", "u32" },
@@ -199,7 +208,7 @@ S.STRUCTS = {
         { "n", "u16" },
         { "_r", "u16" },
     } },
-    PeerRoot = { size = 64, fields = {
+    PeerRoot = { size = 80, fields = {
         { "peer_id", "u32" },
         { "_r", "u32" },
         { "root", "Root" },
@@ -217,12 +226,29 @@ S.STRUCTS = {
         { "n", "u16" },
         { "_r", { "u16", 3 } },
     } },
-    PlaybackRow = { size = 32, fields = {
+    PlaybackRow = { size = 400, fields = {
         { "peer", "u32" },
         { "_r", "u32" },
         { "body_ts", "f64" },
         { "arm_ts", "f64" },
         { "local_ms", "f64" },
+        { "match_id", "u64" },
+        { "round", "u32" },
+        { "life", "u16" },
+        { "_life_r", { "u8", 2 } },
+        { "pawn", { "str", 56 } },
+        { "settle_world", { "str", 192 } },
+        { "settle_reason", { "str", 56 } },
+        { "settle_sample_ms", "f64" },
+        { "settle_stable_ms", "f64" },
+        { "settle_source_ts", "f64" },
+        { "settle_source_seq", "u64" },
+        { "settle_pos_uu", "f32" },
+        { "settle_rot_deg", "f32" },
+        { "settle_cut", "u32" },
+        { "settle_ready", "bool" },
+        { "settle_count", "u8" },
+        { "_settle_r", { "u8", 2 } },
     } },
     Welcome = { size = 64, fields = {
         { "server_epoch", "u64" },
@@ -352,7 +378,9 @@ S.STRUCTS = {
         { "flags", "u32" },
         { "spawn_id", "u32" },
         { "load_error", "u8" },
-        { "_r", { "u8", 7 } },
+        { "_r", "u8" },
+        { "life", "u16" },
+        { "_r2", "u32" },
         { "arena", { "str", 40 } },
     } },
     Spawned = { size = 24, fields = {
@@ -489,7 +517,21 @@ S.STRUCTS = {
         { "_r", "u32" },
         { "nick", { "str", 48 } },
     } },
-    SpawnStatus = { size = 360, fields = {
+    SurrenderHold = { size = 96, fields = {
+        { "match_id", "u64" },
+        { "round", "u32" },
+        { "life", "u16" },
+        { "active", "bool" },
+        { "_r", "u8" },
+        { "progress", "f32" },
+        { "remaining_s", "f32" },
+        { "at_ms", "f64" },
+        { "pawn", { "str", 64 } },
+    } },
+    SpawnStatus = { size = 376, fields = {
+        { "match_id", "u64" },
+        { "life", "u16" },
+        { "_context_r", { "u8", 6 } },
         { "protect_until", "f64" },
         { "t", "f64" },
         { "pos", { "f64", 3 } },
@@ -553,7 +595,60 @@ S.STRUCTS = {
         { "until_s", "f64" },
         { "keep", { "str", 56 } },
     } },
-    Damage = { size = 160, fields = {
+    ModeHead = { size = 200, fields = {
+        { "match_id", "u64" },
+        { "server_time_ms", "u64" },
+        { "round_end_ms", "u64" },
+        { "seq", "u32" },
+        { "round", "u32" },
+        { "team_wins", { "u32", 4 } },
+        { "team_score", { "u32", 4 } },
+        { "target_s", "u16" },
+        { "n", "u16" },
+        { "round_time_s", "u16" },
+        { "mode", "u8" },
+        { "team_rule", "u8" },
+        { "teams", "u8" },
+        { "friendly_fire", "bool" },
+        { "sudden_death", "bool" },
+        { "respawn_s", "u8" },
+        { "team_alive", { "u8", 4 } },
+        { "result", "u8" },
+        { "winner_team", "u8" },
+        { "_r", { "u8", 6 } },
+        { "kit_r", { "str", 32 } },
+        { "kit_l", { "str", 32 } },
+        { "kit_label", { "str", 48 } },
+    } },
+    ModeRow = { size = 32, fields = {
+        { "peer_id", "u32" },
+        { "score", "u32" },
+        { "kills", "u16" },
+        { "deaths", "u16" },
+        { "round_kills", "u16" },
+        { "life", "u16" },
+        { "seat", "u8" },
+        { "team", "u8" },
+        { "alive", "bool" },
+        { "respawning", "bool" },
+        { "in_zone", "bool" },
+        { "_r", { "u8", 3 } },
+        { "respawn_at_ms", "u64" },
+    } },
+    ZoneState = { size = 80, fields = {
+        { "match_id", "u64" },
+        { "center", { "f32", 3 } },
+        { "radius_cm", "f32" },
+        { "half_height_cm", "f32" },
+        { "round", "u32" },
+        { "holder_seat", "u8" },
+        { "holder_team", "u8" },
+        { "contested", "bool" },
+        { "inside", "u8" },
+        { "_r", "u32" },
+        { "arena", { "str", 40 } },
+    } },
+    Damage = { size = 280, fields = {
         { "hit_id", "u32" },
         { "cid", "u32" },
         { "target_peer_id", "u32" },
@@ -577,7 +672,15 @@ S.STRUCTS = {
         { "bone", { "str", 32 } },
         { "flags", "u8" },
         { "n", "u8" },
-        { "_r", { "u8", 6 } },
+        { "_r", { "u8", 2 } },
+        { "parent_cid", "u32" },
+        { "match_id", "u64" },
+        { "attacker_life", "u16" },
+        { "victim_life", "u16" },
+        { "_life_r", { "u8", 4 } },
+        { "source_class", { "str", 48 } },
+        { "hit_box_frame", { "f32", 13 } },
+        { "_box_r", { "u8", 4 } },
     } },
     DamageDelta = { size = 8, fields = {
         { "i", "u8" },
@@ -598,15 +701,30 @@ S.STRUCTS = {
         { "attacker", "u32" },
         { "hit_id", "u32" },
     } },
+    ReplayOutcome = { size = 32, fields = {
+        { "match_id", "u64" },
+        { "round", "u32" },
+        { "attacker", "u32" },
+        { "hit_id", "u32" },
+        { "victim_life", "u16" },
+        { "status", "u8" },
+        { "_r", "u8" },
+        { "observed_fields", "u32" },
+        { "health_delta", "f32" },
+    } },
     Clash = { size = 16, fields = {
         { "other_peer_id", "u32" },
         { "my_ts", "u32" },
         { "other_ts", "u32" },
         { "_r", "u32" },
     } },
-    DeathReport = { size = 8, fields = {
+    DeathReport = { size = 24, fields = {
         { "death_id", "u32" },
         { "round", "u32" },
+        { "match_id", "u64" },
+        { "life", "u16" },
+        { "reason", "u8" },
+        { "_life_r", { "u8", 5 } },
     } },
     DeathAck = { size = 8, fields = {
         { "death_id", "u32" },
@@ -617,15 +735,20 @@ S.STRUCTS = {
         { "round", "u32" },
         { "killer", "u32" },
         { "cause", "u8" },
-        { "_r", { "u8", 3 } },
+        { "_r", "u8" },
+        { "life", "u16" },
         { "match_id", "u64" },
         { "wall_ms", "u64" },
     } },
-    Vitals = { size = 48, fields = {
+    Vitals = { size = 64, fields = {
         { "seq", "u32" },
         { "dism", "u32" },
         { "flags", "u16" },
         { "v", { "u16", 19 } },
+        { "match_id", "u64" },
+        { "round", "u32" },
+        { "life", "u16" },
+        { "_life_r", { "u8", 2 } },
     } },
     StandinDead = { size = 16, fields = {
         { "wall", "u64" },
@@ -718,12 +841,43 @@ S.STRUCTS = {
         { "n", "u16" },
         { "_r", "u16" },
     } },
-    DynEntry = { size = 224, fields = {
+    WeaponPass = { size = 1088, fields = {
+        { "class", { "str", 128 } },
+        { "head_sub1", { "str", 128 } },
+        { "head_sub2", { "str", 128 } },
+        { "head", { "str", 128 } },
+        { "guard", { "str", 128 } },
+        { "pommel", { "str", 128 } },
+        { "grip", { "str", 128 } },
+        { "name", { "str", 64 } },
+        { "id", "i32" },
+        { "mat_steel", "i32" },
+        { "mat_colored", "i32" },
+        { "mat_wood", "i32" },
+        { "mat_leather", "i32" },
+        { "tier", "i32" },
+        { "head_size", { "f32", 3 } },
+        { "guard_size", { "f32", 3 } },
+        { "grip_size", { "f32", 3 } },
+        { "pommel_size", { "f32", 3 } },
+        { "mass_head", "f32" },
+        { "mass_guard", "f32" },
+        { "mass_grip", "f32" },
+        { "mass_pommel", "f32" },
+        { "price", "f32" },
+        { "color_wood", { "f32", 4 } },
+        { "color_leather", { "f32", 4 } },
+        { "_r", "u32" },
+    } },
+    DynEntry = { size = 1320, fields = {
         { "id", "u32" },
         { "chash", "u32" },
         { "pos", { "f32", 3 } },
         { "dyn_owner", "u32" },
         { "class_path", { "str", 200 } },
+        { "has_passport", "bool" },
+        { "_r", { "u8", 7 } },
+        { "passport", "WeaponPass" },
     } },
     HashHead = { size = 24, fields = {
         { "level", "u32" },
@@ -803,34 +957,6 @@ S.STRUCTS = {
         { "mode", "u8" },
         { "_r", "u8" },
     } },
-    WeaponPass = { size = 1088, fields = {
-        { "class", { "str", 128 } },
-        { "head_sub1", { "str", 128 } },
-        { "head_sub2", { "str", 128 } },
-        { "head", { "str", 128 } },
-        { "guard", { "str", 128 } },
-        { "pommel", { "str", 128 } },
-        { "grip", { "str", 128 } },
-        { "name", { "str", 64 } },
-        { "id", "i32" },
-        { "mat_steel", "i32" },
-        { "mat_colored", "i32" },
-        { "mat_wood", "i32" },
-        { "mat_leather", "i32" },
-        { "tier", "i32" },
-        { "head_size", { "f32", 3 } },
-        { "guard_size", { "f32", 3 } },
-        { "grip_size", { "f32", 3 } },
-        { "pommel_size", { "f32", 3 } },
-        { "mass_head", "f32" },
-        { "mass_guard", "f32" },
-        { "mass_grip", "f32" },
-        { "mass_pommel", "f32" },
-        { "price", "f32" },
-        { "color_wood", { "f32", 4 } },
-        { "color_leather", { "f32", 4 } },
-        { "_r", "u32" },
-    } },
     LoadoutHead = { size = 2184, fields = {
         { "version", "u32" },
         { "n", "u16" },
@@ -882,6 +1008,21 @@ S.STRUCTS = {
         { "bone", { "str", 32 } },
         { "mass", "f32" },
         { "mass_scale", "f32" },
+    } },
+    Body2Head = { size = 128, fields = {
+        { "match_id", "u64" },
+        { "round", "u32" },
+        { "life", "u16" },
+        { "n", "u16" },
+        { "version", "u32" },
+        { "height_rate", "f32" },
+        { "muscle_rate", "f32" },
+        { "mass_scale_bp", "f32" },
+        { "char_scale", { "f32", 3 } },
+        { "native_height", "f32" },
+        { "actor_scale", { "f32", 3 } },
+        { "_r", "u32" },
+        { "pawn", { "str", 64 } },
     } },
     KitStatus = { size = 448, fields = {
         { "t", "f64" },
@@ -936,13 +1077,109 @@ S.STRUCTS = {
         { "key", { "str", 32 } },
         { "arg", { "str", 192 } },
     } },
+    ModManifestHead = { size = 56, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "total_bytes", "u64" },
+        { "max_chunk", "u32" },
+        { "timeout_s", "u32" },
+        { "n", "u16" },
+        { "files", "u16" },
+        { "_r", "u32" },
+    } },
+    ModRow = { size = 304, fields = {
+        { "mod_hash", { "u8", 32 } },
+        { "bytes", "u64" },
+        { "first_file", "u16" },
+        { "files", "u16" },
+        { "_r", "u32" },
+        { "name", { "str", 32 } },
+        { "version", { "str", 16 } },
+        { "author", { "str", 48 } },
+        { "description", { "str", 160 } },
+    } },
+    ModFilesHead = { size = 40, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "n", "u16" },
+        { "_r", { "u8", 6 } },
+    } },
+    ModFileRow = { size = 176, fields = {
+        { "sha256", { "u8", 32 } },
+        { "size", "u64" },
+        { "mod_index", "u16" },
+        { "_r", { "u8", 6 } },
+        { "path", { "str", 128 } },
+    } },
+    ModChunkReq = { size = 24, fields = {
+        { "offset", "u64" },
+        { "req_id", "u32" },
+        { "len", "u32" },
+        { "file", "u16" },
+        { "_r", { "u8", 6 } },
+    } },
+    ModChunkHead = { size = 24, fields = {
+        { "offset", "u64" },
+        { "req_id", "u32" },
+        { "n", "u32" },
+        { "file", "u16" },
+        { "_r", { "u8", 6 } },
+    } },
+    ModReady = { size = 40, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "result", "u8" },
+        { "failed", "u8" },
+        { "_r", { "u8", 6 } },
+    } },
+    ModOffer = { size = 88, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "server_key", { "u8", 32 } },
+        { "total_bytes", "u64" },
+        { "cached_bytes", "u64" },
+        { "n", "u16" },
+        { "files", "u16" },
+        { "_r", "u32" },
+    } },
+    ModEntry = { size = 336, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "mod_hash", { "u8", 32 } },
+        { "bytes", "u64" },
+        { "index", "u16" },
+        { "n", "u16" },
+        { "files", "u16" },
+        { "cached", "bool" },
+        { "_r", "u8" },
+        { "name", { "str", 32 } },
+        { "version", { "str", 16 } },
+        { "author", { "str", 48 } },
+        { "description", { "str", 160 } },
+    } },
+    ModProgress = { size = 184, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "done_bytes", "u64" },
+        { "total_bytes", "u64" },
+        { "state", "u8" },
+        { "code", "u8" },
+        { "_r", { "u8", 6 } },
+        { "text", { "str", 128 } },
+    } },
+    ModDecision = { size = 40, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "op", "u8" },
+        { "_r", { "u8", 7 } },
+    } },
+    ModLoaded = { size = 168, fields = {
+        { "set_hash", { "u8", 32 } },
+        { "ok", "bool" },
+        { "failed", "u8" },
+        { "_r", { "u8", 6 } },
+        { "text", { "str", 128 } },
+    } },
 }
 
 -- record name -> { id, layout, row, count, max_rows, cap, flow, chan }
 S.RECORDS = {
     root = { id = 0x0110, layout = "Root", row = nil, count = nil, max_rows = 0, cap = 0x1, flow = "c2s,s2c,g2s", chan = "latest" },
     weapon = { id = 0x0111, layout = "Weapon", row = nil, count = nil, max_rows = 0, cap = 0x1, flow = "c2s,g2s", chan = "latest" },
-    pose = { id = 0x0112, layout = "PoseHead", row = "u8", count = "n", max_rows = 640, cap = 0x1, flow = "c2s,s2c,g2s", chan = "latest" },
+    pose = { id = 0x0112, layout = "PoseHead", row = "u8", count = "n", max_rows = 1120, cap = 0x1, flow = "c2s,s2c,g2s", chan = "latest" },
     peer_root = { id = 0x0113, layout = "PeerRoot", row = nil, count = nil, max_rows = 0, cap = 0x1, flow = "s2g", chan = "none" },
     puppets = { id = 0x0150, layout = "Puppets", row = "PuppetRow", count = "n", max_rows = 32, cap = 0x100, flow = "local", chan = "none" },
     playback = { id = 0x0151, layout = "Playback", row = "PlaybackRow", count = "n", max_rows = 32, cap = 0x100, flow = "local", chan = "none" },
@@ -967,6 +1204,7 @@ S.RECORDS = {
     director = { id = 0x0231, layout = "DirectorState", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     conn_state = { id = 0x0232, layout = "ConnState", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     spectate = { id = 0x0233, layout = "Spectate", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
+    surrender_hold = { id = 0x023b, layout = "SurrenderHold", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     spawn_status = { id = 0x0234, layout = "SpawnStatus", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     spawn_request = { id = 0x0235, layout = "SpawnRequest", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     travel_request = { id = 0x0236, layout = "TravelRequest", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
@@ -974,11 +1212,15 @@ S.RECORDS = {
     ui_request = { id = 0x0238, layout = "UiRequest", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     return_to_lobby = { id = 0x0239, layout = "ReturnToLobby", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     fallback_swap = { id = 0x023a, layout = "FallbackSwap", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
-    damage = { id = 0x0310, layout = "Damage", row = "DamageDelta", count = "n", max_rows = 24, cap = 0x80, flow = "c2s,g2s", chan = "reliable" },
-    damage_in = { id = 0x0311, layout = "Damage", row = "DamageDelta", count = "n", max_rows = 24, cap = 0x80, flow = "s2c,s2g", chan = "reliable" },
+    mode = { id = 0x0240, layout = "ModeHead", row = "ModeRow", count = "n", max_rows = 64, cap = 0x2, flow = "s2c,s2g", chan = "rel_latest" },
+    zone = { id = 0x0241, layout = "ZoneState", row = nil, count = nil, max_rows = 0, cap = 0x2, flow = "s2c,s2g", chan = "rel_latest" },
+    damage = { id = 0x0310, layout = "Damage", row = "DamageDelta", count = "n", max_rows = 24, cap = 0x80, flow = "c2s,g2s", chan = "ordered" },
+    damage_in = { id = 0x0311, layout = "Damage", row = "DamageDelta", count = "n", max_rows = 24, cap = 0x80, flow = "s2c,s2g", chan = "ordered" },
     hitfx_in = { id = 0x0312, layout = "Damage", row = "DamageDelta", count = "n", max_rows = 24, cap = 0x80, flow = "s2c,s2g", chan = "reliable" },
     damage_verdict = { id = 0x0313, layout = "DamageVerdict", row = nil, count = nil, max_rows = 0, cap = 0x80, flow = "s2c,s2g", chan = "reliable" },
     damage_ack = { id = 0x0314, layout = "DamageAck", row = nil, count = nil, max_rows = 0, cap = 0x80, flow = "c2s", chan = "reliable" },
+    replay_outcome = { id = 0x0315, layout = "ReplayOutcome", row = nil, count = nil, max_rows = 0, cap = 0x80, flow = "c2s,s2c,g2s,s2g", chan = "reliable" },
+    replay_outcome_ack = { id = 0x0316, layout = "ReplayOutcome", row = nil, count = nil, max_rows = 0, cap = 0x80, flow = "s2c,s2g", chan = "reliable" },
     clash = { id = 0x0318, layout = "Clash", row = nil, count = nil, max_rows = 0, cap = 0x80, flow = "c2s,g2s", chan = "reliable" },
     touch = { id = 0x0319, layout = "Clash", row = nil, count = nil, max_rows = 0, cap = 0x80, flow = "c2s,g2s", chan = "reliable" },
     death_report = { id = 0x0320, layout = "DeathReport", row = nil, count = nil, max_rows = 0, cap = 0x80, flow = "c2s,g2s", chan = "reliable" },
@@ -1003,6 +1245,7 @@ S.RECORDS = {
     kit_rules = { id = 0x0513, layout = "KitRules", row = nil, count = nil, max_rows = 0, cap = 0x8, flow = "s2c,s2g", chan = "rel_latest" },
     loadout = { id = 0x0514, layout = "LoadoutHead", row = "ArmorRow", count = "n", max_rows = 48, cap = 0x8, flow = "c2s,s2c,g2s,s2g", chan = "rel_latest" },
     body = { id = 0x0515, layout = "BodyHead", row = "BodyBone", count = "n", max_rows = 24, cap = 0x8, flow = "c2s,s2c,g2s,s2g", chan = "rel_latest" },
+    body2 = { id = 0x0516, layout = "Body2Head", row = "BodyBone", count = "n", max_rows = 24, cap = 0x8, flow = "c2s,s2c,g2s,s2g", chan = "rel_latest" },
     kit_status = { id = 0x0520, layout = "KitStatus", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     standin_weapons = { id = 0x0521, layout = "StandinWeapons", row = nil, count = nil, max_rows = 0, cap = 0x100, flow = "local", chan = "none" },
     interact = { id = 0x0610, layout = "Interact", row = nil, count = nil, max_rows = 0, cap = 0x40, flow = "c2s,s2c,g2s,s2g", chan = "reliable" },
@@ -1010,6 +1253,16 @@ S.RECORDS = {
     interact_grab_l = { id = 0x0612, layout = "Interact", row = nil, count = nil, max_rows = 0, cap = 0x40, flow = "c2s,s2c", chan = "rel_latest" },
     pose_yield = { id = 0x0620, layout = "PoseYield", row = "YieldRow", count = "n", max_rows = 32, cap = 0x100, flow = "local", chan = "none" },
     dev_cmd = { id = 0x0810, layout = "DevCmd", row = nil, count = nil, max_rows = 0, cap = 0x200, flow = "local", chan = "none" },
+    mod_manifest = { id = 0x0901, layout = "ModManifestHead", row = "ModRow", count = "n", max_rows = 16, cap = 0x0, flow = "s2c", chan = "ordered" },
+    mod_files = { id = 0x0902, layout = "ModFilesHead", row = "ModFileRow", count = "n", max_rows = 256, cap = 0x0, flow = "s2c", chan = "ordered" },
+    mod_chunk_req = { id = 0x0903, layout = "ModChunkReq", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "c2s", chan = "ordered" },
+    mod_chunk = { id = 0x0904, layout = "ModChunkHead", row = "u8", count = "n", max_rows = 32768, cap = 0x0, flow = "s2c", chan = "reliable" },
+    mod_ready = { id = 0x0905, layout = "ModReady", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "c2s", chan = "ordered" },
+    mod_offer = { id = 0x0906, layout = "ModOffer", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "s2g", chan = "none" },
+    mod_entry = { id = 0x0907, layout = "ModEntry", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "s2g", chan = "none" },
+    mod_progress = { id = 0x0908, layout = "ModProgress", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "s2g", chan = "none" },
+    mod_decision = { id = 0x0909, layout = "ModDecision", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "g2s", chan = "none" },
+    mod_loaded = { id = 0x090a, layout = "ModLoaded", row = nil, count = nil, max_rows = 0, cap = 0x0, flow = "g2s", chan = "none" },
 }
 S.RECORD_BY_ID = {}
 for name, r in pairs(S.RECORDS) do S.RECORD_BY_ID[r.id] = name end
@@ -1025,9 +1278,12 @@ S.SLOTS = {
     session = { record = "session", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
     link = { record = "link", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
     admin = { record = "admin_state", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
+    mode = { record = "mode", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
+    zone = { record = "zone", form = "slot", dir = "s2g", cap = 0x2, world_scoped = false },
     director = { record = "director", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     conn_state = { record = "conn_state", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     spectate = { record = "spectate", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
+    surrender_hold = { record = "surrender_hold", form = "bus", dir = "local", cap = 0x100, world_scoped = true },
     spawn_status = { record = "spawn_status", form = "bus", dir = "local", cap = 0x100, world_scoped = true },
     spawn_request = { record = "spawn_request", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     travel_request = { record = "travel_request", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
@@ -1056,6 +1312,8 @@ S.SLOTS = {
     peer_loadout = { record = "loadout", form = "peer_blob", dir = "s2g", cap = 0x8, world_scoped = false },
     body = { record = "body", form = "slot", dir = "g2s", cap = 0x8, world_scoped = false },
     peer_body = { record = "body", form = "peer_slot", dir = "s2g", cap = 0x8, world_scoped = false },
+    body2 = { record = "body2", form = "slot", dir = "g2s", cap = 0x8, world_scoped = false },
+    peer_body2 = { record = "body2", form = "peer_slot", dir = "s2g", cap = 0x8, world_scoped = false },
     kit_status = { record = "kit_status", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     standin_weapons = { record = "standin_weapons", form = "bus", dir = "local", cap = 0x100, world_scoped = false },
     pose_yield = { record = "pose_yield", form = "bus", dir = "local", cap = 0x100, world_scoped = true },
@@ -1064,14 +1322,16 @@ S.SLOTS = {
 -- code tables: S.ENUMS.<table>.<NAME> = value, S.ENUM_NAMES.<table>[value] = NAME
 S.ENUMS, S.ENUM_NAMES = {}, {}
 S.ENUMS.phase = { LOBBY = 0, LOADING = 1, COUNTDOWN = 2, LIVE = 3, ROUND_OVER = 4, MATCH_OVER = 5, POST_MATCH = 6, PAUSED = 7, }
-S.ENUMS.game_mode = { DUEL = 0, FFA = 1, TEAM_ELIM = 2, KING_OF_HILL = 3, }
+S.ENUMS.game_mode = { DUEL = 0, FFA = 1, TEAM_ELIM = 2, KING_OF_HILL = 3, ROULETTE = 4, BRAWL = 5, DEATHMATCH = 6, }
+S.ENUMS.mode_opt = { KOTH_TARGET = 1, FRIENDLY_FIRE = 2, RESPAWN_S = 3, }
+S.ENUMS.mode_result = { NONE = 0, ELIMINATION = 1, OBJECTIVE = 2, TIME_LIMIT = 3, KILLS = 4, SUDDEN_DEATH = 5, DRAW = 6, }
 S.ENUMS.team_rule = { NONE = 0, AUTO = 1, FIXED = 2, }
 S.ENUMS.jip = { SPECTATE = 0, NEXT_ROUND = 1, NEVER = 2, }
 S.ENUMS.kit_mode = { FREE = 0, CLASSES = 1, CUSTOM = 2, }
 S.ENUMS.role = { FIGHTER = 0, SPECTATOR = 1, QUEUED = 2, }
 S.ENUMS.admin_role = { NONE = 0, MODERATOR = 1, ADMIN = 2, OWNER = 3, }
 S.ENUMS.result_reason = { NONE = 0, KILL = 1, DRAW = 2, FORFEIT = 3, OPPONENT_LEFT = 4, TIME_LIMIT = 5, ABORTED = 6, LOAD_FAILED = 7, }
-S.ENUMS.cmd_op = { READY = 1, START = 2, ABORT = 3, PICK_ARENA = 4, SET_CONFIG = 5, KICK = 6, BAN = 7, PROMOTE = 8, VOTE = 9, SWITCH_ROLE = 10, SET_TEAM = 11, UNBAN = 12, RESET_MATCH = 13, }
+S.ENUMS.cmd_op = { READY = 1, START = 2, ABORT = 3, PICK_ARENA = 4, SET_CONFIG = 5, KICK = 6, BAN = 7, PROMOTE = 8, VOTE = 9, SWITCH_ROLE = 10, SET_TEAM = 11, UNBAN = 12, RESET_MATCH = 13, SET_OPTION = 14, }
 S.ENUMS.cfg = { ARENA = 1, MODE = 2, BEST_OF = 4, ROUND_TIME = 8, TEAM_RULE = 16, TEAMS = 32, KIT_RULES = 64, MAX_FIGHTERS = 128, MAX_SPECTATORS = 256, JIP = 512, }
 S.ENUMS.cmd_reason = { OK = 0, NOT_ADMIN = 1, WRONG_PHASE = 2, NOT_ALL_READY = 3, REV_MISMATCH = 4, UNKNOWN_ARENA = 5, INVALID_VALUE = 6, UNKNOWN_PLAYER = 7, NOT_ENOUGH_PLAYERS = 8, RATE_LIMITED = 9, UNSUPPORTED = 10, }
 S.ENUMS.status_flag = { LOADED = 1, READY = 2, DEAD = 4, IN_MENU = 8, SPECTATING = 16, BACKGROUND = 32, }
@@ -1082,10 +1342,12 @@ S.ENUMS.leave_reason = { USER = 0, GAME_EXITED = 1, SWITCH_SERVER = 2, }
 S.ENUMS.sidecar_status = { CONNECTING = 0, CONNECTED = 1, RECONNECTING = 2, REJECTED = 3, KICKED = 4, REPLACED = 5, SERVER_CLOSED = 6, ENDED = 7, }
 S.ENUMS.link_state = { CONNECTING = 0, UP = 1, STALLED = 2, RECONNECTING = 3, TERMINAL = 4, }
 S.ENUMS.verdict_kind = { CONFIRM = 1, FINAL = 2, CLASH = 3, }
+S.ENUMS.replay_status = { CHANGED = 1, NO_OBSERVED_CHANGE = 2, STALE_CONTEXT = 3, SOURCE_MISSING = 4, INACTIVE = 5, UNCERTAIN = 6, EXPIRED = 7, }
 S.ENUMS.damage_reason = { OK = 0, CONFIRM = 1, CLASH = 2, PARRIED = 3, TIMEOUT = 4, QUEUE_FULL = 5, EXPIRED = 6, ROUND_OVER = 7, ATTACKER_DOWN = 8, SELF_HIT = 9, NO_TARGET = 10, TARGET_DOWN = 11, NOT_LIVE = 12, STALE_ROUND = 13, TOO_LATE = 14, BAD_FIELD = 15, RANGE = 16, RATE_LIMITED = 17, NO_TS = 18, NO_HISTORY = 19, CLOCK_RATE = 20, TS_FUTURE = 21, TS_OLD = 22, TS_INCONSISTENT = 23, NO_CLOCK = 24, FUTURE = 25, REWIND_CAP = 26, BODY_MISS = 27, NO_COVER = 28, BLADE_MISS = 29, REACH = 30, OTHER = 31, }
 S.ENUMS.dism_part = { PELVIS = 0, SPINE_01 = 1, SPINE_02 = 2, SPINE_03 = 3, SPINE_04 = 4, SPINE_05 = 5, NECK_01 = 6, NECK_02 = 7, HEAD = 8, CLAVICLE_L = 9, UPPERARM_L = 10, LOWERARM_L = 11, HAND_L = 12, CLAVICLE_R = 13, UPPERARM_R = 14, LOWERARM_R = 15, HAND_R = 16, THIGH_L = 17, CALF_L = 18, FOOT_L = 19, THIGH_R = 20, CALF_R = 21, FOOT_R = 22, }
-S.ENUMS.vitals_flag = { DEAD = 1, FALLEN = 2, DOWNED = 4, HEADLESS = 8, PAIN_SHOCK = 16, }
-S.ENUMS.death_cause = { REPORTED = 0, DAMAGE = 1, VITALS = 2, LEFT = 3, ZONE = 4, }
+S.ENUMS.vitals_flag = { DEAD = 1, FALLEN = 2, DOWNED = 4, HEADLESS = 8, PAIN_SHOCK = 16, HEAD_IMPAIRED = 32, NECK_IMPAIRED = 64, BACK_IMPAIRED = 128, ARM_R_IMPAIRED = 256, ARM_L_IMPAIRED = 512, LEG_R_IMPAIRED = 1024, LEG_L_IMPAIRED = 2048, }
+S.ENUMS.death_cause = { REPORTED = 0, DAMAGE = 1, VITALS = 2, LEFT = 3, ZONE = 4, DEFEAT = 5, SURRENDER = 6, }
+S.ENUMS.death_report_reason = { DEATH = 0, DEFEAT = 1, SURRENDER = 2, }
 S.ENUMS.world_mode = { FREE = 0, TOUCH = 1, HOLD_R = 2, HOLD_L = 3, STATE = 4, INIT = 5, }
 S.ENUMS.world_flag = { ASLEEP = 1, HELD = 2, LEFT = 4, SIM = 8, }
 S.ENUMS.world_mm = { POSE = 1, PRESENCE = 2, STATE = 3, }
@@ -1097,6 +1359,10 @@ S.ENUMS.hand_vis = { UNKNOWN = 0, SHOWN = 1, HIDDEN = 2, }
 S.ENUMS.interact_kind = { GRAB_START = 1, GRAB_UPDATE = 2, GRAB_END = 3, IMPULSE = 4, GRAB_DENIED = 5, }
 S.ENUMS.hero_bone = { Pelvis = 0, Spine_02 = 1, Spine_04 = 2, Head = 3, Upperarm_L = 4, Lowerarm_L = 5, Hand_L = 6, Upperarm_R = 7, Lowerarm_R = 8, Hand_R = 9, Thigh_L = 10, Calf_L = 11, Foot_L = 12, Thigh_R = 13, Calf_R = 14, Foot_R = 15, }
 S.ENUMS.dev_op = { AUTOTEST = 1, TUNE = 2, TDIAG = 3, }
+S.ENUMS.mod_result = { LOADED = 1, FAILED = 2, DECLINED = 3, }
+S.ENUMS.mod_state = { OFFER = 1, DOWNLOADING = 2, VERIFYING = 3, READY = 4, JOINED = 5, FAILED = 6, CLEAR = 7, }
+S.ENUMS.mod_error = { NONE = 0, HASH_MISMATCH = 1, TOO_LARGE = 2, BAD_MANIFEST = 3, DISCONNECTED = 4, DISK = 5, TIMEOUT = 6, LOAD_FAILED = 7, DECLINED = 8, BLOCKED = 9, }
+S.ENUMS.mod_op = { ACCEPT = 1, DECLINE = 2, RESEND = 3, }
 for t, vals in pairs(S.ENUMS) do
     local names = {}
     for n, v in pairs(vals) do names[v] = n end

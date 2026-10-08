@@ -7,6 +7,16 @@ Records: `crates/hsmp-ipc/src/schema/combat.rs`. The in-game checklist is in
 
 ## 1. Overview
 
+Native injury channels remain independent: a blunt hit can lower consciousness
+and head crush without crossing the main Health damage threshold. Temporary
+unconsciousness remains recoverable. The owner's native `Event Lose Match`,
+after its own prolonged knockout/submission checks, reports a scoped final
+defeat in Brawl only (`death_report.reason=1`, `death.cause=5`). Other modes
+continue through automatic knockouts until native death or deliberate surrender
+(`death_report.reason=2`, `death.cause=6`). Elimination leaves a surrendered or
+knocked-out body alive; it never writes Health zero or calls native Death/Dying.
+The ordinary biological death report retains reason zero.
+
 Damage is owner-authoritative and server-validated:
 
 1. My weapon (or body) touches a peer's **stand-in** on my screen. The stand-in takes no damage.
@@ -18,8 +28,10 @@ Damage is owner-authoritative and server-validated:
 3. An accepted claim goes to the victim's owner as `damage_in`. The victim's HSMPCombat **replays
    it natively** through its own pawn's "Deal Complex Damage": its own armour, height, wounds,
    bleeding, dismemberment and death apply exactly as in solo play.
-4. Every other player gets the same record as `hitfx_in` and replays it on its stand-in of the
-   victim for blood, wounds and bruises, then puts the stand-in's damage state back.
+4. After the victim reports an authenticated changed native injury outcome, every other
+   player gets the approved record as `hitfx_in`. It replays cosmetics on its stand-in of
+   the victim, then restores the stand-in's damage state. Transport ACKs and bookkeeping
+   alone do not authorize wounds.
 5. The victim's vitals stream (CON, part health, bleeding, ...) is what every screen shows.
 
 Record flow (G2S = game to sidecar over shared memory, C2S / S2C = network):
@@ -28,7 +40,7 @@ Record flow (G2S = game to sidecar over shared memory, C2S / S2C = network):
 |---|---|---|
 | `damage` | G2S, C2S | the claim; the sidecar fills `hit_id`, `round`, `age_ms` and resends every 120 ms until a final verdict (gives up after 2 s) |
 | `damage_in` | S2C, S2G | the approved claim, to the victim's owner (`WireHdr.peer` = attacker) |
-| `hitfx_in` | S2C, S2G | the approved claim, to every other player that negotiated `caps::HIT_FX` |
+| `hitfx_in` | S2C, S2G | the approved claim after observed native owner injury, to other players with `caps::HIT_FX` |
 | `damage_verdict` | S2C, S2G | `CONFIRM` (first acceptance), `FINAL` (ok or a reason code) or `CLASH` |
 | `damage_ack` | C2S | the victim's sidecar got a `damage_in` |
 | `clash` / `touch` | G2S, C2S | parry evidence: my weapon met theirs / their stand-in reached my body |
@@ -265,7 +277,15 @@ follows from that.
   (Rigidity·|Hit Velocity| first). Each claim carries the game's claim id `cid`
   and `lage_ms` (time held in the game). `attacker_ts = floor(os.clock·1000)` in the callback (the
   pose clock); `victim_view_ts` / `victim_arm_ts` come from HSMPAvatars' `playback` bus key (what the
-  stand-in was displaying). A Get Damage callback is never a claim.
+  stand-in was displaying). These are physical sample times on the owner's clock,
+  including the sender physics step. The servo quantizes the time to whole milliseconds
+  before constructing its targets, so the existing u32 fields carry that exact time;
+  publication never rounds a fractional target or subtracts the selected frame's step.
+  Lag compensation samples that time directly using only the frames relayed to the
+  attacker, and refuses missing delivered endpoints or relay history. Sender frame-start
+  stamps remain the relay/cache keys and clock-estimator inputs. Deploy the Avatar and
+  server changes together: an older Avatar publishes a different timestamp meaning.
+  A Get Damage callback is never a claim.
 - **Verdicts** arrive as `damage_verdict` events: `CONFIRM` the first time the server accepts the
   hit (forwarded or held), `FINAL` with ok or a reason code, and `CLASH` for a validated clash. They
   feed the log and the counters below.
@@ -344,9 +364,18 @@ Vitals take a per-sender budget (`rate::Kind::Vitals`, 40 burst, 25/s; an honest
 The early `CONFIRM` is not final; the sidecar keeps resending. The `FINAL` verdict follows the
 victim's ack. A validated clash produces a `CLASH` verdict (`hit_id` 0) to both players; clashes are
 judged on the server tick (`lagcomp::judge_due`). On the first forward of a hit the glue books it in
-the ledger and sends `hitfx_in` to every other player that negotiated `caps::HIT_FX`, the attacker
-included (its own stand-in of the victim then shows the approved wound). A hit forwarded after the
+the ledger. Cosmetics wait for a fresh authenticated `REPLAY_CHANGED` owner outcome with
+changed injury fields; `damage_ack` alone is insufficient. Then `hitfx_in` goes to other
+players with `caps::HIT_FX`, the attacker included. Duplicate receipts, refused native
+attempts, suppressed origins and bookkeeping-only changes cannot paint a wound. A hit forwarded after the
 round ended or the target died is answered `round over / target down`.
+
+Stand-ins keep native `Force Disable Vertex Paint=true`, which gates DCD armour paint
+before Get Damage's invulnerability gate. Accepted cosmetic replay temporarily opens
+this guard, restores it even on Lua/native errors, and discards wrappers if the world
+guard dropped during replay. Probe damage sampling remains enabled separately. This
+uses the owner's injury outcome to authorize approved-input cosmetic replay; it does
+not yet copy the owner's vertex colors or paint-only outcomes with no sampled injury.
 
 API notes:
 
@@ -374,7 +403,9 @@ trim.
 | `pain_rate` | Stab Rate |
 | `damage_out` | Rigidity |
 | `raw_damage` | the stand-in's measured relative speed (uu/s) |
-| `dism_blunt` | Blunt Destruction Int \| Kick·10 << 8 \| Lower Threshold << 16 \| Extra High Velocity << 17 |
+| `dism_blunt` | Blunt Destruction Int \| Kick·10 << 8 \| Lower Threshold << 16 \| Extra High Velocity << 17 \| fist source << 18 \| left-hand source << 19 \| right-hand source << 20 |
+
+Source bits preserve the native striking component independently of geometry. Fists retain the weapon flag for native replay, but the server validates them against the attacker's body capsules and body velocity. A named left or right weapon source uses that hand's history and replay component; it cannot borrow the other hand's geometry. Both hand bits set, source bits without the weapon flag, and undefined packed bits are rejected. Legacy claims without source bits retain their previous selection behavior.
 
 **Server bounds (`damage::clamp_complex`).** The inputs are the attacker's own native call, so they
 pass unchanged unless physically impossible:
@@ -498,3 +529,11 @@ The run also covers a stalled owner (its Lua hung for 10 s while its sidecar kee
 Unit tests worth knowing: `ledger_ceiling_never_cuts_an_owner_that_reports_in_the_replay_tick`,
 `honest_owner_at_full_health_after_estimated_hits_is_shown_and_kept` (combat.rs) and
 `victim_touch_after_its_clash_keeps_the_hit` (lagcomp/tests.rs).
+
+## Protocol 8 historical cutting shape
+
+The 280-byte Damage header carries an exact ASCII native source class (48-byte field; capture rejects names of 48 bytes or more) and thirteen original HitBox values: center in physical centimetres in the victim bone's rotation frame, local quaternion, original world scale, and unscaled native extent. Capture subtracts the original bone position and applies inverse rotation; replay and server validation apply rotation and add the corresponding bone position. Neither operation divides by native socket scale or multiplies by the median skeleton reference scale. Those scales have different provenance, so normalizing with one and reconstructing with the other moves a legitimate Box. Other damage point and velocity coordinates retain their existing semantics. All 24 injury deltas fit the 472-byte ring payload exactly. Weapon claims require an original component ordinal, one source hand, and exact class history. Ordinal-zero weapon fallback is rejected.
+
+The server reconstructs the historical cutting Box against authenticated original pose history, including victim bone frame, exact source class fingerprint, component ordinal, native Box scale, and scaled extent. Keeping scale separate prevents a forged reciprocal extent/scale pair from changing the native X-before-scale clamp. The original live weapon is never transformed or resized. Replay uses a private collision-disabled, nonsimulating Box pool bounded to 128 native actors per world, including partial construction failures. Session reconnect retains the pool; world travel retires its numeric identities. Native Shipping snapshots and deep-copies shape transforms/extents synchronously before asynchronous paint work, allowing bounded reuse while retaining the UObject for its world lifetime.
+
+The tracked extra melee registry records thirteen original PAK classes independently verified as direct ModularWeaponBP descendants. The diagnostic command `autotest parity inventory extra` checks those separately from the configured 128 weapon classes. Catalogue presence and inheritance evidence do not establish successful native injury for every weapon. Thrown or ranged source objects still need separate authenticated object identity, and body-striker HitBox replay remains rejected where original native Box scale history is unavailable. The private factory command `autotest parity cutproxy` must pass native construction, readback, collision flags, and reuse checks before cutting PvP is considered verified.

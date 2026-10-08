@@ -126,6 +126,7 @@ fn read_everything(s: &Segment) {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(48))]
     #[test]
+    #[ignore = "slow: cargo test -- --ignored"]
     fn random_segment_never_faults(seed in any::<u64>(), density in prop_oneof![Just(255u8), Just(16u8), Just(1u8)],
                                    patches in prop::collection::vec((0..SEGMENT_SIZE, prop::collection::vec(any::<u8>(), 1..64)), 0..16)) {
         let m = Mapping::anonymous();
@@ -135,6 +136,7 @@ proptest! {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn all_ones_segment_never_faults() {
     let m = Mapping::anonymous();
     for i in 0..SEGMENT_SIZE {

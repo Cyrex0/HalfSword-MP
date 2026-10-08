@@ -1249,6 +1249,7 @@ dependencies = [
  "objc2-foundation 0.2.2",
  "parking_lot",
  "percent-encoding",
+ "pollster",
  "profiling",
  "raw-window-handle",
  "static_assertions",
@@ -1256,6 +1257,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
+ "wgpu",
  "winapi",
  "windows-sys 0.59.0",
  "winit",
@@ -1793,6 +1795,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpu-allocator"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c151a2a5ef800297b4e79efa4f4bec035c5f51d5ae587287c9b952bdf734cacd"
+dependencies = [
+ "log",
+ "presser",
+ "thiserror 1.0.69",
+ "windows",
+]
+
+[[package]]
 name = "gpu-descriptor"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1888,7 +1902,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-combat-sim"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "hsmp-ipc",
  "hsmp-net",
@@ -1900,7 +1914,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-diag"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "hex",
  "hsmp-master-core",
@@ -1914,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-fake-sidecar"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "bytemuck",
  "hsmp-ipc",
@@ -1922,21 +1936,21 @@ dependencies = [
 
 [[package]]
 name = "hsmp-hud-test"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-interact-test"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-ipc"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "bytemuck",
  "proptest",
@@ -1946,7 +1960,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-launcher"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "anyhow",
  "ed25519-dalek",
@@ -1960,6 +1974,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "ureq",
+ "wgpu",
  "windows-sys 0.52.0",
  "winreg",
  "zip",
@@ -1967,7 +1982,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-master-core"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -1978,16 +1993,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "hsmp-modes"
-version = "0.1.0-beta.5"
-dependencies = [
- "proptest",
- "serde",
-]
-
-[[package]]
 name = "hsmp-nat"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "rand 0.8.8",
  "reqwest",
@@ -1997,7 +2004,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-native"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "bytemuck",
  "hsmp-ipc",
@@ -2007,7 +2014,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-net"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "chacha20poly1305",
  "ed25519-dalek",
@@ -2020,21 +2027,21 @@ dependencies = [
 
 [[package]]
 name = "hsmp-pose"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "hsmp-ipc",
 ]
 
 [[package]]
 name = "hsmp-pose-truth"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-release"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.2.17",
@@ -2048,14 +2055,14 @@ dependencies = [
 
 [[package]]
 name = "hsmp-saveguard-test"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-server"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "anyhow",
  "axum",
@@ -2092,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-tools"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -2114,7 +2121,7 @@ dependencies = [
 
 [[package]]
 name = "hsmpworld-sim"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "hsmp-ipc",
  "mlua",
@@ -2123,7 +2130,7 @@ dependencies = [
 
 [[package]]
 name = "hsmpworld-tests"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
@@ -3362,6 +3369,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "presser"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3611,6 +3624,12 @@ checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
 dependencies = [
  "rand_core 0.9.5",
 ]
+
+[[package]]
+name = "range-alloc"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08"
 
 [[package]]
 name = "raw-window-handle"
@@ -5120,6 +5139,7 @@ dependencies = [
  "document-features",
  "js-sys",
  "log",
+ "naga",
  "parking_lot",
  "profiling",
  "raw-window-handle",
@@ -5167,13 +5187,16 @@ dependencies = [
  "android_system_properties",
  "arrayvec",
  "ash",
+ "bit-set",
  "bitflags 2.13.2",
+ "block",
  "bytemuck",
  "cfg_aliases",
  "core-graphics-types",
  "glow",
  "glutin_wgl_sys",
  "gpu-alloc",
+ "gpu-allocator",
  "gpu-descriptor",
  "js-sys",
  "khronos-egl",
@@ -5188,6 +5211,7 @@ dependencies = [
  "ordered-float 4.6.0",
  "parking_lot",
  "profiling",
+ "range-alloc",
  "raw-window-handle",
  "renderdoc-sys",
  "rustc-hash 1.1.0",
@@ -5197,6 +5221,7 @@ dependencies = [
  "web-sys",
  "wgpu-types",
  "windows",
+ "windows-core",
 ]
 
 [[package]]

@@ -21,6 +21,7 @@
 --   if S:live() then ... end
 --   S.status (name: "connected", "kicked", ...), S.peer_id, S.exists, S.id_changed, S.link
 --   local v = HS.view()                -- the normalised session / match view (below), or nil
+--   local m = HS.mode()                -- the game-mode view (`mode` / `zone` slots), or nil
 --   HS.link(), HS.session(), HS.admin(), HS.is_admin(), HS.my_peer_id()
 
 local M = { VERSION = 2, FRESH_S = 5.0 }
@@ -210,6 +211,87 @@ function M.view(o)
 end
 -- Forget the cached view (tests, world changes).
 function M.reset_view() vc.sver, vc.lver, vc.v = nil, nil, nil end
+
+-- ---- game modes (slots `mode` / `zone`, server caps::MODES / ZONE) ----------------------
+-- m = {
+--   mode (code), id ("duel", "ffa", "teams", "koth", "roulette", "brawl", "deathmatch"), label,
+--   teams (0 = none), team_rule, friendly_fire, target_s, respawn_s, round_time_s,
+--   round_left_ms (nil = no clock running), sudden_death, round, match_id,
+--   team_wins {[t]}, team_score {[t]} (King of the hill ms / deathmatch kills), team_alive {[t]},
+--   result (`mode_result` name), winner_team, kit_r, kit_l, kit_label ("" = own kits),
+--   rows {[peer_id] = {seat, team, kills, deaths, round_kills, score, life, alive, respawning,
+--          in_zone, respawn_in_ms}}, by_seat {[seat] = row},
+--   zone = {x, y, z, r, hh, holder_seat, holder_team, contested, inside} (King of the hill) or nil }
+-- nil without a mode record from this server (an older server: seq 0).
+M.MODE_ID = { [0] = "duel", [1] = "ffa", [2] = "teams", [3] = "koth", [4] = "roulette", [5] = "brawl", [6] = "deathmatch" }
+M.MODE_LABEL = { duel = "Duel", ffa = "Free for all", teams = "Team elimination", koth = "King of the hill",
+                 roulette = "Weapon roulette", brawl = "Brawl", deathmatch = "Deathmatch" }
+M.TEAM_NAME = { "Red", "Blue", "Green", "Gold" }
+M.RESULT_NAME = { [0] = "none", [1] = "elimination", [2] = "objective", [3] = "time_limit", [4] = "kills",
+                  [5] = "sudden_death", [6] = "draw" }
+
+-- Pure: a `mode` record (and a `zone` record or nil) -> the mode view, `age_s` seconds after it
+-- arrived (the clocks count down from the receipt).
+function M.mode_from(h, z, age_s)
+    if type(h) ~= "table" or (h.seq or 0) == 0 then return nil end
+    local id = M.MODE_ID[h.mode] or "duel"
+    local m = { mode = h.mode, id = id, label = M.MODE_LABEL[id], teams = h.teams or 0, team_rule = h.team_rule or 0,
+                friendly_fire = h.friendly_fire == true, target_s = h.target_s or 0, respawn_s = h.respawn_s or 0,
+                round_time_s = h.round_time_s or 0, sudden_death = h.sudden_death == true, round = h.round or 0,
+                match_id = h.match_id or 0, result = M.RESULT_NAME[h.result] or "none", winner_team = h.winner_team or 0,
+                kit_r = h.kit_r or "", kit_l = h.kit_l or "", kit_label = h.kit_label or "",
+                team_wins = {}, team_score = {}, team_alive = {}, rows = {}, by_seat = {} }
+    m.sent_ms, m.end_ms = h.server_time_ms or 0, h.round_end_ms or 0
+    for t = 1, 4 do
+        m.team_wins[t] = (h.team_wins or {})[t] or 0
+        m.team_score[t] = (h.team_score or {})[t] or 0
+        m.team_alive[t] = (h.team_alive or {})[t] or 0
+    end
+    for _, r in ipairs(h.rows or {}) do
+        local row = { seat = r.seat, team = r.team or 0, kills = r.kills or 0, deaths = r.deaths or 0,
+                      round_kills = r.round_kills or 0, score = r.score or 0, life = r.life or 0, alive = r.alive == true,
+                      respawning = r.respawning == true, in_zone = r.in_zone == true, peer_id = r.peer_id or 0,
+                      respawn_at_ms = r.respawn_at_ms or 0 }
+        m.by_seat[r.seat] = row
+        if row.peer_id ~= 0 then m.rows[row.peer_id] = row end
+    end
+    if type(z) == "table" and (z.radius_cm or 0) > 0 and z.match_id == m.match_id and id == "koth" then
+        local c = z.center or {}
+        m.zone = { x = c[1] or 0, y = c[2] or 0, z = c[3] or 0, r = z.radius_cm, hh = z.half_height_cm or 0,
+                   holder_seat = (z.holder_seat ~= 255) and z.holder_seat or nil,
+                   holder_team = (z.holder_team or 0) ~= 0 and z.holder_team or nil,
+                   contested = z.contested == true, inside = z.inside or 0 }
+    end
+    M.mode_clock(m, age_s or 0)
+    return m
+end
+
+-- The clocks of a mode view `age_s` seconds after its record arrived: round_left_ms (nil = no
+-- clock running) and each respawning row's respawn_in_ms.
+function M.mode_clock(m, age_s)
+    local now_ms = m.sent_ms + age_s * 1000
+    m.round_left_ms = (m.end_ms ~= 0) and math.max(0, math.floor(m.end_ms - now_ms)) or nil
+    for _, row in pairs(m.by_seat) do
+        row.respawn_in_ms = (row.respawning and row.respawn_at_ms ~= 0) and math.max(0, math.floor(row.respawn_at_ms - now_ms)) or nil
+    end
+end
+
+-- The current mode view (built once per record version; the clocks follow the local clock).
+local mc = { ver = nil, zver = nil, at = 0, m = nil }
+function M.mode(o)
+    local ipc = ipc_of(o)
+    if not ipc or not ipc.rec then return nil end
+    local h, ver = ipc.rec("mode")
+    if type(h) ~= "table" then return nil end
+    local z, zver = ipc.rec("zone")
+    local clock = (o and o.clock) or os.clock
+    if ver ~= mc.ver or zver ~= mc.zver or mc.ipc ~= ipc then
+        mc.ver, mc.zver, mc.ipc, mc.at = ver, zver, ipc, clock()
+        mc.m = M.mode_from(h, z, 0)
+    end
+    if mc.m then M.mode_clock(mc.m, clock() - mc.at) end
+    return mc.m
+end
 
 -- ---- notices (S2G `notice` records) -------------------------------------------------
 M.NOTICE_NAME = { [1] = "host_left", [2] = "role_changed", [3] = "load_failed", [4] = "player_joined",

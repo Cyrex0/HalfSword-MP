@@ -23,8 +23,10 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "weapon_swap" })
     T.isolated(T.script, "case", { kind = "bad_mesh" })
     T.isolated(T.script, "case", { kind = "died_round" })
+    T.isolated(T.script, "case", { kind = "native_dead" })
     T.isolated(T.script, "case", { kind = "tdiag" })
     T.isolated(T.script, "case", { kind = "native_sample" })
+    T.isolated(T.script, "case", { kind = "prepare_stream" })
     return
 end
 
@@ -92,6 +94,16 @@ local function beat()
     beats = beats + 1
     local N = _G.HSMPNative
     if beats == 1 then N.sc_put("link", { status = 1, state = 1, my_peer_id = 1 }) end   -- CONNECTED, UP
+    if opts.kind ~= "died_round" and opts.kind ~= "native_dead" and opts.kind ~= "prepare_stream" then
+        if beats == 1 then
+            N.sc_put("session",{epoch=1,seq=1,match_id=71,phase=3,round=1,winner_seat=255,
+                config={arena="Map_Arena_Pit"},rows={{peer_id=1,seat=1,connected=true,alive=true,spawn_id=256,spawn_pos={10,20,30}}}})
+            N.sc_put("mode",{seq=1,match_id=71,round=1,rows={{peer_id=1,seat=1,life=1,alive=true}}})
+        end
+        -- The sampling harness supplies placement evidence; placement itself is
+        -- covered separately by spawn_place's physical verification tests.
+        N.bus_put("spawn_status",{match_id=71,round=1,life=1,spawn_id=256,pawn="Willie_BP_C_3",verified=true})
+    end
     N._st.hb_age = 0.05
 end
 local function stop_beating() _G.HSMPNative._st.hb_age = 1e9 end
@@ -128,7 +140,9 @@ if opts.kind == "sp" then
 elseif opts.kind == "mp" then
     local pawn = boot()
     pawn.__props["Weapon R"] = weapon("W_1", 5001)
-    run(3000, true)
+    run(1000, true) -- initial world drop has no verified original placement yet
+    local initial_weapon_puts=puts("local_weapon")
+    run(2500, true)
     T.check(puts("local_pose") > 0 and puts("local_root") > 0, "live MP session: root + pose streamed", T.repr(hot() and hot().n))
     T.check(last_w1() == 1, "the held sword is sampled", T.repr(hot() and hot().pose and hot().pose.w))
     local c = cvar_cmds()
@@ -176,13 +190,31 @@ elseif opts.kind == "bad_mesh" then
     local n = T.count(M.logtext(), "codec-v2 bones")
     T.check(n == 1, "a pawn without the codec-v2 bones is logged once, not per sample", n)
 
-elseif opts.kind == "died_round" then
+elseif opts.kind == "died_round" or opts.kind == "native_dead" then
     -- A death is reported for the round it happened in; a pawn that
     -- stays dead into a same-world round change never reports the new round.
     local pawn = boot()
-    _G.HSMPNative.sc_put("session", { epoch = 1, seq = 1, phase = 3, round = 2, winner_seat = 255 })   -- LIVE round 2
-    run(3000, true)
-    pawn.__props.Health = 0
+    local function life(match_id,round,generation,seq)
+        HSMPNative.sc_put("session",{epoch=1,seq=seq,match_id=match_id,phase=3,round=round,winner_seat=255,
+            rows={{peer_id=1,seat=1,connected=true,alive=true,spawn_id=round*256,spawn_pos={10,20,30}}}})
+        HSMPNative.sc_put("mode",{seq=seq,match_id=match_id,round=round,rows={{peer_id=1,seat=1,life=generation,alive=true}}})
+        HSMPNative.bus_put("spawn_status",{verified=true,pawn="Willie_BP_C_3",match_id=match_id,round=round,life=generation,spawn_id=round*256})
+    end
+    run(500,true) -- initial world transition clears old placement evidence
+    life(81,2,1,1)
+    run(2500,true)
+    if opts.kind == "native_dead" then
+        HSMPNative.sc_rec_drain()
+        pawn.__props.Health=100
+        pawn.__props.Consciousness=0
+        pawn.__props.Downed=true
+        pawn.__props.Fallen=true
+        pawn.__props["Force Death"]=true
+        run(1500,true)
+        T.check(not T.any(HSMPNative.sc_rec_drain(),function(m)return m.kind=="death_report" end),
+            "KO and pending ForceDeath hints never create biological death")
+        pawn.__props.DED=true
+    else pawn.__props.Health = 0 end
     run(2500, true)
     -- the typed G2S `death_report` record
     local SENT = {}
@@ -194,6 +226,16 @@ elseif opts.kind == "died_round" then
     end
     local r = reports()
     T.check(#r >= 2 and T.all(r, function(x) return x == 2 end), "death_report round 2 sent (and resent) while dead in round 2", T.repr(r))
+    if opts.kind=="native_dead" then
+        T.check(pawn.__props.Health==100,"native DED fallback reports without fabricating HP damage")
+    end
+    local n=#r
+    T.check(T.all(SENT,function(m)return m.kind~="death_report" or (m.data.match_id==81 and m.data.life==1) end),
+        "Sync fallback carries the original native pawn's full death context")
+    life(81,2,2,2);run(2000,true)
+    T.check(#reports()==n,"same-round new life cannot relabel a latched old death")
+    life(82,2,1,3);run(2000,true)
+    T.check(#reports()==n,"new match reusing round/life cannot relabel old death")
     local ob = T.read(sd .. "/.control.outbox.jsonl") or ""
     T.check(ob:find("died:", 1, true) == nil, "no control-outbox died verb any more", ob)
     _G.HSMPNative.sc_put("session", { epoch = 1, seq = 2, phase = 3, round = 3, winner_seat = 255 })   -- LIVE round 3
@@ -222,6 +264,43 @@ elseif opts.kind == "tdiag" then
     T.check(T.count(M.logtext(), "tdiag on") == 1 and T.contains(M.logtext(), "tdiag off (dev_cmd #5)"),
         "a repeated on is not re-logged; TDIAG off switches them off", M.logtext())
     T.check(#M.dead_touch == 0, "nothing freed touched", T.repr(M.dead_touch))
+elseif opts.kind == "prepare_stream" then
+    local pawn=boot()
+    local root
+    local put_root=HSMPNative.put_root
+    HSMPNative.put_root=function(...)
+        root=select(12,...)
+        return put_root(...)
+    end
+    run(500,true)
+    local function assignment(generation,placed,mode_id,name,sid)
+        HSMPNative.sc_put("session",{epoch=1,seq=generation,match_id=91,phase=3,round=1,winner_seat=255,
+            rows={{peer_id=1,seat=1,connected=true,alive=false,spawn_id=sid,spawn_pos={10,20,30}}}})
+        HSMPNative.sc_put("mode",{seq=generation,mode=mode_id,match_id=91,round=1,
+            rows={{peer_id=1,seat=1,life=generation,alive=false,respawning=true}}})
+        HSMPNative.bus_put("spawn_status",{verified=placed,pawn=name,match_id=91,round=1,life=generation,spawn_id=sid})
+    end
+    assignment(2,true,6,"Willie_BP_C_3",386)
+    run(1500,true)
+    T.check(puts("local_root")>0 and puts("local_pose")>0,
+        "actual Sync sends verified life2 root and pose before LOADED while server still respawning")
+    T.check(root and root.match_id==91 and root.round==1 and root.life==2,
+        "actual root carries full original respawn context",T.repr(root))
+    local n=puts("local_root")
+    pawn.__props.DED=true;HSMPNative.sc_rec_drain();run(1500,true)
+    T.check(not T.any(HSMPNative.sc_rec_drain(),function(m)return m.kind=="death_report" end),
+        "publication memo cannot leak preparation authority into the active death reporter")
+    pawn.__props.DED=false
+    assignment(130,true,6,"Willie_BP_C_3",386);run(1000,true)
+    T.check(root and root.life==130 and puts("local_root")>n,
+        "actual root preserves full life130 despite wrapped order bits")
+    n=puts("local_root")
+    assignment(130,true,6,"Old_Pawn",386);run(1000,true)
+    T.check(puts("local_root")==n,"another pawn's placement does not resume root publication")
+    assignment(130,true,0,"Willie_BP_C_3",386);run(1000,true)
+    T.check(puts("local_root")==n,"non-deathmatch respawning cannot resume root publication")
+    assignment(130,false,6,"Willie_BP_C_3",386);run(1000,true)
+    T.check(puts("local_root")==n,"unverified respawn cannot resume root publication")
 elseif opts.kind == "native_sample" then
     -- Native sampling: the settings A/B switch, the native sampler used while it answers, the
     -- Lua path on a refusal and while switched off (HSMPNative.sample_local is a test hook).
@@ -230,6 +309,8 @@ elseif opts.kind == "native_sample" then
     local N = rawget(_G, "HSMPNative")
     local calls, mode = { pose = 0, root = 0, weapon = 0, n = 0 }, "ok"
     N._sample = function(a)   -- one call carries every part (sample.rs: mask 1 root, 2 weapon, 4 pose)
+        assert(a.context and a.context.match_id==71 and a.context.round==1 and a.context.life==1
+            and a.root_pawn==a.pawn,"native root uses the same verified original pose pawn/context")
         calls.n = calls.n + 1
         local m, err = 0, nil
         if a.root_pawn then calls.root = calls.root + 1; m = m | 1 end
@@ -244,9 +325,11 @@ elseif opts.kind == "native_sample" then
     pawn.__props["Weapon R"] = weapon("W_1", 5001)
     run(3000, true)
     T.check(calls.pose > 100 and calls.root > 100, "default (no native_sample key): the native sampler takes root + pose", T.repr(calls))
-    T.check(puts("local_pose") == 0 and puts("local_root") == 0 and puts("local_weapon") == 0, "and the Lua path stays idle",
+    T.check(puts("local_pose") == 0 and puts("local_root") == 0 and puts("local_weapon") <= 10, "verified root and pose stay native; pre-placement weapon fallback remains bounded",
         T.repr(hot() and hot().n))
-    T.check(calls.weapon > 100 and calls.n == calls.pose, "one native call per sample: root, the held weapon and pose together", T.repr(calls))
+    local settled_n, settled_p = calls.n, calls.pose
+    run(1000,true)
+    T.check(calls.weapon > 100 and calls.n-settled_n == calls.pose-settled_p, "one native call per verified sample: root, held weapon and context-bound pose together", T.repr(calls))
     mode = "skip"
     local p0, r0 = puts("local_pose"), puts("local_root")
     run(1000, true)

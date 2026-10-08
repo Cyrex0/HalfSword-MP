@@ -649,7 +649,7 @@ mod tests {
     #[test]
     fn seal_overhead_matches_a_real_v5_datagram() {
         use hsmp_net::net::{caps, crypto, Conn, ConnConfig, SendMode, Side};
-        let r = hsmp_ipc::schema::pose::Root { tick: 99, ts: 1, send_wall_ms: 2, pos: [1.0, 2.0, 3.0], rot: [0.0, 0.0, 0.0, 1.0], vel: [0.5, 0.0, 0.0] };
+        let r = hsmp_ipc::schema::pose::Root { tick: 99, ts: 1, send_wall_ms: 2, pos: [1.0, 2.0, 3.0], rot: [0.0, 0.0, 0.0, 1.0], vel: [0.5, 0.0, 0.0], match_id: 1, round: 1, life: 1, _r: 0 };
         let bytes = hsmp_ipc::wire::encode(0, 4, &r, &[]);
         let mode = proto::record_mode(hsmp_ipc::schema::pose::K_ROOT, 4).unwrap();
         let k = crypto::derive(&[1; 32], &[2; 32], &[3; 32]);

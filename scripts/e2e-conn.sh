@@ -132,11 +132,14 @@ if [[ "${E2E_CONN_STANDALONE:-0}" == 1 ]]; then
 fi
 
 # A headless "game": reports its game status like HSMPMatch's Director (a typed
-# `game_status` record: round 99 loaded on <arena>, alive) every second, so the server
+# `game_status` record: the current assigned round/life loaded on <arena>, alive) every second, so the server
 # treats the client as a game in its load barrier.
 q_game() {   # dir arena
   local d="$1" a="$2"
-  ( while true; do send_status "$d" 99 0 "$a" 2>/dev/null; sleep 1; done ) &
+  ( while true; do
+      if pawn_scope "$d"; then send_loaded_status "$d" 0 "$a"; else send_status "$d" 0 0; fi
+      sleep 1
+    done ) &
   Q_PIDS+=($!)
 }
 # q_sidecar / q_server run in THIS shell (never call them inside $(...), the PID would be
@@ -191,6 +194,9 @@ sleep 1.5
 q_game "$QD1" Map_Arena_Alley; q_game "$QD2" Map_Arena_Alley
 if q_start_match $QR "$QD1" "$QD2"; then pass "Q1a match live (two reporting game clients)"
 else fail "Q1a match live" "$(sess_show "$QD1" 400)"; fi
+# A complete own roster row must have arrived before freezing the reconnect baseline.
+q1_has_seat() { local s; s=$(my_seat "$1"); [[ "$s" =~ ^[1-9][0-9]*$ ]]; }
+rec_wait 5 q1_has_seat "$QD2"
 SEAT2=$(my_seat "$QD2")
 # Dropper wins round 1 (kill the Stayer's seat) so there are wins to keep.
 SEAT1=$(my_seat "$QD1")

@@ -70,6 +70,20 @@ pub struct QueryInfo {
     /// "" = it accepts any content, or an older server.
     #[serde(rename = "h", default)]
     pub content_tag: String,
+    /// Server mods: how many, and their size in KiB (0 / absent = none, or an older server;
+    /// docs/hosting/server-mods.md). Older readers ignore the keys.
+    #[serde(rename = "o", default, skip_serializing_if = "is_zero_u32")]
+    pub mods: u32,
+    #[serde(rename = "ob", default, skip_serializing_if = "is_zero_u64")]
+    pub mods_kb: u64,
+}
+
+fn is_zero_u32(x: &u32) -> bool {
+    *x == 0
+}
+
+fn is_zero_u64(x: &u64) -> bool {
+    *x == 0
 }
 
 /// The content tag of a full content hash: its first 16 hex chars, lower case
@@ -305,6 +319,8 @@ mod tests {
             proto_max: 5,
             server_key: "ab".repeat(32),
             content_tag: content_tag(&"Cd".repeat(32)),
+            mods: 16,
+            mods_kb: 65536,
         };
         assert_eq!(info.content_tag, "cdcdcdcdcdcdcdcd");
         assert_eq!(content_tag("abc"), "");
@@ -317,6 +333,10 @@ mod tests {
         assert_eq!(got.players, 3);
         assert!(got.password);
         assert_eq!(got.content_tag, info.content_tag, "the tag survives a full-size reply");
+        assert_eq!((got.mods, got.mods_kb), (16, 65536), "the server mods survive a full-size reply");
+        // a server without mods sends neither key (an older reader sees the old reply)
+        let plain = build_reply(1, &QueryInfo::default());
+        assert!(!String::from_utf8_lossy(&plain[16..]).contains("\"o"));
     }
 
     #[test]

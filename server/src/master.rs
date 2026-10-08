@@ -179,7 +179,15 @@ struct ServerEntry {
     /// A punch request reaches it right now (its listen socket is open).
     #[serde(default)]
     punch: bool,
+    /// Server mods it serves (count, bytes); absent = none (docs/hosting/server-mods.md).
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    mods: u32,
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    mods_bytes: u64,
 }
+
+fn is_zero_u32(x: &u32) -> bool { *x == 0 }
+fn is_zero_u64(x: &u64) -> bool { *x == 0 }
 
 #[derive(Debug, Clone)]
 struct ServerStored {
@@ -322,6 +330,10 @@ struct RegisterReq {
     nat: Option<String>,
     #[serde(default)]
     punch: Option<bool>,
+    #[serde(default)]
+    mods: Option<u32>,
+    #[serde(default)]
+    mods_bytes: Option<u64>,
 }
 fn default_max_players() -> u32 { 8 }
 
@@ -787,6 +799,8 @@ async fn register(
         age_s: 0,
         nat: hsmp_master_core::fields::nat_kind(req.nat.as_deref()),
         punch: false,
+        mods: req.mods.unwrap_or(0).min(hsmp_master_core::fields::MAX_MODS),
+        mods_bytes: req.mods_bytes.unwrap_or(0).min(hsmp_master_core::fields::MAX_MODS_BYTES),
     };
 
     let mut nonces = std::collections::VecDeque::with_capacity(8);
@@ -1139,9 +1153,12 @@ mod tests {
         b["proto_max"] = json!(7);
         b["content_hash"] = json!("AB".repeat(32));
         b["future_field"] = json!("ignored");
+        b["mods"] = json!(3);
+        b["mods_bytes"] = json!(4096);
         assert_eq!(c.post(format!("{base}/v1/register")).json(&b).send().await.unwrap().status(), 201);
         let l = list(&c, &base).await;
         let e = l.iter().find(|e| e["name"] == "Versioned").unwrap();
+        assert_eq!((e["mods"].as_u64(), e["mods_bytes"].as_u64()), (Some(3), Some(4096)));
         assert_eq!((e["proto_ver"].as_u64(), e["proto_min"].as_u64(), e["proto_max"].as_u64()), (Some(6), Some(6), Some(7)));
         assert_eq!(e["content_hash"], "ab".repeat(32));
         // An older server: the range defaults to proto_ver, no content hash.
@@ -1176,6 +1193,7 @@ mod tests {
         assert_eq!(l[0]["version"], "");
         assert_eq!(l[0]["content_hash"], "");
         assert_eq!(l[0]["region"], "");
+        assert!(l[0].get("mods").is_none(), "no mods key for a server without mods");
     }
 
     #[tokio::test]

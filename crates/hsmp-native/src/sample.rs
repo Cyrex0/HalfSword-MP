@@ -181,6 +181,14 @@ struct World {
     weapon_props: HashMap<u64, Vec<Option<HsmpProp>>>,
 }
 
+/// Original generation of the last successful pose-slot write.
+#[derive(Clone, Copy)]
+pub(crate) struct PoseWritten {
+    pub tick: u32,
+    pub ts: f64,
+    pub context: hsmp_pose::posecodec::v2::Context,
+}
+
 /// Native sampling state (process-global, in `Native`).
 pub struct SampleState {
     cfg: Option<Cfg>,
@@ -200,6 +208,8 @@ pub struct SampleState {
     ns_total: u64,
     ns_last: u64,
     fallbacks: u64,
+    /// Last actual successful pose-slot write, including the Lua sampling path.
+    pub(crate) pose_written: Option<PoseWritten>,
     /// Native servo (servo.rs).
     pub(crate) servo: crate::servo::ServoState,
     /// Native neutralise (neutralise.rs).
@@ -223,6 +233,7 @@ impl Default for SampleState {
             ns_total: 0,
             ns_last: 0,
             fallbacks: 0,
+            pose_written: None,
             servo: Default::default(),
             neut: Default::default(),
         }
@@ -232,6 +243,7 @@ impl Default for SampleState {
 impl SampleState {
     /// World leave / world change: forget every engine handle without touching it.
     pub fn drop_world(&mut self, leaving: bool) {
+        self.pose_written = None;
         self.world = None;
         self.why = None;
         self.servo.drop_world();
@@ -921,12 +933,19 @@ impl Native {
             // root
             let rp = addr("root_pawn");
             if !rp.is_null() {
+                rawget_str(L,t,"context");
+                let root_context=crate::pose_hot::read_pose_context(L,-1);pop(L,1);
+                // The original context is captured from the very same pawn
+                // supplied to the pose sample; never authorize a second actor.
+                if rp!=addr("pawn") {fail("skip:root_context_pawn",&mut err);}
+                else {
                 match live(vt, rp, classes[C_ACTOR]).and_then(|a| self.actor_state(vt, a)) {
-                    Some((pos, rot, vel)) => match self.write_root(num("root_tick") as u32, num("root_ts"), pos, rot, vel) {
+                    Some((pos, rot, vel)) => match self.write_root(num("root_tick") as u32, num("root_ts"), pos, rot, vel,root_context) {
                         Ok(()) => mask |= 1,
                         Err(e) => fail(&hot_msg(e), &mut err),
                     },
                     None => fail("skip:root", &mut err),
+                }
                 }
             }
             // weapon actor
@@ -954,13 +973,17 @@ impl Native {
                         }
                     }
                     let mut nw = 0usize;
-                    for (wk, hk, tk) in [("w1", "h1", "t1"), ("w2", "h2", "t2")] {
+                    let mut boxes = Vec::new();
+                    for (wk, hk, tk, sk) in [("w1", "h1", "t1", "s1"), ("w2", "h2", "t2", "s2")] {
                         let wp = addr(wk);
                         if wp.is_null() {
                             continue;
                         }
                         if let Some(v) = self.sample_weapon(vt, mesh, wp, num(hk), num(tk)) {
                             self.sample.weapons[nw] = v;
+                            rawget_str(L, t, sk);
+                            boxes.push(crate::pose_hot::read_weapon_boxes(L, -1));
+                            pop(L, 1);
                             nw += 1;
                         }
                     }
@@ -977,7 +1000,11 @@ impl Native {
                     let bones = *self.sample.bones;
                     let weapons = self.sample.weapons;
                     let control = self.sample.control;
-                    self.write_pose(num("pose_tick") as u32, num("pose_ts"), num("dt"), num("k"), &bones, &weapons[..nw], ctl.then_some(&control))
+                    rawget_str(L,t,"strikers");
+                    let strikers=crate::pose_hot::read_body_strikers(L,-1); pop(L,1);
+                    rawget_str(L,t,"context");
+                    let context=crate::pose_hot::read_pose_context(L,-1); pop(L,1);
+                    self.write_pose(num("pose_tick") as u32, num("pose_ts"), num("dt"), num("k"), &bones, &weapons[..nw], ctl.then_some(&control), &boxes, strikers.as_deref(), context)
                         .map_err(hot_msg)?;
                     Ok(())
                 })();
@@ -1005,10 +1032,11 @@ impl Native {
     }
 
     /// `sample_status()` -> {available, configured, verified, world_ok, why, samples,
-    /// fallbacks, pe_calls, avg_us, last_us}.
+    /// fallbacks, pe_calls, avg_us, last_us, pose}. `pose` is the last successful
+    /// slot write's original generation/timestamp, not a sampling attempt.
     pub unsafe fn sample_status(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
-            lua_createtable(L, 0, 10);
+            lua_createtable(L, 0, 11);
             let t = lua_gettop(L);
             let s = &self.sample;
             set_bool(L, t, "available", reflect::vt().is_some());
@@ -1024,6 +1052,18 @@ impl Native {
             set_int(L, t, "pe_calls", s.pe_calls as i64);
             set_num(L, t, "avg_us", if s.samples > 0 { s.ns_total as f64 / s.samples as f64 / 1000.0 } else { 0.0 });
             set_num(L, t, "last_us", s.ns_last as f64 / 1000.0);
+            if let Some(pose) = s.pose_written {
+                lua_createtable(L, 0, 5);
+                let p = lua_gettop(L);
+                set_int(L, p, "tick", pose.tick as i64);
+                set_num(L, p, "ts", pose.ts);
+                set_int(L, p, "match_id", pose.context.match_id as i64);
+                set_int(L, p, "round", pose.context.round as i64);
+                set_int(L, p, "life", pose.context.life as i64);
+                rawset_str(L, t, "pose");
+            } else {
+                set_nil(L, t, "pose");
+            }
             1
         }
     }

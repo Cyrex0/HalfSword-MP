@@ -360,6 +360,7 @@ local function parse_tool_text(raw)
                     source = t[14], live = (t[15] == "1"),
                     content = t[16] or "", proto_min = tonumber(t[17]) or 0, proto_max = tonumber(t[18]) or 0,
                     nat = t[19] or "", punch = (t[20] == "1"),
+                    mods = tonumber(t[21]) or 0, mods_kb = tonumber(t[22]) or 0,
                 })
             else
                 r.skipped = r.skipped + 1
@@ -403,6 +404,8 @@ local function parse_curl_text(raw, idx)
                 proto_max = tonumber(obj:match('"proto_max"%s*:%s*(%d+)')) or 0,
                 nat = obj:match('"nat"%s*:%s*"([%w]*)"') or "",
                 punch = (obj:match('"punch"%s*:%s*(%a+)') == "true"),
+                mods = tonumber(obj:match('"mods"%s*:%s*(%d+)')) or 0,
+                mods_kb = math.ceil((tonumber(obj:match('"mods_bytes"%s*:%s*(%d+)')) or 0) / 1024),
                 ping = -3, source = "master", live = false,
             })
         else
@@ -1051,7 +1054,8 @@ function B.render()
                 local cells = row.cells
                 Kit.set_text(cells[1], s.pwd and "PW" or "")
                 Kit.set_color(cells[1], sel and Kit.C.on_text or C.ok)
-                Kit.set_text(cells[2], ascii(s.name) .. (s.source == "direct" and "  (direct)" or ""))
+                Kit.set_text(cells[2], ascii(s.name) .. (s.source == "direct" and "  (direct)" or "")
+                    .. (((s.mods or 0) > 0) and string.format("  [MODS %d]", s.mods) or ""))
                 Kit.set_color(cells[2], base)
                 Kit.set_text(cells[3], map_name(s.map)); Kit.set_color(cells[3], base)
                 Kit.set_text(cells[4], s.mode ~= "" and s.mode or "-"); Kit.set_color(cells[4], base)
@@ -1113,6 +1117,12 @@ function B.render()
         Kit.msg(B.flash.text, B.flash.color)
     else
         local r = s and reach(s)
+        local mods = s and (s.mods or 0) > 0
+        if mods then
+            Kit.msg(string.format("SERVER MODS: this server installs %d mod%s (%.1f MB) that run with full access to your PC. You are asked before anything downloads.",
+                s.mods, s.mods == 1 and "" or "s", (s.mods_kb or 0) / 1024), Kit.C.warn)
+            return
+        end
         Kit.msg((r == "nat" and "ENTER or JOIN: the host did not answer directly, so the join goes through its router (NAT traversal).")
             or (r == "unreachable" and "The host does not answer and its router cannot be punched: it must forward its UDP port.")
             or (s and "ENTER or JOIN to join the selected server.") or "Arrows pick a server, ENTER joins. Or type an address below.",

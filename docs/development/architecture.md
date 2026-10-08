@@ -27,7 +27,7 @@ All Rust packages are one Cargo workspace (root `Cargo.toml`, toolchain pinned i
 `hsmp-server`, `hsmp-sidecar`, `hsmp-master`, `hsmp-loadtest` and `hsmp-query`. Shared crates:
 `crates/hsmp-net` (transport), `crates/hsmp-ipc` (the record schema and the shared-memory
 primitives), `crates/hsmp-pose` (pose codec, jitter buffer, sample builder), `crates/hsmp-native`
-(the game-side module), `crates/hsmp-combat-sim` and `crates/hsmp-modes`.
+(the game-side module) and `crates/hsmp-combat-sim`.
 
 ### Deployment
 
@@ -312,8 +312,6 @@ Several binaries compile the same `.rs` files instead of depending on a shared l
   `lagcomp.rs`, `combat.rs` and `validate/` with `#[path]`, and its `build.rs` lifts
   `pub mod catalog { ... }` out of `server/src/loadout.rs` (the rest of that file needs the whole
   server). This is deliberate: the simulator always exercises the code that ships.
-- **`hsmp-modes`** (`crates/hsmp-modes`) is a library whose `lib.path` points at
-  `server/src/modes/mod.rs`; the server itself does not declare `mod modes`.
 
 Consequences: shared files carry `#[allow(dead_code)]` because each binary uses a different
 subset, so dead code in exactly those files is invisible; master-only dependencies are linked into
@@ -332,9 +330,9 @@ validate) would remove these effects; it has not been done.
   stand-ins are the arena's native foe Willies, capped through the game's "Free Mode Foes Amount";
   the Lua side repeats the number. The shared-memory peer table has 32 slots. Relay tiers have no
   interest management.
-- **Game modes are not wired.** `server/src/modes/` (Duel, FFA last-man-standing, LTS, teams,
-  zone) builds and tests as `hsmp-modes`, but `match_core.rs` still runs its own best-of loop.
-  Adding a mode today means editing `match_core.rs` ([modes.md](subsystems/modes.md)).
+- **Game modes live on top of one round loop.** `server/src/server/modes.rs` adds teams, King of
+  the hill, round kits and deathmatch respawns to `match_core.rs`'s best-of loop through hooks; a
+  new mode is a new `game_mode` code plus its rules there ([modes.md](subsystems/modes.md)).
 - **One match per server process.** All match state sits behind one `tokio::sync::Mutex<Inner>`
   plus process-global singletons (lag compensation, combat, world, kits, relay).
 - **Large Lua modules.** HSMPAvatars, HSMPMenu and HSMPWorld are each about 3,000 lines or more,

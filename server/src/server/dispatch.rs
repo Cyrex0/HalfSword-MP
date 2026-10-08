@@ -313,7 +313,7 @@ pub(crate) fn same_host_count<'a>(addrs: impl Iterator<Item = &'a SocketAddr>, f
 
 /// Admission for a verified v5 Auth: ban, full, duplicate
 /// key (the reconnect replaces the old connection), then accept + Welcome.
-async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<PendingAuth>) {
+pub(super) async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<PendingAuth>) {
     let from = p.addr;
     let key = p.player_key();
     let fp = hsmp_net::net::handshake::player_fingerprint(&key);
@@ -380,6 +380,25 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
         return;
     }
     let caps = p.caps;
+    // A mode older clients cannot play (docs/development/protocol.md §7.2): refused with an
+    // actionable text instead of a session record they would refuse.
+    if let Some(why) = modes::join_refusal(&inner, caps) {
+        drop(inner);
+        info!(%from, player = %fp, %why, "join rejected: client without caps::MODES");
+        crate::stats::refused("version");
+        let out = state.net.reject(p, reject_code::VERSION, &why);
+        send_out(socket, state, out).await;
+        return;
+    }
+    // A server with mods takes only clients that can load them.
+    if let Some((code, text)) = super::mods_glue::admit_check(state, caps) {
+        drop(inner);
+        info!(%from, player = %fp, "join rejected: the client cannot take this server's mods");
+        crate::stats::refused("mods_required");
+        let out = state.net.reject(p, code, &text);
+        send_out(socket, state, out).await;
+        return;
+    }
     let taken: Vec<String> = inner.peers.values().map(|q| q.nick.clone()).collect();
     let nick = dedup_nick(p.nick(), &taken);
     // Accept under the peer lock, so the tick's reconcile never sees a
@@ -412,6 +431,7 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
     state.relay.forget(&from);
     state.relay.set_peer(from, id);
     crate::interact::note_caps(id, caps); // interaction channel: negotiated caps per peer
+    super::mods_glue::on_joined_locked(state, &mut inner, id); // pending until its mods are loaded
     // An admin (the listen host back after a drop, a configured admin)
     // joining changes who is admin: everyone's S2CAdminState follows.
     let admins_changed = refresh_admins(&mut inner);
@@ -428,6 +448,8 @@ async fn admit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, p: Box<Pending
     send_msg_to(socket, state, from, welcome_msg(id, seat, state.net.epoch(), state.net.now_ms(), caps, &nick)).await;
     // Who is admin (the `admin_state` record; the welcome has no admin flag).
     send_msg_to(socket, state, from, admin_state).await;
+    // The server's mods, when it has any (the player stays pending until they are loaded).
+    super::mods_glue::after_welcome(socket, state, from, id, false).await;
     // The roster (who else is here) rides in the next `session` snapshot.
     if !all_addrs.is_empty() {
         broadcast_admin_state(socket, state, &all_addrs).await;
@@ -511,6 +533,7 @@ async fn resume(
     // session snapshot (on_resumed forces one), loadouts. The other clients see no change.
     send_msg_to(socket, state, from, welcome_msg(id, seat, state.net.epoch(), state.net.now_ms(), caps, &nick)).await;
     send_msg_to(socket, state, from, admin_state).await;
+    super::mods_glue::after_welcome(socket, state, from, id, true).await;
     crate::loadout::replay_to(socket, state, from).await;
     flush_out(socket, state).await;
 }
@@ -589,8 +612,8 @@ pub(crate) mod resume_tests {
         t
     }
 
-    /// Two players in a live duel; peer ids far from other tests' (the combat
-    /// ledger and cheat tables are process-global).
+    /// Two players in a live duel; peer ids far from other tests' (the cheat
+    /// tables are process-global; each fixture has its own combat ledger).
     pub(crate) async fn live_duel(base: PeerId) -> (Arc<UdpSocket>, Arc<ServerState>, TClient, TClient) {
         let state = Arc::new(ServerState::new(8));
         let socket = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
@@ -777,28 +800,12 @@ pub(crate) mod resume_tests {
     /// still declares the death (the ledger survives the resume).
     #[tokio::test]
     async fn rejoin_does_not_reset_the_god_mode_ledger() {
-        // Kills are opt-in (HSMP_GODMODE_ENFORCE=1); this exercises
-        // that mode. (Never turned off again here: concurrent tests that rely
-        // on the default only use their own Ledger instances.)
+        // Kills are opt-in (HSMP_GODMODE_ENFORCE=1); enable them only for
+        // this fixture's ledger. Other tests' round starts cannot reset it.
         crate::combat::ledger_set_enforce_godmode(true);
         let (socket, state, ca, cb) = live_duel(72_001).await;
         let (aid, bid) = (ca.welcome_id().unwrap(), cb.welcome_id().unwrap());
-        // The ledger is process-global and other tests' go_live resets every
-        // life to their round: use a round of our own and retry the scenario
-        // if a concurrent test wiped it mid-way.
-        let round = 72_001;
-        for attempt in 0..5 {
-            if god_mode_scenario(&socket, &state, aid, bid, round).await { return; }
-            eprintln!("ledger reset by a concurrent test (attempt {attempt}); retrying");
-        }
-        panic!("the god-mode bound must still fire after a re-join");
-    }
-
-    /// Book lethal unreflected damage, resume the victim, keep reporting full
-    /// health: true once the ledger declares the death (false: the life was
-    /// reset by another test's round start, inconclusive).
-    async fn god_mode_scenario(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, aid: PeerId, bid: PeerId, round: u32) -> bool {
-        crate::combat::ledger_forget(bid);
+        let round = 1;
         let hit = |id: u32| proto::DamageEvent::new(crate::proto::Damage {
             hit_id: id, target_peer_id: bid, round, bone: hsmp_ipc::layout::Str::new("spine_02"), offset: [0.0; 3],
             location: [0.0; 3], impulse: [0.0; 3], velocity: [0.0; 3], normal: [1.0, 0.0, 0.0],
@@ -806,23 +813,24 @@ pub(crate) mod resume_tests {
             dism_blunt: 0, flags: 0, age_ms: 0,
             attacker_ts: 0, victim_view_ts: 0, victim_arm_ts: 0, ..Default::default()
         }, &crate::proto::deltas_of(&[(crate::combat::FIELD_HEALTH, -70.0)]));
-        assert!(crate::combat::ledger_vitals(bid, round, 1, 100.0, false).is_some());
+        assert!(crate::combat::ledger_vitals_at(bid, round, 1, 100.0, false, std::time::Instant::now()).is_some());
         for id in 1..=3 {
             crate::combat::ledger_forward(aid, round, &hit(id));
             crate::combat::ledger_ack(bid, aid, id);
         }
         // Shortly before the ledger would fire, the client forces a re-handshake.
-        let cb2 = join(socket, state, seed(72_002)).await;
+        let cb2 = join(&socket, &state, seed(72_002)).await;
         assert_eq!(cb2.welcome_id(), Some(bid));
-        // ... and keeps reporting full health.
-        for seq in 2..80u32 {
-            tokio::time::sleep(Duration::from_millis(50)).await;
-            if crate::combat::ledger_last_attacker(bid, round) != aid { return false; }
-            if let Some(v) = crate::combat::ledger_vitals(bid, round, seq, 100.0, false) {
-                if v.lethal { assert!(v.forced); return true; }
-            }
-        }
-        false
+        assert_eq!(crate::combat::ledger_last_attacker(bid, round), aid,
+            "the actual admission resume must preserve the booked damage");
+        // Keep reporting full health. Advance the ledger's explicit clock,
+        // exercising both grace boundaries without waiting or retrying.
+        let reflected = std::time::Instant::now() + crate::combat::REFLECT_AFTER;
+        let before = crate::combat::ledger_vitals_at(bid, round, 2, 100.0, false, reflected).unwrap();
+        assert!(!before.lethal && !before.forced, "the owner still gets the grace period");
+        let after = crate::combat::ledger_vitals_at(bid, round, 3, 100.0, false,
+            reflected + crate::combat::GODMODE_GRACE).unwrap();
+        assert!(after.lethal && after.forced, "the god-mode bound must still fire after a re-join");
     }
 
     /// A re-join never resurrects a player the round already
@@ -887,18 +895,21 @@ pub(crate) mod resume_tests {
             let mut p = match_core::round_tests::peer(75_001, "t");
             p.last_valid_pos = Some([0.0, 0.0, 100.0]);
             i.peers.insert(a, p);
+            i.match_state="countdown".into();i.sess.match_id=1;i.spawn_round=1;
+            i.spawn_plan=vec![crate::spawns::SpawnAssign {peer_id:75_001,spawn_id:256,slot:0,pos:[0.0;3],yaw:0.0,protect_ms:3000}];
+            i.sess.root_placed.insert(75_001,(1,1,1,256));
         }
         let mut x = 0.0;
         for _ in 0..10 {
             let pos = [x + 350.0, 0.0, 100.0];
-            if session::accept_root(&state, a, pos, Default::default()).await.is_some() { x = pos[0]; }
+            if session::accept_root(&state, a, pos, hsmp_ipc::schema::pose::Root {match_id:1,round:1,life:1,..Default::default()}).await.is_some() { x = pos[0]; }
         }
         assert!(x <= 1050.0 + 1.0, "moved {x} uu inside one tick");
         // An honest sprint (700 uu/s, 60 Hz roots on the arrival clock) keeps passing.
         for k in 0..120 {
             tokio::time::sleep(Duration::from_millis(16)).await;
             let pos = [x + 700.0 / 60.0, 0.0, 100.0];
-            assert!(session::accept_root(&state, a, pos, Default::default()).await.is_some(), "sprint step {k} refused");
+            assert!(session::accept_root(&state, a, pos, hsmp_ipc::schema::pose::Root {match_id:1,round:1,life:1,..Default::default()}).await.is_some(), "sprint step {k} refused");
             x = pos[0];
         }
     }
@@ -1150,8 +1161,13 @@ mod bundle_tests {
         for _ in 0..3 { a.pump(&socket, &state).await; b.pump(&socket, &state).await; }
         let mut buf = [0u8; 2048];
         while b.sock.try_recv_from(&mut buf).is_ok() {}
-        let root = Root { tick: 1, ts: 1000, send_wall_ms: 0, pos: [100.0, 200.0, 50.0], rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3] };
-        let vit = Vitals { seq: 7, ..Default::default() };
+        {let mut i=state.inner.lock().await;let id=a.welcome_id().unwrap();i.sess.match_id=91;
+            let key=session::peer_key(i.peers.get(&a.addr).unwrap());i.modes.stats.entry(key).or_default().life=1;
+            i.spawn_plan.push(crate::spawns::SpawnAssign {peer_id:id,spawn_id:256,slot:0,pos:[0.0;3],yaw:0.0,protect_ms:3000});
+            i.sess.root_placed.insert(id,(91,1,1,256));}
+        let root = Root { tick: 1, ts: 1000, send_wall_ms: 0, pos: [100.0, 200.0, 50.0], rot: [0.0, 0.0, 0.0, 1.0], vel: [0.0; 3], match_id: 91, round: 1, life: 1, _r: 0 };
+        let vit = {let inner=state.inner.lock().await;Vitals {seq:7,round:inner.match_round,match_id:inner.sess.match_id,
+            life:super::modes::peer_life(&inner,a.welcome_id().unwrap()),..Default::default()}};
         let msgs = [hsmp_ipc::wire::encode(0, 0, &root, &[]), hsmp_ipc::wire::encode(0, 0, &vit, &[])];
         for m in &msgs {
             let (h, _) = hsmp_ipc::wire::split(m).unwrap();

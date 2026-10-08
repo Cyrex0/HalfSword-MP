@@ -1227,6 +1227,10 @@ impl World {
             target_pos: None,
             match_live: true,
             match_round: 1,
+            // The sim's claims carry no pose context (match 0, life 0), like a pre-protocol-11 hit.
+            match_id: 0,
+            attacker_life: 0,
+            target_life: 0,
         }
     }
 

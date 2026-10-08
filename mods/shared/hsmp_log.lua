@@ -56,6 +56,8 @@ M.EVENTS = {
     conn_state              = { "state" },
     travel_reason           = { "reason" },
     resume                  = { "ok" },
+    -- the Director reloads for a deathmatch respawn order (director.lua)
+    respawn                 = { "round", "spawn_id" },
     -- every 5 s during a round (HSMPCombat emit_quality)
     combat_quality          = {},
     ready_report            = { "round" },

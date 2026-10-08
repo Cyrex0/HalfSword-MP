@@ -126,6 +126,66 @@ local function match_round()
     return v.round or 0, v.state or "lobby"
 end
 
+-- Exact assigned placement identity, scoped by the caller's native world.
+function Kit.fighter_context(session, link, mode, st, world)
+    if not (session and link and st and type(world) == "string" and world ~= ""
+        and (link.my_peer_id or 0) > 0 and (st.seq or 0) > 0 and (st.match_id or 0) > 0
+        and st.match_id == session.match_id and (st.life or 0) > 0
+        and type(st.pawn) == "string" and st.pawn ~= "") then return nil end
+    local phase = session.phase
+    if not phase or phase < 1 or phase > 7 then return nil end
+    local round = (phase == 1 or phase == 2) and session.round + 1 or session.round
+    if st.round ~= round then return nil end
+    local assigned
+    for _, row in ipairs(session.rows or {}) do
+        if row.peer_id == link.my_peer_id then assigned = row; break end
+    end
+    if not assigned or (st.spawn_id or 0) == 0 or st.spawn_id ~= assigned.spawn_id then return nil end
+    if phase <= 2 then
+        if st.life ~= 1 then return nil end
+    else
+        if not mode or mode.match_id ~= st.match_id or mode.round ~= st.round then return nil end
+        local life
+        for _, row in ipairs(mode.rows or {}) do
+            if row.peer_id == link.my_peer_id then life = row.life; break end
+        end
+        if life ~= st.life then return nil end
+    end
+    return { key = table.concat({ world, tostring(st.match_id), tostring(st.round), tostring(st.life),
+        tostring(st.spawn_id), st.pawn }, "|"), world = world, pawn = st.pawn, verified = st.verified == true }
+end
+
+-- Retain metadata, never an UObject, during a native fallback possession swap.
+-- Resolve the verified fighter fresh and compare its native address/world.
+function Kit.local_fighter(candidate, context, bound, swap, now, describe, resolve)
+    local swapping = swap and (tonumber(swap.until_s) or 0) > now
+    if not context then
+        -- Keep only the old identity metadata while proof is unavailable; do
+        -- not return any pawn. An exact context return may resume it later.
+        if swapping then return nil, bound end
+        return candidate, nil
+    end
+    if bound and bound.key ~= context.key then bound = nil end
+    local function matches(pawn, address)
+        local m = pawn and describe(pawn)
+        return m and m.world == context.world and m.name == context.pawn
+            and m.address ~= nil and (address == nil or m.address == address), m
+    end
+    local ok, meta = matches(candidate)
+    if ok then
+        if context.verified or bound then bound = { key = context.key, name = context.pawn, address = meta.address } end
+        return candidate, bound
+    end
+    if swapping and bound and swap.keep == bound.name then
+        local original = resolve(bound.name, bound.address)
+        if matches(original, bound.address) then return original, bound end
+        return nil, bound
+    end
+    -- Placement still names another actor: wait for assignment and possession
+    -- to agree instead of dressing the stand-in with our kit.
+    return nil, bound
+end
+
 -- --- catalogue -> classes ------------------------------------------------------
 
 local slot_cache = {}   -- class path -> ArmorSlots_Enum value (or false)
@@ -150,7 +210,11 @@ end
 
 local function item_path(id)
     local it = Cat and id and id ~= "" and Cat.items[id]
-    return it and it.path or nil
+    return it and it.path or (api.weapon_recipe_class and api.weapon_recipe_class(id)) or nil
+end
+local function item_recipe(id)
+    if api.weapon_recipe_class and api.weapon_recipe_class(id) then return id end
+    return nil
 end
 
 -- Kit armour as main.lua "pieces": { {slot, path}, ... } (+ unresolved ids).
@@ -235,14 +299,13 @@ local function current_weapon(pawn, side)
 end
 
 -- Give `pawn` the weapon class `path` in hand `side` ("R"/"L"); nil = empty hand.
--- The weapon actor is spawned first so it builds from its own Blueprint
--- defaults; the actor and its own passport then go to the game's equip
--- function ("Set Up Right Hand Weapon" / "Set Up Left Hand Weapon").
-function Kit.give_weapon(pawn, side, path)
+-- The native equip function builds from the complete canonical passport.
+-- The actor fallback receives that same passport before native construction.
+function Kit.give_weapon(pawn, side, path, recipe)
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
     local cur = current_weapon(pawn, side)
     if not path then
-        if api.set_hand_passport then api.set_hand_passport(pawn, side, nil) end
+        if api.set_hand_passport and not api.set_hand_passport(pawn, side, nil) then return "FAIL hand passport" end
         if cur then
             if api.destroy_hand_weapon then api.destroy_hand_weapon(cur)   -- bumps standin_weapons
             else pcall(function() cur:K2_DestroyActor() end) end   -- unsafe: ok a hand weapon actor, never a Willie
@@ -251,29 +314,38 @@ function Kit.give_weapon(pawn, side, path)
         return "none"
     end
     local cls = api.resolve_class(path)
-    if not cls then return "noclass" end
+    if not cls then return "FAIL noclass" end
     -- The game re-arms the hands from the character passport after a setup;
     -- keep it in line with the kit (see main.lua set_hand_passport).
-    local pass = api.weapon_passport_for and api.weapon_passport_for(cls) or {}
-    if api.set_hand_passport then api.set_hand_passport(pawn, side, cls, pass) end
+    local pass = api.weapon_passport_for and api.weapon_passport_for(cls, nil, recipe)
+    if not pass then return "FAIL native weapon defaults unavailable" end
+    if api.set_hand_passport and not api.set_hand_passport(pawn, side, cls, pass) then return "FAIL hand passport" end
     if cur then
         local cp = ""; pcall(function() cp = api.class_path(cur:GetClass()) end)
-        if cp == path then return "same" end
+        if cp == path and api.weapon_passport_matches and api.weapon_passport_matches(cur, pass) then return "same" end
     end
     -- The class form: the game spawns the weapon from the class/passport
     -- itself and attaches it to the hand socket.
     local ok, err = pcall(api.bp_call, pawn, fname, cls, nil, false, true, pass)
+    if ok and cur and api.hand_weapon_replaced then api.hand_weapon_replaced() end
     if ok then
         local now = current_weapon(pawn, side)
         local np = ""; pcall(function() np = api.class_path(now:GetClass()) end)
-        if np == path then return "ok" end
+        if np == path and api.weapon_passport_matches and api.weapon_passport_matches(now, pass) then return "ok" end
+        err = "native hand passport mismatch"
     end
     -- Fallback: spawn the actor ourselves and hand it over.
     local a
     local ok2, err2 = pcall(function()
-        a = api.spawn_weapon_actor(pawn, cls, nil)
+        a = api.spawn_weapon_actor(pawn, cls, pass)
         if not a then error("spawn failed") end
-        api.bp_call(pawn, fname, cls, a, false, true, api.weapon_passport_for and api.weapon_passport_for(cls, a) or pass)
+        api.bp_call(pawn, fname, cls, a, false, true, pass)
+        if cur and api.hand_weapon_replaced then api.hand_weapon_replaced() end
+        local now = current_weapon(pawn, side)
+        local np = now and api.class_path(now:GetClass()) or ""
+        if np ~= path or not api.weapon_passport_matches or not api.weapon_passport_matches(now, pass) then
+            error("native hand passport mismatch")
+        end
     end)
     if ok2 then return "ok(actor)" end
     if api.valid(a) then pcall(function() a:K2_DestroyActor() end) end
@@ -330,7 +402,8 @@ function Kit.effective_remote(id, L)
     -- No appearance yet: show the kit itself.
     local pieces = Kit.pieces(kit)
     return { v = 0, p = pieces, a = {}, tint = Kit.tint(kit), w = {},
-             kit_w = { R = item_path(kit.r), L = item_path(kit.l) }, cos_kit = kit }, suffix
+             kit_w = { R = item_path(kit.r), L = item_path(kit.l) },
+             kit_recipe = { R = item_recipe(kit.r), L = item_recipe(kit.l) }, cos_kit = kit }, suffix
 end
 
 -- --- stand-in apply keys (pure; main.lua apply_remote) ---------------------------------
@@ -374,9 +447,13 @@ end
 function Kit.weapon_sig(L, hsuf, strip)
     if type(L) ~= "table" then return "-" end
     local w, kw = L.w or {}, L.kit_w
-    local function c(e) return type(e) == "table" and tostring(e.class) or "-" end
-    return string.format("R=%s,L=%s,kR=%s,kL=%s%s%s%s", c(w.R), c(w.L), kw and tostring(kw.R) or "-",
-        kw and tostring(kw.L) or "-", hsuf or "", (strip and strip.R) and "|sR" or "", (strip and strip.L) and "|sL" or "")
+    local function c(e)
+        if Kit.weapon_passport_key then return Kit.weapon_passport_key(e) end
+        return type(e) == "table" and tostring(e.class) or "-"
+    end
+    local recipes = L.kit_recipe or {}
+    return string.format("R=%s,L=%s,kR=%s,kL=%s,pR=%s,pL=%s%s%s%s", c(w.R), c(w.L), kw and tostring(kw.R) or "-",
+        kw and tostring(kw.L) or "-", tostring(recipes.R or ""), tostring(recipes.L or ""), hsuf or "", (strip and strip.R) and "|sR" or "", (strip and strip.L) and "|sL" or "")
 end
 
 -- Dynamic world items in the text form of HSMPWorld's world manifest
@@ -435,13 +512,16 @@ Kit.is_bare = is_bare
 -- own results: "Currently Equipped Armor", which "Set Up Armor" fills with
 -- the pieces it actually spawned (source "equipped")
 -- when it reports anything, else the count of worn armour meshes.
--- A hand counts only when it holds the kit class (never fists).
-local function weapon_ok(pawn, side, path)
+-- A hand counts only when it holds the kit class and complete native passport.
+local function weapon_ok(pawn, side, path, recipe)
     local cur = current_weapon(pawn, side)
     local cp = ""
     if cur then pcall(function() cp = api.class_path(cur:GetClass()) end) end
     if not path then return is_bare(cp), cp end
-    return cp == path and not is_bare(cp), cp
+    if cp ~= path or is_bare(cp) then return false, cp end
+    local cls = api.resolve_class(path)
+    local pass = cls and api.weapon_passport_for and api.weapon_passport_for(cls, nil, recipe)
+    return pass ~= nil and api.weapon_passport_matches ~= nil and api.weapon_passport_matches(cur, pass), cp
 end
 
 -- Both hands against the kit: ok, { "R (Weapon_Fists_C)", ... }, { "R", ... }.
@@ -449,7 +529,7 @@ local function hands_check(pawn, kit)
     local bad, sides = {}, {}
     for _, side in ipairs({ "R", "L" }) do
         local path = item_path(side == "R" and kit.r or kit.l)
-        local ok, cp = weapon_ok(pawn, side, path)
+        local ok, cp = weapon_ok(pawn, side, path, item_recipe(side == "R" and kit.r or kit.l))
         if not ok then
             bad[#bad + 1] = side .. " (" .. (cp ~= "" and cp:match("([^/%.]+)$") or "empty") .. ")"
             sides[#sides + 1] = side
@@ -475,9 +555,9 @@ local function hand_visible(pawn, side)
 end
 Kit.hand_visible = hand_visible
 
-local function verify(pawn, kit)
-    local wr, cr = weapon_ok(pawn, "R", item_path(kit.r))
-    local wl, cl = weapon_ok(pawn, "L", item_path(kit.l))
+local function verify(pawn, kit, retain_weapon)
+    local wr, cr = weapon_ok(pawn, "R", item_path(kit.r), item_recipe(kit.r))
+    local wl, cl = weapon_ok(pawn, "L", item_path(kit.l), item_recipe(kit.l))
     local ok, missing, worn = verify_armour(pawn, kit)
     if not wr then missing[#missing + 1] = "R hand (" .. (cr ~= "" and cr:match("([^/]+)$") or "empty") .. ")" end
     if not wl then missing[#missing + 1] = "L hand (" .. (cl ~= "" and cl:match("([^/]+)$") or "empty") .. ")" end
@@ -499,8 +579,10 @@ local function verify(pawn, kit)
                     -- origin, no mesh): take it away so the next apply gives
                     -- a fresh one (give_weapon would answer "same" otherwise).
                     rearm[#rearm + 1] = s .. ":" .. tostring(why)
-                    if api.set_hand_passport then api.set_hand_passport(pawn, s, nil) end
-                    if api.destroy_hand_weapon then api.destroy_hand_weapon(cur) end
+                    if not retain_weapon then
+                        if api.set_hand_passport then api.set_hand_passport(pawn, s, nil) end
+                        if api.destroy_hand_weapon then api.destroy_hand_weapon(cur) end
+                    end
                 end
             end
         end
@@ -510,13 +592,20 @@ local function verify(pawn, kit)
         for _, s in ipairs(hid) do missing[#missing + 1] = s .. " hand HIDDEN" end
         for _, s in ipairs(rearm) do missing[#missing + 1] = s .. " hand NOT SHOWN" end
         if #hid > 0 then Log("own kit: weapon in %s hand was hidden; unhid %d carried actor(s)", table.concat(hid, "+"), n) end
-        if #rearm > 0 then Log("own kit: weapon not shown at the hand (%s); removed, re-arming", table.concat(rearm, ", ")) end
+        if #rearm > 0 then Log("own kit: weapon not shown at the hand (%s); %s", table.concat(rearm, ", "),
+            retain_weapon and "retained for same-actor re-arm" or "removed, re-arming") end
         return false, missing, worn
     end
     return ok and wr and wl, missing, worn
 end
 
 verify_armour = function(pawn, kit)
+    if api.armour_passports_match then
+        local pieces, unresolved = Kit.pieces(kit)
+        local ok, missing = api.armour_passports_match(pawn, pieces, Kit.tint(kit))
+        for _, id in ipairs(unresolved) do missing[#missing + 1] = id .. " unresolved" end
+        return ok and #unresolved == 0, missing, api.worn_count(pawn)
+    end
     local want = kit_paths(kit)
     local nwant = 0; for _ in pairs(want) do nwant = nwant + 1 end
     local worn = api.worn_count(pawn)
@@ -538,8 +627,8 @@ local function apply_own(pawn, kit)
     local pieces, unresolved = Kit.pieces(kit)
     local L = { p = pieces, a = {}, tint = Kit.tint(kit) }
     local armour_ok, n, ares = api.apply_armour(pawn, L)
-    local wr = Kit.give_weapon(pawn, "R", item_path(kit.r))
-    local wl = Kit.give_weapon(pawn, "L", item_path(kit.l))
+    local wr = Kit.give_weapon(pawn, "R", item_path(kit.r), item_recipe(kit.r))
+    local wl = Kit.give_weapon(pawn, "L", item_path(kit.l), item_recipe(kit.l))
     local hair = Kit.apply_hair(pawn, kit)
     local face = Kit.apply_face(pawn, kit)
     Log("own kit %s rev=%s applied: pieces=%d%s %s | R=%s L=%s | hair=%s face=%s",
@@ -689,16 +778,40 @@ end
 
 -- Put the dropped actor itself back in hand (the same "Set Up ...
 -- Hand Weapon" call the actor form of give_weapon uses). Returns a result
--- string, or nil when it did not end up in hand.
-function Kit.reequip(pawn, side, actor, path)
-    local cls = api.resolve_class(path)
-    if not cls then return nil end
+-- string, or nil when it did not end up in hand. The optional second result
+-- distinguishes a refusal before native setup from attempted, unproved native
+-- completion: native setup can subtract weight before a later failure.
+function Kit.reequip(pawn, side, actor, path, recipe)
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
-    local pass = api.weapon_passport_for and api.weapon_passport_for(cls, actor) or {}
-    if api.set_hand_passport then api.set_hand_passport(pawn, side, cls, pass) end
-    local ok = pcall(api.bp_call, pawn, fname, cls, actor, false, true, pass)
-    if ok and same_actor(current_weapon(pawn, side), actor) then return "ok(same actor)" end
-    return nil
+    local prepared, input = pcall(function()
+        if not api.valid(actor) then return nil end
+        local cls = api.resolve_class(path)
+        if not cls then return nil end
+        local pass = api.weapon_passport_for and api.weapon_passport_for(cls, actor, recipe)
+        if not pass then return nil end
+        if recipe and (not api.weapon_passport_matches or not api.weapon_passport_matches(actor, pass)) then return nil end
+        local same = same_actor(current_weapon(pawn, side), actor)
+        -- The native OR condition destroys grip0 even with Destroy Previous
+        -- false. Refuse it before changing the hand passport.
+        if same then
+            local grip = api.field(pawn, side .. "_GripType_Current")
+            if type(grip) ~= "number" or not math.tointeger(grip) or grip <= 0 or grip > 255 then return nil end
+        end
+        if api.set_hand_passport and not api.set_hand_passport(pawn, side, cls, pass) then return nil end
+        return {cls=cls,pass=pass,same=same}
+    end)
+    if not prepared or not input then return nil, "preflight" end
+    local ok = pcall(api.bp_call, pawn, fname, input.cls, actor, false, not input.same, input.pass)
+    if not ok then return nil, "attempted" end
+    local read, result = pcall(function()
+        if api.valid(actor) and same_actor(current_weapon(pawn, side), actor) then
+            return "ok(same actor) retained=" .. nm(actor) .. "@" .. pawn_addr(actor)
+        end
+    end)
+    if read and result then
+        return result, "complete"
+    end
+    return nil, "attempted"
 end
 
 -- Contract (docs/development/subsystems/spawns.md): a kit weapon that left the
@@ -707,8 +820,9 @@ end
 -- nothing retires a dynamic id, so destroying it leaves a pickable ghost on
 -- every other screen. The dropped actor is re-equipped instead (HSMPWorld
 -- then sees its own item picked up again: a "picked up" claim, one weapon on
--- every screen). Only if that does not take (or somebody else holds it) a new
--- kit weapon is given, and the dropped one stays a real, replicated item.
+-- every screen). Retain a valid recoverable actor when native re-equipping
+-- needs another try. Replace only an invalid/wrong-class actor or one held by
+-- somebody else; a dropped world item is never destroyed here.
 local function rearm(pawn, kit, sides)
     local res = {}
     for _, side in ipairs(sides) do
@@ -716,15 +830,22 @@ local function rearm(pawn, kit, sides)
         local old = own.held and own.held[side]
         local r
         if path and old and api.valid(old) then
-            local held, cp = true, ""
-            pcall(function() held = api.field(old, "Is Held") == true end)
+            local held, cp = nil, ""
+            pcall(function()
+                local value = api.field(old, "Is Held")
+                if type(value) == "boolean" then held = value end
+            end)
             pcall(function() cp = api.class_path(old:GetClass()) end)
-            if not held and cp == path then
-                r = Kit.reequip(pawn, side, old, path)
-                if not r then r = tostring(Kit.give_weapon(pawn, side, path)) .. "(dropped actor left as a world item)" end
+            if cp == path and (held == false or same_actor(current_weapon(pawn, side), old)) then
+                r = Kit.reequip(pawn, side, old, path, item_recipe(side == "R" and kit.r or kit.l))
+                if not r then r = "waiting(same actor retained) retained=" .. nm(old) .. "@" .. pawn_addr(old) end
+            elseif cp == path and held == nil then
+                r = "waiting(actor ownership unavailable) retained=" .. nm(old) .. "@" .. pawn_addr(old)
+            elseif cp == "" then
+                r = "waiting(actor class unavailable) retained=" .. nm(old) .. "@" .. pawn_addr(old)
             end
         end
-        r = r or tostring(Kit.give_weapon(pawn, side, path))
+        r = r or tostring(Kit.give_weapon(pawn, side, path, item_recipe(side == "R" and kit.r or kit.l)))
         local now_w = current_weapon(pawn, side)
         if own.held and now_w and not is_bare(short_class(now_w)) then own.held[side] = now_w end
         res[#res + 1] = side .. "=" .. r
@@ -737,6 +858,13 @@ local function watch_hands(pawn, now)
     if now < wt.next_t then return end
     wt.next_t = now + WATCH_EVERY
     local ok, bad, sides = hands_check(pawn, wt.kit)
+    for _, side in ipairs({ "R", "L" }) do
+        if item_path(side == "R" and wt.kit.r or wt.kit.l) and hand_visible(pawn, side) == false then
+            local found = false; for _, s in ipairs(sides) do if s == side then found = true end end
+            if not found then bad[#bad + 1] = side .. " hand NOT SHOWN"; sides[#sides + 1] = side end
+            ok = false
+        end
+    end
     if ok then
         if wt.down then
             Log("own kit %s: kit weapons in hand again (was %s)", tostring(wt.kit.class), wt.down)
@@ -777,12 +905,12 @@ end
 -- Called every 100 ms from main.lua (game thread).
 function Kit.tick_local()
     if not Cat then return end
-    if not api.in_arena() then own.key, own.pending, own.stable = nil, nil, nil; return end
+    if not api.in_arena() then Kit.on_world_change(); return end
     -- Only while an MP session is live. A leftover link record /
     -- peer_kit record from an earlier session must never rewrite a
     -- single-player pawn's passport (the native "Save Game" would keep it).
     if api.mp_live and not api.mp_live() then
-        own.key, own.pending, own.stable, own.watch = nil, nil, nil, nil
+        Kit.on_world_change()
         return
     end
     local pawn = api.local_pawn()
@@ -814,6 +942,11 @@ function Kit.tick_local()
     -- the first seconds of the fight). A new round is a new world and a new pawn
     -- (the Director reloads the arena; on_world_change() clears the key).
     local key = addr .. "|" .. tostring(kit.rev)
+    local context = api.fighter_context and api.fighter_context(pawn)
+    -- Acquiring placement proof does not re-dress this same pawn. An actual
+    -- life/assignment/world change does, even when a native address is reused.
+    if context and own.context and own.context ~= context then own.key = nil end
+    if context then own.context = context end
     local now = clock()
     if key ~= own.key then
         local prev_addr = (own.key or ""):match("^([^|]*)|")
@@ -845,23 +978,45 @@ function Kit.tick_local()
     -- Stability window after a verified dress: undo a native re-arm at once.
     local st = own.stable
     if st and not own.pending then
-        if now >= st.until_t then
-            own.stable = nil
-            -- write_status re-checks the hands: a drop at the very end is not "held".
-            write_status(pawn, st.kit, true, st.tries, nil, true, false)
-            own.watch = { kit = st.kit, tries = st.tries, next_t = now, rearms = 0 }
-            return
-        end
         if now < st.next_t then return end
         st.next_t = now + VERIFY_AFTER
-        local ok, missing = verify(pawn, st.kit)
+        local armour_ok = verify_armour(pawn, st.kit)
+        local ok, missing = verify(pawn, st.kit, armour_ok)
         if not ok then
+            if armour_ok then
+                local _, _, sides = hands_check(pawn, st.kit)
+                if #sides == 0 then
+                    for _, side in ipairs({ "R", "L" }) do
+                        if item_path(side == "R" and st.kit.r or st.kit.l) and hand_visible(pawn, side) == false then
+                            sides[#sides + 1] = side
+                        end
+                    end
+                end
+                local window = rearm_window(pawn, now)
+                st.rearms = st.rearms or 0
+                if window and #sides > 0 and st.rearms < MAX_REARMS then
+                    st.rearms = st.rearms + 1
+                    local res = rearm(pawn, st.kit, sides)
+                    Log("own kit %s: initial hand recovery %s (%d/%d); outfit retained",
+                        tostring(st.kit.class), res, st.rearms, MAX_REARMS)
+                end
+                write_status(pawn, st.kit, false, st.tries,
+                    st.rearms >= MAX_REARMS and "initial hand recovery gave up" or
+                    ("initial hand recovery: " .. table.concat(missing, ",")), false, false)
+                return
+            end
             Log("own kit %s: native re-arm undid %s within %.1f s of dressing; re-dressing",
                 tostring(st.kit.class), table.concat(missing, ","), now - st.dressed_t)
             own.pending = { kit = st.kit, due = now, tries = 0, verify_at = nil }
             own.stable = nil
             write_status(pawn, st.kit, false, 0, "re-dressing: native re-arm undid " .. table.concat(missing, ","),
                 false, false)
+        elseif now >= st.until_t then
+            own.stable = nil
+            write_status(pawn, st.kit, true, st.tries, nil, true, false)
+            own.watch = { kit = st.kit, tries = st.tries, next_t = now, rearms = st.rearms or 0 }
+        else
+            write_status(pawn, st.kit, true, st.tries, nil, false, false)
         end
         return
     end
@@ -922,6 +1077,7 @@ end
 -- it without touching it. The new pawn gets the kit through the normal path.
 function Kit.on_world_change()
     own.key, own.pending, own.deferred, own.stable, own.watch, own.held = nil, nil, false, nil, nil, nil
+    own.context = nil
     -- The next world's first status is always written (with a new
     -- "t"), even if it reads the same as the old world's: a pooled pawn FName
     -- comes back, and the Director keys its kit step on name + "t".
@@ -931,7 +1087,9 @@ end
 -- Ctrl+F7 (with the gear dump): re-apply own kit now.
 function Kit.force_local()
     own.key, own.pending, own.stable, own.watch, own.held = nil, nil, nil, nil, nil
+    own.context = nil
     Log("own kit: forced re-apply requested")
 end
 
 return Kit
+

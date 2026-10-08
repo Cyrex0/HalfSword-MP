@@ -247,7 +247,8 @@ end
 local function r3(x) return math.floor((tonumber(x) or 0) * 1000 + 0.5) / 1000 end
 
 -- A passport UStruct as its record table (ArmorRow / WeaponPass fields).
-local function enc_struct(s, fields)
+local function enc_struct(s, fields, exact)
+    local round = exact and function(value) return tonumber(value) or 0 end or r3
     local t = {}
     for _, fd in ipairs(fields) do
         local name, kind = fd[1], fd[2]
@@ -258,10 +259,10 @@ local function enc_struct(s, fields)
         elseif kind == "bool" then e = (v == true)
         elseif kind == "color" then
             e = { 0, 0, 0, 1 }
-            pcall(function() e = { r3(v.R), r3(v.G), r3(v.B), r3(v.A) } end)
+            pcall(function() e = { round(v.R), round(v.G), round(v.B), round(v.A) } end)
         elseif kind == "vec" then
             e = { 0, 0, 0 }
-            pcall(function() e = { r3(v.X), r3(v.Y), r3(v.Z) } end)
+            pcall(function() e = { round(v.X), round(v.Y), round(v.Z) } end)
         elseif kind == "name" then
             e = ""
             pcall(function() e = v:ToString() end)
@@ -351,12 +352,44 @@ local function in_arena()
     return ok
 end
 
+function PCF.fighter_context()
+    local i = rawget(_G, "HSMP_IPC")
+    if not (i and i.rec and i.bus_table and Kit.fighter_context) then return nil end
+    local w = PCF.world()
+    if not (w and w:IsValid()) then return nil end
+    local world = tostring(world_gen) .. "|" .. tostring(w:GetAddress()) .. "@" .. w:GetFullName()
+    return Kit.fighter_context(i.rec("session"), i.rec("link"), i.rec("mode"), i.bus_table("spawn_status"), world)
+end
+function PCF.describe(pawn)
+    local m
+    pcall(function()
+        if not (pawn and pawn:IsValid()) then return end
+        local w = pawn:GetWorld()
+        if not (w and w:IsValid()) then return end
+        m = { address = tostring(pawn:GetAddress()), name = pawn:GetFName():ToString(),
+            world = tostring(world_gen) .. "|" .. tostring(w:GetAddress()) .. "@" .. w:GetFullName() }
+    end)
+    return m
+end
+function PCF.resolve(name, address)
+    if not (PCF.settled and PCF.settled()) then return nil end
+    for _, pawn in pairs(FindAllOf("Willie_BP_C") or {}) do
+        local m = PCF.describe(pawn)
+        if m and m.name == name and m.address == address then return pawn end
+    end
+end
 local function local_pawn()
     local pc = PCF.get()
     if not pc or not pc:IsValid() then return nil end
-    local p = pc.Pawn
-    if p and p:IsValid() then return p end
-    return nil
+    local owned = PCF.aip and PCF.aip.ai_pawn_lookup and PCF.aip.ai_pawn_lookup()
+    local p = owned or pc.Pawn
+    if not (p and p:IsValid()) then p = nil end
+    if not Kit.local_fighter then return p end
+    local i = rawget(_G, "HSMP_IPC")
+    local swap = i and i.bus_table and i.bus_table("fallback_swap")
+    local context = PCF.fighter_context()
+    p, PCF.bound = Kit.local_fighter(p, context, PCF.bound, swap, os.clock(), PCF.describe, PCF.resolve)
+    return p
 end
 
 local function busy(w)
@@ -545,7 +578,7 @@ end
 local function weapon_entry(x)
     if not valid(x) then return nil end
     local pass = field(x, "Weapon Passport")
-    local arr = pass and enc_struct(pass, WEAPON_FIELDS) or nil
+    local arr = pass and enc_struct(pass, WEAPON_FIELDS, true) or nil
     -- The passport's own class can be empty for level-placed weapons; fall back
     -- to the actor's class so the stand-in still gets the right weapon.
     if arr and (arr.class == nil or arr.class == "") then
@@ -703,7 +736,7 @@ local function write_local()
         busy_since = nil
     end
     local L = read_local_loadout(pawn)
-    local content = sig({ p = L.p, a = L.a, w = L.w })
+    local content = sig({ p = L.p, a = L.a }) .. "|" .. Kit.weapon_sig(L)
     local now = os.time()
     if content == last_content then
         if now - last_heartbeat >= 30 then
@@ -742,7 +775,73 @@ local tries   = {}   -- peer_id -> { key, n, next_at }
 --   dyn_raw   last world_dyn record version
 --   hand      own hands' address signature (publish on change)
 local SI = { aw = {}, strip = {}, dyn_seen = nil, dyn_raw = nil, hand = nil }
-function SI.reset() SI.aw, SI.strip, SI.dyn_seen, SI.dyn_raw, SI.hand = {}, {}, nil, nil, nil end
+function SI.reset()
+    SI.aw, SI.strip, SI.dyn_seen, SI.dyn_raw, SI.hand = {}, {}, nil, nil, nil
+    if SI.empty_left then SI.empty_left:reset() end
+end
+SI.empty_left_module = (function()
+    local ok, value = pcall(require, "remote_empty_left")
+    if ok and type(value) == "table" then return value end
+    local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+    local directory = source:match("^(.*)[/\\]") or "."
+    local loaded, module = pcall(dofile, directory .. "/remote_empty_left.lua")
+    if loaded and type(module) == "table" then return module end
+end)()
+SI.weapon_equal = (function()
+    local ok, value = pcall(require, 'weapon_passport_equal')
+    if ok and type(value) == 'table' then return value end
+    local source = (debug.getinfo(1, 'S').source or ''):gsub('^@', '')
+    local directory = source:match('^(.*)[/\\]') or '.'
+    local loaded, module = pcall(dofile, directory .. '/weapon_passport_equal.lua')
+    if loaded and type(module) == 'table' then return module end
+    Log('exact Weapon Passport helper unavailable: %s', tostring(module))
+end)()
+Kit.weapon_passport_key = function(record)
+    return SI.weapon_equal and SI.weapon_equal.signature(record, WEAPON_FIELDS) or "unavailable"
+end
+function SI.native_passport_record(pass, fields)
+    if not pass or not SI.weapon_equal then return nil end
+    local ok, record = pcall(enc_struct, pass, fields, true)
+    if not ok then return nil end
+    local read, matches = pcall(SI.weapon_equal.matches, pass, record, fields, class_path)
+    if not read or not matches then return nil end
+    return record
+end
+SI.weapon_presets_module = (function()
+    local ok, value = pcall(require, "native_weapon_presets")
+    if ok and type(value) == "table" then return value end
+    local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+    local directory = source:match("^(.*)[/\\]") or "."
+    local loaded, module = pcall(dofile, directory .. "/native_weapon_presets.lua")
+    if loaded and type(module) == "table" then return module end
+end)()
+if SI.weapon_presets_module then
+    SI.weapon_presets = SI.weapon_presets_module.new({generation=world_gen_ref,
+        source=function(d)
+            local da = StaticFindObject(d.asset)
+            if not valid(da) then
+                LoadAsset(d.asset:match("^(.*)%.[^%.]+$"))
+                da = StaticFindObject(d.asset)
+            end
+            if not valid(da) then return nil end
+            local entries = field(field(da, d.container), d.field)
+            local count = #entries
+            if count < 1 or count > 64 then return nil end
+            local pass
+            if d.index then
+                if d.index > count then return nil end
+                pass = entries[d.index]
+            else
+                -- Pinned TMap::Find uses the same GetParam pusher as ForEach.
+                pass = entries:Find(d.map_key):get()
+            end
+            if #entries ~= count then return nil end
+            return pass
+        end,
+        read_record=function(pass)return SI.native_passport_record(pass, WEAPON_FIELDS)end,
+        matches=function(pass,record)return SI.weapon_equal.matches(pass,record,WEAPON_FIELDS,class_path)end,
+    })
+end
 
 -- HSMPAvatars' stand-ins (bus key "puppets", typed rows {peer, name}) as
 -- { ["<peer id>"] = "<Willie FName>" }; nil = never written.
@@ -768,7 +867,7 @@ local function remote_loadout(id)
     if type(t) ~= "table" or not t.version then return nil end
     local c = lo_cache[id]
     if c and c.rec == t then return c.L end
-    local L = { v = t.version, p = {}, a = {}, w = {} }
+    local L = { v = t.version, p = {}, a = {}, w = {}, exact_armour = true }
     for _, r in ipairs(t.rows or {}) do
         local f = tonumber(r.flags) or 0
         if f & REC.PIECE ~= 0 then L.p[#L.p + 1] = { r.slot, r.class } end
@@ -819,7 +918,7 @@ end
 --
 -- Passport contents come from the game's own loadout data assets
 -- (DA_Equipment_Loadout_Tier_*: ArmorinSlots, real modules/colours/steel);
--- an item no tier loadout uses gets a synthesised passport (core only).
+-- an item no tier loadout uses keeps its own class's native passport defaults.
 
 local TIER_DAS = { "Beggar", "Peasant", "Commoner", "Militia", "Soldier", "ManAtArms", "Veteran", "Knight" }
 local pass_tmpl, pass_tmpl_n = nil, 0
@@ -840,8 +939,8 @@ local function harvest_templates()
             nda = nda + 1
             local lo = field(da, "Loadout")
             map_each(lo and field(lo, EQ_ARMOR_IN), function(_, pass)
-                local enc = enc_struct(pass, ARMOR_FIELDS)
-                if enc.class and enc.class ~= "" and not t[enc.class] then
+                local enc = SI.native_passport_record(pass, ARMOR_FIELDS)
+                if enc and enc.class and enc.class ~= "" and not t[enc.class] then
                     t[enc.class] = enc
                     pass_tmpl_n = pass_tmpl_n + 1
                 end
@@ -854,14 +953,6 @@ local function harvest_templates()
     return t
 end
 
-local DEFAULT_PASSPORT_COLOURS = {
-    { 0, 0, 0, 1 },                 -- background
-    { 0.22, 0.13, 0.07, 1 },        -- leather
-    { 0.42, 0.37, 0.29, 1 },        -- fabric 1
-    { 0.30, 0.26, 0.20, 1 },        -- fabric 2
-    { 0.20, 0.17, 0.13, 1 },        -- fabric 3
-}
-
 -- Encoded passport (ARMOR_FIELDS order) for armour class `path` in `slot`.
 local function make_passport(slot, path, tint)
     local tm = harvest_templates()[path]
@@ -869,29 +960,53 @@ local function make_passport(slot, path, tint)
     if tm then
         arr = copy_pass(tm)
     else
-        local C = DEFAULT_PASSPORT_COLOURS
-        local function col(i) return { C[i][1], C[i][2], C[i][3], C[i][4] } end
-        arr = { class = path, id = 0, core_removed = false, module1 = 0, module2 = 0, module3 = 0,
-                bg_color = col(1), leather_color = col(2), fabric1 = col(3), fabric2 = col(4), fabric3 = col(5),
-                steel = 0, metal = 0, rust = false, dirt = false, price = 0, pslot = slot,
-                up_ap = false, low_ap = false, req_up_ap = false, req_low_ap = false, req_hier = false, tier = 0 }
-        -- Arming-point flags from the armour class defaults.
+        -- Modular Core UserConstructionScript consumes the passport's steel,
+        -- materials and module indices before native protection is built.
+        -- A fabricated steel=0 changes that protection; copy the native CDO.
         local cls = resolve_class(path)
         local cdo; pcall(function() cdo = cls:GetCDO() end)
-        if valid(cdo) then
-            local function b(n) local v; pcall(function() v = cdo[n] end); return v == true end
-            arr.up_ap = b("Unlocks Upper Arming Points")
-            arr.low_ap = b("Unlocks Lower Arming Points")
-            arr.req_up_ap = b("Requires Upper Arming Points")
-            arr.req_low_ap = b("Requires Lower Arming Points")
+        local pass = valid(cdo) and field(cdo, "Armor Passport")
+        if not pass then return nil, false end
+        arr = SI.native_passport_record(pass, ARMOR_FIELDS)
+        if not arr then return nil, false end
+        for _, flag in ipairs({ { "up_ap", "Unlocks Upper Arming Points" }, { "low_ap", "Unlocks Lower Arming Points" },
+            { "req_up_ap", "Requires Upper Arming Points" }, { "req_low_ap", "Requires Lower Arming Points" } }) do
+            local read, value = pcall(function() return cdo[flag[2]] end)
+            if not read or type(value) ~= "boolean" then return nil, false end
+            arr[flag[1]] = value
         end
     end
-    arr.class, arr.core_removed, arr.pslot = path, false, slot
+    arr.class, arr.pslot = path, slot
     if tint then
         local col, dark = tint[1], tint[2]
         arr.leather_color, arr.fabric1, arr.fabric2, arr.fabric3 = dark, col, dark, col
     end
     return arr, tm ~= nil
+end
+
+-- Count/class checks cannot establish native modules or material. Compare the
+-- game's result with every field we supplied, rather than the input slot map.
+function SI.armour_passports_match(pawn, want)
+    local have, missing = {}, {}
+    map_each(field(pawn, "Currently Equipped Armor"), function(slot, pass)
+        have[tonumber(slot) or -1] = pass
+    end)
+    for slot, pass in pairs(want) do
+        if not SI.weapon_equal or not SI.weapon_equal.matches(have[slot], pass, ARMOR_FIELDS, class_path) then
+            missing[#missing + 1] = (pass.class or "?"):match("([^/]+)$") .. " passport"
+        end
+    end
+    table.sort(missing)
+    return #missing == 0, missing
+end
+function SI.kit_armour_match(pawn, pieces, tint)
+    local want = {}
+    for _, piece in ipairs(pieces) do
+        local pass = make_passport(piece[1], piece[2], tint)
+        if not pass then return false, { piece[2]:match("([^/]+)$") .. " defaults unavailable" } end
+        want[piece[1]] = pass
+    end
+    return SI.armour_passports_match(pawn, want)
 end
 
 -- Native passports a pawn had before we first dressed it (underwear / base
@@ -1005,7 +1120,12 @@ local function apply_armour(puppet, L)
     end
     local want, first, later = {}, {}, {}
     local nt, ns = 0, 0
-    for _, e in ipairs(base_pass[key]) do want[e[1]] = e[2] end
+    -- Received appearances already include the owner's real base clothing.
+    -- A pooled foe's non-catalogue pieces can be helmets/plate too, not just
+    -- underwear; merging them makes an opponent wear gear its owner removed.
+    if not L.exact_armour then
+        for _, e in ipairs(base_pass[key]) do want[e[1]] = e[2] end
+    end
     for _, pc in ipairs(pieces) do
         local slot, path = pc[1], pc[2]
         local g = given[slot]
@@ -1013,6 +1133,7 @@ local function apply_armour(puppet, L)
             want[slot] = g
         else
             local enc, from_tmpl = make_passport(slot, path, L.tint)
+            if not enc then return false, #pieces, "FAIL native armour defaults unavailable: " .. path end
             if from_tmpl then nt = nt + 1 else ns = ns + 1 end
             want[slot] = enc
         end
@@ -1022,7 +1143,7 @@ local function apply_armour(puppet, L)
     end
     table.sort(first); table.sort(later)
     local wrote = 0
-    res[#res + 1] = "passport=" .. tostring(pcall(function()
+    local passport_ok, passport_err = pcall(function()
         local m = passport_armour_map(puppet)
         m:Empty()
         for _, list in ipairs({ first, later }) do
@@ -1031,7 +1152,11 @@ local function apply_armour(puppet, L)
                 wrote = wrote + 1
             end
         end
-    end))
+    end)
+    res[#res + 1] = "passport=" .. tostring(passport_ok)
+    if not passport_ok then
+        return false, #pieces, table.concat(res, " ") .. " FAIL " .. tostring(passport_err)
+    end
     local ok, err = call_setup(puppet, false)
     local built = #current_passports(puppet)
     local mode = "checked"
@@ -1039,20 +1164,25 @@ local function apply_armour(puppet, L)
         -- The game's layering rules refused something the server-validated
         -- kit allows (arming points / slot blocking): rebuild without checks.
         -- ("Set Up Armor" removed the refused entries from the passport map.)
-        pcall(function()
+        local rewrite_ok, rewrite_err = pcall(function()
             local m = passport_armour_map(puppet)
             m:Empty()
             for _, list in ipairs({ first, later }) do
                 for _, slot in ipairs(list) do m:Add(slot, dec_struct(want[slot], ARMOR_FIELDS)) end
             end
         end)
+        if not rewrite_ok then
+            return false, #pieces, table.concat(res, " ") .. " rewrite FAIL " .. tostring(rewrite_err)
+        end
         ok, err = call_setup(puppet, true)
         built = #current_passports(puppet)
         mode = "nocheck"
     end
-    res[#res + 1] = string.format("built=%d/%d(tmpl=%d synth=%d base=%d %s)", built, wrote, nt, ns, #base_pass[key], mode)
+    local exact, missing = SI.armour_passports_match(puppet, want)
+    res[#res + 1] = string.format("built=%d/%d(tmpl=%d defaults=%d base=%d %s) exact=%s", built, wrote, nt, ns, #base_pass[key], mode, tostring(exact))
+    if not exact then res[#res + 1] = "mismatch=" .. table.concat(missing, ",") end
     res[#res + 1] = "SetUpArmor=" .. (ok and "ok" or ("FAIL " .. tostring(err)))
-    return ok and built >= wrote, #pieces, table.concat(res, " ")
+    return ok and built >= wrote and exact, #pieces, table.concat(res, " ")
 end
 
 -- The pawn's own "Character Passport".Equipment.WeaponinHands (key 0 = right,
@@ -1075,10 +1205,20 @@ local WP_CLASS = "WeaponClass_54_B478ECF7499977809745A3973AD678EC"
 -- without a head module takes its modules (and sizes, materials) from the
 -- first of those whose head module belongs to the same weapon family; the
 -- weapon class stays the kit's.
+-- This legacy family fallback reads merchant/save stock, not canonical class
+-- defaults. Full source validation below does not prove tier/recipe identity;
+-- replacing it with explicitly identified native presets remains open.
 local WEAPON_FAMILIES = {
     { "Sword", "Sword_Blade" }, { "LongSword", "Sword_Blade" }, { "GreatSword", "Sword_Blade" },
     { "Falchion", "Falchion_Blade" }, { "Messer", "Langmesser" }, { "Dagger", "Sword_Blade" },
     { "Polearm", "Polearm_Head" }, { "Polearm", "PA_Head" }, { "Mace", "Mace" }, { "Hafted", "Hafted_Head" },
+}
+-- Harvested Reforged DaggerRondel has a fixed Blade1 SCS mesh
+-- SM_Weapon_Dagger_Rondell_A_001 and its own passport Name override. Its
+-- complete runtime CDO passport is authoritative even with empty modules;
+-- a "Dagger" family match must not attach a merchant sword recipe to it.
+local FIXED_WEAPON_CLASSES = {
+    ["@Weapons/Blueprints/Built_Weapons/Reforged/ModularWeaponBP_DaggerRondel"] = true,
 }
 local module_templates = nil   -- head-module path -> encoded passport (GI lists, read once per process)
 local function weapon_templates()
@@ -1088,11 +1228,14 @@ local function weapon_templates()
         local gi = UEHelpers.GetGameInstance()
         if not valid(gi) then return end
         for _, key in ipairs({ "Available Weapons 1H", "Available Weapons 2H" }) do
-            local arr = gi[key]
-            for i = 1, #arr do
-                local e
-                pcall(function() e = enc_struct(arr[i], WEAPON_FIELDS) end)
-                if e and e.head and e.head ~= "" then list[#list + 1] = e end
+            local arr = field(gi, key)
+            local counted, n = pcall(function() return #arr end)
+            if counted then
+                for i = 1, n do
+                    local e
+                    pcall(function() e = SI.native_passport_record(arr[i], WEAPON_FIELDS) end)
+                    if e and e.head and e.head ~= "" then list[#list + 1] = e end
+                end
             end
         end
     end)
@@ -1103,58 +1246,91 @@ local function weapon_templates()
     return list
 end
 local function module_template_for(cls)
-    local cn = ""; pcall(function() cn = cls:GetFName():ToString() end)
+    if FIXED_WEAPON_CLASSES[class_path(cls)] then return nil, false end
+    local named, cn = pcall(function() return cls:GetFName():ToString() end)
+    if not named or type(cn) ~= "string" or cn == "" then return nil, true end
     local list = weapon_templates()
+    local needs_modules = false
     for _, fam in ipairs(WEAPON_FAMILIES) do
         if cn:find(fam[1], 1, true) then
+            needs_modules = true
             for _, e in ipairs(list) do
-                if tostring(e.head):find(fam[2], 1, true) then return e end
+                if tostring(e.head):find(fam[2], 1, true) then return e, true end
             end
         end
     end
-    return nil
+    return nil, needs_modules
 end
 
-local function weapon_passport_for(cls, from_actor)
+local function weapon_passport_for(cls, from_actor, recipe)
+    if recipe ~= nil then
+        local gen = world_gen
+        if not SI.weapon_presets or SI.weapon_presets_module.class_for(recipe) ~= class_path(cls) then return nil end
+        local record = SI.weapon_presets.resolve(recipe)
+        if not record or world_gen ~= gen then return nil end
+        local decoded, pass = pcall(dec_struct, record, WEAPON_FIELDS)
+        if not decoded or world_gen ~= gen or not SI.weapon_equal.matches(pass,record,WEAPON_FIELDS,class_path) then return nil end
+        return pass
+    end
     local src = from_actor
     if not valid(src) then pcall(function() src = cls:GetCDO() end) end
-    local e
-    pcall(function() e = enc_struct(src["Weapon Passport"], WEAPON_FIELDS) end)
+    local e = valid(src) and SI.native_passport_record(field(src, "Weapon Passport"), WEAPON_FIELDS)
     if not e or not e.head or e.head == "" then
-        local tm = module_template_for(cls)
+        local tm, needs_modules = module_template_for(cls)
         if tm then
             e = copy_pass(tm)
+        elseif needs_modules then
+            return nil
         end
     end
-    local t = {}
-    if e then pcall(function() t = dec_struct(e, WEAPON_FIELDS) end) end
+    if not e then return nil end
+    local decoded, t = pcall(dec_struct, e, WEAPON_FIELDS)
+    if not decoded or type(t) ~= "table" then return nil end
     t[WP_CLASS] = cls
     return t
 end
 
+function SI.weapon_passport_matches(actor, pass)
+    return pass ~= nil and valid(actor) and SI.weapon_equal ~= nil and
+        SI.weapon_equal.matches(field(actor, "Weapon Passport"), enc_struct(pass, WEAPON_FIELDS, true), WEAPON_FIELDS, class_path)
+end
+function SI.hand_passport_matches(pawn, side, path, pass, bare)
+    local actor = field(pawn, "Weapon " .. side)
+    if not valid(actor) then actor = field(pawn, "Weapon " .. side .. "_0") end
+    local actual = ""; pcall(function() actual = class_path(actor:GetClass()) end)
+    return actual == path and (bare or SI.weapon_passport_matches(actor, pass))
+end
+
 local function set_hand_passport(pawn, side, cls, pass)
     local key = side == "R" and 0 or 1
+    if cls then
+        pass = pass or weapon_passport_for(cls)
+        if not pass then return false end
+    end
     return pcall(function()
         local cp = pawn["Character Passport"]
         local m = cp[CP_EQUIPMENT][EQ_WEAPON_HANDS]
-        if cls then m:Add(key, pass or weapon_passport_for(cls)) else m:Remove(key) end
+        if cls then m:Add(key, pass) else m:Remove(key) end
     end)
 end
 
 -- HSMPAvatars caches a stand-in's hand-weapon root component; every
--- K2_DestroyActor of a hand weapon here bumps the bus key "standin_weapons"
+-- destruction or native replacement of a hand weapon bumps "standin_weapons"
 -- (typed record { gen }) so Avatars drops its cached pointers at once (it also
 -- re-validates each use).
 local weapon_gen = nil
-local function destroy_hand_weapon(a)
+local function bump_weapon_generation()
     local I = ipc()
     if weapon_gen == nil then
         local t = I and I.bus_table and I.bus_table("standin_weapons")
         weapon_gen = tonumber(type(t) == "table" and t.gen) or 0
     end
-    pcall(function() a:K2_DestroyActor() end)   -- unsafe: ok a hand weapon actor (Weapon R/L), never a Willie
     weapon_gen = weapon_gen + 1
     if I and I.bus_put then pcall(I.bus_put, "standin_weapons", { gen = weapon_gen }) end
+end
+local function destroy_hand_weapon(a)
+    pcall(function() a:K2_DestroyActor() end)   -- unsafe: ok hand weapon actor only, never a Willie
+    bump_weapon_generation()
 end
 SI.destroy_hand_weapon = destroy_hand_weapon
 
@@ -1175,31 +1351,45 @@ local function spawn_weapon_actor(puppet, cls, pass)
 end
 
 local function apply_weapon(puppet, side, entry)
+    if not SI.weapon_equal then return "FAIL exact Passport helper unavailable" end
+    local empty_hand = entry == nil
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
     local cur
     for _, f in ipairs(side == "R" and { "Weapon R", "Weapon R_0" } or { "Weapon L", "Weapon L_0" }) do
         if not cur then local x = field(puppet, f); if valid(x) then cur = x end end
     end
     if not entry then
-        set_hand_passport(puppet, side, nil)
-        -- Remote hand is empty: the stand-in must not keep the arena foe's weapon.
-        if cur then
-            destroy_hand_weapon(cur)   -- bumps standin_weapons
-            return "stripped"
-        end
-        return "none"
+        -- Fists are omitted from the appearance stream, but the native Sphere
+        -- still supplies collision tags/owner identity to damage replay. Keep
+        -- or construct the game's real pseudo-weapon rather than deleting it.
+        entry = { class = "@Weapons/Blueprints/Built_Weapons/Weapon_Fists" }
+        -- Keep the old actor valid until native hand setup subtracts its
+        -- weight and destroys it through Destroy Previous=true.
     end
     local cls = resolve_class(entry.class)
-    if not cls then return "noclass" end
+    if not cls then return "FAIL noclass" end
     if cur then
         local cp = ""; pcall(function() cp = class_path(cur:GetClass()) end)
-        if cp == entry.class then return "same" end
+        if cp == entry.class and (empty_hand or SI.weapon_equal.matches(field(cur, "Weapon Passport"), entry, WEAPON_FIELDS, class_path)) then
+            local reused
+            if empty_hand then reused = weapon_passport_for(cls, cur) else reused = dec_struct(entry, WEAPON_FIELDS) end
+            if not reused then return "FAIL native weapon defaults unavailable" end
+            reused[WP_CLASS] = cls
+            if not set_hand_passport(puppet, side, cls, reused) then return "FAIL hand passport" end
+            return "same"
+        end
     end
-    local pass = dec_struct(entry, WEAPON_FIELDS)
+    local pass
+    if empty_hand then pass = weapon_passport_for(cls) else pass = dec_struct(entry, WEAPON_FIELDS) end
+    if not pass then return "FAIL native weapon defaults unavailable" end
     pass[WP_CLASS] = cls
-    set_hand_passport(puppet, side, cls, pass)
+    if not set_hand_passport(puppet, side, cls, pass) then return "FAIL hand passport" end
     local ok, err = pcall(bp_call, puppet, fname, cls, nil, false, true, pass)
-    if ok then return "ok" end
+    if ok and cur then bump_weapon_generation() end
+    if ok and SI.hand_passport_matches(puppet, side, entry.class, pass, empty_hand) then
+        return "ok"
+    end
+    if ok then err = "native hand passport mismatch" end
     -- nil actor rejected by the reflection layer: spawn it ourselves and hand
     -- the actor to the same BP function.
     local a
@@ -1207,8 +1397,12 @@ local function apply_weapon(puppet, side, entry)
         a = spawn_weapon_actor(puppet, cls, pass)
         if not a then error("spawn failed") end
         bp_call(puppet, fname, cls, a, false, true, pass)
+        if cur then bump_weapon_generation() end
+        if not SI.hand_passport_matches(puppet, side, entry.class, pass, empty_hand) then error("native hand passport mismatch") end
     end)
-    if ok2 then return "ok(spawned)" end
+    if ok2 then
+        return "ok(spawned)"
+    end
     if valid(a) then pcall(function() a:K2_DestroyActor() end) end
     return "FAIL " .. tostring(err) .. " / " .. tostring(err2)
 end
@@ -1257,19 +1451,41 @@ local function apply_weapons(puppet, L, id, strip)
     local wR = not (strip and strip.R) and w.R or nil
     local wL = not (strip and strip.L) and w.L or nil
     local held = id and world_held(id)
+    local absent_left = not (held and held.L) and ((strip and strip.L)
+        or (L.kit_w and L.kit_w.L == nil) or (not L.kit_w and wL == nil))
+    local wanted
+    if absent_left and not (held and held.R) and not (strip and strip.R) then
+        local path = L.kit_w and L.kit_w.R or wR and wR.class
+        if path and path ~= "" and not Kit.is_bare(path) then wanted = { class = path, record = not L.kit_w and wR or nil,
+            recipe = L.kit_recipe and L.kit_recipe.R } end
+    end
+    if absent_left then
+        if not SI.empty_left then return false, "FAIL empty L helper unavailable", "FAIL empty L helper unavailable" end
+        local ok, result = SI.empty_left:prepare(puppet, tonumber(id), wanted)
+        if not ok then return false, "FAIL R not attempted", result end
+        wl = result
+    elseif SI.empty_left then
+        local ok, reason = SI.empty_left:allow(puppet, tonumber(id))
+        if not ok then return false, "FAIL R not attempted", reason end
+        SI.empty_left:forget(tonumber(id))
+    end
     if held and (held.R or held.L) then
         local kw = L.kit_w
         wr = held.R and yield_hand(puppet, "R", held.R)
-            or (kw and Kit.give_weapon(puppet, "R", kw.R) or apply_weapon(puppet, "R", wR))
-        wl = held.L and yield_hand(puppet, "L", held.L)
-            or (kw and Kit.give_weapon(puppet, "L", kw.L) or apply_weapon(puppet, "L", wL))
+            or (kw and Kit.give_weapon(puppet, "R", kw.R, L.kit_recipe and L.kit_recipe.R) or apply_weapon(puppet, "R", wR))
+        wl = wl or held.L and yield_hand(puppet, "L", held.L)
+            or (kw and Kit.give_weapon(puppet, "L", kw.L, L.kit_recipe and L.kit_recipe.L) or apply_weapon(puppet, "L", wL))
     elseif L.kit_w then
         -- Synthesised from the validated kit (no appearance received yet).
-        wr = (strip and strip.R) and apply_weapon(puppet, "R", nil) or Kit.give_weapon(puppet, "R", L.kit_w.R)
-        wl = (strip and strip.L) and apply_weapon(puppet, "L", nil) or Kit.give_weapon(puppet, "L", L.kit_w.L)
+        wr = (strip and strip.R) and apply_weapon(puppet, "R", nil) or Kit.give_weapon(puppet, "R", L.kit_w.R, L.kit_recipe and L.kit_recipe.R)
+        wl = wl or Kit.give_weapon(puppet, "L", L.kit_w.L, L.kit_recipe and L.kit_recipe.L)
     else
         wr = apply_weapon(puppet, "R", wR)
-        wl = apply_weapon(puppet, "L", wL)
+        wl = wl or apply_weapon(puppet, "L", wL)
+    end
+    if absent_left and not wr:find("^FAIL") then
+        local ok, result = SI.empty_left:finish(puppet, tonumber(id), wanted)
+        if not ok or result then wr = result end
     end
     return not wr:find("^FAIL") and not wl:find("^FAIL"), wr, wl
 end
@@ -1283,7 +1499,7 @@ local function apply_loadout(puppet, L, id, strip)
     local summary = string.format("pieces=%d %s worn %d->%d weapons R=%s L=%s hair=%s%s",
         npieces, ares, before, after, wr, wl, hair,
         L.cos_kit and (" kit=" .. tostring(L.cos_kit.class)) or "")
-    return armour_ok and wok, summary
+    return armour_ok and wok, summary, armour_ok
 end
 
 -- --- invisible dressing ---------------------------------------------------------
@@ -1321,6 +1537,47 @@ end
 -- while its pawn was hidden (dressing), or a pooled weapon actor that the
 -- census hid on an extra (HSMPAvatars remove_willie), can stay hidden: no
 -- weapon shows although the kit verified it in hand.
+-- Current applied pose + server life, with native world/actor/mesh checked
+-- again before each empty-L passport write or retained-R rebind.
+function SI.remote_hand_context(pawn, peer)
+    local I = ipc()
+    local hs = Kit._HS and Kit._HS()
+    if not (I and I.N and I.N.ipc_info and hs and hs.view and hs.mode and mp_live()) then return nil end
+    local info = I.N.ipc_info()
+    local age = type(info) == "table" and info.sidecar_hb_age_s
+    if type(info) ~= "table" or (info.sidecar_state ~= "ready" and info.sidecar_state ~= 2)
+        or type(age) ~= "number" or age ~= age or age < 0 or age > 5 then return nil end
+    local v, mode = hs.view(), hs.mode()
+    local me, world = PCF.describe(pawn), PCF.world()
+    if not (v and me and world and valid(world) and v.by_peer and v.by_peer[peer]
+        and v.by_peer[peer].role == 0 and v.match_id and v.match_id > 0
+        and me.world == tostring(world_gen) .. "|" .. tostring(world:GetAddress()) .. "@" .. world:GetFullName()) then return nil end
+    local round = (v.state == "countdown" or v.state == "paused") and v.spawn_round or v.round
+    if not round or round <= 0 then return nil end
+    local playback = I.bus_table("playback")
+    local shown
+    for _, row in ipairs(playback and playback.rows or {}) do
+        if row.peer == peer and row.pawn == me.name then shown = row; break end
+    end
+    local now = os.clock() * 1000
+    if not shown or shown.match_id ~= v.match_id or shown.round ~= round
+        or type(shown.life) ~= "number" or not math.tointeger(shown.life) or shown.life <= 0
+        or type(shown.local_ms) ~= "number" or shown.local_ms ~= shown.local_ms
+        or shown.local_ms > now or now - shown.local_ms > 250 then return nil end
+    local assigned = v.spawns and v.spawns[peer]
+    if not assigned or type(assigned.spawn_id) ~= "number" or not math.tointeger(assigned.spawn_id)
+        or assigned.spawn_id <= 0 or assigned.spawn_id >> 8 ~= round then return nil end
+    if mode and mode.match_id == v.match_id and mode.round == round then
+        local row = mode.rows and mode.rows[peer]
+        if not row or row.life ~= shown.life then return nil end
+    elseif not (v.state == "countdown" and v.spawn_round == v.pending_round) then return nil end
+    local mesh = pawn.Mesh
+    if not valid(mesh) or mesh:GetOwner():GetAddress() ~= pawn:GetAddress() then return nil end
+    return { world = me.world, world_address = world:GetAddress(), pawn = me.name, address = pawn:GetAddress(),
+        mesh = mesh:GetAddress(), mesh_name = mesh:GetFName():ToString(), peer = peer,
+        match_id = v.match_id, round = round, life = shown.life, spawn_id = assigned.spawn_id }
+end
+
 local CARRIED_FIELDS = { "Weapon R", "Weapon L", "Weapon R_0", "Weapon L_0",
     "Weapon Slot R 1", "Weapon Slot R 2", "Weapon Slot L 1", "Weapon Slot L 2", "Weapon Slot Back" }
 
@@ -1565,7 +1822,17 @@ local function apply_remote()
                         t.n = t.n + 1
                         t.next_at = now + 0.5
                         local ok, wr, wl = apply_weapons(w, L, id, st)
-                        if ok then SI.aw[id] = wkey end
+                        if ok then
+                            SI.aw[id] = wkey
+                            local aa = applied_at[id]
+                            if aa and not aa.verified then
+                                aa.verified, aa.hands = true, SI.hands_sig(w)
+                                reveal(w, "dressed after hands retry")
+                                local Rw, Lw = held_weapons(w)
+                                late.ev("kit_verified", { who = "peer:" .. tostring(id), armour_n = #current_passports(w),
+                                    r_class = Rw and cls_name(Rw) or "None", l_class = Lw and cls_name(Lw) or "None", ok = true })
+                            end
+                        end
                         Log("peer %s: hands only on %s (try %d): R=%s L=%s%s", id, name, t.n, wr, wl,
                             ok and "" or " - will retry")
                     end
@@ -1587,11 +1854,18 @@ local function apply_remote()
                     elseif w and not same(w, me) and hp > 0 then
                         t.n = t.n + 1
                         t.next_at = now + 0.5
-                        local ok, res = apply_loadout(w, L, id, st)
+                        local ok, res, armour_ok = apply_loadout(w, L, id, st)
+                        if armour_ok then
+                            -- A failed hand transaction retries only hands; do
+                            -- not respawn successful armour to finish its debt.
+                            applied[id] = key
+                            SI.aw[id] = nil -- an old success for the same hand key cannot cover this failed attempt
+                            applied_at[id] = { t = now, expect = #current_passports(w), hands = ok and SI.hands_sig(w) or nil, verified = ok }
+                        end
                         if ok then
                             applied[id], SI.aw[id] = key, wkey
                             local neq = #current_passports(w)
-                            applied_at[id] = { t = now, expect = neq, hands = SI.hands_sig(w) }
+                            applied_at[id] = { t = now, expect = neq, hands = SI.hands_sig(w), verified = true }
                             local ms = reveal(w, "dressed")
                             local R, Lw = held_weapons(w)
                             -- Where the stand-in's weapons
@@ -1662,12 +1936,19 @@ function SI.strip_dropped()
                     end
                 end
                 if cur and cls_name(cur) == e.leaf then
-                    local res = apply_weapon(w, side, nil)
                     local R = remote_loadout(id)
                     local v = (R and R.v) or 0
                     local st = SI.strip[id]
                     if not st or st.v ~= v then st = { v = v }; SI.strip[id] = st end
                     st[side] = true
+                    local res
+                    if side == "L" then
+                        local L = Kit.effective_remote(id, R)
+                        if L then
+                            local ok, wr, wl = apply_weapons(w, L, id, st)
+                            res = tostring(wl) .. " R=" .. tostring(wr) .. (ok and "" or " - will retry")
+                        else res = "FAIL missing appearance/kit for None cleanup" end
+                    else res = apply_weapon(w, side, nil) end
                     Log("peer %s dropped %s (world item %d): stand-in %s hand %s %s at once", id, e.leaf, e.id,
                         tostring(name), side, res)
                 end
@@ -1756,18 +2037,46 @@ Kit.init({
     class_path = class_path, bp_call = bp_call, spawn_weapon_actor = spawn_weapon_actor,
     enc_struct = enc_struct, dec_struct = dec_struct, WEAPON_FIELDS = WEAPON_FIELDS,
     set_hand_passport = set_hand_passport, weapon_passport_for = weapon_passport_for,
+    weapon_recipe_class = SI.weapon_presets_module and SI.weapon_presets_module.class_for,
+    weapon_passport_matches = SI.weapon_passport_matches, armour_passports_match = SI.kit_armour_match,
     destroy_hand_weapon = destroy_hand_weapon, weapon_shown = weapon_shown,
+    hand_weapon_replaced = bump_weapon_generation,
     reveal = reveal, dress_wait = dress_wait, dress_age = dress_age,
     apply_armour = apply_armour, read_pieces = read_pieces, read_source = read_source,
     worn_count = worn_count, in_arena = in_arena, local_pawn = local_pawn, busy = busy,
+    fighter_context = function(pawn)
+        local context, m = PCF.fighter_context(), PCF.describe(pawn)
+        return context and m and context.pawn == m.name and context.world == m.world and context.key or nil
+    end,
     mp_live = mp_live,
 })
+if SI.empty_left_module then
+    SI.empty_left = SI.empty_left_module.new({
+        context = SI.remote_hand_context,
+        wanted_key = function(w) return w.class .. "|" .. (w.record and Kit.weapon_passport_key(w.record) or "kit") .. "|" .. tostring(w.recipe or "") end,
+        matches = function(actor, wanted)
+            if class_path(actor:GetClass()) ~= wanted.class then return false end
+            if wanted.record then return SI.weapon_equal and SI.weapon_equal.matches(field(actor, "Weapon Passport"), wanted.record, WEAPON_FIELDS, class_path) end
+            local cls = resolve_class(wanted.class)
+            local pass = cls and weapon_passport_for(cls, nil, wanted.recipe)
+            return SI.weapon_passport_matches(actor, pass)
+        end,
+        clear_passport = function(pawn) return set_hand_passport(pawn, "L", nil) end,
+        cleanup = function(pawn, record) bp_call(pawn, "Set Up Left Hand Weapon", nil, nil, false, true, dec_struct(record, WEAPON_FIELDS)) end,
+        reequip = function(pawn, actor, wanted)
+            if type(Kit.reequip) ~= "function" then return nil, "preflight" end
+            return Kit.reequip(pawn, "R", actor, wanted.class, wanted.recipe)
+        end,
+        replaced = bump_weapon_generation,
+    })
+end
 
 -- --- loops -----------------------------------------------------------------------
 
 -- Forget everything tied to the old world without touching it. Pure Lua:
 -- safe inside the LoadMap hook.
 local function drop_world_caches()
+    PCF.bound = nil
     applied, tries, dumped_this_arena = {}, {}, false
     dressing, applied_at, puppet_names, seen_vis = {}, {}, {}, {}
     if hair_warmed_here then hair_warm_done = true end
@@ -1799,6 +2108,7 @@ local SETTLE = (function()
             if ok2 and type(m2) == "table" then m = m2; ok = true; break end
         end
     end
+    if ok and type(m) == "table" then PCF.aip = m end   -- local_pawn's AI-drive fallback
     if ok and type(m) == "table" and m.settle_tracker then return m.settle_tracker(), m.SETTLE_S end
     -- fallback (shared lib missing): the same rule inline
     local st = { key = nil, at = nil }
@@ -1807,6 +2117,7 @@ local SETTLE = (function()
     return st, 2.0
 end)()
 local function world_settled() return SETTLE.settled() end
+PCF.settled = world_settled
 SI.world_settled = world_settled
 
 local seen_world = nil
@@ -1934,3 +2245,5 @@ LoopAsync(2000, function()
 end)
 
 Log("loaded; state_dir=%s (Ctrl+F7 = gear dump + re-apply own kit)", STATE_DIR)
+
+

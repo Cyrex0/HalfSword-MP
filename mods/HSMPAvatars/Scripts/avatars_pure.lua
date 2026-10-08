@@ -169,6 +169,10 @@ function PURE.parse_play2(line, last_seq)
     if seq == last_seq then return "same" end
     local t = {
         v2 = true, seq = seq,
+        match_id = tonumber(line:match('"match_id":(%d+)')),
+        round = tonumber(line:match('"round":(%d+)')),
+        life = tonumber(line:match('"life":(%d+)')),
+        has_context = line:match('"has_context":(true)') ~= nil,
         pt    = tonumber(line:match('"ptf":(%-?[%d%.]+)')) or tonumber(line:match('"pt":(%-?%d+)')) or 0,
         mode  = line:match('"mode":"(%a+)"') or "?",
         age   = tonumber(line:match('"age":(%-?[%d%.]+)')) or -1,
@@ -217,10 +221,63 @@ do   -- (one block: the main chunk is near the 200-locals limit)
 local function fill(dst, src, base, n)   -- dst[1..n] = src[base+1 .. base+n]
     return table.move(src, base + 1, base + n, 1, dst or {})
 end
+-- Pose data belongs to one native life, including poses cached between reads.
+function PURE.displayed_pose(pose, pawn, label, at)
+    return {label=label,at=at,pawn=pawn,has_context=pose.has_context,
+        match_id=pose.match_id,round=pose.round,life=pose.life,cut=pose.cut}
+end
+
+-- Combat's u32 timestamps represent whole milliseconds. Quantize the time
+-- BEFORE constructing servo targets, never just their published labels.
+function PURE.display_times(pt, want, horizon, cap, frozen)
+    local shown = math.floor(pt + (frozen and 0 or PURE.clamp(want - pt, -cap, cap)))
+    local aim = math.floor(pt + (frozen and 0 or PURE.clamp(shown - pt + horizon, -cap, cap)))
+    return shown, aim, shown - pt, aim - pt
+end
+
+PURE.SETTLE_FIELDS={"settle_world","settle_sample_ms","settle_stable_ms","settle_ready","settle_count",
+    "settle_pos_uu","settle_rot_deg","settle_reason","settle_source_seq","settle_source_ts","settle_cut"}
+function PURE.playback_row(peer, shown, now, allow_stale)
+    if not shown or shown.has_context~=true or not shown.match_id or shown.match_id==0
+        or not shown.life or shown.life<1 or type(shown.pawn)~="string" or shown.pawn==""
+        or not shown.at or now-shown.at<0 or (not allow_stale and now-shown.at>=250)
+        or not math.tointeger(shown.label) or shown.label<1 or shown.label>0xffffffff then return nil end
+    local row={peer=peer,body_ts=shown.label,arm_ts=shown.label,local_ms=math.floor(shown.at),
+        match_id=shown.match_id,round=shown.round,life=shown.life,pawn=shown.pawn}
+    for _,key in ipairs(PURE.SETTLE_FIELDS) do row[key]=shown[key] end
+    return row
+end
+
+-- A relayed Root carries its original context as plain fields (no has_context flag, unlike
+-- PeerPlay): stamped when match_id is set. Returns the table pose_context_ok expects.
+function PURE.root_context(r)
+    local m = type(r) == "table" and math.tointeger(r.match_id) or 0
+    return { has_context = m ~= 0, match_id = r and r.match_id, round = r and r.round, life = r and r.life }
+end
+
+function PURE.pose_context_ok(o, session, mode, peer)
+    if type(session) ~= "table" or (session.match_id or 0) == 0 then return true end
+    if type(o) ~= "table" or o.has_context ~= true then return false end
+    local round = session.round or 0
+    if session.state == "countdown" or session.state == "paused" then
+        if (session.spawn_round or 0) > 0 then round = session.spawn_round end
+    end
+    local life = 1
+    if type(mode) == "table" and mode.match_id == session.match_id and mode.round == round then
+        local row = mode.rows and mode.rows[peer]
+        if row and (row.life or 0) > 0 then life = row.life end
+        if session.state == "live" and not (row and (row.life or 0) > 0) then return false end
+    elseif session.state == "live" then
+        return false
+    end
+    return o.match_id == session.match_id and o.round == round and o.life == life
+end
+
 function PURE.play_from_out(o, into)
     if type(o) ~= "table" or type(o.B) ~= "table" then return nil end
     local t = into or { slots = {}, weapons = {} }
     t.v2, t.seq, t.pt, t.mode = true, o.seq, tonumber(o.pt) or 0, o.mode or "?"
+    t.match_id, t.round, t.life, t.has_context = o.match_id, o.round, o.life, o.has_context == true
     t.age, t.delay, t.jit = tonumber(o.age) or -1, tonumber(o.delay) or 0, tonumber(o.jit) or 0
     t.cut, t.nbones = tonumber(o.cut) or 0, 0
     t.lead, t.iv, t.st, t.rate = tonumber(o.lead) or 0, tonumber(o.iv) or -1, tonumber(o.st) or 0, tonumber(o.rate) or 1
@@ -481,9 +538,10 @@ end
 -- "tdiag" is stored 1 / nil, its readers test presence); numbers are clamped to a sane range.
 PURE.TUNE_FLAGS = { servo = true, wpn = true, world = true, ghost = true, clock = true, motors = true, grips = true,
                     retarget = true, tonus = true, stamp = true, noacc = true, plant = true, v1aim = true, tdiag = true,
-                    native_servo = true, native_neutralise = true, native_wservo = true }   -- native servo A/B
+                    native_servo = true, native_neutralise = true, native_wservo = true, downed_world = true }   -- native servo A/B
 PURE.TUNE_RANGE = { cap_lin = { 0, 20000 }, cap_ang = { 0, 20000 }, lead = { -500, 500 }, gain = { 0, 1 },
-                    leg_gain = { 0, 1 }, lat = { 0, 500 }, limits = { 0, 180 }, bench = { 1, 1000 } }
+                    leg_gain = { 0, 1 }, lat = { 0, 500 }, limits = { 0, 180 }, bench = { 1, 1000 },
+                    impact_dv = { 0, 5000 }, impact_ms = { 0, 1000 } }
 -- The stored value for knob `key` set to `num`, or nil, "unknown" / "bad".
 function PURE.tune_value(key, num)
     if type(num) ~= "number" or num ~= num or num == math.huge or num == -math.huge then return nil, "bad" end
@@ -544,10 +602,14 @@ function PURE.ref_loc(loc)
         local ref = PURE.V2_REF_T[i]
         local want = PURE.len3(ref) * k
         local m = loc and loc[i]
-        if m and math.abs(PURE.len3(m) - want) <= math.max(2, 0.15 * want) then
+        local expected = { ref[1] * k, ref[2] * k, ref[3] * k }
+        -- Equal length does not mean an intact joint: a pooled/ragdolled
+        -- neck can be displaced sideways. Caching that direction permanently
+        -- makes the servo aim at a bent skeleton on every later frame.
+        if m and PURE.d3(m, expected) <= math.max(2, 0.15 * want) then
             out[i] = m
         else
-            out[i] = { ref[1] * k, ref[2] * k, ref[3] * k }
+            out[i] = expected
             fixed = fixed + 1
         end
     end

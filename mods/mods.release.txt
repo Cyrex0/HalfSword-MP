@@ -42,6 +42,8 @@ HSMPCombat : 1
 HSMPLoadout : 1
 HSMPHud : 1
 HSMPInteract : 1
+# Runs the server mods the player accepted (docs/hosting/server-mods.md).
+HSMPModHost : 1
 
 # --- HSMP developer tools (mods/dev/<Name>) ----------------------------------------
 # HSMPDiag: dev-only property dumps. It emits NO gate events: willie_census comes from the

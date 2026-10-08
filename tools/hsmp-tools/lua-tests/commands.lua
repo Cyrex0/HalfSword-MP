@@ -51,6 +51,24 @@ end
 
 local LOBBY5 = { state = "lobby", best_of = 5, ready = {} }
 
+T.log("== game-mode commands are typed records")
+do
+    _G.HSMP_IPC = { S = { ENUMS = { cmd_op = { SET_CONFIG = 5, SET_TEAM = 11, SET_OPTION = 14 },
+        cfg = { MODE = 2, ROUND_TIME = 8, TEAM_RULE = 16, TEAMS = 32 } } } }
+    local C = dofile(CMDS)
+    local r = C.record({ id = 7, kind = "game_mode", args = { mode = 6 } })
+    T.check(r.op == 5 and r.patch.mask == 2 and r.patch.mode == 6, "mode -> SET_CONFIG MODE", T.repr(r))
+    r = C.record({ id = 8, kind = "teams", args = { rule = 2, n = 3 } })
+    T.check(r.patch.mask == 48 and r.patch.team_rule == 2 and r.patch.teams == 3, "teams -> TEAM_RULE | TEAMS", T.repr(r))
+    r = C.record({ id = 9, kind = "set_team", args = { team = 2 } })
+    T.check(r.op == 11 and r.role == 2 and r.peer_id == 0, "set_team: my own pick", T.repr(r))
+    r = C.record({ id = 10, kind = "set_option", args = { opt = 1, value = 90 } })
+    T.check(r.op == 14 and r.choice == 1 and r.ballot == 90, "set_option", T.repr(r))
+    r = C.record({ id = 11, kind = "round_time", args = { s = 300 } })
+    T.check(r.patch.mask == 8 and r.patch.round_time_limit_s == 300, "round_time", T.repr(r))
+    _G.HSMP_IPC = nil
+end
+
 T.log("== the snapshot arrives before the server's answer (lost result packet)")
 do
     local w = new_env(true)
@@ -128,4 +146,48 @@ do
         T.repr(st) .. " sent=" .. #w.sent)
 end
 
+T.log("== closing drains queued and delayed answers without retries or new commands")
+do
+    local w = new_env(true)
+    local queued = w.C.send("best_of", { n = 5 })
+    w:answer(queued, true)
+    w.C.begin_close()
+    T.check(w.C.status(queued).source == "server", "closing consumes the already queued server answer")
+    local blocked, why = w.C.send("ready", { value = true })
+    T.check(blocked == nil and why == "session closing" and #w.sent == 1, "closing refuses new tracked commands before allocating or sending")
+    w:run(7, LOBBY5)
+    T.check(#w.sent == 1 and #w:results(queued) == 1, "closing never retries or creates a second result")
+    w.C.reset()
+    T.check(not w.C.closing and #w:results(queued) == 1, "final reset preserves the one server result")
+
+    w = new_env(true)
+    local delayed = w.C.send("ready", { value = true })
+    w.C.begin_close()
+    w:run(0.5, { state = "lobby", ready = {} })
+    T.check(w.C.status(delayed).state == "pending", "closing retains the unanswered command")
+    w:answer(delayed, true)
+    w.C.drain_results()
+    w:answer(delayed, true)
+    w.C.reset()
+    local rs = w:results(delayed)
+    T.check(#rs == 1 and rs[1].f.ok and rs[1].f.source == "server", "a delayed answer resolves once before the final reset", T.repr(rs))
+    T.check(#w.sent == 1, "delayed close answer needed no resend")
+end
+
+T.log("== closing does not infer an answer and final reset refuses unanswered IDs once")
+do
+    local w = new_env(true)
+    local id = w.C.send("best_of", { n = 5 })
+    w.C.begin_close()
+    w:run(7, LOBBY5)
+    T.check(w.C.status(id).state == "pending" and #w.sent == 1, "closing neither infers nor applies the normal timeout")
+    w.C.reset()
+    w:answer(id, true)
+    w.C.drain_results()
+    w.C.reset()
+    local rs = w:results(id)
+    T.check(#rs == 1 and not rs[1].f.ok and rs[1].f.source == "local" and rs[1].f.reason == "session closed",
+        "the teardown bound produces exactly one explicit local refusal", T.repr(rs))
+    T.check(w.C.send("ready", { value = true }) ~= nil, "a new session can send after reset")
+end
 _G.HSMP_IPC = nil

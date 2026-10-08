@@ -418,7 +418,9 @@ fn claims_and_held_items_are_typed_records() {
         H.expect(d.id == 77 and d.mode == 0 and d.has_rest == true and d.level == W.level and d.epoch == 5, "claim head")
         H.expect(math.abs(d.rest.pos[1] - 10.0) < 1e-4 and d.rest.rot[3] == 32767 and d.rest.vel[1] == 1
             and d.rest.vel[2] == -3 and d.rest.vel[3] == 32767, "rest: 0.1 cm, smallest-three, i16 velocities")
-        H.expect(d.rest.flags == (1 | 8 | (2 << 6)), "flags: WF_* + the dropped quaternion index")
+        -- Yaw 90 ties z and w (sin and cos of pi/4 round either way by platform): either drop decodes alike.
+        H.expect(d.rest.flags == (1 | 8 | (2 << 6)) or d.rest.flags == (1 | 8 | (3 << 6)),
+            "flags: WF_* + the dropped quaternion index (" .. tostring(d.rest.flags) .. ")")
         W2.put_held({ { peer = 3, nid = 77, hand = 1, actor = "Sword_1" } })
         local h = N.sc_get("world_held")
         H.expect(h and h.n == 1 and h.rows[1].hand == 1 and h.rows[1].actor == "Sword_1", "world_held bus record")

@@ -2,10 +2,12 @@
 //! native module: the shared conformance script `tools/hsmp-tools/lua-tests/lib/
 //! records_conformance.lua` (the same checks `hsmp-tools lua-test records` runs against the Lua
 //! mock), plus native-only cases (DevCtl fan-out across Lua states, argv quoting, stderr
-//! capture, batch files) and the benchmarks.
+//! capture, batch files), allocation regressions and opt-in benchmarks.
 //!
 //! One test function: the native state is process-global (like in the game).
-//! `cargo test -p hsmp-native --release --test records -- --nocapture` prints the timings.
+//! Timing-only loops and budgets require `HSMP_NATIVE_BENCH=1 cargo test -p hsmp-native
+//! --release --test records -- --nocapture` (PowerShell: set `$env:HSMP_NATIVE_BENCH='1'`
+//! before the command, remove it afterward). Correctness and allocation checks always run.
 
 use std::ffi::{c_int, c_void, CStr, CString};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -462,7 +464,7 @@ fn argv_round_trip(args: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn records_dev_proc_conformance_and_bench() {
+fn records_dev_proc_conformance_and_allocations() {
     // The Lua test table mirrors the Rust layouts exactly.
     let a = new_state("HSMPSync");
     let b = new_state("HSMPMenu");
@@ -496,6 +498,32 @@ fn records_dev_proc_conformance_and_bench() {
         end)
         assert(#fails == 0, #fails .. " of " .. n .. " conformance checks failed:\n" .. table.concat(fails, "\n"))
         print(string.format("conformance: %d checks passed", n))
+    "#);
+
+    // Production playback is now larger than the former 4 KiB bus. Reusing
+    // tables must still allocate no Lua memory at 1 and 32 peer capacities.
+    run(a, r#"
+        local N = HSMPNative
+        for _, peers in ipairs({1, 32}) do
+            local p, out = {rows={}}, {}
+            for i=1,peers do
+                p.rows[i] = {peer=i,pawn="Willie_BP_C_"..i,match_id=91,round=3,life=130,
+                    body_ts=1200.5,arm_ts=1200.5,local_ms=1600.0,settle_world="123@World Arena",
+                    settle_reason="settled",settle_sample_ms=1600.0,settle_stable_ms=151.0,
+                    settle_source_ts=1199.5,settle_source_seq=30,settle_cut=7,settle_ready=true,
+                    settle_count=6,settle_pos_uu=1.0,settle_rot_deg=1.0}
+            end
+            for _=1,10 do assert(N.bus_put("playback",p)); N.bus_get("playback",-1,out) end
+            collectgarbage("collect"); collectgarbage("stop")
+            local before, start = collectgarbage("count"), N.now_us()
+            for _=1,1000 do N.bus_put("playback",p); N.bus_get("playback",-1,out) end
+            local elapsed, grew = N.now_us()-start, collectgarbage("count")-before
+            collectgarbage("restart")
+            assert(out.n==peers and #out.rows==peers and out.rows[peers].settle_cut==7)
+            assert(grew<1,"physical playback put/get allocated "..grew.." KiB")
+            print(string.format("PLAYBACK peers=%d payload=%d bytes put/get=%.3f us allocation=%.3f KiB/1k",
+                peers,8+400*peers,elapsed/1000,grew))
+        end
     "#);
 
     // DevCtl fan-out: both states (registered before the commands) see each command once.
@@ -548,7 +576,9 @@ fn records_dev_proc_conformance_and_bench() {
     "#, bat = bat_s));
     let _ = std::fs::remove_dir_all(&dir);
 
-    // ---- benchmarks (release: `--release --test records -- --nocapture`) ----------------------
+    // ---- allocation and delivery regressions; timing-only work is opt-in -------------------
+    let timings = std::env::var("HSMP_NATIVE_BENCH").as_deref() == Ok("1");
+    run(a, &format!("BENCH_TIMINGS = {timings}"));
     run(a, &format!("RELEASE = {}", !cfg!(debug_assertions)));
     run(a, r#"while true do local d = H.sc_rec_drain(); if #d == 0 then break end end"#);
     run(a, r#"
@@ -569,7 +599,7 @@ fn records_dev_proc_conformance_and_bench() {
             print(string.format("TIMING %-36s %8.3f us", label, us))
             return us
         end
-        -- allocation check: put + get into out + bus round trip, 10k times
+        -- allocation check: fixed and variable typed put/get into out, 10k times
         N.put("t_fixed_out", fixed); N.get("t_fixed_out", -1, out)
         N.put("t_var_out", var); N.get("t_var_out", -1, vout)
         collectgarbage("collect"); collectgarbage("stop")
@@ -583,6 +613,8 @@ fn records_dev_proc_conformance_and_bench() {
         local grew = collectgarbage("count") - k0
         collectgarbage("restart")
         assert(grew < 1, "typed put/get with out allocated " .. grew .. " KiB over 10k")
+        print(string.format("ALLOCATION typed put/get: %.3f KiB over 10k iterations", grew))
+        if BENCH_TIMINGS then
         local t_put = bench("put t_fixed (152 B)", 20000, function() N.put("t_fixed_out", fixed) end)
         local ver = N.get("t_fixed_out", -1, out)
         local t_get = bench("get t_fixed changed (into out)", 20000, function() N.get("t_fixed_out", -1, out) end)
@@ -596,10 +628,14 @@ fn records_dev_proc_conformance_and_bench() {
         bench("get t_var (24 rows, into out)", 20000, function() N.get("t_var_out", -1, vout) end)
         bench("send t_var (24 rows)", 300, function() N.send("t_var", var) end)
         H.sc_rec_drain()
+        -- Target < 5 us (reported); asserted with a 5x margin so a loaded machine (parallel builds,
+        -- game soaks) does not fail the opt-in timing run.
+        assert(not RELEASE or (t_put < 25 and t_get < 25 and t_send < 25), string.format("small-record budget: put %.2f get %.2f send %.2f us", t_put, t_get, t_send))
+        end
         N.poll(64, ev)
-        local function poll_bench(label, kind, t)
+        local function poll_conformance(label, kind, t)
             H.sc_push_n(kind, t, 1000)
-            local t0 = N.now_us()
+            local t0 = BENCH_TIMINGS and N.now_us()
             local got = 0
             while got < 1000 do
                 local n = N.poll(64, ev)
@@ -607,13 +643,12 @@ fn records_dev_proc_conformance_and_bench() {
                 got = got + n
             end
             assert(got == 1000, got)
-            print(string.format("TIMING %-36s %8.3f us", label, (N.now_us() - t0) / 1000))
+            if BENCH_TIMINGS then
+                print(string.format("TIMING %-36s %8.3f us", label, (N.now_us() - t0) / 1000))
+            end
         end
-        poll_bench("poll t_fixed (per event)", "t_fixed", fixed)
-        poll_bench("poll t_var 24 rows (per event)", "t_var", var)
-        -- Target < 5 us (reported); asserted with a 5x margin so a loaded machine (parallel builds,
-        -- game soaks) does not fail the suite.
-        assert(not RELEASE or (t_put < 25 and t_get < 25 and t_send < 25), string.format("small-record budget: put %.2f get %.2f send %.2f us", t_put, t_get, t_send))
+        poll_conformance("poll t_fixed (per event)", "t_fixed", fixed)
+        poll_conformance("poll t_var 24 rows (per event)", "t_var", var)
     "#);
 
     unsafe {

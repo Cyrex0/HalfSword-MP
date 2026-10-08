@@ -4,9 +4,204 @@ All notable changes to HalfSword-MP are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/). The product version is the `version` in
 `tools/release/release.json`; releases are tagged `v<version>`. The network protocol and the
-game-to-sidecar IPC have their own versions (currently protocol 6, IPC ABI 2).
+game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ## [Unreleased]
+
+## [0.1.0-beta.6] - 2026-10-08
+
+### Known limitations
+
+- This is a release of the existing PvP mod. Native headless hosting and co-op are
+  still development work and are not included in this release.
+- Round-start placement and settling can still fail or delay input release. Remote
+  arms and wrists can twist, drift or overshoot, especially under high frame cost.
+- Native body construction, dismemberment and clothing/armour replication do not
+  yet have complete single-player parity. Partial cuts and detached components
+  remain unfinished; diagnostic observations are not proof of equivalent damage.
+- Prior live captures reported pose and smoothness gate failures. Final beta.6
+  release validation must be recorded on the release commit; no G2 pass is claimed
+  by these notes.
+
+### Launcher fixes
+
+- Launcher windows use OpenGL and automatically retry Direct3D 12 on Windows if OpenGL
+  initialization fails. `HSMP_LAUNCHER_RENDERER=glow` or `dx12` explicitly selects a renderer. Startup records the
+  renderer and adapter in `launcher.log`, and graphics initialization errors show a message
+  with recovery instructions instead of silently closing.
+
+### What's new
+
+- Finish pending readiness commands from server replies during the existing bounded
+  quit teardown, without sending new commands or retrying while the session closes.
+- Preserve complete session and mode state during developer wrist captures while
+  allowing sequence and server-clock heartbeats, retaining strict gameplay guards;
+  bound loading-phase retries and record the transported grip without changing it.
+- Keep initial spawn position anchored through Loading and Countdown while native
+  limb motion stays active; require fresh settling after release before player input.
+- Make developer AI takeover wait for the controller's actual input release.
+- Carry native absolute foot targets and step splines with residual spawn placement
+  corrections, refusing stale body or component bindings.
+- Preserve the displayed pose's actual discontinuity context so developer wrist
+  fault captures can admit a real persistent stall.
+- Avoid repeated grip motor writes when the same freshly verified binding already
+  has all six linear drive flags disabled, preserving restoration checks.
+- Capture bounded developer wrist settings and current grip flags during an actual
+  settling fault, and distinguish native spawn rotation targets from physical body data.
+- Disable native linear grip motors on a driven proxy using six verified enable
+  flags, preserving native strengths and restoring exact flags to the same binding.
+- Add focused developer observations for the left shoulder and three protected
+  spawn corrections, retaining native body and capsule positions separately.
+- Preserve a stuck blade's original pelvis contact separately from its initial
+  spine anchor, allowing the same validated constraint to return to that contact.
+- Retain stuck-blade continuations while their known parent awaits pose coverage,
+  preserving source delivery order without requiring a child resend.
+- Reuse developer joint-capture session readers while preserving fresh native
+  header, link, peer and sample checks at every guard.
+- Add a bounded developer journal for native stuck-blade setup, marker wear and
+  sever callbacks, with explicit missing history and no sever authority.
+- Retain the existing owner damage call's native material-response outputs with
+  explicit incomplete results after copy-out failures and world changes.
+- Correct scalar output containers for the pinned game bridge, including current
+  joint settings, without adding native calls or changing guard limits.
+- Stage seven internal authored weapon recipes with exact native passports across
+  equip, verification and recovery; public selection awaits recipe-specific validation.
+- Restore source order within a single drained batch of approved hits when the
+  full life context and source timestamps agree, preserving duplicate protection.
+- Identify the first failed developer joint-capture guard from existing sampled
+  values, without adding native reads or changing capture limits.
+- Stop creating new hit claims after a fighter's confirmed elimination while
+  preserving claims already queued for trade resolution.
+- Preserve precise bounded developer capture refusals, and finish capture cleanup
+  before optional stop logging, including when logging fails or reenters.
+- Add a bounded developer capture of current right-arm joint limits, drive strengths,
+  softness and projection on each local owner and remote proxy, with explicit identities.
+- Record native caller admission refusals from one nonblocking attempt, preserving
+  the existing guard and saving bounded callback process totals in developer logs.
+- Distinguish confirmed foreign-thread damage callbacks from unavailable admission
+  on the proven game thread, retaining fail-closed handling and explicit coverage gaps.
+- Prepare native damage observations with sampling disabled, then activate after
+  fresh playback and current character, weapon and hit-box bindings are verified.
+- Measure bounded native damage-observer enrollment stages to diagnose setup stalls.
+- Read native limb target outputs in their actual struct format, and measure
+  damage-observer setup stages without changing playback freshness checks.
+- Add bounded developer captures for limb constraints and current animation-drive
+  components, and precise playback refusal details for native damage observations.
+- Preserve a truly empty remote left hand instead of creating a fist weapon,
+  retaining native polearm offhand setup. Recovery separates refused calls from
+  attempted native operations to avoid repeating uncertain mass changes.
+- Read the complete bounded native function property chain when validating damage
+  observer inputs, including Blueprint locals. Pending hand diagnostics record
+  actual Mode mismatches without treating them as authoritative gameplay state.
+- Add bounded developer captures for current hand grip motor settings and native
+  damage-sampling hit-box changes, with explicit identity and availability checks.
+  Observer refusals identify their failed stage; unavailable grip axes remain
+  explicitly unavailable, and fixtures isolate probe settings from the environment.
+  Read-only hand diagnostics compare actual decoded, final, prior and current
+  driver poses, plus native grip flags and current hand constraint identities.
+- Run stand-in arm neutralisation in the actual Blueprint ReceiveTick callback slot,
+  validating the current pawn, life, world and mesh before applying the existing policy.
+- Resolve stuck-blade memberships once with bounded reads and explicit parent ambiguity,
+  retaining the proven same-constraint left-arm rebind and validation metadata on refusal.
+- Publish verified deathmatch respawn preparation frames before the loaded acknowledgement,
+  while keeping death reporting restricted to the active life.
+- Refuse developer deployments with incompatible compiled content before changing game files,
+  and resolve custom binary paths consistently with the game configuration.
+- Start playback clocks from the current match, round, life and pose discontinuity
+  after placement returns; preserve the existing timing detector within that generation.
+- Keep the fixed Rondel dagger's native weapon passport instead of replacing it
+  with a sword recipe from merchant stock; incomplete native defaults still refuse equip.
+
+- Harvest the local game's complete indexed gear dependency set offline, with
+  inherited class defaults, native enum mappings and explicit coverage gaps.
+- Preserve native armor passports for items outside tier templates and verify
+  complete equipped armor/weapon passports, including modules and materials.
+- Add short read-only armor trace bursts with bounded native reads and explicit
+  availability, independent of the stand-in damage probe.
+- Build the lab controller before use and keep each running session on its own
+  executable copy, avoiding stale IPC layouts and Windows rebuild locks.
+- Record native parent-bone-space arm/driver displacement and dislocation inputs
+  with strict identity and availability checks; sampling grants no damage authority.
+- Recover initial dropped kit weapons by re-equipping the same native actor, retaining the
+  outfit and assigned fighter through the stand-in fallback's brief possession swap.
+- Reassert stand-in grip limits after native hand updates and check physical pelvis
+  placement on the first teleport, retaining the existing spawn readiness limits.
+- Refresh a validated weapon root's mutable physics state so native setup enabling
+  simulation resumes pose driving instead of retaining an obsolete kinematic cache.
+- Preserve native joint-dislocation protection during non-Live placement and restore
+  its original value with fresh ownership and readback checks.
+- Keep confirmed missing-limb servo and physics exclusions through temporary playback
+  release; add separate read-only native body and sever-component diagnostics.
+- Correct native sever-hook lookup through UE4SS's function-prefix parser and add
+  explicit topology availability plus optional native damage-caller diagnostics.
+- Read completed native distal cuts from the typed ledger with fresh body-life
+  and physical hiding checks, instead of the legacy unwritten array. Partial
+  cut geometry and detached components remain separate replication work.
+- Check diagnostic sample budgets before native function lookup to bound work
+  in hot weapon callbacks while retaining exact native identity validation.
+- Add `hsmp-lab` recipe sessions, incremental evidence collectors, bootstrap comparisons,
+  explicit baseline promotion, a regression journal and in-session A/B runs.
+- Add isolated modes/server-mods backend smoke and repeatable native deathmatch placement
+  checks; correct compatibility expectations and the test fixture's per-file limits.
+- Fix repeated unchanged kit saves leaving the game acknowledgement stale. The lab waits
+  for the exact accepted server kit before starting an experiment.
+- Publish the stand-in's physical sample time at target construction and reconstruct body,
+  weapon and cutting geometry from delivered physical frames, removing sender-step inversion.
+  Protocol 12 rejects earlier clients because timestamp and continuation meanings changed.
+- Bind stuck-blade continuations to their exact native origin/module, including suppressed
+  origins; reject deferred children if their parent is later parried. Dev AI Duel yield
+  counts as scoped surrender; harness timeouts are recorded separately.
+- Enable lab AI only after the arena is live, with native takeover evidence recorded
+  separately from command submission. Pause verified AI attack intent after a round ends.
+- Require fresh current-life streams, native collision and settled arm/hand physics before
+  the initial input unlock; keep ordinary wounded fighters controllable after release.
+- Place two-game tests on the smallest secondary display, with no window activation.
+- Record freshly read unchanged Health as a measured zero and correct native POST armour
+  trace argument ordering; cached or unread values remain unavailable.
+- Keep actual pose receipt time separate from physical frame time so late callbacks do not
+  introduce artificial playback clock jumps.
+
+- Game modes, picked by the host on the lobby's new **GAME MODE** screen (or with `--mode` and
+  RCON `MODE`):
+  - **Team elimination** (2 to 4 teams): teams balanced automatically or picked by the players in
+    the lobby; teammates spawn together and cannot hurt each other unless friendly fire is on.
+  - **King of the hill**: hold the hill alone to score; the first to the target wins the round.
+    The HUD shows who holds it and how far and where it is.
+  - **Weapon roulette**: everybody gets the same random weapon and armour each round.
+  - **Brawl**: fists only, no armour.
+  - **Timed deathmatch**: respawn after a death, most kills when the clock runs out wins; a tie
+    goes to sudden death.
+  - King of the hill, roulette, brawl and deathmatch can be played in teams too, and every mode
+    can have a round clock.
+- The scoreboard (TAB) shows kills and deaths, and team tags in team modes; the top banner shows
+  team scores, points or kills, and the round clock.
+- The server browser lists a server's game mode.
+- Server admins: new flags `--teams`, `--team-rule`, `--round-time`, `--koth-target`,
+  `--friendly-fire`, `--respawn-delay` (and `HSMP_KOTH_ZONES`), and RCON `MODE`, `TEAMS`, `TEAM`,
+  `ROUNDTIME`, `OPTION`; `STATUS` reports teams, kills and deaths.
+- **Server mods.** A server can now serve its own Lua mods (`hsmp-server --mods-dir`). When you
+  join one, a warning lists every mod (name, version, author, size) and says plainly that they run
+  with full access to your PC; nothing downloads unless you click ACCEPT & JOIN. DECLINE takes you
+  back to the server browser. The mods download over the game connection, every file is checked
+  against the server's hash, and they start without restarting the game.
+- The server browser marks servers with mods (**[MODS n]**).
+- SETTINGS > SERVER MODS: ASK ME or NEVER, and FORGET REMEMBERED SERVERS. "Remember for this
+  server" asks again whenever the server's mods change.
+- Hosting: [server mods](docs/hosting/server-mods.md): folder layout, `mod.json`, the rules, the
+  download rate limits that keep players in a match unaffected.
+
+### Compatibility
+
+- Protocol 12 requires matching beta.6 clients and servers. Earlier releases,
+  including beta.5, cannot join; update the host and every player together.
+
+### Changed
+
+- New release mod HSMPModHost (runs accepted server mods). Downloaded mods are kept in
+  `Win64\hsmp_mods`, outside the UE4SS mods folder; the launcher's uninstall deletes it.
+- Protocol: capability bit 18 `SERVER_MODS`, records `0x0901`-`0x090A`, reject code 11
+  `MODS_REQUIRED` for clients without server-mods support. The server list and the browser ping
+  carry the mod count and size (older readers ignore them).
 
 ## [0.1.0-beta.5] - 2026-10-04
 

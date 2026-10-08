@@ -567,7 +567,7 @@ fn install_host(lua: &Lua, phys: &Rc<RefCell<Phys>>, host: &Rc<RefCell<Host>>) -
                     let p = arr3(e, "pos");
                     let cp: String = e.get("class_path").unwrap_or_default();
                     DynEntry { id: u32of(e, "id"), chash: u32of(e, "chash"), pos: [p[0] as f32, p[1] as f32, p[2] as f32],
-                               dyn_owner: u32of(e, "dyn_owner"), class_path: Str::new(&cp) }
+                               dyn_owner: u32of(e, "dyn_owner"), class_path: Str::new(&cp), ..Default::default() }
                 }).collect();
                 h.out.dyn_out = Some((level, epoch, r));
             }

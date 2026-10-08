@@ -692,6 +692,36 @@ local function click_tile(ref)
     equip(ui.slot, v)
 end
 
+-- Harness (HSMP_AUTOTEST `kit <class> [r=<id>] [l=<id>] [armor=<id,id,..>]`): the class card,
+-- the slot edits a player makes under CUSTOM rules (armor= replaces the whole armour set), then
+-- SAVE, without the screen. The same Cat.check as the SAVE button decides.
+function Classes.autotest_kit(arg)
+    local id = tostring(arg or ""):match("^(%S+)") or ""
+    if id ~= "none" and not Cat.class_by_id[id] then return false, "unknown class " .. tostring(id) end
+    sel = sel or load_choice() or from_class(Cat.default_class)
+    sel = from_class(id, sel.cos)
+    for k, v in tostring(arg):gmatch("(%a+)=(%S*)") do
+        if k == "r" or k == "l" then
+            if v ~= "" and not (Cat.items[v] and Cat.items[v].kind == "weapon") then return false, "not a weapon: " .. v end
+            sel[k] = v
+        elseif k == "armor" then
+            sel.armor = {}
+            for a in v:gmatch("[^,]+") do
+                local it = Cat.items[a]
+                if not (it and it.kind == "armor") then return false, "not armour: " .. a end
+                sel.armor[it.group] = a
+            end
+        else
+            return false, "unknown field " .. k
+        end
+    end
+    local rules = rules_now()
+    local good, reason = Cat.check(as_check(sel), rules.mode, rules.budget)
+    if not good then return false, reason end
+    if not save_choice() then return false, "cannot write the kit slot" end
+    return true
+end
+
 local function do_save(and_back)
     local rules = rules_now()
     local good, reason = Cat.check(as_check(sel), rules.mode, rules.budget)

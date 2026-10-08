@@ -37,6 +37,8 @@ mod interact_glue; // interaction channel (docs/development/subsystems/interact.
 mod records; // protocol v6: typed record messages, per-domain dispatch
 mod pose_glue; // protocol v6: root / weapon / pose records
 mod session_records; // session domain records (0x02xx): builders + C2S handlers
+mod modes; // game modes: teams, King of the hill, roulette / brawl kits, deathmatch respawns
+mod mods_glue; // server mods (0x09xx): join gating, manifest, chunk serving
 
 // Siblings share each other's items through `use super::*`.
 use session::*;
@@ -54,7 +56,8 @@ pub use match_core::seed_arena;
 #[allow(unused_imports)] // only used inside this module tree
 pub use match_core::{DEFAULT_ARENA, SPAWN_SLOT_SENTINEL_Z, normalize_arena};
 #[allow(unused_imports)] // only used inside this module tree
-pub(crate) use match_core::{DEATH_DAMAGE, DEATH_LEFT, DEATH_REPORTED, DEATH_VITALS};
+pub(crate) use match_core::{DEATH_DAMAGE, DEATH_DEFEAT, DEATH_LEFT, DEATH_REPORTED, DEATH_SURRENDER, DEATH_VITALS};
+pub(crate) use match_core::body_context_matches;
 pub use admin::{load_banlist, set_banlist_path, configure_admins, AdminOpts};
 pub(crate) use admin::rcon_admin;
 pub(crate) use admin::save_banlist;
@@ -64,8 +67,10 @@ pub(crate) use records::refused;
 pub use broadcast::shutdown;
 pub use tick::{tick_loop, TICK_HZ_MIN, TICK_HZ_MAX};
 pub use session::net_status_notices;
+pub use mods_glue::serve_loop as mods_serve_loop;
 // Session layer: typed commands, snapshot, RCON match/debug verbs.
-pub(crate) use session::{configure_session, rcon_debug_kill, rcon_status, run_command, Actor, KitView, SessionOpts};
+pub(crate) use session::{configure_session, rcon_debug_kill, rcon_status, run_command, seat_peer, Actor, KitView, SessionOpts};
+pub(crate) use modes::{mode_label, parse_mode, ModeCfg};
 #[derive(Debug, Clone)]
 pub struct PeerState {
     pub id: PeerId,
@@ -100,6 +105,8 @@ pub struct ServerState {
     /// Peers with relayed messages queued while the receive loop handles one datagram (None =
     /// not batching). Flushed after it, so records a sender sent together leave together.
     relay_batch: std::sync::Mutex<Option<Vec<SocketAddr>>>,
+    /// Server mods (`--mods-dir`; mods_glue.rs): set once at startup, never when there are none.
+    pub(crate) mods: std::sync::OnceLock<Arc<crate::server_mods::Host>>,
 }
 
 pub(crate) struct Inner {
@@ -150,7 +157,7 @@ pub(crate) struct Inner {
     // ---- authoritative deaths + simultaneous-kill settle (combat) ----
     /// Deaths declared this round: (peer, killer, cause). Re-broadcast as
     /// S2CDeath with every match-state broadcast until the next round.
-    round_deaths: Vec<(PeerId, PeerId, u8)>,
+    round_deaths: Vec<(PeerId, PeerId, u8, u16)>,
     /// Above 0 while a finished round "settles": the last-standing player is
     /// provisional; a trade hit / death landing in this window makes it a
     /// draw. The result is published only when this reaches 0.
@@ -167,6 +174,10 @@ pub(crate) struct Inner {
     /// Session layer: epoch, snapshot seq, match id,
     /// frozen config, seats by key, command results cache.
     sess: session::SessionCore,
+    /// Game modes (modes.rs): config, teams, scores, round clock, respawns, round kit.
+    modes: modes::ModeCore,
+    /// Players still loading the server's mods (peer id -> since, server ms; mods_glue.rs).
+    pub(crate) mods_pending: HashMap<PeerId, u64>,
 }
 
 /// What a peer's GAME (not just its sidecar) last told us.
@@ -222,11 +233,14 @@ impl ServerState {
                 paused_from_live: false,
                 out_msgs: Vec::new(),
                 sess: session::SessionCore::new(max_peers),
+                modes: modes::ModeCore::default(),
+                mods_pending: HashMap::new(),
             }),
             max_peers,
             net,
             relay: crate::relay::Relay::default(),
             relay_batch: std::sync::Mutex::new(None),
+            mods: std::sync::OnceLock::new(),
         }
     }
 
@@ -248,6 +262,12 @@ impl ServerState {
     /// label (None while the match lock is busy).
     pub(crate) fn current_best_of(&self) -> Option<u8> {
         self.inner.try_lock().ok().map(|i| i.best_of)
+    }
+
+    /// Non-blocking read of the game mode in force (the frozen one in a match) for the
+    /// server browser's label (None while the match lock is busy).
+    pub(crate) fn current_mode(&self) -> Option<u8> {
+        self.inner.try_lock().ok().map(|i| i.modes.now().mode)
     }
 }
 

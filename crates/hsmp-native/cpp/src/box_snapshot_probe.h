@@ -1,0 +1,40 @@
+// Optional proof-only native Box observer. Never writes engine state.
+#pragma once
+#include "box_snapshot_pair.hpp"
+#include "box_enrollment_timing.hpp"
+#include "hsmp_native.h"
+struct lua_State;
+namespace hsmp_box
+{
+enum class CallbackThread { Unknown, Same, Different };
+inline CallbackThread callback_thread(std::uint32_t proven,std::uint32_t actual)
+{ return !proven || !actual ? CallbackThread::Unknown : proven==actual ? CallbackThread::Same : CallbackThread::Different; }
+struct ObjectInput { const wchar_t* path{}; std::uint64_t address{}; };
+struct Enrollment
+{
+    ObjectInput world{}, pawn{}, mesh{}, box{}, box_owner{};
+    std::uint64_t match_id{}; std::uint32_t round{}, life{};
+};
+using Sink = void (*)(unsigned phase, void* context, void* frame);
+struct Provider
+{
+    bool (*on_thread)();
+    std::uint64_t (*now_ms)();
+    bool (*enroll)(const Enrollment&,Scope&,Reason&);
+    bool (*submit)(Sink,Reason&);
+    // Returns no role for a non-target function, without a global role/name lookup.
+    bool (*key)(void* context,void* frame,Key&,Reason&);
+    bool (*snapshot)(const Key&,void* frame,Snapshot&,Reason&);
+    // Optional bounded scalar detail for a failed enrollment, never runtime authority.
+    const char* (*enrollment_detail)(){};
+    const EnrollmentTiming* (*enrollment_timing)(){};
+    // Revalidate prepared identities/layouts without repeating path lookups.
+    bool (*prepared_current)(const Scope&,Reason&){};
+    // Optional precise result, consumed directly rather than rereading a refused boolean.
+    int (*caller_admission)(){};
+};
+}
+// ue4ss_reflect_box.cpp provides the pinned host; tests supply a bounded fake.
+const hsmp_box::Provider& hsmp_reflect_box_provider();
+void hsmp_box_probe_install(lua_State* L);
+

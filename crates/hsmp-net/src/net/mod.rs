@@ -23,21 +23,22 @@ pub mod handshake;
 pub mod replay;
 pub mod wire;
 
-#[cfg(test)]
-mod testlink;
+#[cfg(any(test, feature = "testlink"))]
+pub mod testlink;
 #[cfg(test)]
 mod tests;
 
 pub use channel::{Delivery, SendError, SendMode, CH_ORDERED, CH_RELIABLE, CH_UNRELIABLE};
 pub use conn::{close_code, Conn, ConnConfig, ConnState, ConnStats, Side};
 pub use endpoint::{Client, ClientConfig, ClientEvent, Incoming, PendingAuth, ServerConfig, ServerEndpoint};
-/// The header/handshake format version. v6 (HSMP-SHM ABI 2): every channel message is a
-/// typed record behind an 8-byte header (`hsmp_ipc::wire`); the transport is unchanged.
-pub const PROTOCOL_VERSION: u16 = 6;
-/// Lowest protocol version this build accepts (v5 bodies are not v6 messages).
-pub const VERSION_MIN: u16 = 6;
+/// Protocol v12 reports physical display sample times and authenticates
+/// geometry-only Inside origins separately from their damage continuations.
+/// Typed records still use the v6 transport and 8-byte application header.
+pub const PROTOCOL_VERSION: u16 = 12;
+/// Prior combat field meanings cannot interoperate with physical display times.
+pub const VERSION_MIN: u16 = PROTOCOL_VERSION;
 /// Highest protocol version this build speaks.
-pub const VERSION_MAX: u16 = 6;
+pub const VERSION_MAX: u16 = PROTOCOL_VERSION;
 
 /// Largest datagram either side ever sends (safe below every common MTU).
 pub const MAX_DATAGRAM: usize = 1200;
@@ -68,9 +69,11 @@ pub type ConnId = u64;
 /// Capability bits (negotiated as `client_caps & server_caps`). Every wire
 /// addition after v5 hides behind one of these; none is required.
 pub mod caps {
-    /// `S2CSession.mode` sections other than `None`, `S2CEvent::KillFeed`.
+    /// Game modes: the `mode` record (teams, scores, kills / deaths, round clock, respawn
+    /// orders, imposed kit) and `kill_feed`. A server running any mode but duel / FFA admits
+    /// only peers that have it.
     pub const MODES: u64 = 1 << 0;
-    /// Zone (battle royale ring) state in `S2CSession.mode`.
+    /// The King of the hill `zone` record.
     pub const ZONE: u64 = 1 << 1;
     /// Interaction channel messages (`Impulse`, `Grab`, `Clash`).
     pub const INTERACT: u64 = 1 << 2;
@@ -120,6 +123,13 @@ pub mod caps {
     /// players that negotiated it, for their stand-ins of it. Opted in by server and
     /// sidecar; peers without it never send or receive the record.
     pub const BODY: u64 = 1 << 17;
+    /// Original-generation native passport body snapshots.
+    pub const BODY2: u64 = 1 << 19;
+    /// Application: server-served mods (`mod_manifest` / `mod_files` / `mod_chunk` down,
+    /// `mod_chunk_req` / `mod_ready` up; docs/hosting/server-mods.md). The server offers it
+    /// only when it has a `--mods-dir`, the sidecar always; a server with mods refuses a
+    /// client without it (`reject_code::MODS_REQUIRED`).
+    pub const SERVER_MODS: u64 = 1 << 18;
     /// Everything this build implements at the transport level (the
     /// application-level bits are opted in by the server / sidecar).
     pub const SUPPORTED: u64 = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY;

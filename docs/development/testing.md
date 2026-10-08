@@ -16,6 +16,51 @@ cargo build --release -p hsmp-tools
 | G1 | before a merge to main | `scripts/e2e-test.sh` + G0 | |
 | G2 | before a release | `scripts/mp_test.ps1` gate scenarios, green twice | see §4 |
 
+### During development: check the domains you changed
+
+```powershell
+.\scripts\dev-test.ps1 -List
+.\scripts\dev-test.ps1 -Domain combat
+.\scripts\dev-test.ps1 -Domain modes,mods -Plan    # inspect the selections, start nothing
+.\scripts\dev-test.ps1 -Domain kit
+```
+
+The runner builds the Lua test tool, selects the related Lua suites and Rust test filters,
+and writes command selections, raw output, timings and counts to
+`test-results/dev-check-<id>/report.json`. It fails if a Rust selection runs zero passing
+tests or a selected Lua suite runs no successful assertions. Available domains are
+`combat`, `pose`, `modes`, `mods`, `kit`, `ui`, `ipc`, `launcher` and `world`; multiple
+domains share one deduplicated selection. IPC includes the real sidecar round trip;
+`-Domain ipc -Stress` also runs the cross-process stress scenarios.
+
+This is an **offline development subset**. It does not audit every dependency, write a G0
+stamp, prove native game behavior or pass a release gate. Run full G0 before pushing and
+the appropriate in-game gates before release. For schema/shared-runtime changes or an
+unclear change boundary, broaden the domains or run the full gate. A lab session runs quick
+G0 once at startup; its individual experiments reuse the session without rerunning G0.
+
+Counts use different units: G0 reports **Lua suites** and **Rust tests** separately.
+Assertions inside a Lua scenario are recorded in its detailed report, not presented as
+thousands of independent tests. `hsmp-tools lua-test combat --json <report.json>` writes
+the suite names, assertion totals, failures and timings; G0 retains these under its
+`lua_test.details` field. The full menu/HUD resolution matrix still runs for UI changes
+and in full G0. Workspace Lua syntax checking stays in `lua-check`, so the world suite
+no longer repeats the same syntax scan.
+
+Native binding correctness and allocation checks remain in normal `cargo test`. Their
+timing-only microbenchmarks are opt-in:
+
+```powershell
+$previousNativeBench = $env:HSMP_NATIVE_BENCH
+try {
+    $env:HSMP_NATIVE_BENCH = '1'
+    cargo test --locked -p hsmp-native --test api --test records -- --nocapture
+} finally {
+    if ($null -eq $previousNativeBench) { Remove-Item Env:HSMP_NATIVE_BENCH -ErrorAction SilentlyContinue }
+    else { $env:HSMP_NATIVE_BENCH = $previousNativeBench }
+}
+```
+
 ### Without the game you can run
 
 Everything below works on a machine with no Half Sword install (no `HSMP_GAME_DIR`, no `game/`):
@@ -32,6 +77,11 @@ target\release\hsmp-gate.exe g0              # full G0; bp_names and the U1/U2 r
 #   HSMP_BINS  = the release dir with hsmp-server.exe, hsmp-sidecar.exe, hsmp-master.exe, ...
 HSMP_TOOLS=<target>/release/hsmp-tools.exe HSMP_BINS=<target>/release bash scripts/e2e-test.sh
 ```
+
+`cargo test` skips the slow simulations and mutation fuzzers of systems that rarely change
+(`#[ignore = "slow: ..."]`: the combat sim, the world-sync and netfeel sims, the IPC primitive
+property tests, and the wire, IPC, NAT, master and launcher-manifest fuzzers). Run them with
+`cargo test --workspace -- --ignored` after changing one of those systems or before a release.
 
 Both default to `$CARGO_TARGET_DIR/release`, else `<repo>/target/release`. Every sidecar in the
 suite runs behind a fake game (`hsmp-tools ipc-game`); S1-S12 (`scripts/e2e-shm.sh`) check the
@@ -131,6 +181,7 @@ shape outside the contract. A rule that needs a field no emitter writes reports 
 | S2G `cmd_result` (tap) | **`cmd_id`**, **`ok`**, `reason_code`, `code`, `reason_text`, `config_rev`, `cmd`, `wall_ms` | **sidecar**: one per fresh `cmd_result` record from the server (an `s2g` record in `inst<i>/ipc_tap.jsonl`; the gate reads its payload as `cmd_result`, src `sidecar`) | 10 |
 | `pose_quality` | **`peer`**, **`arm_p95_uu`**, **`tip_p95_uu`**, **`latency_ms`**, **`jitter_ratio`**, **`foot_slide_p95`**, **`idle_rms`** (each `-1` = not applicable in that Live window; see POSE-1 below) | HSMPAvatars, every 5 s over Live frames only | POSE-1 |
 | `netfeel` | **`peer`**, **`snaps_per_min`**, **`rigid_snaps`**, **`clock_resets`**, **`jump_max_uu`**, **`window_s`**, `frames`, `buffer_ms`, `jitter_ms` | HSMPAvatars, with each `pose_quality` sample | SMOOTH-1 |
+| `x_pose_clock_reset` | `peer`, `threshold_ms` (50), `expect`, `projected_clk`, `delta_ms`, `clk_pt`, `clk_at`, `clk_rate`, `local_ms`, `source_pt`, `read_at`, `rate`, `lead`, `mode`, `age`, `delay`, `jitter`, `iv`, `quiet`, `cut`, `step`, `frame`, `source_seq`, `fresh`, `match_id`, `round`, `life`, `has_context` | HSMPAvatars, once at each clock discontinuity before correction; excludes initialisation and explicit pose cuts. Times are milliseconds, rates are clock multipliers; `quiet` is time since the latest fresh playback record. | diagnostic |
 | `pawn_correction` | **`why`** (`round start`, `new round`, `fell`, `drift`, `director retry`, `launch_clamp`), **`live`**, **`dist_cm`** | HSMPSync spawn_place, HSMPAvatars (launch clamp): every move of the local pawn | SMOOTH-1 |
 | `spawn_stretch` | **`who`** (`standin`/`pawn`), **`peer`**, **`max_uu`**, **`bone`**, **`why`**, `frames` | HSMPAvatars: 3 s after a stand-in starts / is re-posed, 8 s after our pawn appears | SPAWN-1 |
 | `load_failed` | **`round`**, **`nick`**, **`error`**, `peer_id`, `seat`, `match_id` | **server** | 1 |
@@ -437,7 +488,7 @@ arena, round, live/end ms), `checks` (one line per rule × round × instance) an
 | `hsmp-server --debug-verbs` | RCON `MAP <arena>`, `START`, `ABORT`, `BESTOF <n>`, `DEBUG KILL <seat>` (reply `OK ...` / `ERR <reason>`); `START` with an unready player → `ERR`. Without it the harness runs the stopgap mode |
 | `--parent-pid` | On the server, the sidecar and the master: exit when the parent dies (§3) |
 | `HSMP_AUTOTEST` (HSMPMenu) | `host` = be seat 1 (join `HSMP_AUTOTEST_ADDR` when `HSMP_AUTOTEST_EXTERNAL=1`, else host a listen server and do not auto-start); `join` = join `HSMP_AUTOTEST_ADDR`; `HSMP_AUTOTEST_READY=1\|0` = auto-ready in the lobby; legacy `1` for the stopgap |
-| Autotest commands | Under `HSMP_AUTOTEST`, HSMPMenu consumes `dev_cmd` AUTOTEST records from the DevCtl ring (`IPC.dev_poll`). The harness sends `hsmp-tools ipc-ctl --pid <game> --id <n> autotest pick_arena\|start\|ready\|unready\|leave\|quit\|move\|world_poke [arg]`; they run through the same code path as the buttons, with `cmd_sent` / `cmd_result` events. `move` (arg `"<seconds>[,noswing][,nowalk]"`, `autotest_mover.lua`) walks the local pawn (its own input disabled meanwhile) and swings its right arm by impulses, then stands still for the last 3 s; `quit` uses `KismetSystemLibrary:QuitGame`; `world_poke` (arg `"<cm/s>[,<n>]"`) is HSMPWorld's (its own DevCtl cursor; HSMPMenu ignores it): it throws the n free bodies nearest the pawn by a mod-side impulse after a touch claim (`world_sync`, WORLD-2) |
+| Autotest commands | Under `HSMP_AUTOTEST`, HSMPMenu consumes `dev_cmd` AUTOTEST records from the DevCtl ring (`IPC.dev_poll`). The harness sends `hsmp-tools ipc-ctl --pid <game> --id <n> autotest pick_arena\|start\|ready\|unready\|leave\|quit\|move\|world_poke\|team|kit|mods_accept|mods_decline [arg]\|mods_accept\|mods_decline [arg]`; they run through the same code path as the buttons, with `cmd_sent` / `cmd_result` events. `move` (arg `"<seconds>[,noswing][,nowalk]"`, `autotest_mover.lua`) walks the local pawn (its own input disabled meanwhile) and swings its right arm by impulses, then stands still for the last 3 s; `quit` uses `KismetSystemLibrary:QuitGame`; `world_poke` (arg `"<cm/s>[,<n>]"`) is HSMPWorld's (its own DevCtl cursor; HSMPMenu ignores it): it throws the n free bodies nearest the pawn by a mod-side impulse after a touch claim (`world_sync`, WORLD-2); `team <n>` is the GAME MODE screen's YOUR TEAM pick, `kit <class>` the LOADOUT screen's class card + SAVE, `mods_accept` / `mods_decline` the SERVER MODS screen's buttons |
 | Events | The emitters in §1 |
 
 ### Environment the harness gives each game
@@ -494,8 +545,7 @@ Do not skip the hook with `--no-verify`.
 
 CI runs five parallel jobs: Windows G0 (`hsmp-gate g0 --no-stamp --skip clippy`), Windows e2e
 (`scripts/e2e-test.sh`), Clippy (the same command as the G0 `clippy` check, which is why G0 skips it
-there), Linux (`cargo test --locked -p hsmp-net -p hsmp-server
--p hsmp-modes`, then a release build of `hsmp-server`, `hsmp-master` and `hsmp-query`) and a
+there), Linux (`cargo test --locked -p hsmp-net -p hsmp-server`, then a release build of `hsmp-server`, `hsmp-master` and `hsmp-query`) and a
 Docker image smoke test. A full local G0 plus `scripts/e2e-test.sh` covers the three Windows jobs. Build caches are saved from
 `main` only; pull requests restore them. The Linux job cannot be reproduced on Windows:
 the `cfg(not(windows))` code (the sidecar's `/proc` process checks, for one) only compiles and runs
@@ -504,7 +554,7 @@ there. With WSL and a distro, run the job's test command in the distro on a copy
 
 ```sh
 rsync -a --delete --exclude target --exclude .git /mnt/d/<worktree>/ ~/hsmp-linux/
-cd ~/hsmp-linux && cargo test --locked -p hsmp-net -p hsmp-server -p hsmp-modes
+cd ~/hsmp-linux && cargo test --locked -p hsmp-net -p hsmp-server
 ```
 
 Without WSL, the Linux job is first seen on the push.
@@ -516,6 +566,13 @@ Without WSL, the Linux job is first seen on the push.
   copies the binaries into `Binaries\Win64\hsmp\` (the layout the launcher installs) and points `hsmp.cfg`
   `bin_dir` at `hsmp` (relative), so a later `cargo build` elsewhere can never change the binaries under test.
   `-BinDir` writes an explicit folder instead (not stamped). `mp_test.ps1` reads `bin_dir` from there too.
+  Shipped Lua and map content is embedded in these binaries' content identity;
+  changing it requires a normal rebuild even when no Rust source changed.
+  Before any deployment copy/write, the script compares the actual server and
+  sidecar compiled identities with the source mods identity. `-SkipBuild` works
+  only when these identities still match; malformed, missing or stale identities
+  stop the deploy before changing game files. G0 and matching file checksums alone
+  do not establish that compatibility.
 * Copies every `Scripts/*.lua` of each `mods/HSMP*` and `mods/dev/HSMP*` mod and then `mods/shared/*.lua` into the
   mod's deployed `Scripts/`. Retired mods (`HSMPLobby`, `HSMPAdmin`, `HSMPCharacter`, `HSMPSettings`, `HSMPChat`)
   are not deployed.

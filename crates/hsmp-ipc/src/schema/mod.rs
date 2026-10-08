@@ -17,6 +17,7 @@ pub mod combat;
 pub mod dev;
 pub mod interact;
 pub mod loadout;
+pub mod mods;
 pub mod pose;
 pub mod session;
 pub mod world;
@@ -154,6 +155,7 @@ pub fn records() -> impl Iterator<Item = &'static RecordInfo> {
         .chain(interact::RECORDS)
         .chain(bus::RECORDS)
         .chain(dev::RECORDS)
+        .chain(mods::RECORDS)
 }
 
 pub fn record_info(kind: u16) -> Option<&'static RecordInfo> {
@@ -386,6 +388,7 @@ pub fn slots() -> impl Iterator<Item = &'static SlotInfo> {
         .chain(interact::SLOTS)
         .chain(bus::SLOTS)
         .chain(dev::SLOTS)
+        .chain(mods::SLOTS)
 }
 
 pub fn slot_by_name(name: &str) -> Option<&'static SlotInfo> {
@@ -422,6 +425,7 @@ pub fn enums() -> impl Iterator<Item = &'static EnumInfo> {
         .chain(interact::ENUMS)
         .chain(bus::ENUMS)
         .chain(dev::ENUMS)
+        .chain(mods::ENUMS)
 }
 
 pub fn enum_by_name(name: &str) -> Option<&'static EnumInfo> {
@@ -516,6 +520,7 @@ pub fn kinds() -> impl Iterator<Item = &'static KindInfo> {
         .chain(interact::KINDS)
         .chain(bus::KINDS)
         .chain(dev::KINDS)
+        .chain(mods::KINDS)
 }
 
 pub fn kind_info(kind: u16) -> Option<&'static KindInfo> {

@@ -23,6 +23,8 @@ pub const MANIFEST_GAP_MS: u64 = 3000;
 #[derive(Clone, Copy)]
 pub struct Sample { pub snap: WorldSnap, pub recv: u64 }
 
+// Plain-old-data records kept by value in a short proposal list: boxing would cost more than it saves.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Copy)]
 pub enum Prop {
     Static(ManifestEntry),
@@ -243,7 +245,7 @@ pub fn due_proposals(r: &mut WorldRx, t: u64) -> Vec<Vec<u8>> {
         let h = rec::ManifestHead { level, epoch, req, n: 0, _r: 0 };
         out.push(hsmp_ipc::wire::encode(0, 0, &h, c));
     }
-    for c in dy.chunks(rec::PROPOSE_MAX) {
+    for c in dy.chunks(rec::DYN_WIRE_MAX) {
         let req = next_req(r, c.iter().map(|e| e.id).collect());
         let h = rec::DynHead { level, epoch, req, n: 0, _r: 0 };
         out.push(hsmp_ipc::wire::encode(0, 0, &h, c));

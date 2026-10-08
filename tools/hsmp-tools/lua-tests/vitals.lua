@@ -34,9 +34,15 @@ function FName(s) return { s = s, ToString = function(self) return self.s end } 
 
 local addr = 1000
 local function valid() return true end
+local native_world={IsValid=valid,GetAddress=function()return 999 end,GetFullName=function()return "World VitalsFixture" end}
 function mk_mesh(bones)
-    local m = { bones = bones or {}, hidden = {} }
+    addr=addr+1
+    local m = { bones = bones or {}, hidden = {},__addr=addr }
     m.IsValid = valid
+    m.GetAddress=function(self)return self.__addr end
+    m.GetFName=function(self)return FName("Mesh_"..self.__addr)end
+    m.GetWorld=function()return native_world end
+    m.IsBoneHiddenByName=function(self,n)return self.hidden[n.s]~=nil end
     m.GetBoneIndex = function(self, n) return self.bones[n.s] or -1 end
     m.HideBoneByName = function(self, n, opt) self.hidden[n.s] = opt end
     m.UnHideBoneByName = function(self, n) self.hidden[n.s] = nil end
@@ -44,9 +50,16 @@ function mk_mesh(bones)
     return m
 end
 function mk_arr(items)
-    return { items = items, ForEach = function(self, fn)
+    return { items = items,GetArrayNum=function(self)return #self.items end, ForEach = function(self, fn)
         for i, n in ipairs(self.items) do fn(i, { get = function() return FName(n) end }) end
     end }
+end
+local function mk_parts(items)
+    return {items=items,ForEach=function(self,fn)
+        for _,row in ipairs(self.items)do
+            fn({get=function()return row[1]end},{get=function()return row[2]end})
+        end
+    end}
 end
 function mk_willie(name, vals)
     addr = addr + 1
@@ -56,8 +69,12 @@ function mk_willie(name, vals)
     w.GetAddress = function(self) return self.__addr end
     w.GetFName = function(self) return FName(self.__name) end
     w.GetClass = function(self) return { GetFName = function() return FName("Willie_BP_C") end } end
-    w.Mesh = mk_mesh({ head = 5, lowerarm_l = 9, hand_l = 10 })
+    w.GetWorld=function()return native_world end
+    w.Mesh = mk_mesh({ head = 5, lowerarm_l = 9, hand_l = 10,hand_r=11,lowerarm_r=12 })
     w["Dismembered Array"] = mk_arr({})
+    w["Dismembered Bones"]=mk_arr({})
+    w["Dismembered Parts Map"]=mk_parts({})
+    w["Dismemberment In Process"]=false
     w["Death"] = function(self) self.calls.death = (self.calls.death or 0) + 1; self.DED = true end
     return w
 end
@@ -95,7 +112,7 @@ end
 
 -- ---- load -----------------------------------------------------------------------
 -- shared/hsmp_wg.lua (HSMPCombat's world guard; deploy copies it into Scripts/)
-package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
+package.path = T.path("mods/HSMPCombat/Scripts") .. "/?.lua;" .. T.path("mods/shared") .. "/?.lua;" .. package.path
 local fn, err = load(T.read(SRC))
 T.check(fn ~= nil, "HSMPCombat loads (Lua 5.4)", err)
 if fn == nil then return end
@@ -103,6 +120,10 @@ fn()
 local api = HSMP_COMBAT_TEST.api
 T.check(api ~= nil, "test api exported")
 api.set_world("world#1")
+-- Real topology/world-guard behavior has separate bounded suites. This fixture
+-- supplies native-world identities while preserving its synthetic session key.
+api.WG.check=function()return true end
+api.WG.world=function()return native_world end
 
 local function write(name, text) T.write(STATE .. "/" .. name, text) end
 -- Typed session state: the sidecar's `link` record + the server's `session`
@@ -115,6 +136,19 @@ hb(0.01)
 local function sidecar(status, id) NAT.sc_put("link", { status = ES.sidecar_status[status:upper()], state = ES.link_state.UP, my_peer_id = id }) end
 local PHASE = { lobby = 0, countdown = 2, live = 3, roundover = 4, match_over = 5, paused = 7 }
 local SESS = { phase = 0, round = 0, winner_seat = 255, rows = {} }
+-- These tests isolate scalar encoding/mirroring and native replay arithmetic.
+-- Combat's suite exercises exact typed pawn/life placement binding separately.
+api.C3.life_for = function(peer)
+    if peer == 1 or peer == 2 then return {match_id=4242,round=SESS.round,life=1} end
+end
+api.C3.displayed_for = function(peer) return api.C3.life_for(peer,false) end
+local mock_actors={}
+local set_puppets=api.set_puppets
+api.set_puppets=function(peers,actors,weapons)
+    mock_actors=actors
+    set_puppets(peers,actors,weapons)
+end
+api.C3.remote_actor=function(peer) return mock_actors[peer] end
 local function publish() NAT.sc_put("session", SESS) end
 local function match(state, round) SESS.phase, SESS.round = PHASE[state], round; publish() end
 local function read(name) return T.read(STATE .. "/" .. name) end
@@ -138,7 +172,7 @@ local missing = {}
 local names = {}
 for _, n in ipairs(vit) do names[#names + 1] = n end
 for _, n in ipairs(fld) do names[#names + 1] = n end
-for _, n in ipairs({ "DED", "Fallen", "Downed", "Headless", "Pain Shock", "Dismembered Array" }) do names[#names + 1] = n end
+for _, n in ipairs({ "DED", "Fallen", "Downed", "Headless", "Pain Shock", "Dismembered Array", "Dismembered Parts Map", "Dismemberment In Process" }) do names[#names + 1] = n end
 for _, n in ipairs(names) do if not real[n] then missing[#missing + 1] = n end end
 T.check(#missing == 0, "every vitals/field name is a real Willie_BP_C property", T.repr(missing))
 T.check(#vit == 19, "19 vitals scalars (= schema/combat.rs VITALS_N)", #vit)
@@ -185,7 +219,8 @@ T.check(N.sc_get("vitals").v[14] == q(99.4), "stamina quantised (99.4 * 64 round
 CLOCK = 101.5
 T.check(api.publish_own_vitals(ME) == true, "heartbeat after 1 s without change")
 ME["Fallen"] = true
-ME["Dismembered Array"]["items"][1] = "lowerarm_l"
+ME["Dismembered Parts Map"].items={{6,true}}
+ME.Mesh.hidden.lowerarm_l=1
 api.set_tick(20)
 api.publish_own_vitals(ME)
 rec = N.sc_get("vitals")
@@ -196,13 +231,48 @@ api.publish_own_vitals(ME)
 rec = N.sc_get("vitals")
 T.check(rec.flags == 3 and rec.v[1] == 0, "dead: DED + Health 0 -> flag bit 1, v[1] 0", T.repr(rec))
 ME["Health"], ME["DED"], ME["Fallen"] = 100, false, false
-ME["Dismembered Array"]["items"] = {}
+ME["Dismembered Parts Map"].items={}
 api.set_tick(40)
 api.publish_own_vitals(ME)
+
+do
+    local old = mk_willie("Willie_BP_C_OLD_BODY", full_vitals())
+    old["Dismembered Parts Map"].items={{4,true}}
+    old.Mesh.hidden.hand_r=1
+    local fresh = mk_willie("Willie_BP_C_FRESH_BODY", full_vitals())
+    local previous_pawn=PC.Pawn
+    PC.Pawn=old
+    local a = api.sample_own_vitals(old)
+    old["Dismembered Parts Map"] = { ForEach = function() error("native map temporarily unavailable") end }
+    api.set_tick(47)
+    local unavailable = api.sample_own_vitals(old)
+    T.check(T.eq(unavailable.dism, { "hand_r" }), "an unreadable native ledger cannot regrow a missing limb")
+    PC.Pawn=fresh
+    local b = api.sample_own_vitals(fresh)
+    T.check(T.eq(a.dism, { "hand_r" }) and #b.dism == 0,
+        "a new pawn immediately samples its own missing parts instead of inheriting the old pawn's cache")
+    PC.Pawn=previous_pawn
+    api.sample_own_vitals(ME)
+    api.set_tick(40)
+end
 
 -- ---- quantisation + dism bitmask round trip (VQ = the game's one encoder) ----------
 do
     local VQ = api.VQ
+    local me = mk_willie("Willie_BP_C_INJURY", full_vitals())
+    me["Arm R Broken"], me["Arm R Dislocated"] = true, true
+    local s0 = api.sample_own_vitals(me)
+    T.check(s0.f == 256, "both right-arm native injury booleans share one functional bit")
+    T.check(VQ.record(1,s0).flags == 256, "functional injury survives owner wire encoding")
+    me["Arm R Broken"], me["Arm R Dislocated"] = false, false
+    T.check(api.sample_own_vitals(me).f == 0, "native injury clearing is sampled on the same pawn")
+    for _, name in ipairs({"Head Broken","Neck Dislocated","Back Broken","Arm R Broken","Arm L Dislocated","Leg R Broken","Leg L Dislocated"}) do me[name] = true end
+    T.check(api.sample_own_vitals(me).f == 4064, "all seven current functional regions are sampled")
+    T.check(api.sample_own_vitals(mk_willie("Willie_BP_C_NEW_INTACT", full_vitals())).f == 0,
+        "fresh pawn does not inherit previous injury flags")
+    local all = VQ.record(2,{v={},f=4095,dism={}})
+    local encoded, why = RL.marshal(S,"vitals",all)
+    T.check(encoded ~= nil and encoded.flags == 4095, "all defined functional injury flags marshal",why)
     local s = { v = {}, f = 4 + 16, dism = { "head", "LowerArm_L", "nosuchbone", "foot_r" } }
     for i = 1, 19 do s.v[i] = 50 end
     s.v[1] = 62.51            -- 4000.64 -> 4001
@@ -229,6 +299,9 @@ end
 
 -- ---- HUD: my own vitals are readable by any Lua state ------------------------------
 do
+    SESS.match_id=4242; publish()
+    N.sc_put("mode",{seq=1,match_id=4242,round=SESS.round,mode=ES.game_mode.DEATHMATCH,
+        rows={{peer_id=1,life=1,seat=0,alive=true}}})
     local HS = dofile(T.path("mods/HSMPHud/Scripts/hud_state.lua"))
     local snap = HS.read_all(STATE)
     T.check(snap.vown ~= nil and snap.vown.hp == 100 and snap.vown.dead == false and snap.vown.con == 100,
@@ -243,7 +316,7 @@ local function peer_rec(seq, flags, dism, hp0)
     local v = {}
     for i, x in ipairs(vals) do v[i] = (i - 1 == 5) and 65535 or q(x) end
     if hp0 then v[1] = 0 end
-    return { seq = seq, flags = flags, dism = dism, v = v }
+    return { seq = seq, flags = flags, dism = dism, v = v, match_id=4242,round=SESS.round,life=1 }
 end
 N.sc_put("peer_vitals", peer_rec(10, 2, (1 << DP.LOWERARM_L) | (1 << DP.THIGH_R)), 2)
 IPCF.peer_dir(true)   -- the HUD read above cached the directory before peer 2 had a slot
@@ -264,16 +337,39 @@ T.check(SI["Fallen"] == false and SI["Fallen Rate"] == 0, "mirror: posture flags
 T.check(SI["Mesh"].hidden["lowerarm_l"] == 0, "mirror: severed bone hidden (PBO_None)")
 T.check(SI["Mesh"].hidden["thigh_r"] == nil, "mirror: a part the stand-in mesh lacks is not hidden")
 SI["Stamina"] = 90   -- native regen drifts the stand-in
+SI.Mesh.hidden.lowerarm_l = nil -- appearance rebuild forgot its hidden bones
+SI.Mesh.bones.thigh_r = 11      -- the second mesh/bone became available later
 api.set_tick(45)
 api.update_standins()
 T.check(SI["Stamina"] == 90, "mirror: same seq not re-applied before reassert")
 api.set_tick(52)
 api.update_standins()
 T.check(SI["Stamina"] == 23.5, "mirror: re-asserted after MIRROR_REASSERT ticks")
+T.check(SI.Mesh.hidden.lowerarm_l == 0, "mirror: reasserts a severed bone after appearance rebuild")
+T.check(SI.Mesh.hidden.thigh_r == 0, "mirror: retries a previously unavailable severed bone")
 N.sc_put("peer_vitals", peer_rec(11, 2, 0), 2)
 api.set_tick(53)
 api.update_standins()
 T.check(SI["Mesh"].hidden["lowerarm_l"] == nil, "mirror: bone un-hidden when the owner's list clears")
+
+do
+    local displayed = api.C3.displayed_for
+    local current = api.VQ.frame(peer_rec(12,0,0))
+    local before = SI.Consciousness
+    current.v[12] = 7
+    api.C3.displayed_for = function() return {match_id=4242,round=SESS.round,life=2} end
+    T.check(api.mirror_vitals(2,SI,current)==0 and SI.Consciousness==before,
+        "new assigned vitals cannot write onto a different displayed life")
+    api.C3.displayed_for = function() return nil end
+    T.check(api.mirror_vitals(2,SI,current)==0 and SI.Consciousness==before,
+        "unbound standin receives no native vitals writes")
+    api.C3.displayed_for = displayed
+    api.set_tick(54)
+    api.mirror_vitals(2,SI,current)
+    T.check(SI.Consciousness==7,"exact displayed generation receives independent consciousness")
+    T.check(current.match_id==4242 and current.round==SESS.round and current.life==1,
+        "dequantised vitals preserve original context")
+end
 
 -- ---- attacker claim (after-call hook) -> owner replay (native only) -------------
 -- UE4SS runs a Blueprint hook's callback AFTER the body: the claim is the

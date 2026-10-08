@@ -23,6 +23,299 @@ local DW = require("dir_world")
 local D, SD, S = DW.D, DW.SD, DW.S
 local new_world, to_ready = DW.new, DW.to_ready
 
+T.log("== combat spawn proof binds native collision and advancing streams to the displayed life")
+do
+    local R = D.SpawnReady
+    T.check(R ~= nil, "shared spawn proof helper loaded")
+    local proof = R.new()
+    local function vital(life, seq) return { match_id = 91, round = 3, life = life, seq = seq, flags = 0, v = { 6400 } } end
+    local input = { world = "arena#1", native_world = "123@World arena", now_ms = 1000, own = { match_id = 91, round = 3, life = 130, pawn = "owner" },
+        root = { match_id = 91, round = 3, life = 130, ts = 1000 }, vitals = vital(130, 10),
+        pose = { match_id = 91, round = 3, life = 130, ts = 1000, tick = 30 },
+        remotes = {{ peer = 2, match_id = 91, round = 3, life = 2, pawn = "proxy", vitals = vital(2, 20),
+            source = { match_id = 91, round = 3, life = 2, peer_id = 2, has_context = true, age = 70, mode = "interp", cut = 7 },
+            playback = { match_id = 91, round = 3, life = 2, pawn = "proxy", local_ms = 1000,
+                settle_world="123@World arena",settle_sample_ms=1000,settle_stable_ms=150,settle_source_ts=900,
+                settle_source_seq=50,settle_cut=7,settle_ready=true,settle_count=6,settle_pos_uu=5,settle_rot_deg=10,
+                settle_reason="settled" }, native = { alive = true, collision = true } }} }
+    local ok, why = proof:check(input)
+    T.check(not ok and why == "own pose not sampling", "a retained native pose slot does not release the spawn", why)
+    input.now_ms, input.root.ts, input.remotes[1].playback.local_ms = 1100, 1100, 1100
+    input.vitals.seq, input.remotes[1].vitals.seq = 11, 21
+    input.pose.ts, input.pose.tick = 1100, 31
+    T.check(proof:check(input), "current-life streams advancing with native collision release the barrier")
+    local remote = input.remotes[1]
+    remote.playback.settle_ready, remote.playback.settle_reason = false, "hand_r rotation"
+    ok, why = proof:check(input)
+    T.check(not ok and why == "peer 2 physical hand_r rotation", "fresh visible pose with an actual twisted hand remains frozen", why)
+    remote.playback.settle_ready, remote.playback.settle_stable_ms = true, 149
+    T.check(not proof:check(input), "a momentary close pose cannot replace 150ms of continuous physical stability")
+    remote.playback.settle_stable_ms, remote.playback.settle_count = 150, 5
+    T.check(not proof:check(input), "all six arm and hand bodies are required")
+    remote.playback.settle_count, remote.playback.settle_pos_uu = 6, 5.001
+    T.check(not proof:check(input), "physical position above the existing 5uu bound waits")
+    remote.playback.settle_pos_uu, remote.playback.settle_rot_deg = 5, 10.001
+    T.check(not proof:check(input), "physical angular error above the existing 10degree bound waits")
+    remote.playback.settle_rot_deg, remote.playback.settle_sample_ms = 10, 1101
+    T.check(not proof:check(input), "future actual body evidence does not qualify")
+    remote.playback.settle_sample_ms, remote.playback.settle_world = 1100, "124@World arena"
+    T.check(not proof:check(input), "same named map in another native world cannot borrow physical evidence")
+    remote.playback.settle_world, remote.playback.settle_cut = input.native_world, 6
+    T.check(not proof:check(input), "a discontinuity cannot borrow the prior integrated aim proof")
+    remote.playback.settle_cut = 7
+    T.check(proof:check(input), "exact physical evidence recovers without widening either fairness bound")
+    -- Reaching Ready never qualifies a released life: a late physical fault
+    -- before the first Live release must still be observed.
+    input.qualify_settle = true
+    remote.playback.settle_ready = false
+    T.check(not proof:check(input), "healthy Ready proof lost at first release does not create a qualification latch")
+    remote.playback.settle_ready = true
+    T.check(proof:check(input), "passing first release qualifies only this exact world, life, pawn and cut")
+    remote.playback.settle_ready, remote.playback.settle_rot_deg = false, 173
+    T.check(proof:check(input), "same-life pause or reconnect may resume after injury without demanding healthy spawn limbs")
+    input.qualify_settle = false
+    T.check(not proof:check(input), "Ready always requires current physical evidence even after a release qualification")
+    input.qualify_settle = true
+    remote.pawn, remote.playback.pawn = "replacement proxy", "replacement proxy"
+    T.check(not proof:check(input), "a replacement pawn in the same world and life cannot borrow prior qualification")
+    remote.pawn, remote.playback.pawn = "proxy", "proxy"
+    T.check(not proof:check(input), "returning an old pawn name after replacement does not restore discarded qualification")
+    remote.playback.settle_ready, remote.playback.settle_rot_deg = true, 10
+    T.check(proof:check(input), "new physical evidence can qualify the exact current pawn again")
+    remote.playback.settle_ready, remote.playback.settle_rot_deg = false, 173
+    input.qualify_settle, remote.source.cut = true, 8
+    T.check(not proof:check(input), "a new physical discontinuity cannot reuse released-life qualification")
+    remote.source.cut = 7
+    T.check(not proof:check(input), "returning a previous cut cannot revive its discarded qualification")
+    input.qualify_settle, remote.source.cut = false, 7
+    remote.playback.settle_ready, remote.playback.settle_rot_deg = true, 10
+    remote.source.mode = "stale"
+    T.check(not proof:check(input), "a freshly republished stale PeerPlay cannot release the spawn")
+    remote.source.mode, remote.source.age = "extrap", 251
+    T.check(not proof:check(input), "a clock advancing on an old physical frame is not fresh pose proof")
+    remote.source.mode, remote.source.age = "interp", 70
+    remote.source.age = -12
+    T.check(proof:check(input), "a native interpolated frame slightly ahead of the corrected sender clock is current")
+    remote.source.age = 70
+    remote.playback.life = 130
+    ok, why = proof:check(input)
+    T.check(not ok and why == "peer 2 displayed pawn/life", "reused compact life or pawn cannot relabel old playback", why)
+    remote.playback.life, remote.playback.pawn = 2, "other proxy"
+    T.check(not proof:check(input), "correct life on a different proxy does not count")
+    remote.playback.pawn, remote.native.collision = "proxy", false
+    ok, why = proof:check(input)
+    T.check(not ok and why == "peer 2 native collision unavailable/off", "a visible pose with collision off does not release", why)
+    remote.native.collision, remote.playback.local_ms = true, 1101
+    T.check(not proof:check(input), "future playback is not fresh")
+    remote.playback.local_ms, remote.vitals.v[1] = 1100, 65535
+    T.check(not proof:check(input), "unknown owner health cannot prove a ready opponent")
+    remote.vitals.v[1], remote.native.alive = 6400, false
+    T.check(not proof:check(input), "native DED/alive readback must agree before release")
+    remote.native.alive = true
+    input.now_ms, input.root.ts, remote.playback.local_ms = 3800, 3800, 3800
+    remote.playback.settle_sample_ms = 3800
+    input.pose.ts, input.pose.tick = 3800, 32
+    ok, why = proof:check(input)
+    T.check(not ok and why == "own vitals not sampling", "fresh root/pose cannot cover a stopped vitals stream", why)
+    input.vitals.seq, remote.vitals.seq = 12, 22
+    T.check(proof:check(input), "new native samples recover readiness without a timeout release")
+    input.world = "arena#2"
+    T.check(not proof:check(input), "a new world with reused pawn and life must observe new samples")
+end
+
+T.log("== initial anchor release requires a measured fresh physical suffix")
+do
+    local R, proof = D.SpawnReady, D.SpawnReady.new()
+    local function vital(life, seq) return {match_id=91,round=3,life=life,seq=seq,flags=0,v={6400}} end
+    local remote={peer=2,match_id=91,round=3,life=2,pawn="proxy",vitals=vital(2,20),native={alive=true,collision=true},
+        source={match_id=91,round=3,life=2,peer_id=2,has_context=true,age=70,mode="interp",cut=7},
+        playback={match_id=91,round=3,life=2,pawn="proxy",local_ms=1000,settle_world="123@World arena",
+            settle_sample_ms=1000,settle_stable_ms=500,settle_source_ts=900,settle_source_seq=50,
+            settle_cut=7,settle_ready=true,settle_count=6,settle_pos_uu=5,settle_rot_deg=10}}
+    local input={world="arena#1",native_world="123@World arena",now_ms=1000,
+        own={match_id=91,round=3,life=130,pawn="owner",spawn_id=770,arena="arena",status_since=0.5},
+        root={match_id=91,round=3,life=130,ts=1000},pose={match_id=91,round=3,life=130,ts=1000,tick=30},
+        vitals=vital(130,10),remotes={remote}}
+    local function advance(now)
+        input.now_ms,input.root.ts,input.pose.ts,remote.playback.local_ms=now,now,now,now
+        input.pose.tick,input.vitals.seq,remote.vitals.seq=input.pose.tick+1,input.vitals.seq+1,remote.vitals.seq+1
+    end
+    proof:check(input);advance(1100);input.qualify_settle=true
+    T.check(proof:check(input),"fixture has an actual prior same-life qualification")
+    input.require_anchor_release=true
+    T.check(not proof:check(input),"an old qualified token cannot bypass missing release acknowledgement")
+    input.spawn_status={seq=2,verified=true,why="anchor_released",error="",match_id=91,round=3,life=130,
+        pawn="owner",arena="arena",spawn_id=770,t=1.1}
+    local ok,why=proof:check(input)
+    T.check(not ok and why=="own pose before local anchor release","old250ms source proof is refused after release",why)
+    advance(1101)
+    ok,why=proof:check(input)
+    T.check(not ok and why=="peer 2 physical sample before local anchor release","a hold-era physical sample cannot reuse its token",why)
+    advance(1249);remote.playback.settle_sample_ms=1249
+    T.check(not proof:check(input),"continuously healthy pre-release interval still waits149ms after release")
+    advance(1250);remote.playback.settle_sample_ms=1250
+    T.check(proof:check(input),"new150ms suffix passes without rewriting an older continuous measured interval")
+    T.check(remote.playback.settle_stable_ms==500 and input.spawn_status.t==1.1,"producer stability and original release clock remain intact")
+    remote.playback.settle_stable_ms=149
+    T.check(not proof:check(input),"enough post-release wall time cannot cover a shorter measured stable interval")
+    remote.playback.settle_stable_ms=500;remote.playback.settle_rot_deg=10.001
+    T.check(not proof:check(input),"a release cache cannot bypass the existing angular threshold")
+    remote.playback.settle_rot_deg=10;input.spawn_status.life=2
+    T.check(not proof:check(input),"compact-life alias cannot relabel the exact local release")
+    input.spawn_status.life=130;input.spawn_status.spawn_id=771
+    T.check(not proof:check(input),"another assigned spawn cannot acknowledge this initial anchor")
+    input.spawn_status.spawn_id=770;input.spawn_status.t=0.49
+    T.check(not proof:check(input),"an old world release before pipeline start is refused")
+    input.spawn_status.t=1.251
+    T.check(not proof:check(input),"a future release clock is refused")
+    input.spawn_status.t=1.1
+    T.check(proof:check(input),"restored exact release scope recovers without timeout admission")
+    input.require_anchor_release=false;input.spawn_status=nil;remote.playback.settle_ready=false
+    T.check(proof:check(input),"already-qualified same-life resume retains wounded control without another anchor ACK")
+end
+
+T.log("== visible census cannot release Live while combat spawn proof is missing")
+do
+    local ready = false
+    local w = to_ready({ setup = function(world)
+        world.env.combat_ready = function() return ready, "peer 2 native collision unavailable/off" end
+    end })
+    w:tick(40)
+    T.check(w.dir.state == "Spawn" and w.dir.ready_round == 0, "proof waits past the old census timeout")
+    T.check(T.contains(w:logtext(), "Ready waits for combat spawn proof: peer 2 native collision unavailable/off"), "blocked proof names its cause")
+    w:match("live", "Map_Arena_Pit", 1); w:tick(2)
+    T.check(w.frozen ~= false and w.dir.ready_round == 0, "a server Live snapshot cannot release this unverified pawn")
+    ready = true; w:tick(2)
+    T.check(w.dir.ready_round == 1 and w.dir.state == "Live" and w.frozen == false, "verified native proof releases the current pawn")
+end
+
+T.log("== native Loading and warm Live pipelines scope the initial release requirement")
+do
+    local w=new_world()
+    w:sidecar_status("connected");w:match("lobby","Map_Arena_Pit",0);w:session(7,91);w:start();w:tick(4)
+    w:match("loading","Map_Arena_Pit",0);w:spawns(1,"Map_Arena_Pit",100,200,10);w:tick(1);w:load();w:tick(2)
+    T.check(w.dir.sess.phase=="countdown" and w.dir.pipe.initial_anchor==true,
+        "typed native Loading1 reaches the exact initial-anchor pipeline through countdown normalization")
+    w:placed(1);w.kit_status={pawn=w.pawn.id,ok=true,stable=true};w.census_n=1;w:tick(8)
+    T.check(w.dir.state=="Ready" and w.dir.ready_context.require_anchor_release==true,
+        "verified Loading placement reaches Ready without waiting for an anchor release")
+    local request
+    w.env.combat_ready=function(p)request=p;return true end
+    w:match("live","Map_Arena_Pit",1);w:tick(1)
+    T.check(request and request.require_anchor_release==true and request.spawn_id==w.dir.applied_spawn_id
+        and request.status_since==w.dir.ready_context.status_since,"first cold Live passes its exact original assignment and release requirement")
+    w:match("paused","Map_Arena_Pit",1);w:tick(1);w:match("live","Map_Arena_Pit",1);w:tick(1)
+    T.check(request.require_anchor_release==false,"already-qualified exact paused life does not demand another anchor release")
+    local session=w.dir.get_session()
+    w.dir:start_pipeline(w.env.world(),session,"warm Live join",1,w.clock)
+    T.check(w.dir.pipe.initial_anchor==false,"a life1 pipeline first observed in Live does not manufacture an anchor requirement")
+end
+
+T.log("== actual combat-ready adapter consumes the typed local release bus")
+do
+    local NM=require("hsmp_native_mock")
+    local N=NM.new{}
+    local I=dofile(T.path("mods/shared/hsmp_ipc.lua"))
+    local now=1000
+    I.init({mod="HSMPMatch",native=N,clock=function()return now/1000 end,log=function()end,reinit=true})
+    local world={IsValid=function()return true end,GetAddress=function()return 123 end,GetFullName=function()return "World arena"end}
+    local proxy={Health=100,DED=false,IsValid=function()return true end,
+        GetFName=function()return {ToString=function()return "proxy"end}end,GetActorEnableCollision=function()return true end}
+    proxy.Mesh={IsValid=function()return true end,IsVisible=function()return true end,
+        IsSimulatingPhysics=function()return true end,GetCollisionEnabled=function()return 3 end}
+    local old_find,old_name=_G.FindAllOf,_G.FName
+    _G.FindAllOf=function()return {proxy}end;_G.FName=function(v)return v end
+    local env=D.make_ue_env({WG={settled=function()return true end,world=function()return world end},
+        UEHelpers={},log=function()end,ev=function()end,state_dir="x"})
+    env.ipc=I;env.now=function()return now/1000 end
+    local p={key="arena#1",pawn_id="owner",arena="arena",match_id=91,round=3,life=130,verified_life=130,
+        spawn_id=770,status_since=0.5,qualify_settle=true,require_anchor_release=true}
+    local s={phase="live",my_id=1,round=3,roster={{id=1,role="fighter"},{id=2,role="fighter"}}}
+    local pose={match_id=91,round=3,life=130,ts=now,tick=30}
+    I.sample_status=function()return {pose=pose}end
+    I.peer_slot=function()return 0 end
+    I.peer_play=function(_,out)for k,v in pairs({match_id=91,round=3,life=2,peer_id=2,has_context=true,age=30,mode="interp",cut=7})do out[k]=v end end
+    local function publish(sample,stable)
+        pose.ts,pose.tick=now,pose.tick+1
+        N.sc_put("local_root",{match_id=91,round=3,life=130,ts=now,rot={0,0,0,1}})
+        N.sc_put("vitals",{match_id=91,round=3,life=130,seq=pose.tick,flags=0,v={6400}})
+        N.sc_put("peer_vitals",{match_id=91,round=3,life=2,seq=pose.tick,flags=0,v={6400}},0)
+        N.sc_put("mode",{seq=1,match_id=91,round=3,rows={{peer_id=1,life=130,alive=true},{peer_id=2,life=2,alive=true}}})
+        I.bus_put("puppets",{rows={{peer=2,name="proxy"}}})
+        I.bus_put("playback",{rows={{peer=2,match_id=91,round=3,life=2,pawn="proxy",local_ms=now,
+            settle_world="123@World arena",settle_sample_ms=sample,settle_stable_ms=stable,settle_source_ts=900,
+            settle_source_seq=50,settle_cut=7,settle_ready=true,settle_count=6,settle_pos_uu=5,settle_rot_deg=10}}})
+    end
+    publish(1000,500);env.combat_ready(p,s,{})
+    now=1101;publish(1101,500)
+    local status={seq=1,match_id=91,round=3,life=130,pawn="owner",arena="arena",spawn_id=770,
+        why="anchor_released",verified=true,t=1.1,error=""}
+    I.bus_put("spawn_status",status)
+    local ok,why=env.combat_ready(p,s,{})
+    T.check(not ok and why=="peer 2 physical post-release stabilizing","real adapter reads the release bus and refuses the held-era suffix",why)
+    now=1250;publish(1250,500)
+    T.check(env.combat_ready(p,s,{}),"real adapter accepts exact new150ms stable suffix after the original release")
+    p.require_anchor_release=false;I.bus_put("spawn_status",{})
+    now=1260;publish(1260,0)
+    T.check(env.combat_ready(p,s,{}),"real adapter retains same-life qualification on resume without a new release bus")
+    p.require_anchor_release=true;status.life=2;I.bus_put("spawn_status",status)
+    T.check(not env.combat_ready(p,s,{}),"real adapter refuses stale compact-life release despite retained qualification")
+    _G.FindAllOf,_G.FName=old_find,old_name
+end
+
+T.log("== first Live input release refreshes Ready proof, then ordinary injuries retain control")
+do
+    local fresh, checks, last_context = true, 0, nil
+    local w = to_ready({ setup = function(world)
+        world.env.combat_ready = function(context)
+            checks, last_context = checks + 1, context
+            return fresh, "peer 2 pose source stale/held"
+        end
+    end })
+    T.check(w.dir.state == "Ready" and w.frozen ~= false, "current native proof reached Ready with input frozen")
+    fresh = false
+    w:match("live", "Map_Arena_Pit", 1); w:tick(2)
+    T.check(w.frozen ~= false and w.dir.live_release == nil,
+        "proof lost during Countdown keeps the first Live input release frozen")
+    T.check(T.contains(w:logtext(), "Live input waits for combat spawn proof: peer 2 pose source stale/held"),
+        "the transition identifies the deteriorated proof")
+    T.check(last_context.key == w.dir.ready_context.world and last_context.pawn_id == w.dir.ready_context.pawn
+        and last_context.match_id == w.dir.ready_context.match_id and last_context.round == 1
+        and last_context.verified_life == w.dir.ready_context.life and last_context.qualify_settle == true,
+        "Live proof re-check uses the original exact Ready life and pawn")
+    fresh = true; w:tick(1)
+    local released = w.dir.live_release
+    T.check(w.frozen == false and released and released.spawn_id == w.dir.applied_spawn_id,
+        "fresh current proof releases and latches this placed life")
+    local checked = checks
+    fresh = false
+    w.pawn.props.Health, w.pawn.props.Consciousness = 17, 58
+    w:tick(3)
+    T.check(w.frozen == false and checks == checked and w.dir.live_release == released,
+        "ordinary wounded Live keeps control without re-running healthy spawn proof")
+    w:match("paused", "Map_Arena_Pit", 1); w:tick(1)
+    T.check(w.frozen ~= false and w.dir.live_release == nil, "explicit pause freezes and clears the release latch")
+    w:match("live", "Map_Arena_Pit", 1); w:tick(1)
+    T.check(w.frozen ~= false and checks > checked, "resume re-checks current proof and waits if it is stale")
+    fresh = true; w:tick(1)
+    T.check(w.frozen == false and w.dir.live_release ~= nil, "fresh paused-life proof restores control")
+    w:sidecar_status("reconnecting"); w:tick(2)
+    T.check(w.frozen ~= false and w.dir.live_release == nil, "reconnect freezes and clears the release latch")
+    fresh = false
+    w:sidecar_status("connected"); w:tick(8)
+    T.check(w.frozen ~= false and w.dir.live_release == nil, "a restored link still waits for current native proof")
+    fresh = true; w:tick(1)
+    T.check(w.frozen == false, "fresh native proof restores the reconnected life")
+    -- A new full life can reuse a round, pawn and compact spawn ID.
+    -- Its Ready tuple must never borrow the previous life's released latch.
+    fresh = false
+    w.dir.ready_context.life = w.dir.ready_context.life + 128
+    w.dir.sess.life = w.dir.ready_context.life
+    w.dir:update_freeze(w.dir.sess, w.pawn)
+    T.check(w.frozen ~= false and w.dir.live_release == nil,
+        "a different full life on the same world and pawn needs a new release proof")
+end
+
 -- ---------------------------------------------------------------------------
 T.log("== startup, heartbeat, stale request")
 do
@@ -143,6 +436,10 @@ do
     w.kit_status = { pawn = w.pawn.id, ok = false, armour_n = 3, l_class = "Shield", rev = 1, error = "verifying" }
     w:tick(2)
     T.check(w.dir.state == "Spawn", "a not-yet-verified kit holds the pipeline")
+    local pgs = w:sent("game_status")
+    pgs = pgs[#pgs]
+    T.check(pgs and (pgs.flags & S.ENUMS.status_flag.LOADED) == 0 and pgs.spawn_id == 256 and pgs.round == 1 and pgs.life == 1,
+        "placed before Ready: game_status carries the verified order (roots authorized) without LOADED", T.repr(pgs))
     w.kit_status = { pawn = w.pawn.id, ok = true, armour_n = 5, r_class = "Sword", l_class = "Shield", rev = 1, stable = false, t = w.clock }
     w:tick(4)                                        -- 1.0 s: inside the native re-arm window
     T.check(w.dir.state == "Spawn" and D.PIPE[w.dir.pipe.step] == "kit", "a kit verified < 1.5 s ago is not trusted yet")
@@ -223,6 +520,121 @@ do
     T.check(w.dir.loaded_for == 3 and w.dir.state == "Spawn", "new world serves round 3", w.dir.loaded_for)
 end
 
+T.log("== deathmatch respawn: the order reloads the arena and serves the running round")
+do
+    local w = DW.to_live()
+    local n0 = #w.opens
+    local GM = S.ENUMS.game_mode
+    -- killed: the server has us dead; no reload without an order
+    w:match("live", "Map_Arena_Pit", 1, nil, { dead = { 1 } })
+    w.N.sc_put("mode", { seq = 2, mode = GM.DEATHMATCH, round = 1,
+        rows = { { peer_id = 1, seat = 1, life = 1, respawning = true }, { peer_id = 2, seat = 2, life = 1, alive = true } } })
+    w:tick(4)
+    T.check(#w.opens == n0 and w.dir.state == "Live", "dead, respawn pending: no reload before the order", w.dir.state)
+    -- the respawn order: the roster's spawn order becomes round 1 | 0x80 | life
+    w.sess.plan[1] = { spawn_id = 256 + 0x82, slot = 4, x = 300, y = 400, z = 10, yaw = 0 }
+    w:put_session()
+    w.N.sc_put("mode", { seq = 3, mode = GM.DEATHMATCH, round = 1,
+        rows = { { peer_id = 1, seat = 1, life = 2, respawning = true }, { peer_id = 2, seat = 2, life = 1, alive = true } } })
+    w:tick(1)
+    T.check(#w.opens == n0 + 1 and w.opens[#w.opens] == "Map_Arena_Pit", "one reload of the same arena", T.repr(w.opens))
+    local ev = w:last_ev("respawn")
+    T.check(ev and ev.round == 1 and ev.spawn_id == 256 + 0x82 and ev.life == 2, "respawn{round, spawn_id, life}", T.repr(ev))
+    w:tick(4)
+    T.check(#w.opens == n0 + 1, "the order is served once")
+    w:load(); w:tick(1)
+    T.check(w.dir.state == "Spawn" and w.dir.loaded_for == 1, "the new world serves the running round", w.dir.loaded_for)
+    w:tick(2)
+    w:placed(1, { x = 300, y = 400 })
+    w.kit_status = { pawn = w.pawn.id, ok = true, armour_n = 5, r_class = "Sword", l_class = "Shield", rev = 1 }
+    w:clear_pings()
+    w:tick(30)
+    T.check(w.dir.state == "Live" and w.dir.ready_round == 1, "Ready on the running round", w.dir.state)
+    local gs = w:sent("game_status")
+    local last = gs[#gs]
+    T.check(last and last.round == 1 and last.spawn_id == 256 + 0x82 and (last.flags & S.ENUMS.status_flag.LOADED) ~= 0,
+        "game_status reports the respawn order applied (the server revives on it)", T.repr(last))
+    T.check(last and last.life == 2, "game_status carries the verified native pawn's full original life")
+    T.check(w.frozen == w.pawn.id, "input stays frozen until the server has us alive")
+    -- revived: alive in the roster, no longer respawning
+    w:match("live", "Map_Arena_Pit", 1)
+    w.N.sc_put("mode", { seq = 4, mode = GM.DEATHMATCH, round = 1,
+        rows = { { peer_id = 1, seat = 1, life = 2, alive = true }, { peer_id = 2, seat = 2, life = 1, alive = true } } })
+    w:tick(2)
+    T.check(w.frozen == false and #w.opens == n0 + 1, "input released; no further reload")
+    -- the next round's countdown still reloads for round 2
+    w:match("roundover", "Map_Arena_Pit", 1); w:tick(2)
+    w:match("countdown", "Map_Arena_Pit", 1); w:tick(1)
+    T.check(#w.opens == n0 + 2, "the next round reloads as usual", T.repr(w.opens))
+    w:load(); w:tick(1)
+    T.check(w.dir.loaded_for == 2, "and serves round 2", w.dir.loaded_for)
+end
+
+T.log("== repeated deathmatch match: round 1 life 2 may reuse spawn 386")
+do
+    local w = DW.to_live()
+    local GM = S.ENUMS.game_mode
+    local function order(life)
+        w.sess.plan[1] = { spawn_id = 256 + 0x80 + (life & 0x7f), slot = 4, x = 300, y = 400, z = 10, yaw = 0 }
+        w:put_session()
+        w.N.sc_put("mode", { seq = life, mode = GM.DEATHMATCH, round = 1,
+            rows = {{ peer_id = 1, seat = 1, life = life, respawning = true }} })
+    end
+    order(2); w:tick(1); w:load(); w:tick(3)
+    T.check(w.dir.state == "Spawn", "respawn generation 2 is still loading")
+    local opens = #w.opens
+    -- A full life may change while its compact spawn id is reused.
+    order(130); w:tick(1)
+    T.check(#w.opens == opens + 1 and w.dir.respawn_life == 130,
+        "a newer full life preempts the old in-flight pipeline despite the same spawn id")
+    w:load(); w:tick(3); w:placed(1, { life = 2, x = 300, y = 400 }); w:tick(4)
+    T.check(w.dir.ready_round == 0, "an old life's placement cannot complete the new pipeline")
+    w:placed(1, { life = 130, x = 300, y = 400 })
+    w.kit_status = { pawn = w.pawn.id, ok = true, armour_n = 5 }
+    w:tick(30)
+    T.check(w.dir.state == "Live" and w.dir.ready_context.life == 130,
+        "the fresh full-life placement completes the reissued respawn")
+end
+do
+    local w = DW.to_live()
+    local GM = S.ENUMS.game_mode
+    w:session(77, 11); w:tick(1)
+    local function order(seq)
+        w.sess.plan[1] = { spawn_id=386, slot=4, x=300, y=400, z=10, yaw=0 }
+        w:put_session()
+        w.N.sc_put("mode", {seq=seq,mode=GM.DEATHMATCH,round=1,
+            rows={{peer_id=1,seat=1,life=2,respawning=true},{peer_id=2,seat=2,life=1,alive=true}}})
+    end
+    order(2); w:tick(1)
+    w:load(); w:tick(3); w:placed(1,{x=300,y=400})
+    w.kit_status={pawn=w.pawn.id,ok=true,armour_n=5,r_class="Sword",l_class="Shield",rev=1}
+    w:tick(30)
+    w.N.sc_put("mode", {seq=3,mode=GM.DEATHMATCH,round=1,
+        rows={{peer_id=1,seat=1,life=2,alive=true},{peer_id=2,seat=2,life=1,alive=true}}})
+    w:tick(2)
+    T.check(w.dir.state=="Live" and w.dir.respawn_for==386,"first match served life 2 spawn 386",w.dir.state)
+    w:match("lobby","Map_Arena_Pit",0); w:tick(12)
+    w:load(); w:tick(2)
+    T.check(w.dir.respawn_for==nil,"ABORT/new match context forgets the old match's respawn ID")
+    -- Keep the old match_id while the new countdown/arena are prepared; the
+    -- eventual new ID must not create a second context or lose an in-flight order.
+    w:match("countdown","Map_Arena_Pit",0); w:tick(2)
+    w:load(); w:tick(1)
+    w:spawns(1,"Map_Arena_Pit",100,200,10); w:placed(1)
+    w.kit_status={pawn=w.pawn.id,ok=true,armour_n=5}
+    w:tick(30)
+    w:match("live","Map_Arena_Pit",1); w:tick(2)
+    local before=#w.opens
+    order(4); w:tick(1)
+    T.check(#w.opens==before+1 and w.dir.respawn_for==386,
+        "second match life 2 reusing spawn 386 starts a fresh arena reload",T.repr(w.opens))
+    local gen=w.dir.match_gen
+    w:session(77,12); w:tick(4)
+    T.check(w.dir.match_gen==gen and w.dir.respawn_for==386,
+        "late match_id allocation preserves the in-flight respawn in its existing context")
+    T.check(#w.opens==before+1,"repeated order within the same match never reloads twice")
+end
+
 T.log("== world change mid-pipeline")
 do
     local w = new_world()
@@ -275,7 +687,7 @@ do
     w:tick(4)
     w:tick(3)
     T.check(#w.opens == 0 and w.dir.load_error == "gi_verify", "GI writes that do not stick: no travel, load_error=gi_verify", tostring(w.dir.load_error))
-    T.check(T.any(w:pings(), function(p) return p == "0:0::" .. S.ENUMS.load_error.OTHER end), "the game status carries the load error", T.repr(w:pings()))
+    T.check(T.any(w:pings(), function(p) return p == "1:0::" .. S.ENUMS.load_error.OTHER end), "the game status carries the original pending round's load error", T.repr(w:pings()))
     w.gi_stuck = {}
     w:tick(24)
     T.check(#w.opens == 1, "retried after gi_retry_s and travelled", T.repr(w.opens))
@@ -341,6 +753,9 @@ do
     w:placed(2)
     w:tick(4)
     T.check(D.PIPE[w.dir.pipe.step] == "place", "a status for another round is ignored")
+    w:placed(1, { spawn_id = 386 })
+    w:tick(2)
+    T.check(D.PIPE[w.dir.pipe.step] == "place", "a status for another life spawn order is ignored")
     -- verified, but the body snapped back afterwards (the Slums bug)
     w:placed(1, { stay = true })
     w.pawn.x, w.pawn.y = 257, 415
@@ -374,6 +789,34 @@ do
 end
 
 T.log("== spawn protection: no dead ping inside the window, input frozen until the pipeline is done")
+do
+    local w = to_ready({ setup = function(w) w:session(77, 11) end })
+    local original = w.dir.ready_context.match_id
+    local s = w.dir.sess
+    local changed = {}
+    for k, v in pairs(s) do changed[k] = v end
+    changed.match_id = (original or 0) + 100
+    changed.life = 130
+    w.dir.next_ping = 0
+    w.dir:ping(changed, w.pawn)
+    local sends = w:sent("game_status")
+    T.check(sends[#sends].match_id == original, "Ready evidence keeps its original match identity")
+    T.check(sends[#sends].life == 1, "Ready evidence never borrows life from the receipt-current session")
+    w.dir:error("spawn_timeout", "old source failure")
+    w.dir.next_ping = 0
+    w.dir:ping(changed, w.pawn)
+    sends = w:sent("game_status")
+    T.check(sends[#sends].match_id == original and sends[#sends].round == 1,
+        "a delayed load failure preserves its original match and round")
+    T.check((sends[#sends].flags & S.ENUMS.status_flag.LOADED) == 0,
+        "load failure revokes the Ready placement report")
+    w:new_pawn()
+    w.dir.next_ping = 0
+    w.dir:ping(s, w.pawn)
+    sends = w:sent("game_status")
+    T.check((sends[#sends].flags & S.ENUMS.status_flag.LOADED) == 0 and sends[#sends].spawn_id == 0,
+        "another pawn cannot acknowledge the old verified spawn")
+end
 do
     local w = to_ready()
     T.check(w.dir.state == "Ready", "Ready")
@@ -791,8 +1234,16 @@ do
     local n0 = #w.opens
     w:session(77, 6)   -- lands now
     w:tick(4)
-    T.check(#w.opens == n0 and w.dir.state == "Ready", "the late match_id does not re-prepare the arena",
+    T.check(#w.opens == n0 and w.dir.state == "Spawn", "the late match_id re-verifies in the existing arena",
         T.repr({ w.opens, w.dir.state }))
+    T.check(w.dir.ready_round == 0, "old match placement evidence cannot pass the new match's load barrier")
+    w:placed(1)
+    w:tick(30)
+    local reports = w:sent("game_status")
+    local gs = reports[#reports]
+    T.check(w.dir.state == "Ready" and gs.match_id == 6 and gs.life == 1
+        and (gs.flags & S.ENUMS.status_flag.LOADED) ~= 0,
+        "fresh source placement verifies the new match without relabelling the old proof", T.repr(gs))
     T.check(w.dir.match_gen == g1, "no second match context for the same match", w.dir.match_gen)
     T.check(next_round(w, 1) == 1 and w.dir.loaded_for == 2, "match 2 round 2 still reloads once (H2)", w.dir.loaded_for)
     -- a match_id change with no lobby in between is still a new match

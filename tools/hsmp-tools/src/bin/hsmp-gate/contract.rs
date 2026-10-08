@@ -110,15 +110,26 @@ pub const CONTRACT: &[Entry] = &[
     e("world_track", L, &["nid", "t", "x", "y", "z", "rest", "level", "epoch"], &["qx", "qy", "qz", "qw", "mode", "owner"]),
     e("world_sync_quality", L, &["hard_snaps"], &["max_off_cm", "lost_races", "takeovers", "poked", "follow_ticks", "window_s", "level", "epoch"]),
     // COMBAT-1 (docs/development/subsystems/combat.md): HSMPCombat every 5 s of combat during Live
-    e("combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s"]),
-    e("x_combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s"]),
+    e("combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s", "owner_replay_by_status", "attacker_receipts_by_status", "owner_observed_fields", "attacker_observed_fields", "owner_health_delta", "attacker_health_delta", "unsupported_source_colliders"]),
+    e("x_combat_quality", L, &["claims", "accepted", "pending", "rejected_by_reason"], &["confirmed", "clashes", "round", "window_s", "owner_replay_by_status", "attacker_receipts_by_status", "owner_observed_fields", "attacker_observed_fields", "owner_health_delta", "attacker_health_delta", "unsupported_source_colliders"]),
     e("x_pose_contact", L, &[], &[]),   // stand-in contact impulses (diagnostic, not gated)
+    e("x_pose_clock_reset", L, &[], &["peer", "threshold_ms", "expect", "projected_clk", "delta_ms",
+        "clk_pt", "clk_at", "clk_rate", "local_ms", "source_pt", "read_at", "rate", "lead", "mode",
+        "age", "delay", "jitter", "iv", "quiet", "cut", "step", "frame", "source_seq", "fresh",
+        "match_id", "round", "life", "has_context"]), // pre-correction clock diagnostic
     // DoD-8: attributes a career-file mtime change to a pre-session native write (guard off)
     e("x_save_call", L, &["fn", "slot", "active"], &["err"]),
     e("x_autotest_cmd", L, &[], &[]),
+    // HSMPModHost (docs/hosting/server-mods.md): a server mod raised an error; a set loaded / unloaded
+    e("x_server_mod_error", L, &[], &["mod", "what", "error"]),
+    e("x_server_mods_offer", L, &[], &["mods", "bytes", "decision"]),
+    e("x_server_mods_loaded", L, &[], &["set", "mods", "ok", "failed"]),
+    e("x_server_mods_unloaded", L, &[], &["why", "inert"]),
     e("conn_state", L, &[], &[]),
     e("travel_reason", L, &[], &[]),
     e("resume", L, &[], &[]),
+    // the Director reloads for a deathmatch respawn order (modes.md). Not judged yet.
+    e("respawn", L, &[], &["round", "spawn_id", "life"]),
     // hsmp_log `lua_error` events are extra SOAK-LUAERR evidence; UE4SS.log is the primary one.
     Entry { ev: "lua_error", src: L, read: &["mod", "error", "msg"], known: &[], optional: true },
     e("_open", L, &[], &[]),
@@ -146,8 +157,17 @@ pub const CONTRACT: &[Entry] = &[
     e("session_resumed", &[Src::Server, Src::Sidecar], &[], &[]),
     e("round_resumed", SV, &[], &[]),
     e("drop_forfeit_round", SV, &[], &[]),
+    // game modes (docs/development/subsystems/modes.md): the lobby's mode changed, a
+    // deathmatch respawn order, the respawned player back in the round. Not judged yet.
+    e("mode_set", SV, &[], &[]),
+    e("respawn_order", SV, &[], &[]),
+    e("respawned", SV, &[], &[]),
+    e("respawn_refused", SV, &[], &["peer_id", "round", "match_id", "reason"]),
     // NAT traversal (server/src/nat): a relayed punch answered with probes. Not judged.
     e("nat_punch", SV, &[], &["to", "nonce"]),
+    // server mods (docs/hosting/server-mods.md): the server (a joining player's set loaded /
+    // declined / failed) and the sidecar (accepted / loaded / failed with a code)
+    e("server_mods", &[Src::Server, Src::Sidecar], &[], &["peer_id", "result", "ms", "failed", "state", "code", "text"]),
     // --- hsmp-sidecar --events -----------------------------------------------------------------
     e("cmd_sent", SC, &[], &[]),
     e("cmd_timeout", SC, &["cmd", "cmd_id", "tries"], &[]),
@@ -646,9 +666,21 @@ fn rust_emits_in(repo: &Path, path: &Path, callee: &Regex, src: Src) -> Vec<Emit
     let Ok(text) = std::fs::read_to_string(path) else { return vec![] };
     // drop `//` line comments (keeps strings intact enough for event payloads)
     let text: String = text.lines().map(|l| match l.find("//") { Some(i) if !l[..i].contains('"') => &l[..i], _ => l }).collect::<Vec<_>>().join("\n");
-    // the test module is not an emitter (a lone #[cfg(test)] helper above real code is)
-    let test_mod = Regex::new(r"#\[cfg\(test\)\]\s*(?:pub(?:\([^)]*\))?\s+)?mod\s").unwrap();
-    let text = match test_mod.find(&text) { Some(m) => text[..m.start()].to_string(), None => text };
+    // test modules are not emitters: blank each inline one (keeping its lines, so later line
+    // numbers hold); a lone #[cfg(test)] helper and the code after a test module still count
+    let test_mod = Regex::new(r"#\[cfg\(test\)\]\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{").unwrap();
+    let mut text = text;
+    while let Some(m) = test_mod.find(&text) {
+        let open = m.end() - 1;
+        let close = match_close(text.as_bytes(), open).unwrap_or(text.len());
+        let blank: String = text[m.start()..close].chars().filter(|&c| c == '\n').collect();
+        text.replace_range(m.start()..close, &blank);
+    }
+    // an out-of-line test module (`#[cfg(test)] #[path = ..] mod x;`) ends the file's real code
+    let text = match Regex::new(r"#\[cfg\(test\)\]\s*(?:#\[[^\]]*\]\s*)*mod\s+\w+\s*;").unwrap().find(&text) {
+        Some(m) => text[..m.start()].to_string(),
+        None => text,
+    };
     let file = rel(repo, path);
     let mut out = vec![];
     let quoted = Regex::new(r#"^"([A-Za-z_]\w*)"$"#).unwrap();

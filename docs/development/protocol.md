@@ -1,4 +1,4 @@
-# Wire protocol (v6)
+# Wire protocol (v12)
 
 The UDP protocol between `hsmp-sidecar` (client) and `hsmp-server`.
 
@@ -25,8 +25,77 @@ The UDP protocol between `hsmp-sidecar` (client) and `hsmp-server`.
 - **Three channels** over one connection: unreliable-latest, reliable-unordered and
   reliable-ordered, with fragmentation up to 64 KiB.
 - **Versioning.** `PROTOCOL_VERSION` changes only when the packet header (§4) or handshake (§3)
-  changes, or when the message representation changes. Everything else is added behind a
+  changes, or when the message representation or existing field meaning changes. Everything else is added behind a
   capability bit (§7).
+
+### What changed in v12
+
+Combat `victim_view_ts` / `victim_arm_ts` now name the physical sample time the
+stand-in displays, including the sender physics step. The Avatar quantizes target
+times before constructing its servo poses, so the existing u32 fields carry exact
+whole-millisecond sample times. The server reconstructs delivered body and weapon
+frames at that time directly; it no longer subtracts or guesses the selected step.
+
+`COMPLEX | INSIDE` with `parent_cid = 0` is a geometry-only origin for a native
+contact whose DCD gate suppressed damage. It requires original native life and
+source evidence, and authenticates a parent without replaying its damage; later
+Inside continuations retain that accepted parent's component identity.
+
+These field meanings are incompatible with protocol 11 despite unchanged record
+sizes and IPC layout. Both endpoints require protocol 12, including development
+servers with content checking disabled. Deploy the Lua mods, sidecar and server
+together; unchanged IPC layouts cannot detect an intentionally mixed installation.
+
+### What changed in v10
+
+Weapon geometry now supports twelve rows per held weapon. Position uses signed
+13-bit integers and nonnegative half-extents use unsigned 12-bit integers;
+both retain the existing 0.1-unit resolution. Quaternion and native-scale
+precision are unchanged. The full maximum frame is 1118 bytes (1179 bytes with
+UDP framing), below the 1200-byte datagram limit. Pose storage allows 1120 bytes.
+The changed bit layout first required protocol 10 at both endpoints. Protocol 11
+also binds every Root record to its original verified match, round and pawn life.
+Delayed records from a
+previous pawn generation must not seed a new spawn's movement history.
+
+### What changed in v9
+
+Weapon pose geometry distinguishes a native cutting child box from its parent
+striking component. A cutting child carries its original collision-array parent
+ordinal. The server checks that relationship when validating the cutting frame
+and refuses cutting-only children as striking sources. The parent mesh envelope
+remains available for contact validation. This pose representation requires
+protocol 9 on both endpoints; version 8 peers cannot join this build.
+
+### What changed in v8
+
+Game status carries the original full pawn life for placement verification,
+including when the spawn order's short life suffix repeats. Its unscoped DEAD
+flag no longer declares deaths; reliable, scoped death reports do that.
+
+Cutting claims carry the original native box frame and source class. Pose
+history supplies independent native box geometry and class identity for server
+validation. Replay uses a separate collision-disabled box instead of moving a
+live weapon component. These layout changes require protocol 8 throughout.
+
+The capability-gated `body2` record retains the owner's original match, round,
+life and pawn name, native passport height, actor scale, mesh scale and measured
+bone masses. Its receiver requires matching pose context and does not substitute
+an unscoped `body` record. Native height and actor scale are diagnostic evidence;
+applying them at native construction still requires runtime verification.
+
+### What changed in v7
+
+Combat and pose records now carry the original match, round and pawn life. Damage
+claims capture both attacker and victim life; death reports, vitals and verified
+placement retain their original context. The server and receiving game reject stale
+contexts instead of assigning delayed traffic to the current pawn. Native replay
+outcomes and acknowledgments report execution separately from geometric acceptance
+and transport receipt.
+
+The transport and 8-byte application header remain unchanged. The larger record
+layouts and required life context are incompatible with v6, so both ends advertise
+only v7. A v6 client receives a `VERSION` PreReject before entering a session.
 
 ### What changed in v6
 
@@ -289,6 +358,7 @@ that it is never larger than the Auth it answers.
 | 8 | SERVER_CLOSING | shutdown in progress |
 | 9 | DUPLICATE_PLAYER | the same key is connected and replacement is refused |
 | 10 | RATE_LIMITED | too many attempts |
+| 11 | MODS_REQUIRED | the server serves mods and the client has no `caps::SERVER_MODS` (§12) |
 | 255 | INTERNAL | — |
 
 ### 3.8 Client behaviour
@@ -571,7 +641,7 @@ Every channel message is one record:
 
 ### 6.2 Kinds and validation
 
-A kind id is `domain << 8 | n` with `n` in `0x10..=0xFF`. Every kind, with its layout,
+A kind id is `domain << 8 | n` with `n` in `0x10..=0xFF` (the server-mods domain `0x09` uses `0x01..=0x0F`). Every kind, with its layout,
 capability bit, allowed flow (`c2s`, `s2c`, `g2s`, `s2g`, `local`) and channel, is declared once
 in `crates/hsmp-ipc/src/schema/<domain>.rs` (`RECORDS`). `hsmp-tools gen-ipc` generates the C
 header and the Lua schema from it.
@@ -598,7 +668,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 |---|---|---|---|---|
 | `0x0110` | `root` | C→S, S→C | latest | Root position, rotation (quaternion), velocity, tick, timestamps |
 | `0x0111` | `weapon` | C→S | latest | Held weapon transform; kept by the server for lag compensation, not relayed |
-| `0x0112` | `pose` | C→S, S→C | latest | A pose codec v2 frame as rows (≤ 640 bytes). The server decodes it once (structural check, lag compensation) and relays the incoming bytes |
+| `0x0112` | `pose` | C→S, S→C | latest | A pose codec v2 frame as rows (≤ 1120 bytes). The server decodes it once (structural check, lag compensation) and relays the incoming bytes. Optional flag `0x10` adds up to twelve local module and cutting-child boxes per held weapon, each carrying its native collision-component ordinal (1–15), center, rotation, half-extents, exact class fingerprint and optional native box scale. Optional flag `0x20` adds up to eight native fist/foot sphere or box shapes, keyed by side/limb and component ordinal, with measured dimensions and bone-relative transforms. A named contact requires its exact source shape and swept point velocity |
 
 **Session, match and connection (`0x02`)**
 
@@ -612,7 +682,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0215` | `game_status` | C→S | rel_latest | The game's state report, about 1 Hz and on change: `match_id`, `round`, `world_key`, `flags` (LOADED, READY, DEAD, IN_MENU, SPECTATING, BACKGROUND), `spawn_id`, `load_error`, `arena`. The server counts a player as loaded only if `match_id`, `round` and `arena` match the frozen config |
 | `0x0216` | `spawned` | C→S | ordered | The pawn was placed on its spawn order (`round`, `slot`, `pos`, `clear`) |
 | `0x0217` | `notice` | S→C | reliable | `notice` code with up to 4 string args; idempotent by `event_id` (`NET_STATUS` = 9, §11) |
-| `0x0218` | `kill_feed` | S→C | reliable | Killer and victim seats, cause, weapon |
+| `0x0218` | `kill_feed` | S→C | reliable | Killer and victim seats (`NO_SEAT` = none), cause, weapon (the round kit's); one per declared death, only to peers with `caps::MODES` |
 | `0x0219` | `kicked` | S→C | reliable | Terminal: no automatic rejoin before `retry_after_s`; followed by close `KICKED` |
 | `0x021A` | `server_closing` | S→C | ordered | `closing_reason`, text, `reconnect_after_ms` (0 = do not); followed by close `SERVER_CLOSING` |
 | `0x021B` | `leave` | C→S | ordered | `leave_reason`; the sidecar sends it when the game exits, then closes |
@@ -621,6 +691,8 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x021E` | `admin_state` | S→C | ordered | Who is admin, and the masked ban list (§6.6) |
 | `0x021F` | `ping` | C→S | latest | Clock probe, every 2 s while connected |
 | `0x0220` | `pong` | S→C | latest | Answer to `ping` with the server wall clock |
+| `0x0240` | `mode` | S→C | rel_latest | Game-mode state (§6.4.1), on change and about 1 Hz in a match; only with `caps::MODES` |
+| `0x0241` | `zone` | S→C | rel_latest | The King of the hill zone: centre, radius, half height, holder seat / team, contested, players inside; only with `caps::ZONE` |
 
 **Combat (`0x03`)**
 
@@ -633,7 +705,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0314` | `damage_ack` | C→S | reliable | Receipt of a delivered hit |
 | `0x0318` | `clash` | C→S | reliable | The sender's screen showed a blade-on-blade contact |
 | `0x0319` | `touch` | C→S | reliable | The sender's screen showed a peer's stand-in reach its body (evidence against a parry; `caps::HIT_FX`) |
-| `0x0320` | `death_report` | C→S | reliable | The owning game reports its death |
+| `0x0320` | `death_report` | C→S | reliable | Original match/round/life outcome: reason 0 native death, reason 1 final Brawl knockout, reason 2 deliberate surrender. Other modes reject automatic knockout; temporary unconsciousness is not an outcome |
 | `0x0321` | `death_ack` | S→C | reliable | Receipt of a death report |
 | `0x0322` | `death` | S→C | reliable | A declared death, with `death_cause` |
 | `0x0328` | `vitals` | C→S, S→C | latest | Health and wound state as u16 values and `vitals_flag` bits |
@@ -662,6 +734,7 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0513` | `kit_rules` | S→C | rel_latest | The current kit rules |
 | `0x0514` | `loadout` | C→S, S→C | rel_latest | The full armour and weapon loadout, fragmented as needed |
 | `0x0515` | `body` | C→S, S→C | rel_latest | The owner's passport body (rates, scales, bone masses) for its stand-ins; only with `caps::BODY` |
+| `0x0516` | `body2` | C→S, S→C | rel_latest | Original verified body generation, native height, actor/mesh scales and bone masses; only with `caps::BODY2`, matched to pose context |
 
 **Interact (`0x06`, `caps::INTERACT`)**
 
@@ -670,6 +743,16 @@ Records with flow `local` or only `g2s` / `s2g` never go on the wire; they are l
 | `0x0610` | `interact` | C→S, S→C | reliable | Grab start / end, impulse, grab denied |
 | `0x0611` | `interact_grab_r` | C→S, S→C | rel_latest | Right-hand grab update, superseded per (initiator, hand) |
 | `0x0612` | `interact_grab_l` | C→S, S→C | rel_latest | Left-hand grab update |
+
+**Server mods (`0x09`, `caps::SERVER_MODS`; §12)**
+
+| Kind | Name | Dir | Channel | What |
+|---|---|---|---|---|
+| `0x0901` | `mod_manifest` | S→C | ordered | The set: hash, total size, chunk size, timeout; one row per mod (hash, size, files, name, version, author, description) |
+| `0x0902` | `mod_files` | S→C | ordered | Every file: SHA-256, size, mod row, path inside the mod |
+| `0x0903` | `mod_chunk_req` | C→S | ordered | Pull `len` (≤ 32 KiB) bytes of file `file` from `offset` |
+| `0x0904` | `mod_chunk` | S→C | reliable | The bytes of one request (byte rows) |
+| `0x0905` | `mod_ready` | C→S | ordered | The set is loaded (`LOADED`), or `DECLINED` / `FAILED` |
 
 Field-level definitions: the structs in `crates/hsmp-ipc/src/schema/<domain>.rs`, or the
 generated `crates/hsmp-native/cpp/gen/hsmp_ipc.h`.
@@ -686,7 +769,8 @@ once on any change. It is a variable record: `SessionHead` plus one `RosterRow` 
   `result_reason`, `has_frozen`, the live `config` and the `frozen` config.
 - **Phases:** LOBBY 0, LOADING 1, COUNTDOWN 2, LIVE 3, ROUND_OVER 4, MATCH_OVER 5, POST_MATCH 6,
   PAUSED 7.
-- **Config:** `rev`, `arena`, `mode` (DUEL, FFA, TEAM_ELIM, KING_OF_HILL), `best_of`,
+- **Config:** `rev`, `arena`, `mode` (DUEL 0, FFA 1, TEAM_ELIM 2, KING_OF_HILL 3, ROULETTE 4, BRAWL 5,
+  DEATHMATCH 6; a peer without `caps::MODES` refuses codes above 3, see §6.4.1), `best_of`,
   `round_time_limit_s`, `team_rule`, `teams`, `kit_mode` / `kit_budget` / `kit_fairness`,
   `max_fighters`, `max_spectators`, `countdown_s`, `roundover_s`, `matchover_s`,
   `barrier_timeout_s`, `join_in_progress` (SPECTATE, NEXT_ROUND, NEVER).
@@ -697,6 +781,37 @@ once on any change. It is a variable record: `SessionHead` plus one `RosterRow` 
 Receiver rules: drop the snapshot if `(epoch, seq) ≤ last`; a new epoch resets all tracking (in a
 match it sends the Director back to the lobby with "Server restarted"). The map is
 `frozen.arena` in a match, else `config.arena`. The own spawn is the own roster row's spawn.
+
+### 6.4.1 Game modes (`mode`, `zone`, `kill_feed`)
+
+Rules: [modes.md](subsystems/modes.md). The `session` record carries the mode, team rule, team
+count and round clock in force (`round_time_limit_s` is the mode's default when the host left it
+at 0) and each seat's `team` (also the lobby's FIXED picks); the rest is in `mode`:
+
+- **`mode` head:** `match_id`, `server_time_ms`, `round_end_ms` (server clock when the round clock
+  runs out, 0 = none; sudden death included), `seq`, `round`, `team_wins[4]`, `team_score[4]`
+  (King of the hill ms held, deathmatch kills), `target_s`, `round_time_s`, `mode`, `team_rule`,
+  `teams`, `friendly_fire`, `sudden_death`, `respawn_s`, `team_alive[4]`, `result` (`mode_result`:
+  NONE, ELIMINATION, OBJECTIVE, TIME_LIMIT, KILLS, SUDDEN_DEATH, DRAW), `winner_team`, and the
+  round's imposed kit (`kit_r`, `kit_l`, `kit_label`; empty = everyone's own kit).
+- **`mode` rows (one per seat):** `peer_id`, `score` (this round), `kills` / `deaths` (match),
+  `round_kills`, `life` (lives started this round), `seat`, `team`, `alive`, `respawning`,
+  `in_zone`, `respawn_at_ms`.
+- **Deathmatch respawn:** the order is the roster row's spawn order with
+  `spawn_id = round << 8 | 0x80 | (life & 0x7F)` (round-start orders keep the low byte below
+  0x80). The client reloads the arena, places the pawn on it and reports it in `game_status`
+  (`round` = the current round with LOADED, `spawn_id` = the order); the server then revives the
+  player (2 s of protection). A respawned peer's next `death` in the same round is a new death: the
+  sidecar re-opens its death dedup when the peer's `life` goes up.
+- **Commands:** SET_CONFIG accepts `mode`, `team_rule`, `teams` and `round_time_limit_s` (lobby,
+  admin). `SET_TEAM` (11): `role` = team 0..4 (0 = no pick), `peer_id` 0 = the sender, another
+  peer = admin only; lobby only, FIXED teams. `SET_OPTION` (14): `choice` = `mode_opt`
+  (KOTH_TARGET 1: 10..600 s, FRIENDLY_FIRE 2: 0 / 1, RESPAWN_S 3: 1..30 s), `ballot` = the value.
+- **Compatibility:** a server playing any mode but DUEL / FFA refuses a joiner without
+  `caps::MODES` at the handshake (reject `VERSION`, "this server is playing <mode>, which needs a
+  newer HSMP: update HSMP to join"), and SET_CONFIG refuses such a mode while a connected peer
+  lacks the cap. Duel / FFA servers keep admitting beta.5 clients, which get no `mode`,
+  `zone` or `kill_feed` records.
 
 Timing: the server tick rate (`--tick-hz`, 60 by default) is not on the wire and a client must
 not assume one. Every duration a client sees is in real time: `phase_deadline_ms` on the
@@ -709,7 +824,7 @@ tick. See [tick rate](tick-rate.md).
 
 `command { cmd_id, expected_rev (0 = don't care), op, flag, role, choice, peer_id, duration_s,
 ballot, text, patch }`. `op` is one of READY 1, START 2, ABORT 3, PICK_ARENA 4, SET_CONFIG 5,
-KICK 6, BAN 7, PROMOTE 8, VOTE 9, SWITCH_ROLE 10, SET_TEAM 11, UNBAN 12, RESET_MATCH 13.
+KICK 6, BAN 7, PROMOTE 8, VOTE 9, SWITCH_ROLE 10, SET_TEAM 11, UNBAN 12, RESET_MATCH 13, SET_OPTION 14 (§6.4.1).
 `SET_CONFIG` carries a `ConfigPatch` whose `mask` says which fields are set.
 
 `cmd_result { cmd_id, config_rev, reason_code, ok, op, reason_text }`. Reason codes: OK 0,
@@ -757,10 +872,12 @@ and the nick never decide them.
 
 - The Hello carries `version_min..=version_max`. The server picks the highest common version, or
   answers PreReject `VERSION` with its own range and an actionable text.
-- This build: `VERSION_MIN = VERSION_MAX = PROTOCOL_VERSION = 6`
+- This build: `VERSION_MIN = VERSION_MAX = PROTOCOL_VERSION = 12`
   (`crates/hsmp-net/src/net/mod.rs`).
-- Adding a record kind does not bump the version: it goes behind a capability bit. Changing an
-  existing record's layout changes the shared-memory layout hash; add a new kind instead.
+- New optional record kinds go behind capability bits. Breaking existing record layouts
+  requires a protocol version change and a matching shared-memory layout hash. Changing
+  an existing field's meaning also requires a protocol version change; an unchanged
+  layout hash does not establish semantic compatibility.
 
 ### 7.2 Capability bits (u64)
 
@@ -770,8 +887,8 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 
 | Bit | Name | Status |
 |---|---|---|
-| 0 | MODES | Reserved: game-mode sections, kill feed gating |
-| 1 | ZONE | Reserved |
+| 0 | MODES | Offered by server and sidecar: the `mode` and `kill_feed` records (§6.4.1); required on every peer for modes other than duel / FFA |
+| 1 | ZONE | Offered by server and sidecar: the `zone` record (King of the hill) |
 | 2 | INTERACT | Offered by server and sidecar: the interact records |
 | 3 | BRACKET | Reserved |
 | 4 | MAP_HASH | Reserved |
@@ -788,6 +905,8 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 | 15 | REL_KEY | Transport: keyed `ReliableLatest` chunks (§5.1) |
 | 16 | HIT_FX | Offered by server and sidecar: `touch` up, `hitfx_in` down |
 | 17 | BODY | Offered by server and sidecar: `body` up and down (relayed only between peers that have it) |
+| 18 | SERVER_MODS | Offered by the sidecar always and by a server with `--mods-dir`: the `0x09` records (§12). A server with mods refuses a client without it (`MODS_REQUIRED`) |
+| 19 | BODY2 | Offered by server and sidecar: generation-bound native body snapshots, relayed only between peers that have it |
 
 `caps::SUPPORTED = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY` are the transport bits
 `hsmp-net` implements itself; every client and server built from it offers them through
@@ -939,3 +1058,77 @@ mock routers), `hsmp-master-core` (listen signature and replay, the endpoint che
 `scripts/e2e-nat.sh` (an emulated NAT in front of the host, `hsmp-server --emulate-nat`: a direct
 join fails, a punched join succeeds) and `scripts/e2e-master-cf.sh` CF6-CF8 (the same through the
 Worker under `wrangler dev`).
+
+## 12. Server mods
+
+A server started with `--mods-dir` serves UE4SS Lua mods to its players
+([../hosting/server-mods.md](../hosting/server-mods.md)). Everything travels over the game
+connection; there is no HTTP. Code: `server/src/server_mods/` (manifest, serving),
+`server/src/server/mods_glue.rs` (join gating), `server/src/sidecar/mods_client.rs` and
+`mods_cache.rs` (client), `crates/hsmp-ipc/src/schema/mods.rs` (records),
+`mods/HSMPModHost` (loading) and `mods/HSMPMenu/Scripts/server_mods.lua` (consent).
+
+```
+server                                      sidecar                                  game
+Challenge: caps SERVER_MODS
+admission: no SERVER_MODS -> AuthReject MODS_REQUIRED
+welcome, admin_state, mod_manifest, mod_files ->
+(player pending)                            session held back from the game;
+                                            manifest rebuilt and checked          -> mod_offer, mod_entry x N,
+                                                                                     mod_progress OFFER
+                                                                                  <- mod_decision ACCEPT
+                                         <- mod_chunk_req (window 4, 32 KiB)
+mod_chunk (serve loop, rate-limited)     ->  SHA-256 per file; cache commit
+                                                                                  -> mod_progress READY
+                                                                                  <- mod_loaded (HSMPModHost)
+                                         <- mod_ready LOADED
+(player joins: roster, READY, START)        held session -> game                  -> mod_progress JOINED
+```
+
+**Manifest.** Mods sorted by lower-case name, files by path. `mod_hash` = SHA-256 of
+`"hsmp-server-mod-v1\0"` and the length-prefixed name, version, author, description, the file
+count and each (path, u64 size, SHA-256); `set_hash` = SHA-256 of `"hsmp-server-mod-set-v1\0"`,
+the mod count and the mod hashes. The client rebuilds the manifest from the two records and checks
+every rule again (the rules table in the hosting page: names, `HSMP*`, paths, extensions, limits),
+the canonical order and both hash levels; a manifest that breaks one fails with `BAD_MANIFEST`
+before anything is shown or requested.
+
+**Transfer.** Pull-based: at most 4 `mod_chunk_req` in flight (128 KiB, inside the transport's
+256 KiB), re-asked after 10 s, resumed after a reconnect at the first missing (file, offset); a
+late answer to a request of an old connection is ignored. Chunks travel on channel 1 (reliable,
+unordered), which the transport fills after channel 0 and 2, so game streams keep their latency.
+The server queues at most 16 requests per player, serves them from a 10 ms loop within a
+per-player and a server-wide token bucket (`--mods-rate-kbps`, `--mods-total-rate-kbps`), and
+disconnects a player that pulls more than three times the set plus 4 MiB per session or sends
+more than 64 bad requests.
+
+**Gating.** A pending player (from admission to its `mod_ready LOADED`) is not listed in
+`session`, cannot run commands (`cmd_result` "still loading the server's mods"), is not counted by
+START or the auto start, never becomes a participant, and its records other than the `0x09`
+kinds, `leave`, `ping`, `command`, `kit`, `loadout` and `body` are dropped. After
+`--mods-timeout-s` it is kicked. A session resume of a pending player gets the manifest again; a
+resume of a player that loaded the set does not. The sidecar answers a manifest whose set it
+already loaded at once (the same server after a restart).
+
+**Game side.** The sidecar puts only data into shared memory (set and mod hashes, the server key,
+names, versions, authors, descriptions, sizes, states and reason text); paths and bytes stay in
+the sidecar and its cache (`<hsmp_mods>/<mod hash hex>/...`, written by a verify-then-rename
+commit). HSMPModHost loads `<hsmp_mods>/<mod hash>/Scripts/main.lua` for each `mod_entry` of the
+set the sidecar reported READY.
+
+Tests: `hsmp-ipc` `schema::mods::tests`, `hsmp-server` `server_mods::manifest::tests`,
+`server_mods::tests`, `server::mods_glue::tests`, sidecar `mods_client::tests` (the transfer over
+the impaired link with a reconnect) and `mods_cache::tests`, `hsmp-tools lua-test modhost` and
+`server_mods`.
+
+Pose v2 flag `0x40` carries the original verified native pawn placement context:
+`match_id:u64`, `round:u32`, `life:u16` (14 bytes, integer-preserving). It follows
+native body strikers and precedes the optional physics-step byte. Full geometry,
+23 bones with every translation override, two weapons with twelve geometry rows each,
+eight body strikers, native box scales and class fingerprints, control, context
+and step fit in 1118 of the 1120 pose bytes (1179 bytes with message and encryption framing).
+Active matches reject missing or mismatched context before history insertion or
+relay. A generation change clears collision histories and cuts playback; the
+receiver also checks cached samples against its current authoritative life.
+`SpawnStatus` stores the context of the original verified placement, including
+its actual pawn identity, and never adopts a newer generation at receipt time.

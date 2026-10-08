@@ -15,7 +15,7 @@ use hsmp_ipc::layout::Str;
 use hsmp_ipc::record::{to_payload, view, Invalid};
 use hsmp_ipc::schema::loadout::{
     check_loadout_rows, Kit, KitRules, LoadoutHead, K_KIT, K_KIT_RULES_REQ, K_KIT_VERDICT,
-    BodyHead, K_BODY, K_LOADOUT, VERDICT_ACCEPTED, VERDICT_DEFAULT, VERDICT_REPLACED,
+    BodyHead, Body2Head, K_BODY, K_BODY2, K_LOADOUT, VERDICT_ACCEPTED, VERDICT_DEFAULT, VERDICT_REPLACED,
 };
 use hsmp_ipc::wire::{self, WireHdr};
 use std::collections::HashMap;
@@ -70,6 +70,10 @@ pub async fn handle_record(
         K_BODY => {
             let v = view::<BodyHead>(payload).map_err(crate::server::refused)?;
             on_body(socket, state, from, v.head.version, payload).await;
+        }
+        K_BODY2 => {
+            let v = view::<Body2Head>(payload).map_err(crate::server::refused)?;
+            on_body2(socket, state, from, &v.head, payload).await;
         }
         k => {
             // kit_verdict / kit_rules are server -> client only.
@@ -161,6 +165,27 @@ fn body_store() -> &'static Mutex<HashMap<PeerId, Stored>> {
     static S: OnceLock<Mutex<HashMap<PeerId, Stored>>> = OnceLock::new();
     S.get_or_init(|| Mutex::new(HashMap::new()))
 }
+fn body2_store() -> &'static Mutex<HashMap<PeerId, Stored>> {
+    static S: OnceLock<Mutex<HashMap<PeerId, Stored>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(HashMap::new()))
+}
+async fn on_body2(socket: &UdpSocket, state: &Arc<ServerState>, from: SocketAddr, h: &Body2Head, payload: &[u8]) {
+    let (pid, others) = {
+        let inner = state.lock().lock().await;
+        let Some(p) = inner.peers.get(&from) else { return };
+        if crate::interact::peer_caps(p.id) & hsmp_net::net::caps::BODY2 == 0
+            || !crate::server::body_context_matches(&inner, p.id, h.match_id, h.round, h.life) { return; }
+        let others = inner.peers.iter().filter(|(_, q)| q.id != p.id
+            && crate::interact::peer_caps(q.id) & hsmp_net::net::caps::BODY2 != 0).map(|(a, _)| *a).collect::<Vec<_>>();
+        (p.id, others)
+    };
+    let msg = {
+        let mut st = body2_store().lock().await;
+        if store_versioned(&mut st, K_BODY2, pid, h.version, payload, Instant::now()) != LoadoutStep::Relay { return; }
+        st[&pid].msg.clone()
+    };
+    send_all(socket, state, &others, &msg).await;
+}
 
 /// Players that get a `body` record of `owner`: every other one that negotiated
 /// `caps::BODY` (a beta.4 sidecar never sees the record).
@@ -200,6 +225,7 @@ async fn on_body(socket: &UdpSocket, state: &Arc<ServerState>, from: SocketAddr,
 pub async fn forget(pid: PeerId) {
     store().lock().await.remove(&pid);
     body_store().lock().await.remove(&pid);
+    body2_store().lock().await.remove(&pid);
     kit_gate().lock().unwrap_or_else(|e| e.into_inner()).pending.remove(&pid);
 }
 
@@ -445,7 +471,13 @@ struct KitStore {
     last_rev: u64,
     kits: HashMap<PeerId, KitEntry>,
     task_started: bool,
+    /// Weapon roulette / brawl: the kit every player gets this round, whatever they chose
+    /// (their cosmetics kept). None = everyone's own validated kit.
+    imposed: Option<KitSel>,
 }
+
+/// Why a kit was replaced by the round's imposed kit (kit_verdict reason).
+pub const IMPOSED_REASON: &str = "round kit: everyone fights with the same kit";
 
 impl KitStore {
     /// Monotonic, and wall-clock-ms based so it keeps increasing across a
@@ -487,34 +519,38 @@ impl KitStore {
         changed
     }
 
-    /// Give every live peer without a kit the default class kit (all modes).
-    /// Returns the peers that got one.
+    /// The kit `req` (None = never sent one) gets now: the round's imposed kit (with the
+    /// player's cosmetics), else the validated selection, else the default.
+    fn resolve(&self, req: Option<&KitSel>) -> (KitSel, u8, String) {
+        match (&self.imposed, req) {
+            (Some(k), r) => (k.with_cos(r.map_or([0; 4], |r| sanitize_cosmetic(r.cos()))), VERDICT_REPLACED, IMPOSED_REASON.into()),
+            (None, Some(r)) => resolve_kit(r, self.rules),
+            (None, None) => (default_kit(self.rules), VERDICT_DEFAULT, DEFAULT_REASON.into()),
+        }
+    }
+
+    /// Give every live peer without a kit the default class kit (all modes; the imposed
+    /// kit in a roulette / brawl round). Returns the peers that got one.
     fn assign_defaults(&mut self, live: &[PeerId]) -> Vec<PeerId> {
         let mut fresh = Vec::new();
         for pid in live {
             if self.kits.contains_key(pid) { continue; }
-            let k = default_kit(self.rules);
-            self.set_kit(*pid, k, VERDICT_DEFAULT, DEFAULT_REASON.into());
+            let (k, v, r) = self.resolve(None);
+            self.set_kit(*pid, k, v, r);
             fresh.push(*pid);
         }
         fresh
     }
 
-    /// Re-resolve every stored kit after a rules change. Returns changed peers.
+    /// Re-resolve every stored kit after a rules change (or a new imposed kit). Returns
+    /// changed peers.
     fn revalidate_all(&mut self) -> Vec<PeerId> {
-        let rules = self.rules;
         let mut changed = Vec::new();
         let ids: Vec<PeerId> = self.kits.keys().copied().collect();
         for id in ids {
-            match self.kits[&id].requested {
-                Some(req) => {
-                    let (k, v, r) = resolve_kit(&req, rules);
-                    if self.set_kit(id, k, v, r) { changed.push(id); }
-                }
-                None => {
-                    if self.set_kit(id, default_kit(rules), VERDICT_DEFAULT, DEFAULT_REASON.into()) { changed.push(id); }
-                }
-            }
+            let req = self.kits[&id].requested;
+            let (k, v, r) = self.resolve(req.as_ref());
+            if self.set_kit(id, k, v, r) { changed.push(id); }
         }
         changed
     }
@@ -525,7 +561,7 @@ fn kit_store() -> &'static Mutex<KitStore> {
     S.get_or_init(|| {
         let rules = Rules::from_env();
         info!(mode = rules.mode, budget = rules.budget, "kit rules (startup)");
-        Mutex::new(KitStore { rules, rules_rev: 1, last_rev: 1, kits: HashMap::new(), task_started: false })
+        Mutex::new(KitStore { rules, rules_rev: 1, last_rev: 1, kits: HashMap::new(), task_started: false, imposed: None })
     })
 }
 
@@ -543,7 +579,6 @@ pub async fn on_kit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: Soc
     ensure_kit_task(socket, state).await;
     let (msg, broadcast, log) = {
         let mut st = kit_store().lock().await;
-        let rules = st.rules;
         let now = Instant::now();
         let mut duplicate = false;
         if let Some(e) = st.kits.get_mut(&pid) {
@@ -561,7 +596,7 @@ pub async fn on_kit(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, from: Soc
         if duplicate {
             (st.kits[&pid].msg(pid), false, None)
         } else {
-            let (k, verdict, reason) = resolve_kit(&kit, rules);
+            let (k, verdict, reason) = st.resolve(Some(&kit));
             let changed = st.set_kit(pid, k, verdict, reason.clone());
             let e = st.kits.get_mut(&pid).expect("kit entry");
             e.requested = Some(kit);
@@ -613,6 +648,31 @@ pub async fn set_rules(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, mode: 
     let live: Vec<PeerId> = peers.iter().map(|(_, id, _)| *id).collect();
     ensure_kit_task(socket, state).await;
     apply_rules(socket, state, &addrs, &live, 0, mode, budget).await;
+}
+
+/// Weapon roulette / brawl (modes.rs, after the state lock): impose `kit` on every player
+/// for the round, or give everyone their own kit back (None). Takes effect at the next
+/// spawn; kits change in the countdown, before Live freezes the kit facts.
+pub async fn impose(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, kit: Option<KitSel>) {
+    let peers = live_peers(state).await;
+    let addrs: Vec<SocketAddr> = peers.iter().map(|(a, _, _)| *a).collect();
+    let live: Vec<PeerId> = peers.iter().map(|(_, id, _)| *id).collect();
+    ensure_kit_task(socket, state).await;
+    let out: Vec<Vec<u8>> = {
+        let mut st = kit_store().lock().await;
+        if st.imposed == kit { return; }
+        st.imposed = kit;
+        match &kit {
+            Some(k) => info!(class = %k.class(), r = %k.r(), armour = k.armor_len(), "round kit imposed on every player"),
+            None => info!("round kit lifted: players' own kits again"),
+        }
+        let mut changed = st.revalidate_all();
+        changed.extend(st.assign_defaults(&live));
+        changed.iter().filter(|id| live.contains(id)).map(|id| st.kits[id].msg(*id)).collect()
+    };
+    for m in &out {
+        send_all(socket, state, &addrs, m).await;
+    }
 }
 
 /// `S2CSession`: the current rules and every stored kit's revision.
@@ -691,10 +751,21 @@ pub async fn replay_to(socket: &Arc<UdpSocket>, state: &Arc<ServerState>, to: So
         }
         _ => Vec::new(),
     };
+    let bodies2 = if joiner.is_some_and(|j| crate::interact::peer_caps(j) & hsmp_net::net::caps::BODY2 != 0) {
+        let candidates = {
+            let st = body2_store().lock().await;
+            others.iter().filter_map(|pid| st.get(pid).map(|e| (*pid, e.msg.clone()))).collect::<Vec<_>>()
+        };
+        let inner = state.lock().lock().await;
+        candidates.into_iter().filter_map(|(id, msg)| {
+            let (_, v) = hsmp_ipc::wire::decode::<Body2Head>(&msg).ok()?;
+            crate::server::body_context_matches(&inner, id, v.head.match_id, v.head.round, v.head.life).then_some(msg)
+        }).collect::<Vec<_>>()
+    } else { Vec::new() };
     if to_joiner.len() > 1 || !loadouts.is_empty() || !bodies.is_empty() {
         info!(%to, kits = to_joiner.len() - 1, loadouts = loadouts.len(), bodies = bodies.len(), "replaying kits / loadouts to joiner");
     }
-    for m in to_joiner.into_iter().chain(loadouts).chain(bodies) {
+    for m in to_joiner.into_iter().chain(loadouts).chain(bodies).chain(bodies2) {
         send_msg(socket, state, to, m).await;
     }
     for m in &to_all {
@@ -1127,7 +1198,41 @@ mod kit_tests {
     }
 
     fn store(mode: u8, budget: u16) -> KitStore {
-        KitStore { rules: rules(mode, budget), rules_rev: 1, last_rev: 1, kits: HashMap::new(), task_started: true }
+        KitStore { rules: rules(mode, budget), rules_rev: 1, last_rev: 1, kits: HashMap::new(), task_started: true, imposed: None }
+    }
+
+    /// Weapon roulette / brawl: the imposed kit replaces everyone's (cosmetics kept),
+    /// a new selection meanwhile is stored but not used, lifting it gives each player
+    /// their own validated kit back.
+    #[test]
+    fn an_imposed_round_kit_replaces_every_kit_until_lifted() {
+        let mut st = store(MODE_CUSTOM, 30);
+        let (a, b, c) = (0x4E31, 0x4E32, 0x4E33);
+        let own = class_sel("duelist").with_cos([1, 2, 3, 0]);
+        let (k, v, r) = st.resolve(Some(&own));
+        st.set_kit(a, k, v, r);
+        st.kits.get_mut(&a).unwrap().requested = Some(own);
+        st.assign_defaults(&[b]);
+        let fists = KitSel::new("brawl", "", "", &["b_tunic", "l_hosen3"], [0; 4]);
+        st.imposed = Some(fists);
+        let mut changed = st.revalidate_all();
+        changed.sort_unstable();
+        assert_eq!(changed, vec![a, b]);
+        for id in [a, b] {
+            assert_eq!((st.kits[&id].kit.r(), st.kits[&id].verdict), ("", VERDICT_REPLACED));
+            assert_eq!(st.kits[&id].reason, IMPOSED_REASON);
+        }
+        assert_eq!(st.kits[&a].kit.cos(), [1, 2, 3, 0], "own cosmetics kept");
+        // A joiner and a new selection during the round get the imposed kit too.
+        assert_eq!(st.assign_defaults(&[a, b, c]), vec![c]);
+        assert_eq!(st.kits[&c].kit.r(), "");
+        let (k, _, _) = st.resolve(Some(&sel("custom", "w_poleaxe_m", "", &[])));
+        assert_eq!(k.r(), "");
+        st.imposed = None;
+        st.revalidate_all();
+        assert_eq!((st.kits[&a].kit.r(), st.kits[&a].verdict), ("w_arming3", VERDICT_ACCEPTED));
+        assert_eq!(st.kits[&b].verdict, VERDICT_DEFAULT);
+        for id in [a, b, c] { crate::validate::damage::forget(id); }
     }
 
     /// Exploit regression: a kit with a poleaxe during a fought
@@ -1476,6 +1581,9 @@ mod record_tests {
             assert_ne!(record_mode(other, 9), k, "kind {other:#x} shares the body stream");
         }
         assert_eq!(keys::BODY, hsmp_ipc::schema::loadout::hsmp_net_keys::BODY);
+        assert_eq!(keys::BODY2, hsmp_ipc::schema::loadout::hsmp_net_keys::BODY2);
+        assert_eq!(record_mode(K_BODY2,9),Some(SendMode::ReliableLatest{key:key(keys::BODY2,9)}));
+        assert_ne!(record_mode(K_BODY2,9),k,"legacy body cannot overwrite the Body2 reliable stream");
         let a = |n: u16| -> SocketAddr { format!("127.0.0.1:{n}").parse().unwrap() };
         let peers = vec![(a(1), 3), (a(2), 4), (a(3), 5), (a(4), 6)];
         let capsf = |id: PeerId| if id == 6 { caps::HIT_FX } else { caps::BODY | caps::HIT_FX };

@@ -15,7 +15,9 @@
 --   * spawn protection: from the moment the pawn exists until placement +
 --     protect_ms the pawn is "Invulnerable" (Willie_BP "Get Damage" returns
 --     at once when it is set: bytecode, spawns.md 1.6), its vitals are
---     topped up from the CDO and no death is reported;
+--     topped up from the CDO and no death is reported. Before Live only,
+--     "Block Spine Breaking" guards native dislocation checks during
+--     placement; its original value is restored on exit;
 --   * the fall watchdog: a LIVING pawn below the floor is put back on its
 --     order WITHOUT dying (before Live: re-placed, healed, protection
 --     re-armed; during Live: re-placed only). A dead pawn is never moved.
@@ -91,9 +93,9 @@ local function dist_xy(ax, ay, bx, by) return math.sqrt((ax - bx) ^ 2 + (ay - by
 -- The plan from the normalised session view (shared/hsmp_session.lua HS.view()):
 -- { round, arena, seq, by_peer = {[peer] = {peer, spawn_id, slot, x, y, z, yaw, protect_ms}}, list }.
 -- round = the round the orders are for (spawn_id >> 8); nil without any order.
-function SP.plan_from_view(v)
+function SP.plan_from_view(v, mode)
     if type(v) ~= "table" or type(v.spawns) ~= "table" then return nil end
-    local p = { round = tonumber(v.spawn_round) or 0, arena = v.arena or "", seq = tonumber(v.seq) or 0,
+    local p = { match_id = v.match_id or 0, round = tonumber(v.spawn_round) or 0, arena = v.arena or "", seq = tonumber(v.seq) or 0,
                 by_peer = {}, list = {} }
     local ids = {}
     for id in pairs(v.spawns) do ids[#ids + 1] = id end
@@ -102,6 +104,17 @@ function SP.plan_from_view(v)
         local s = v.spawns[id]
         local e = { peer = id, spawn_id = s.spawn_id, slot = s.slot or 0, x = s.x, y = s.y, z = s.z,
                     yaw = s.yaw or 0, protect_ms = s.protect_ms or 0 }
+        -- Snapshot the generation belonging to THIS order. Initial round orders
+        -- precede Mode.on_live (which initializes life1); respawns require the
+        -- matching full authoritative generation, not only the wrapped low bits.
+        local sid = math.tointeger(e.spawn_id) or 0
+        e.life = 1
+        if sid & 0x80 ~= 0 then
+            local row = mode and mode.rows and mode.rows[id]
+            local life = row and math.tointeger(row.life) or 0
+            e.life = mode and mode.match_id == p.match_id and mode.round == p.round
+                and life > 0 and (life & 0x7f) == (sid & 0x7f) and life or 0
+        end
         p.by_peer[id] = e
         p.list[#p.list + 1] = e
     end
@@ -183,7 +196,7 @@ end
 --   world() -> { key=, short= }        (called only while the world guard passed)
 --   my_peer_id() -> n                  match() -> state, round
 --   pawn() -> p | nil   pawn_id(p) -> FName string   pawn_begun(p) -> bool
---   pawn_loc(p) -> x, y, z             body_loc(p) -> x, y, z | nil (Mesh pelvis; optional)
+--   pawn_loc(p) -> x, y, z             body_loc(p) -> x, y, z | nil,nil,nil,error (Mesh pelvis; optional)
 --   ground(p, x, y, z) -> floor_z | nil          (downward trace)
 --   clear(p, x, y, floor_z) -> bool              (capsule sweep)
 --   others(p) -> { {x,y,z}, ... }                (other Willies)
@@ -210,6 +223,7 @@ function SP.new(env, opts)
     self.env = env
     self.dir = (opts and opts.state_dir) or "hsmp_state"
     self.status_seq = 0
+    self.drift_attempts = 0 -- whole process budget; deliberately survives reset/travel
     -- Last handled spawn request seq (bus `spawn_request`); a request left over
     -- from an earlier run is never acted on.
     local r = env.request and env.request()
@@ -235,6 +249,7 @@ function P:reset(why)
     self.cur = nil                   -- current placement: { e, plan, dest, floor, tries, ... }
     self.placed_pawn = nil           -- pawn id the current world's placement belongs to
     self.protect = nil               -- { until_t (nil = until placed), set_by_us, ms }
+    self.dislocation_guard = nil     -- original native bool + exact pawn/world/life; forget on drop
     self.no_order_logged = false
     self.world_t0 = nil
     self.next_watch, self.next_vitals, self.next_req = 0, 0, 0
@@ -243,6 +258,7 @@ function P:reset(why)
     -- The round went Live in this world (protection then ends at until_t;
     -- before that it holds whatever until_t says).
     self.live_seen, self.live_at = false, nil
+    self.respawn_spawn = false
     -- Pairs whose collision we disabled: key -> { actor, t } (UObjects of
     -- this world only; dropped with it, never touched after a world change).
     self.nc = { pairs = {}, next_t = 0, ended_t = nil, ok = nil }
@@ -269,6 +285,7 @@ function P:order()
     if short ~= plan.arena then return nil, nil, "plan is for " .. plan.arena .. ", loaded " .. short end
     local e = plan.by_peer[me]
     if not e then return nil, nil, "no seat for peer " .. me end
+    if (plan.match_id or 0) ~= 0 and (e.life or 0) == 0 then return nil, nil, "waiting for spawn life" end
     return e, plan
 end
 
@@ -279,6 +296,14 @@ function P:order_text()
         e.spawn_id or -1)
 end
 
+-- A server deathmatch life order is distinct from an incidental possession
+-- swap during combat. Only the Director's actual Spawn phase authorizes it.
+function P:respawn_order(e)
+    local id = e and math.tointeger(e.spawn_id) or 0
+    return id ~= nil and id & 0x80 ~= 0 and self.env.director_state
+        and self.env.director_state() == "Spawn" or false
+end
+
 -- Is the local pawn under spawn protection right now? From the first tick an
 -- MP pawn exists until the round goes Live (never into Live; the client
 -- floor protect_ms only bounds a window before Live, e.g. a failed
@@ -286,10 +311,10 @@ end
 function P:protected(now)
     local pr = self.protect
     if not pr then return false end
-    if self.live_seen then return false end
+    if self.live_seen and not pr.respawn then return false end
     now = now or self.env.now()
     if pr.until_t == nil or now < pr.until_t then return true end
-    return pr.until_live == true
+    return not pr.respawn and pr.until_live == true
 end
 
 -- Absolute end of protection (process clock), nil while unbounded (not
@@ -298,6 +323,7 @@ end
 function P:protect_until()
     local pr = self.protect
     if not pr then return nil end
+    if pr.respawn then return pr.until_t end
     if self.live_seen then
         local la = self.live_at or self.env.now()
         return (pr.until_t and pr.until_t < la) and pr.until_t or la
@@ -314,12 +340,12 @@ function P:write_status(c, verified, err)
     local d = c.dest
     local pu = self:protect_until()
     env.put_status({
-        seq = self.status_seq, round = c.plan.round, arena = c.plan.arena or "",
+        seq = self.status_seq, match_id = c.plan.match_id or 0, life = c.e.life or 0, round = c.plan.round, arena = c.plan.arena or "",
         spawn_id = tonumber(c.e.spawn_id) or 0, slot = tonumber(c.e.slot) or -1, pawn = self.pawn_id or "",
         has_dest = d ~= nil, pos = d and { d.X, d.Y, d.Z } or nil, clear = c.clear and true or false,
-        why = c.why or "", verified = verified and true or false, tries = c.tries or 0,
+        why = c.anchor_released_at and "anchor_released" or c.why or "", verified = verified and true or false, tries = c.tries or 0,
         has_floor = tonumber(c.floor) ~= nil, floor = tonumber(c.floor) or 0, protect_ms = SP.protect_ms(c.e),
-        has_protect_until = pu ~= nil, protect_until = pu or 0, t = env.now(), error = err or "",
+        has_protect_until = pu ~= nil, protect_until = pu or 0, t = c.anchor_released_at or env.now(), error = err or "",
         tol_cm = SP.T.verify_tol_cm,
     })
 end
@@ -411,6 +437,22 @@ end
 function P:place(pawn, e, plan, why, no_protect)
     local env = self.env
     local now = env.now()
+    local context = self:dislocation_context(e, plan)
+    local g = self.dislocation_guard
+    if g and not self:same_dislocation_context(g.context, context) then
+        -- The guard owns its original value from the first protected tick,
+        -- including the initial settle before cur exists. Transfer that
+        -- ownership before replacing cur or publishing a new assignment.
+        if g.ended or self:restore_dislocation_guard(g.context, "new placement") then
+            self.dislocation_guard = nil
+        else
+            if not g.transfer_blocked then
+                env.log("spawn: placement held: native dislocation guard restoration unavailable")
+                g.transfer_blocked = true
+            end
+            return false
+        end
+    end
     local dest, floor, clear, off = self:choose(pawn, e, plan)
     if not dest then
         env.log("spawn: round %d slot %d -> (%.0f, %.0f, %.0f) NO GROUND under the server point; not moving (%s)",
@@ -420,6 +462,7 @@ function P:place(pawn, e, plan, why, no_protect)
         self.placed_pawn = self.pawn_id   -- do not retry every tick; the Director may ask again
         self.counters.failed = self.counters.failed + 1
         self:arm_protection(now + SP.protect_ms(e) / 1000)
+        self:dislocation_step(now, e, plan)
         self:write_status(self.cur, false, "no ground under the server point")
         return false
     end
@@ -436,6 +479,7 @@ end
 function P:teleport_try()
     local env, c = self.env, self.cur
     c.tries = c.tries + 1
+    self:dislocation_step(env.now(), c.e, c.plan)
     local detail = env.teleport(self.pawn, c.dest, c.e.yaw, c.tries) or ""
     local now = env.now()
     -- Hold the body on the destination for hold_s before the first check
@@ -461,35 +505,100 @@ end
 -- destination for hold_s after each teleport (velocities zeroed, a residual
 -- drift moved back rigidly) while that transient decays; only then is the
 -- placement verified.
+function P:end_hold(c)
+    local env=self.env
+    if not c.hold_until then return end
+    c.hold_until = nil
+        local t=env.drift_probe==true and self.cur==c and c.hold_timing
+        if t then
+            env.log("spawn: hold released after %d correction(s) [hold calls=%d moved=%d total_ms=%.3f max_ms=%.3f]",
+                c.holds or 0,t.calls,t.moved,t.total_ms,t.max_ms)
+        else
+            env.log("spawn: hold released after %d correction(s)", c.holds or 0)
+        end
+end
+
 function P:hold_step(now)
-    local env, c = self.env, self.cur
-    if not c or not c.hold_until or c.done or c.failed then return end
-    if now >= c.hold_until then
-        c.hold_until = nil
-        env.log("spawn: hold released after %d correction(s)", c.holds or 0)
+    local env,c=self.env,self.cur
+    if not c or not c.dest or c.failed or not env.hold then return end
+    local world,pawn_id,pawn=self.wkey,self.pawn_id,self.pawn
+    local match_id,round,life,spawn_id,peer=c.plan.match_id,c.plan.round,c.e.life,c.e.spawn_id,c.e.peer
+    local phase=env.match()
+    local function current()
+        if self.cur~=c or self.wkey~=world or self.pawn_id~=pawn_id or self.pawn~=pawn then return false end
+        if env.match()~=phase then return false end
+        local own,plan=self:order()
+        return own and plan and plan.match_id==match_id and plan.round==round
+            and own.life==life and own.spawn_id==spawn_id and own.peer==peer or false
+    end
+    local initial=not c.no_protect and not self.respawn_spawn
+    local scope={world=world,pawn=pawn_id,current=current}
+    if phase=="live" and initial then
+        -- The source releases independently of the human/AI input latch.
+        -- Consumers must qualify a NEW physical interval after this ACK.
+        self:end_hold(c)
+        if initial and c.done and not c.anchor_released_at and current() then
+            local ok,safe=pcall(env.hold_release_current or current,pawn,scope)
+            if ok and safe==true and current() then
+                c.anchor_released_at=env.now()
+                self:write_status(c,true,c.err)
+            end
+        end
         return
     end
-    local moved = env.hold(self.pawn, c.dest, SP.T.hold_tol_cm)
+    if not c.hold_until then return end
+    local continuation=now>=c.hold_until
+    if not current() then self:end_hold(c);return end
+    if continuation and (not initial or self.live_seen or (phase~="loading" and phase~="countdown")
+        or not self:protected(now)) then self:end_hold(c);return end
+    -- The first 0.9 s retains the original transient cancellation. During
+    -- Loading/Countdown, native balance then stays active: only a residual
+    -- XY translation is anchored, including after placement verification.
+    scope.continuation=continuation
+    local measure=env.drift_probe==true
+    local started=measure and os.clock() or nil
+    local moved = env.hold(self.pawn,c.dest,SP.T.hold_tol_cm,scope)
+    local finished=measure and os.clock() or nil
+    if measure and self.cur==c and self.wkey==world and self.pawn_id==pawn_id and self.pawn==pawn
+        and type(started)=="number" and type(finished)=="number" and started==started and finished==finished
+        and started>-math.huge and finished<math.huge and finished>=started then
+        local ms=(finished-started)*1000
+        if ms<math.huge then
+            local t=c.hold_timing or {calls=0,moved=0,total_ms=0,max_ms=0}
+            t.calls=t.calls+1;t.moved=t.moved+(moved and 1 or 0)
+            t.total_ms=t.total_ms+ms;t.max_ms=math.max(t.max_ms,ms)
+            c.hold_timing=t
+        end
+    end
     if moved then c.holds = (c.holds or 0) + 1 end
 end
 
 -- Called every tick while a placement is unverified.
 function P:verify_step(now)
     local env, c, T = self.env, self.cur, SP.T
-    if c and c.hold_until then self:hold_step(now) end
+    if c then self:hold_step(now) end
     if not c or c.done or c.failed or not c.next_check or now < c.next_check then return end
     local x, y, z = env.pawn_loc(self.pawn)
     local d = x and dist_xy(x, y, c.dest.X, c.dest.Y) or math.huge
     local dz = z and math.abs(z - c.dest.Z) or math.huge
-    -- The visible body too (Mesh pelvis): a capsule on the spot with the
+    -- The body too (physical Mesh pelvis when simulated): a capsule on the spot with the
     -- ragdoll left behind is not placed.
-    local bx, by = nil, nil
-    if env.body_loc then bx, by = env.body_loc(self.pawn) end
-    local bd = bx and dist_xy(bx, by, c.dest.X, c.dest.Y) or 0
+    local bx, by, bz, body_err
+    if env.body_loc then bx, by, bz, body_err = env.body_loc(self.pawn) end
+    local bd = bx and dist_xy(bx, by, c.dest.X, c.dest.Y) or (body_err and math.huge or 0)
     if d <= T.verify_tol_cm and dz <= T.verify_dz_cm and bd <= T.verify_body_cm then
         c.checks = c.checks + 1
         if c.checks >= 2 then
             c.done, c.verified_at = true, now
+            if env.drift_probe and self.drift_attempts < 3 then
+                -- These coordinates were already read for placement, not by
+                -- the probe. Their original Mesh incarnation was not sampled.
+                c.drift_baseline = { tick_ms=now*1000, copied_ms=env.now()*1000,
+                    capsule={x,y,z}, body=bx and {bx,by,bz} or nil,
+                    world=self.wkey, pawn=self.pawn_id, match_id=c.plan.match_id, round=c.plan.round,
+                    life=c.e.life, spawn_id=c.e.spawn_id, same_mesh_available=false,
+                    reason="historical Mesh identity unavailable" }
+            end
             self.counters.verified = self.counters.verified + 1
             self:arm_protection(now + SP.protect_ms(c.e) / 1000)
             env.log("spawn: placement verified round %d slot %d id=%d at (%.0f,%.0f,%.0f), %.0f cm from the destination, "
@@ -506,7 +615,8 @@ function P:verify_step(now)
     end
     -- It did not stick (snapped back to the old body, pushed, fell).
     local where = x and string.format("(%.0f,%.0f,%.0f), %.0f cm from the destination%s", x, y, z, d,
-        bx and string.format("; body (Mesh pelvis) %.0f cm", bd) or "") or "unknown"
+        bx and string.format("; body (Mesh pelvis) %.0f cm", bd)
+            or (body_err and ("; body unavailable: " .. body_err) or "")) or "unknown"
     if c.tries < T.max_tries then
         self.counters.retries = self.counters.retries + 1
         env.log("spawn: placement did NOT stick: pawn at %s; re-teleporting", where)
@@ -526,6 +636,84 @@ end
 
 -- --- spawn protection -------------------------------------------------------------------------
 
+-- Native Event Check Bone Dislocation Status tests !"Block Spine Breaking"
+-- for upperarm_l/r, calf_l/r, neck_02 and spine_04. Invulnerable is not a
+-- predicate there. Use the reflected bool (Willie_BP offset 0x461E), without
+-- changing joint limits or clearing any existing native injury.
+function P:dislocation_context(e, plan)
+    if not e or not plan then return nil end
+    return { world = self.wkey, pawn = self.pawn, pawn_id = self.pawn_id,
+        peer = e.peer or self.env.my_peer_id(), match_id = plan.match_id or 0,
+        round = plan.round, spawn_id = e.spawn_id or 0, life = e.life or 0 }
+end
+
+function P:same_dislocation_context(a, b)
+    return a and b and a.world == b.world and a.pawn == b.pawn and a.pawn_id == b.pawn_id
+        and a.peer == b.peer and a.match_id == b.match_id and a.round == b.round
+        and a.spawn_id == b.spawn_id and a.life == b.life or false
+end
+
+function P:restore_dislocation_guard(context, why)
+    local env, g = self.env, self.dislocation_guard
+    if not g or g.ended then return false end
+    -- Compare only cached identities. Read properties only through the pawn
+    -- found NOW, and only in the exact original world and life assignment.
+    local w = env.world() or {}
+    local fresh = w.key == g.context.world and env.pawn() or nil
+    if not self:same_dislocation_context(g.context, context) or fresh ~= g.context.pawn
+        or not fresh or env.pawn_id(fresh) ~= g.context.pawn_id then
+        if not g.context_unavailable then
+            env.log("spawn: native dislocation guard unavailable (original pawn/world/life no longer current; %s)", why)
+            g.context_unavailable = true
+        end
+        return false
+    end
+    if type(g.original) ~= "boolean" then g.ended = true; return true end -- never guessed or wrote the flag
+    local ok, set = pcall(env.prop_set, fresh, "Block Spine Breaking", g.original)
+    local read_ok, value = pcall(env.prop_get, fresh, "Block Spine Breaking")
+    g.ended = ok and set ~= false and read_ok and value == g.original
+    if g.ended or not g.restore_failed then
+        env.log("spawn: native dislocation guard %s (Block Spine Breaking=%s; %s)",
+            g.ended and "restored" or "unavailable: restore failed", tostring(g.original), why)
+    end
+    g.restore_failed = not g.ended
+    return g.ended
+end
+
+function P:dislocation_step(now, e, plan)
+    local env = self.env
+    local context = self:dislocation_context(e, plan)
+    local g = self.dislocation_guard
+    if g and (g.context.world ~= self.wkey or g.context.pawn ~= self.pawn) then
+        self.dislocation_guard, g = nil, nil -- no old UObject touch on world/pawn replacement
+    end
+    local active = self:protected(now) and not self.live_seen and env.match() ~= "live" and context ~= nil
+    if not active then
+        if g and not g.ended then self:restore_dislocation_guard(context, "protection over") end
+        return
+    end
+    if not g then
+        local ok, original = pcall(env.prop_get, self.pawn, "Block Spine Breaking")
+        g = { context = context }
+        if ok and type(original) == "boolean" then g.original = original end
+        self.dislocation_guard = g
+        if type(g.original) ~= "boolean" then
+            env.log("spawn: native dislocation guard unavailable (Block Spine Breaking original bool unreadable)")
+            return
+        end
+    end
+    if g.ended or g.restore_failed or type(g.original) ~= "boolean"
+        or not self:same_dislocation_context(g.context, context) then return end
+    local ok, value = pcall(env.prop_get, self.pawn, "Block Spine Breaking")
+    if ok and type(value) == "boolean" and not value then
+        local wrote, set = pcall(env.prop_set, self.pawn, "Block Spine Breaking", true)
+        if not (wrote and set ~= false) and not g.write_unavailable then
+            env.log("spawn: native dislocation guard unavailable (Block Spine Breaking write failed)")
+            g.write_unavailable = true
+        end
+    end
+end
+
 function P:arm_protection(until_t)
     -- A Live re-place (a living player fell) never re-arms protection,
     -- also not when its placement is verified or fails.
@@ -535,7 +723,8 @@ function P:arm_protection(until_t)
         pr = { set_by_us = false, invuln = 0, vitals = 0, since = self.env.now() }
         self.protect = pr
     end
-    pr.until_t = until_t
+    pr.respawn = self.respawn_spawn == true
+    pr.until_t = until_t or (pr.respawn and (self.env.now() + SP.T.protect_max_ms / 1000)) or nil
     pr.ended = false
 end
 
@@ -672,9 +861,10 @@ function P:emit_state(at)
         dist_cm = d and math.floor(d + 0.5) or nil,
     }
     if env.ev then pcall(env.ev, "pawn_state", f) end
-    env.log("pawn_state[%s] round %d: consciousness=%s downed=%s fallen=%s health=%s R=%s L=%s protected=%s%s",
+    env.log("pawn_state[%s] round %d: consciousness=%s downed=%s fallen=%s health=%s R=%s L=%s protected=%s block_spine_breaking=%s%s",
         at, f.round, tostring(f.consciousness), tostring(f.downed), tostring(f.fallen), tostring(f.health),
-        f.weapon_r, f.weapon_l, tostring(f.protected), d and string.format(" %.0f cm from the spawn", d) or "")
+        f.weapon_r, f.weapon_l, tostring(f.protected), tostring(s.block_spine_breaking),
+        d and string.format(" %.0f cm from the spawn", d) or "")
     return f
 end
 
@@ -719,6 +909,33 @@ function P:fall_z(e)
     return lo and (lo - T.fall_margin_cm) or -10000
 end
 
+-- Diagnostic work is admitted only at an existing correction boundary. A
+-- failed measurement never changes the drift limit or makes placement proof.
+function P:observe_drift(c, e, plan, x, y, z, now, capsule_read_ms)
+    local env = self.env
+    if not env.drift_probe or self.drift_attempts >= 3 then return true end
+    self.drift_attempts = self.drift_attempts + 1
+    local expected = { world=self.wkey, pawn=self.pawn_id, peer=e and e.peer,
+        match_id=plan and plan.match_id, round=plan and plan.round, life=e and e.life,
+        spawn_id=e and e.spawn_id, attempt=self.drift_attempts, watch_tick_ms=now*1000,capsule_read_ms=capsule_read_ms,
+        capsule={x,y,z}, target={c.dest.X,c.dest.Y,c.dest.Z}, target_yaw=c.e.yaw, floor=c.floor, slot=c.e.slot,
+        verified_baseline=c.drift_baseline }
+    local function current()
+        if self.cur ~= c or self.wkey ~= expected.world or self.pawn_id ~= expected.pawn then return false end
+        local own, active = self:order()
+        return own and active and active.match_id==expected.match_id and active.round==expected.round
+            and own.peer==expected.peer and own.life==expected.life and own.spawn_id==expected.spawn_id
+            and env.match()~="live" and self:protected() or false
+    end
+    local ok, row, recheck = pcall(env.drift_snapshot, self.pawn, expected, current)
+    if ok and type(row)=="table" and env.drift_log then pcall(env.drift_log,row) end
+    -- Logging or an unavailable diagnostic must not bypass the independent
+    -- native world/actor/Mesh guard returned by the admitted snapshot.
+    if not ok or type(recheck)~="function" then return false end
+    local safe, value = pcall(recheck)
+    return safe and value==true
+end
+
 function P:watch_step(now)
     local env, T = self.env, SP.T
     local prot = self:protected(now)
@@ -726,6 +943,7 @@ function P:watch_step(now)
     self.next_watch = now + (prot and T.watch_protect_s or T.watch_s)
     if now - self.last_fall < T.fall_cooldown_s then return end
     local x, y, z = env.pawn_loc(self.pawn)
+    local capsule_read_ms=env.drift_probe and self.drift_attempts<3 and env.now()*1000 or nil
     if not z then return end
     local e, plan = self:order()
     local c = self.cur
@@ -748,6 +966,7 @@ function P:watch_step(now)
         return
     end
     self.dead_fall_logged = nil
+    if drift and not self:observe_drift(c,e,plan,x,y,z,now,capsule_read_ms) then return end
     self.last_fall = now
     self.counters.falls = self.counters.falls + 1
     -- During Live a fall is part of the fight: the living player is put back
@@ -795,8 +1014,9 @@ function P:request_step(now, settled)
     local seq = q and tonumber(q.seq)
     if not seq or seq <= self.req_seq then return end
     if not settled then return end
+    local e, plan, order_why = self:order()
+    if not e and order_why == "waiting for spawn life" then return end
     self.req_seq = seq
-    local e, plan = self:order()
     local r, a = tonumber(q.round), q.arena
     local pw = (q.pawn ~= nil and q.pawn ~= "") and q.pawn or nil
     if not e or r ~= plan.round or a ~= plan.arena or (pw and pw ~= self.pawn_id) then
@@ -898,12 +1118,15 @@ function P:tick()
         end
         if old and old ~= pawn and next(self.nc.pairs) ~= nil then self:restore_collision("possessed pawn changed") end
         self.cur, self.placed_pawn, self.protect = nil, nil, nil
+        self.dislocation_guard = nil -- the previous actor is not freshly owned; never restore through its cache
         self.nc.pairs = {}
         -- A possession change during Live (a native SpawnCombatants swap, a
         -- re-possession) is never placed: teleporting the player to the spawn
         -- mid-fight would be a free reset (HSMPCombat would see an 11 m jump).
         -- The watchdog (falls) still runs.
-        if self.live_seen then
+        local incoming = self:order()
+        self.respawn_spawn = self:respawn_order(incoming)
+        if self.live_seen and not self.respawn_spawn then
             self.placed_pawn = pid
             env.log("spawn: new pawn %s during Live: not placed (watchdog only)", pid)
         end
@@ -911,6 +1134,7 @@ function P:tick()
     self.pawn = pawn
 
     local e, plan, why = self:order()
+    if not self.protect and self:respawn_order(e) then self.respawn_spawn = true end
     local mstate = env.match()
     if mstate == "countdown" then self.live_seen, self.live_at = false, nil end   -- a new round in the same world
     if mstate == "live" and not self.live_seen then
@@ -923,13 +1147,15 @@ function P:tick()
             env.log("spawn: round is Live; spawn protection %s", pu and pu > now
                 and string.format("ends in %.1f s", pu - now) or "ends now")
         end
+        self:dislocation_step(now, e, plan) -- restore before the normal Live pawn diagnostics
         if self.protect then self:emit_state("live") end
     end
     -- Protection starts as soon as an MP pawn exists, before placement, and
     -- holds until the round goes Live.
     if e and not self.protect then self:arm_protection(nil) end
-    if e and self.protect then self.protect.until_live = true end
+    if e and self.protect then self.protect.until_live = not self.protect.respawn end
     self:protect_step(now)
+    self:dislocation_step(now, e, plan)
     self:nocollide_step(now)
     if self.protect and not self.protect.ended and self:protected(now) and self.cur and self.cur.done
         and now >= self.next_state then
@@ -956,7 +1182,7 @@ function P:tick()
     end
     -- An order for a NEW round in the same world (live -> countdown without a reload).
     local c = self.cur
-    if e and c and c.e and c.e.spawn_id ~= e.spawn_id and plan.round ~= c.plan.round then
+    if e and c and c.e and ((plan.match_id or 0) ~= (c.plan.match_id or 0) or (c.e.spawn_id ~= e.spawn_id and plan.round ~= c.plan.round)) then
         self:place(pawn, e, plan, "new round")
         return
     end
@@ -976,6 +1202,8 @@ function SP.make_ue_env(ctx)
     env.my_peer_id = ctx.my_peer_id
     env.match = ctx.match
     env.world = ctx.world
+    env.drift_probe = ctx.drift_probe == true
+    env.drift_log = ctx.drift_log
 
     -- Shared-memory IPC: typed records. The plan comes from the session record
     -- (ctx.view = shared/hsmp_session.lua HS.view), the request / status / director
@@ -986,7 +1214,7 @@ function SP.make_ue_env(ctx)
         local i = ipc()
         return i and i.bus_table("fallback_swap") or nil
     end
-    function env.plan() return SP.plan_from_view(ctx.view and ctx.view()) end
+    function env.plan() return SP.plan_from_view(ctx.view and ctx.view(), ctx.mode and ctx.mode()) end
     function env.request()
         local i = ipc()
         local t = i and i.bus_table("spawn_request")
@@ -1016,7 +1244,8 @@ function SP.make_ue_env(ctx)
 
     -- ctx.pc = the mod's WG.pc (one PlayerController lookup per frame).
     function env.pawn()
-        local p
+        local p = ctx.ai_pawn and ctx.ai_pawn() or nil
+        if p then return p end -- verified AI ownership survives a native stand-in possession swap
         pcall(function()
             local pc = ctx.pc and ctx.pc() or UEH.GetPlayerController()
             if pc and pc:IsValid() then
@@ -1038,15 +1267,254 @@ function SP.make_ue_env(ctx)
         if l then return l.X, l.Y, l.Z end
         return nil
     end
-    -- Where the visible ragdoll is (Mesh pelvis), nil when unreadable.
-    function env.body_loc(p)
-        local l
-        pcall(function()
-            local m = p.Mesh
-            if m and m:IsValid() then l = m:GetSocketLocation(FName("pelvis")) end
+    local PELVIS = nil
+    local function finite(v)
+        return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+    end
+    -- A simulated body's animated socket may follow the capsule while the
+    -- rigid body is still at the native spawner. COM is a fresh physics read;
+    -- its fixed bone offset cancels when measuring a translation residual.
+    local function pelvis(m, guard, physical_only)
+        local function read(f)
+            if guard and guard()~=true then error("scope changed",0) end
+            local ok, value=pcall(f)
+            if guard and guard()~=true then error("scope changed",0) end
+            if not ok then error("native body read failed",0) end
+            return value
+        end
+        local sim
+        local ok = pcall(function()
+            PELVIS = PELVIS or FName("pelvis")
+            sim = read(function() return m:IsSimulatingPhysics(PELVIS) end)
         end)
-        if l and l.X then return l.X, l.Y, l.Z end
-        return nil
+        if not ok or type(sim) ~= "boolean" then return nil, "pelvis simulation state unavailable" end
+        if physical_only and not sim then return nil,"physical simulation unavailable" end
+        local l
+        ok = pcall(function()
+            if sim then l = read(function() return m:GetCenterOfMass(PELVIS) end)
+            else l = read(function() return m:GetSocketLocation(PELVIS) end) end
+            -- Copy plain scalars now; no native FVector wrapper is retained.
+            if not (l and finite(l.X) and finite(l.Y) and finite(l.Z)) then l = nil
+            else l = { X = l.X, Y = l.Y, Z = l.Z } end
+        end)
+        if not ok or not l then
+            return nil, sim and "physical pelvis unavailable" or "visual pelvis unavailable"
+        end
+        return l, nil, sim
+    end
+    -- Unknown simulation / physics reads explicitly fail placement proof.
+    function env.body_loc(p, guard, physical_only)
+        local m
+        pcall(function()
+            if guard and guard()~=true then return end
+            local candidate=p.Mesh
+            if guard and guard()~=true then return end
+            if candidate and candidate:IsValid() then m=candidate end
+            if guard and guard()~=true then m=nil end
+        end)
+        if not m then return nil, nil, nil, "Mesh unavailable" end
+        local l, err = pelvis(m, guard, physical_only)
+        if l then return l.X, l.Y, l.Z end
+        return nil, nil, nil, err
+    end
+
+    -- Called at most three times, synchronously before an already warranted
+    -- protected drift correction. No native wrapper escapes this call.
+    function env.drift_snapshot(p, expected, placement_current)
+        local closed, pawn_id, mesh_id, world_id=false,nil,nil,nil
+        local drops=ctx.drift_drops and ctx.drift_drops()
+        local function base()
+            if closed then return false end
+            local ok, value=pcall(function()
+                return ctx.drift_world_current and ctx.drift_world_current(expected.world,drops)==true
+                    and placement_current()==true
+            end)
+            if not ok or value~=true then closed=true;return false end
+            return true
+        end
+        local function read(f)
+            assert(base(),"scope changed")
+            local ok,value=pcall(f)
+            assert(base(),"scope changed")
+            if not ok then error("native identity read unavailable",0) end
+            return value
+        end
+        local function identity(o)
+            assert(o and read(function() return o:IsValid() end)==true,"identity unavailable")
+            local address=read(function() return o:GetAddress() end)
+            local fn=read(function() return o:GetFName() end)
+            local name=read(function() return fn:ToString() end)
+            assert(finite(address) and math.tointeger(address) and address>0
+                and type(name)=="string" and name~="" and #name<=512 and not name:find("\0",1,true),"identity unavailable")
+            return {address=address,name=name}
+        end
+        local function same(a,b)return a and b and a.address==b.address and a.name==b.name end
+        local function current()
+            if not base() then return false end
+            local ok,value=pcall(function()
+                if not pawn_id or not mesh_id or not world_id then return false end
+                local own=read(function() return env.pawn() end)
+                if not same(identity(own),pawn_id) then return false end
+                if not same(identity(read(function() return own:GetWorld() end)),world_id) then return false end
+                local mesh=read(function() return own.Mesh end)
+                return same(identity(mesh),mesh_id)
+                    and same(identity(read(function() return mesh:GetOwner() end)),pawn_id)
+            end)
+            if not ok or value~=true then closed=true;return false end
+            return true
+        end
+        local function xyz(a)
+            if type(a)=="table" and finite(a[1]) and finite(a[2]) and finite(a[3]) then return {a[1],a[2],a[3]} end
+        end
+        local function number(v)return finite(v) and v or nil end
+        local row={inst=(os.getenv("HSMP_INST") or ""):sub(1,16),phase="protected_drift_before_correction",
+            authority=false,available=false,attempt=expected.attempt,world=expected.world,pawn=expected.pawn,
+            peer=number(expected.peer),match_id=number(expected.match_id),round=number(expected.round),life=number(expected.life),
+            spawn_id=number(expected.spawn_id),slot=number(expected.slot),watch_tick_ms=number(expected.watch_tick_ms),
+            capsule_read_ms=number(expected.capsule_read_ms),
+            capsule=xyz(expected.capsule),target=xyz(expected.target),target_yaw=number(expected.target_yaw),
+            floor=finite(expected.floor) and expected.floor or nil,
+            body_basis="physical pelvis center of mass"}
+        local started=env.now()
+        row.observed_ms=number(started) and started*1000 or nil
+        local ok,why=pcall(function()
+            assert(row.capsule and row.target,"position unavailable")
+            for _,k in ipairs({"peer","match_id","round","life","spawn_id"}) do
+                assert(finite(row[k]) and math.tointeger(row[k]) and row[k]>0,"assignment unavailable")
+            end
+            local pc=read(function() return ctx.pc and ctx.pc() or UEH.GetPlayerController() end)
+            world_id=identity(read(function() return pc:GetWorld() end))
+            pawn_id=identity(p)
+            assert(pawn_id.name==expected.pawn,"pawn changed")
+            assert(same(identity(read(function() return env.pawn() end)),pawn_id),"pawn changed")
+            assert(same(identity(read(function() return p:GetWorld() end)),world_id),"pawn world changed")
+            local mesh=read(function() return p.Mesh end)
+            mesh_id=identity(mesh)
+            assert(same(identity(read(function() return mesh:GetOwner() end)),pawn_id),"Mesh owner changed")
+            row.native_world,row.actor,row.mesh=world_id,pawn_id,mesh_id
+            assert(current(),"scope changed")
+            row.body_read_start_ms=number(env.now()*1000)
+            local x,y,z,err=env.body_loc(p,current,true)
+            row.body_read_end_ms=number(env.now()*1000)
+            assert(current(),"scope changed")
+            assert(finite(x) and finite(y) and finite(z),err or "physical body unavailable")
+            -- body_loc's normal visual fallback is useful for placement, but
+            -- cannot constitute this physical-only diagnostic observation.
+            row.body={x,y,z};row.available=true
+            row.capsule_target_xy_cm=dist_xy(row.capsule[1],row.capsule[2],row.target[1],row.target[2])
+            row.body_target_xy_cm=dist_xy(x,y,row.target[1],row.target[2])
+            row.body_capsule_delta={x-row.capsule[1],y-row.capsule[2],z-row.capsule[3]}
+            assert(finite(row.capsule_target_xy_cm) and finite(row.body_target_xy_cm) and xyz(row.body_capsule_delta),
+                "derived position unavailable")
+            -- These are evaluated socket/component rotations and native handle
+            -- targets, not an independent rigid-body orientation read. The COM
+            -- above remains the only physical-body observation in this row.
+            local function guarded(f, guard)
+                assert(current() and (not guard or guard()),"rotation scope changed")
+                local good,value=pcall(f)
+                assert(current() and (not guard or guard()),"rotation scope changed")
+                if not good then error("rotation read unavailable",0) end
+                return value
+            end
+            local function vector(v)
+                assert(v and finite(v.X) and finite(v.Y) and finite(v.Z),"vector unavailable")
+                return {v.X,v.Y,v.Z}
+            end
+            local function rotator(v)
+                assert(v and finite(v.Pitch) and finite(v.Yaw) and finite(v.Roll),"rotator unavailable")
+                return {pitch=v.Pitch,yaw=v.Yaw,roll=v.Roll}
+            end
+            local function optional(f)
+                local good,value=pcall(f)
+                assert(current(),"scope changed")
+                if good then return {available=true,value=value} end
+                return {available=false,reason=tostring(value):gsub("[%c]"," "):sub(1,192)}
+            end
+            local function component(field)
+                local o=guarded(function()return p[field]end)
+                local id=guarded(function()return identity(o)end)
+                local lost=false
+                local function bound()
+                    if lost or not current() then lost=true;return false end
+                    local good,value=pcall(function()
+                        local candidate=read(function()return p[field]end)
+                        if not same(identity(candidate),id) then return false end
+                        return same(identity(read(function()return candidate:GetOwner()end)),pawn_id)
+                    end)
+                    if not good or value~=true then lost=true;return false end
+                    return true
+                end
+                assert(bound(),"component binding unavailable")
+                return o,id,bound
+            end
+            local rotation={physical_orientation_available=false,
+                body_rotation_basis="evaluated Mesh pelvis socket; not independent rigid-body orientation",
+                component_rotation_basis="current scene component world rotation",
+                observed_start_ms=number(env.now()*1000)}
+            rotation.actor=optional(function()return rotator(guarded(function()return p:K2_GetActorRotation()end))end)
+            rotation.mesh_component=optional(function()return rotator(guarded(function()return mesh:K2_GetComponentRotation()end))end)
+            rotation.mesh_pelvis_socket=optional(function()return rotator(guarded(function()return mesh:GetSocketRotation(PELVIS)end))end)
+            rotation.driver=optional(function()
+                local driver,id,bound=component("DriverSkeleton")
+                local component_rot=guarded(function()return rotator(driver:K2_GetComponentRotation())end,bound)
+                local pelvis_rot=guarded(function()return rotator(driver:GetSocketRotation(PELVIS))end,bound)
+                assert(bound(),"DriverSkeleton changed")
+                return {identity=id,component_rotation=component_rot,pelvis_socket_rotation=pelvis_rot,
+                    basis="evaluated DriverSkeleton socket; not physical body"}
+            end)
+            rotation.current_control=optional(function()return rotator(guarded(function()return p["Current Control Rotation"]end))end)
+            rotation.on_ground_yaw=optional(function()
+                local v=guarded(function()return p["On Ground Z Rotation"]end)
+                assert(finite(v),"ground yaw unavailable");return v
+            end)
+            rotation.movement_input=optional(function()return vector(guarded(function()return p["Movement Input Vector"]end))end)
+            rotation.foot_points={}
+            for _,field in ipairs({"R Foot On Ground Loc","L Foot On Ground Loc"}) do
+                rotation.foot_points[field]=optional(function()return vector(guarded(function()return p[field]end))end)
+            end
+            rotation.handles={}
+            for _,field in ipairs({"PhysicsHandle LowerBody","PhysicsHandle UpperBody"}) do
+                rotation.handles[field]=optional(function()
+                    local handle,id,bound=component(field)
+                    local grabbed=guarded(function()return identity(handle.GrabbedComponent)end,bound)
+                    assert(same(grabbed,mesh_id),"handle does not grab current Mesh")
+                    local released=false
+                    local function grabbing()
+                        if released or not bound() then released=true;return false end
+                        local good,value=pcall(function()
+                            return same(identity(read(function()return handle.GrabbedComponent end)),grabbed)
+                        end)
+                        if not good or value~=true then released=true;return false end
+                        return true
+                    end
+                    local target_location,target_rotation={},{}
+                    guarded(function()handle:GetTargetLocationAndRotation(target_location,target_rotation)end,grabbing)
+                    -- Struct OutParms consume separate tables in the pinned
+                    -- bridge; support direct FStruct reuse and named wrappers.
+                    local loc=guarded(function()return vector(target_location.TargetLocation or target_location)end,grabbing)
+                    local rot=guarded(function()return rotator(target_rotation.TargetRotation or target_rotation)end,grabbing)
+                    return {identity=id,grabbed_mesh=grabbed,target_location=loc,target_rotation=rot,
+                        basis="native PhysicsHandle target; grabbed bone unavailable"}
+                end)
+            end
+            rotation.observed_end_ms=number(env.now()*1000)
+            row.rotation=rotation
+            local prior=expected.verified_baseline
+            if type(prior)=="table" then
+                row.verified_baseline={tick_ms=number(prior.tick_ms),copied_ms=number(prior.copied_ms),
+                    capsule=xyz(prior.capsule),body=xyz(prior.body),world=prior.world,pawn=prior.pawn,
+                    match_id=number(prior.match_id),round=number(prior.round),life=number(prior.life),spawn_id=number(prior.spawn_id),
+                    same_mesh_available=false,reason="historical Mesh identity unavailable"}
+            end
+        end)
+        if not ok then
+            row.available=false;row.body=nil;row.capsule_target_xy_cm,row.body_target_xy_cm,row.body_capsule_delta=nil,nil,nil
+            row.reason=tostring(why):gsub("[%c]"," "):sub(1,192)
+        end
+        local finished=env.now()
+        if finite(started) and finite(finished) and finished>=started then row.capture_elapsed_ms=(finished-started)*1000 end
+        row.scope_current=current()
+        return row,current
     end
     function env.prop_get(p, k) local v; pcall(function() v = p[k] end); return v end
     function env.prop_set(p, k, v) return pcall(function() p[k] = v end) end
@@ -1160,31 +1628,36 @@ function SP.make_ue_env(ctx)
     -- never switched on or off here: switching it off detaches a body for
     -- good, switching it on turns a kinematic copy into a falling ragdoll.
     local MESH_FIELDS = { "Mesh", "SK_Skeleton", "BoneCore", "DriverSkeleton" }
-    local PELVIS = nil
-    local function pelvis(m)
-        PELVIS = PELVIS or FName("pelvis")
-        local l; pcall(function() l = m:GetSocketLocation(PELVIS) end)
-        return (l and l.X) and l or nil
-    end
     -- Willie_BP's own PhysicsHandles hold the pelvis / spine to targets it
     -- keeps in WORLD space and re-derives each tick from the previous target
     -- (bytecode: LowerBody target = VInterpTo(previous target in Mesh space,
     -- capsule point)). A teleport must carry those targets along, or the
     -- handles drag the body back toward where it was.
     local HANDLE_FIELDS = { "PhysicsHandle LowerBody", "PhysicsHandle UpperBody", "PhysicsHandle GetUp" }
-    local function shift_handles(p, ox, oy, oz)
+    local function with_guard(guard,f)
+        assert(not guard or guard(),"placement scope changed")
+        local value=f()
+        assert(not guard or guard(),"placement scope changed")
+        return value
+    end
+    local function shift_handles(p, ox, oy, oz, guard, read_guard)
+        read_guard=read_guard or guard
         local n = 0
         for _, f in ipairs(HANDLE_FIELDS) do
+            if read_guard and not read_guard() then return n end
             pcall(function()
-                local h = p[f]
-                if not (h and h:IsValid()) then return end
+                local h = with_guard(read_guard,function()return p[f]end)
+                if not (h and with_guard(read_guard,function()return h:IsValid()end)) then return end
                 local grabbed = false
-                pcall(function() local gc = h.GrabbedComponent; grabbed = gc ~= nil and gc:IsValid() end)
+                pcall(function()
+                    local gc=with_guard(read_guard,function()return h.GrabbedComponent end)
+                    grabbed=gc~=nil and with_guard(read_guard,function()return gc:IsValid()end)
+                end)
                 if not grabbed then return end
                 local loc, rot = {}, {}
-                h:GetTargetLocationAndRotation(loc, rot)
+                with_guard(guard,function()h:GetTargetLocationAndRotation(loc, rot)end)
                 if loc.X then
-                    h:SetTargetLocation({ X = loc.X + ox, Y = loc.Y + oy, Z = loc.Z + oz })
+                    with_guard(guard,function()h:SetTargetLocation({ X = loc.X + ox, Y = loc.Y + oy, Z = loc.Z + oz })end)
                     n = n + 1
                 end
             end)
@@ -1197,13 +1670,15 @@ function SP.make_ue_env(ctx)
     -- toward / past the spot after the jump; they move with the teleport.
     local WORLD_VECS = { "R Foot On Ground Loc", "L Foot On Ground Loc", "R Step Start Position", "R Step End Position",
                          "L Step Start Position", "L Step End Position", "Last On Ground Position", "LastPosition" }
-    local function shift_vectors(p, ox, oy, oz)
+    local function shift_vectors(p, ox, oy, oz, guard, read_guard)
+        read_guard=read_guard or guard
         local n = 0
         for _, f in ipairs(WORLD_VECS) do
+            if read_guard and not read_guard() then return n end
             pcall(function()
-                local v = p[f]
+                local v=with_guard(read_guard,function()return p[f]end)
                 if v and v.X then
-                    p[f] = { X = v.X + ox, Y = v.Y + oy, Z = v.Z + oz }
+                    with_guard(guard,function()p[f] = { X = v.X + ox, Y = v.Y + oy, Z = v.Z + oz }end)
                     n = n + 1
                 end
             end)
@@ -1236,14 +1711,19 @@ function SP.make_ue_env(ctx)
         end
         return t
     end
-    local function carry_left_behind(list, before, ox, oy, oz, skip)
+    local function carry_left_behind(list, before, ox, oy, oz, skip, tolerance, guard, addresses)
         local n = 0
         for i, c in ipairs(list) do
+            if guard and not guard() then return n,false end
             local b = before[i]
-            if b and not skip[c:GetAddress()] then
+            local address=addresses and addresses[i] or c:GetAddress()
+            if not addresses and guard and not guard() then return n,false end
+            if b and not skip[address] then
                 local l; pcall(function() l = c:K2_GetComponentLocation() end)
-                if l and math.abs(l.X - (b.X + ox)) + math.abs(l.Y - (b.Y + oy)) + math.abs(l.Z - (b.Z + oz)) > 30 then
+                if guard and not guard() then return n,false end
+                if l and math.abs(l.X - (b.X + ox)) + math.abs(l.Y - (b.Y + oy)) + math.abs(l.Z - (b.Z + oz)) > (tolerance or 30) then
                     pcall(function() c:K2_SetWorldLocation({ X = b.X + ox, Y = b.Y + oy, Z = b.Z + oz }, false, {}, true) end)
+                    if guard and not guard() then return n,false end
                     n = n + 1
                 end
             end
@@ -1259,50 +1739,56 @@ function SP.make_ue_env(ctx)
     -- Bare hands (Weapon_Fists / Weapon_Feet) are part of the pawn: skipped.
     local WEAPON_FIELDS = { "Weapon R", "Weapon L" }
     local ZERO = { X = 0, Y = 0, Z = 0 }
-    local function held_weapons(p)
+    local function held_weapons(p, guard)
         local out = {}
         for _, k in ipairs(WEAPON_FIELDS) do
+            if guard and not guard() then return out end
             pcall(function()
-                local w = p[k]
-                if not (w and w:IsValid()) then return end
+                local w=with_guard(guard,function()return p[k]end)
+                if not (w and with_guard(guard,function()return w:IsValid()end)) then return end
                 local cn = ""
-                pcall(function() cn = w:GetClass():GetFName():ToString() end)
+                pcall(function()
+                    local cls=with_guard(guard,function()return w:GetClass()end)
+                    local fn=with_guard(guard,function()return cls:GetFName()end)
+                    cn=with_guard(guard,function()return fn:ToString()end)
+                end)
                 if cn:find("Weapon_Fists", 1, true) or cn:find("Weapon_Feet", 1, true) then return end
-                local l = w:K2_GetActorLocation()
+                local l=with_guard(guard,function()return w:K2_GetActorLocation()end)
                 if l and l.X then out[#out + 1] = { k = k, w = w, X = l.X, Y = l.Y, Z = l.Z } end
             end)
         end
         return out
     end
-    local function stop_actor(a)
+    local function stop_actor(a, guard)
         pcall(function()
-            local r = a:K2_GetRootComponent()
-            if r and r:IsValid() then
-                r:SetAllPhysicsLinearVelocity(ZERO, false)
-                r:SetAllPhysicsAngularVelocityInDegrees(ZERO, false)
+            local r=with_guard(guard,function()return a:K2_GetRootComponent()end)
+            if r and with_guard(guard,function()return r:IsValid()end) then
+                with_guard(guard,function()r:SetAllPhysicsLinearVelocity(ZERO, false)end)
+                with_guard(guard,function()r:SetAllPhysicsAngularVelocityInDegrees(ZERO, false)end)
             end
         end)
     end
-    local function carry_weapons(list, ox, oy, oz, tol)
+    local function carry_weapons(list, ox, oy, oz, tol, guard, keep_velocity)
         local n = 0
         for _, e in ipairs(list) do
+            if guard and not guard() then return n end
             pcall(function()
                 local tx, ty, tz = e.X + ox, e.Y + oy, e.Z + oz
-                local l = e.w:K2_GetActorLocation()
+                local l=with_guard(guard,function()return e.w:K2_GetActorLocation()end)
                 if not (l and l.X) or math.abs(l.X - tx) + math.abs(l.Y - ty) + math.abs(l.Z - tz) > (tol or 30) then
-                    e.w:K2_SetActorLocation({ X = tx, Y = ty, Z = tz }, false, {}, true)
+                    with_guard(guard,function()e.w:K2_SetActorLocation({ X = tx, Y = ty, Z = tz }, false, {}, true)end)
                     n = n + 1
                 end
             end)
-            stop_actor(e.w)
+            if not keep_velocity then stop_actor(e.w,guard) end
         end
         return n
     end
     env.held_weapons, env.carry_weapons = held_weapons, carry_weapons   -- (tests)
 
-    -- try >= 2 (the previous move did not stick): also move a mesh whose
-    -- component followed but whose bodies (pelvis) did not, rigidly by the
-    -- pelvis residual (HSMPAvatars snap_mesh, proven on stand-ins).
+    -- On every attempt, including the first, check the physical pelvis after
+    -- the component moved or followed. Apply the existing rigid residual
+    -- correction once when the simulated body did not accompany that move.
     function env.teleport(p, dest, yaw, try)
         local a0; pcall(function() a0 = p:K2_GetActorLocation() end)
         if not a0 then return "no actor location" end
@@ -1312,7 +1798,11 @@ function SP.make_ue_env(ctx)
             local m; pcall(function() m = p[f] end)
             if m and m:IsValid() then
                 local l; pcall(function() l = m:K2_GetComponentLocation() end)
-                if l then comps[#comps + 1] = { f = f, m = m, x = l.X, y = l.Y, z = l.Z, pel = pelvis(m) } end
+                if l then
+                    local pl, err, sim = pelvis(m)
+                    comps[#comps + 1] = { f = f, m = m, x = l.X, y = l.Y, z = l.Z,
+                        pel = pl, pel_err = err, sim = sim }
+                end
             end
         end
         local skip = {}
@@ -1334,24 +1824,46 @@ function SP.make_ue_env(ctx)
             local l; pcall(function() l = c.m:K2_GetComponentLocation() end)
             local tx, ty, tz = c.x + ox, c.y + oy, c.z + oz
             local lag = l and math.sqrt((l.X - tx) ^ 2 + (l.Y - ty) ^ 2 + (l.Z - tz) ^ 2) or math.huge
+            local note
             if lag > 30 then
                 pcall(function() c.m:K2_SetWorldLocation({ X = tx, Y = ty, Z = tz }, false, {}, true) end)
-                parts[#parts + 1] = string.format("%s moved(%.0fcm)", c.f, lag == math.huge and -1 or lag)
+                note = string.format("%s moved(%.0fcm)", c.f, lag == math.huge and -1 or lag)
             else
-                local note = c.f .. " followed"
-                local pl = (try or 1) >= 2 and c.pel and pelvis(c.m)
-                if pl then
-                    local rx, ry, rz = c.pel.X + ox - pl.X, c.pel.Y + oy - pl.Y, c.pel.Z + oz - pl.Z
-                    local res = math.sqrt(rx * rx + ry * ry + rz * rz)
-                    if res > 100 and l then
-                        pcall(function()
-                            c.m:K2_SetWorldLocation({ X = l.X + rx, Y = l.Y + ry, Z = l.Z + rz }, false, {}, true)
-                        end)
-                        note = string.format("%s bodies snapped(%.0fcm)", c.f, res)
-                    end
-                end
-                parts[#parts + 1] = note
+                note = c.f .. " followed"
             end
+            local pl, err, sim = pelvis(c.m)
+            if c.pel_err or err then
+                note = note .. "; body unavailable: " .. (c.pel_err or err)
+            elseif c.sim ~= sim then
+                note = note .. "; body unavailable: pelvis simulation state changed"
+            elseif c.pel and pl and sim then
+                local rx, ry, rz = c.pel.X + ox - pl.X, c.pel.Y + oy - pl.Y, c.pel.Z + oz - pl.Z
+                local res = math.sqrt(rx * rx + ry * ry + rz * rz)
+                if res > 100 then
+                    -- Read the component again: the moved branch may have
+                    -- changed it already. Never apply the actor offset twice.
+                    local current; pcall(function() current = c.m:K2_GetComponentLocation() end)
+                    if current then
+                        local moved = pcall(function()
+                            c.m:K2_SetWorldLocation({ X = current.X + rx, Y = current.Y + ry, Z = current.Z + rz }, false, {}, true)
+                        end)
+                        local after, after_err, after_sim = pelvis(c.m)
+                        if moved and after and after_sim then
+                            local remaining = math.sqrt((c.pel.X + ox - after.X) ^ 2
+                                + (c.pel.Y + oy - after.Y) ^ 2 + (c.pel.Z + oz - after.Z) ^ 2)
+                            note = note .. string.format("; %s(%.0fcm), physical residual(%.0fcm)",
+                                remaining <= 100 and "bodies snapped" or "body correction unresolved", res, remaining)
+                        else
+                            note = note .. "; body correction unavailable" .. (after_err and (": " .. after_err) or "")
+                        end
+                    else
+                        note = note .. "; body correction unavailable: component location"
+                    end
+                else
+                    note = note .. string.format("; physical residual(%.0fcm)", res)
+                end
+            end
+            parts[#parts + 1] = note
             pcall(function() c.m:SetAllPhysicsLinearVelocity({ X = 0, Y = 0, Z = 0 }, false) end)
             pcall(function() c.m:SetAllPhysicsAngularVelocityInDegrees({ X = 0, Y = 0, Z = 0 }, false) end)
         end
@@ -1368,46 +1880,228 @@ function SP.make_ue_env(ctx)
         return "[" .. table.concat(parts, ", ") .. "]"
     end
 
+    -- The release ACK requires the fresh current source body, even though
+    -- releasing anchoring itself performs no native setter.
+    function env.hold_release_current(p,scope)
+        local drops=ctx.drift_drops and ctx.drift_drops()
+        local closed=false
+        local function current()
+            if closed then return false end
+            local ok,value=pcall(function()
+                return scope and ctx.drift_world_current and ctx.drift_world_current(scope.world,drops)==true
+                    and scope.current()==true
+            end)
+            if not ok or value~=true then closed=true;return false end
+            return true
+        end
+        local function read(f)
+            assert(current(),"release scope changed")
+            local value=f()
+            assert(current(),"release scope changed")
+            return value
+        end
+        local function identity(o)
+            return read(function()
+                assert(o and o:IsValid()==true,"release identity unavailable")
+                local address=o:GetAddress();local name=o:GetFName():ToString()
+                assert(finite(address) and math.tointeger(address) and address>0 and type(name)=="string" and name~="",
+                    "release identity unavailable")
+                return {address=address,name=name}
+            end)
+        end
+        local function same(a,b)return a.address==b.address and a.name==b.name end
+        local ok,value=pcall(function()
+            -- Actual PC world first, before any retained pawn/mesh touch.
+            assert(current(),"release scope changed")
+            local actor=identity(read(function()return env.pawn()end))
+            assert(actor.name==scope.pawn and same(actor,identity(p)),"release pawn changed")
+            local pc=read(function()return ctx.pc and ctx.pc() or UEH.GetPlayerController()end)
+            local world=identity(read(function()return pc:GetWorld()end))
+            assert(same(world,identity(read(function()return p:GetWorld()end))),"release world changed")
+            local mesh=read(function()return p.Mesh end);local mid=identity(mesh)
+            assert(same(actor,identity(read(function()return mesh:GetOwner()end))),"release Mesh owner changed")
+            assert(same(mid,identity(read(function()return p.Mesh end))),"release Mesh changed")
+            return current()
+        end)
+        return ok and value==true
+    end
+
     -- Hold the pawn on dest (P:hold_step, every tick for hold_s after a
     -- teleport): every body's velocity zeroed; when the actor drifted more
     -- than tol_cm (XY) from dest, the actor and every mesh are moved back
     -- rigidly by that residual (XY only: the body settles on the floor).
     -- Returns true when it moved the pawn.
-    function env.hold(p, dest, tol_cm)
+    function env.hold(p, dest, tol_cm, scope)
+        local closed=false
+        local drops=ctx.drift_drops and ctx.drift_drops()
+        local protected=scope and ctx.drift_world_current and ctx.drift_drops
+        local function base()
+            if closed then return false end
+            if not protected then return true end
+            local ok,value=pcall(function()
+                return ctx.drift_world_current(scope.world,drops)==true and scope.current()==true
+            end)
+            if not ok or value~=true then closed=true;return false end
+            return true
+        end
+        local check=base
+        local function read(f)
+            if not check() then return nil end
+            local ok,value=pcall(f)
+            if not check() then return nil end
+            return ok and value or nil
+        end
+        -- Actual PC world is checked before touching the retained pawn.
+        if not base() then return false end
         local a; pcall(function() a = p:K2_GetActorLocation() end)
+        if not base() then return false end
         if not a then return false end
         local rx, ry = dest.X - a.X, dest.Y - a.Y
         local moved = false
+        local continuation=scope and scope.continuation==true
+        if continuation and math.sqrt(rx*rx+ry*ry)<=(tol_cm or 10) then return false end
         local meshes = {}
         for _, f in ipairs(MESH_FIELDS) do
-            local m; pcall(function() m = p[f] end)
-            if m and m:IsValid() then meshes[#meshes + 1] = m end
+            local m=read(function()return p[f]end)
+            if m and read(function()return m:IsValid()end) then meshes[#meshes + 1] = m end
+            if not base() then return false end
         end
-        local weapons = held_weapons(p)
+        local weapons = held_weapons(p,protected and base or nil)
+        if not base() then return false end
         if math.sqrt(rx * rx + ry * ry) > (tol_cm or 10) then
+            local targets,tbefore,skip={},{},{}
+            if protected then
+                local function identity(o)
+                    -- Pinned wrapper identity methods do not call ProcessEvent.
+                    -- Guard the group once; reflected owner/location calls
+                    -- remain separately guarded at their stage boundaries.
+                    return assert(read(function()
+                        assert(o and o:IsValid()==true,"identity unavailable")
+                        local address=o:GetAddress();local name=o:GetFName():ToString()
+                        assert(finite(address) and address>0 and math.tointeger(address)
+                            and type(name)=="string" and name~="" and #name<=512,"identity unavailable")
+                        return {address=address,name=name}
+                    end),"identity unavailable")
+                end
+                local function same(a,b)return a and b and a.address==b.address and a.name==b.name end
+                local refs={}
+                local ok=pcall(function()
+                    local actor_id=identity(p)
+                    assert(actor_id.name==scope.pawn,"pawn changed")
+                    local mesh=read(function()return p.Mesh end);local mesh_id=identity(mesh)
+                    assert(same(identity(read(function()return mesh:GetOwner()end)),actor_id),"Mesh owner changed")
+                    local pc=read(function()return ctx.pc and ctx.pc() or UEH.GetPlayerController()end)
+                    local world_id=identity(read(function()return pc:GetWorld()end))
+                    assert(same(identity(read(function()return p:GetWorld()end)),world_id),"pawn world changed")
+                    local function current()
+                        if not base() then return false end
+                        local good,value=pcall(function()
+                            local own=read(function()return env.pawn()end)
+                            if not same(identity(own),actor_id)
+                                or not same(identity(read(function()return own:GetWorld()end)),world_id) then return false end
+                            local m=read(function()return own.Mesh end)
+                            return same(identity(m),mesh_id)
+                                and same(identity(read(function()return m:GetOwner()end)),actor_id)
+                        end)
+                        if not good or value~=true then closed=true;return false end
+                        return true
+                    end
+                    local function target_current(ref)
+                        if not base() then return nil end
+                        local good,target=pcall(function()
+                            local candidate=read(function()return p[ref.field]end)
+                            assert(same(identity(candidate),ref.id),"target changed")
+                            assert(same(identity(read(function()return candidate:GetOwner()end)),actor_id),"target owner changed")
+                            return candidate
+                        end)
+                        if not good or not target then closed=true;return nil end
+                        return target
+                    end
+                    -- Willie serializes these four targets with absolute
+                    -- location. Its idle/timeline writers sample StepSpline
+                    -- in world space. Carry them with a residual pin too.
+                    for _,field in ipairs({"R Foot IK","L Foot IK","StepSplineR","StepSplineL"})do
+                        local target=read(function()return p[field]end)
+                        if target and read(function()return target:IsValid()end)==true then
+                            local id=identity(target)
+                            assert(same(identity(read(function()return target:GetOwner()end)),actor_id),"target owner changed")
+                            local ref={field=field,id=id};refs[#refs+1]=ref
+                            local l=read(function()return target:K2_GetComponentLocation()end)
+                            assert(current() and target_current(ref),"scope changed")
+                            if l and finite(l.X) and finite(l.Y) and finite(l.Z) then
+                                ref.before={X=l.X,Y=l.Y,Z=l.Z}
+                            end
+                        end
+                    end
+                    check=current -- used only at mutation/stage boundaries
+                    -- Scalar identity reads use only the cheap, latched world
+                    -- and placement guard, never a recursive full traversal.
+                    read=function(f)
+                        if not base() then return nil end
+                        local good,value=pcall(f)
+                        if not base() then return nil end
+                        return good and value or nil
+                    end
+                    targets=refs
+                    tbefore=target_current
+                    for _,m in ipairs(meshes)do
+                        local address=read(function()return m:GetAddress()end)
+                        if address then skip[address]=true end
+                    end
+                end)
+                if not ok or not check() then return false end
+            end
             local before = {}
             for i, m in ipairs(meshes) do
-                local l; pcall(function() l = m:K2_GetComponentLocation() end)
+                local l=read(function()return m:K2_GetComponentLocation()end)
                 before[i] = l and { X = l.X, Y = l.Y, Z = l.Z } or nil
             end
-            pcall(function() p:K2_SetActorLocation({ X = a.X + rx, Y = a.Y + ry, Z = a.Z }, false, {}, true) end)
-            carry_weapons(weapons, rx, ry, 0, 5)   -- held weapons too (the mesh tolerance below)
+            if not check() then return false end
+            read(function()p:K2_SetActorLocation({ X = a.X + rx, Y = a.Y + ry, Z = a.Z }, false, {}, true)end)
+            if not check() then return false end
+            carry_weapons(weapons, rx, ry, 0, 5,protected and check or nil,continuation)
+            if not check() then return false end
             for i, m in ipairs(meshes) do
                 local b = before[i]
-                local l; pcall(function() l = m:K2_GetComponentLocation() end)
+                local l=read(function()return m:K2_GetComponentLocation()end)
+                if not check() then return false end
                 if b and l and math.abs(l.X - (b.X + rx)) + math.abs(l.Y - (b.Y + ry)) > 5 then
-                    pcall(function() m:K2_SetWorldLocation({ X = b.X + rx, Y = b.Y + ry, Z = b.Z }, false, {}, true) end)
+                    read(function()m:K2_SetWorldLocation({ X = b.X + rx, Y = b.Y + ry, Z = b.Z }, false, {}, true)end)
                 end
+                if not check() then return false end
             end
-            shift_handles(p, rx, ry, 0)
-            shift_vectors(p, rx, ry, 0)
+            for _,ref in ipairs(targets)do
+                local target=tbefore(ref) -- reacquire after actor/mesh translation
+                if not target then return false end
+                if ref.before then
+                    local _,good=carry_left_behind({target},{ref.before},rx,ry,0,skip,5,function()
+                        return check() and tbefore(ref)~=nil
+                    end,{ref.id.address})
+                    if good==false then return false end
+                end
+                if not check() then return false end
+            end
+            shift_handles(p, rx, ry, 0,protected and check or nil,protected and base or nil)
+            if not check() then return false end
+            shift_vectors(p, rx, ry, 0,protected and check or nil,protected and base or nil)
+            if not check() then return false end
             moved = true
         end
+        -- Continuation leaves native limb/weapon integration active. Do not
+        -- cancel any velocities, including inside the carried-weapon path.
+        if continuation then return moved end
         for _, m in ipairs(meshes) do
-            pcall(function() m:SetAllPhysicsLinearVelocity({ X = 0, Y = 0, Z = 0 }, false) end)
-            pcall(function() m:SetAllPhysicsAngularVelocityInDegrees({ X = 0, Y = 0, Z = 0 }, false) end)
+            if not check() then return false end
+            read(function()m:SetAllPhysicsLinearVelocity({ X = 0, Y = 0, Z = 0 }, false)end)
+            if not check() then return false end
+            read(function()m:SetAllPhysicsAngularVelocityInDegrees({ X = 0, Y = 0, Z = 0 }, false)end)
+            if not check() then return false end
         end
-        for _, e in ipairs(weapons) do stop_actor(e.w) end   -- held still with the pawn
+        for _, e in ipairs(weapons) do
+            if not check() then return false end
+            stop_actor(e.w,protected and check or nil)
+            if not check() then return false end
+        end
         return moved
     end
 
@@ -1622,6 +2316,10 @@ function SP.make_ue_env(ctx)
         pcall(function() s.downed = p.Downed == true end)
         pcall(function() s.fallen = p.Fallen == true end)
         pcall(function() s.health = tonumber(p.Health) end)
+        pcall(function()
+            local value = p["Block Spine Breaking"]
+            if type(value) == "boolean" then s.block_spine_breaking = value end
+        end)
         for side, f in pairs({ weapon_r = "Weapon R", weapon_l = "Weapon L" }) do
             local x; pcall(function() x = p[f] end)
             s[side] = obj_ok(x) and (wclass(x) or "?") or "None"

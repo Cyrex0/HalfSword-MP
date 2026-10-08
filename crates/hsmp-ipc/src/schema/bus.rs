@@ -10,7 +10,8 @@ use super::{Dir, Form, KindInfo, Stamped, CAP_BUS};
 
 pub const BUS_KEYS: usize = 64;
 pub const BUS_KEY_BYTES: usize = 32;
-pub const BUS_VALUE_BYTES: usize = 4096;
+// Playback includes physical settlement evidence for all 32 peer slots.
+pub const BUS_VALUE_BYTES: usize = 16384;
 
 /// One bus key's slot body: the record payload behind its `SlotMeta` (like every record slot).
 pub type BusValue = Stamped<[u8; BUS_VALUE_BYTES]>;
@@ -27,7 +28,7 @@ crate::ipc_pod! {
 }
 
 /// Keys that are cleared at every world leave.
-pub const WORLD_SCOPED_KEYS: &[&str] = &["puppets", "standin_dead", "playback", "pose_yield", "world_held", "spawn_status"];
+pub const WORLD_SCOPED_KEYS: &[&str] = &["puppets", "standin_dead", "playback", "pose_yield", "world_held", "spawn_status", "surrender_hold"];
 
 pub const K_BUS: u16 = 0x0701;
 

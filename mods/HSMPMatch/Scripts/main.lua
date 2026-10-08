@@ -209,6 +209,8 @@ local session = director.get_session()
 local function local_pawn()
     local pc = WG.pc()
     if not pc or not pc:IsValid() then return nil, nil end
+    local owned = WG.ai_pawn()
+    if owned then return owned, pc end
     local p = pc.Pawn
     if p and p:IsValid() then return p, pc end
     return nil, pc
@@ -219,6 +221,25 @@ local function pawn_health(p)
     pcall(function() hp = tonumber(p.Health) end)
     return hp
 end
+
+local SurrenderHold = load_module("surrender_hold")
+local surrender_session = load_module("hsmp_session")
+local surrender = SurrenderHold and SurrenderHold.new({now=os.clock,log=Log,
+    accept_actor=function(actor)
+        if not tick_wok or WG.pending() or not WG.settled() then return false end
+        local p=local_pawn()
+        return actor and actor:IsValid() and p and actor:GetAddress()==p:GetAddress()
+            and actor:GetFName():ToString()==p:GetFName():ToString()
+    end,
+    context=SurrenderHold.make_context({
+        ready=function()return tick_wok and not WG.pending() and WG.settled()end,
+        view=function()return surrender_session and surrender_session.view()end,
+        mode=function()return surrender_session and surrender_session.mode()end,
+        pawn=local_pawn,status=function()return IPC and IPC.bus_table("spawn_status")end,
+        world=WG.world,world_key=function()return WG.key end}),
+    send=function(record)return IPC and IPC.send("death_report",record)end,
+    publish=function(record)return IPC and IPC.bus_put("surrender_hold",record)end})
+if surrender then wg_on_drop(function()surrender:cancel()end) end
 
 local function nick_of(id)
     if id == session.my_id then return session.my_nick end
@@ -1085,6 +1106,12 @@ local function tick()
     if SG then pcall(SG.tick) end
     -- One world-guard check per tick, shared with the Director (env.world).
     tick_wok = wg_check()
+    if surrender then
+        if tick_n%4==0 then surrender:hooks(RegisterHook) end
+        local oks,errs=pcall(surrender.tick,surrender)
+        if not oks then log_err("surrender tick error",errs) end
+        if IPC and IPC.pending and IPC.pending()>0 then IPC.flush() end
+    end
     -- Hitch probe (release profile): this 250 ms game-thread loop is the
     -- process's only M.frame() caller. A gap is a level load (travel=true) when
     -- the world is not ready / changed since the last tick / a travel is

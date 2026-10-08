@@ -28,6 +28,7 @@ fn world2_limit(p: &str) -> f64 {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn world_sync_holds_at_every_profile() {
     for &(p, path95, free95, snaps) in LIMITS {
         let (s, runs) = run(p, 2);

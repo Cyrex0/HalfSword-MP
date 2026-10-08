@@ -1,0 +1,407 @@
+// Lua control/lookup for a default-OFF proof-only observer. No engine writes or files.
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <cstring>
+#include <string>
+#include <limits>
+#include <atomic>
+#include <cstdio>
+#include "lua.hpp"
+#include "box_snapshot_probe.h"
+namespace
+{
+using namespace hsmp_box;
+State state;
+lua_State* owner_state{};
+bool submitted{};
+struct Prepared
+{
+    Scope scope{};
+    std::array<std::wstring,5> paths{};
+    std::uint64_t token{}, deadline{}, duration{};
+    unsigned limit{};
+} prepared;
+std::uint64_t control_version{}, token_id{};
+bool control_busy{};
+struct InFlight
+{
+    bool held=true;
+    InFlight() { control_busy=true; }
+    void release() { if (held) { control_busy=false; held=false; } }
+    ~InFlight() { release(); }
+};
+unsigned timing_prints{}; // Fixed process budget; never reset by activation or world changes.
+std::atomic<bool> enabled{};
+std::atomic<unsigned> deferred_failure{};
+std::atomic<DWORD> proven_thread{};
+std::atomic<unsigned> foreign_callbacks{}, same_thread_unavailable{}, unknown_thread_callbacks{}, thread_failure_kind{};
+std::atomic<int> refused_admission{-1};
+const char* admission_name(int result)
+{
+    constexpr const char* names[]={"allowed","would_block","mutex_poisoned","native_poisoned","frame_thread_unset","wrong_thread","panic"};
+    return result>=0 && result<=HSMP_CALLER_PANIC ? names[result] : "unavailable";
+}
+const char* admission_failure(int result)
+{
+    constexpr const char* names[]={"same proven thread admission unavailable","same proven thread admission would_block",
+        "same proven thread admission mutex_poisoned","same proven thread admission native_poisoned",
+        "same proven thread admission frame_thread_unset","same proven thread admission wrong_thread","same proven thread admission panic"};
+    return result>HSMP_CALLER_ALLOWED && result<=HSMP_CALLER_PANIC ? names[result] : "same proven thread admission unavailable";
+}
+// Saturating process totals, never reset by activation/world changes. No frame/engine reads.
+void count_callback(std::atomic<unsigned>& counter)
+{
+    auto value=counter.load(std::memory_order_relaxed);
+    while (value<UINT32_MAX && !counter.compare_exchange_weak(value,value+1,std::memory_order_relaxed)) {}
+}
+const Provider& provider() { return hsmp_reflect_box_provider(); }
+lua_State* vm(lua_State* L)
+{
+    lua_rawgeti(L,LUA_REGISTRYINDEX,LUA_RIDX_MAINTHREAD);
+    auto* main=lua_tothread(L,-1); lua_pop(L,1); return main;
+}
+void disable(Reason why=Reason::Off)
+{ enabled.store(false); state.stop(why); prepared={}; ++control_version; }
+void synchronize()
+{
+    const auto failure=deferred_failure.exchange(0);
+    if (failure) disable(static_cast<Reason>(failure));
+}
+void rawfield(lua_State* L,int table,const char* key)
+{ lua_pushstring(L,key); lua_rawget(L,table); }
+bool integer(lua_State* L,int table,const char* key,std::uint64_t& out,bool zero=false)
+{
+    rawfield(L,table,key);
+    const bool typed=lua_isinteger(L,-1)!=0;
+    const auto n=typed ? lua_tointeger(L,-1) : -1;
+    lua_pop(L,1);
+    if (!typed || n<0 || (!zero && n==0)) return false;
+    out=static_cast<std::uint64_t>(n); return true;
+}
+bool object(lua_State* L,int table,const char* key,ObjectInput& out,std::wstring& path)
+{
+    rawfield(L,table,key);
+    if (!lua_istable(L,-1)) { lua_pop(L,1); return false; }
+    const int t=lua_absindex(L,-1);
+    bool ok=integer(L,t,"address",out.address);
+    rawfield(L,t,"path"); std::size_t n{};
+    const char* s=lua_type(L,-1)==LUA_TSTRING ? lua_tolstring(L,-1,&n) : nullptr;
+    if (!s || n==0 || n>2048 || std::string(s,n).find('\0')!=std::string::npos) ok=false;
+    if (ok)
+    {
+        const auto count=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s,static_cast<int>(n),nullptr,0);
+        if (count<=0) ok=false;
+        else { path.resize(static_cast<std::size_t>(count));
+            ok=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,s,static_cast<int>(n),path.data(),count)==count; }
+    }
+    lua_pop(L,2); out.path=path.c_str(); return ok;
+}
+int unavailable(lua_State* L,const char* why)
+{ lua_pushnil(L); lua_pushstring(L,why); return 2; }
+void number(lua_State* L,const char* key,std::uint64_t value)
+{ lua_pushinteger(L,static_cast<lua_Integer>(value)); lua_setfield(L,-2,key); }
+void boolean(lua_State* L,const char* key,bool value)
+{ lua_pushboolean(L,value); lua_setfield(L,-2,key); }
+void text(lua_State* L,const char* key,const char* value)
+{ lua_pushstring(L,value); lua_setfield(L,-2,key); }
+void identity(lua_State* L,const char* key,const Identity& id)
+{
+    lua_createtable(L,0,7); number(L,"address",id.address); number(L,"weak",id.weak); number(L,"name",id.name);
+    number(L,"class_address",id.class_address); number(L,"class_weak",id.class_weak); number(L,"class_name",id.class_name);
+    boolean(L,"persistent",id.persistent()); lua_setfield(L,-2,key);
+}
+void scope(lua_State* L,const Scope& s)
+{
+    number(L,"match_id",s.match_id); number(L,"round",s.round); number(L,"life",s.life);
+    identity(L,"world",s.world); identity(L,"pawn",s.pawn); identity(L,"mesh",s.mesh);
+    identity(L,"box",s.box); identity(L,"box_owner",s.box_owner);
+}
+void extent(lua_State* L,const char* key,const Snapshot& s)
+{
+    if (!s.available) { lua_pushnil(L); lua_setfield(L,-2,key); return; }
+    lua_createtable(L,3,0);
+    const double values[]={s.extent.x,s.extent.y,s.extent.z};
+    for (int i=0;i<3;++i) { lua_pushnumber(L,values[i]); lua_rawseti(L,-2,i+1); }
+    lua_setfield(L,-2,key);
+}
+const EnrollmentTiming* costs()
+{ return provider().enrollment_timing ? provider().enrollment_timing() : nullptr; }
+void cost_table(lua_State* L,const EnrollmentTiming* t)
+{
+    if (!t) { lua_pushnil(L); return; }
+    lua_createtable(L,0,5); text(L,"clock","GetTickCount64"); boolean(L,"authority",false);
+    const unsigned count=t->count<EnrollmentTiming::kLimit ? t->count : EnrollmentTiming::kLimit;
+    number(L,"count",count); boolean(L,"overflow",t->overflow || t->count>EnrollmentTiming::kLimit);
+    lua_createtable(L,static_cast<int>(count),0);
+    for (unsigned i=0;i<count;++i)
+    {
+        const auto& r=t->rows[i]; lua_createtable(L,0,5);
+        lua_pushlstring(L,r.name ? r.name : "unknown",r.name ? strnlen_s(r.name,48) : 7); lua_setfield(L,-2,"stage");
+        number(L,"start_ms",r.start_ms); number(L,"end_ms",r.end_ms);
+        const bool available=r.available && r.end_ms>=r.start_ms;
+        boolean(L,"elapsed_available",available);
+        if (available) number(L,"elapsed_ms",r.end_ms-r.start_ms);
+        lua_rawseti(L,-2,static_cast<lua_Integer>(i)+1);
+    }
+    lua_setfield(L,-2,"rows");
+}
+void print_costs(lua_State* L,const EnrollmentTiming* t,bool enrollment_ok)
+{
+    if (!t || timing_prints>=32) return;
+    ++timing_prints;
+    char instance[8]{},line[2048]{};
+    const DWORD n=GetEnvironmentVariableA("HSMP_INST",instance,sizeof instance);
+    const char* inst=n==1 && (instance[0]=='1' || instance[0]=='2') ? instance : "unknown";
+    const unsigned count=t->count<EnrollmentTiming::kLimit ? t->count : EnrollmentTiming::kLimit;
+    int used=std::snprintf(line,sizeof line,"BOXOBS_ENROLL_COST inst=%s record=%u enrollment_ok=%s clock=GetTickCount64 count=%u overflow=%s authority=false",
+        inst,timing_prints,enrollment_ok ? "true" : "false",count,(t->overflow || t->count>EnrollmentTiming::kLimit) ? "true" : "false");
+    for (unsigned i=0;i<count && used>0 && static_cast<std::size_t>(used)<sizeof line;++i)
+    {
+        const auto& r=t->rows[i];
+        const bool available=r.available && r.end_ms>=r.start_ms;
+        const auto remaining=sizeof line-static_cast<std::size_t>(used);
+        int added;
+        if (available) added=std::snprintf(line+used,remaining," %.*s_ms=%llu",48,r.name ? r.name : "unknown",
+            static_cast<unsigned long long>(r.end_ms-r.start_ms));
+        else added=std::snprintf(line+used,remaining," %.*s_ms=unknown",48,r.name ? r.name : "unknown");
+        if (added<0 || static_cast<std::size_t>(added)>=remaining) break;
+        used+=added;
+    }
+    // Look up the exact global without invoking _G.__index. Logging runs after state work.
+    lua_rawgeti(L,LUA_REGISTRYINDEX,LUA_RIDX_GLOBALS);
+    lua_pushliteral(L,"print"); lua_rawget(L,-2); lua_remove(L,-2);
+    if (!lua_isfunction(L,-1)) { lua_pop(L,1); return; }
+    lua_pushstring(L,line);
+    if (lua_pcall(L,1,0,0)!=LUA_OK) lua_pop(L,1);
+}
+void observe(unsigned phase,void* context,void* frame)
+{
+    if (!enabled.load()) return;
+    // Classify using only the positively admitted OS thread ID. Foreign targets remain unknown.
+    const auto thread=callback_thread(proven_thread.load(),GetCurrentThreadId());
+    if (thread==CallbackThread::Different) { count_callback(foreign_callbacks); return; }
+    if (thread==CallbackThread::Unknown)
+    {
+        count_callback(unknown_thread_callbacks); thread_failure_kind.store(1); refused_admission.store(-1);
+        deferred_failure.store(static_cast<unsigned>(Reason::Thread)); enabled.store(false); return;
+    }
+    // Same OS thread is insufficient by itself: keep the existing Rust admission guard.
+    const int admission=provider().caller_admission ? provider().caller_admission()
+        : (provider().on_thread() ? HSMP_CALLER_ALLOWED : -1);
+    if (admission!=HSMP_CALLER_ALLOWED)
+    {
+        refused_admission.store(admission);
+        count_callback(same_thread_unavailable); thread_failure_kind.store(2);
+        deferred_failure.store(static_cast<unsigned>(Reason::Thread)); enabled.store(false); return;
+    }
+    synchronize();
+    const auto now=provider().now_ms(); state.poll(now);
+    if (!state.active) { enabled.store(false); return; }
+    try
+    {
+        Key key{}; Reason why=Reason::None;
+        if (!provider().key(context,frame,key,why))
+        { if (why!=Reason::None) disable(why); return; }
+        if (phase==1 && !state.guard_entry(key,now))
+        { if (!state.active) enabled.store(false); return; }
+        if (phase==2 && !state.has(key))
+        { state.post(key,{},now); if (!state.active) enabled.store(false); return; }
+        Snapshot s{};
+        if (!provider().snapshot(key,frame,s,why)) { s.available=false; s.reason=why; }
+        if (phase==1) state.pre(key,s,now); else if (phase==2) state.post(key,s,now);
+        if (!state.active) enabled.store(false);
+    }
+    catch (...) { disable(Reason::Unavailable); }
+}
+int begin_impl(lua_State* L,bool prepare_only=false)
+{
+    char dev[8]{};
+    if (GetEnvironmentVariableA("HSMP_DEV",dev,sizeof dev)!=1 || dev[0]!='1') return unavailable(L,"developer mode required");
+    if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    proven_thread.store(GetCurrentThreadId()); // Proven by the existing Native::frame thread guard.
+    if (control_busy) return unavailable(L,"observer setup busy");
+    InFlight guard;
+    synchronize();
+    if ((state.active || prepared.token) && owner_state!=vm(L)) return unavailable(L,"another developer state owns the observer");
+    disable(Reason::Scope);
+    const auto version=control_version;
+    if (!lua_istable(L,1)) return unavailable(L,"enrollment table required");
+    Enrollment input{}; std::wstring paths[5]; std::uint64_t round{},life{},duration{},limit{};
+    if (!integer(L,1,"match_id",input.match_id) || !integer(L,1,"round",round) || !integer(L,1,"life",life)
+        || round>UINT32_MAX || life>UINT32_MAX || !integer(L,1,"duration_ms",duration)
+        || duration>kMaxDurationMs || !integer(L,1,"calls",limit) || limit>kMaxPairs
+        || !object(L,1,"world",input.world,paths[0]) || !object(L,1,"pawn",input.pawn,paths[1])
+        || !object(L,1,"mesh",input.mesh,paths[2]) || !object(L,1,"box",input.box,paths[3])
+        || !object(L,1,"box_owner",input.box_owner,paths[4])) return unavailable(L,reason_name(Reason::BadInput));
+    input.round=static_cast<std::uint32_t>(round); input.life=static_cast<std::uint32_t>(life);
+    if (control_version!=version) return unavailable(L,"observer setup cancelled");
+    owner_state=vm(L);
+    Scope enrolled{}; Reason why=Reason::Unavailable;
+    // Re-enrollment must never leave an older binding active after a failed path/identity check.
+    const bool enrolled_ok=provider().enroll(input,enrolled,why);
+    // Copy before optional Lua logging can re-enter control or replace provider diagnostics.
+    const auto* measured=costs(); EnrollmentTiming copied{};
+    if (measured) copied=*measured;
+    const auto* timing=measured ? &copied : nullptr;
+    if (control_version!=version) return unavailable(L,"observer setup cancelled");
+    if (!enrolled_ok)
+    {
+        std::string reason=reason_name(why);
+        if (provider().enrollment_detail)
+        {
+            const char* detail=provider().enrollment_detail();
+            if (detail && *detail) { reason+=" ["; reason.append(detail,strnlen_s(detail,512)); reason+="]"; }
+        }
+        unavailable(L,reason.c_str()); guard.release(); print_costs(L,timing,false); return 2;
+    }
+    if (!provider().submit(observe,why))
+    { unavailable(L,reason_name(why)); guard.release(); print_costs(L,timing,true); return 2; }
+    submitted=true;
+    if (control_version!=version) return unavailable(L,"observer setup cancelled");
+    if (prepare_only)
+    {
+        const auto now=provider().now_ms();
+        if (now>UINT64_MAX-250 || token_id>=static_cast<std::uint64_t>(LUA_MAXINTEGER))
+            return unavailable(L,"observer preparation unavailable");
+        prepared.scope=enrolled; prepared.token=++token_id; prepared.deadline=now+250;
+        prepared.duration=duration; prepared.limit=static_cast<unsigned>(limit);
+        for (unsigned i=0;i<5;++i) prepared.paths[i]=paths[i];
+        lua_pushboolean(L,1); lua_pushinteger(L,static_cast<lua_Integer>(prepared.token)); cost_table(L,timing);
+        guard.release(); print_costs(L,timing,true); return 3;
+    }
+    if (!state.begin(enrolled,provider().now_ms(),duration,static_cast<unsigned>(limit)))
+    { unavailable(L,reason_name(Reason::BadInput)); guard.release(); print_costs(L,timing,true); return 2; }
+    owner_state=vm(L); enabled.store(true); lua_pushboolean(L,1); cost_table(L,timing);
+    guard.release(); print_costs(L,timing,true); return 2; // No engine reads or re-enable after a Lua callback.
+}
+int begin(lua_State* L)
+{ try { return begin_impl(L); } catch (...) { disable(Reason::Unavailable); return unavailable(L,"observer unavailable"); } }
+int prepare(lua_State* L)
+{ try { return begin_impl(L,true); } catch (...) { disable(Reason::Unavailable); return unavailable(L,"observer unavailable"); } }
+int activate_impl(lua_State* L)
+{
+    char dev[8]{};
+    if (GetEnvironmentVariableA("HSMP_DEV",dev,sizeof dev)!=1 || dev[0]!='1') return unavailable(L,"developer mode required");
+    if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    proven_thread.store(GetCurrentThreadId());
+    if (control_busy) return unavailable(L,"observer setup busy");
+    InFlight guard;
+    synchronize();
+    if (owner_state!=vm(L)) return unavailable(L,"observer owner required");
+    const auto token=lua_isinteger(L,1) ? lua_tointeger(L,1) : 0;
+    if (token<=0 || !prepared.token || static_cast<std::uint64_t>(token)!=prepared.token)
+        return unavailable(L,"observer preparation token unavailable");
+    const auto version=control_version;
+    const auto expected=prepared; prepared={}; // Every exact-token activation attempt consumes it.
+    if (provider().now_ms()>expected.deadline) return unavailable(L,"observer preparation expired");
+    if (!lua_istable(L,2)) return unavailable(L,reason_name(Reason::BadInput));
+    std::uint64_t value{};
+    const char* tuple[]={"match_id","round","life"};
+    const std::uint64_t values[]={expected.scope.match_id,expected.scope.round,expected.scope.life};
+    for (unsigned i=0;i<3;++i)
+        if (!integer(L,2,tuple[i],value) || value!=values[i]) return unavailable(L,reason_name(Reason::Scope));
+    const char* names[]={"world","pawn","mesh","box","box_owner"};
+    const Identity ids[]={expected.scope.world,expected.scope.pawn,expected.scope.mesh,expected.scope.box,expected.scope.box_owner};
+    for (unsigned i=0;i<5;++i)
+    {
+        ObjectInput input{}; std::wstring path;
+        if (!object(L,2,names[i],input,path) || input.address!=ids[i].address || path!=expected.paths[i])
+            return unavailable(L,reason_name(Reason::Scope));
+    }
+    if (control_version!=version) return unavailable(L,"observer preparation cancelled");
+    Reason why=Reason::Unavailable;
+    if (!provider().prepared_current || !provider().prepared_current(expected.scope,why)) return unavailable(L,reason_name(why));
+    if (control_version!=version) return unavailable(L,"observer preparation cancelled");
+    const auto now=provider().now_ms();
+    if (now>expected.deadline) return unavailable(L,"observer preparation expired");
+    if (!state.begin(expected.scope,now,expected.duration,expected.limit)) return unavailable(L,reason_name(Reason::BadInput));
+    enabled.store(true); lua_pushboolean(L,1); return 1;
+}
+int activate(lua_State* L)
+{ try { return activate_impl(L); } catch (...) { disable(Reason::Unavailable); return unavailable(L,"observer unavailable"); } }
+int stop(lua_State* L)
+{
+    if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    synchronize();
+    if (owner_state && owner_state!=vm(L)) return unavailable(L,"observer owner required");
+    disable(); lua_pushboolean(L,1); return 1;
+}
+int status(lua_State* L)
+{
+    if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    synchronize();
+    state.poll(provider().now_ms()); lua_createtable(L,0,22);
+    boolean(L,"active",state.active); boolean(L,"submitted",submitted); boolean(L,"authority",false);
+    boolean(L,"qualified",false);
+    const auto thread_failure=thread_failure_kind.load();
+    text(L,"reason",state.last==Reason::Thread ? (thread_failure==1 ? "callback thread identity unavailable" :
+        thread_failure==2 ? admission_failure(refused_admission.load()) : reason_name(state.last)) : reason_name(state.last));
+    number(L,"deadline_ms",state.deadline);
+    number(L,"entries",state.entries); number(L,"completed",state.completed()); number(L,"pending",state.pending());
+    number(L,"pending_role",state.pending_role());
+    number(L,"unmatched",state.unmatched); number(L,"discarded",state.discarded); number(L,"marks_outside",state.marks_outside);
+    number(L,"max_pairs",kMaxPairs); number(L,"max_depth",kMaxDepth);
+    number(L,"proven_thread_id",proven_thread.load());
+    number(L,"foreign_callbacks_process_total",foreign_callbacks.load());
+    number(L,"same_thread_unavailable_process_total",same_thread_unavailable.load());
+    number(L,"unknown_thread_callbacks_process_total",unknown_thread_callbacks.load());
+    boolean(L,"foreign_callback_targets_known",false);
+    text(L,"last_refused_caller_admission",admission_name(refused_admission.load()));
+    boolean(L,"last_refused_caller_admission_available",refused_admission.load()>=0 && refused_admission.load()<=HSMP_CALLER_PANIC);
+    return 1;
+}
+int read(lua_State* L)
+{
+    if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    synchronize();
+    if (owner_state && owner_state!=vm(L)) return unavailable(L,"observer owner required");
+    state.poll(provider().now_ms()); lua_createtable(L,static_cast<int>(state.completed()),0);
+    for (unsigned i=0;i<state.completed();++i)
+    {
+        const auto& p=state.at(i); lua_createtable(L,0,25);
+        number(L,"id",p.id); number(L,"parent",p.parent); number(L,"depth",p.depth); number(L,"role",p.key.role);
+        number(L,"pre_ms",p.pre_ms); number(L,"post_ms",p.post_ms); number(L,"lua_marks",p.lua_marks); number(L,"marker",p.marker);
+        boolean(L,"qualified",p.qualified); boolean(L,"authority",false); boolean(L,"lua_inside",p.lua_inside);
+        boolean(L,"paired",true);
+        boolean(L,"pre_available",p.before.available); boolean(L,"post_available",p.after.available);
+        boolean(L,"lifetime_available",p.before.persistent() && p.after.persistent());
+        boolean(L,"context_declared",true); text(L,"reason",reason_name(p.reason));
+        scope(L,p.before.available ? p.before.scope : state.scope);
+        identity(L,"function",p.before.function); extent(L,"before",p.before); extent(L,"after",p.after);
+        lua_rawseti(L,-2,static_cast<lua_Integer>(i+1));
+    }
+    state.drain(); return 1;
+}
+int mark(lua_State* L)
+{
+    if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
+    synchronize();
+    if (owner_state && owner_state!=vm(L)) return unavailable(L,"observer owner required");
+    if (!lua_istable(L,1)) return unavailable(L,reason_name(Reason::BadInput));
+    Scope fresh=state.scope; std::uint64_t values[9]{};
+    const char* keys[]={"world","pawn","mesh","box","box_owner","match_id","round","life","role"};
+    for (unsigned i=0;i<9;++i) if (!integer(L,1,keys[i],values[i])) return unavailable(L,reason_name(Reason::BadInput));
+    if (values[6]>UINT32_MAX || values[7]>UINT32_MAX || values[8]>2) return unavailable(L,reason_name(Reason::BadInput));
+    fresh.world.address=values[0]; fresh.pawn.address=values[1]; fresh.mesh.address=values[2];
+    fresh.box.address=values[3]; fresh.box_owner.address=values[4]; fresh.match_id=values[5];
+    fresh.round=static_cast<std::uint32_t>(values[6]); fresh.life=static_cast<std::uint32_t>(values[7]);
+    std::uint64_t marker{}; if (!integer(L,1,"marker",marker,true)) return unavailable(L,reason_name(Reason::BadInput));
+    const auto ok=state.mark(fresh,static_cast<unsigned>(values[8]),marker,provider().now_ms());
+    if (!ok) return unavailable(L,"no active exact entry");
+    lua_pushboolean(L,1); return 1; // No unpaired entry geometry is returned.
+}
+}
+void hsmp_box_probe_install(lua_State* L)
+{
+    const auto top=lua_gettop(L);
+    if (lua_getglobal(L,"HSMPNative")==LUA_TTABLE)
+    {
+        lua_createtable(L,0,7);
+        struct Entry { const char* name; lua_CFunction fn; };
+        for (const auto& e : {Entry{"begin",begin},Entry{"prepare",prepare},Entry{"activate",activate},Entry{"stop",stop},Entry{"status",status},Entry{"read",read},Entry{"mark",mark}})
+        { lua_pushcfunction(L,e.fn); lua_setfield(L,-2,e.name); }
+        lua_setfield(L,-2,"box_probe");
+    }
+    lua_settop(L,top);
+}

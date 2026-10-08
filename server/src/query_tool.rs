@@ -31,7 +31,7 @@
 //!   master <url> <index 1..n> <n>      (only when a master answered)
 //!   lan    <0|1> <servers found>        (only with --lan)
 //!   done   <0|1>
-//!   S host port name map mode players max pwd proto version region ping_ms source live content proto_min proto_max nat punch
+//!   S host port name map mode players max pwd proto version region ping_ms source live content proto_min proto_max nat punch mods mods_kb
 //!
 //! ping_ms: -1 = pending, -2 = no answer. live: 1 if the server answered
 //! (fields then come from the server itself, fresher than the master).
@@ -40,6 +40,8 @@
 //! unknown); proto_min / proto_max: its protocol range (0 = unknown, use proto).
 //! nat: how the listing says it is reachable (open, upnp, pcp, natpmp, double, cone, symmetric,
 //! unknown; "" = not reported); punch: 1 if the list can relay a hole punch to it now.
+//! mods / mods_kb: the server mods it serves (count, size in KiB; 0 = none or not reported;
+//! docs/hosting/server-mods.md).
 
 // Only needed for PROTOCOL_VERSION; kept out of this binary's test build so
 // proto.rs's own tests (run by hsmp-server / hsmp-sidecar) aren't duplicated.
@@ -113,6 +115,9 @@ struct Row {
     /// the list can relay a punch to it right now.
     nat: String,
     punch: bool,
+    /// Server mods: count and size in KiB (0 = none / not reported).
+    mods: u32,
+    mods_kb: u64,
 }
 
 fn tsv(s: &str) -> String {
@@ -175,6 +180,8 @@ fn row_from_json(v: &serde_json::Value) -> Option<Row> {
         proto_max: n("proto_max").min(65_535),
         nat: s("nat"),
         punch: o.get("punch").and_then(|x| x.as_bool()).unwrap_or(false),
+        mods: n("mods").min(hsmp_ipc::schema::mods::MAX_MODS as u32),
+        mods_kb: o.get("mods_bytes").and_then(|x| x.as_u64()).unwrap_or(0).min(1 << 30).div_ceil(1024),
     })
 }
 
@@ -225,10 +232,11 @@ fn render(gen: &str, st: &Status, meta: &Meta, rows: &[Row], done: bool) -> Stri
     out.push_str(&format!("done\t{}\n", if done { 1 } else { 0 }));
     for r in rows {
         out.push_str(&format!(
-            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "S\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             tsv(&r.host), r.port, tsv(&r.name), tsv(&r.map), tsv(&r.mode),
             r.players, r.max, r.pwd as u8, r.proto, tsv(&r.version), tsv(&r.region),
             r.ping, r.source, r.live as u8, r.content, r.proto_min, r.proto_max, tsv(&r.nat), r.punch as u8,
+            r.mods, r.mods_kb,
         ));
     }
     out
@@ -421,6 +429,8 @@ fn apply_info(r: &mut Row, ms: u64, info: &query::QueryInfo) {
     r.proto_min = info.proto_min;
     r.proto_max = info.proto_max;
     r.content = query::content_tag_of_tag(&info.content_tag);
+    r.mods = info.mods.min(hsmp_ipc::schema::mods::MAX_MODS as u32);
+    r.mods_kb = info.mods_kb.min(1 << 20);
 }
 
 /// "7777" / "7777-7786" -> ports (at most 64). None = malformed.
@@ -647,7 +657,7 @@ mod tests {
         let st = Status { code: "ok", msg: String::new(), listed: 2, skipped: 0 };
         let out = render("g", &st, &Meta::default(), &rows, true);
         let s: Vec<&str> = out.lines().find(|l| l.starts_with("S\t")).unwrap().split('\t').collect();
-        assert_eq!(&s[15..], &["abababababababab", "6", "7", "", "0"]);
+        assert_eq!(&s[15..20], &["abababababababab", "6", "7", "", "0"]);
         let mut r = rows[1].clone();
         apply_info(&mut r, 5, &query::QueryInfo { content_tag: "CDCDCDCDCDCDCDCD".into(), proto_min: 6, proto_max: 6, ..Default::default() });
         assert_eq!((r.content.as_str(), r.proto_min), ("cdcdcdcdcdcdcdcd", 6));
@@ -661,7 +671,25 @@ mod tests {
         let st = Status { code: "ok", msg: String::new(), listed: 2, skipped: 0 };
         let out = render("g", &st, &Meta::default(), &rows, true);
         let s: Vec<&str> = out.lines().find(|l| l.starts_with("S\t")).unwrap().split('\t').collect();
-        assert_eq!(&s[18..], &["cone", "1"]);
+        assert_eq!(&s[18..20], &["cone", "1"]);
+    }
+
+    /// The server mods columns: from the listing (`mods`, `mods_bytes`) and from the server's
+    /// own query reply; absent = 0.
+    #[test]
+    fn mods_columns() {
+        let body = r#"[{"host":"1.2.3.4","port":7777,"mods":3,"mods_bytes":2049},{"host":"1.2.3.4","port":7778,"mods":999}]"#;
+        let (mut rows, _) = parse_master_list(body).unwrap();
+        assert_eq!((rows[0].mods, rows[0].mods_kb), (3, 3));
+        assert_eq!(rows[1].mods, hsmp_ipc::schema::mods::MAX_MODS as u32, "clamped");
+        let st = Status { code: "ok", msg: String::new(), listed: 2, skipped: 0 };
+        let out = render("g", &st, &Meta::default(), &rows, true);
+        let s: Vec<&str> = out.lines().find(|l| l.starts_with("S\t")).unwrap().split('\t').collect();
+        assert_eq!(&s[20..], &["3", "3"]);
+        apply_info(&mut rows[1], 5, &query::QueryInfo { mods: 2, mods_kb: 40, ..Default::default() });
+        assert_eq!((rows[1].mods, rows[1].mods_kb), (2, 40));
+        let none: Vec<serde_json::Value> = serde_json::from_str(r#"[{"host":"1.2.3.4","port":1}]"#).unwrap();
+        assert_eq!(row_from_json(&none[0]).map(|r| (r.mods, r.mods_kb)), Some((0, 0)));
     }
 
     #[test]
@@ -679,7 +707,7 @@ mod tests {
         let out = render("g", &st, &Meta::default(), &rows, true);
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines.iter().filter(|l| l.starts_with("S\t")).count(), 1);
-        assert_eq!(lines.last().unwrap().split('\t').count(), 20);
+        assert_eq!(lines.last().unwrap().split('\t').count(), 22);
     }
 
     #[test]

@@ -35,6 +35,12 @@ pub(super) fn advance(inner: &mut Inner, now_ms: u64) -> Option<MatchResult> {
         }
     }
 
+    // The mode's own round end (King of the hill target, the round clock,
+    // sudden death): the same settle as the last side standing.
+    if modes::step(inner, dt) && inner.match_state == "live" {
+        begin_settle(inner, standing(inner).len());
+    }
+
     // Countdown bookkeeping / state transitions. A countdown whose load
     // barrier is still open stays frozen.
     let frozen = inner.match_state == "countdown" && !inner.barrier_passed;
@@ -49,9 +55,9 @@ pub(super) fn advance(inner: &mut Inner, now_ms: u64) -> Option<MatchResult> {
                 _ => None,
             };
             if next == Some("paused_expired") {
-                let present = present_participants(inner);
-                if present.len() == 1 {
-                    forfeit_to(inner, present[0]);
+                // One side (player or team) still here wins by forfeit.
+                if let Some((_, pid)) = modes::single_side(inner, |p| is_present(inner, p)) {
+                    forfeit_to(inner, pid);
                 } else {
                     reset_to_lobby(inner);
                 }
@@ -110,6 +116,7 @@ fn go_live(inner: &mut Inner) {
         for (key, nick) in late {
             info!(%nick, round, "match: late joiner enters the next round");
             inner.participants.push(key);
+            modes::seat_late(inner, key);
         }
     }
     inner.round_deaths.clear();
@@ -125,6 +132,7 @@ fn go_live(inner: &mut Inner) {
     }
     inner.match_reason.clear();
     inner.sess.live_ms = inner.now_ms;
+    modes::on_live(inner);
     // Too few fighters loaded (the others failed to load or missed the 45 s
     // barrier): the round is void — no winner, nobody loses — instead of a
     // lone fighter "winning" it or the match stalling. Repeated voids end the
@@ -257,6 +265,8 @@ pub fn tick_period(tick_hz: u32) -> Duration {
 pub(super) struct TickScratch {
     /// Kit view filled before the state lock, swapped into `Inner::sess.kits`.
     kits: KitView,
+    /// The roulette / brawl kit generation loadout.rs was last told about.
+    kit_gen: u32,
     ids: Vec<PeerId>,
     timed: Vec<(SocketAddr, PeerId)>,
     deaths_sent_ms: u64,
@@ -269,6 +279,8 @@ pub(super) struct TickOut {
     /// The `session` record and who gets it.
     pub session: Option<(Vec<SocketAddr>, Vec<u8>)>,
     pub admin_promoted: bool,
+    /// A new imposed round kit (None inside = players' own kits again) for loadout.rs.
+    pub kit: Option<Option<crate::loadout::KitSel>>,
 }
 
 /// The part of a tick that runs under the state lock at `now` (transport clock): match flow
@@ -296,7 +308,7 @@ pub(super) fn tick_locked(state: &ServerState, inner: &mut Inner, sc: &mut TickS
     if due && matches!(inner.match_state.as_str(), "live" | "roundover" | "match_over") {
         let round = inner.match_round;
         let again: Vec<Vec<u8>> = inner.round_deaths.iter()
-            .map(|&(peer_id, killer, cause)| death_msg(peer_id, round, killer, cause))
+            .map(|&(peer_id, killer, cause, life)| combat_glue::scoped_death_msg(peer_id,round,killer,cause,inner.sess.match_id,life))
             .collect();
         for m in again { inner.out_msgs.push((None, m)); }
     }
@@ -307,6 +319,15 @@ pub(super) fn tick_locked(state: &ServerState, inner: &mut Inner, sc: &mut TickS
     let session = session::session_due(inner, now)
         .filter(|_| !inner.peers.is_empty())
         .map(|s| (inner.peers.keys().copied().collect::<Vec<_>>(), session_msg(&s)));
+    // The `mode` / `zone` records (peers with caps::MODES / ZONE only).
+    let mut mode_out = std::mem::take(&mut inner.out_msgs);
+    modes::records_due(inner, now, &mut mode_out);
+    inner.out_msgs = mode_out;
+    // Roulette / brawl: a new round kit for loadout.rs (applied after the lock).
+    let kit = (sc.kit_gen != inner.modes.kit_gen).then(|| {
+        sc.kit_gen = inner.modes.kit_gen;
+        inner.modes.kit.as_ref().map(|k| k.selection())
+    });
 
     // `timed_out`, into the kept buffer.
     sc.timed.clear();
@@ -327,7 +348,7 @@ pub(super) fn tick_locked(state: &ServerState, inner: &mut Inner, sc: &mut TickS
     // (kick, ban, RCON, timeout) — no-op when unchanged.
     state.net.reconcile(&inner.peers);
     let timed_out = if sc.timed.is_empty() { Vec::new() } else { std::mem::take(&mut sc.timed) };
-    TickOut { timed_out, match_result, session, admin_promoted }
+    TickOut { timed_out, match_result, session, admin_promoted, kit }
 }
 
 pub async fn tick_loop(
@@ -354,7 +375,7 @@ pub async fn tick_loop(
         // Kit rules and per-peer kit revisions for the session snapshot
         // (loadout.rs owns them; read before the state lock, never nested).
         crate::loadout::session_view_into(&mut sc.kits).await;
-        let TickOut { timed_out, match_result, session: session_broadcast, admin_promoted } = {
+        let TickOut { timed_out, match_result, session: session_broadcast, admin_promoted, kit } = {
             let mut inner = state.inner.lock().await;
             let now = state.net.now_ms();
             tick_locked(&state, &mut inner, &mut sc, now)
@@ -362,6 +383,9 @@ pub async fn tick_loop(
 
         if let Some((addrs, msg)) = session_broadcast {
             broadcast_msg(&socket, &state, &addrs, msg).await;
+        }
+        if let Some(k) = kit {
+            crate::loadout::impose(&socket, &state, k).await;
         }
         if let Some(r) = match_result {
             write_history(&r).await;

@@ -236,7 +236,7 @@ mod tests {
         assert!(!d.join(".damage_in.jsonl").exists(), "combat records are not mirrored");
         // game -> sidecar: a game-state file (no outbox file is bridged: G2S messages are records)
         std::fs::write(d.join(".world_claim.jsonl"), "{\"kind\":\"match\",\"verb\":\"ready\"}\nnot json\n").unwrap();
-        std::fs::write(d.join("me_4242.json"), r#"{"pid":4242,"tick":5,"pos":[1,2,3],"rot":[0,0,0],"vel":[0,0,0]}"#).unwrap();
+        std::fs::write(d.join("me_4242.json"), r#"{"pid":4242,"tick":5,"pos":[1,2,3],"rot":[0,0,0],"vel":[0,0,0],"match_id":3,"round":1,"life":1}"#).unwrap();
         std::thread::sleep(POLL);
         b.poll_files(&g);
         let s = g.seg();

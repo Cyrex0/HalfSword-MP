@@ -20,6 +20,8 @@ enum C {
     Kick { peer_id: PeerId, reason: String },
     Promote { peer_id: PeerId, admin_role: u8 },
     SetTeam(u8),
+    SetTeamOf(PeerId, u8),
+    SetOption(u8, u32),
 }
 
 /// Test shorthand for a config patch (`None` = unchanged).
@@ -28,6 +30,7 @@ struct Patch {
     best_of: Option<u8>,
     mode: Option<u8>,
     kit_rules: Option<(u8, u16)>,
+    team_rule: Option<u8>,
 }
 
 impl C {
@@ -44,10 +47,13 @@ impl C {
                 if let Some(b) = p.best_of { c.patch.mask |= cfg::BEST_OF; c.patch.best_of = b; }
                 if let Some(m) = p.mode { c.patch.mask |= cfg::MODE; c.patch.mode = m; }
                 if let Some((m, b)) = p.kit_rules { c.patch.mask |= cfg::KIT_RULES; c.patch.kit_mode = m; c.patch.kit_budget = b; }
+                if let Some(t) = p.team_rule { c.patch.mask |= cfg::TEAM_RULE; c.patch.team_rule = t; }
             }
             C::Kick { peer_id, reason } => { c.op = cmd_op::KICK; c.peer_id = *peer_id; c.text = Str::new(reason); }
             C::Promote { peer_id, admin_role } => { c.op = cmd_op::PROMOTE; c.peer_id = *peer_id; c.role = *admin_role; }
             C::SetTeam(t) => { c.op = cmd_op::SET_TEAM; c.role = *t; }
+            C::SetTeamOf(p, t) => { c.op = cmd_op::SET_TEAM; c.peer_id = *p; c.role = *t; }
+            C::SetOption(o, v) => { c.op = cmd_op::SET_OPTION; c.choice = *o; c.ballot = *v; }
         }
         c
     }
@@ -265,8 +271,20 @@ fn seat(i: &Inner, a: SocketAddr) -> u8 {
 #[tokio::test]
 async fn nan_root_is_refused_and_never_disables_the_speed_cap() {
     let st = Arc::new(new_state());
-    let a = { let mut i = st.inner.lock().await; join(&mut i, 1, "A") };
-    let body = hsmp_ipc::schema::pose::Root::default();
+    // A verified placement for round 1 of match 91 at the origin (protocol 11: roots come from it).
+    let a = {
+        let mut i = st.inner.lock().await;
+        let a = join(&mut i, 1, "A");
+        let id = i.peers[&a].id;
+        i.match_state = "countdown".into(); i.match_round = 0; i.spawn_round = 1;
+        i.match_arena = "Map_Arena_Alley".into(); i.sess.match_id = 91;
+        i.spawn_plan = vec![crate::spawns::SpawnAssign { peer_id: id, spawn_id: 1 << 8, slot: 0, pos: [0.0; 3], yaw: 0.0, protect_ms: 3000 }];
+        let gs = rec::GameStatus { match_id: 91, round: 1, life: 1, spawn_id: 1 << 8,
+            flags: v5::status_flags::LOADED, arena: Str::new("Map_Arena_Alley"), ..Default::default() };
+        assert!(match_core::game_status_placed(&mut i, id, &gs));
+        a
+    };
+    let body = hsmp_ipc::schema::pose::Root { match_id: 91, round: 1, life: 1, rot: [0.0, 0.0, 0.0, 1.0], ..Default::default() };
     assert!(accept_root(&st, a, [f32::NAN, 0.0, 0.0], body).await.is_none(), "NaN as the first packet");
     assert!(accept_root(&st, a, [f32::INFINITY, 0.0, 0.0], body).await.is_none());
     assert!(accept_root(&st, a, [100.0, 0.0, 0.0], body).await.is_some());
@@ -756,8 +774,10 @@ fn command_results() {
     assert_eq!(r.reason_code, CmdReason::REV_MISMATCH);
     let r = cmd(&mut i, a, 11, patch(Patch { best_of: Some(0), ..Default::default() }));
     assert_eq!(r.reason_code, CmdReason::INVALID_VALUE);
-    let r = cmd(&mut i, a, 12, patch(Patch { mode: Some(v5::Mode::FFA), ..Default::default() }));
+    // Host and Guest run clients without caps::MODES: a mode they cannot play is refused.
+    let r = cmd(&mut i, a, 12, patch(Patch { mode: Some(v5::Mode::TEAM_ELIM), ..Default::default() }));
     assert_eq!(r.reason_code, CmdReason::UNSUPPORTED);
+    assert!(r.reason_text.contains("Guest") && r.reason_text.contains("Host"), "{}", r.reason_text);
     let before = i.sess.config_rev;
     let r = cmd(&mut i, a, 13, patch(Patch { best_of: Some(19), ..Default::default() }));
     assert!(r.ok);
@@ -794,6 +814,46 @@ fn command_results() {
     assert!(cl(&mut i, Actor::Peer(a), Some(25), 0, &C::Kick { peer_id: bid, reason: String::new() }, &mut fx).0.ok);
     assert_eq!(fx.kicks.len(), 1);
     assert_eq!(fx.kicks[0].0, b);
+}
+
+/// Game modes from the lobby: the mode in SET_CONFIG, players picking their own FIXED team,
+/// the host moving players and setting options; all frozen once the match starts.
+#[test]
+fn mode_teams_and_options_are_lobby_commands() {
+    let st = new_state();
+    let mut i = st.inner.try_lock().unwrap();
+    i.next_peer_id = 92_001; // ids of their own: the negotiated-caps map is process-wide
+    let a = join(&mut i, 1, "Host");
+    let b = join(&mut i, 2, "Guest");
+    let (ida, idb) = (i.peers[&a].id, i.peers[&b].id);
+    for id in [ida, idb] { crate::interact::note_caps(id, hsmp_net::net::caps::MODES); }
+    let patch = |p: Patch| C::SetConfig(p);
+    let r = cmd(&mut i, b, 1, patch(Patch { mode: Some(v5::Mode::TEAM_ELIM), ..Default::default() }));
+    assert_eq!(r.reason_code, CmdReason::NOT_ADMIN);
+    let r = cmd(&mut i, a, 2, patch(Patch { mode: Some(v5::Mode::TEAM_ELIM), team_rule: Some(v5::TeamRule::FIXED), ..Default::default() }));
+    assert!(r.ok, "{:?}", r);
+    assert_eq!(cmd_name(&C::SetConfig(Patch { mode: Some(1), ..Default::default() }).rec(1, 0)), "mode");
+    let s = tv(&build_session(&i, 0));
+    assert_eq!((s.config.mode, s.config.team_rule, s.config.teams), (v5::Mode::TEAM_ELIM, v5::TeamRule::FIXED, 2));
+    // Players pick their own team; only the host moves others.
+    assert!(cmd(&mut i, b, 3, C::SetTeam(2)).ok);
+    assert_eq!(cmd(&mut i, b, 4, C::SetTeamOf(ida, 2)).reason_code, CmdReason::NOT_ADMIN);
+    assert!(cmd(&mut i, a, 5, C::SetTeamOf(idb, 1)).ok);
+    assert!(cmd(&mut i, a, 6, C::SetTeam(2)).ok);
+    let team = |i: &Inner, a: SocketAddr| build_session(i, 0).rows.iter().find(|r| r.peer_id == i.peers[&a].id).unwrap().team;
+    assert_eq!((team(&i, a), team(&i, b)), (2, 1));
+    // Options: the host only.
+    assert_eq!(cmd(&mut i, b, 7, C::SetOption(rec::mode_opt::FRIENDLY_FIRE, 1)).reason_code, CmdReason::NOT_ADMIN);
+    assert!(cmd(&mut i, a, 8, C::SetOption(rec::mode_opt::FRIENDLY_FIRE, 1)).ok);
+    assert_eq!(cmd(&mut i, a, 9, C::SetOption(rec::mode_opt::KOTH_TARGET, 5000)).reason_code, CmdReason::INVALID_VALUE);
+    assert!(i.modes.cfg.friendly_fire);
+    // In a match teams and options are frozen.
+    assert!(cmd(&mut i, a, 10, C::Start { force: true }).ok);
+    assert_eq!((team(&i, a), team(&i, b)), (2, 1), "the picks are the match's teams");
+    assert_eq!(cmd(&mut i, b, 11, C::SetTeam(2)).reason_code, CmdReason::WRONG_PHASE);
+    assert_eq!(cmd(&mut i, a, 12, C::SetOption(rec::mode_opt::FRIENDLY_FIRE, 0)).reason_code, CmdReason::WRONG_PHASE);
+    // A client without caps::MODES may not join this server now.
+    assert!(modes::join_refusal(&i, 0).is_some());
 }
 
 #[test]

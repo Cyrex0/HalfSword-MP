@@ -154,6 +154,23 @@ mod tests {
         assert!(match_events(&evs, &st, 3, 0).is_none());
         assert!(match_events(&evs, &st, 2, 5000).is_none());
     }
+    #[test]
+    fn readiness_requires_each_actual_server_answer() {
+        let step = json!({"ev":"cmd_result","who":"each","where":{"cmd":"ready","ok":"true","source":"server"}});
+        let mut evs = vec![
+            ev(json!({"ev":"lobby_ready","inst":"1","src":"inst","wall_ms":1000})),
+            ev(json!({"ev":"lobby_ready","inst":"2","src":"inst","wall_ms":1100})),
+            ev(json!({"ev":"cmd_result","inst":"1","src":"inst","cmd":"ready","ok":true,"source":"server","wall_ms":1200})),
+            ev(json!({"ev":"cmd_result","inst":"2","src":"inst","cmd":"ready","ok":true,"source":"inferred","wall_ms":1300})),
+        ];
+        assert!(match_events(&evs, &step, 2, 0).is_none(), "connected or inferred is not server-confirmed readiness");
+        evs.push(ev(json!({"ev":"cmd_result","inst":"2","src":"inst","cmd":"ready","ok":false,"source":"server","wall_ms":1400})));
+        assert!(match_events(&evs, &step, 2, 0).is_none(), "a refusal cannot admit START");
+        evs.push(ev(json!({"ev":"cmd_result","inst":"2","src":"inst","cmd":"ready","ok":true,"source":"server","wall_ms":1500})));
+        let hits = match_events(&evs, &step, 2, 0).unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(wall(&hits[1]), 1500, "START waits for the delayed second server answer");
+    }
     /// server_restart: after a restart the sidecar reconnects (`obs_sidecar connected`)
     /// before the Director is back in the lobby. For an instance that has emitted a real
     /// lobby_ready in the run, only a new lobby_ready satisfies the wait.

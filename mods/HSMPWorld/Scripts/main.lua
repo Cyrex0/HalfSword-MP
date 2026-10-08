@@ -151,6 +151,11 @@ local K = {}
 local W2 = {}   -- identical-worlds and record helpers (same reason)
 -- How bodies somebody else simulates are shown (world_follow.lua, next to this file).
 K.FW = load_module("world_follow")
+K.NA = load_module("native_array")
+if not K.NA or type(K.NA.each)~="function" then
+    Log("FATAL: native_array.lua missing - %s disabled (native enumeration required)","HSMPWorld")
+    return
+end
 if not K.FW then
     Log("FATAL: world_follow.lua missing - %s disabled (deploy copies every Scripts/*.lua)", "HSMPWorld")
     return
@@ -236,31 +241,31 @@ local WEAPON_BASE_PATH = "/Game/Assets/Weapons/Blueprints/ModularWeaponBP.Modula
 -- HSMPLoadout's WEAPON_FIELDS). Copied from the dropping peer's stand-in
 -- weapon so the remote copy looks like the real one.
 local PASSPORT_FIELDS = {
-    { "WeaponClass_54_B478ECF7499977809745A3973AD678EC", "class" },
-    { "ID_70_C02CF656483647A1933EEA96314B78A6", "num" },
-    { "Name_57_3729B51148E846FE8DD336B9419BCEE1", "name" },
-    { "HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D", "class" },
-    { "HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9", "class" },
-    { "HeadModule_11_62DF53134688807E1DA7F4A20E9F7139", "class" },
-    { "GuardModule_13_6DD2B06245505E53B529D090333012F0", "class" },
-    { "PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6", "class" },
-    { "GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4", "class" },
-    { "HeadSize_21_2D425E61473B8F64FBAB51B223459D57", "vec" },
-    { "GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704", "vec" },
-    { "GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF", "vec" },
-    { "PommelSize_27_660CC00C49C26D503E16B2BC58CE115E", "vec" },
-    { "CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7", "num" },
-    { "CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927", "num" },
-    { "CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10", "num" },
-    { "CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173", "num" },
-    { "MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36", "num" },
-    { "MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2", "num" },
-    { "MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A", "num" },
-    { "MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB", "num" },
-    { "ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743", "color" },
-    { "ColorLeather_48_DC45F07E4C0C3280278212A7158EE638", "color" },
-    { "Price_60_83FE5A624EA188485BBE4E9C8606AEE5", "num" },
-    { "Tier_67_05026E6F43B7300AA8BACC9D9F9AB461", "num" },
+    { "WeaponClass_54_B478ECF7499977809745A3973AD678EC", "class", "class" },
+    { "ID_70_C02CF656483647A1933EEA96314B78A6", "num", "id" },
+    { "Name_57_3729B51148E846FE8DD336B9419BCEE1", "name", "name" },
+    { "HeadSubModule1_7_ABBFD017411F42A4950B1C9F2360A30D", "class", "head_sub1" },
+    { "HeadSubModule2_9_90AAA8304C7794E1BF814C9354A1A7E9", "class", "head_sub2" },
+    { "HeadModule_11_62DF53134688807E1DA7F4A20E9F7139", "class", "head" },
+    { "GuardModule_13_6DD2B06245505E53B529D090333012F0", "class", "guard" },
+    { "PommelModule_15_561B01324BFCD4360DAE9A95299BB9D6", "class", "pommel" },
+    { "GripModule_18_F4DF51EB4E742195B8C6BAB17E4C5DB4", "class", "grip" },
+    { "HeadSize_21_2D425E61473B8F64FBAB51B223459D57", "vec", "head_size" },
+    { "GuardSize_23_5A1AA0E04708E86FEFF61E974DDA8704", "vec", "guard_size" },
+    { "GripSize_25_AC1660814C4C25C521AAA8830FE8ECCF", "vec", "grip_size" },
+    { "PommelSize_27_660CC00C49C26D503E16B2BC58CE115E", "vec", "pommel_size" },
+    { "CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7", "num", "mass_head" },
+    { "CustomMassScaleGuard_51_3A9024E74306B7BB5D186087011D1927", "num", "mass_guard" },
+    { "CustomMassScaleGrip_32_0EAADEE0419C05C6DB38F0AE134A9B10", "num", "mass_grip" },
+    { "CustomMassScalePommel_34_0AB28D814BDEF17D408D0DAA3A453173", "num", "mass_pommel" },
+    { "MaterialMetalSteel_37_AB7A28C94B176CF81A6C8BA34AC57C36", "num", "mat_steel" },
+    { "MaterialMetalColored_39_DC2EAC244758A8D82855CC940784A1D2", "num", "mat_colored" },
+    { "MaterialWeood_41_E0B3C8DB48943B878AEFA3AB01E7B99A", "num", "mat_wood" },
+    { "MaterialLeather_43_41D1114148FDB4FE4DACC8A2F4CA9FEB", "num", "mat_leather" },
+    { "ColorWood_46_F3AE05AD4495EBCD1D354C8025D7C743", "color", "color_wood" },
+    { "ColorLeather_48_DC45F07E4C0C3280278212A7158EE638", "color", "color_leather" },
+    { "Price_60_83FE5A624EA188485BBE4E9C8606AEE5", "num", "price" },
+    { "Tier_67_05026E6F43B7300AA8BACC9D9F9AB461", "num", "tier" },
 }
 
 local WEAPON_CLASS = "ModularWeaponBP_C"
@@ -318,7 +323,7 @@ function RD.pc() return UEHelpers.GetPlayerController() end
 function RD.pawn_of(pc)
     pc = pc or UEHelpers.GetPlayerController()
     if pc and pc:IsValid() and pc.Pawn and pc.Pawn:IsValid() then return pc.Pawn end
-    return nil
+    return WG.ai_pawn()   -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
 end
 local function valid(o)
     if o == nil then return false end
@@ -537,8 +542,9 @@ local send_seq = 0   -- world_out frame seq (continues across W resets in one pr
 local last_clock = clock_ms()
 
 local function new_level(name, waddr, now)
+    W2.world_lineage = (W2.world_lineage or 0) + 1
     W = {
-        name = name, addr = waddr, level = fnv1a(name), t0 = now, tick = 0,
+        name = name, addr = waddr, lineage = W2.world_lineage, level = fnv1a(name), t0 = now, tick = 0,
         epoch = nil, synced = false, sync_next = 0, sync_tries = 0,
         objs = {}, by_lid = {}, by_nid = {}, by_addr = {}, taken = {}, known_actor = {},
         owners = {}, pending = {}, fclock = {}, fseq = {}, peer_rtt = {}, req = 0, seq = 0,
@@ -546,7 +552,7 @@ local function new_level(name, waddr, now)
         last_owners = nil, last_manifest = nil, last_remote = nil, last_mout = nil, last_held = nil,
         mlen = 0, unmatched = 0, dyn_queue = {}, dyn_failed = {}, dyn_ctr = 1, my_items = {},
         classes = {}, unbound_rows = {}, restore_due = nil, manifest_seen = false, synced_at = 0,
-        puppets = {}, puppet_next = 0,
+        puppets = {}, puppet_next = 0, peer_passports = {},
         stats = { sent = 0, recv = 0, claims = 0, snaps = 0, t = now, follow = 0 },
         -- identical worlds
         actors = {}, known_state = {}, unbound_ids = {},
@@ -625,8 +631,7 @@ function W2.actor_constraints(a)
     pcall(function() arr = a:K2_GetComponentsByClass(cc) end)
     if arr then
         pcall(function()
-            arr:ForEach(function(_, e)
-                local c = e:get()
+            K.NA.each(arr,function(c)
                 if valid(c) then out[#out + 1] = { fname_of(c) or ("pc" .. #out), c } end
             end)
         end)
@@ -974,11 +979,25 @@ T.can_drive = can_drive
 
 local function set_sim(o, on)
     if not can_drive(o) then return false end
-    if is_sim(o.body) == on then o.sim = on; return true end
-    pcall(function() o.body:SetSimulatePhysics(on) end)
+    if on == false and W2.note_freeze and not W2.note_freeze(o) then return false end
+    local read_ok, current = pcall(RD.sim, o.body)
+    if not read_ok then return false end
+    if current == on then
+        o.sim = on
+        if on and W2.clear_freeze then W2.clear_freeze(o) end
+        return true
+    end
+    local ok = pcall(function() o.body:SetSimulatePhysics(on) end)
+    if not ok then return false end
+    local verified, actual = pcall(RD.sim, o.body)
+    if not verified then return false end
+    o.sim = actual == true
+    if o.sim ~= on then return false end
     o.sim = on
+    if on and W2.clear_freeze then W2.clear_freeze(o) end
     return true
 end
+T.set_sim = set_sim
 
 -- End an anchor pin (o.pin_kin: a prop held kinematic on its anchor). Must
 -- run on a same-world restore, a session end and a peer-id change, not only
@@ -987,9 +1006,9 @@ end
 -- READY_TIMEOUT_MS, the next scan skips it as "static"). restore = put the
 -- scene's own simulation flag (sim0) back (only when we may drive the body).
 function W2.unpin(o, restore)
-    local was = o.pin_kin
-    o.pin_kin, o.pinned_at = nil, nil
-    if was and restore and o.sim0 ~= nil and o.sim ~= o.sim0 then set_sim(o, o.sim0) end
+    local was = o.pin_kin or o.pin_pending
+    if was and restore and o.sim0 ~= nil and o.sim ~= o.sim0 and not set_sim(o, o.sim0) then return false end
+    o.pin_kin, o.pinned_at, o.pin_pending = nil, nil, nil
     return was
 end
 
@@ -1008,7 +1027,7 @@ local function teleport(o, pos, rot, vel, rest)
         end
         return false
     end
-    pcall(function()
+    local ok = pcall(function()
         o.body:K2_SetWorldLocationAndRotation(pos, rot, false, {}, true)
         if o.sim then
             o.body:SetPhysicsLinearVelocity(vel or ZERO, false, NAME_NONE)
@@ -1016,9 +1035,11 @@ local function teleport(o, pos, rot, vel, rest)
             if rest then o.body:PutRigidBodyToSleep(NAME_NONE) end
         end
     end)
+    if not ok then return false end
     o.pos, o.rot = pos, rot
     return true
 end
+T.teleport = teleport
 
 local function read_body(o, now)
     if not alive(o) then return false end
@@ -1240,21 +1261,23 @@ end
 -- --- per-body update --------------------------------------------------------------------------
 local function become_local(o, why)
     -- A pinned prop that changes hands is no longer pinned.
-    if o.pin_kin and not o.kin then W2.unpin(o, true) else o.pin_kin, o.pinned_at = nil, nil end
+    if (o.pin_kin or o.pin_pending) and not o.kin then
+        if not W2.unpin(o, true) then return false end
+    else o.pin_kin, o.pinned_at, o.pin_pending = nil, nil, nil end
     -- Physics back on after following someone else's stream.
     if o.kin then
-        o.kin = false
         local last = o.buf[#o.buf]
         local asleep = last and (last.flags & WF_ASLEEP) ~= 0
         -- Place it at the final rest frame while still kinematic, THEN turn
         -- physics on: enabling simulation first and teleporting a live body
         -- afterwards kicks it (and whatever it overlaps).
         if why == "free" and asleep then
-            teleport(o, last.pos, quat_to_rot(last.q[1], last.q[2], last.q[3], last.q[4]), ZERO)
+            if not teleport(o, last.pos, quat_to_rot(last.q[1], last.q[2], last.q[3], last.q[4]), ZERO) then return false end
         end
         local want = o.prev_sim_flag
         if want == nil then want = o.sim0 end
-        set_sim(o, want)
+        if not set_sim(o, want) then return false end
+        o.kin = false
         if last and o.sim and can_drive(o) then
             -- Hinged doors / levers / lids (and anything spinning): keep the
             -- owner's angular velocity, derived from its last two samples
@@ -1284,7 +1307,9 @@ local function become_local(o, why)
             o.anchor_pos, o.anchor_rot = o.pos, o.rot
         end
     end
+    return true
 end
+T.become_local = become_local
 
 local function follower_update(o, owner, now)
     if not alive(o) then return end
@@ -1337,7 +1362,7 @@ local function follower_update(o, owner, now)
             return
         end
         o.prev_sim_flag = nil
-        set_sim(o, false)
+        if not set_sim(o, false) then return end
         o.kin = true
         -- start from where it is here and blend onto the owner's stream
         FW.reset(o.fw)
@@ -1382,8 +1407,22 @@ local function i_touched(o)
     return false
 end
 
+local function pin_anchor(o, now)
+    -- Retain the transition if freezing succeeds but placement fails.
+    -- The next tick retries placement rather than forgetting a frozen body.
+    o.pin_pending = true
+    if not set_sim(o, false) or not teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true) then return false end
+    o.pin_kin, o.pinned_at, o.pin_pending = true, now, nil
+    return true
+end
+T.pin_anchor = pin_anchor
+
 local function free_update(o, now)
-    if o.kin then become_local(o, "free") end
+    if o.kin and not become_local(o, "free") then return end
+    if o.pin_pending then
+        if not pin_anchor(o, now) then return end
+        return
+    end
     -- A pinned prop is held kinematic on its anchor (see the anchor pin below)
     -- until any Willie comes within PIN_FREE_DIST: physics is back on well
     -- before anyone can touch it (checked every tick, cheap: one distance to
@@ -1394,11 +1433,11 @@ local function free_update(o, now)
         if o.anchor_new then
             -- A new / healed anchor arrived: un-pin and apply it below
             -- (the anchor handling restores the anchor's simulation flag).
-            W2.unpin(o, true)
+            if not W2.unpin(o, true) then return end
         elseif not p or mine < K.PIN_FREE_DIST or nearest_puppet_dist(p) < K.PIN_FREE_DIST then
+            if p and o.anchor_rot and not teleport(o, p, o.anchor_rot, ZERO, true) then return end
+            if not set_sim(o, true) then return end
             o.pin_kin = nil
-            set_sim(o, true)
-            if p and o.anchor_rot then teleport(o, p, o.anchor_rot, ZERO, true) end
         else
             return
         end
@@ -1412,29 +1451,26 @@ local function free_update(o, now)
     local off = dist3(o.pos, o.anchor_pos)
     local spd = vlen(o.vel)
     if o.anchor_new then
-        o.anchor_new = false
         -- Initial / healed anchors are forced exactly; ordinary
         -- anchor updates only beyond the drift rule.
         local exact = o.force_exact
-        o.force_exact = nil
         local need = off > ANCHOR_DRIFT
             or (exact and (off > K.FORCE_POS or rot_diff(o.rot, o.anchor_rot) > K.FORCE_ROT))
-        if exact then
-            o.forced = true
-            if need then W.stats.forced = (W.stats.forced or 0) + 1 end
-        end
         if need and not (near and i_touched(o)) then
             -- Rest pose first (kinematic if it will end kinematic), then the
             -- simulation flag of the anchor.
-            if o.anchor_sim == false and o.sim then set_sim(o, false) end
-            teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
+            if o.anchor_sim == false and o.sim and not set_sim(o, false) then return end
+            if not teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true) then return end
             if o.anchor_sim == true and not o.sim then
-                set_sim(o, true)
-                teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
+                if not set_sim(o, true) or not teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true) then return end
             end
+            o.anchor_new, o.force_exact = false, nil
+            if exact then o.forced = true; W.stats.forced = (W.stats.forced or 0) + 1 end
             o.drift_since = nil
             return
         end
+        o.anchor_new, o.force_exact = false, nil
+        if exact then o.forced = true end
     end
     -- Anchor pin: a server-anchored body that nobody touches must stay on the shared
     -- pose. Each client's solver settles it independently (a few cm / degrees apart
@@ -1452,16 +1488,14 @@ local function free_update(o, now)
             -- off its anchor on that client for whole rounds because "my pawn is near")
             if off_anchor and spd < SETTLE_SPEED and not (o.nid and W.pending[o.nid])
                and now - (o.pinned_at or -1e9) >= K.PIN_EVERY_MS and pose_ok(o.anchor_pos, W.bounds) then
-                teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
+                if not teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true) then return end
                 W.stats.pinned = (W.stats.pinned or 0) + 1
                 -- Pinned once already and it settled away again (some props
                 -- teleported onto the shared pose re-settle a few cm / degrees off
                 -- within a second, every time): the local world does not hold
                 -- that pose, so hold it kinematic until a Willie nears.
                 if o.pinned_at and o.anchor_sim ~= false and o.sim then
-                    set_sim(o, false)
-                    teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
-                    o.pin_kin = true
+                    if not pin_anchor(o, now) then return end
                     W.stats.pin_kin = (W.stats.pin_kin or 0) + 1
                 end
                 o.pinned_at = now
@@ -1486,9 +1520,8 @@ local function free_update(o, now)
     if o.anchor_pos and o.anchor_sim ~= false and o.sim and pose_ok(o.anchor_pos, W.bounds) then
         for _, x in ipairs(W.kin_last or {}) do
             if x ~= o and x.applied_pos and o.pos and dist3(x.applied_pos, o.pos) < K.SHIELD_R then
-                set_sim(o, false)
-                teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
-                o.pin_kin, o.pinned_at, o.drift_since = true, now, nil
+                if not pin_anchor(o, now) then return end
+                o.drift_since = nil
                 W.stats.shielded = (W.stats.shielded or 0) + 1
                 return
             end
@@ -1499,9 +1532,8 @@ local function free_update(o, now)
     -- kinematic on that pose at once, until a Willie comes near (the anchor pin below).
     if o.freed_at and now - o.freed_at < K.FREED_HOLD_MS and o.anchor_pos and pose_ok(o.anchor_pos, W.bounds)
        and o.anchor_sim ~= false and o.sim then
-        set_sim(o, false)
-        teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
-        o.pin_kin, o.pinned_at, o.drift_since, o.freed_at = true, now, nil, nil
+        if not pin_anchor(o, now) then return end
+        o.drift_since, o.freed_at = nil, nil
         W.stats.pin_kin = (W.stats.pin_kin or 0) + 1
         return
     end
@@ -1512,15 +1544,13 @@ local function free_update(o, now)
     -- (rate-limited like the pin above).
     if o.anchor_key and spd < SETTLE_SPEED and not (o.nid and W.pending[o.nid])
        and now - (o.pinned_at or -1e9) >= K.PIN_EVERY_MS and pose_ok(o.anchor_pos, W.bounds) then
-        teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
+        if not teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true) then return end
         -- Pinned before and it came to rest off the anchor again: this world
         -- does not hold that pose (re-pinning every second does not keep it
         -- there). Hold it kinematic until a Willie comes near, exactly like the
         -- in-tolerance pin above.
         if o.pinned_at and o.anchor_sim ~= false and o.sim then
-            set_sim(o, false)
-            teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
-            o.pin_kin = true
+            if not pin_anchor(o, now) then return end
             W.stats.pin_kin = (W.stats.pin_kin or 0) + 1
         end
         o.pinned_at, o.drift_since = now, nil
@@ -1529,7 +1559,7 @@ local function free_update(o, now)
     end
     o.drift_since = o.drift_since or now
     if now - o.drift_since > ANCHOR_GRACE_MS and (off > ANCHOR_DRIFT or (o.anchor_key and off_anchor)) then
-        teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true)
+        if not teleport(o, o.anchor_pos, o.anchor_rot, ZERO, true) then return end
         o.drift_since = nil
         W.stats.snapback = (W.stats.snapback or 0) + 1
     elseif not o.anchor_key and spd < SETTLE_SPEED and pose_ok(o.pos, W.bounds) then
@@ -1542,7 +1572,7 @@ end
 
 local function owner_update(o, mode, now, send_tick)
     local held = my_hold_mode(o)
-    if o.kin then become_local(o, "owner") end
+    if o.kin and not become_local(o, "owner") then return end
     if not send_tick then return end
     if not read_body(o, now) then return end
     local moved = o.prev_pos and dist3(o.pos, o.prev_pos) or 1e9
@@ -1589,7 +1619,7 @@ local function update_body(o, now, send_tick)
     end
     local eo, emode = effective_owner(o)
     -- The body left the free state (owned / followed): no pin.
-    if o.pin_kin and eo ~= 0 then W2.unpin(o, true) end
+    if (o.pin_kin or o.pin_pending) and eo ~= 0 and not W2.unpin(o, true) then return end
     if eo == sess.my_id then
         if not o.was_mine then o.was_mine = true; o.awake = true; o.still_since = nil; o.consumed = nil end
         -- held items and bodies at my pawn stream at the fast rate (every 2nd tick), the
@@ -1751,6 +1781,7 @@ local function track_my_items(now)
                         actor = it.actor, actor_addr = ad, body = body, sim0 = sim, sim = sim, probed_at = clock_ms(),
                         spawn_pos = p, spawn_rot = r, anchor_pos = p, anchor_rot = r, pos = p, rot = r,
                         vel = v3(0, 0, 0), dyn_owner = sess.my_id, class_path = cls_path(it.actor),
+                        passport = W2.encode_passport(it.actor),
                         buf = {}, prio = 0, last_read = -999, last_probe = -999,
                     }
                     W.objs[#W.objs + 1] = o
@@ -1831,6 +1862,103 @@ local function passport_source(e)
     return nil
 end
 
+-- Remember plain record data while the peer still holds a weapon. The
+-- loadout mod may strip its actor before this mod spawns the dropped copy;
+-- relying on that actor makes module geometry depend on callback order.
+function W2.cache_peer_passports()
+    local ipc = W2.ipc()
+    if not ipc or not ipc.peer_rec then return end
+    for _, pp in ipairs(W.puppets or {}) do
+        local rec = ipc.peer_rec("peer_loadout", pp.id)
+        if type(rec) == "table" then
+            local cache = W.peer_passports[pp.id] or {}
+            W.peer_passports[pp.id] = cache
+            for i, side in ipairs({ "r", "l" }) do
+                local pass = rec[side]
+                if ((tonumber(rec.flags) or 0) & (1 << (i - 1))) ~= 0 and type(pass) == "table" then
+                    local path = W2.passport_path(pass.class)
+                    if path then cache[path] = pass end
+                end
+            end
+        end
+    end
+end
+
+function W2.passport_path(path)
+    if type(path) ~= "string" or path == "" then return nil end
+    path = path:gsub("^@", "/Game/Assets/")
+    if not path:find("%.") then path = path .. "." .. (path:match("([^/]+)$") or "") .. "_C" end
+    return path
+end
+
+-- Decode the owner-authored module sizes/materials, without inventing a
+-- family template. UClass references are resolved only in this world.
+function W2.record_passport(pass)
+    local out = {}
+    for _, fd in ipairs(PASSPORT_FIELDS) do
+        local name, kind, v = fd[1], fd[2], pass[fd[3]]
+        if kind == "class" then
+            local path = W2.passport_path(v)
+            if path then
+                local cls
+                pcall(function() cls = StaticFindObject(path) end)
+                if not valid(cls) then
+                    pcall(function() LoadAsset(path:gsub("%.[^%./]+$", "")) end)
+                    pcall(function() cls = StaticFindObject(path) end)
+                end
+                if not valid(cls) then return nil end
+                out[name] = cls
+            end
+        elseif kind == "vec" then
+            v = type(v) == "table" and v or {}
+            out[name] = { X = v[1] or 0, Y = v[2] or 0, Z = v[3] or 0 }
+        elseif kind == "color" then
+            v = type(v) == "table" and v or {}
+            out[name] = { R = v[1] or 0, G = v[2] or 0, B = v[3] or 0, A = v[4] or 1 }
+        elseif kind == "name" then out[name] = FName(type(v) == "string" and v or "")
+        else out[name] = tonumber(v) or 0 end
+    end
+    return out
+end
+T.record_passport = W2.record_passport
+T.passport_path = W2.passport_path
+T.cache_peer_passports = W2.cache_peer_passports
+
+-- Capture the actor itself at the drop, not a same-class hand on a peer.
+-- All fields are plain values: no actor or UClass survives a world reload.
+function W2.encode_passport(actor)
+    local sp = field(actor, "Weapon Passport")
+    if not sp then return nil end
+    local out = {}
+    for _, fd in ipairs(PASSPORT_FIELDS) do
+        local name, kind = fd[1], fd[2]
+        local ok, v = pcall(function() return sp[name] end)
+        if not ok then return nil end
+        if kind == "class" then
+            local full
+            if valid(v) then pcall(function() full = v:GetFullName() end) end
+            local path = full and full:match("^%S+%s+(.+)$") or ""
+            local pkg, leaf = path:match("^(.+)%.([^%./]+)_C$")
+            if pkg and pkg:sub(-(#leaf + 1)) == "/" .. leaf then path = pkg end
+            out[fd[3]] = path:gsub("^/Game/Assets/", "@")
+        elseif kind == "vec" then
+            out[fd[3]] = { v.X, v.Y, v.Z }
+        elseif kind == "color" then
+            out[fd[3]] = { v.R, v.G, v.B, v.A }
+        elseif kind == "name" then
+            out[fd[3]] = v:ToString()
+        else out[fd[3]] = tonumber(v) or 0 end
+    end
+    if out.class == "" then
+        -- Level-placed/picked-up weapons can omit WeaponClass in their
+        -- passport; their live actor still supplies the exact spawn class.
+        out.class = (cls_path(actor) or ""):gsub("^/Game/Assets/", "@")
+    end
+    if out.class == "" then return nil end
+    return out
+end
+T.encode_passport = W2.encode_passport
+
 -- All-or-nothing copy of "Weapon Passport" into a deferred (not yet
 -- constructed) weapon actor.
 local function copy_passport(src, dst)
@@ -1883,7 +2011,25 @@ local function spawn_remote_item(e)
     -- Deferred: set what the construction script / BeginPlay reads.
     pcall(function() a["Simulates Physics"] = true end)
     local src = e.src or passport_source(e)
-    local look = src and copy_passport(src, a) and "peer passport" or "class default look"
+    local look = not e.passport and src and copy_passport(src, a) and "peer passport" or "class default look"
+    -- A pickup-race replacement must be a copy of this exact actor. If
+    -- reading its passport failed, keep the original for the next attempt
+    -- rather than retiring it in favour of an unrelated class-default kit.
+    if e.src and not e.passport and look ~= "peer passport" then
+        retire_actor(a, WEAPON_BODY_KEYS)
+        return nil, "source weapon passport not ready"
+    end
+    if look == "class default look" then
+        local cached = e.passport or ((W.peer_passports[e.dyn] or {})[e.class])
+        local decoded = cached and W2.record_passport(cached)
+        if cached then
+            if not decoded or not pcall(function() a["Weapon Passport"] = decoded end) then
+                retire_actor(a, WEAPON_BODY_KEYS)
+                return nil, "received weapon modules not ready"
+            end
+            look = "received peer passport"
+        end
+    end
     local ok2, err2 = pcall(function() gs:FinishSpawningActor(a, t, SCALE_MULTIPLY) end)
     if not ok2 then
         retire_actor(a, WEAPON_BODY_KEYS)
@@ -1918,6 +2064,7 @@ function W2.lose_hold(o, owner, now)
     local body, sim = weapon_body(copy)
     o.actor, o.actor_addr, o.body, o.sim, o.body_at = copy, addr(copy), body, sim, now
     o.spawned_by_us, o.kin, o.settled, o.applied_pos, o.probed_at = true, false, false, nil, clock_ms()
+    W2.track_copy(o)
     if o.actor_addr then W.by_addr[o.actor_addr] = o; W.known_actor[o.actor_addr] = true end
     W.stats.lost_races = (W.stats.lost_races or 0) + 1
     Log("lost the pickup race for %s to peer %d: let go here, showing their copy (%s)", obj_label(o), owner, info or "?")
@@ -1997,6 +2144,7 @@ local function service_dyn(now)
                     dyn_owner = e.dyn, class_path = e.class, spawned_by_us = true,
                     buf = {}, prio = 0, last_read = -999, last_probe = -999,
                 }
+                W2.track_copy(o)
                 W.objs[#W.objs + 1] = o
                 W.by_lid[e.id] = o
                 W.by_nid[e.id] = o
@@ -2044,6 +2192,7 @@ local function write_manifest_out(now)
             rows[#rows + 1] = { id = o.lid, chash = o.chash, pos = { rnd(o.spawn_pos.X, 10), rnd(o.spawn_pos.Y, 10), rnd(o.spawn_pos.Z, 10) } }
         elseif o.dyn_owner ~= 0 and o.dyn_owner == sess.my_id and o.class_path and #drows < 32 then
             drows[#drows + 1] = { id = o.lid, chash = o.chash, dyn_owner = o.dyn_owner, class_path = o.class_path,
+                                  has_passport = o.passport ~= nil, passport = o.passport,
                                   pos = { rnd(o.spawn_pos.X, 10), rnd(o.spawn_pos.Y, 10), rnd(o.spawn_pos.Z, 10) } }
         end
     end
@@ -2074,57 +2223,236 @@ end
 -- simulation back where they are, and local copies of peers' dropped items
 -- (spawned_by_us, not held) are retired so they are not proposed twice when
 -- a session resumes. Only for the CURRENT world (caller checks name + addr).
+-- Plain identities only: W is discarded on session loss. Resolve each retry
+-- from the current world's live actor inventory; never retain old UObjects.
+local release_retries = {}
+W2.frozen_identities = {}
+function W2.world_scope(name, key)
+    if type(key) == "string" and key:find("@", 1, true) then return key:match("^(.-)#") or key end
+    return tostring(name) .. "@" .. tostring(key)
+end
+function W2.native_scope(object)
+    local ok, scope = pcall(function()
+        local world = object:GetWorld()
+        if valid(world) then return world:GetFullName() .. "@" .. tostring(world:GetAddress()) end
+    end)
+    return ok and scope or nil
+end
+function W2.ownership_identity(o, retire)
+    if not W then return end
+    local aa, ba = addr(o.actor), addr(o.body)
+    local an, bn = fname_of(o.actor), fname_of(o.body)
+    if not aa or not an or not o.cls or (not retire and (not ba or not bn)) then return end
+    local body_path
+    pcall(function() body_path = o.body:GetFullName():match("^%S+ (.+)$") end)
+    local key = aa .. ":" .. (retire and "copy" or ba)
+    return key, { name = an, body_name = bn, body_path = body_path, actor_addr = aa, body_addr = ba,
+        cls = o.cls, kind = o.kind, sim0 = o.sim0, world_name = W.name, world_key = W.addr,
+        scope = W2.world_scope(W.name, W.addr), lineage = W.lineage, retire = retire,
+        next_ms = 0, tries = 0 }
+end
+function W2.track_copy(o)
+    local key, r = W2.ownership_identity(o, true)
+    if not key then return false end
+    W2.frozen_identities[key] = W2.frozen_identities[key] or r
+    return true
+end
+function W2.note_freeze(o)
+    if not W then return true end -- fresh recovery after the old W was discarded
+    if o.spawned_by_us then return W2.track_copy(o) end
+    if o.sim0 ~= true then return true end
+    local key, r = W2.ownership_identity(o, false)
+    if not key then return false end
+    W2.frozen_identities[key] = W2.frozen_identities[key] or r
+    return true
+end
+function W2.clear_freeze(o)
+    if o.spawned_by_us then return end
+    local aa, ba = addr(o.actor), addr(o.body)
+    if aa and ba then W2.frozen_identities[aa .. ":" .. ba] = nil end
+end
+function W2.queue_copy_cleanup(o, held)
+    local key = o.actor_addr and (o.actor_addr .. ":copy")
+    if not key then return end
+    if held then release_retries[key], W2.frozen_identities[key] = nil, nil
+    elseif W2.frozen_identities[key] then release_retries[key] = W2.frozen_identities[key] end
+end
+function W2.recovery_pending(wname, wkey)
+    local scope = W2.world_scope(wname, wkey)
+    for _, r in pairs(release_retries) do
+        if r.recovering and r.scope == scope then return true end
+    end
+    return false
+end
+local function queue_release(o)
+    local key, r = W2.ownership_identity(o, false)
+    if key then release_retries[key] = r end
+end
+function W2.service_release_retries(wname, wkey, now)
+    if WG.travel_from ~= nil then release_retries, W2.frozen_identities = {}, {}; return end
+    local budget = 4
+    for key, r in pairs(release_retries) do
+        if r.world_name ~= wname or (r.recovering and r.scope ~= W2.world_scope(wname, wkey))
+            or (not r.recovering and r.world_key ~= wkey) then
+            release_retries[key] = nil
+            W2.frozen_identities[key] = nil
+        elseif budget > 0 and now >= r.next_ms and WG.settled() then
+            budget = budget - 1
+            r.tries = r.tries + 1
+            -- Retain ownership of a failed restoration while this world lives.
+            -- Back off after the initial burst instead of abandoning a frozen
+            -- body. Only plain identities survive between these callbacks.
+            r.next_ms = now + (r.tries >= 12 and 5000 or 250)
+            local actor, body
+            local ok, list = pcall(FindAllOf, r.cls)
+            if ok then
+                for _, a in pairs(list or {}) do
+                    if valid(a) and addr(a) == r.actor_addr and fname_of(a) == r.name then actor = a; break end
+                end
+            end
+            if actor then
+                if W2.native_scope(actor) ~= W2.world_scope(wname, wkey) then actor = nil end
+            elseif ok and type(list) == "table" then
+                -- Successful fresh enumeration proves the original actor absent.
+                release_retries[key], W2.frozen_identities[key] = nil, nil
+            end
+            if actor and r.retire then
+                body = weapon_body(actor)
+                if natively_held({ actor = actor, body = body, kind = r.kind }) then
+                    release_retries[key], W2.frozen_identities[key] = nil, nil
+                elseif retire_actor(actor, WEAPON_BODY_KEYS) then
+                    -- Keep the plain identity until a fresh lookup confirms
+                    -- retirement; a destroy request alone cannot release the
+                    -- recovery barrier or change the validated world scope.
+                end
+            elseif actor then
+                local body_absent = false
+                if r.body_path then
+                    local found, b = pcall(StaticFindObject, r.body_path)
+                    if found then
+                        if valid(b) and addr(b) == r.body_addr and fname_of(b) == r.body_name then body = b
+                        else body_absent = true end
+                    end
+                else
+                    if r.kind == "weapon" then
+                        local b = weapon_body(actor)
+                        if valid(b) and addr(b) == r.body_addr and fname_of(b) == r.body_name then body = b end
+                    end
+                    local cc; pcall(function() cc = StaticFindObject("/Script/Engine.PrimitiveComponent") end)
+                    if not body and valid(cc) then
+                        local enumerated = pcall(function()
+                            local actors = { actor }
+                            if r.kind == "weapon" then
+                                local children = {}
+                                actor:GetAttachedActors(children, true, true)
+                                for _, child in pairs(children) do
+                                    if not valid(child) then child = child:get() end
+                                    if valid(child) and not is_willie_class(cls_short(child)) then actors[#actors + 1] = child end
+                                end
+                            end
+                            for _, a in ipairs(actors) do
+                                K.NA.each(a:K2_GetComponentsByClass(cc),function(b)
+                                    if valid(b) and addr(b) == r.body_addr and fname_of(b) == r.body_name then body = b end
+                                end)
+                            end
+                        end)
+                        body_absent = enumerated and body == nil
+                    end
+                end
+                if body_absent then release_retries[key], W2.frozen_identities[key] = nil, nil end
+                if body and W2.native_scope(body) ~= W2.world_scope(wname, wkey) then body = nil end
+                if body and addr(body) == r.body_addr and fname_of(body) == r.body_name then
+                    local reclaimed = false
+                    if W and W.name == wname and W.addr == wkey and W.lineage ~= r.lineage then
+                        for _, current in ipairs(W.objs) do
+                            if current.actor_addr == r.actor_addr and probed_recently(current)
+                                and valid(current.body) and addr(current.body) == r.body_addr then
+                                current.sim0 = r.sim0
+                                reclaimed = true; break
+                            end
+                        end
+                    end
+                    local o = { actor = actor, body = body, kind = r.kind }
+                    if reclaimed then release_retries[key] = nil
+                    elseif natively_held(o) then release_retries[key], W2.frozen_identities[key] = nil, nil
+                    elseif set_sim(o, r.sim0) then release_retries[key], W2.frozen_identities[key] = nil, nil end
+                end
+            end
+        end
+    end
+end
+T.release_retries = function() return release_retries end
+
 local function release_world(why)
     read_hands()
-    local phys, retired, kept = 0, 0, 0
+    local phys, retired, kept, failed = 0, 0, 0, 0
     for _, o in ipairs(W.objs) do
+        local released = true
         if o.spawned_by_us then
             if not probed_recently(o) then
                 -- not probed lately: may be freed; forget it untouched
+                W2.queue_copy_cleanup(o, false)
             elseif alive(o) and (my_hold_mode(o) or natively_held(o)) then
                 kept = kept + 1
-            elseif alive(o) and retire_actor(o.actor, WEAPON_BODY_KEYS) then
-                retired = retired + 1
+                W2.queue_copy_cleanup(o, true)
+            else
+                if alive(o) and retire_actor(o.actor, WEAPON_BODY_KEYS) then retired = retired + 1 end
+                W2.queue_copy_cleanup(o, false)
             end
             o.dead, o.actor, o.body = true, nil, nil
-        elseif (o.kin or o.pin_kin) and probed_recently(o) and alive(o) and valid(o.body) and my_hold_mode(o) == nil then
+        elseif (o.kin or o.pin_kin or o.pin_pending) and probed_recently(o) and alive(o) and valid(o.body) and my_hold_mode(o) == nil then
             -- (a pinned prop goes back to the scene's own physics too)
-            if o.sim0 then set_sim(o, true) end
-            phys = phys + 1
+            if set_sim(o, o.sim0) then phys = phys + 1
+            else failed = failed + 1; released = false; queue_release(o) end
         end
-        o.kin, o.pin_kin, o.pinned_at = false, nil, nil
+        if released then
+            o.kin, o.pin_kin, o.pinned_at, o.pin_pending = false, nil, nil, nil
+        end
     end
-    Log("%s: released the replicated world (%d followed bodies back to physics, %d copies retired, %d held)",
-        why, phys, retired, kept)
+    Log("%s: released the replicated world (%d followed bodies back to physics, %d copies retired, %d held, %d retrying)",
+        why, phys, retired, kept, failed)
+    return failed == 0
 end
 T.release_world = function(why) return release_world(why) end
 
+local function restore_body(o)
+    o.restore_pending = true
+    if o.sim and not set_sim(o, false) then return false end
+    if not teleport(o, o.spawn_pos, o.spawn_rot, ZERO) then return false end
+    if not set_sim(o, o.sim0) then return false end
+    if o.sim0 and not teleport(o, o.spawn_pos, o.spawn_rot, ZERO, true) then return false end
+    o.restore_pending = nil
+    return true
+end
+T.restore_body = restore_body
 local function restore_all(why)
     read_hands()
-    local n, retired, kept = 0, 0, 0
+    local n, retired, kept, failed = 0, 0, 0, 0
     for _, o in ipairs(W.objs) do
         if o.spawned_by_us then
             if not probed_recently(o) then
                 -- not probed lately: may be freed; forget it untouched
+                W2.queue_copy_cleanup(o, false)
             elseif alive(o) and (my_hold_mode(o) or natively_held(o)) then
                 kept = kept + 1
-            elseif alive(o) then
-                if retire_actor(o.actor, WEAPON_BODY_KEYS) then retired = retired + 1 end
+                W2.queue_copy_cleanup(o, true)
+            else
+                if alive(o) and retire_actor(o.actor, WEAPON_BODY_KEYS) then retired = retired + 1 end
+                W2.queue_copy_cleanup(o, false)
             end
             o.dead, o.actor, o.body = true, nil, nil
         elseif o.dyn_owner == 0 and probed_recently(o) and alive(o) and valid(o.body) and my_hold_mode(o) == nil and can_drive(o) then
             local moved = (o.pos and dist3(o.pos, o.spawn_pos) > 0.5) or (o.rot and rot_diff(o.rot, o.spawn_rot) > 0.5)
-            if moved or o.kin or o.sim ~= o.sim0 then
-                if o.sim then set_sim(o, false) end
-                teleport(o, o.spawn_pos, o.spawn_rot, ZERO)
-                if o.sim0 then
-                    set_sim(o, true)
-                    teleport(o, o.spawn_pos, o.spawn_rot, ZERO, true)
-                end
-                n = n + 1
+            if moved or o.kin or o.pin_kin or o.pin_pending or o.restore_pending or o.sim ~= o.sim0 then
+                if restore_body(o) then n = n + 1 else failed = failed + 1 end
             end
         end
+    end
+    -- No state is relinquished while a reset transition still needs retry.
+    if failed > 0 then return false end
+    for _, o in ipairs(W.objs) do
         o.kin, o.pin_kin, o.pinned_at = false, nil, nil   -- unpinned (sim0 restored above)
+        o.pin_pending, o.restore_pending = nil, nil
         o.nid, o.buf, o.buf_sender, o.consumed, o.settled = nil, {}, nil, nil, false
         o.anchor_pos, o.anchor_rot, o.anchor_key, o.anchor_new = o.spawn_pos, o.spawn_rot, nil, false
         o.was_mine, o.awake, o.asleep_repeat, o.applied_pos = false, false, 0, nil
@@ -2156,6 +2484,7 @@ local function restore_all(why)
     W.mout_dirty = true
     Log("%s: restored %d bodies to their spawn pose; retired %d spawned copies (%d held, left alone)",
         why, n, retired, kept)
+    return true
 end
 T.restore_all = function(why) return restore_all(why) end
 
@@ -2801,6 +3130,14 @@ T.poke = function(speed, count, now) return W2.poke(speed, count, now) end
 -- hand refs are dropped without touching any of them.
 
 wg_on_drop(function(why)
+    if why == "world changed" or why == "no valid world" then
+        -- Only plain records were captured before freezing/spawning. An
+        -- ambiguous lookup loss must not read any of the discarded UObjects.
+        for key, r in pairs(W2.frozen_identities) do release_retries[key] = r end
+        for _, r in pairs(release_retries) do r.recovering, r.next_ms = true, 0 end
+    else
+        release_retries, W2.frozen_identities = {}, {}
+    end
     if W then
         Log("leaving world state (%s)", tostring(why))
         W = nil
@@ -2858,6 +3195,10 @@ local function on_tick()
     if not wg_check(tick_pc) then return end
     local wname, waddr = current_world()
     T.apply_session_change(wname, waddr)
+    W2.service_release_retries(wname, waddr, now)
+    -- Recover the original native baseline before rescanning. Otherwise a
+    -- frozen follower would be rediscovered with false as its original sim0.
+    if W2.recovery_pending(wname, waddr) then return end
     if not sess.live or not wname or wname:find("Map_Menu_", 1, true) or not wname:find("/Game/Maps/", 1, true) then
         if W then
             -- The session ended while THIS world is still loaded: hand the
@@ -2884,8 +3225,8 @@ local function on_tick()
     -- arena reload, which replaces W) has happened.
     if W.restore_due then
         if now < W.restore_due then return end
+        if not restore_all("round reset") then W.restore_due = now + 250; return end
         W.restore_due = nil
-        restore_all("round reset")
     end
 
     -- (Re)sync until the sidecar reports the reply for this level (IPC only).
@@ -2923,6 +3264,7 @@ local function on_tick()
 
     read_hands(tick_pc)
     refresh_puppets(now)
+    W2.cache_peer_passports()
     track_my_items(now)
     ingest_remote(now)
     service_dyn(now)

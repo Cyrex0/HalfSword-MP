@@ -154,7 +154,7 @@ pub(super) fn note_placed(inner: &mut Inner, id: PeerId, round: u32) {
     if e.0 != round { *e = (round, now); }
     // The pawn was teleported onto its spawn: the root speed cap starts over
     // from there (the cap is a body speed, not a fixed 300 m/s).
-    for p in inner.peers.values_mut().filter(|p| p.id == id) { p.last_valid_pos = None; }
+    // Movement reset belongs exclusively to a scoped GameStatus placement.
 }
 
 /// True while `pid` is under spawn protection (against "insta died at round
@@ -183,9 +183,9 @@ pub(super) fn arena_matches(inner: &Inner, arena: Option<&str>) -> bool {
 }
 
 /// One game-status report (the `game_status` record): load
-/// barrier, game liveness, redundant death report. Returns true when the
-/// report says the player died in the current live round.
-pub(super) fn game_status_in(inner: &mut Inner, id: PeerId, alive: bool, loaded: u32, arena: Option<&str>, dead: bool) -> bool {
+/// barrier and game liveness. The legacy return value is always false:
+/// unscoped status flags cannot declare a protocol 7 pawn death.
+pub(super) fn game_status_in(inner: &mut Inner, id: PeerId, _alive: bool, loaded: u32, arena: Option<&str>, _dead: bool) -> bool {
     let now = inner.now_ms;
     let right_arena = arena_matches(inner, arena);
     let mp = inner.match_peers.entry(id).or_default();
@@ -200,9 +200,59 @@ pub(super) fn game_status_in(inner: &mut Inner, id: PeerId, alive: bool, loaded:
     } else if loaded > mp.loaded_round {
         debug!(peer_id = id, loaded, arena = ?arena, "load report on the wrong arena: not counted");
     }
-    // Round-tagged: a delayed ping from the previous round's corpse must not
-    // kill us in the round that just went live.
-    dead && alive && inner.match_state == "live" && loaded == inner.match_round
+    // Status is load/liveness evidence. Death declarations use the reliable
+    // DeathReport path, whose acknowledgement and resend semantics preserve
+    // the original native callback across packet loss.
+    false
+}
+
+/// Placement is proof of a healthy, verified world, not merely a spawn id echo.
+/// A verified placement without LOADED (placed, the game not Ready yet) authorizes the
+/// peer's roots so the others can make its stand-in during their own load; only a LOADED
+/// one counts for the load barrier and spawn protection (the return value).
+pub(super) fn game_status_placed(inner: &mut Inner, id: PeerId, gs: &hsmp_ipc::schema::session::GameStatus) -> bool {
+    let arena = gs.arena.as_str().unwrap_or("");
+    let expected_life = if matches!(inner.match_state.as_str(),"loading"|"countdown") && gs.round == inner.match_round + 1 {
+        1
+    } else { modes::peer_life(inner, id) };
+    if gs.match_id != inner.sess.match_id || gs.spawn_id == 0 || gs.load_error != 0
+        || gs.life == 0 || gs.life != expected_life
+        || gs.flags & v5::status_flags::DEAD != 0
+        || arena.trim().is_empty() || !arena_matches(inner, Some(arena))
+        || !inner.spawn_plan.iter().any(|s| s.peer_id == id && s.spawn_id == gs.spawn_id)
+    { return false; }
+    let round = gs.spawn_id >> 8;
+    if gs.round != round { return false; }
+    let pending=matches!(inner.match_state.as_str(),"loading"|"countdown") && gs.round==inner.spawn_round;
+    let live=inner.match_state=="live" && gs.round==inner.match_round;
+    if !pending && !live {return false;}
+    let original=(gs.match_id,gs.round,gs.life,gs.spawn_id);
+    if inner.sess.root_placed.get(&id)!=Some(&original) {
+        inner.sess.root_placed.insert(id,original);
+        for p in inner.peers.values_mut().filter(|p|p.id==id) {
+            p.last_valid_pos=None;p.last_root=None;p.last_valid_ms=0;
+        }
+    }
+    if gs.flags & v5::status_flags::LOADED == 0 { return false; }
+    note_placed(inner, id, round);
+    if gs.round == inner.match_round { modes::on_placed(inner, id, gs.spawn_id); }
+    true
+}
+
+/// A delayed failure belongs only to the world load that originally failed.
+pub(super) fn game_status_load_error(inner: &mut Inner, id: PeerId, gs: &hsmp_ipc::schema::session::GameStatus) {
+    if gs.load_error != 0 && gs.match_id == inner.sess.match_id && gs.round == inner.match_round + 1 {
+        note_load_error(inner, id, load_error_name(gs.load_error));
+    }
+}
+
+pub(crate) fn body_context_matches(inner: &Inner, id: PeerId, match_id: u64, round: u32, life: u16) -> bool {
+    let pending = inner.match_state == "countdown";
+    let expected_round = if pending { inner.spawn_round } else { inner.match_round };
+    let expected_life = if pending { 1 } else { modes::peer_life(inner, id) };
+    match_id != 0 && match_id == inner.sess.match_id && round == expected_round && life != 0
+        && life == expected_life && inner.peers.values().any(|p| p.id == id)
+        && crate::lagcomp::has_accepted_pose_context(id, match_id, round, life)
 }
 
 /// The `game_status` record (session_records.rs): counted only for this match, round and
@@ -212,7 +262,6 @@ pub(crate) async fn on_game_status(socket: &Arc<UdpSocket>, state: &Arc<ServerSt
         let mut inner = state.inner.lock().await;
         let Some((id, alive)) = inner.peers.get(&from).map(|p| (p.id, p.alive)) else { return };
         let this_match = gs.match_id == inner.sess.match_id || inner.match_state == "lobby";
-        let loaded = if this_match && gs.flags & v5::status_flags::LOADED != 0 { gs.round } else { 0 };
         let arena = if this_match { Some(gs.arena.as_str().unwrap_or("")) } else { Some("") };
         let dead = this_match && gs.flags & v5::status_flags::DEAD != 0;
         if !this_match {
@@ -224,12 +273,9 @@ pub(crate) async fn on_game_status(socket: &Arc<UdpSocket>, state: &Arc<ServerSt
             false
         } else {
             // The spawn order this client applied = its placement report.
-            let order = inner.spawn_plan.iter().find(|s| s.peer_id == id).map(|s| s.spawn_id);
-            if gs.spawn_id != 0 && order == Some(gs.spawn_id) {
-                note_placed(&mut inner, id, gs.spawn_id >> 8);
-            }
+            let loaded = if game_status_placed(&mut inner, id, gs) { gs.round } else { 0 };
             let died = game_status_in(&mut inner, id, alive, loaded, arena, dead);
-            if gs.load_error != 0 { note_load_error(&mut inner, id, load_error_name(gs.load_error)); }
+            game_status_load_error(&mut inner, id, gs);
             died
         }
     };
@@ -297,6 +343,10 @@ pub(crate) const DEATH_VITALS: u8 = 2;
 /// (`drop_loses_round`). Within the budget a duel pauses for its
 /// reconnect instead; 3+ player rounds just stop counting it as standing.
 pub(crate) const DEATH_LEFT: u8 = 3;
+/// The native game ended this fighter's bout without killing their body.
+pub(crate) const DEATH_DEFEAT: u8 = 5;
+/// Explicit player surrender, which leaves the native body alive.
+pub(crate) const DEATH_SURRENDER: u8 = 6;
 /// 400 ms: covers DEFENDER_GRACE (200 ms) + trade hit transit.
 pub(super) const SETTLE_MS: u64 = 400;
 
@@ -306,24 +356,20 @@ pub(super) fn combat_open(inner: &Inner) -> bool {
 }
 
 /// Connected participants of this match that are still standing.
-fn standing(inner: &Inner) -> Vec<PeerId> {
+pub(super) fn standing(inner: &Inner) -> Vec<PeerId> {
     inner.peers.values()
         .filter(|p| p.alive && is_present(inner, p))
         .map(|p| p.id)
         .collect()
 }
 
-/// `standing(inner).len()` without the list (checked every tick of a live round).
-fn standing_count(inner: &Inner) -> usize {
-    inner.peers.values().filter(|p| p.alive && is_present(inner, p)).count()
-}
-
 /// Mark `pid` dead for the current round. Returns false if it was already
 /// dead / unknown or no round is open (late packet, native flow, stand-in).
 pub(super) fn declare_death(inner: &mut Inner, pid: PeerId, killer: PeerId, cause: u8) -> bool {
     // Spawn protection: a death report or ledger kill right after the
-    // player's placement (insta-death at round start) does not count.
-    if combat_open(inner) && spawn_protected(inner, pid) {
+    // player's placement (insta-death at round start), or right after a
+    // deathmatch respawn, does not count.
+    if combat_open(inner) && (spawn_protected(inner, pid) || modes::protected(inner, pid)) {
         let alive = inner.peers.values().any(|p| p.id == pid && p.alive);
         if alive {
             warn!(peer_id = pid, killer, cause, round = inner.match_round,
@@ -345,48 +391,80 @@ pub(super) fn declare_death_unprotected(inner: &mut Inner, pid: PeerId, killer: 
         return false;
     }
     let round = inner.match_round;
+    let life = modes::peer_life(inner,pid);
     let Some(p) = inner.peers.values_mut().find(|p| p.id == pid) else { return false };
     if !p.alive { return false; }
     p.alive = false;
     crate::lagcomp::note_death(pid);
-    inner.round_deaths.push((pid, killer, cause));
+    inner.round_deaths.push((pid, killer, cause, life));
     inner.match_state_dirty = true;
-    inner.out_msgs.push((None, death_msg(pid, round, killer, cause)));
+    inner.out_msgs.push((None, combat_glue::scoped_death_msg(pid,round,killer,cause,inner.sess.match_id,life)));
     info!(peer_id = pid, killer, cause, round, settling = inner.settle_ms > 0,
           "DEATH declared (authoritative)");
+    modes::on_death(inner, pid, killer, cause);
     if inner.match_state == "live" { check_round_end(inner, true); }
     true
 }
 
-/// Live round: start the settle once ≤ 1 participant is standing (a solo
-/// test round only ends when its player dies).
+/// Live round: start the settle once ≤ 1 side (player or team) is standing (a
+/// solo test round only ends when its player dies). A deathmatch round
+/// ends only on its clock: deaths respawn.
 fn check_round_end(inner: &mut Inner, after_death: bool) {
     if inner.match_state != "live" { return; }
-    let alive = standing_count(inner);
-    let multi = inner.participants.len() >= 2;
+    if inner.modes.run.is_some_and(|c| c.respawns()) { return; }
+    let (alive, multi) = modes::standing_sides(inner, |i, p| p.alive && is_present(i, p));
     if alive == 0 || (multi && alive <= 1) {
         if !after_death { info!(alive, "match: round ends (players left / timed out)"); }
-        inner.match_state = "roundover".into();
-        inner.match_reason = "pending".into();
-        inner.last_winner = 0;
-        inner.countdown_ms = 0; // runs once the result is fixed
-        inner.settle_ms = SETTLE_MS;
-        inner.match_state_dirty = true;
-        info!(round = inner.match_round, alive, "match: round over, settling {} ms for trades",
-              SETTLE_MS);
-        // Report Live -> RoundOver now (a death arrives outside the tick).
-        session::observe_phase(inner);
+        begin_settle(inner, alive);
     }
 }
 
-/// Settle deadline: fix the round result (see the block comment above).
+/// The round is over (last side standing, or the mode's end: objective, clock): settle
+/// SETTLE_MS for trades before the result is fixed.
+pub(super) fn begin_settle(inner: &mut Inner, alive: usize) {
+    inner.match_state = "roundover".into();
+    inner.match_reason = "pending".into();
+    inner.last_winner = 0;
+    inner.countdown_ms = 0; // runs once the result is fixed
+    inner.settle_ms = SETTLE_MS;
+    inner.match_state_dirty = true;
+    info!(round = inner.match_round, alive, "match: round over, settling {} ms for trades",
+          SETTLE_MS);
+    // Report Live -> RoundOver now (a death arrives outside the tick).
+    session::observe_phase(inner);
+}
+
+/// Settle deadline: fix the round result (see the block comment above). The mode
+/// decides who won (modes::decide): the last side standing, or the side its objective /
+/// clock names; anything else is a draw.
 pub(super) fn finalize_round(inner: &mut Inner) {
     inner.settle_ms = 0;
     let alive = standing(inner);
     let round = inner.match_round;
-    
-    let text = if alive.len() == 1 {
-        let winner = alive[0];
+    let (winner, reason, result) = modes::decide(inner, &alive);
+    let ended_by = inner.modes.end;
+    modes::on_result(inner, winner, result);
+    let why = match result {
+        hsmp_ipc::schema::session::mode_result::OBJECTIVE => " (held the hill)",
+        hsmp_ipc::schema::session::mode_result::TIME_LIMIT => " (time)",
+        hsmp_ipc::schema::session::mode_result::KILLS => " (most kills)",
+        hsmp_ipc::schema::session::mode_result::SUDDEN_DEATH => " (sudden death)",
+        _ => "",
+    };
+    let text = if let Some(modes::Side::Team(t)) = winner {
+        let wins = modes::team_won(inner, t);
+        let match_over = wins >= needed_wins(inner);
+        let rep = modes::team_rep(inner, t);
+        let name = modes::side_name(inner, modes::Side::Team(t));
+        end_round(inner, rep, reason, match_over);
+        if match_over { inner.sess.match_winner = Some((rep, name.clone(), wins)); }
+        info!(round, team = t, wins, match_over, reason, deaths = ?inner.round_deaths, "ROUND RESULT (authoritative): team win");
+        if match_over {
+            format!("MATCH OVER — {} wins ({} rounds){}", name, wins, why)
+        } else {
+            format!("round {} — {} wins ({} total){}", round, name, wins, why)
+        }
+    } else if let Some(modes::Side::Player(winner)) = winner {
         let mut wins = 0u32;
         let mut nick = String::new();
         let mut key = None;
@@ -395,21 +473,25 @@ pub(super) fn finalize_round(inner: &mut Inner) {
         }
         if let Some(k) = key { inner.wins_by_key.insert(k, wins); }
         let match_over = wins >= needed_wins(inner);
-        end_round(inner, winner, "", match_over);
-        info!(round, winner_id = winner, winner_nick = %nick, wins, match_over,
+        end_round(inner, winner, reason, match_over);
+        info!(round, winner_id = winner, winner_nick = %nick, wins, match_over, reason,
               deaths = ?inner.round_deaths, "ROUND RESULT (authoritative)");
         if match_over {
-            format!("MATCH OVER — {} wins ({} rounds)", nick, wins)
+            format!("MATCH OVER — {} wins ({} rounds){}", nick, wins, why)
         } else {
-            format!("round {} — {} wins ({} total)", round, nick, wins)
+            format!("round {} — {} wins ({} total){}", round, nick, wins, why)
         }
     } else {
-        // Nobody (mutual kill / trade inside the window) — or, defensively,
-        // several (cannot happen: settle starts at ≤ 1) — is a draw.
+        // Nobody (mutual kill / trade inside the window), a tied clock, or —
+        // defensively — several sides (cannot happen: settle starts at ≤ 1) is a draw.
         end_round(inner, 0, "draw", false);
-        info!(round, standing = alive.len(), deaths = ?inner.round_deaths,
+        info!(round, standing = alive.len(), deaths = ?inner.round_deaths, result,
               "ROUND RESULT (authoritative): draw");
-        format!("round {} — draw (simultaneous kill)", round)
+        match ended_by {
+            Some(modes::RoundEnd::Time) => format!("round {} — draw (time)", round),
+            Some(modes::RoundEnd::SuddenDeathOver) => format!("round {} — draw (no kill in sudden death)", round),
+            _ => format!("round {} — draw (simultaneous kill)", round),
+        }
     };
     push_server_chat(inner, &text);
 }
@@ -447,17 +529,14 @@ pub(super) fn present_participants(inner: &Inner) -> Vec<PeerId> {
     inner.peers.values().filter(|p| is_present(inner, p)).map(|p| p.id).collect()
 }
 
-/// `present_participants(inner).len()` without the list (match_step runs every tick).
-fn present_count(inner: &Inner) -> usize {
-    inner.peers.values().filter(|p| is_present(inner, p)).count()
-}
-
 /// A connected participant whose game is still alive (see `present_participants`).
-fn is_present(inner: &Inner, p: &PeerState) -> bool {
+/// A deathmatch player loading its respawn may be silent for a level load.
+pub(super) fn is_present(inner: &Inner, p: &PeerState) -> bool {
     let check_pings = inner.match_state == "live";
     is_participant(inner, p)
         && match inner.match_peers.get(&p.id) {
-            Some(m) if m.aware && check_pings => inner.now_ms.saturating_sub(m.last_ping_ms) <= GAME_PING_TIMEOUT_MS,
+            Some(m) if m.aware && check_pings && !modes::respawning(inner, p.id) =>
+                inner.now_ms.saturating_sub(m.last_ping_ms) <= GAME_PING_TIMEOUT_MS,
             _ => true,
         }
         // Resume: a game client silent for 3 s mid-Live is away.
@@ -490,9 +569,20 @@ fn end_round(inner: &mut Inner, winner: PeerId, reason: &str, match_over: bool) 
     inner.match_state_dirty = true;
 }
 
-/// Award the match to the last participant standing after the others left.
+/// Award the match to the last participant (its team, in a team mode) standing
+/// after the others left.
 pub(super) fn forfeit_to(inner: &mut Inner, winner: PeerId) {
     let needed = needed_wins(inner);
+    let team = modes::team_of_peer(inner, winner);
+    if team != 0 {
+        let w = needed.max(inner.modes.team_wins[team as usize - 1]);
+        modes::set_team_wins(inner, team, w);
+        modes::on_result(inner, Some(modes::Side::Team(team)), hsmp_ipc::schema::session::mode_result::ELIMINATION);
+        end_round(inner, winner, "forfeit", true);
+        inner.sess.match_winner = Some((winner, modes::side_name(inner, modes::Side::Team(team)), w));
+        info!(winner_id = winner, team, "match over by forfeit (team)");
+        return;
+    }
     let mut key = None;
     for p in inner.peers.values_mut() {
         if p.id == winner { p.wins = p.wins.max(needed); key = Some(session::peer_key(p)); }
@@ -532,8 +622,9 @@ pub(super) fn match_step(inner: &mut Inner) {
         inner.match_state_dirty = true;
     }
 
-    let multi = inner.participants.len() >= 2;
-    let present = present_count(inner);
+    // Sides (players, or teams in a team mode) with a present participant: a
+    // match pauses when fewer than 2 are left, not when a teammate drops.
+    let (present, multi) = modes::standing_sides(inner, is_present);
 
     // Nobody of this match is left (also a solo match whose only player
     // left, or an empty server): back to the lobby instead of "live" forever.
@@ -704,6 +795,8 @@ pub(super) fn begin_countdown(inner: &mut Inner, ms: u64) {
     inner.settle_ms = 0;
     inner.match_state_dirty = true;
     info!(round = inner.match_round + 1, "match: countdown begins (waiting for clients to load)");
+    let round = inner.match_round + 1;
+    modes::on_countdown(inner, round);
     plan_spawns(inner);
 }
 
@@ -722,10 +815,12 @@ fn plan_spawns(inner: &mut Inner) {
     let mut by_seat: HashMap<u32, PeerId> = HashMap::new();
     let seats: Vec<crate::spawns::Seat> = inner.peers.values()
         .map(|p| {
-            let seat = inner.sess.seats.get(&session::peer_key(p)).copied().unwrap_or(255) as u32;
+            let key = session::peer_key(p);
+            let seat = inner.sess.seats.get(&key).copied().unwrap_or(255) as u32;
             let order = (seat << 24) | (p.id & 0x00FF_FFFF);
             by_seat.insert(order, p.id);
-            crate::spawns::Seat { peer: order, team: 0 }
+            // Teams spawn on their own side of the arena (sides swap every round).
+            crate::spawns::Seat { peer: order, team: modes::team_of_key(inner, &key) }
         })
         .collect();
     let mut plan = crate::spawns::assign(&inner.match_arena, round, &seats);
@@ -784,6 +879,7 @@ pub(super) fn reset_to_lobby(inner: &mut Inner) {
     inner.sess.load_errors.clear();
     inner.sess.sat_out.clear();
     inner.sess.placed.clear();
+    inner.sess.root_placed.clear();
     inner.pauses_by_key.clear();
     inner.match_pauses = 0;
     inner.paused_from_live = false;
@@ -793,6 +889,7 @@ pub(super) fn reset_to_lobby(inner: &mut Inner) {
     // when there is one, was taken before this reset).
     for p in inner.peers.values_mut() { p.ready = false; p.alive = true; p.wins = 0; }
     inner.match_state_dirty = true;
+    modes::on_lobby(inner);
     session::on_lobby(inner);
 }
 
@@ -991,7 +1088,7 @@ pub(super) mod round_tests {
         }
         match_step(&mut i);
         assert_eq!(i.match_state, "roundover");
-        assert!(i.round_deaths.iter().any(|&(p, _, c)| p == 2 && c == DEATH_LEFT));
+        assert!(i.round_deaths.iter().any(|&(p, _, c, _)| p == 2 && c == DEATH_LEFT));
         // It comes back during the settle: still the loser.
         for p in i.peers.values_mut() { p.last_seen_ms = 40_000; }
         settle(&mut i);

@@ -20,6 +20,16 @@ local R = require("hsmp_native_records")
 local NS = require("hsmp_native_mock").S
 local SD = "S"
 
+do
+    local owner = { IsValid=function() return true end }
+    local temporary = { IsValid=function() return true end }
+    local pc = { IsValid=function() return true end, Pawn=temporary }
+    local env = SP.make_ue_env({UEHelpers={},pc=function() return pc end,ai_pawn=function() return owner end})
+    T.check(env.pawn()==owner,"real spawn environment preserves verified AI ownership during native stand-in possession")
+    local human = SP.make_ue_env({UEHelpers={},pc=function() return pc end,ai_pawn=function() return nil end})
+    T.check(human.pawn()==temporary,"real spawn environment keeps ordinary human possession when no verified AI owns the life")
+end
+
 local function new_world(opts)
     opts = opts or {}
     local w = {
@@ -88,7 +98,11 @@ local function new_world(opts)
         return "[Mesh moved(1300cm)]"
     end
     env.prop_get = function(p, k) return p.props[k] end
-    env.prop_set = function(p, k, v) p.props[k] = v; return true end
+    w.prop_writes = {}
+    env.prop_set = function(p, k, v)
+        w.prop_writes[#w.prop_writes + 1] = { pawn = p, key = k, value = v }
+        p.props[k] = v; return true
+    end
     env.cdo_vitals = function() return w.cdo end
     env.native_floor = function() return w.native[3] end
     env.native_point = function() return table.unpack(w.native) end
@@ -115,7 +129,8 @@ local function new_world(opts)
     function w:new_pawn()
         self.npawn = self.npawn + 1
         self.pawn = { id = "Willie_BP_C_" .. (100 + self.npawn), x = 257, y = 415, z = 953, home = { 257, 415, 953 },
-                      props = { Health = 100, ["Neck Health"] = 100, Invulnerable = false, DED = false } }
+                      props = { Health = 100, ["Neck Health"] = 100, Invulnerable = false, DED = false,
+                                ["Block Spine Breaking"] = false } }
         return self.pawn
     end
     function w:tick(n, dt)
@@ -320,7 +335,104 @@ do
     local d = math.sqrt((w2.pawn.x - st.x) ^ 2 + (w2.pawn.y - st.y) ^ 2)
     T.check(d <= SP.T.verify_tol_cm and SP.T.verify_tol_cm == 100 and st.tol_cm == 100,
         "on the spot (<= 100 cm, tol_cm carried for the gate)", d)
-    T.check(T.contains(w2:logtext(), "hold released after"), "hold release logged")
+    T.check(not T.contains(w2:logtext(), "hold released after"), "protected placement keeps residual anchoring after verification")
+    w2:go_live();w2:tick()
+    T.check(T.contains(w2:logtext(), "hold released after"), "hold release logged at Live")
+end
+
+T.log("== developer hold timing stays scalar, assignment-scoped and release-only")
+do
+    local saved_clock=os.clock
+    local function make(enabled)
+        local w=placed_world();w:secs(2.1)
+        local c=w.sp.cur;c.hold_until=w.clock+10
+        w.env.drift_probe=enabled
+        w.env.hold=function()return false end
+        return w,c
+    end
+    local clocks=0
+    os.clock=function()clocks=clocks+1;return 10+clocks*.001 end
+    local w,c=make(false);w.sp:hold_step(w.clock)
+    T.check(clocks==0 and c.hold_timing==nil,"default-off hold performs no timing clock calls or field allocation")
+    w,c=make(true)
+    local samples={10,10.001,11,11.002};clocks=0
+    os.clock=function()clocks=clocks+1;return samples[clocks]end
+    local calls=0;w.env.hold=function()calls=calls+1;return calls==2 end
+    w.sp:hold_step(w.clock);w.sp:hold_step(w.clock)
+    local t=c.hold_timing
+    T.check(clocks==4 and calls==2 and t.calls==2 and t.moved==1
+        and math.abs(t.total_ms-3)<1e-8 and math.abs(t.max_ms-2)<1e-8,
+        "exactly two clocks bracket each real hold call; scalar totals retain moved count, sum and maximum")
+    local n=#w.logs;w:go_live();w.sp:hold_step(w.clock);w.sp:hold_step(w.clock+20)
+    T.check(clocks==4 and #w.logs==n+1 and T.contains(w.logs[#w.logs],"hold calls=2 moved=1 total_ms=3.000 max_ms=2.000"),
+        "timing appends to the existing once-only release log, never per frame")
+    w,c=make(true);clocks=0
+    os.clock=function()clocks=clocks+1;return 10+clocks*.001 end
+    w.env.hold=function()w.sp.cur={};return false end
+    w.sp:hold_step(w.clock)
+    T.check(clocks==2 and c.hold_timing==nil,"replacement assignment during hold cannot acquire old timing metadata")
+    for _,v in ipairs({{10,9},{0/0,11},{10,math.huge}})do
+        w,c=make(true);clocks=0
+        os.clock=function()clocks=clocks+1;return v[clocks]end
+        w.sp:hold_step(w.clock)
+        T.check(clocks==2 and c.hold_timing==nil,"backwards/nonfinite duration is unavailable without changing hold behavior")
+    end
+    os.clock=saved_clock
+end
+
+T.log("== protected residual anchoring survives the initial delay and stops before Live")
+do
+    local w=placed_world();local full,continuation=0,0
+    w.env.hold=function(p,dest,tol,scope)
+        if not scope.current() then return false end
+        if scope.continuation then continuation=continuation+1 else full=full+1 end
+        if math.abs(p.x-dest.X)>tol then p.x=dest.X;return true end
+        return false
+    end
+    w:secs(4);local c=w.sp.cur;local teleports=w.teleports;local verified=w.sp.status_seq
+    for _=1,180 do w.pawn.x=w.pawn.x+7;w:tick()end
+    T.check(c.done and full>0 and continuation>180 and w.teleports==teleports and w.sp.cur==c
+        and w.sp.status_seq==verified and math.abs(w.pawn.x-c.dest.X)<=SP.T.hold_tol_cm,
+        "ongoing native balance after0.9s stays anchored after c.done without repeated placement/source invalidation")
+    local calls=full+continuation;w:go_live();w:tick()
+    local st=w:status();local release=st.t
+    T.check(full+continuation==calls and c.hold_until==nil and st.why=="anchor_released" and st.verified and release==w.clock,
+        "first Live releases before any hold call and explicitly acknowledges the exact verified assignment")
+    w.clock=w.clock+2;w.sp:write_status(c,true,nil);st=w:status()
+    T.check(st.t==release and st.why=="anchor_released" and st.match_id==c.plan.match_id and st.life==c.e.life
+        and st.spawn_id==c.e.spawn_id,"status refresh preserves original release timestamp and full life, never freshens the ACK")
+    w.pawn.props.Health=43;w.pawn.x=w.pawn.x+20;w:tick()
+    T.check(full+continuation==calls and w.pawn.props.Health==43,"ongoing wounded Live is never anchored or healed by the release path")
+    local q=placed_world();q.env.hold=function()return false end;q:secs(4)
+    q.env.hold=function(_,_,_,scope)
+        q:go_live()
+        T.check(not scope.current(),"production continuation guard refuses a reflected Loading/Countdown-to-Live phase change")
+        return false
+    end
+    q.sp:hold_step(q.clock)
+    for _,kind in ipairs({"phase","session","assignment","no_protect","respawn"})do
+        local q=placed_world();q.env.hold=function()return false end;q:secs(4)
+        q.env.hold=function()error("forbidden anchor")end
+        local cur=q.sp.cur
+        if kind=="phase" then q.mstate="paused"
+        elseif kind=="session" then q.env.session_live=function()return false end
+        elseif kind=="assignment" then local row=R.deep(q.plan.by_peer[1]);row.life=2;q.plan.by_peer[1]=row
+        elseif kind=="no_protect" then cur.no_protect=true
+        else q.sp.respawn_spawn=true end
+        local ok=pcall(function()q.sp:hold_step(q.clock)end)
+        T.check(ok and cur.hold_until==nil and not cur.anchor_released_at,
+            "unknown/changed/Live-respawn scope cannot continue anchoring or manufacture a release ACK: "..kind)
+    end
+    for _,kind in ipairs({"no_protect","respawn"})do
+        local q=placed_world();local calls=0;q.env.hold=function(_,_,_,scope)calls=calls+1;assert(not scope.continuation);return false end
+        q:secs(2.1);local cur=q.sp.cur;q:go_live();q.sp.live_seen=true
+        if kind=="no_protect" then cur.no_protect=true else q.sp.respawn_spawn=true end
+        local before=calls;q.sp:hold_step(q.clock)
+        T.check(calls==before+1 and not cur.anchor_released_at,"existing finite full hold is retained for Live "..kind)
+        q.clock=cur.hold_until;q.sp:hold_step(q.clock)
+        T.check(calls==before+1 and not cur.hold_until and not cur.anchor_released_at,
+            "Live "..kind.." releases at its original0.9s deadline without new continuation/initial ACK")
+    end
 end
 
 T.log("== capsule on the spot but the visible body left behind is NOT placed")
@@ -332,8 +444,20 @@ do
     local st = w:status()
     T.check(st.verified == false and T.contains(st.error or "", "body (Mesh pelvis)"),
         "a body far from the destination fails verification, and the error says so", T.repr(st))
-    T.check(T.eq(w.tries_seen, { 1, 2, 3 }), "the teleport is told which try it is (try >= 2 snaps lagging bodies)",
+    T.check(T.eq(w.tries_seen, { 1, 2, 3 }), "the teleport is told which bounded attempt it is",
         T.repr(w.tries_seen))
+end
+
+T.log("== unreadable physical body cannot qualify a capsule-only placement")
+do
+    local w = placed_world()
+    w.env.body_loc = function() return nil, nil, nil, "physical pelvis unavailable" end
+    w:secs(5)
+    local st = w:status()
+    T.check(st and st.verified == false and w.sp.counters.verified == 0,
+        "an explicitly unavailable body read never verifies placement", T.repr(st))
+    T.check(st.tries == SP.T.max_tries and T.contains(st.error or "", "body unavailable: physical pelvis unavailable"),
+        "unavailable physics proof fails after the existing bounded attempts with its reason", T.repr(st))
 end
 
 T.log("== Director retry (.spawn_request.json)")
@@ -469,6 +593,30 @@ do
 end
 
 T.log("== a new pawn gets its own placement and protection")
+do
+    local w = placed_world()
+    w:go_live()
+    w:secs(4)
+    w.plan.by_peer[1].spawn_id = 386 -- round1, deathmatch life2
+    w.director = "Spawn"
+    w:new_pawn()
+    w:tick(1)
+    T.check(w.sp:protected() and w.pawn.props.Invulnerable,
+        "server-authorized fresh deathmatch life is protected even though match is already Live")
+    T.check(w.sp:protect_until() > w.clock and w.sp:protect_until() <= w.clock+15,
+        "live respawn protection is bounded before placement")
+    w:secs(3)
+    T.check(w.teleports == 2 and w:status().verified and w:status().pawn == w.pawn.id,
+        "actual fresh deathmatch pawn receives its order and verifies during Live")
+    w.director = "Live"
+    w:secs(4)
+    T.check(not w.sp:protected() and not w.pawn.props.Invulnerable,
+        "verified respawn protection expires without waiting for another Live transition")
+    w:new_pawn()
+    w:secs(3)
+    T.check(w.teleports == 2 and not w.sp:protected(),
+        "completed respawn order does not authorize arbitrary later possession resets")
+end
 do
     local w = placed_world()
     w:secs(3.5)
@@ -841,6 +989,319 @@ do
     T.check(w.teleports == 1 and w:status() and w:status().verified, "a live session: placed as before", T.repr(w:status()))
 end
 
+T.log("== the real env reads fresh physical pelvis and corrects first-teleport body residual")
+do
+    local saved_sfo, saved_fn = rawget(_G, "StaticFindObject"), rawget(_G, "FName")
+    _G.StaticFindObject = function() return nil end
+    _G.FName = function(n) return n end
+    local env = SP.make_ue_env({ UEHelpers = { GetPlayerController = function() return nil end },
+        log = function() end, state_dir = T.tmpdir("sp_physical_"), my_peer_id = function() return 1 end,
+        match = function() return "countdown" end, world = function() return { key = "k", short = "A" } end })
+    -- Component / animated socket and simulated COM are independent. An actor
+    -- teleport can move the former while its physics body stays at the fence.
+    local function fixture(o, p)
+        o, p = o or {}, p or { x = 100, y = 0, z = 100 }
+        local m = { x = p.x, y = p.y, z = p.z, bx = p.x + 5, by = p.y + 10, bz = p.z + 50,
+            moves = 0, com_reads = 0, socket_reads = 0, sim = o.sim ~= false }
+        p.Mesh = m
+        m.IsValid = function() return true end
+        m.GetAddress = function() return 121 end
+        m.IsSimulatingPhysics = function(_, bone)
+            assert(bone == "pelvis")
+            if o.sim_error then error("physics state unreadable") end
+            if o.sim_unknown then return nil end
+            return m.sim
+        end
+        m.GetCenterOfMass = function(_, bone)
+            assert(bone == "pelvis")
+            m.com_reads = m.com_reads + 1
+            if o.com_error then error("physics COM unreadable") end
+            if o.com_nil then return nil end
+            return { X = o.com_nan and (0/0) or m.bx, Y = m.by, Z = o.com_inf and math.huge or m.bz }
+        end
+        m.GetSocketLocation = function()
+            m.socket_reads = m.socket_reads + 1
+            return { X = m.x, Y = m.y, Z = m.z + 50 }
+        end
+        m.K2_GetComponentLocation = function() return { X = m.x, Y = m.y, Z = m.z } end
+        m.K2_SetWorldLocation = function(_, l, sweep, hit, teleport)
+            assert(sweep == false and teleport == true)
+            local dx, dy, dz = l.X - m.x, l.Y - m.y, l.Z - m.z
+            m.x, m.y, m.z, m.moves = l.X, l.Y, l.Z, m.moves + 1
+            -- Some detached components change location before their physics
+            -- body accompanies the move; the fresh read must catch this too.
+            if not (o.correction_body_lag or (o.first_mesh_body_lag and m.moves == 1)) then
+                m.bx, m.by, m.bz = m.bx + dx, m.by + dy, m.bz + dz
+            end
+        end
+        m.SetAllPhysicsLinearVelocity = function() end
+        m.SetAllPhysicsAngularVelocityInDegrees = function() end
+        p.K2_GetActorLocation = function() return { X = p.x, Y = p.y, Z = p.z } end
+        p.K2_SetActorLocation = function(_, l, sweep, hit, teleport)
+            assert(sweep == false and teleport == true)
+            local dx, dy, dz = l.X - p.x, l.Y - p.y, l.Z - p.z
+            p.x, p.y, p.z = l.X, l.Y, l.Z
+            if not o.detached then m.x, m.y, m.z = m.x + dx, m.y + dy, m.z + dz end
+            if o.body_follows then m.bx, m.by, m.bz = m.bx + dx, m.by + dy, m.bz + dz end
+        end
+        return p, m
+    end
+    local dest = { X = 1100, Y = 500, Z = 100 }
+    local p, m = fixture()
+    local x, y, z = env.body_loc(p)
+    T.check(x == 105 and y == 10 and z == 150 and m.com_reads == 1 and m.socket_reads == 0,
+        "simulated pelvis is read from native COM, independent of its animated socket")
+    local detail = env.teleport(p, dest, nil, 1)
+    T.check(m.bx == 1105 and m.by == 510 and m.bz == 150 and m.moves == 1,
+        "first teleport corrects physics lag when the component followed", T.repr({ m.bx, m.by, m.bz, m.moves, detail }))
+    T.check(T.contains(detail, "Mesh followed; bodies snapped("), "followed branch reports the immediate physical correction", detail)
+    x, y, z = env.body_loc(p)
+    T.check(x == 1105 and y == 510 and z == 150 and m.socket_reads == 0,
+        "placement reads the corrected physical body, even when the animated component differs")
+
+    p, m = fixture({ detached = true, first_mesh_body_lag = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.bx == 1105 and m.by == 510 and m.bz == 150 and m.moves == 2,
+        "first teleport also checks physical lag after moving a detached component", T.repr({ m.bx, m.by, m.bz, m.moves, detail }))
+    T.check(m.x == 2100 and m.y == 1000 and T.contains(detail, "Mesh moved(") and T.contains(detail, "; bodies snapped("),
+        "residual correction uses the fresh component location after its initial move", detail)
+
+    p, m = fixture({ body_follows = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.moves == 0 and m.bx == 1105 and m.by == 510 and not T.contains(detail, "bodies snapped"),
+        "a component and physics body that already followed are not moved twice", detail)
+    p, m = fixture({ detached = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.moves == 1 and m.bx == 1105 and m.by == 510 and not T.contains(detail, "bodies snapped"),
+        "a detached body carried by its initial component move receives no residual move", detail)
+    p, m = fixture({ correction_body_lag = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.moves == 1 and m.bx == 105 and m.by == 10 and T.contains(detail, "body correction unresolved(")
+            and not T.contains(detail, "bodies snapped"),
+        "a successful movement call with unchanged physical COM is reported as unresolved", detail)
+
+    p, m = fixture({ sim = false })
+    x, y, z = env.body_loc(p)
+    T.check(x == 100 and y == 0 and z == 150 and m.com_reads == 0 and m.socket_reads == 1,
+        "explicitly non-simulated mesh retains the visual socket fallback")
+    for _, opts in ipairs({ { sim_error = true }, { sim_unknown = true }, { com_error = true },
+            { com_nil = true }, { com_nan = true }, { com_inf = true } }) do
+        p, m = fixture(opts)
+        local err
+        x, y, z, err = env.body_loc(p)
+        T.check(x == nil and y == nil and z == nil and type(err) == "string" and m.socket_reads == 0,
+            "unreadable simulation / COM never falls back to animated proof: " .. T.repr(opts), err)
+    end
+    p, m = fixture({ com_error = true })
+    detail = env.teleport(p, dest, nil, 1)
+    T.check(m.moves == 0 and T.contains(detail, "body unavailable: physical pelvis unavailable"),
+        "unknown physical residual is logged and never guessed", detail)
+
+    local w = placed_world()
+    p, m = fixture({}, w.pawn)
+    w.env.body_loc = env.body_loc
+    w.env.teleport = function(pawn, target, yaw, attempt)
+        w.teleports = w.teleports + 1
+        return env.teleport(pawn, target, nil, attempt)
+    end
+    w:secs(4)
+    local st = w:status()
+    T.check(st and st.verified and st.tries == 1 and m.moves == 1 and w.teleports == 1,
+        "first physical correction precedes the placement-complete handshake", T.repr(st))
+    T.check(m.socket_reads == 0 and T.contains(w:logtext(), "bodies snapped("),
+        "the complete placement uses fresh physical proof throughout", w:logtext())
+    _G.StaticFindObject, _G.FName = saved_sfo, saved_fn
+end
+
+T.log("== bounded protected drift observation uses physical COM before the existing correction")
+do
+    local saved_fn=rawget(_G,"FName");_G.FName=function(n)return n end
+    local function make(opts)
+        opts=opts or {}
+        local w=new_world();w:spawns(1,"Map_Arena_Slums",517,250,855);w.plan.match_id=7;w.plan.by_peer[1].yaw=90
+        local p=w:new_pawn();local original={};local changed={};local pc={Pawn=p,NativeWorld=original}
+        local native_reads,body_reads,old_reads,rows=0,0,0,{}
+        local function live()
+            native_reads=native_reads+1
+            if pc.NativeWorld~=original then old_reads=old_reads+1;error("old world touch")end
+        end
+        local function identity(o,address,name)
+            o.IsValid=function()live();return true end
+            o.GetAddress=function()live();return address end
+            o.GetFName=function()live();return {ToString=function()live();return name end}end
+        end
+        identity(original,1,"World Slums");identity(p,101,p.id)
+        p.GetWorld=function()live();return original end
+        local m={};identity(m,121,"CharacterMesh0");p.Mesh=m
+        m.GetOwner=function()live();return p end
+        m.IsSimulatingPhysics=function()
+            live();if opts.sim_flip then pc.NativeWorld=changed end
+            return opts.visual~=true
+        end
+        m.GetCenterOfMass=function()
+            live();body_reads=body_reads+1
+            if opts.com_flip then pc.NativeWorld=changed end
+            if opts.com_error then error("COM unavailable")end
+            return {X=opts.com_nan and 0/0 or (p.bx or p.x),Y=p.by or p.y,Z=p.z+50}
+        end
+        m.GetSocketLocation=function()live();error("diagnostic must not read visual socket")end
+        local rotation_reads=0
+        local function rotated(value)
+            live();rotation_reads=rotation_reads+1;return value
+        end
+        p.K2_GetActorRotation=function()
+            local value=rotated({Pitch=0,Yaw=90,Roll=0})
+            if opts.rotation_flip then pc.NativeWorld=changed end
+            return value
+        end
+        m.K2_GetComponentRotation=function()return rotated({Pitch=0,Yaw=-90,Roll=0})end
+        m.GetSocketRotation=function()return rotated({Pitch=0,Yaw=-80,Roll=0})end
+        p["Current Control Rotation"]={Pitch=0,Yaw=90,Roll=0}
+        p["On Ground Z Rotation"]=opts.ground_nan and 0/0 or -90
+        p["Movement Input Vector"]={X=0,Y=0,Z=0}
+        p["R Foot On Ground Loc"]={X=517,Y=240,Z=855}
+        p["L Foot On Ground Loc"]={X=517,Y=260,Z=855}
+        local driver={};identity(driver,131,"DriverSkeleton");p.DriverSkeleton=driver
+        driver.GetOwner=function()live();return p end
+        driver.K2_GetComponentRotation=function()return rotated({Pitch=0,Yaw=90,Roll=0})end
+        driver.GetSocketRotation=function()
+            local value=rotated({Pitch=0,Yaw=100,Roll=0})
+            if opts.driver_replace then
+                local replacement={};identity(replacement,131,"RebuiltDriver")
+                replacement.GetOwner=function()live();return p end;p.DriverSkeleton=replacement
+            end
+            return value
+        end
+        local target_calls=0
+        for i,field in ipairs({"PhysicsHandle LowerBody","PhysicsHandle UpperBody"})do
+            local h={GrabbedComponent=m};identity(h,141+i,field);p[field]=h
+            h.GetOwner=function()live();return p end
+            h.GetTargetLocationAndRotation=function(_,location,rotation)
+                live();target_calls=target_calls+1
+                local loc={X=522,Y=250,Z=opts.target_nan and 0/0 or 905}
+                local rot={Pitch=0,Yaw=-90,Roll=0}
+                if opts.named_out then location.TargetLocation=loc;rotation.TargetRotation=rot
+                else for k,v in pairs(loc)do location[k]=v end;for k,v in pairs(rot)do rotation[k]=v end end
+                if opts.handle_flip then pc.NativeWorld=changed end
+                if opts.handle_release then h.GrabbedComponent=nil end
+            end
+        end
+        pc.IsValid=function()return true end;pc.GetWorld=function()return pc.NativeWorld end
+        local ctx={UEHelpers={},pc=function()return pc end,drift_probe=true,
+            drift_drops=function()return 0 end,
+            drift_world_current=function(key,drops)return key==w.wkey and drops==0 and pc:GetWorld()==original end}
+        local real=SP.make_ue_env(ctx)
+        real.now=w.env.now -- the production caller and native adapter share os.clock
+        -- Verification's body coordinates are existing gameplay reads. The
+        -- production optional path, including its guard, is used only at drift.
+        w.env.drift_probe=opts.off~=true
+        w.env.drift_snapshot=real.drift_snapshot
+        w.env.drift_log=function(row)
+            rows[#rows+1]=R.deep(row)
+            if opts.log_flip then pc.NativeWorld=changed end
+            if opts.log_error then error("logging unavailable")end
+        end
+        w:start();w:secs(3.5)
+        function w:trigger_drift()
+            self.pawn.x=self.sp.cur.dest.X+70;self.pawn.y=self.sp.cur.dest.Y
+            self.pawn.bx=self.sp.cur.dest.X+5;self.pawn.by=self.sp.cur.dest.Y
+            self.sp.next_watch,self.sp.last_fall=0,-1e9
+            self.sp:watch_step(self.clock)
+        end
+        function w:reads()return native_reads,body_reads,old_reads end
+        function w:rotation_reads()return rotation_reads,target_calls end
+        w.rows,w.pc,w.real,w.mesh=rows,pc,real,m
+        return w
+    end
+    local w=make();local before=w.teleports;w:trigger_drift()
+    local row=w.rows[1]
+    T.check(w.teleports==before+1 and row.available and row.scope_current and row.attempt==1,
+        "available diagnostic preserves the original single protected correction")
+    T.check(row.capsule_target_xy_cm==70 and row.body_target_xy_cm==5 and row.body_capsule_delta[1]==-65,
+        "same callback distinguishes a70cm capsule displacement from a5cm physical pelvis displacement")
+    T.check(row.body_basis=="physical pelvis center of mass" and row.phase=="protected_drift_before_correction"
+        and row.body[1]~=w.pawn.x and select(2,w:reads())==1,
+        "one native COM observation is copied before the existing teleport, not relabeled as a bone origin")
+    T.check(row.actor.address==101 and row.mesh.name=="CharacterMesh0" and row.native_world.address==1
+        and row.peer==1 and row.match_id==7 and row.round==1 and row.life==1 and row.spawn_id==256,
+        "observation retains exact current native identities and the actual pending assignment")
+    T.check(row.verified_baseline.copied_ms<row.observed_ms and row.verified_baseline.capsule[1]==517
+        and row.verified_baseline.same_mesh_available==false and row.verified_baseline.reason=="historical Mesh identity unavailable",
+        "historical placement coordinates retain their separate time and unavailable Mesh continuity")
+    local rot=row.rotation
+    T.check(rot.actor.available and rot.actor.value.yaw==90 and rot.mesh_component.value.yaw==-90
+        and rot.mesh_pelvis_socket.value.yaw==-80 and rot.driver.value.pelvis_socket_rotation.yaw==100,
+        "current actor, component and evaluated socket rotations preserve an observed frame disagreement without correcting it")
+    T.check(not rot.physical_orientation_available and T.contains(rot.body_rotation_basis,"not independent")
+        and rot.current_control.value.yaw==90 and rot.on_ground_yaw.value==-90 and row.target_yaw==90,
+        "native control/ground yaw and requested yaw are distinct from unavailable rigid-body orientation")
+    local handle=rot.handles["PhysicsHandle LowerBody"]
+    T.check(handle.available and handle.value.identity.address==142 and handle.value.grabbed_mesh.address==121
+        and handle.value.target_location[1]==522 and handle.value.target_rotation.yaw==-90
+        and select(2,w:rotation_reads())==2,
+        "two bounded native handle outputs retain actual target rotation and fresh current-Mesh binding")
+    T.check(rot.movement_input.available and rot.movement_input.value[1]==0
+        and rot.foot_points["R Foot On Ground Loc"].value[2]==240
+        and rot.observed_start_ms<=rot.observed_end_ms,
+        "zero movement input and bounded world foot points remain observed scalars with a separate rotation interval")
+    for i=2,4 do w:secs(2.1);w:trigger_drift()end
+    T.check(#w.rows==3 and select(2,w:reads())==3 and w.sp.drift_attempts==3,
+        "whole process cap is consumed before a fourth optional body read",T.repr({rows=#w.rows,body=select(2,w:reads()),attempts=w.sp.drift_attempts,logs=w:logtext()}))
+    w.sp:reset("test world drop");T.check(w.sp.drift_attempts==3,"travel/reset cannot rearm the three-attempt budget")
+    w=make({off=true});before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before+1 and #w.rows==0 and select(1,w:reads())==0,
+        "default-off path performs no diagnostic native reads or row allocations")
+    w=make({named_out=true});w:trigger_drift()
+    T.check(w.rows[1].rotation.handles["PhysicsHandle LowerBody"].value.target_rotation.yaw==-90,
+        "named struct-output wrappers preserve the same handle evidence as direct FStruct reuse")
+    w=make({ground_nan=true,target_nan=true});before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before+1 and w.rows[1].available and not w.rows[1].rotation.on_ground_yaw.available
+        and not w.rows[1].rotation.handles["PhysicsHandle LowerBody"].available,
+        "nonfinite rotation/target fields are independently unavailable and do not change physical COM or correction policy")
+    w=make({driver_replace=true});before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before+1 and not w.rows[1].rotation.driver.available,
+        "same-address/new-name Driver replacement invalidates that observation without changing the original correction")
+    w=make({handle_release=true});before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before+1 and not w.rows[1].rotation.handles["PhysicsHandle LowerBody"].available,
+        "a released native handle cannot retain target/binding proof, while the current pawn correction remains unchanged")
+    for _,opts in ipairs({{rotation_flip=true},{handle_flip=true}})do
+        w=make(opts);before=w.teleports;w:trigger_drift()
+        T.check(w.teleports==before and select(3,w:reads())==0 and not w.rows[1].scope_current,
+            "rotation getter PC-world loss stops all old-object reads and the existing correction: "..T.repr(opts))
+    end
+    for _,opts in ipairs({{com_error=true},{com_nan=true},{visual=true},{log_error=true}})do
+        w=make(opts);before=w.teleports;w:trigger_drift()
+        T.check(w.teleports==before+1 and #w.rows==1 and w.rows[1].scope_current,
+            "ordinary unavailable body/log evidence leaves the original correction unchanged: "..T.repr(opts))
+        if not opts.log_error then
+            T.check(not w.rows[1].available and not w.rows[1].body and type(w.rows[1].reason)=="string",
+                "missing or nonphysical COM is explicit unavailable, never zero/visual proof")
+        end
+    end
+    for _,opts in ipairs({{sim_flip=true},{com_flip=true},{log_flip=true}})do
+        w=make(opts);before=w.teleports;w:trigger_drift()
+        T.check(w.teleports==before and select(3,w:reads())==0 and w.sp.drift_attempts==1,
+            "PC-world loss during optional observation/logging prevents old-world correction and later old-object reads: "..T.repr(opts))
+        if opts.sim_flip then T.check(select(2,w:reads())==0,"simulation getter world loss prevents the COM call")end
+    end
+    w=make();before=w.teleports
+    w.mesh.GetCenterOfMass=function()
+        w.pawn.Mesh={IsValid=function()return true end,GetAddress=function()return 121 end,
+            GetFName=function()return {ToString=function()return "ReplacementMesh"end}end}
+        return {X=522,Y=250,Z=1000}
+    end
+    w:trigger_drift()
+    T.check(w.teleports==before and w.rows[1].scope_current==false and not w.rows[1].available,
+        "same-address/new-name Mesh replacement refuses the pending correction")
+    w=make();before=w.teleports
+    w.mesh.GetCenterOfMass=function()w.plan.by_peer[1].life=2;return {X=522,Y=250,Z=1000}end
+    w:trigger_drift()
+    T.check(w.teleports==before and not w.rows[1].scope_current,"assignment life change during COM read prevents relabeling/correction")
+    w=make();w:go_live();w:tick(1);before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before and #w.rows==0 and select(1,w:reads())==0,"Live drift never admits this protected-spawn observer")
+    _G.FName=saved_fn
+end
+
 T.log("== the real env's teleport / hold carry the held weapon actors")
 do
     local saved_sfo = rawget(_G, "StaticFindObject")
@@ -885,6 +1346,137 @@ do
     _G.StaticFindObject = saved_sfo
 end
 
+T.log("== protected residual pins carry the four native absolute balance targets")
+do
+    local function make(opts)
+        opts=opts or{}
+        local world,replacement={},{};local phase="countdown"
+        local p={x=opts.residual or 20,y=0,z=100,id="Willie_Current"}
+        local pc={Pawn=p,world=world,IsValid=function()return true end}
+        local reads,world_checks,old_touches,writes,target_reads=0,0,0,0,0
+        local function touch()
+            reads=reads+1
+            if pc.world~=world or phase~="countdown" then old_touches=old_touches+1;error("old native access")end
+        end
+        local function native(o,addr,name)
+            o.IsValid=function()touch();return true end
+            o.GetAddress=function()touch();return addr end
+            o.GetFName=function()touch();return{ToString=function()touch();return name end}end
+        end
+        native(world,1,"Arena");native(p,10,p.id)
+        pc.GetWorld=function()return pc.world end
+        p.GetWorld=function()touch();return world end
+        p.K2_GetActorLocation=function()touch();return{X=p.x,Y=p.y,Z=p.z}end
+        local mesh={x=p.x,y=0,z=10,moves=0,velocities=0};native(mesh,20,"CharacterMesh0");p.Mesh=mesh
+        mesh.GetOwner=function()touch();return p end
+        mesh.K2_GetComponentLocation=function()touch();return{X=mesh.x,Y=mesh.y,Z=mesh.z}end
+        mesh.K2_SetWorldLocation=function(_,v)touch();writes=writes+1;mesh.moves=mesh.moves+1;mesh.x,mesh.y,mesh.z=v.X,v.Y,v.Z end
+        mesh.SetAllPhysicsLinearVelocity=function()touch();writes=writes+1;mesh.velocities=mesh.velocities+1 end
+        mesh.SetAllPhysicsAngularVelocityInDegrees=function()touch();writes=writes+1;mesh.velocities=mesh.velocities+1 end
+        local fields={"R Foot IK","L Foot IK","StepSplineR","StepSplineL"};local targets={}
+        for i,field in ipairs(fields)do
+            local target={x=100+i,y=10*i,z=0,owner=p,moves=0,reads=0,field=field};native(target,30+i,field)
+            target.GetOwner=function()touch();return target.owner end
+            target.K2_GetComponentLocation=function()
+                touch();target_reads=target_reads+1;target.reads=target.reads+1
+                if i==1 and opts.get_world_flip then pc.world=replacement end
+                if i==1 and opts.get_phase_flip then phase="live" end
+                if i==1 and opts.field_swap then local r={GetOwner=target.GetOwner};native(r,31,"RebuiltTarget");p[field]=r end
+                if i==1 and opts.owner_swap then target.owner=mesh end
+                if i==1 and opts.pawn_swap then local r={};native(r,11,"NewPawn");pc.Pawn=r end
+                if i==1 and (opts.mesh_swap or (opts.post_mesh_swap and target.reads==2)) then
+                    local r={GetOwner=mesh.GetOwner};native(r,20,"RebuiltMesh");p.Mesh=r
+                end
+                return{X=target.x,Y=target.y,Z=target.z}
+            end
+            target.K2_SetWorldLocation=function(_,v)
+                touch();writes=writes+1;target.moves=target.moves+1;target.x,target.y,target.z=v.X,v.Y,v.Z
+                if i==1 and opts.write_world_flip then pc.world=replacement end
+            end
+            targets[i]=target;p[field]=target
+        end
+        p.K2_SetActorLocation=function(_,v)
+            touch();writes=writes+1;local dx,dy,dz=v.X-p.x,v.Y-p.y,v.Z-p.z;p.x,p.y,p.z=v.X,v.Y,v.Z
+            if opts.attached then local t=targets[1];t.x,t.y,t.z=t.x+dx,t.y+dy,t.z+dz end
+        end
+        local handle={writes=0,GrabbedComponent=mesh};native(handle,40,"PhysicsHandle LowerBody")
+        if opts.handle_mesh_swap then
+            p["PhysicsHandle LowerBody"]=handle
+            handle.GetTargetLocationAndRotation=function(_,loc,rot)
+                touch();loc.X,loc.Y,loc.Z=20,0,100;rot.Pitch,rot.Yaw,rot.Roll=0,90,0
+                local r={GetOwner=mesh.GetOwner};native(r,20,"RebuiltMesh");p.Mesh=r
+            end
+            handle.SetTargetLocation=function()touch();handle.writes=handle.writes+1 end
+        end
+        local ctx={UEHelpers={},pc=function()return pc end,drift_drops=function()return 0 end,
+            drift_world_current=function(key,drops)world_checks=world_checks+1;return key=="Arena#PC"and drops==0 and pc.world==world end}
+        local env=SP.make_ue_env(ctx)
+        local scope={world="Arena#PC",pawn=p.id,current=function()return phase=="countdown"end,continuation=opts.continuation==true}
+        local weapon={x=p.x+5,y=0,z=100,moves=0,velocities=0}
+        if opts.weapon then
+            native(weapon,50,"Polearm")
+            weapon.GetClass=function()touch();return{GetFName=function()touch();return{ToString=function()touch();return"ModularWeaponBP_Polearm_C"end}end}end
+            weapon.K2_GetActorLocation=function()touch();return{X=weapon.x,Y=weapon.y,Z=weapon.z}end
+            weapon.K2_SetActorLocation=function(_,v)touch();weapon.moves=weapon.moves+1;weapon.x,weapon.y,weapon.z=v.X,v.Y,v.Z end
+            weapon.K2_GetRootComponent=function()touch();return{IsValid=function()touch();return true end,
+                SetAllPhysicsLinearVelocity=function()touch();weapon.velocities=weapon.velocities+1 end,
+                SetAllPhysicsAngularVelocityInDegrees=function()touch();weapon.velocities=weapon.velocities+1 end}end
+            p["Weapon R"]=weapon
+        end
+        return {env=env,p=p,mesh=mesh,targets=targets,scope=scope,handle=handle,
+            weapon=weapon,pc=pc,world=world,
+            hold=function(self)return env.hold(p,{X=0,Y=0,Z=100},10,scope)end,
+            counts=function()return reads,world_checks,old_touches,writes,target_reads end}
+    end
+    for _,residual in ipairs({12,20,29})do
+        local w=make({residual=residual});local moved=w:hold()
+        T.check(moved and w.p.x==0 and w.mesh.x==0 and w.mesh.moves==1,
+            "original body residual correction is preserved at "..residual.."cm")
+        local good=true;for i,t in ipairs(w.targets)do good=good and t.x==100+i-residual and t.moves==1 end
+        T.check(good,"absolute foot IK and world step splines carry once even for10–30cm pin residuals")
+        local reads,checks=w.counts()
+        T.check(reads<1200,"residual guard uses bounded stage/single-target checks, not recursive all-target scalar scans",
+            T.repr({native_reads=reads,cheap_world_checks=checks}))
+        T.log("hold residual "..residual.."cm: native reads="..reads.." cheap world checks="..checks)
+    end
+    local w=make({attached=true});w:hold()
+    T.check(w.targets[1].x==81 and w.targets[1].moves==0 and w.targets[2].moves==1,
+        "an attached target already carried by actor translation is not translated twice")
+    for _,opts in ipairs({{get_world_flip=true},{field_swap=true},{owner_swap=true},{pawn_swap=true},{mesh_swap=true}})do
+        w=make(opts);local moved=w:hold();local _,_,old,writes=w.counts()
+        T.check(not moved and writes==0 and old==0,
+            "fresh world/pawn/Mesh/target scope loss during optional capture prevents all old correction writes: "..T.repr(opts))
+    end
+    w=make({write_world_flip=true});w:hold();local _,_,old=w.counts()
+    T.check(old==0 and w.targets[1].moves==1 and w.targets[2].moves==0 and w.mesh.velocities==0,
+        "world loss inside target write stops subsequent targets and old velocity/legacy correction writes")
+    w=make({post_mesh_swap=true});w:hold()
+    T.check(w.targets[1].moves==0 and w.targets[2].moves==0 and w.mesh.velocities==0,
+        "same-world Mesh replacement in post-actor target location read prevents its setter and all remaining old stages")
+    w=make({handle_mesh_swap=true});w:hold()
+    T.check(w.handle.writes==0 and w.mesh.velocities==0,
+        "legacy reflected handle getter Mesh replacement stops the handle target write and remaining old physics stages")
+    w=make({residual=5});w:hold();local _,_,_,_,target_reads=w.counts()
+    T.check(target_reads==0 and w.targets[1].moves==0,"no balance target snapshot/carry occurs below the unchanged10cm pin boundary")
+    w=make({continuation=true,weapon=true});w:hold()
+    T.check(w.p.x==0 and w.mesh.moves==1 and w.targets[1].moves==1 and w.weapon.moves==1
+        and w.mesh.velocities==0 and w.weapon.velocities==0,
+        "actual native-env continuation carries body/absolute targets/weapon while preserving all body and held-root velocities")
+    w=make({continuation=true,weapon=true,residual=5});w:hold()
+    T.check(w.mesh.moves==0 and w.weapon.moves==0 and w.mesh.velocities==0 and w.weapon.velocities==0,
+        "actual continuation below residual boundary performs no physical setters or velocity cancellations")
+    w=make({continuation=true,get_world_flip=true});w:hold();local _,_,old,writes=w.counts()
+    T.check(writes==0 and old==0,"continuation retains the existing PC-world-first no-old-write guard")
+    w=make({continuation=true,get_phase_flip=true});w:hold();local _,_,old,writes=w.counts()
+    T.check(writes==0 and old==0,"phase transition inside native continuation getter prevents all later native accesses/setters")
+    w=make();T.check(w.env.hold_release_current(w.p,w.scope)==true,"release ACK requires the actual fresh source pawn/world/Mesh ownership")
+    w.scope.current=function()return false end
+    T.check(not w.env.hold_release_current(w.p,w.scope),"changed full assignment cannot qualify an anchor release ACK")
+    w=make();w.mesh.GetOwner=function()w.pc.world={};return w.p end
+    T.check(not w.env.hold_release_current(w.p,w.scope) and select(3,w.counts())==0,
+        "PC-world loss during release readback cuts off before any later old-body access")
+end
+
 T.log("== a Willie freed while we were protected: its cached actor is never touched again")
 do
     -- Seen on a listen host: a pooled extra Willie vanished
@@ -905,4 +1497,308 @@ do
     T.check(w:count("Willie_BP_C_7", true) == 1 and w:count("Willie_BP_C_8", true) == 0,
         "collision restored with the Willie that still exists only", T.repr(w.calls))
     T.check(T.contains(w:logtext(), "collision with 1 other Willie(s) restored (protection over)"), "restore logged for 1")
+end
+
+T.log("== original placement context survives report refresh and changes only after new placement")
+do
+    local w=placed_world()
+    w.plan.match_id=51
+    w:secs(4)
+    local old=w:status()
+    T.check(old.verified and old.match_id==51 and old.life==1,"verified status stores original order match and life")
+    w:go_live();w:tick()
+    T.check(w:status().match_id==51 and w:status().life==1,"Live report refresh retains original placement context")
+    w.mstate,w.mround="countdown",0
+    w:spawns(1,"Map_Arena_Slums",517,250,853)
+    w.plan.match_id=52
+    local before=w.teleports
+    w:tick()
+    T.check(w.teleports==before+1 and not w:status().verified and w:status().match_id==52,
+        "same pawn and spawn256 in a new match requires a fresh physical placement")
+    T.check(old.match_id==51,"new session never relabels saved old placement")
+    w:secs(1.2)
+    T.check(w:status().verified and w:status().match_id==52,"new match verifies its own placement")
+end
+
+T.log("== native dislocation guard starts before placement and restores its original bool once")
+do
+    for _, original in ipairs({ false, true }) do
+        local w = placed_world()
+        w.pawn.props["Block Spine Breaking"] = original
+        local teleport = w.env.teleport
+        w.env.teleport = function(p, ...)
+            T.check(p.props["Block Spine Breaking"] == true,
+                "native dislocation guard is active before every first placement teleport")
+            return teleport(p, ...)
+        end
+        w:tick()
+        T.check(w.teleports == 0 and w.pawn.props["Block Spine Breaking"] == true,
+            "native dislocation guard starts on the first protected tick, before settling")
+        w.pawn.props["Block Spine Breaking"] = false -- native animation code can overwrite it
+        w:tick()
+        T.check(w.pawn.props["Block Spine Breaking"] == true,
+            "a native false write is reasserted while protected")
+        w:secs(3.5)
+        local writes = 0
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then writes = writes + 1 end
+        end
+        w:go_live(); w:tick()
+        T.check(w.pawn.props["Block Spine Breaking"] == original,
+            "Live restores the exact original native bool: " .. tostring(original))
+        local after = 0
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then after = after + 1 end
+        end
+        T.check(after == writes + 1, "the original bool is restored with one write at Live")
+        w.pawn.props["Block Spine Breaking"] = not original
+        w:secs(2)
+        local later = 0
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then later = later + 1 end
+        end
+        T.check(later == after and w.pawn.props["Block Spine Breaking"] == not original,
+            "completed guard never restores again or fights later native writes")
+    end
+end
+
+T.log("== an unreadable native dislocation bool is explicit and never guessed")
+do
+    for _, unavailable in ipairs({ "missing", "number", "error" }) do
+        local w = placed_world()
+        local get = w.env.prop_get
+        w.env.prop_get = function(p, key)
+            if key == "Block Spine Breaking" then
+                if unavailable == "error" then error("property unavailable") end
+                return unavailable == "number" and 0 or nil
+            end
+            return get(p, key)
+        end
+        w:secs(3.5); w:go_live(); w:secs(1)
+        local writes = 0
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then writes = writes + 1 end
+        end
+        T.check(writes == 0 and w.pawn.props["Block Spine Breaking"] == false,
+            "no guessed write for an unreadable original bool: " .. unavailable)
+        T.check(T.contains(w:logtext(), "native dislocation guard unavailable"),
+            "unreadable native guard is logged explicitly: " .. unavailable)
+    end
+end
+
+T.log("== native dislocation and dismemberment state stays under the game's control during Live")
+do
+    local w = placed_world()
+    w:secs(3.5); w:go_live(); w:tick()
+    w.pawn.props.Health, w.pawn.props["Arm L Health"] = 27, 4
+    w.pawn.props["Arm L Dislocated"], w.pawn.props["Neck Dislocated"] = true, true
+    w.pawn.props["Dismembered Parts Map"] = { [6] = true }
+    local limbs = w.pawn.props["Dismembered Parts Map"]
+    w.pawn.props["Block Spine Breaking"] = false
+    w:secs(2)
+    T.check(w.pawn.props.Health == 27 and w.pawn.props["Arm L Health"] == 4
+        and w.pawn.props["Arm L Dislocated"] and w.pawn.props["Neck Dislocated"]
+        and w.pawn.props["Dismembered Parts Map"] == limbs and limbs[6],
+        "ordinary Live neither heals nor clears native injury or dismemberment")
+    T.check(w.pawn.props["Block Spine Breaking"] == false,
+        "ordinary Live leaves the native joint-breaking switch alone")
+
+    w.plan.by_peer[1].spawn_id = 386
+    w.director = "Spawn"
+    w:new_pawn(); w:tick()
+    T.check(w.sp:protected() and w.pawn.props["Block Spine Breaking"] == false,
+        "existing Live deathmatch spawn protection never arms the dislocation guard")
+    w.pawn.props["Arm L Dislocated"] = true
+    w.pawn.props["Dismembered Parts Map"] = limbs
+    w:secs(3.5)
+    T.check(w.pawn.props["Block Spine Breaking"] == false and w.pawn.props["Arm L Dislocated"]
+        and w.pawn.props["Dismembered Parts Map"] == limbs,
+        "Live deathmatch placement never clears or freezes native joint injury")
+end
+
+T.log("== native dislocation guard drops world caches without touching an old pawn")
+do
+    local w = placed_world()
+    w:tick()
+    local old = w.pawn
+    old.props = nil
+    setmetatable(old, { __index = function() error("touched an old-world pawn") end })
+    w.wkey = "Map_Arena_Slums#2"
+    w:new_pawn()
+    w.pawn.props["Block Spine Breaking"] = true
+    local ok, err = pcall(function() w:secs(3.5); w:go_live(); w:tick() end)
+    T.check(ok, "world drop never reads or restores the old native guard", tostring(err))
+    T.check(w.pawn.props["Block Spine Breaking"] == true,
+        "the next world's original true value is preserved independently")
+end
+
+T.log("== native dislocation guard transfers its original value before publishing a new assignment")
+do
+    local w = placed_world()
+    w.plan.match_id = 61
+    w:secs(3.5)
+    local before = w:status()
+    T.check(before.match_id == 61 and w.pawn.props["Block Spine Breaking"] == true,
+        "old verified assignment owns the guarded flag")
+    w:spawns(1, "Map_Arena_Slums", 517, 250, 853)
+    w.plan.match_id = 62
+    local teleport = w.env.teleport
+    w.env.teleport = function(p, ...)
+        local last = {}
+        for _, row in ipairs(w.prop_writes) do
+            if row.key == "Block Spine Breaking" then last[#last + 1] = row.value end
+        end
+        T.check(#last >= 3 and last[#last - 1] == false and last[#last] == true,
+            "old false is restored before the new context captures and reasserts it")
+        T.check(w:status().match_id == 61 and p.props["Block Spine Breaking"] == true,
+            "new native guard precedes the new teleport and new status publication")
+        return teleport(p, ...)
+    end
+    w:tick()
+    T.check(w:status().match_id == 62 and not w:status().verified,
+        "new assignment is published only after restoration ownership transfers")
+    w:secs(1.2); w:go_live(); w:tick()
+    T.check(w.pawn.props["Block Spine Breaking"] == false,
+        "new assignment restores false, rather than inheriting the previous temporary true")
+end
+
+T.log("== a changed life cannot restore the preceding life's original native flag")
+do
+    local w = placed_world()
+    w.pawn.props["Block Spine Breaking"] = true
+    w.plan.match_id = 63
+    w:secs(3.5)
+    w.plan.by_peer[1].life = 2 -- a later assignment without the placer's ownership transfer
+    w.pawn.props["Block Spine Breaking"] = false
+    local before = #w.prop_writes
+    w:go_live(); w:tick()
+    local wrote = false
+    for i = before + 1, #w.prop_writes do
+        if w.prop_writes[i].key == "Block Spine Breaking" then wrote = true end
+    end
+    T.check(not wrote and w.pawn.props["Block Spine Breaking"] == false,
+        "same actor in a different full life never receives an old restoration write")
+    T.check(T.contains(w:logtext(), "original pawn/world/life no longer current"),
+        "unproven ownership transfer is explicit, not silently inherited")
+end
+
+T.log("== a new match during initial settling transfers the guard's actual original value")
+do
+    local w = placed_world()
+    w.plan.match_id = 66
+    w:tick()
+    T.check(w.sp.cur == nil and w.sp.dislocation_guard.original == false
+        and w.pawn.props["Block Spine Breaking"] == true,
+        "initial protected tick owns original false before any placement exists")
+    w:spawns(1, "Map_Arena_Slums", 517, 250, 853)
+    w.plan.match_id = 67
+    w:secs(3.5)
+    T.check(w:status() and w:status().verified and w:status().match_id == 67
+        and w.sp.dislocation_guard.context.match_id == 67 and w.sp.dislocation_guard.original == false,
+        "settling-period match replacement transfers original false, never temporary true")
+    w:go_live(); w:tick()
+    T.check(w.pawn.props["Block Spine Breaking"] == false and w.sp.dislocation_guard.ended,
+        "Live after the replacement restores the pawn's actual original false")
+end
+
+T.log("== replacement with the same pawn name never touches a cached native guard actor")
+do
+    local w = placed_world()
+    w:tick()
+    local old, name = w.pawn, w.pawn.id
+    old.props = nil
+    setmetatable(old, { __index = function() error("touched a replaced native guard actor") end })
+    w:new_pawn()
+    w.pawn.id = name
+    w.pawn.props["Block Spine Breaking"] = true
+    local ok, err = pcall(function() w:secs(3.5); w:go_live(); w:tick() end)
+    T.check(ok, "same-name actor replacement uses only the fresh current pawn", tostring(err))
+    T.check(w.pawn.props["Block Spine Breaking"] == true,
+        "replacement's original true never inherits the previous actor's false")
+end
+
+T.log("== a transient native guard restoration failure retries in the exact current Live life")
+do
+    local w = placed_world()
+    w.plan.match_id = 68
+    w:secs(3.5)
+    local set, attempts = w.env.prop_set, 0
+    w.env.prop_set = function(p, key, value)
+        if key == "Block Spine Breaking" and value == false then
+            attempts = attempts + 1
+            if attempts <= 2 then return false end
+        end
+        return set(p, key, value)
+    end
+    w:go_live(); w:tick()
+    T.check(attempts == 2 and w.pawn.props["Block Spine Breaking"] == true
+        and w.sp.dislocation_guard.original == false and not w.sp.dislocation_guard.ended,
+        "failed Live restoration retains the exact original false and stays explicitly incomplete")
+    w:tick()
+    T.check(attempts == 3 and w.pawn.props["Block Spine Breaking"] == false and w.sp.dislocation_guard.ended,
+        "fresh same world, actor, and full life retry restores original false after transient failure")
+    w:secs(1)
+    T.check(attempts == 3, "successful restoration ends retries without further native writes")
+end
+
+T.log("== a permanently failed native guard restoration blocks transfer without recapturing true")
+do
+    local w = placed_world()
+    w.plan.match_id = 64
+    w:secs(3.5)
+    local set, attempts = w.env.prop_set, 0
+    w.env.prop_set = function(p, key, value)
+        if key == "Block Spine Breaking" and value == false then attempts = attempts + 1; return false end
+        return set(p, key, value)
+    end
+    w:go_live(); w:secs(1)
+    T.check(attempts > 1 and T.contains(w:logtext(), "unavailable: restore failed")
+        and not w.sp.dislocation_guard.ended,
+        "permanent Live failure retries while eligible and remains explicitly unavailable")
+    local old_status, old_teleports = w:status(), w.teleports
+    w.mstate, w.mround = "countdown", 0
+    w:spawns(1, "Map_Arena_Slums", 517, 250, 853)
+    w.plan.match_id = 65
+    w:secs(3.5)
+    local g = w.sp.dislocation_guard
+    T.check(g and not g.ended and g.original == false and g.context.match_id == 64,
+        "failed restoration keeps original ownership unavailable instead of recapturing temporary true")
+    T.check(w.teleports == old_teleports and w:status().match_id == old_status.match_id
+        and w.sp.cur.plan.match_id == 64,
+        "new assignment cannot teleport or publish new placement evidence before guard transfer succeeds")
+    T.check(T.contains(w:logtext(), "placement held: native dislocation guard restoration unavailable"),
+        "held startup reports its native restoration blocker explicitly")
+end
+
+T.log("== native guard restoration requires live readback, not only a successful property call")
+do
+    local w = placed_world()
+    w:secs(3.5)
+    local set, ignore = w.env.prop_set, true
+    w.env.prop_set = function(p, key, value)
+        if ignore and key == "Block Spine Breaking" and value == false then return true end
+        return set(p, key, value)
+    end
+    w:go_live(); w:tick()
+    T.check(not w.sp.dislocation_guard.ended and w.pawn.props["Block Spine Breaking"] == true
+        and T.contains(w:logtext(), "unavailable: restore failed"),
+        "a successful setter with unchanged live flag never claims successful restoration")
+    ignore = false
+    w:tick()
+    T.check(w.sp.dislocation_guard.ended and w.pawn.props["Block Spine Breaking"] == false,
+        "retry completes only after the native live flag equals the saved original bool")
+end
+
+T.log("== real pawn diagnostics expose the live native dislocation flag without guessing")
+do
+    local env = SP.make_ue_env({ UEHelpers = {}, log = function() end })
+    local p = { ["Block Spine Breaking"] = false }
+    T.check(env.pawn_state(p).block_spine_breaking == false,
+        "real pawn diagnostics preserve an explicit native false")
+    p["Block Spine Breaking"] = true
+    T.check(env.pawn_state(p).block_spine_breaking == true,
+        "real pawn diagnostics preserve an explicit native true")
+    p["Block Spine Breaking"] = nil
+    T.check(env.pawn_state(p).block_spine_breaking == nil,
+        "missing native flag remains unavailable in pawn diagnostics")
 end

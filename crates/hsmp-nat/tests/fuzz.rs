@@ -72,6 +72,7 @@ fn mutate(r: &mut Xs, seed: &[u8], corpus: &[Vec<u8>]) -> Vec<u8> {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn stun_and_probe_decoders_survive_mutation() {
     let tx = [7u8; 12];
     let v4 = stun::binding_success(&tx, "203.0.113.5:40000".parse().unwrap());
@@ -96,6 +97,7 @@ fn stun_and_probe_decoders_survive_mutation() {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn natpmp_and_pcp_decoders_survive_mutation() {
     let req = pcp::map_request(Ipv4Addr::new(192, 168, 1, 20), &[1; 12], 7777, 7777, 3600);
     let corpus = vec![
@@ -123,6 +125,7 @@ const DESC: &str = r#"<?xml version="1.0"?>
 <controlURL>ppp</controlURL></service></serviceList></device></deviceList></device></root>"#;
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn upnp_text_parsers_survive_mutation() {
     let ssdp = "HTTP/1.1 200 OK\r\nST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\nLOCATION: http://192.168.1.1:5000/rootDesc.xml\r\n\r\n";
     let fault = "<s:Envelope><s:Body><s:Fault><detail><UPnPError><errorCode>718</errorCode></UPnPError></detail></s:Fault></s:Body></s:Envelope>";
@@ -152,6 +155,7 @@ fn upnp_text_parsers_survive_mutation() {
 
 /// The description parser stays linear enough on hostile input of the largest accepted size.
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn upnp_description_parse_is_bounded_on_hostile_input() {
     let unit = "<service></x>";
     let hostile = unit.repeat(upnp::MAX_BODY / unit.len());

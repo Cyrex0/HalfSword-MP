@@ -390,6 +390,29 @@
     }
    ]
   },
+  "combat_manual": {
+   "doc": "Two real players at normal spawns for manual combat, ragdoll and object physics inspection. No scripted input or admin kills. Observation session, not a damage-parity verdict.",
+   "dod": [12],
+   "topology": "dedicated",
+   "netsim": "none",
+   "requires": ["debug_verbs"],
+   "steps": [
+    { "do": "wait", "ev": "lobby_ready", "who": "each", "timeout_s": 150 },
+    { "do": "wait", "ev": "cmd_result", "who": "each", "where": { "cmd": "ready", "ok": "true" }, "timeout_s": 60 },
+    { "do": "rcon", "cmd": "MODE duel" },
+    { "do": "rcon", "cmd": "TEAMS off" },
+    { "do": "rcon", "cmd": "BESTOF 31" },
+    { "do": "rcon", "cmd": "MAP Alley", "pick": "Alley" },
+    { "do": "mark", "name": "start", "arena": "Alley" },
+    { "do": "rcon", "cmd": "START" },
+    { "do": "wait", "ev": "phase", "who": "server", "where": { "to": "Live" }, "timeout_s": 180 },
+    { "do": "mark", "name": "manual_combat_ready" },
+    { "do": "client_cmd", "inst": 1, "cmd": "parity", "arg": "kit" },
+    { "do": "client_cmd", "inst": 2, "cmd": "parity", "arg": "kit" },
+    { "do": "hold", "s": 1800, "why": "Manual combat observation; both players retain normal controls" },
+    { "do": "quit_all" }
+   ]
+  },
   "combat_probe": {
    "doc": "Combat in-game probe: one Live round on a dedicated server held 12 min; hits, screenshots and checks are driven from inside the games (-Dev deploy; the HSMPDiag Lua-from-file console was removed: drive it through `hsmp-tools ipc-ctl` dev_cmd records, e.g. autotest move). Not a gate.",
    "dod": [
@@ -635,6 +658,13 @@
      "timeout_s": 150
     },
     {
+     "do": "wait",
+     "ev": "cmd_result",
+     "who": "each",
+     "where": { "cmd": "ready", "ok": "true", "source": "server" },
+     "timeout_s": 60
+    },
+    {
      "do": "rcon",
      "cmd": "MAP Alley",
      "pick": "Alley"
@@ -698,6 +728,13 @@
      "ev": "lobby_ready",
      "who": "each",
      "timeout_s": 150
+    },
+    {
+     "do": "wait",
+     "ev": "cmd_result",
+     "who": "each",
+     "where": { "cmd": "ready", "ok": "true", "source": "server" },
+     "timeout_s": 60
     },
     {
      "do": "rcon",

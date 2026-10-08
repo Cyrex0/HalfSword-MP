@@ -40,11 +40,17 @@ pub(super) async fn handle_server_record(
         rs::K_PINGS => session_client::on_pings(payload)?,
         rs::K_CMD_RESULT => session_client::on_cmd_result(payload)?,
         rs::K_NOTICE | rs::K_KILL_FEED => session_client::on_event(h.kind, payload)?,
+        rs::K_MODE | rs::K_ZONE => session_client::on_mode(h.kind, payload)?,
         rs::K_KICKED => session_client::on_kicked(payload, shared).await?,
         rs::K_SERVER_CLOSING => session_client::on_server_closing(payload, shared).await?,
         rs::K_CHAT_IN => session_client::on_chat_in(payload)?,
         rs::K_ADMIN_STATE => session_client::on_admin_state(payload, shared).await?,
         rs::K_PONG => session_client::on_pong(payload)?,
+        // Server mods (0x09xx): the manifest and the chunks (mods_client.rs).
+        k if hsmp_ipc::schema::mods::is_mods_kind(k) => {
+            hsmp_ipc::schema::check_payload(k, payload).map_err(|e| anyhow::anyhow!("server mods record {k:#x}: {e}"))?;
+            super::mods_client::on_server_record(k, payload)
+        }
         // Grabs and shoves (interact_client.rs): into the S2G ring as `interact`.
         k if hsmp_ipc::schema::interact::is_interact_kind(k) => interact_client::on_s2c(h, payload),
         // ---- combat (combat_client.rs): copied into the S2G ring / peer slot as they are ----
@@ -60,6 +66,7 @@ pub(super) async fn handle_server_record(
         hsmp_ipc::schema::loadout::K_KIT_RULES => loadout_client::on_kit_rules(payload),
         hsmp_ipc::schema::loadout::K_LOADOUT => loadout_client::on_loadout(h.peer, payload),
         hsmp_ipc::schema::loadout::K_BODY => loadout_client::on_body(h.peer, payload),
+        hsmp_ipc::schema::loadout::K_BODY2 => loadout_client::on_body2(h.peer, payload),
         // ---- pose (protocol v6; schema/pose.rs) ----
         K_ROOT => {
             let v = match hsmp_ipc::record::view::<Root>(payload) {
@@ -191,6 +198,16 @@ mod tests {
         assert!(session_client::is_admin() && sh.lock().await.is_admin);
         assert_eq!(l.test_slot("admin", None), Some((rs::K_ADMIN_STATE, a)));
         assert!(session_client::link_now().is_admin.get());
+        // Game modes: the mode / zone records go into their slots as they are.
+        let md = to_payload(&rs::ModeHead { mode: rs::game_mode::DEATHMATCH, round: 2, ..Default::default() },
+                            &[rs::ModeRow { peer_id: 41, seat: 1, kills: 3, ..Default::default() }]);
+        let (h, p) = rec(rs::K_MODE, &md);
+        handle_server_record(h, &p, &sh).await.unwrap();
+        assert_eq!(l.test_slot("mode", None), Some((rs::K_MODE, md.clone())));
+        let zn = to_payload(&rs::ZoneState { radius_cm: 300.0, half_height_cm: 300.0, ..Default::default() }, &[]);
+        let (h, p) = rec(rs::K_ZONE, &zn);
+        handle_server_record(h, &p, &sh).await.unwrap();
+        assert_eq!(l.test_slot("zone", None), Some((rs::K_ZONE, zn.clone())));
 
         // Hostile bytes: arbitrary bytes and single-byte mutations of valid messages, every
         // kind of the domain, through the S2C handler and the G2S path.
@@ -202,6 +219,7 @@ mod tests {
             (rs::K_PONG, to_payload(&rs::Pong { client_time_ms: 1, server_time_ms: 2 }, &[])),
             (rs::K_COMMAND, to_payload(&rs::Command { text: Str::new("Map_Arena_Pit"), ..rs::Command::new(660_001, rs::cmd_op::PICK_ARENA) }, &[])),
             (rs::K_GAME_STATUS, to_payload(&rs::GameStatus::default(), &[])),
+            (rs::K_MODE, md), (rs::K_ZONE, zn),
         ];
         let mut x = 0x9e37_79b9u32;
         let mut rnd = || { x ^= x << 13; x ^= x >> 17; x ^= x << 5; x };
@@ -225,7 +243,7 @@ mod tests {
             }
         }
         // Nothing invalid was ever published.
-        for slot in ["session", "admin", "link"] {
+        for slot in ["session", "admin", "link", "mode", "zone"] {
             if let Some((k, p)) = l.test_slot(slot, None) {
                 assert!(hsmp_ipc::schema::check_payload(k, &p).is_ok(), "{slot} holds an invalid record");
             }

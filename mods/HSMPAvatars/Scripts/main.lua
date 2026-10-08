@@ -99,7 +99,9 @@ local function load_module(name)
     if ok and type(mod) == "table" then return mod end
     local src = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
     local dir = src:match("^(.*)[/\\]") or "."
-    for _, path in ipairs({ dir .. "/" .. name .. ".lua", dir .. "/../../shared/" .. name .. ".lua" }) do
+    local paths = { dir .. "/" .. name .. ".lua", dir .. "/../../shared/" .. name .. ".lua" }
+    if name == "standin_body" then paths[#paths+1] = dir .. "/../../HSMPCombat/Scripts/standin_body.lua" end
+    for _, path in ipairs(paths) do
         local ok2, mod2 = pcall(dofile, path)
         if ok2 and type(mod2) == "table" then return mod2 end
     end
@@ -162,6 +164,15 @@ local POSE_DIAG_MS      = 5000
 -- catches up gently instead of hitting like a hammer.
 local SERVO_CAP_LIN   = 900     -- uu/s beyond the replicated velocity
 local SERVO_CAP_ANG   = 900     -- deg/s beyond the replicated angular velocity
+-- Impact yield: a body the solver left IMPACT_DV uu/s off its commanded velocity was struck
+-- (blade, body, prop), not servo-tracked: ease the stand-in for IMPACT_MS so the native contact
+-- response shows, then servo back onto the owner's pose (which by then carries the owner's own
+-- reaction). Without it a stand-in shrugs off every blow within one physics step. First
+-- guesses, not measured: tune impact_dv / impact_ms (impact_dv 0 = off).
+local IMPACT_DV       = 300
+local IMPACT_MS       = 200
+local IMPACT_GAIN     = 0.08
+local IMPACT_CAP      = 200
 local SERVO_GAIN      = 0.3     -- share of the remaining error corrected per step (1 = deadbeat; measured A/B under motion: 1.0 -> jitter 2-9, 0.7 -> 1.4-2.0, 0.4 -> 1.1-1.3, 0.3 -> 1.0-1.2 at the same 0.2-0.6 uu arm error; 0.2 lets arm error reach 3-9 uu)
 local SERVO_EXTRAP_MS = 120     -- advance a target by its velocity at most this long (v2 aim at 20 fps: ~2 x 50 ms past the sample)
 local HOLD_RELEASE_MS = 5000    -- stale data: hold the last pose this long, then release
@@ -239,6 +250,9 @@ local function now_ms() return os.clock() * 1000 end   -- MSVC clock(): wall ms
 
 -- The pure math (no UE calls) lives in avatars_pure.lua.
 local PURE = load_module("avatars_pure")
+local INJURY = load_module("body_injury")
+local BODY_HEIGHT = load_module("standin_body") -- optional dev-only native height probe helper
+local SEVERED_PHYSICS = os.getenv("HSMP_SEVERED_PHYSICS") ~= "0" -- explicit diagnostic opt-out
 if not PURE then error("HSMPAvatars: avatars_pure.lua is missing (deploy copies every Scripts/*.lua)") end
 local quat_to_rot, clamp = PURE.quat_to_rot, PURE.clamp
 
@@ -314,9 +328,13 @@ local function local_pc()
     return nil
 end
 
-local function local_pawn()
-    local pc = local_pc()
+local function local_pawn(pc)
+    pc = pc or local_pc()
     if not pc then return nil end
+    -- the game's own AI drives our pawn (dev, HSMPParity `ai on`; shared/hsmp_wg.lua)
+    if TUNE.aip == nil then TUNE.aip = load_module("hsmp_wg") or false end
+    local ai = TUNE.aip and TUNE.aip.ai_pawn_lookup() or nil
+    if ai then return ai end
     local p = pc.Pawn
     if p and p:IsValid() then return p end
     return nil
@@ -436,6 +454,7 @@ local function read_snapshot(id)
         local t = IPC.peer_rec("peer_root", id)
         local r = type(t) == "table" and t.root or nil
         if type(r) ~= "table" or type(r.pos) ~= "table" or not r.tick then return nil end
+        if not PURE.pose_context_ok(PURE.root_context(r),HSM and HSM.view(),HSM and HSM.mode(),id) then return nil end
         -- yaw (degrees) of the quaternion {x, y, z, w}, as FQuat::Rotator
         local q = type(r.rot) == "table" and r.rot or {}
         local x, y, z, w = tonumber(q[1]) or 0, tonumber(q[2]) or 0, tonumber(q[3]) or 0, tonumber(q[4]) or 1
@@ -632,11 +651,19 @@ local function puppet_body(p)
         if idx and idx >= 0 then bones[#bones + 1] = bn end
     end
     local motors = {}
+    local motor_ids=os.getenv("HSMP_DEV")=="1"and os.getenv("HSMP_LIMB_BURST_PROBE")=="1"and {}or nil
     pcall(function() local pa = actor.PhysicalAnimation; if pa and pa:IsValid() then motors[#motors + 1] = pa end end)
     pcall(function()
         local arr = actor["Phys Anim Array"]
         if arr then arr:ForEach(function(_, e) local pa = e:get(); if pa and pa:IsValid() then motors[#motors + 1] = pa end end) end
     end)
+    if motor_ids and #motors>8 then motor_ids=nil end
+    if motor_ids then
+        for _,pa in ipairs(motors)do
+            local ok,id=pcall(function()return {address=pa:GetAddress(),name=pa:GetFName():ToString()}end)
+            if ok then motor_ids[#motor_ids+1]=id else motor_ids=nil;break end
+        end
+    end
     -- Reuse handle components across re-claims of the same actor (they are
     -- real components on it; creating new ones each time would leak).
     local key; pcall(function() key = actor:GetAddress() end)
@@ -644,7 +671,10 @@ local function puppet_body(p)
     if key then handle_cache[key] = hs end
     hs.bones = hs.bones or {}
     local lens, nlens = measure_lengths(pick)
-    p.body = { mesh = pick, field = field_name, sims = sims, bones = bones, motors = motors,
+    local mesh_addr,mesh_fname
+    pcall(function()mesh_addr=pick:GetAddress();mesh_fname=pick:GetFName():ToString()end)
+    p.body = { mesh = pick, field = field_name, sims = sims, bones = bones, motors = motors,motor_ids=motor_ids,
+               mesh_addr=mesh_addr,mesh_fname=mesh_fname,
                handles = hs.bones, wpn = hs.wpn, cache = hs, ctl = nil, snaps = 0,
                lens = lens, err_since = nil, made_at = now_ms(), stiff = stiff_mult }
     Log("pose: stand-in %s drives %s (%d simulated meshes), %d/%d bones, %d bone lengths, %d physical-animation comps; candidates: %s",
@@ -735,6 +765,7 @@ end
 -- owner is authoritative (HSMPCombat replicates real wounds/death).
 local function harden_standin(p)
     pcall(function() p.actor["Force Disable Dismemberment"] = true end)
+    pcall(function() p.actor["Force Disable Vertex Paint"] = true end)
 end
 
 local function set_motor_strength(body, s)
@@ -819,6 +850,13 @@ end
 -- the grip free, hand and weapon each go exactly where the owner has them.
 
 local PX = {}   -- pose extras (one local: the main chunk is at the 200-locals limit)
+PX.SETTLE = load_module("spawn_settle")
+function PX.settle_reset(p,reason)
+    if PX.SETTLE then
+        PX.SETTLE.invalidate(p.settle_state,reason,now_ms())
+        PX.SETTLE.copy(p.shown,p.settle_state)
+    end
+end
 
 -- Dev tuning knobs for the v2 servo: dev_cmd TUNE records from the DevCtl ring
 -- (`hsmp-tools ipc-ctl --pid <game> tune servo 0`; PURE.tune_value): "servo" 0 stops
@@ -833,6 +871,16 @@ function PX.poll_dev()
     local n = ipc.dev_poll(16, out)
     for i = 1, n do
         local c = out[i] and (out[i].data or out[i])
+        if type(c) == "table" and c.op == 1 and c.key == "bodyphysics" and PX.bodyphysics then
+            PX.bodyphysics_request = tostring(c.arg or "") -- act only after the normal world guard
+        end
+        if type(c) == "table" and c.op == 1 and c.key == "bodyheight" then
+            PX.bodyheight_request = tostring(c.arg or "")
+        end
+        if type(c)=="table" and c.op==1 and c.key=="parity" and os.getenv("HSMP_DEV")=="1" then
+            local exp,rest=tostring(c.arg or ""):match("^(%S+)%s*(.*)$")
+            if exp=="weaponstate" then PX.weaponstate_request=rest end
+        end
         if type(c) == "table" and c.op == 2 then   -- S.ENUMS.dev_op.TUNE
             local k = tostring(c.key or "")
             local v, err = PURE.tune_value(k, tonumber(c.num))
@@ -1005,6 +1053,12 @@ function PX.owner_vitals_dead(id)
     local hp = type(t.v) == "table" and math.tointeger(t.v[1]) or nil
     return f & 1 ~= 0 or hp == 0
 end
+-- The owner's `peer_vitals` record says fallen or downed (VF FALLEN 2 / DOWNED 4). nil = no record.
+function PX.owner_vitals_down(id)
+    local t = HSMP_IPC and HSMP_IPC.peer_rec("peer_vitals", id)
+    if type(t) ~= "table" then return nil end
+    return (math.tointeger(t.flags) or 0) & 6 ~= 0
+end
 PX.BUDGET_MS = 4   -- Lua frame budget for the stand-in driver (ms per frame)
 -- Legs keep a stiffer servo than the 0.3 body gain: the driven mesh ignores world
 -- geometry (no floor friction), so only the servo holds a planted foot against the
@@ -1055,6 +1109,35 @@ function PX.spawn_spot(id, s)
     return at
 end
 PX.TONUS = { "All Body Tonus", "Upper Body Tonus", "Arm R Tonus", "Arm L Tonus", "Leg R Tonus", "Leg L Tonus", "Muscle Power" }
+function PX.grip_want(p,g,now)
+    if not g.lim or TUNE.grips==0 then return false end
+    local field=g.hand=="hand_r" and "Weapon R" or "Weapon L"
+    local wa=p.actor[field] -- current field, never a retained weapon UObject
+    if not (wa and wa:IsValid()) then return false end
+    if wa:GetClass():GetFName():ToString():match("^Weapon_Fists") then return true end
+    local ws=p.wservo and p.wservo[field]
+    return ws and now>=ws and now-ws<500 and p.wservo_actor and p.wservo_actor[field]==wa:GetAddress()
+end
+function PX.grip_identity(g,c)
+    return c and c:IsValid() and c:GetAddress()==g.addr and c:GetFName():ToString()==g.fname
+        and c.ConstraintInstance.ConstraintBone2:ToString()==g.hand
+end
+function PX.grip_limits(p,g,c,now)
+    if PX.grip_want(p,g,now) then
+        c:SetLinearXLimit(0,0);c:SetLinearYLimit(0,0);c:SetLinearZLimit(0,0)
+        c:SetAngularSwing1Limit(0,0);c:SetAngularSwing2Limit(0,0);c:SetAngularTwistLimit(0,0)
+        g.freed=true
+    elseif g.freed and g.lim then
+        local l=g.lim
+        c:SetLinearXLimit(l[1],l[4]);c:SetLinearYLimit(l[2],l[4]);c:SetLinearZLimit(l[3],l[4])
+        c:SetAngularSwing1Limit(l[5],l[6]);c:SetAngularSwing2Limit(l[7],l[8]);c:SetAngularTwistLimit(l[9],l[10])
+        g.freed=nil
+    end
+end
+function PX.grip_drive_current(p)
+    if not p.driving or p.gen~=world_gen or cache_gen~=world_gen or not p.peer or type(p.last)~="table" then return false end
+    return PURE.pose_context_ok(p.last,HSM and HSM.view(),HSM and HSM.mode(),p.peer)
+end
 function PX.grip_constraints(p, now)
     if p.grips and now - p.grips.at < 1000 then return p.grips.list end
     local list = {}
@@ -1072,12 +1155,13 @@ function PX.grip_constraints(p, now)
             local b2 = c.ConstraintInstance.ConstraintBone2:ToString()
             if b2 == "hand_r" or b2 == "hand_l" then
                 local addr = c:GetAddress()
+                local name=c:GetFName():ToString()
                 -- keep the BP values seen first (before we zeroed them) for the restore
                 local o = p.grips and p.grips.by[addr]
-                if o then o.c = c; list[#list + 1] = o else   -- the fresh component, never last scan's pointer
+                if o and o.fname==name and o.hand==b2 then o.c = c; list[#list + 1] = o else   -- the fresh component, never last scan's pointer
                     local pi = c.ConstraintInstance.ProfileInstance
                     local d = pi.AngularDrive.SlerpDrive
-                    local g = { c = c, addr = addr, hand = b2, stiff = d.Stiffness, damp = d.Damping, maxf = d.MaxForce }
+                    local g = { c = c, addr = addr, fname=name, hand = b2, stiff = d.Stiffness, damp = d.Damping, maxf = d.MaxForce }
                     pcall(function()
                         local L, C, T = pi.LinearLimit, pi.ConeLimit, pi.TwistLimit
                         g.lim = { L.XMotion, L.YMotion, L.ZMotion, L.Limit, C.Swing1Motion, C.Swing1LimitDegrees,
@@ -1091,28 +1175,18 @@ function PX.grip_constraints(p, now)
     end
     local by = {}
     local changed = false
-    for _, g in ipairs(list) do by[g.addr] = g; if not (p.grips and p.grips.by[g.addr]) then changed = true end end
+    for _, g in ipairs(list) do by[g.addr] = g; if not (p.grips and p.grips.by[g.addr]==g) then changed = true end end
     if changed then
         Log("pose: stand-in grip constraints driven off: %d (BP slerp drive %s)", #list, tostring(list[1] and list[1].stiff))
     end
     p.grips = { at = now, list = list, by = by }
-    -- Free the limits only while that hand's weapon is servoed to the owner's
-    -- (a weapon that is not - other class, kinematic fists - keeps its grip and
-    -- just follows the hand). Re-applied each refresh: the BP may re-lock.
+    -- A real weapon needs a fresh servo target before its grip is freed.
+    -- Fists have no weapon pose target at all: a locked grip to that pseudo
+    -- actor fights the hand-bone servo, so driven fists must be free too.
+    -- Re-applied each refresh: the BP may re-lock.
     for _, g in ipairs(list) do
-        local ws = p.wservo and p.wservo[g.hand == "hand_r" and "Weapon R" or "Weapon L"]
-        local want = g.lim and TUNE.grips ~= 0 and ws and now - ws < 500
         pcall(function()
-            if want then
-                g.c:SetLinearXLimit(0, 0); g.c:SetLinearYLimit(0, 0); g.c:SetLinearZLimit(0, 0)
-                g.c:SetAngularSwing1Limit(0, 0); g.c:SetAngularSwing2Limit(0, 0); g.c:SetAngularTwistLimit(0, 0)
-                g.freed = true
-            elseif g.freed then
-                local l = g.lim
-                g.c:SetLinearXLimit(l[1], l[4]); g.c:SetLinearYLimit(l[2], l[4]); g.c:SetLinearZLimit(l[3], l[4])
-                g.c:SetAngularSwing1Limit(l[5], l[6]); g.c:SetAngularSwing2Limit(l[7], l[8]); g.c:SetAngularTwistLimit(l[9], l[10])
-                g.freed = nil
-            end
+            PX.grip_limits(p,g,g.c,now)
         end)
         g.fresh = nil
     end
@@ -1124,6 +1198,711 @@ function PX.grips_desc(p)
         t[#t + 1] = string.format("%s%s", g.hand == "hand_r" and "R" or "L", g.freed and ":free" or ":locked")
     end
     return #t > 0 and table.concat(t, ",") or "none"
+end
+
+-- Bounded developer evidence only. Read the two native hand fields after BP
+-- writes and (for a driven body) after our existing policy in the same callback.
+-- SDK LinearDriveConstraint/ConstraintDrive and cooked Willie hand setup prove
+-- these fields and bindings; free limits alone do not describe motor enables.
+PX.GRIP_PROBE = os.getenv("HSMP_DEV")=="1" and os.getenv("HSMP_GRIP_PROBE")=="1"
+function PX.grip_probe_number(v)
+    if type(v)~="number" or v~=v or math.abs(v)==math.huge then error("number unavailable",0)end
+    return v
+end
+function PX.grip_probe_id(o)
+    if not o or o:IsValid()~=true then error("object unavailable",0)end
+    local addr,name=o:GetAddress(),o:GetFName():ToString()
+    if type(addr)~="number" or addr<=0 or not math.tointeger(addr) or type(name)~="string" or name==""then
+        error("identity unavailable",0)
+    end
+    return {address=addr,name=name}
+end
+function PX.grip_probe_same(a,b)return a and b and a.address==b.address and a.name==b.name or false end
+function PX.grip_probe_binding(c,current)
+    -- Pinned UE4SS scalar-Outs retain the first stack table. One fresh shared
+    -- container gives all four named outputs an unambiguous destination.
+    local out={}
+    c:GetConstrainedComponents(out,out,out,out)
+    if current then current() end -- native reentry: qualify before touching returned wrappers
+    local one,two=out.OutComponent1,out.OutComponent2
+    local b1,b2=out.OutBoneName1:ToString(),out.OutBoneName2:ToString()
+    if type(b1)~="string" or b1=="" or type(b2)~="string" or b2==""then error("bone unavailable",0)end
+    return {one=PX.grip_probe_id(one),two=PX.grip_probe_id(two),bone1=b1,bone2=b2,
+        owner1=PX.grip_probe_id(one:GetOwner()),owner2=PX.grip_probe_id(two:GetOwner())}
+end
+function PX.grip_probe_current(q)
+    local ok,current=pcall(function()
+        if cache_gen~=world_gen or q.generation~=world_gen or q.world~=cache_world then return false end
+        -- PURE permits unstamped/no-session driving outside an active match.
+        -- Evidence requires the fresh published session and exact Mode life
+        -- in every phase, including the next spawn round during preparation.
+        -- The normal facade caches its header for 1s and retains it on a failed
+        -- refresh. This admitted diagnostic uses an actual current header;
+        -- the session reader still owns connected/heartbeat qualification.
+        local info=HSMP_IPC and HSMP_IPC.N and HSMP_IPC.N.ipc_info()
+        if type(info)~="table"then return false end
+        if info.sidecar_state~="ready" and info.sidecar_state~=2 or type(info.sidecar_hb_age_s)~="number"
+            or PX.grip_probe_number(info.sidecar_hb_age_s)<0 then return false end
+        local reader=HSM and HSM.new({every_s=0,ipc={S=HSMP_IPC.S,rec=HSMP_IPC.rec,refresh_info=function()return info end}})
+        if not reader then return false end
+        reader:poll(true)
+        if not reader:live()then return false end
+        local session,mode=HSM.view(),HSM.mode()
+        local function positive(v)return type(v)=="number" and v>0 and math.tointeger(v)~=nil end
+        if type(session)~="table" or not positive(session.seq) or not positive(session.match_id)then return false end
+        local round=session.round
+        if (session.state=="countdown" or session.state=="paused") and positive(session.spawn_round)then round=session.spawn_round end
+        local row=type(mode)=="table" and type(mode.rows)=="table" and mode.rows[q.peer]
+        if not positive(round) or session.match_id~=q.match_id or round~=q.round or not row
+            or mode.match_id~=q.match_id or mode.round~=q.round or not positive(row.life) or row.life~=q.life then return false end
+        local pc=local_pc()
+        local _,wid=world_identity(pc)
+        if not wid or q.world~=tostring(world_gen).."|"..wid then return false end
+        if not PX.grip_probe_same(PX.grip_probe_id(q.actor),q.pawn)then return false end
+        local w=q.actor:GetWorld()
+        if not w or w:IsValid()~=true or tostring(world_gen).."|"..tostring(w:GetAddress()).."@"..w:GetFullName()~=q.world then return false end
+        if q.p then
+            local shown=q.p.shown or q.p.applied_context
+            if not PX.grip_drive_current(q.p) or not shown or shown.pawn~=q.pawn.name
+                or not PURE.pose_context_ok(shown,HSM and HSM.view(),HSM and HSM.mode(),q.peer)then return false end
+            for _,k in ipairs({"match_id","round","life"})do if shown[k]~=q[k] or q.p.last[k]~=q[k]then return false end end
+            if shown.cut~=q.cut or q.p.last.cut~=q.source_cut then return false end
+            local mesh=PX.injury_mesh(q.p)
+            if not mesh or not PX.grip_probe_same(PX.grip_probe_id(mesh),q.body)
+                or not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),q.pawn)then return false end
+        else
+            if not PX.grip_probe_same(PX.grip_probe_id(local_pawn(pc)),q.pawn)then return false end
+            local s=HSMP_IPC and HSMP_IPC.bus_table("spawn_status")
+            if not s or s.verified~=true or s.pawn~=q.pawn.name then return false end
+            for _,k in ipairs({"match_id","round","life"})do if s[k]~=q[k]then return false end end
+            if not PURE.pose_context_ok(q,HSM and HSM.view(),HSM and HSM.mode(),q.peer)then return false end
+        end
+        return true
+    end)
+    return ok and current==true
+end
+function PX.grip_probe_begin(a,addr,name,p)
+    if not PX.GRIP_PROBE then return nil end
+    local now=now_ms()
+    local state=PX.grip_probe_state or {used=0,at={}}
+    PX.grip_probe_state=state -- only bounded scalar cadence/budget state persists
+    local groups=p and 2 or 1
+    if state.used+groups>120 or state.started and (now<state.started or now-state.started>=180000)then return nil end
+    local context=p and (p.shown or p.applied_context) or HSMP_IPC and HSMP_IPC.bus_table("spawn_status")
+    local peer=p and p.peer or HSM and HSM.my_peer_id()
+    if not context or not peer or peer<=0 or not math.tointeger(peer)then return nil end
+    if not p and (context.verified~=true or context.pawn~=name)then return nil end
+    for _,k in ipairs({"match_id","round","life"})do
+        local v=context[k];if type(v)~="number" or v<=0 or not math.tointeger(v)then return nil end
+    end
+    local role=p and "driven" or "owner"
+    local key=role..":"..peer
+    local identity=name.."@"..tostring(addr)..":"..context.match_id..":"..context.round..":"..context.life
+    local prior=state.at[key]
+    if prior and prior.identity==identity and now-prior.at<5000 then return nil end
+    state.at[key]={identity=identity,at=now};state.started=state.started or now;state.used=state.used+groups
+    state.sequence=(state.sequence or 0)+1
+    local q={actor=a,p=p,pawn={address=addr,name=name},role=role,peer=peer,world=cache_world,generation=world_gen,
+        match_id=context.match_id,round=context.round,life=context.life,has_context=true,
+        group=state.sequence,frame=PX.frame_no or 0,at=now,instance=os.getenv("HSMP_INST") or "unavailable"}
+    if p then q.body={address=p.body.mesh_addr,name=p.body.mesh_fname}end
+    if p then q.cut,q.source_cut,q.source_seq,q.source_mode,q.source_age=context.cut,p.last.cut,p.last.seq,p.last.mode,p.last.age end
+    if not PX.grip_probe_current(q)then return nil end
+    return q -- synchronous callback-local view; never cached or queued
+end
+function PX.grip_probe_capture(q,stage)
+    local result={role=q.role,peer=q.peer,pawn=q.pawn,world=q.world,generation=q.generation,
+        match_id=q.match_id,round=q.round,life=q.life,group=q.group,frame=q.frame,at=q.at,stage=stage,joints={},
+        cut=q.cut,source_cut=q.source_cut,source_seq=q.source_seq,source_mode=q.source_mode,source_age=q.source_age,instance=q.instance}
+    if not PX.grip_probe_current(q)then return nil,"scope changed"end
+    local function id(o)return PX.grip_probe_id(o)end
+    local function vector(v)return {PX.grip_probe_number(v.X),PX.grip_probe_number(v.Y),PX.grip_probe_number(v.Z)}end
+    local function read(row,key,f)
+        local ok,v=pcall(f)
+        if ok then row[key]=v else row.errors[key]="unavailable"end
+    end
+    for _,field in ipairs({"PhysicsConstraint R Hand","PhysicsConstraint L Hand"})do
+        local row={field=field,errors={},linear={errors={}}};result.joints[#result.joints+1]=row
+        local ok=pcall(function()
+            local c=q.actor[field] -- fresh native field; no retained p.grips wrapper
+            row.constraint=id(c)
+            row.owner=id(c:GetOwner())
+            if not PX.grip_probe_same(row.owner,q.pawn)then error("constraint owner mismatch",0)end
+            local mesh=q.actor.Mesh;row.mesh=id(mesh)
+            if not PX.grip_probe_same(id(mesh:GetOwner()),q.pawn)then error("mesh owner mismatch",0)end
+            if q.p then local m=PX.injury_mesh(q.p);row.driver_mesh=id(m)end
+            row.binding=PX.grip_probe_binding(c)
+            if not PX.grip_probe_same(row.binding.two,row.mesh) or not PX.grip_probe_same(row.binding.owner2,q.pawn)then
+                error("body binding mismatch",0)
+            end
+            for _,weapon_field in ipairs({"Weapon R","Weapon L"})do
+                local wa=q.actor[weapon_field]
+                if wa and wa:IsValid()==true and PX.grip_probe_same(id(wa),row.binding.owner1)then
+                    if not PX.grip_probe_same(id(wa.BaseMesh),row.binding.one) or not PX.grip_probe_same(id(wa:GetOwner()),q.pawn)then
+                        error("weapon binding mismatch",0)
+                    end
+                    local w=wa:GetWorld()
+                    if not w or w:IsValid()~=true or tostring(world_gen).."|"..tostring(w:GetAddress()).."@"..w:GetFullName()~=q.world then
+                        error("weapon world mismatch",0)
+                    end
+                    row.weapon_field,row.weapon=weapon_field,id(wa)
+                end
+            end
+            if not row.weapon then error("weapon binding unavailable",0)end
+            local ci=c.ConstraintInstance
+            if ci.ConstraintBone1:ToString()~=row.binding.bone1 or ci.ConstraintBone2:ToString()~=row.binding.bone2 then
+                error("bone binding mismatch",0)
+            end
+            local pi=ci.ProfileInstance
+            read(row,"reference",function()return {vector(ci.Pos1),vector(ci.PriAxis1),vector(ci.SecAxis1),
+                vector(ci.Pos2),vector(ci.PriAxis2),vector(ci.SecAxis2)}end)
+            read(row,"limits",function()
+                local l,co,t=pi.LinearLimit,pi.ConeLimit,pi.TwistLimit
+                return {PX.grip_probe_number(l.XMotion),PX.grip_probe_number(l.YMotion),PX.grip_probe_number(l.ZMotion),PX.grip_probe_number(l.Limit),
+                    PX.grip_probe_number(co.Swing1Motion),PX.grip_probe_number(co.Swing1LimitDegrees),PX.grip_probe_number(co.Swing2Motion),
+                    PX.grip_probe_number(co.Swing2LimitDegrees),PX.grip_probe_number(t.TwistMotion),PX.grip_probe_number(t.TwistLimitDegrees)}
+            end)
+            read(row,"angular",function()
+                local d=pi.AngularDrive.SlerpDrive
+                return {PX.grip_probe_number(d.Stiffness),PX.grip_probe_number(d.Damping),PX.grip_probe_number(d.MaxForce)}
+            end)
+            read(row,"targets",function()return {vector(pi.LinearDrive.PositionTarget),vector(pi.LinearDrive.VelocityTarget)}end)
+            for _,axis in ipairs({"XDrive","YDrive","ZDrive"})do
+                read(row.linear,axis,function()
+                    local d=pi.LinearDrive[axis]
+                    if type(d.bEnablePositionDrive)~="boolean" or type(d.bEnableVelocityDrive)~="boolean"then error("enable unavailable",0)end
+                    return {position=d.bEnablePositionDrive,velocity=d.bEnableVelocityDrive,stiffness=PX.grip_probe_number(d.Stiffness),
+                        damping=PX.grip_probe_number(d.Damping),max_force=PX.grip_probe_number(d.MaxForce)}
+                end)
+            end
+            -- Re-resolve the field and its actual binding after the reads;
+            -- an address reused/rebound during capture cannot become evidence.
+            local current=q.actor[field]
+            if not PX.grip_probe_same(id(current),row.constraint) or not PX.grip_probe_same(id(current:GetOwner()),row.owner)then
+                error("constraint changed",0)
+            end
+            local binding=PX.grip_probe_binding(current)
+            for _,k in ipairs({"one","two","owner1","owner2"})do
+                if not PX.grip_probe_same(binding[k],row.binding[k])then error("binding changed",0)end
+            end
+            if binding.bone1~=row.binding.bone1 or binding.bone2~=row.binding.bone2 then error("bone changed",0)end
+            if current.ConstraintInstance.ConstraintBone1:ToString()~=binding.bone1
+                or current.ConstraintInstance.ConstraintBone2:ToString()~=binding.bone2 then error("current bone changed",0)end
+            local weapon=q.actor[row.weapon_field]
+            local weapon_id=id(weapon)
+            local w=weapon:GetWorld()
+            if not PX.grip_probe_same(id(q.actor.Mesh),row.mesh) or not PX.grip_probe_same(weapon_id,row.weapon)
+                or not PX.grip_probe_same(id(weapon.BaseMesh),row.binding.one) or not PX.grip_probe_same(id(weapon:GetOwner()),q.pawn)
+                or not w or w:IsValid()~=true or tostring(world_gen).."|"..tostring(w:GetAddress()).."@"..w:GetFullName()~=q.world then
+                error("current field changed",0)
+            end
+            row.binding_current=true
+            if stage=="post_policy"then
+                local previous=q.before and q.before.joints[#result.joints]
+                row.same_pair=previous and previous.binding_current==true and PX.grip_probe_same(previous.constraint,row.constraint)
+                    and PX.grip_probe_same(previous.owner,row.owner) or false
+                for _,k in ipairs({"one","two","owner1","owner2"})do
+                    row.same_pair=row.same_pair and PX.grip_probe_same(previous.binding[k],row.binding[k])
+                end
+                row.same_pair=row.same_pair and previous.binding.bone1==row.binding.bone1 and previous.binding.bone2==row.binding.bone2
+            end
+        end)
+        if not ok then row.binding_current=false;row.errors.binding="unavailable"end
+        row.complete=row.binding_current==true and next(row.errors)==nil and next(row.linear.errors)==nil
+            and (stage~="post_policy" or row.same_pair==true)
+    end
+    if not PX.grip_probe_current(q)then return nil,"scope changed"end
+    return result
+end
+function PX.grip_probe_emit(r,why,q,stage)
+    local function ident(v)return v and v.name.."@"..v.address or "unavailable"end
+    local function values(v)
+        if not v then return "unavailable"end
+        local out={};for _,x in ipairs(v)do out[#out+1]=type(x)=="table" and values(x) or tostring(x)end
+        return "("..table.concat(out,",")..")"
+    end
+    local c=r or q
+    Log("GRIPSTATE inst=%s role=%s peer=%s pawn=%s match=%s round=%s life=%s world=%s gen=%s group=%s frame=%s at_ms=%s stage=%s available=%s reason=%s cut=%s source_cut=%s source_seq=%s source_mode=%s source_age=%s read_only=true",
+        tostring(c.instance),c.role,tostring(c.peer),ident(c.pawn),tostring(c.match_id),tostring(c.round),tostring(c.life),tostring(c.world),tostring(c.generation),
+        tostring(c.group),tostring(c.frame),tostring(c.at),r and r.stage or stage,tostring(r~=nil),why or "none",tostring(c.cut),tostring(c.source_cut),
+        tostring(c.source_seq),tostring(c.source_mode),tostring(c.source_age))
+    for _,g in ipairs(r and r.joints or {})do
+        local b=g.binding
+        local unavailable={};for _,k in ipairs({"binding","reference","limits","angular","targets"})do if g.errors[k]then unavailable[#unavailable+1]=k end end
+        Log("GRIPJOINT inst=%s group=%s stage=%s field=%s component=%s owner=%s binding_current=%s same_pair=%s complete=%s unavailable=%s one=%s owner1=%s bone1=%s two=%s owner2=%s bone2=%s native_mesh=%s driven_mesh=%s weapon_field=%s weapon=%s limits=%s angular=%s targets=%s reference=%s",
+            tostring(r.instance),tostring(r.group),r.stage,g.field,ident(g.constraint),ident(g.owner),tostring(g.binding_current),tostring(g.same_pair),tostring(g.complete),table.concat(unavailable,","),ident(b and b.one),ident(b and b.owner1),
+            tostring(b and b.bone1),ident(b and b.two),ident(b and b.owner2),tostring(b and b.bone2),ident(g.mesh),ident(g.driver_mesh),g.weapon_field or "unavailable",ident(g.weapon),
+            g.binding_current and values(g.limits) or "unavailable",g.binding_current and values(g.angular) or "unavailable",
+            g.binding_current and values(g.targets) or "unavailable",g.binding_current and values(g.reference) or "unavailable")
+        for _,axis in ipairs({"XDrive","YDrive","ZDrive"})do
+            local d=g.binding_current==true and type(g.linear)=="table" and type(g.linear[axis])=="table" and g.linear[axis] or nil
+            Log("GRIPAXIS inst=%s group=%s stage=%s component=%s axis=%s available=%s position=%s velocity=%s stiffness=%s damping=%s max_force=%s",
+                tostring(r.instance),tostring(r.group),r.stage,ident(g.constraint),axis,tostring(d~=nil),d and tostring(d.position) or "unavailable",d and tostring(d.velocity) or "unavailable",
+                d and tostring(d.stiffness) or "unavailable",d and tostring(d.damping) or "unavailable",d and tostring(d.max_force) or "unavailable")
+        end
+    end
+end
+-- Actual v2 drive stages, copied only after bounded developer admission.
+-- Current c7 is the existing World-space socket return, not a joint/body angle.
+PX.HAND_PIPELINE_PROBE=os.getenv("HSMP_DEV")=="1" and os.getenv("HSMP_HAND_PIPELINE_PROBE")=="1"
+PX.HAND_PIPELINE_SLOTS={11,12,13,15,16,17} -- upperarms anchor the two forearm parents
+PX.LIMB_BURST_MODULE=os.getenv("HSMP_DEV")=="1" and os.getenv("HSMP_LIMB_BURST_PROBE")=="1" and load_module("limb_burst_probe") or nil
+PX.LIMB_BURST=PX.LIMB_BURST_MODULE and PX.LIMB_BURST_MODULE.new(function(row)
+    if HL and HL.encode then Log("LIMBBURST %s",HL.encode(row))end
+end)or nil
+PX.JOINT_PROFILE_MODULE=os.getenv("HSMP_DEV")=="1"and os.getenv("HSMP_JOINT_PROFILE_PROBE")=="1"and load_module("joint_profile_probe")or nil
+PX.JOINT_PROFILE_SESSION=PX.JOINT_PROFILE_MODULE and load_module("joint_profile_session")or nil
+if PX.JOINT_PROFILE_MODULE then
+    PX.JOINT_PROFILE,PX.JOINT_PROFILE_REASON=PX.JOINT_PROFILE_MODULE.new(function(row)
+        if HL and HL.encode then Log("JOINTPROFILE %s",HL.encode(row))end
+    end,os.getenv("HSMP_JOINT_PROFILE_FOCUS"),os.getenv("HSMP_JOINT_PROFILE_TRIGGER"))
+    if PX.JOINT_PROFILE_REASON then Log("JOINTPROFILE refused stage=config reason=%s",PX.JOINT_PROFILE_REASON)end
+end
+function PX.hand_pipeline_copy(v,n)
+    local ok,out=pcall(function()
+        if type(v)~="table"then return nil end
+        local copy={}
+        for i=1,n do copy[i]=PX.grip_probe_number(v[i])end
+        return copy
+    end)
+    return ok and out or nil
+end
+function PX.hand_pipeline_quat(v)
+    if not v then return nil end
+    local norm=math.sqrt(v[4]^2+v[5]^2+v[6]^2+v[7]^2)
+    if norm<=0 or norm~=norm or norm==math.huge then return nil end
+    return {v[4]/norm,v[5]/norm,v[6]/norm,v[7]/norm},norm
+end
+-- Pending observations describe this actual drive, not an authoritative life.
+-- GRIP/Box and the production pose/readiness guards remain strict and separate.
+function PX.joint_profile_failure(validator,predicate,field,expected,observed)
+    if PX.JOINT_PROFILE_MODULE then return PX.JOINT_PROFILE_MODULE.failure(validator,predicate,field,expected,observed)end
+end
+-- Reuse only reader allocations. Each guard supplies its already freshly
+-- validated native header and still force-polls the current link below.
+function PX.joint_profile_reader(role,info)
+    local holders=PX.joint_profile_readers
+    if not holders then holders={};PX.joint_profile_readers=holders end
+    local holder=holders[role]
+    if not holder then
+        holder={ipc={}}
+        holder.ipc.refresh_info=function()return holder.info end
+        holder.reader=HSM and HSM.new({every_s=0,ipc=holder.ipc})
+        holders[role]=holder
+    end
+    holder.info=info
+    holder.ipc.S,holder.ipc.rec=HSMP_IPC.S,HSMP_IPC.rec
+    return holder.reader
+end
+function PX.hand_pipeline_scope(q,diagnose)
+    local function fail(predicate,field,expected,observed)
+        if diagnose then return nil,PX.joint_profile_failure("proxy",predicate,field,expected,observed)end
+    end
+    local ok,audit,why=pcall(function()
+        local p=q.p
+        if not p or not p.driving or p.actor~=q.actor or cache_gen~=world_gen or q.generation~=world_gen
+            or p.gen~=world_gen or q.world~=cache_world then return fail("proxy_binding","binding_current",true,false)end
+        local source,shown=p.last,p.shown or p.applied_context
+        if type(source)~="table"or type(shown)~="table"or source.has_context~=true or shown.has_context~=true
+            or source.seq~=q.source_seq or source.cut~=q.source_cut or shown.cut~=q.cut or shown.pawn~=q.pawn.name then return fail("applied_source_binding","binding_current",true,false)end
+        for _,k in ipairs({"match_id","round","life"})do
+            if source[k]~=q[k]then return fail("source_tuple",k,q[k],source[k])end
+            if shown[k]~=q.display[k]then return fail("display_tuple",k,q.display[k],shown[k])end
+            if shown[k]~=source[k]then return fail("display_source_tuple",k,source[k],shown[k])end
+        end
+        local info=HSMP_IPC and HSMP_IPC.N and HSMP_IPC.N.ipc_info()
+        if type(info)~="table"then return fail("native_header","header_available",true,false)end
+        if info.sidecar_state~="ready"and info.sidecar_state~=2 then return fail("native_header_state","sidecar_state","ready or 2",info.sidecar_state)end
+        if type(info.sidecar_hb_age_s)~="number"or PX.grip_probe_number(info.sidecar_hb_age_s)<0 then return fail("native_header_age","sidecar_hb_age_s","finite nonnegative number",info.sidecar_hb_age_s)end
+        local reader=PX.joint_profile_reader("proxy",info)
+        if not reader then return fail("session_reader","reader_available",true,false)end
+        reader:poll(true);if not reader:live()then return fail("session_liveness","live",true,false)end
+        local function integer(v,low)return type(v)=="number"and math.tointeger(v)and v>=low and v or nil end
+        local raw_session=diagnose and HSMP_IPC.rec("session")or nil
+        local session=HSM.view()
+        if type(session)~="table"or not integer(session.seq,1)or not integer(session.match_id,1)
+            or not integer(session.round,0)or not integer(session.phase,0)or session.match_id~=q.match_id then return fail("session_view","view_current",true,false)end
+        local pending=session.phase==1 or session.phase==2
+        local round
+        if pending then round=integer(session.spawn_round,1)else round=integer(session.round,1)end
+        if not round or round~=q.round then return fail("session_round","effective_round",q.round,round)end
+        local spawn=pending and type(session.spawns)=="table"and session.spawns[q.peer]or nil
+        if pending and (type(spawn)~="table"or spawn.peer~=q.peer or not integer(spawn.spawn_id,1)
+            or (math.tointeger(spawn.spawn_id)>>8)~=q.round or session.spawn_round~=q.round)then return fail("pending_assignment","assignment_current",true,false)end
+        local mode=HSMP_IPC.rec("mode") -- actual fields; HSM.mode() supplies defaults for consumers
+        local present=type(mode)=="table"
+        local row,count=nil,0
+        if present and type(mode.rows)=="table"then
+            for _,r in ipairs(mode.rows)do
+                if type(r)=="table"and r.peer_id==q.peer then row=r;count=count+1 end
+            end
+        end
+        if count~=1 then row=nil end
+        local a={session_seq=session.seq,session_match=session.match_id,session_round=session.round,session_phase=session.phase,
+            effective_round=round,pending=pending,spawn_id=spawn and spawn.spawn_id or nil,spawn_peer=spawn and spawn.peer or nil,
+            mode_present=present,mode_seq=present and integer(mode.seq,0)or nil,mode_match=present and integer(mode.match_id,0)or nil,
+            mode_round=present and integer(mode.round,0)or nil,mode_row_available=row~=nil,mode_peer=row and row.peer_id or nil,
+            mode_life=row and integer(row.life,0)or nil}
+        a.mode_available=integer(a.mode_seq,1)~=nil
+        a.qualification=a.mode_available and a.mode_match==q.match_id and a.mode_round==q.round
+            and integer(a.mode_life,1)~=nil and a.mode_life==q.life
+        a.qualification_reason=a.qualification and "mode_current"or not a.mode_available and "mode_unavailable"or "mode_tuple_mismatch"
+        if not a.qualification and not pending then return fail("mode_qualification","qualification",true,a.qualification)end -- preserve strict Live admission
+        if diagnose then
+            local helper=PX.JOINT_PROFILE_SESSION
+            if not helper then return fail("raw_scope_snapshot","helper_available",true,false)end
+            a.semantic,a.raw_versions=helper.capture(raw_session,mode)
+            if not a.semantic then return fail("raw_scope_snapshot","snapshot_available",true,false)end
+        end
+        local pc=local_pc();local _,wid=world_identity(pc)
+        if not wid or q.world~=tostring(world_gen).."|"..wid or not PX.grip_probe_same(PX.grip_probe_id(q.actor),q.pawn)then return fail("native_pc_actor_binding","binding_current",true,false)end
+        local w=q.actor:GetWorld()
+        if not w or w:IsValid()~=true or tostring(world_gen).."|"..w:GetAddress().."@"..w:GetFullName()~=q.world then return fail("native_actor_world","world_current",true,false)end
+        local mesh=PX.injury_mesh(p)
+        if not mesh or not PX.grip_probe_same(PX.grip_probe_id(mesh),q.body)
+            or not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),q.pawn)then return fail("native_mesh_binding","binding_current",true,false)end
+        return a
+    end)
+    if not ok then return fail("scope_exception","exception",nil,type(audit)=="string"and audit or nil)end
+    return audit,why
+end
+function PX.hand_pipeline_current(q,diagnose)
+    local a,why=PX.hand_pipeline_scope(q,diagnose)
+    if not a then return false,why end
+    if not q.audit then return false,diagnose and PX.joint_profile_failure("proxy","audit_unavailable","audit_available",true,false)or nil end
+    local function compared(k)return not diagnose or(k~="session_seq"and k~="mode_seq"and k~="semantic"and k~="raw_versions")end
+    if diagnose then
+        local same,field,expected,observed=PX.JOINT_PROFILE_SESSION.same(q.audit.semantic,a.semantic)
+        if not same then return false,PX.joint_profile_failure("proxy","raw_scope_changed",field,expected,observed)end
+        for _,k in ipairs(PX.JOINT_PROFILE_MODULE.AUDIT_FIELDS)do
+            if compared(k)and q.audit[k]~=a[k]then return false,PX.joint_profile_failure("proxy","audit_changed",k,q.audit[k],a[k])end
+        end
+    end
+    for k,v in pairs(a)do if compared(k)and q.audit[k]~=v then return false,diagnose and PX.joint_profile_failure("proxy","audit_changed",k,q.audit[k],v)or nil end end
+    for k,v in pairs(q.audit)do if compared(k)and a[k]~=v then return false,diagnose and PX.joint_profile_failure("proxy","audit_changed",k,v,a[k])or nil end end
+    return true
+end
+function PX.limb_writer_current(q)
+    local ok,valid=pcall(function()
+        local _,wid=world_identity(local_pc())
+        if not wid or tostring(world_gen).."|"..wid~=q.world then return false end
+        local p=q.p
+        if p.actor~=q.actor or not p.driving or p.gen~=world_gen or cache_gen~=world_gen
+            or cache_world~=q.world or world_gen~=q.generation then return false end
+        local source,shown=p.last,p.shown or p.applied_context
+        if not source or not shown or source.seq~=q.source_seq or source.cut~=q.source_cut or shown.pawn~=q.pawn.name then return false end
+        for _,k in ipairs({"match_id","round","life"})do if source[k]~=q[k]or shown[k]~=q[k]then return false end end
+        local mesh=PX.injury_mesh(p)
+        return mesh~=nil and PX.grip_probe_same(PX.grip_probe_id(q.actor),q.pawn)
+            and PX.grip_probe_same(PX.grip_probe_id(mesh),q.body)and PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),q.pawn)
+    end)
+    return ok and valid==true
+end
+-- The local source is our own peer, never the owner of this process's proxy.
+-- Pending life comes from a successful actual pose publication, not a constant.
+function PX.joint_profile_source_scope(diagnose)
+    local function fail(predicate,field,expected,observed)
+        if diagnose then return nil,PX.joint_profile_failure("source",predicate,field,expected,observed)end
+    end
+    local ok,q,why=pcall(function()
+        local pc=local_pc();local _,wid=world_identity(pc)
+        if not wid or cache_gen~=world_gen or cache_world~=tostring(world_gen).."|"..wid then return fail("native_pc_world","world_current",true,false)end
+        local info=HSMP_IPC.N.ipc_info()
+        if type(info)~="table"then return fail("native_header","header_available",true,false)end
+        if info.sidecar_state~="ready"and info.sidecar_state~=2 then return fail("native_header_state","sidecar_state","ready or 2",info.sidecar_state)end
+        if type(info.sidecar_hb_age_s)~="number"or PX.grip_probe_number(info.sidecar_hb_age_s)<0 then return fail("native_header_age","sidecar_hb_age_s","finite nonnegative number",info.sidecar_hb_age_s)end
+        local reader=PX.joint_profile_reader("source",info)
+        reader:poll(true);if not reader:live()then return fail("session_liveness","live",true,false)end
+        local function positive(v)return type(v)=="number"and math.tointeger(v)and v>0 and v or nil end
+        local raw_session=diagnose and HSMP_IPC.rec("session")or nil
+        local session,peer=HSM.view(),HSM.my_peer_id()
+        local status=HSMP_IPC.sample_status();local pose=status and status.pose
+        local spawn=HSMP_IPC.bus_table("spawn_status")
+        local now=now_ms()
+        if not positive(peer)or type(session)~="table"or not positive(session.seq)or type(pose)~="table"then return fail("source_records","records_available",true,false)end
+        if not positive(pose.tick)or type(pose.ts)~="number"or pose.ts~=pose.ts or pose.ts<=0 or pose.ts>=math.huge then return fail("source_sample_stamp","stamp_available",true,false)end
+        if now-pose.ts<0 or now-pose.ts>250 then return fail("source_sample_age","sample_age_ms","0..250",now-pose.ts)end
+        if not positive(pose.match_id)or not positive(pose.round)or not positive(pose.life)then return fail("source_sample_tuple","tuple_available",true,false)end
+        if type(spawn)~="table"or spawn.verified~=true then return fail("verified_spawn","verified",true,false)end
+        for _,k in ipairs({"match_id","round","life"})do if spawn[k]~=pose[k]then return fail("spawn_sample_tuple",k,spawn[k],pose[k])end end
+        local pending=session.phase==1 or session.phase==2
+        if session.match_id~=pose.match_id then return fail("session_sample_tuple","match_id",session.match_id,pose.match_id)end
+        if (pending and session.spawn_round or session.round)~=pose.round then return fail("session_sample_tuple","round",pending and session.spawn_round or session.round,pose.round)end
+        local order=type(session.spawns)=="table"and session.spawns[peer]
+        if not order or order.peer~=peer or not positive(order.spawn_id)or not positive(spawn.spawn_id)
+            or spawn.spawn_id~=order.spawn_id or (order.spawn_id>>8)~=pose.round then return fail("current_assignment","assignment_current",true,false)end
+        local mode=HSMP_IPC.rec("mode");local mr,count=nil,0
+        if mode and type(mode.rows)=="table"then for _,r in ipairs(mode.rows)do if r.peer_id==peer then mr=r;count=count+1 end end end
+        local qualified=mode and positive(mode.seq)and mode.match_id==pose.match_id and mode.round==pose.round and count==1 and mr.life==pose.life or false
+        if not pending and not qualified then return fail("mode_qualification","qualification",true,qualified)end
+        if pending and mode and positive(mode.seq)and mode.match_id==pose.match_id and mode.round==pose.round and not qualified then return fail("pending_mode_qualification","qualification",true,qualified)end
+        local semantic,raw_versions
+        if diagnose then
+            local helper=PX.JOINT_PROFILE_SESSION
+            if not helper then return fail("raw_scope_snapshot","helper_available",true,false)end
+            semantic,raw_versions=helper.capture(raw_session,mode)
+            if not semantic then return fail("raw_scope_snapshot","snapshot_available",true,false)end
+        end
+        pc=local_pc();local _,fresh_world=world_identity(pc)
+        if fresh_world~=wid then return fail("native_pc_world_changed","world",wid,fresh_world)end
+        local actor=local_pawn(pc);local pawn=PX.grip_probe_id(actor)
+        if not pawn or pawn.name~=spawn.pawn then return fail("native_pawn_binding","pawn_name",spawn.pawn,pawn and pawn.name)end
+        local world=actor:GetWorld()
+        if not world or world:GetAddress().."@"..world:GetFullName()~=wid then return fail("native_actor_world","world_current",true,false)end
+        local mesh=actor.Mesh;local body=PX.grip_probe_id(mesh)
+        if not body or not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),pawn)then return fail("native_mesh_binding","binding_current",true,false)end
+        return {actor=actor,mesh=mesh,semantic=semantic,context={instance=os.getenv("HSMP_INST")or "unavailable",role="local_source",peer=peer,
+            pawn=pawn,mesh=body,world=cache_world,generation=world_gen,match_id=pose.match_id,round=pose.round,life=pose.life,
+            qualification=qualified,pending=pending,spawn_id=order.spawn_id,observed_ms=now,
+            sample_tick=pose.tick,sample_ms=pose.ts,admission_sample_age_ms=now-pose.ts,source_cut_available=false,
+            raw_record_versions=raw_versions,
+            time_meaning="sample_ms is last successful own pose publication; observed_ms is current configuration read"}}
+    end)
+    if not ok then return fail("scope_exception","exception",nil,type(q)=="string"and q or nil)end
+    return q,why
+end
+function PX.joint_profile_source_current(q)
+    local fresh,why=PX.joint_profile_source_scope(true);if not fresh then return false,why end
+    local a,b=q.context,fresh.context
+    for _,k in ipairs({"peer","world","generation","match_id","round","life","spawn_id","qualification","pending"})do
+        if a[k]~=b[k]then return false,PX.joint_profile_failure("source","context_changed",k,a[k],b[k])end
+    end
+    if not PX.grip_probe_same(a.pawn,b.pawn)then return false,PX.joint_profile_failure("source","native_pawn_changed","identity_current",true,false)end
+    if not PX.grip_probe_same(a.mesh,b.mesh)then return false,PX.joint_profile_failure("source","native_mesh_changed","identity_current",true,false)end
+    local same,field,expected,observed=PX.JOINT_PROFILE_SESSION.same(q.semantic,fresh.semantic)
+    if not same then return false,PX.joint_profile_failure("source","raw_scope_changed",field,expected,observed)end
+    return true
+end
+function PX.joint_profile_row(p)
+    local probe=PX.JOINT_PROFILE
+    if not probe or not p or not p.aim then return nil,true end
+    local trigger
+    if probe.trigger=="fault"then
+        trigger=PX.JOINT_PROFILE_MODULE.right_fault(p.settle_state,p.last,p.shown,p.aim,p.body,
+            PX.settle_world,world_gen,now_ms(),PX.STALL_FRAMES or 20)
+        if not trigger then return nil,true end -- no optional reads or consumed attempt before a real fault
+    end
+    if not probe:attempt(now_ms())then return nil,true end
+    local q
+    local capture_started=false
+    local stage="proxy_context"
+    local ok,result,reason,detail=pcall(function()
+        local cur,body,shown=p.last,p.body,p.shown or p.applied_context
+        if not cur or not body or not shown then return nil end
+        q={actor=p.actor,p=p,pawn={address=p.addr,name=shown.pawn},body={address=body.mesh_addr,name=body.mesh_fname},
+            peer=p.peer,world=cache_world,generation=world_gen,match_id=cur.match_id,round=cur.round,life=cur.life,
+            cut=shown.cut,source_cut=cur.cut,source_seq=cur.seq,display={match_id=shown.match_id,round=shown.round,life=shown.life,cut=shown.cut}}
+        if cur.has_context~=true or (cur.mode~="interp"and cur.mode~="extrap")or type(cur.age)~="number"
+            or cur.age~=cur.age or math.abs(cur.age)>250 then return nil end
+        for _,k in ipairs({"match_id","round","life"})do
+            if type(cur[k])~="number"or not math.tointeger(cur[k])or cur[k]<=0 then return nil end
+        end
+        stage="proxy_scope";local failure;q.audit,failure=PX.hand_pipeline_scope(q,true);if not q.audit then return nil,"proxy scope unavailable",{stage=stage,first_failure=failure}end
+        stage="source_scope";local own;own,failure=PX.joint_profile_source_scope(true);if not own then return nil,"source scope unavailable",{stage=stage,first_failure=failure}end
+        if probe.retry_attempt and(own.context.pending~=true or q.audit.pending~=true)then
+            probe:abandon();return nil,"retry requires current pending peers" -- before optional lookup/component reads
+        end
+        local transported={available=false,kind="transported_control",source_seq=q.source_seq,
+            native_read_availability=false,control_timestamp_available=false,authority=false}
+        if type(cur.control)=="table"then
+            local r,l=rawget(cur.control,2),rawget(cur.control,3)
+            if type(r)=="number"and math.tointeger(r)and r>=0 and r<=255
+                and type(l)=="number"and math.tointeger(l)and l>=0 and l<=255 then
+                transported.available,transported.grip_r,transported.grip_l=true,r,l
+            end
+        end
+        local context={instance=os.getenv("HSMP_INST")or "unavailable",role="remote_proxy",peer=q.peer,pawn=q.pawn,mesh=q.body,
+            world=q.world,generation=q.generation,match_id=q.match_id,round=q.round,life=q.life,source_cut=q.source_cut,
+            source_seq=q.source_seq,source_mode=cur.mode,admission_source_age_ms=cur.age,source_pt=cur.pt,observed_ms=now_ms(),
+            original_applied_ms=shown.at,original_body_ts=shown.label,original_arm_ts=shown.label,
+            raw_record_versions=q.audit.raw_versions,
+            source_control=transported,
+            qualification=q.audit.qualification,pending=q.audit.pending,frame=PX.frame_no or 0,
+            time_meaning="applied pose timestamps retained; configuration observation is a later read"}
+        context.fault_trigger=trigger
+        stage="library_lookup";local lib=StaticFindObject("/Script/Engine.Default__ConstraintInstanceBlueprintLibrary")
+        -- Lookup may reenter travel before cached generations update. Check
+        -- the current PC world before resolving any retained proxy component.
+        if not PX.limb_writer_current(q)then return nil,"writer scope changed after library lookup"end
+        stage="capture"
+        capture_started=true
+        return probe:capture(own.context,context,
+            {actor=own.actor,mesh=own.mesh,library=lib,fname=fname,now=now_ms,joint_angles=trigger~=nil,current=function()return PX.joint_profile_source_current(own)end},
+            {actor=p.actor,mesh=PX.injury_mesh(p),library=lib,fname=fname,now=now_ms,joint_angles=trigger~=nil,
+                grip_flags=trigger and function()
+                    local value,why=PX.grip_linear_observe(p)
+                    assert(value and value.available==true,value and value.reason or why or "current grip flags unavailable");return value
+                end or nil,current=function()return PX.hand_pipeline_current(q,true)end})
+    end)
+    if not ok or not result then
+        if not capture_started and probe.trigger=="fault"then probe:abandon()end -- warm pre-capture admission retains its existing retries
+        local why=PX.JOINT_PROFILE_MODULE.reason(ok and (reason or "context unavailable")or result)
+        local elapsed=type(detail)=="table"and detail.elapsed_available==true and detail.capture_elapsed_ms or nil
+        pcall(Log,"JOINTPROFILE refused inst=%s attempt=%d stage=%s capture_elapsed_ms=%s reason=%s",
+            os.getenv("HSMP_INST")or "unavailable",probe.attempts,type(detail)=="table"and detail.stage or stage,
+            elapsed~=nil and tostring(elapsed)or "unavailable",why)
+        local failure=type(detail)=="table"and detail.first_failure
+        if type(failure)=="table"then
+            pcall(function()Log("JOINTPROFILE predicate inst=%s attempt=%d %s",os.getenv("HSMP_INST")or "unavailable",probe.attempts,HL.encode(failure))end)
+        end
+    end
+    -- Diagnostic Session/Mode failure adds no physical policy. Native scope
+    -- change during optional reads must still prevent writing the old body.
+    local writer_current=true
+    if q then
+        local valid,v=pcall(PX.limb_writer_current,q)
+        writer_current=valid and v==true
+    end
+    return ok and result or nil,writer_current
+end
+function PX.limb_burst_row(p,phase,params,aim)
+    local probe=PX.LIMB_BURST
+    if not probe or not p or not probe:attempt(p.settle_state,now_ms())then return nil,true end
+    local cur,body,shown=p.last,p.body,p.shown or p.applied_context
+    if not cur or not body or not shown or cur.has_context~=true or (cur.mode~="interp"and cur.mode~="extrap")
+        or type(cur.age)~="number"or cur.age~=cur.age or math.abs(cur.age)>250 then return nil,true end
+    if not probe.key then
+        local fault=p.settle_state
+        if not fault or fault.match_id~=cur.match_id or fault.round~=cur.round or fault.life~=cur.life
+            or fault.pawn~=shown.pawn or fault.world~=PX.settle_world or fault.cut~=cur.cut then return nil,true end
+    end
+    local q={actor=p.actor,p=p,pawn={address=p.addr,name=shown.pawn},body={address=body.mesh_addr,name=body.mesh_fname},
+        peer=p.peer,world=cache_world,generation=world_gen,match_id=cur.match_id,round=cur.round,life=cur.life,
+        cut=shown.cut,source_cut=cur.cut,source_seq=cur.seq,display={match_id=shown.match_id,round=shown.round,life=shown.life,cut=shown.cut}}
+    q.audit=PX.hand_pipeline_scope(q)
+    if not q.audit then
+        pcall(Log,"LIMBBURST refused inst=%s phase=%s reason=diagnostic_scope_unavailable",os.getenv("HSMP_INST")or "unavailable",phase)
+        return nil,PX.limb_writer_current(q)
+    end
+    local context={instance=os.getenv("HSMP_INST")or "unavailable",pawn=q.pawn,mesh=q.body,world=q.world,generation=q.generation,
+        peer=q.peer,match_id=q.match_id,round=q.round,life=q.life,source_cut=q.source_cut,source_seq=q.source_seq,
+        source_mode=cur.mode,source_age=cur.age,source_pt=cur.pt,at=now_ms(),frame=PX.frame_no or 0,audit=q.audit}
+    local mesh=PX.injury_mesh(p);if not mesh then return nil,false end
+    local library
+    pcall(function()library=StaticFindObject("/Script/Engine.Default__ConstraintInstanceBlueprintLibrary")end)
+    local prior=p.aim
+    local ok,record=pcall(probe.capture,probe,context,phase,{actor=p.actor,mesh=mesh,library=library,cached=body.motor_ids,fname=fname,
+        current=function()return PX.hand_pipeline_current(q)end,
+        pose=function(bone)
+            local i=bone=="upperarm_l"and 11 or bone=="lowerarm_l"and 12 or 13
+            return {decoded=cur.slots[i],aim=aim and aim[i],prior=prior and prior.slots and prior.slots[i]}
+        end},params,p.settle_state)
+    if not ok then pcall(Log,"LIMBBURST refused inst=%s phase=%s reason=capture_exception",context.instance,phase)end
+    return ok and record or nil,PX.limb_writer_current(q)
+end
+function PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
+    if not PX.HAND_PIPELINE_PROBE then return nil end
+    local at=now_ms()
+    local s=PX.hand_pipeline_state or {used=0,at={}}
+    PX.hand_pipeline_state=s -- scalar only; callback-local records are never queued
+    if s.used>=60 or s.started and (at<s.started or at-s.started>=180000)then return nil end
+    local shown=p.shown or p.applied_context
+    if not shown or type(shown.pawn)~="string" or shown.pawn=="" or cur.has_context~=true
+        or type(p.addr)~="number" or p.addr<=0 or not math.tointeger(p.addr)
+        or type(p.peer)~="number"or p.peer<=0 or not math.tointeger(p.peer)then return nil end
+    for _,k in ipairs({"match_id","round","life","seq"})do
+        local v=cur[k];if type(v)~="number" or v<=0 or not math.tointeger(v)then return nil end
+    end
+    if type(cur.cut)~="number" or cur.cut<0 or not math.tointeger(cur.cut)then return nil end
+    local identity=tostring(cache_world)..":"..p.addr..":"..shown.pawn..":"..tostring(body.mesh_addr)..":"..tostring(body.mesh_fname)
+        ..":"..cur.match_id..":"..cur.round..":"..cur.life..":"..cur.cut
+    local prior=s.at[p.peer]
+    if prior and prior.identity==identity and at-prior.at<5000 then return nil end
+    s.at[p.peer]={identity=identity,at=at};s.used=s.used+1 -- rejected attempts remain bounded
+    local q={actor=p.actor,p=p,pawn={address=p.addr,name=shown.pawn},body={address=body.mesh_addr,name=body.mesh_fname},
+        peer=p.peer,world=cache_world,generation=world_gen,match_id=cur.match_id,round=cur.round,life=cur.life,has_context=true,
+        cut=shown.cut,source_cut=cur.cut,source_seq=cur.seq,group=s.used,instance=os.getenv("HSMP_INST") or "unavailable",
+        frame=PX.frame_no or 0,at=at,drive_ms=now,
+        display={match_id=shown.match_id,round=shown.round,life=shown.life,cut=shown.cut},state=s}
+    q.audit=PX.hand_pipeline_scope(q)
+    if not q.audit then return nil end
+    local old=p.aim
+    local prior_ok=old and old.has_context==true and old.match_id==q.match_id and old.round==q.round and old.life==q.life
+        and old.cut==q.source_cut and old.pawn==q.pawn.name and old.pipeline_world==q.world and old.pipeline_generation==q.generation
+        and PX.grip_probe_same(old.pipeline_mesh,q.body)
+    q.record={instance=q.instance,peer=q.peer,pawn=q.pawn,mesh=q.body,world=q.world,generation=q.generation,group=q.group,
+        frame=q.frame,at=q.at,drive_ms=now,match_id=q.match_id,round=q.round,life=q.life,source_seq=q.source_seq,source_cut=q.source_cut,
+        source_mode=cur.mode,source_age=cur.age,source_pt=cur.pt,display_label=label,aim_label=aim_label,display=q.display,
+        audit=q.audit,qualification=q.audit.qualification,authority=false,
+        prior_available=prior_ok==true,prior_seq=prior_ok and old.seq or nil,prior_label=prior_ok and old.label or nil,
+        prior_frame=prior_ok and old.pipeline_frame or nil,decoded={},aim={},prior={},current={},readback={}}
+    for _,i in ipairs(PX.HAND_PIPELINE_SLOTS)do
+        q.record.decoded[i]=PX.hand_pipeline_copy(cur.slots[i],13)
+        q.record.aim[i]=PX.hand_pipeline_copy(aim[i],13)
+        q.record.prior[i]=prior_ok and PX.hand_pipeline_copy(old.slots and old.slots[i],13) or nil
+    end
+    return q
+end
+function PX.hand_pipeline_observe(q,i,c,native)
+    if not q then return end
+    for _,slot in ipairs(PX.HAND_PIPELINE_SLOTS)do
+        if slot==i then
+            q.record.current[i]=PX.hand_pipeline_copy(c,7)
+            q.record.current_source=native and "native_servo_socket_world" or "lua_socket_world"
+            return
+        end
+    end
+end
+function PX.hand_pipeline_finish(q)
+    if not q or not PX.hand_pipeline_current(q)then return nil,"scope changed"end
+    if q.state.started and (now_ms()<q.state.started or now_ms()-q.state.started>=180000)then return nil,"capture expired"end
+    local mesh=PX.injury_mesh(q.p) -- fresh field, never the retained body.mesh wrapper
+    if not mesh then return nil,"mesh unavailable"end
+    for _,i in ipairs({12,13,16,17})do
+        local row={};q.record.readback[i]=row
+        local ok,sim=pcall(function()return mesh:IsSimulatingPhysics(fname(PURE.V2_SLOTS[i]))end)
+        if ok and type(sim)=="boolean"then row.simulating=sim end
+        local good,velocity=pcall(function()
+            local v=mesh:GetPhysicsAngularVelocityInDegrees(fname(PURE.V2_SLOTS[i]))
+            return {PX.grip_probe_number(v.X),PX.grip_probe_number(v.Y),PX.grip_probe_number(v.Z)}
+        end)
+        if good then row.angular_velocity=velocity end
+        if not PX.hand_pipeline_current(q)then return nil,"scope changed"end
+    end
+    local at=now_ms()
+    if q.state.started and (at<q.state.started or at-q.state.started>=180000)then return nil,"capture expired"end
+    q.state.started=q.state.started or at -- only the first completed native-scope observation starts the window
+    q.record.window_started=q.state.started
+    return q.record
+end
+function PX.hand_pipeline_emit(r,why,q)
+    local function values(v)
+        if not v then return "unavailable"end
+        local out={};for _,x in ipairs(v)do out[#out+1]=tostring(x)end
+        return "("..table.concat(out,",")..")"
+    end
+    local c=r or q
+    local pawn=c.pawn.name.."@"..c.pawn.address
+    local mesh=(c.mesh or c.body).name.."@"..(c.mesh or c.body).address
+    local a=c.audit or {};local d=c.display or {}
+    local function actual(v)return v==nil and "unavailable"or tostring(v)end
+    Log("HANDCONTEXT inst=%s group=%s peer=%s available=%s qualification=%s authority=false qualification_reason=%s source_match=%s source_round=%s source_life=%s display_match=%s display_round=%s display_life=%s display_cut=%s session_seq=%s session_match=%s session_round=%s session_phase=%s effective_round=%s pending=%s spawn_id=%s spawn_peer=%s mode_present=%s mode_available=%s mode_seq=%s mode_match=%s mode_round=%s mode_row_available=%s mode_peer=%s mode_life=%s window_started_ms=%s",
+        tostring(c.instance),tostring(c.group),tostring(c.peer),tostring(r~=nil),tostring(r~=nil and c.qualification==true),r and a.qualification_reason or why or "unavailable",
+        tostring(c.match_id),tostring(c.round),tostring(c.life),tostring(d.match_id),tostring(d.round),tostring(d.life),tostring(d.cut),
+        actual(a.session_seq),actual(a.session_match),actual(a.session_round),actual(a.session_phase),actual(a.effective_round),actual(a.pending),
+        actual(a.spawn_id),actual(a.spawn_peer),actual(a.mode_present),actual(a.mode_available),actual(a.mode_seq),actual(a.mode_match),actual(a.mode_round),
+        actual(a.mode_row_available),actual(a.mode_peer),actual(a.mode_life),actual(c.window_started))
+    Log("HANDPIPESTATE inst=%s group=%s peer=%s pawn=%s mesh=%s world=%s gen=%s match=%s round=%s life=%s frame=%s at_ms=%s drive_ms=%s source_seq=%s source_cut=%s source_mode=%s source_age=%s source_pt=%s display_label=%s aim_label=%s prior_available=%s prior_seq=%s prior_label=%s prior_frame=%s current_source=%s available=%s qualification=%s authority=false reason=%s current_phase=pre_driver_returned readback_phase=post_driver read_only=true",
+        tostring(c.instance),tostring(c.group),tostring(c.peer),pawn,mesh,tostring(c.world),tostring(c.generation),tostring(c.match_id),tostring(c.round),tostring(c.life),
+        tostring(c.frame),tostring(c.at),tostring(c.drive_ms),tostring(c.source_seq),tostring(c.source_cut),tostring(c.source_mode),tostring(c.source_age),tostring(c.source_pt),
+        tostring(c.display_label),tostring(c.aim_label),tostring(c.prior_available),tostring(c.prior_seq),tostring(c.prior_label),tostring(c.prior_frame),
+        tostring(c.current_source),tostring(r~=nil),tostring(r~=nil and c.qualification==true),why or "none")
+    if not r then return end
+    for _,i in ipairs({12,13,16,17})do
+        local stage={}
+        for _,name in ipairs({"decoded","aim","prior","current"})do
+            local data=r[name][i]
+            local quat,norm=PX.hand_pipeline_quat(data)
+            local parent=PX.hand_pipeline_quat(r[name][PURE.V2_PARENT[i]])
+            local relative=quat and parent and PURE.qmul(PURE.qconj(parent),quat) or nil
+            stage[#stage+1]=string.format("%s_available=%s %s_values=%s %s_norm=%s %s_relative=%s",name,tostring(quat~=nil),name,values(data),name,tostring(norm),name,values(relative))
+        end
+        local b=r.readback[i] or {}
+        Log("HANDPIPE inst=%s group=%s peer=%s slot=%d bone=%s parent_slot=%d parent_bone=%s qualification=%s authority=false %s sim_available=%s simulating=%s angular_velocity_available=%s angular_velocity_deg_s=%s",
+            tostring(r.instance),tostring(r.group),tostring(r.peer),i,PURE.V2_SLOTS[i],PURE.V2_PARENT[i],PURE.V2_SLOTS[PURE.V2_PARENT[i]],tostring(r.qualification),table.concat(stage," "),
+            tostring(type(b.simulating)=="boolean"),type(b.simulating)=="boolean" and tostring(b.simulating) or "unavailable",
+            tostring(b.angular_velocity~=nil),values(b.angular_velocity))
+    end
 end
 -- The grip constraints of a stand-in, as FRESH components keyed by
 -- address. The BP destroys and rebuilds them on a pick-up / drop / disarm;
@@ -1145,16 +1924,342 @@ function PX.fresh_grips(p)
     end)
     return fresh
 end
+local function constraint_bone2(c) return c.ConstraintInstance.ConstraintBone2:ToString() end
+-- Plain restoration leases, independent of the disposable p.grips scan.
+-- Only the six native enable flags are owned: per-axis strengths, targets and
+-- the existing angular/limit policy are never changed by this lease.
+function PX.grip_linear_equal(a,b)
+    if type(a)~=type(b) then return false end
+    if type(a)~="table" then return a==b end
+    for k,v in pairs(a) do if not PX.grip_linear_equal(v,b[k]) then return false end end
+    for k in pairs(b) do if a[k]==nil then return false end end
+    return true
+end
+function PX.grip_linear_flags(c)
+    local d=c.ConstraintInstance.ProfileInstance.LinearDrive
+    local flags={}
+    for i,axis in ipairs({"XDrive","YDrive","ZDrive"}) do
+        local p,v=d[axis].bEnablePositionDrive,d[axis].bEnableVelocityDrive
+        if type(p)~="boolean" or type(v)~="boolean" then error("linear flags unavailable",0) end
+        flags[i],flags[i+3]=p,v
+    end
+    return flags
+end
+function PX.grip_linear_note(p,field,lease,status,reason,actual)
+    -- Process-total cap; logs use only copied flags/identities, never getters.
+    -- A repeated BP reassertion or unavailable restoration cannot flood logs.
+    local seen=lease and lease.notes
+    if not seen then
+        if lease then seen={};lease.notes=seen else
+            p.linear_grip_refusals=p.linear_grip_refusals or {}
+            local scope=p.last or {}
+            local key=tostring(p.gen)..":"..tostring(scope.match_id)..":"..tostring(scope.round)..":"..tostring(scope.life)
+            local old=p.linear_grip_refusals[field]
+            if not old or old.scope~=key then old={scope=key};p.linear_grip_refusals[field]=old end
+            seen=old
+        end
+    end
+    if seen[status] or (PX.linear_grip_notes or 0)>=64 then return end
+    seen[status]=true;PX.linear_grip_notes=(PX.linear_grip_notes or 0)+1
+    pcall(function()
+        local function flags(v)
+            if type(v)~="table" then return "unavailable" end
+            local out={};for i=1,6 do out[i]=type(v[i])=="boolean" and (v[i] and "1" or "0") or "?" end
+            return table.concat(out)
+        end
+        local q=lease and lease.binding or {};local source=p.last or {}
+        Log("linear grip inst=%s peer=%s field=%s pawn=%s match=%s round=%s life=%s constraint=%s state=%s reason=%s original=%s actual=%s",
+            tostring(os.getenv("HSMP_INST") or "unknown"),tostring(p.peer),field,
+            tostring(q.pawn and q.pawn.name or "unavailable"):sub(1,96),tostring(q.match_id or source.match_id or "unavailable"),
+            tostring(q.round or source.round or "unavailable"),tostring(q.life or source.life or "unavailable"),
+            tostring(q.constraint and q.constraint.address or "unavailable"),status,tostring(reason or "none"):sub(1,96),
+            flags(lease and lease.flags),flags(actual))
+    end)
+end
+function PX.grip_linear_resolve(p,field,expected,off)
+    local c,q,lost
+    local ok,why=pcall(function()
+        local function changed(reason) lost=true;error(reason,0) end
+        if p.gen~=world_gen or cache_gen~=world_gen then changed("world changed") end
+        if type(p.peer)~="number" or not math.tointeger(p.peer) or p.peer<=0 then error("peer unavailable",0) end
+        local own_peer=HSM and HSM.my_peer_id()
+        if type(own_peer)~="number" or own_peer<=0 then error("own peer unavailable",0) end
+        if p.peer==own_peer then changed("source pawn refused") end
+        local peer=p.peer
+        local _,wid=world_identity(local_pc())
+        if not wid then error("world unavailable",0) end
+        if cache_world~=tostring(world_gen).."|"..wid then changed("world changed") end
+        local source=p.last
+        if type(source)~="table" or source.has_context~=true then error("life unavailable",0) end
+        for _,k in ipairs({"match_id","round","life"}) do
+            if type(source[k])~="number" or not math.tointeger(source[k]) or source[k]<=0 then error("life unavailable",0) end
+        end
+        local match_id,round,life=source.match_id,source.round,source.life
+        if not PURE.pose_context_ok(source,HSM and HSM.view(),HSM and HSM.mode(),p.peer) then changed("life changed") end
+        if off and (not PX.grip_drive_current(p) or not p.body or p.body.ctl~="servo") then error("drive unavailable",0) end
+        local actor=p.actor
+        local pawn=PX.grip_probe_id(actor)
+        if pawn.address~=p.addr then changed("pawn changed") end
+        local aw=actor:GetWorld()
+        if not aw or aw:IsValid()~=true then error("pawn world unavailable",0) end
+        if tostring(aw:GetAddress()).."@"..aw:GetFullName()~=wid then changed("pawn world changed") end
+        local shown=p.shown
+        if shown and (shown.has_context~=true or shown.match_id~=source.match_id or shown.round~=source.round
+            or shown.life~=source.life or shown.pawn~=pawn.name) then changed("display life changed") end
+        local mesh,_,reason=PX.injury_mesh(p)
+        if not mesh then
+            if reason~="body unavailable" then changed(reason or "mesh changed") end
+            error("mesh unavailable",0)
+        end
+        local body=PX.grip_probe_id(mesh)
+        if not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),pawn) then changed("mesh owner changed") end
+        local body_record=p.body
+        local body_field=body_record.field or "Mesh"
+        local constraint,held=nil,{}
+        -- Capture plain identities before the endpoint getter. A same-world
+        -- replacement during native reentry can free the returned wrappers.
+        for _,wf in ipairs({"Weapon R","Weapon L"}) do
+            local wa=actor[wf]
+            if wa and wa:IsValid()==true then
+                local wr=wa.BaseMesh
+                held[wf]={weapon=PX.grip_probe_id(wa),root=wr and wr:IsValid()==true and PX.grip_probe_id(wr) or false}
+            else held[wf]=false end
+        end
+        local function current()
+            local _,fresh_world=world_identity(local_pc())
+            if not fresh_world then error("world unavailable",0) end
+            if fresh_world~=wid or p.gen~=world_gen or cache_gen~=world_gen
+                or cache_world~=tostring(world_gen).."|"..fresh_world then changed("world changed") end
+            if p.actor~=actor or p.body~=body_record or p.last~=source or p.peer~=peer or HSM.my_peer_id()~=own_peer
+                or body_record.mesh_addr~=body.address or body_record.mesh_fname~=body.name
+                or (body_record.field or "Mesh")~=body_field
+                or source.match_id~=match_id or source.round~=round or source.life~=life
+                or (off and not p.driving) then changed("scope changed") end
+            if p.shown and (p.shown.has_context~=true or p.shown.match_id~=match_id or p.shown.round~=round
+                or p.shown.life~=life or p.shown.pawn~=pawn.name) then changed("display life changed") end
+            if not PX.grip_probe_same(PX.grip_probe_id(actor[body_field]),body)
+                or (constraint and not PX.grip_probe_same(PX.grip_probe_id(actor[field]),constraint)) then changed("component changed") end
+            for _,wf in ipairs({"Weapon R","Weapon L"}) do
+                local wa,h=actor[wf],held[wf]
+                if not h then
+                    if wa and wa:IsValid()==true then changed("held field changed") end
+                else
+                    if not PX.grip_probe_same(PX.grip_probe_id(wa),h.weapon) then changed("held field changed") end
+                    local wr=wa.BaseMesh
+                    if h.root then
+                        if not PX.grip_probe_same(PX.grip_probe_id(wr),h.root) then changed("held root changed") end
+                    elseif wr and wr:IsValid()==true then changed("held root changed") end
+                end
+            end
+        end
+        c=actor[field] -- fresh field only; never a retained constraint wrapper
+        constraint=PX.grip_probe_id(c)
+        local owner=PX.grip_probe_id(c:GetOwner())
+        if not PX.grip_probe_same(owner,pawn) then changed("constraint owner changed") end
+        local class=c:GetClass():GetFName():ToString()
+        if type(class)~="string" or class=="" then error("constraint class unavailable",0) end
+        local binding=PX.grip_probe_binding(c,current)
+        local hand=field=="PhysicsConstraint R Hand" and "hand_r" or "hand_l"
+        if binding.bone2~=hand or not PX.grip_probe_same(binding.two,body)
+            or not PX.grip_probe_same(binding.owner2,pawn) then changed("body binding changed") end
+        local ci=c.ConstraintInstance
+        if ci.ConstraintBone1:ToString()~=binding.bone1 or ci.ConstraintBone2:ToString()~=binding.bone2 then changed("bone changed") end
+        local weapon,weapon_field,root
+        for _,wf in ipairs({"Weapon R","Weapon L"}) do
+            local wa=actor[wf]
+            if wa and wa:IsValid()==true and PX.grip_probe_same(PX.grip_probe_id(wa),binding.owner1) then
+                if weapon then error("weapon binding ambiguous",0) end
+                local wr=wa.BaseMesh
+                if not PX.grip_probe_same(PX.grip_probe_id(wr),binding.one)
+                    or not PX.grip_probe_same(PX.grip_probe_id(wr:GetOwner()),binding.owner1)
+                    or not PX.grip_probe_same(PX.grip_probe_id(wa:GetOwner()),pawn) then changed("weapon owner changed") end
+                local w=wa:GetWorld()
+                if not w or w:IsValid()~=true then error("weapon world unavailable",0) end
+                if tostring(w:GetAddress()).."@"..w:GetFullName()~=wid then changed("weapon world changed") end
+                weapon,weapon_field,root=PX.grip_probe_id(wa),wf,PX.grip_probe_id(wr)
+            end
+        end
+        if not weapon then changed("held weapon changed") end
+        q={generation=world_gen,world=cache_world,peer=peer,pawn=pawn,body=body,
+            match_id=match_id,round=round,life=life,field=field,
+            constraint=constraint,class=class,owner=owner,binding=binding,weapon=weapon,weapon_field=weapon_field,root=root}
+        if expected and not PX.grip_linear_equal(q,expected) then changed("binding changed") end
+        -- GetConstrainedComponents is a native call: check the plain scope and
+        -- fresh fields again before returning a component eligible for a write.
+        current()
+        if p.last~=source or source.match_id~=q.match_id or source.round~=q.round or source.life~=q.life
+            or p.gen~=q.generation or cache_gen~=q.generation or cache_world~=q.world
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[field]),constraint)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[p.body.field or "Mesh"]),body)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[weapon_field]),weapon)
+            or not PX.grip_probe_same(PX.grip_probe_id(c:GetOwner()),pawn)
+            or not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),pawn)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[weapon_field].BaseMesh),root)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[weapon_field]:GetOwner()),pawn)
+            or not PX.grip_probe_same(PX.grip_probe_id(actor[weapon_field].BaseMesh:GetOwner()),weapon)
+            or c.ConstraintInstance.ConstraintBone1:ToString()~=binding.bone1
+            or c.ConstraintInstance.ConstraintBone2:ToString()~=binding.bone2
+            or (p.shown and (p.shown.match_id~=match_id or p.shown.round~=round or p.shown.life~=life
+                or p.shown.has_context~=true or p.shown.pawn~=pawn.name)) then changed("scope changed") end
+        if not PURE.pose_context_ok(source,HSM and HSM.view(),HSM and HSM.mode(),p.peer)
+            or (off and not PX.grip_drive_current(p)) then changed("life changed") end
+        current()
+    end)
+    if not ok then return nil,nil,tostring(why),lost end
+    return c,q
+end
+function PX.grip_linear(p,off)
+    local leases=p.linear_grip_leases or {}
+    p.linear_grip_leases=leases
+    for _,field in ipairs({"PhysicsConstraint R Hand","PhysicsConstraint L Hand"}) do
+        local lease=leases[field]
+        if off or lease then
+            local c,q,why,lost=PX.grip_linear_resolve(p,field,lease and lease.binding,off)
+            if not c then
+                if lost then leases[field]=nil end -- changed binding: no old-object access or restoration
+                p.linear_grip_error=why
+                PX.grip_linear_note(p,field,lease,lost and "binding_lost" or "refused",why)
+            else
+                local ok,err=pcall(function()
+                    local want=off and {false,false,false,false,false,false} or lease and lease.flags
+                    if off and lease then
+                        lease.status="off_pending"
+                        local actual=PX.grip_linear_flags(c)
+                        if PX.grip_linear_equal(actual,want) then
+                            c=PX.grip_linear_resolve(p,field,lease.binding,true)
+                            if not c then error("readback binding changed",0) end
+                            -- The second endpoint getter may itself reenter a
+                            -- native writer. Reread flags before the no-write
+                            -- confirmation; drift retains the full setter path.
+                            actual=PX.grip_linear_flags(c)
+                            if PX.grip_linear_equal(actual,want) then
+                                lease.status="off_confirmed"
+                                PX.grip_linear_note(p,field,lease,lease.status,nil,actual)
+                                return
+                            end
+                        end
+                    end
+                    if not lease then
+                        local flags=PX.grip_linear_flags(c) -- all six exact booleans BEFORE either setter
+                        c=PX.grip_linear_resolve(p,field,q,off)
+                        if not c then error("snapshot binding changed",0) end
+                        lease={binding=q,flags=flags,status="pending"}
+                        leases[field]=lease -- persist originals before any partial native success
+                    end
+                    want=off and want or lease.flags
+                    lease.status=off and "off_pending" or "restore_pending"
+                    c:SetLinearPositionDrive(want[1],want[2],want[3])
+                    c=PX.grip_linear_resolve(p,field,lease.binding,off)
+                    if not c then error("position binding changed",0) end
+                    c:SetLinearVelocityDrive(want[4],want[5],want[6])
+                    c=PX.grip_linear_resolve(p,field,lease.binding,off)
+                    if not c then error("velocity binding changed",0) end
+                    local actual=PX.grip_linear_flags(c)
+                    c=PX.grip_linear_resolve(p,field,lease.binding,off)
+                    if not c or not PX.grip_linear_equal(actual,want)
+                        or not PX.grip_linear_equal(PX.grip_linear_flags(c),want) then error("linear readback unavailable",0) end
+                    lease.status=off and "off_confirmed" or "restored"
+                    if not off then leases[field]=nil end
+                    PX.grip_linear_note(p,field,lease,lease.status,nil,actual)
+                end)
+                if not ok then
+                    p.linear_grip_error=tostring(err)
+                    PX.grip_linear_note(p,field,lease,"refused",tostring(err))
+                end
+            end
+        end
+    end
+    if next(leases)==nil then p.linear_grip_leases=nil end
+    return p.linear_grip_leases==nil
+end
+function PX.grip_linear_restore(p)
+    if not p.linear_grip_leases then return true end
+    local now=now_ms()
+    if not p.driving and p.linear_grip_restore_at and now>=p.linear_grip_restore_at
+        and now-p.linear_grip_restore_at<1000 then return false end
+    p.linear_grip_restore_at=now
+    return PX.grip_linear(p,false) -- at most two exact bindings, once/s after a release failure
+end
+-- Optional fault evidence only. Never suppress, create a lease, or update its
+-- debt/status; nonzero native flags are valid observations, not policy success.
+function PX.grip_linear_observe(p)
+    local started
+    local ok,result=pcall(function()
+        started=PX.grip_probe_number(now_ms())
+        local source=p and p.last
+        if type(source)~="table" then error("source unavailable",0) end
+        local keys={"match_id","round","life","seq","cut","mode","pt"}
+        local context={};for _,k in ipairs(keys) do context[k]=source[k] end
+        local shown=p.shown or p.applied_context
+        local applied=shown and shown.at
+        local function current()
+            if p.last~=source or (p.shown or p.applied_context)~=shown or (shown and shown.at~=applied) then error("source changed",0) end
+            for _,k in ipairs(keys) do if source[k]~=context[k] then error("source changed",0) end end
+        end
+        local field="PhysicsConstraint R Hand"
+        local c,binding,why=PX.grip_linear_resolve(p,field,nil,true)
+        if not c then error(why or "binding unavailable",0) end
+        current()
+        local flags=PX.grip_linear_flags(c)
+        current()
+        c=PX.grip_linear_resolve(p,field,binding,true)
+        if not c then error("observation binding changed",0) end
+        current()
+        local actual=PX.grip_linear_flags(c)
+        current()
+        if not PX.grip_linear_equal(flags,actual) then error("observed flags changed",0) end
+        local original
+        local lease=p.linear_grip_leases and p.linear_grip_leases[field]
+        if lease and PX.grip_linear_equal(lease.binding,binding) then
+            original={}
+            for i=1,6 do
+                if type(lease.flags[i])~="boolean" then error("original flags unavailable",0) end
+                original[i]=lease.flags[i]
+            end
+        end
+        local finished=PX.grip_probe_number(now_ms())
+        if finished<started then error("observation clock regressed",0) end
+        return {available=true,binding=binding,current_flags=actual,original_available=original~=nil,original_flags=original,
+            observed_start_ms=started,observed_end_ms=finished,source_seq=context.seq,source_cut=context.cut,
+            source_pt=context.pt,original_applied_ms=applied,authority=false}
+    end)
+    if ok then return result end
+    return {available=false,reason=tostring(result):sub(1,120),observed_start_ms=started,authority=false}
+end
 function PX.grips_off(p, off)
     local list = p.grips and p.grips.list
-    if not list or #list == 0 then return end
+    if not list or #list == 0 then if off then PX.grip_linear(p,true) end;return end
+    if (p.gen~=nil and p.gen~=world_gen) or (off and not PX.grip_drive_current(p)) then
+        for _,g in ipairs(list) do g.c=nil end -- forget wrappers without touching stale native objects
+        return
+    end
     local fresh = PX.fresh_grips(p)
+    if off then
+        -- A grip the BP rebuilt (pick-up, drop, grip change) has a new address: until the
+        -- next scan it would keep its locked limits and drive against the hand servo
+        -- (seen 60-90 deg hand error). Force that scan on the next drive tick.
+        local g = p.grips
+        for addr, c in pairs(fresh) do
+            if not g.by[addr] and not (g.other and g.other[addr]) then
+                local ok, b2 = pcall(constraint_bone2, c)
+                if ok and (b2 == "hand_r" or b2 == "hand_l") then g.at = -math.huge
+                else g.other = g.other or {}; g.other[addr] = true end
+            end
+        end
+    end
     for _, g in ipairs(list) do
         g.c = fresh[g.addr]   -- nil when the BP rebuilt it: never touch the old one
         pcall(function()
-            if not (g.c and g.c:IsValid()) then return end
+            if not PX.grip_identity(g,g.c) then
+                if off then p.grips.at=-math.huge end
+                g.c=nil;return
+            end
             if off then
                 g.c:SetAngularDriveParams(0, 0, 0)
+                -- The native sliding-grip timeline writes Z limits every
+                -- frame. Reassert this same policy on the fresh component,
+                -- including when the retained `freed` flag is already true.
+                PX.grip_limits(p,g,g.c,now_ms())
             else
                 if g.stiff then g.c:SetAngularDriveParams(g.stiff, g.damp or 0, g.maxf or 0) end
                 if g.freed and g.lim then
@@ -1166,11 +2271,20 @@ function PX.grips_off(p, off)
             end
         end)
     end
+    if off then PX.grip_linear(p,true) end
 end
 
 -- Hand the stand-in back to its own muscles (no fresh pose).
-local function release_standin(p)
-    if p.driving == false then return end
+local function release_standin(p, handoff)
+    PX.settle_reset(p,"drive released")
+    p.wservo,p.wservo_actor=nil,nil
+    if PX.height_restore and p.body and p.body.height_probe and p.gen == world_gen and cache_gen == world_gen then
+        PX.height_restore(p, "release", false)
+    end
+    local injury_ok=true
+    if handoff and PX.injury_release then injury_ok=PX.injury_release(p) end
+    local linear_ok=PX.grip_linear_restore(p)
+    if p.driving == false then return injury_ok and linear_ok end
     if p.gen == world_gen and cache_gen == world_gen and p.actor and p.actor:IsValid() then
         PX.grips_off(p, false); PX.close_limits(p, p.body)
         for k, v in pairs(p.tonus0 or {}) do pcall(function() p.actor[k] = v end) end
@@ -1180,7 +2294,7 @@ local function release_standin(p)
     -- Only ever write to a stand-in of the CURRENT world that is still alive.
     if p.gen ~= world_gen or cache_gen ~= world_gen or not (p.actor and p.actor:IsValid()) then
         p.driving = false
-        return
+        return injury_ok and linear_ok
     end
     if p.body then
         release_handles(p.body); set_motor_strength(p.body, 1.0)
@@ -1218,6 +2332,8 @@ local function release_standin(p)
     end
     set_muscles_blocked(p, false)
     p.driving = false
+    if not handoff and PX.injury_targets and p.body then PX.injury_targets(p.peer or 0,p,nil,nil) end
+    return injury_ok and linear_ok
 end
 
 -- Rigidly move every simulated mesh so its pelvis lands on the target.
@@ -1494,6 +2610,266 @@ end
 -- --- puppets -----------------------------------------------------------------
 
 local puppets     = {}   -- id -> { actor, nick, body, play, ... }
+function PX.injury_diag(id,body,bone,stage)
+    pcall(function()
+        local f = fname(bone)
+        local c = body.mesh:GetCenterOfMass(f)
+        Log("bodyphysics evidence peer=%d mesh=%s bone=%s stage=%s com=(%.3f,%.3f,%.3f) mass=%.4f sim=%s disabled=%s",
+            id,tostring(body.mesh:GetAddress()),bone,stage,c.X,c.Y,c.Z,
+            body.mesh:GetBoneMass(f,false),tostring(body.mesh:IsSimulatingPhysics(f)),
+            tostring(body.injury_disabled and body.injury_disabled[bone] == true))
+    end)
+end
+function PX.bodyphysics(arg)
+    local id, bone, action = arg:match("^(%d+)%s+([%w_]+)%s+(%a+)$")
+    id = tonumber(id)
+    local p = id and puppets[id]
+    bone = bone and bone:lower()
+    -- Diagnostic limbs only: never disable the pelvis or whole character.
+    local allowed = {lowerarm_l=true,lowerarm_r=true,hand_l=true,hand_r=true,
+        calf_l=true,calf_r=true,foot_l=true,foot_r=true}
+    if not (p and p.gen == world_gen and p.actor and p.actor:IsValid() and p.body and p.body.mesh:IsValid()
+        and allowed[bone] and (action == "off" or action == "on")) then
+        Log("bodyphysics refused: expected current stand-in peer, distal limb, off|on")
+        return
+    end
+    local body = p.body
+    PX.injury_diag(id,body,bone,"before_" .. action)
+    if action == "off" then
+        body.injury_probe = {bone=bone,until_t=os.clock()+2}
+    else
+        body.injury_probe = nil
+    end
+    local want = action == "off" and {[bone]=true} or {}
+    local err
+    body.injury_disabled, err = INJURY.apply(body.mesh,body.injury_disabled,want,fname)
+    Log("bodyphysics peer=%d mesh=%s bone=%s action=%s applied=%s error=%s auto_restore_s=2",
+        id,tostring(body.mesh:GetAddress()),bone,action,tostring(body.injury_disabled[bone] == true),tostring(err))
+    PX.injury_diag(id,body,bone,"after_" .. action)
+end
+
+-- Explicit dev command only: resize exactly one existing remote body for
+-- two seconds, retaining its native physics asset/controls throughout.
+function PX.height_resolve(p, s)
+    if not (p and p.gen == world_gen and cache_gen == world_gen and p.body and s) then return nil end
+    local actor, mesh
+    pcall(function()
+        local me = local_pawn()
+        if not (me and me:IsValid()) then return end
+        for _, w in pairs(FindAllOf("Willie_BP_C") or {}) do
+            if w and w:IsValid() and not same(w, me) and w:GetAddress() == s.addr
+                and w:GetFName():ToString() == s.name then
+                local m = w.Mesh
+                if m and m:IsValid() and m:GetAddress() == s.mesh_addr then actor, mesh = w, m end
+                break
+            end
+        end
+    end)
+    return actor, mesh
+end
+function PX.height_restore(p, why, repose)
+    local body = p.body
+    local s = body and body.height_probe
+    if not s then return true end
+    if s.retry_at and os.clock() < s.retry_at then return false end
+    local actor, mesh = PX.height_resolve(p, s)
+    if not actor then
+        -- Never write a previous world's object or a body now possessed by us.
+        body.height_probe = nil
+        Log("bodyheight restoration abandoned: target identity/ownership changed (%s)", tostring(why))
+        return false
+    end
+    if repose then PX.start_repose(p, body, now_ms(), "height diagnostic restore") end
+    local ok = BODY_HEIGHT.height_restore(actor, mesh, s)
+    body.sv, body.scale_remeasure = nil, true
+    p.aim, p.shown, p.qhist, p.idlew, p.qfoot = nil, nil, nil, nil, nil
+    if not repose then
+        body.repose = nil
+        pcall(function() mesh:SetSimulatePhysics(s.sim) end)
+    end
+    if ok then
+        body.height_probe = nil
+    else
+        s.retry_at = os.clock()+1 -- retain snapshot without resetting/logging every frame
+    end
+    Log("bodyheight peer=%d actor=%s mesh=%s restore=%s reason=%s original_height=%.9f",
+        s.peer, s.name, tostring(s.mesh_addr), tostring(ok), tostring(why), s.height)
+    return ok
+end
+function PX.height_tick(p, clock)
+    local s = p.body and p.body.height_probe
+    if p.gen == world_gen and s and (clock or os.clock()) >= s.until_t then
+        PX.height_restore(p, "automatic 2-second timeout", p.driving == true)
+    end
+end
+function PX.bodyheight(arg)
+    local id, height = arg:match("^(%d+)%s+([%d%.]+)$")
+    id, height = tonumber(id), tonumber(height)
+    local p = id and puppets[id]
+    if not (BODY_HEIGHT and p and p.gen == world_gen and p.driving and p.in_range and p.body
+        and p.body.ctl == "servo" and not p.owner_dead and not p.body.height_probe and not p.body.repose
+        and height and height >= 0 and height <= 1) then
+        Log("bodyheight refused: expected active remote servo peer and native passport height 0..1")
+        return
+    end
+    local s, err
+    pcall(function()
+        s = BODY_HEIGHT.height_snapshot(p.actor, p.body.mesh)
+        if not s then return end
+        s.addr, s.name, s.mesh_addr = p.actor:GetAddress(), p.actor:GetFName():ToString(), p.body.mesh:GetAddress()
+        s.sim = p.body.mesh:IsSimulatingPhysics(fname("pelvis"))
+    end)
+    local actor, mesh = PX.height_resolve(p, s)
+    if not actor or s.sim ~= true then Log("bodyheight refused: fresh identity or native snapshot unavailable"); return end
+    s.peer, s.until_t = id, os.clock()+2
+    p.body.height_probe = s -- retain restoration data before the first write
+    PX.start_repose(p, p.body, now_ms(), "height diagnostic apply")
+    if not p.body.repose then PX.height_restore(p, "physics-off refused", false); return end
+    local ok
+    ok, err = BODY_HEIGHT.height_probe(actor, mesh, height, s)
+    p.body.sv, p.body.scale_remeasure = nil, true
+    p.aim, p.shown, p.qhist, p.idlew, p.qfoot = nil, nil, nil, nil, nil
+    Log("bodyheight peer=%d actor=%s mesh=%s height=%.9f original=%.9f applied=%s error=%s auto_restore_s=2",
+        id, s.name, tostring(s.mesh_addr), height, s.height, tostring(ok), tostring(err))
+    if not ok then PX.height_restore(p, "native write failed", false) end
+end
+-- Resolve the current component from its actor field before any injury write.
+-- A world/actor/mesh replacement drops its bookkeeping without touching the old
+-- UObject; only an exact current body may restore a previously owned exclusion.
+function PX.injury_mesh(p)
+    if not (p and p.gen==world_gen and cache_gen==world_gen and p.body) then return nil,nil,"world changed" end
+    local mesh,key,why
+    local ok=pcall(function()
+        local a=p.actor
+        if not p.addr then why="body unavailable";return end
+        if type(p.body.mesh_addr)~="number" or p.body.mesh_addr<=0 or not math.tointeger(p.body.mesh_addr)
+            or type(p.body.mesh_fname)~="string" or p.body.mesh_fname==""then why="body unavailable";return end
+        if not (a and a:IsValid()) or a:GetAddress()~=p.addr then why="actor changed";return end
+        local w=a:GetWorld()
+        if not (w and w:IsValid()) then why="body unavailable";return end
+        local wid=tostring(w:GetAddress()).."@"..w:GetFullName()
+        if cache_world~=tostring(world_gen).."|"..wid then why="world changed";return end
+        local m=a[p.body.field or "Mesh"]
+        if not (m and m:IsValid()) then why="body unavailable";return end
+        -- Compare only the fresh field against the captured scalar identity.
+        -- The retained wrapper may already be freed after a native rebuild.
+        if m:GetAddress()~=p.body.mesh_addr or m:GetFName():ToString()~=p.body.mesh_fname then
+            why="mesh changed";return
+        end
+        mesh=m
+        key=a:GetFName():ToString().."@"..tostring(a:GetAddress())
+            ..":"..m:GetFName():ToString().."@"..tostring(m:GetAddress())
+    end)
+    return mesh,key,(not ok and "body unavailable" or why)
+end
+function PX.injury_release(p)
+    local body=p.body
+    if not body then return true end
+    local mesh,key,why=PX.injury_mesh(p)
+    if not mesh or (body.injury_key and body.injury_key~=key) then
+        if why=="body unavailable" and next(body.injury_disabled or {}) then
+            body.injury_retiring,body.injury_error=true,why
+            return false -- unknown is not a lease handoff: retain exact restoration ownership
+        end
+        body.injury_disabled,body.injury_wanted,body.injury_journal={},{},nil
+        body.injury_probe,body.injury_retiring=nil,nil
+        return true -- identity lost: no old UObject access
+    end
+    body.injury_disabled=INJURY.restore(mesh,body.injury_disabled,fname)
+    body.injury_probe=nil
+    body.injury_retiring=next(body.injury_disabled)~=nil
+    if body.injury_retiring then
+        body.injury_error="restore failed"
+        if body.injury_diag_key~="restore failed" then
+            body.injury_diag_key="restore failed"
+            Log("sever physics peer=%d body=%s restore failed; lease retained",p.peer or 0,key)
+        end
+        return false
+    end
+    body.injury_error=nil
+    body.injury_wanted,body.injury_journal,body.injury_diag_key={},nil,nil
+    return true
+end
+function PX.injury_targets(id,p,targets,aim)
+    local body = p.body
+    if not body then return end
+    if not SEVERED_PHYSICS and not body.injury_probe and not next(body.injury_disabled or {}) then return end
+    local mesh,key,why=PX.injury_mesh(p)
+    if not mesh then
+        body.injury_error=why
+        INJURY.omit(aim,body.injury_wanted,PURE.V2_SLOTS,PURE.V2_PARENT)
+        INJURY.omit(targets,body.injury_wanted,PURE.V2_SLOTS,PURE.V2_PARENT)
+        INJURY.omit(aim,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+        INJURY.omit(targets,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+        if next(body.injury_wanted or {}) and body.injury_diag_key~=why then
+            body.injury_diag_key=why;Log("sever physics peer=%d unavailable=%s (no native write)",id,tostring(why))
+        end
+        return
+    end
+    if body.injury_key and body.injury_key~=key then
+        body.injury_disabled,body.injury_wanted,body.injury_journal={},{},nil
+    end
+    body.injury_key=key
+    if body.injury_retiring then return end
+    local want = body.injury_wanted or {}
+    if SEVERED_PHYSICS then
+        local r = HSMP_IPC and HSMP_IPC.peer_rec("peer_vitals",id)
+        local shown=p.shown or p.applied_context
+        local view=HSM and HSM.view()
+        local allowed=shown and shown.has_context==true and (shown.match_id or 0)>0
+            and (shown.round or 0)>0 and (shown.life or 0)>0
+            and shown.pawn==p.actor:GetFName():ToString()
+            and view and (view.match_id or 0)>0
+            and PURE.pose_context_ok(shown,view,HSM and HSM.mode(),id)
+        local mask
+        body.injury_journal,mask=INJURY.select_mask(body.injury_journal,shown,allowed,r,key)
+        local enums = HSMP_IPC and HSMP_IPC.S and HSMP_IPC.S.ENUMS and HSMP_IPC.S.ENUMS.dism_part
+        -- Zero has no source availability bit today. It cannot prove that a
+        -- previously missing part regrew; a true lease handoff restores it.
+        if mask and mask>0 and enums then
+            local retained={};for bone in pairs(want)do retained[bone]=true end
+            want=retained
+            for name,bit in pairs(enums) do
+                if mask & (1 << bit) ~= 0 then want[name:lower()] = true end
+            end
+            body.injury_wanted=want
+        end
+    end
+    local probe = body.injury_probe
+    local restored_bone
+    if probe and os.clock() < probe.until_t then
+        local copy={};for bone in pairs(want)do copy[bone]=true end
+        want=copy;want[probe.bone] = true
+    elseif probe then
+        restored_bone = probe.bone
+        body.injury_probe = nil; Log("bodyphysics peer=%d automatic restore",id)
+    end
+    local err
+    -- Reassert even with unchanged bookkeeping: collision/simulation toggles
+    -- and native appearance setup may rebuild physics on this same component.
+    body.injury_disabled,err = INJURY.apply(mesh,body.injury_disabled,want,fname,true)
+    body.injury_error=err
+    local signature=tostring(body.injury_journal and body.injury_journal.mask).."|"..tostring(err)
+    if next(want) and (signature~=body.injury_diag_key or now_ms()>=(body.injury_diag_at or 0)) then
+        body.injury_diag_key,body.injury_diag_at=signature,now_ms()+1000
+        local samples=INJURY.simulation(mesh,want,PURE.V2_SLOTS,PURE.V2_PARENT,fname)
+        local parts={};for bone,value in pairs(samples)do parts[#parts+1]=bone.."="..value end;table.sort(parts)
+        Log("sever physics peer=%d body=%s match=%s round=%s life=%s mask=%s simulation=%s collision=unverified error=%s",
+            id,key,tostring(body.injury_journal and body.injury_journal.match_id),tostring(body.injury_journal and body.injury_journal.round),
+            tostring(body.injury_journal and body.injury_journal.life),tostring(body.injury_journal and body.injury_journal.mask),table.concat(parts,","),tostring(err))
+    end
+    if restored_bone then PX.injury_diag(id,body,restored_bone,"automatic_restore") end
+    -- Owner-confirmed absence controls servo omission even if native exclusion
+    -- throws; failed restoration also keeps the still-disabled roots omitted.
+    INJURY.omit(aim,want,PURE.V2_SLOTS,PURE.V2_PARENT)
+    INJURY.omit(targets,want,PURE.V2_SLOTS,PURE.V2_PARENT)
+    INJURY.omit(aim,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+    INJURY.omit(targets,body.injury_disabled,PURE.V2_SLOTS,PURE.V2_PARENT)
+end
+function PX.injury_tick(id,p)
+    if p.body and p.body.injury_retiring then return PX.injury_release(p) end
+    PX.injury_targets(id,p,nil,nil)
+end
 local _driven     = {}   -- actor address -> driven stand-in (ReceiveTick post-hook)
 local next_claim  = {}   -- id -> tick of next claim attempt
 local warned_none = {}   -- id -> true once "no combatant" was logged
@@ -1534,6 +2910,22 @@ local function candidate_willies()
         end
     end)
     return ai, idle
+end
+
+-- A native stand-in spawn may possess its new body even while the original
+-- fighter is AI-driven. Release that foreign possession without stealing the
+-- original fighter back from its verified AI controller. Human control keeps
+-- the normal restoration path.
+function PX.restore_spawn_possession(pawn, pc)
+    if not (pc and pc:IsValid() and pawn and pawn:IsValid() and (willie_health(pawn) or 1) > 0) then return nil end
+    if TUNE.aip == nil then TUNE.aip = load_module("hsmp_wg") or false end
+    local ai = TUNE.aip and TUNE.aip.ai_pawn_lookup() or nil
+    if ai and same(ai, pawn) then
+        pc:UnPossess()
+        return "released the temporary pawn; original fighter keeps its AI"
+    end
+    pc:Possess(pawn)
+    return "re-possessed the original pawn"
 end
 
 -- Last resort: have the arena spawn more natively booted foes.
@@ -1647,10 +3039,10 @@ local function request_native_foes(count, ats, peers)
     local ok = pcall(function() lm["Spawn Combatants"](lm) end)
     Log("fallback: BP_LevelManager:SpawnCombatants(%d) call %d/%d ok=%s",
         count, spawn_calls, SPAWN_MAX, tostring(ok))
-    local after = local_pawn()
-    if pc and before and before:IsValid() and not same(after, before) then
-        pcall(function() pc:Possess(before) end)
-        Log("fallback: SpawnCombatants changed our pawn; re-possessed the original")
+    local after; pcall(function() after = pc and pc.Pawn end)
+    if pc and before and before:IsValid() and after and after:IsValid() and not same(after, before) then
+        local ok, how = pcall(PX.restore_spawn_possession, before, pc)
+        Log("fallback: SpawnCombatants changed our possession; %s", ok and how or "original pawn unavailable")
     end
     -- The native spawn possesses its new pawn a few frames LATER (36 ms after
     -- this call, past the check above). Guard the original (already placed)
@@ -1667,16 +3059,11 @@ function PX.keep_possession()
     local k = PX.keep_pawn
     if not k then return end
     if k.gen ~= world_gen or tick_num > k.until_tick then PX.keep_pawn = nil; return end
-    local cur = local_pawn()
-    if cur and not same(cur, k.pawn) then
-        local ok = false
-        pcall(function()
-            if k.pawn:IsValid() and (willie_health(k.pawn) or 1) > 0 then
-                local pc = local_pc()
-                if pc and pc:IsValid() then pc:Possess(k.pawn); ok = true end
-            end
-        end)
-        Log("fallback: native spawn swapped our possession; %s", ok and "re-possessed the original pawn" or "original pawn gone - kept the new one")
+    local pc, cur = local_pc(), nil
+    pcall(function() cur = pc and pc.Pawn end)
+    if cur and cur:IsValid() and not same(cur, k.pawn) then
+        local ok, how = pcall(PX.restore_spawn_possession, k.pawn, pc)
+        Log("fallback: native spawn swapped our possession; %s", ok and how or "original pawn gone - kept the new one")
         PX.keep_pawn = nil
     end
 end
@@ -1694,6 +3081,7 @@ local function claim_puppet(id, needed, ats, peers)
         how = "idle combatant"
     end
     if pick then
+        harden_standin({actor=pick}) -- Before collision/visibility and the first combat tick.
         Log("peer %d -> puppet %s (%s)", id, pick:GetFName():ToString(), how)
         return pick
     end
@@ -1879,6 +3267,11 @@ end
 -- Forget every cached UObject WITHOUT touching it (world gone / changing).
 -- Pure Lua + bus writes: safe inside the LoadMap hook.
 drop_caches = function(reason)
+    for _, p in pairs(puppets) do
+        if p.body and p.body.height_probe then Log("bodyheight probe discarded at world teardown (no old UObject access)") end
+    end
+    PX.bodyheight_request = nil
+    PX.weaponstate_request = nil
     if next(puppets) ~= nil then Log("dropping all puppet caches (no UE access): %s", reason) end
     puppets, next_claim, warned_none = {}, {}, {}
     _driven = {}
@@ -1900,7 +3293,12 @@ end
 local function reset_all(reason)
     if next(puppets) ~= nil then Log("releasing all puppets: %s", reason) end
     if cache_gen == world_gen then
-        for _, p in pairs(puppets) do pcall(release_standin, p) end
+        local restored=true
+        for _, p in pairs(puppets) do
+            local ok,done=pcall(release_standin,p,true)
+            if not ok or done==false then restored=false end
+        end
+        if not restored then return false end -- retry while these bodies still belong to us
     end
     drop_caches(reason)
 end
@@ -1918,11 +3316,19 @@ local function read_play(id, last_seq)
         local key = tostring(slot) .. ":" .. tostring(e.gen)
         if P.key[id] ~= key then P.key[id], P.seq[id] = key, nil end
         local seq = IPC.peer_play(slot, P.out, P.seq[id])
+        -- PeerPlay is evaluated by a wall-clock sidecar thread. A rendered
+        -- frame can already be late when this slot is read; its physical
+        -- frame timestamp is therefore not the slot's receipt timestamp.
+        local read_at=now_ms()
         if seq == nil then
             if P.seq[id] ~= nil and last_seq ~= nil then return "same" end   -- unchanged
             return nil                                                       -- empty / stale epoch
         end
         P.seq[id] = seq
+        if not PURE.pose_context_ok(P.out, HSM and HSM.view(), HSM and HSM.mode(), id) then
+            P.last[id], P.seq[id] = nil, nil
+            return "context"
+        end
         if last_seq ~= nil and P.out.seq == last_seq then return "same" end
         -- two tables per peer, alternating: the caller keeps the last one (p.last)
         -- and may still hold the one before (last frame's aim) this frame
@@ -1931,7 +3337,7 @@ local function read_play(id, last_seq)
         local into = (P.last[id] == bufs[1]) and bufs[2] or bufs[1]
         if not into.slots then into.slots, into.weapons = {}, {} end
         local t = PURE.play_from_out(P.out, into)
-        if t then P.last[id] = t end
+        if t then t.read_at=read_at; P.last[id] = t end
         return t
     end
     return nil
@@ -1954,6 +3360,8 @@ for i, bn in ipairs(PURE.V2_SLOTS) do _sv_fn[i] = fname(bn) end
 -- mesh snapped onto the target pelvis. `why` (drive start, discontinuity)
 -- also starts the soft servo ramp and the spawn stretch watch.
 function PX.start_repose(p, body, now, why)
+    PX.settle_reset(p,"repose")
+    p.wservo,p.wservo_actor=nil,nil
     body.repose_at = now
     body.reposes = (body.reposes or 0) + 1
     if why then
@@ -1961,6 +3369,35 @@ function PX.start_repose(p, body, now, why)
         Log("pose: stand-in of %s: %s: clean start (physics reset, snap onto the target pelvis)", tostring(p.nick), why)
     end
     if pcall(function() body.mesh:SetSimulatePhysics(false) end) then body.repose = true end
+end
+
+-- Geometry changes belong to the avatar driver: resizing a live mesh while
+-- retaining old COM/parent-offset caches would pull every joint apart.
+function PX.sync_body_scale(id, p, body, now, pose)
+    local r = HSMP_IPC and HSMP_IPC.peer_rec("peer_body2", id)
+    if not pose or pose.has_context ~= true or type(r) ~= "table" or r.match_id == 0
+        or r.match_id ~= pose.match_id or r.round ~= pose.round or r.life ~= pose.life
+        or not r.life or r.life < 1 or type(r.pawn) ~= "string" or r.pawn == "" then return false end
+    local s = type(r) == "table" and r.char_scale
+    if type(s) ~= "table" then return false end
+    for i = 1, 3 do
+        if type(s[i]) ~= "number" or s[i] ~= s[i] or s[i] <= 0 or s[i] > 16 then return false end
+    end
+    local c
+    pcall(function() c = body.mesh:K2_GetComponentScale() end)
+    if not c then return false end
+    if math.abs(c.X-s[1]) <= 0.001 and math.abs(c.Y-s[2]) <= 0.001 and math.abs(c.Z-s[3]) <= 0.001 then return false end
+    PX.start_repose(p, body, now, "owner body scale changed")
+    if not body.repose then return false end
+    local ok = pcall(function() body.mesh:SetWorldScale3D({ X=s[1], Y=s[2], Z=s[3] }) end)
+    if not ok then return true end -- complete the physics reset even after a refused write
+    -- Keep existing bodies: SetPhysicsAsset(force=true) destroys the native
+    -- character's active physics-control bindings (verified live: both
+    -- stand-ins reached 20–130 cm / 90–155 degree tracking errors).
+    Log("pose: owner body scale %.3f/%.3f/%.3f applied; existing physics bodies retained", s[1], s[2], s[3])
+    body.sv, body.scale_remeasure = nil, true
+    p.aim, p.shown, p.qhist, p.idlew, p.qfoot = nil, nil, nil, nil, nil
+    return true
 end
 
 -- How long after a clean start the servo is soft, and the stretch watch.
@@ -2055,7 +3492,7 @@ local _frame_dt = 1 / 60          -- predicted physics step of the coming frame 
 local _clk_off = nil              -- os.clock base - world real time (ms)
 
 -- Bone-frame centre of mass of every stand-in body, measured once.
-local function servo_setup(body)
+local function servo_setup(body, clean_geometry)
     if body.sv then return body.sv end
     local sv = { com = {}, n = 0, err = { n = 0, e = 0, emax = 0, a = 0, amax = 0, hmax = 0, capped = 0 }, wc = {} }
     for i = 1, PURE.V2_NB do
@@ -2082,7 +3519,14 @@ local function servo_setup(body)
         end)
     end
     local fixed, k
-    sv.loc, fixed, k = PURE.ref_loc(sv.loc)
+    if clean_geometry then
+        -- These offsets were read immediately after the animated reset and
+        -- physics rebuild, so they include the owner's anisotropic scale.
+        -- Comparing them against one uniform reference scale would undo it.
+        fixed, k = 0, PURE.ref_scale(sv.loc)
+    else
+        sv.loc, fixed, k = PURE.ref_loc(sv.loc)
+    end
     sv.ref_len = {}
     for i = 2, PURE.V2_NB do sv.ref_len[i] = PURE.len3(sv.loc[i]) end
     if fixed > 0 then
@@ -2182,6 +3626,54 @@ function PX.wc_check(p, field, c)
     end)
     return wa, root
 end
+-- Synchronous dev snapshot of cache versus fresh native readbacks. It shares
+-- Parity's broadcast command, but reads only after this mod's world guard.
+function PX.wc_vec(v)
+    if type(v)~="table" then return "unavailable" end
+    return string.format("(%.6f,%.6f,%.6f)",v[1],v[2],v[3])
+end
+function PX.weaponstate(arg)
+    if os.getenv("HSMP_DEV")~="1" then return end
+    local session=HSM and HSM.new({every_s=0})
+    if session then session:poll(true) end
+    if not session or not session:live() then return end
+    local requested=tonumber(arg)
+    if arg~="" and (not requested or requested<0 or requested%1~=0) then return end
+    for peer,p in pairs(puppets) do
+        if (requested==nil or requested==peer) and p.gen==world_gen and p.actor and p.actor:IsValid() then
+            local shown=p.shown or p.applied_context
+            if shown and shown.has_context==true and shown.pawn==p.actor:GetFName():ToString() and PURE.pose_context_ok(shown,HSM and HSM.view(),HSM and HSM.mode(),peer) then
+                for _,field in ipairs({"Weapon R","Weapon L"}) do
+                    local c=p.body and p.body.sv and p.body.sv.wc and p.body.sv.wc[field]
+                    local wa,root=PX.wc_check(p,field,c)
+                    local actual,base,base_sim
+                    local actual_com,com_delta,mass,actor_scale,root_scale,com_error
+                    if wa then
+                        pcall(function()actual=root:IsSimulatingPhysics(fname("None"))end)
+                        pcall(function()base=wa.BaseMesh;if base and base:IsValid() then base_sim=base:IsSimulatingPhysics(fname("None")) end end)
+                        local ok,why=pcall(function()
+                            local t=wa:GetTransform()
+                            local m=root:GetCenterOfMass(fname("None"))
+                            local q={t.Rotation.X,t.Rotation.Y,t.Rotation.Z,t.Rotation.W}
+                            -- Same orientation-frame/world-uu COM used when
+                            -- creating the servo entry; do not divide by scale.
+                            actual_com=PURE.qrot(PURE.qconj(q),{m.X-t.Translation.X,m.Y-t.Translation.Y,m.Z-t.Translation.Z})
+                            if c.com then com_delta=PURE.d3(actual_com,c.com) end
+                            actor_scale={t.Scale3D.X,t.Scale3D.Y,t.Scale3D.Z}
+                        end)
+                        if not ok then com_error=tostring(why) end
+                        pcall(function()mass=root:GetMass()end)
+                        pcall(function()local s=root:K2_GetComponentScale();root_scale={s.X,s.Y,s.Z}end)
+                    end
+                    Log("WPNCACHE peer=%s pawn=%s match=%s round=%s life=%s world=%s generation=%s field=%s actor_address=%s root_address=%s cached_sim=%s actual_root_sim=%s actual_base_sim=%s servo_at=%s grips=%s cached_com=%s actual_com=%s com_delta=%s root_mass=%s actor_scale=%s root_scale=%s read_only=true",
+                        tostring(peer),shown.pawn,tostring(shown.match_id),tostring(shown.round),tostring(shown.life),tostring(PX.settle_world),tostring(p.gen),field,tostring(c and c.addr),tostring(c and c.root_addr),tostring(c and c.sim),tostring(actual),tostring(base_sim),tostring(p.wservo and p.wservo[field]),PX.grips_desc(p),
+                        PX.wc_vec(c and c.com),PX.wc_vec(actual_com),com_delta and string.format("%.6f",com_delta) or "unavailable",tostring(mass),PX.wc_vec(actor_scale),PX.wc_vec(root_scale))
+                    if com_error then Log("WPNCACHE_ERROR peer=%s pawn=%s field=%s property=COM reason=%s",tostring(peer),shown.pawn,field,com_error) end
+                end
+            end
+        end
+    end
+end
 -- The validated weapon entries of a body: stale ones are dropped WITHOUT
 -- being touched, live ones get their root re-taken from the fresh read.
 -- Call before every use of body.sv.wc.
@@ -2207,7 +3699,9 @@ end
 -- servo commanded last frame.
 function PX.contact_body(mesh, sv, i, cv, near)
     local fn = _sv_fn[i]
-    if not sv.mass[i] then sv.mass[i] = mesh:GetBoneMass(fn, true) or 0 end
+    local mass = tonumber(mesh:GetBoneMass(fn, false))
+    if not mass or mass ~= mass or mass <= 0 or mass == math.huge then return end
+    sv.mass[i] = mass -- diagnostics follow successful current native mass changes
     local v = mesh:GetPhysicsLinearVelocity(fn)
     local dv = math.sqrt((v.X - cv[1]) ^ 2 + (v.Y - cv[2]) ^ 2 + (v.Z - cv[3]) ^ 2)
     local imp = dv * sv.mass[i]   -- kg*uu/s
@@ -2216,9 +3710,43 @@ function PX.contact_body(mesh, sv, i, cv, near)
     local t = near and ci.near or ci.far
     t[#t + 1] = imp
     if near and imp > ci.maxn then ci.maxn = imp; ci.maxb = PURE.V2_SLOTS[i] end
+    return dv
+end
+
+-- Simulation is mutable on a live weapon root (native pickup / setup can
+-- enable it after this cache was created). Only call with the fresh root
+-- returned by wc_check, or while creating the newly resolved entry.
+function PX.wc_refresh_sim(p, body, field, c, root)
+    local previous, sim = c.sim, nil
+    local ok = pcall(function() sim = root:IsSimulatingPhysics(FN_NONE) end)
+    local unavailable = not ok or type(sim) ~= "boolean"
+    if unavailable then sim = nil end
+    c.sim = sim
+    local changed = previous ~= sim or (unavailable and not c.sim_unavailable)
+    c.sim_unavailable = unavailable or nil
+    if changed or unavailable then
+        if p.wservo then p.wservo[field] = nil end
+        if p.wservo_actor then p.wservo_actor[field] = nil end
+        PX.settle_reset(p, unavailable and "weapon physics unavailable" or "weapon physics changed")
+    end
+    if changed then
+        Log("WPNSIM peer=%s field=%s actor_address=%s root_address=%s previous=%s actual=%s unavailable=%s",
+            tostring(p.peer), field, tostring(c.addr), tostring(c.root_addr), tostring(previous), tostring(sim), tostring(unavailable))
+    end
+    if sim == true and previous ~= true and body.gravity == false then
+        -- The same policy used when a simulated entry is first constructed.
+        pcall(function() root:SetEnableGravity(false) end)
+        pcall(function() root:SetCollisionResponseToChannel(0, 0); root:SetCollisionResponseToChannel(1, 0) end)
+    end
 end
 
 local function servo_weapon_parts(p, body, field)
+    -- Production callers carry both guards. Reject a stale generation / life
+    -- before reading any native actor or root, including a reused entry.
+    if (p.gen ~= nil and (p.gen ~= world_gen or cache_gen ~= world_gen))
+        or (p.peer ~= nil and not PURE.pose_context_ok(p.last, HSM and HSM.view(), HSM and HSM.mode(), p.peer)) then
+        return nil
+    end
     body.wc_owner = p
     local okw, wa = pcall(PX.r_index, p.actor, field)
     if not okw then wa = nil end
@@ -2228,7 +3756,11 @@ local function servo_weapon_parts(p, body, field)
     local c = body.sv.wc[field]
     if c and c.addr == addr and body.sv.wc_gen == PX.wc_gen_poll() then
         local wa2, root = PX.wc_check(p, field, c)
-        if wa2 then c.root = root; return c, wa2 end
+        if wa2 then
+            c.root = root
+            PX.wc_refresh_sim(p, body, field, c, root)
+            return c, wa2
+        end
     end
     body.sv.wc[field] = nil   -- a different / destroyed weapon: forget the old entry untouched
     body.sv.wc_gen = PX.wc_gen_poll()
@@ -2237,7 +3769,6 @@ local function servo_weapon_parts(p, body, field)
     pcall(function() c.root = wa.RootComponent end)
     if not (c.root and c.root:IsValid()) then return nil end
     pcall(function() c.root_addr = c.root:GetAddress() end)
-    pcall(function() c.sim = c.root:IsSimulatingPhysics(FN_NONE) end)
     pcall(function()
         local t = wa:GetTransform()
         local m = c.root:GetCenterOfMass(FN_NONE)
@@ -2246,10 +3777,7 @@ local function servo_weapon_parts(p, body, field)
     end)
     pcall(function() c.base = wa["Root Scene"]; c.tip = wa.TippyTipScene end)
     pcall(function() c.tag = PURE.class_tag(wa:GetClass():GetFName():ToString()) end)
-    if c.sim and body.gravity == false then
-        pcall(function() c.root:SetEnableGravity(false) end)
-        pcall(function() c.root:SetCollisionResponseToChannel(0, 0); c.root:SetCollisionResponseToChannel(1, 0) end)
-    end
+    PX.wc_refresh_sim(p, body, field, c, c.root)
     body.sv.wc[field] = c
     return c, wa
 end
@@ -2356,12 +3884,58 @@ end
 PX.CONTACT_NEAR_UU = 150
 PX.CONTACT_BODIES = { 1, 4, 9, 13, 17 }   -- pelvis, spine_03, head, hand_l, hand_r
 
+-- Keep the reset decision and its evidence together: emit the pre-correction
+-- clock and playback state exactly once per discontinuity, never per frame.
+function PX.playback_clock(id, p, cur, clk, now, cut_reset, fresh)
+    local rate = PURE.clamp(tonumber(cur.rate) or 1, 0.5, 1.5)
+    if rate ~= rate or (tonumber(cur.rate) or 0) <= 0 then rate = 1 end
+    -- `now` is the physical frame time. Project the actually received
+    -- sidecar clock back to it when the callback/slot read happened late.
+    local expect = cur.pt - (cur.lead or 0) + (now - (cur.read_at or now)) * rate
+    local projected = clk and (clk.pt + (now - clk.at) * (clk.r or 1))
+    local epoch = cur.has_context==true and type(cur.match_id)=="number" and cur.match_id>0
+        and cur.match_id<math.huge and cur.match_id==math.floor(cur.match_id)
+        and type(cur.round)=="number" and cur.round>0 and cur.round<math.huge and cur.round==math.floor(cur.round)
+        and type(cur.life)=="number" and cur.life>0 and cur.life<math.huge and cur.life==math.floor(cur.life)
+        and type(cur.cut)=="number" and cur.cut>=0 and cur.cut<math.huge and cur.cut==math.floor(cur.cut)
+    -- cut_seen belongs to the body lifecycle: its cut/repose frames return
+    -- before this clock integrates. Bind the clock's own generation on the
+    -- first actual drive instead of reusing its previous cut's phase.
+    local new_epoch = epoch and not (clk and clk.has_context==true and clk.match_id==cur.match_id
+        and clk.round==cur.round and clk.life==cur.life and clk.cut==cur.cut)
+    local reset = clk ~= nil and not cut_reset and not new_epoch and math.abs(expect - projected) > 50
+    if reset then
+        ev("x_pose_clock_reset", {
+            peer=id, threshold_ms=50, expect=expect, projected_clk=projected, delta_ms=expect-projected,
+            clk_pt=clk.pt, clk_at=clk.at, clk_rate=clk.r or 1, local_ms=now,
+            source_pt=cur.pt, read_at=cur.read_at or now, rate=rate, lead=cur.lead or 0,
+            mode=cur.mode, age=cur.age, delay=cur.delay, jitter=cur.jit, iv=cur.iv,
+            quiet=now-((p.play and p.play.seq_at) or now), cut=cur.cut, step=cur.st,
+            frame=PX.frame_no or 0, source_seq=cur.seq, fresh=fresh==true,
+            match_id=cur.match_id, round=cur.round, life=cur.life, has_context=cur.has_context==true,
+        })
+    end
+    local result
+    if not clk or cut_reset or new_epoch or reset then result={pt=expect,at=now,r=rate}
+    else
+        local r = clk.r or 1
+        result={pt=projected+0.1*(expect-projected),at=now,r=r+0.3*(rate-r)}
+    end
+    if epoch then
+        result.has_context,result.match_id,result.round,result.life,result.cut=true,cur.match_id,cur.round,cur.life,cur.cut
+    end
+    return result, reset
+end
+
 -- One frame of the v2 driver. `fresh`: a new pose_play sample arrived this frame.
 local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local sv = servo_setup(body)
     -- What is on screen now = what we aimed at last frame (contract for
     -- bus key "playback", i.e. HSMPCombat's view time of this peer).
-    if p.aim then p.shown = { label = p.aim.label, at = now } end
+    if p.aim then
+        p.shown = PURE.displayed_pose(p.aim, p.aim.pawn, p.aim.label, now)
+        p.applied_context = p.shown
+    end
     if sv.n == 0 then return end
     -- Time accounting (measured in game with tdiag): this callback runs after
     -- the frame's physics, so the bodies we read stand for the end of the
@@ -2435,18 +4009,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     -- The sidecar's clock runs at cur.rate (slower while its buffer starves,
     -- faster while it catches up): this clock follows that rate, so a stretch
     -- is not read as an error (which would reset the clock again and again).
-    local rate = PURE.clamp(tonumber(cur.rate) or 1, 0.5, 1.5)
-    if rate ~= rate or (tonumber(cur.rate) or 0) <= 0 then rate = 1 end
-    local expect = cur.pt - (cur.lead or 0) + (now - (cur.read_at or now)) * rate
-    local clk = (TUNE.clock ~= 0) and p.clk or nil
-    if not clk or cut_reset or math.abs(expect - (clk.pt + (now - clk.at) * (clk.r or 1))) > 50 then
-        if clk and not cut_reset and body.sv and body.sv.err then body.sv.err.clkr = (body.sv.err.clkr or 0) + 1 end
-        clk = { pt = expect, at = now, r = rate }
-    else
-        local r = clk.r or 1
-        local pt = clk.pt + (now - clk.at) * r
-        clk = { pt = pt + 0.1 * (expect - pt), at = now, r = r + 0.3 * (rate - r) }
-    end
+    local clk, clkr = PX.playback_clock(id, p, cur, (TUNE.clock ~= 0) and p.clk or nil, now, cut_reset, fresh)
+    if clkr and body.sv and body.sv.err then body.sv.err.clkr = (body.sv.err.clkr or 0) + 1 end
     p.clk = clk
     -- A hold sample already stands still (zero velocities): only stale data
     -- freezes the shown time, so leaving a hold does not step it back.
@@ -2484,15 +4048,12 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
         pv.pt = cur.pt
         p.vprev = pv
     end
-    local targets, label, aim
+    local targets, label, aim, aim_label
     if v1aim then
-        targets, label = cur.slots, clk.pt + (TUNE.lead or 0)
-        local ms = label - cur.pt
-        if ms > SERVO_EXTRAP_MS then ms = SERVO_EXTRAP_MS end
-        if ms < -SERVO_EXTRAP_MS then ms = -SERVO_EXTRAP_MS end
-        if frozen then ms = 0 end
-        label = cur.pt + ms
-        if math.abs(ms) > 0.05 then
+        targets = cur.slots
+        local ms
+        label, aim_label, ms = PURE.display_times(cur.pt, clk.pt + (TUNE.lead or 0), 0, SERVO_EXTRAP_MS, frozen)
+        if ms ~= 0 then
             targets = {}
             for s, tg in pairs(cur.slots) do targets[s] = PURE.advance(tg, ms) end
         end
@@ -2500,11 +4061,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     else
         -- label: the time the bodies stand for NOW; aim: the pose at the end
         -- of the coming step, approached with the chord velocity of that step.
-        label = clk.pt + xoff
-        local ms = PURE.clamp(label - cur.pt, -SERVO_EXTRAP_MS, SERVO_EXTRAP_MS)
-        local ma = PURE.clamp(ms + hstep, -SERVO_EXTRAP_MS, SERVO_EXTRAP_MS)
-        if frozen then ms, ma = 0, 0 end
-        label = cur.pt + ms
+        local ms, ma
+        label, aim_label, ms, ma = PURE.display_times(cur.pt, clk.pt + xoff, hstep, SERVO_EXTRAP_MS, frozen)
         -- Target and aim tables come from a per-stand-in ring of 6 sets (2 per drive):
         -- a set is refilled 3 drives later. The targets are read until 2 drives later
         -- (quality history a1 / a2), the aim until the next one (p.aim).
@@ -2544,9 +4102,13 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     -- What is on screen now (contract for bus key "playback" = HSMPCombat's view
     -- time of this peer): v2 aim knows it exactly; v1aim shows last frame's
     -- aim.
-    -- (lag comp keeps the sender's frame-start stamps: the pose shown stands
-    -- for label, which is the frame start + cur.st on that clock)
-    if not v1aim then p.shown = { label = label - (cur.st or 0), at = now } end
+    -- Publish the physical sample time used to construct these targets. The
+    -- selected sender step cannot be subtracted: around hitches that mapping
+    -- has several different poses for the same frame-start label.
+    if not v1aim then
+        p.shown = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), label, now)
+        p.applied_context = p.shown
+    end
     -- Foot planting: while the owner's foot is planted (its replicated speed
     -- under PQ.PLANT_SPD), the stand-in's foot is locked where it was when the
     -- plant began and only creeps toward the owner's foot at PQ.PLANT_CREEP
@@ -2592,6 +4154,9 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local s_gain = yl and yl.gain or (TUNE.gain or SERVO_GAIN)
     local s_capl = yl and yl.cap_lin or SERVO_CAP_LIN
     local s_capa = yl and yl.cap_ang or SERVO_CAP_ANG
+    if p.impact_until and now < p.impact_until then
+        s_gain, s_capl, s_capa = math.min(s_gain, IMPACT_GAIN), math.min(s_capl, IMPACT_CAP), math.min(s_capa, IMPACT_CAP)
+    end
     if body.ramp_at then
         local k = (now - body.ramp_at) / PX.RAMP_MS
         if k >= 1 or k < 0 then body.ramp_at = nil else s_capl, s_capa = s_capl * (0.3 + 0.7 * k), s_capa * (0.3 + 0.7 * k) end
@@ -2608,11 +4173,27 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     end
     sv.cmd = sv.cmd or {}
     sv.mass = sv.mass or {}
+    sv.dvp = sv.dvp or {}
     if sv.cmd[1] then
+        local idv = TUNE.impact_dv or IMPACT_DV
         for _, i in ipairs(PX.CONTACT_BODIES) do
             local cv = sv.cmd[i]
             if cv then
-                pcall(PX.contact_body, mesh, sv, i, cv, near)
+                local ok, dv = pcall(PX.contact_body, mesh, sv, i, cv, near)
+                -- A blow is a STEP in how far the solver left the body off its command. A limb
+                -- held against a joint or a grip sits a steady ~900 uu/s off the capped servo
+                -- (measured live: an idle stand-in's hand_r 920 uu/s every frame, 438 false
+                -- "struck" in a 70-round gate without one blow), which is no reason to yield.
+                local prev = sv.dvp[i]
+                if ok and dv then sv.dvp[i] = dv end
+                if ok and dv and prev and idv > 0 and dv > idv and dv - prev > idv and not body.ramp_at then
+                    if not (p.impact_logged and now - p.impact_logged < 2000) then
+                        p.impact_logged = now
+                        Log("pose peer %d: struck (%s %.0f uu/s off the servo, +%.0f in one frame): yielding %d ms", id,
+                            PURE.V2_SLOTS[i] or "?", dv, dv - prev, TUNE.impact_ms or IMPACT_MS)
+                    end
+                    p.impact_until = now + (TUNE.impact_ms or IMPACT_MS)
+                end
             end
         end
     end
@@ -2622,7 +4203,28 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     local pel_err
     local ncap = 0
     if TUNE.tdiag then PX.td_acc = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } end
+    if v1aim and (SEVERED_PHYSICS or body.injury_probe or next(body.injury_disabled or {})) then
+        local copy = {}
+        for s,t in pairs(targets) do copy[s] = t end
+        targets = copy -- never remove slots from the retained received pose
+    end
+    PX.injury_targets(id,p,targets,aim)
+    local hand_pipeline=PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
+    if PX.JOINT_PROFILE then
+        local _,current=PX.joint_profile_row(p)
+        if current==false then return end
+    end
+    local limb_params
+    if PX.LIMB_BURST then
+        limb_params={dt_s=dt,gain=s_gain,cap_lin=s_capl,cap_ang=s_capa,holding=holding==true,yielding=yl~=nil,
+            ramp=body.ramp_at~=nil,ramp_at=body.ramp_at,driver_ms=now}
+        local _,current=PX.limb_burst_row(p,"pre_driver",limb_params,aim)
+        if current==false then return end -- optional reads changed the exact body; never write the earlier wrapper.
+    end
     local nat = PX.ns_bodies(mesh, aim, sv, dt, s_capl, s_capa, s_gain, yl, holding)   -- native servo
+    if PX.SETTLE then
+        p.settle_state=PX.SETTLE.begin(p.settle_state,PX.settle_world,p.shown,p.aim,cur,now)
+    end
     local sv_c = sv.c7 or {}
     sv.c7 = sv_c
     for i = 1, PURE.V2_NB do
@@ -2646,6 +4248,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
             else
                 c = xf7(mesh:GetSocketTransform(fn, 0), c)
             end
+            if hand_pipeline then PX.hand_pipeline_observe(hand_pipeline,i,c,nat~=nil)end
+            if PX.SETTLE then PX.SETTLE.measure(p.settle_state,i,c,p.aim and p.aim.slots and p.aim.slots[i]) end
             -- Tracking error vs. what we aimed at last frame.
             if prev and prev.slots[i] then
                 local a = prev.slots[i]
@@ -2761,7 +4365,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 -- driven bodies and the commanded COM momentum, per frame.
                 local td = PX.td_acc
                 sv.mass2 = sv.mass2 or {}
-                if not sv.mass2[i] then pcall(function() sv.mass2[i] = mesh:GetBoneMass(fn, true) or 0 end) end
+                sv.mass2[i] = nil
+                pcall(function() sv.mass2[i] = mesh:GetBoneMass(fn, false) or 0 end)
                 local m = sv.mass2[i] or 0
                 local wc = PURE.qrot({ c[4], c[5], c[6], c[7] }, com)
                 td[1], td[2], td[3], td[4] = td[1] + m, td[2] + m * (c[1] + wc[1]), td[3] + m * (c[2] + wc[2]), td[4] + m * (c[3] + wc[3])
@@ -2876,6 +4481,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 wstate = "missing"
             elseif cur.weapons[s] and c.tag ~= cur.weapons[s][2] then
                 wstate = "other-class"   -- not the sender's weapon: it just follows the hand
+            elseif c.sim == nil then
+                wstate = "physics-unavailable"
             elseif not c.sim then
                 wstate = "kinematic"
             elseif c.com then
@@ -2910,6 +4517,8 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
                 wstate = "servo"
                 p.wservo = p.wservo or {}
                 p.wservo[field] = now
+                p.wservo_actor=p.wservo_actor or {}
+                p.wservo_actor[field]=c.addr
             end
         end
         local cls = PX.wpn_status(c, wa, now)
@@ -2950,24 +4559,64 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     _probe_buf[#_probe_buf + 1] = table.concat(out, " ")
         probe_flush(id, false)
     end
-    p.aim = { slots = aim, label = label + hstep }
+    if PX.SETTLE then
+        PX.SETTLE.finish(p.settle_state,now)
+        if PX.JOINT_PROFILE and p.body==body and p.gen==world_gen then
+            -- Existing plain scalars identify the Mesh used for this completed
+            -- measurement; they do not retroactively identify an earlier sample.
+            p.settle_state.probe_mesh_addr,p.settle_state.probe_mesh_fname=body.mesh_addr,body.mesh_fname
+            p.settle_state.probe_generation=world_gen
+        end
+        PX.SETTLE.copy(p.shown,p.settle_state)
+        if p.settle_state.settle_ready and not p.settle_state.logged then
+            p.settle_state.logged=true
+            Log("spawn settle peer=%d pawn=%s match=%s round=%s life=%s ready=%s reason=%s limbs=%d pos=%.2f rot=%.2f stable_ms=%.0f source_seq=%s source_ts=%s",
+                id,tostring(p.shown and p.shown.pawn),tostring(cur.match_id),tostring(cur.round),tostring(cur.life),
+                tostring(p.settle_state.settle_ready),p.settle_state.settle_reason,p.settle_state.settle_count,
+                p.settle_state.settle_pos_uu,p.settle_state.settle_rot_deg,p.settle_state.settle_stable_ms,
+                tostring(p.settle_state.settle_source_seq),tostring(p.settle_state.settle_source_ts))
+        end
+    end
+    if limb_params then
+        limb_params.native_servo=nat~=nil
+        local _,current=PX.limb_burst_row(p,"post_driver",limb_params,aim)
+        if current==false then return end
+    end
+    p.aim = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), aim_label, now)
+    p.aim.world,p.aim.cut,p.aim.seq=PX.settle_world,cur.cut,cur.seq
+    p.aim.slots = aim
+    if PX.HAND_PIPELINE_PROBE then
+        p.aim.pipeline_mesh={address=body.mesh_addr,name=body.mesh_fname}
+        p.aim.pipeline_world,p.aim.pipeline_generation,p.aim.pipeline_frame=cache_world,world_gen,PX.frame_no or 0
+    end
+    if hand_pipeline then
+        local record,why=PX.hand_pipeline_finish(hand_pipeline)
+        PX.hand_pipeline_emit(record,why,hand_pipeline)
+    end
     return pel_err
 end
 
 -- Runs every game frame for every claimed puppet.
 local function drive_frame(id, p, now)
+    p.peer=id
     local pl = p.play or {}
     p.play = pl
     local r = read_play(id, pl.seq)
     pl.reads = (pl.reads or 0) + 1
     if type(r) == "table" then
         if pl.seq then pl.fresh = (pl.fresh or 0) + 1 end
-        r.read_at = now
         p.last, pl.seq, pl.seq_at = r, r.seq, now
     elseif r == nil then
         pl.bad = (pl.bad or 0) + 1   -- missing or torn record
     end
     local cur = p.last
+    if r == "context" or (cur and not PURE.pose_context_ok(cur, HSM and HSM.view(), HSM and HSM.mode(), id)) then
+        if p.driving then release_standin(p) end
+        p.last, p.aim, p.shown, p.cut_seen = nil, nil, nil, nil
+        pl.seq, pl.seq_at = nil, nil
+        return
+    end
+    if p.body and p.body.injury_retiring then return end
     if cur and cur.v2 then
         -- Codec v2: velocity servo every frame (replication.md "Driver").
         local quiet = now - (pl.seq_at or -1e9)
@@ -2988,18 +4637,24 @@ local function drive_frame(id, p, now)
         if not body or cur.nbones == 0 then p.cut_seen = cur.cut; return end
         if body.ctl ~= "servo" then
             release_handles(body)
-            body.ctl = "servo"
             p.driving = false
             -- The servo drives the visible ragdoll itself (CharacterMesh0);
             -- head, gore mesh and armour copy their pose from it.
             if body.field ~= "Mesh" then
+                PX.settle_reset(p,"mesh handoff")
                 local m; pcall(function() m = p.actor.Mesh end)
-                if m and m:IsValid() then
-                    body.mesh, body.field, body.sims, body.sv = m, "Mesh", { m }, nil
-                    pcall(function() m:SetSimulatePhysics(true) end)
-                end
+                if not (m and m:IsValid()) then return end
+                local ma,mn
+                pcall(function()ma=m:GetAddress();mn=m:GetFName():ToString()end)
+                if type(ma)~="number" or ma<=0 or not math.tointeger(ma)or type(mn)~="string"or mn==""then return end
+                if PX.injury_release(p)==false then return end
+                body.mesh, body.field, body.sims, body.sv = m, "Mesh", { m }, nil
+                body.mesh_addr,body.mesh_fname=ma,mn
+                pcall(function() m:SetSimulatePhysics(true) end)
             end
+            body.ctl = "servo" -- commit only after restoration and the required mesh switch
         end
+        if PX.sync_body_scale(id, p, body, now, cur) then return end
         if not p.driving then
             -- Start only on live data read after the claim: a stale sample can be
             -- the owner's previous round or place, and pulling a fresh Willie there
@@ -3052,12 +4707,17 @@ local function drive_frame(id, p, now)
         if body.repose then
             body.repose = nil
             pcall(function() body.mesh:SetSimulatePhysics(true) end)
+            if body.scale_remeasure then
+                body.sv, body.scale_remeasure = nil, nil
+                servo_setup(body, true)
+            end
             body.gravity = nil
             set_gravity(body, false)
             set_motor_strength(body, 0.0)
             world_collision(body, false)
             body.stall = nil
             if pel and snap_clear(pel) then snap_mesh(body, pel[1], pel[2], pel[3]) end
+            PX.injury_targets(id,p,nil,nil) -- physics reset may have re-enabled missing bodies
             p.qhist, p.idlew, p.qfoot = nil, nil, nil
             p.aim = nil
             -- soft servo for the first moments, and the spawn stretch watch
@@ -3375,7 +5035,15 @@ local function tick_puppet(id, p, me_loc)
             -- shoving the driven bodies (seen: hand 77 deg held off target).
             -- On a local pawn it simulates far below the map; off here.
             pcall(function() local bc = p.actor.BoneCore; if bc and bc:IsValid() and bc:GetCollisionEnabled() ~= 0 then bc:SetCollisionEnabled(0) end end)
-            world_collision(body, false)   -- re-asserted (see drive start)
+            -- Off while the owner stands (the servo holds the feet; see drive start). A fallen or
+            -- downed owner lies on the floor: the stand-in collides with it again instead of
+            -- floating above or sinking through it (servo and gravity unchanged; tune downed_world 0).
+            local down = TUNE.downed_world ~= 0 and PX.owner_vitals_down(id) == true
+            if down ~= (p.down_world == true) then
+                Log("pose peer %d: owner %s: stand-in world collision %s", id, down and "down" or "up", down and "on" or "off")
+                p.down_world = down
+            end
+            world_collision(body, down)   -- re-asserted (see drive start)
             -- Gravity off is re-asserted too: anything that recreates the
             -- mesh's physics state (collision toggles, the BP's own resets)
             -- turns it back on, and a cached "off" would hide that for good.
@@ -3401,6 +5069,7 @@ local function tick_puppet(id, p, me_loc)
     elseif body and body.ctl == nil and not (p.last and p.last.v2) then
         ensure_handles(p, body)   -- prepare control before the first (v1) pose
     end
+    if p.body then PX.injury_targets(id,p,nil,nil) end -- includes released/out-of-range bodies
     -- Server-declared death of the owner (peer_vitals record,
     -- docs/development/subsystems/vitals.md): the stand-in becomes a free
     -- native ragdoll (drive_frame lets go).
@@ -3608,6 +5277,7 @@ local function on_tick()
     end
     if not key then cache_gen = -1; _world_name = nil; return end
     cache_gen = world_gen
+    PX.settle_world=wid
     _world_name = wname
     PX.keep_possession()
     local world = wname
@@ -3621,8 +5291,7 @@ local function on_tick()
     end
     -- Let HSMPSync finish possessing our own Willie first, so neither mod can
     -- mistake the other's Willie during spawn.
-    local me
-    pcall(function() local p = pc.Pawn; if p and p:IsValid() then me = p end end)
+    local me = local_pawn(pc)
     if not me then return end
     -- Nothing touches Willies in the first PX.WORLD_SETTLE_S of a world: the
     -- previous world is still being purged incrementally and the new world's
@@ -3630,6 +5299,29 @@ local function on_tick()
     -- 0.5-0.6 s after a round reload (GetFName / FName:ToString on a dead
     -- object, right after the first claim pass).
     if os.clock() - (census.arena_at or 0) < PX.WORLD_SETTLE_S then return end
+    if PX.bodyphysics_request then
+        local request = PX.bodyphysics_request
+        PX.bodyphysics_request = nil
+        PX.bodyphysics(request)
+    end
+    if PX.bodyheight_request then
+        local request = PX.bodyheight_request
+        PX.bodyheight_request = nil
+        PX.bodyheight(request)
+    end
+    if PX.weaponstate_request then
+        local request=PX.weaponstate_request
+        PX.weaponstate_request=nil
+        PX.weaponstate(request)
+    end
+    -- A diagnostic must restore even when no fresh pose reaches drive_v2.
+    for id,p in pairs(puppets) do
+        PX.height_tick(p)
+        if p.gen == world_gen and p.actor and p.actor:IsValid() and p.body and p.body.mesh:IsValid()
+            and (p.body.injury_probe or next(p.body.injury_disabled or {})) then
+            PX.injury_tick(id,p)
+        end
+    end
     local me_loc = willie_loc(me)
     PX.view_loc = PX.camera_loc(pc) or me_loc   -- stand-in range from the camera
     do
@@ -3711,10 +5403,12 @@ local function on_tick()
             end
             if why then
                 Log("peer %d (%s): %s; re-claiming", id, nick, why)
-                pcall(release_standin, p)
-                puppets[id] = nil; p = nil
-                demand = demand + 1   -- a re-claim needs a body too
-                next_claim[id] = tick_num
+                local ok,restored=pcall(release_standin,p,true)
+                if ok and restored~=false then
+                    puppets[id] = nil; p = nil
+                    demand = demand + 1   -- a re-claim needs a body too
+                    next_claim[id] = tick_num
+                end
             end
         end
 
@@ -3756,9 +5450,8 @@ local function on_tick()
     for id, p in pairs(puppets) do
         if not live[id] then
             Log("peer %d (%s) gone; releasing puppet (left standing)", id, p.nick or "?")
-            if p.actor and p.actor:IsValid() then pcall(release_standin, p) end
-            puppets[id] = nil
-            snap[id] = nil
+            local ok,restored=pcall(release_standin,p,true)
+            if ok and restored~=false then puppets[id]=nil;snap[id]=nil end
         end
     end
 
@@ -3773,6 +5466,7 @@ local function on_tick()
     -- Stand-ins the ReceiveTick post-hook neutralises (address -> puppet).
     _driven = {}
     for _, p in pairs(puppets) do
+        if not p.driving and p.linear_grip_leases then PX.grip_linear_restore(p) end
         if p.driving and p.addr and p.gen == world_gen and p.body and p.body.ctl == "servo" then _driven[p.addr] = p end
     end
 
@@ -3805,15 +5499,11 @@ local function on_tick()
     -- the reader can advance it.
     local pb = {}
     for id, p in pairs(puppets) do
-        local cur = p.last
-        if p.shown and cur and cur.v2 and now_ms() - p.shown.at < 250 then
-            -- Codec v2: the sender time the stand-in is SHOWING right now (the
-            -- pose it was driven to last frame, read back this frame) and the
-            -- local ms of that read; HSMPCombat advances it to the hit time.
-            pb[#pb + 1] = { peer = id, body_ts = math.floor(p.shown.label), arm_ts = math.floor(p.shown.label), local_ms = math.floor(p.shown.at) }
-        elseif cur and not cur.v2 and cur.read_at and cur.mode ~= "stale" then
-            pb[#pb + 1] = { peer = id, body_ts = math.floor(cur.pt), arm_ts = math.floor(cur.pt), local_ms = math.floor(cur.read_at) }
-        end
+        -- Keep the original timestamp and pawn generation after driving stops.
+        -- New contacts still enforce freshness; approved death trades need this
+        -- immutable binding until the actor or its native life is replaced.
+        local row = PURE.playback_row(id, p.shown or p.applied_context, now_ms(), true)
+        if row then pb[#pb + 1] = row end
     end
     if HSMP_IPC then HSMP_IPC.bus_put("playback", { rows = pb }) end
 end
@@ -3870,33 +5560,79 @@ hook_note[#hook_note + 1] = "EndPlay=" .. tostring(ok_end)
 -- fails ("ReceiveTick=false" in the log) and the post-BP neutralising would
 -- never run. Retried once a second from the tick, forever, until it succeeds
 -- (one cheap failed lookup; same pattern as HSMPCombat).
--- UE4SS requires a function as the pre-callback; it is an empty one.
+-- Pinned UE4SS script hooks execute argument #2 AFTER the Blueprint; the
+-- native-only third callback slot is ignored for this non-native function.
 tick_hook.FN = "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:ReceiveTick"
-function tick_hook.post(ctx)
-    if next(_driven) == nil or cache_gen ~= world_gen then return end
-    local a; pcall(function() a = ctx:get() end)
-    PX.hook_calls = (PX.hook_calls or 0) + 1
-    if not a then return end
-    local addr; pcall(function() addr = a:GetAddress() end)
-    local p = addr and _driven[addr]
-    if p then PX.hook_hits = (PX.hook_hits or 0) + 1 end
-    if p and p.driving and p.gen == world_gen and p.body and p.body.ctl == "servo" then
-        neutralise_bp(p, p.body)
+function tick_hook.post(ctx,delta_seconds)
+    if next(_driven) == nil and not PX.GRIP_PROBE or cache_gen ~= world_gen then return end
+    local hook_started=PX.GRIP_PROBE and os.clock() or nil
+    pcall(function()
+        local _,wid=world_identity(local_pc())
+        if not wid or cache_world~=tostring(world_gen).."|"..wid then return end
+        local a=ctx:get();PX.hook_calls=(PX.hook_calls or 0)+1
+        if not (a and a:IsValid())then return end
+        local addr,name=a:GetAddress(),a:GetFName():ToString()
+        local p=_driven[addr]
+        if not p and PX.GRIP_PROBE then
+            local q=PX.grip_probe_begin(a,addr,name,nil)
+            if q then
+                local sample,why=PX.grip_probe_capture(q,"post_bp")
+                PX.grip_probe_emit(sample,why,q,"post_bp")
+                Log("GRIPCALL inst=%s group=%s role=owner elapsed_ms=%.6f includes_probe=true",tostring(q.instance),tostring(q.group),(os.clock()-hook_started)*1000)
+            end
+        end
+        if not p or not p.body or p.body.ctl~="servo" or not PX.grip_drive_current(p)then return end
+        local shown=p.shown or p.applied_context
+        if not shown or shown.pawn~=name or not PURE.pose_context_ok(shown,HSM and HSM.view(),HSM and HSM.mode(),p.peer)then return end
+        local mesh,key=PX.injury_mesh(p)
+        if not mesh or p.actor:GetFName():ToString()~=name then return end
+        local owner=mesh:GetOwner()
+        if not (owner and owner:IsValid()) or owner:GetAddress()~=addr or owner:GetFName():ToString()~=name then return end
+        local body=p.body
+        local fresh,fresh_key=PX.injury_mesh(p)
+        if fresh~=mesh and not same(fresh,mesh) or fresh_key~=key or not PX.grip_drive_current(p)then return end
+        local q=PX.grip_probe_begin(a,addr,name,p)
+        local before,before_why
+        if q then
+            before,before_why=PX.grip_probe_capture(q,"post_bp");q.before=before
+            if not PX.grip_probe_current(q)then PX.grip_probe_emit(nil,"scope changed",q,"post_bp");return end
+            mesh=PX.injury_mesh(p) -- only the freshly verified body reaches the existing writer
+            if not mesh then return end
+        end
+        PX.hook_hits=(PX.hook_hits or 0)+1
+        local limb_bp
+        if PX.LIMB_BURST then
+            limb_bp={receive_tick_delta_available=false}
+            local ok,value=pcall(function()return type(delta_seconds)=="number"and delta_seconds or delta_seconds:get()end)
+            if ok and type(value)=="number"and value==value and value>0 and value<math.huge then
+                limb_bp.receive_tick_delta_available=true;limb_bp.receive_tick_delta_s=value
+            end
+            local _,current=PX.limb_burst_row(p,"bp_post",limb_bp)
+            if current==false then return end
+            mesh=PX.injury_mesh(p);if not mesh then return end
+        end
+        neutralise_bp(p, {mesh=mesh,motors=body.motors}) -- current wrapper, no retained body-mesh access
+        if limb_bp then PX.limb_burst_row(p,"policy_post",limb_bp)end
+        if q then
+            local after,after_why=PX.grip_probe_capture(q,"post_policy")
+            PX.grip_probe_emit(before,before_why,q,"post_bp")
+            PX.grip_probe_emit(after,after_why,q,"post_policy")
+            Log("GRIPCALL inst=%s group=%s role=driven elapsed_ms=%.6f includes_probe=true",tostring(q.instance),tostring(q.group),(os.clock()-hook_started)*1000)
+        end
         if TUNE.tdiag then
             pcall(function()
                 local gs = PX.gs
-                local l = p.body.mesh:GetSocketLocation(_sv_fn[1])
+                local l = mesh:GetSocketLocation(_sv_fn[1])
                 p.hook = { l.X, l.Y, l.Z, gs and gs:GetRealTimeSeconds(a) * 1000 or -1, os.clock() * 1000 }
             end)
         end
-    end
+    end)
 end
-tick_hook.pre = function() end
 tick_hook.try = function(force)
     if tick_hook.ok then return true end
     if not force and tick_num % 30 ~= 0 then return false end
     tick_hook.tries = tick_hook.tries + 1
-    local ok, err = pcall(function() RegisterHook(tick_hook.FN, tick_hook.pre, tick_hook.post) end)
+    local ok, err = pcall(function() RegisterHook(tick_hook.FN, tick_hook.post) end)
     tick_hook.ok = ok
     if ok then
         Log("ReceiveTick post-hook registered (try %d): BP neutralising active", tick_hook.tries)
@@ -3949,11 +5685,14 @@ Log("loaded; state_dir=%s (puppet mode, per-frame PhysicsHandle pose control fro
 -- Offline test hook (`hsmp-tools lua-test avatars`): never set in game.
 if rawget(_G, "HSMP_AVATARS_TEST") then
     HSMP_AVATARS_TEST.api = {
-        tick_hook = tick_hook, on_tick = on_tick,
+        tick_hook = tick_hook, on_tick = on_tick, local_pawn = local_pawn,
         parse_standin_dead = DH.parse, combat_declared_dead = DH.declared,
         puppets = function() return puppets end,
         set_puppet = function(id, p) puppets[id] = p end,
-        PX = PX, servo_weapon_parts = servo_weapon_parts, set_gravity = set_gravity,
+        set_driven = function(p) _driven[p.addr]=p end,
+        PX = PX, drive_frame = drive_frame, drive_v2 = drive_v2, servo_weapon_parts = servo_weapon_parts, set_gravity = set_gravity,
+        generation = function() return world_gen, cache_gen end,
+        drop_caches = drop_caches,
         snap_mesh = snap_mesh, release_standin = release_standin,
         read_roster = read_roster, roster = function() return roster end,
         tune = function() return TUNE end, caps = function() return SERVO_CAP_LIN, SERVO_CAP_ANG end, PURE = PURE,

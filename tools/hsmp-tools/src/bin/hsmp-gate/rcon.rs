@@ -7,7 +7,12 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 /// Returns (accepted, full reply). Err = connection problem.
-pub fn send(addr: &str, password: &str, cmd: &str, timeout: Duration) -> std::io::Result<(bool, String)> {
+pub fn send(
+    addr: &str,
+    password: &str,
+    cmd: &str,
+    timeout: Duration,
+) -> std::io::Result<(bool, String)> {
     let sa = addr
         .to_socket_addrs()?
         .next()
@@ -21,7 +26,10 @@ pub fn send(addr: &str, password: &str, cmd: &str, timeout: Duration) -> std::io
     let mut recv = |r: &mut BufReader<TcpStream>| -> std::io::Result<String> {
         line.clear();
         if r.read_line(&mut line)? == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "rcon closed"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "rcon closed",
+            ));
         }
         Ok(line.trim_end_matches(['\r', '\n']).to_string())
     };

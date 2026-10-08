@@ -23,6 +23,9 @@
 .my_character.json
 .gi_backup.txt
 .browser_prefs.txt
+# the server-mods consent (server key -> accepted mod-set hashes; HSMPMenu server_mods.lua):
+# the player's own decision, persistent config; the downloaded mods live outside the state dir
+.server_mods.json
 
 [log: dev output] diagnostic dumps and probe logs (HSMP_DEV / gate only; written, never read back)
 .tdiag_recv.txt
@@ -66,6 +69,10 @@ fs:server/src/sidecar/net.rs
 
 [fs: tap] the dev/gate IPC tap (a log, not IPC)
 fs:server/src/sidecar/ipc_shm.rs
+fs:server/src/sidecar/ipc_shm_tests.rs
+
+[fs: server mods cache] verified server mods, content-addressed, in --mods-cache (hsmp_mods next to the game: outside the state dir and outside ue4ss/Mods; never IPC)
+fs:server/src/sidecar/mods_cache.rs
 
 [fs: hsmp-server] the dedicated server's / master's own files (ban list, admin, the hosting --pid-file; not a game state dir)
 fs:server/src/proc_util.rs

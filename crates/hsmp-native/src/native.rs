@@ -589,6 +589,10 @@ impl Native {
             }
             let out = lua_absindex(L, 2);
             set_int(L, out, "peer_id", p.peer_id as i64);
+            set_int(L,out,"match_id",p.match_id as i64);
+            set_int(L,out,"round",p.round as i64);
+            set_int(L,out,"life",p.life as i64);
+            set_bool(L,out,"has_context",p.has_context.get());
             set_int(L, out, "seq", p.play_seq as i64);
             let mode = PLAY_MODES.iter().find(|(_, v)| *v == p.mode).map_or("stale", |(n, _)| n);
             set_str(L, out, "mode", mode);

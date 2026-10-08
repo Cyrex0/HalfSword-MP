@@ -51,6 +51,7 @@ check(st.available == true and st.configured == true, "status " .. repr(st))
 
 local mesh, pawn, weapon, hr = mock_world()
 local a = {
+    context = { match_id = 1, round = 1, life = 1 },
     mesh = mesh, pawn = pawn, pose_tick = 1, pose_ts = 1000.5, dt = 16, k = 0, control = true,
     w1 = weapon, h1 = 1, t1 = 77, w2 = 0, h2 = 0, t2 = 0,
     root_pawn = pawn, root_tick = 1, root_ts = 1000,
@@ -96,7 +97,7 @@ for i = 6, 37 do c[i] = 0 end
 c[20], c[21], c[22] = 1, 0, 0
 c[23], c[24] = 10, 20
 c[25], c[26], c[27] = 5, 6, 7
-assert(N.put_pose(1, 1000.5, 16, 0, b, w, c))
+assert(N.put_pose(1, 1000.5, 16, 0, b, w, c, nil, nil, a.context))
 local _, pose_lua = N.get("local_pose", -1)
 check(same(pose_native, pose_lua), "native pose == Lua-path pose\nnative " .. repr(pose_native) .. "\nlua    " .. repr(pose_lua))
 print("[harness_sample] native sample == Lua path (root, weapon, pose record identical)")
@@ -119,7 +120,7 @@ check(mask == 5 and err == nil, "after world_ready: " .. tostring(mask) .. " " .
 
 -- Cost: the full pose sample (23 bones, 22 bodies, control), native side only (the mock's
 -- ProcessEvent is a few instructions; in the game each call costs the engine's thunk).
-local pa = { mesh = mesh, pawn = pawn, pose_tick = 2, pose_ts = 1, dt = 16, k = 0, control = true, w1 = 0, w2 = 0 }
+local pa = { context = a.context, mesh = mesh, pawn = pawn, pose_tick = 2, pose_ts = 1, dt = 16, k = 0, control = true, w1 = 0, w2 = 0 }
 for _ = 1, 200 do N.sample_local(pa) end
 local _, _, _, _, pe0 = mock_world()
 local n = 5000

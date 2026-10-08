@@ -44,6 +44,7 @@ pub fn slot_name(i: usize) -> &'static str {
 /// before the playback time): weapon geometry and the control layer.
 #[derive(Clone, Debug, Default)]
 pub struct Extra {
+    pub context: Option<v2::Context>,
     /// Per weapon slot (R, L): (hands, class id, blade base, blade tip) in weapon space.
     pub weapons: [Option<(u8, u8, [f32; 3], [f32; 3])>; 2],
     pub control: Option<v2::Control>,
@@ -53,8 +54,8 @@ pub struct Extra {
     /// the clock offset / jitter estimate uses this, whose arrival does not
     /// swing with the frame length.
     pub clock_ts: Option<f64>,
-    /// That step (ms; 0 = none): the game subtracts it from the label it
-    /// reports to lag comp, which keeps the plain frame-start stamps.
+    /// That step (ms; 0 = none). Display labels are physical sample times;
+    /// the server keeps both this time and the original frame-start key.
     pub step: f64,
 }
 
@@ -182,7 +183,7 @@ impl Frame {
                 vmask |= 1 << i;
             }
         }
-        let mut extra = Extra { control: f.control.clone(), k: f.k, ..Default::default() };
+        let mut extra = Extra { context: f.context, control: f.control.clone(), k: f.k, ..Default::default() };
         for w in &f.weapons {
             let s = if w.hands & 1 != 0 || w.hands == 0 { 0 } else { 1 };
             if extra.weapons[s].is_some() { continue; }
@@ -322,6 +323,8 @@ pub struct Playback {
     /// Current playback-clock rate (1 = real time; below 1 while the buffer starves).
     pub rate: f64,
     blend: Option<Blend>,
+    context: Option<v2::Context>,
+    retired_contexts: VecDeque<v2::Context>,
 }
 
 fn dist3(a: &[f32], b: &[f32]) -> f32 {
@@ -403,6 +406,17 @@ impl Playback {
 
     pub fn push_pose(&mut self, rx: f64, frame: Frame) -> Push {
         if frame.mask & 1 == 0 || !frame.ts.is_finite() { return Push::Bad; }
+        let context=frame.extra.as_ref().and_then(|e|e.context);
+        if self.context != context {
+            if self.context.is_some() && context.is_none() {return Push::Bad;}
+            if context.is_some_and(|c|self.retired_contexts.contains(&c)) {return Push::Late;}
+            if let (Some(old),Some(new))=(self.context,context) {
+                if old.match_id==new.match_id && (new.round,new.life)<(old.round,old.life) {return Push::Late;}
+                self.retired_contexts.push_back(old);
+                while self.retired_contexts.len()>32 {self.retired_contexts.pop_front();}
+            }
+            self.reset(); self.cut+=1; self.context=context;
+        }
         if let Some(last) = self.frames.back() {
             if frame.ts < last.ts - RESTART_BACK_MS { self.reset(); }
         }
@@ -453,6 +467,12 @@ impl Playback {
         res
     }
 
+    /// A root never changes the pose generation or supplies another life's
+    /// capsule. Pose context is authenticated before this root enters history.
+    pub fn push_scoped_root(&mut self, context:v2::Context,rx:f64,ts:f64,pos:[f32;3],vel:[f32;3],yaw:f32)->Push {
+        if self.context!=Some(context) {return Push::Bad;}
+        self.push_root(rx,ts,pos,vel,yaw)
+    }
     pub fn push_root(&mut self, rx: f64, ts: f64, pos: [f32; 3], vel: [f32; 3], yaw: f32) -> Push {
         if !ts.is_finite() || !pos.iter().chain(vel.iter()).all(|v| v.is_finite()) { return Push::Bad; }
         if let Some(last) = self.roots.back() {
@@ -1093,6 +1113,33 @@ mod tests {
     }
 
     /// v2 state with exact velocities (central differences of the analytic motion).
+    #[test]
+    fn life_change_cuts_nearby_body_and_late_old_life_cannot_rebind() {
+        let mut pb=Playback::new();
+        let c=v2::Context{match_id:91,round:1,life:1};
+        assert_eq!(pb.push_scoped_root(c,1029.0,999.0,[0.0;3],[0.0;3],0.0),Push::Bad);
+        let mut f=v2_state(1000.0); f.context=Some(c);
+        pb.push_pose(1030.0,Frame::from_v2(1,&f));
+        assert_eq!(pb.push_scoped_root(c,1031.0,1000.0,[0.0;3],[0.0;3],0.0),Push::Accepted);
+        f.ts=1017.0; f.context=Some(v2::Context{life:2,..c});
+        let cut=pb.cut;
+        pb.push_pose(1047.0,Frame::from_v2(2,&f));
+        assert!(pb.roots.is_empty());
+        assert_eq!(pb.push_scoped_root(c,1048.0,1018.0,[9999.0;3],[0.0;3],0.0),Push::Bad);
+        assert_eq!(pb.push_scoped_root(v2::Context{life:2,..c},1048.0,1018.0,[0.0;3],[0.0;3],0.0),Push::Accepted);
+        assert_eq!(pb.frames.len(),1);assert!(pb.cut>cut);
+        f.ts=1034.0; f.context=Some(c);
+        assert_eq!(pb.push_pose(1064.0,Frame::from_v2(3,&f)),Push::Late);
+        assert_eq!(pb.frames.back().unwrap().extra.as_ref().unwrap().context.unwrap().life,2);
+        f.context=Some(v2::Context{match_id:92,..c});
+        pb.push_pose(1064.0,Frame::from_v2(4,&f));
+        f.ts=1051.0;f.context=Some(v2::Context{life:2,..c});
+        assert_eq!(pb.push_pose(1081.0,Frame::from_v2(5,&f)),Push::Late);
+        assert_eq!(pb.frames.len(),1);
+        f.context=None;
+        assert_eq!(pb.push_pose(1082.0,Frame::from_v2(6,&f)),Push::Bad);
+    }
+
     fn v2_with_vel(t_ms: f64) -> v2::Full {
         let (a, b) = (v2_state(t_ms - 0.05), v2_state(t_ms + 0.05));
         let mut f = v2_state(t_ms);
@@ -1468,5 +1515,108 @@ mod replay_tests {
                 jitter, loss, delay.map(|d| format!("{:.0} ms", d)).unwrap_or("adaptive".into()), lead, p(&mut delays, 0.5),
                 p(&mut hand, 0.5), p(&mut hand, 0.95), p(&mut hand_rot, 0.95), p(&mut arm, 0.95), p(&mut idle_jump, 0.95));
         }
+    }
+}
+
+/// Pure playback sampler at an authenticated physical display sample time.
+/// Inputs contain ONLY accepted complete frames
+/// whose original frame-start timestamps were relayed to this viewer.
+/// No Buffer arrival blend/rate state or native Avatar servo is claimed here.
+pub struct DeliveredSample {
+    pub bones: [Xf; SLOTS],
+    pub extra: Option<Arc<Extra>>,
+}
+
+pub fn sample_delivered(fr:&VecDeque<Frame>, at:f64)->Option<DeliveredSample> {
+    if fr.is_empty() || !at.is_finite() || at < fr.front()?.ts {return None;}
+    // The Avatar quantizes its target time before building the servo target,
+    // so this is exactly its published time. No selected-step inversion, pose
+    // equivalence tolerance, fractional candidate, or hidden frame is needed.
+    let sample=sample_frames_lead(fr,at,(at-fr.back()?.ts).max(0.0),0.0);
+    Some(DeliveredSample {bones:sample.bones,extra:sample.extra})
+}
+
+pub fn sample_delivered_bones(fr:&VecDeque<Frame>, at:f64)->Option<[Xf;SLOTS]> {
+    Some(sample_delivered(fr,at)?.bones)
+}
+
+/// Why [`sample_delivered_bones`] found no pose at `label` (diagnostics only): the delivered
+/// frames around the physical sample time.
+pub fn explain_delivered(fr:&VecDeque<Frame>, label:f64)->String {
+    if fr.is_empty() {return "no delivered frames".into();}
+    let i=fr.partition_point(|f|f.ts<=label);
+    let lo=i.saturating_sub(2);
+    let near:Vec<String>=fr.iter().skip(lo).take(4).map(|f|format!("{:.1}/s{:.2}",f.ts,f.extra.as_ref().map_or(-1.0,|e|e.step))).collect();
+    format!("physical time {:.1}, {} frames {:.1}..{:.1}, near [{}]",label,fr.len(),fr[0].ts,fr.back().unwrap().ts,near.join(" "))
+}
+
+#[cfg(test)]mod delivered_stage_tests {
+    use super::*;
+    fn frame(ts:f64,step:f32,rot:f32,v:f32,w:f32)->Frame {
+        let mut f=v2::Full::default();f.ts=ts;f.step=step;
+        f.bones[0].q=[0.0,0.0,(rot.to_radians()/2.0).sin(),(rot.to_radians()/2.0).cos()];
+        f.bones[0].v=[v,0.0,0.0];f.bones[0].w=[0.0,0.0,w];
+        Frame::from_v2(1,&f)
+    }
+    #[test]fn newest_never_uses_hidden_future_twist(){
+        let delivered=VecDeque::from([frame(950.0,0.0,0.0,0.0,0.0),frame(1000.0,0.0,0.0,0.0,0.0)]);
+        let hidden=frame(1030.0,0.0,20.0,0.0,0.0);
+        let got=sample_delivered_bones(&delivered,1030.0).unwrap();
+        assert_eq!(got[0][3..7],[0.0,0.0,0.0,1.0]);
+        assert!(got[0][3..7].iter().zip(hidden.b[0][3..7].iter()).map(|(a,b)|a*b).sum::<f32>()<0.99);
+    }
+    #[test]fn jittering_steps_use_the_published_physical_time(){
+        // 60 Hz with the game's real step jitter (16.5 / 16.9 ms): selected
+        // metadata never changes the time at which the delivered pose is sampled.
+        let delivered:VecDeque<Frame>=(0..12).map(|k|{
+            let ts=1000.0+k as f64*16.7;
+            frame(ts,if k%2==0 {16.5} else {16.9},k as f32*0.2,100.0,10.0)
+        }).collect();
+        // Targets are constructed at whole-ms physical times, independent of selected Extra.
+        let (mut none,mut t)=(0,1020.0f64);
+        while t<1170.0 {
+            let label=t.floor();
+            if sample_delivered_bones(&delivered,label).is_none() {none+=1;}
+            t+=0.5;
+        }
+        assert_eq!(none,0,"published labels without a pose");
+    }
+    #[test]fn newest_uses_native_velocity_angular_and_step(){
+        let delivered=VecDeque::from([frame(950.0,10.0,0.0,100.0,90.0),frame(1000.0,10.0,0.0,100.0,90.0)]);
+        let got=sample_delivered_bones(&delivered,1030.0).unwrap();
+        // Physical1030; newest physical1010 =>20ms. Never add the selected step again.
+        assert!((got[0][0]-2.0).abs()<0.001);
+        assert!((got[0][5]-(1.8f32.to_radians()/2.0).sin()).abs()<0.00001);
+    }
+    #[test]fn hitch_steps_do_not_alias_distinct_physical_samples(){
+        // sword-fixed-5/server.log: label40259 had self-consistent +10 and
+        // +22 candidates around physical40277/40279.1. Both sample times are
+        // now explicit; their different poses are never collapsed by tolerance.
+        let mut a=frame(40252.3-17.0,17.0,0.0,1000.0,100.0);
+        let mut b=frame(40277.0-10.0,10.0,30.0,1000.0,100.0);
+        let mut c=frame(40279.1-22.0,22.0,60.0,1000.0,100.0);
+        a.b[0][0]=0.0;b.b[0][0]=24.7;c.b[0][0]=26.8;
+        let frames=VecDeque::from([a,b,c]);
+        for at in [40269.0,40281.0] {
+            let expected=sample_frames_lead(&frames,at,(at-frames.back().unwrap().ts).max(0.0),0.0).bones;
+            assert_eq!(sample_delivered_bones(&frames,at),Some(expected));
+        }
+        assert_ne!(sample_delivered_bones(&frames,40269.0),sample_delivered_bones(&frames,40281.0));
+    }
+    #[test]fn sample_before_oldest_delivered_frame_is_not_a_future_fallback(){
+        let frames=VecDeque::from([frame(1000.0,17.0,0.0,0.0,0.0)]);
+        assert!(sample_delivered_bones(&frames,1016.0).is_none());
+        assert!(sample_delivered_bones(&frames,f64::NAN).is_none());
+        assert!(sample_delivered_bones(&VecDeque::new(),1017.0).is_none());
+        assert!(sample_delivered_bones(&frames,1017.0).is_some());
+    }
+    #[test]fn delivered_interpolation_uses_real_hermite_tangents(){
+        let delivered=VecDeque::from([frame(950.0,0.0,0.0,100.0,0.0),frame(1000.0,0.0,0.0,0.0,0.0)]);
+        let got=sample_delivered_bones(&delivered,975.0).unwrap();
+        assert!((got[0][0]-0.625).abs()<0.001);
+    }
+    #[test]fn long_extrapolation_is_bounded_using_actual_sampler(){
+        let delivered=VecDeque::from([frame(950.0,0.0,0.0,10000.0,0.0),frame(1000.0,0.0,0.0,10000.0,0.0)]);
+        assert!(sample_delivered_bones(&delivered,1200.0).unwrap()[0][0]<=EXTRAP_MAX_UU+0.001);
     }
 }

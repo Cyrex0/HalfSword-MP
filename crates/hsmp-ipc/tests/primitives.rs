@@ -43,6 +43,7 @@ fn consistent<T: hsmp_ipc::Pod>(v: &T) -> bool {
 // ---- seqlock ------------------------------------------------------------------------------
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn seqlock_single_thread() {
     let s = SeqSlot::<Words2k>::new_boxed();
     assert_eq!(s.read().err(), Some(ReadError::Empty));
@@ -69,6 +70,7 @@ fn seqlock_single_thread() {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn seqlock_no_torn_reads_under_contention() {
     let s: Arc<SeqSlot<Words2k>> = Arc::from(SeqSlot::<Words2k>::new_boxed());
     let stop = Arc::new(AtomicBool::new(false));
@@ -118,6 +120,7 @@ enum TbOp {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
     #[test]
+    #[ignore = "slow: cargo test -- --ignored"]
     fn triple_buffer_matches_model(ops in prop::collection::vec(prop_oneof![Just(TbOp::Publish), Just(TbOp::Take), Just(TbOp::Current)], 1..200)) {
         let tb = TripleBuf::<Words2k>::new_boxed();
         let mut next = 1u64;
@@ -165,6 +168,7 @@ proptest! {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn triple_buffer_two_threads_no_torn() {
     let tb: Arc<TripleBuf<Words16k>> = Arc::from(TripleBuf::<Words16k>::new_boxed());
     let stop = Arc::new(AtomicBool::new(false));
@@ -204,6 +208,7 @@ fn triple_buffer_two_threads_no_torn() {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn triple_buffer_restart_repair() {
     let tb = TripleBuf::<Words2k>::new_boxed();
     let mut v = Words2k::default();
@@ -244,6 +249,7 @@ fn ring_op() -> impl Strategy<Value = RingOp> {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
     #[test]
+    #[ignore = "slow: cargo test -- --ignored"]
     fn ring_matches_vecdeque(ops in prop::collection::vec(ring_op(), 1..400)) {
         const EPOCH: u64 = 77;
         let r = Ring::<8>::new_boxed();
@@ -292,6 +298,7 @@ proptest! {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn ring_epoch_zero_accepts_any_and_peek() {
     let r = Ring::<4>::new_boxed();
     r.push(5, 1, 2, 3, b"x").unwrap();
@@ -304,6 +311,7 @@ fn ring_epoch_zero_accepts_any_and_peek() {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn ring_two_threads_in_order() {
     let r: Arc<Ring<64>> = Arc::from(Ring::<64>::new_boxed());
     let n = (iters() / 2).max(10_000);

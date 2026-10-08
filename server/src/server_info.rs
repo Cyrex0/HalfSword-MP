@@ -22,6 +22,9 @@ pub struct Advertised {
     /// The content hash the server enforces (64 hex), or "" when it accepts any
     /// (`--allow-mismatched-content`).
     pub content_hash: String,
+    /// Server mods (`--mods-dir`): how many, and their total size in bytes (0 = none).
+    pub mods: u32,
+    pub mods_bytes: u64,
 }
 
 static ADVERTISED: OnceLock<Advertised> = OnceLock::new();
@@ -62,9 +65,19 @@ pub fn mode_label(advertised: &str, best_of: Option<u8>) -> String {
     }
 }
 
-/// The mode label to advertise right now (see `mode_label`).
+/// `mode_label`, unless the lobby plays a game mode other than duel: then its name
+/// ("Deathmatch"), whatever the boot label said.
+pub fn mode_label_for(advertised: &str, best_of: Option<u8>, mode: Option<u8>) -> String {
+    match mode {
+        Some(m) if m != crate::proto::v5::Mode::DUEL && crate::server::parse_mode(advertised) != Some(m) =>
+            crate::server::mode_label(m).to_string(),
+        _ => mode_label(advertised, best_of),
+    }
+}
+
+/// The mode label to advertise right now (see `mode_label_for`).
 pub fn live_mode(state: &ServerState) -> String {
-    mode_label(&advertised().mode, state.current_best_of())
+    mode_label_for(&advertised().mode, state.current_best_of(), state.current_mode())
 }
 
 pub fn snapshot(state: &ServerState) -> QueryInfo {
@@ -74,7 +87,7 @@ pub fn snapshot(state: &ServerState) -> QueryInfo {
         qver: query::QUERY_VERSION,
         name: a.name,
         map,
-        mode: mode_label(&a.mode, state.current_best_of()),
+        mode: mode_label_for(&a.mode, state.current_best_of(), state.current_mode()),
         players,
         max_players: a.max_players,
         password: a.password,
@@ -85,6 +98,8 @@ pub fn snapshot(state: &ServerState) -> QueryInfo {
         proto_max: hsmp_net::net::VERSION_MAX as u32,
         server_key: a.server_key,
         content_tag: query::content_tag(&a.content_hash),
+        mods: a.mods,
+        mods_kb: a.mods_bytes.div_ceil(1024),
     }
 }
 
@@ -119,6 +134,7 @@ mod tests {
             name: "Test Srv".into(), mode: "Free Fight".into(),
             default_map: "Map_Arena_Pit".into(), region: "EU".into(),
             max_players: 8, password: false, server_key: "cd".repeat(32), content_hash: "ef".repeat(32),
+            mods: 2, mods_bytes: 5000,
         });
         let sock = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
         let addr = sock.local_addr().unwrap();
@@ -142,6 +158,7 @@ mod tests {
         assert_eq!(info.map, "Map_Arena_Pit");
         assert_eq!(info.proto_ver, crate::proto::PROTOCOL_VERSION);
         assert_eq!(info.content_tag, "efefefefefefefef");
+        assert_eq!((info.mods, info.mods_kb), (2, 5));
     }
 
     #[test]
@@ -155,6 +172,16 @@ mod tests {
         assert_eq!(mode_label("duel", Some(5)), "duel");
         assert_eq!(mode_label("Free Fight", Some(3)), "Free Fight");
         assert_eq!(mode_label("", Some(3)), "");
+    }
+
+    #[test]
+    fn the_listing_names_the_game_mode() {
+        use crate::proto::v5::Mode;
+        assert_eq!(mode_label_for("Best of 5", Some(3), Some(Mode::DUEL)), "Best of 3");
+        assert_eq!(mode_label_for("Best of 5", Some(3), Some(Mode::DEATHMATCH)), "Deathmatch");
+        assert_eq!(mode_label_for("koth", Some(3), Some(Mode::KING_OF_HILL)), "koth", "the host's own label for it");
+        assert_eq!(mode_label_for("duel", Some(3), Some(Mode::TEAM_ELIM)), "Team elimination");
+        assert_eq!(mode_label_for("duel", None, None), "duel");
     }
 
     #[tokio::test]

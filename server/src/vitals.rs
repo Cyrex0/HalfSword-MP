@@ -36,7 +36,7 @@ pub const DEADBAND: [f32; N] = [
 
 /// A record with every scalar unknown (tests, tools).
 pub fn unknown() -> Vitals {
-    Vitals { seq: 0, dism: 0, flags: 0, v: [UNKNOWN; N] }
+    Vitals { seq: 0, dism: 0, flags: 0, v: [UNKNOWN; N], ..Default::default() }
 }
 
 /// Scalar `i` as a value (None = unknown).
@@ -55,7 +55,7 @@ pub fn set(f: &mut Vitals, i: usize, x: f32) {
 /// datagram (flags, parts, a field appearing / vanishing, or any field moving by at
 /// least its DEADBAND).
 pub fn differs(a: &Vitals, prev: &Vitals) -> bool {
-    if a.flags != prev.flags || a.dism != prev.dism {
+    if urgent_vs(a, prev) {
         return true;
     }
     a.v.iter().zip(prev.v.iter()).enumerate().any(|(i, (&x, &y))| match (x == UNKNOWN, y == UNKNOWN) {
@@ -67,7 +67,8 @@ pub fn differs(a: &Vitals, prev: &Vitals) -> bool {
 
 /// Flags or dismemberment changed: send at once, ignoring the rate cap.
 pub fn urgent_vs(a: &Vitals, prev: &Vitals) -> bool {
-    a.flags != prev.flags || a.dism != prev.dism
+    a.match_id != prev.match_id || a.round != prev.round || a.life != prev.life
+        || a.flags != prev.flags || a.dism != prev.dism
 }
 
 #[cfg(test)]
@@ -100,7 +101,7 @@ mod tests {
         assert!(get(&g, 2).is_none() && get(&g, 3).is_none());
         assert_eq!(unknown().health(), None);
         assert!(!unknown().dead());
-        assert_eq!(core::mem::size_of::<Vitals>(), 48, "one record: 48 bytes (was a 43+ byte codec frame)");
+        assert_eq!(core::mem::size_of::<Vitals>(), 64, "scoped Vitals: generated IPC schema size");
     }
 
     #[test]
@@ -122,5 +123,18 @@ mod tests {
         e.dism |= 1 << 8;
         assert!(urgent_vs(&e, &a));
         assert!(!urgent_vs(&b, &a));
+    }
+
+    #[test]
+    fn new_generation_is_urgent_even_with_identical_scalars() {
+        let mut a = sample();
+        a.match_id = 71; a.round = 2; a.life = 1;
+        for context in [(71,2,2), (71,3,1), (72,2,1)] {
+            let mut b = a;
+            (b.match_id,b.round,b.life) = context;
+            assert!(differs(&b,&a) && urgent_vs(&b,&a));
+        }
+        let mut b = a; b.seq += 1;
+        assert!(!differs(&b,&a) && !urgent_vs(&b,&a));
     }
 }

@@ -50,6 +50,16 @@ D.HS = (function()
     end
     return nil
 end)()
+D.SpawnReady = (function()
+    local ok, module = pcall(require, "hsmp_spawn_ready")
+    if ok and type(module) == "table" then return module end
+    local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+    local directory = source:match("^(.*)[/\\]") or "."
+    for _, path in ipairs({ directory .. "/hsmp_spawn_ready.lua", directory .. "/../../shared/hsmp_spawn_ready.lua" }) do
+        local loaded, value = pcall(dofile, path)
+        if loaded and type(value) == "table" then return value end
+    end
+end)()
 
 -- The IPC facade the Director talks through: env.ipc (tests) or this Lua
 -- state's shared/hsmp_ipc.lua (HSMP_IPC). nil = IPC unavailable.
@@ -242,6 +252,9 @@ D.valid_arena, D.is_hub, D.is_menu = valid_arena, is_hub, is_menu
 --   remote_fighters  fighter seats other than mine
 --   order, wins{}, alive{}, waiting{}, countdown, best_of, last_winner, reason
 --   spawn_order(round, arena) -> {spawn_id, slot, x, y, z, yaw} | nil
+--   respawn       deathmatch: {spawn_id, life} while the server orders us back into the
+--                 running round (the `mode` record says respawning, the roster carries a
+--                 respawn order: spawn_id round << 8 | 0x80 | life), else nil
 --   match_stale   the snapshot is a previous session's
 --
 -- Liveness is the header heartbeat (never "the content changed recently"):
@@ -376,7 +389,17 @@ function D.session_reader(env, state_dir)
             for _, id in ipairs(v.waiting_on or {}) do sess.waiting[#sess.waiting + 1] = id end
             sess.arena = v.arena
             sess.remote_fighters = v.remote_fighters or 0
+            -- Deathmatch respawn order (shared/hsmp_session.lua HS.mode()).
+            sess.respawn = nil
+            local m = HS and HS.mode and HS.mode(o) or nil
+            local row = m and m.rows[sess.my_id]
+            sess.life = row and m.match_id == sess.match_id and m.round == sess.round and row.life or nil
+            local sp = v.spawns and v.spawns[sess.my_id]
+            if row and row.respawning and sp and (sp.spawn_id & 0x80) ~= 0 and (sp.spawn_id >> 8) == sess.round then
+                sess.respawn = { spawn_id = sp.spawn_id, life = row.life }
+            end
         else
+            sess.respawn = nil
             if not exists then sess.epoch, sess.match_id = nil, nil end
             sess.phase, sess.arena, sess.roster, sess.order = "none", nil, {}, {}
             sess.remote_fighters = 0
@@ -434,6 +457,7 @@ function D.new(env, opts)
     self.counters = { travel = 0, native_rewritten = 0, requests = 0, refused = 0 }
     self.next_ping, self.next_hb = 0, 0
     self.frozen_id = nil
+    self.live_release = nil       -- pure context of the life whose input was released
     self.req_seq = nil             -- last seen travel_request seq
     self.link_lost_at, self.gone_at, self.menu_since = nil, nil, nil
     -- The single connection state shown to the player (docs/development/subsystems/director.md):
@@ -507,6 +531,13 @@ function Dir:error(code, detail)
     if not self.errors_logged[code] then
         self.errors_logged[code] = true
         self.env.log("director ERROR %s: %s", code, tostring(detail or ""))
+    end
+    if not self.load_error then
+        local source = self.pipe or self.ready_context
+        local s = self.sess or {}
+        self.load_context = { match_id = source and source.match_id or s.match_id or 0,
+            round = source and source.round or s.pending_round or ((s.round or 0) + 1),
+            match_gen = self.match_gen }
     end
     self.load_error = self.load_error or code
 end
@@ -982,6 +1013,8 @@ function Dir:travel_menu(why, opts)
     self.in_match = false
     self.target = D.MENU_WORLD
     self.ready_round, self.loaded_for, self.loaded_key, self.reloaded_for = 0, 0, nil, nil
+    self.ready_context, self.applied_spawn_id, self.place_context = nil, 0, nil
+    self.live_release, self.live_wait_reason = nil, nil
     self.pipe = nil
     if s and s.exists and not opts.no_flag then
         self:return_to_lobby()
@@ -1246,13 +1279,23 @@ function D.step_index(name)
 end
 D.T.gi_post_s = 3   -- Spawn: GI profile re-applied after the arena's own "Load Game"
 
-function Dir:start_pipeline(w, s, why)
+function Dir:start_pipeline(w, s, why, serve_round, status_since)
     self:ensure_save_guard()   -- also when the match found us already in the arena
-    self.loaded_for = s.pending_round or (s.round + 1)
+    -- A deathmatch respawn load serves the round being fought; any other load the next one.
+    local respawn = s.phase == "live" and s.respawn ~= nil and s.respawn.spawn_id == self.respawn_for
+        and s.respawn.life == self.respawn_life
+    self.loaded_for = serve_round or (respawn and s.round or (s.pending_round or (s.round + 1)))
     self.loaded_key = self:round_key(self.loaded_for)
     self.ready_round = 0
+    self.ready_context, self.place_context = nil, nil
+    self.live_release, self.live_wait_reason = nil, nil
     self.load_error, self.errors_logged, self.protect_logged = nil, nil, nil
-    self.pipe = { key = w.key, arena = w.short, round = self.loaded_for, step = 1, t0 = self.env.now(),
+    self.load_context = nil
+    self.pipe = { key = w.key, arena = w.short, round = self.loaded_for, match_id = s.match_id,
+                  life = respawn and s.respawn.life or (self.loaded_for == s.round and s.life or 1),
+                  initial_anchor = not respawn and s.phase == "countdown" and (s.match_id or 0) > 0,
+                  match_gen = self.match_gen, step = 1, t0 = self.env.now(),
+                  status_since = status_since,
                   step_t = self.env.now(), notes = {}, tries = 0 }
     self:set_state("Spawn", why)
     self.env.log("director: world ready %s (phase=%s round=%d) -> serving round %d",
@@ -1351,7 +1394,14 @@ function Dir:step_pipeline(w, s)
             local d = (x and st.x) and math.sqrt((x - st.x) ^ 2 + (y - st.y) ^ 2) or nil
             if d and d <= D.T.place_tol_cm then
                 p.placed = { st.x, st.y, st.z }
+                p.verified_life = st.life
                 p.place_tol = st.tol
+                -- The verified spawn order authorizes this pawn's roots on the server before
+                -- Ready (ping, without LOADED): peers' stand-ins can be made during the
+                -- census instead of waiting on each other's Ready.
+                self.place_context = (p.order and (p.order.spawn_id or 0) ~= 0) and { match_id = p.match_id or s.match_id,
+                    match_gen = p.match_gen, life = st.life, round = p.round, pawn = p.pawn_id, world = p.key,
+                    arena = p.arena, spawn_id = p.order.spawn_id } or nil
                 self:next_step(string.format("hsmpsync(id=%s tries=%s %.0fcm%s)", tostring(st.spawn_id),
                     tostring(st.tries), d, p.retried and " after retry" or ""))
                 return false
@@ -1424,10 +1474,16 @@ function Dir:step_pipeline(w, s)
         local pawn = env.pawn()
         if not pawn or env.pawn_id(pawn) ~= p.pawn_id then return self:restart_pawn() end
         local vis, detail = env.census(pawn)
+        local combat_ready, combat_why = true, nil
+        if env.combat_ready then combat_ready, combat_why = env.combat_ready(p, s, pawn) end
+        if not combat_ready and p.combat_wait_reason ~= combat_why then
+            p.combat_wait_reason = combat_why
+            env.log("director: Ready waits for combat spawn proof: %s", tostring(combat_why))
+        end
         if vis == nil then
             -- The world is still settling (no Willie walk yet): wait;
             -- give up only well past the census window
-            if age > D.T.census_s + 5 then self:next_step("unavailable(" .. tostring(detail) .. ")") end
+            if not env.combat_ready and age > D.T.census_s + 5 then self:next_step("unavailable(" .. tostring(detail) .. ")") end
             return false
         end
         local expected = s.remote_fighters or 0
@@ -1441,7 +1497,7 @@ function Dir:step_pipeline(w, s)
         -- census_missing_s (far inside the server's 45 s load barrier);
         -- extras are judged at census_s.
         local limit = (vis or 0) < expected and D.T.census_missing_s or D.T.census_s
-        if settled or age > limit then
+        if (settled and combat_ready) or (not env.combat_ready and age > limit) then
             local extras = math.max(0, (vis or 0) - expected)
             self:ev("willie_census", { visible = (vis or 0) + 1, expected = expected + 1, extras = extras,
                 missing = math.max(0, expected - (vis or 0)), at = "ready", round = p.round, detail = detail })
@@ -1455,18 +1511,34 @@ function Dir:step_pipeline(w, s)
     elseif step == "ready" then
         local pawn = env.pawn()
         if not pawn or env.pawn_id(pawn) ~= p.pawn_id then return self:restart_pawn() end
+        if env.combat_ready then
+            local ready, why = env.combat_ready(p, s, pawn)
+            if not ready then
+                if p.combat_wait_reason ~= why then
+                    p.combat_wait_reason = why
+                    env.log("director: Ready waits for combat spawn proof: %s", tostring(why))
+                end
+                return false
+            end
+        end
         -- HSMPSync's watchdog may be re-placing the pawn right now (pushed off
         -- its spawn after the place step): Ready waits for that placement to be
         -- verified and then reports against its destination. Reporting in the
         -- middle of it can put a pawn ~150 cm off at Ready. Bounded by place_s.
-        if p.placed and age <= D.T.place_s then
+        if p.placed then
             local st = self:spawn_status(p)
-            if st and not st.verified and not st.error then
+            local x, y = env.pawn_loc(pawn)
+            local dist = st and st.x and x and math.sqrt((x - st.x) ^ 2 + (y - st.y) ^ 2)
+            if not st or not st.verified or st.error or not dist or dist > D.T.place_tol_cm then
+                if age > D.T.place_s then
+                    self:error("spawn_timeout", "final Ready placement is not verified for this pawn")
+                else
                 if not p.ready_wait_logged then
                     p.ready_wait_logged = true
                     env.log("director: Ready waits for HSMPSync's re-placement of the pawn")
                 end
                 return false
+                end
             end
             if st and st.verified and st.x and (st.x ~= p.placed[1] or st.y ~= p.placed[2]) then
                 p.placed = { st.x, st.y, st.z }
@@ -1475,6 +1547,7 @@ function Dir:step_pipeline(w, s)
         -- Final vitals check (wounds may land late); re-apply once if needed.
         local vok = self:vitals_check(pawn, false)
         if vok == false then vok = self:vitals_check(pawn, true) end
+        if vok == false then self:error("vitals", "final Ready vitals check failed") end
         -- Final GI read-back (a late game-manager "Load Game" would undo it).
         local gok, gbad = self:gi_verify(s)
         if not gok then
@@ -1482,13 +1555,21 @@ function Dir:step_pipeline(w, s)
             p.notes[#p.notes + 1] = "gi_reapplied"
             gok = self:apply_gi(s, false)
         end
-        self.ready_round = p.round
-        self.applied_spawn_id = (p.placed and p.order and p.order.spawn_id) or 0
+        if not gok then self:error("gi_verify", "final Ready GI check failed") end
         local x, y, z = env.pawn_loc(pawn)
         local o = p.order
         local dist
         if o and x and o.x then dist = math.sqrt((x - o.x) ^ 2 + (y - o.y) ^ 2) end
         local ok = self.load_error == nil and vok ~= false and gok
+        -- Only this verified pawn/world may acknowledge the placement. Keep
+        -- its original match identity; a newer session cannot relabel it.
+        self.ready_round = ok and p.round or 0
+        self.applied_spawn_id = ok and (p.placed and p.order and p.order.spawn_id) or 0
+        self.ready_context = ok and { match_id = p.match_id or s.match_id, match_gen = p.match_gen,
+            life = p.verified_life, round = p.round, status_since = p.status_since or p.t0,
+            pawn = p.pawn_id, world = p.key, arena = p.arena,
+            require_anchor_release = p.initial_anchor == true and p.placed ~= nil and o ~= nil
+                and type(o.spawn_id) == "number" and o.spawn_id > 0 } or nil
         -- Fields hsmp-gate check-events reads: dist_cm to the order, x/y/z,
         -- and snap_z = the slot's ground-snapped Z HSMPSync placed the pawn on
         -- (spawn_status z, kept in p.placed[3]).
@@ -1525,9 +1606,13 @@ function Dir:spawn_status(p)
     local r = self:bus("spawn_status")
     if not r or (r.seq or 0) == 0 then return nil end   -- absent / cleared: no evidence this tick
     if r.round ~= p.round or r.arena ~= p.arena then return nil end
-    if r.pawn ~= "" and r.pawn ~= p.pawn_id then return nil end
+    if p.order and r.spawn_id ~= p.order.spawn_id then return nil end
+    if p.match_id and p.match_id ~= 0 and r.match_id ~= p.match_id then return nil end
+    if p.life and p.life ~= 0 and r.life ~= p.life then return nil end
+    if r.t and r.t < (p.status_since or p.t0) then return nil end
+    if r.pawn == "" or r.pawn ~= p.pawn_id then return nil end
     local pos = r.has_dest and r.pos or {}
-    return { verified = r.verified == true, x = pos[1], y = pos[2], z = pos[3],
+    return { verified = r.verified == true, life = r.life, x = pos[1], y = pos[2], z = pos[3],
              spawn_id = (r.spawn_id ~= 0) and r.spawn_id or nil, tries = r.tries,
              error = (r.error ~= "") and r.error or nil, protect_until = r.has_protect_until and r.protect_until or nil,
              tol = r.tol_cm }
@@ -1590,6 +1675,8 @@ function Dir:on_world(w, s)
     self.pending_travel = nil
     self.pipe = nil
     self.ready_round = 0
+    self.ready_context, self.place_context = nil, nil
+    self.live_release, self.live_wait_reason = nil, nil
     self.frozen_id = nil
     self.applied_spawn_id = 0
     -- The menu world is up, the MP arena is gone: the save guard may
@@ -1672,6 +1759,14 @@ end
 
 function Dir:bump_match(why)
     self.match_gen = self.match_gen + 1
+    -- Respawn spawn IDs encode round/life, so a later match can reuse the
+    -- exact same ID (round 1, life 2 = 386). Deduplicate within a match only.
+    -- track_match already coalesces a late match_id into an opened context;
+    -- clearing here must not happen on that late allocation transition.
+    self.respawn_for = nil
+    self.respawn_life = nil
+    self.ready_round, self.applied_spawn_id, self.ready_context, self.place_context = 0, 0, nil, nil
+    self.live_release, self.live_wait_reason = nil, nil
     self.mt.fresh, self.mt.fresh_why = true, why
     self.env.log("director: new match context #%d (%s)", self.match_gen, why)
 end
@@ -1792,6 +1887,16 @@ function Dir:step_state(w, s)
             return
         end
         -- In the right arena.
+        local evidence = self.pipe or self.ready_context
+        if evidence and evidence.match_gen == self.match_gen and evidence.match_id and evidence.match_id ~= 0
+            and s.match_id and s.match_id ~= 0 and evidence.match_id ~= s.match_id
+            and (st == "Spawn" or st == "Ready" or st == "Live") then
+            -- A late match allocation belongs to this already loaded world,
+            -- but the old proof cannot be relabelled. Verify the new source
+            -- placement and the pawn again without another world travel.
+            return self:start_pipeline(w, s, "verify newly allocated match identity", evidence.round,
+                evidence.status_since or evidence.t0)
+        end
         if st == "Menu" then
             self.target, self.in_match = want, true
             return self:start_pipeline(w, s, "already in the arena")
@@ -1802,6 +1907,17 @@ function Dir:step_state(w, s)
             and (st == "Ready" or st == "Live" or st == "Spawn") then
             self.reloaded_for = pkey
             return self:begin_prepare(want, string.format("round %d starting", pending))
+        end
+        -- Deathmatch: the server ordered us back into the running round. The same reload
+        -- as a new round (fresh world, pawn, vitals, placement on the respawn order, kit,
+        -- census), serving THIS round; the server revives us on the placement report.
+        local rsp = s.respawn
+        if s.phase == "live" and rsp and (self.respawn_for ~= rsp.spawn_id or self.respawn_life ~= rsp.life)
+            and (st == "Ready" or st == "Live" or st == "Spawn") then
+            self.respawn_for = rsp.spawn_id
+            self.respawn_life = rsp.life
+            self:ev("respawn", { round = s.round, spawn_id = rsp.spawn_id, life = rsp.life })
+            return self:begin_prepare(want, string.format("respawn order (round %d, life %d)", s.round, rsp.life))
         end
         if st == "Spawn" and self.pipe then
             for _ = 1, 3 do   -- run a few cheap steps per tick
@@ -1828,8 +1944,56 @@ function Dir:update_freeze(s, pawn)
     local env = self.env
     local in_arena = s.exists and self.wshort ~= nil and self.wshort == self.target and self.in_match
     -- Reconnecting: the world stays as it is, the player cannot act.
-    local frozen = in_arena and not (self.state == "Live" and s.phase == "live" and s.alive[s.my_id] ~= false
-        and self.conn.state == "ok")
+    local ctx = self.ready_context
+    local verified = ctx and ctx.world == self.wkey and ctx.arena == self.wshort
+        and ctx.match_id == s.match_id and ctx.match_gen == self.match_gen and ctx.round == s.round
+        and (s.life == nil or ctx.life == s.life)
+        and pawn and ctx.pawn == env.pawn_id(pawn) and self.ready_round == s.round
+        and self.load_error == nil
+    local released = in_arena and verified and self.state == "Live" and s.phase == "live"
+        and s.alive[s.my_id] ~= false and self.conn.state == "ok"
+    if not released then
+        -- Pause/reconnect must re-establish a current proof on resume. New
+        -- worlds/lives also clear the latch; ordinary wounded Live does not.
+        self.live_release, self.live_wait_reason = nil, nil
+    else
+        local prior = self.live_release
+        local same = prior and prior.match_id == ctx.match_id and prior.match_gen == ctx.match_gen
+            and prior.round == ctx.round and prior.life == ctx.life and prior.world == ctx.world
+            and prior.pawn == ctx.pawn and prior.spawn_id == self.applied_spawn_id
+        if not same then
+            self.live_release = nil
+            local ready, why = true, nil
+            local aq = ctx.anchor_qualified
+            local anchor_qualified = aq and aq.match_id == ctx.match_id and aq.match_gen == ctx.match_gen
+                and aq.round == ctx.round and aq.life == ctx.life and aq.world == ctx.world
+                and aq.pawn == ctx.pawn and aq.spawn_id == self.applied_spawn_id
+            if env.combat_ready then
+                ready, why = env.combat_ready({ key = ctx.world, pawn_id = ctx.pawn, arena = ctx.arena,
+                    match_id = ctx.match_id, match_gen = ctx.match_gen, round = ctx.round,
+                    life = ctx.life, verified_life = ctx.life, qualify_settle = true,
+                    spawn_id = self.applied_spawn_id, status_since = ctx.status_since,
+                    require_anchor_release = ctx.require_anchor_release == true and not anchor_qualified }, s, pawn)
+            end
+            if ready then
+                self.live_release = { match_id = ctx.match_id, match_gen = ctx.match_gen, round = ctx.round,
+                    life = ctx.life, world = ctx.world, pawn = ctx.pawn, spawn_id = self.applied_spawn_id }
+                if ctx.require_anchor_release == true then
+                    -- Exact first-release proof survives pause/reconnect;
+                    -- a new life/assignment can never borrow this tuple.
+                    ctx.anchor_qualified = self.live_release
+                end
+                self.live_wait_reason = nil
+            else
+                released = false
+                if self.live_wait_reason ~= why then
+                    self.live_wait_reason = why
+                    env.log("director: Live input waits for combat spawn proof: %s", tostring(why))
+                end
+            end
+        end
+    end
+    local frozen = in_arena and not released
     if frozen and pawn then
         local id = env.pawn_id(pawn)
         if self.frozen_id ~= id then
@@ -1864,17 +2028,39 @@ function Dir:ping(s, pawn)
     end
     local arena = (self.wshort and self.wshort == self.target) and self.wshort or ""
     -- G2S `game_status` (C2SGameStatus): the load-barrier report, game
-    -- liveness and the redundant death report, ~1 Hz while connected.
+    -- liveness and diagnostic dead state, ~1 Hz while connected. Only the
+    -- reliable generation-scoped DeathReport can declare a server death.
     local env = self.env
     local flags = 0
-    if self.ready_round > 0 then flags = flags | code(env, "status_flag", "LOADED", 1) end
+    local ctx = self.ready_context
+    local loaded = self.ready_round > 0 and ctx and ctx.match_gen == self.match_gen
+        and ctx.life and ctx.life > 0
+        and ctx.world == self.wkey and ctx.arena == self.wshort and pawn
+        and ctx.pawn == env.pawn_id(pawn) and self.load_error == nil
+    -- A first allocation can arrive after verification; it belongs to the
+    -- same context only while that exact pawn and world remain current.
+    if loaded and (not ctx.match_id or ctx.match_id == 0) then ctx.match_id = s.match_id end
+    if loaded then flags = flags | code(env, "status_flag", "LOADED", 1) end
+    -- Placed, not yet Ready: the same context checks on the verified placement, no LOADED
+    -- (the load barrier still waits for Ready).
+    local pc = not loaded and self.place_context
+    local placed = pc and pc.match_gen == self.match_gen and pc.life and pc.life > 0
+        and pc.world == self.wkey and pc.arena == self.wshort and pawn
+        and pc.pawn == env.pawn_id(pawn) and self.load_error == nil
+    if placed and (not pc.match_id or pc.match_id == 0) then pc.match_id = s.match_id end
     if dead then flags = flags | code(env, "status_flag", "DEAD", 4) end
     if self.in_match == false and (self.wshort == nil or is_menu(self.wshort)) then
         flags = flags | code(env, "status_flag", "IN_MENU", 8)
     end
+    local failed = self.load_error and self.load_context
+    local failure_current = failed and failed.match_gen == self.match_gen
     self:send("game_status", {
-        match_id = s.match_id or 0, round = self.ready_round, world_key = D.world_hash(self.wkey), flags = flags,
-        spawn_id = self.applied_spawn_id or 0, load_error = D.load_error_code(env, self.load_error), arena = arena,
+        match_id = (loaded and ctx.match_id) or (placed and pc.match_id) or (failed and failed.match_id) or s.match_id or 0,
+        round = loaded and self.ready_round or (placed and pc.round) or (failed and failed.round) or 0,
+        world_key = D.world_hash(self.wkey), flags = flags,
+        spawn_id = loaded and self.applied_spawn_id or (placed and pc.spawn_id) or 0,
+        load_error = D.load_error_code(env, failure_current and self.load_error or nil), arena = arena,
+        life = loaded and ctx.life or (placed and pc.life) or 0,
     })
 end
 
@@ -2012,6 +2198,10 @@ function D.make_ue_env(ctx)
     -- Fresh lookup every call: a pawn is never cached across ticks here.
     function env.pawn()
         local p
+        -- A native stand-in spawn can temporarily possess another Willie.
+        -- The verified AI-held fighter remains this life's owner throughout.
+        if WG.ai_pawn then p = WG.ai_pawn() end
+        if p then return p end
         pcall(function()
             local pc = (WG.pc and WG.pc() or UEH.GetPlayerController())
             if pc and pc:IsValid() then
@@ -2019,6 +2209,7 @@ function D.make_ue_env(ctx)
                 if pw and pw:IsValid() then p = pw end
             end
         end)
+        -- the game's own AI drives our pawn (dev, HSMPParity `ai on`)
         return p
     end
     function env.pawn_id(p)
@@ -2141,6 +2332,72 @@ function D.make_ue_env(ctx)
             end
         end)
         return vis, table.concat(parts, ",")
+    end
+
+    local spawn_ready = D.SpawnReady and D.SpawnReady.new()
+    function env.combat_ready(p, s, own)
+        if not spawn_ready then return false, "spawn proof helper unavailable" end
+        if WG and WG.settled and not WG.settled() then return false, "world settling" end
+        local I = ipc_of(env)
+        if not I or not I.rec or not I.peer_rec or not I.bus_table then return false, "spawn proof IPC unavailable" end
+        local mode = D.HS and D.HS.mode and D.HS.mode({ ipc = I, clock = env.now })
+        local names, playback, actors = {}, {}, {}
+        for _, row in ipairs((I.bus_table("puppets") or {}).rows or {}) do names[row.peer] = row.name end
+        for _, row in ipairs((I.bus_table("playback") or {}).rows or {}) do playback[row.peer] = row end
+        -- Look up this world's actors once. No UObject survives this call.
+        local read = pcall(function()
+            for _, actor in pairs(FindAllOf("Willie_BP_C") or {}) do
+                if actor and actor:IsValid() then actors[env.pawn_id(actor)] = actor end
+            end
+        end)
+        if not read then return false, "native stand-in lookup unavailable" end
+        local remotes = {}
+        for _, row in ipairs(s.roster or {}) do
+            local mode_row = mode and mode.match_id == p.match_id and mode.round == p.round and mode.rows[row.id]
+            local participating = s.phase ~= "live" or (row.alive ~= false
+                and (not mode_row or (mode_row.alive ~= false and mode_row.respawning ~= true)))
+            if row.id ~= s.my_id and row.role == "fighter" and participating then
+                local id, name = row.id, names[row.id]
+                local source = {}
+                local slot = I.peer_slot and I.peer_slot(id)
+                if slot ~= nil and I.peer_play then I.peer_play(slot, source) end
+                local life = mode_row and mode_row.life or (p.round ~= s.round and 1 or nil)
+                local actor, native = name and actors[name], {}
+                if actor and actor ~= own then
+                    pcall(function() native.alive = actor.Health > 0 and actor.DED == false end)
+                    local best, best_score
+                    for _, field in ipairs({ "SK_Skeleton", "BoneCore", "DriverSkeleton", "Mesh" }) do
+                        pcall(function()
+                            local mesh = actor[field]
+                            if mesh and mesh:IsValid() then
+                                local sim = mesh:IsSimulatingPhysics(FName("Pelvis")) == true
+                                local score = (sim and 2 or 0) + (mesh:IsVisible() == true and 1 or 0)
+                                if best_score == nil or score > best_score then best, best_score = mesh, score end
+                            end
+                        end)
+                    end
+                    pcall(function()
+                        local collision = best and best:GetCollisionEnabled()
+                        native.collision = actor:GetActorEnableCollision() == true
+                            and best:IsSimulatingPhysics(FName("Pelvis")) == true and (collision == 2 or collision == 3)
+                    end)
+                end
+                remotes[#remotes + 1] = { peer = id, pawn = name, match_id = p.match_id, round = p.round,
+                    life = life, source = source, playback = playback[id], vitals = I.peer_rec("peer_vitals", id), native = native }
+            end
+        end
+        local sampling = I.sample_status and I.sample_status()
+        local native_world
+        pcall(function()
+            local world = WG.world and WG.world() or UEH.GetWorld()
+            if world and world:IsValid() then native_world = tostring(world:GetAddress()) .. "@" .. world:GetFullName() end
+        end)
+        return spawn_ready:check({ world = p.key, native_world = native_world, qualify_settle = p.qualify_settle == true,
+            require_anchor_release = p.require_anchor_release == true, spawn_status = I.bus_table("spawn_status"),
+            own = { match_id = p.match_id, round = p.round,
+            life = p.verified_life or p.life, pawn = p.pawn_id, arena = p.arena,
+            spawn_id = p.spawn_id or (p.order and p.order.spawn_id), status_since = p.status_since }, root = I.rec("local_root"),
+            pose = sampling and sampling.pose, vitals = I.rec("vitals"), remotes = remotes, now_ms = env.now() * 1000 })
     end
 
     function env.freeze(p, on)

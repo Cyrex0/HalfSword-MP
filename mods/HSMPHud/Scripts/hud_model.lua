@@ -195,6 +195,13 @@ local CAUSE = { [1] = "", [2] = "", [0] = "" }
 function Mo.death_text(snap, d)
     local v = who(snap, d.victim)
     if d.cause == 3 then return v .. " left the fight" end
+    if d.cause == 6 then return v .. " surrendered" end
+    if d.cause == 5 then
+        if d.killer and d.killer ~= 0 and d.killer ~= d.victim then
+            return who(snap,d.killer) .. " defeated " .. v
+        end
+        return v .. (v == "You" and " were defeated" or " was defeated")
+    end
     if d.killer and d.killer ~= 0 and d.killer ~= d.victim then
         return who(snap, d.killer) .. " slew " .. v .. (CAUSE[d.cause] or "")
     end
@@ -262,13 +269,82 @@ function Mo.net(T, snap, now)
     return { level = level, text = table.concat(parts, "  ") }
 end
 
+-- --- game modes (snap.mode: shared/hsmp_session.lua HS.mode()) ---------------------------------
+
+Mo.TEAM_NAME = { "RED", "BLUE", "GREEN", "GOLD" }
+
+-- A team-mode view (nil without teams).
+local function teams_of(snap) local md = snap.mode; return md and md.teams > 0 and md or nil end
+
+local function my_team(snap)
+    local md = snap.mode
+    local r = md and md.rows[my_id(snap)]
+    return r and r.team or 0
+end
+
+-- Where the hill is from my pawn: "ON THE HILL" or "12 m AHEAD-LEFT". pos = {x, y, z} (cm),
+-- yaw (deg, UE: 0 = +X, 90 = +Y). nil without a position.
+function Mo.hill_hint(z, pos, yaw)
+    if not z or not pos then return nil end
+    local dx, dy = z.x - pos[1], z.y - pos[2]
+    local d = math.sqrt(dx * dx + dy * dy)
+    if d <= z.r and math.abs(pos[3] - z.z) <= (z.hh or 300) then return "ON THE HILL" end
+    local m = math.max(1, math.floor((d - z.r) / 100 + 0.5))
+    if not yaw then return string.format("%d m", m) end
+    local rel = (math.deg(math.atan(dy, dx)) - yaw + 540) % 360 - 180   -- -180..180, + = right
+    local dir
+    if math.abs(rel) <= 30 then dir = "AHEAD"
+    elseif math.abs(rel) >= 150 then dir = "BEHIND"
+    elseif rel > 0 then dir = (rel < 90) and "AHEAD-RIGHT" or "RIGHT"
+    else dir = (rel > -90) and "AHEAD-LEFT" or "LEFT" end
+    return string.format("%d m %s", m, dir)
+end
+
+-- Who holds the hill, for the banner.
+local function hill_holder(snap)
+    local md = snap.mode
+    local z = md and md.zone
+    if not z then return nil end
+    if z.contested then return "CONTESTED" end
+    if z.holder_team then
+        return (z.holder_team == my_team(snap) and "YOUR TEAM" or Mo.TEAM_NAME[z.holder_team]) .. " HOLDS IT"
+    end
+    if z.holder_seat then
+        local r = md.by_seat[z.holder_seat]
+        if r then return (r.peer_id == my_id(snap) and "YOU HOLD IT" or (string.upper(Mo.nick(snap, r.peer_id)) .. " HOLDS IT")) end
+    end
+    return "EMPTY"
+end
+
+-- The round score of a player / team in this mode's units ("23 s", "4 K"), or nil.
+local function round_score(md, v)
+    if md.id == "koth" then return string.format("%d s", math.floor((v or 0) / 1000)) end
+    if md.id == "deathmatch" then return string.format("%d K", v or 0) end
+    return nil
+end
+
 -- --- centre phase message ---------------------------------------------------------------------
 
 local function score_text(snap)
     local m = snap.match
+    local md = teams_of(snap)
     local parts = {}
+    if md then
+        for t = 1, md.teams do parts[#parts + 1] = string.format("%s %d", Mo.TEAM_NAME[t], md.team_wins[t] or 0) end
+        return table.concat(parts, "  -  ")
+    end
     for _, id in ipairs(m.order) do parts[#parts + 1] = string.format("%s %d", Mo.nick(snap, id), m.wins[id] or 0) end
     return table.concat(parts, "  -  ")
+end
+
+-- "Team Red wins the round" / "You win the round" / "<nick> wins the round".
+local function round_winner_text(snap, m)
+    local md = snap.mode
+    if md and md.winner_team > 0 then
+        if md.winner_team == my_team(snap) then return "Your team wins the round" end
+        return "Team " .. (md.teams > 0 and Mo.TEAM_NAME[md.winner_team] or "?"):lower():gsub("^%l", string.upper) .. " wins the round"
+    end
+    return (m.last_winner == my_id(snap)) and "You win the round" or (Mo.nick(snap, m.last_winner) .. " wins the round")
 end
 
 local function first_alive_foe(snap)
@@ -305,6 +381,10 @@ function Mo.centre(T, snap, now)
     end
     local m = snap.match
     if not m then return nil end
+    if m.state=="live" and snap.surrender then
+        return {title=string.format("Hold to surrender %d%%",math.floor(snap.surrender.progress*100)),
+            sub="Release to cancel",tone="warn"}
+    end
     local me = my_id(snap)
     if m.state == "lobby" and Mo.rematch_waiting(T, now) then
         return { title = "REMATCH", sub = string.format("waiting for everyone to be ready   -   %d s", math.max(0, math.ceil(Mo.REMATCH_HOLD_S - (now - T.result_at)))) }
@@ -315,8 +395,9 @@ function Mo.centre(T, snap, now)
             for _, id in ipairs(m.waiting) do names[#names + 1] = Mo.nick(snap, id) end
             return { title = "WAITING FOR PLAYERS", sub = "loading: " .. table.concat(names, ", ") }
         end
+        local kit = snap.mode and snap.mode.kit_label ~= "" and ("   -   round kit: " .. snap.mode.kit_label) or ""
         return { title = string.format("ROUND %d", m.round + 1),
-                 sub = string.format("%s   -   fight in %d", score_text(snap), m.countdown) }
+                 sub = string.format("%s   -   fight in %d%s", score_text(snap), m.countdown, kit) }
     elseif m.state == "live" then
         if now < T.fight_until then return { title = "FIGHT!", sub = score_text(snap), tone = "good" } end
         if me ~= 0 and m.alive[me] == false then
@@ -328,6 +409,16 @@ function Mo.centre(T, snap, now)
             local name = (not arena) and ((sp and sp.nick ~= "" and sp.nick) or (foe and Mo.nick(snap, foe))) or nil
             local title = arena and "ARENA VIEW" or (name and ("SPECTATING " .. string.upper(name)) or "SPECTATING")
             local keys = (sp and sp.alive and sp.alive > 1) and "Q / E switch   -   TAB scores" or "TAB scores"
+            -- deathmatch: the server respawns us
+            local mr = snap.mode and snap.mode.rows[me]
+            if mr and mr.respawning then
+                local t = mr.respawn_in_ms
+                if T.died_at and now - T.died_at < Mo.DIED_S then
+                    return { title = "YOU DIED", sub = "respawning soon", tone = "bad" }
+                end
+                return { title = (t and t > 0) and string.format("RESPAWN IN %d", math.ceil(t / 1000)) or "RESPAWNING...",
+                         sub = "loading the arena for your next life   -   TAB scores" }
+            end
             if my_hp and my_hp > 0 then
                 -- the server has us out but our pawn lives: a late joiner
                 return { title = title, sub = "you join the next round   -   " .. keys }
@@ -344,13 +435,15 @@ function Mo.centre(T, snap, now)
         elseif m.reason == "draw" or m.last_winner == 0 then
             sub = string.format("draw   -   %s   -   next round in %d", score_text(snap), m.countdown)
         else
-            local w = (m.last_winner == me) and "You win the round" or (Mo.nick(snap, m.last_winner) .. " wins the round")
-            sub = string.format("%s   -   %s   -   next round in %d", w, score_text(snap), m.countdown)
+            sub = string.format("%s   -   %s   -   next round in %d", round_winner_text(snap, m), score_text(snap), m.countdown)
         end
         return { title = "ROUND OVER", sub = sub }
     elseif m.state == "match_over" then
         local title, tone
-        if m.last_winner ~= 0 and m.last_winner == me then title, tone = "VICTORY", "good"
+        local wt = snap.mode and snap.mode.winner_team or 0
+        if wt > 0 and wt == my_team(snap) then title, tone = "VICTORY", "good"
+        elseif wt > 0 then title = "TEAM " .. (Mo.TEAM_NAME[wt] or "?") .. " WINS THE MATCH"
+        elseif m.last_winner ~= 0 and m.last_winner == me then title, tone = "VICTORY", "good"
         elseif m.last_winner ~= 0 then title = string.upper(Mo.nick(snap, m.last_winner)) .. " WINS THE MATCH"
         else title = "MATCH OVER" end
         local why = (m.reason == "forfeit") and "opponent forfeited   -   " or ""
@@ -473,18 +566,43 @@ function Mo.build(T, snap, now, ctx)
     if m then
         local rnd = (m.state == "countdown") and (m.round + 1) or math.max(1, m.round)
         local title = string.format("ROUND %d", rnd)
-        if m.best_of and m.best_of > 0 then title = title .. string.format("  /  BEST OF %d", m.best_of) end
+        local md = snap.mode
+        if md and md.id == "koth" and m.state == "live" then
+            title = title .. "  /  HILL: " .. (Mo.hill_hint(md.zone, ctx.me_pos, ctx.me_yaw) or "") ..
+                ((hill_holder(snap) and ("  -  " .. hill_holder(snap))) or "")
+        elseif md and md.id ~= "duel" and md.id ~= "ffa" then
+            title = title .. "  /  " .. string.upper(md.label or md.id)
+        elseif m.best_of and m.best_of > 0 then
+            title = title .. string.format("  /  BEST OF %d", m.best_of)
+        end
         local timer
-        if m.state == "live" and m.round_left then timer = mmss(m.round_left)
+        if m.state == "live" and md and md.round_left_ms then
+            timer = (md.sudden_death and "SUDDEN DEATH " or "") .. mmss(md.round_left_ms / 1000)
+        elseif m.state == "live" and m.round_left then timer = mmss(m.round_left)
         elseif m.state == "live" and T.live_since then timer = mmss(now - T.live_since)
         elseif m.state == "countdown" and #m.waiting > 0 then timer = "LOADING"
         elseif m.state == "paused" then timer = "PAUSED " .. mmss(m.countdown)
         elseif m.state == "match_over" then timer = "END"
         else timer = mmss(m.countdown) end
         local cells = {}
-        for _, id in ipairs(m.order) do
-            cells[#cells + 1] = { id = id, text = string.format("%s  %d", Mo.nick(snap, id), m.wins[id] or 0),
-                                  me = (id == me), dead = (m.state == "live" and m.alive[id] == false) }
+        local tm = teams_of(snap)
+        if tm then
+            -- one cell per team: round wins (and this round's points in King of the hill / deathmatch)
+            local mine = my_team(snap)
+            for t = 1, tm.teams do
+                local sc = round_score(tm, tm.team_score[t])
+                cells[#cells + 1] = { id = -t, text = string.format("%s  %d%s", Mo.TEAM_NAME[t], tm.team_wins[t] or 0,
+                    sc and ("  (" .. sc .. ")") or ""), me = (t == mine),
+                    dead = (m.state == "live" and (tm.team_alive[t] or 0) == 0 and tm.id ~= "deathmatch") }
+            end
+        else
+            for _, id in ipairs(m.order) do
+                local r = md and md.rows[id]
+                local sc = md and r and round_score(md, r.score)
+                cells[#cells + 1] = { id = id, text = string.format("%s  %d%s", Mo.nick(snap, id), m.wins[id] or 0,
+                                                                    sc and ("  (" .. sc .. ")") or ""),
+                                      me = (id == me), dead = (m.state == "live" and m.alive[id] == false) }
+            end
         end
         out.top = { title = title, timer = timer, cells = cells }
     end
@@ -500,7 +618,7 @@ function Mo.build(T, snap, now, ctx)
         local hp = vo.hp
         local dead = (m and m.alive[me] == false and m.state == "live") or hp <= 0 or vo.dead or false
         out.me = { hp = math.max(0, hp), st = vo.st, dead = dead and true or false,
-                   body = vo.body, con = vo.con, bleeding = vo.bleeding or false }
+                   body = vo.body, con = vo.con, bleeding = vo.bleeding or false, severed = vo.severed or false }
     end
 
     -- opponents (roster order) from their `peer_vitals` records
@@ -515,7 +633,8 @@ function Mo.build(T, snap, now, ctx)
                 local down = r and r.down
                 out.opps[#out.opps + 1] = { id = id, name = Mo.nick(snap, id), hp = hp, st = st,
                                             dead = dead and true or false, down = (not dead) and down and true or false,
-                                            body = r and r.body, con = r and r.con, bleeding = r and r.bleeding or false }
+                                            body = r and r.body, con = r and r.con, bleeding = r and r.bleeding or false,
+                                            severed = r and r.severed or false }
             end
         end
     end
@@ -559,9 +678,16 @@ function Mo.build(T, snap, now, ctx)
         local rows = {}
         local ids = {}
         for _, id in ipairs(m.order) do ids[#ids + 1] = id end
+        local md = snap.mode
+        local function row_of(id) return md and md.rows[id] or nil end
         table.sort(ids, function(a, b)
+            local ra, rb = row_of(a), row_of(b)
+            local ta, tb = ra and ra.team or 0, rb and rb.team or 0
+            if ta ~= tb then return ta < tb end
             local wa, wb = m.wins[a] or 0, m.wins[b] or 0
             if wa ~= wb then return wa > wb end
+            local ka, kb = ra and ra.kills or 0, rb and rb.kills or 0
+            if ka ~= kb then return ka > kb end
             return a < b
         end)
         local waiting = {}
@@ -570,11 +696,15 @@ function Mo.build(T, snap, now, ctx)
             local ping = snap.sc and snap.sc.ping[id]
             if id == me and snap.metrics and snap.metrics.rtt then ping = snap.metrics.rtt end
             local status
+            local r = row_of(id)
             if waiting[id] then status = "LOADING"
+            elseif r and r.respawning then status = "RESPAWN"
             elseif m.alive[id] == false then status = "DEAD"
             else status = "ALIVE" end
-            rows[#rows + 1] = { rank = tostring(i), nick = Mo.nick(snap, id) .. ((id == me) and "  (you)" or ""),
+            local tag = (r and r.team > 0) and ("[" .. (Mo.TEAM_NAME[r.team] or "?") .. "] ") or ""
+            rows[#rows + 1] = { rank = tostring(i), nick = tag .. Mo.nick(snap, id) .. ((id == me) and "  (you)" or ""),
                                 wins = tostring(m.wins[id] or 0),
+                                kd = r and string.format("%d / %d", r.kills, r.deaths) or "-",
                                 ping = ping and string.format("%d ms", math.floor(ping + 0.5)) or "-",
                                 status = status, me = (id == me) }
         end

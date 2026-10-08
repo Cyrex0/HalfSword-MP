@@ -64,6 +64,9 @@
 .PARAMETER KillPrevious
     Only reap DEAD runs (harness gone: stop the processes they recorded, remove their
     state dirs), then exit. A live run is never touched.
+.PARAMETER ServerArgs
+    Extra hsmp-server flags appended to the dedicated server's command line
+    (e.g. -ServerArgs '--mods-dir','C:\hsmp-test-mods').
 .PARAMETER ServerPort
     Ports default to 0 = a free port picked per run (ServerPort, RconPort, MasterPort, and
     one netsim port per instance). An explicit port must be free or the run refuses to start.
@@ -76,6 +79,7 @@
 param(
     [int]$Instances = 2,
     [string]$Scenario = "p0_gate",
+    [ValidateSet("", "duel", "brawl")][string]$CombatMode = "",
     [string]$Netsim = "",
     [string]$Arenas = "",
     [int]$Rounds = 0,
@@ -100,10 +104,27 @@ param(
     [string]$TestCvars = "r.VSync=0;t.MaxFPS=60",
     # Extra .settings.json keys for every instance, as a JSON object (A/B switches such as
     # {"native_sample":true,"native_servo":true}). The instance's nick / server always win.
-    [string]$ExtraSettings = ""
+    [string]$ExtraSettings = "",
+    [string[]]$ServerArgs = @(),
+    # combat_manual only: arena, kit rules (free|classes|custom), each player's kit
+    # ("<class> [r=<id>] [l=<id>] [armor=<id,..>]"), and the dev switches after Live.
+    [string]$CombatArena = "",
+    [string]$CombatKit = "",
+    [string]$CombatKitRules = "",
+    [switch]$CombatAi,
+    [switch]$CombatProbe,
+    # Lab session reuses this harness's save guard, process identities and teardown.
+    [string]$LabSession = "",
+    [int]$LabOwnerPid = 0,
+    [string]$LabServerArgsJson = ""
 )
 
 $ErrorActionPreference = "Stop"
+if ($LabServerArgsJson) {
+    $labExtraArgs = @($LabServerArgsJson | ConvertFrom-Json)
+    if (-not $LabServerArgsJson.TrimStart().StartsWith('[') -or @($labExtraArgs | Where-Object { $_ -isnot [string] -or $_ -match '[\r\n]' }).Count) { throw 'Lab server args must be a JSON array of strings.' }
+    $ServerArgs += @($labExtraArgs)
+}
 $Repo = Split-Path -Parent $PSScriptRoot
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 if (-not $RunRoot) { $RunRoot = Join-Path $Repo "test-results" }
@@ -149,7 +170,9 @@ $cargo = if ($cargo) { $cargo.Source } else { "$env:USERPROFILE\.cargo\bin\cargo
 if (Test-Path $cargo) {
     Say "building hsmp-gate / hsmp-tools (release, --locked; no-op when current)..."
     $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-    & $cargo build --release --locked --quiet -p hsmp-tools --manifest-path (Join-Path $Repo "Cargo.toml") 2>&1 | ForEach-Object { Write-Host "  $_" }
+    # The live lab owner is another binary in this package. Windows locks its
+    # executable while running; only rebuild the two tools this harness uses.
+    & $cargo build --release --locked --quiet -p hsmp-tools --bin hsmp-gate --bin hsmp-tools --manifest-path (Join-Path $Repo "Cargo.toml") 2>&1 | ForEach-Object { Write-Host "  $_" }
     $buildCode = $LASTEXITCODE
     $ErrorActionPreference = $prev
     if ($buildCode -ne 0) { Say "hsmp-gate / hsmp-tools build failed (exit $buildCode): refusing to judge with stale binaries" Red; Hsmp-ReleaseGameLock $script:RunLock; exit 2 }
@@ -258,6 +281,50 @@ if ($Rounds -gt 0) { $scArgs += @("--rounds", "$Rounds") }
 $r = Invoke-Gate $scArgs
 if ($r.code -ne 0) { Say "scenario error: $($r.out)" Red; exit 2 }
 $sc = $r.out | ConvertFrom-Json
+if ($CombatMode) {
+    if ($Scenario -ne "combat_manual") { throw '-CombatMode applies only to combat_manual.' }
+    foreach ($step in $sc.steps) {
+        if ($step.do -eq 'rcon' -and $step.cmd -eq 'MODE duel') { $step.cmd = "MODE $CombatMode" }
+    }
+}
+if ($CombatArena -or $CombatKit -or $CombatKitRules -or $CombatAi -or $CombatProbe) {
+    # The first match is the real one: arena, kit rules and each player's kit are set in the
+    # lobby BEFORE the first START (no default-kit round to abort), and the dev switches go on
+    # once it is Live (HSMPParity `ai auto` keeps every later round on the AI too).
+    if ($Scenario -ne "combat_manual") { throw '-CombatArena/-CombatKit/-CombatKitRules/-CombatAi/-CombatProbe apply only to combat_manual.' }
+    $steps = New-Object System.Collections.Generic.List[object]
+    foreach ($step in $sc.steps) {
+        if ($CombatArena -and $step.do -eq 'rcon' -and "$($step.cmd)" -like 'MAP *') { $step.cmd = "MAP $CombatArena"; $step.pick = $CombatArena }
+        if ($CombatArena -and $step.do -eq 'mark' -and $step.name -eq 'start') { $step.arena = $CombatArena }
+        if ($step.do -eq 'rcon' -and $step.cmd -eq 'START') {
+            if ($CombatKitRules) { $steps.Add([pscustomobject]@{ do = 'rcon'; cmd = "KIT $CombatKitRules" }) }
+            if ($CombatKit) {
+                for ($k = 1; $k -le $Instances; $k++) { $steps.Add([pscustomobject]@{ do = 'client_cmd'; inst = $k; cmd = 'kit'; arg = $CombatKit }) }
+                $steps.Add([pscustomobject]@{ do = 'hold'; s = 3.0 / [Math]::Max($HoldScale, 0.001); why = 'kit selections reach the server before START (3 s real)' })
+            }
+        }
+        $steps.Add($step)
+        if ($step.do -eq 'mark' -and $step.name -eq 'manual_combat_ready') {
+            for ($k = 1; $k -le $Instances; $k++) {
+                if ($CombatAi) { $steps.Add([pscustomobject]@{ do = 'client_cmd'; inst = $k; cmd = 'parity'; arg = 'ai auto' }) }
+                if ($CombatProbe) { $steps.Add([pscustomobject]@{ do = 'client_cmd'; inst = $k; cmd = 'combat_probe'; arg = 'on' }) }
+            }
+        }
+    }
+    $sc.steps = $steps.ToArray()
+}
+if ($LabSession) {
+    if ($Scenario -ne 'combat_manual' -or $LabOwnerPid -le 0) { throw 'Lab requires combat_manual and its owner PID.' }
+    $LabSession = [IO.Path]::GetFullPath($LabSession)
+    # Rust canonical paths carry Win32 extended prefixes; Windows PowerShell's
+    # filesystem provider cannot Join-Path these even when .NET accepts them.
+    if ($LabSession.StartsWith('\\?\UNC\')) { $LabSession = '\\' + $LabSession.Substring(8) }
+    elseif ($LabSession.StartsWith('\\?\')) { $LabSession = $LabSession.Substring(4) }
+    New-Item -ItemType Directory -Force $LabSession | Out-Null
+    foreach ($step in $sc.steps) {
+        if ($step.do -eq 'hold' -and $step.s -eq 1800) { $step.do = 'lab_session' }
+    }
+}
 if ($eff -eq "rcon" -and ($sc.requires -contains "debug_verbs") -and -not $caps.debug_verbs -and -not $DryRun) {
     Say "scenario $($sc.name) needs RCON debug verbs (hsmp-server --debug-verbs)" Red; exit 2
 }
@@ -398,6 +465,8 @@ function Server-Args([int]$gen) {
     $sv = $sc.env.PSObject.Properties | Where-Object { $_.Name -eq "server" }
     if ($sv -and "$($sv.Value.HSMP_TEST_NO_ADMINS)" -eq "1") { $noAdmins = $true }
     if ($caps.admin_keys -and -not $noAdmins) { $a += @("--admins-file", (Join-Path $stateDirs["1"] ".player_key")) }
+    # extra hsmp-server flags for manual sessions (e.g. --mods-dir <dir> --mods-timeout-s 30)
+    if ($ServerArgs.Count -gt 0) { $a += $ServerArgs }
     return $a
 }
 
@@ -433,7 +502,7 @@ function Collect-State {
         $dst = Join-Path $Run "inst$i"
         New-Item -ItemType Directory -Force $dst | Out-Null
         $files = @(Get-ChildItem -LiteralPath $stateDirs[$i] -Force -File -ErrorAction SilentlyContinue)
-        $files | Where-Object { $_.Name -like "hsmp_events*.jsonl" -or $_.Name -in @(".settings.json", ".career_guard.jsonl", ".sidecar_panic.log") } |
+        $files | Where-Object { $_.Name -like "hsmp_events*.jsonl" -or $_.Name -in @(".settings.json", ".career_guard.jsonl", ".sidecar_panic.log", ".parity_results.txt", ".world_scan.txt") } |
             ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $dst -Force }
         if (Test-Path -LiteralPath $stateDirs[$i]) {
             $names = @($files | ForEach-Object { $_.Name } | Sort-Object)
@@ -550,6 +619,7 @@ if (Test-Path $MasterExe) {
     [void](Start-Tracked "master" $MasterExe @("--bind", "127.0.0.1:$MasterPort") (Join-Path $Run "master.log"))
 }
 $serverEnv = @{ NO_COLOR = "1"; HSMP_MASTER_URL = "http://127.0.0.1:$MasterPort" }
+if ($LabSession) { $serverEnv.RUST_LOG = 'hsmp_server=info' } # acceptance denominators require accepted-hit records
 if ($topology -eq "dedicated") {
     if (-not $caps.server_found) { Say "hsmp-server not found in $BinDir" Red; exit 2 }
     [void](Start-Tracked "server" $ServerExe (Server-Args 1) (Join-Path $Run "server.log") $Run $serverEnv)
@@ -591,29 +661,55 @@ function Wait-Step($step, [int64]$since) {
     return $r
 }
 
-# Lay the game windows out side by side on the primary screen (each renders fully visible, no
+# Lay the game windows out side by side on the smallest secondary screen (each renders fully visible, no
 # overlap). Window placement only (SetWindowPos, no activation, no input, no ini change).
-if (-not ("HsmpWin" -as [type])) {
-    Add-Type -Namespace "" -Name HsmpWin -MemberDefinition @"
-[System.Runtime.InteropServices.DllImport("user32.dll")] public static extern bool SetWindowPos(System.IntPtr h, System.IntPtr after, int x, int y, int cx, int cy, uint flags);
+if (-not ("HsmpWin2" -as [type])) {
+    # The game process owns two top-level windows: the UE4SS console (created first, so it is
+    # Process.MainWindowHandle) and the game's own "UnrealWindow". Only the latter is placed.
+    Add-Type -TypeDefinition @"
+using System; using System.Text; using System.Runtime.InteropServices;
+public static class HsmpWin2 {
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr l);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    public static IntPtr GameWindow(uint pid) {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((h, l) => {
+            uint p; GetWindowThreadProcessId(h, out p);
+            if (p != pid || !IsWindowVisible(h)) return true;
+            var sb = new StringBuilder(64); GetClassName(h, sb, 64);
+            if (sb.ToString() == "UnrealWindow") { found = h; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+}
 "@
 }
 function Place-GameWindow([int]$procId, [int]$i, [int]$n) {
     if ($n -lt 2) { return }
     try {
         Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
-        $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+        $screen = [System.Windows.Forms.Screen]::AllScreens |
+            Where-Object { -not $_.Primary } |
+            Sort-Object { $_.Bounds.Width * $_.Bounds.Height } |
+            Select-Object -First 1
+        if (-not $screen) { $screen = [System.Windows.Forms.Screen]::PrimaryScreen }
+        $wa = $screen.WorkingArea
         $w = [int][Math]::Floor($wa.Width / $n)
         $h = [int][Math]::Min($wa.Height, [Math]::Floor($w * 9 / 16) + 32)
         $deadline = (Get-Date).AddSeconds(30)
         do {
             $pr = Get-Process -Id $procId -ErrorAction SilentlyContinue
             if (-not $pr) { return }
-            $hw = $pr.MainWindowHandle
+            $hw = [HsmpWin2]::GameWindow([uint32]$procId)
             if ($hw -ne [IntPtr]::Zero) {
                 # SWP_NOZORDER 0x4 | SWP_NOACTIVATE 0x10
-                [void][HsmpWin]::SetWindowPos($hw, [IntPtr]::Zero, $wa.X + ($i - 1) * $w, $wa.Y, $w, $h, 0x14)
-                Say "game$i window placed at x=$($wa.X + ($i - 1) * $w) ($w x $h)"
+                [void][HsmpWin2]::SetWindowPos($hw, [IntPtr]::Zero, $wa.X + ($i - 1) * $w, $wa.Y, $w, $h, 0x14)
+                Say "game$i window placed on $($screen.DeviceName) at x=$($wa.X + ($i - 1) * $w) ($w x $h)"
                 return
             }
             Start-Sleep -Milliseconds 250
@@ -626,6 +722,9 @@ function Place-GameWindow([int]$procId, [int]$i, [int]$n) {
 $launchSince = NowMs
 for ($i = 1; $i -le $Instances; $i++) {
     $ie = Inst-Env $i
+    # this instance's own events count from its launch: placing its window waits for the
+    # engine's window, which appears after the game already wrote `_open`
+    $instSince = (NowMs) - 2000
     if ($FakeGame) {
         [void](Start-Tracked "game$i" $Gate @("fake-game") (Join-Path $Run "fakegame$i.log") $Win64 $ie)
     } else {
@@ -635,7 +734,7 @@ for ($i = 1; $i -le $Instances; $i++) {
     $gt = @($script:Tracked | Where-Object { $_.role -eq "game$i" }) | Select-Object -Last 1
     if ($gt -and -not $FakeGame) { Place-GameWindow ([int]$gt.pid) $i $Instances }
     # serialise start-up on the instance's own first event instead of a fixed sleep
-    $w = Wait-Step ([ordered]@{ do = "wait"; ev = "_open"; who = "$i"; timeout_s = $GameStartTimeout }) ((NowMs) - 2000)
+    $w = Wait-Step ([ordered]@{ do = "wait"; ev = "_open"; who = "$i"; timeout_s = $GameStartTimeout }) $instSince
     if ($w.code -ne 0) { Say "instance $i wrote no hsmp_log _open event in ${GameStartTimeout}s (mods not instrumented?) - continuing" Yellow }
     if ($topology -eq "listen" -and $i -eq 1 -and $Instances -gt 1) {
         # the listen host connects first (it owns its server by its player key)
@@ -644,8 +743,23 @@ for ($i = 1; $i -le $Instances; $i++) {
     }
 }
 
+# The engine re-applies its own window size/position while it finishes starting up (the
+# early placement above is undone and the windows end up stacked): place them again now
+# that every game is open, and once more when they first reach the lobby.
+function Place-AllGameWindows {
+    if ($FakeGame) { return }
+    foreach ($e in @($script:Tracked | Where-Object { $_.role -match '^game\d+$' })) {
+        if (Same-Process $e) { Place-GameWindow ([int]$e.pid) ([int]($e.role -replace '^game', '')) $Instances }
+    }
+}
+Place-AllGameWindows
+$script:WindowsReplaced = $false
+
 # --- 6. scenario steps -------------------------------------------------------------------------
-$since = if ($topology -eq "listen") { $launchSince } else { NowMs }
+# From the first launch in every topology: a game can reach its lobby while the later ones
+# are still starting (window placement waits for each engine window), and this run's state
+# dirs are fresh, so no older event can match.
+$since = $launchSince
 $failed = $null
 $cmdSeq = 0
 $quitDone = $false
@@ -747,6 +861,7 @@ foreach ($s in $sc.steps) {
             $w = Wait-Step $s $since
             if ($w.code -ne 0) { $failed = $s; HEvent "step_failed" @{ step = $sj; detail = $w.out } ; Say "  FAILED: $($w.out)" Red }
             Discover-Children
+            if ($s.ev -eq "lobby_ready" -and -not $script:WindowsReplaced) { $script:WindowsReplaced = $true; Place-AllGameWindows }
         }
         "rcon" {
             $rr = Invoke-Gate @("rcon", "--addr", "127.0.0.1:$RconPort", "--password", $RconPw, $s.cmd)
@@ -775,6 +890,21 @@ foreach ($s in $sc.steps) {
             $secs = [double]$s.s * $HoldScale
             HEvent "hold" @{ s = $secs; why = $s.why }
             Start-Sleep -Milliseconds ([int]($secs * 1000))
+        }
+        "lab_session" {
+            $labOwner = Get-Process -Id $LabOwnerPid -ErrorAction Stop
+            $labIdentity = Hsmp-ProcRecord $labOwner 'lab'
+            Write-Utf8 (Join-Path $LabSession 'ready.json') (ConvertTo-Json -InputObject @{ run = $Run; owner = $labIdentity } -Depth 4)
+            HEvent 'mark' @{ name = 'lab_ready'; arena = $CombatArena }
+            Say "lab ready: $LabSession (experiments use RCON and DevCtl)" Cyan
+            # Poll a condition, never a fixed startup/round sleep. If the owner
+            # exits, normal harness teardown still restores its own save guard.
+            while (-not (Test-Path (Join-Path $LabSession 'stop')) -and (Same-Process $labIdentity)) {
+                Discover-Children
+                $dead = @($script:Tracked | Where-Object { $_.role -match '^game\d+$' } | Where-Object { -not (Same-Process $_) })
+                if ($dead.Count) { throw 'A lab game exited before session teardown.' }
+                Start-Sleep -Milliseconds 250
+            }
         }
         { $_ -in @("kill", "restart") } {
             $e = @($script:Tracked | Where-Object { $_.role -eq $s.role }) | Select-Object -Last 1
@@ -840,6 +970,8 @@ foreach ($o in $orphans) { $e = $script:Tracked | Where-Object { $_.pid -eq $o.p
 Collect-State
 $ue4ssLog = Join-Path $Win64 "ue4ss\UE4SS.log"
 if (Test-Path $ue4ssLog) { Copy-Item $ue4ssLog (Join-Path $Run "UE4SS.log") -Force }
+$nativeCppLog = Join-Path $Win64 "ue4ss\Mods\HSMPNative\HSMPNative.log"
+if (Test-Path $nativeCppLog) { Copy-Item $nativeCppLog (Join-Path $Run "HSMPNative.log") -Force }
 
 # a dump written while the game went down lands a few seconds after the last process exit;
 # settle before the crash scan and the triage window end (the window ends now, not earlier)

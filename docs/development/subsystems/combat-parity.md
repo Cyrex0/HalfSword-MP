@@ -146,3 +146,104 @@ instances on a dedicated server of this build:
    keep the pooled bodies (no error, no disconnect).
 5. Fight a round: no new `native damage on stand-in ... put back` or stretch / launch of the
    stand-in after the masses change (`spawn_stretch` stays ≤ 10 uu, combat.md / replication.md).
+
+## 5. Asset-derived coverage and articulated weapons (2026-10-04)
+
+The installed PAK was read directly with the existing MapDump/CUE4Parse tool and matching
+usmap. `test-results/dev-feature-checks/combat-asset-packages.txt` lists 2,376 parsed weapon,
+armour and equipment-data packages with no parse errors. `weapon-pak-coverage.json` verifies
+the existence of all 128 configured weapon packages; `armour-pak-coverage.json` verifies all
+116 configured armour packages. This establishes asset availability, not runtime collision
+or damage parity. There are 154 packages under `Built_Weapons`; the exact 26 outside the
+configured catalogue are in `weapon-pak-outside-catalogue.txt`, including Fists, Feet,
+uncatalogued melee variants, traps, ranged weapons/projectiles and quivers.
+
+`weapon-flail-asset.json` is the full cooked export of
+`/Game/Assets/Weapons/Blueprints/Built_Weapons/Reforged/ModularWeaponBP_Flail_A`.
+Its `Head_GEN_VARIABLE` and `Link 1_GEN_VARIABLE` are **StaticMeshComponent** objects with
+`BodyInstance.bSimulatePhysics = true`. `PhysicsConstraint1_GEN_VARIABLE` joins Head to
+Link 1 with 180-degree swing limits. Therefore a component's actor-relative transform is
+not constant merely because its mesh is static. The sender now samples module transforms
+each frame. Server history interpolates matching native component IDs, and contact speed
+tracks the selected material point through both the module and actor transforms. Tests
+cover a stationary actor/Grip with an independently translating and rotating Head, including
+an impact between snapshots and reordered module-array storage. No geometry allowance was
+increased by this change.
+
+The Fists and Feet asset exports independently confirm a 13 cm fist sphere and foot box
+half-extents of (7.5, 15, 7.5) cm before scaling. Both declare zero edge sharpness and retain
+the native Weapon tag; Fists declares rigidity 0.4. The streamed body-striker geometry uses
+the actual per-frame native properties and transforms rather than those constants.
+
+Remaining coverage limits are explicit: static mesh envelopes are not exact cooked collision
+shapes; skeletal modules and active-module capacity still need a complete runtime inventory.
+The first attempted inventory crashed on naming an invalid CDO class reference; those
+speculative property reads were removed and reflected names are validity-checked. A later
+single-class construction/inspection succeeded but cleanup was not confirmed, so neither
+run is a catalogue pass. Class defaults should be inspected offline; runtime diagnostics
+must confirm destruction before progressing to another class.
+
+Original cutting-box identity, historical orientation, extent and native scale are now
+carried and replayed using a private collision-disabled Box. Native DCD/GetDamage and the matching executable's RVP implementation
+use that geometry for cutting/paint; the native paint path snapshots it before asynchronous
+work. Complete cutting/gore parity still requires validating the victim proxy's actual
+bone frame against its owner's physics and native continued penetration. Persistent injury comparisons also require fresh native reference/network pawn
+pairs: restoring scalar health fields does not undo broken joints or severed bodies. These
+comparisons can be automated; manual fights are not an exhaustive acceptance test.
+
+## 6. Complete native class audit (2026-10-05)
+
+`test-results/dev-feature-checks/weapon-catalogue-audit/coverage-manifest.json` accounts
+for every one of the 154 built weapon classes. There are 141 registered melee classes
+(128 canonical and 13 additional native classes), two body strikers, two ranged weapons,
+two projectiles, two quivers and five traps. The extraction parsed 1,359 packages without
+errors, including 401 modular-part classes and 2,462 conservative constructor/reference
+edges. Every full short class name fits the source record; none of their class hashes collide.
+This proves static coverage, not every construction combination or native combat outcome.
+
+The matching installed executable was checked against the isolated IDA database by SHA-256.
+Native exports confirm RVP snapshots/deep copies and actor-enumeration retirement semantics;
+the cooked Blueprint exports provide the gameplay damage, module, firing and penetration logic.
+Fired/released actors, traps, independently moving skeletal strap bodies and stuck-weapon
+Inside continuation remain explicit incomplete production routes.
+
+Native run `20261005-125818-c9ef9c-combat_manual` exposed 154 accepted fist contacts whose
+victim replay dropped the source after the temporary fist actor disappeared, and 272 accepted
+contacts whose native input vectors were reduced. The fist replay factory preserves the exact
+native Sphere ordinal and original life without replacing held equipment. Impulse-selected
+weapon inputs now retain the already-validated impulse envelope instead of using a smaller
+speed-unit ceiling. Neither change establishes exhaustive injury parity.
+
+Run `20261005-134221-29e054-combat_manual` completed four rounds without a new crash.
+All 73 detailed cutting-geometry rejections had valid original scales/extents. Native-owner
+pose reconstruction reproduces the server errors within 1cm/1degree; several inferred proxy
+orientations differ by 30–60degrees while their bone origins remain close. These results do
+not justify increasing geometry tolerances. Exact native proxy rotation, playback and anatomy
+must be resolved. The native inventory also remains gated on positive single-class retirement;
+construction observations must never be reported as combat passes.
+
+`scripts/analyze_weapon_inventory.py <run>` joins observations to all 154 classes and explicitly
+keeps construction/retirement separate from native combat parity. The opt-in combat pose tap
+retains each exact transmitted frame; `combat_pose_decode` decodes it using the production codec.
+
+## Read-only native armor trace bursts
+
+In a developer build, `hsmp-tools ipc-ctl --pid <verified-game-pid> autotest
+armor_probe on` observes existing object-query11 complex traces for15 seconds.
+`armor_probe off` cancels the burst. This does not enable the stand-in damage
+probe or execute a new native trace. Keep the optional C++ caller journal off:
+the Native20 session reproduced severe gameplay stalls with it enabled.
+
+`LAB_ARMOR_TRACE` records the exact world, peer, match, round, life, pawn and Mesh,
+ordered existing hit components/tags/materials and independent read availability.
+The observer limits total records48, records per full body scope16, interval250ms
+and detail16KiB. Native arrays are preflighted, stopped on inconsistent entries,
+and count-checked afterward. Partial reads remain incomplete; a changing body
+scope discards the row. Inactive bursts avoid context/native reads entirely.
+
+An owner replay span is recorded only while the matching full-life native replay
+is active. `dcd_caller` and `source_parent` remain unavailable: the native trace
+callback alone cannot establish its Blueprint caller or accepted source lineage.
+Rows are evidence only and cannot authorize damage or dismemberment. Positive
+native clothing/mail/plate and exposed-region captures are still required before
+claiming protection or soft-spot parity.

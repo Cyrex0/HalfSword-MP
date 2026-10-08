@@ -66,6 +66,7 @@ bytemuck = "1"
 
 [dev-dependencies]
 proptest = "1"
+hsmp-net = { path = "../crates/hsmp-net", features = ["testlink"] }
 
 [lints]
 workspace = true

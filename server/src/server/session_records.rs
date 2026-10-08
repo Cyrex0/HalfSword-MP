@@ -245,5 +245,20 @@ async fn on_spawned(state: &Arc<ServerState>, from: SocketAddr, s: &rec::Spawned
         info!(peer_id = pid, round = s.round, slot = s.slot, x = s.pos[0], y = s.pos[1], z = s.pos[2],
               clear = s.clear.get(), offset_cm = off, "spawn report: pawn placed");
     }
-    note_placed(&mut inner, pid, s.round);
+    // Legacy Spawned has no original match/life/assignment identity. Diagnostic
+    // only: scoped healthy GameStatus owns placement/protection/movement reset.
+}
+
+#[cfg(test)]
+mod scoped_placement_tests {
+    use super::*;
+    #[tokio::test]
+    async fn unscoped_spawn_report_cannot_reset_root_or_grant_protection() {
+        let state=Arc::new(ServerState::new(8));let from:SocketAddr="127.0.0.1:44992".parse().unwrap();
+        {let mut i=state.inner.lock().await;i.match_state="countdown".into();i.match_round=0;
+            let mut p=match_core::round_tests::peer(1,"p");p.last_valid_pos=Some([100.0,200.0,300.0]);i.peers.insert(from,p);}
+        on_spawned(&state,from,&rec::Spawned {round:1,slot:0,pos:[9000.0;3],clear:hsmp_ipc::layout::Bool::from(true),..Default::default()}).await;
+        let i=state.inner.lock().await;assert_eq!(i.peers[&from].last_valid_pos,Some([100.0,200.0,300.0]));
+        assert!(i.sess.placed.is_empty());assert!(i.sess.root_placed.is_empty());
+    }
 }

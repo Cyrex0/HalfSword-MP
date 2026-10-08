@@ -165,7 +165,7 @@ says **HOST**.
 | **ROUNDS** | **BEST OF 1**, **3**, **5** or **7**. |
 | **KIT RULES** | **FREE** (any kit, no points limit), **CLASSES ONLY** (class presets only), or **CUSTOM** (custom kits within a point budget). |
 | **BUDGET** | For **CUSTOM** only: 12, 20, 30, 45 or 60 points. |
-| **MODE** | Set by the server. Today it is **DUEL**. |
+| **MODE** | The game mode; the **MODE** button opens the GAME MODE screen. See [Game modes](#game-modes). |
 
 **Buttons at the bottom:**
 
@@ -173,6 +173,7 @@ says **HOST**.
 |---|---|---|
 | **MARK READY** | everybody | Tells everybody you are ready. It then reads **READY [x]**. Press it again to cancel. |
 | **LOADOUT** | everybody | Opens the loadout screen. See [Your loadout](#your-loadout). |
+| **MODE** | everybody | Opens the GAME MODE screen: the host picks the mode and its options, everybody picks a team when teams are **PICK**. |
 | **START MATCH** | host | Starts the match on the server's arena. It works once every player is ready. With only you in the lobby, it reads **START (SOLO)**. Other players see **HOST STARTS (n/m)**. |
 | **LEAVE** / **CLOSE LOBBY** | everybody / host | Leaves the server. For the host, **CLOSE LOBBY** closes the server for everybody. |
 
@@ -256,6 +257,8 @@ Click **SETTINGS** on the main menu.
 | **NET INDICATOR** | Ping and packet loss, bottom right: ALWAYS, WHEN BAD, or OFF. | ALWAYS |
 | **PEER AVATARS** | Shows the other players' bodies. Turn it off only to debug. | ON |
 | **ROUTER PORT** | While you host, opens the HOST PORT on your router automatically (UPnP, PCP or NAT-PMP) and closes it again when you stop. OFF: forward the port by hand. | ON |
+| **SERVER MODS: ALLOW** | ASK ME: a server that wants to install mods shows you a warning first. NEVER: such servers are declined (you cannot join them). See [Server mods](#server-mods). | ASK ME |
+| **FORGET REMEMBERED SERVERS** | Servers you accepted mods for with REMEMBER ask again. | |
 
 **SAVE & BACK** checks and saves everything. **BACK** leaves without saving. **RESET DEFAULTS**
 resets everything except your nickname. HUD settings apply from your next match.
@@ -267,18 +270,70 @@ are laid out for 1920x1080 and scaled by the window's height (or its width on sc
 16:9). On an ultrawide screen they keep the 16:9 size and stay centred. Text never gets smaller
 than 9 pixels.
 
+## Server mods
+
+Some servers install their own mods (UE4SS Lua scripts) on your PC when you join. The server
+browser marks them with **[MODS n]**, and before anything downloads you get a warning screen:
+
+> This server wants to install N mods that run with FULL ACCESS to your PC (files, network,
+> everything a game mod can do). Only accept for servers you trust.
+
+with every mod's name, version, author, description and size, the server's key and the mod set's
+hash.
+
+- **What "full access" means.** A server mod is code, like a mod you install yourself. HSMP checks
+  that you get exactly the files the server announced (every byte is checked against its SHA-256
+  before it is saved), that they are Lua and plain data files only (no programs, no DLLs), and that
+  they cannot replace HSMP's own mods. It does **not** limit what that Lua code may do once it
+  runs. Accept only for servers you trust.
+- **ACCEPT & JOIN** downloads the mods, starts them and takes you into the lobby. **DECLINE** leaves
+  the server and takes you back to the server browser.
+- **REMEMBER FOR THIS SERVER** (on by default) skips the question next time for this server and
+  exactly these mods. If the server changes a single file, you are asked again.
+- **Revoking:** SETTINGS > **FORGET REMEMBERED SERVERS**, or delete
+  `HalfswordUE5\Binaries\Win64\hsmp_state\.server_mods.json`. SETTINGS > SERVER MODS: **NEVER**
+  declines every server's mods.
+- Downloaded mods are kept in `HalfswordUE5\Binaries\Win64\hsmp_mods` (outside the UE4SS mods
+  folder, so they never run on their own). They are checked again before every use and not
+  downloaded twice. Deleting the folder is safe; the launcher's uninstall deletes it.
+- When you leave the server, its mods are stopped. A few things a mod may have registered (key
+  binds, console commands) cannot be removed while the game runs; they stay switched off. Restart
+  the game for a completely clean state.
+
+If something goes wrong (a file does not match the server's hash, the download stops, the mods
+fail to start) the screen says why and **BACK TO BROWSER** leaves the server.
+
 ## Character
 
 **CHARACTER** shows four stats: **STRENGTH**, **AGILITY**, **INTELLIGENCE** and **STAMINA**, each
 0 to 10, at most 40 in total. **SAVE & PUBLISH** saves them and sends them to the server with your
 profile.
 
+## Game modes
+
+The host picks the mode on the lobby's **GAME MODE** screen (the **MODE** button). Every mode is
+played in rounds; the first player or team to win enough rounds (2 in a best of 3) wins the match.
+
+| Mode | How to win a round |
+|---|---|
+| **DUEL** / **FFA** | Be the last fighter standing. If everybody falls together, the round is a draw. |
+| **TEAMS** (team elimination) | Be on the last team standing. Teammates cannot hurt each other unless the host turns **FRIENDLY FIRE** on. |
+| **HILL** (King of the hill) | Stand on the hill with no enemy on it: you (or your team) score a point per second. The first to the target (60 s by default) wins. A fight on the hill scores nothing for anybody. Dying still puts you out of the round, and when the round clock runs out the most points win. The top banner says how far the hill is and in which direction ("HILL: 12 m AHEAD-LEFT", "ON THE HILL"). |
+| **ROULETTE** (weapon roulette) | Last fighter standing, but everybody fights with the same random weapon and armour set, a new one each round. The countdown names it. Your own loadout comes back after the match. |
+| **BRAWL** | Last fighter standing, with fists only and no armour. |
+| **DEATHMATCH** | Kill as often as you can before the round clock (5 minutes by default) runs out. When you die, you come back a few seconds later at a spawn point away from the others: your game reloads the arena ("RESPAWN IN 3", then "RESPAWNING..."), and you fight again once you are placed. The most kills win the round; a tie goes to sudden death, where the next kill wins. |
+
+**Teams.** HILL, ROULETTE, BRAWL and DEATHMATCH can be played in teams too. With **AUTO** teams
+the server balances the teams when the match starts; with **PICK** teams every player picks
+**RED**, **BLUE**, **GREEN** or **GOLD** on the GAME MODE screen (**ANY** = the smallest team).
+Teams spawn on their own side of the arena and swap sides every round. When a whole team drops,
+the match waits for it like a duel waits for a dropped opponent.
+
 ## During a match
 
-A match is a series of rounds. The mode today is **DUEL**: with two players it is a duel, with
-three or more it is last man standing. The last fighter standing wins the round. If everybody
-falls, the round is a draw and nobody scores. The first player to win enough rounds (for example 2
-in a best of 3) wins the match.
+A match is a series of rounds (see [Game modes](#game-modes) for how each mode is won). In
+**DUEL**, with two players it is a duel, with three or more it is last man standing. If everybody
+falls, the round is a draw and nobody scores.
 
 How hits work: your game sees your weapon hit another fighter and reports the hit. The server
 checks it against where that fighter was at the moment you saw it (lag compensation), and if it
@@ -289,12 +344,13 @@ So both players see the same wound, and a hit that the server refuses has no eff
 
 | Where | What |
 |---|---|
-| Top centre | Round banner, timer and the score. |
+| Top centre | Round banner, timer and the score. In team modes one cell per team (round wins, and this round's points or kills); in King of the hill the banner shows who holds the hill and where it is; with a round clock the timer counts down (SUDDEN DEATH after a tied deathmatch). |
 | Top left | Every opponent (up to 7): name, **CON** and **BODY %**, a body bar and a stamina bar. The row turns red while that fighter bleeds. |
 | Bottom left | You: a body bar with **BODY %**, then **CON**, your raw health (`hp`) and **BLEED** while you bleed, and a stamina bar. |
 | Top right | Kill feed, and notices such as players joining or leaving. |
 | Bottom right | Net indicator: NET GOOD, NET OK, NET POOR or NET BAD, with ping. |
-| Centre | Big messages: ROUND n, FIGHT!, ROUND OVER, YOU DIED, SPECTATING, VICTORY, MATCH OVER. |
+| Centre | Big messages: ROUND n (with the round kit in weapon roulette and brawl), FIGHT!, ROUND OVER, YOU DIED, RESPAWN IN n, SPECTATING, VICTORY, MATCH OVER. |
+| Centre (hold TAB) | Scoreboard: wins, kills / deaths, ping, status; team tags in team modes. |
 
 What the numbers mean. A Half Sword fight is not decided by raw health: health only drops on hard
 hits to the head, neck and torso, and it regenerates. So the HUD shows what matters:

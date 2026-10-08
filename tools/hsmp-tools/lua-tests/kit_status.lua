@@ -29,11 +29,15 @@ local function new_env()
         return { path = path, GetCDO = function() return { ["Armor Slot"] = 3 } end,
                  GetFName = function() return { ToString = function() return path:match("([^/]+)$") .. "_C" end } end }
     end
+    local function native_passport(path)
+        return { class = path, head = "native head", material = 3, head_size = 1.00001, mass_head = 1 }
+    end
     local function weapon(path)
+        w.spawns = (w.spawns or 0) + 1
         local cls = class_obj(path)
         return { cls = cls, bHidden = w.spawn_hidden == true, GetClass = function(self) return self.cls end,
-                 props = { ["Is Held"] = true },
-                 IsValid = function() return true end,
+                 props = { ["Is Held"] = true, ["Weapon Passport"] = native_passport(path) },
+                 IsValid = function(self) return not self.destroyed end,
                  K2_DestroyActor = function(self) self.destroyed = true; w.destroyed = (w.destroyed or 0) + 1 end,
                  GetFName = function() return { ToString = function() return "W_" .. path:match("([^/]+)$") end } end }
     end
@@ -49,21 +53,46 @@ local function new_env()
         STATE_DIR = SD,
         ev = function(n, f) w.evs[#w.evs + 1] = { n = n, f = f } end,
         now = function() return w.clock end,
-        valid = function(o) return o ~= nil and o ~= false end,
+        valid = function(o) return o ~= nil and o ~= false and not o.destroyed end,
         field = function(o, k) return o and o.props[k] end,
         resolve_class = function(path) return class_obj(path) end,
         expand_path = function(p) return "/Game/" .. p end,
         class_path = function(cls) return cls and cls.path or "" end,
         -- "Set Up Right/Left Hand Weapon"(Class, Actor, ...): the actor form
         -- puts that very actor in hand (the re-arm re-equips the dropped one).
-        bp_call = function(p, fname, cls, actor)
+        bp_call = function(p, fname, cls, actor, _, destroy_previous, pass)
             if not w.equip_ok then return end
             local side = fname:find("Right") and "Weapon R" or "Weapon L"
+            local hand = fname:find("Right") and "R" or "L"
             if actor and w.actor_equip_ok == false then return end
-            if actor then actor.props["Is Held"] = true end
-            p.props[side] = actor or weapon(cls.path)
+            local previous = p.props[side]
+            w.equips = w.equips or {}
+            w.equips[#w.equips + 1] = { actor = actor, previous = previous, destroy_previous = destroy_previous }
+            -- Native previous-weapon lifecycle runs BEFORE input validation.
+            if previous and not previous.destroyed and (destroy_previous or p.props[hand .. "_GripType_Current"] == 0) then
+                previous:K2_DestroyActor()
+                p.props[side] = nil
+            end
+            local equipped = actor and not actor.destroyed and actor or weapon(cls.path)
+            if pass then
+                equipped.props["Weapon Passport"] = {}
+                for key, value in pairs(pass) do equipped.props["Weapon Passport"][key] = value end
+                if w.bad_passport then equipped.props["Weapon Passport"][w.bad_passport] = "wrong native output" end
+            end
+            equipped.props["Is Held"] = true
+            p.props[side] = equipped
+            p.props[hand .. "_GripType_Current"] = cls.path:find("Weapon_Fists", 1, true) and 0 or 14
         end,
         spawn_weapon_actor = function() return nil end,
+        weapon_passport_for = function(cls, actor)
+            return actor and actor.props["Weapon Passport"] or native_passport(cls.path)
+        end,
+        weapon_passport_matches = function(actor, wanted)
+            local pass = actor and actor.props["Weapon Passport"]
+            if not pass then return false end
+            for key, value in pairs(wanted) do if pass[key] ~= value then return false end end
+            return true
+        end,
         apply_armour = function(p, L)
             w.applies = w.applies + 1
             p.equipped = {}
@@ -149,6 +178,250 @@ local function new_env()
     return w
 end
 
+T.log("== own kit requires the complete native weapon passport")
+do
+    local w = new_env()
+    local pawn = w:new_pawn(1)
+    w:kit("duelist", 3)
+    local path = w.Cat.items[w.peer_kit[1].r].path
+    local previous = w.weapon(path)
+    pawn.props["Weapon R"] = previous
+    T.check(w.Kit.give_weapon(pawn, "R", path) == "same", "identical full passport keeps the same weapon")
+    for _, key in ipairs({ "head", "material", "head_size", "mass_head" }) do
+        local actor = pawn.props["Weapon R"]
+        actor.props["Weapon Passport"][key] = key == "head_size" and 1.00002 or "different variant"
+        T.check(not w.Kit.hands_check(pawn, w.peer_kit[1]), "same-class " .. key .. " mismatch fails native verification")
+        T.check(w.Kit.give_weapon(pawn, "R", path) == "ok" and pawn.props["Weapon R"] ~= actor,
+            "same-class " .. key .. " mismatch replaces through native setup")
+    end
+    local actor = pawn.props["Weapon R"]
+    actor.props["Weapon Passport"].material = 0
+    w.bad_passport = "material"
+    T.check(w.Kit.give_weapon(pawn, "R", path):find("^FAIL") ~= nil,
+        "a successful native call with a wrong output passport is not accepted")
+    T.check(not w.Kit.hands_check(pawn, w.peer_kit[1]), "native output remains unverified after the failed setup")
+    w.bad_passport, w.equip_ok = nil, false
+    w.api.spawn_weapon_actor = function(_, cls, pass)
+        T.check(pass and pass.head == "native head", "fallback actor receives the complete canonical passport before construction")
+        return w.weapon(cls.path)
+    end
+    T.check(w.Kit.give_weapon(pawn, "R", path):find("^FAIL") ~= nil,
+        "a successful actor-form call which never equips its actor fails post-setup verification")
+    local writes = 0
+    w.api.set_hand_passport = function() writes = writes + 1; return false end
+    T.check(w.Kit.give_weapon(pawn, "R", path) == "FAIL hand passport" and writes == 1,
+        "failed character hand passport write cannot report a successful apply")
+end
+
+T.log("== unavailable canonical weapon source fails before any hand mutation")
+do
+    local w = new_env()
+    local pawn = w:new_pawn(1); w:kit("duelist", 3)
+    local path = w.Cat.items[w.peer_kit[1].r].path
+    local original = w.weapon(path)
+    pawn.props["Weapon R"] = original
+    local writes, spawn_attempts = 0, 0
+    w.api.set_hand_passport = function() writes = writes + 1; return true end
+    w.api.spawn_weapon_actor = function() spawn_attempts = spawn_attempts + 1; return w.weapon(path) end
+    w.api.weapon_passport_for = function() return nil end
+    T.check(w.Kit.give_weapon(pawn, "R", path) == "FAIL native weapon defaults unavailable",
+        "unavailable canonical passport is reported by own hand give")
+    T.check(not w.Kit.hands_check(pawn, w.peer_kit[1]), "unavailable canonical passport cannot verify an existing same-class actor")
+    local reequipped, stage = w.Kit.reequip(pawn, "R", original, path)
+    T.check(reequipped == nil and stage == "preflight", "unavailable dropped-actor passport reports refusal before native re-equip")
+    T.check(writes == 0 and spawn_attempts == 0 and w.equips == nil and pawn.props["Weapon R"] == original
+        and not original.destroyed, "all unavailable-source paths leave hand passport and current actor untouched")
+    w.api.weapon_passport_for = nil
+    T.check(w.Kit.give_weapon(pawn, "R", path) == "FAIL native weapon defaults unavailable" and writes == 0,
+        "a missing passport provider also cannot substitute an empty table")
+end
+
+T.log("== armor class/count cannot override full native passport evidence")
+do
+    local w = new_env()
+    w:new_pawn(1); w:kit("duelist", 3)
+    w.api.armour_passports_match = function()
+        return w.bad_armor ~= true, w.bad_armor and { "native armor material" } or {}
+    end
+    w:tick(6)
+    T.check(w:status().ok and w.pawn.worn == #w.peer_kit[1].rows, "native full-passport evidence verifies the initial kit")
+    w.bad_armor = true; w:tick(4)
+    T.check(w:status().ok == false and w.pawn.worn == #w.peer_kit[1].rows,
+        "same armor class/count becomes unverified when native passport evidence differs", T.repr(w:status()))
+    w.bad_armor = false; w:tick(12)
+    T.check(w:status().ok, "correct full native passport evidence completes the bounded retry")
+end
+
+T.log("== current assigned fighter survives only the exact protected fallback window")
+do
+    local w = new_env()
+    local original = w:new_pawn(1)
+    local foreign = w:new_pawn(2)
+    w.pawn, w.pc_pawn = original, original
+    w:kit("man_at_arms", 3)
+    local session = { match_id = 9007199254740993, phase = 2, round = 0,
+        rows = { { peer_id = 1, spawn_id = 256 } } }
+    local st = { seq = 1, verified = true, match_id = session.match_id, round = 1, life = 1,
+        spawn_id = 256, pawn = "Willie_BP_C_1" }
+    local scope = "8|111@World Arena"
+    local context = w.Kit.fighter_context(session, { my_peer_id = 1 }, nil, st, scope)
+    local describe = function(p) return { name = "Willie_BP_C_" .. p.n, address = tostring(1000 + p.n), world = scope } end
+    local resolve = function(name, address)
+        return name == "Willie_BP_C_1" and address == "1001" and original or nil
+    end
+    local bound, swap
+    w.api.local_pawn = function()
+        local pawn; pawn, bound = w.Kit.local_fighter(w.pc_pawn, context, bound, swap, w.clock, describe, resolve)
+        return pawn
+    end
+    w.api.fighter_context = function() return context and context.key end
+    w:tick(6)
+    local polearm, applies, spawns = original.props["Weapon R"], w.applies, w.spawns
+    T.check(w:status().ok and bound and bound.address == "1001", "verified original bound by exact native address")
+    polearm.props["Is Held"], original.props["Weapon R"] = false, nil
+    w.pc_pawn, swap = foreign, { keep = "Willie_BP_C_1", until_s = w.clock + 3 }
+    w:tick(10)
+    T.check(original.props["Weapon R"] == polearm and w:status().pawn == "Willie_BP_C_1" and w:status().ok,
+        "fallback PC swap preserves own kit/stability and re-arms the original fighter", T.repr(w:status()))
+    T.check(w.applies == applies and w.spawns == spawns and foreign.props["Weapon R"] == nil,
+        "foreign fallback body never dressed; one retained polearm actor and no second spawn")
+    local pawn = w.Kit.local_fighter(foreign, context, bound, swap, swap.until_s, describe, resolve)
+    T.check(pawn == nil, "expired fallback cannot resolve the old fighter or dress the foreign pawn")
+    local missing, metadata = w.Kit.local_fighter(foreign, nil, bound, swap, w.clock, describe, resolve)
+    local missing_again, metadata_again = w.Kit.local_fighter(foreign, nil, metadata, swap, w.clock, describe, resolve)
+    T.check(missing == nil and missing_again == nil and metadata == bound and metadata_again == bound,
+        "two sequential missing-context calls never return a pawn; only identity metadata remains")
+    local unbound_missing = w.Kit.local_fighter(foreign, nil, nil, swap, w.clock, describe, resolve)
+    T.check(unbound_missing == nil, "active fallback without any binding also refuses foreign PC pawn")
+    local restored, restored_bound = w.Kit.local_fighter(foreign, context, metadata_again, swap, w.clock, describe, resolve)
+    T.check(restored == original and restored_bound and restored_bound.address == "1001",
+        "exact verified context can recover the freshly resolved assigned fighter")
+    for _, change in ipairs({ "world", "match", "round", "life", "assignment" }) do
+        local next_session = { match_id = session.match_id, phase = 2, round = 0,
+            rows = { { peer_id = 1, spawn_id = 256 } } }
+        local next_st = { seq = 1, verified = true, match_id = st.match_id, round = 1, life = 1,
+            spawn_id = 256, pawn = st.pawn }
+        local next_world, next_mode = scope, nil
+        if change == "world" then next_world = "9|222@World Arena"
+        elseif change == "match" then next_session.match_id = session.match_id + 1; next_st.match_id = next_session.match_id
+        elseif change == "round" then
+            next_session.round, next_st.round, next_st.spawn_id, next_session.rows[1].spawn_id = 1, 2, 512, 512
+        elseif change == "life" then
+            next_session.phase, next_session.round, next_st.life = 3, 1, 130
+            next_mode = { match_id = session.match_id, round = 1, rows = { { peer_id = 1, life = 130 } } }
+        else next_st.spawn_id, next_session.rows[1].spawn_id = 257, 257 end
+        local altered = w.Kit.fighter_context(next_session, { my_peer_id = 1 }, next_mode, next_st, next_world)
+        local got, b = w.Kit.local_fighter(foreign, altered, bound, swap, w.clock, describe, resolve)
+        T.check(got == nil and b == nil, change .. " change cannot preserve previous fighter metadata")
+    end
+    st.life = 130
+    T.check(w.Kit.fighter_context(session, { my_peer_id = 1 }, nil, st, scope) == nil,
+        "pending placement requires initial life1")
+    session.phase, session.round = 3, 1
+    local mode = { match_id = session.match_id, round = 1, rows = { { peer_id = 1, life = 130, respawning = true } } }
+    local respawn = w.Kit.fighter_context(session, { my_peer_id = 1 }, mode, st, scope)
+    T.check(respawn and respawn.key ~= context.key, "placed DM respawn uses its full native life130 context")
+    mode.rows[1].life = 129
+    T.check(w.Kit.fighter_context(session, { my_peer_id = 1 }, mode, st, scope) == nil,
+        "old placed life cannot be rebound to the new Mode life")
+    st.spawn_id = 257
+    T.check(w.Kit.fighter_context(session, { my_peer_id = 1 }, mode, st, scope) == nil,
+        "wrong assigned spawn id has no fighter proof")
+end
+
+T.log("== unavailable ownership of the remembered weapon cannot create a replacement")
+do
+    local w = new_env()
+    w:new_pawn(1); w:kit("man_at_arms", 3); w:tick(6)
+    local old, spawns, applies = w.pawn.props["Weapon R"], w.spawns, w.applies
+    old.props["Is Held"], w.pawn.props["Weapon R"] = nil, nil
+    w:tick(12)
+    T.check(not w:status().ok and w.spawns == spawns and w.applies == applies and not old.destroyed
+        and T.contains(w:logtext(), "actor ownership unavailable"),
+        "unavailable native IsHeld remains an explicit wait with one retained weapon", T.repr(w:status()))
+end
+
+T.log("== failed initial actor re-arm stays bounded without respawning the polearm/outfit")
+do
+    local w = new_env()
+    w:new_pawn(1); w:kit("man_at_arms", 3); w:tick(6)
+    local old, applies, spawns = w.pawn.props["Weapon R"], w.applies, w.spawns
+    old.props["Is Held"], w.pawn.props["Weapon R"], w.actor_equip_ok = false, nil, false
+    w:tick(80)
+    T.check(w:status().ok == false and w:status().error == "initial hand recovery gave up",
+        "failed original actor re-arm reports a bounded honest failure", T.repr(w:status()))
+    T.check(T.count(w:logtext(), "initial hand recovery R=") == w.Kit.MAX_REARMS
+        and w.applies == applies and w.spawns == spawns and not old.destroyed,
+        "exactly MAX_REARMS attempts retain one actor without new native equipment")
+end
+
+T.log("== initial misplaced held polearm re-arms its original actor without destroying it")
+do
+    local w = new_env()
+    w.api.weapon_shown = function(actor) return actor.misplaced ~= true, actor.misplaced and "hand distance" or nil end
+    w:new_pawn(1); w:kit("man_at_arms", 3); w:tick(6)
+    local old, applies, spawns = w.pawn.props["Weapon R"], w.applies, w.spawns
+    local equip = w.api.bp_call
+    w.api.bp_call = function(p, name, cls, actor, ...)
+        equip(p, name, cls, actor, ...)
+        if actor then actor.misplaced = nil end
+    end
+    old.misplaced = true
+    w:tick(12)
+    T.check(w:status().ok and w.pawn.props["Weapon R"] == old and not old.destroyed,
+        "misplaced held weapon recovers by same-actor native equip then fresh visibility proof", T.repr(w:status()))
+    T.check(w.applies == applies and w.spawns == spawns and T.contains(w:logtext(), "retained for same-actor re-arm"),
+        "nonshown hand-only failure never destroys the polearm or rebuilds the outfit")
+    local call = w.equips[#w.equips]
+    T.check(call.actor == old and call.previous == old and call.destroy_previous == false and old:IsValid(),
+        "native Destroy Previous is false for the already held real actor, which remains valid")
+end
+
+T.log("== held grip0/unavailable cannot safely enter native reuse on either hand")
+do
+    for _, side in ipairs({ "R", "L" }) do
+        for _, bad in ipairs({ 0, "missing", "throws" }) do
+            local w = new_env()
+            w:new_pawn(1); w:kit("duelist", 3); w:tick(6)
+            local actor = w.pawn.props["Weapon " .. side]
+            if bad == "missing" then w.pawn.props[side .. "_GripType_Current"] = nil
+            elseif bad == "throws" then
+                local field = w.api.field
+                w.api.field = function(o, k)
+                    if k == side .. "_GripType_Current" then error("native grip unavailable") end
+                    return field(o, k)
+                end
+            else w.pawn.props[side .. "_GripType_Current"] = bad end
+            local calls, spawns = #w.equips, w.spawns
+            local result, stage = w.Kit.reequip(w.pawn, side, actor, actor.cls.path)
+            T.check(result == nil and stage == "preflight" and #w.equips == calls and w.spawns == spawns and actor:IsValid(),
+                side .. " " .. tostring(bad) .. ": fail closed before destructive native previous-weapon lifecycle")
+        end
+    end
+end
+
+T.log("== native reuse reports entered calls separately from preflight refusal")
+do
+    for _, outcome in ipairs({ "complete", "throws", "readback" }) do
+        local w = new_env()
+        w:new_pawn(1); w:kit("man_at_arms", 3); w:tick(6)
+        local actor, calls, spawns = w.pawn.props["Weapon R"], 0, w.spawns
+        local equip = w.api.bp_call
+        w.api.bp_call = function(p, name, cls, original, ...)
+            calls = calls + 1
+            if outcome == "throws" then error("native operation entered before failure") end
+            equip(p, name, cls, original, ...)
+            if outcome == "readback" then p.props["Weapon R"] = nil end
+        end
+        local result, stage = w.Kit.reequip(w.pawn, "R", actor, actor.cls.path)
+        T.check(calls == 1 and w.spawns == spawns and not actor.destroyed,
+            outcome .. ": native reuse enters once without creating another weapon")
+        T.check(outcome == "complete" and result ~= nil and stage == "complete"
+            or outcome ~= "complete" and result == nil and stage == "attempted",
+            outcome .. ": native execution failure cannot masquerade as retryable preflight refusal")
+    end
+end
+
 T.log("== status_record (the kit_status record)")
 do
     local w = new_env()
@@ -190,21 +463,25 @@ do
     T.check(#w:evs_named("kit_verified") == 1, "the stable rewrite is not a second verdict event")
 end
 
-T.log("== the native re-arm undoes the right hand -> ok=false, re-dressed, ok again")
+T.log("== initial polearm drop recovers the exact actor without a second spawn/outfit")
 do
     local w = new_env()
     w:new_pawn(1)
     w:kit("man_at_arms", 3)
     w:tick(6)
     T.check(w:status().ok == true, "verified first")
+    local polearm, applies, spawns = w.pawn.props["Weapon R"], w.applies, w.spawns
+    polearm.props["Is Held"] = false
     w.pawn.props["Weapon R"] = nil                    -- the game re-armed from the passport: fists
     w:tick(4)
     local s = w:status()
-    T.check(s.ok == false and T.contains(s.error or "", "re-dressing: native re-arm undid R hand"),
+    T.check(s.ok == false and T.contains(s.error or "", "initial hand recovery"),
         "the undo is visible to the Director at once", T.repr(s))
     w:tick(6)
     s = w:status()
-    T.check(s.ok == true and T.contains(s.r_class or "", "Pole"), "re-dressed and ok again", T.repr(s))
+    T.check(s.ok == true and w.pawn.props["Weapon R"] == polearm, "the original polearm is verified in hand again", T.repr(s))
+    T.check(w.applies == applies and w.spawns == spawns and not polearm.destroyed,
+        "one retained polearm actor: no second weapon spawn, armour setup or destruction", { w.applies, w.spawns })
 end
 
 T.log("== a weapon in hand but HIDDEN is not a verified kit: unhidden, then ok + visible")
@@ -377,7 +654,7 @@ do
     T.check(w:status().ok == true, "verified with the kit weapons")
     w:tick(26)                                        -- inside the 3 s stability window ...
     drop(w, "R")                                      -- ... a drop right at its end
-    w:tick(1)
+    w.Kit._write_status(w.pawn, w.Kit.read(1), true, 1, nil, true, false)
     local s = w:status()
     T.check(s.ok == false and s.r_class == "Weapon_Fists_C", "never ok=true with fists in a kit hand; r_class is the real actor class",
         T.repr(s))
@@ -465,21 +742,22 @@ end
 
 T.log("== a re-arm never destroys the dropped kit weapon")
 do
-    -- re-equipping the dropped actor does not take: a new kit weapon, the dropped one stays a world item
+    -- Native actor re-equip may temporarily fail; retain the exact recoverable
+    -- actor instead of creating a second pickable weapon.
     local w = verified_env()
     w.actor_equip_ok = false
     local old = drop(w, "R")
+    local spawns = w.spawns
     w:tick(12)
     local s = w:status()
-    T.check(s.ok == true and T.contains(s.r_class or "", "Arming") and w.pawn.props["Weapon R"] ~= old,
-        "fallback: a new kit weapon in hand", T.repr(s))
+    T.check(s.ok == false and w.spawns == spawns,
+        "temporary native actor-equip failure cannot spawn a replacement", T.repr(s))
     T.check(old.destroyed ~= true and (w.destroyed or 0) == 0, "the dropped actor is left alone (a real, replicated item)")
-    T.check(T.contains(w:logtext(), "dropped actor left as a world item"), "and the log says so")
-    -- a second drop re-equips the NEW weapon (own.held follows the hand)
+    T.check(T.contains(w:logtext(), "same actor retained"), "and the log names the retained actor recovery")
     w.actor_equip_ok = nil
-    local new = drop(w, "R")
     w:tick(12)
-    T.check(w.pawn.props["Weapon R"] == new and new.destroyed ~= true, "the next drop re-equips the weapon now held")
+    T.check(w.pawn.props["Weapon R"] == old and not old.destroyed and w.spawns == spawns,
+        "the next successful native attempt recovers that original actor")
 
     -- somebody else picked the dropped sword up: a new one for us, theirs untouched
     local w2 = verified_env()
@@ -677,14 +955,15 @@ do
         T.repr(w:status()))
 end
 
-T.log("== IO-1: the re-dress after a native re-arm (stability window) waits too")
+T.log("== IO-1: actual missing armour during initial stability still waits for hair")
 do
     local w = settle_env()
     w:kit("man_at_arms", 3)
     w:tick(6)
     local n = w.applies
     w.settle_until = w.clock + 2.5
-    w.pawn.props["Weapon R"] = nil           -- the game re-armed from the passport: fists
+    table.remove(w.pawn.equipped, 1)
+    w.pawn.worn = w.pawn.worn - 1
     w:tick(10)
     T.check(w.applies == n and T.contains(w:logtext(), "re-dressing"), "re-dress decided but not run inside the window",
         tostring(w.applies - n))

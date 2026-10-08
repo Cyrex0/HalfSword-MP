@@ -363,9 +363,19 @@ mod tests {
         let status = status.to_string();
         std::thread::spawn(move || {
             if let Ok((mut s, _)) = l.accept() {
-                let mut buf = [0u8; 4096];
-                let _ = s.set_read_timeout(Some(Duration::from_millis(500)));
-                let _ = std::io::Read::read(&mut s, &mut buf);
+                // Read the whole request (headers + content-length body) first: closing a
+                // socket with unread request bytes makes Windows send RST, and the client then
+                // sees a transport error instead of this status (the 429 case failed 4 in 5).
+                let _ = s.set_read_timeout(Some(Duration::from_millis(2000)));
+                let (mut req, mut buf) = (Vec::new(), [0u8; 4096]);
+                while let Ok(n) = std::io::Read::read(&mut s, &mut buf) {
+                    if n == 0 { break; }
+                    req.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&req).to_ascii_lowercase();
+                    let Some(end) = text.find("\r\n\r\n") else { continue };
+                    let len = text[..end].lines().find_map(|l| l.strip_prefix("content-length:").and_then(|v| v.trim().parse::<usize>().ok())).unwrap_or(0);
+                    if req.len() >= end + 4 + len { break; }
+                }
                 let _ = write!(s, "HTTP/1.1 {status}\r\ncontent-length: 9\r\nconnection: close\r\n\r\nNot Found");
             }
         });

@@ -45,6 +45,7 @@ local STATE = T.tmpdir("hsmp_parity_")
 -- HSMP_PARITY_SRC (global, set by a wrapper) runs the same suite against another
 -- main.lua, e.g. the previous release, for a before / after table.
 local SRC = rawget(_G, "HSMP_PARITY_SRC") or T.path("mods/HSMPCombat/Scripts/main.lua")
+package.path=T.path("mods/HSMPCombat/Scripts").."/?.lua;"..package.path
 local REPORT_ONLY = rawget(_G, "HSMP_PARITY_SRC") ~= nil
 
 HSMP_COMBAT_TEST = {}
@@ -325,6 +326,14 @@ T.check(fn ~= nil, "HSMPCombat loads", err)
 if not fn then return end
 fn()
 api = HSMP_COMBAT_TEST.api
+-- This suite models damage arithmetic, not placement/network lifecycle.
+-- Real typed original-context binding is exercised by combat.lua.
+local model_actors={}
+local set_puppets=api.set_puppets
+api.set_puppets=function(peers,actors,weapons)model_actors=actors;set_puppets(peers,actors,weapons)end
+api.C3.remote_actor=function(peer)return model_actors[peer]end
+api.C3.life_for=function()return {match_id=4242,round=3,life=1}end
+api.C3.displayed_for=function()return {match_id=4242,round=3,life=1}end
 api.set_world("world#1")
 local NAT = rawget(_G, "HSMPNative")
 local IPCF = rawget(_G, "HSMP_IPC")
@@ -573,6 +582,15 @@ end
 
 -- ---- 4. blows far apart, replays bunched ------------------------------------------------
 do
+    local torso = { bone = "spine_03", spot = "front", vel = 1600, cut = 40, stab = 0, rig = 0.8, weapon = true }
+    local head = { bone = "head", spot = "front", vel = 900, cut = 40, stab = 0, rig = 0.8, weapon = true }
+    local soft = { bone = "spine_03", spot = "front", vel = 700, cut = 40, stab = 0, rig = 0.8, weapon = true }
+    local solo, mp, mine = run({ { torso, 0 }, { head, 0.005 }, { soft, 0.010 } },
+        { armour = ARMOUR[1].set, same_tick = true })
+    T.check(#mine == 3 and same(solo, mp), "3b. torso/head/torso contact order preserves native damage gates",
+        T.repr({ n = #mine, solo = solo, mp = mp }))
+end
+do
     local b1 = { bone = "head", spot = "front", vel = 1500, cut = 0, stab = 0, rig = 3.1, weapon = true }
     local b2 = { bone = "head", spot = "front", vel = 900, cut = 0, stab = 0, rig = 3.1, weapon = true }
     local solo, mp, mine = run({ { b1, 0 }, { b2, 0.35 } }, { armour = ARMOUR[1].set })
@@ -593,6 +611,9 @@ do
         T.repr({ n = #mine, solo = solo, mp = mp }))
     solo, mp, mine = run({ { b1, 0 }, { b2, 0.35 } }, { armour = ARMOUR[1].set, spread = true })
     T.check(#mine == 2 and same(solo, mp), "4. ...and blows 350 ms apart replayed 300 ms apart both land",
+        T.repr({ n = #mine, solo = solo, mp = mp }))
+    solo, mp, mine = run({ { b3, 0 }, { b3, 0.15 }, { b4, 0.30 } }, { armour = ARMOUR[1].set, spread = true })
+    T.check(#mine == 3 and same(solo, mp), "4. equal-strength contact retriggers gate against a later weaker touch",
         T.repr({ n = #mine, solo = solo, mp = mp }))
 end
 

@@ -1,0 +1,44 @@
+{
+  "name": "sword-mail",
+  "arena": "Yard",
+  "mode": "duel",
+  "kit_rules": "custom",
+  "kits": [
+    "man_at_arms r=w_arming3 l= armor=b_gambeson,m_hauberk,l_hosen2,f_shoes2",
+    "man_at_arms r=w_arming3 l= armor=b_gambeson,m_hauberk,l_hosen2,f_shoes2"
+  ],
+  "ai": true,
+  "probe": true,
+  "tune": {
+    "impact_dv": 300,
+    "impact_ms": 200,
+    "grips": 1,
+    "downed_world": 1
+  },
+  "duration_s": 300,
+  "round_timeout_s": 90,
+  "no_claim_timeout_s": 30,
+  "commands": [],
+  "bounds": {
+    "proxy.rotation_deg": {
+      "max": 10,
+      "min": null,
+      "min_samples": 200
+    },
+    "clock_resets_per_min": {
+      "max": 1,
+      "min": null,
+      "min_samples": 20
+    },
+    "paired.Health": {
+      "max": 1.05,
+      "min": 0.95,
+      "min_samples": 200
+    },
+    "honest_accept": {
+      "max": null,
+      "min": 0.97,
+      "min_samples": 200
+    }
+  }
+}

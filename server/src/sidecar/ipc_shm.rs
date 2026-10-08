@@ -466,37 +466,42 @@ impl ShmLink {
     /// slots, which allocates the peer's table slot). The hsmp-ipc thread writes it on its next
     /// step (the slot's single writer). The payload is the record as received / built.
     pub fn post_record(&self, slot: &'static str, peer: Option<u32>, kind: u16, payload: &[u8]) {
+        let _ = self.try_post_record(slot, peer, kind, payload);
+    }
+    pub fn try_post_record(&self, slot: &'static str, peer: Option<u32>, kind: u16, payload: &[u8]) -> bool {
         if let Some(p) = peer {
             if self.slots().alloc(p).is_none() {
-                return;
+                return false;
             }
         }
         self.lock().rec_slots.insert((slot, peer), (kind, payload.to_vec()));
+        true
     }
 
     /// Queue one typed S2G ring record (the wire header fields + payload), e.g. an S2C record
     /// the game must see as an event, copied as it is.
-    pub fn push_record(&self, kind: u16, aux: u16, peer: u32, payload: &[u8]) {
+    pub fn push_record(&self, kind: u16, aux: u16, peer: u32, payload: &[u8]) -> bool {
         if payload.len() > MAX_PAYLOAD {
             self.count(ctr::TOO_BIG, 1);
             let mut st = self.lock();
             if st.too_big_logged.insert(kind) {
                 warn!(kind, len = payload.len(), "ipc: record over the ring payload dropped (schema error)");
             }
-            return;
+            return false;
         }
         let mut st = self.lock();
         if st.s2g.len() >= S2G_OVERFLOW {
             drop(st);
             self.count(ctr::OVERFLOW, 1);
             self.seg.header.resync_req.fetch_add(1, Ordering::AcqRel);
-            return;
+            return false;
         }
         st.s2g.push_back(S2gRec { kind, aux, peer, bytes: payload.to_vec() });
         if st.taps.len() < 4096 {
             st.taps.push_back(("s2g", serde_json::json!({"kind": record_name(kind), "kind_id": kind, "peer": peer, "aux": aux,
                 "v": hsmp_ipc::debug_json::record_to_json(kind, payload)})));
         }
+        true
     }
 
     // ---- the hsmp-ipc thread ----------------------------------------------------------------
@@ -611,6 +616,8 @@ struct Seen {
 struct Worker {
     l: &'static ShmLink,
     tap: Option<Tap>,
+    /// Opt-in exact transmitted pose evidence for native combat investigations.
+    tap_pose_frames: bool,
     bell: Option<Doorbell>,
     bell_try: Option<Instant>,
     seen: Seen,
@@ -636,6 +643,7 @@ impl Worker {
         Worker {
             l,
             tap,
+            tap_pose_frames: std::env::var("HSMP_IPC_TAP_POSES").as_deref()==Ok("1"),
             bell: None,
             bell_try: None,
             seen: Seen::default(),
@@ -754,6 +762,15 @@ impl Worker {
         }
         if kind == K_POSE {
             super::pose::note_tx(&self.hot_buf);
+            if self.tap_pose_frames {
+                if let Some(t)=self.tap.as_mut() {
+                    // Retain the actual validated bytes, including native Box
+                    // scales/parents and all bone rotations. A sampled summary
+                    // cannot reconstruct a particular rejected contact.
+                    t.ev("pose_tx",serde_json::json!({"kind_id":kind,"tick":tick,"world_epoch":meta.world_epoch,
+                        "payload_hex":hex::encode(&self.hot_buf)}));
+                }
+            }
         }
         Some(hsmp_ipc::wire::message(kind, 0, 0, &self.hot_buf))
     }

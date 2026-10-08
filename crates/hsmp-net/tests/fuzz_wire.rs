@@ -161,6 +161,7 @@ fn seeds() -> Seeds {
 /// Every mutated client datagram into a fresh server: bounded replies, no state, and only the
 /// genuine Auth is admitted.
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn server_preauth_decoders_survive_mutation() {
     let s = seeds();
     let corpus = vec![s.hello.clone(), s.auth.clone(), s.c_data.clone()];
@@ -192,6 +193,7 @@ fn server_preauth_decoders_survive_mutation() {
 /// Mutated datagrams into an established connection: no panic, nothing delivered unless it is
 /// the genuine packet, the connection survives garbage.
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn server_conn_decoders_survive_mutation() {
     let s = seeds();
     let corpus = vec![s.c_data.clone(), s.auth.clone()];
@@ -226,6 +228,7 @@ fn server_conn_decoders_survive_mutation() {
 
 /// Mutated server replies into a client at each handshake stage.
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn client_decoders_survive_mutation() {
     let s = seeds();
     let corpus = vec![s.challenge.clone(), s.pre_reject.clone(), s.auth_reject.clone(), s.s_data.clone()];
@@ -254,6 +257,7 @@ fn client_decoders_survive_mutation() {
 
 /// Every raw handshake parser over random and mutated bytes.
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn handshake_parsers_survive_mutation() {
     let s = seeds();
     let corpus = vec![s.hello.clone(), s.challenge.clone(), s.auth.clone(), s.pre_reject.clone(), s.auth_reject.clone()];

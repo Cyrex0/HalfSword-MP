@@ -145,7 +145,8 @@ fn game_put(f: &Fake, slot: &'static str, meta: SlotMeta, kind: u16, payload: &[
 }
 
 fn root_rec(tick: f64) -> hsmp_ipc::schema::pose::Root {
-    hsmp_pose::sample::root(&[tick, 1234.7, 100.0, -200.0, 90.5, 0.0, 90.0, 0.0, 1.0, 2.0, 3.0], 1_700_000_000_000)
+    let mut r=hsmp_pose::sample::root(&[tick, 1234.7, 100.0, -200.0, 90.5, 0.0, 90.0, 0.0, 1.0, 2.0, 3.0], 1_700_000_000_000);
+    r.match_id=1;r.round=1;r.life=1;r
 }
 
 fn pose_rec(tick: f64) -> Vec<u8> {
@@ -233,6 +234,34 @@ fn one_sample_is_one_batch_and_the_pose_bytes_are_untouched() {
 }
 
 #[test]
+fn combat_pose_evidence_retains_only_exact_transmitted_frames() {
+    let mut f=fake();
+    let path=std::env::temp_dir().join(format!("hsmp-combat-pose-{}-{}.jsonl",std::process::id(),rand::random::<u64>()));
+    f.w.tap=Some(Tap::open(&path).unwrap());
+    f.w.tap_pose_frames=true;
+    let p=pose_rec(42.0);
+    game_put(&f,"local_pose",f.gmeta(),K_POSE,&p);
+    f.step();
+    assert_eq!(f.msgs().unwrap(),vec![hsmp_ipc::wire::message(K_POSE,0,0,&p)]);
+    game_put(&f,"local_pose",f.gmeta(),K_POSE,&p);
+    f.step();
+    assert!(f.msgs().is_none(),"duplicate tick has no new transmission/evidence");
+    let short=hsmp_ipc::record::to_payload(&hsmp_ipc::schema::pose::PoseHead{tick:43,n:0,_r:0},&[0xff;10]);
+    game_put(&f,"local_pose",f.gmeta(),K_POSE,&short);
+    f.step();
+    assert!(f.msgs().is_none(),"invalid pose has no transmission/evidence");
+    f.w.tap.as_mut().unwrap().flush();
+    let text=std::fs::read_to_string(&path).unwrap();
+    let rows:Vec<J>=text.lines().map(|l|serde_json::from_str(l).unwrap()).filter(|v:&J|v["ev"]=="pose_tx").collect();
+    assert_eq!(rows.len(),1);
+    assert_eq!(hex::decode(rows[0]["payload_hex"].as_str().unwrap()).unwrap(),p);
+    assert_eq!(rows[0]["tick"],42);
+    assert_eq!(rows[0]["world_epoch"],f.gmeta().world_epoch);
+    f.w.tap=None;
+    std::fs::remove_file(&path).unwrap();
+}
+
+#[test]
 fn peer_dir_root_codec_slots_and_slot_release() {
     let mut f = fake();
     f.l.sync_roster(&[(7, "Zoë".into())]);
@@ -299,6 +328,7 @@ fn peer_play_slot_carries_the_play_line_fields() {
         cut: 4, mask: 0b11 | (1 << hsmp_pose::poseplay::WPN_R), bones: [[0.0; 7]; hsmp_pose::poseplay::SLOTS], root: Some(([1.0, 2.0, 3.0], 90.0)),
         vmask: 0b1, vel: [[0.0; 6]; hsmp_pose::poseplay::SLOTS], v2: true, rate: 1.0,
         extra: Some(std::sync::Arc::new(hsmp_pose::poseplay::Extra {
+            context: Some(hsmp_pose::posecodec::v2::Context{match_id:0xfedcba9876543210,round:9,life:3}),
             weapons: [Some((1, 77, [0.0, 0.0, 1.0], [0.0, 0.0, 90.0])), None],
             control: Some(hsmp_pose::posecodec::v2::Control { flags: 9, grip_r: 2, ik_world: [true, false, false, false], ..Default::default() }),
             k: 1.02, clock_ts: None, step: 8.0,
@@ -311,6 +341,8 @@ fn peer_play_slot_carries_the_play_line_fields() {
     let slot = f.l.slot_for(7).unwrap();
     f.l.write_play(slot, &p);
     let (g, _): (PeerPlay, u64) = f.seg().peers.slots[slot].play.read().unwrap();
+    assert!(g.has_context.get());
+    assert_eq!((g.match_id,g.round,g.life),(0xfedcba9876543210,9,3));
     assert_eq!((g.peer_id, g.play_seq, g.mode, g.cut), (7, 33, 1, 4));
     assert_eq!(g.pt, 1500.25);
     assert_eq!((g.delay, g.jit, g.lead, g.st, g.iv, g.k), (40.0, 2.5, 3.0, 8.0, 16.7, 1.02));
@@ -329,7 +361,7 @@ fn g2s_queues_dedup_requests_and_stale_epochs() {
     let mut f = fake();
     // Typed session records: framed as they are (a command is also kept for its resends).
     use hsmp_ipc::schema::session::{cmd_op, Command, GameStatus, K_COMMAND, K_GAME_STATUS};
-    let gs = hsmp_ipc::record::to_payload(&GameStatus { match_id: 9, round: 2, flags: 1, ..Default::default() }, &[]);
+    let gs = hsmp_ipc::record::to_payload(&GameStatus { match_id: 9, round: 2, life: 1, flags: 1, ..Default::default() }, &[]);
     f.game_rec(K_GAME_STATUS, 1, &gs);
     f.game_rec(K_GAME_STATUS, 1, &gs); // duplicate req_id
     f.seg().g2s().push(GAME_EPOCH ^ 1, K_GAME_STATUS, 0, 2, &gs).unwrap(); // a dead game instance

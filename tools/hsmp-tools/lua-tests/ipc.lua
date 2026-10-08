@@ -307,6 +307,14 @@ elseif opts.kind == "sync_shm" then
         beats = beats + 1
         if shm then
             N.sc_put("link", { status = 1, state = 1, my_peer_id = 1 })
+            if beats == 1 then
+                N.sc_put("session", { epoch=1,seq=1,match_id=71,phase=3,round=1,winner_seat=255,
+                    config={arena="Map_Arena_Pit"},rows={{peer_id=1,seat=1,connected=true,alive=true,spawn_id=256,spawn_pos={10,20,30}}} })
+                N.sc_put("mode", {seq=1,match_id=71,round=1,rows={{peer_id=1,seat=1,life=1,alive=true}}})
+            end
+            -- This sender fixture supplies the exact verified placement;
+            -- spawn_place tests cover obtaining that evidence physically.
+            N.bus_put("spawn_status", {match_id=71,round=1,life=1,spawn_id=256,pawn="Willie_BP_C_3",verified=true})
         else
             T.write(sd .. "/.sidecar.json", string.format('{"peer_id":1,"status":"connected","last_tick":%d,"peers":[]}\n', beats))
         end

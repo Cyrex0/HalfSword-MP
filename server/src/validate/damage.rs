@@ -28,6 +28,13 @@ use crate::loadout::KitSel;
 use crate::proto::{DamageEvent, PeerId};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
+#[path = "native_damage_classes.rs"]
+mod native_damage_classes;
+use native_damage_classes::native_source_class;
+
+/// The damage class of an exact native weapon class name ("ModularWeaponBP_Polearm_Mid_Tier_C"),
+/// from the audited registry; None for anything it does not list.
+pub fn native_class(name: &str) -> Option<WeaponClass> { native_source_class(name) }
 
 /// Index of `Health` in the shared HSMPCombat FIELDS table.
 pub const FIELD_HEALTH: u8 = 0;
@@ -388,6 +395,15 @@ pub fn weapon_class(peer: PeerId) -> WeaponClass {
     attacker_class(&kits().lock().unwrap(), peer)
 }
 
+/// Geometry must use the selected hand, not the hardest-hitting other item.
+/// The single Unknown entry denotes native FREE-mode gear in either hand.
+pub fn weapon_class_for_hand(peer: PeerId, offhand: bool) -> WeaponClass {
+    let k=kits().lock().unwrap();
+    let Some(f)=k.get(&peer) else { return NO_KIT_CLASS };
+    if f.weapons.as_slice()==[WeaponClass::Unknown] { return WeaponClass::Unknown; }
+    f.weapons.get(usize::from(offhand)).copied().unwrap_or(WeaponClass::Unarmed)
+}
+
 /// The more damaging of the attacker's held weapons (see `weapon_class`).
 fn attacker_class(k: &HashMap<PeerId, KitFacts>, attacker: PeerId) -> WeaponClass {
     let Some(f) = k.get(&attacker) else { return NO_KIT_CLASS };
@@ -396,6 +412,25 @@ fn attacker_class(k: &HashMap<PeerId, KitFacts>, attacker: PeerId) -> WeaponClas
     f.weapons.iter().copied().filter(|c| *c != WeaponClass::Unarmed)
         .max_by(|a, b| (rig_max(*a) * hit_vel_factor(*a)).total_cmp(&(rig_max(*b) * hit_vel_factor(*b))))
         .unwrap_or(WeaponClass::Unarmed)
+}
+
+/// Only after lagcomp accepted the original hand/component/class/life history.
+/// Native modern claims must never borrow a different weapon's kit envelope.
+pub fn accepted_source_class(attacker:PeerId,hit:&DamageEvent,unarmed:bool,geometry_accepted:bool)->Result<WeaponClass,&'static str> {
+    if hit.flags & FLAG_COMPLEX == 0 || hit.match_id == 0 {
+        return Ok(if unarmed {WeaponClass::Unarmed}else{weapon_class(attacker)});
+    }
+    if !geometry_accepted || hit.round==0 || hit.attacker_life==0 || hit.victim_life==0 {
+        return Err("source_class: modern damage lacks accepted original context");
+    }
+    if unarmed {return Ok(WeaponClass::Unarmed);}
+    let hands=hit.dism_blunt&(SOURCE_LEFT|SOURCE_RIGHT);
+    if hit.flags&FLAG_WEAPON==0 || (hands!=SOURCE_LEFT && hands!=SOURCE_RIGHT)
+        || hit.dism_blunt&SOURCE_COMPONENT_MASK==0 || hit.dism_blunt&(SOURCE_FIST|SOURCE_FEET)!=0 {
+        return Err("source_class: modern weapon damage lacks exact source identity");
+    }
+    native_source_class(hit.source_class.as_str().unwrap_or(""))
+        .ok_or("source_class: registered native damage envelope absent")
 }
 
 fn victim_armour(k: &HashMap<PeerId, KitFacts>, victim: PeerId, bone: &str) -> Armour {
@@ -432,8 +467,12 @@ pub fn cap_for(attacker: PeerId, hit: &DamageEvent, speed: Option<f32>) -> f32 {
 /// `cap_for`, with the striking part known to be the attacker's body
 /// (`unarmed`: fist, elbow, knee — lag comp found no blade at the contact).
 pub fn cap_for_as(attacker: PeerId, hit: &DamageEvent, speed: Option<f32>, unarmed: bool) -> f32 {
+    let class=if unarmed {WeaponClass::Unarmed}else{weapon_class(attacker)};
+    cap_for_class(hit,speed,class)
+}
+
+fn cap_for_class(hit:&DamageEvent,speed:Option<f32>,class:WeaponClass)->f32 {
     let k = kits().lock().unwrap();
-    let class = if unarmed { WeaponClass::Unarmed } else { attacker_class(&k, attacker) };
     let armour = victim_armour(&k, hit.target_peer_id, hit.bone_str());
     let stab = hit.flags & FLAG_STAB != 0 || hit.draw_cut > 0.0 || hit.flags & FLAG_INSIDE != 0;
     let speed = speed.or(Some(MAX_STRIKE_SPEED));
@@ -476,7 +515,12 @@ pub fn clamp_hit(attacker: PeerId, hit: &mut DamageEvent, speed: Option<f32>) ->
 
 /// `clamp_hit` for a contact made by the attacker's body, not its weapon.
 pub fn clamp_hit_as(attacker: PeerId, hit: &mut DamageEvent, speed: Option<f32>, unarmed: bool) -> Clamp {
-    let cap = cap_for_as(attacker, hit, speed, unarmed);
+    let class=if unarmed {WeaponClass::Unarmed}else{weapon_class(attacker)};
+    clamp_hit_with_class(attacker,hit,speed,class)
+}
+
+pub fn clamp_hit_with_class(attacker:PeerId,hit:&mut DamageEvent,speed:Option<f32>,class:WeaponClass)->Clamp {
+    let cap = cap_for_class(hit, speed, class);
     let c = apply_cap(hit, cap);
     if c.factor < 1.0 {
         use super::cheat::{self, Kind};
@@ -507,10 +551,26 @@ pub const FLAG_COMPLEX: u8 = 1 << 5;
 pub const FLAG_LOCAL: u8 = 1 << 6;
 /// The striking component was a weapon, not a Willie body part.
 pub const FLAG_WEAPON: u8 = 1 << 7;
+/// Native source identity in the armour-stage packed `dism_blunt` value.
+/// Fists retain FLAG_WEAPON for replay but use replicated body geometry.
+pub const SOURCE_FIST: i32 = 1 << 18;
+pub const SOURCE_LEFT: i32 = 1 << 19;
+pub const SOURCE_RIGHT: i32 = 1 << 20;
+pub const SOURCE_FEET: i32 = 1 << 25;
+/// Original native Deal Complex Damage DamageParent boolean.
+pub const DAMAGE_PARENT: i32 = 1 << 26;
+/// Optional native cutting HitBox, distinct from the striking component.
+pub const HIT_BOX_SHIFT: u32 = 27;
+pub const HIT_BOX_MASK: i32 = 0xf << HIT_BOX_SHIFT;
+pub const SOURCE_COMPONENT_SHIFT: u32 = 21;
+pub const SOURCE_COMPONENT_MASK: i32 = 0xf << SOURCE_COMPONENT_SHIFT;
+pub const SOURCE_MASK: i32 = SOURCE_FIST | SOURCE_LEFT | SOURCE_RIGHT | SOURCE_COMPONENT_MASK | SOURCE_FEET;
 /// Hit Impulse ceiling over the attacker's peak striking speed (live user
 /// swings: the DCD Hit Impulse — the normal impulse, which rubber
 /// banding does not scale — reached ~11× it on a blade pressing into a body).
-/// It only feeds Deal Complex Damage's contact gate and the knock-back.
+/// This remains an empirical envelope, not an engine-proven mass/force bound.
+/// The native weapon can also select this vector as DCD Hit Velocity; that
+/// branch must retain the approved impulse magnitude in both native slots.
 pub const IMP_CEIL_K: f32 = 12.0;
 
 fn len3(v: [f32; 3]) -> f32 { (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt() }
@@ -542,6 +602,23 @@ pub fn replay_loss(hit: &DamageEvent, armour: Armour, hm: f32) -> f32 {
 
 /// Bound armour-stage inputs by the physics of this contact.
 fn clamp_complex(class: WeaponClass, hit: &mut DamageEvent, striking: Option<f32>, relative: Option<f32>, rel_exact: bool, raw_max: f32) -> ImpactClamp {
+    // Collision Hit 13572..14252 selects the *normal impulse vector* as
+    // Hit Velocity when it dominates COM velocity. That branch has kg*cm/s
+    // in both slots: a cm/s-only ceiling must not discard an impulse already
+    // admitted by our independent impulse envelope. Restrict recognition to
+    // the authenticated modern held-weapon route; body/legacy semantics differ.
+    let hands = hit.dism_blunt & (SOURCE_LEFT | SOURCE_RIGHT);
+    let modern_weapon = hit.flags & FLAG_WEAPON != 0 && class != WeaponClass::Unarmed
+        && hit.dism_blunt & (SOURCE_FIST | SOURCE_FEET) == 0
+        && (hands == SOURCE_LEFT || hands == SOURCE_RIGHT)
+        && hit.dism_blunt & SOURCE_COMPONENT_MASK != 0
+        && !hit.source_class.as_str().unwrap_or("").is_empty()
+        && hit.match_id != 0 && hit.round != 0 && hit.attacker_life != 0 && hit.victim_life != 0;
+    // Identical native operands undergo identical bone rotations and f32 wire
+    // conversion. Permit only floating-point roundoff, never an angle cone.
+    let impulse_selected = modern_weapon && len3(hit.impulse) > 0.0
+        && hit.velocity.iter().zip(hit.impulse).all(|(v,i)|
+            v.is_finite() && i.is_finite() && (*v-i).abs() <= 4.0*f32::EPSILON*v.abs().max(i.abs()).max(1.0));
     let cp = hit.cutting_power;
     let m = if cp >= 50.0 { 1.0 } else { 1.0 + 0.666 * (50.0 - cp) / 50.0 };
     let rig_cap = rig_max(class) * QUALITY_MAX * (1.0 + 2.0 * (m - 1.0));
@@ -553,7 +630,7 @@ fn clamp_complex(class: WeaponClass, hit: &mut DamageEvent, striking: Option<f32
     let kick = ((hit.dism_blunt >> 8) & 0xFF).clamp(0, (KICK_MAX * 10.0) as i32);
     let lower = (hit.dism_blunt >> 16) & 1;
     // Extra High Velocity is for fired ammunition only (no projectiles here).
-    hit.dism_blunt = low | (kick << 8) | (lower << 16);
+    hit.dism_blunt = low | (kick << 8) | (lower << 16) | (hit.dism_blunt & (SOURCE_MASK | DAMAGE_PARENT | HIT_BOX_MASK));
     // The inputs are the attacker's OWN native Deal Complex Damage call — the
     // game's solo computation for that contact — and pass unchanged unless
     // physically impossible. A two-way rescale toward lag comp's relative
@@ -584,9 +661,15 @@ fn clamp_complex(class: WeaponClass, hit: &mut DamageEvent, striking: Option<f32
         hit.impulse = hit.impulse.map(|x| x * k);
         factor = k;
     }
-    // 2) Hard ceilings: Hit Velocity = max(weapon COM ≤ the point's peak,
-    //    normal impulse ≤ hvf · relative speed); Hit Impulse ≤ IMP_CEIL_K · base.
-    let (vmax, imax) = (s.max(hit_vel_factor(class) * rel), IMP_CEIL_K * base);
+    // 2) Hard ceilings. COM-dominant Hit Velocity uses the speed envelope.
+    // Exact impulse-selected modern weapon inputs share the independently
+    // approved impulse envelope; never apply a cm/s ceiling to kg*cm/s.
+    // Hit Impulse's existing empirical ceiling is unchanged.
+    let (speed_vmax, imax) = (s.max(hit_vel_factor(class) * rel), IMP_CEIL_K * base);
+    let approved_impulse = len3(hit.impulse).min(imax);
+    let vmax = if impulse_selected && approved_impulse.is_finite() {
+        speed_vmax.max(approved_impulse)
+    } else { speed_vmax };
     for (v, cap) in [(&mut hit.h.velocity, vmax), (&mut hit.h.impulse, imax)] {
         let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
         if l.is_finite() && l > cap && l > 0.0 {
@@ -598,6 +681,7 @@ fn clamp_complex(class: WeaponClass, hit: &mut DamageEvent, striking: Option<f32
         }
     }
     // raw_damage now holds Raw for the Get Damage fallback (unarmoured).
+    let raw_max = if impulse_selected { raw_max.max(rig_cap*vmax) } else { raw_max };
     hit.raw_damage = (hit.damage_out * len3(hit.velocity)).min(raw_max);
     ImpactClamp { raw_max, factor }
 }
@@ -638,6 +722,10 @@ pub fn clamp_impact(attacker: PeerId, hit: &mut DamageEvent, striking: Option<f3
 /// is the v1 blade estimate — no rescale toward it, hard caps only).
 pub fn clamp_impact_ex(attacker: PeerId, hit: &mut DamageEvent, striking: Option<f32>, relative: Option<f32>, rel_exact: bool, unarmed: bool) -> ImpactClamp {
     let class = if unarmed { WeaponClass::Unarmed } else { attacker_class(&kits().lock().unwrap(), attacker) };
+    clamp_impact_with_class(hit,striking,relative,rel_exact,class)
+}
+
+pub fn clamp_impact_with_class(hit:&mut DamageEvent,striking:Option<f32>,relative:Option<f32>,rel_exact:bool,class:WeaponClass)->ImpactClamp {
     hit.cutting_power = if hit.cutting_power.is_finite() { hit.cutting_power.clamp(0.0, 200.0) } else { 0.0 };
     hit.draw_cut = if hit.draw_cut.is_finite() { hit.draw_cut.clamp(0.0, 400.0) } else { 0.0 };
     let rm = raw_max(class, hit.cutting_power, striking, relative);
@@ -658,7 +746,7 @@ pub fn clamp_impact_ex(attacker: PeerId, hit: &mut DamageEvent, striking: Option
         for x in v.iter_mut() { *x *= k; }
     }
     if factor < 0.99 {
-        tracing::debug!(attacker, hit_id = hit.hit_id, raw_max = rm, factor, ?striking, ?relative,
+        tracing::debug!(hit_id = hit.hit_id, raw_max = rm, factor, ?striking, ?relative,
             "combat: impact inputs clamped (stand-in measurement above the physical bound)");
     }
     ImpactClamp { raw_max: rm, factor }
@@ -667,6 +755,97 @@ pub fn clamp_impact_ex(attacker: PeerId, hit: &mut DamageEvent, striking: Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exact_native_envelopes_cover_registry_and_do_not_borrow_kit_class() {
+        assert_eq!(native_damage_classes::NATIVE_DAMAGE_CLASSES.len(),141);
+        for (name,c) in native_damage_classes::NATIVE_DAMAGE_CLASSES {
+            assert_eq!(native_source_class(name),Some(*c));
+            assert_eq!(native_damage_classes::NATIVE_DAMAGE_CLASSES.iter().filter(|(n,_)|n==name).count(),1);
+        }
+        // Verify the actual two production registries, not just count141.
+        for line in include_str!("../../../mods/HSMPLoadout/Scripts/hsmp_catalog.lua").lines().filter(|l|l.starts_with("W(\"")) {
+            let native_path=line.split('"').nth(5).expect("canonical weapon native path");
+            let native_name=format!("{}_C",native_path.rsplit('/').next().unwrap());
+            assert!(native_source_class(&native_name).is_some(),"missing canonical envelope {native_name}");
+        }
+        let extras:serde_json::Value=serde_json::from_str(include_str!("../native_melee_classes.json")).unwrap();
+        for row in extras.as_array().unwrap() {
+            let name=row["class"].as_str().unwrap();
+            assert!(native_source_class(name).is_some(),"missing extra envelope {name}");
+        }
+        let peer=9713;
+        set_kit(peer,&KitSel::new("custom","w_arming1","s_buckler",&[],[0;4]));
+        let mut h=impulse_weapon([1000.0,0.0,0.0]);
+        h.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_ArmingSword_C");
+        assert_eq!(accepted_source_class(peer,&h,false,true),Ok(WeaponClass::Sword));
+        h.damage_out=1.155;h.cutting_power=60.0;
+        clamp_impact_with_class(&mut h,Some(1000.0),Some(1000.0),true,WeaponClass::Sword);
+        assert!((h.damage_out-1.155).abs()<0.0001,"shield must not reduce native sword rigidity");
+        h.source_class=hsmp_ipc::layout::Str::new("ModularWeaponBP_BaronBeak_C");
+        assert_eq!(accepted_source_class(peer,&h,false,true),Ok(WeaponClass::Polearm),"actual hand hot swap supersedes requested kit");
+        h.source_class=hsmp_ipc::layout::Str::new("Weapon_Fists_C");h.dism_blunt|=SOURCE_FIST;
+        assert_eq!(accepted_source_class(peer,&h,true,true),Ok(WeaponClass::Unarmed));
+        assert!(accepted_source_class(peer,&h,false,true).is_err());
+        assert!(accepted_source_class(peer,&h,true,false).is_err());
+        h.dism_blunt=SOURCE_RIGHT|(1<<SOURCE_COMPONENT_SHIFT);
+        h.source_class=hsmp_ipc::layout::Str::new("CustomSword_C");
+        assert!(accepted_source_class(peer,&h,false,true).is_err());
+        assert!(native_source_class("BP_Weapon_Trap_C").is_none());
+        h.match_id=0;
+        assert_eq!(accepted_source_class(peer,&h,false,false),Ok(weapon_class(peer)),"legacy fallback unchanged");
+    }
+
+    fn impulse_weapon(v: [f32;3]) -> DamageEvent {
+        DamageEvent::new(crate::proto::Damage {
+            flags: FLAG_COMPLEX | FLAG_WEAPON | FLAG_LOCAL,
+            dism_blunt: SOURCE_RIGHT | (1 << SOURCE_COMPONENT_SHIFT),
+            source_class: hsmp_ipc::layout::Str::new("ModularWeaponBP_Polearm_Mid_Tier_C"),
+            match_id: 3447624676712270, round: 2, attacker_life: 1, victim_life: 1,
+            velocity: v, impulse: v, cutting_power: 59.6718,
+            damage_out: 0.8310453, raw_damage: 44.32985,
+            ..Default::default()
+        }, &[])
+    }
+
+    #[test]
+    fn native_impulse_selected_velocity_uses_approved_impulse_units() {
+        // Observed cid284: |V|=|I|813.7258, old forwarded V19.6951/I163.6931.
+        // Reconstruct peak=forwarded I/12 and rel=old forwarded V/2.5;
+        // these reproduce the recorded old hard ceilings, not an oracle for
+        // the true physical contact. Original vector components are unchanged.
+        let mut h=impulse_weapon([-329.76373,674.00604,314.8355]);
+        clamp_complex(WeaponClass::Polearm,&mut h,Some(163.69311/12.0),Some(19.695127/2.5),true,31.9);
+        let i=len3(h.impulse);
+        assert!((len3(h.velocity)-i).abs()<0.001);
+        assert!((i-163.69311).abs()<0.001 && i<813.7258);
+        assert!((h.raw_damage-h.damage_out*len3(h.velocity)).abs()<0.001);
+        assert_eq!(h.cutting_power,59.6718);
+    }
+
+    #[test]
+    fn native_impulse_semantics_do_not_expand_impulse_or_other_routes() {
+        let mut outlier=impulse_weapon([100000.0,0.0,0.0]);outlier.raw_damage=0.0;
+        clamp_complex(WeaponClass::Polearm,&mut outlier,Some(20.0),Some(8.0),true,31.9);
+        assert!((len3(outlier.impulse)-240.0).abs()<0.001);
+        assert!((len3(outlier.velocity)-240.0).abs()<0.001);
+        for kind in 0..6 {
+            let mut h=impulse_weapon([813.7258,0.0,0.0]);h.raw_damage=0.0;
+            match kind {
+                0=>h.impulse=[0.0,813.7258,0.0], // same length, wrong direction
+                1=>h.velocity=[900.0,0.0,0.0], // COM dominates, not selected impulse
+                2=>h.dism_blunt|=SOURCE_FIST,
+                3=>h.dism_blunt=0,
+                4=>h.victim_life=0,
+                _=>h.source_class=hsmp_ipc::layout::Str::new(""),
+            }
+            clamp_complex(WeaponClass::Polearm,&mut h,Some(20.0),Some(8.0),true,31.9);
+            assert!(len3(h.velocity)<=20.001,"route {kind}");
+        }
+        let mut body=impulse_weapon([813.7258,0.0,0.0]);body.raw_damage=0.0;
+        clamp_complex(WeaponClass::Unarmed,&mut body,Some(20.0),Some(8.0),true,31.9);
+        assert!(len3(body.velocity)<=24.001);
+    }
 
     #[test]
     fn classes_from_catalogue_ids() {
@@ -753,6 +932,19 @@ mod tests {
         let g = raw_through(0.8, 1500.0, Armour::Padded);
         assert!(g > 1000.0 && g <= 1200.0, "{}", g);
         assert_eq!(raw_through(0.8, 1500.0, Armour::None), 1200.0);
+    }
+
+    #[test]
+    fn native_source_identity_survives_input_clamp() {
+        for source in [SOURCE_FIST, SOURCE_FEET] {
+        let bits = source | SOURCE_LEFT | (15 << SOURCE_COMPONENT_SHIFT) | DAMAGE_PARENT | (15 << HIT_BOX_SHIFT);
+        let mut h = DamageEvent::new(crate::proto::Damage {
+            flags: FLAG_COMPLEX | FLAG_WEAPON, dism_blunt: bits | (255 << 8) | 255 | (1 << 17),
+            ..Default::default()
+        }, &[]);
+        clamp_complex(WeaponClass::Unarmed, &mut h, Some(100.0), Some(100.0), true, 1000.0);
+        assert_eq!(h.dism_blunt, bits | (100 << 8) | 6);
+        }
     }
 
     #[test]

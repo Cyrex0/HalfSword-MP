@@ -44,3 +44,25 @@ void hsmp_native_set_reflect(const HsmpReflect* vt);
 // ue4ss_reflect.cpp: resolve the UE4SS exports and register; nullptr = registered, else the
 // first missing export's name.
 const char* hsmp_reflect_register();
+// Optional native observers borrow the registered provider; no reflection ABI change.
+const HsmpReflect* hsmp_reflect_table();
+
+// Opt-in observational journal. Every pointer is borrowed only inside a live
+// script-hook callback; the sink receives scalar observations synchronously.
+struct HsmpCallerIdentity
+{
+    uint64_t address{}, weak{}, class_address{}, class_weak{}, name{}, class_name{};
+    uint32_t available{}, persistent{}, class_available{}, actor_kind{}, actor_kind_known{};
+};
+struct HsmpCallerFrame { HsmpCallerIdentity node{}, object{}; uint32_t role{}; };
+struct HsmpCallerEvent
+{
+    uint64_t seq{};
+    uint32_t hook{}, phase{}, role{}, count{}, end{}, observed{};
+    HsmpCallerIdentity context{};
+    HsmpCallerFrame frames[16]{};
+};
+using HsmpCallerSink = void (*)(const HsmpCallerEvent&);
+// Legacy registration is a submitted callback, not returned-ID proof. Only
+// actual observed callbacks qualify journal coverage. Never creates a factory.
+const char* hsmp_reflect_caller_register(HsmpCallerSink sink);

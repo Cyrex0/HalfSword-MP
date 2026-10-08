@@ -152,7 +152,13 @@ pub struct Net {
 
 impl Net {
     pub fn new(static_secret: [u8; 32], content_hash: Option<[u8; 32]>) -> Self {
+        Self::with_caps(static_secret, content_hash, 0)
+    }
+
+    /// `new`, offering `extra_caps` too (`caps::SERVER_MODS` when the server has mods).
+    pub fn with_caps(static_secret: [u8; 32], content_hash: Option<[u8; 32]>, extra_caps: u64) -> Self {
         let mut cfg = ServerConfig::new(static_secret);
+        cfg.caps |= extra_caps;
         cfg.content_hash = content_hash;
         // Interaction channel (docs/development/subsystems/interact.md), offered on top of the base set.
         cfg.caps |= hn::caps::INTERACT;
@@ -161,7 +167,9 @@ impl Net {
         // Combat hit effects (C2STouch / S2CHitFx).
         cfg.caps |= hn::caps::HIT_FX;
         // Passport bodies for stand-ins (body records).
-        cfg.caps |= hn::caps::BODY;
+        cfg.caps |= hn::caps::BODY | hn::caps::BODY2;
+        // Game modes: the `mode` / `kill_feed` records, and the King of the hill `zone`.
+        cfg.caps |= hn::caps::MODES | hn::caps::ZONE;
         let conn_cfg = ConnConfig { idle_timeout_ms: SERVER_IDLE_MS, ..ConnConfig::default() };
         let ep = ServerEndpoint::new(cfg, conn_cfg, 0, None);
         let static_pub = ep.static_public();

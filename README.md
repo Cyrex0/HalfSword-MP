@@ -274,7 +274,6 @@ Details: [architecture](docs/development/architecture.md), [wire protocol](docs/
 │   ├── hsmp-ipc/               shared-memory IPC: segment schema, primitives, code generators
 │   ├── hsmp-native/            HSMPNative, the in-game native module (Rust + C++)
 │   ├── hsmp-pose/              pose codec, sample encoder and the receiver jitter buffer
-│   ├── hsmp-modes/             game-mode framework (not wired into the server yet)
 │   └── hsmp-combat-sim/        deterministic combat simulator over the real server code
 ├── mods/                       UE4SS Lua mods that ship (<Mod>/Scripts/main.lua)
 │   ├── shared/                 libraries copied into every mod at deploy

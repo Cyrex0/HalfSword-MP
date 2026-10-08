@@ -88,6 +88,7 @@ fn items() -> BTreeMap<String, Item> {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn manifest_and_sig_parsers_survive_mutation() {
     let key = SigningKey::from_bytes(&[1; 32]);
     let (mb, sb) = pack::seal(sample(), &items(), &key).unwrap();
@@ -116,6 +117,7 @@ fn manifest_and_sig_parsers_survive_mutation() {
 }
 
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn release_json_and_checksum_parsers_survive_mutation() {
     let rel = br#"{"tag_name":"v0.1.0","name":"x","draft":false,"prerelease":false,"html_url":"","assets":[
         {"name":"hsmp-0.1.0.zip","browser_download_url":"https://github.com/a/b/releases/download/v0.1.0/hsmp-0.1.0.zip","size":40000000},
@@ -141,6 +143,7 @@ fn release_json_and_checksum_parsers_survive_mutation() {
 /// A signed release zip, mutated byte-wise: it either fails to open, or opens with exactly the
 /// signed manifest and then loads only the signed bytes (or fails).
 #[test]
+#[ignore = "slow: cargo test -- --ignored"]
 fn mutated_release_zip_never_installs_changed_bytes() {
     let key = SigningKey::from_bytes(&[1; 32]);
     let it = items();

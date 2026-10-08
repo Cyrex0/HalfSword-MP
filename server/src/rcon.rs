@@ -24,6 +24,12 @@
 //!   > ABORT               → "OK aborted" | "OK already in the lobby"
 //!   > BESTOF <n>          → "OK config updated" | "ERR <reason>"   (lobby only, 1..=31)
 //!   > KIT <mode> [budget] → kit rules (0 free, 1 classes, 2 custom; lobby only)
+//!   > MODE <mode>         → game mode: duel ffa teams koth roulette brawl deathmatch (lobby only)
+//!   > TEAMS <off|auto|fixed> [2..4] → team rule and count (lobby only)
+//!   > TEAM <seat> <0..4>  → put the player at <seat> on a team (FIXED teams; 0 = no pick)
+//!   > ROUNDTIME <s>       → round clock (0 = the mode's default)
+//!   > OPTION <koth_target|ff|respawn> <value> → King of the hill target s, friendly fire on/off,
+//!                           deathmatch respawn delay s (lobby only)
 //!   > STATUS              → "OK {json}": phase, round, match_id, arena, roster by seat
 //!   > REPORT              → the newest 10 s stats report: the `stats:` line, one `stats peer` line per player, "END"
 //!   > DEBUG KILL <seat>   → "OK killed seat N ..." | "ERR <reason>"   (`--debug-verbs` only)
@@ -391,6 +397,32 @@ async fn handle_client(
                 info!(%from, cmd = %cmd_line_for_log(verb, arg), reply = %line.trim(), "rcon");
                 wr.write_all(line.as_bytes()).await?;
             }
+            "MODE" | "TEAMS" | "TEAM" | "ROUNDTIME" | "OPTION" => {
+                let arg = rest.trim();
+                let cmd = match verb {
+                    // TEAM names a seat: the peer sitting there.
+                    "TEAM" => {
+                        let mut it = arg.split_whitespace();
+                        match (it.next().and_then(|s| s.parse::<u8>().ok()), it.next().and_then(|t| t.parse::<u8>().ok())) {
+                            (Some(seat), Some(team)) => match server::seat_peer(&state, seat).await {
+                                Some(pid) => Ok(rec::Command { peer_id: pid, role: team, ..rec::Command::new(0, rec::cmd_op::SET_TEAM) }),
+                                None => Err(format!("no connected player at seat {}", seat)),
+                            },
+                            _ => Err("usage: TEAM <seat> <0..4>".to_string()),
+                        }
+                    }
+                    _ => mode_verb(verb, arg),
+                };
+                let line = match cmd {
+                    Ok(cmd) => {
+                        let r = server::run_command(&socket, &state, Actor::Rcon, &cmd).await;
+                        format!("{} {}\n", if r.ok.get() { "OK" } else { "ERR" }, r.reason_text.lossy())
+                    }
+                    Err(usage) => format!("ERR {}\n", usage),
+                };
+                info!(%from, cmd = %cmd_line_for_log(verb, arg), reply = %line.trim(), "rcon");
+                wr.write_all(line.as_bytes()).await?;
+            }
             "ADMIN" => {
                 // Admins are player keys, granted here or in --admins-file.
                 let line = match server::rcon_admin(&socket, &state, rest).await {
@@ -462,7 +494,7 @@ END
                 return Ok(Session::Ended);
             }
             "HELP" | "" => {
-                wr.write_all(b"commands: LIST BANS KICK <id> BAN <id> UNBAN <ip> SAY <text> MAP <arena> START [FORCE] ABORT BESTOF <n> KIT <mode> [budget] STATUS ADMIN ADD|REMOVE <id|key> ADMIN LIST DEBUG KILL <seat> SHUTDOWN HELP\n").await?;
+                wr.write_all(b"commands: LIST BANS KICK <id> BAN <id> UNBAN <ip> SAY <text> MAP <arena> START [FORCE] ABORT BESTOF <n> KIT <mode> [budget] MODE <mode> TEAMS <off|auto|fixed> [n] TEAM <seat> <team> ROUNDTIME <s> OPTION <name> <value> STATUS ADMIN ADD|REMOVE <id|key> ADMIN LIST DEBUG KILL <seat> SHUTDOWN HELP\n").await?;
             }
             _ => {
                 wr.write_all(format!("ERR unknown verb: {}\n", verb).as_bytes()).await?;
@@ -475,6 +507,54 @@ END
 const MAX_BANS_LINES: usize = 1000;
 
 /// LIST reply: "<id> <nick> <addr>" per peer, then "END".
+/// MODE / TEAMS / ROUNDTIME / OPTION -> the typed command (SET_CONFIG / SET_OPTION).
+fn mode_verb(verb: &str, arg: &str) -> Result<rec::Command, String> {
+    let mut it = arg.split_whitespace();
+    let a = it.next().unwrap_or("").to_ascii_lowercase();
+    let b = it.next();
+    let config = |mask: u32, f: &dyn Fn(&mut rec::ConfigPatch)| {
+        let mut c = rec::Command::new(0, rec::cmd_op::SET_CONFIG);
+        c.patch.mask = mask;
+        f(&mut c.patch);
+        c
+    };
+    match verb {
+        "MODE" => match server::parse_mode(&a) {
+            Some(m) => Ok(config(rec::cfg::MODE, &|p| p.mode = m)),
+            None => Err("usage: MODE <duel|ffa|teams|koth|roulette|brawl|deathmatch>".into()),
+        },
+        "TEAMS" => {
+            let usage = "usage: TEAMS <off|auto|fixed> [2..4]";
+            let rule = match a.as_str() { "off" | "none" => 0u8, "auto" => 1, "fixed" => 2, _ => return Err(usage.into()) };
+            match b.map(|n| n.parse::<u8>()) {
+                None => Ok(config(rec::cfg::TEAM_RULE, &|p| p.team_rule = rule)),
+                Some(Ok(n)) => Ok(config(rec::cfg::TEAM_RULE | rec::cfg::TEAMS, &|p| { p.team_rule = rule; p.teams = n; })),
+                Some(Err(_)) => Err(usage.into()),
+            }
+        }
+        "ROUNDTIME" => match a.parse::<u16>() {
+            Ok(s) => Ok(config(rec::cfg::ROUND_TIME, &|p| p.round_time_limit_s = s)),
+            Err(_) => Err("usage: ROUNDTIME <seconds> (0 = the mode's default)".into()),
+        },
+        _ => {
+            let usage = "usage: OPTION <koth_target|ff|respawn> <value>";
+            let opt = match a.as_str() {
+                "koth_target" | "target" => rec::mode_opt::KOTH_TARGET,
+                "ff" | "friendly_fire" => rec::mode_opt::FRIENDLY_FIRE,
+                "respawn" | "respawn_s" => rec::mode_opt::RESPAWN_S,
+                _ => return Err(usage.into()),
+            };
+            let v = match b.map(|v| v.to_ascii_lowercase()) {
+                Some(v) if v == "on" || v == "true" => 1,
+                Some(v) if v == "off" || v == "false" => 0,
+                Some(v) => v.parse::<u32>().map_err(|_| usage.to_string())?,
+                None => return Err(usage.into()),
+            };
+            Ok(rec::Command { choice: opt, ballot: v, ..rec::Command::new(0, rec::cmd_op::SET_OPTION) })
+        }
+    }
+}
+
 fn list_reply<'a>(peers: impl Iterator<Item = (u32, &'a str, std::net::SocketAddr)>) -> String {
     let mut out = String::new();
     for (id, nick, addr) in peers {
@@ -549,6 +629,37 @@ mod tests {
             }
         }
         String::from_utf8_lossy(&out).into_owned()
+    }
+
+    #[test]
+    fn mode_verbs_become_typed_commands() {
+        let c = mode_verb("MODE", "KotH").unwrap();
+        assert_eq!((c.op, c.patch.mask, c.patch.mode), (rec::cmd_op::SET_CONFIG, rec::cfg::MODE, rec::game_mode::KING_OF_HILL));
+        assert!(mode_verb("MODE", "chess").is_err());
+        let c = mode_verb("TEAMS", "fixed 3").unwrap();
+        assert_eq!((c.patch.mask, c.patch.team_rule, c.patch.teams), (rec::cfg::TEAM_RULE | rec::cfg::TEAMS, 2, 3));
+        assert_eq!(mode_verb("TEAMS", "off").unwrap().patch.mask, rec::cfg::TEAM_RULE);
+        assert_eq!(mode_verb("ROUNDTIME", "300").unwrap().patch.round_time_limit_s, 300);
+        let c = mode_verb("OPTION", "ff on").unwrap();
+        assert_eq!((c.op, c.choice, c.ballot), (rec::cmd_op::SET_OPTION, rec::mode_opt::FRIENDLY_FIRE, 1));
+        assert_eq!(mode_verb("OPTION", "koth_target 90").unwrap().ballot, 90);
+        assert!(mode_verb("OPTION", "respawn").is_err());
+    }
+
+    #[tokio::test]
+    async fn mode_verbs_over_rcon() {
+        let state = Arc::new(ServerState::new(8));
+        let addr = start_with(Limits::default(), state.clone()).await;
+        let mut s = TcpStream::connect(addr).await.unwrap();
+        s.write_all(b"AUTH pw\nMODE deathmatch\nOPTION respawn 5\nTEAMS fixed 2\nTEAM 9 1\nSTATUS\nSHUTDOWN\n").await.unwrap();
+        let out = read_all(&mut s).await;
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines[1], "OK config updated", "{out}");
+        assert_eq!(lines[2], "OK respawn delay 5 s", "{out}");
+        assert_eq!(lines[3], "OK config updated", "{out}");
+        assert_eq!(lines[4], "ERR no connected player at seat 9", "{out}");
+        assert!(lines[5].contains("\"mode\":\"deathmatch\"") && lines[5].contains("\"respawn_s\":5")
+            && lines[5].contains("\"team_rule\":2"), "{out}");
     }
 
     #[tokio::test]

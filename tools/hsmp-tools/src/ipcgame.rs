@@ -116,7 +116,11 @@ fn wall_ms() -> u64 {
 /// `put_root`'s record from the `me_<PID>.json` shape `{"tick","ts","pos":[3],"rot":[pitch,yaw,roll],"vel":[3]}`.
 pub fn local_root_from(v: &J) -> Root {
     let (p, r, w) = (arr::<3>(&v["pos"]), arr::<3>(&v["rot"]), arr::<3>(&v["vel"]));
-    hsmp_pose::sample::root(&[f(&v["tick"]), f(&v["ts"]), p[0], p[1], p[2], r[0], r[1], r[2], w[0], w[1], w[2]], wall_ms())
+    let mut root=hsmp_pose::sample::root(&[f(&v["tick"]), f(&v["ts"]), p[0], p[1], p[2], r[0], r[1], r[2], w[0], w[1], w[2]], wall_ms());
+    root.match_id=v["match_id"].as_u64().unwrap_or(0);
+    root.round=v["round"].as_u64().and_then(|v|u32::try_from(v).ok()).unwrap_or(0);
+    root.life=v["life"].as_u64().and_then(|v|u16::try_from(v).ok()).unwrap_or(0);
+    root
 }
 
 /// `put_weapon`'s record from the `.weapon.json` shape (`held` defaults to 1).
@@ -129,8 +133,46 @@ pub fn local_weapon_from(v: &J) -> Weapon {
 /// `put_pose`'s record (the codec v2 frame, encoded once) from the `.skeletal.json` v2 shape:
 /// `{"tick","ts","dt","b":[23*13],"w":[[21]...],"c":{"f","gr","gl","s":[16],"aim":[3],"cr":[2],"ik":[12]}}`,
 /// or with `"bones":{"pelvis":[7 or 13], ...}` (POSE_BONES names; missing bones are zero, a
-/// missing rotation is the identity). `None` if a number is not finite.
+/// missing rotation is the identity). Optional `context` holds the original integer
+/// `match_id`, `round`, `life`; `strikers` holds native BodyStriker fields. Explicit invalid
+/// or partial identity/geometry is refused, never filled from the current session.
 pub fn local_pose_from(v: &J) -> Option<Box<PoseBuf>> {
+    use hsmp_pose::posecodec::v2::{BodyStriker, Context, MAX_BODY_STRIKERS};
+    let context = match v.get("context") {
+        None => None,
+        Some(c) => {
+            let c = Context { match_id: c["match_id"].as_u64()?,
+                round: u32::try_from(c["round"].as_u64()?).ok()?,
+                life: u16::try_from(c["life"].as_u64()?).ok()? };
+            if !c.valid() { return None; }
+            Some(c)
+        }
+    };
+    fn vector<const N: usize>(v: &J) -> Option<[f32; N]> {
+        let a = v.as_array()?;
+        if a.len() != N { return None; }
+        let mut out = [0.0; N];
+        for (o, x) in out.iter_mut().zip(a) { *o = x.as_f64()? as f32; }
+        out.iter().all(|x| x.is_finite()).then_some(out)
+    }
+    let strikers = match v.get("strikers") {
+        None => None,
+        Some(a) => {
+            let a = a.as_array()?;
+            if a.len() > MAX_BODY_STRIKERS { return None; }
+            let mut out: Vec<BodyStriker> = Vec::with_capacity(a.len());
+            for s in a {
+                let s = BodyStriker {
+                    part: u8::try_from(s["part"].as_u64()?).ok()?,
+                    component: u8::try_from(s["component"].as_u64()?).ok()?,
+                    kind: u8::try_from(s["kind"].as_u64()?).ok()?,
+                    p: vector(&s["p"])?, q: vector(&s["q"])?, half: vector(&s["half"])? };
+                if !s.valid() || out.iter().any(|o| o.part == s.part && o.component == s.component) { return None; }
+                out.push(s);
+            }
+            Some(out)
+        }
+    };
     let mut b = [0f64; hsmp_pose::sample::BONE_NUMS];
     for i in 0..NB {
         b[i * 13 + 6] = 1.0;
@@ -175,7 +217,8 @@ pub fn local_pose_from(v: &J) -> Option<Box<PoseBuf>> {
     }
     let a = hsmp_pose::sample::PoseArgs { tick: f(&v["tick"]), ts: f(&v["ts"]), dt: f(&v["dt"]), b: &b, w: &ws, c: c.is_object().then_some(&cv) };
     let mut out = PoseBuf::new_boxed();
-    hsmp_pose::sample::encode_pose(&a, &mut hsmp_pose::sample::Scratch::default(), &mut out).then_some(out)
+    hsmp_pose::sample::encode_pose_with_context(&a, &mut hsmp_pose::sample::Scratch::default(), &mut out,
+        &[], strikers.as_deref(), context).then_some(out)
 }
 
 /// Read a hot record slot: (meta, version, payload).
@@ -191,7 +234,8 @@ fn quat_json(q: &[f32; 4]) -> J {
     json!({"q": nums(q), "yaw": num(hsmp_pose::sample::quat_yaw(*q))})
 }
 pub fn root_json(r: &Root) -> J {
-    json!({"tick": r.tick, "ts": r.ts, "send_wall_ms": r.send_wall_ms, "pos": nums(&r.pos), "rot": quat_json(&r.rot), "vel": nums(&r.vel)})
+    json!({"tick": r.tick, "ts": r.ts, "send_wall_ms": r.send_wall_ms, "pos": nums(&r.pos), "rot": quat_json(&r.rot), "vel": nums(&r.vel),
+        "match_id":r.match_id,"round":r.round,"life":r.life})
 }
 pub fn weapon_json(w: &Weapon) -> J {
     json!({"tick": w.tick, "ts": w.ts, "weapon_id": w.weapon_id, "held": w.held, "pos": nums(&w.pos), "rot": quat_json(&w.rot), "vel": nums(&w.vel)})
@@ -208,9 +252,25 @@ pub fn pose_json(payload: &[u8], full: bool) -> J {
             j["step"] = num(d.step);
             j["has_control"] = json!(d.control.is_some());
             j["weapons"] = json!(d.weapons.len());
+            j["context"] = d.context.map(|c|json!({"match_id":c.match_id,"round":c.round,"life":c.life})).unwrap_or(J::Null);
+            j["has_body_strikers"] = json!(d.strikers.is_some());
             j["overrides"] = json!(d.overrides.count_ones());
             j["pelvis"] = nums(&[p.p[0], p.p[1], p.p[2], p.q[0], p.q[1], p.q[2], p.q[3]]);
             if full {
+                j["body_strikers"] = J::Array(d.strikers.iter().flatten().map(|s|{
+                    let b=d.bones[s.bone().unwrap()];
+                    let offset=hsmp_pose::posecodec::v2::qrot(b.q,s.p);
+                    let p: [f32;3]=std::array::from_fn(|i|b.p[i]+offset[i]);
+                    json!({"part":s.part,"component":s.component,"kind":s.kind,"local_center":nums(&s.p),"local_rotation":nums(&s.q),"half":nums(&s.half),"world_center":nums(&p)})
+                }).collect());
+                j["weapon_frames"] = J::Array(d.weapons.iter().map(|w| {
+                    let (base, tip) = hsmp_pose::posecodec::v2::blade_world(w);
+                    json!({"hands": w.hands, "id": w.id, "pos": nums(&w.p), "rot": quat_json(&w.q),
+                        "vel": nums(&w.v), "angular_vel": nums(&w.w),
+                        "local_base": nums(&w.base), "local_tip": nums(&w.tip),
+                        "world_base": nums(&base), "world_tip": nums(&tip),
+                        "boxes": w.boxes.iter().map(|b| json!({"component":b.component, "center": nums(&b.p), "rotation": nums(&b.q), "half": nums(&b.half)})).collect::<Vec<_>>()})
+                }).collect());
                 j["bones"] = J::Object(POSE_BONES.iter().enumerate().map(|(i, n)| {
                     let x = d.bones[i];
                     (n.to_string(), nums(&[x.p[0], x.p[1], x.p[2], x.q[0], x.q[1], x.q[2], x.q[3]]))
@@ -846,6 +906,51 @@ mod tests {
     use hsmp_ipc::handshake::{attach_sidecar, SideParams};
     use hsmp_ipc::schema::{CAP_POSE, CAP_QUEUES, CAP_STATE};
 
+    #[test]
+    fn root_tools_preserve_original_generation_without_float_conversion() {
+        let original=0xfedc_ba98_7654_3210u64;
+        let r=local_root_from(&json!({"tick":17,"ts":1234,"pos":[1,2,3],"rot":[0,0,0],"vel":[0,0,0],
+            "match_id":original,"round":29,"life":513}));
+        assert_eq!((r.match_id,r.round,r.life),(original,29,513));
+        let out=root_json(&r);
+        assert_eq!(out["match_id"].as_u64(),Some(original));
+        assert_eq!(out["round"],29);
+        assert_eq!(out["life"],513);
+        let legacy=local_root_from(&json!({"tick":17,"ts":1234,"pos":[1,2,3],"rot":[0,0,0],"vel":[0,0,0]}));
+        assert_eq!((legacy.match_id,legacy.round,legacy.life),(0,0,0),"tools never restamp missing context from a current session");
+    }
+
+    #[test]
+    fn pose_tools_preserve_original_context_and_exact_native_striker() {
+        use hsmp_pose::posecodec::v2::{self, Context};
+        let original = 0xfedc_ba98_7654_3210u64;
+        let mut v = json!({"tick":17,"ts":1234,"dt":16,
+            "context":{"match_id":original,"round":29,"life":513},
+            "strikers":[{"part":1,"component":10,"kind":0,"p":[13,0,0],"q":[0,0,0,1],"half":[13,13,13]}]});
+        let p = local_pose_from(&v).unwrap();
+        let decoded = v2::decode(p.used()).unwrap();
+        assert_eq!(decoded.context, Some(Context {match_id:original,round:29,life:513}));
+        let s = decoded.strikers.unwrap();
+        assert_eq!((s[0].part,s[0].component,s[0].kind),(1,10,0));
+        assert_eq!(s[0].p,[13.0,0.0,0.0]);
+        assert_eq!(s[0].half,[13.0;3]);
+        for invalid in [json!({"match_id":original,"round":29}),
+            json!({"match_id":original,"round":29,"life":0}),
+            json!({"match_id":original,"round":29,"life":65536}),
+            json!({"match_id":original,"round":4294967296u64,"life":1})] {
+            v["context"] = invalid;
+            assert!(local_pose_from(&v).is_none(), "partial or overflowing context cannot become unscoped");
+        }
+        v.as_object_mut().unwrap().remove("context");
+        assert_eq!(v2::decode(local_pose_from(&v).unwrap().used()).unwrap().context,None);
+        v["strikers"][0]["component"] = json!(0);
+        assert!(local_pose_from(&v).is_none(), "invalid native identity cannot be dropped silently");
+        v["strikers"][0]["component"] = json!(10);
+        let duplicate = v["strikers"][0].clone();
+        v["strikers"].as_array_mut().unwrap().push(duplicate);
+        assert!(local_pose_from(&v).is_none(), "duplicate native component cannot overwrite geometry");
+    }
+
     /// The generic ABI-2 machinery: records by name into the G2S / DevCtl rings, rendered back
     /// by the schema; record slots through RawSlot (peek never takes a blob).
     #[test]
@@ -884,7 +989,7 @@ mod tests {
         // RawSlot rendering: a seqlock slot and a blob (peek does not take)
         let sl = hsmp_ipc::seqlock::SeqSlot::<schema::Stamped<schema::pose::Root>>::new_boxed();
         let tb = hsmp_ipc::triple::TripleBuf::<schema::Stamped<schema::pose::Root>>::new_boxed();
-        let (kind, payload) = hsmp_ipc::debug_json::json_to_record("root", &json!({"tick": 8, "rot": [0, 0, 0, 1], "pos": [5, 6, 7]})).unwrap();
+        let (kind, payload) = hsmp_ipc::debug_json::json_to_record("root", &json!({"tick": 8, "rot": [0, 0, 0, 1], "pos": [5, 6, 7], "match_id": 3, "round": 1, "life": 1})).unwrap();
         let (mut sc, mut out) = (Vec::new(), Vec::new());
         let meta = SlotMeta { valid: 1, ..Default::default() };
         assert!(schema::RawSlot::put(&*sl, meta, kind, &payload, &mut sc));
@@ -911,7 +1016,7 @@ mod tests {
         assert!(ev.iter().any(|e| e["ev"] == "attach"), "{ev:?}");
         assert!(g.has(CAP_POSE) && !g.has(CAP_STATE));
 
-        g.put("local_root", &json!({"tick": 42, "ts": 5.5, "pos": [500.0, 0.0, 100.0], "rot": [0, 90, 0], "vel": [1, 2, 3]})).unwrap();
+        g.put("local_root", &json!({"tick": 42, "ts": 5.5, "pos": [500.0, 0.0, 100.0], "rot": [0, 90, 0], "vel": [1, 2, 3], "match_id": 3, "round": 1, "life": 1})).unwrap();
         let mut b = vec![0.0; NB * 13];
         b[2] = 100.0;
         b[6] = 1.0;
@@ -958,7 +1063,7 @@ mod tests {
         s.peers.dir.write(&d);
         let mut pr = PeerRoot::default();
         pr.peer_id = 2;
-        pr.root = local_root_from(&json!({"pos": [1.0, 2.0, 3.0]}));
+        pr.root = local_root_from(&json!({"pos": [1.0, 2.0, 3.0], "match_id": 3, "round": 1, "life": 1}));
         let mut m = game_meta(s, 0);
         m.writer_epoch = 0x55;
         assert!(s.peers.slots[3].root.put(m, hsmp_ipc::schema::pose::K_PEER_ROOT, bytemuck::bytes_of(&pr), &mut Vec::new()));
