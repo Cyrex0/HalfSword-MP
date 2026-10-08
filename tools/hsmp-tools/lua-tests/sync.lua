@@ -26,6 +26,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "native_dead" })
     T.isolated(T.script, "case", { kind = "tdiag" })
     T.isolated(T.script, "case", { kind = "native_sample" })
+    T.isolated(T.script, "case", { kind = "prepare_stream" })
     return
 end
 
@@ -93,7 +94,7 @@ local function beat()
     beats = beats + 1
     local N = _G.HSMPNative
     if beats == 1 then N.sc_put("link", { status = 1, state = 1, my_peer_id = 1 }) end   -- CONNECTED, UP
-    if opts.kind ~= "died_round" and opts.kind ~= "native_dead" then
+    if opts.kind ~= "died_round" and opts.kind ~= "native_dead" and opts.kind ~= "prepare_stream" then
         if beats == 1 then
             N.sc_put("session",{epoch=1,seq=1,match_id=71,phase=3,round=1,winner_seat=255,
                 config={arena="Map_Arena_Pit"},rows={{peer_id=1,seat=1,connected=true,alive=true,spawn_id=256,spawn_pos={10,20,30}}}})
@@ -263,6 +264,43 @@ elseif opts.kind == "tdiag" then
     T.check(T.count(M.logtext(), "tdiag on") == 1 and T.contains(M.logtext(), "tdiag off (dev_cmd #5)"),
         "a repeated on is not re-logged; TDIAG off switches them off", M.logtext())
     T.check(#M.dead_touch == 0, "nothing freed touched", T.repr(M.dead_touch))
+elseif opts.kind == "prepare_stream" then
+    local pawn=boot()
+    local root
+    local put_root=HSMPNative.put_root
+    HSMPNative.put_root=function(...)
+        root=select(12,...)
+        return put_root(...)
+    end
+    run(500,true)
+    local function assignment(generation,placed,mode_id,name,sid)
+        HSMPNative.sc_put("session",{epoch=1,seq=generation,match_id=91,phase=3,round=1,winner_seat=255,
+            rows={{peer_id=1,seat=1,connected=true,alive=false,spawn_id=sid,spawn_pos={10,20,30}}}})
+        HSMPNative.sc_put("mode",{seq=generation,mode=mode_id,match_id=91,round=1,
+            rows={{peer_id=1,seat=1,life=generation,alive=false,respawning=true}}})
+        HSMPNative.bus_put("spawn_status",{verified=placed,pawn=name,match_id=91,round=1,life=generation,spawn_id=sid})
+    end
+    assignment(2,true,6,"Willie_BP_C_3",386)
+    run(1500,true)
+    T.check(puts("local_root")>0 and puts("local_pose")>0,
+        "actual Sync sends verified life2 root and pose before LOADED while server still respawning")
+    T.check(root and root.match_id==91 and root.round==1 and root.life==2,
+        "actual root carries full original respawn context",T.repr(root))
+    local n=puts("local_root")
+    pawn.__props.DED=true;HSMPNative.sc_rec_drain();run(1500,true)
+    T.check(not T.any(HSMPNative.sc_rec_drain(),function(m)return m.kind=="death_report" end),
+        "publication memo cannot leak preparation authority into the active death reporter")
+    pawn.__props.DED=false
+    assignment(130,true,6,"Willie_BP_C_3",386);run(1000,true)
+    T.check(root and root.life==130 and puts("local_root")>n,
+        "actual root preserves full life130 despite wrapped order bits")
+    n=puts("local_root")
+    assignment(130,true,6,"Old_Pawn",386);run(1000,true)
+    T.check(puts("local_root")==n,"another pawn's placement does not resume root publication")
+    assignment(130,true,0,"Willie_BP_C_3",386);run(1000,true)
+    T.check(puts("local_root")==n,"non-deathmatch respawning cannot resume root publication")
+    assignment(130,false,6,"Willie_BP_C_3",386);run(1000,true)
+    T.check(puts("local_root")==n,"unverified respawn cannot resume root publication")
 elseif opts.kind == "native_sample" then
     -- Native sampling: the settings A/B switch, the native sampler used while it answers, the
     -- Lua path on a refusal and while switched off (HSMPNative.sample_local is a test hook).

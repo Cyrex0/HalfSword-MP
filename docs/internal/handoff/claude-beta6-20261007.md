@@ -894,3 +894,66 @@ exemption. Astra approved this bounded correction; regression covers replacing
 a polluted same-class passport and exact reuse. General modular preset/tier
 recipe selection remains open. Actual Rondel equip and uninstrumented clock
 behavior still need the matching Native24 capture before live improvement claims.
+
+### Native24 deployment refusal and Native25 actual checkpoint evidence
+
+Commitf7687d38 (clock lifecycle and exact fixed Rondel selection) passed strict
+G0:59 Lua suites,1,279 Rust tests in75 binaries,clippy0errors/2warnings,93Lua
+parses. Native24 used a SkipBuild deploy and failed before connection: changed
+mods content3b388deed5c38697 versus old shipped sidecar9a0c8e04c279cb95. Raw:
+`test-results/20261008-040101-2fd290-combat_manual`. Menu correctly refused;
+150s lobby timeout,normal menu quits,0crashes,noorphans. No recipe ran and no
+combat evidence was produced. A full RequireG0 rebuild/deploy then independently
+confirmed identical compiled sidecar and Lua content hashes. SkipBuild is not
+safe for changed Lua content: server/build.rs embeds it. The deploy preflight
+and bins-match bookkeeping need to include this dependency, before any game writes.
+
+Fresh Native25 raw:`test-results/20261008-040558-dc4405-combat_manual`, session:
+`test-results/lab/native-20261008-25`. Both windows confirmed DISPLAY1;caller,
+body and armor probes remained off. Rondel90s: both owners and displayed peers
+passed exact loadout/equip checks with ModularWeaponBP_DaggerRondel_C,Rok,
+Lnone on owners;6 actual AI takeovers and3 authoritative round results. This
+proves the complete runtime fixed passport can equip in these cases, not all
+recipes or solo injury parity. Clock resets0 over16 windows;honest acceptance
+0.91005291(n189);proxy rotation mean35.45606/max80.01591degrees(n22).
+
+Plate axe180s:clock resets0 over56 windows;honest acceptance0.93764706(n1700);
+proxy rotation mean26.75144/max76.87013degrees(n177). Pose still fails and lacks
+200samples; neither acceptance meets0.97. Clock observations support the
+reviewed lifecycle correction, not a global pose-quality or repeatable A/B claim.
+
+The same session actually attempted deathmatch respawns (2 planned per player).
+InitialLive/native placement and all5 lobby-only configuration refusals passed.
+Only the first explicit DEBUG KILL death ran: server accepted it,issued life2
+same-round respawn and native client reloaded Yard,dressed its12-piece knight
+axe kit,then remained waiting for `combat spawn proof: own root life` (04:14:26).
+ServerSTATUS retainedalive=false,loaded_round0,respawning=true.35s placement
+timeout ended this attempt; no completed respawn sample. Evidence:
+`modes-two-deaths/report.json`,RCONjournal and rawUE4SS.log. This is a real
+respawn blocker, not a reason to widen the timeout. A12-A14 remain unaccepted;
+HUD/control/collision and remote-life correctness are not verified.
+
+Normal session stop produced0newcrashes,noorphans and menu_quit on bothclients.
+The manualreport passes onlylimitedcrash/teardown/network/state checks while
+the modes subcheck failed; neitherreport is p0 or release acceptance. Nextwork:
+fix deploymentpreflight; resolve stuck-constraint memberships without fabricated
+first/lastparent authority; investigate ownrootlife respawnproof circularity.
+
+The respawn publication correction is now source-reviewed by Astra: strict
+pose_context.of remains unchanged for all3 death lookup sites. for_publication
+admits only exact verified live deathmatch respawn assignment/pawn/match/round,
+respawn marker+wrapped order bits and authoritative full life; life130 cannot
+alias oldlife2. Four root/pose writers use this context, with independent active
+and publication memo buckets. Focused context25 and Sync49 checks passed,
+including actual Lua root+pose beforeLOADED and absent deathreport after that
+cache was populated. Existing physical readiness5uu/10deg/150ms bounds unchanged.
+Native26 repeated-death proof remains pending. Server and receiver preparation
+streams already accept the original current life beforeLOADED; the first deadlock
+is local publication, not a reason to remove Ready's physical proof.
+
+The deploy preflight was independently verified by root:16 WindowsPowerShell5.1
+actual full-script scratch fixtures passed. Stale/malformed/unavailable compiled
+server/sidecar identities fail before game writes, unchanged reuse and normal
+builds succeed, relativeBinDir uses Win64-relative paths, DryRun stays read-only.
+Astra approved. Real matching deploy and stale-check refusal should be recorded
+at the next checkpoint; Native24's failure is retained as the before evidence.

@@ -25,3 +25,34 @@ T.check(SP.plan_from_view(v,mode).by_peer[1].life==0,"Mode/order mismatch cannot
 mode.rows[1].life=130
 T.check(SP.plan_from_view(v,mode).by_peer[1].life==130,"wrapped order bits retain full authoritative life")
 T.check(p.by_peer[1].life==2,"later Mode updates do not mutate original placement context")
+
+v.spawns[1].spawn_id=386
+s.spawn_id,s.life=386,2
+mode.id="deathmatch";mode.rows[1]={life=2,respawning=true}
+local preparing=M.for_publication(s,v,mode,1,"Pawn_A")
+T.check(preparing and preparing.life==2 and preparing.match_id==51 and preparing.round==1,
+    "verified exact deathmatch reload publishes its original life2 before LOADED")
+T.check(M.of(s,v,mode,1,"Pawn_A")==nil,"preparation grants no active death context")
+s.life=130;mode.rows[1].life=130
+T.check(M.for_publication(s,v,mode,1,"Pawn_A").life==130,
+    "wrapped respawn order retains full authoritative life130")
+s.life=2
+T.check(M.for_publication(s,v,mode,1,"Pawn_A")==nil,"same low bits cannot relabel old life2 as life130")
+mode.rows[1].life=2
+T.check(M.for_publication(s,v,mode,1,"Pawn_B")==nil,"preparation requires exact placed pawn")
+s.verified=false
+T.check(M.for_publication(s,v,mode,1,"Pawn_A")==nil,"unverified placement cannot start preparation streams")
+s.verified=true;mode.id="duel"
+T.check(M.for_publication(s,v,mode,1,"Pawn_A")==nil,"respawning flag in another mode grants no preparation")
+mode.id="deathmatch";s.spawn_id=256
+T.check(M.for_publication(s,v,mode,1,"Pawn_A")==nil,"previous round assignment cannot authorize a reload")
+for _,sid in ipairs({258,384,642}) do
+    s.spawn_id=sid;v.spawns[1].spawn_id=sid
+    T.check(M.for_publication(s,v,mode,1,"Pawn_A")==nil,
+        "matching but invalid marker, low life bits or round in order fails closed: "..sid)
+end
+s.spawn_id=386;v.spawns[1].spawn_id=386;v.phase_name="roundover"
+T.check(M.for_publication(s,v,mode,1,"Pawn_A")==nil,"roundover cannot start respawn preparation")
+v.phase_name="live";mode.rows[1].respawning=false
+T.check(M.of(s,v,mode,1,"Pawn_A").life==2 and M.for_publication(s,v,mode,1,"Pawn_A").life==2,
+    "completed reload returns to existing strict active context")

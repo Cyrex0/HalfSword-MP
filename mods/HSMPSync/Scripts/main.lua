@@ -701,14 +701,15 @@ end
 -- The bus record and both session views are cached tables, rebuilt only when their record
 -- changes, so the same inputs give the same context: reuse it instead of building one per
 -- sample (it runs at the sample rate; the pose writers copy it).
-local ctx_memo = { ok = false }
-pose_context = function(pawn)
+local ctx_memo = { active = {ok=false}, publication = {ok=false} }
+pose_context = function(pawn, publication)
     if not POSE_CONTEXT or not HS then return nil end
     local st, view, mode, peer, name = IPC.bus_table("spawn_status"), HS.view(), HS.mode(), get_my_peer_id(), pval(r_fname, pawn)
-    local m = ctx_memo
+    local m = publication and ctx_memo.publication or ctx_memo.active
     if m.ok and m.st == st and m.view == view and m.mode == mode and m.peer == peer and m.name == name then return m.ctx end
     m.st, m.view, m.mode, m.peer, m.name = st, view, mode, peer, name
-    m.ctx, m.ok = POSE_CONTEXT.of(st, view, mode, peer, name), true
+    local resolve = publication and POSE_CONTEXT.for_publication or POSE_CONTEXT.of
+    m.ctx, m.ok = resolve(st, view, mode, peer, name), true
     return m.ctx
 end
 local function addr_of(o) return pval(r_addr, o) end
@@ -716,7 +717,7 @@ local function addr_of(o) return pval(r_addr, o) end
 -- put_skeletal_state (two-handed grip, one actor per address, no "Fists").
 -- Returns the number of weapons, or nil when the mesh or pawn has no address.
 function NSAMPLE.pose_fields(a, pawn, mesh, tick, ts, dstep)
-    a.context=pose_context(pawn)
+    a.context=pose_context(pawn,true)
     if not a.context then a.mesh=nil; return nil end
     a.mesh, a.pawn = addr_of(mesh), addr_of(pawn)
     if not (a.mesh and a.pawn) then a.mesh = nil; return nil end
@@ -755,7 +756,7 @@ local _pose_stats = { n = 0, bones = 0, wpn = 0, ctl = 0, cost_ms = 0, at = 0 }
 -- IPC.put_pose call: the native module builds the codec v2 `pose` record once.
 local _pb, _pw, _pc, _ps = {}, {}, {}, {}
 local function put_skeletal_state(pawn, mesh, ts, dstep)
-    local context=pose_context(pawn)
+    local context=pose_context(pawn,true)
     if not context then return end
     for i = 1, #POSE_BONES do
         local ok, r = pcall(sample_bone, mesh, i)
@@ -876,7 +877,7 @@ local _root_seq = 0   -- root write counter; the sidecar dedups on `tick`
 local function read_my_transform(ts)
     local pawn = get_local_pawn()
     if not pawn then return nil end
-    local context=pose_context(pawn)
+    local context=pose_context(pawn,true)
     if not context then return nil end
     -- Wrap each reflection call in pcall. The Pawn pointer can be in a
     -- transitional state (level-reload, respawn) where IsValid returns true
@@ -1367,7 +1368,7 @@ end
 -- path for the parts it did not write. A refusal is counted and logged once per call.
 function NSAMPLE.all(pawn, ts, tsf, dstep, weapon, wid, hand)
     local a = NSAMPLE.a
-    a.context=pose_context(pawn)
+    a.context=pose_context(pawn,true)
     if not a.context then a.root_pawn=nil;a.mesh=nil;return 0 end
     a.pawn=addr_of(pawn)
     a.root_pawn, a.root_tick, a.root_ts = addr_of(pawn), _root_seq + 1, ts
