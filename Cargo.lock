@@ -1902,7 +1902,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-combat-sim"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "hsmp-ipc",
  "hsmp-net",
@@ -1914,7 +1914,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-diag"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "hex",
  "hsmp-master-core",
@@ -1928,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-fake-sidecar"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "bytemuck",
  "hsmp-ipc",
@@ -1936,21 +1936,21 @@ dependencies = [
 
 [[package]]
 name = "hsmp-hud-test"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-interact-test"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-ipc"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "bytemuck",
  "proptest",
@@ -1960,7 +1960,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-launcher"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "anyhow",
  "ed25519-dalek",
@@ -1982,7 +1982,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-master-core"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -1994,7 +1994,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-nat"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "rand 0.8.8",
  "reqwest",
@@ -2004,7 +2004,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-native"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "bytemuck",
  "hsmp-ipc",
@@ -2014,7 +2014,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-net"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "chacha20poly1305",
  "ed25519-dalek",
@@ -2027,21 +2027,21 @@ dependencies = [
 
 [[package]]
 name = "hsmp-pose"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "hsmp-ipc",
 ]
 
 [[package]]
 name = "hsmp-pose-truth"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-release"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "ed25519-dalek",
  "getrandom 0.2.17",
@@ -2055,14 +2055,14 @@ dependencies = [
 
 [[package]]
 name = "hsmp-saveguard-test"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]
 
 [[package]]
 name = "hsmp-server"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "anyhow",
  "axum",
@@ -2099,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "hsmp-tools"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -2121,7 +2121,7 @@ dependencies = [
 
 [[package]]
 name = "hsmpworld-sim"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "hsmp-ipc",
  "mlua",
@@ -2130,7 +2130,7 @@ dependencies = [
 
 [[package]]
 name = "hsmpworld-tests"
-version = "0.1.0-beta.5"
+version = "0.1.0-beta.6"
 dependencies = [
  "mlua",
 ]

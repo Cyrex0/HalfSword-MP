@@ -8,6 +8,21 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ## [Unreleased]
 
+## [0.1.0-beta.6] - 2026-10-08
+
+### Known limitations
+
+- This is a release of the existing PvP mod. Native headless hosting and co-op are
+  still development work and are not included in this release.
+- Round-start placement and settling can still fail or delay input release. Remote
+  arms and wrists can twist, drift or overshoot, especially under high frame cost.
+- Native body construction, dismemberment and clothing/armour replication do not
+  yet have complete single-player parity. Partial cuts and detached components
+  remain unfinished; diagnostic observations are not proof of equivalent damage.
+- Prior live captures reported pose and smoothness gate failures. Final beta.6
+  release validation must be recorded on the release commit; no G2 pass is claimed
+  by these notes.
+
 ### Launcher fixes
 
 - Launcher windows use OpenGL and automatically retry Direct3D 12 on Windows if OpenGL
@@ -175,9 +190,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### Compatibility
 
-- A server playing any mode other than duel or free-for-all only admits players with this version
-  or newer; older clients get "update HSMP to join". Duel and free-for-all servers still admit
-  0.1.0-beta.5 clients.
+- Protocol 12 requires matching beta.6 clients and servers. Earlier releases,
+  including beta.5, cannot join; update the host and every player together.
 
 ### Changed
 
