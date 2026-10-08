@@ -12,6 +12,25 @@ libraries incl. `debug`, like UE4SS).
 `hsmp-lab` keeps a two-game session alive for recipe experiments, incremental
 combat/pose analysis, bootstrap comparisons and reviews. See [Native combat lab](lab.md).
 
+On Windows, use the launcher wrapper so the controller is rebuilt against the
+current IPC layout before each command:
+
+```powershell
+.\scripts\lab.ps1 session --dir test-results/lab/manual --seconds 600
+.\scripts\lab.ps1 --help
+```
+
+The wrapper builds only `hsmp-lab` with `--release --locked`, honors
+`CARGO_TARGET_DIR`, and forwards the CLI arguments and exit code. A failed build
+stops before launching a controller. It launches the executable reported by
+Cargo's compiler-artifact record, so configured target directories and target
+triples cannot silently select an older default output. Each `session` runs a unique executable
+copy under the ignored `test-results/lab/tool-snapshots/` directory. Windows can
+therefore rebuild the controller while an earlier session still owns its copy.
+Other commands run the freshly built output directly; snapshots remain available
+with the session evidence. This avoids a stale lab binary after a server-only
+deployment build. The wrapper does not deploy mods or restart an existing game.
+
 ```powershell
 cargo build --release -p hsmp-tools
 # binaries: target/release/hsmp-tools.exe, hsmp-gate.exe, check_travel.exe, check_wg.exe,

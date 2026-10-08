@@ -23,6 +23,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   complete equipped armor/weapon passports, including modules and materials.
 - Add short read-only armor trace bursts with bounded native reads and explicit
   availability, independent of the stand-in damage probe.
+- Build the lab controller before use and keep each running session on its own
+  executable copy, avoiding stale IPC layouts and Windows rebuild locks.
+- Record native parent-bone-space arm/driver displacement and dislocation inputs
+  with strict identity and availability checks; sampling grants no damage authority.
 - Recover initial dropped kit weapons by re-equipping the same native actor, retaining the
   outfit and assigned fighter through the stand-in fallback's brief possession swap.
 - Reassert stand-in grip limits after native hand updates and check physical pelvis

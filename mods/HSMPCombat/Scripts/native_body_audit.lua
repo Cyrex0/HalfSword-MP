@@ -16,6 +16,12 @@ M.BONES={"pelvis","spine_01","spine_02","spine_03","spine_04","spine_05","neck_0
     "thigh_l","calf_l","foot_l","thigh_r","calf_r","foot_r"}
 M.CONSTRAINTS={"Dislocated Bone Constraint Arm R","Dislocated Bone Constraint Arm L","Dislocated Bone Constraint Leg R",
     "Dislocated Bone Constraint Leg L","Dislocated Bone Constraint Neck","Dislocated Bone Constraint Back"}
+-- Cooked Willie offsets 623197/623312 and 624058/624173 pass 3 to
+-- SceneComponent:GetSocketTransform. The local SDK's ERelativeTransformSpace
+-- declares RTS_ParentBoneSpace=3 (RTS_Component=2); these are not world poses.
+M.DISLOCATION_SPACE=3
+M.DISLOCATION_BONES={{bone="upperarm_r",part=3,flag="Arm R Dislocated"},
+    {bone="upperarm_l",part=6,flag="Arm L Dislocated"}}
 -- Native topology version1 availability fields; these never form a bone mask.
 M.TOPOLOGY_FLAGS={"Headless","Hand R Torn Off","Hand L Torn Off","Leg R Torn Off","Leg L Torn Off",
     "Upper Body Spawned","Dismemberment In Process"}
@@ -129,6 +135,114 @@ function M.new(o)
             swing1=number(safe(function()return c:GetCurrentSwing1()end)),
             swing2=number(safe(function()return c:GetCurrentSwing2()end)),twist=number(safe(function()return c:GetCurrentTwist()end))}
     end
+    local function dislocation_inputs(w,mesh,r,current_context)
+        local invalid
+        local function guard()
+            if invalid then return false end
+            if not o.enabled() or scope_key(safe(function()return current_context(w)end))~=r.key then
+                invalid="scope changed";return false
+            end
+            return true
+        end
+        local function read(f)if guard() then return safe(f)end end
+        local function unknown(why)return {available=false,reason=why or "unavailable"}end
+        local function ref(c)
+            if read(function()return valid(c)end)~=true then return unknown("identity unavailable")end
+            local id=number(read(function()return address(c)end))
+            local nm=read(function()return name(c)end)
+            local fn=read(function()return fname(c:GetFName())end)
+            local ok=id and id>0 and id%1==0 and type(nm)=="string" and nm~="" and type(fn)=="string" and fn~=""
+            return {available=ok==true,address=id,name=type(nm)=="string" and nm or nil,fname=type(fn)=="string" and fn or nil}
+        end
+        local function world(c)
+            local v=ref(read(function()return c:GetWorld()end))
+            return v.available and tostring(v.address).."@"..v.name or nil
+        end
+        local pawn=ref(w);pawn.world=world(w)
+        local s={version=1,space=M.DISLOCATION_SPACE,space_name="RTS_ParentBoneSpace",pawn=pawn,
+            eligibility="unavailable:sample_only",available=false,read_complete=false,bones={}}
+        local function scalar(k,convert,native_type)
+            local raw=read(function()return field(w,k)end)
+            local v=convert(raw)
+            return {available=v~=nil,value=v,read_type=type(raw),native_type=native_type}
+        end
+        -- Willie SDK BoneSnapping is double; BlockSpineBreaking is bool.
+        s.bone_snapping=scalar("Bone Snapping",number,"double")
+        s.block_spine_breaking=scalar("Block Spine Breaking",boolean,"bool")
+        local function owned(c)
+            local id=ref(c);local owner=ref(read(function()return c:GetOwner()end))
+            local cw,ow=world(c),world(read(function()return c:GetOwner()end))
+            local typed=read(function()return boolean(c:IsA("/Script/Engine.SkeletalMeshComponent"))end)
+            local g={available=false,identity=id,owner=owner,world=cw,class_match=typed}
+            owner.world=ow
+            if not id.available or not owner.available then g.reason="component or owner identity unavailable"
+            elseif cw~=r.context.world or ow~=r.context.world then g.reason="component or owner world unavailable or mismatched"
+            elseif owner.address~=pawn.address or owner.name~=pawn.name or owner.fname~=pawn.fname then g.reason="component owner mismatched"
+            elseif typed~=true then g.reason="skeletal component type unavailable or mismatched"
+            else g.available=true end
+            return g
+        end
+        local driver=read(function()return field(w,"DriverSkeleton")end)
+        s.mesh,s.driver=owned(mesh),owned(driver)
+        if not guard() then return nil end
+        if not pawn.available or pawn.address~=r.context.actor or pawn.fname~=r.context.pawn or pawn.world~=r.context.world then
+            s.reason="pawn identity or world unavailable or mismatched";return s
+        end
+        if not s.mesh.available or not s.driver.available or s.mesh.identity.address~=r.context.mesh
+            or s.mesh.identity.address==s.driver.identity.address then
+            s.reason="distinct owned Mesh and DriverSkeleton unavailable";return s
+        end
+        local function position(c,bone)
+            local f=read(function()return o.fname(bone)end)
+            local idx=number(read(function()return c:GetBoneIndex(f)end))
+            if not idx or idx<0 or idx%1~=0 then return unknown("native bone index unavailable")end
+            local xf=read(function()return c:GetSocketTransform(f,M.DISLOCATION_SPACE)end)
+            local p=read(function()return field(xf,"Translation")end)
+            local v={available=true,index=idx}
+            for _,k in ipairs({"X","Y","Z"})do
+                v[k]=number(read(function()return field(p,k)end));if v[k]==nil then v.available=false end
+            end
+            if not v.available then v.reason="native translation unavailable or nonfinite"end
+            return v
+        end
+        s.available=true;s.read_complete=s.bone_snapping.available and s.block_spine_breaking.available
+        for _,spec in ipairs(M.DISLOCATION_BONES)do
+            local b={bone=spec.bone,native_part=spec.part,part=unknown("native map unavailable or key absent"),
+                dislocated=scalar(spec.flag,boolean,"bool"),mesh=position(mesh,spec.bone),driver=position(driver,spec.bone)}
+            -- Exact native map keys 3/6 are proved by the cooked arm branches,
+            -- independent of network bone bits. Absent keys remain unknown.
+            if r.parts.available then
+                b.part.present=false
+                for _,v in ipairs(r.parts.values or {})do
+                    if v.part==spec.part then b.part={available=true,present=true,value=v.value};break end
+                end
+            end
+            if b.mesh.available and b.driver.available then
+                local dx,dy,dz=b.mesh.X-b.driver.X,b.mesh.Y-b.driver.Y,b.mesh.Z-b.driver.Z
+                b.distance=number(math.sqrt(dx*dx+dy*dy+dz*dz))
+            end
+            b.read_complete=b.distance~=nil and b.part.available and b.dislocated.available
+                and s.bone_snapping.available and s.block_spine_breaking.available
+            if b.read_complete then
+                b.sampled_predicates_match=b.distance>15 and b.dislocated.value==false and b.part.value==false
+                    and s.block_spine_breaking.value==false and s.bone_snapping.value>0.1
+            end
+            if not b.read_complete then s.read_complete=false end
+            s.bones[#s.bones+1]=b
+        end
+        if not guard() then return nil end
+        local ma,da=owned(read(function()return field(w,"Mesh")end)),owned(read(function()return field(w,"DriverSkeleton")end))
+        local pa=ref(w)
+        if not guard() then return nil end
+        if not ma.available or not da.available or ma.identity.address~=s.mesh.identity.address or ma.identity.name~=s.mesh.identity.name
+            or da.identity.address~=s.driver.identity.address or da.identity.name~=s.driver.identity.name
+            or world(w)~=pawn.world or pa.address~=pawn.address or pa.name~=pawn.name or pa.fname~=pawn.fname then
+            return {version=1,space=M.DISLOCATION_SPACE,space_name="RTS_ParentBoneSpace",available=false,
+                read_complete=false,eligibility="unavailable:sample_only",reason="native identity changed",bones={}}
+        end
+        if not guard() then return nil end
+        return s
+    end
     local function snapshot(w,event,meta,current_context)
         current_context=current_context or o.context
         if not o.enabled() then return nil end
@@ -148,6 +262,8 @@ function M.new(o)
         r.dism_array=r.topology.available and r.topology.dism_array or missing()
         r.dism_bones=r.topology.available and r.topology.dism_bones or missing()
         r.parts=r.topology.available and r.topology.parts or missing()
+        r.dislocation_inputs=dislocation_inputs(w,mesh,r,current_context)
+        if not r.dislocation_inputs then return nil end
         for _,k in ipairs(M.TOPOLOGY_FLAGS)do
             local f=r.topology.flags[k]
             if f and f.available then r.flags[k]=f.value else r.flags[k]=nil end
@@ -356,6 +472,27 @@ function M.new(o)
         end
         collection("dism_array",r.dism_array,token);collection("dism_bones",r.dism_bones,token)
         collection("parts",r.parts,function(v)return v.part..":"..token(v.value)end);put("spawn_bone",r.spawn_bone)
+        local d=r.dislocation_inputs
+        put("dislocation_inputs_version",d.version);put("dislocation_space",d.space);put("dislocation_space_name",d.space_name)
+        put("dislocation_inputs_available",d.available);put("dislocation_inputs_read_complete",d.read_complete)
+        put("dislocation_inputs_reason",d.reason);put("dislocation_eligibility",d.eligibility)
+        for _,k in ipairs({"bone_snapping","block_spine_breaking"})do
+            local v=d[k] or {};put("dislocation_"..k.."_available",v.available);put("dislocation_"..k,v.value)
+            put("dislocation_"..k.."_read_type",v.read_type)
+        end
+        for _,k in ipairs({"pawn","mesh","driver"})do
+            local g=d[k] or {};local id=g.identity or g;local owner=g.owner or {}
+            rows[#rows+1]="dislocation_"..k.."="..table.concat({token(g.available),token(id.address),token(id.name),token(id.fname),
+                "world:"..token(g.world),"owner:"..token(owner.available).."/"..token(owner.address).."/"..token(owner.name)
+                .."/"..token(owner.fname).."/"..token(owner.world),"reason:"..token(g.reason)},"|")
+        end
+        for _,b in ipairs(d.bones or {})do
+            local function pos(v)return table.concat({token(v.available),token(v.index),token(v.X),token(v.Y),token(v.Z)},"/")end
+            rows[#rows+1]="dislocation_"..b.bone.."="..table.concat({"part:"..b.native_part,"part_available:"..token(b.part.available),
+                "part_present:"..token(b.part.present),"part_value:"..token(b.part.value),"dislocated:"..token(b.dislocated.available)
+                .."/"..token(b.dislocated.value),"mesh:"..pos(b.mesh),"driver:"..pos(b.driver),"distance:"..token(b.distance),
+                "complete:"..token(b.read_complete),"sampled_predicates_match:"..token(b.sampled_predicates_match)},"|")
+        end
         local function comp(c)
             if not c.available then return "unavailable"end
             local b={};for _,v in ipairs(c.bones)do

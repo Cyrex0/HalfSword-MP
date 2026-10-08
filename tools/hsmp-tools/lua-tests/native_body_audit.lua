@@ -354,3 +354,98 @@ hooks[prefix..M.HOOKS[1]](param(pawn),param(mesh),param(8),nil,nil,nil,nil,param
 hooks[prefix..M.HOOKS[2]](param(pawn),param(mesh),param(8),nil,nil,nil,nil,param(mesh))
 T.check(logs[#logs]:find("pair=unavailable",1,true),"world-drop clears sever callback correlation without retained UObjects")
 T.check(writes==0,"all callback/readback paths remain read-only")
+-- Native dislocation samples use the actual parent-bone-space getter pair,
+-- never the component/world transform already logged for general body audit.
+local poses={upperarm_r={X=20,Y=2,Z=3},upperarm_l={X=15,Y=2,Z=3}}
+local socket_calls={}
+local driver=geometry(obj(70,"SkeletalMeshComponent DriverSkeleton"),"mesh",1000)
+local old_bone_index=mesh.GetBoneIndex
+mesh.GetBoneIndex=function(_,b)return poses[b:ToString()] and 12 or -1 end
+driver.GetBoneIndex=mesh.GetBoneIndex
+local function socket(c,b,space)
+    local bone=b:ToString();socket_calls[#socket_calls+1]={id=c:GetAddress(),bone=bone,space=space}
+    assert(space==3 and (bone=="upperarm_r" or bone=="upperarm_l"),"exact native getter inputs")
+    return {Translation=c==mesh and poses[bone] or {X=0,Y=2,Z=3}}
+end
+mesh.GetSocketTransform=socket;driver.GetSocketTransform=socket
+pawn.DriverSkeleton=driver;pawn["Bone Snapping"]=1.5;pawn["Block Spine Breaking"]=false
+pawn["Arm R Dislocated"]=false;pawn["Arm L Dislocated"]=false
+pawn["Dismembered Parts Map"]=map({{3,false},{6,false},{8,true}})
+local observed=a.capture(pawn,"dislocation inputs")
+local di=observed.dislocation_inputs
+T.check(di.available and di.read_complete and di.space==3 and di.space_name=="RTS_ParentBoneSpace"
+    and #socket_calls==4,"two proved arm bones are sampled once per component using SDK parent-bone space3")
+T.check(di.pawn.address==1 and di.pawn.fname=="Willie_1" and di.mesh.identity.address==2
+    and di.driver.identity.address==70 and di.driver.owner.address==1 and di.driver.owner.world==ctx.world,
+    "dislocation readback binds actual pawn, Mesh, DriverSkeleton and owner/world identities")
+T.check(di.bone_snapping.available and di.bone_snapping.value==1.5 and di.bone_snapping.read_type=="number"
+    and di.bone_snapping.native_type=="double" and di.block_spine_breaking.value==false,
+    "strict typed native snapping and spine guard retain values and availability")
+T.check(di.bones[1].native_part==3 and di.bones[1].part.value==false and di.bones[1].distance==20
+    and di.bones[1].sampled_predicates_match==true and di.bones[2].native_part==6
+    and di.bones[2].distance==15 and di.bones[2].sampled_predicates_match==false,
+    "native arm predicates use exact map keys and strict distance greater than15 without world offsets")
+T.check(di.eligibility=="unavailable:sample_only" and plain(di)
+    and logs[#logs]:find("dislocation_space_name=RTS_ParentBoneSpace",1,true)
+    and logs[#logs]:find("sampled_predicates_match:true",1,true),
+    "sample log labels the proved native space and copied evidence without asserting native event eligibility")
+local function sampled()return a.capture(pawn,"dislocation edge").dislocation_inputs end
+pawn["Bone Snapping"]=0.1
+T.check(sampled().bones[1].sampled_predicates_match==false,"native BoneSnapping threshold is strict greater than0.1")
+pawn["Bone Snapping"]=nil
+local unavailable=sampled()
+T.check(not unavailable.bone_snapping.available and unavailable.bone_snapping.read_type=="nil"
+    and not unavailable.read_complete and unavailable.bones[1].sampled_predicates_match==nil,
+    "missing BoneSnapping cannot advertise a matched predicate or substitute zero")
+for _,bad in ipairs({"1.5",false,math.huge,0/0})do
+    pawn["Bone Snapping"]=bad;unavailable=sampled()
+    T.check(not unavailable.bone_snapping.available and unavailable.bones[1].sampled_predicates_match==nil,
+        "nonnumeric/nonfinite snapping input stays unavailable")
+end
+pawn["Bone Snapping"]=1.5;pawn["Block Spine Breaking"]=0
+T.check(not sampled().block_spine_breaking.available,"nonboolean native spine guard stays unavailable")
+pawn["Block Spine Breaking"]=true
+T.check(sampled().bones[1].sampled_predicates_match==false,"available native spine guard blocks the sampled conjunction")
+pawn["Block Spine Breaking"]=false;pawn["Arm R Dislocated"]=true
+T.check(sampled().bones[1].sampled_predicates_match==false,"already-dislocated native arm blocks the sampled conjunction")
+pawn["Arm R Dislocated"]=false;pawn["Dismembered Parts Map"]=map({{3,true},{6,false}})
+T.check(sampled().bones[1].sampled_predicates_match==false,"positive exact native part3 ledger blocks the sampled conjunction")
+pawn["Dismembered Parts Map"]=map({{6,false}});unavailable=sampled()
+T.check(unavailable.bones[1].part.present==false and not unavailable.bones[1].part.available
+    and unavailable.bones[1].sampled_predicates_match==nil,"missing native arm map key never becomes a verified false entry")
+pawn["Dismembered Parts Map"]=map({{3,0},{6,false}})
+T.check(not sampled().bones[1].part.available,"malformed native part map cannot provide dislocation predicates")
+pawn["Dismembered Parts Map"]=map({{3,false},{6,false}})
+poses.upperarm_r.X=math.huge;unavailable=sampled()
+T.check(not unavailable.bones[1].mesh.available and unavailable.bones[1].distance==nil
+    and unavailable.bones[1].sampled_predicates_match==nil,"nonfinite native translation cannot become a distance")
+poses.upperarm_r.X="20"
+T.check(not sampled().bones[1].mesh.available,"numeric strings are not native transform coordinates")
+poses.upperarm_r.X=20;driver.GetBoneIndex=function()return -1 end
+local old_socket_count=#socket_calls;unavailable=sampled()
+T.check(not unavailable.bones[1].driver.available and #socket_calls==old_socket_count+2,
+    "missing driver bone index prevents fallback socket-transform reads")
+driver.GetBoneIndex=mesh.GetBoneIndex
+driver.GetOwner=function()return obj(99,"Willie foreign")end;old_socket_count=#socket_calls
+T.check(not sampled().available and #socket_calls==old_socket_count,"wrong driver owner refuses all native position reads")
+driver.GetOwner=function()return pawn end;driver.GetWorld=function()return obj(99,"World departed")end
+T.check(not sampled().available and #socket_calls==old_socket_count,"wrong driver world refuses all native position reads")
+driver.GetWorld=function()return world end;pawn.DriverSkeleton=nil
+T.check(not sampled().available and #socket_calls==old_socket_count,"missing DriverSkeleton never substitutes Mesh")
+pawn.DriverSkeleton=mesh
+T.check(not sampled().available and #socket_calls==old_socket_count,"same component cannot masquerade as independent driver and simulated Mesh")
+pawn.DriverSkeleton=driver
+driver.GetSocketTransform=function(c,b,space)
+    local result=socket(c,b,space);pawn.DriverSkeleton=geometry(obj(71,"SkeletalMeshComponent replacement driver"),"mesh",1);return result
+end
+unavailable=sampled()
+T.check(not unavailable.available and unavailable.reason=="native identity changed" and #unavailable.bones==0,
+    "driver reference changing during getter read invalidates the sample without relabeling old positions")
+pawn.DriverSkeleton=driver;driver.GetSocketTransform=function(c,b,space)
+    local result=socket(c,b,space);ctx.life=ctx.life+1;return result
+end
+local before_scope_logs=#logs
+T.check(a.capture(pawn,"mid sample life transition")==nil and #logs==before_scope_logs,
+    "scope change during a native arm getter drops the entire body row")
+ctx.life=ctx.life-1;driver.GetSocketTransform=socket;mesh.GetBoneIndex=old_bone_index
+T.check(writes==0,"dislocation diagnostic invokes only proved native getters and performs no physical writes")

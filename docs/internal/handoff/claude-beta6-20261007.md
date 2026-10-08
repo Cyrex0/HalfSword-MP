@@ -13,6 +13,15 @@ only (no AI trailers). No Python anywhere (tools and tests are Rust/C++, mods ar
 scripts PowerShell / POSIX shell). Never inject OS input; drive the game through mod hooks,
 the DevCtl ring (`hsmp-tools ipc-ctl`) and RCON.
 
+**Owner steering, 2026-10-08:** keep iterating while the owner sleeps, using native
+tests and reverse engineering as needed. The owner conditionally authorizes a PR,
+merge to main and release/update only once all intended behavior is verified and
+the known gameplay gaps and documented acceptance gates are satisfied. This is
+not authorization to ship the current failing checkpoint. Until that evidence
+exists, verified milestones still go to dev only. A thread heartbeat named
+HalfSword multiplayer native iteration continues the work every30 minutes and
+stays quiet except for meaningful results, material failures or required input.
+
 Last state of this session: everything is pushed to `origin` `dev` (this handoff included). GitHub
 once rejected three pushes in a row with "Internal Server Error" while G0 passed; a later retry
 with the explicit refspec went through.
@@ -752,3 +761,68 @@ Cooked free-mode inventory data assets contain complete native presets, while
 tier class CDOs can expose a grip without a head. These require explicit recipe
 mapping; neither a tier suffix nor an empty head may be guessed. The current
 passport identity checks do not close this recipe-selection gap.
+
+### Native22: first actual equipped-passport and read-only armor check
+
+Commit03c71b7a passed full strict G0 (59 Lua suites;1,279 Rust tests in75 binaries;
+clippy0errors/2warnings;93 production Lua parses) and matching RequireG0 deploy.
+Raw run: `test-results/20261008-024922-2a708d-combat_manual`. Both windows were
+confirmed on DISPLAY1 at x=-1760/-880,880x527. The old release lab controller
+initially refused IPC with stale layout9824d6249fd2dc68 versus deployed262ac8453e7af06c,
+before starting a recipe. Renaming its in-use executable to an ignored checkpoint
+allowed a matching controller rebuild without restarting the games. Build the
+lab controller explicitly before future sessions; the deploy's tool list does
+not guarantee that auxiliary binary is current.
+
+Two90-second fixed-axe recipes completed with the caller journal off and local
+damage probe off. Cloth completed4 native-yield rounds with8 actual AI takeover
+records; plate completed2 native-yield rounds with4 takeovers. No harness round
+timeout occurred. Repeated loser notifications are not extra rounds, and yield
+at Health96.72 is not biological death. Own cloth3-piece and knight12-piece kits
+reported exact equipped passports and successful hands; fresh displayed peers
+also reported exact=true. No unavailable-default/passport mismatch was observed
+in these selected recipes. This does not validate every class/module recipe.
+
+The read-only bursts recorded55 traces:3 cloth(2owner/1source) and52 plate
+(27owner/25source). All55 have complete native trace reads;26 plate owner traces
+had matching active replay spans.45 plate rows include density10000 armor tags;
+the remaining rows must be inspected individually rather than called proven
+soft-spot contacts. Observed cloth tags included defB1.45/defC0.5/defS0.25/dens150;
+plate shoulder/cuirass tags included defC187.5/defS112.5/dens10000, with flesh and
+clothing also in ordered hit lists. Caller/source-parent authority remains
+unavailable. Some traces are native damage evaluation at isolated coordinates,
+not world-space contact positions. These are actual native layers, not a paired
+solo/network injury ratio or faithful sever/collision acceptance.
+
+Fairness still fails: cloth honest acceptance0.77397(n146), proxy rotation
+median22.04/max42.93 degrees(n6), clock resets mean2.105/min(n17). Plate honest
+acceptance0.953824(n693), proxy rotation median25.14/max103.19 degrees(n74),
+clock resets0(n26). Neither pose sample count reaches200; do not relax bounds.
+The manual harness verdict passed its limited crash/teardown/network/state
+checks, with zero new crashes and normal menu quits. It is not p0_gate or a
+release verdict. No game/server/sidecar remained after teardown.
+
+Read-only native follow-up: Native21 Arm_R-to-zero cid99 was Inside=true;
+Get Damage excludes Inside from Break Arm R, so its false broken flag was
+expected. Fracture also needs limbHP<=25 and the native snapping/proximity
+inequality. Dislocation instead compares Mesh vs DriverSkeleton upperarm
+parent-bone-space positions (>15 units) and Bone Snapping, not HP0. Cooked socket
+getters use space3; the pinned SDK identifies3 as RTS_ParentBoneSpace, while
+RTS_Component is2. Do not substitute component or world positions. Current audit
+does not measure those inputs. Forwarding stuck damage does not reproduce the
+source constraint's physical force history; measure the two bone positions and
+source/owner native constraint forces before changing replay or joint limits.
+
+The next reviewed checkpoint adds `scripts/lab.ps1`: it builds the controller,
+uses Cargo's actual reported executable (including configured targets), preserves
+CLI arguments/exit codes, and copies each session owner to a unique ignored path.
+Independent Windows PowerShell5.1 verification passed17 focused checks, including
+a rebuild while the old owner executable remains running. Use this wrapper for
+future sessions/experiments instead of an unverified release lab binary.
+
+The read-only body audit now samples exact space3 upperarm Mesh/DriverSkeleton
+translations, Bone Snapping, strict native flags and map3/6 values. Both skeletal
+components need distinct fresh identities and the current pawn owner/world.
+Missing or changing inputs stay unavailable; sampled predicates never authorize
+an event. Astra approved source; focused body+combat checks passed483 assertions
+(130+353). A positive matching native diagnostic capture remains pending.
