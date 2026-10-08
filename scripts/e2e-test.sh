@@ -441,8 +441,8 @@ fi
 
 # T6: A's original placed-life root reaches B unchanged through the file bridge and shm.
 rec_wait 3 pawn_scope "$DIRA"
-send_loaded_status "$DIRA" 0 "$(sess_arena "$DIRA")"
-send_loaded_status "$DIRB" 0 "$(sess_arena "$DIRB")"
+fixture_game "$DIRA" "$(sess_arena "$DIRA")"; T4_GAME_A=$REC_GAME_PID
+fixture_game "$DIRB" "$(sess_arena "$DIRB")"; T4_GAME_B=$REC_GAME_PID
 pawn_scope "$DIRA"
 T6_ROOT=$(fixture_root "$DIRA" 42 "$REC_POS")
 printf '%s\n' "$T6_ROOT" > "$DIRA/me_9001.json"
@@ -476,7 +476,7 @@ if [[ -n "$T5_STATS" ]] && ! echo "$T5_STATS" | grep -v -q "aead_failed=0 "; the
   pass "T5b no decrypt failures during normal ops"
 else fail "T5b decrypt failures" "$(grep 'v5 transport stats' $SCRATCH/t4_sv.log | tail -1)"; fi
 
-kill $SV $SA $SB 2>/dev/null
+kill $T4_GAME_A $T4_GAME_B $SV $SA $SB 2>/dev/null
 wait 2>/dev/null
 
 # ============================================================================
@@ -699,7 +699,8 @@ else fail "T21a live" "$(sess_show "$DIRX") | $(cmd_result "$DIRX" 1802)"; fi
 # Apply the exact assigned spawns first; the first root cannot invent a fight position.
 rec_wait 3 pawn_scope "$DIRX"; rec_wait 3 pawn_scope "$DIRY"
 for d in "$DIRX" "$DIRY"; do
-  send_loaded_status "$d" 0 "$(sess_arena "$d")"
+  fixture_game "$d" "$(sess_arena "$d")"
+  if [[ "$d" == "$DIRX" ]]; then T20_GAME_X=$REC_GAME_PID; else T20_GAME_Y=$REC_GAME_PID; fi
   pawn_scope "$d"
   rec_put "$d" local_root "$(fixture_root "$d" 1 "$REC_POS" "$(( $(date +%s%3N) & 4294967295 ))")"
 done
@@ -716,10 +717,13 @@ pawn_scope "$DIRX"; T20_MATCH=$REC_MATCH; T20_ROUND=$REC_ROUND; T20_ALIFE=$REC_L
 for k in $(seq 1 12); do
   T20_TS=$(( $(date +%s%3N) & 4294967295 ))
   T20_DT=25; (( T20_PREV > 0 )) && T20_DT=$((T20_TS - T20_PREV))
-  rec_put "$DIRX" local_root "${T20_XROOT/\"ts\":0/\"ts\":$T20_TS}"
-  rec_put "$DIRY" local_root "${T20_YROOT/\"ts\":0/\"ts\":$T20_TS}"
   T20_XFRAME=${T20_XPOSE/\"ts\":0/\"ts\":$T20_TS}; T20_XFRAME=${T20_XFRAME/\"dt\":25/\"dt\":$T20_DT}
   T20_YFRAME=${T20_YPOSE/\"ts\":0/\"ts\":$T20_TS}; T20_YFRAME=${T20_YFRAME/\"dt\":25/\"dt\":$T20_DT}
+  T20_XFRAME=${T20_XFRAME/\"tick\":1/\"tick\":$((k+1))}; T20_YFRAME=${T20_YFRAME/\"tick\":1/\"tick\":$((k+1))}
+  T20_XROOT_SAMPLE=${T20_XROOT/\"ts\":0/\"ts\":$T20_TS}; T20_XROOT_SAMPLE=${T20_XROOT_SAMPLE/\"tick\":2/\"tick\":$((k+1))}
+  T20_YROOT_SAMPLE=${T20_YROOT/\"ts\":0/\"ts\":$T20_TS}; T20_YROOT_SAMPLE=${T20_YROOT_SAMPLE/\"tick\":2/\"tick\":$((k+1))}
+  rec_put "$DIRX" local_root "$T20_XROOT_SAMPLE"
+  rec_put "$DIRY" local_root "$T20_YROOT_SAMPLE"
   rec_put "$DIRX" local_pose "$T20_XFRAME"
   rec_put "$DIRY" local_pose "$T20_YFRAME"
   T20_PREV=$T20_TS
@@ -731,8 +735,10 @@ T20_VIEW=$(jget "$T20_PLAY" pt | awk '{printf "%.0f",int($1)}')
 # Tool startup time must not turn a genuine contact into an expired timestamp.
 T20_TS=$(( $(date +%s%3N) & 4294967295 ))
 T20_DT=$((T20_TS - T20_PREV))
-rec_put "$DIRX" local_root "${T20_XROOT/\"ts\":0/\"ts\":$T20_TS}"
+T20_XROOT_SAMPLE=${T20_XROOT/\"ts\":0/\"ts\":$T20_TS}; T20_XROOT_SAMPLE=${T20_XROOT_SAMPLE/\"tick\":2/\"tick\":14}
+rec_put "$DIRX" local_root "$T20_XROOT_SAMPLE"
 T20_XFRAME=${T20_XPOSE/\"ts\":0/\"ts\":$T20_TS}; T20_XFRAME=${T20_XFRAME/\"dt\":25/\"dt\":$T20_DT}
+T20_XFRAME=${T20_XFRAME/\"tick\":1/\"tick\":14}
 rec_put "$DIRX" local_pose "$T20_XFRAME"
 # FLAG_COMPLEX|FLAG_WEAPON =160; native SOURCE_FIST|SOURCE_RIGHT|(Sphere10<<21).
 # The sidecar allocates only hit_id/age_ms; original callback identity remains immutable.
@@ -771,6 +777,8 @@ if e2e_wait_file 3 "$DIRX/view.jsonl" '"ev":"s2g".*"kind":"death".*"peer_id":2' 
    && grep -q '"ev":"s2g".*"kind":"death".*"peer_id":2' "$DIRY/view.jsonl"; then
   pass "T21c death record reaches both games (S2G, match_id filled)"
 else fail "T21c death record" "$(grep '"kind":"death"' "$DIRX/view.jsonl" | tail -1 | head -c 300)"; fi
+kill $T20_GAME_X $T20_GAME_Y 2>/dev/null
+wait $T20_GAME_X $T20_GAME_Y 2>/dev/null
 
 # T22: admin kick — X (admin) kicks peer_id=2 (Y): a typed KICK command
 send_cmd "$DIRX" 1803 kick '"peer_id":2,"text":"kicked"'

@@ -194,6 +194,9 @@ sleep 1.5
 q_game "$QD1" Map_Arena_Alley; q_game "$QD2" Map_Arena_Alley
 if q_start_match $QR "$QD1" "$QD2"; then pass "Q1a match live (two reporting game clients)"
 else fail "Q1a match live" "$(sess_show "$QD1" 400)"; fi
+# A complete own roster row must have arrived before freezing the reconnect baseline.
+q1_has_seat() { local s; s=$(my_seat "$1"); [[ "$s" =~ ^[1-9][0-9]*$ ]]; }
+rec_wait 5 q1_has_seat "$QD2"
 SEAT2=$(my_seat "$QD2")
 # Dropper wins round 1 (kill the Stayer's seat) so there are wins to keep.
 SEAT1=$(my_seat "$QD1")

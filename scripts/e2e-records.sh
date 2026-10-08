@@ -31,7 +31,7 @@ rec_wait() { local t="$1" i=0; shift; while (( i < t * 10 )); do "$@" && return 
 
 # --- reading ------------------------------------------------------------------------------
 # rec DIR SLOT: the newest slot line (empty if none yet); rec_v DIR SLOT: its record ("v") part.
-rec() { grep -F "\"slot\":\"$2\"" "$1/view.jsonl" 2>/dev/null | tail -1; }
+rec() { awk -v slot="$2" 'index($0,"\"slot\":\"" slot "\"") && /}\r?$/ { last=$0 } END { if (last!="") print last }' "$1/view.jsonl" 2>/dev/null; }
 rec_v() { local l; l=$(rec "$1" "$2"); [[ -n "$l" ]] && printf '%s' "${l#*\"v\":}"; }
 # jget JSON KEY: the first value of KEY (a number, bool or string, quotes stripped).
 jget() { printf '%s' "$1" | grep -o "\"$2\":\(\"[^\"]*\"\|[^],}]*\)" | head -1 | cut -d: -f2- | sed 's/^"//; s/"$//'; }
@@ -126,11 +126,33 @@ fixture_root() { # DIR TICK POS [TS]: explicit scoped game callback, legacy root
   printf '{"tick":%s,"ts":%s,"pos":%s,"rot":[0,0,0],"vel":[0,0,0],"match_id":%s,"round":%s,"life":%s}' \
     "$2" "${4:-0}" "$3" "$REC_MATCH" "$REC_ROUND" "$REC_LIFE"
 }
+# ipcgame::num renders source f32 values rounded to 1e-4; compare that exact
+# display representation, not its spelling against the wider schema JSON number.
+root_position_equal() {
+  awk -v expected="$1" -v actual="$2" 'BEGIN {
+    gsub(/[\[\]]/,"",expected); gsub(/[\[\]]/,"",actual)
+    if (split(expected,e,",")!=3 || split(actual,a,",")!=3) exit 1
+    for (i=1;i<=3;i++) {
+      rounded=int(e[i]*10000+(e[i]<0 ? -0.5 : 0.5))/10000
+      if (rounded != a[i]+0) exit 1
+    }
+  }'
+}
 root_relayed() { # DIR OWNER EXPECTED_ROOT: exact scoped content, not any historical root
   local r k
   r=$(grep '"ev":"peer_root"' "$1/view.jsonl" 2>/dev/null | grep -F "\"peer\":$2," | grep -F "\"tick\":$(jget "$3" tick)," | tail -1)
-  [[ -n "$r" && "$(jarray "$r" pos)" == "$(jarray "$3" pos)" ]] || return 1
+  [[ -n "$r" ]] && root_position_equal "$(jarray "$3" pos)" "$(jarray "$r" pos)" || return 1
   for k in match_id round life; do [[ "$(jget "$r" "$k")" == "$(jget "$3" "$k")" ]] || return 1; done
+}
+# The fake game must keep reporting while script/tool startup takes time. Capture
+# this pawn's verified assignment once; never restamp the heartbeat into another life.
+fixture_game() { # DIR ARENA; caller owns REC_GAME_PID and stops it at fixture teardown
+  local d="$1" status
+  pawn_scope "$d" || return 1
+  status="{\"match_id\":$REC_MATCH,\"round\":$REC_ROUND,\"life\":$REC_LIFE,\"spawn_id\":$REC_SPAWN,\"world_key\":1,\"flags\":3,\"load_error\":0,\"arena\":\"$2\"}"
+  rec_put "$d" game_status "$status" || return 1
+  ( while sleep 1; do rec_put "$d" game_status "$status" || exit 1; done ) &
+  REC_GAME_PID=$!
 }
 # The neutral skeleton from lagcomp/tests.rs::skeleton, with its linking v2 bones.
 # The source sphere is the proven native_fist_sphere fixture: right hand, component 10,
