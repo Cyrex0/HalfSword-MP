@@ -340,15 +340,8 @@ if nocolor "$SCRATCH/t4_sv.log" | grep -q "peer joined.*player=" && \
   pass "T5 v5 encrypted handshake (player fingerprints logged)"
 else fail "T5 encryption" "$(grep -E 'peer joined|v5' $SCRATCH/t4_sv.log | head -3)"; fi
 
-# T6: snapshot forwarding — A's game root (me_*.json through the fake game -> the local_root
-# record, built as HSMPNative builds it)
-# reaches B's game as PeerRoot (shared memory; seen in B's game view).
-echo '{"pid":9001,"nick":"Alpha","tick":42,"pos":[500.000,0.000,100.000],"rot":[0.000,0.000,0.000],"vel":[0.0,0.0,0.0]}' > "$DIRA/me_9001.json"
-if e2e_wait_file 5 "$DIRB/view.jsonl" '"ev":"peer_root".*"peer":1.*"pos":\[500\.0,0\.0,100\.0\]'; then
-  pass "T6 root-snapshot forwarding (A pos=500 reaches B's PeerRoot)"
-else
-  fail "T6 forwarding" "$(grep '"ev":"peer_root"' "$DIRB/view.jsonl" 2>/dev/null | tail -1 | head -c 300)"
-fi
+# T6 runs after the match's placed-life acknowledgement below: lobby roots have
+# no native pawn generation and are intentionally refused by protocol 12.
 
 # T7: chat (a typed `chat` record from A's game -> the server -> B's game as `chat_in`)
 send_chat "$DIRA" "e2e chat test"
@@ -446,12 +439,28 @@ else
   fail "T10 live" "$(sess_show "$DIRA")"
 fi
 
+# T6: A's original placed-life root reaches B unchanged through the file bridge and shm.
+rec_wait 3 pawn_scope "$DIRA"
+send_loaded_status "$DIRA" 0 "$(sess_arena "$DIRA")"
+send_loaded_status "$DIRB" 0 "$(sess_arena "$DIRB")"
+pawn_scope "$DIRA"
+T6_ROOT=$(fixture_root "$DIRA" 42 "$REC_POS")
+printf '%s\n' "$T6_ROOT" > "$DIRA/me_9001.json"
+if rec_wait 5 root_relayed "$DIRB" 1 "$T6_ROOT"; then
+  pass "T6 root-snapshot forwarding (A's exact placed-life root reaches B's PeerRoot)"
+else
+  fail "T6 forwarding" "$(grep '"ev":"peer_root"' "$DIRB/view.jsonl" 2>/dev/null | tail -1 | head -c 300)"
+fi
+
 # T12: speed cap — fire a teleport
 # (a root inside the world bound: the record check refuses one outside it before it leaves
 # the game. A first root after a spawn is a baseline, so set one, then jump 900 m.)
-echo '{"pid":9001,"nick":"Alpha","tick":43,"pos":[600.000,0.000,100.000],"rot":[0.000,0.000,0.000],"vel":[0.0,0.0,0.0]}' > "$DIRA/me_9001.json"
+pawn_scope "$DIRA"
+T12_BASE=$(fixture_root "$DIRA" 43 "$REC_POS")
+printf '%s\n' "$T12_BASE" > "$DIRA/me_9001.json"
+rec_wait 3 root_relayed "$DIRB" 1 "$T12_BASE"
 sleep 0.5
-echo '{"pid":9001,"nick":"Alpha","tick":44,"pos":[90000.000,0.000,100.000],"rot":[0.000,0.000,0.000],"vel":[0.0,0.0,0.0]}' > "$DIRA/me_9001.json"
+fixture_root "$DIRA" 44 '[90000.0,0.0,100.0]' > "$DIRA/me_9001.json"
 sleep 1.0
 if grep -q "speed cap exceeded" "$SCRATCH/t4_sv.log"; then
   pass "T12 teleport speed cap caught the jump"
@@ -539,6 +548,8 @@ hdr "V1-V5: Build identity (protocol / content checks, listing fields)"
 
 V_HASH=$("$BINS/hsmp-server.exe" --build-info | grep -o '"content_hash":"[0-9a-f]*"' | cut -d'"' -f4)
 V_VER=$("$BINS/hsmp-server.exe" --build-info | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+V_MIN=$("$BINS/hsmp-server.exe" --build-info | grep -o '"proto_min":[0-9]*' | cut -d: -f2)
+V_MAX=$("$BINS/hsmp-server.exe" --build-info | grep -o '"proto_max":[0-9]*' | cut -d: -f2)
 V_OTHER=$(printf '%064d' 7)
 e2e_port VMPORT
 e2e_port VPORT
@@ -606,10 +617,10 @@ fi
 # V5: the listing carries version, protocol range and the enforced content hash; hsmp-query passes them on
 V_LIST=$(curl -s "http://127.0.0.1:$VMPORT/v1/servers")
 V_Q=$("$BINS/hsmp-query.exe" --master "http://127.0.0.1:$VMPORT" --timeout-ms 800 2>/dev/null | grep "^S" | head -1)
-if echo "$V_LIST" | grep -q "\"content_hash\":\"$V_HASH\"" && echo "$V_LIST" | grep -q '"proto_min":6' \
-   && echo "$V_LIST" | grep -q '"proto_max":6' && echo "$V_LIST" | grep -q "\"version\":\"$V_VER\"" \
-   && [[ "$(echo "$V_Q" | cut -f16-18)" == "${V_HASH:0:16}"$'\t'"6"$'\t'"6" ]]; then
-  pass "V5 listing: version $V_VER, proto 6..6, content_hash ${V_HASH:0:16}..."
+if echo "$V_LIST" | grep -q "\"content_hash\":\"$V_HASH\"" && echo "$V_LIST" | grep -q "\"proto_min\":$V_MIN[,}]" \
+   && echo "$V_LIST" | grep -q "\"proto_max\":$V_MAX[,}]" && echo "$V_LIST" | grep -q "\"version\":\"$V_VER\"" \
+   && [[ "$(echo "$V_Q" | cut -f16-18)" == "${V_HASH:0:16}"$'\t'"$V_MIN"$'\t'"$V_MAX" ]]; then
+  pass "V5 listing: version $V_VER, proto $V_MIN..$V_MAX, content_hash ${V_HASH:0:16}..."
 else
   fail "V5 listing fields" "list: $V_LIST | query: $V_Q"
 fi
@@ -684,35 +695,70 @@ if wait_phase 8 "$DIRX" live; then
   pass "T21a match in live state"
 else fail "T21a live" "$(sess_show "$DIRX") | $(cmd_result "$DIRX" 1802)"; fi
 
-# T20: a damage claim in the live round. Keep the attacker's position near the target via a
-# root (me_*.json) so the server's range check has it.
-echo '{"pid":9100,"nick":"AdminGuy","tick":1,"pos":[-480.0,0.0,100.0],"rot":[0.0,0.0,0.0],"vel":[0.0,0.0,0.0]}' > "$DIRX/me_9100.json"
-# (No root from Y: a victim without stream history is judged without lag compensation,
-# so this un-timestamped claim is accepted; lagcomp itself is covered by unit tests.)
-sleep 0.5
-# The game's claim (a typed `damage` record, cid 7): the sidecar fills hit_id / round /
-# age_ms; the server validates it, forwards it to Y as `damage_in` (peer = X), confirms to X,
-# and on Y's sidecar ack sends X the FINAL verdict, all as records into the games' S2G rings.
-rec_put "$DIRX" damage '{"cid":7,"target_peer_id":2,"bone":"spine_02","raw_damage":10.0,"damage_out":5.0,"cutting_power":1.0,"normal":[1.0,0.0,0.0],"location":[-500.0,0.0,110.0],"offset":[0.0,0.0,10.0],"flags":32}'
+# T20: a modern native fist claim backed by BOTH original-life pose histories.
+# Apply the exact assigned spawns first; the first root cannot invent a fight position.
+rec_wait 3 pawn_scope "$DIRX"; rec_wait 3 pawn_scope "$DIRY"
+for d in "$DIRX" "$DIRY"; do
+  send_loaded_status "$d" 0 "$(sess_arena "$d")"
+  pawn_scope "$d"
+  rec_put "$d" local_root "$(fixture_root "$d" 1 "$REC_POS" "$(( $(date +%s%3N) & 4294967295 ))")"
+done
+sleep 3.2 # past spawn protection, and enough real travel time for this bounded approach
+# Canonical sphere scene from lagcomp/tests.rs::native_fist_sphere_validates_its_swept_source.
+# Use the actual clock and delivered victim playback time, never a fabricated lag hint.
+T20_PREV=0
+T20_XROOT=$(fixture_root "$DIRX" 2 '[-150.0,0.0,100.0]')
+T20_YROOT=$(fixture_root "$DIRY" 2 '[-80.0,-20.0,100.0]')
+T20_XPOSE=$(contact_pose "$DIRX" 0 25 -150 0)
+T20_YPOSE=$(contact_pose "$DIRY" 0 25 -80 -20)
+pawn_scope "$DIRY"; T20_VLIFE=$REC_LIFE
+pawn_scope "$DIRX"; T20_MATCH=$REC_MATCH; T20_ROUND=$REC_ROUND; T20_ALIFE=$REC_LIFE
+for k in $(seq 1 12); do
+  T20_TS=$(( $(date +%s%3N) & 4294967295 ))
+  T20_DT=25; (( T20_PREV > 0 )) && T20_DT=$((T20_TS - T20_PREV))
+  rec_put "$DIRX" local_root "${T20_XROOT/\"ts\":0/\"ts\":$T20_TS}"
+  rec_put "$DIRY" local_root "${T20_YROOT/\"ts\":0/\"ts\":$T20_TS}"
+  T20_XFRAME=${T20_XPOSE/\"ts\":0/\"ts\":$T20_TS}; T20_XFRAME=${T20_XFRAME/\"dt\":25/\"dt\":$T20_DT}
+  T20_YFRAME=${T20_YPOSE/\"ts\":0/\"ts\":$T20_TS}; T20_YFRAME=${T20_YFRAME/\"dt\":25/\"dt\":$T20_DT}
+  rec_put "$DIRX" local_pose "$T20_XFRAME"
+  rec_put "$DIRY" local_pose "$T20_YFRAME"
+  T20_PREV=$T20_TS
+  sleep 0.025
+done
+T20_PLAY=$("$HSMP_TOOLS" ipc-dump --name "$(cat "$(rec_name_file "$DIRX")")" --get peer_play --peer 2 --json)
+T20_VIEW=$(jget "$T20_PLAY" pt | awk '{printf "%.0f",int($1)}')
+# Sample the original attacker again after observing the delivered victim frame.
+# Tool startup time must not turn a genuine contact into an expired timestamp.
+T20_TS=$(( $(date +%s%3N) & 4294967295 ))
+T20_DT=$((T20_TS - T20_PREV))
+rec_put "$DIRX" local_root "${T20_XROOT/\"ts\":0/\"ts\":$T20_TS}"
+T20_XFRAME=${T20_XPOSE/\"ts\":0/\"ts\":$T20_TS}; T20_XFRAME=${T20_XFRAME/\"dt\":25/\"dt\":$T20_DT}
+rec_put "$DIRX" local_pose "$T20_XFRAME"
+# FLAG_COMPLEX|FLAG_WEAPON =160; native SOURCE_FIST|SOURCE_RIGHT|(Sphere10<<21).
+# The sidecar allocates only hit_id/age_ms; original callback identity remains immutable.
+rec_put "$DIRX" damage "{\"cid\":7,\"target_peer_id\":2,\"match_id\":$T20_MATCH,\"round\":$T20_ROUND,\"attacker_life\":$T20_ALIFE,\"victim_life\":$T20_VLIFE,\"attacker_ts\":$T20_TS,\"victim_view_ts\":$T20_VIEW,\"bone\":\"spine_02\",\"source_class\":\"Weapon_Fists_C\",\"dism_blunt\":22282240,\"raw_damage\":10.0,\"damage_out\":5.0,\"cutting_power\":1.0,\"normal\":[1.0,0.0,0.0],\"location\":[-79.0,-20.0,140.0],\"offset\":[1.0,0.0,15.0],\"flags\":160}"
 if e2e_wait_file 5 "$DIRY/view.jsonl" '"ev":"s2g".*"kind":"damage_in"'; then
   DI=$(grep '"ev":"s2g".*"kind":"damage_in"' "$DIRY/view.jsonl" | tail -1)
-  if echo "$DI" | grep -q '"bone":"spine_02"' && echo "$DI" | grep -q '"cid":7' && echo "$DI" | grep -q '"target_peer_id":2'; then
+  if echo "$DI" | grep -q '"bone":"spine_02"' && echo "$DI" | grep -q '"cid":7,' && echo "$DI" | grep -q '"target_peer_id":2' \
+     && [[ "$(jget "$DI" match_id)" == "$T20_MATCH" && "$(jget "$DI" round)" == "$T20_ROUND" \
+       && "$(jget "$DI" attacker_life)" == "$T20_ALIFE" && "$(jget "$DI" victim_life)" == "$T20_VLIFE" \
+       && "$(jget "$DI" source_class)" == Weapon_Fists_C && "$(jget "$DI" dism_blunt)" == 22282240 ]]; then
     pass "T20 damage claim reaches the victim's game as damage_in (record as written)"
   else fail "T20 damage_in" "$(echo "$DI" | head -c 400)"; fi
 else
   fail "T20 damage claim" "no damage_in in Y's view; X: $(grep '"kind":"damage_verdict"' "$DIRX/view.jsonl" | tail -1 | head -c 300)"
 fi
-if e2e_wait_file 5 "$DIRX/view.jsonl" '"kind":"damage_verdict".*"kind":2.*"ok":true'; then
-  if grep '"kind":"damage_verdict"' "$DIRX/view.jsonl" | grep -q '"cid":7'; then
+if e2e_wait_file 5 "$DIRX/view.jsonl" '"kind":"damage_verdict".*"cid":7,.*"kind":2.*"ok":true'; then
+  if grep '"kind":"damage_verdict"' "$DIRX/view.jsonl" | grep '"cid":7,' | grep '"kind":2' | grep -q '"ok":true'; then
     pass "T20a attacker gets the FINAL verdict for its claim id (owner acked)"
   else fail "T20a verdict cid" "$(grep '"kind":"damage_verdict"' "$DIRX/view.jsonl" | tail -1 | head -c 300)"; fi
 else
   fail "T20a damage verdict" "$(grep '"kind":"damage_verdict"' "$DIRX/view.jsonl" | tail -2 | head -c 400)"
 fi
 
-# Y's game reports its own death (typed death_report, round 0 = the sidecar's round):
+# Y's game reports its own original-life death (the sidecar only allocates death_id):
 # resent until death_ack; the server declares it and every game gets one `death` record.
-rec_put "$DIRY" death_report '{"round":0}'
+send_death "$DIRY"
 wait_phase 4 "$DIRX" roundover
 T21_RO=no; phase_is "$DIRX" roundover && T21_RO=yes
 # The roster row's wins can land a snapshot after the phase: let it converge (3 s).
@@ -861,7 +907,8 @@ else
   fail "T29a spawn plan" "$(cmd_result "$DIRV1" 2901) | $(sess_show "$DIRV1" 600)"
 fi
 
-rec_put "$DIRV2" death_report '{"round":0}'
+rec_wait 3 pawn_scope "$DIRV2"
+send_death "$DIRV2"
 sleep 8  # 5s match_over pause + 1s die + buffer → reset to lobby + history write
 
 # T30: history.jsonl written on match_over
@@ -1108,7 +1155,7 @@ sleep 0.6
 FS=$(rcon_s "START FORCE@400")
 wait_phase 3 "$DIRS1" loading
 send_status "$DIRS1" 1 0 Map_Arena_Yard
-send_status "$DIRS2" 0 0 "" spawn_timeout
+send_status "$DIRS2" 1 0 "" spawn_timeout
 sleep 5
 MID_PHASE=$(sess_phase "$DIRS1"); MID_W2=$(jget "$(row_of_seat "$DIRS1" 2)" waiting)
 sleep 8

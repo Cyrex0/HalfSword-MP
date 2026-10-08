@@ -132,11 +132,14 @@ if [[ "${E2E_CONN_STANDALONE:-0}" == 1 ]]; then
 fi
 
 # A headless "game": reports its game status like HSMPMatch's Director (a typed
-# `game_status` record: round 99 loaded on <arena>, alive) every second, so the server
+# `game_status` record: the current assigned round/life loaded on <arena>, alive) every second, so the server
 # treats the client as a game in its load barrier.
 q_game() {   # dir arena
   local d="$1" a="$2"
-  ( while true; do send_status "$d" 99 0 "$a" 2>/dev/null; sleep 1; done ) &
+  ( while true; do
+      if pawn_scope "$d"; then send_loaded_status "$d" 0 "$a"; else send_status "$d" 0 0; fi
+      sleep 1
+    done ) &
   Q_PIDS+=($!)
 }
 # q_sidecar / q_server run in THIS shell (never call them inside $(...), the PID would be
