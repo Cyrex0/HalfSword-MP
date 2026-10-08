@@ -14,6 +14,11 @@ local function admission(s)
     local v=type(s)=="table" and s.last_refused_caller_admission
     return type(v)=="string" and s.last_refused_caller_admission_available==true and admissions[v] and v or "unavailable"
 end
+local function status_reason(s)
+    local v=type(s)=="table" and s.reason
+    if type(v)~="string"then return "unavailable"end
+    return v:sub(1,128):gsub("[%c\\]",function(c)return string.format("\\x%02x",c:byte())end)
+end
 local function copy(s)
     if type(s)~="table" then return nil end
     local c={}
@@ -85,12 +90,31 @@ function M.new(api)
             api.emit(row)
         end
     end
+    local stopping=false
     local function stop(reason)
         control_epoch=control_epoch+1
-        local n=native()
-        if n then pcall(n.stop);drain(n) end
+        if stopping then return end
+        stopping=true
+        local admitted,n=pcall(native)
+        if not admitted then n=nil end
+        local status_fields
+        if n then
+            if active or pending then
+                -- Status uses copied native scalars only; no snapshot resolver or UE object reads.
+                local ok,s=pcall(n.status)
+                if not ok then s=nil end
+                local copied,values=pcall(function()return {status_reason(s),process_counter(s,"proven_thread_id"),process_counter(s,"foreign_callbacks_process_total"),
+                    process_counter(s,"same_thread_unavailable_process_total"),process_counter(s,"unknown_thread_callbacks_process_total"),admission(s)}end)
+                if copied then status_fields=values end
+            end
+            pcall(n.stop);pcall(drain,n)
+        end
         active,pending=nil,nil
-        api.log("BOXOBS stopped reason=%s authority=false",reason or "developer")
+        if status_fields then
+            pcall(api.log,"BOXOBS_STATUS stage=stop native_reason=%s proven_thread_id=%s foreign_callbacks_process_total=%s same_thread_unavailable_process_total=%s unknown_thread_callbacks_process_total=%s last_refused_caller_admission=%s foreign_callback_targets_known=false authority=false",table.unpack(status_fields))
+        end
+        pcall(api.log,"BOXOBS stopped reason=%s authority=false",reason or "developer")
+        stopping=false
     end
     local function fresh(caller)
         if not active then return nil,"inactive" end

@@ -1451,12 +1451,19 @@ do
         T.check(api.C3.inside_journal(SI,coll,FName("head"),SI.Mesh,nil,1000,1000,0,1,false)==false,
             "wrong constraint target bone cannot be reported as proven")
         constraint["Bone Name 2"]=FName("head")
+        local participation_seq=SESS.seq
+        SESS.seq=1;publish()
         local original_gate,original_gate_bone=SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]
         SI["Last Complex Damage Impulse"],SI["Last Complex Damage Bone"]=100000,FName("head")
+        local old_consciousness,old_fallen,old_health=ME.Consciousness,ME.Fallen,ME.Health
+        ME.Consciousness,ME.Fallen,ME.Health=0,true,10
         api.on_complex(SI,SI.Mesh,coll,FName("head"),zero,zero,
             {X=100,Y=0,Z=0},{X=1,Y=0,Z=0},40,0,.85,0,false,false,1,nil,false,0)
         local parent=api.CX.pending[#api.CX.pending]
         T.check(parent and parent.gate==false and not parent.cid,"suppressed native DCD retained before constraint construction")
+        T.check(parent and api.C3.new_source_down(2,{match_id=12345,round=3,life=1},{match_id=12345,round=3,life=1})==false,
+            "native unconsciousness/fall/low Health do not veto new records while exact Mode remains alive")
+        ME.Consciousness,ME.Fallen,ME.Health=old_consciousness,old_fallen,old_health
         api.C3.constraint_begin_journal(constraint)
         T.check(parent and parent.constraint_parent,"exact original source/body callback binds suppressed penetration parent")
         local before=#sent("damage")
@@ -1464,6 +1471,22 @@ do
         api.C3.inside_forward(SI,coll,FName("head"),SI.Mesh,zero,1000,1000,0,1,false,false,false,false,0,native_normal,zero,zero)
         T.check(#sent("damage")==before and #(api.CX.inside_queue or {})==1,
             "initial native Inside before origin flush queues plain data instead of orphaning")
+        local participation_mode=RL.deep(NAT._rec.slots.mode.t)
+        local participation_phase=SESS.phase
+        local origin_at,inside_at=parent.ats,api.CX.inside_queue[1].attacker_ts
+        local pending_count=#api.CX.pending
+        SESS.phase=4;publish();api.refresh_match()
+        for _,down_peer in ipairs({9,2})do
+            local down_mode=RL.deep(participation_mode)
+            down_mode.seq=down_mode.seq+10+down_peer
+            for _,row in ipairs(down_mode.rows)do if row.peer_id==down_peer then row.alive=false end end
+            NAT.sc_put("mode",down_mode)
+            api.on_complex(SI,SI.Mesh,coll,FName("head"),zero,zero,
+                {X=100,Y=0,Z=0},{X=1,Y=0,Z=0},40,0,.85,0,false,false,1,nil,false,0)
+            api.C3.inside_forward(SI,coll,FName("head"),SI.Mesh,zero,1000,1000,0,1,false,false,false,false,0,native_normal,zero,zero)
+            T.check(#api.CX.pending==pending_count and #(api.CX.inside_queue or {})==1 and #sent("damage")==before,
+                "known-down peer"..down_peer.." refuses fresh origin and Inside without new record/CID")
+        end
         api.flush_claims()
         local emitted=sent("damage")
         local origin,inside=emitted[before+1],emitted[before+2]
@@ -1472,6 +1495,11 @@ do
         T.check(inside and inside.flags==129 and inside.source_class=="ArmingSword_C"
             and inside.dism_blunt==3145728 and math.abs(inside.normal[2]-.8)<1e-6 and math.abs(inside.normal[3]-.6)<1e-6,
             "continuation preserves exact source hand/module/class and native normal",T.repr(inside))
+        T.check(origin and inside and origin.attacker_ts==origin_at and inside.attacker_ts==inside_at
+            and origin.match_id==12345 and inside.match_id==12345 and origin.round==3 and inside.round==3
+            and origin.attacker_life==1 and inside.attacker_life==1 and origin.victim_life==1 and inside.victim_life==1,
+            "pre-down queued origin and Inside still flush with immutable timestamps/full lives after Mode-down")
+        NAT.sc_put("mode",participation_mode);SESS.phase,SESS.seq=participation_phase,participation_seq;publish();api.refresh_match()
         if inside then
             local retry={};for k,v in pairs(inside)do retry[k]=v end
             local ctx=api.C3.inside_context(SI,coll,FName("head"),SI.Mesh)

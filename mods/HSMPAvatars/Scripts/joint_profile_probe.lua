@@ -27,6 +27,11 @@ local function copy(v,depth)
     if type(v)=="number"then number(v)elseif type(v)=="string"then assert(#v<=2048,"text capacity")end
     return v
 end
+function M.reason(v)
+    local ok,text=pcall(tostring,v)
+    if not ok then return "diagnostic reason unavailable"end
+    return text:gsub("[%c]"," "):sub(1,120)
+end
 local function attempt(r,key,fn)
     local ok,v=pcall(fn);r[key]=ok and {available=true,value=v}or {available=false,reason=tostring(v):sub(1,120)}
 end
@@ -66,9 +71,11 @@ local spec={
     projection={"GetProjectionParams",{"bEnableProjection","ProjectionLinearAlpha","ProjectionAngularAlpha"}},
 }
 local order={"angular_limits","angular_drive","soft_swing","soft_twist","projection"}
-local function joint(e,j)
+local function joint(e,j,label)
+    e.stage(label..".accessor_before")
     local ref,before=accessor(e,j);local r={name=j[1],binding=before,complete=true}
     for _,key in ipairs(order)do
+        e.stage(label.."."..key)
         assert(e.current(),"scope changed")
         attempt(r,key,function()
             local s=spec[key];local args={};for i=1,#s[2]do args[i]={}end
@@ -83,13 +90,14 @@ local function joint(e,j)
         end)
         assert(e.current(),"scope changed");r.complete=r.complete and r[key].available
     end
+    e.stage(label..".accessor_after")
     local _,after=accessor(e,j)
     assert(same(before.owner,after.owner)and before.index==after.index and before.parent==after.parent and before.child==after.child,"accessor changed")
     return r
 end
-local function row(c,e,all_current)
+local function row(c,e,all_current,stage,label)
     local lost=false;local old=e.current
-    e=setmetatable({current=function()
+    e=setmetatable({stage=stage,current=function()
         if lost then return false end
         local ok,v=pcall(old)
         if not ok or v~=true then lost=true;return false end
@@ -97,12 +105,15 @@ local function row(c,e,all_current)
         if not ok2 or v2~=true then lost=true;return false end
         return true
     end},{__index=e})
+    stage(label..".scope_before")
     assert(e.current(),"scope changed")
     local r=copy(c);r.admission_ms=r.observed_ms;r.observed_ms=number(e.now())
     r.side="right";r.phase="pre_driver_configuration_observation";r.authority=false;r.joints={}
+    stage(label..".asset_before")
     local before=asset(e.mesh,e);assert(e.current(),"scope changed");r.asset=before
     r.hand={}
     for _,field in ipairs({"R_GripType_Current","L_GripType_Current","R Two Handed Grip","L Hand In Offhand Attached"})do
+        stage(label..".hand."..field)
         assert(e.current(),"scope changed")
         attempt(r.hand,field,function()
             local v=e.actor[field]
@@ -113,10 +124,12 @@ local function row(c,e,all_current)
         assert(e.current(),"scope changed")
     end
     for _,j in ipairs(M.JOINTS)do
+        stage(label.."."..j[1])
         assert(e.current(),"scope changed")
-        local jr={name=j[1]};attempt(jr,"current",function()return joint(e,j)end);r.joints[#r.joints+1]=jr
+        local jr={name=j[1]};attempt(jr,"current",function()return joint(e,j,label.."."..j[1])end);r.joints[#r.joints+1]=jr
         assert(e.current(),"scope changed")
     end
+    stage(label..".asset_after")
     assert(e.current(),"scope changed");local after=asset(e.mesh,e);assert(e.current(),"scope changed")
     assert(equal_asset(before,after),"asset changed")
     r.observed_end_ms=number(e.now());assert(r.observed_end_ms>=r.observed_ms,"observation clock regressed")
@@ -131,6 +144,12 @@ function M.new(emit)
     function s:capture(source,proxy,se,pe)
         if self.used or self.attempts<1 then return nil end
         self.used=true -- all optional native reads, including failed reads, are once-only.
+        local stage="pair.scope"
+        local function clock()
+            local ok,v=pcall(se.now)
+            return ok and type(v)=="number"and v==v and math.abs(v)<math.huge and v or nil
+        end
+        local started=clock()
         local lost=false
         local function current()
             if lost then return false end
@@ -145,12 +164,18 @@ function M.new(emit)
             for _,k in ipairs({"world","generation","match_id","round"})do
                 assert(source[k]~=nil and source[k]==proxy[k],"source/proxy scope disagreement")
             end
-            local a=row(source,se,current);assert(current(),"scope changed")
-            local b=row(proxy,pe,current);assert(current(),"scope changed")
+            local function set_stage(value)stage=value end
+            local a=row(source,se,current,set_stage,"source");assert(current(),"scope changed")
+            local b=row(proxy,pe,current,set_stage,"proxy");assert(current(),"scope changed")
+            stage="pair.complete"
             return {instance=source.instance,coverage="right_only",comparison="different_peers_same_process; correlate counterpart peer across clients",
                 temporal_pairing=false,authority=false,source=a,proxy=b,observation_separation_ms=b.observed_ms-a.observed_ms}
         end)
-        if not ok then return nil,tostring(result):sub(1,120)end
+        if not ok then
+            local finished=clock();local available=started~=nil and finished~=nil and finished>=started
+            -- Total capture-entry-to-refusal time, not a per-stage duration.
+            return nil,M.reason(result),{stage=stage,elapsed_available=available,capture_elapsed_ms=available and finished-started or nil}
+        end
         pcall(emit,result);return result
     end
     return s

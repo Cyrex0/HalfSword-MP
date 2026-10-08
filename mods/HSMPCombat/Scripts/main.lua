@@ -827,6 +827,7 @@ end
 --     the stand-in with its damage state restored right after.
 local C3 = {
     stuck_resolver = load_module("stuck_membership"),
+    participation = load_module("claim_participation"),
     STANDIN_INVULNERABLE = true,
     TOUCH_GAP_MS = 50,          -- per-peer touch report rate limit
     -- Bookkeeping Deal Complex Damage / Get Damage write besides FIELDS: their
@@ -1322,6 +1323,23 @@ end
 -- made on stand-ins this tick, in callback order. No UObject is
 -- kept in it; cleared every flush and on every world drop.
 local CX = { pending = {}, orphans = 0, source_skips = {} }
+
+function C3.new_source_down(peer,mine,theirs)
+    if not connected or not C3.participation or not mine or not theirs
+        or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return false end
+    local down,reason=C3.participation.known_down(rawget(_G,"HSMP_IPC"),{
+        attacker=my_peer_id,target=peer,match_id=mine.match_id,round=mine.round,
+        attacker_life=mine.life,victim_life=theirs.life},HSESS and HSESS.FRESH_S)
+    if down==true then
+        CX.participation_stops=(CX.participation_stops or 0)+1
+        if CX.participation_stops<=3 or CX.participation_stops%100==0 then
+            Log("new source claim stopped: %s match=%s round=%s attacker_life=%s victim_life=%s (#%d)",
+                reason,tostring(mine.match_id),tostring(mine.round),tostring(mine.life),tostring(theirs.life),CX.participation_stops)
+        end
+        return true
+    end
+    return false -- Missing/changed authority is not a fabricated alive=false.
+end
 local read_vitals
 CX.discard_outbox = C3.discard_outbox
 local complex_hook_ok = false
@@ -1480,6 +1498,7 @@ local function on_complex(selfp, HitComponent, CollidedComponent, HitBone, Locat
         end
         return
     end
+    if C3.new_source_down(peer,mine,theirs)then return end
     local probe_text
     if C3.native_probe then
         -- this blow on one line: my native inputs and what the game did to the stand-in
@@ -2008,6 +2027,8 @@ function C3.inside_forward(w,coll,bone,mesh,loc,raw,cut,draw,pain,lower,shock,st
     local guard=function()return C3.inside_scope_valid(r.context)end
     if not C3.stuck_resolver.current(q,r,guard)then return end
     local c,parent=r.context,r.parent
+    if C3.new_source_down(c.victim_peer,{match_id=c.match_id,round=c.round,life=c.attacker_life},
+        {match_id=c.match_id,round=c.round,life=c.victim_life})then return end
     local bname=c.bone
     local function b(v,n) return v==true and n or 0 end
     local flags=1+b(lower,2)+b(shock,4)+b(stab,8)+b(flesh,16)+BF.WEAPON

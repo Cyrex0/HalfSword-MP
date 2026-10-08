@@ -1608,7 +1608,8 @@ function PX.joint_profile_row(p)
     local probe=PX.JOINT_PROFILE
     if not probe or not p or not p.aim or not probe:attempt()then return nil,true end
     local q
-    local ok,result=pcall(function()
+    local stage="proxy_context"
+    local ok,result,reason,detail=pcall(function()
         local cur,body,shown=p.last,p.body,p.shown or p.applied_context
         if not cur or not body or not shown then return nil end
         q={actor=p.actor,p=p,pawn={address=p.addr,name=shown.pawn},body={address=body.mesh_addr,name=body.mesh_fname},
@@ -1619,23 +1620,30 @@ function PX.joint_profile_row(p)
         for _,k in ipairs({"match_id","round","life"})do
             if type(cur[k])~="number"or not math.tointeger(cur[k])or cur[k]<=0 then return nil end
         end
-        q.audit=PX.hand_pipeline_scope(q);if not q.audit then return nil end
-        local own=PX.joint_profile_source_scope();if not own then return nil end
+        stage="proxy_scope";q.audit=PX.hand_pipeline_scope(q);if not q.audit then return nil,"proxy scope unavailable"end
+        stage="source_scope";local own=PX.joint_profile_source_scope();if not own then return nil,"source scope unavailable"end
         local context={instance=os.getenv("HSMP_INST")or "unavailable",role="remote_proxy",peer=q.peer,pawn=q.pawn,mesh=q.body,
             world=q.world,generation=q.generation,match_id=q.match_id,round=q.round,life=q.life,source_cut=q.source_cut,
             source_seq=q.source_seq,source_mode=cur.mode,admission_source_age_ms=cur.age,source_pt=cur.pt,observed_ms=now_ms(),
             original_applied_ms=shown.at,original_body_ts=shown.label,original_arm_ts=shown.label,
             qualification=q.audit.qualification,pending=q.audit.pending,frame=PX.frame_no or 0,
             time_meaning="applied pose timestamps retained; configuration observation is a later read"}
-        local lib=StaticFindObject("/Script/Engine.Default__ConstraintInstanceBlueprintLibrary")
+        stage="library_lookup";local lib=StaticFindObject("/Script/Engine.Default__ConstraintInstanceBlueprintLibrary")
         -- Lookup may reenter travel before cached generations update. Check
         -- the current PC world before resolving any retained proxy component.
-        if not PX.limb_writer_current(q)then return nil end
+        if not PX.limb_writer_current(q)then return nil,"writer scope changed after library lookup"end
+        stage="capture"
         return probe:capture(own.context,context,
             {actor=own.actor,mesh=own.mesh,library=lib,fname=fname,now=now_ms,current=function()return PX.joint_profile_source_current(own)end},
             {actor=p.actor,mesh=PX.injury_mesh(p),library=lib,fname=fname,now=now_ms,current=function()return PX.hand_pipeline_current(q)end})
     end)
-    if not ok or not result then pcall(Log,"JOINTPROFILE refused inst=%s attempt=%d reason=%s",os.getenv("HSMP_INST")or "unavailable",probe.attempts,ok and "scope_or_capture_unavailable"or "diagnostic_exception")end
+    if not ok or not result then
+        local why=PX.JOINT_PROFILE_MODULE.reason(ok and (reason or "context unavailable")or result)
+        local elapsed=type(detail)=="table"and detail.elapsed_available==true and detail.capture_elapsed_ms or nil
+        pcall(Log,"JOINTPROFILE refused inst=%s attempt=%d stage=%s capture_elapsed_ms=%s reason=%s",
+            os.getenv("HSMP_INST")or "unavailable",probe.attempts,type(detail)=="table"and detail.stage or stage,
+            elapsed~=nil and tostring(elapsed)or "unavailable",why)
+    end
     -- Diagnostic Session/Mode failure adds no physical policy. Native scope
     -- change during optional reads must still prevent writing the old body.
     local writer_current=true

@@ -56,6 +56,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "joint_profile", gate = "no_dev" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "pc_world" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "lookup_pc_world" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "refusal" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "clock_epoch" })
@@ -1667,6 +1668,10 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
             T.check(source.sample_ms%1~=0 and source.admission_sample_age_ms==.375 and se.current()and pe.current(),
                 "production accepts fresh fractional successful source timestamp with exact current guards")
             self.used=true
+            if opts.change=="refusal"then
+                return nil,"actual native\nread failed\t"..string.rep("q",140),
+                    {stage="source.asset_before",elapsed_available=true,capture_elapsed_ms=2.75}
+            end
             if opts.change=="pc_world"then
                 M.pc.__props.NativeWorld=M.new_obj("World","PROFILE_NEW_WORLD");rawset(M.pc.__props.NativeWorld,"__addr",19991)
             end
@@ -1685,6 +1690,14 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
             return
         end
         T.check(captures==1 and writes==before+12,"actual admitted pair does not change normal servo writes")
+        if opts.change=="refusal"then
+            local log=M.logtext()
+            T.check(T.contains(log,"stage=source.asset_before capture_elapsed_ms=2.75 reason=actual native read failed "),
+                "actual production pcall preserves sanitized second-return reason and copied stage/time")
+            T.check(not T.contains(log,"scope_or_capture_unavailable"),"specific capture refusal is not replaced by the old generic reason")
+            drive(1032);T.check(captures==1,"refusal preserves once-only capture and normal writer without reopening")
+            return
+        end
         drive(1032);T.check(captures==1,"one whole-run capture adds no optional repeat")
         HSMP_IPC.bus_put("spawn_status",{verified=true,pawn="PROFILE_OWN",match_id=419,round=1,life=1,spawn_id=259})
         T.check(PX.joint_profile_source_scope()==nil,"old verified assignment cannot acquire a new current session spawn ID")

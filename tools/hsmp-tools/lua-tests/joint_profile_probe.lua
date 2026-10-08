@@ -88,3 +88,14 @@ T.check(e:run()==nil and proxy_checks==0 and e.reads==0,"first lost source guard
 e=fixture();local first=e.source.library.GetAngularLimits;e.source.library.GetAngularLimits=nil
 setmetatable(e.source.library,{__index=function(_,name)if name=="GetAngularLimits"then e.current=false;return first end end})
 T.check(e:run()==nil and not e.calls,"getter lookup scope loss stops before invoking returned getter")
+e=fixture();e.asset_flip=true
+local value,reason,detail=e:run()
+T.check(value==nil and reason:find("scope changed",1,true)and detail.stage=="source.asset_before",
+    "actual helper refusal carries its bounded reason and static failed asset stage")
+T.check(detail.elapsed_available and detail.capture_elapsed_ms>=0,"total capture failure interval uses the same observation clock")
+T.check(P.reason("native\nread\tfailed\0"..string.rep("x",200)):find("[%c]")==nil
+    and #P.reason(string.rep("x",200))==120,"persisted reason sanitizes control characters and bounds text")
+e=fixture();e.sc.match_id=999;e.source.now=function()error("clock unavailable")end
+value,reason,detail=e:run()
+T.check(value==nil and detail.stage=="pair.scope"and detail.elapsed_available==false and detail.capture_elapsed_ms==nil,
+    "unavailable diagnostic clock does not invent an elapsed interval or suppress actual refusal")

@@ -1,4 +1,28 @@
 local M=dofile(T.path("mods/dev/HSMPParity/Scripts/native_box_observer.lua"))
+-- Stop telemetry cannot prevent cleanup or recurse through a logging callback.
+local function stop_logging_fixture(reentrant)
+    local obs,live,stops,reads,statuses,resolved=false,false,0,0,0,0
+    local n={begin=function()return true end,prepare=function()return true,1 end,
+        activate=function()live=true;return true end,stop=function()stops=stops+1;live=false;return true end,
+        read=function()reads=reads+1;return {}end,status=function()statuses=statuses+1;return {active=live,reason="capture budget"}end,mark=function()end}
+    local s={match_id=1,round=1,life=1,owner_life=1,owner_pawn=20,owner_mesh=30,world_key="w",peer=2,side="r",grip=14}
+    for i,k in ipairs({"world","pawn","mesh","box","box_owner"})do s[k]={address=i,path="/"..k}end
+    local at=1000
+    obs=M.new({developer=function()return true end,native=function()return n end,clock_ms=function()return at end,
+        snapshot=function()resolved=resolved+1;return s,nil,{local_ms=at},true end,register=function()return 1,1 end,emit=function()end,
+        log=function(fmt)
+            if fmt:find("BOXOBS_STATUS",1,true)or fmt:find("BOXOBS stopped",1,true)then
+                T.check(not live,"optional stop logging follows native cleanup")
+                if reentrant then obs.drop()else error("logger unavailable")end
+            end
+        end})
+    obs.command("2 r 1");at=1033;obs.tick()
+    local before_resolved=resolved
+    T.check(pcall(obs.drop),"throwing/reentrant stop logger is contained")
+    T.check(stops==1 and reads==1 and statuses==1,"stop logger cannot repeat native stop/read/status")
+    obs.tick();T.check(resolved==before_resolved,"cleared stop state cannot resolve an old scope after logger")
+end
+stop_logging_fixture(false);stop_logging_fixture(true)
 local logs,emitted,hooks,begin_count,mark_count,stop_count={},{},{},0,0,0
 local scope={match_id=123,round=2,life=3,owner_life=7,owner_pawn=20,owner_mesh=30,world_key="world#1",peer=2,side="r",grip=14}
 for i,k in ipairs({"world","pawn","mesh","box","box_owner"})do scope[k]={address=i,path="/"..k}end
@@ -46,6 +70,8 @@ current=clone(scope);observer.command("2 r 1");current.mesh.address=33;observer.
 T.check(stop_count==2,"same pawn mesh replacement cancels exact native scope")
 current=clone(scope);observer.command("2 r 1");current=nil;observer.drop()
 T.check(stop_count==3,"world leave stops scalar observer without touching cached UObjects")
+T.check(logs[#logs-1]:find("BOXOBS_STATUS stage=stop",1,true) and logs[#logs-1]:find("foreign_callbacks_process_total=4294967295",1,true),
+    "world leave persists copied process totals before native stop without a scope resolver")
 current=clone(scope);observer.command("2 r 1");fixture_at=fixture_at+33;observer.tick();native_active=false;observer.tick()
 T.check(logs[#logs]:find("BOXOBS finished",1,true)~=nil,"native expiry/budget completion is reported explicitly")
 T.check(logs[#logs]:find("foreign_callbacks_process_total=4294967295",1,true) and logs[#logs]:find("same_thread_unavailable_process_total=0",1,true)

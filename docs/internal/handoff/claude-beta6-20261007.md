@@ -1688,3 +1688,41 @@ the native bodies remained alive. Server down denotes gameplay participation,
 not native consciousness or recoverable Downed. The .835714 aggregate still fails
 the unchanged bound but does not establish armour damage loss. Claim rotation
 remains separate from limb tracking. Complete native damage/topology still unproved.
+
+### Native39: native pairs available, configuration refusal unresolved
+
+Clean fd8c2d40 passed full G0/dev push/normal deployment. Raw
+test-results/20261008-122100-44c909-combat_manual, session native-20261008-39.
+Only JOINT_PROFILE enabled; GRIP/HAND/LIMB off. Initial spawn reached readiness.
+Both profile captures refused attempt1 with generic scope_or_capture_unavailable;
+no configuration rows or counterpart pairs. The adapter discarded the helper's
+second-return refusal reason, so exact cause is unavailable. No parity claim.
+
+Native damage capture produced12 rows on inst2 (7DCD/5GD). Ten had available
+PRE/POST, LuaInside and one POST mark, all extents6/1/10→6/1/10. Two lacked
+formal parameters. Four readable nested GD/DCD sequences plus one unavailable
+nested sequence. All lifetime_available/qualified false: zero class serials on
+world/Mesh and readable function classes. No serial allocation or restoration
+authority. Last DCD11 spans16ms, others0 at clock resolution. Native thread totals
+were not saved because owner_mode stop preceded budget completion. A narrow tail
+watcher missed activation and re-enrolled one active capture; its ignored replacement
+uses incremental log bytes and stops issuing controls on the first new activation.
+
+Cloth aggregate170/230=.739130; claim Box rotation mean42.346/max96.211degrees,
+7samples, zero clock resets over20 windows. Full typed262 verdicts differ from
+that denominator:170accepted,75target_down,10attacker_down,2round-over,4parried,
+1body_strike_miss. Owner outcomes114changed/52no-observed-change/4expired;
+do not claim all170calls completed. Both menu_quit, zero new crashes/orphans/
+forced kills. Limited combat_manual PASS is not complete acceptance. No release.
+
+Native40 checkpoint preparation: new-source-only participation veto requires
+fresh direct native header/link/roster and exact raw Session/Mode/full-life rows,
+explicit boolean alive=false, and final unchanged version/header checks. Unknown
+authority preserves existing path. life_for, queued origin/Inside, trades, sends,
+replay and server gates unchanged. Root verified17helper+368Combat checks and
+four parses; Astra approved. Profile refusal now saves sanitized120-character
+actual reason, failed stage and total capture-entry→refusal elapsed time, no added
+UE reads or loosened scope; root35helper+410Avatar/four parses, Astra approved.
+Parity STOP copies native scalars, finishes stop/protected drain, clears state,
+then protected optional logs; reentry guard prevents repeated cleanup. Root252
+checks/two parses, Astra approved. All source frozen for native verification.

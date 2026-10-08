@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Stop creating new hit claims after a fighter's confirmed elimination while
+  preserving claims already queued for trade resolution.
+- Preserve precise bounded developer capture refusals, and finish capture cleanup
+  before optional stop logging, including when logging fails or reenters.
 - Add a bounded developer capture of current right-arm joint limits, drive strengths,
   softness and projection on each local owner and remote proxy, with explicit identities.
 - Record native caller admission refusals from one nonblocking attempt, preserving
