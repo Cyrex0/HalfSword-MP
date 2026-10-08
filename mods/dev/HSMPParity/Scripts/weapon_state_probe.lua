@@ -41,6 +41,44 @@ local function components(actor,class,e)
     end
     return out
 end
+local hand_fields={"R_GripType_Current","L_GripType_Current","R Two Handed Grip","L Hand In Offhand Attached"}
+local hand_constraints={"PhysicsConstraint R Hand","PhysicsConstraint L Hand"}
+local function hand_state(actor,context,e)
+    local function unavailable(reason)
+        return {available=false,scope_available=false,reason=reason,fields={},constraints={},instance=e.instance or "unavailable"}
+    end
+    if type(e.hand_current)~="function" then return unavailable("guard_unavailable") end
+    local function current(stage)
+        local ok,yes,why=pcall(e.hand_current,context,actor)
+        return ok and yes==true,ok and (why or stage) or stage.."_exception"
+    end
+    local ok,why=current("scope_start")
+    if not ok then return unavailable(why) end
+    local out={available=true,scope_available=true,reason="none",fields={},constraints={},instance=e.instance or "unavailable"}
+    for i,field in ipairs(hand_fields)do
+        local read,value=pcall(function()return actor[field]end)
+        local known=read and (i<=2 and type(value)=="number" and value>=0 and value<=255 and value%1==0
+            or i>2 and type(value)=="boolean")
+        out.fields[field]={available=known==true,reason=known and "none" or read and "type_unavailable" or "read_failed"}
+        -- A real false is evidence, not an unavailable/default value.
+        if known then out.fields[field].value=value else out.available=false end
+    end
+    for _,field in ipairs(hand_constraints)do
+        local read,value=pcall(function()
+            local v=identity(actor[field])
+            if not v or type(v.address)~="number" or v.address<=0 or v.address>=math.huge or v.address%1~=0
+                or type(v.name)~="string" or v.name=="" or type(v.class)~="string" or v.class=="" then return nil end
+            return v
+        end)
+        out.constraints[field]={available=read and value~=nil,id=read and value or nil,
+            reason=read and value and "none" or read and "identity_unavailable" or "read_failed"}
+        if not read or not value then out.available=false end
+    end
+    ok,why=current("scope_end")
+    if not ok then return unavailable(why) end -- Discard partial observations after scope/header loss.
+    if not out.available then out.reason="partial_unavailable" end
+    return out
+end
 function M.capture(actor,context,e)
     if not e.current(context,actor) then return nil,"original_context_unverified" end
     local result={pawn=identity(actor),context=context,weapons={},constraints={},handles={},errors={},read_only=true}
@@ -94,6 +132,7 @@ function M.capture(actor,context,e)
         end)
         if not ok then result.errors[#result.errors+1]=tostring(err) end
     end
+    result.hand_state=hand_state(actor,context,e)
     if not e.current(context,actor) then return nil,"original_context_changed" end
     return result
 end
@@ -106,6 +145,22 @@ end
 function M.emit(r,log)
     local c=r.context
     log("WEAPONSTATE peer=%s pawn=%s match=%s round=%s life=%s world=%s read_only=true",tostring(c.peer),id(r.pawn),tostring(c.match_id),tostring(c.round),tostring(c.life),tostring(c.world))
+    local h=r.hand_state
+    if h then
+        log("WPNHAND_CONTEXT inst=%s peer=%s pawn=%s mesh=%s mesh_address=%s match=%s round=%s life=%s world=%s scope_available=%s complete=%s reason=%s authority=false read_only=true",
+            h.instance,tostring(c.peer),id(r.pawn),tostring(c.mesh),tostring(c.mesh_address),tostring(c.match_id),tostring(c.round),tostring(c.life),tostring(c.world),
+            tostring(h.scope_available),tostring(h.available),h.reason)
+        for _,field in ipairs(hand_fields)do
+            local f=h.fields[field]
+            log("WPNHAND_FLAG inst=%s peer=%s field=%s available=%s value=%s reason=%s",h.instance,tostring(c.peer),field,tostring(f and f.available or false),
+                f and f.available and tostring(f.value) or "unavailable",f and f.reason or h.reason)
+        end
+        for _,field in ipairs(hand_constraints)do
+            local f=h.constraints[field]
+            log("WPNHAND_CURRENT inst=%s peer=%s field=%s available=%s component=%s reason=%s",h.instance,tostring(c.peer),field,tostring(f and f.available or false),
+                id(f and f.id),f and f.reason or h.reason)
+        end
+    end
     for _,w in ipairs(r.weapons) do
         log("WPNSTATE field=%s actor=%s held=%s grip_r=%s grip_l=%s",w.field,id(w.actor),tostring(w.held),tostring(w.grip_r),tostring(w.grip_l))
         for _,part in ipairs({"root","base"}) do

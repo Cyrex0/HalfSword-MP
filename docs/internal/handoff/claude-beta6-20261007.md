@@ -1166,3 +1166,41 @@ Universal L-first reorder would alter legitimate dual wielding and is not
 justified. Next work is stage-coded Box refusal diagnostics and bounded copies
 of actual hand decoded/final/prior/current quaternions and body simulation state,
 followed by Astra review and real paired evidence. Main/release remain blocked.
+
+### Native30: contact-selected Box enrollment timing
+
+Clean bd4629e9 strictG0 passed61 Lua suites,1,279 Rust tests/75 binaries,
+95parses,clippy0errors/2warnings. Normal matching native/Rust/mod deployment
+reused that stamp. Independently317->318 Avatar assertions pass with both
+ambient probe settings,177 Box/control assertions and5changedfileparses pass.
+Box stage diagnostics and unavailable-axis formatting corrections are Astra
+approved,with no physical policy change.
+
+Session:`test-results/lab/native-20261008-30`,raw:
+`test-results/20261008-070155-557538-combat_manual`. ProbeOFF,bothDISPLAY1,
+clothaxe120s with actualAI control.0clock resets/21windows,honest256/304=.84210526,
+proxyrotation35.63mean/96.58max(n27),114calibration samples,82Insideaccepted/
+41delivery/23native and85rejected records,0exactpairs. Actual native hits and
+server damage were observed; these log layers do not certify solo parity.
+Normal shutdown0newcrashes/noorphans,limitedmanualPASS6rounds.
+
+Six scoped Box refusals are now specifically held_box;0started/0PAIR. Exact
+review shows commands were before the same round's first qualifying blade
+contact: round2 refusals07:03:54.407/.447 precede Blade/BoxDCD55.161; round3
+refusals07:04:24.766/.784 precede AI takeover25.314/.326. Native weapon field
+is contact-selected state,not guaranteed by equip or another round's hits.
+Pinned SDK ModularWeaponBP.hpp91 declares UBoxComponent* Hit Box Collision;
+Axe inherits it;Willie has no separate such field. Cooked only assignment12926
+selects a non-Tip childBox during Collision Hit,not BeginPlay/construction.
+Native30 first Grip_0 DCD31.901 has nilBox,Blade31.921 passes its ownBox,later
+Grip_0 uses rememberedBox,and32.265 can pass a stuck-constraintBox. Existing
+owner/membership refusal must remain; no arbitraryBox fallback is justified.
+Next native enrollment must follow same-life/currentweapon actualBox contact.
+
+The small read-only weaponstate extension is frozen/Astra-approved and root
+independently passes56 changed-suite assertions/4parses. It copies exactly4
+strictly typed current grip/offhand scalars and2current hand-field constraint
+identities,with fresh native header+before/after fullworld/actor/currentMesh
+scope. Missing/new-proof failure leaves ordinary weaponstate available;
+zero/false remain actual values. No loadoutorder or physics setters were added.
+It still needs matching deployment and actual owner/proxy captures.

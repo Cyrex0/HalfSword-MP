@@ -57,6 +57,45 @@ T.check(r.constraints[1].reference.pos2[2]==2 and r.constraints[1].profile.twist
 T.check(r.handles[1].grabbed.address==base:GetAddress(),"native PhysicsHandle grab is captured")
 local lines={}; P.emit(r,function(f,...)lines[#lines+1]=string.format(f,...)end)
 T.check(table.concat(lines,"\n"):find("actual_sim=true",1,true) and table.concat(lines,"\n"):find("WPNREFERENCE",1,true),"diagnostic emits actual simulation and constraint reference evidence")
+T.check(r.hand_state.scope_available==false and r.hand_state.reason=="guard_unavailable" and #r.constraints==1,
+    "missing new hand guard is explicit without suppressing existing native endpoints")
+local actual_right=object("CurrentRight","PhysicsConstraintComponent")
+local actual_left=object("CurrentLeft","PhysicsConstraintComponent")
+pawn["PhysicsConstraint R Hand"],pawn["PhysicsConstraint L Hand"]=actual_right,actual_left
+pawn.R_GripType_Current,pawn.L_GripType_Current=14,0
+pawn["R Two Handed Grip"],pawn["L Hand In Offhand Attached"]=true,false
+local hand_guards=0
+e.instance="1";e.hand_current=function()hand_guards=hand_guards+1;return true end
+local prior_queries=component_queries
+r=P.capture(pawn,context,e)
+T.check(r.hand_state.available and hand_guards==2 and component_queries-prior_queries==2,
+    "six hand-field reads use before/after scoped guard without additional physics component queries")
+T.check(r.hand_state.constraints["PhysicsConstraint R Hand"].id.address==actual_right:GetAddress()
+    and r.hand_state.constraints["PhysicsConstraint L Hand"].id.address==actual_left:GetAddress()
+    and r.constraints[1].id.address==grip:GetAddress(),"current native hand-field identities are distinguished from enumerated orphan constraints")
+T.check(r.hand_state.fields.L_GripType_Current.available and r.hand_state.fields.L_GripType_Current.value==0
+    and r.hand_state.fields["L Hand In Offhand Attached"].available and r.hand_state.fields["L Hand In Offhand Attached"].value==false,
+    "observed native zero and false survive strict scalar availability")
+lines={};P.emit(r,function(f,...)lines[#lines+1]=string.format(f,...)end)
+T.check(table.concat(lines,"\n"):find("WPNHAND_FLAG inst=1 peer=0 field=L Hand In Offhand Attached available=true value=false",1,true)
+    and table.concat(lines,"\n"):find("WPNHAND_CURRENT inst=1",1,true),"namespaced output persists exact current identity and observed false")
+for _,value in ipairs({"14",-1,14.5,256,0/0})do
+    pawn.R_GripType_Current=value;r=P.capture(pawn,context,e)
+    T.check(not r.hand_state.fields.R_GripType_Current.available and r.hand_state.fields.R_GripType_Current.value==nil,
+        "invalid native byte is unavailable rather than coerced/defaulted")
+end
+pawn.R_GripType_Current=14;pawn["R Two Handed Grip"]=0
+r=P.capture(pawn,context,e)
+T.check(not r.hand_state.fields["R Two Handed Grip"].available,"numeric boolean substitute is explicitly unavailable")
+pawn["R Two Handed Grip"]=true;pawn["PhysicsConstraint L Hand"]=nil
+r=P.capture(pawn,context,e)
+T.check(not r.hand_state.available and r.hand_state.scope_available and not r.hand_state.constraints["PhysicsConstraint L Hand"].available
+    and r.hand_state.fields["R Two Handed Grip"].value==true,"missing current constraint does not erase independently observed native flags")
+pawn["PhysicsConstraint L Hand"]=actual_left
+hand_guards=0;e.hand_current=function()hand_guards=hand_guards+1;return hand_guards==1,"session_current" end
+r=P.capture(pawn,context,e)
+T.check(r and not r.hand_state.scope_available and next(r.hand_state.fields)==nil and next(r.hand_state.constraints)==nil and #r.constraints==1,
+    "lost final hand scope discards all new observations while ordinary weaponstate survives")
 local calls=0
 e.current=function()calls=calls+1;return calls==1 end
 T.check(P.capture(pawn,context,e)==nil,"a changed original generation refuses the completed snapshot")

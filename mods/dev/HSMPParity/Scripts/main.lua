@@ -1133,6 +1133,23 @@ local function exp_frames(arg)
     end
 end
 -- Snapshot native simulation and grip endpoints without retaining any wrappers.
+local function weapon_state_hand_current(original,pawn)
+    if not box_observer_live() then return false,"session_current" end
+    local fresh,actor,mesh=diagnostic_snapshot(original.peer)
+    if not DIAGNOSTIC_CONTEXT.same(original,fresh) then return false,"context_current" end
+    if not valid(pawn) or pawn:GetAddress()~=fresh.address or nm(pawn)~=fresh.pawn
+        or not valid(actor) or actor:GetAddress()~=fresh.address then return false,"actor_current" end
+    local world=WG.world()
+    local native_world=pawn:GetWorld()
+    if not valid(world) or not valid(native_world) or native_world:GetAddress()~=world:GetAddress()
+        or tostring(world:GetAddress()).."@"..world:GetFullName()~=original.world then return false,"world_current" end
+    local owner=mesh:GetOwner()
+    if not valid(owner) or owner:GetAddress()~=fresh.address or nm(owner)~=fresh.pawn then return false,"mesh_owner_current" end
+    -- All observations are synchronous. The same full identity and current
+    -- native header are checked again after the six bounded field reads.
+    if not box_observer_live() then return false,"session_recheck" end
+    return true
+end
 local function exp_weaponstate(arg)
     local probe=load_module("weapon_state_probe")
     if not probe then Log("weaponstate: diagnostic module unavailable");return end
@@ -1150,6 +1167,7 @@ local function exp_weaponstate(arg)
         if not original then Log("weaponstate: peer %s refused original verified context unavailable",tostring(peer))
         else
             local result,why=probe.capture(pawn,original,{fname=FName,class=function(name)return StaticFindObject("/Script/Engine."..name)end,
+                instance=box_instance,hand_current=weapon_state_hand_current,
                 current=function(id)
                     return DIAGNOSTIC_CONTEXT.same(id,diagnostic_snapshot(peer))
                 end})

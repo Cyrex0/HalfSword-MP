@@ -4,10 +4,10 @@ local state_dir=T.tmpdir("parity_frames_")
 os.getenv=function(k)if k=="HSMP_STATE_DIR" then return state_dir elseif k=="HSMP_DEV" then return "1" end end
 os.clock=function()return clock end
 print=function(s)logs[#logs+1]=s end
-local function object(name,address)
+local function object(name,address,class)
     return {IsValid=function()return true end,GetAddress=function()return address end,
         GetFName=function()return {ToString=function()return name end}end,
-        GetClass=function()return {GetFName=function()return {ToString=function()return "Willie_BP_C" end}end}end}
+        GetClass=function()return {GetFName=function()return {ToString=function()return class or "Willie_BP_C" end}end}end}
 end
 FName=function(n)return n end
 local read_action,reads=nil,0
@@ -29,6 +29,8 @@ local owner_mesh,remote_mesh=owner.Mesh,remote.Mesh
 local pc={Pawn=foreign,IsValid=function()return true end}
 local world=object("Map_Arena_Yard",2974695297728)
 world.GetFullName=function()return "World /Game/Maps/Arenas/Map_Arena_Yard.Map_Arena_Yard" end
+owner.GetWorld,remote.GetWorld=function()return world end,function()return world end
+owner_mesh.GetOwner,remote_mesh.GetOwner=function()return owner end,function()return remote end
 local key="World /Game/Maps/Arenas/Map_Arena_Yard.Map_Arena_Yard@2974695297728#PlayerController_2147481818"
 local settled,check=true,true
 local guard={key=key,world=function()return world end,pc=function()return pc end,
@@ -41,10 +43,23 @@ local status={pawn="Willie_BP_C_2147481219",match_id=view.match_id,round=1,life=
 local shown={peer=2,pawn="Willie_BP_C_2147480987",match_id=view.match_id,round=1,life=1,body_ts=58678,local_ms=60000}
 local bus={spawn_status=status,playback={rows={shown}},puppets={rows={{peer=2,name=shown.pawn}}}}
 HSMP_IPC={bus_table=function(k)return bus[k]end}
+local header={sidecar_state="ready",sidecar_hb_age_s=0}
+local header_fails,connected=false,true
+HSMP_IPC.N={ipc_info=function()if header_fails then error("native header unavailable")end;return header end}
+HSMP_IPC.refresh_info=function()return {sidecar_state="ready",sidecar_hb_age_s=0}end -- Retained facade must not qualify the hand extension.
 package.preload.UEHelpers=function()return {}end
 package.preload.hsmp_wg=function()return {new=function()return guard end}end
 package.preload.hsmp_ipc=function()return {init=function()end}end
-package.preload.hsmp_session=function()return {new=function()return {}end,view=function()return view end,mode=function()return mode end}end
+package.preload.hsmp_session=function()return {new=function(opts)
+    if not opts.ipc then return {}end
+    return {poll=function(_,force)assert(force==true,"current header qualification must force link poll")end,
+        live=function()
+            local info=opts.ipc.refresh_info(false)
+            if not connected or type(info)~="table"then return false end
+            local age=tonumber(info.sidecar_hb_age_s)
+            return (info.sidecar_state==nil or info.sidecar_state=="ready" or info.sidecar_state==2) and age~=nil and age<=5
+        end}
+end,view=function()return view end,mode=function()return mode end}end
 package.preload.body_joint_dictionary=function()return {{name="UserConstraint_12",parent="lowerarm_r",child="hand_r"}}end
 FindAllOf=function()return {owner,remote,foreign}end
 StaticFindObject=function(path)
@@ -125,3 +140,46 @@ T.check(not contains("WEAPONSTATE peer=2") and contains("original_context_change
     "weaponstate also revalidates the fresh native mesh after its synchronous readback")
 T.check(owner.Mesh==owner_mesh and pc.Pawn==foreign and status.verified==false,
     "diagnostics do not mutate placement, possession or the owner mesh")
+remote.K2_GetComponentsByClass=function()return {}end
+owner.R_GripType_Current,owner.L_GripType_Current=14,0
+owner["R Two Handed Grip"],owner["L Hand In Offhand Attached"]=true,false
+owner["PhysicsConstraint R Hand"]=object("CurrentR",141,"PhysicsConstraintComponent")
+owner["PhysicsConstraint L Hand"]=object("CurrentL",142,"PhysicsConstraintComponent")
+logs={};api.weaponstate("0")
+T.check(contains("WPNHAND_CONTEXT ") and contains("scope_available=true complete=true")
+    and contains("field=L Hand In Offhand Attached available=true value=false")
+    and contains("component=CurrentL@142:PhysicsConstraintComponent"),
+    "actual Parity hand path reads exact pending assigned actor/current fields despite foreign PC")
+header.sidecar_hb_age_s=6;logs={};api.weaponstate("0")
+T.check(contains("WEAPONSTATE peer=0") and contains("scope_available=false complete=false reason=session_current")
+    and contains("field=R_GripType_Current available=false value=unavailable"),
+    "expired current native header marks new hand proof unavailable while ordinary weaponstate remains")
+header.sidecar_hb_age_s=0;header_fails=true;logs={};api.weaponstate("0")
+T.check(contains("WEAPONSTATE peer=0") and contains("scope_available=false complete=false reason=session_current"),
+    "failed native header cannot use retained healthy facade for current hand proof")
+header_fails=false;connected=false;logs={};api.weaponstate("0")
+T.check(contains("WEAPONSTATE peer=0") and contains("scope_available=false complete=false reason=session_current"),
+    "current disconnected link refuses only new hand proof despite retained pending records")
+connected=true
+owner.GetWorld=function()return {IsValid=function()return true end,GetAddress=function()return 77 end}end
+logs={};api.weaponstate("0")
+T.check(contains("WEAPONSTATE peer=0") and contains("reason=world_current"),
+    "fresh pawn's different native world cannot qualify current hand fields")
+owner.GetWorld=function()return world end
+owner_mesh.GetOwner=function()return foreign end;logs={};api.weaponstate("0")
+T.check(contains("WEAPONSTATE peer=0") and contains("reason=mesh_owner_current"),
+    "exact mesh identity with foreign native owner refuses new hand proof")
+owner_mesh.GetOwner=function()header.sidecar_hb_age_s=6;return owner end
+logs={};api.weaponstate("0")
+T.check(contains("WEAPONSTATE peer=0") and contains("reason=session_recheck"),
+    "header loss during fresh world/mesh check cannot qualify the hand observation")
+header.sidecar_hb_age_s=0;owner_mesh.GetOwner=function()return owner end
+local constraint=owner["PhysicsConstraint R Hand"]
+constraint.GetFName=function()header_fails=true;return {ToString=function()return "CurrentR"end}end
+logs={};api.weaponstate("0")
+T.check(contains("WEAPONSTATE peer=0") and contains("scope_available=false complete=false reason=session_current")
+    and contains("field=R Two Handed Grip available=false value=unavailable"),
+    "failed current header after native current-field identity discards all captured flags")
+header_fails=false;constraint.GetFName=function()return {ToString=function()return "CurrentR"end}end
+logs={};api.weaponstate("0")
+T.check(contains("scope_available=true complete=true"),"new hand evidence recovers only with fresh header and original full identity")
