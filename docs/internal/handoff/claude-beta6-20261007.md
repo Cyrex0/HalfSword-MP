@@ -2768,3 +2768,54 @@ retaining the native embedded service. Restore the saved dev CMake cache before
 building/testing native worker startup7b. Keep the networking layer for transport,
 auth/session ownership only; authoritative physics/damage/AI/gear belong to the
 engine. Two observer DTOs alone do not establish a playable visible client.
+
+### 2026-10-08 three-game-process native authority continuation
+
+Main CI37845382939 completed successfully in all five jobs (Windows G0/e2e,
+clippy, Linux server and Docker). The published beta.6 assets remain unchanged.
+Dev merged the release fixes at72ffe671 and passed its exact clean full G0
+(71 Lua suites,1297 Rust tests); that checkpoint was pushed and freshly deployed
+with RequireG0. Shared Cargo artifacts from the separate release checkout caused
+stale-library errors before the scoped debug/release package caches were rebuilt.
+Keep future checkout build caches separate. The current native CMake cache is
+the D: dev source, while target/hsmp-native-cmake-pvp-beta6 preserves the PvP cache.
+
+The actual72 native run test-results/20261008-223517-ffd5ff-native-host fixed
+the repeated startup/admission/travel failure, but stopped at native_spawn:
+PC1 had no Willie after45 seconds. It produced no canonical native frame or
+verified input dispatch. Both UDP probes consequently timed out. Owned cleanup
+completed and original career hashes were unchanged. Do not count it as playability.
+
+The owner now explicitly requires one headless game authority and two normal
+game clients with legal test-AI control intent. The default native_host_test.ps1
+harness implements exactly this topology; DiagnosticProbeOnly explicitly retains
+the earlier diagnostic UDP probes. Both normal client windows use the smaller
+display (-1760/-880,880x527). Neither normal client may simulate local fighters,
+native combat, AI enemies, damage, physics forces or progression. Native PvP
+requests two engine player fighters and no foe; the three-entity native scaffold
+requires mode=diagnostic. Abyss is rejected until its actual native flow is wired.
+
+Descriptor checkpoint7c07d70c captures exact source CP11/armor24/weapon25,
+ordered sparse false slots, construction versus current armor, actual Team Int,
+full render bone/morph/material dictionaries and native RGBA8 RLE. Source object
+addresses remain local bindings. Runtime mesh geometry, cuts, groom, cloth,
+deformers, overlays and altered skin weights remain explicit unsupported states;
+neither missing values nor intact-health flags qualify as complete native parity.
+Focused DTO/parser/Lua checks establish encoding/guard behavior, not a game gate.
+
+Startup/harness checkpoint7b9c2643 adds bounded native mode/controller/pawn/
+GameMode/LevelManager diagnostics and source-owned per-PC ABI dispatch evidence.
+Preparation now precedes fresh scalar input binding; re-entry checks freshly
+resolve the current controller and pawn. Worker/director422 checks and the
+20 harness checks passed without launching games. PC1's cause remains unproved.
+
+The normal client transport candidate carries original EntityRefs, directory/
+recipe generations and a bounded latest full render frame. Authenticated mirror
+readiness is required before LIVE input. Only explicit native source phases can
+end play; zero AI during a future Abyss wave gap cannot fabricate victory. The
+native render provider creates inert Engine actors and render components, verifies
+native mesh/material/color state and visible follower bones, and refuses stale
+world/identity/recipe state. These remain implementation candidates pending an
+exact clean G0 build/deploy and the actual three-game-process run. Do not publish
+the headless path or claim FPS, cuts, all-gear parity or native-client readiness
+from C++ compilation, DTO tests or UDP observers.

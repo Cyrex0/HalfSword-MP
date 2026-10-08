@@ -36,6 +36,9 @@ struct Args {
     state_dir: Option<PathBuf>,
     #[arg(long, default_value = "Map_Arena_Yard")]
     arena: String,
+    /// Select the native two-player PvP path, or the explicitly bounded diagnostic scaffold.
+    #[arg(long, value_enum, default_value = "pvp")]
+    mode: hsmp_server::native_mode::Mode,
     #[arg(long, value_enum, default_value = "null")]
     backend: Backend,
     /// Stop cleanly if the recorded parent disappears.
@@ -163,6 +166,7 @@ fn game_command(exe: &Path, win64: &Path, state: &Path, identity: &Path, args: &
         .env("HSMP_NATIVE_PARENT_PID", std::process::id().to_string())
         .env("HSMP_NATIVE_BIND", args.bind.to_string())
         .env("HSMP_NATIVE_ARENA", &args.arena)
+        .env("HSMP_NATIVE_MODE", args.mode.as_str())
         // Lifecycle control belongs to the supervisor run directory, outside the game's state dir.
         .env(
             "HSMP_NATIVE_STOP_FILE",
@@ -334,6 +338,7 @@ mod tests {
             "offscreen",
         ])
         .unwrap();
+        assert_eq!(args.mode, hsmp_server::native_mode::Mode::Pvp);
         let command = game_command(
             Path::new("game.exe"),
             Path::new("win64"),
@@ -361,6 +366,13 @@ mod tests {
         assert_eq!(env["HSMP_RUNTIME_ROLE"], "native_worker");
         assert_eq!(env["HSMP_NATIVE_IDENTITY_DIR"], "identity");
         assert_eq!(env["HSMP_NATIVE_BIND"], "127.0.0.1:7778");
+        assert_eq!(env["HSMP_NATIVE_MODE"], "pvp");
         assert!(env["HSMP_NATIVE_STOP_FILE"].ends_with("stop.request"));
+    }
+    #[test]
+    fn abyss_cannot_silently_select_the_diagnostic_scaffold() {
+        assert!(Args::try_parse_from([
+            "native", "--game-dir", "game", "--identity-dir", "identity", "--mode", "abyss"
+        ]).is_err());
     }
 }
