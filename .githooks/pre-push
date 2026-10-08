@@ -25,6 +25,16 @@ if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no)" ]; then
     echo "[G0] the working tree has uncommitted changes: G0 would test them, not the pushed commit. Commit them first." >&2
     exit 1
 fi
+# Git exports repository-local variables to hooks. Fixture subprocesses create
+# their own repositories: git -C alone does not override inherited GIT_DIR.
+# Keep the push identity checks above in their original Git context, then isolate
+# cargo, G0 and their children from that context without changing global env.
+git_local_env=$(git -C "$repo" rev-parse --local-env-vars) || exit 1
+for git_local_var in $git_local_env; do
+    unset "$git_local_var"
+done
+cd "$repo" || exit 1
+
 if command -v cargo >/dev/null 2>&1; then CARGO=cargo
 elif [ -x "$HOME/.cargo/bin/cargo" ] || [ -x "$HOME/.cargo/bin/cargo.exe" ]; then CARGO="$HOME/.cargo/bin/cargo"
 elif [ -n "$USERPROFILE" ]; then CARGO="$USERPROFILE/.cargo/bin/cargo"
