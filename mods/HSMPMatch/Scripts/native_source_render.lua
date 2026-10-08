@@ -70,7 +70,7 @@ function M.capture(env,bindings)
     end
     local rows={}
     local function collect(actor,owner_id)
-        local a=checked(function()return actor:GetComponentsByClass(mesh_class)end)
+        local a=checked(function()return actor:K2_GetComponentsByClass(mesh_class)end)
         array(a,64,function(c)
             local id=object_id(c)
             if id then id.owner=owner_id;rows[#rows+1]=id;if #rows>64 then fail("native render component bound")end end
@@ -83,7 +83,7 @@ function M.capture(env,bindings)
     local seen={};for i,r in ipairs(rows)do if seen[r.address]then fail("native render component duplicate")end;seen[r.address]=true;r.id=i end
     local function component(row)
         local actor=owner(row);local found
-        array(checked(function()return actor:GetComponentsByClass(mesh_class)end),64,function(c)
+        array(checked(function()return actor:K2_GetComponentsByClass(mesh_class)end),64,function(c)
             local identity=object_id(c)
             if identity and identity.address==row.address and identity.name==row.name then found=c end
             return true

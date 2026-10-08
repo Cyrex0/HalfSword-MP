@@ -186,7 +186,10 @@ end
 local body=mesh(11,"BodyMesh",host,"skeletal",body_asset);host.Mesh=body;body.GetAttachParent=function()return root end
 local weapon_asset=object(330,"WeaponMesh","/Game/Test/WeaponMesh.WeaponMesh",false);weapon_asset.GetNumLODs=function()return 1 end
 local weapon_mesh=mesh(201,"WeaponMesh",live_weapon,"static",weapon_asset);weapon_mesh.GetAttachParent=function()return body end
-host.GetComponentsByClass=function()return array({body})end;live_weapon.GetComponentsByClass=function()return array({weapon_mesh})end
+host.K2_GetComponentsByClass=function()return array({body})end;live_weapon.K2_GetComponentsByClass=function()return array({weapon_mesh})end
+local plain_component_getter_calls=0
+local function unavailable_component_alias()plain_component_getter_calls=plain_component_getter_calls+1;error("unreflected GetComponentsByClass alias",0)end
+host.GetComponentsByClass=unavailable_component_alias;live_weapon.GetComponentsByClass=unavailable_component_alias
 local rvp={IsValid=function()return true end,GetMeshComponentAmountOfVerticesOnLOD=function(_,c)return #c.native_colors end,
     GetMeshComponentVertexColorsAtLOD_Wrapper=function(_,c)return color_array(c.native_colors)end}
 StaticFindObject=function(p)return p=="/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary"and rvp or p end
@@ -194,6 +197,7 @@ local render_env={read=function(fn)if not scope then error("scope",0)end;local v
     guard=function()if not scope then error("scope",0)end end,token_valid=function()return scope end,weapon=function()return live_weapon end}
 local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapon R"}}}
 local rendered=Render.capture(render_env,native_bindings)
+T.eq(plain_component_getter_calls,0,"source census uses exact reflected K2 component getter")
 T.check(#rendered.components==2 and #rendered.components[1].bones==40,"default source collector keeps complete render dictionary beyond physical bones")
 T.eq(rendered.components[1].materials[1].scalars[1].value,0.3125,"native scalar material override captured exactly")
 T.eq(rendered.components[1].materials[1].vectors[1].value[4],0.0,"native vector alpha zero captured exactly")
