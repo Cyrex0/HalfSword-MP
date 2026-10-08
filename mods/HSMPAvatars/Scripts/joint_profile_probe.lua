@@ -138,6 +138,24 @@ local function joint(e,j,label)
         end)
         assert(e.current(),"scope changed");r.complete=r.complete and r[key].available
     end
+    if e.joint_angles==true then
+        e.stage(label..":joint_angles")
+        attempt(r,"joint_angles",function()
+            -- Scalar outputs share one copied table in the pinned bridge. The
+            -- returned angles are observations, not proof of target eligibility.
+            local fn=guarded(e,function()return e.mesh.GetCurrentJointAngles end)
+            assert(fn,"joint angle getter unavailable")
+            local out={}
+            assert(e.current(),"scope changed")
+            fn(e.mesh,e.fname(j[1]),out,out,out)
+            assert(e.current(),"scope changed")
+            return {lookup_name=j[1],lookup_meaning="verified constraint name; native lookup behavior unproved",
+                swing1=number(output(out,"Swing1Angle")),twist=number(output(out,"TwistAngle")),
+                swing2=number(output(out,"Swing2Angle")),authority=false,physics_verified=false,
+                units="native API output; no conversion"}
+        end)
+        assert(e.current(),"scope changed")
+    end
     e.stage(label..":accessor_after")
     local _,after=accessor(e,j)
     assert(same(before.owner,after.owner)and before.index==after.index and before.parent==after.parent and before.child==after.child,"accessor changed")

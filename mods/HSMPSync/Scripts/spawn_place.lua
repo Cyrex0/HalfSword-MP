@@ -510,10 +510,37 @@ function P:hold_step(now)
     if not c or not c.hold_until or c.done or c.failed then return end
     if now >= c.hold_until then
         c.hold_until = nil
-        env.log("spawn: hold released after %d correction(s)", c.holds or 0)
+        local t=env.drift_probe==true and self.cur==c and c.hold_timing
+        if t then
+            env.log("spawn: hold released after %d correction(s) [hold calls=%d moved=%d total_ms=%.3f max_ms=%.3f]",
+                c.holds or 0,t.calls,t.moved,t.total_ms,t.max_ms)
+        else
+            env.log("spawn: hold released after %d correction(s)", c.holds or 0)
+        end
         return
     end
-    local moved = env.hold(self.pawn, c.dest, SP.T.hold_tol_cm)
+    local world,pawn_id,pawn=self.wkey,self.pawn_id,self.pawn
+    local match_id,round,life,spawn_id,peer=c.plan.match_id,c.plan.round,c.e.life,c.e.spawn_id,c.e.peer
+    local measure=env.drift_probe==true
+    local started=measure and os.clock() or nil
+    local moved = env.hold(self.pawn, c.dest, SP.T.hold_tol_cm,{world=world,pawn=pawn_id,current=function()
+        if self.cur~=c or self.wkey~=world or self.pawn_id~=pawn_id or self.pawn~=pawn then return false end
+        local own,plan=self:order()
+        return own and plan and plan.match_id==match_id and plan.round==round
+            and own.life==life and own.spawn_id==spawn_id and own.peer==peer or false
+    end})
+    local finished=measure and os.clock() or nil
+    if measure and self.cur==c and self.wkey==world and self.pawn_id==pawn_id and self.pawn==pawn
+        and type(started)=="number" and type(finished)=="number" and started==started and finished==finished
+        and started>-math.huge and finished<math.huge and finished>=started then
+        local ms=(finished-started)*1000
+        if ms<math.huge then
+            local t=c.hold_timing or {calls=0,moved=0,total_ms=0,max_ms=0}
+            t.calls=t.calls+1;t.moved=t.moved+(moved and 1 or 0)
+            t.total_ms=t.total_ms+ms;t.max_ms=math.max(t.max_ms,ms)
+            c.hold_timing=t
+        end
+    end
     if moved then c.holds = (c.holds or 0) + 1 end
 end
 
@@ -1578,19 +1605,30 @@ function SP.make_ue_env(ctx)
     -- capsule point)). A teleport must carry those targets along, or the
     -- handles drag the body back toward where it was.
     local HANDLE_FIELDS = { "PhysicsHandle LowerBody", "PhysicsHandle UpperBody", "PhysicsHandle GetUp" }
-    local function shift_handles(p, ox, oy, oz)
+    local function with_guard(guard,f)
+        assert(not guard or guard(),"placement scope changed")
+        local value=f()
+        assert(not guard or guard(),"placement scope changed")
+        return value
+    end
+    local function shift_handles(p, ox, oy, oz, guard, read_guard)
+        read_guard=read_guard or guard
         local n = 0
         for _, f in ipairs(HANDLE_FIELDS) do
+            if read_guard and not read_guard() then return n end
             pcall(function()
-                local h = p[f]
-                if not (h and h:IsValid()) then return end
+                local h = with_guard(read_guard,function()return p[f]end)
+                if not (h and with_guard(read_guard,function()return h:IsValid()end)) then return end
                 local grabbed = false
-                pcall(function() local gc = h.GrabbedComponent; grabbed = gc ~= nil and gc:IsValid() end)
+                pcall(function()
+                    local gc=with_guard(read_guard,function()return h.GrabbedComponent end)
+                    grabbed=gc~=nil and with_guard(read_guard,function()return gc:IsValid()end)
+                end)
                 if not grabbed then return end
                 local loc, rot = {}, {}
-                h:GetTargetLocationAndRotation(loc, rot)
+                with_guard(guard,function()h:GetTargetLocationAndRotation(loc, rot)end)
                 if loc.X then
-                    h:SetTargetLocation({ X = loc.X + ox, Y = loc.Y + oy, Z = loc.Z + oz })
+                    with_guard(guard,function()h:SetTargetLocation({ X = loc.X + ox, Y = loc.Y + oy, Z = loc.Z + oz })end)
                     n = n + 1
                 end
             end)
@@ -1603,13 +1641,15 @@ function SP.make_ue_env(ctx)
     -- toward / past the spot after the jump; they move with the teleport.
     local WORLD_VECS = { "R Foot On Ground Loc", "L Foot On Ground Loc", "R Step Start Position", "R Step End Position",
                          "L Step Start Position", "L Step End Position", "Last On Ground Position", "LastPosition" }
-    local function shift_vectors(p, ox, oy, oz)
+    local function shift_vectors(p, ox, oy, oz, guard, read_guard)
+        read_guard=read_guard or guard
         local n = 0
         for _, f in ipairs(WORLD_VECS) do
+            if read_guard and not read_guard() then return n end
             pcall(function()
-                local v = p[f]
+                local v=with_guard(read_guard,function()return p[f]end)
                 if v and v.X then
-                    p[f] = { X = v.X + ox, Y = v.Y + oy, Z = v.Z + oz }
+                    with_guard(guard,function()p[f] = { X = v.X + ox, Y = v.Y + oy, Z = v.Z + oz }end)
                     n = n + 1
                 end
             end)
@@ -1642,14 +1682,19 @@ function SP.make_ue_env(ctx)
         end
         return t
     end
-    local function carry_left_behind(list, before, ox, oy, oz, skip)
+    local function carry_left_behind(list, before, ox, oy, oz, skip, tolerance, guard, addresses)
         local n = 0
         for i, c in ipairs(list) do
+            if guard and not guard() then return n,false end
             local b = before[i]
-            if b and not skip[c:GetAddress()] then
+            local address=addresses and addresses[i] or c:GetAddress()
+            if not addresses and guard and not guard() then return n,false end
+            if b and not skip[address] then
                 local l; pcall(function() l = c:K2_GetComponentLocation() end)
-                if l and math.abs(l.X - (b.X + ox)) + math.abs(l.Y - (b.Y + oy)) + math.abs(l.Z - (b.Z + oz)) > 30 then
+                if guard and not guard() then return n,false end
+                if l and math.abs(l.X - (b.X + ox)) + math.abs(l.Y - (b.Y + oy)) + math.abs(l.Z - (b.Z + oz)) > (tolerance or 30) then
                     pcall(function() c:K2_SetWorldLocation({ X = b.X + ox, Y = b.Y + oy, Z = b.Z + oz }, false, {}, true) end)
+                    if guard and not guard() then return n,false end
                     n = n + 1
                 end
             end
@@ -1665,42 +1710,48 @@ function SP.make_ue_env(ctx)
     -- Bare hands (Weapon_Fists / Weapon_Feet) are part of the pawn: skipped.
     local WEAPON_FIELDS = { "Weapon R", "Weapon L" }
     local ZERO = { X = 0, Y = 0, Z = 0 }
-    local function held_weapons(p)
+    local function held_weapons(p, guard)
         local out = {}
         for _, k in ipairs(WEAPON_FIELDS) do
+            if guard and not guard() then return out end
             pcall(function()
-                local w = p[k]
-                if not (w and w:IsValid()) then return end
+                local w=with_guard(guard,function()return p[k]end)
+                if not (w and with_guard(guard,function()return w:IsValid()end)) then return end
                 local cn = ""
-                pcall(function() cn = w:GetClass():GetFName():ToString() end)
+                pcall(function()
+                    local cls=with_guard(guard,function()return w:GetClass()end)
+                    local fn=with_guard(guard,function()return cls:GetFName()end)
+                    cn=with_guard(guard,function()return fn:ToString()end)
+                end)
                 if cn:find("Weapon_Fists", 1, true) or cn:find("Weapon_Feet", 1, true) then return end
-                local l = w:K2_GetActorLocation()
+                local l=with_guard(guard,function()return w:K2_GetActorLocation()end)
                 if l and l.X then out[#out + 1] = { k = k, w = w, X = l.X, Y = l.Y, Z = l.Z } end
             end)
         end
         return out
     end
-    local function stop_actor(a)
+    local function stop_actor(a, guard)
         pcall(function()
-            local r = a:K2_GetRootComponent()
-            if r and r:IsValid() then
-                r:SetAllPhysicsLinearVelocity(ZERO, false)
-                r:SetAllPhysicsAngularVelocityInDegrees(ZERO, false)
+            local r=with_guard(guard,function()return a:K2_GetRootComponent()end)
+            if r and with_guard(guard,function()return r:IsValid()end) then
+                with_guard(guard,function()r:SetAllPhysicsLinearVelocity(ZERO, false)end)
+                with_guard(guard,function()r:SetAllPhysicsAngularVelocityInDegrees(ZERO, false)end)
             end
         end)
     end
-    local function carry_weapons(list, ox, oy, oz, tol)
+    local function carry_weapons(list, ox, oy, oz, tol, guard)
         local n = 0
         for _, e in ipairs(list) do
+            if guard and not guard() then return n end
             pcall(function()
                 local tx, ty, tz = e.X + ox, e.Y + oy, e.Z + oz
-                local l = e.w:K2_GetActorLocation()
+                local l=with_guard(guard,function()return e.w:K2_GetActorLocation()end)
                 if not (l and l.X) or math.abs(l.X - tx) + math.abs(l.Y - ty) + math.abs(l.Z - tz) > (tol or 30) then
-                    e.w:K2_SetActorLocation({ X = tx, Y = ty, Z = tz }, false, {}, true)
+                    with_guard(guard,function()e.w:K2_SetActorLocation({ X = tx, Y = ty, Z = tz }, false, {}, true)end)
                     n = n + 1
                 end
             end)
-            stop_actor(e.w)
+            stop_actor(e.w,guard)
         end
         return n
     end
@@ -1805,41 +1856,172 @@ function SP.make_ue_env(ctx)
     -- than tol_cm (XY) from dest, the actor and every mesh are moved back
     -- rigidly by that residual (XY only: the body settles on the floor).
     -- Returns true when it moved the pawn.
-    function env.hold(p, dest, tol_cm)
+    function env.hold(p, dest, tol_cm, scope)
+        local closed=false
+        local drops=ctx.drift_drops and ctx.drift_drops()
+        local protected=scope and ctx.drift_world_current and ctx.drift_drops
+        local function base()
+            if closed then return false end
+            if not protected then return true end
+            local ok,value=pcall(function()
+                return ctx.drift_world_current(scope.world,drops)==true and scope.current()==true
+            end)
+            if not ok or value~=true then closed=true;return false end
+            return true
+        end
+        local check=base
+        local function read(f)
+            if not check() then return nil end
+            local ok,value=pcall(f)
+            if not check() then return nil end
+            return ok and value or nil
+        end
+        -- Actual PC world is checked before touching the retained pawn.
+        if not base() then return false end
         local a; pcall(function() a = p:K2_GetActorLocation() end)
+        if not base() then return false end
         if not a then return false end
         local rx, ry = dest.X - a.X, dest.Y - a.Y
         local moved = false
         local meshes = {}
         for _, f in ipairs(MESH_FIELDS) do
-            local m; pcall(function() m = p[f] end)
-            if m and m:IsValid() then meshes[#meshes + 1] = m end
+            local m=read(function()return p[f]end)
+            if m and read(function()return m:IsValid()end) then meshes[#meshes + 1] = m end
+            if not base() then return false end
         end
-        local weapons = held_weapons(p)
+        local weapons = held_weapons(p,protected and base or nil)
+        if not base() then return false end
         if math.sqrt(rx * rx + ry * ry) > (tol_cm or 10) then
+            local targets,tbefore,skip={},{},{}
+            if protected then
+                local function identity(o)
+                    -- Pinned wrapper identity methods do not call ProcessEvent.
+                    -- Guard the group once; reflected owner/location calls
+                    -- remain separately guarded at their stage boundaries.
+                    return assert(read(function()
+                        assert(o and o:IsValid()==true,"identity unavailable")
+                        local address=o:GetAddress();local name=o:GetFName():ToString()
+                        assert(finite(address) and address>0 and math.tointeger(address)
+                            and type(name)=="string" and name~="" and #name<=512,"identity unavailable")
+                        return {address=address,name=name}
+                    end),"identity unavailable")
+                end
+                local function same(a,b)return a and b and a.address==b.address and a.name==b.name end
+                local refs={}
+                local ok=pcall(function()
+                    local actor_id=identity(p)
+                    assert(actor_id.name==scope.pawn,"pawn changed")
+                    local mesh=read(function()return p.Mesh end);local mesh_id=identity(mesh)
+                    assert(same(identity(read(function()return mesh:GetOwner()end)),actor_id),"Mesh owner changed")
+                    local pc=read(function()return ctx.pc and ctx.pc() or UEH.GetPlayerController()end)
+                    local world_id=identity(read(function()return pc:GetWorld()end))
+                    assert(same(identity(read(function()return p:GetWorld()end)),world_id),"pawn world changed")
+                    local function current()
+                        if not base() then return false end
+                        local good,value=pcall(function()
+                            local own=read(function()return env.pawn()end)
+                            if not same(identity(own),actor_id)
+                                or not same(identity(read(function()return own:GetWorld()end)),world_id) then return false end
+                            local m=read(function()return own.Mesh end)
+                            return same(identity(m),mesh_id)
+                                and same(identity(read(function()return m:GetOwner()end)),actor_id)
+                        end)
+                        if not good or value~=true then closed=true;return false end
+                        return true
+                    end
+                    local function target_current(ref)
+                        if not base() then return nil end
+                        local good,target=pcall(function()
+                            local candidate=read(function()return p[ref.field]end)
+                            assert(same(identity(candidate),ref.id),"target changed")
+                            assert(same(identity(read(function()return candidate:GetOwner()end)),actor_id),"target owner changed")
+                            return candidate
+                        end)
+                        if not good or not target then closed=true;return nil end
+                        return target
+                    end
+                    -- Willie serializes these four targets with absolute
+                    -- location. Its idle/timeline writers sample StepSpline
+                    -- in world space. Carry them with a residual pin too.
+                    for _,field in ipairs({"R Foot IK","L Foot IK","StepSplineR","StepSplineL"})do
+                        local target=read(function()return p[field]end)
+                        if target and read(function()return target:IsValid()end)==true then
+                            local id=identity(target)
+                            assert(same(identity(read(function()return target:GetOwner()end)),actor_id),"target owner changed")
+                            local ref={field=field,id=id};refs[#refs+1]=ref
+                            local l=read(function()return target:K2_GetComponentLocation()end)
+                            assert(current() and target_current(ref),"scope changed")
+                            if l and finite(l.X) and finite(l.Y) and finite(l.Z) then
+                                ref.before={X=l.X,Y=l.Y,Z=l.Z}
+                            end
+                        end
+                    end
+                    check=current -- used only at mutation/stage boundaries
+                    -- Scalar identity reads use only the cheap, latched world
+                    -- and placement guard, never a recursive full traversal.
+                    read=function(f)
+                        if not base() then return nil end
+                        local good,value=pcall(f)
+                        if not base() then return nil end
+                        return good and value or nil
+                    end
+                    targets=refs
+                    tbefore=target_current
+                    for _,m in ipairs(meshes)do
+                        local address=read(function()return m:GetAddress()end)
+                        if address then skip[address]=true end
+                    end
+                end)
+                if not ok or not check() then return false end
+            end
             local before = {}
             for i, m in ipairs(meshes) do
-                local l; pcall(function() l = m:K2_GetComponentLocation() end)
+                local l=read(function()return m:K2_GetComponentLocation()end)
                 before[i] = l and { X = l.X, Y = l.Y, Z = l.Z } or nil
             end
-            pcall(function() p:K2_SetActorLocation({ X = a.X + rx, Y = a.Y + ry, Z = a.Z }, false, {}, true) end)
-            carry_weapons(weapons, rx, ry, 0, 5)   -- held weapons too (the mesh tolerance below)
+            if not check() then return false end
+            read(function()p:K2_SetActorLocation({ X = a.X + rx, Y = a.Y + ry, Z = a.Z }, false, {}, true)end)
+            if not check() then return false end
+            carry_weapons(weapons, rx, ry, 0, 5,protected and check or nil)
+            if not check() then return false end
             for i, m in ipairs(meshes) do
                 local b = before[i]
-                local l; pcall(function() l = m:K2_GetComponentLocation() end)
+                local l=read(function()return m:K2_GetComponentLocation()end)
+                if not check() then return false end
                 if b and l and math.abs(l.X - (b.X + rx)) + math.abs(l.Y - (b.Y + ry)) > 5 then
-                    pcall(function() m:K2_SetWorldLocation({ X = b.X + rx, Y = b.Y + ry, Z = b.Z }, false, {}, true) end)
+                    read(function()m:K2_SetWorldLocation({ X = b.X + rx, Y = b.Y + ry, Z = b.Z }, false, {}, true)end)
                 end
+                if not check() then return false end
             end
-            shift_handles(p, rx, ry, 0)
-            shift_vectors(p, rx, ry, 0)
+            for _,ref in ipairs(targets)do
+                local target=tbefore(ref) -- reacquire after actor/mesh translation
+                if not target then return false end
+                if ref.before then
+                    local _,good=carry_left_behind({target},{ref.before},rx,ry,0,skip,5,function()
+                        return check() and tbefore(ref)~=nil
+                    end,{ref.id.address})
+                    if good==false then return false end
+                end
+                if not check() then return false end
+            end
+            shift_handles(p, rx, ry, 0,protected and check or nil,protected and base or nil)
+            if not check() then return false end
+            shift_vectors(p, rx, ry, 0,protected and check or nil,protected and base or nil)
+            if not check() then return false end
             moved = true
         end
         for _, m in ipairs(meshes) do
-            pcall(function() m:SetAllPhysicsLinearVelocity({ X = 0, Y = 0, Z = 0 }, false) end)
-            pcall(function() m:SetAllPhysicsAngularVelocityInDegrees({ X = 0, Y = 0, Z = 0 }, false) end)
+            if not check() then return false end
+            read(function()m:SetAllPhysicsLinearVelocity({ X = 0, Y = 0, Z = 0 }, false)end)
+            if not check() then return false end
+            read(function()m:SetAllPhysicsAngularVelocityInDegrees({ X = 0, Y = 0, Z = 0 }, false)end)
+            if not check() then return false end
         end
-        for _, e in ipairs(weapons) do stop_actor(e.w) end   -- held still with the pawn
+        for _, e in ipairs(weapons) do
+            if not check() then return false end
+            stop_actor(e.w,protected and check or nil)
+            if not check() then return false end
+        end
         return moved
     end
 

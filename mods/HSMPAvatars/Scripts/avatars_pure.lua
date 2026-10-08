@@ -224,7 +224,7 @@ end
 -- Pose data belongs to one native life, including poses cached between reads.
 function PURE.displayed_pose(pose, pawn, label, at)
     return {label=label,at=at,pawn=pawn,has_context=pose.has_context,
-        match_id=pose.match_id,round=pose.round,life=pose.life}
+        match_id=pose.match_id,round=pose.round,life=pose.life,cut=pose.cut}
 end
 
 -- Combat's u32 timestamps represent whole milliseconds. Quantize the time

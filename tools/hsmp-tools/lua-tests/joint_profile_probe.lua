@@ -213,3 +213,30 @@ e=fixture("hand_r");e.proxy.grip_flags=function()error("binding unavailable")end
 T.check(r and not r.proxy.grip_flags.available,"unavailable current grip observation does not invent off flags")
 e=fixture("hand_r");e.proxy.grip_flags=function()e.current=false;return observed end;r=e:run()
 T.check(r==nil and #e.records==0,"current grip observation world loss stops the remaining joint getters")
+
+e=fixture("hand_r");e.proxy.joint_angles=true
+local angle_calls=0
+e.proxy.mesh.GetCurrentJointAngles=function(_,name,s1,tw,s2)
+    angle_calls=angle_calls+1
+    assert(name=="UserConstraint_12" and s1==tw and tw==s2,"verified name and shared scalar outputs required")
+    s1.Swing1Angle,s1.TwistAngle,s1.Swing2Angle=0,-37.25,12.5
+end
+r=e:run()
+local angles=r and r.proxy.joints[1].current.value.joint_angles
+T.check(angles and angles.available and angles.value.swing1==0 and angles.value.twist==-37.25
+    and angles.value.swing2==12.5 and angles.value.authority==false and angle_calls==1,
+    "optional current angles retain zero and signed native scalar outputs without target authority")
+T.check(r.source.joints[1].current.value.joint_angles==nil,
+    "disabled current-angle observation adds no native lookup or fabricated values")
+e=fixture("hand_r");e.proxy.joint_angles=true;r=e:run()
+T.check(r and not r.proxy.joints[1].current.value.joint_angles.available
+    and r.proxy.joints[1].current.value.complete,"missing optional angle getter preserves independently complete configuration")
+e=fixture("hand_r");e.proxy.joint_angles=true
+e.proxy.mesh.GetCurrentJointAngles=function(_,_,s1) s1.Swing1Angle=0/0;s1.TwistAngle=0;s1.Swing2Angle=0 end
+r=e:run();T.check(r and not r.proxy.joints[1].current.value.joint_angles.available,
+    "nonfinite current angle remains unavailable")
+e=fixture("hand_r");e.source.joint_angles=true;local proxy_angle_reads=0
+e.source.mesh.GetCurrentJointAngles=function()e.current=false end
+e.proxy.joint_angles=true;e.proxy.mesh.GetCurrentJointAngles=function()proxy_angle_reads=proxy_angle_reads+1 end
+r=e:run();T.check(r==nil and #e.records==0 and proxy_angle_reads==0,
+    "scope loss in optional angle read stops every later proxy read and emission")

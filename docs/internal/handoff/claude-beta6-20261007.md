@@ -2187,3 +2187,82 @@ state-file allowlist and whitespace clean. These are mocked/source checks, not n
 spawn acceptance. Native45 uses hand_r focus, fault trigger and bounded drift capture;
 native caller and other expensive probes remain off. Keep spawn→main/release gates
 →co-op Abyss ordering; spawning remains failed on latest completed Native44 evidence.
+
+### Native45 completed: less driver cost, wrist capture admission gap found
+
+46446274 fullG0 passed (69Lua suites,1283Rust/75binaries,clippy0errors2warnings),
+exact dev push and normal RequireG0 deployment passed. Native45 raw run
+20261008-163437-f5b8d2-combat_manual, session native-20261008-45. Both windows
+on smallest secondary DISPLAY1. Native caller and other expensive probes off.
+Owner and180s recipe exited0; normal harness shutdown, no new crash dumps.
+Manual basic-state/cleanup verdict PASS does not certify spawn or release readiness.
+
+Harness quickG0 failed12Avatar assertions because the new trigger/focus inherited
+into fixtures: boot pinned PROBE but omitted TRIGGER/FOCUS. Full prepushG0 had
+passed under ordinary environment. Native45 remains diagnostic-only; do not count
+its quickG0 as green. Minimal fixture env isolation is prepared for Native46.
+
+Recipe128/137 accepted (.9343065693);47stall events, wrist170.2degrees with118frame
+repose observed. Box rotation mean35.97/max75.69degrees,31samples; zero clock resets
+in21windows. Bounds and minimum counts unchanged; these do not meet spawn acceptance.
+Final same-filter88active windows driver cost2.410778ms versus Native44 3.462802ms,
+about30.38percent lower, median2.3695ms,286.9659drives/window,0deferred; callback
+elapsed and renderedFPS excluded. Final flags-performance-audit.json preserves
+19R/0L confirmations and31RH reposes. No claim that grip policy cured the fault.
+
+All6current source drift rows available, three eachprocess. Capsule60.3–78.3cm and
+physicalCOM76.3–95.5cm displaced in inst1 bootstrap. Actor/control approximately89/90,
+evaluated Mesh/Driver approximately0, native lowerhandle86–90degrees. Native Mesh
+relative yaw270 and pelvis+90 lowerhandle convention explain those offsets; this
+rejects the simple stale evaluated Mesh/Driver/lowerhandle yaw hypothesis. GroundYaw
+is native derived/interpolated, not independent physical orientation. Inputvector0.
+Rotation captures65–97ms, significantly dearer than prior6–9ms COM-only captures.
+Physical orientation unavailable remains explicit. No yaw-reset fix authorized by this.
+
+No JOINTPROFILE capture occurred despite actual persistent RH faults. Production
+PURE.displayed_pose copied match/round/life but dropped cut; actual fault admission
+required shown.cut and therefore always refused. Prior positive helper tests supplied
+a fabricated cut; actual-main test covered only refusal. Native46 copies exact pose.cut,
+pins fixture env and includes a positive27frame actual drive_v2 regression. Astra
+approved. Raw fault-only native joint angles use shared scalar out table, remain
+physics_verified=false/native lookup behavior unproved and grant no target authority.
+
+Another concrete placement gap: native absolute Foot IK scene components are carried
+by initial teleport but omitted from residual protected hold. Sol preparing the narrow
+same-translation hold repair and world/replacement regression; native sole causality
+still requires the next run. Keep Native46 diagnostic admission and this placement
+fix separate from any declaration that all arms or source spawning are repaired.
+
+### Native46 frozen preparation: carry absolute balance inputs during protected pins
+
+Native Willie R/L Foot IK and StepSplineR/L templates have absolute locations;
+idle foot writers sample each spline GetLocationAtTime(0,World) and set Foot IK.
+Residual env.hold previously moved actor, meshes, weapons and scalar targets but
+omitted those four scene components. The fix snapshots these exact fields only
+inside residual>existing10cm branch, then carries any that did not already follow
+the actor, using the existing hold mesh/weapon5cm follow tolerance. Initial
+teleport30cm follow, drift60cm and actual six-limb5uu/10degree/150ms gates unchanged.
+No yaw reset, profile reset, new physics strengths or generic component enumeration.
+
+Fresh placement/PC-world/body and exact component field/owner/identity guards stop
+old writes after replacement. Retained scene components are reacquired after actor
+translation. Non-ProcessEvent identity wrappers are grouped under before/after
+world checks, while reflected read/write stages retain individual guards. Fixture
+read ceiling1200 not raised: modeled four-target residual pin852wrapper/845world
+checks, down from1282/2813 before grouping. Actual game correction cost remains
+unmeasured; this count is not runtime/FPS acceptance. New real-env12/20/29cm pins,
+already-following targets and PC-world/same-world Mesh/target replacements tested.
+
+Alongside exact displayed cut propagation, ambient fixture isolation and positive
+production fault admission, final four suites881assertions pass (Avatar475,
+profile72,placement301,session33), seven Lua parses and state-files pass. Astra
+approved all correction scopes and final tiny timing delta.
+Native46 must establish
+source drift, final-dressed fault-time wrist/flags and actual six-limb spawn behavior.
+Raw joint angles remain unverified native API outputs, with explicit no authority.
+
+Existing developer drift opt-in also brackets env.hold with exactly two os.clock
+reads, finite monotonic timing stored only in current assignment's plain counters.
+Calls/moved/total/max append only to the existing once hold-release log. DefaultOFF
+adds no clock/stat reads; no new UE gets/setters/files or per-frame logging. Actual
+source pose sender timing starts after placement and would not measure this cost.

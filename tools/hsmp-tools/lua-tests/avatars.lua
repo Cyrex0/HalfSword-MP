@@ -54,6 +54,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "limb_burst", change = "pc_world" })
     T.isolated(T.script, "case", { kind = "joint_profile" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "fault_wait" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "actual_fault" })
     T.isolated(T.script, "case", { kind = "joint_profile", gate = "off" })
     T.isolated(T.script, "case", { kind = "joint_profile", gate = "no_dev" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "pc_world" })
@@ -93,7 +94,9 @@ local function boot(register_ok)
         HSMP_GRIP_PROBE = opts.kind=="grip_probe" and opts.gate~="off" and "1" or "0",
         HSMP_HAND_PIPELINE_PROBE = opts.kind=="hand_pipeline" and opts.gate~="off" and "1" or "0",
         HSMP_LIMB_BURST_PROBE = opts.kind=="limb_burst" and opts.gate~="off" and "1" or "0",
-        HSMP_JOINT_PROFILE_PROBE = opts.kind=="joint_profile" and opts.gate~="off" and "1"or "0" }, strict = true })
+        HSMP_JOINT_PROFILE_PROBE = opts.kind=="joint_profile" and opts.gate~="off" and "1"or "0",
+        HSMP_JOINT_PROFILE_TRIGGER = opts.change=="actual_fault" and "fault" or "warm",
+        HSMP_JOINT_PROFILE_FOCUS = opts.change=="actual_fault" and "hand_r" or "right" }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -967,8 +970,12 @@ if opts.kind == "parse" then
     T.check(not P.pose_context_ok(P.root_context(root), s, m, 2), "unstamped peer root is rejected in a match")
     s.state, s.spawn_round, pose.round, pose.life, pose.has_context = "countdown", 3, 3, 1, true
     T.check(P.pose_context_ok(pose, s, m, 2), "next round placement uses its own initial life")
+    pose.cut=7
     local shown=P.displayed_pose(pose,"Willie_BP_C_rendered",100,500)
-    pose.life=2
+    pose.life,pose.cut=2,8
+    T.check(shown.cut==7,"displayed pose copies its actual source discontinuity without borrowing a later source cut")
+    T.check(P.displayed_pose({cut=0},"Pawn",100,500).cut==0 and P.displayed_pose({},"Pawn",100,500).cut==nil,
+        "actual cut zero is preserved while missing cut stays unavailable without a default")
     local row=P.playback_row(2,shown,501)
     T.check(row and row.life==1 and row.match_id==901 and row.round==3 and row.pawn=="Willie_BP_C_rendered",
         "displayed playback retains original pose life and actual pawn after source table changes")
@@ -1670,6 +1677,13 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         PX.JOINT_PROFILE.capture=function(self,source,proxy,se,pe)
             captures=captures+1
             source_current,proxy_current=se.current,pe.current
+            if opts.change=="actual_fault"then
+                T.check(proxy.fault_trigger and proxy.fault_trigger.frames>20
+                    and proxy.fault_trigger.reason==p.settle_state.settle_reason
+                    and proxy.fault_trigger.sample_ms==p.aim.at and proxy.fault_trigger.measurement_mesh.address==body.mesh_addr
+                    and p.shown.cut==cur.cut and p.aim.cut==cur.cut and p.settle_state.cut==cur.cut,
+                    "actual capped RH drive produces fault capture with copied original display cut rather than a fabricated fixture cut")
+            end
             T.check(source.peer==1 and proxy.peer==2 and source.life==1 and proxy.life==2 and source.pending and not source.qualification,
                 "production scopes preserve independent peer/life and actual Mode0 pending source publication")
             T.check(source.sample_ms%1~=0 and source.admission_sample_age_ms==.375 and se.current()and pe.current(),
@@ -1709,6 +1723,15 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         if opts.change=="fault_wait"then
             T.check(captures==0 and PX.JOINT_PROFILE.attempts==0 and writes==before+12,
                 "actual main waits for a completed persistent wrist fault without consuming attempts or changing servo writes")
+            return
+        end
+        if opts.change=="actual_fault"then
+            T.check(captures==0 and PX.JOINT_PROFILE.attempts==0 and p.shown.cut==7,
+                "early real drive retains its source cut while persistent fault has not reached the threshold")
+            for frame=2,27 do drive(1000+frame*16)end
+            T.check(captures==1 and PX.JOINT_PROFILE.used and p.body.stall[17]>20 and p.settle_state.settle_count==6,
+                "more than twenty actual capped RH frames reach the production fault diagnostic exactly once")
+            T.check(PX.JOINT_PROFILE.trigger=="fault","positive actual fault fixture opts into fault independently of ambient host setting")
             return
         end
         if opts.change=="lookup_pc_world"then

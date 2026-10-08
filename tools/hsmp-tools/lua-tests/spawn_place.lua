@@ -338,6 +338,46 @@ do
     T.check(T.contains(w2:logtext(), "hold released after"), "hold release logged")
 end
 
+T.log("== developer hold timing stays scalar, assignment-scoped and release-only")
+do
+    local saved_clock=os.clock
+    local function make(enabled)
+        local w=placed_world();w:secs(2.1)
+        local c=w.sp.cur;c.hold_until=w.clock+10
+        w.env.drift_probe=enabled
+        w.env.hold=function()return false end
+        return w,c
+    end
+    local clocks=0
+    os.clock=function()clocks=clocks+1;return 10+clocks*.001 end
+    local w,c=make(false);w.sp:hold_step(w.clock)
+    T.check(clocks==0 and c.hold_timing==nil,"default-off hold performs no timing clock calls or field allocation")
+    w,c=make(true)
+    local samples={10,10.001,11,11.002};clocks=0
+    os.clock=function()clocks=clocks+1;return samples[clocks]end
+    local calls=0;w.env.hold=function()calls=calls+1;return calls==2 end
+    w.sp:hold_step(w.clock);w.sp:hold_step(w.clock)
+    local t=c.hold_timing
+    T.check(clocks==4 and calls==2 and t.calls==2 and t.moved==1
+        and math.abs(t.total_ms-3)<1e-8 and math.abs(t.max_ms-2)<1e-8,
+        "exactly two clocks bracket each real hold call; scalar totals retain moved count, sum and maximum")
+    local n=#w.logs;w.sp:hold_step(c.hold_until);w.sp:hold_step(w.clock+20)
+    T.check(clocks==4 and #w.logs==n+1 and T.contains(w.logs[#w.logs],"hold calls=2 moved=1 total_ms=3.000 max_ms=2.000"),
+        "timing appends to the existing once-only release log, never per frame")
+    w,c=make(true);clocks=0
+    os.clock=function()clocks=clocks+1;return 10+clocks*.001 end
+    w.env.hold=function()w.sp.cur={};return false end
+    w.sp:hold_step(w.clock)
+    T.check(clocks==2 and c.hold_timing==nil,"replacement assignment during hold cannot acquire old timing metadata")
+    for _,v in ipairs({{10,9},{0/0,11},{10,math.huge}})do
+        w,c=make(true);clocks=0
+        os.clock=function()clocks=clocks+1;return v[clocks]end
+        w.sp:hold_step(w.clock)
+        T.check(clocks==2 and c.hold_timing==nil,"backwards/nonfinite duration is unavailable without changing hold behavior")
+    end
+    os.clock=saved_clock
+end
+
 T.log("== capsule on the spot but the visible body left behind is NOT placed")
 do
     local w = placed_world()
@@ -1247,6 +1287,107 @@ do
     env.hold(pawn, { X = 1100, Y = 500, Z = 100 }, 10)
     T.check(sword.x == 1110 and sword.moves == 2, "hold carries the sword back with the pawn", T.repr({ sword.x, sword.moves }))
     _G.StaticFindObject = saved_sfo
+end
+
+T.log("== protected residual pins carry the four native absolute balance targets")
+do
+    local function make(opts)
+        opts=opts or{}
+        local world,replacement={},{}
+        local p={x=opts.residual or 20,y=0,z=100,id="Willie_Current"}
+        local pc={Pawn=p,world=world,IsValid=function()return true end}
+        local reads,world_checks,old_touches,writes,target_reads=0,0,0,0,0
+        local function touch()
+            reads=reads+1
+            if pc.world~=world then old_touches=old_touches+1;error("old native access")end
+        end
+        local function native(o,addr,name)
+            o.IsValid=function()touch();return true end
+            o.GetAddress=function()touch();return addr end
+            o.GetFName=function()touch();return{ToString=function()touch();return name end}end
+        end
+        native(world,1,"Arena");native(p,10,p.id)
+        pc.GetWorld=function()return pc.world end
+        p.GetWorld=function()touch();return world end
+        p.K2_GetActorLocation=function()touch();return{X=p.x,Y=p.y,Z=p.z}end
+        local mesh={x=p.x,y=0,z=10,moves=0,velocities=0};native(mesh,20,"CharacterMesh0");p.Mesh=mesh
+        mesh.GetOwner=function()touch();return p end
+        mesh.K2_GetComponentLocation=function()touch();return{X=mesh.x,Y=mesh.y,Z=mesh.z}end
+        mesh.K2_SetWorldLocation=function(_,v)touch();writes=writes+1;mesh.moves=mesh.moves+1;mesh.x,mesh.y,mesh.z=v.X,v.Y,v.Z end
+        mesh.SetAllPhysicsLinearVelocity=function()touch();writes=writes+1;mesh.velocities=mesh.velocities+1 end
+        mesh.SetAllPhysicsAngularVelocityInDegrees=function()touch();writes=writes+1;mesh.velocities=mesh.velocities+1 end
+        local fields={"R Foot IK","L Foot IK","StepSplineR","StepSplineL"};local targets={}
+        for i,field in ipairs(fields)do
+            local target={x=100+i,y=10*i,z=0,owner=p,moves=0,reads=0,field=field};native(target,30+i,field)
+            target.GetOwner=function()touch();return target.owner end
+            target.K2_GetComponentLocation=function()
+                touch();target_reads=target_reads+1;target.reads=target.reads+1
+                if i==1 and opts.get_world_flip then pc.world=replacement end
+                if i==1 and opts.field_swap then local r={GetOwner=target.GetOwner};native(r,31,"RebuiltTarget");p[field]=r end
+                if i==1 and opts.owner_swap then target.owner=mesh end
+                if i==1 and opts.pawn_swap then local r={};native(r,11,"NewPawn");pc.Pawn=r end
+                if i==1 and (opts.mesh_swap or (opts.post_mesh_swap and target.reads==2)) then
+                    local r={GetOwner=mesh.GetOwner};native(r,20,"RebuiltMesh");p.Mesh=r
+                end
+                return{X=target.x,Y=target.y,Z=target.z}
+            end
+            target.K2_SetWorldLocation=function(_,v)
+                touch();writes=writes+1;target.moves=target.moves+1;target.x,target.y,target.z=v.X,v.Y,v.Z
+                if i==1 and opts.write_world_flip then pc.world=replacement end
+            end
+            targets[i]=target;p[field]=target
+        end
+        p.K2_SetActorLocation=function(_,v)
+            touch();writes=writes+1;local dx,dy,dz=v.X-p.x,v.Y-p.y,v.Z-p.z;p.x,p.y,p.z=v.X,v.Y,v.Z
+            if opts.attached then local t=targets[1];t.x,t.y,t.z=t.x+dx,t.y+dy,t.z+dz end
+        end
+        local handle={writes=0,GrabbedComponent=mesh};native(handle,40,"PhysicsHandle LowerBody")
+        if opts.handle_mesh_swap then
+            p["PhysicsHandle LowerBody"]=handle
+            handle.GetTargetLocationAndRotation=function(_,loc,rot)
+                touch();loc.X,loc.Y,loc.Z=20,0,100;rot.Pitch,rot.Yaw,rot.Roll=0,90,0
+                local r={GetOwner=mesh.GetOwner};native(r,20,"RebuiltMesh");p.Mesh=r
+            end
+            handle.SetTargetLocation=function()touch();handle.writes=handle.writes+1 end
+        end
+        local ctx={UEHelpers={},pc=function()return pc end,drift_drops=function()return 0 end,
+            drift_world_current=function(key,drops)world_checks=world_checks+1;return key=="Arena#PC"and drops==0 and pc.world==world end}
+        local env=SP.make_ue_env(ctx)
+        local scope={world="Arena#PC",pawn=p.id,current=function()return true end}
+        return {env=env,p=p,mesh=mesh,targets=targets,scope=scope,handle=handle,
+            hold=function(self)return env.hold(p,{X=0,Y=0,Z=100},10,scope)end,
+            counts=function()return reads,world_checks,old_touches,writes,target_reads end}
+    end
+    for _,residual in ipairs({12,20,29})do
+        local w=make({residual=residual});local moved=w:hold()
+        T.check(moved and w.p.x==0 and w.mesh.x==0 and w.mesh.moves==1,
+            "original body residual correction is preserved at "..residual.."cm")
+        local good=true;for i,t in ipairs(w.targets)do good=good and t.x==100+i-residual and t.moves==1 end
+        T.check(good,"absolute foot IK and world step splines carry once even for10–30cm pin residuals")
+        local reads,checks=w.counts()
+        T.check(reads<1200,"residual guard uses bounded stage/single-target checks, not recursive all-target scalar scans",
+            T.repr({native_reads=reads,cheap_world_checks=checks}))
+        T.log("hold residual "..residual.."cm: native reads="..reads.." cheap world checks="..checks)
+    end
+    local w=make({attached=true});w:hold()
+    T.check(w.targets[1].x==81 and w.targets[1].moves==0 and w.targets[2].moves==1,
+        "an attached target already carried by actor translation is not translated twice")
+    for _,opts in ipairs({{get_world_flip=true},{field_swap=true},{owner_swap=true},{pawn_swap=true},{mesh_swap=true}})do
+        w=make(opts);local moved=w:hold();local _,_,old,writes=w.counts()
+        T.check(not moved and writes==0 and old==0,
+            "fresh world/pawn/Mesh/target scope loss during optional capture prevents all old correction writes: "..T.repr(opts))
+    end
+    w=make({write_world_flip=true});w:hold();local _,_,old=w.counts()
+    T.check(old==0 and w.targets[1].moves==1 and w.targets[2].moves==0 and w.mesh.velocities==0,
+        "world loss inside target write stops subsequent targets and old velocity/legacy correction writes")
+    w=make({post_mesh_swap=true});w:hold()
+    T.check(w.targets[1].moves==0 and w.targets[2].moves==0 and w.mesh.velocities==0,
+        "same-world Mesh replacement in post-actor target location read prevents its setter and all remaining old stages")
+    w=make({handle_mesh_swap=true});w:hold()
+    T.check(w.handle.writes==0 and w.mesh.velocities==0,
+        "legacy reflected handle getter Mesh replacement stops the handle target write and remaining old physics stages")
+    w=make({residual=5});w:hold();local _,_,_,_,target_reads=w.counts()
+    T.check(target_reads==0 and w.targets[1].moves==0,"no balance target snapshot/carry occurs below the unchanged10cm pin boundary")
 end
 
 T.log("== a Willie freed while we were protected: its cached actor is never touched again")

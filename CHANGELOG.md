@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Carry native absolute foot targets and step splines with residual spawn placement
+  corrections, refusing stale body or component bindings.
+- Preserve the displayed pose's actual discontinuity context so developer wrist
+  fault captures can admit a real persistent stall.
 - Avoid repeated grip motor writes when the same freshly verified binding already
   has all six linear drive flags disabled, preserving restoration checks.
 - Capture bounded developer wrist settings and current grip flags during an actual

@@ -1689,8 +1689,8 @@ function PX.joint_profile_row(p)
         if not PX.limb_writer_current(q)then return nil,"writer scope changed after library lookup"end
         stage="capture"
         return probe:capture(own.context,context,
-            {actor=own.actor,mesh=own.mesh,library=lib,fname=fname,now=now_ms,current=function()return PX.joint_profile_source_current(own)end},
-            {actor=p.actor,mesh=PX.injury_mesh(p),library=lib,fname=fname,now=now_ms,
+            {actor=own.actor,mesh=own.mesh,library=lib,fname=fname,now=now_ms,joint_angles=trigger~=nil,current=function()return PX.joint_profile_source_current(own)end},
+            {actor=p.actor,mesh=PX.injury_mesh(p),library=lib,fname=fname,now=now_ms,joint_angles=trigger~=nil,
                 grip_flags=trigger and function()
                     local value,why=PX.grip_linear_observe(p)
                     assert(value and value.available==true,value and value.reason or why or "current grip flags unavailable");return value
