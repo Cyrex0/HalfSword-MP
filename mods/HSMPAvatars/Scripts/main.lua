@@ -1432,6 +1432,126 @@ function PX.grip_probe_emit(r,why,q,stage)
         end
     end
 end
+-- Actual v2 drive stages, copied only after bounded developer admission.
+-- Current c7 is the existing World-space socket return, not a joint/body angle.
+PX.HAND_PIPELINE_PROBE=os.getenv("HSMP_DEV")=="1" and os.getenv("HSMP_HAND_PIPELINE_PROBE")=="1"
+PX.HAND_PIPELINE_SLOTS={11,12,13,15,16,17} -- upperarms anchor the two forearm parents
+function PX.hand_pipeline_copy(v,n)
+    local ok,out=pcall(function()
+        if type(v)~="table"then return nil end
+        local copy={}
+        for i=1,n do copy[i]=PX.grip_probe_number(v[i])end
+        return copy
+    end)
+    return ok and out or nil
+end
+function PX.hand_pipeline_quat(v)
+    if not v then return nil end
+    local norm=math.sqrt(v[4]^2+v[5]^2+v[6]^2+v[7]^2)
+    if norm<=0 or norm~=norm or norm==math.huge then return nil end
+    return {v[4]/norm,v[5]/norm,v[6]/norm,v[7]/norm},norm
+end
+function PX.hand_pipeline_current(q)
+    return PX.grip_probe_current(q) and q.p.last.seq==q.source_seq and q.p.last.cut==q.source_cut
+        and q.p.last.has_context==true
+end
+function PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
+    if not PX.HAND_PIPELINE_PROBE then return nil end
+    local at=now_ms()
+    local s=PX.hand_pipeline_state or {used=0,at={}}
+    PX.hand_pipeline_state=s -- scalar only; callback-local records are never queued
+    if s.used>=60 or s.started and (at<s.started or at-s.started>=180000)then return nil end
+    local shown=p.shown or p.applied_context
+    if not shown or type(shown.pawn)~="string" or shown.pawn=="" or cur.has_context~=true
+        or type(p.addr)~="number" or p.addr<=0 or not math.tointeger(p.addr)then return nil end
+    for _,k in ipairs({"match_id","round","life","seq"})do
+        local v=cur[k];if type(v)~="number" or v<=0 or not math.tointeger(v)then return nil end
+    end
+    if type(cur.cut)~="number" or cur.cut<0 or not math.tointeger(cur.cut)then return nil end
+    local identity=tostring(cache_world)..":"..p.addr..":"..shown.pawn..":"..tostring(body.mesh_addr)..":"..tostring(body.mesh_fname)
+        ..":"..cur.match_id..":"..cur.round..":"..cur.life..":"..cur.cut
+    local prior=s.at[p.peer]
+    if prior and prior.identity==identity and at-prior.at<5000 then return nil end
+    s.at[p.peer]={identity=identity,at=at};s.started=s.started or at;s.used=s.used+1
+    local q={actor=p.actor,p=p,pawn={address=p.addr,name=shown.pawn},body={address=body.mesh_addr,name=body.mesh_fname},
+        peer=p.peer,world=cache_world,generation=world_gen,match_id=cur.match_id,round=cur.round,life=cur.life,has_context=true,
+        cut=shown.cut,source_cut=cur.cut,source_seq=cur.seq,group=s.used,instance=os.getenv("HSMP_INST") or "unavailable",
+        frame=PX.frame_no or 0,at=at,drive_ms=now}
+    if not PX.hand_pipeline_current(q)then return nil end
+    local old=p.aim
+    local prior_ok=old and old.has_context==true and old.match_id==q.match_id and old.round==q.round and old.life==q.life
+        and old.cut==q.source_cut and old.pawn==q.pawn.name and old.pipeline_world==q.world and old.pipeline_generation==q.generation
+        and PX.grip_probe_same(old.pipeline_mesh,q.body)
+    q.record={instance=q.instance,peer=q.peer,pawn=q.pawn,mesh=q.body,world=q.world,generation=q.generation,group=q.group,
+        frame=q.frame,at=q.at,drive_ms=now,match_id=q.match_id,round=q.round,life=q.life,source_seq=q.source_seq,source_cut=q.source_cut,
+        source_mode=cur.mode,source_age=cur.age,source_pt=cur.pt,display_label=label,aim_label=aim_label,
+        prior_available=prior_ok==true,prior_seq=prior_ok and old.seq or nil,prior_label=prior_ok and old.label or nil,
+        prior_frame=prior_ok and old.pipeline_frame or nil,decoded={},aim={},prior={},current={},readback={}}
+    for _,i in ipairs(PX.HAND_PIPELINE_SLOTS)do
+        q.record.decoded[i]=PX.hand_pipeline_copy(cur.slots[i],13)
+        q.record.aim[i]=PX.hand_pipeline_copy(aim[i],13)
+        q.record.prior[i]=prior_ok and PX.hand_pipeline_copy(old.slots and old.slots[i],13) or nil
+    end
+    return q
+end
+function PX.hand_pipeline_observe(q,i,c,native)
+    if not q then return end
+    for _,slot in ipairs(PX.HAND_PIPELINE_SLOTS)do
+        if slot==i then
+            q.record.current[i]=PX.hand_pipeline_copy(c,7)
+            q.record.current_source=native and "native_servo_socket_world" or "lua_socket_world"
+            return
+        end
+    end
+end
+function PX.hand_pipeline_finish(q)
+    if not q or not PX.hand_pipeline_current(q)then return nil,"scope changed"end
+    local mesh=PX.injury_mesh(q.p) -- fresh field, never the retained body.mesh wrapper
+    if not mesh then return nil,"mesh unavailable"end
+    for _,i in ipairs({12,13,16,17})do
+        local row={};q.record.readback[i]=row
+        local ok,sim=pcall(function()return mesh:IsSimulatingPhysics(fname(PURE.V2_SLOTS[i]))end)
+        if ok and type(sim)=="boolean"then row.simulating=sim end
+        local good,velocity=pcall(function()
+            local v=mesh:GetPhysicsAngularVelocityInDegrees(fname(PURE.V2_SLOTS[i]))
+            return {PX.grip_probe_number(v.X),PX.grip_probe_number(v.Y),PX.grip_probe_number(v.Z)}
+        end)
+        if good then row.angular_velocity=velocity end
+        if not PX.hand_pipeline_current(q)then return nil,"scope changed"end
+    end
+    return q.record
+end
+function PX.hand_pipeline_emit(r,why,q)
+    local function values(v)
+        if not v then return "unavailable"end
+        local out={};for _,x in ipairs(v)do out[#out+1]=tostring(x)end
+        return "("..table.concat(out,",")..")"
+    end
+    local c=r or q
+    local pawn=c.pawn.name.."@"..c.pawn.address
+    local mesh=(c.mesh or c.body).name.."@"..(c.mesh or c.body).address
+    Log("HANDPIPESTATE inst=%s group=%s peer=%s pawn=%s mesh=%s world=%s gen=%s match=%s round=%s life=%s frame=%s at_ms=%s drive_ms=%s source_seq=%s source_cut=%s source_mode=%s source_age=%s source_pt=%s display_label=%s aim_label=%s prior_available=%s prior_seq=%s prior_label=%s prior_frame=%s current_source=%s available=%s reason=%s current_phase=pre_driver_returned readback_phase=post_driver read_only=true",
+        tostring(c.instance),tostring(c.group),tostring(c.peer),pawn,mesh,tostring(c.world),tostring(c.generation),tostring(c.match_id),tostring(c.round),tostring(c.life),
+        tostring(c.frame),tostring(c.at),tostring(c.drive_ms),tostring(c.source_seq),tostring(c.source_cut),tostring(c.source_mode),tostring(c.source_age),tostring(c.source_pt),
+        tostring(c.display_label),tostring(c.aim_label),tostring(c.prior_available),tostring(c.prior_seq),tostring(c.prior_label),tostring(c.prior_frame),
+        tostring(c.current_source),tostring(r~=nil),why or "none")
+    if not r then return end
+    for _,i in ipairs({12,13,16,17})do
+        local stage={}
+        for _,name in ipairs({"decoded","aim","prior","current"})do
+            local data=r[name][i]
+            local quat,norm=PX.hand_pipeline_quat(data)
+            local parent=PX.hand_pipeline_quat(r[name][PURE.V2_PARENT[i]])
+            local relative=quat and parent and PURE.qmul(PURE.qconj(parent),quat) or nil
+            stage[#stage+1]=string.format("%s_available=%s %s_values=%s %s_norm=%s %s_relative=%s",name,tostring(quat~=nil),name,values(data),name,tostring(norm),name,values(relative))
+        end
+        local b=r.readback[i] or {}
+        Log("HANDPIPE inst=%s group=%s peer=%s slot=%d bone=%s parent_slot=%d parent_bone=%s %s sim_available=%s simulating=%s angular_velocity_available=%s angular_velocity_deg_s=%s",
+            tostring(r.instance),tostring(r.group),tostring(r.peer),i,PURE.V2_SLOTS[i],PURE.V2_PARENT[i],PURE.V2_SLOTS[PURE.V2_PARENT[i]],table.concat(stage," "),
+            tostring(type(b.simulating)=="boolean"),type(b.simulating)=="boolean" and tostring(b.simulating) or "unavailable",
+            tostring(b.angular_velocity~=nil),values(b.angular_velocity))
+    end
+end
 -- The grip constraints of a stand-in, as FRESH components keyed by
 -- address. The BP destroys and rebuilds them on a pick-up / drop / disarm;
 -- a pointer kept from the last 1 s scan can be freed by GC by then, and
@@ -3434,6 +3554,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
         targets = copy -- never remove slots from the retained received pose
     end
     PX.injury_targets(id,p,targets,aim)
+    local hand_pipeline=PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
     local nat = PX.ns_bodies(mesh, aim, sv, dt, s_capl, s_capa, s_gain, yl, holding)   -- native servo
     if PX.SETTLE then
         p.settle_state=PX.SETTLE.begin(p.settle_state,PX.settle_world,p.shown,p.aim,cur,now)
@@ -3461,6 +3582,7 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
             else
                 c = xf7(mesh:GetSocketTransform(fn, 0), c)
             end
+            if hand_pipeline then PX.hand_pipeline_observe(hand_pipeline,i,c,nat~=nil)end
             if PX.SETTLE then PX.SETTLE.measure(p.settle_state,i,c,p.aim and p.aim.slots and p.aim.slots[i]) end
             -- Tracking error vs. what we aimed at last frame.
             if prev and prev.slots[i] then
@@ -3786,6 +3908,14 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     p.aim = PURE.displayed_pose(cur, p.actor:GetFName():ToString(), aim_label, now)
     p.aim.world,p.aim.cut,p.aim.seq=PX.settle_world,cur.cut,cur.seq
     p.aim.slots = aim
+    if PX.HAND_PIPELINE_PROBE then
+        p.aim.pipeline_mesh={address=body.mesh_addr,name=body.mesh_fname}
+        p.aim.pipeline_world,p.aim.pipeline_generation,p.aim.pipeline_frame=cache_world,world_gen,PX.frame_no or 0
+    end
+    if hand_pipeline then
+        local record,why=PX.hand_pipeline_finish(hand_pipeline)
+        PX.hand_pipeline_emit(record,why,hand_pipeline)
+    end
     return pel_err
 end
 

@@ -1204,3 +1204,17 @@ identities,with fresh native header+before/after fullworld/actor/currentMesh
 scope. Missing/new-proof failure leaves ordinary weaponstate available;
 zero/false remain actual values. No loadoutorder or physics setters were added.
 It still needs matching deployment and actual owner/proxy captures.
+
+The HAND pipeline observer is now frozen for final Astra review. Root independent
+checks pass343 Avatar assertions with ambientDEV/GRIP/HAND all1 and all0,plus
+2parses. Explicit HSMP_DEV=1 AND HSMP_HAND_PIPELINE_PROBE=1 admits at most60
+scalar capturegroups in180s,5s per exactpeer/pawn/world/life/cut. It deep-copies
+actual decoded/finalaim/prioraim and existing returned current c7 values for
+both lowerarms/hands,usingupperarms only as relative-quaternion anchors. Source
+sequence/cut/frame/fullscope and current mesh stamp qualify prior availability.
+Only4bones get bounded post-driver simulation/angular-velocity readbacks;
+current quaternions retain their pre-driver-returned phase label. No extra
+socket-quaternion getter,joint-angle API,physics setter or driver policy change.
+Unknown/missing/nonfinite/stale data stays unavailable. Native execution and
+causal interpretation remain pending Native31.
+Final Astra HAND source review approved the frozen two-file diagnostic for matching Native31; native verification remains pending.

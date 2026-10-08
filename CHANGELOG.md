@@ -21,6 +21,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   damage-sampling hit-box changes, with explicit identity and availability checks.
   Observer refusals identify their failed stage; unavailable grip axes remain
   explicitly unavailable, and fixtures isolate probe settings from the environment.
+  Read-only hand diagnostics compare actual decoded, final, prior and current
+  driver poses, plus native grip flags and current hand constraint identities.
 - Run stand-in arm neutralisation in the actual Blueprint ReceiveTick callback slot,
   validating the current pawn, life, world and mesh before applying the existing policy.
 - Resolve stuck-blade memberships once with bounded reads and explicit parent ambiguity,

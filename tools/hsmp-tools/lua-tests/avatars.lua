@@ -38,6 +38,9 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "grip_probe" })
     T.isolated(T.script, "case", { kind = "grip_probe", gate = "off" })
     T.isolated(T.script, "case", { kind = "grip_probe", gate = "no_dev" })
+    T.isolated(T.script, "case", { kind = "hand_pipeline" })
+    T.isolated(T.script, "case", { kind = "hand_pipeline", gate = "off" })
+    T.isolated(T.script, "case", { kind = "hand_pipeline", gate = "no_dev" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "clock_epoch" })
@@ -66,8 +69,9 @@ end
 
 local function boot(register_ok)
     M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_SEVERED_PHYSICS = opts.severed_physics,
-        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or opts.kind=="grip_probe" and opts.gate~="no_dev") and "1" or "0",
-        HSMP_GRIP_PROBE = opts.kind=="grip_probe" and opts.gate~="off" and "1" or "0" }, strict = true })
+        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or (opts.kind=="grip_probe" or opts.kind=="hand_pipeline") and opts.gate~="no_dev") and "1" or "0",
+        HSMP_GRIP_PROBE = opts.kind=="grip_probe" and opts.gate~="off" and "1" or "0",
+        HSMP_HAND_PIPELINE_PROBE = opts.kind=="hand_pipeline" and opts.gate~="off" and "1" or "0" }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -1544,6 +1548,148 @@ if opts.kind == "body_scale" then
     body.sv, p.aim = {}, {}
     T.check(api.PX.sync_body_scale(2, p, body, 2000, pose) and body.sv == nil and p.aim == nil and #calls == 4,
         "a later owner geometry change invalidates a running servo too")
+end
+
+if opts.kind=="hand_pipeline"then
+    T.write(sd.."/.settings.json",'{"avatars":true,"native_neutralise":false,"native_servo":false}\n')
+    local api=boot(true);local PX,P=api.PX,api.PURE
+    if opts.gate then
+        T.check(not PX.HAND_PIPELINE_PROBE and PX.hand_pipeline_begin(nil,nil,nil,nil)==nil and PX.hand_pipeline_state==nil,
+            "hand pipeline requires both developer mode and explicit opt-in before optional reads")
+        return
+    end
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=419,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=419,round=1,rows={{peer_id=2,life=2}}})
+    api.on_tick()
+    local actor=M.new_obj("Willie_BP_C","HAND_PROXY");rawset(actor,"__addr",9901)
+    local mesh=M.new_obj("SkeletalMeshComponent","HAND_MESH");rawset(mesh,"__addr",9902)
+    actor.__props.Mesh,mesh.__props.Owner=mesh,actor
+    M.Methods.GetOwner=function(o)return o.__props.Owner end
+    M.Methods.GetWorld=function(o)return o.__props.NativeWorld or M.world end
+    local sockets,sim_reads,velocity_reads,writes=0,0,0,0
+    local malformed,change_life=false,false
+    M.Methods.GetSocketTransform=function(_,bone,space)
+        sockets=sockets+1;assert(space==0,"existing driver uses native World space")
+        return {Translation={X=7,Y=0,Z=0},Rotation={X=0,Y=0,Z=0,W=1}}
+    end
+    M.Methods.SetPhysicsLinearVelocity=function()writes=writes+1 end
+    M.Methods.SetPhysicsAngularVelocityInDegrees=function()writes=writes+1 end
+    M.Methods.IsSimulatingPhysics=function(_,bone)
+        sim_reads=sim_reads+1
+        if malformed then return "false"end
+        local name=type(bone)=="string"and bone or bone:ToString()
+        return name~="hand_l"
+    end
+    M.Methods.GetPhysicsAngularVelocityInDegrees=function(_,bone)
+        velocity_reads=velocity_reads+1
+        if change_life then HSMPNative.sc_put("mode",{seq=2,match_id=419,round=1,rows={{peer_id=2,life=3}}})end
+        return {X=malformed and 0/0 or 12,Y=34,Z=56}
+    end
+    local slots,sv={}, {n=6,com={},cmd={},wc={},err={n=0,e=0,emax=0,a=0,amax=0,hmax=0,capped=0}}
+    for _,i in ipairs(PX.HAND_PIPELINE_SLOTS)do
+        local h=(i==13 or i==17)and math.pi/4 or 0
+        slots[i]={0,0,0,0,0,math.sin(h),math.cos(h),20,0,0,0,0,0};sv.com[i]={0,0,0}
+    end
+    local cur={v2=true,has_context=true,match_id=419,round=1,life=2,seq=0,pt=1000,read_at=1000,
+        cut=7,age=0,delay=0,rate=1,st=16,mode="interp",slots=slots,weapons={},nbones=6}
+    local body={mesh=mesh,mesh_addr=9902,mesh_fname="HAND_MESH",field="Mesh",gravity=false,ctl="servo",motors={},sv=sv}
+    local p={actor=actor,addr=9901,body=body,gen=api.generation(),peer=2,driving=true,last=cur,
+        shown={has_context=true,pawn="HAND_PROXY",match_id=419,round=1,life=2,cut=7}}
+    local records={};local emit=PX.hand_pipeline_emit
+    PX.hand_pipeline_emit=function(r,why,q)records[#records+1]=r or {unavailable=why};emit(r,why,q)end
+    local function drive(now)
+        M.now=now;cur.seq=cur.seq+1;cur.pt,cur.read_at=now,now;PX.frame_no=(PX.frame_no or 0)+1
+        cur.slots[13][1]=cur.seq-1
+        api.drive_v2(2,p,body,cur,true,now,false,false)
+    end
+    drive(1000)
+    local r=records[1]
+    T.check(r and r.source_seq==1 and r.source_cut==7 and r.life==2 and r.mesh.address==9902 and r.pawn.name=="HAND_PROXY",
+        "actual production drive captures full source and fresh body identity",T.repr(r))
+    T.check(r and r.decoded[13][1]==0 and r.aim[13][1]>0 and r.current[13][1]==7 and r.current_source=="lua_socket_world",
+        "production stages distinguish decoded input, advanced final aim and existing native World socket return")
+    T.check(sockets==6 and sim_reads==4 and velocity_reads==4 and writes==12,
+        "admitted drive adds only four read-only per-bone readbacks and no extra socket getters or physics writes")
+    T.check(r and not r.prior_available and r.readback[13].simulating==false and r.readback[13].angular_velocity[3]==56,
+        "first frame has no invented prior aim and preserves actual false simulation plus post-driver velocity")
+    local log=M.logtext();local row=log:match("HANDPIPE inst=7[^\n]*slot=13[^\n]*") or ""
+    T.check(T.contains(log,"current_phase=pre_driver_returned readback_phase=post_driver")
+        and T.contains(row,"parent_slot=12 parent_bone=lowerarm_l") and T.contains(row,"sim_available=true simulating=false")
+        and T.contains(row,"decoded_relative=(0.0,0.0,0.707"),
+        "namespaced rows identify stages and parent-relative quaternion with false simulation available",row)
+    drive(1016)
+    T.check(#records==1 and sim_reads==4 and velocity_reads==4 and sockets==12 and writes==24,
+        "per-life cadence refuses optional readbacks while the normal driver continues")
+    drive(6000);r=records[2]
+    T.check(r and r.prior_available and r.prior_seq==2 and r.prior_frame==2 and r.prior[13][1]~=r.aim[13][1],
+        "next admitted actual drive copies the real previous aim with its own source and frame")
+    local native={c={},v={},dl={},gl={}}
+    for _,i in ipairs(PX.HAND_PIPELINE_SLOTS)do
+        local b=(i-1)*7;for j,v in ipairs({9,0,0,0,0,0,1})do native.c[b+j]=v end
+        b=(i-1)*3;native.v[b+1],native.v[b+2],native.v[b+3]=0,0,0;native.dl[i],native.gl[i]=0,0
+    end
+    PX.ns_bodies=function()return native end
+    drive(11000);r=records[3]
+    T.check(r and r.current[13][1]==9 and r.current_source=="native_servo_socket_world" and sockets==18 and writes==36,
+        "actual native servo branch copies returned c7 without another getter or Lua physical write")
+    native.c[(13-1)*7+1]=999
+    T.check(r.current[13][1]==9,"capture owns scalar copies instead of retaining native result buffers")
+    local function plain(v)
+        if type(v)~="table"then return type(v)=="number"or type(v)=="string"or type(v)=="boolean"or v==nil end
+        if getmetatable(v)~=nil then return false end
+        for k,x in pairs(v)do if not plain(k)or not plain(x)then return false end end
+        return true
+    end
+    T.check(plain(r)and plain(PX.hand_pipeline_state),"published records and persistent cadence state contain only plain scalar copies")
+    PX.hand_pipeline_state=nil;M.now=12000
+    local q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,11000,11016,12000)
+    local decoded,aim,prior=q.record.decoded[13][1],q.record.aim[13][1],q.record.prior[13][1]
+    cur.slots[13][1],p.aim.slots[13][1]=777,888
+    local c={1,2,3,0,0,0,1};PX.hand_pipeline_observe(q,13,c,false);c[1]=555
+    T.check(q.record.decoded[13][1]==decoded and q.record.aim[13][1]==aim and q.record.prior[13][1]==prior and q.record.current[13][1]==1,
+        "all decoded, final, prior and current arrays are copied before mutable playback storage changes")
+    cur.slots[13][1],p.aim.slots[13][1]=decoded,aim
+    local before=writes
+    T.check(PX.hand_pipeline_finish(q)~=nil and writes==before,"standalone finish makes no physical writes")
+    local count=velocity_reads;cur.seq=cur.seq+1
+    T.check(PX.hand_pipeline_finish(q)==nil and velocity_reads==count,"changed source sequence refuses readback before optional native calls")
+    cur.seq=cur.seq-1;cur.cut=8
+    T.check(PX.hand_pipeline_finish(q)==nil and velocity_reads==count,"source cut changes cannot inherit admitted capture identity")
+    cur.cut=7;mesh.__props.Owner=M.pc
+    T.check(PX.hand_pipeline_finish(q)==nil and velocity_reads==count,"same-world wrong mesh owner fails before optional reads")
+    mesh.__props.Owner=actor;actor.__props.NativeWorld=M.new_obj("World","OTHER_WORLD")
+    rawset(actor.__props.NativeWorld,"__addr",9910)
+    T.check(PX.hand_pipeline_finish(q)==nil and velocity_reads==count,"changed actual pawn world refuses native readback despite matching retained life")
+    actor.__props.NativeWorld=nil;HSMPNative.sc_put("link",{status=0,state=0,my_peer_id=1})
+    T.check(PX.hand_pipeline_finish(q)==nil and velocity_reads==count,"retained positive life cannot qualify a disconnected capture")
+    sidecar({{1,"Own"},{2,"Peer"}});change_life=true
+    local sample,why=PX.hand_pipeline_finish(q)
+    T.check(sample==nil and why=="scope changed" and velocity_reads==count+1 and writes==before,
+        "life change during optional read stops the bounded capture before publishing qualified data")
+    change_life=false;HSMPNative.sc_put("mode",{seq=3,match_id=419,round=1,rows={{peer_id=2,life=2}}})
+    local replacement=M.new_obj("SkeletalMeshComponent","REPLACED_HAND_MESH");rawset(replacement,"__addr",9903)
+    replacement.__props.Owner=actor;actor.__props.Mesh=replacement;rawset(mesh,"__dead",true)
+    count=velocity_reads
+    T.check(PX.hand_pipeline_finish(q)==nil and velocity_reads==count and #M.dead_touch==0,
+        "freed retained mesh is never dereferenced after fresh field replacement",T.repr(M.dead_touch))
+    rawset(mesh,"__dead",false);actor.__props.Mesh=mesh
+    PX.hand_pipeline_state=nil;cur.slots[13][4]=0/0;M.now=13000
+    q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,11000,11016,13000);malformed=true
+    sample=PX.hand_pipeline_finish(q);emit(sample,nil,q)
+    log=M.logtext();row=log:match("HANDPIPE inst=7 group=1[^\n]*slot=13[^\n]*decoded_available=false[^\n]*")or""
+    T.check(sample and sample.decoded[13]==nil and sample.readback[13].simulating==nil and sample.readback[13].angular_velocity==nil
+        and T.contains(row,"sim_available=false simulating=unavailable angular_velocity_available=false"),
+        "nonfinite pose/velocity and nonboolean simulation remain explicit unknown rather than plausible values",row)
+    cur.slots[13][4]=0;malformed=false
+    p.aim.pipeline_mesh={address=9902,name="OTHER_COMPONENT"};PX.hand_pipeline_state=nil
+    q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,11000,11016,13000)
+    T.check(q and not q.record.prior_available and q.record.prior[13]==nil,"prior aim cannot cross a component identity change")
+    count=velocity_reads
+    PX.hand_pipeline_state={used=60,at={}}
+    T.check(PX.hand_pipeline_begin(nil,nil,nil,nil)==nil and velocity_reads==count,"total sixty-sample budget rejects before any native read")
+    PX.hand_pipeline_state={used=0,started=M.now-180000,at={}}
+    T.check(PX.hand_pipeline_begin(nil,nil,nil,nil)==nil and velocity_reads==count,"hard expiry rejects before any native read")
 end
 
 if opts.kind=="grip_probe"then
