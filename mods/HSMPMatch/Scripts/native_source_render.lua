@@ -47,6 +47,7 @@ function M.capture(env,bindings)
         local p=type(full)=="string" and full:match("^%S+%s+(.+)$")
         if not p or #p>512 then fail("native render asset path unavailable")end
         local transient=checked(function()return o:HasAnyFlags(0x40)end) -- native RF_Transient
+        if type(transient)~="boolean"then fail("native render asset transient flag unavailable")end
         return p,transient
     end
     local function name(v)return type(v)=="string" and v or checked(function()return v:ToString()end)end
@@ -171,7 +172,8 @@ function M.capture(env,bindings)
         elseif kind=="static"then asset_obj=get(row,function(o)return o.StaticMesh end)
         elseif kind=="groom"then asset_obj=get(row,function(o)return o.GroomAsset end)end
         local transient;c.asset,transient=path(asset_obj)
-        c.geometry=kind=="procedural" and "procedural" or transient and "runtime_merged" or "cooked"
+        -- RF_Transient is evidence of a runtime asset, not a specific merge.
+        c.geometry=kind=="procedural" and "procedural" or transient and "runtime_transient" or "cooked"
         c.skeleton="";c.physics_asset=""
         if kind=="skeletal"then
             if path(checked(function()return asset_obj:GetOverlayMaterial()end))~="" then fail("native asset overlay material unsupported")end
@@ -201,7 +203,9 @@ function M.capture(env,bindings)
                 local parent_index=parent_name=="None" and -1 or index[parent_name]
                 if parent_index==nil then fail("native render bone parent incomplete")end
                 c.bones[#c.bones+1]={name=n,parent=parent_index}
-                if get(row,function(o)return o:IsBoneHiddenByName(FName(n))end)==true then c.hidden_bones[#c.hidden_bones+1]=n end
+                local hidden=get(row,function(o)return o:IsBoneHiddenByName(FName(n))end)
+                if type(hidden)~="boolean"then fail("native bone visibility unavailable")end
+                if hidden then c.hidden_bones[#c.hidden_bones+1]=n end
             end
             array(checked(function()return asset_obj:GetMorphTargetsPtrConv()end),128,function(m)
                 local n=name(checked(function()return m:GetFName()end));c.morphs[#c.morphs+1]={name=n,value=get(row,function(o)return o:GetMorphTarget(FName(n))end)};return true end)
@@ -215,7 +219,7 @@ function M.capture(env,bindings)
         end
         if path(get(row,function(o)return o:GetOverlayMaterial()end))~="" then fail("native component overlay material unsupported")end
         local count=get(row,function(o)return o:GetNumMaterials()end)
-        if type(count)~="number" or count<0 or count>32 then fail("native material slots incomplete")end
+        if type(count)~="number" or not math.tointeger(count) or count<0 or count>32 then fail("native material slots incomplete")end
         for slot=0,count-1 do c.materials[#c.materials+1]=material(row,slot)end
         if kind=="skeletal" or kind=="static"then
             if not rvp or checked(function()return rvp:IsValid()end)~=true then fail("native vertex getter unavailable")end
@@ -245,8 +249,11 @@ function M.capture(env,bindings)
             if not colors then fail(why)end
             c.vertex_colors,c.vertex_state=colors,"captured"
         elseif env.vertex_state then c.vertex_state=env.vertex_state(row)end
-        if get(row,function(o)return o:ComponentHasTag(FName("Dismembered"))end)==true then detached[#detached+1]=row.id end
-        if get(row,function(o)return o:ComponentHasTag(FName("Gore"))end)==true then gore[#gore+1]=row.id end
+        local detached_tag=get(row,function(o)return o:ComponentHasTag(FName("Dismembered"))end)
+        local gore_tag=get(row,function(o)return o:ComponentHasTag(FName("Gore"))end)
+        if type(detached_tag)~="boolean" or type(gore_tag)~="boolean"then fail("native persistent component tags unavailable")end
+        if detached_tag then detached[#detached+1]=row.id end
+        if gore_tag then gore[#gore+1]=row.id end
         components[#components+1]=c
     end
     local bound={};for _,r in ipairs(rows)do bound[#bound+1]={id=r.id,address=r.address,

@@ -215,4 +215,14 @@ body.GetOverlayMaterial=function()return nil end;body.IsUsingSkinWeightProfile=f
 T.check(not pcall(Render.capture,render_env,native_bindings),"native skin weight mutation refuses unverified geometry")
 body.IsUsingSkinWeightProfile=function()return false end;body.IsMaterialSectionShown=function()return false end
 T.check(not pcall(Render.capture,render_env,native_bindings),"native hidden section refuses incomplete render recipe")
+body.IsMaterialSectionShown=function()return true end;body_asset.HasAnyFlags=function()return true end
+body_asset.GetFullName=function()return "SkeletalMesh /Engine/Transient.SkeletalMesh_1"end
+local transient_render=Render.capture(render_env,native_bindings)
+T.eq(transient_render.components[1].geometry,"runtime_transient","RF_Transient does not invent an observed merge recipe")
+body_asset.HasAnyFlags=function()return nil end
+T.check(not pcall(Render.capture,render_env,native_bindings),"missing native transient flag refuses rather than assumes cooked geometry")
+body_asset.HasAnyFlags=function()return true end;body.IsBoneHiddenByName=function()return nil end
+T.check(not pcall(Render.capture,render_env,native_bindings),"missing native bone visibility refuses rather than assumes visible")
+body.IsBoneHiddenByName=function()return false end;body.ComponentHasTag=function()return nil end
+T.check(not pcall(Render.capture,render_env,native_bindings),"missing native component tags refuse rather than erase persistent parts")
 StaticFindObject,FName=saved_find,saved_fname

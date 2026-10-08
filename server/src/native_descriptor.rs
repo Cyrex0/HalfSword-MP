@@ -110,6 +110,7 @@ pub enum ComponentKind {
 #[serde(rename_all = "snake_case")]
 pub enum Geometry {
     Cooked,
+    RuntimeTransient,
     RuntimeMerged,
     Procedural,
 }
@@ -743,5 +744,20 @@ mod tests {
         component.id = 2;
         recipe.components.push(component);
         assert_eq!(recipe.validate(), Err("source vertex expansion bound"));
+    }
+    #[test]
+    fn transient_flag_does_not_assert_an_observed_merge_recipe() {
+        let mut recipe = fixture();
+        recipe.components[0].geometry = Geometry::RuntimeTransient;
+        recipe.components[0].asset = "/Engine/Transient.SkeletalMesh_1".into();
+        recipe.validate().unwrap();
+        assert_eq!(
+            decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap(),
+            recipe
+        );
+        assert_eq!(
+            recipe.validate_mirror_profile(),
+            Err("native runtime geometry unsupported")
+        );
     }
 }
