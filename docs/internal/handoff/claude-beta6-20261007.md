@@ -1404,3 +1404,70 @@ appears healthy again. False/throw/recovery regressions prove zero subsequent
 old reads and no mixed row. Final Astra review approved the four-file source;
 native output usefulness and rigid-body authority remain unproved until the
 matching Native33 capture.
+
+### Native33 and Native34 measured results
+
+Native33 uses clean deployed `2b84eaef` (raw
+`test-results/20261008-094741-428e53-combat_manual`), with HAND and LIMB
+diagnostics enabled and GRIP disabled. The initial eleven limb rows identify
+current left constraints/accessors and the current PhysicalAnimation binding;
+they do not identify a stale component. Lowerarm rotation remains approximately
+178 degrees across three pre-drive samples. Angular velocity writes read back
+successfully and remain unchanged through Blueprint POST and the first policy
+POST callbacks. Their attenuation before the following frame remains unexplained.
+The measured native tick steps include 78.83 and 94.07 milliseconds during the
+burst; this is not an uninstrumented FPS result. Target getters were incorrectly
+reported unavailable because the diagnostic adapter expected nested outputs,
+whereas pinned UE4SS returns direct struct fields. Correct that reader only.
+
+Native33 cloth: honest acceptance118/131 (.900763), rotation mean32.074/max98.948
+degrees over30 samples, clock-reset rate mean1.3262/max12 over18 windows.
+Both native Box enrollments stop on playback age285/399 milliseconds with exact
+pawn/match/round/life tuples; zero qualified pairs. The later LIMBBURST diagnostic
+timestamp is not `shown.at` and cannot prove a newer applied pose was published
+late. The earlier publication inference is withdrawn.
+
+Native34 runs the same clean deployed build with HAND/GRIP/LIMB all disabled
+(raw `test-results/20261008-100213-f4a58d-combat_manual`, session
+`test-results/lab/native-20261008-34`). Initial and axe rounds1/2/3 obtain both
+six-limb settling proofs before releasing input; no load_failed observed. The
+sampled avatar update cost is at most1.102 milliseconds with zero budget
+deferrals; this does not establish render FPS. Cloth acceptance242/245=.987755,
+rotation mean24.084/max49.679 degrees over20 samples, clock-reset rate
+mean.425931/max11.9261 over28 windows. These rotation values measure claim
+reconstruction, not limb tracking; bounds/sample counts still fail. Unequal
+sample windows prevent a causal comparison with Native33.
+The last active window reports297 avatar drives and approximately59 pose
+samples per second, with no budget deferrals. Its22-body servo tracking summary
+is mean1.41/max38.26 degrees (worst foot_r), distinct from claim reconstruction.
+These counters measure update activity, not rendered FPS.
+
+Native34 Box starts10:06:47.954/.981 and stops10:06:48.001/.018 local time,
+ages276/279 milliseconds, exact tuples, zero qualified pairs. Optional limb
+diagnostics are therefore not the sole cause. Inst2's clock-reset event at
+10:06:47.996 has actual drive local_ms251772 and prior clk_at251516.102;
+the refused bus timestamp251516 matches that prior baseline. This supports a
+frame gap/publication window, but does not measure completed shown assignment,
+snapshot cost, native enrollment cost or Lua hook installation cost. Measure
+those separately before changing publication. Keep the250ms guard and original
+applied timestamps; never refresh a stale pose's timestamp.
+
+Both sessions stop through normal menu quit with no new crashes or orphaned
+games. Mandatory prepush G0 and matching normal deployment passed for `2b84eaef`;
+limited harness PASS does not establish combat parity. No PR/main/tag/release.
+
+Next diagnostic checkpoint: the limb reader accepts finite direct struct
+outputs (pinned UE4SS's actual format), retains nested adapter compatibility,
+and rejects ambiguous/nonfinite values. Root independently passes65 helper
+assertions and two parses; owner also passes386 unchanged Avatar assertions.
+Astra approves the two-file correction. Native values remain unverified until
+a matching capture. Parity setup timing brackets use the same process clock,
+report only existing playback timestamp/generation reads, and preserve every
+qualification predicate. Command-enter measures entry into the command function,
+not command queue arrival. Measurements cannot by themselves establish
+Avatar shown assignment/publication ordering.
+Root independently passes217 Box observer plus65 limb helper assertions and
+five parses. Timing is bounded to32 rows per observer lifetime; optional clock,
+formatting and log failures cannot alter enrollment, marking or refresh control.
+Astra approves both frozen code changes; next measure Native35 on the matching
+clean deployed checkpoint. No gameplay publication or physics policy changed.

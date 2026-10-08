@@ -17,6 +17,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Read native limb target outputs in their actual struct format, and measure
+  damage-observer setup stages without changing playback freshness checks.
 - Add bounded developer captures for limb constraints and current animation-drive
   components, and precise playback refusal details for native damage observations.
 - Preserve a truly empty remote left hand instead of creating a fist weapon,

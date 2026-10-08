@@ -983,6 +983,13 @@ local box_instance=os.getenv("HSMP_INST")
 if box_instance~="1" and box_instance~="2" then box_instance="unavailable" end
 local function box_log(fmt,...)Log("inst=%s "..fmt,box_instance,...)end
 local box_playback={logs=0}
+function box_playback.trace(play,now,generation)
+    local row=type(play)=="table" and play or nil
+    local function finite(v)return type(v)=="number" and v==v and math.abs(v)<math.huge and v or nil end
+    local sample=finite(row and rawget(row,"local_ms"))
+    now=finite(now)
+    return {local_ms=sample,sample_now_ms=now,age_ms=sample and now and finite(now-sample),generation=finite(generation)}
+end
 function box_playback.scalar(v,kind)
     if kind=="number" and type(v)=="number" and v==v and math.abs(v)<math.huge then return tostring(v),true end
     if kind=="string" and type(v)=="string" and v~="" then
@@ -992,10 +999,11 @@ function box_playback.scalar(v,kind)
     end
     return "unknown",false
 end
-function box_playback.refuse(reason,detail,peer,shown,play,now)
+function box_playback.refuse(reason,detail,peer,shown,play,now,generation)
     -- Existing scalar snapshots only: explaining a refusal performs no native reads.
     -- Fixed total budget, no world/command reset; strings and row size are bounded too.
-    if box_playback.logs>=32 then return nil,reason end
+    local trace=box_playback.trace(play,now,generation)
+    if box_playback.logs>=32 then return nil,reason,trace end
     box_playback.logs=box_playback.logs+1
     local actual_row=type(play)=="table" and play or nil
     local fields={}
@@ -1012,27 +1020,30 @@ function box_playback.refuse(reason,detail,peer,shown,play,now)
     local age,ga=box_playback.scalar(la and na and now-timestamp or nil,"number")
     box_log("BOXOBS_PLAYBACK reason=%s detail=%s peer=%s record=%d %s local_ms=%s local_ms_available=%s now=%s now_available=%s age_ms=%s age_available=%s authority=false",
         reason,detail,tostring(peer),box_playback.logs,table.concat(fields," "),local_ms,tostring(la),at,tostring(na),age,tostring(ga))
-    return nil,reason
+    return nil,reason,trace
 end
 function box_playback.check(peer,shown)
     local ipc=rawget(_G,"HSMP_IPC")
-    local ok,play=pcall(function()
-        for _,r in ipairs((ipc and ipc.bus_table("playback") or {}).rows or {})do if r.peer==peer then return r end end
+    local ok,play,generation=pcall(function()
+        local rows,gen
+        if ipc then rows,gen=ipc.bus_table("playback")end
+        for _,r in ipairs((rows or {}).rows or {})do if r.peer==peer then return r,gen end end
+        return nil,gen
     end)
     local now=os.clock()*1000
     if not ok then return box_playback.refuse("playback_unavailable","read_failed",peer,shown,nil,now) end
-    if not play then return box_playback.refuse("playback_unavailable","row_missing",peer,shown,nil,now) end
-    if type(play.local_ms)~="number" then return box_playback.refuse("playback_unavailable","local_ms_unavailable",peer,shown,play,now) end
+    if not play then return box_playback.refuse("playback_unavailable","row_missing",peer,shown,nil,now,generation) end
+    if type(play.local_ms)~="number" then return box_playback.refuse("playback_unavailable","local_ms_unavailable",peer,shown,play,now,generation) end
     -- Preserve the original predicate order/coercion; diagnostic availability is not admission.
-    if now<play.local_ms then return box_playback.refuse("playback_timefuture","future",peer,shown,play,now) end
-    if now-play.local_ms>250 then return box_playback.refuse("playback_timeage","age_over250",peer,shown,play,now) end
+    if now<play.local_ms then return box_playback.refuse("playback_timefuture","future",peer,shown,play,now,generation) end
+    if now-play.local_ms>250 then return box_playback.refuse("playback_timeage","age_over250",peer,shown,play,now,generation) end
     for _,key in ipairs({"pawn","match_id","round","life"})do
         if play[key]~=shown[key] then
             return box_playback.refuse("playback_"..(key=="match_id" and "match" or key),
-                play[key]==nil and "field_missing" or "field_changed",peer,shown,play,now)
+                play[key]==nil and "field_missing" or "field_changed",peer,shown,play,now,generation)
         end
     end
-    return true
+    return true,nil,box_playback.trace(play,now,generation)
 end
 local box_session,box_session_ipc
 local function box_observer_live()
@@ -1076,8 +1087,8 @@ local function box_observer_snapshot(peer,side)
     if not view or view.phase~=3 or not mode then return nil,"live_phase" end
     if own.match_id~=shown.match_id or own.round~=shown.round then return nil,"context_tuple" end
     local ipc=rawget(_G,"HSMP_IPC")
-    local playback_ok,playback_reason=box_playback.check(peer,shown)
-    if not playback_ok then return nil,playback_reason end
+    local playback_ok,playback_reason,playback_trace=box_playback.check(peer,shown)
+    if not playback_ok then return nil,playback_reason,playback_trace end
     local stream,slot={},ipc and ipc.peer_slot and ipc.peer_slot(peer)
     if slot==nil or not ipc.peer_play then return nil,"peer_stream_unavailable" end
     ipc.peer_play(slot,stream)
@@ -1122,7 +1133,7 @@ local function box_observer_snapshot(peer,side)
         or source[side=="l" and "Weapon L" or "Weapon R"]:GetAddress()~=weapon:GetAddress()
         or not valid(weapon["Hit Box Collision"]) or weapon["Hit Box Collision"]:GetAddress()~=box:GetAddress() then return nil,"revalidation" end
     if not box_observer_live() then return nil,"session_end" end
-    return result
+    return result,nil,playback_trace
 end
 local function exp_boxobserve(arg)
     if not box_observer then
@@ -1130,7 +1141,7 @@ local function exp_boxobserve(arg)
         if not m or not log then box_log("BOXOBS unavailable dev observer/logger");return end
         box_observer=m.new({developer=function()return os.getenv("HSMP_DEV")=="1"end,
             native=function()local n=rawget(_G,"HSMPNative");return n and n.box_probe end,
-            snapshot=box_observer_snapshot,register=RegisterHook,log=box_log,emit=function(row)
+            snapshot=box_observer_snapshot,clock_ms=function()return os.clock()*1000 end,register=RegisterHook,log=box_log,emit=function(row)
                 -- FName/weak bits remain exact even beyond JSON's integer range.
                 for _,k in ipairs({"world","pawn","mesh","box","box_owner","function"})do
                     for key,value in pairs(row[k] or {})do if type(value)=="number" then row[k][key]=tostring(value) end end

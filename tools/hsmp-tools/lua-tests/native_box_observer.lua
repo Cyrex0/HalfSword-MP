@@ -57,6 +57,43 @@ signed.command("2 r 1")
 T.check(signed_registrations==2,"equal signed int32 Blueprint IDs are accepted")
 signed.command("off")
 
+-- Optional timing must measure each stage independently and never control enrollment.
+local function timed_fixture(clock_throw,log_throw)
+    local at,rows,callbacks=1000,{},{}
+    local counts={begin=0,snapshot=0,mark=0}
+    local n={begin=function()counts.begin=counts.begin+1;at=at+40;return true end,stop=function()return true end,
+        status=function()return {active=true,pending=1,pending_role=1}end,read=function()return {}end,
+        mark=function()counts.mark=counts.mark+1 end}
+    local o=M.new({developer=function()return true end,native=function()return n end,
+        clock_ms=function()if clock_throw then error("clock unavailable")end;return at end,
+        snapshot=function()counts.snapshot=counts.snapshot+1;at=at+7;return clone(scope),nil,
+            {local_ms=999,sample_now_ms=at,age_ms=at-999,generation=17}end,
+        register=function(path,f)callbacks[path]=f;at=at+3;return 1,1 end,
+        log=function(fmt,...)
+            if log_throw and fmt:find("BOXOBS_TIMING",1,true)then error("optional log unavailable")end
+            rows[#rows+1]=string.format(fmt,...)
+        end,emit=function()end})
+    return o,counts,rows,callbacks
+end
+local timed,tc,tr,th=timed_fixture(false,false)
+timed.command("2 r 1")
+local timing_row=tr[#tr-1]or ""
+T.check(tc.begin==1 and timing_row:find("snapshot_ms=7 snapshot_ms_available=true",1,true)
+    and timing_row:find("begin_ms=40 begin_ms_available=true",1,true)
+    and timing_row:find("install_ms=6 install_ms_available=true",1,true),"timing separates snapshot, native enrollment and hook registration costs")
+T.check(timing_row:find("command_enter_ms=1000",1,true) and timing_row:find("playback_local_ms=999",1,true)
+    and timing_row:find("playback_generation=17 playback_generation_available=true",1,true),"timing preserves original same-read sample and generation without refreshing its timestamp")
+timed.tick()
+T.check(tr[#tr]:find("stage=first_tick",1,true) and tr[#tr]:find("fresh_ms=7 fresh_ms_available=true",1,true),
+    "first freshness read has its own entry/exit interval")
+timed,tc,tr,th=timed_fixture(false,true)
+timed.command("2 r 1");th[dcd](param(2),table.unpack(args))
+T.check(tc.begin==1 and tc.mark==1 and tc.snapshot==2,"throwing optional timing log cannot interrupt enrollment or first native marker")
+timed,tc,tr,th=timed_fixture(true,false)
+timed.command("2 r 1");timed.tick()
+T.check(tc.begin==1 and tc.snapshot==2 and tr[#tr]:find("begin_ms=unknown begin_ms_available=false",1,true)
+    and tr[#tr]:find("fresh_ms=unknown fresh_ms_available=false",1,true),"throwing clock remains unavailable without changing enrollment or tick eligibility")
+
 -- Actual Parity snapshot/enrollment path follows assigned fighter despite a foreign PC Pawn.
 local game_logs,loop={},nil
 local game_clock=10

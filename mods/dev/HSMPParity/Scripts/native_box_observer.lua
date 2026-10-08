@@ -31,6 +31,32 @@ local function same(a,b)
 end
 function M.new(api)
     local active,hooks=nil,{}
+    local timing_count,timing_id=0,0
+    local function clock()
+        local ok,v=pcall(api.clock_ms or function()return os.clock()*1000 end)
+        return ok and type(v)=="number" and v==v and math.abs(v)<math.huge and v or nil
+    end
+    local function timing(t,stage,status,play)
+        if not t or timing_count>=32 then return end
+        timing_count=timing_count+1
+        pcall(function() -- Optional timing formatting/logging cannot change observer control.
+        local fields={}
+        local function field(key,value)
+            local available=type(value)=="number" and value==value and math.abs(value)<math.huge
+            fields[#fields+1]=key.."="..(available and tostring(value) or "unknown").." "..key.."_available="..tostring(available)
+        end
+        for _,key in ipairs({"command_enter_ms","snapshot_enter_ms","snapshot_exit_ms","begin_enter_ms","begin_exit_ms",
+            "install_enter_ms","install_exit_ms","fresh_enter_ms","fresh_exit_ms"})do field(key,t[key])end
+        for _,p in ipairs({{"snapshot_ms","snapshot_enter_ms","snapshot_exit_ms"},{"begin_ms","begin_enter_ms","begin_exit_ms"},
+            {"install_ms","install_enter_ms","install_exit_ms"},{"fresh_ms","fresh_enter_ms","fresh_exit_ms"}})do
+            local a,b=t[p[2]],t[p[3]];field(p[1],a and b and b>=a and b-a or nil)
+        end
+        for _,key in ipairs({"local_ms","sample_now_ms","age_ms","generation"})do
+            field("playback_"..key,type(play)=="table" and rawget(play,key) or nil)
+        end
+        api.log("BOXOBS_TIMING id=%d stage=%s status=%s record=%d %s authority=false",t.id,stage,status,timing_count,table.concat(fields," "))
+        end)
+    end
     local function native()
         local n=api.native()
         return type(n)=="table" and type(n.begin)=="function" and type(n.mark)=="function"
@@ -53,9 +79,13 @@ function M.new(api)
         active=nil
         api.log("BOXOBS stopped reason=%s authority=false",reason or "developer")
     end
-    local function fresh()
+    local function fresh(caller)
         if not active then return nil,"inactive" end
-        local ok,s,reason=pcall(api.snapshot,active.scope.peer,active.scope.side)
+        local t=active.timing
+        local first=t and not t.fresh_seen
+        if first then t.fresh_seen=true;t.fresh_enter_ms=clock()end
+        local ok,s,reason,play=pcall(api.snapshot,active.scope.peer,active.scope.side)
+        if first then t.fresh_exit_ms=clock();timing(t,caller or "first_fresh",ok and s and "snapshot_passed" or "snapshot_failed",play)end
         if not ok then return nil,"snapshot_exception" end
         if not s then return nil,reason or "snapshot_unavailable" end
         s=copy(s)
@@ -69,7 +99,7 @@ function M.new(api)
         local admitted,status=pcall(n.status)
         if not admitted or type(status)~="table" or status.active~=true
             or type(status.pending)~="number" or status.pending<1 or status.pending_role~=role then return end
-        local s,reason=fresh()
+        local s,reason=fresh("first_mark")
         if not s then stop(reason);return end
         local ok,p,b=pcall(function()return ctx:get(),box_param:get()end)
         if not ok or not p or not b or not p:IsValid() or not b:IsValid()
@@ -100,6 +130,7 @@ function M.new(api)
     end
     local out={}
     function out.command(arg)
+        local command_enter=clock()
         if api.developer()~=true then api.log("BOXOBS refused developer mode required");return end
         if arg=="off" then stop();return end
         local peer,side,seconds=tostring(arg):match("^(%d+)%s+([rl])%s+(%d+)$")
@@ -109,23 +140,36 @@ function M.new(api)
         end
         if active then stop("re-enrollment") end
         local n=native();if not n then api.log("BOXOBS unavailable native API");return end
-        local ok,s,reason=pcall(api.snapshot,peer,side)
+        timing_id=timing_id+1
+        local t={id=timing_id,command_enter_ms=command_enter}
+        t.snapshot_enter_ms=clock()
+        local ok,s,reason,play=pcall(api.snapshot,peer,side)
+        t.snapshot_exit_ms=clock()
         if not ok then reason="snapshot_exception"
         elseif s then s=copy(s);if not s then reason="snapshot_fields" end
         else reason=reason or "snapshot_unavailable" end
         if not ok or not s then api.log("BOXOBS refused reason=%s authority=false",reason);return end
         s.duration_ms,s.calls=seconds*1000,32
+        t.begin_enter_ms=clock()
         local started,yes,why=pcall(n.begin,s)
-        if not started or yes~=true then api.log("BOXOBS unavailable enrollment=%s",tostring(why or yes));return end
-        active={scope=copy(s),drained=0}
-        if not install() then stop("Lua POST hook unavailable");return end
+        t.begin_exit_ms=clock()
+        if not started or yes~=true then
+            timing(t,"enrollment","begin_failed",play)
+            api.log("BOXOBS unavailable enrollment=%s",tostring(why or yes));return
+        end
+        active={scope=copy(s),drained=0,timing=t}
+        t.install_enter_ms=clock()
+        local installed=install()
+        t.install_exit_ms=clock()
+        timing(t,"enrollment",installed and "installed" or "install_failed",play)
+        if not installed then stop("Lua POST hook unavailable");return end
         api.log("BOXOBS started peer=%s side=%s seconds=%s calls=32 qualified=unavailable_until_pair authority=false",
             tostring(peer),side,tostring(seconds))
     end
     function out.tick()
         if not active then return end
         local n=native();if not n then active=nil;return end
-        local current,reason=fresh()
+        local current,reason=fresh("first_tick")
         if not current then stop(reason);return end
         drain(n)
         local ok,s=pcall(n.status)

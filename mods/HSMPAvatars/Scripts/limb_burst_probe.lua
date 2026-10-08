@@ -17,6 +17,24 @@ local function out(name,...)
     for i=1,select("#",...)do local t=select(i,...);if type(t)=="table"and t[name]~=nil then return t[name]end end
     error("out parameter unavailable: "..name,0)
 end
+local function struct_out(t,name,fields)
+    -- Pinned UE4SS reuses a struct OutParm table directly. Some adapters wrap
+    -- that struct under its parameter name; both shapes must retain exact values.
+    local function values(v)
+        assert(type(v)=="table"or type(v)=="userdata","struct output unavailable: "..name)
+        local a={};for i,f in ipairs(fields)do a[i]=number(v[f])end;return a
+    end
+    local direct=false;for _,f in ipairs(fields)do if t[f]~=nil then direct=true end end
+    if t[name]~=nil then
+        local a=values(t[name])
+        if direct then
+            local b=values(t);for i=1,#a do assert(a[i]==b[i],"conflicting struct output: "..name)end
+        end
+        return a
+    end
+    assert(direct,"struct output unavailable: "..name)
+    return values(t)
+end
 local function attempt(row,key,fn)
     local ok,v=pcall(fn);if ok then row[key]={available=true,value=v}else row[key]={available=false,reason=tostring(v):sub(1,160)}end
 end
@@ -93,13 +111,13 @@ local function joint(mesh,lib,j,e)
         assert(e.current(),"scope changed")
         local t={};lib:GetAngularOrientationTarget(ref,t)
         assert(e.current(),"scope changed")
-        local v=out("OutPosTarget",t);return {number(v.Pitch),number(v.Yaw),number(v.Roll)}
+        return struct_out(t,"OutPosTarget",{"Pitch","Yaw","Roll"})
     end)
     attempt(r,"velocity_target",function()
         assert(e.current(),"scope changed")
         local t={};lib:GetAngularVelocityTarget(ref,t)
         assert(e.current(),"scope changed")
-        return vec(out("OutVelTarget",t))
+        return struct_out(t,"OutVelTarget",{"X","Y","Z"})
     end)
     local _,after=accessor(mesh,lib,j,e);local aa=asset(mesh)
     assert(after.index==id.index and same(after.owner,id.owner)and same(before.skeletal_mesh,aa.skeletal_mesh)

@@ -49,8 +49,8 @@ local function env()
             if e.change_asset then paasset=object("RebuiltAsset",24)end
         end
     end
-    e.library.GetAngularOrientationTarget=function(_,a,t)t.OutPosTarget={Pitch=0,Yaw=0,Roll=0}end
-    e.library.GetAngularVelocityTarget=function(_,a,t)t.OutVelTarget={X=0,Y=0,Z=0}end
+    e.library.GetAngularOrientationTarget=function(_,a,t)t.Pitch=0;t.Yaw=0;t.Roll=0 end
+    e.library.GetAngularVelocityTarget=function(_,a,t)t.X=0;t.Y=0;t.Z=0 end
     local pa=object("PhysAnim",30);pa.GetOwner=function()return e.actor end
     pa.SkeletalMeshComponent=e.mesh;pa.StrengthMultiplyer=0
     e.actor.PhysicalAnimation=pa;e.cached={{address=30,name="PhysAnim"}}
@@ -67,6 +67,54 @@ local function env()
     e.params={dt_s=0.016,gain=0.8,cap_ang=900,holding=false}
     e.probe=L.new(function(r)e.records[#e.records+1]=r end)
     return e
+end
+for _,shape in ipairs({"direct","nested","matching"})do
+    local e=env()
+    e.library.GetAngularOrientationTarget=function(_,a,t)
+        if shape~="nested"then t.Pitch=-12.5;t.Yaw=0;t.Roll=30 end
+        if shape~="direct"then t.OutPosTarget={Pitch=-12.5,Yaw=0,Roll=30}end
+    end
+    e.library.GetAngularVelocityTarget=function(_,a,t)
+        if shape~="nested"then t.X=0;t.Y=-2.75;t.Z=18 end
+        if shape~="direct"then t.OutVelTarget={X=0,Y=-2.75,Z=18}end
+    end
+    local r=e.probe:capture(e.context,"pre_driver",e,e.params,e.fault)
+    local j=r.joints[1].current.value
+    T.check(j.orientation_target.available and j.orientation_target.value[1]==-12.5
+        and j.orientation_target.value[2]==0 and j.orientation_target.value[3]==30,
+        shape.." rotator struct output preserves finite signed and zero native fields")
+    T.check(j.velocity_target.available and j.velocity_target.value[1]==0
+        and j.velocity_target.value[2]==-2.75 and j.velocity_target.value[3]==18,
+        shape.." vector struct output preserves finite signed and zero native fields")
+end
+for _,kind in ipairs({"missing","partial","string","nan","infinite","nested_invalid","conflicting"})do
+    local e=env()
+    e.library.GetAngularOrientationTarget=function(_,a,t)
+        if kind=="missing"then return end
+        t.Pitch=0;t.Yaw=0;t.Roll=0
+        if kind=="partial"then t.Roll=nil
+        elseif kind=="string"then t.Roll="0"
+        elseif kind=="nan"then t.Roll=0/0
+        elseif kind=="infinite"then t.Roll=math.huge
+        elseif kind=="nested_invalid"then t.OutPosTarget=false
+        elseif kind=="conflicting"then t.OutPosTarget={Pitch=0,Yaw=1,Roll=0}end
+    end
+    e.library.GetAngularVelocityTarget=function(_,a,t)
+        if kind=="missing"then return end
+        t.X=0;t.Y=0;t.Z=0
+        if kind=="partial"then t.Z=nil
+        elseif kind=="string"then t.Z="0"
+        elseif kind=="nan"then t.Z=0/0
+        elseif kind=="infinite"then t.Z=-math.huge
+        elseif kind=="nested_invalid"then t.OutVelTarget=false
+        elseif kind=="conflicting"then t.OutVelTarget={X=1,Y=0,Z=0}end
+    end
+    local r=e.probe:capture(e.context,"pre_driver",e,e.params,e.fault)
+    local j=r.joints[1].current.value
+    T.check(not j.orientation_target.available and not j.velocity_target.available,
+        kind.." targets remain explicitly unavailable, without zero/default invention")
+    T.check(j.angular_limits.available and j.drive_params.available,
+        kind.." target failure leaves independent native constraint evidence intact")
 end
 do
     local e=env();e.replace_driver=true
@@ -88,6 +136,9 @@ do
     T.check(r.joints[1].current.value.orientation_slerp.available and r.joints[1].current.value.orientation_slerp.value.bOutEnableSLERP==false,
         "named scalar outputs preserve available false even in another output table")
     T.check(r.joints[2].current.value.drive_params.value.OutPositionStrength==0,"available zero drive is native evidence")
+    T.check(r.joints[1].current.value.orientation_target.available and r.joints[1].current.value.orientation_target.value[1]==0
+        and r.joints[1].current.value.velocity_target.available and r.joints[1].current.value.velocity_target.value[3]==0,
+        "pinned UE4SS direct struct outputs preserve available zero targets")
     T.check(r.physical_animation.available and r.physical_animation.value.entries[1].binding.value.strength==0
         and r.physical_animation.value.entries[1].cached,"fresh PA membership/binding compared to cached identity")
     e.params.gain=99;e.context.audit.mode_round=9;e.context.pawn.name="changed"
