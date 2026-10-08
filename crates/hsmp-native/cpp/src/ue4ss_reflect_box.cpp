@@ -310,6 +310,6 @@ bool safe_prepared_current(const Scope& expected,Reason& why)
 }
 bool thread_ok() { return hsmp_native_caller_thread_ok()!=0; }
 std::uint64_t now_ms() { return GetTickCount64(); }
-const Provider provider{thread_ok,now_ms,safe_enroll,submit,key,safe_snapshot,enrollment_detail,enrollment_timing,safe_prepared_current};
+const Provider provider{thread_ok,now_ms,safe_enroll,submit,key,safe_snapshot,enrollment_detail,enrollment_timing,safe_prepared_current,hsmp_native_caller_admission};
 }
 const hsmp_box::Provider& hsmp_reflect_box_provider() { return provider; }

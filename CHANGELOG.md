@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Add a bounded developer capture of current right-arm joint limits, drive strengths,
+  softness and projection on each local owner and remote proxy, with explicit identities.
+- Record native caller admission refusals from one nonblocking attempt, preserving
+  the existing guard and saving bounded callback process totals in developer logs.
 - Distinguish confirmed foreign-thread damage callbacks from unavailable admission
   on the proven game thread, retaining fail-closed handling and explicit coverage gaps.
 - Prepare native damage observations with sampling disabled, then activate after

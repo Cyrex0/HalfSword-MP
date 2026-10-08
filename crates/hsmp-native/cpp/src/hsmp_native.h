@@ -19,6 +19,13 @@ int luaopen_hsmp_lua(struct lua_State* L);
 // Diagnostic hooks: only a thread already established by Native::frame().
 // Unknown thread, busy/poisoned state and another thread all return 0.
 int hsmp_native_caller_thread_ok(void);
+enum HsmpCallerAdmission {
+    HSMP_CALLER_ALLOWED=0, HSMP_CALLER_WOULD_BLOCK=1, HSMP_CALLER_MUTEX_POISONED=2,
+    HSMP_CALLER_NATIVE_POISONED=3, HSMP_CALLER_FRAME_THREAD_UNSET=4,
+    HSMP_CALLER_WRONG_THREAD=5, HSMP_CALLER_PANIC=6
+};
+// Precise result from one try-lock attempt; the old boolean is result==ALLOWED.
+int hsmp_native_caller_admission(void);
 
 // hsmp_luauser.c: how lua_lock is resolved ("host ..." or "private ...").
 const char* hsmp_lua_lock_mode(void);

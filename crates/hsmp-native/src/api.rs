@@ -19,17 +19,50 @@ fn global() -> &'static Mutex<Native> {
     G.get_or_init(|| Mutex::new(Native::new()))
 }
 
-fn caller_thread_permitted(n: &Native) -> bool {
-    !n.poisoned && n.game_thread.is_some_and(|t| t == std::thread::current().id())
+// Stable C ABI values mirrored in cpp/src/hsmp_native.h. Reasons never grant dispatch access.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CallerAdmission {
+    Allowed = 0,
+    WouldBlock = 1,
+    MutexPoisoned = 2,
+    NativePoisoned = 3,
+    FrameThreadUnset = 4,
+    WrongThread = 5,
+    Panic = 6,
 }
 
-/// The caller journal never establishes a thread or waits for the native lock.
+fn caller_admission_state(n: &Native) -> CallerAdmission {
+    if n.poisoned { return CallerAdmission::NativePoisoned; }
+    match n.game_thread {
+        None => CallerAdmission::FrameThreadUnset,
+        Some(t) if t == std::thread::current().id() => CallerAdmission::Allowed,
+        Some(_) => CallerAdmission::WrongThread,
+    }
+}
+
+fn caller_admission_once(native: &Mutex<Native>) -> CallerAdmission {
+    match native.try_lock() {
+        Ok(n) => caller_admission_state(&n),
+        Err(TryLockError::WouldBlock) => CallerAdmission::WouldBlock,
+        Err(TryLockError::Poisoned(_)) => CallerAdmission::MutexPoisoned,
+    }
+}
+
+fn catch_caller_admission(f: impl FnOnce() -> CallerAdmission) -> c_int {
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or(CallerAdmission::Panic) as c_int
+}
+
+/// One nonblocking attempt; never establishes a thread, recovers poison, or reads engine data.
+#[no_mangle]
+pub extern "C" fn hsmp_native_caller_admission() -> c_int {
+    catch_caller_admission(|| caller_admission_once(global()))
+}
+
+/// Backwards-compatible boolean: true only for the same Allowed result.
 #[no_mangle]
 pub extern "C" fn hsmp_native_caller_thread_ok() -> c_int {
-    catch_unwind(AssertUnwindSafe(|| match global().try_lock() {
-        Ok(n) => caller_thread_permitted(&n) as c_int,
-        Err(_) => 0,
-    })).unwrap_or(0)
+    (hsmp_native_caller_admission() == CallerAdmission::Allowed as c_int) as c_int
 }
 
 #[cfg(test)]
@@ -43,19 +76,39 @@ mod caller_guard_tests {
         assert!(!l.is_null());
         unsafe { ffi::lua_close(l) };
         let mut n = Native::new();
-        assert!(!caller_thread_permitted(&n), "probe cannot claim an unknown thread");
+        assert_eq!(caller_admission_state(&n), CallerAdmission::FrameThreadUnset);
         n.game_thread = Some(std::thread::current().id());
-        assert!(caller_thread_permitted(&n));
+        assert_eq!(caller_admission_state(&n), CallerAdmission::Allowed);
         n.game_thread = Some(std::thread::spawn(|| std::thread::current().id()).join().unwrap());
-        assert!(!caller_thread_permitted(&n));
+        assert_eq!(caller_admission_state(&n), CallerAdmission::WrongThread);
         n.game_thread = Some(std::thread::current().id());
         n.poisoned = true;
-        assert!(!caller_thread_permitted(&n));
+        assert_eq!(caller_admission_state(&n), CallerAdmission::NativePoisoned);
     }
     #[test]
     fn caller_guard_busy_is_unavailable() {
         let _held = global().lock().unwrap();
+        assert_eq!(hsmp_native_caller_admission(), CallerAdmission::WouldBlock as c_int);
         assert_eq!(hsmp_native_caller_thread_ok(), 0);
+    }
+    #[test]
+    fn caller_guard_poison_is_unavailable_without_recovery() {
+        let native = std::sync::Arc::new(Mutex::new(Native::new()));
+        let worker = native.clone();
+        assert!(std::thread::spawn(move || {
+            let _held = worker.lock().unwrap();
+            panic!("fixture poisons only its local mutex");
+        }).join().is_err());
+        assert_eq!(caller_admission_once(&native), CallerAdmission::MutexPoisoned);
+        assert!(native.is_poisoned());
+    }
+    #[test]
+    fn caller_guard_allowed_and_panic_are_precise() {
+        let mut n = Native::new();
+        n.game_thread = Some(std::thread::current().id());
+        let native = Mutex::new(n);
+        assert_eq!(catch_caller_admission(|| caller_admission_once(&native)), 0);
+        assert_eq!(catch_caller_admission(|| panic!("diagnostic boundary")), CallerAdmission::Panic as c_int);
     }
 }
 

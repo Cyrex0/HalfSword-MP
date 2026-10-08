@@ -14,6 +14,8 @@ namespace
 using namespace hsmp_box;
 unsigned checks{}, reads{}, keys{}, enrolls{}, submissions{}, validations{};
 std::atomic<unsigned> admission_reads{};
+std::atomic<unsigned> precise_admission_reads{};
+int admission_status=HSMP_CALLER_ALLOWED;
 bool good_thread=true, bad_enrollment{}, bad_snapshot{}, serial_zero{};
 bool malformed_costs{};
 bool bad_prepared{};
@@ -32,6 +34,7 @@ Scope sample_scope()
 { return {id(1),id(2),id(3),id(4),id(5),123456789,1,1}; }
 struct Frame { unsigned role{}; std::uint64_t token{}; double x{6},y{1},z{10}; bool wrong_box{}; };
 bool on_thread() { ++admission_reads; return good_thread; }
+int caller_admission() { ++precise_admission_reads; return good_thread ? admission_status : HSMP_CALLER_WRONG_THREAD; }
 std::uint64_t now() { return time_ms; }
 bool enroll(const Enrollment& e,Scope& out,Reason& why)
 {
@@ -68,7 +71,7 @@ bool prepared_current(const Scope& expected,Reason& why)
     if (expected!=scoped) { why=Reason::Identity; return false; }
     return true;
 }
-const Provider fake{on_thread,now,enroll,submit,key,snapshot,enrollment_detail,enrollment_timing,prepared_current};
+const Provider fake{on_thread,now,enroll,submit,key,snapshot,enrollment_detail,enrollment_timing,prepared_current,caller_admission};
 void check(bool ok,const char* message)
 { ++checks; if (!ok) { std::fprintf(stderr,"FAIL %s\n",message); std::exit(1); } }
 void lua(lua_State* L,const char* code)
@@ -171,9 +174,9 @@ int main()
       assert(r[1].qualified and r[2].qualified and r[2].lua_inside and r[2].marker==777)
       assert(r[2].authority==false and r[2].context_declared and r[2].lifetime_available)
       assert(#N.read()==0))");
-    const auto thread_reads=admission_reads.load(); unsigned foreign_keys=keys, foreign_reads=reads;
+    const auto thread_reads=admission_reads.load(), precise_reads=precise_admission_reads.load(); unsigned foreign_keys=keys, foreign_reads=reads;
     std::thread([&] { callback(1,reinterpret_cast<void*>(2),&outer); callback(2,reinterpret_cast<void*>(2),&outer); }).join();
-    check(admission_reads.load()==thread_reads && keys==foreign_keys && reads==foreign_reads,
+    check(admission_reads.load()==thread_reads && precise_admission_reads.load()==precise_reads && keys==foreign_keys && reads==foreign_reads,
         "foreign callbacks never consult native admission, frame keys, snapshots or game-thread state");
     lua(L,"local s=N.status(); assert(s.active and s.proven_thread_id>0 and s.foreign_callbacks_process_total==2 and not s.foreign_callback_targets_known and s.same_thread_unavailable_process_total==0)");
     event(1,outer); lua(L,mark1); event(2,outer);
@@ -217,7 +220,20 @@ int main()
     lua(L,"assert(not N.status().active and N.status().reason=='unpaired ordering')");
     lua(L,start); event(1,outer); good_thread=false; previous=keys; event(2,outer);
     check(keys==previous,"foreign thread callback never reads FFrame"); good_thread=true;
-    lua(L,"local s=N.status(); assert(not s.active and s.reason=='same proven thread admission unavailable' and s.same_thread_unavailable_process_total==1 and s.foreign_callbacks_process_total==2 and #N.read()==0)");
+    lua(L,"local s=N.status(); assert(not s.active and s.reason=='same proven thread admission wrong_thread' and s.last_refused_caller_admission=='wrong_thread' and s.last_refused_caller_admission_available and s.same_thread_unavailable_process_total==1 and s.foreign_callbacks_process_total==2 and #N.read()==0)");
+    const char* admission_names[]={"allowed","would_block","mutex_poisoned","native_poisoned","frame_thread_unset","wrong_thread","panic"};
+    for (int result=HSMP_CALLER_WOULD_BLOCK;result<=HSMP_CALLER_PANIC;++result)
+    {
+        lua(L,start); admission_status=result;
+        const auto before_precise=precise_admission_reads.load(), before_boolean=admission_reads.load();
+        const auto before_keys=keys, before_reads=reads;
+        event(1,outer);
+        check(precise_admission_reads.load()==before_precise+1 && admission_reads.load()==before_boolean
+            && keys==before_keys && reads==before_reads,"one precise refusal attempt never rereads boolean or touches the frame");
+        admission_status=HSMP_CALLER_ALLOWED;
+        lua_pushstring(L,admission_names[result]);lua_setglobal(L,"expected_admission");
+        lua(L,"local s=N.status(); assert(not s.active and s.last_refused_caller_admission_available and s.last_refused_caller_admission==expected_admission and s.reason=='same proven thread admission '..expected_admission)");
+    }
     lua(L,start); bad_enrollment=true; lua(L,"assert(N.begin(a)==nil and not N.status().active)");
     diagnostic="stage=gd_hit_box failure=children_limit children=1070";
     previous=submissions;

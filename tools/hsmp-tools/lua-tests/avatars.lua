@@ -51,6 +51,11 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "limb_burst", change = "admission_world" })
     T.isolated(T.script, "case", { kind = "limb_burst", change = "mode_unavailable" })
     T.isolated(T.script, "case", { kind = "limb_burst", change = "pc_world" })
+    T.isolated(T.script, "case", { kind = "joint_profile" })
+    T.isolated(T.script, "case", { kind = "joint_profile", gate = "off" })
+    T.isolated(T.script, "case", { kind = "joint_profile", gate = "no_dev" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "pc_world" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "lookup_pc_world" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "clock_epoch" })
@@ -79,10 +84,11 @@ end
 
 local function boot(register_ok)
     M.install({ state_dir = sd, env = { LOCALAPPDATA = la, HSMP_INST = "7", HSMP_SEVERED_PHYSICS = opts.severed_physics,
-        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or (opts.kind=="grip_probe" or opts.kind=="hand_pipeline" or opts.kind=="limb_burst") and opts.gate~="no_dev") and "1" or "0",
+        HSMP_DEV = (opts.kind == "ai_owner" or opts.kind == "weaponstate" or (opts.kind=="grip_probe" or opts.kind=="hand_pipeline" or opts.kind=="limb_burst"or opts.kind=="joint_profile") and opts.gate~="no_dev") and "1" or "0",
         HSMP_GRIP_PROBE = opts.kind=="grip_probe" and opts.gate~="off" and "1" or "0",
         HSMP_HAND_PIPELINE_PROBE = opts.kind=="hand_pipeline" and opts.gate~="off" and "1" or "0",
-        HSMP_LIMB_BURST_PROBE = opts.kind=="limb_burst" and opts.gate~="off" and "1" or "0" }, strict = true })
+        HSMP_LIMB_BURST_PROBE = opts.kind=="limb_burst" and opts.gate~="off" and "1" or "0",
+        HSMP_JOINT_PROFILE_PROBE = opts.kind=="joint_profile" and opts.gate~="off" and "1"or "0" }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -1561,10 +1567,14 @@ if opts.kind == "body_scale" then
         "a later owner geometry change invalidates a running servo too")
 end
 
-if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"then
+if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_profile"then
     T.write(sd.."/.settings.json",'{"avatars":true,"native_neutralise":false,"native_servo":false}\n')
     local api=boot(true);local PX,P=api.PX,api.PURE
     if opts.gate then
+        if opts.kind=="joint_profile"then
+            T.check(not PX.JOINT_PROFILE and PX.joint_profile_row(nil)==nil,"joint profile requires both opt-in flags before any optional reads")
+            return
+        end
         if opts.kind=="limb_burst"then
             T.check(not PX.LIMB_BURST and PX.limb_burst_row(nil)==nil,"limb burst requires developer mode and explicit flag")
             return
@@ -1624,6 +1634,72 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"then
         M.now=now;cur.seq=cur.seq+1;cur.pt,cur.read_at=now,now;PX.frame_no=(PX.frame_no or 0)+1
         cur.slots[13][1]=cur.seq-1
         api.drive_v2(2,p,body,cur,true,now,false,false)
+    end
+    if opts.kind=="joint_profile"then
+        local own=M.new_obj("Willie_BP_C","PROFILE_OWN");rawset(own,"__addr",9801)
+        local ownmesh=M.new_obj("SkeletalMeshComponent","PROFILE_OWN_MESH");rawset(ownmesh,"__addr",9802)
+        own.__props.Mesh=ownmesh;ownmesh.__props.Owner=own;M.pc.__props.Pawn=own
+        HSMPNative.sc_put("session",{seq=2,match_id=419,round=0,spawn_round=1,phase=1,
+            rows={{peer_id=1,seat=0,connected=true,spawn_id=257,spawn_pos={0,0,0}},
+                {peer_id=2,seat=1,connected=true,spawn_id=258,spawn_pos={0,0,0}}}})
+        HSMPNative.sc_put("mode",{seq=2,match_id=419,round=0,rows={{peer_id=1,life=0},{peer_id=2,life=0}}})
+        HSMP_IPC.bus_put("spawn_status",{verified=true,pawn="PROFILE_OWN",match_id=419,round=1,life=1,spawn_id=257})
+        local sample_life,sample_age=1,0.375
+        HSMP_IPC.sample_status=function()return {pose={tick=7,ts=M.now-sample_age,match_id=419,round=1,life=sample_life}}end
+        local captures=0
+        local lookup_changed,old_touches=false,0
+        if opts.change=="lookup_pc_world"then
+            local find=StaticFindObject;local world_get=M.Methods.GetWorld;local address_get=M.Methods.GetAddress
+            StaticFindObject=function(path)
+                if path=="/Script/Engine.Default__ConstraintInstanceBlueprintLibrary"then
+                    lookup_changed=true;M.pc.__props.NativeWorld=M.new_obj("World","PROFILE_LOOKUP_NEW_WORLD")
+                    rawset(M.pc.__props.NativeWorld,"__addr",19991)
+                end
+                return find(path)
+            end
+            M.Methods.GetWorld=function(o)if lookup_changed and o==actor then old_touches=old_touches+1 end;return world_get(o)end
+            M.Methods.GetAddress=function(o)if lookup_changed and (o==actor or o==mesh)then old_touches=old_touches+1 end;return address_get(o)end
+        end
+        PX.JOINT_PROFILE.capture=function(self,source,proxy,se,pe)
+            captures=captures+1
+            T.check(source.peer==1 and proxy.peer==2 and source.life==1 and proxy.life==2 and source.pending and not source.qualification,
+                "production scopes preserve independent peer/life and actual Mode0 pending source publication")
+            T.check(source.sample_ms%1~=0 and source.admission_sample_age_ms==.375 and se.current()and pe.current(),
+                "production accepts fresh fractional successful source timestamp with exact current guards")
+            self.used=true
+            if opts.change=="pc_world"then
+                M.pc.__props.NativeWorld=M.new_obj("World","PROFILE_NEW_WORLD");rawset(M.pc.__props.NativeWorld,"__addr",19991)
+            end
+            return {source=source,proxy=proxy}
+        end
+        drive(1000)
+        T.check(captures==0,"first drive has no fabricated previously applied pose for pairing")
+        local before=writes;drive(1016)
+        if opts.change=="lookup_pc_world"then
+            T.check(lookup_changed and captures==0 and writes==before and old_touches==0,
+                "library lookup travel checks fresh PC world before any old proxy getter or physical writer")
+            return
+        end
+        if opts.change=="pc_world"then
+            T.check(captures==1 and writes==before,"actual drive preserves false independent writer recheck after optional PC-world change")
+            return
+        end
+        T.check(captures==1 and writes==before+12,"actual admitted pair does not change normal servo writes")
+        drive(1032);T.check(captures==1,"one whole-run capture adds no optional repeat")
+        HSMP_IPC.bus_put("spawn_status",{verified=true,pawn="PROFILE_OWN",match_id=419,round=1,life=1,spawn_id=259})
+        T.check(PX.joint_profile_source_scope()==nil,"old verified assignment cannot acquire a new current session spawn ID")
+        HSMP_IPC.bus_put("spawn_status",{verified=true,pawn="PROFILE_OWN",match_id=419,round=1,life=1,spawn_id=257})
+        sample_life=2;M.now=1048
+        T.check(PX.joint_profile_source_scope()==nil,"successful sample tuple disagreement with verified spawn is unavailable")
+        sample_life=1;sample_age=251
+        T.check(PX.joint_profile_source_scope()==nil,"stale successful native source publication cannot be relabeled current")
+        sample_age=.375
+        HSMPNative.sc_put("session",{seq=3,match_id=419,round=1,phase=3,
+            rows={{peer_id=1,seat=0,connected=true,spawn_id=257,spawn_pos={0,0,0}},
+                {peer_id=2,seat=1,connected=true,spawn_id=258,spawn_pos={0,0,0}}}})
+        HSMPNative.sc_put("mode",{seq=3,match_id=419,round=1,rows={{peer_id=1,life=2},{peer_id=2,life=2}}})
+        T.check(PX.joint_profile_source_scope()==nil,"Live source Mode life mismatch remains strict")
+        return
     end
     if opts.kind=="limb_burst"then
         cur.slots[17][6],cur.slots[17][7]=0,1 -- only the measured left hand is faulted.

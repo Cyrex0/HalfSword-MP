@@ -1631,3 +1631,60 @@ process totals; current Lua completion logging prints reasons, not these totals.
 Astra approved the frozen three-file change. Root rebuilt current targets and
 verified149 focused C++ checks; provider compilation also passed. This is a
 diagnostic classification change, not native callback coverage or combat proof.
+
+### Native38: repeated initial spawn refusal, no observer capture
+
+Clean deployed e4cd0443 passed full G0 and normal deployment; all GRIP/HAND/LIMB
+off. Raw test-results/20261008-115244-bae837-combat_manual, session
+test-results/lab/native-20261008-38. Initial polearm round1 and round2 each ended
+load_failed (11:54:14 and11:55:06). Round1 only one proxy settled; round2 only
+the opposite proxy settled. Round2 peer2 tracking windows report right-hand
+max10.65–11.07uu and153.38–154.36deg, with367–397 capped operations; peer1
+windows report max0.27–0.32uu and1.72–1.88deg. These are window maxima,
+not per-frame samples or render FPS. Ready remained unavailable during the
+bounded experiment-start wait; no cloth recipe or Box capture ran.
+
+Round3 both proxies settled11:55:19; normal stop was requested10:55:24UTC,
+with input release logged11:55:23.406/.433 just before teardown. Thus this is
+repeated initial spawn failure followed by late recovery, not permanent failure
+to reach Live. Zero new crashes/orphans/forced kills, both menu_quit. Harness
+combat_manual PASS covers its limited teardown checks, not playable acceptance.
+Prioritize exact source/proxy runtime constraint comparison without loosening
+spawn readiness. Thread-classification native result remains unavailable.
+
+Native39 admission preparation: Rust exports a single-attempt result distinguishing
+allowed, would_block, mutex_poisoned, native_poisoned, frame_thread_unset,
+wrong_thread and panic. Existing boolean remains true only for allowed. Production
+Box consumes that same attempt and retains all refusals before frame/key/snapshot
+access. Completion logging validates uint32 process counters and whitelists the
+explicitly available copied result, with skipped-target coverage unknown. Permanent
+poison can prevent later status retrieval under the unchanged control guard; do
+not infer its reason from unavailable status. Root rebuilt173 C++ checks/provider,
+four targeted Rust tests and241 Lua checks/parse passed; Astra approved the frozen
+eight-file admission/logging delta. Runtime reason remains to be measured.
+
+Native39 joint configuration preparation: default off, requires HSMP_DEV=1 and
+HSMP_JOINT_PROFILE_PROBE=1. Three bounded admissions, one descriptive pair per
+process for actual right constraints10/11/12, with returned accessor owner/index/
+endpoints, current limits/strength/softness/projection and four native hand fields.
+Local source and proxy are different peers; only counterpart peer rows across
+clients support source/proxy comparison. Shared world/gen/match/round required;
+legitimate separate lives retained, native successful fractional pose timestamps
+remain distinct from admission and actual row observation timestamps. Right-only
+coverage, no temporal pair, solver or rigid-body authority claim. Scope loss/throw
+latches before subsequent optional reads; independent PC-world-first writer check
+after library lookup prevents touching or writing old proxy Mesh. Root verified
+31 helper +403 Avatar focused checks and four parses. Verified spawn assignment
+must equal the current Session order; an old same-life/pawn placement cannot
+be relabeled with a different assignment. No setters, readiness,
+physics tolerances or damage authority changes. Astra approved the final freeze.
+
+Native37 cloth rejection audit corrects earlier attribution: all46 general
+rejections were target_down40/attacker_down6 after authoritative elimination in
+RoundOver; all95 Inside rejects were also after elimination. General and Inside
+streams overlap (61 accepted and27 rejected keys), so do not add totals. Six
+eliminations across five cloth rounds were cause6/reason2 AI-yield surrender;
+the native bodies remained alive. Server down denotes gameplay participation,
+not native consciousness or recoverable Downed. The .835714 aggregate still fails
+the unchanged bound but does not establish armour damage loss. Claim rotation
+remains separate from limb tracking. Complete native damage/topology still unproved.

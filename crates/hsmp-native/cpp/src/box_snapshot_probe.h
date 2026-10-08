@@ -2,6 +2,7 @@
 #pragma once
 #include "box_snapshot_pair.hpp"
 #include "box_enrollment_timing.hpp"
+#include "hsmp_native.h"
 struct lua_State;
 namespace hsmp_box
 {
@@ -29,6 +30,8 @@ struct Provider
     const EnrollmentTiming* (*enrollment_timing)(){};
     // Revalidate prepared identities/layouts without repeating path lookups.
     bool (*prepared_current)(const Scope&,Reason&){};
+    // Optional precise result, consumed directly rather than rereading a refused boolean.
+    int (*caller_admission)(){};
 };
 }
 // ue4ss_reflect_box.cpp provides the pinned host; tests supply a bounded fake.

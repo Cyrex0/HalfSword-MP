@@ -9,7 +9,9 @@ local pending,pending_role,resolves=1,1,0
 local queued={}
 local native={begin=function(s)begin_count=begin_count+1;native_active=true;T.check(s.calls==32 and s.duration_ms<=15000,"activation retains fixed native budget");return true end,
     stop=function()stop_count=stop_count+1;native_active=false;return true end,
-    status=function()return {active=native_active,pending=pending,pending_role=pending_role,reason="capture budget",entries=2,unmatched=0,discarded=0}end,
+    status=function()return {active=native_active,pending=pending,pending_role=pending_role,reason="capture budget",entries=2,unmatched=0,discarded=0,
+        proven_thread_id=123,foreign_callbacks_process_total=4294967295,same_thread_unavailable_process_total=0,
+        unknown_thread_callbacks_process_total=-1,last_refused_caller_admission="would_block",last_refused_caller_admission_available=true}end,
     read=function()local r=queued;queued={};return r end,
     mark=function(s)mark_count=mark_count+1;T.check(s.role==1 or s.role==2,"Lua POST marks explicit native function kind");return nil,"no active exact entry" end}
 native.prepare=function(s)native.begin(s);native_active=false;return true,begin_count end
@@ -46,6 +48,10 @@ current=clone(scope);observer.command("2 r 1");current=nil;observer.drop()
 T.check(stop_count==3,"world leave stops scalar observer without touching cached UObjects")
 current=clone(scope);observer.command("2 r 1");fixture_at=fixture_at+33;observer.tick();native_active=false;observer.tick()
 T.check(logs[#logs]:find("BOXOBS finished",1,true)~=nil,"native expiry/budget completion is reported explicitly")
+T.check(logs[#logs]:find("foreign_callbacks_process_total=4294967295",1,true) and logs[#logs]:find("same_thread_unavailable_process_total=0",1,true)
+    and logs[#logs]:find("unknown_thread_callbacks_process_total=unavailable",1,true),"bounded process counters preserve valid zero and saturation, reject invalid values")
+T.check(logs[#logs]:find("last_refused_caller_admission=would_block",1,true) and logs[#logs]:find("foreign_callback_targets_known=false",1,true),
+    "copied admission result is persisted without implying skipped callback target coverage")
 local before_resolves=resolves;hooks[dcd](param(2),table.unpack(args))
 T.check(resolves==before_resolves,"finished native budget skips full callback resolver")
 local foreign={};for i=1,33 do foreign[i]={}end;queued=foreign

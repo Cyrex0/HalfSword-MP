@@ -4,6 +4,16 @@ local objects={"world","pawn","mesh","box","box_owner"}
 local fields={"match_id","round","life","world_key","owner_life","owner_pawn","owner_mesh","peer","side","grip"}
 local function positive(v)return type(v)=="number" and v>0 and v<math.huge and v%1==0 end
 local function hook_id(v)return type(v)=="number" and v%1==0 and v>=-2147483648 and v<=2147483647 end
+local function process_counter(s,key)
+    local v=type(s)=="table" and s[key]
+    return type(v)=="number" and v%1==0 and v>=0 and v<=4294967295 and tostring(v) or "unavailable"
+end
+local admissions={allowed=true,would_block=true,mutex_poisoned=true,native_poisoned=true,
+    frame_thread_unset=true,wrong_thread=true,panic=true}
+local function admission(s)
+    local v=type(s)=="table" and s.last_refused_caller_admission
+    return type(v)=="string" and s.last_refused_caller_admission_available==true and admissions[v] and v or "unavailable"
+end
 local function copy(s)
     if type(s)~="table" then return nil end
     local c={}
@@ -214,11 +224,13 @@ function M.new(api)
         drain(n)
         local ok,s=pcall(n.status)
         if not ok or type(s)~="table" or s.active~=true then
-            api.log("BOXOBS finished reason=%s entries=%s unpaired=%s discarded=%s authority=false",
+            api.log("BOXOBS finished reason=%s entries=%s unpaired=%s discarded=%s proven_thread_id=%s foreign_callbacks_process_total=%s same_thread_unavailable_process_total=%s unknown_thread_callbacks_process_total=%s last_refused_caller_admission=%s foreign_callback_targets_known=false authority=false",
                 tostring(type(s)=="table" and s.reason or "status unavailable"),
                 tostring(type(s)=="table" and s.entries or "unavailable"),
                 tostring(type(s)=="table" and s.unmatched or "unavailable"),
-                tostring(type(s)=="table" and s.discarded or "unavailable"))
+                tostring(type(s)=="table" and s.discarded or "unavailable"),
+                process_counter(s,"proven_thread_id"),process_counter(s,"foreign_callbacks_process_total"),
+                process_counter(s,"same_thread_unavailable_process_total"),process_counter(s,"unknown_thread_callbacks_process_total"),admission(s))
             active=nil
         end
     end

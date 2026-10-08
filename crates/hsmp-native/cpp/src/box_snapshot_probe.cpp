@@ -36,6 +36,19 @@ std::atomic<bool> enabled{};
 std::atomic<unsigned> deferred_failure{};
 std::atomic<DWORD> proven_thread{};
 std::atomic<unsigned> foreign_callbacks{}, same_thread_unavailable{}, unknown_thread_callbacks{}, thread_failure_kind{};
+std::atomic<int> refused_admission{-1};
+const char* admission_name(int result)
+{
+    constexpr const char* names[]={"allowed","would_block","mutex_poisoned","native_poisoned","frame_thread_unset","wrong_thread","panic"};
+    return result>=0 && result<=HSMP_CALLER_PANIC ? names[result] : "unavailable";
+}
+const char* admission_failure(int result)
+{
+    constexpr const char* names[]={"same proven thread admission unavailable","same proven thread admission would_block",
+        "same proven thread admission mutex_poisoned","same proven thread admission native_poisoned",
+        "same proven thread admission frame_thread_unset","same proven thread admission wrong_thread","same proven thread admission panic"};
+    return result>HSMP_CALLER_ALLOWED && result<=HSMP_CALLER_PANIC ? names[result] : "same proven thread admission unavailable";
+}
 // Saturating process totals, never reset by activation/world changes. No frame/engine reads.
 void count_callback(std::atomic<unsigned>& counter)
 {
@@ -170,12 +183,15 @@ void observe(unsigned phase,void* context,void* frame)
     if (thread==CallbackThread::Different) { count_callback(foreign_callbacks); return; }
     if (thread==CallbackThread::Unknown)
     {
-        count_callback(unknown_thread_callbacks); thread_failure_kind.store(1);
+        count_callback(unknown_thread_callbacks); thread_failure_kind.store(1); refused_admission.store(-1);
         deferred_failure.store(static_cast<unsigned>(Reason::Thread)); enabled.store(false); return;
     }
     // Same OS thread is insufficient by itself: keep the existing Rust admission guard.
-    if (!provider().on_thread())
+    const int admission=provider().caller_admission ? provider().caller_admission()
+        : (provider().on_thread() ? HSMP_CALLER_ALLOWED : -1);
+    if (admission!=HSMP_CALLER_ALLOWED)
     {
+        refused_admission.store(admission);
         count_callback(same_thread_unavailable); thread_failure_kind.store(2);
         deferred_failure.store(static_cast<unsigned>(Reason::Thread)); enabled.store(false); return;
     }
@@ -315,12 +331,12 @@ int status(lua_State* L)
 {
     if (!provider().on_thread()) return unavailable(L,reason_name(Reason::Thread));
     synchronize();
-    state.poll(provider().now_ms()); lua_createtable(L,0,20);
+    state.poll(provider().now_ms()); lua_createtable(L,0,22);
     boolean(L,"active",state.active); boolean(L,"submitted",submitted); boolean(L,"authority",false);
     boolean(L,"qualified",false);
     const auto thread_failure=thread_failure_kind.load();
     text(L,"reason",state.last==Reason::Thread ? (thread_failure==1 ? "callback thread identity unavailable" :
-        thread_failure==2 ? "same proven thread admission unavailable" : reason_name(state.last)) : reason_name(state.last));
+        thread_failure==2 ? admission_failure(refused_admission.load()) : reason_name(state.last)) : reason_name(state.last));
     number(L,"deadline_ms",state.deadline);
     number(L,"entries",state.entries); number(L,"completed",state.completed()); number(L,"pending",state.pending());
     number(L,"pending_role",state.pending_role());
@@ -331,6 +347,8 @@ int status(lua_State* L)
     number(L,"same_thread_unavailable_process_total",same_thread_unavailable.load());
     number(L,"unknown_thread_callbacks_process_total",unknown_thread_callbacks.load());
     boolean(L,"foreign_callback_targets_known",false);
+    text(L,"last_refused_caller_admission",admission_name(refused_admission.load()));
+    boolean(L,"last_refused_caller_admission_available",refused_admission.load()>=0 && refused_admission.load()<=HSMP_CALLER_PANIC);
     return 1;
 }
 int read(lua_State* L)
