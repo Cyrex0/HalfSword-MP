@@ -4,6 +4,7 @@
 -- retain an explicit incomplete vertex state.
 local src=(debug.getinfo(1,"S").source or ""):gsub("^@","")
 local Vertex=dofile((src:match("^(.*)[/\\]") or ".").."/native_source_vertex.lua")
+local Array=dofile((src:match("^(.*)[/\\]") or ".").."/native_source_array.lua")
 local M={}
 local kinds={skeletal="/Script/Engine.SkeletalMeshComponent",static="/Script/Engine.StaticMeshComponent",
     groom="/Script/HairStrandsCore.GroomComponent",procedural="/Script/ProceduralMeshComponent.ProceduralMeshComponent"}
@@ -24,20 +25,8 @@ local function fail(s)error(s,0)end
 function M.capture(env,bindings)
     local read,guard=env.read,env.guard
     local function checked(fn)guard();local v=fn();guard();return v end
-    local function unwrap(v)
-        if type(v)=="string" or type(v)=="number" or type(v)=="boolean"then return v end
-        return checked(function()return v:get()end)
-    end
-    local function array(a,max,convert)
-        if not a then fail("native render array unavailable")end
-        local n=checked(function()return a:GetArrayNum()end)
-        if type(n)~="number" or not math.tointeger(n) or n<0 or n>max then fail("native render array bound")end
-        local out={};checked(function()a:ForEach(function(_,v)
-            if #out>=max then fail("native render array bound")end
-            out[#out+1]=convert(unwrap(v));guard()
-        end)end)
-        if #out~=n or checked(function()return a:GetArrayNum()end)~=n then fail("native render array changed")end
-        return out
+    local function array(a,max,convert,producer)
+        return Array.collect(a,max,producer or "property",{guard=guard},convert)
     end
     local function path(o)
         if o==nil then return "",false end
@@ -75,7 +64,7 @@ function M.capture(env,bindings)
             local id=object_id(c)
             if id then id.owner=owner_id;rows[#rows+1]=id;if #rows>64 then fail("native render component bound")end end
             return true
-        end)
+        end,"return")
     end
     collect(read(function(b)return b.pawn end),0)
     for _,w in ipairs(bindings.weapons)do collect(env.weapon(w.field,w),w.id)end
@@ -87,7 +76,7 @@ function M.capture(env,bindings)
             local identity=object_id(c)
             if identity and identity.address==row.address and identity.name==row.name then found=c end
             return true
-        end)
+        end,"return")
         if not found then fail("native render component changed")end
         local actual=checked(function()return found:GetOwner()end)
         local current_owner=owner(row)
@@ -176,10 +165,27 @@ function M.capture(env,bindings)
         c.geometry=kind=="procedural" and "procedural" or transient and "runtime_transient" or "cooked"
         c.skeleton="";c.physics_asset=""
         if kind=="skeletal"then
-            if path(checked(function()return asset_obj:GetOverlayMaterial()end))~="" then fail("native asset overlay material unsupported")end
-            if path(checked(function()return asset_obj:GetDefaultMeshDeformer()end))~="" then fail("native asset mesh deformer unsupported")end
-            c.skeleton=path(checked(function()return asset_obj.Skeleton end))
-            c.physics_asset=path(get(row,function(o)return o:GetPhysicsAsset()end))
+            local asset_identity=object_id(asset_obj)
+            if not asset_identity then fail("native skeletal asset unavailable")end
+            local function current_asset()
+                local actual=get(row,function(o)return o:GetSkeletalMeshAsset()end)
+                local identity=object_id(actual)
+                if not identity or identity.address~=asset_identity.address or identity.name~=asset_identity.name then fail("native skeletal asset changed")end
+                return actual
+            end
+            local function asset_read(fn)
+                guard();local value=fn(current_asset());guard();current_asset();return value
+            end
+            if path(asset_read(function(o)return o:GetOverlayMaterial()end))~="" then fail("native asset overlay material unsupported")end
+            if path(asset_read(function(o)return o:GetDefaultMeshDeformer()end))~="" then fail("native asset mesh deformer unsupported")end
+            c.skeleton=path(asset_read(function(o)return o.Skeleton end))
+            local override=get(row,function(o)return o.PhysicsAssetOverride end)
+            local override_identity=object_id(override)
+            c.physics_asset=path(override_identity and override or asset_read(function(o)return o:GetPhysicsAsset()end))
+            local after_override=object_id(get(row,function(o)return o.PhysicsAssetOverride end))
+            if (override_identity==nil)~=(after_override==nil) or (override_identity and
+                (override_identity.address~=after_override.address or override_identity.name~=after_override.name))then fail("native physics asset override changed")end
+            current_asset()
             c.deformer=path(get(row,function(o)return o.MeshDeformer end))
             if object_id(get(row,function(o)return o:GetMeshDeformerInstance()end)) then fail("native mesh deformer instance unsupported")end
             local weight_profile=get(row,function(o)return o:IsUsingSkinWeightProfile()end)
@@ -191,7 +197,7 @@ function M.capture(env,bindings)
                 if flag then fail("native render flag unsupported: "..field)end
             end
             local disable_cloth=get(row,function(o)return o.bDisableClothSimulation end)
-            local clothing=checked(function()return asset_obj.MeshClothingAssets end)
+            local clothing=asset_read(function(o)return o.MeshClothingAssets end)
             if type(disable_cloth)~="boolean" or not clothing then fail("native cloth state unavailable")end
             c.cloth=not disable_cloth and checked(function()return clothing:GetArrayNum()end)>0
             local count=get(row,function(o)return o:GetNumBones()end)
@@ -207,8 +213,8 @@ function M.capture(env,bindings)
                 if type(hidden)~="boolean"then fail("native bone visibility unavailable")end
                 if hidden then c.hidden_bones[#c.hidden_bones+1]=n end
             end
-            array(checked(function()return asset_obj:GetMorphTargetsPtrConv()end),128,function(m)
-                local n=name(checked(function()return m:GetFName()end));c.morphs[#c.morphs+1]={name=n,value=get(row,function(o)return o:GetMorphTarget(FName(n))end)};return true end)
+            array(asset_read(function(o)return o:GetMorphTargetsPtrConv()end),128,function(m)
+                current_asset();local n=name(checked(function()return m:GetFName()end));c.morphs[#c.morphs+1]={name=n,value=get(row,function(o)return o:GetMorphTarget(FName(n))end)};current_asset();return true end,"return")
         elseif kind=="groom"then
             local groups=array(get(row,function(o)return o.GroomGroupsDesc end),32,function(v)
                 local group={};for _,fd in ipairs(group_fields)do group[fd[2]]=checked(function()return v[fd[1]]end);if group[fd[2]]==nil then fail("native groom group incomplete")end end;return group end)
@@ -244,7 +250,7 @@ function M.capture(env,bindings)
                     if vertex_total>1000000 then fail("native vertex expansion bound")end
                 end,
                 colors=function(lod)return get(row,function(o)return rvp:GetMeshComponentVertexColorsAtLOD_Wrapper(o,lod)end)end,
-                unwrap=function(v)return v:get()end, -- copied hard FColor; no engine getter in the vertex loop
+                array_kind="return", -- known synchronous native TArray<FColor> return
             })
             if not colors then fail(why)end
             c.vertex_colors,c.vertex_state=colors,"captured"

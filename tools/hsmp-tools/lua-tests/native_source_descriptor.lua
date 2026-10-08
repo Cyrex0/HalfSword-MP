@@ -6,7 +6,7 @@ local recipe=fixture("tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.j
 local armor=fixture("tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.json")
 -- Native ForEach passes GetParam wrappers for the actual hard enum/bool/struct
 -- inner properties. These fixtures reproduce that documented wrapper contract.
-local function wrapped(v)return {get=function()return v end}end
+local function wrapped(v,kind)return {type=function()return kind or "RemoteUnrealParam"end,get=function()return v end}end
 local function map(rows)
     return setmetatable({ForEach=function(_,fn)for _,r in ipairs(rows)do fn(wrapped(r.slot),wrapped(r.value))end end},
         {__len=function()return #rows end})
@@ -117,12 +117,20 @@ end
 scope=true
 local colors={{R=255,G=0,B=128,A=0},{R=255,G=0,B=128,A=0},{R=0,G=255,B=0,A=255}}
 local vertex_env={guard=function()return scope end,lods=function()return 1 end,count=function()return #colors end,
-    colors=function()return color_array(colors)end,unwrap=function(v)return v:get()end}
+    colors=function()return color_array(colors)end,array_kind="property"}
 local lods=Vertex.capture(vertex_env)
 T.check(lods~=nil and #lods[1].runs==2,"native color RLE preserves complete source ordering")
 T.eq(lods[1].runs[1].count,2,"identical native colors compact exactly")
 T.eq(lods[1].runs[1].color[3],128,"native RGBA8 channels never gamma-converted")
 T.eq(lods[1].runs[1].color[4],0,"native cut alpha zero preserved")
+local function color_return(values)local out={};for i,v in ipairs(values)do out[i]=wrapped(v,"LocalUnrealParam")end;return out end
+vertex_env.array_kind="return";vertex_env.colors=function()return color_return(colors)end
+T.check(Vertex.capture(vertex_env)~=nil,"native function return colors use plain table of typed local struct parameters")
+vertex_env.colors=function()return colors end
+T.check(Vertex.capture(vertex_env)~=nil,"copied direct color tables remain exact without parameter get")
+vertex_env.colors=function()return {[1]=wrapped(colors[1],"LocalUnrealParam"),[3]=wrapped(colors[3],"LocalUnrealParam")}end
+T.check(Vertex.capture(vertex_env)==nil,"sparse native return array refuses rather than samples existing entries")
+vertex_env.array_kind="property";vertex_env.colors=function()return color_array(colors)end
 colors[1].A=nil;T.check(Vertex.capture(vertex_env)==nil,"missing native alpha refuses color capture")
 colors[1].A=0;vertex_env.count=function()return 4 end
 T.check(Vertex.capture(vertex_env)==nil,"native vertex count mismatch refuses capture")
@@ -141,7 +149,8 @@ local function fname(value)return {ToString=function()return value end}end
 local function array(values)return {GetArrayNum=function()return #values end,ForEach=function(_,fn)for i,v in ipairs(values)do fn(i,wrapped(v))end end}end
 local function object(address,n,path,transient)
     return {GetAddress=function()return address end,IsValid=function()return true end,GetFName=function()return fname(n)end,
-        GetFullName=function()return "FixtureClass "..path end,HasAnyFlags=function()return transient end}
+        GetFullName=function()return "FixtureClass "..path end,HasAnyFlags=function()return transient end,
+        type=function()return "UObject"end,get=function()error("direct UObject is not a parameter",0)end}
 end
 local saved_find,saved_fname=StaticFindObject,FName
 FName=function(n)return n end
@@ -152,7 +161,7 @@ local live_weapon=object(200,"LiveWeapon","/Game/Test/WeaponActor.WeaponActor",f
 local body_asset=object(300,"Body","/Game/Test/Body.Body",false)
 body_asset.Skeleton=object(301,"Skeleton","/Game/Test/Skeleton.Skeleton",false)
 body_asset.GetOverlayMaterial=function()return nil end;body_asset.GetDefaultMeshDeformer=function()return nil end
-body_asset.MeshClothingAssets=array({});body_asset.GetMorphTargetsPtrConv=function()return array({object(302,"ExactMorph","/Game/Test/Morph.Morph",false)})end
+body_asset.MeshClothingAssets=array({});body_asset.GetMorphTargetsPtrConv=function()return {wrapped(object(302,"ExactMorph","/Game/Test/Morph.Morph",false))}end
 local cooked_mat=object(310,"Material","/Game/Test/Material.Material",false)
 local dynamic_mat=object(311,"MID","/Engine/Transient.MaterialInstanceDynamic_1",true)
 dynamic_mat.IsA=function(_,c)return c=="/Script/Engine.MaterialInstance"end
@@ -166,6 +175,7 @@ dynamic_mat.TextureParameterValues=array({parameter("ExactTexture",object(312,"T
 local bone_names={"root"};for i=2,40 do bone_names[i]="native_render_bone_"..i end
 local bone_index={};for i,n in ipairs(bone_names)do bone_index[n]=i end
 local physical_asset=object(320,"Physics","/Game/Test/Physics.Physics",false)
+body_asset.GetPhysicsAsset=function()return physical_asset end
 local function mesh(address,n,actor,kind,asset)
     local c=object(address,n,"/Game/Test/Runtime."..n,false)
     c.GetOwner=function()return actor end;c.IsA=function(_,k)return k=="/Script/Engine."..(kind=="skeletal"and "SkeletalMeshComponent"or "StaticMeshComponent")end
@@ -173,7 +183,8 @@ local function mesh(address,n,actor,kind,asset)
     c.IsVisible=function()return true end;c.bHiddenInGame=false;c.GetAttachSocketName=function()return fname("None")end
     c.GetCollisionResponseToChannel=function(_,channel)return channel%3 end;c.GetCollisionEnabled=function()return 3 end
     c.GetCollisionObjectType=function()return 3 end;c.GetCollisionProfileName=function()return fname("ExactNativeProfile")end;c.IsSimulatingPhysics=function()return true end
-    c.GetSkeletalMeshAsset=function()return asset end;c.StaticMesh=asset;c.GetPhysicsAsset=function()return physical_asset end
+    c.GetSkeletalMeshAsset=function()return asset end;c.StaticMesh=asset
+    c.GetPhysicsAsset=function()error("GetPhysicsAsset is not reflected on a component",0)end
     c.bDisableClothSimulation=false;c.GetNumBones=function()return #bone_names end;c.GetBoneName=function(_,i)return fname(bone_names[i+1])end
     c.GetOverlayMaterial=function()return nil end;c.GetMeshDeformerInstance=function()return nil end;c.IsUsingSkinWeightProfile=function()return false end
     c.bHideSkin=false;c.bDisableMorphTarget=false;c.bForceWireframe=false;c.GetVertexOffsetUsage=function()return 0 end;c.IsMaterialSectionShown=function()return true end
@@ -186,12 +197,12 @@ end
 local body=mesh(11,"BodyMesh",host,"skeletal",body_asset);host.Mesh=body;body.GetAttachParent=function()return root end
 local weapon_asset=object(330,"WeaponMesh","/Game/Test/WeaponMesh.WeaponMesh",false);weapon_asset.GetNumLODs=function()return 1 end
 local weapon_mesh=mesh(201,"WeaponMesh",live_weapon,"static",weapon_asset);weapon_mesh.GetAttachParent=function()return body end
-host.K2_GetComponentsByClass=function()return array({body})end;live_weapon.K2_GetComponentsByClass=function()return array({weapon_mesh})end
+host.K2_GetComponentsByClass=function()return {wrapped(body)}end;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
 local plain_component_getter_calls=0
 local function unavailable_component_alias()plain_component_getter_calls=plain_component_getter_calls+1;error("unreflected GetComponentsByClass alias",0)end
 host.GetComponentsByClass=unavailable_component_alias;live_weapon.GetComponentsByClass=unavailable_component_alias
 local rvp={IsValid=function()return true end,GetMeshComponentAmountOfVerticesOnLOD=function(_,c)return #c.native_colors end,
-    GetMeshComponentVertexColorsAtLOD_Wrapper=function(_,c)return color_array(c.native_colors)end}
+    GetMeshComponentVertexColorsAtLOD_Wrapper=function(_,c)return color_return(c.native_colors)end}
 StaticFindObject=function(p)return p=="/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary"and rvp or p end
 local render_env={read=function(fn)if not scope then error("scope",0)end;local value=fn({pawn=host});if not scope then error("scope",0)end;return value end,
     guard=function()if not scope then error("scope",0)end end,token_valid=function()return scope end,weapon=function()return live_weapon end}
@@ -206,10 +217,27 @@ T.eq(rendered.components[1].hidden_bones[1],bone_names[40],"native hidden render
 T.eq(rendered.components[2].parent,1,"native weapon attachment binds captured source body")
 T.eq(rendered.bindings[2].owner,200,"ephemeral binding uses actual owner address rather than logical wire id")
 T.eq(rendered.topology.vertex_state,"captured","source vertex readiness follows actual complete getter data")
-local bones_after_loss=0;body.GetPhysicsAsset=function()scope=false;return physical_asset end
+T.eq(rendered.components[1].physics_asset,"/Game/Test/Physics.Physics","null native component override selects actual skeletal asset physics")
+local override_asset=object(321,"OverridePhysics","/Game/Test/OverridePhysics.OverridePhysics",false)
+body.PhysicsAssetOverride=override_asset
+local override_render=Render.capture(render_env,native_bindings)
+T.eq(override_render.components[1].physics_asset,"/Game/Test/OverridePhysics.OverridePhysics","nonnull native component override preserves its distinct exact physics asset")
+body.PhysicsAssetOverride=nil
+host.K2_GetComponentsByClass=function()return {body}end;live_weapon.K2_GetComponentsByClass=function()return {weapon_mesh}end
+T.check(pcall(Render.capture,render_env,native_bindings),"direct returned UObject entries never receive parameter get")
+host.K2_GetComponentsByClass=function()return {[2]=wrapped(body)}end
+T.check(not pcall(Render.capture,render_env,native_bindings),"malformed native component return table refuses capture")
+host.K2_GetComponentsByClass=function()return {wrapped(body)}end;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
+local bones_after_loss=0;body_asset.GetPhysicsAsset=function()scope=false;return physical_asset end
 body.GetNumBones=function()bones_after_loss=bones_after_loss+1;return #bone_names end
 T.check(not pcall(Render.capture,render_env,native_bindings) and bones_after_loss==0,"world loss inside render getter prevents next source operation")
-scope=true;body.GetPhysicsAsset=function()return physical_asset end
+scope=true;body_asset.GetPhysicsAsset=function()return physical_asset end
+body_asset.GetPhysicsAsset=function()body.GetSkeletalMeshAsset=function()return weapon_asset end;return physical_asset end
+T.check(not pcall(Render.capture,render_env,native_bindings),"source skeletal asset replacement during physics getter refuses stale capture")
+body.GetSkeletalMeshAsset=function()return body_asset end;body_asset.GetPhysicsAsset=function()return physical_asset end
+body_asset.GetPhysicsAsset=function()body.PhysicsAssetOverride=override_asset;return physical_asset end
+T.check(not pcall(Render.capture,render_env,native_bindings),"native override replacement during default physics getter refuses capture")
+body.PhysicsAssetOverride=nil;body_asset.GetPhysicsAsset=function()return physical_asset end
 dynamic_mat.FontParameterValues=array({true})
 T.check(not pcall(Render.capture,render_env,native_bindings),"unsupported native material parameter refuses rather than drops data")
 dynamic_mat.FontParameterValues=array({})
