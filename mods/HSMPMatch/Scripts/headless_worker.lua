@@ -235,7 +235,7 @@ function M.start()
         local result = { name = actor:GetFName():ToString(), address = actor:GetAddress() }
         for _, field in ipairs(fields) do
             local value = actor[field]
-            result[field] = (type(value) == "boolean" or type(value) == "number") and value or "unavailable"
+            result[field] = SpawnDiagnostics.property(value)
         end
         return result
     end
@@ -248,7 +248,7 @@ function M.start()
                 for _, row in ipairs(D.native_worker_profile(native_mode) or {}) do
                     if not WG.same(token) then return nil, "world changed during GI profile" end
                     local value = env.gi_get(row[1])
-                    result[row[1]] = (type(value) == "boolean" or type(value) == "number") and value or "unavailable"
+                    result[row[1]] = SpawnDiagnostics.property(value)
                 end
                 return result
             end,
@@ -308,10 +308,51 @@ function M.start()
                 end
                 return result
             end,
+            spawners = function(t)
+                local game,combat,play,foes=env.gi_get("Current Game Mode Enum"),env.gi_get("Current Combat Mode"),env.gi_get("Current Play Mode"),env.gi_get("Free Mode Foes Amount")
+                if not WG.same(t) then return nil,"world changed during spawner context" end
+                for _,pair in ipairs({{"game",game},{"combat",combat},{"play",play},{"foes",foes}})do
+                    local value=pair[2]
+                    if type(value)~="number" or value%1~=0 then return {state="native spawner context unavailable"} end
+                end
+                local result={total=0,compatible=0,player=0,nonplayer=0,compatible_player=0,compatible_nonplayer=0,
+                    game=game,combat=combat,play=play,combatants=foes+1,actors={}}
+                for _,candidate in pairs(FindAllOf("BP_SpawnerPoint_Willies_C") or {}) do
+                    if not WG.same(t) then return nil end
+                    if candidate and candidate:IsValid() then
+                        local actor=diagnostic_actor("BP_SpawnerPoint_Willies_C",candidate:GetAddress(),candidate:GetFName():ToString(),t)
+                        if actor then
+                            result.total=result.total+1
+                            if result.total>64 then return {state="native spawner actor bound"} end
+                            local row={name=actor:GetFName():ToString(),address=actor:GetAddress(),
+                                player=SpawnDiagnostics.property(actor["Spawn Player"]),mercenary=SpawnDiagnostics.property(actor["Spawn Mercenary"]),
+                                required=SpawnDiagnostics.property(actor["Required Combatants Amount"]),spawned=SpawnDiagnostics.property(actor["Spawned Amount"])}
+                            local valid=function()return WG.same(t)end
+                            row.game=SpawnDiagnostics.map_flag(actor["Works in these Game Modes"],game,valid)
+                            row.combat=SpawnDiagnostics.map_flag(actor["Works in these Combat Modes"],combat,valid)
+                            row.play=SpawnDiagnostics.map_flag(actor["Works in these Play Modes"],play,valid)
+                            row.compatible=SpawnDiagnostics.compatible(row.game,row.combat,row.play,foes+1,row.required)
+                            if type(row.player)~="boolean" or row.compatible==nil then return {state="native spawner properties unavailable"} end
+                            if row.player then result.player=result.player+1 else result.nonplayer=result.nonplayer+1 end
+                            if row.compatible then
+                                result.compatible=result.compatible+1
+                                if row.player then result.compatible_player=result.compatible_player+1 else result.compatible_nonplayer=result.compatible_nonplayer+1 end
+                            end
+                            result.actors[#result.actors+1]=row
+                        end
+                    end
+                end
+                return result
+            end,
         }
         local rows, why = SpawnDiagnostics.capture(readers, token, reason)
-        if rows then log("native spawn diagnostic: %s", SpawnDiagnostics.format(rows))
-        else log("native spawn diagnostic refused: %s", why or "binding changed") end
+        if rows then
+            log("native spawn diagnostic: %s", SpawnDiagnostics.format(rows))
+            if HL then HL.event("x_native_worker", {state="native_spawn_diagnostic",reason=reason or "",arena=arena,census=rows}) end
+        else
+            log("native spawn diagnostic refused: %s", why or "binding changed")
+            if HL then HL.event("x_native_worker", {state="native_spawn_diagnostic",reason=why or "binding changed",arena=arena}) end
+        end
     end
     env.native_settled = WG.settled
     env.native_players_ready = function() local rows, reason = census(); return rows ~= nil, reason end

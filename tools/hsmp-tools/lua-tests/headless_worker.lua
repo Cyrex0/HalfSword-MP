@@ -328,6 +328,11 @@ do
     local values = {}
     for _, row in ipairs(pvp) do values[row[1]] = row[2] end
     T.eq(values["Free Mode Foes Amount"], 1, "default PvP requests exactly two native fighters")
+    -- Pinned CXXHeaderDump Enum_GameMode_enums.hpp: Arena(NewEnumerator1)=1;
+    -- Enum_PlayMode_enums.hpp: Free Mode(NewEnumerator2)=1. Yard's cooked
+    -- spawn_points support Arena on multiple native spawners, Tavern on C_0.
+    T.eq(values["Current Game Mode Enum"],1,"native authority selects actual Arena mode rather than Tavern")
+    T.eq(values["Current Play Mode"],1,"native authority selects actual Free Mode rather than Progression")
     T.eq(values["FreeMode Multiplayer"], true, "PvP retains the native second-player path")
     local unknown = Director.new_native_worker(env, { mode = "coop_abyss" })
     local travels = #travel
@@ -336,14 +341,44 @@ do
 end
 
 do
+    local current,reads=true,0
+    local function native_map(rows)
+        return setmetatable({ForEach=function(_,callback)
+            for _,row in ipairs(rows)do callback({get=function()return row[1]end},{get=function()reads=reads+1;return row[2]end})end
+        end},{__len=function()return #rows end})
+    end
+    local flags=native_map({{0,false},{1,true}})
+    T.check(SpawnDiagnostics.map_flag(flags,0,function()return current end)==false,
+        "actual native spawner false compatibility remains false")
+    T.check(SpawnDiagnostics.map_flag(flags,1,function()return current end)==true,
+        "actual native enum key selects its typed compatibility value")
+    T.check(SpawnDiagnostics.map_flag(flags,2,function()return current end)==false,
+        "a missing native bool map key has the native Map_Find false out-value")
+    T.check(SpawnDiagnostics.compatible(true,true,true,2,2)==true and SpawnDiagnostics.compatible(true,true,true,2,3)==false,
+        "native compatibility uses Foes+1 >= RequiredCombatants exactly")
+    T.check(SpawnDiagnostics.compatible(true,false,true,2,2)==false and SpawnDiagnostics.compatible(nil,true,true,2,2)==nil,
+        "incompatible and unavailable source map values stay distinct")
+    local stale=setmetatable({ForEach=function(_,callback)
+        callback({get=function()current=false;return 1 end},{get=function()reads=reads+1;return true end})
+    end},{__len=function()return 1 end})
+    local before=reads
+    local ok=pcall(SpawnDiagnostics.map_flag,stale,1,function()return current end)
+    T.check(not ok and reads==before,"world loss while reading a native spawner key prevents the next old-map value read")
+end
+
+do
     local current, reads = true, {}
     local readers={same=function()return current end,world_key=function()return "native#2"end}
     for _, key in ipairs({"profile","controllers","mode","level","willies"}) do
         readers[key]=function()reads[#reads+1]=key;return {state="observed"}end
     end
+    readers.level=function()reads[#reads+1]="level";return {p2=SpawnDiagnostics.property(false),player=SpawnDiagnostics.property(true),amount=SpawnDiagnostics.property(0),missing=SpawnDiagnostics.property(nil)}end
     local rows=SpawnDiagnostics.capture(readers,{},"PC1 missing")
     T.check(rows and #reads==5 and SpawnDiagnostics.format(rows):find("native[reason]=PC1 missing",1,true),
         "native spawn diagnostics carry scalar source observations and the actual refusal")
+    T.check(rows.level.p2==false and rows.level.player==true and rows.level.amount==0 and rows.level.missing=="unavailable",
+        "native diagnostic property conversion preserves actual false, true and zero separately from absence")
+    T.check(SpawnDiagnostics.format(rows):find("native[level][p2]=false",1,true),"persisted fault census never turns actual false into unavailable")
     reads={};readers.profile=function()reads[#reads+1]="profile";current=false;return {}end
     T.check(not SpawnDiagnostics.capture(readers,{},"PC1 missing"),"world replacement inside profile refuses the census")
     T.eq(#reads,1,"no old controller, game mode or Willie reader runs after world replacement")

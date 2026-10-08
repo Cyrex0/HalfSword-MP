@@ -2179,7 +2179,8 @@ function D.make_ue_env(ctx)
                 ok = true
             end
         end)
-        if not ok and name:match("^Map_Arena_") then
+        -- A required GameMode override must never be discarded by fallback.
+        if not ok and (options == nil or options == "") and name:match("^Map_Arena_") then
             pcall(function()
                 -- KismetSystemLibrary:ExecuteConsoleCommand (as apply_cvars does):
                 -- APlayerController:ConsoleCommand is not callable from UE4SS Lua.
@@ -2469,8 +2470,8 @@ end
 -- Native authority boot: bypasses the client session/spawn pipeline. Travel
 -- stays here, and the game's own local-multiplayer spawners create both pawns.
 D.NATIVE_WORKER_PROFILE = {
-    { "Current Game Mode Enum", 0 }, { "Current Combat Mode", 0 },
-    { "Current Play Mode", 0 }, { "Free Mode Activated", true },
+    { "Current Game Mode Enum", 1 }, { "Current Combat Mode", 0 },
+    { "Current Play Mode", 1 }, { "Free Mode Activated", true },
     { "FreeMode Multiplayer", true }, { "Progression Multiplayer", false },
     { "Free Mode Foes Amount", 1 }, { "Free Mode Carnage", false },
     { "Free Mode Brawling", false }, { "Free Mode Blossfechten", false },
