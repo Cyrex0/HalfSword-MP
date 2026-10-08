@@ -1454,7 +1454,7 @@ PX.JOINT_PROFILE_MODULE=os.getenv("HSMP_DEV")=="1"and os.getenv("HSMP_JOINT_PROF
 if PX.JOINT_PROFILE_MODULE then
     PX.JOINT_PROFILE,PX.JOINT_PROFILE_REASON=PX.JOINT_PROFILE_MODULE.new(function(row)
         if HL and HL.encode then Log("JOINTPROFILE %s",HL.encode(row))end
-    end,os.getenv("HSMP_JOINT_PROFILE_FOCUS"))
+    end,os.getenv("HSMP_JOINT_PROFILE_FOCUS"),os.getenv("HSMP_JOINT_PROFILE_TRIGGER"))
     if PX.JOINT_PROFILE_REASON then Log("JOINTPROFILE refused stage=config reason=%s",PX.JOINT_PROFILE_REASON)end
 end
 function PX.hand_pipeline_copy(v,n)
@@ -1653,7 +1653,14 @@ function PX.joint_profile_source_current(q)
 end
 function PX.joint_profile_row(p)
     local probe=PX.JOINT_PROFILE
-    if not probe or not p or not p.aim or not probe:attempt()then return nil,true end
+    if not probe or not p or not p.aim then return nil,true end
+    local trigger
+    if probe.trigger=="fault"then
+        trigger=PX.JOINT_PROFILE_MODULE.right_fault(p.settle_state,p.last,p.shown,p.aim,p.body,
+            PX.settle_world,world_gen,now_ms(),PX.STALL_FRAMES or 20)
+        if not trigger then return nil,true end -- no optional reads or consumed attempt before a real fault
+    end
+    if not probe:attempt()then return nil,true end
     local q
     local stage="proxy_context"
     local ok,result,reason,detail=pcall(function()
@@ -1675,6 +1682,7 @@ function PX.joint_profile_row(p)
             original_applied_ms=shown.at,original_body_ts=shown.label,original_arm_ts=shown.label,
             qualification=q.audit.qualification,pending=q.audit.pending,frame=PX.frame_no or 0,
             time_meaning="applied pose timestamps retained; configuration observation is a later read"}
+        context.fault_trigger=trigger
         stage="library_lookup";local lib=StaticFindObject("/Script/Engine.Default__ConstraintInstanceBlueprintLibrary")
         -- Lookup may reenter travel before cached generations update. Check
         -- the current PC world before resolving any retained proxy component.
@@ -1682,7 +1690,11 @@ function PX.joint_profile_row(p)
         stage="capture"
         return probe:capture(own.context,context,
             {actor=own.actor,mesh=own.mesh,library=lib,fname=fname,now=now_ms,current=function()return PX.joint_profile_source_current(own)end},
-            {actor=p.actor,mesh=PX.injury_mesh(p),library=lib,fname=fname,now=now_ms,current=function()return PX.hand_pipeline_current(q,true)end})
+            {actor=p.actor,mesh=PX.injury_mesh(p),library=lib,fname=fname,now=now_ms,
+                grip_flags=trigger and function()
+                    local value,why=PX.grip_linear_observe(p)
+                    assert(value and value.available==true,value and value.reason or why or "current grip flags unavailable");return value
+                end or nil,current=function()return PX.hand_pipeline_current(q,true)end})
     end)
     if not ok or not result then
         local why=PX.JOINT_PROFILE_MODULE.reason(ok and (reason or "context unavailable")or result)
@@ -1963,6 +1975,17 @@ function PX.grip_linear_resolve(p,field,expected,off)
         local body=PX.grip_probe_id(mesh)
         if not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),pawn) then changed("mesh owner changed") end
         local body_record=p.body
+        local body_field=body_record.field or "Mesh"
+        local constraint,held=nil,{}
+        -- Capture plain identities before the endpoint getter. A same-world
+        -- replacement during native reentry can free the returned wrappers.
+        for _,wf in ipairs({"Weapon R","Weapon L"}) do
+            local wa=actor[wf]
+            if wa and wa:IsValid()==true then
+                local wr=wa.BaseMesh
+                held[wf]={weapon=PX.grip_probe_id(wa),root=wr and wr:IsValid()==true and PX.grip_probe_id(wr) or false}
+            else held[wf]=false end
+        end
         local function current()
             local _,fresh_world=world_identity(local_pc())
             if not fresh_world then error("world unavailable",0) end
@@ -1970,13 +1993,28 @@ function PX.grip_linear_resolve(p,field,expected,off)
                 or cache_world~=tostring(world_gen).."|"..fresh_world then changed("world changed") end
             if p.actor~=actor or p.body~=body_record or p.last~=source or p.peer~=peer or HSM.my_peer_id()~=own_peer
                 or body_record.mesh_addr~=body.address or body_record.mesh_fname~=body.name
+                or (body_record.field or "Mesh")~=body_field
                 or source.match_id~=match_id or source.round~=round or source.life~=life
                 or (off and not p.driving) then changed("scope changed") end
             if p.shown and (p.shown.has_context~=true or p.shown.match_id~=match_id or p.shown.round~=round
                 or p.shown.life~=life or p.shown.pawn~=pawn.name) then changed("display life changed") end
+            if not PX.grip_probe_same(PX.grip_probe_id(actor[body_field]),body)
+                or (constraint and not PX.grip_probe_same(PX.grip_probe_id(actor[field]),constraint)) then changed("component changed") end
+            for _,wf in ipairs({"Weapon R","Weapon L"}) do
+                local wa,h=actor[wf],held[wf]
+                if not h then
+                    if wa and wa:IsValid()==true then changed("held field changed") end
+                else
+                    if not PX.grip_probe_same(PX.grip_probe_id(wa),h.weapon) then changed("held field changed") end
+                    local wr=wa.BaseMesh
+                    if h.root then
+                        if not PX.grip_probe_same(PX.grip_probe_id(wr),h.root) then changed("held root changed") end
+                    elseif wr and wr:IsValid()==true then changed("held root changed") end
+                end
+            end
         end
         c=actor[field] -- fresh field only; never a retained constraint wrapper
-        local constraint=PX.grip_probe_id(c)
+        constraint=PX.grip_probe_id(c)
         local owner=PX.grip_probe_id(c:GetOwner())
         if not PX.grip_probe_same(owner,pawn) then changed("constraint owner changed") end
         local class=c:GetClass():GetFName():ToString()
@@ -2044,6 +2082,24 @@ function PX.grip_linear(p,off)
                 PX.grip_linear_note(p,field,lease,lost and "binding_lost" or "refused",why)
             else
                 local ok,err=pcall(function()
+                    local want=off and {false,false,false,false,false,false} or lease and lease.flags
+                    if off and lease then
+                        lease.status="off_pending"
+                        local actual=PX.grip_linear_flags(c)
+                        if PX.grip_linear_equal(actual,want) then
+                            c=PX.grip_linear_resolve(p,field,lease.binding,true)
+                            if not c then error("readback binding changed",0) end
+                            -- The second endpoint getter may itself reenter a
+                            -- native writer. Reread flags before the no-write
+                            -- confirmation; drift retains the full setter path.
+                            actual=PX.grip_linear_flags(c)
+                            if PX.grip_linear_equal(actual,want) then
+                                lease.status="off_confirmed"
+                                PX.grip_linear_note(p,field,lease,lease.status,nil,actual)
+                                return
+                            end
+                        end
+                    end
                     if not lease then
                         local flags=PX.grip_linear_flags(c) -- all six exact booleans BEFORE either setter
                         c=PX.grip_linear_resolve(p,field,q,off)
@@ -2051,7 +2107,7 @@ function PX.grip_linear(p,off)
                         lease={binding=q,flags=flags,status="pending"}
                         leases[field]=lease -- persist originals before any partial native success
                     end
-                    local want=off and {false,false,false,false,false,false} or lease.flags
+                    want=off and want or lease.flags
                     lease.status=off and "off_pending" or "restore_pending"
                     c:SetLinearPositionDrive(want[1],want[2],want[3])
                     c=PX.grip_linear_resolve(p,field,lease.binding,off)
@@ -2084,6 +2140,52 @@ function PX.grip_linear_restore(p)
         and now-p.linear_grip_restore_at<1000 then return false end
     p.linear_grip_restore_at=now
     return PX.grip_linear(p,false) -- at most two exact bindings, once/s after a release failure
+end
+-- Optional fault evidence only. Never suppress, create a lease, or update its
+-- debt/status; nonzero native flags are valid observations, not policy success.
+function PX.grip_linear_observe(p)
+    local started
+    local ok,result=pcall(function()
+        started=PX.grip_probe_number(now_ms())
+        local source=p and p.last
+        if type(source)~="table" then error("source unavailable",0) end
+        local keys={"match_id","round","life","seq","cut","mode","pt"}
+        local context={};for _,k in ipairs(keys) do context[k]=source[k] end
+        local shown=p.shown or p.applied_context
+        local applied=shown and shown.at
+        local function current()
+            if p.last~=source or (p.shown or p.applied_context)~=shown or (shown and shown.at~=applied) then error("source changed",0) end
+            for _,k in ipairs(keys) do if source[k]~=context[k] then error("source changed",0) end end
+        end
+        local field="PhysicsConstraint R Hand"
+        local c,binding,why=PX.grip_linear_resolve(p,field,nil,true)
+        if not c then error(why or "binding unavailable",0) end
+        current()
+        local flags=PX.grip_linear_flags(c)
+        current()
+        c=PX.grip_linear_resolve(p,field,binding,true)
+        if not c then error("observation binding changed",0) end
+        current()
+        local actual=PX.grip_linear_flags(c)
+        current()
+        if not PX.grip_linear_equal(flags,actual) then error("observed flags changed",0) end
+        local original
+        local lease=p.linear_grip_leases and p.linear_grip_leases[field]
+        if lease and PX.grip_linear_equal(lease.binding,binding) then
+            original={}
+            for i=1,6 do
+                if type(lease.flags[i])~="boolean" then error("original flags unavailable",0) end
+                original[i]=lease.flags[i]
+            end
+        end
+        local finished=PX.grip_probe_number(now_ms())
+        if finished<started then error("observation clock regressed",0) end
+        return {available=true,binding=binding,current_flags=actual,original_available=original~=nil,original_flags=original,
+            observed_start_ms=started,observed_end_ms=finished,source_seq=context.seq,source_cut=context.cut,
+            source_pt=context.pt,original_applied_ms=applied,authority=false}
+    end)
+    if ok then return result end
+    return {available=false,reason=tostring(result):sub(1,120),observed_start_ms=started,authority=false}
 end
 function PX.grips_off(p, off)
     local list = p.grips and p.grips.list
@@ -4420,6 +4522,12 @@ local function drive_v2(id, p, body, cur, fresh, now, holding, cut_reset)
     end
     if PX.SETTLE then
         PX.SETTLE.finish(p.settle_state,now)
+        if PX.JOINT_PROFILE and p.body==body and p.gen==world_gen then
+            -- Existing plain scalars identify the Mesh used for this completed
+            -- measurement; they do not retroactively identify an earlier sample.
+            p.settle_state.probe_mesh_addr,p.settle_state.probe_mesh_fname=body.mesh_addr,body.mesh_fname
+            p.settle_state.probe_generation=world_gen
+        end
         PX.SETTLE.copy(p.shown,p.settle_state)
         if p.settle_state.settle_ready and not p.settle_state.logged then
             p.settle_state.logged=true

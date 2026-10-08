@@ -53,6 +53,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "limb_burst", change = "mode_unavailable" })
     T.isolated(T.script, "case", { kind = "limb_burst", change = "pc_world" })
     T.isolated(T.script, "case", { kind = "joint_profile" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "fault_wait" })
     T.isolated(T.script, "case", { kind = "joint_profile", gate = "off" })
     T.isolated(T.script, "case", { kind = "joint_profile", gate = "no_dev" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "pc_world" })
@@ -1652,6 +1653,7 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         HSMP_IPC.sample_status=function()return {pose={tick=7,ts=M.now-sample_age,match_id=419,round=1,life=sample_life}}end
         local captures=0
         local source_current,proxy_current
+        if opts.change=="fault_wait"then PX.JOINT_PROFILE.trigger="fault"end
         local lookup_changed,old_touches=false,0
         if opts.change=="lookup_pc_world"then
             local find=StaticFindObject;local world_get=M.Methods.GetWorld;local address_get=M.Methods.GetAddress
@@ -1704,6 +1706,11 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         drive(1000)
         T.check(captures==0,"first drive has no fabricated previously applied pose for pairing")
         local before=writes;drive(1016)
+        if opts.change=="fault_wait"then
+            T.check(captures==0 and PX.JOINT_PROFILE.attempts==0 and writes==before+12,
+                "actual main waits for a completed persistent wrist fault without consuming attempts or changing servo writes")
+            return
+        end
         if opts.change=="lookup_pc_world"then
             T.check(lookup_changed and captures==0 and writes==before and old_touches==0,
                 "library lookup travel checks fresh PC world before any old proxy getter or physical writer")
@@ -2311,9 +2318,10 @@ if opts.kind=="grip_linear" then
     local right,rld=grip("LINEAR_R",9915,"hand_r")
     local left,lld=grip("LINEAR_L",9916,"hand_l")
     pawn.__props["PhysicsConstraint R Hand"],pawn.__props["PhysicsConstraint L Hand"]=right,left
-    local calls,fail,lie=0,nil,false
+    local calls,fail,lie,binding_count=0,nil,false,0
     M.Methods.K2_GetComponentsByClass=function(a)return {a["PhysicsConstraint R Hand"],a["PhysicsConstraint L Hand"]}end
     M.Methods.GetConstrainedComponents=function(c,a,b,x,y)
+        binding_count=binding_count+1
         assert(a==b and a==x and a==y,"all four scalar outputs share one fresh container")
         local e=c.__props.Endpoints
         a.OutComponent1,a.OutBoneName1,a.OutComponent2,a.OutBoneName2=e.one,fn(e.bone1),e.two,fn(e.bone2)
@@ -2364,10 +2372,57 @@ if opts.kind=="grip_linear" then
         end;return n
     end
     T.check(notes("off_confirmed")==2,"first confirmed suppression logs both current hands once")
+    local setters,getters=calls,binding_count;M.now=1008;M.bp_tick(pawn)
+    T.check(calls==setters and binding_count-getters==4 and lease.status=="off_confirmed",
+        "already-off existing leases use two full fresh resolves per hand and no setters")
+    getters=binding_count;setters=calls
     M.now=1016;M.bp_tick(pawn,function()native(rld,{true,true,true,true,true,true});native(lld,{true,true,true,true,true,true})end)
     T.check(T.eq(flags(rld),{false,false,false,false,false,false})and p.linear_grip_leases["PhysicsConstraint R Hand"]==lease
         and T.eq(lease.flags,originals),"later native BP drift is reasserted without recapturing our false flags or overwriting originals")
+    T.check(calls-setters==4 and binding_count-getters==8,"native enabled-flag drift still takes both setters and four full resolves per hand")
     T.check(notes("off_confirmed")==2,"steady BP reassertions do not produce per-frame confirmation logs")
+    local observed=PX.grip_linear_observe(p)
+    T.check(observed.available and T.eq(observed.current_flags,{false,false,false,false,false,false})
+        and observed.original_available and T.eq(observed.original_flags,originals) and observed.authority==false,
+        "read-only fault helper copies current six flags and same-binding original flags with separate observation time")
+    local snapshot_setters,snapshot_logs=calls,#M.logs
+    native(rld,originals);observed=PX.grip_linear_observe(p)
+    T.check(observed.available and T.eq(observed.current_flags,originals) and calls==snapshot_setters and #M.logs==snapshot_logs
+        and p.linear_grip_leases["PhysicsConstraint R Hand"]==lease,
+        "nonzero current flags remain readable evidence without setters, log output or lease mutation")
+    observed.binding.pawn.name="MUTATED_COPY";observed.original_flags[1]=false
+    T.check(lease.binding.pawn.name=="LINEAR_PROXY" and lease.flags[1]==true,"returned observer binding and originals are independent plain copies")
+    local retained=p.linear_grip_leases["PhysicsConstraint R Hand"]
+    p.linear_grip_leases["PhysicsConstraint R Hand"]=nil
+    observed=PX.grip_linear_observe(p)
+    T.check(observed.available and not observed.original_available and observed.original_flags==nil
+        and p.linear_grip_leases["PhysicsConstraint R Hand"]==nil and calls==snapshot_setters,
+        "current readback without an original lease stays independently available and creates no restoration debt")
+    p.linear_grip_leases["PhysicsConstraint R Hand"]=retained
+    right.__props.DuringBinding=function()p.last.cut=9 end
+    observed=PX.grip_linear_observe(p)
+    T.check(not observed.available and calls==snapshot_setters,"source cut change during native getter refuses mixed fault observations")
+    right.__props.DuringBinding=nil;p.last.cut=nil
+    local x=rld.XDrive;local position=x.bEnablePositionDrive
+    x.bEnablePositionDrive=nil
+    setmetatable(x,{__index=function(_,key)
+        if key=="bEnablePositionDrive"then p.last.seq=12;return position end
+    end})
+    observed=PX.grip_linear_observe(p)
+    T.check(not observed.available and observed.reason=="source changed" and calls==snapshot_setters,
+        "source sequence change while reading six flags refuses mixed observations without setters")
+    setmetatable(x,nil);x.bEnablePositionDrive=position;p.last.seq=nil
+    rld.ZDrive.bEnableVelocityDrive=nil;observed=PX.grip_linear_observe(p)
+    T.check(not observed.available and calls==snapshot_setters,"missing actual flag produces explicit unavailable without native setters")
+    rld.ZDrive.bEnableVelocityDrive=originals[6]
+    local observe_reads=0
+    right.__props.DuringBinding=function()
+        observe_reads=observe_reads+1;if observe_reads==2 then rld.XDrive.bEnablePositionDrive=false end
+    end
+    observed=PX.grip_linear_observe(p)
+    T.check(not observed.available and observed.reason=="observed flags changed" and calls==snapshot_setters,
+        "six flags changed between fresh resolves refuse evidence instead of inventing stable state")
+    right.__props.DuringBinding=nil;native(rld,{false,false,false,false,false,false})
     fail="velocity";local done=api.release_standin(p)
     T.check(done==false and p.driving==false and p.grips==nil and p.linear_grip_leases and lease.status=="restore_pending",
         "partial release retains independent restoration debt after the grip cache is discarded")
@@ -2387,12 +2442,41 @@ if opts.kind=="grip_linear" then
     T.check(lease.status=="off_pending"and p.linear_grip_error=="linear readback unavailable","successful setters without changed flags remain explicitly unconfirmed")
     lie=false;M.now=3048;M.bp_tick(pawn)
     local binding_reads=0
+    rld.XDrive.bEnablePositionDrive=true -- exercise the original full setter path
     right.__props.DuringBinding=function()
         binding_reads=binding_reads+1;if binding_reads==4 then rld.XDrive.bEnablePositionDrive=true end
     end
     M.now=3050;PX.grip_linear(p,true)
     T.check(lease.status=="off_pending","native flag drift in final binding getter cannot yield a false confirmed readback")
     right.__props.DuringBinding=nil;M.now=3052;PX.grip_linear(p,true)
+    binding_reads=0;setters=calls
+    right.__props.DuringBinding=function()
+        binding_reads=binding_reads+1;if binding_reads==2 then rld.XDrive.bEnablePositionDrive=true end
+    end
+    M.now=3054;PX.grip_linear(p,true)
+    T.check(calls-setters==2 and lease.status=="off_confirmed" and T.eq(flags(rld),{false,false,false,false,false,false}),
+        "flag rewrite during second fast-path resolve falls through to full guarded setters rather than false confirmation")
+    right.__props.DuringBinding=nil
+    binding_reads=0;setters=calls
+    right.__props.DuringBinding=function()
+        binding_reads=binding_reads+1;if binding_reads==2 then rld.YDrive.bEnableVelocityDrive=nil end
+    end
+    M.now=3056;PX.grip_linear(p,true)
+    T.check(calls==setters and lease.status=="off_pending" and T.eq(lease.flags,originals),
+        "missing bool in final fast-path read refuses setters and confirmation while preserving original debt")
+    right.__props.DuringBinding=nil;rld.YDrive.bEnableVelocityDrive=false
+    M.now=3058;PX.grip_linear(p,true)
+    binding_reads=0;setters=calls
+    local during_mesh=obj("SkeletalMeshComponent","LINEAR_MESH_REENTRY",9912,pawn)
+    right.__props.DuringBinding=function()
+        binding_reads=binding_reads+1
+        if binding_reads==2 then pawn.__props.Mesh=during_mesh;rawset(mesh,"__dead",true)end
+    end
+    M.now=3060;PX.grip_linear(p,true)
+    T.check(calls==setters and #M.dead_touch==0 and lease.status=="off_pending",
+        "same-world Mesh replacement in second fast resolve aborts before returned dead endpoint access or setters")
+    right.__props.DuringBinding=nil;pawn.__props.Mesh=mesh;rawset(mesh,"__dead",false)
+    M.now=3062;PX.grip_linear(p,true)
     local rebuilt,newld=grip("LINEAR_R_REBUILT",9915,"hand_r");rawset(right,"__dead",true);pawn.__props["PhysicsConstraint R Hand"]=rebuilt
     n=calls;M.now=3064;M.bp_tick(pawn)
     T.check(not p.linear_grip_leases["PhysicsConstraint R Hand"]and T.eq(flags(newld),originals)and #M.dead_touch==0,
@@ -2404,7 +2488,9 @@ if opts.kind=="grip_linear" then
     T.check(not p.linear_grip_leases["PhysicsConstraint R Hand"]and #M.dead_touch==0,"rebound endpoints cannot inherit or restore the old flags")
     rebuilt.__props.Endpoints.one=root;native(newld,originals);newld.YDrive.bEnableVelocityDrive=nil
     n=calls;M.now=3112;PX.grip_linear(p,true)
-    T.check(not p.linear_grip_leases["PhysicsConstraint R Hand"]and calls==n+2,"one missing actual boolean refuses both setters for that hand without blocking the other exact hand")
+    T.check(not p.linear_grip_leases["PhysicsConstraint R Hand"]and calls==n
+        and p.linear_grip_leases["PhysicsConstraint L Hand"].status=="off_confirmed",
+        "one missing actual boolean refuses both setters for that hand without blocking already-off verification of the other exact hand")
     newld.YDrive.bEnableVelocityDrive=true;M.now=3128;PX.grip_linear(p,true)
     local fresh=obj("SkeletalMeshComponent","NEW_LINEAR_MESH",9912,pawn);pawn.__props.Mesh=fresh;rawset(mesh,"__dead",true)
     n=calls;M.now=3144;PX.grip_linear(p,true)

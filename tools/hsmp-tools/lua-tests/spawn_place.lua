@@ -1021,7 +1021,7 @@ do
     local saved_fn=rawget(_G,"FName");_G.FName=function(n)return n end
     local function make(opts)
         opts=opts or {}
-        local w=new_world();w:spawns(1,"Map_Arena_Slums",517,250,855);w.plan.match_id=7
+        local w=new_world();w:spawns(1,"Map_Arena_Slums",517,250,855);w.plan.match_id=7;w.plan.by_peer[1].yaw=90
         local p=w:new_pawn();local original={};local changed={};local pc={Pawn=p,NativeWorld=original}
         local native_reads,body_reads,old_reads,rows=0,0,0,{}
         local function live()
@@ -1048,6 +1048,47 @@ do
             return {X=opts.com_nan and 0/0 or (p.bx or p.x),Y=p.by or p.y,Z=p.z+50}
         end
         m.GetSocketLocation=function()live();error("diagnostic must not read visual socket")end
+        local rotation_reads=0
+        local function rotated(value)
+            live();rotation_reads=rotation_reads+1;return value
+        end
+        p.K2_GetActorRotation=function()
+            local value=rotated({Pitch=0,Yaw=90,Roll=0})
+            if opts.rotation_flip then pc.NativeWorld=changed end
+            return value
+        end
+        m.K2_GetComponentRotation=function()return rotated({Pitch=0,Yaw=-90,Roll=0})end
+        m.GetSocketRotation=function()return rotated({Pitch=0,Yaw=-80,Roll=0})end
+        p["Current Control Rotation"]={Pitch=0,Yaw=90,Roll=0}
+        p["On Ground Z Rotation"]=opts.ground_nan and 0/0 or -90
+        p["Movement Input Vector"]={X=0,Y=0,Z=0}
+        p["R Foot On Ground Loc"]={X=517,Y=240,Z=855}
+        p["L Foot On Ground Loc"]={X=517,Y=260,Z=855}
+        local driver={};identity(driver,131,"DriverSkeleton");p.DriverSkeleton=driver
+        driver.GetOwner=function()live();return p end
+        driver.K2_GetComponentRotation=function()return rotated({Pitch=0,Yaw=90,Roll=0})end
+        driver.GetSocketRotation=function()
+            local value=rotated({Pitch=0,Yaw=100,Roll=0})
+            if opts.driver_replace then
+                local replacement={};identity(replacement,131,"RebuiltDriver")
+                replacement.GetOwner=function()live();return p end;p.DriverSkeleton=replacement
+            end
+            return value
+        end
+        local target_calls=0
+        for i,field in ipairs({"PhysicsHandle LowerBody","PhysicsHandle UpperBody"})do
+            local h={GrabbedComponent=m};identity(h,141+i,field);p[field]=h
+            h.GetOwner=function()live();return p end
+            h.GetTargetLocationAndRotation=function(_,location,rotation)
+                live();target_calls=target_calls+1
+                local loc={X=522,Y=250,Z=opts.target_nan and 0/0 or 905}
+                local rot={Pitch=0,Yaw=-90,Roll=0}
+                if opts.named_out then location.TargetLocation=loc;rotation.TargetRotation=rot
+                else for k,v in pairs(loc)do location[k]=v end;for k,v in pairs(rot)do rotation[k]=v end end
+                if opts.handle_flip then pc.NativeWorld=changed end
+                if opts.handle_release then h.GrabbedComponent=nil end
+            end
+        end
         pc.IsValid=function()return true end;pc.GetWorld=function()return pc.NativeWorld end
         local ctx={UEHelpers={},pc=function()return pc end,drift_probe=true,
             drift_drops=function()return 0 end,
@@ -1071,6 +1112,7 @@ do
             self.sp:watch_step(self.clock)
         end
         function w:reads()return native_reads,body_reads,old_reads end
+        function w:rotation_reads()return rotation_reads,target_calls end
         w.rows,w.pc,w.real,w.mesh=rows,pc,real,m
         return w
     end
@@ -1089,6 +1131,22 @@ do
     T.check(row.verified_baseline.copied_ms<row.observed_ms and row.verified_baseline.capsule[1]==517
         and row.verified_baseline.same_mesh_available==false and row.verified_baseline.reason=="historical Mesh identity unavailable",
         "historical placement coordinates retain their separate time and unavailable Mesh continuity")
+    local rot=row.rotation
+    T.check(rot.actor.available and rot.actor.value.yaw==90 and rot.mesh_component.value.yaw==-90
+        and rot.mesh_pelvis_socket.value.yaw==-80 and rot.driver.value.pelvis_socket_rotation.yaw==100,
+        "current actor, component and evaluated socket rotations preserve an observed frame disagreement without correcting it")
+    T.check(not rot.physical_orientation_available and T.contains(rot.body_rotation_basis,"not independent")
+        and rot.current_control.value.yaw==90 and rot.on_ground_yaw.value==-90 and row.target_yaw==90,
+        "native control/ground yaw and requested yaw are distinct from unavailable rigid-body orientation")
+    local handle=rot.handles["PhysicsHandle LowerBody"]
+    T.check(handle.available and handle.value.identity.address==142 and handle.value.grabbed_mesh.address==121
+        and handle.value.target_location[1]==522 and handle.value.target_rotation.yaw==-90
+        and select(2,w:rotation_reads())==2,
+        "two bounded native handle outputs retain actual target rotation and fresh current-Mesh binding")
+    T.check(rot.movement_input.available and rot.movement_input.value[1]==0
+        and rot.foot_points["R Foot On Ground Loc"].value[2]==240
+        and rot.observed_start_ms<=rot.observed_end_ms,
+        "zero movement input and bounded world foot points remain observed scalars with a separate rotation interval")
     for i=2,4 do w:secs(2.1);w:trigger_drift()end
     T.check(#w.rows==3 and select(2,w:reads())==3 and w.sp.drift_attempts==3,
         "whole process cap is consumed before a fourth optional body read",T.repr({rows=#w.rows,body=select(2,w:reads()),attempts=w.sp.drift_attempts,logs=w:logtext()}))
@@ -1096,6 +1154,24 @@ do
     w=make({off=true});before=w.teleports;w:trigger_drift()
     T.check(w.teleports==before+1 and #w.rows==0 and select(1,w:reads())==0,
         "default-off path performs no diagnostic native reads or row allocations")
+    w=make({named_out=true});w:trigger_drift()
+    T.check(w.rows[1].rotation.handles["PhysicsHandle LowerBody"].value.target_rotation.yaw==-90,
+        "named struct-output wrappers preserve the same handle evidence as direct FStruct reuse")
+    w=make({ground_nan=true,target_nan=true});before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before+1 and w.rows[1].available and not w.rows[1].rotation.on_ground_yaw.available
+        and not w.rows[1].rotation.handles["PhysicsHandle LowerBody"].available,
+        "nonfinite rotation/target fields are independently unavailable and do not change physical COM or correction policy")
+    w=make({driver_replace=true});before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before+1 and not w.rows[1].rotation.driver.available,
+        "same-address/new-name Driver replacement invalidates that observation without changing the original correction")
+    w=make({handle_release=true});before=w.teleports;w:trigger_drift()
+    T.check(w.teleports==before+1 and not w.rows[1].rotation.handles["PhysicsHandle LowerBody"].available,
+        "a released native handle cannot retain target/binding proof, while the current pawn correction remains unchanged")
+    for _,opts in ipairs({{rotation_flip=true},{handle_flip=true}})do
+        w=make(opts);before=w.teleports;w:trigger_drift()
+        T.check(w.teleports==before and select(3,w:reads())==0 and not w.rows[1].scope_current,
+            "rotation getter PC-world loss stops all old-object reads and the existing correction: "..T.repr(opts))
+    end
     for _,opts in ipairs({{com_error=true},{com_nan=true},{visual=true},{log_error=true}})do
         w=make(opts);before=w.teleports;w:trigger_drift()
         T.check(w.teleports==before+1 and #w.rows==1 and w.rows[1].scope_current,

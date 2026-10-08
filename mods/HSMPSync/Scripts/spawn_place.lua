@@ -862,7 +862,7 @@ function P:observe_drift(c, e, plan, x, y, z, now, capsule_read_ms)
     local expected = { world=self.wkey, pawn=self.pawn_id, peer=e and e.peer,
         match_id=plan and plan.match_id, round=plan and plan.round, life=e and e.life,
         spawn_id=e and e.spawn_id, attempt=self.drift_attempts, watch_tick_ms=now*1000,capsule_read_ms=capsule_read_ms,
-        capsule={x,y,z}, target={c.dest.X,c.dest.Y,c.dest.Z}, floor=c.floor, slot=c.e.slot,
+        capsule={x,y,z}, target={c.dest.X,c.dest.Y,c.dest.Z}, target_yaw=c.e.yaw, floor=c.floor, slot=c.e.slot,
         verified_baseline=c.drift_baseline }
     local function current()
         if self.cur ~= c or self.wkey ~= expected.world or self.pawn_id ~= expected.pawn then return false end
@@ -1316,7 +1316,8 @@ function SP.make_ue_env(ctx)
             peer=number(expected.peer),match_id=number(expected.match_id),round=number(expected.round),life=number(expected.life),
             spawn_id=number(expected.spawn_id),slot=number(expected.slot),watch_tick_ms=number(expected.watch_tick_ms),
             capsule_read_ms=number(expected.capsule_read_ms),
-            capsule=xyz(expected.capsule),target=xyz(expected.target),floor=finite(expected.floor) and expected.floor or nil,
+            capsule=xyz(expected.capsule),target=xyz(expected.target),target_yaw=number(expected.target_yaw),
+            floor=finite(expected.floor) and expected.floor or nil,
             body_basis="physical pelvis center of mass"}
         local started=env.now()
         row.observed_ms=number(started) and started*1000 or nil
@@ -1349,6 +1350,99 @@ function SP.make_ue_env(ctx)
             row.body_capsule_delta={x-row.capsule[1],y-row.capsule[2],z-row.capsule[3]}
             assert(finite(row.capsule_target_xy_cm) and finite(row.body_target_xy_cm) and xyz(row.body_capsule_delta),
                 "derived position unavailable")
+            -- These are evaluated socket/component rotations and native handle
+            -- targets, not an independent rigid-body orientation read. The COM
+            -- above remains the only physical-body observation in this row.
+            local function guarded(f, guard)
+                assert(current() and (not guard or guard()),"rotation scope changed")
+                local good,value=pcall(f)
+                assert(current() and (not guard or guard()),"rotation scope changed")
+                if not good then error("rotation read unavailable",0) end
+                return value
+            end
+            local function vector(v)
+                assert(v and finite(v.X) and finite(v.Y) and finite(v.Z),"vector unavailable")
+                return {v.X,v.Y,v.Z}
+            end
+            local function rotator(v)
+                assert(v and finite(v.Pitch) and finite(v.Yaw) and finite(v.Roll),"rotator unavailable")
+                return {pitch=v.Pitch,yaw=v.Yaw,roll=v.Roll}
+            end
+            local function optional(f)
+                local good,value=pcall(f)
+                assert(current(),"scope changed")
+                if good then return {available=true,value=value} end
+                return {available=false,reason=tostring(value):gsub("[%c]"," "):sub(1,192)}
+            end
+            local function component(field)
+                local o=guarded(function()return p[field]end)
+                local id=guarded(function()return identity(o)end)
+                local lost=false
+                local function bound()
+                    if lost or not current() then lost=true;return false end
+                    local good,value=pcall(function()
+                        local candidate=read(function()return p[field]end)
+                        if not same(identity(candidate),id) then return false end
+                        return same(identity(read(function()return candidate:GetOwner()end)),pawn_id)
+                    end)
+                    if not good or value~=true then lost=true;return false end
+                    return true
+                end
+                assert(bound(),"component binding unavailable")
+                return o,id,bound
+            end
+            local rotation={physical_orientation_available=false,
+                body_rotation_basis="evaluated Mesh pelvis socket; not independent rigid-body orientation",
+                component_rotation_basis="current scene component world rotation",
+                observed_start_ms=number(env.now()*1000)}
+            rotation.actor=optional(function()return rotator(guarded(function()return p:K2_GetActorRotation()end))end)
+            rotation.mesh_component=optional(function()return rotator(guarded(function()return mesh:K2_GetComponentRotation()end))end)
+            rotation.mesh_pelvis_socket=optional(function()return rotator(guarded(function()return mesh:GetSocketRotation(PELVIS)end))end)
+            rotation.driver=optional(function()
+                local driver,id,bound=component("DriverSkeleton")
+                local component_rot=guarded(function()return rotator(driver:K2_GetComponentRotation())end,bound)
+                local pelvis_rot=guarded(function()return rotator(driver:GetSocketRotation(PELVIS))end,bound)
+                assert(bound(),"DriverSkeleton changed")
+                return {identity=id,component_rotation=component_rot,pelvis_socket_rotation=pelvis_rot,
+                    basis="evaluated DriverSkeleton socket; not physical body"}
+            end)
+            rotation.current_control=optional(function()return rotator(guarded(function()return p["Current Control Rotation"]end))end)
+            rotation.on_ground_yaw=optional(function()
+                local v=guarded(function()return p["On Ground Z Rotation"]end)
+                assert(finite(v),"ground yaw unavailable");return v
+            end)
+            rotation.movement_input=optional(function()return vector(guarded(function()return p["Movement Input Vector"]end))end)
+            rotation.foot_points={}
+            for _,field in ipairs({"R Foot On Ground Loc","L Foot On Ground Loc"}) do
+                rotation.foot_points[field]=optional(function()return vector(guarded(function()return p[field]end))end)
+            end
+            rotation.handles={}
+            for _,field in ipairs({"PhysicsHandle LowerBody","PhysicsHandle UpperBody"}) do
+                rotation.handles[field]=optional(function()
+                    local handle,id,bound=component(field)
+                    local grabbed=guarded(function()return identity(handle.GrabbedComponent)end,bound)
+                    assert(same(grabbed,mesh_id),"handle does not grab current Mesh")
+                    local released=false
+                    local function grabbing()
+                        if released or not bound() then released=true;return false end
+                        local good,value=pcall(function()
+                            return same(identity(read(function()return handle.GrabbedComponent end)),grabbed)
+                        end)
+                        if not good or value~=true then released=true;return false end
+                        return true
+                    end
+                    local target_location,target_rotation={},{}
+                    guarded(function()handle:GetTargetLocationAndRotation(target_location,target_rotation)end,grabbing)
+                    -- Struct OutParms consume separate tables in the pinned
+                    -- bridge; support direct FStruct reuse and named wrappers.
+                    local loc=guarded(function()return vector(target_location.TargetLocation or target_location)end,grabbing)
+                    local rot=guarded(function()return rotator(target_rotation.TargetRotation or target_rotation)end,grabbing)
+                    return {identity=id,grabbed_mesh=grabbed,target_location=loc,target_rotation=rot,
+                        basis="native PhysicsHandle target; grabbed bone unavailable"}
+                end)
+            end
+            rotation.observed_end_ms=number(env.now()*1000)
+            row.rotation=rotation
             local prior=expected.verified_baseline
             if type(prior)=="table" then
                 row.verified_baseline={tick_ms=number(prior.tick_ms),copied_ms=number(prior.copied_ms),

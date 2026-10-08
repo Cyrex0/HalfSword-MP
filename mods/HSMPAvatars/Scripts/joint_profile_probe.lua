@@ -5,6 +5,33 @@ local M={MAX_ATTEMPTS=3,JOINTS={{"UserConstraint_10","clavicle_r","upperarm_r"},
 -- Cooked primary asset and native limb capture agree on this name/endpoints.
 -- The runtime accessor still proves its owner, index and both actual bodies.
 M.LEFT_UPPERARM={{"UserConstraint_14","clavicle_l","upperarm_l"}}
+M.RIGHT_HAND={{"UserConstraint_12","lowerarm_r","hand_r"}}
+-- This is a copied trigger from an already completed physical measurement.
+-- Native scope and current Mesh identity are independently rechecked at capture.
+function M.right_fault(s,cur,shown,aim,body,world,generation,now,threshold)
+    local function finite(v)return type(v)=="number"and v==v and math.abs(v)<math.huge end
+    if type(s)~="table"or type(cur)~="table"or type(shown)~="table"or type(aim)~="table"or type(body)~="table"
+        or s.enabled~=true or s.settle_count~=6 or s.settle_ready~=false
+        or (s.settle_reason~="hand_r rotation"and s.settle_reason~="hand_r position")then return nil end
+    local frames=body.stall and body.stall[17]
+    if not finite(frames)or not finite(threshold)or frames<=threshold or not finite(now)
+        or not finite(s.settle_sample_ms)or now-s.settle_sample_ms<0 or now-s.settle_sample_ms>250
+        or not finite(cur.age)or math.abs(cur.age)>250 or (cur.mode~="interp"and cur.mode~="extrap")then return nil end
+    if cur.has_context~=true or shown.has_context~=true or aim.has_context~=true or s.world~=world
+        or aim.world~=world or s.pawn~=shown.pawn or s.pawn~=aim.pawn
+        or s.probe_generation~=generation or s.probe_mesh_addr~=body.mesh_addr
+        or s.probe_mesh_fname~=body.mesh_fname or type(body.mesh_addr)~="number"or body.mesh_addr<=0
+        or type(body.mesh_fname)~="string"or body.mesh_fname==""or aim.at~=s.settle_sample_ms then return nil end
+    for _,k in ipairs({"match_id","round","life","cut"})do
+        if not finite(s[k])or s[k]~=cur[k]or s[k]~=shown[k]or s[k]~=aim[k]then return nil end
+    end
+    if not finite(s.settle_pos_uu)or not finite(s.settle_rot_deg)then return nil end
+    return {kind="persistent_hand_r",sample_ms=s.settle_sample_ms,observed_ms=now,
+        reason=s.settle_reason,frames=frames,threshold=threshold,six_limb_max_position_uu=s.settle_pos_uu,
+        six_limb_max_rotation_deg=s.settle_rot_deg,source_seq=s.settle_source_seq,source_ts=s.settle_source_ts,
+        measurement_mesh={address=s.probe_mesh_addr,name=s.probe_mesh_fname},generation=generation,
+        pairing="fault-side observation; counterpart availability unproved"}
+end
 local function number(v)
     assert(type(v)=="number"and v==v and math.abs(v)<math.huge,"number unavailable");return v
 end
@@ -144,6 +171,12 @@ local function row(c,e,all_current,stage,label,on_loss,selection,side)
         end)
         assert(e.current(),"scope changed")
     end
+    if e.grip_flags then
+        stage(label..":current_grip_flags")
+        assert(e.current(),"scope changed")
+        attempt(r,"grip_flags",function()return copy(guarded(e,e.grip_flags))end)
+        assert(e.current(),"scope changed")
+    end
     for _,j in ipairs(selection)do
         stage(label..":"..j[1])
         assert(e.current(),"scope changed")
@@ -156,14 +189,17 @@ local function row(c,e,all_current,stage,label,on_loss,selection,side)
     r.observed_end_ms=number(e.now());assert(r.observed_end_ms>=r.observed_ms,"observation clock regressed")
     return copy(r)
 end
-function M.new(emit,focus)
+function M.new(emit,focus,trigger)
+    if trigger~=nil and trigger~=""and trigger~="warm"and trigger~="fault"then return nil,"unsupported joint trigger"end
     local selection,side,coverage
     if focus==nil or focus==""or focus=="right"then
         selection,side,coverage=copy(M.JOINTS),"right","right_only"
     elseif focus=="upperarm_l"then
         selection,side,coverage=copy(M.LEFT_UPPERARM),"left","left_upperarm_only"
+    elseif focus=="hand_r"then
+        selection,side,coverage=copy(M.RIGHT_HAND),"right","right_hand_only"
     else return nil,"unsupported joint focus"end
-    local s={attempts=0,used=false}
+    local s={attempts=0,used=false,trigger=trigger=="fault"and "fault"or "warm"}
     function s:attempt()
         if self.used or self.attempts>=M.MAX_ATTEMPTS then return false end
         self.attempts=self.attempts+1;return true

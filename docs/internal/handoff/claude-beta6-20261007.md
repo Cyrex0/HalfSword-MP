@@ -2108,3 +2108,82 @@ Root final4Lua suites800assertions(Avatar451,profile51,session33,placement265),
 Native44 must prove flags really execute, frame/callback cost, actual6-limb settling
 and the remaining left-shoulder/capsule-body mechanism. Until then no spawn closure,
 main merge or release. Main/release checks stay distinct from manual-lab PASS.
+
+### Native44 completed: six flags execute but spawning remains failed
+
+b1175bb7 dev fullG0 and normal RequireG0 deploy passed69Lua suites,1283Rust/
+75binaries, clippy0errors2warnings/no skips. Raw20261008-155217-bdacbd-combat_manual,
+owned session native-20261008-44; both windows smallest secondary DISPLAY1.
+Correct joint flag/focus upperarm_l and bounded3source-drift observations enabled;
+other probes and expensive native caller off. Owner/exp exit0, menu_quit both,
+no new crashes/orphans/forced kills. Manual basic-state/cleanup PASS is not spawning
+acceptance. Custom recipe145/165=.878788, Box rotation mean35.39/max137.74degrees
+(37samples), clock1reset/10windows. Acceptance is lower than Native43, not a proved
+single-cause experiment or permission to loosen any bound.
+
+19right-hand linear off_confirmed rows retain original111111/actual000000. Zero
+left confirmations and zero restorations logged; unavailable left objects are explicit.
+Initial right hands were close, but left lowerarm173degrees persisted; customr2
+right hand144.7–168degrees and21right-hand reposes remain. One-time flag confirmation
+does not prove contemporaneous flags at the later fault or all bound endpoint/root
+identities as separate log scalars. The policy executes; it does not close arm faults.
+
+Native source/proxy current left-shoulder rows complete in both instances: actual
+index15,clavicle_l→upperarm_l,limits75/75/45,soft50/5/contact1,projection1/0 equal;
+source drive500/1/0 versus proxy0/0/0. Both warm qualificationsfalse, bootstrap match,
+before/overlapping final proxy Set Up Armor. These prove early configuration only,
+not final dressed or later-fault parity. Capture costs184/188ms. Saved dynamic
+counterpart comparison native44-joint-profile-native-comparison.json.
+
+All6SPAWNDRIFT rows current/available, three perprocess: inst1customr3/peer1slot2,
+inst2customr6/peer2slot2. CapsuleXY error62.92–77.58cm, actual physical pelvis COM
+error78.63–92.44cm; body-minus-capsule only15.98–17.16cm. Both physically displaced
+in the same direction; capsule-only false correction is unsupported. Captures6–9ms,
+historical Mesh continuity unknown. This same slot affects both peers. Re-placement
+then creates stale/held source cascades; other arm failures occur without drift.
+Native lower-body balance targets and translated-only rotational placement need
+separate proof. No changing drift threshold or using capsule-only/body-only shortcuts.
+
+Bootstrapr1 failed HSMP2; customr2 failed HSMP1/r3 failed HSMP2; customr1/r4/r5 had
+both6limbsettles and nativeAI combat. Root stopped after bounded recipe. Logged
+active driver cost weighted.777522ms Native43→3.462802ms Native44,4.45x; mean drives
+perwindow296.36→281.31. Callback elapsed/renderFPS excluded. Performance regression
+requires action, not a claim of fixed2FPS. Exact audit flags-performance-audit.json
+and six-source-row analysis native44-source-drift-analysis.json are ignored artifacts.
+
+NEXT: retain flags correctness but avoid setters when an existing exact lease already
+reads all6off, with full fresh binding before/after and original mutation proof on
+any changed flag. Capture actual wrist fault after dressing rather than early warm
+left profile. Sol independently examines incomplete source yaw/physical/native
+balance-target placement; Astra reviews. Main/release remain unfulfilled because
+body spawning and twists still fail. User's order remains spawn fix, main/release,
+then co-op Abyss; do not replace it with unrelated gear/cut expansion.
+
+### Native45 preparation: avoid redundant writes and observe actual wrist faults
+
+Sol fast grip lease path now performs two fresh complete binding resolutions and
+two strict flag reads. Stable six-off flags avoid all setters; any changed flag
+falls through the original guarded mutation path. Native endpoint getter reentry
+must preserve fresh Mesh, constraint and held-root identity before dereferencing
+returned endpoints. Native45 must measure runtime cost; no improvement claimed yet.
+
+DefaultOFF bounded joint capture supports exact hand_r UserConstraint_12 focus and
+fault-only admission from completed six-limb SETTLE state. Measurement Mesh identity,
+generation, full life/cut, aim timestamp, freshness and actual hand stall are checked
+before consuming a capture attempt. Six-limb maxima are labeled as such. Read-only
+grip observations preserve explicit unavailable results, independently unavailable
+lease originals and stable source/binding identity; they never write physical state.
+
+Existing three source-drift captures add actor/control/ground yaw, evaluated socket
+rotations, input and feet positions, native lower-body handle targets and separate
+physical pelvis COM. Physical orientation remains explicitly unavailable; evaluated
+sockets are not independent rigid-body rotations. No new placement setters or bounds.
+Cooked handle first target uses pelvis socket rotation plus90; later ground-yaw
+logic may recompute it, so translated-only rotation is a hypothesis pending game data.
+
+All three scopes frozen and Astra approved. Final offline checks: four suites,
+841 assertions (Avatar466/profile67/placement275/session33), six Lua parses,
+state-file allowlist and whitespace clean. These are mocked/source checks, not native
+spawn acceptance. Native45 uses hand_r focus, fault trigger and bounded drift capture;
+native caller and other expensive probes remain off. Keep spawn→main/release gates
+→co-op Abyss ordering; spawning remains failed on latest completed Native44 evidence.

@@ -171,3 +171,45 @@ T.check(invalid==nil and invalid_reason=="unsupported joint focus","arbitrary co
 e=fixture("upperarm_l");local saved_name=P.LEFT_UPPERARM[1][1]
 P.LEFT_UPPERARM[1][1]="WrongAfterConstruction";r=e:run();P.LEFT_UPPERARM[1][1]=saved_name
 T.check(r and r.source.joints[1].name==saved_name,"probe owns a copied selection unaffected by later table edits")
+
+e=fixture("hand_r");r=e:run()
+T.check(r and r.coverage=="right_hand_only"and #r.source.joints==1 and #e.calls==10
+    and r.proxy.joints[1].current.value.binding.parent=="lowerarm_r"
+    and r.proxy.joints[1].current.value.binding.child=="hand_r","fixed wrist focus keeps actual endpoint checks")
+local function fault_case()
+    local cur={has_context=true,match_id=9,round=2,life=3,cut=4,mode="interp",age=10}
+    local shown={has_context=true,match_id=9,round=2,life=3,cut=4,pawn="Pawn"}
+    local aim={has_context=true,match_id=9,round=2,life=3,cut=4,pawn="Pawn",world="World",at=100}
+    local body={mesh_addr=40,mesh_fname="Mesh",stall={[17]=21}}
+    local state={enabled=true,settle_count=6,settle_ready=false,settle_reason="hand_r rotation",
+        settle_sample_ms=100,settle_pos_uu=2,settle_rot_deg=150,settle_source_seq=8,settle_source_ts=90,
+        match_id=9,round=2,life=3,cut=4,pawn="Pawn",world="World",
+        probe_mesh_addr=40,probe_mesh_fname="Mesh",probe_generation=6}
+    return state,cur,shown,aim,body
+end
+local state,cur,shown,aim,body=fault_case()
+local trigger=P.right_fault(state,cur,shown,aim,body,"World",6,116,20)
+T.check(trigger and trigger.frames==21 and trigger.six_limb_max_rotation_deg==150 and trigger.source_seq==8,
+    "fault trigger copies the prior integrated sample without requiring current source seq")
+state.settle_rot_deg=0;T.check(trigger.six_limb_max_rotation_deg==150,"fault trigger owns copied scalar evidence")
+for _,change in ipairs({function(s)s.settle_count=5 end,function(s)s.settle_ready=true end,
+    function(s)s.settle_reason="upperarm_l rotation"end,function(s)s.life=4 end,
+    function(s)s.probe_mesh_addr=41 end,function(s)s.probe_generation=7 end,
+    function(s)s.settle_sample_ms=-200 end})do
+    state,cur,shown,aim,body=fault_case();change(state)
+    T.check(P.right_fault(state,cur,shown,aim,body,"World",6,116,20)==nil,
+        "incomplete, ready, wrong limb/life/Mesh/generation or old fault refuses")
+end
+state,cur,shown,aim,body=fault_case();body.stall[17]=20
+T.check(P.right_fault(state,cur,shown,aim,body,"World",6,116,20)==nil,"uncapped-threshold sample does not arm a fault capture")
+local bad,bad_reason=P.new(function()end,"hand_r","anything")
+T.check(bad==nil and bad_reason=="unsupported joint trigger","unknown trigger never arms optional reads")
+e=fixture("hand_r");local observed={observed_ms=101,flags={false,false,false,false,false,false}}
+e.proxy.grip_flags=function()return observed end;r=e:run()
+T.check(r and r.proxy.grip_flags.available and r.proxy.grip_flags.value.flags[1]==false,
+    "optional current proxy grip flags remain typed observation with their own time")
+observed.flags[1]=true;T.check(r.proxy.grip_flags.value.flags[1]==false,"grip observation owns its scalar copy")
+e=fixture("hand_r");e.proxy.grip_flags=function()error("binding unavailable")end;r=e:run()
+T.check(r and not r.proxy.grip_flags.available,"unavailable current grip observation does not invent off flags")
+e=fixture("hand_r");e.proxy.grip_flags=function()e.current=false;return observed end;r=e:run()
+T.check(r==nil and #e.records==0,"current grip observation world loss stops the remaining joint getters")

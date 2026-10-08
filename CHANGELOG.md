@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Avoid repeated grip motor writes when the same freshly verified binding already
+  has all six linear drive flags disabled, preserving restoration checks.
+- Capture bounded developer wrist settings and current grip flags during an actual
+  settling fault, and distinguish native spawn rotation targets from physical body data.
 - Disable native linear grip motors on a driven proxy using six verified enable
   flags, preserving native strengths and restoring exact flags to the same binding.
 - Add focused developer observations for the left shoulder and three protected
