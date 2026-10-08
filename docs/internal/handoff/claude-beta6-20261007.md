@@ -2624,3 +2624,147 @@ cleanup for unobserved records. Supervisor also watches its administrative stop
 file, enforcing its ten-second owned-child fallback even if native quit fails.
 The regular native IPC probe is explicitly disabled as well as the caller probe.
 Native spawning, frame publication, input, damage/cuts and Abyss remain unproved.
+
+### 2026-10-08 release scope and native authority continuation
+
+The human explicitly selected releasing the existing PvP build with accepted
+issues today, while headless co-op continues on dev. They also want headless
+authority for PvP, with native attacks/forces shared by both modes. Do not ship
+the incomplete native host as functional in beta.6 or restore the old broker
+architecture. Only Sol6.1 high/extra-high agents are authorized.
+
+Dev7bfff3d6 passed full G0 and was pushed: the one-shot worker startup and owned
+cleanup corrections are verified offline, but the corrected worker has not yet
+been retried in the game. The existing PvP candidate is isolated at
+C:/Users/johns/.codex/worktrees/pvp-beta-release/HalfswordMultiplayert on
+codex/pvp-beta-6, based on pre-headless8b2fa47b. Metadata99e12173 sets beta.6,
+documents accepted spawn/arm/body/clothing/cut limitations, and requires matching
+protocol12 clients and servers (published beta.5 used protocol6).
+
+Candidate820a012f includes fixture7600012c and the pre-push Git environment fix.
+The original linked-worktree push exposed inherited GIT_DIR contaminating test
+git init: common core.bare became true. Root restored only core.bare=false,
+verified both intended heads/clean trees and author identity, and the hook now
+clears canonical Git-local environment variables after its original push/dirty
+checks. A private regression reproduced the linked-worktree fault and verified
+isolation. Shared core.hooksPath still points at the dev checkout; release pushes
+must explicitly select the release worktree hook. No Git guards were removed.
+
+Full G0 passed on820a012f (70 Lua suites,1283 Rust tests,75 binaries; clippy no
+errors/2 warnings), and that candidate was pushed. Native CTest passed9/9 after
+supplying the existing sampler fixture its mandatory original life context.
+The trusted existing signing key and game/UE4SS/proxy pins were checked without
+printing private material. A signed256-file beta.6 package verifies; two builds
+are byte-identical. Its current private candidate SHA is
+18bff39cf4bf0c2ab1501c6a4066b4393baf13da3a60a2e570f3070138846b57.
+This candidate is not published and must be rebuilt after the pending fixes.
+
+G1 INFO run test-results/pvp-beta6-e2e-info ended183 pass/12 fail. An earlier
+warn-only invocation was interrupted because log assertions lacked evidence.
+The INFO failures have stale fixture inputs: hardcoded protocol6; zero/missing
+match/round/life; loaded status rejected before transmission; lobby roots where
+only qualified live roots are legal; modern contact lacking scoped source and
+victim history. Net Sol owns four E2E scripts plus minimal ipcgame.rs encoding
+support for explicit complete context/body-striker records, preserving all
+production validation and meaningful modern contact checks. Batch the corrected
+scripts, tools and pending menu fix before the next full gate/package checkpoint.
+
+Actual native map_change on820a012f completed all15 steps: both lobby connections,
+Yard/Slums/Cellar picks, both Cellar world-ready events, abort and menu quit.
+Windows were placed on DISPLAY1 at-1760/-880,880x527. No new crash dumps; original
+career hashes unchanged; no forced game kills/orphans. DoD4/12/state/netsim passed.
+DoD10 failed: an outstanding auto-ready command was locally refused during quit;
+one server answer was already queued100ms, the other arrived7ms after reset.
+Native Sol owns a real bounded-teardown fix: stop new/retried commands, retain
+pending IDs, drain server replies during the existing leave poll, reset remaining
+unanswered IDs only at completion. No additional wait or gate exception.
+Raw evidence: test-results/20261008-210447-c4ca4d-map_change. G2 is not green.
+
+Next headless steps still require an actual corrected-worker retry, then source
+descriptors and client mirrors. Source CharacterPassport equipment is consumed
+by native setup, so worn armor must also come from Currently Equipped Armor;
+existing ArmorRow omits SlotsBlocked. Persistent cut component census uses
+same-world/owner/weak-qualified skeletal components tagged Dismembered, not
+latest-cut scratch maps. Poseable leaders with collision-free skeletal followers
+can display source poses/morphs; generated SDK struct-input wrappers omit some
+inputs, requiring verified reflection marshaling. The23 physical bones omit
+animated fingers/face and complete geometry. These are primary-source proposals,
+not a verified display/runtime. Preserve exact recipes/scale/material/topology
+and fail incomplete captures rather than inventing source defaults.
+
+The dev native CMake cache was preserved as target/hsmp-native-cmake-dev; the
+current target/hsmp-native-cmake is built from the PvP release worktree. Do not
+reuse its DLL as the embedded-headless dev DLL. Rust cached builds were serialized
+where they share target; reproducible release builds use the release worktree's
+own target/release-repro directories. No PR, main merge, tag or publication yet.
+
+### 2026-10-08 PvP publication checkpoint (supersedes candidate status above)
+
+The owner again asked whether the public release exists. PR8 is now open as a
+draft: https://github.com/Cyrex0/HalfSword-MP/pull/8, main from codex/pvp-beta-6.
+GitHub CI is running. Nothing is tagged/published at this checkpoint.
+
+The corrected menu teardown is b85c8b73. Actual map_change now passes all rules:
+test-results/20261008-213732-9f0b67-map_change. Actual reconnect passed all rules,
+including an eight-second blackout restoring the same seat/score:
+test-results/20261008-214547-51f9dd-reconnect. Small actual two-round Yard P0
+test-results/20261008-214152-be1dfc-p0_gate passed all functional combat, spawn,
+world, state and smoothness rules; POSE-1 alone failed foot slide at8.0418/6.0603cm
+against5cm. This is an explicitly recorded accepted beta visual limitation,
+not a green full G2 or evidence of complete native gear/body parity.
+
+Modern E2E fixtures use actual original context and body-striker history.
+Follow-up20e994a4 corrects fake publisher liveness/sample ticks, exact float32
+display checks and incomplete JSON reads. Full INFO network suite completed
+195PASS/0FAIL: test-results/pvp-beta6-e2e-publish.log. Local Cloudflare Worker
+test skipped due Node20; deployed /v1/health and /v1/servers were checked.
+Full G0 on20 passed70Lua suites/1284Rust tests/clippy, and20 is pushed.
+
+Native start_refused passed on20:
+test-results/20261008-215733-72755f-start_refused. The first host_leave attempt
+never reached departure: START preceded client2's accepted ready by119ms.
+454c3d0b adds the legitimate source=server/ok=true/ready reply prerequisite for
+each client before START in host_leave and server_restart, leaving start_refused
+and all gameplay bounds unchanged. Focused wait/scenario tests passed. Clean
+release HEAD5ebc4da3 includes that fixture and truthful final release docs; native
+Sol owns the remaining departure/restart/bad-map sequence exclusively.
+
+The private signed256-file20 package verifies at
+test-results/pvp-beta6-publish-dist/hsmp-0.1.0-beta.6.zip, SHA256
+073cd3c1b89642cda4e58e13aaa3cd71e80f892339c5d13a35ec245b4101d6cb.
+It is NOT the final public asset: rebuild twice from actual merged main source,
+verify signature/files/reproducibility, then publish beta.6 with exact zip and
+checksum names. Update this handoff with actual final commit/hash/URL.
+
+### Published PvP beta.6 and resumed headless authority pivot
+
+The authorized PvP release is public:
+https://github.com/Cyrex0/HalfSword-MP/releases/tag/v0.1.0-beta.6
+PR8 merged to main4f3018826bd2f12c105f2146986bb9052febb129; the merge tree is
+identical to verified release5ebc4da3. Final pre-push G0 passed70Lua suites,
+1286Rust tests and clippy. Native host_leave/server_restart/map_change-bad all
+passed on5e with runtime-equivalent deployment20; no crashes/forced games/orphans,
+original career hashes unchanged. Evidence summary:
+test-results/pvp-beta6-native-connectivity-20e994a4-summary.json.
+
+The actual main package rebuilt all inputs and passed9/9 native CTest, signed
+256-file verification and byte-identical second packaging. Server/sidecar and
+package protocol12/IPC2.0/layout262ac8453e7af06c/content identities match.
+Public28,111,890-byte ZIP was downloaded without authentication and its checksum,
+signature and all files verified. SHA256:
+79bc2f4a2dff76536b05a14187ffd8e3105e21a9ac03db4c3e7f425ba49c1149.
+Tag points exactly at main4f301882; the public launcher update feed includes the
+non-draft prerelease with both exact required asset names. Never rebuild or
+replace this published beta.6. Full G2/native parity remains explicitly unproved.
+
+Main CI37845382939 was still running at publication, recorded openly in release
+notes. Linux server, Docker and clippy have since passed; Windows G0/e2e remain
+in progress at this continuation checkpoint. Do not claim final remote CI green
+until read. The requested Discord message was drafted, not posted.
+
+The human now explicitly resumes the headless Half Sword client as dedicated
+authority for both PvP and co-op Abyss. Merge main's release fixes into dev while
+retaining the native embedded service. Restore the saved dev CMake cache before
+building/testing native worker startup7b. Keep the networking layer for transport,
+auth/session ownership only; authoritative physics/damage/AI/gear belong to the
+engine. Two observer DTOs alone do not establish a playable visible client.
