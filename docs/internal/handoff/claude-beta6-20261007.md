@@ -2266,3 +2266,95 @@ reads, finite monotonic timing stored only in current assignment's plain counter
 Calls/moved/total/max append only to the existing once hold-release log. DefaultOFF
 adds no clock/stat reads; no new UE gets/setters/files or per-frame logging. Actual
 source pose sender timing starts after placement and would not measure this cost.
+
+### Native46 completed: source drift remains; user demands direct lifecycle correction
+
+763aba06 fullG0, exactdevpush and normalRequireG0deploy passed; harness quickG0
+also passed with diagnostic environment, confirming fixture isolation correction.
+Raw20261008-171510-724b19-combat_manual, session native-20261008-46, both windows
+on smallest secondary DISPLAY1. Owner/180s recipe exited0, both menu_quit/eventloop
+ended, no new crash dumps. Manual basic-state/cleanup PASS is not spawn acceptance.
+337/346 claims accepted; honest subset337/342=.98538011696 (user's earlier98.35
+sample threshold exceeded, NOT overall progress or spawn acceptance). Box rotation
+mean38.263/max178.276degrees,77samples. One foot-r stall/repose logged; severe
+upperarm/wrist rotation remained in diagnostic/physical-ready checks. User personally
+reported one actor moving while protected and wrong arm again; root acknowledged
+foot carry had not solved whole-body drift and stopped after the bounded run.
+
+Early recipe rounds1/2 verified placement try1 and both6limbsettles; later recipe
+r6 inst2 peer2 slot2/spawn1537 repeatedly drifts. Three exact current observations:
+capsule64.28/61.05/79.80cm, physical pelvis COM75.61/75.94/94.62cm, native input0,
+body-minus-capsule15.5–16cm. Re-verification13–44cm then repeated>60cm watchdog
+re-placement resets source freshness and creates source held/stale + upperarm errors.
+All values overlapNative45; the four-target repair closes a consistency defect but
+does not prove convergence. Final source audit native46-hold-drift-live.json.
+
+27timed hold-release rows, worst call60ms; three max>=50ms rows (60/59/58), row
+mean1.0–9.474ms. Later failed re-placements often short no-move holds, so cost is
+not proved sole drift cause. Rotation observations84–95ms separate from hold cost.
+Shared release logs have no exact process/assignment IDs; attribution unavailable,
+no time-only join or summing cumulative retry aggregates as independent totals.
+
+Both fault captures refused, zero completed profiles. inst2 123ms fails proxy hand
+stage Session53→54 with loaded_round/waiting change; attempt precedes actual proxy
+kit_verified by268ms. inst1 156ms fails proxy wrist accessor Session190→191 after
+proxy kit_verified10.102s; tap comparison changes onlyseq/server_time_ms, sameLive
+full semantic fields. Keep guard/refusal evidence; no fault flags/angles/current
+paired grip proof. Next physical test disables JOINTPROFILE to remove those stalls.
+
+Concrete lifecycle gap: full hold ends0.9s after teleport and skips c.done, while
+spawn protection continues Loading/Countdown. Native balance then moves the body
+without movement input. Native47 work GO: keep original initial0.9s fullhold,
+then exact protected Loading/Countdown residual position carry only (no blanket
+body/weapon velocity cancellation), including verified c.done; release beforeLive,
+never anchor warm respawn/no_protect/wounded/old assignments. Preserve all world,
+body/field bindings, physical simulation and readiness/position/arm bounds.
+
+Sync/Match agreed existing local SpawnStatus why=anchor_released + original durable
+t in seconds, full match/round/life/spawn/pawn/arena/verified/positive seq. No new
+network schema. Release only after fresh exact initialLive, never inferred from
+protect_until or unknown world/session. Match first input must not reuse old
+qualification/hold-era stable proof. New post-release suffix requires actual
+min(settle_stable_ms,settle_sample_ms-original_local_release_ms)>=150, strictly
+newer/fresh sample and unchanged fullscope/6limbs/5uu/10degrees. This avoids a
+deadlock from demanding continuous producer interval start after release, while
+proving the whole last150ms was actually stable and after release. Do not rewrite
+producer timestamps or compare clocks across clients. Astra approved design;
+implementation owned Sync by Sol, Match/helper/fixtures by Armor. Root will review,
+G0/deploy and run native evidence; main/release still conditional on spawn correction.
+
+### Native47 frozen implementation: close protected anchoring lifetime gap
+
+Sync now keeps exact initial Loading/Countdown residual XY anchoring after the
+original0.9s transient hold, including c.done, until initialLive. Continuation
+does not cancel any mesh or weapon linear/angular velocity, including nested
+carry_weapons; no-residual continuation performs no physical setters. All original
+finite0.9s Livefall/DM/no_protect/warm holds retained, only new continuation/ACK
+excluded there. Phase changes inside reflected getters stop later old setters.
+FirstLive source disables anchor independently of input, native-qualifies current
+world/pawn/Mesh, then writes durable existing SpawnStatus marker and original t.
+No guessed protect_until release or new network schema; rewritten status preserves t.
+
+Match normal firstLoading pipeline (typednativephase1 maps countdown) requires
+exact ACK, an actual newer own pose and150ms contained measured physical suffix
+after release. Old qualification cannot bypass first proof. Exact release-qualified
+context survives paused/reconnected injured same-life control; warm firstLive
+never anchored does not require ACK. All6limbs/5uu/10degrees/150ms and existing
+freshness/health/collision/source/context guards unchanged. Producer samples untouched.
+
+Root found test AI can bypass human input barrier: Parity previously gates server
+Live and AI_PROOF only. It now additionally requires strict false from actual
+Controller:IsMoveInputIgnored immediately after proof, then fresh native PCworld,
+same controller address and current pawn address+FName before takeover. Unknown/
+throw/travel/possession/reused pointer refuse. Ongoing already-controlled AI intent
+unchanged; actual Native47 scripted mover disabled. This controller flag is actual
+input state, not an exclusive Director token (scripted mover can also reset it).
+
+Astra approved all3frozen scopes. Final5suites1216assertions(Avatar475/Director335/
+Sync323/ParityAI50/session33), seven Lua parses, state-files and whitespace pass.
+AI fixture's replacement world has a real matching name but different address,
+and verifies no post-getter old pawn read on world loss. Native47 must show protected
+body staysplaced, arm settling, postrelease input/AI and convergence. JOINTPROFILE
+disabled to avoid123/156ms failed capture stalls; native caller/hand/limb probes off.
+Existing bounded drift observations and plain hold timing may remain enabled.
+No main/PR/release yet: Native46 visibly failed the user's spawning requirement.

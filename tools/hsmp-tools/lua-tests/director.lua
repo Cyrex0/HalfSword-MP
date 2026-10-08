@@ -123,6 +123,57 @@ do
     T.check(not proof:check(input), "a new world with reused pawn and life must observe new samples")
 end
 
+T.log("== initial anchor release requires a measured fresh physical suffix")
+do
+    local R, proof = D.SpawnReady, D.SpawnReady.new()
+    local function vital(life, seq) return {match_id=91,round=3,life=life,seq=seq,flags=0,v={6400}} end
+    local remote={peer=2,match_id=91,round=3,life=2,pawn="proxy",vitals=vital(2,20),native={alive=true,collision=true},
+        source={match_id=91,round=3,life=2,peer_id=2,has_context=true,age=70,mode="interp",cut=7},
+        playback={match_id=91,round=3,life=2,pawn="proxy",local_ms=1000,settle_world="123@World arena",
+            settle_sample_ms=1000,settle_stable_ms=500,settle_source_ts=900,settle_source_seq=50,
+            settle_cut=7,settle_ready=true,settle_count=6,settle_pos_uu=5,settle_rot_deg=10}}
+    local input={world="arena#1",native_world="123@World arena",now_ms=1000,
+        own={match_id=91,round=3,life=130,pawn="owner",spawn_id=770,arena="arena",status_since=0.5},
+        root={match_id=91,round=3,life=130,ts=1000},pose={match_id=91,round=3,life=130,ts=1000,tick=30},
+        vitals=vital(130,10),remotes={remote}}
+    local function advance(now)
+        input.now_ms,input.root.ts,input.pose.ts,remote.playback.local_ms=now,now,now,now
+        input.pose.tick,input.vitals.seq,remote.vitals.seq=input.pose.tick+1,input.vitals.seq+1,remote.vitals.seq+1
+    end
+    proof:check(input);advance(1100);input.qualify_settle=true
+    T.check(proof:check(input),"fixture has an actual prior same-life qualification")
+    input.require_anchor_release=true
+    T.check(not proof:check(input),"an old qualified token cannot bypass missing release acknowledgement")
+    input.spawn_status={seq=2,verified=true,why="anchor_released",error="",match_id=91,round=3,life=130,
+        pawn="owner",arena="arena",spawn_id=770,t=1.1}
+    local ok,why=proof:check(input)
+    T.check(not ok and why=="own pose before local anchor release","old250ms source proof is refused after release",why)
+    advance(1101)
+    ok,why=proof:check(input)
+    T.check(not ok and why=="peer 2 physical sample before local anchor release","a hold-era physical sample cannot reuse its token",why)
+    advance(1249);remote.playback.settle_sample_ms=1249
+    T.check(not proof:check(input),"continuously healthy pre-release interval still waits149ms after release")
+    advance(1250);remote.playback.settle_sample_ms=1250
+    T.check(proof:check(input),"new150ms suffix passes without rewriting an older continuous measured interval")
+    T.check(remote.playback.settle_stable_ms==500 and input.spawn_status.t==1.1,"producer stability and original release clock remain intact")
+    remote.playback.settle_stable_ms=149
+    T.check(not proof:check(input),"enough post-release wall time cannot cover a shorter measured stable interval")
+    remote.playback.settle_stable_ms=500;remote.playback.settle_rot_deg=10.001
+    T.check(not proof:check(input),"a release cache cannot bypass the existing angular threshold")
+    remote.playback.settle_rot_deg=10;input.spawn_status.life=2
+    T.check(not proof:check(input),"compact-life alias cannot relabel the exact local release")
+    input.spawn_status.life=130;input.spawn_status.spawn_id=771
+    T.check(not proof:check(input),"another assigned spawn cannot acknowledge this initial anchor")
+    input.spawn_status.spawn_id=770;input.spawn_status.t=0.49
+    T.check(not proof:check(input),"an old world release before pipeline start is refused")
+    input.spawn_status.t=1.251
+    T.check(not proof:check(input),"a future release clock is refused")
+    input.spawn_status.t=1.1
+    T.check(proof:check(input),"restored exact release scope recovers without timeout admission")
+    input.require_anchor_release=false;input.spawn_status=nil;remote.playback.settle_ready=false
+    T.check(proof:check(input),"already-qualified same-life resume retains wounded control without another anchor ACK")
+end
+
 T.log("== visible census cannot release Live while combat spawn proof is missing")
 do
     local ready = false
@@ -136,6 +187,80 @@ do
     T.check(w.frozen ~= false and w.dir.ready_round == 0, "a server Live snapshot cannot release this unverified pawn")
     ready = true; w:tick(2)
     T.check(w.dir.ready_round == 1 and w.dir.state == "Live" and w.frozen == false, "verified native proof releases the current pawn")
+end
+
+T.log("== native Loading and warm Live pipelines scope the initial release requirement")
+do
+    local w=new_world()
+    w:sidecar_status("connected");w:match("lobby","Map_Arena_Pit",0);w:session(7,91);w:start();w:tick(4)
+    w:match("loading","Map_Arena_Pit",0);w:spawns(1,"Map_Arena_Pit",100,200,10);w:tick(1);w:load();w:tick(2)
+    T.check(w.dir.sess.phase=="countdown" and w.dir.pipe.initial_anchor==true,
+        "typed native Loading1 reaches the exact initial-anchor pipeline through countdown normalization")
+    w:placed(1);w.kit_status={pawn=w.pawn.id,ok=true,stable=true};w.census_n=1;w:tick(8)
+    T.check(w.dir.state=="Ready" and w.dir.ready_context.require_anchor_release==true,
+        "verified Loading placement reaches Ready without waiting for an anchor release")
+    local request
+    w.env.combat_ready=function(p)request=p;return true end
+    w:match("live","Map_Arena_Pit",1);w:tick(1)
+    T.check(request and request.require_anchor_release==true and request.spawn_id==w.dir.applied_spawn_id
+        and request.status_since==w.dir.ready_context.status_since,"first cold Live passes its exact original assignment and release requirement")
+    w:match("paused","Map_Arena_Pit",1);w:tick(1);w:match("live","Map_Arena_Pit",1);w:tick(1)
+    T.check(request.require_anchor_release==false,"already-qualified exact paused life does not demand another anchor release")
+    local session=w.dir.get_session()
+    w.dir:start_pipeline(w.env.world(),session,"warm Live join",1,w.clock)
+    T.check(w.dir.pipe.initial_anchor==false,"a life1 pipeline first observed in Live does not manufacture an anchor requirement")
+end
+
+T.log("== actual combat-ready adapter consumes the typed local release bus")
+do
+    local NM=require("hsmp_native_mock")
+    local N=NM.new{}
+    local I=dofile(T.path("mods/shared/hsmp_ipc.lua"))
+    local now=1000
+    I.init({mod="HSMPMatch",native=N,clock=function()return now/1000 end,log=function()end,reinit=true})
+    local world={IsValid=function()return true end,GetAddress=function()return 123 end,GetFullName=function()return "World arena"end}
+    local proxy={Health=100,DED=false,IsValid=function()return true end,
+        GetFName=function()return {ToString=function()return "proxy"end}end,GetActorEnableCollision=function()return true end}
+    proxy.Mesh={IsValid=function()return true end,IsVisible=function()return true end,
+        IsSimulatingPhysics=function()return true end,GetCollisionEnabled=function()return 3 end}
+    local old_find,old_name=_G.FindAllOf,_G.FName
+    _G.FindAllOf=function()return {proxy}end;_G.FName=function(v)return v end
+    local env=D.make_ue_env({WG={settled=function()return true end,world=function()return world end},
+        UEHelpers={},log=function()end,ev=function()end,state_dir="x"})
+    env.ipc=I;env.now=function()return now/1000 end
+    local p={key="arena#1",pawn_id="owner",arena="arena",match_id=91,round=3,life=130,verified_life=130,
+        spawn_id=770,status_since=0.5,qualify_settle=true,require_anchor_release=true}
+    local s={phase="live",my_id=1,round=3,roster={{id=1,role="fighter"},{id=2,role="fighter"}}}
+    local pose={match_id=91,round=3,life=130,ts=now,tick=30}
+    I.sample_status=function()return {pose=pose}end
+    I.peer_slot=function()return 0 end
+    I.peer_play=function(_,out)for k,v in pairs({match_id=91,round=3,life=2,peer_id=2,has_context=true,age=30,mode="interp",cut=7})do out[k]=v end end
+    local function publish(sample,stable)
+        pose.ts,pose.tick=now,pose.tick+1
+        N.sc_put("local_root",{match_id=91,round=3,life=130,ts=now,rot={0,0,0,1}})
+        N.sc_put("vitals",{match_id=91,round=3,life=130,seq=pose.tick,flags=0,v={6400}})
+        N.sc_put("peer_vitals",{match_id=91,round=3,life=2,seq=pose.tick,flags=0,v={6400}},0)
+        N.sc_put("mode",{seq=1,match_id=91,round=3,rows={{peer_id=1,life=130,alive=true},{peer_id=2,life=2,alive=true}}})
+        I.bus_put("puppets",{rows={{peer=2,name="proxy"}}})
+        I.bus_put("playback",{rows={{peer=2,match_id=91,round=3,life=2,pawn="proxy",local_ms=now,
+            settle_world="123@World arena",settle_sample_ms=sample,settle_stable_ms=stable,settle_source_ts=900,
+            settle_source_seq=50,settle_cut=7,settle_ready=true,settle_count=6,settle_pos_uu=5,settle_rot_deg=10}}})
+    end
+    publish(1000,500);env.combat_ready(p,s,{})
+    now=1101;publish(1101,500)
+    local status={seq=1,match_id=91,round=3,life=130,pawn="owner",arena="arena",spawn_id=770,
+        why="anchor_released",verified=true,t=1.1,error=""}
+    I.bus_put("spawn_status",status)
+    local ok,why=env.combat_ready(p,s,{})
+    T.check(not ok and why=="peer 2 physical post-release stabilizing","real adapter reads the release bus and refuses the held-era suffix",why)
+    now=1250;publish(1250,500)
+    T.check(env.combat_ready(p,s,{}),"real adapter accepts exact new150ms stable suffix after the original release")
+    p.require_anchor_release=false;I.bus_put("spawn_status",{})
+    now=1260;publish(1260,0)
+    T.check(env.combat_ready(p,s,{}),"real adapter retains same-life qualification on resume without a new release bus")
+    p.require_anchor_release=true;status.life=2;I.bus_put("spawn_status",status)
+    T.check(not env.combat_ready(p,s,{}),"real adapter refuses stale compact-life release despite retained qualification")
+    _G.FindAllOf,_G.FName=old_find,old_name
 end
 
 T.log("== first Live input release refreshes Ready proof, then ordinary injuries retain control")

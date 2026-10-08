@@ -23,6 +23,9 @@ world.GetFullName = function() return "World /Game/Maps/Arena.Arena" end
 local native_world = tostring(world:GetAddress()) .. "@" .. world:GetFullName()
 local pc = obj("PC", "PlayerController")
 pc.Pawn, me.Controller, me.Player = me, pc, true
+local input_ignored=false
+pc.IsMoveInputIgnored=function()return input_ignored end
+pc.GetWorld=function()return world end
 me["Team Int"], remote["Team Int"] = 1, 101
 remote.Health, remote.DED = 100, false
 remote.GetActorEnableCollision = function() return true end
@@ -110,7 +113,32 @@ remote.DED=false; source.age=-12; shown.settle_ready=false; shown.settle_reason=
 T.check(takeovers == 0, "a physically twisted spawned hand prevents AI handover despite fresh pose, health and collision")
 shown.settle_ready=true; shown.settle_stable_ms=149; advance(); api.ai_tick()
 T.check(takeovers == 0, "AI waits for continuous actual limb stability")
-shown.settle_stable_ms=150; advance(); api.ai_tick()
+shown.settle_stable_ms=150; input_ignored=true; advance(); api.ai_tick()
+T.check(takeovers==0,"server Live and healthy limbs cannot bypass the local first-input gate")
+input_ignored=nil; advance(); api.ai_tick()
+T.check(takeovers==0,"unavailable native input state never invents an AI release")
+local input_get=pc.IsMoveInputIgnored
+pc.IsMoveInputIgnored=function()error("input getter unavailable")end; advance(); api.ai_tick()
+T.check(takeovers==0,"a throwing native input getter refuses takeover")
+pc.IsMoveInputIgnored=function()pc.Pawn=foreign;return false end; advance(); api.ai_tick()
+T.check(takeovers==0,"input getter possession reentry cannot hand a temporary pawn to AI")
+pc.Pawn=me;pc.IsMoveInputIgnored=input_get
+local reused=obj("ReusedPawn");reused.GetAddress=me.GetAddress
+pc.IsMoveInputIgnored=function()pc.Pawn=reused;return false end;advance();api.ai_tick()
+T.check(takeovers==0,"a reused address with a different native pawn name cannot borrow input release")
+pc.Pawn=me;pc.IsMoveInputIgnored=input_get
+local pc_world_get=pc.GetWorld
+local old_pawn_reads=0
+local pawn_get_addr=me.GetAddress
+me.GetAddress=function()old_pawn_reads=old_pawn_reads+1;return pawn_get_addr()end
+local replacement_world=obj("ReplacementWorld","World")
+replacement_world.GetFullName=world.GetFullName
+pc.GetWorld=function()return replacement_world end;input_ignored=false;advance();api.ai_tick()
+T.check(takeovers==0,"fresh native controller world loss refuses despite unchanged cached world key")
+T.check(old_pawn_reads==1,"fresh native world mismatch stops before any post-getter old pawn identity read")
+me.GetAddress=pawn_get_addr
+pc.GetWorld=pc_world_get
+input_ignored=false; advance(); api.ai_tick()
 T.check(takeovers == 1 and combat_calls == 1 and pc.Pawn == nil and pc.camera == me, "correct fighter takes over exactly once after all current-life proof")
 pc.Pawn, foreign.Controller = foreign, pc
 advance(); api.ai_tick()

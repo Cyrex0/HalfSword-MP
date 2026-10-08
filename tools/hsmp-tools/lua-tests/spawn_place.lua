@@ -335,7 +335,9 @@ do
     local d = math.sqrt((w2.pawn.x - st.x) ^ 2 + (w2.pawn.y - st.y) ^ 2)
     T.check(d <= SP.T.verify_tol_cm and SP.T.verify_tol_cm == 100 and st.tol_cm == 100,
         "on the spot (<= 100 cm, tol_cm carried for the gate)", d)
-    T.check(T.contains(w2:logtext(), "hold released after"), "hold release logged")
+    T.check(not T.contains(w2:logtext(), "hold released after"), "protected placement keeps residual anchoring after verification")
+    w2:go_live();w2:tick()
+    T.check(T.contains(w2:logtext(), "hold released after"), "hold release logged at Live")
 end
 
 T.log("== developer hold timing stays scalar, assignment-scoped and release-only")
@@ -361,7 +363,7 @@ do
     T.check(clocks==4 and calls==2 and t.calls==2 and t.moved==1
         and math.abs(t.total_ms-3)<1e-8 and math.abs(t.max_ms-2)<1e-8,
         "exactly two clocks bracket each real hold call; scalar totals retain moved count, sum and maximum")
-    local n=#w.logs;w.sp:hold_step(c.hold_until);w.sp:hold_step(w.clock+20)
+    local n=#w.logs;w:go_live();w.sp:hold_step(w.clock);w.sp:hold_step(w.clock+20)
     T.check(clocks==4 and #w.logs==n+1 and T.contains(w.logs[#w.logs],"hold calls=2 moved=1 total_ms=3.000 max_ms=2.000"),
         "timing appends to the existing once-only release log, never per frame")
     w,c=make(true);clocks=0
@@ -376,6 +378,61 @@ do
         T.check(clocks==2 and c.hold_timing==nil,"backwards/nonfinite duration is unavailable without changing hold behavior")
     end
     os.clock=saved_clock
+end
+
+T.log("== protected residual anchoring survives the initial delay and stops before Live")
+do
+    local w=placed_world();local full,continuation=0,0
+    w.env.hold=function(p,dest,tol,scope)
+        if not scope.current() then return false end
+        if scope.continuation then continuation=continuation+1 else full=full+1 end
+        if math.abs(p.x-dest.X)>tol then p.x=dest.X;return true end
+        return false
+    end
+    w:secs(4);local c=w.sp.cur;local teleports=w.teleports;local verified=w.sp.status_seq
+    for _=1,180 do w.pawn.x=w.pawn.x+7;w:tick()end
+    T.check(c.done and full>0 and continuation>180 and w.teleports==teleports and w.sp.cur==c
+        and w.sp.status_seq==verified and math.abs(w.pawn.x-c.dest.X)<=SP.T.hold_tol_cm,
+        "ongoing native balance after0.9s stays anchored after c.done without repeated placement/source invalidation")
+    local calls=full+continuation;w:go_live();w:tick()
+    local st=w:status();local release=st.t
+    T.check(full+continuation==calls and c.hold_until==nil and st.why=="anchor_released" and st.verified and release==w.clock,
+        "first Live releases before any hold call and explicitly acknowledges the exact verified assignment")
+    w.clock=w.clock+2;w.sp:write_status(c,true,nil);st=w:status()
+    T.check(st.t==release and st.why=="anchor_released" and st.match_id==c.plan.match_id and st.life==c.e.life
+        and st.spawn_id==c.e.spawn_id,"status refresh preserves original release timestamp and full life, never freshens the ACK")
+    w.pawn.props.Health=43;w.pawn.x=w.pawn.x+20;w:tick()
+    T.check(full+continuation==calls and w.pawn.props.Health==43,"ongoing wounded Live is never anchored or healed by the release path")
+    local q=placed_world();q.env.hold=function()return false end;q:secs(4)
+    q.env.hold=function(_,_,_,scope)
+        q:go_live()
+        T.check(not scope.current(),"production continuation guard refuses a reflected Loading/Countdown-to-Live phase change")
+        return false
+    end
+    q.sp:hold_step(q.clock)
+    for _,kind in ipairs({"phase","session","assignment","no_protect","respawn"})do
+        local q=placed_world();q.env.hold=function()return false end;q:secs(4)
+        q.env.hold=function()error("forbidden anchor")end
+        local cur=q.sp.cur
+        if kind=="phase" then q.mstate="paused"
+        elseif kind=="session" then q.env.session_live=function()return false end
+        elseif kind=="assignment" then local row=R.deep(q.plan.by_peer[1]);row.life=2;q.plan.by_peer[1]=row
+        elseif kind=="no_protect" then cur.no_protect=true
+        else q.sp.respawn_spawn=true end
+        local ok=pcall(function()q.sp:hold_step(q.clock)end)
+        T.check(ok and cur.hold_until==nil and not cur.anchor_released_at,
+            "unknown/changed/Live-respawn scope cannot continue anchoring or manufacture a release ACK: "..kind)
+    end
+    for _,kind in ipairs({"no_protect","respawn"})do
+        local q=placed_world();local calls=0;q.env.hold=function(_,_,_,scope)calls=calls+1;assert(not scope.continuation);return false end
+        q:secs(2.1);local cur=q.sp.cur;q:go_live();q.sp.live_seen=true
+        if kind=="no_protect" then cur.no_protect=true else q.sp.respawn_spawn=true end
+        local before=calls;q.sp:hold_step(q.clock)
+        T.check(calls==before+1 and not cur.anchor_released_at,"existing finite full hold is retained for Live "..kind)
+        q.clock=cur.hold_until;q.sp:hold_step(q.clock)
+        T.check(calls==before+1 and not cur.hold_until and not cur.anchor_released_at,
+            "Live "..kind.." releases at its original0.9s deadline without new continuation/initial ACK")
+    end
 end
 
 T.log("== capsule on the spot but the visible body left behind is NOT placed")
@@ -1293,13 +1350,13 @@ T.log("== protected residual pins carry the four native absolute balance targets
 do
     local function make(opts)
         opts=opts or{}
-        local world,replacement={},{}
+        local world,replacement={},{};local phase="countdown"
         local p={x=opts.residual or 20,y=0,z=100,id="Willie_Current"}
         local pc={Pawn=p,world=world,IsValid=function()return true end}
         local reads,world_checks,old_touches,writes,target_reads=0,0,0,0,0
         local function touch()
             reads=reads+1
-            if pc.world~=world then old_touches=old_touches+1;error("old native access")end
+            if pc.world~=world or phase~="countdown" then old_touches=old_touches+1;error("old native access")end
         end
         local function native(o,addr,name)
             o.IsValid=function()touch();return true end
@@ -1323,6 +1380,7 @@ do
             target.K2_GetComponentLocation=function()
                 touch();target_reads=target_reads+1;target.reads=target.reads+1
                 if i==1 and opts.get_world_flip then pc.world=replacement end
+                if i==1 and opts.get_phase_flip then phase="live" end
                 if i==1 and opts.field_swap then local r={GetOwner=target.GetOwner};native(r,31,"RebuiltTarget");p[field]=r end
                 if i==1 and opts.owner_swap then target.owner=mesh end
                 if i==1 and opts.pawn_swap then local r={};native(r,11,"NewPawn");pc.Pawn=r end
@@ -1353,8 +1411,20 @@ do
         local ctx={UEHelpers={},pc=function()return pc end,drift_drops=function()return 0 end,
             drift_world_current=function(key,drops)world_checks=world_checks+1;return key=="Arena#PC"and drops==0 and pc.world==world end}
         local env=SP.make_ue_env(ctx)
-        local scope={world="Arena#PC",pawn=p.id,current=function()return true end}
+        local scope={world="Arena#PC",pawn=p.id,current=function()return phase=="countdown"end,continuation=opts.continuation==true}
+        local weapon={x=p.x+5,y=0,z=100,moves=0,velocities=0}
+        if opts.weapon then
+            native(weapon,50,"Polearm")
+            weapon.GetClass=function()touch();return{GetFName=function()touch();return{ToString=function()touch();return"ModularWeaponBP_Polearm_C"end}end}end
+            weapon.K2_GetActorLocation=function()touch();return{X=weapon.x,Y=weapon.y,Z=weapon.z}end
+            weapon.K2_SetActorLocation=function(_,v)touch();weapon.moves=weapon.moves+1;weapon.x,weapon.y,weapon.z=v.X,v.Y,v.Z end
+            weapon.K2_GetRootComponent=function()touch();return{IsValid=function()touch();return true end,
+                SetAllPhysicsLinearVelocity=function()touch();weapon.velocities=weapon.velocities+1 end,
+                SetAllPhysicsAngularVelocityInDegrees=function()touch();weapon.velocities=weapon.velocities+1 end}end
+            p["Weapon R"]=weapon
+        end
         return {env=env,p=p,mesh=mesh,targets=targets,scope=scope,handle=handle,
+            weapon=weapon,pc=pc,world=world,
             hold=function(self)return env.hold(p,{X=0,Y=0,Z=100},10,scope)end,
             counts=function()return reads,world_checks,old_touches,writes,target_reads end}
     end
@@ -1388,6 +1458,23 @@ do
         "legacy reflected handle getter Mesh replacement stops the handle target write and remaining old physics stages")
     w=make({residual=5});w:hold();local _,_,_,_,target_reads=w.counts()
     T.check(target_reads==0 and w.targets[1].moves==0,"no balance target snapshot/carry occurs below the unchanged10cm pin boundary")
+    w=make({continuation=true,weapon=true});w:hold()
+    T.check(w.p.x==0 and w.mesh.moves==1 and w.targets[1].moves==1 and w.weapon.moves==1
+        and w.mesh.velocities==0 and w.weapon.velocities==0,
+        "actual native-env continuation carries body/absolute targets/weapon while preserving all body and held-root velocities")
+    w=make({continuation=true,weapon=true,residual=5});w:hold()
+    T.check(w.mesh.moves==0 and w.weapon.moves==0 and w.mesh.velocities==0 and w.weapon.velocities==0,
+        "actual continuation below residual boundary performs no physical setters or velocity cancellations")
+    w=make({continuation=true,get_world_flip=true});w:hold();local _,_,old,writes=w.counts()
+    T.check(writes==0 and old==0,"continuation retains the existing PC-world-first no-old-write guard")
+    w=make({continuation=true,get_phase_flip=true});w:hold();local _,_,old,writes=w.counts()
+    T.check(writes==0 and old==0,"phase transition inside native continuation getter prevents all later native accesses/setters")
+    w=make();T.check(w.env.hold_release_current(w.p,w.scope)==true,"release ACK requires the actual fresh source pawn/world/Mesh ownership")
+    w.scope.current=function()return false end
+    T.check(not w.env.hold_release_current(w.p,w.scope),"changed full assignment cannot qualify an anchor release ACK")
+    w=make();w.mesh.GetOwner=function()w.pc.world={};return w.p end
+    T.check(not w.env.hold_release_current(w.p,w.scope) and select(3,w.counts())==0,
+        "PC-world loss during release readback cuts off before any later old-body access")
 end
 
 T.log("== a Willie freed while we were protected: its cached actor is never touched again")

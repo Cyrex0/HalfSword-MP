@@ -17,6 +17,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Keep initial spawn position anchored through Loading and Countdown while native
+  limb motion stays active; require fresh settling after release before player input.
+- Make developer AI takeover wait for the controller's actual input release.
 - Carry native absolute foot targets and step splines with residual spawn placement
   corrections, refusing stale body or component bindings.
 - Preserve the displayed pose's actual discontinuity context so developer wrist

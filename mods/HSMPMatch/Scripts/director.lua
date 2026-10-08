@@ -1293,6 +1293,7 @@ function Dir:start_pipeline(w, s, why, serve_round, status_since)
     self.load_context = nil
     self.pipe = { key = w.key, arena = w.short, round = self.loaded_for, match_id = s.match_id,
                   life = respawn and s.respawn.life or (self.loaded_for == s.round and s.life or 1),
+                  initial_anchor = not respawn and s.phase == "countdown" and (s.match_id or 0) > 0,
                   match_gen = self.match_gen, step = 1, t0 = self.env.now(),
                   status_since = status_since,
                   step_t = self.env.now(), notes = {}, tries = 0 }
@@ -1566,7 +1567,9 @@ function Dir:step_pipeline(w, s)
         self.applied_spawn_id = ok and (p.placed and p.order and p.order.spawn_id) or 0
         self.ready_context = ok and { match_id = p.match_id or s.match_id, match_gen = p.match_gen,
             life = p.verified_life, round = p.round, status_since = p.status_since or p.t0,
-            pawn = p.pawn_id, world = p.key, arena = p.arena } or nil
+            pawn = p.pawn_id, world = p.key, arena = p.arena,
+            require_anchor_release = p.initial_anchor == true and p.placed ~= nil and o ~= nil
+                and type(o.spawn_id) == "number" and o.spawn_id > 0 } or nil
         -- Fields hsmp-gate check-events reads: dist_cm to the order, x/y/z,
         -- and snap_z = the slot's ground-snapped Z HSMPSync placed the pawn on
         -- (spawn_status z, kept in p.placed[3]).
@@ -1961,14 +1964,25 @@ function Dir:update_freeze(s, pawn)
         if not same then
             self.live_release = nil
             local ready, why = true, nil
+            local aq = ctx.anchor_qualified
+            local anchor_qualified = aq and aq.match_id == ctx.match_id and aq.match_gen == ctx.match_gen
+                and aq.round == ctx.round and aq.life == ctx.life and aq.world == ctx.world
+                and aq.pawn == ctx.pawn and aq.spawn_id == self.applied_spawn_id
             if env.combat_ready then
                 ready, why = env.combat_ready({ key = ctx.world, pawn_id = ctx.pawn, arena = ctx.arena,
                     match_id = ctx.match_id, match_gen = ctx.match_gen, round = ctx.round,
-                    life = ctx.life, verified_life = ctx.life, qualify_settle = true }, s, pawn)
+                    life = ctx.life, verified_life = ctx.life, qualify_settle = true,
+                    spawn_id = self.applied_spawn_id, status_since = ctx.status_since,
+                    require_anchor_release = ctx.require_anchor_release == true and not anchor_qualified }, s, pawn)
             end
             if ready then
                 self.live_release = { match_id = ctx.match_id, match_gen = ctx.match_gen, round = ctx.round,
                     life = ctx.life, world = ctx.world, pawn = ctx.pawn, spawn_id = self.applied_spawn_id }
+                if ctx.require_anchor_release == true then
+                    -- Exact first-release proof survives pause/reconnect;
+                    -- a new life/assignment can never borrow this tuple.
+                    ctx.anchor_qualified = self.live_release
+                end
                 self.live_wait_reason = nil
             else
                 released = false
@@ -2379,8 +2393,10 @@ function D.make_ue_env(ctx)
             if world and world:IsValid() then native_world = tostring(world:GetAddress()) .. "@" .. world:GetFullName() end
         end)
         return spawn_ready:check({ world = p.key, native_world = native_world, qualify_settle = p.qualify_settle == true,
+            require_anchor_release = p.require_anchor_release == true, spawn_status = I.bus_table("spawn_status"),
             own = { match_id = p.match_id, round = p.round,
-            life = p.verified_life or p.life, pawn = p.pawn_id }, root = I.rec("local_root"),
+            life = p.verified_life or p.life, pawn = p.pawn_id, arena = p.arena,
+            spawn_id = p.spawn_id or (p.order and p.order.spawn_id), status_since = p.status_since }, root = I.rec("local_root"),
             pose = sampling and sampling.pose, vitals = I.rec("vitals"), remotes = remotes, now_ms = env.now() * 1000 })
     end
 

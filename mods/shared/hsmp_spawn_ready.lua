@@ -22,7 +22,25 @@ local function vitals(record, context)
     return true
 end
 R.vitals = vitals
-function R.physical(playback, remote, world, now)
+-- Sync publishes this world-scoped local acknowledgement only after the
+-- initial anchor is disabled. Its t remains the ORIGINAL release clock.
+function R.anchor_release(status, own, world, now)
+    local function positive(v) return finite(v) and math.tointeger(v) and v > 0 end
+    if type(world) ~= "string" or world == "" or not finite(now) or type(own) ~= "table"
+        or type(status) ~= "table" or status.why ~= "anchor_released" or status.verified ~= true
+        or not positive(status.seq) or status.error ~= "" then return nil, "local anchor release unavailable" end
+    if not scoped(status, own) or status.pawn ~= own.pawn or status.arena ~= own.arena
+        or not positive(own.spawn_id) or status.spawn_id ~= own.spawn_id then
+        return nil, "local anchor release context"
+    end
+    if not finite(own.status_since) or not finite(status.t) or status.t <= 0
+        or status.t < own.status_since or status.t * 1000 > now then
+        return nil, "local anchor release stale/future"
+    end
+    return { world = world, match_id = own.match_id, round = own.round, life = own.life,
+        pawn = own.pawn, spawn_id = own.spawn_id, ms = status.t * 1000 }
+end
+function R.physical(playback, remote, world, now, release_ms)
     if type(world) ~= "string" or world == "" or not playback or playback.settle_world ~= world then
         return false, "physical world unavailable/changed"
     end
@@ -40,11 +58,22 @@ function R.physical(playback, remote, world, now)
     if not finite(playback.settle_rot_deg) or playback.settle_rot_deg < 0 or playback.settle_rot_deg > R.ROT_DEG then
         return false, "physical limb rotation"
     end
+    if release_ms ~= nil then
+        if not finite(release_ms) or release_ms < 0 or playback.settle_sample_ms <= release_ms then
+            return false, "physical sample before local anchor release"
+        end
+        -- The last150ms must be contained in BOTH the producer's continuously
+        -- measured stable interval and the time since local release. Keep the
+        -- producer's original sample/stability values; no timestamp is reset.
+        if math.min(playback.settle_stable_ms, playback.settle_sample_ms - release_ms) < R.SETTLE_MS then
+            return false, "physical post-release stabilizing"
+        end
+    end
     return true
 end
 function R.new()
     local self = { counters = {}, qualified = {} }
-    function self:reset() self.counters, self.qualified, self.key = {}, {}, nil end
+    function self:reset() self.counters, self.qualified, self.key, self.release = {}, {}, nil, nil end
     function self:observe(key, value, now)
         value = math.tointeger(tonumber(value))
         if not value or value < 0 then return false end
@@ -60,7 +89,7 @@ function R.new()
         local own, now = input.own, input.now_ms
         if type(own) ~= "table" or type(now) ~= "number" or now ~= now then return false, "spawn context unavailable" end
         local key = tostring(input.world or "") .. "|" .. tostring(own.match_id) .. ":" .. tostring(own.round)
-            .. ":" .. tostring(own.life) .. "@" .. tostring(own.pawn)
+            .. ":" .. tostring(own.life) .. "@" .. tostring(own.pawn) .. ":" .. tostring(own.spawn_id)
         if self.key ~= key then self:reset(); self.key = key end
         -- Seed all counters together. Only a subsequent sample proves that a
         -- retained slot is still being written; no fixed wait releases it.
@@ -92,6 +121,19 @@ function R.new()
         local ok, why = vitals(input.vitals, own)
         if not ok then return false, "own " .. why end
         if not own_vok or not fresh(now, own_vat, R.VITALS_MS) then return false, "own vitals not sampling" end
+        local release_ms
+        if input.require_anchor_release == true then
+            local release, why = R.anchor_release(input.spawn_status, own, input.world, now)
+            if not release then return false, why end
+            local prior = self.release
+            if not prior or prior.world ~= release.world or prior.match_id ~= release.match_id
+                or prior.round ~= release.round or prior.life ~= release.life or prior.pawn ~= release.pawn
+                or prior.spawn_id ~= release.spawn_id or prior.ms ~= release.ms then
+                self.qualified, self.release = {}, release
+            end
+            release_ms = release.ms
+            if input.pose.ts <= release_ms then return false, "own pose before local anchor release" end
+        end
         for _, remote in ipairs(input.remotes or {}) do
             local prefix = "peer " .. tostring(remote.peer) .. " "
             local source = remote.source
@@ -124,8 +166,8 @@ function R.new()
             -- released, pause/reconnect recheck streams without demanding that
             -- an injured same-life limb recover its spawn alignment.
             if self.qualified[remote.peer] ~= token then self.qualified[remote.peer] = nil end
-            if not (input.qualify_settle == true and cut and self.qualified[remote.peer] == token) then
-                ok, why = R.physical(playback, remote, input.native_world, now)
+            if release_ms ~= nil or not (input.qualify_settle == true and cut and self.qualified[remote.peer] == token) then
+                ok, why = R.physical(playback, remote, input.native_world, now, release_ms)
                 if not ok then return false, prefix .. why end
             end
             qualify[#qualify + 1] = { peer = remote.peer, token = token }

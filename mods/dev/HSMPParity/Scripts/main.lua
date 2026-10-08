@@ -1393,6 +1393,21 @@ local function ai_readiness(pc, me, si, peer)
                 playback = playback, source = source, vitals = ipc.peer_rec("peer_vitals", peer), native = ai_native_ready(si) },
         } })
     if not ok then return nil, why end
+    -- Server Live precedes the Director's fresh first-input proof. A bot
+    -- must wait for the same actual controller gate before taking possession.
+    local key=WG.key
+    local gate_ok,released=pcall(function()
+        local pc_addr,pawn_addr=pc:GetAddress(),me:GetAddress()
+        if pc:IsMoveInputIgnored()~=false then return false end
+        local current_pc=WG.pc()
+        local current_world=valid(current_pc) and current_pc:GetWorld() or nil
+        if WG.key~=key or not valid(current_world)
+            or tostring(current_world:GetAddress()).."@"..current_world:GetFullName()~=native_world then return false end
+        if not valid(current_pc) or current_pc:GetAddress()~=pc_addr then return false end
+        local current_pawn=current_pc.Pawn
+        return valid(current_pawn) and current_pawn:GetAddress()==pawn_addr and nm(current_pawn)==st.pawn
+    end)
+    if not gate_ok or released~=true then return nil,"local input release unavailable/blocked" end
     return st
 end
 local function ai_takeover(pc, me, si)

@@ -343,9 +343,9 @@ function P:write_status(c, verified, err)
         seq = self.status_seq, match_id = c.plan.match_id or 0, life = c.e.life or 0, round = c.plan.round, arena = c.plan.arena or "",
         spawn_id = tonumber(c.e.spawn_id) or 0, slot = tonumber(c.e.slot) or -1, pawn = self.pawn_id or "",
         has_dest = d ~= nil, pos = d and { d.X, d.Y, d.Z } or nil, clear = c.clear and true or false,
-        why = c.why or "", verified = verified and true or false, tries = c.tries or 0,
+        why = c.anchor_released_at and "anchor_released" or c.why or "", verified = verified and true or false, tries = c.tries or 0,
         has_floor = tonumber(c.floor) ~= nil, floor = tonumber(c.floor) or 0, protect_ms = SP.protect_ms(c.e),
-        has_protect_until = pu ~= nil, protect_until = pu or 0, t = env.now(), error = err or "",
+        has_protect_until = pu ~= nil, protect_until = pu or 0, t = c.anchor_released_at or env.now(), error = err or "",
         tol_cm = SP.T.verify_tol_cm,
     })
 end
@@ -505,11 +505,10 @@ end
 -- destination for hold_s after each teleport (velocities zeroed, a residual
 -- drift moved back rigidly) while that transient decays; only then is the
 -- placement verified.
-function P:hold_step(now)
-    local env, c = self.env, self.cur
-    if not c or not c.hold_until or c.done or c.failed then return end
-    if now >= c.hold_until then
-        c.hold_until = nil
+function P:end_hold(c)
+    local env=self.env
+    if not c.hold_until then return end
+    c.hold_until = nil
         local t=env.drift_probe==true and self.cur==c and c.hold_timing
         if t then
             env.log("spawn: hold released after %d correction(s) [hold calls=%d moved=%d total_ms=%.3f max_ms=%.3f]",
@@ -517,18 +516,48 @@ function P:hold_step(now)
         else
             env.log("spawn: hold released after %d correction(s)", c.holds or 0)
         end
-        return
-    end
+end
+
+function P:hold_step(now)
+    local env,c=self.env,self.cur
+    if not c or not c.dest or c.failed or not env.hold then return end
     local world,pawn_id,pawn=self.wkey,self.pawn_id,self.pawn
     local match_id,round,life,spawn_id,peer=c.plan.match_id,c.plan.round,c.e.life,c.e.spawn_id,c.e.peer
-    local measure=env.drift_probe==true
-    local started=measure and os.clock() or nil
-    local moved = env.hold(self.pawn, c.dest, SP.T.hold_tol_cm,{world=world,pawn=pawn_id,current=function()
+    local phase=env.match()
+    local function current()
         if self.cur~=c or self.wkey~=world or self.pawn_id~=pawn_id or self.pawn~=pawn then return false end
+        if env.match()~=phase then return false end
         local own,plan=self:order()
         return own and plan and plan.match_id==match_id and plan.round==round
             and own.life==life and own.spawn_id==spawn_id and own.peer==peer or false
-    end})
+    end
+    local initial=not c.no_protect and not self.respawn_spawn
+    local scope={world=world,pawn=pawn_id,current=current}
+    if phase=="live" and initial then
+        -- The source releases independently of the human/AI input latch.
+        -- Consumers must qualify a NEW physical interval after this ACK.
+        self:end_hold(c)
+        if initial and c.done and not c.anchor_released_at and current() then
+            local ok,safe=pcall(env.hold_release_current or current,pawn,scope)
+            if ok and safe==true and current() then
+                c.anchor_released_at=env.now()
+                self:write_status(c,true,c.err)
+            end
+        end
+        return
+    end
+    if not c.hold_until then return end
+    local continuation=now>=c.hold_until
+    if not current() then self:end_hold(c);return end
+    if continuation and (not initial or self.live_seen or (phase~="loading" and phase~="countdown")
+        or not self:protected(now)) then self:end_hold(c);return end
+    -- The first 0.9 s retains the original transient cancellation. During
+    -- Loading/Countdown, native balance then stays active: only a residual
+    -- XY translation is anchored, including after placement verification.
+    scope.continuation=continuation
+    local measure=env.drift_probe==true
+    local started=measure and os.clock() or nil
+    local moved = env.hold(self.pawn,c.dest,SP.T.hold_tol_cm,scope)
     local finished=measure and os.clock() or nil
     if measure and self.cur==c and self.wkey==world and self.pawn_id==pawn_id and self.pawn==pawn
         and type(started)=="number" and type(finished)=="number" and started==started and finished==finished
@@ -547,7 +576,7 @@ end
 -- Called every tick while a placement is unverified.
 function P:verify_step(now)
     local env, c, T = self.env, self.cur, SP.T
-    if c and c.hold_until then self:hold_step(now) end
+    if c then self:hold_step(now) end
     if not c or c.done or c.failed or not c.next_check or now < c.next_check then return end
     local x, y, z = env.pawn_loc(self.pawn)
     local d = x and dist_xy(x, y, c.dest.X, c.dest.Y) or math.huge
@@ -1739,7 +1768,7 @@ function SP.make_ue_env(ctx)
             end
         end)
     end
-    local function carry_weapons(list, ox, oy, oz, tol, guard)
+    local function carry_weapons(list, ox, oy, oz, tol, guard, keep_velocity)
         local n = 0
         for _, e in ipairs(list) do
             if guard and not guard() then return n end
@@ -1751,7 +1780,7 @@ function SP.make_ue_env(ctx)
                     n = n + 1
                 end
             end)
-            stop_actor(e.w,guard)
+            if not keep_velocity then stop_actor(e.w,guard) end
         end
         return n
     end
@@ -1851,6 +1880,52 @@ function SP.make_ue_env(ctx)
         return "[" .. table.concat(parts, ", ") .. "]"
     end
 
+    -- The release ACK requires the fresh current source body, even though
+    -- releasing anchoring itself performs no native setter.
+    function env.hold_release_current(p,scope)
+        local drops=ctx.drift_drops and ctx.drift_drops()
+        local closed=false
+        local function current()
+            if closed then return false end
+            local ok,value=pcall(function()
+                return scope and ctx.drift_world_current and ctx.drift_world_current(scope.world,drops)==true
+                    and scope.current()==true
+            end)
+            if not ok or value~=true then closed=true;return false end
+            return true
+        end
+        local function read(f)
+            assert(current(),"release scope changed")
+            local value=f()
+            assert(current(),"release scope changed")
+            return value
+        end
+        local function identity(o)
+            return read(function()
+                assert(o and o:IsValid()==true,"release identity unavailable")
+                local address=o:GetAddress();local name=o:GetFName():ToString()
+                assert(finite(address) and math.tointeger(address) and address>0 and type(name)=="string" and name~="",
+                    "release identity unavailable")
+                return {address=address,name=name}
+            end)
+        end
+        local function same(a,b)return a.address==b.address and a.name==b.name end
+        local ok,value=pcall(function()
+            -- Actual PC world first, before any retained pawn/mesh touch.
+            assert(current(),"release scope changed")
+            local actor=identity(read(function()return env.pawn()end))
+            assert(actor.name==scope.pawn and same(actor,identity(p)),"release pawn changed")
+            local pc=read(function()return ctx.pc and ctx.pc() or UEH.GetPlayerController()end)
+            local world=identity(read(function()return pc:GetWorld()end))
+            assert(same(world,identity(read(function()return p:GetWorld()end))),"release world changed")
+            local mesh=read(function()return p.Mesh end);local mid=identity(mesh)
+            assert(same(actor,identity(read(function()return mesh:GetOwner()end))),"release Mesh owner changed")
+            assert(same(mid,identity(read(function()return p.Mesh end))),"release Mesh changed")
+            return current()
+        end)
+        return ok and value==true
+    end
+
     -- Hold the pawn on dest (P:hold_step, every tick for hold_s after a
     -- teleport): every body's velocity zeroed; when the actor drifted more
     -- than tol_cm (XY) from dest, the actor and every mesh are moved back
@@ -1883,6 +1958,8 @@ function SP.make_ue_env(ctx)
         if not a then return false end
         local rx, ry = dest.X - a.X, dest.Y - a.Y
         local moved = false
+        local continuation=scope and scope.continuation==true
+        if continuation and math.sqrt(rx*rx+ry*ry)<=(tol_cm or 10) then return false end
         local meshes = {}
         for _, f in ipairs(MESH_FIELDS) do
             local m=read(function()return p[f]end)
@@ -1982,7 +2059,7 @@ function SP.make_ue_env(ctx)
             if not check() then return false end
             read(function()p:K2_SetActorLocation({ X = a.X + rx, Y = a.Y + ry, Z = a.Z }, false, {}, true)end)
             if not check() then return false end
-            carry_weapons(weapons, rx, ry, 0, 5,protected and check or nil)
+            carry_weapons(weapons, rx, ry, 0, 5,protected and check or nil,continuation)
             if not check() then return false end
             for i, m in ipairs(meshes) do
                 local b = before[i]
@@ -2010,6 +2087,9 @@ function SP.make_ue_env(ctx)
             if not check() then return false end
             moved = true
         end
+        -- Continuation leaves native limb/weapon integration active. Do not
+        -- cancel any velocities, including inside the carried-weapon path.
+        if continuation then return moved end
         for _, m in ipairs(meshes) do
             if not check() then return false end
             read(function()m:SetAllPhysicsLinearVelocity({ X = 0, Y = 0, Z = 0 }, false)end)
