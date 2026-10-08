@@ -71,7 +71,9 @@ local function accessor(e,j)
     local owner=id(guarded(e,function()return weak:get()end),e)
     assert(same(owner,id(e.mesh,e)),"accessor owner mismatch")
     local index=number(guarded(e,function()return a.Index end));assert(math.tointeger(index)and index>=0 and index<32,"index unavailable")
-    local ref={Owner=weak,Index=index};local p,c={},{}
+    -- Pinned LuaUObject.cpp doesn't consume scalar-out placeholders.
+    -- Both exact FName output keys therefore share one copied container.
+    local ref={Owner=weak,Index=index};local p={};local c=p
     assert(e.current(),"scope changed");e.library:GetAttachedBodyNames(ref,p,c)
     assert(e.current(),"scope changed")
     local parent=guarded(e,function()return output(p,"ParentBody"):ToString()end)
@@ -94,7 +96,7 @@ local function joint(e,j,label)
         e.stage(label..":"..key)
         assert(e.current(),"scope changed")
         attempt(r,key,function()
-            local s=spec[key];local args={};for i=1,#s[2]do args[i]={}end
+            local s=spec[key];local args,scalar_outputs={},{};for i=1,#s[2]do args[i]=scalar_outputs end
             local fn=guarded(e,function()return e.library[s[1]]end);assert(fn,"getter unavailable")
             assert(e.current(),"scope changed");fn(e.library,ref,table.unpack(args))
             assert(e.current(),"scope changed")

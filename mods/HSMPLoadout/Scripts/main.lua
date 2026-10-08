@@ -807,6 +807,41 @@ function SI.native_passport_record(pass, fields)
     if not read or not matches then return nil end
     return record
 end
+SI.weapon_presets_module = (function()
+    local ok, value = pcall(require, "native_weapon_presets")
+    if ok and type(value) == "table" then return value end
+    local source = (debug.getinfo(1, "S").source or ""):gsub("^@", "")
+    local directory = source:match("^(.*)[/\\]") or "."
+    local loaded, module = pcall(dofile, directory .. "/native_weapon_presets.lua")
+    if loaded and type(module) == "table" then return module end
+end)()
+if SI.weapon_presets_module then
+    SI.weapon_presets = SI.weapon_presets_module.new({generation=world_gen_ref,
+        source=function(d)
+            local da = StaticFindObject(d.asset)
+            if not valid(da) then
+                LoadAsset(d.asset:match("^(.*)%.[^%.]+$"))
+                da = StaticFindObject(d.asset)
+            end
+            if not valid(da) then return nil end
+            local entries = field(field(da, d.container), d.field)
+            local count = #entries
+            if count < 1 or count > 64 then return nil end
+            local pass
+            if d.index then
+                if d.index > count then return nil end
+                pass = entries[d.index]
+            else
+                -- Pinned TMap::Find uses the same GetParam pusher as ForEach.
+                pass = entries:Find(d.map_key):get()
+            end
+            if #entries ~= count then return nil end
+            return pass
+        end,
+        read_record=function(pass)return SI.native_passport_record(pass, WEAPON_FIELDS)end,
+        matches=function(pass,record)return SI.weapon_equal.matches(pass,record,WEAPON_FIELDS,class_path)end,
+    })
+end
 
 -- HSMPAvatars' stand-ins (bus key "puppets", typed rows {peer, name}) as
 -- { ["<peer id>"] = "<Willie FName>" }; nil = never written.
@@ -1227,7 +1262,16 @@ local function module_template_for(cls)
     return nil, needs_modules
 end
 
-local function weapon_passport_for(cls, from_actor)
+local function weapon_passport_for(cls, from_actor, recipe)
+    if recipe ~= nil then
+        local gen = world_gen
+        if not SI.weapon_presets or SI.weapon_presets_module.class_for(recipe) ~= class_path(cls) then return nil end
+        local record = SI.weapon_presets.resolve(recipe)
+        if not record or world_gen ~= gen then return nil end
+        local decoded, pass = pcall(dec_struct, record, WEAPON_FIELDS)
+        if not decoded or world_gen ~= gen or not SI.weapon_equal.matches(pass,record,WEAPON_FIELDS,class_path) then return nil end
+        return pass
+    end
     local src = from_actor
     if not valid(src) then pcall(function() src = cls:GetCDO() end) end
     local e = valid(src) and SI.native_passport_record(field(src, "Weapon Passport"), WEAPON_FIELDS)
@@ -1412,7 +1456,8 @@ local function apply_weapons(puppet, L, id, strip)
     local wanted
     if absent_left and not (held and held.R) and not (strip and strip.R) then
         local path = L.kit_w and L.kit_w.R or wR and wR.class
-        if path and path ~= "" and not Kit.is_bare(path) then wanted = { class = path, record = not L.kit_w and wR or nil } end
+        if path and path ~= "" and not Kit.is_bare(path) then wanted = { class = path, record = not L.kit_w and wR or nil,
+            recipe = L.kit_recipe and L.kit_recipe.R } end
     end
     if absent_left then
         if not SI.empty_left then return false, "FAIL empty L helper unavailable", "FAIL empty L helper unavailable" end
@@ -1427,13 +1472,13 @@ local function apply_weapons(puppet, L, id, strip)
     if held and (held.R or held.L) then
         local kw = L.kit_w
         wr = held.R and yield_hand(puppet, "R", held.R)
-            or (kw and Kit.give_weapon(puppet, "R", kw.R) or apply_weapon(puppet, "R", wR))
+            or (kw and Kit.give_weapon(puppet, "R", kw.R, L.kit_recipe and L.kit_recipe.R) or apply_weapon(puppet, "R", wR))
         wl = wl or held.L and yield_hand(puppet, "L", held.L)
-            or (kw and Kit.give_weapon(puppet, "L", kw.L) or apply_weapon(puppet, "L", wL))
+            or (kw and Kit.give_weapon(puppet, "L", kw.L, L.kit_recipe and L.kit_recipe.L) or apply_weapon(puppet, "L", wL))
     elseif L.kit_w then
         -- Synthesised from the validated kit (no appearance received yet).
-        wr = (strip and strip.R) and apply_weapon(puppet, "R", nil) or Kit.give_weapon(puppet, "R", L.kit_w.R)
-        wl = wl or Kit.give_weapon(puppet, "L", L.kit_w.L)
+        wr = (strip and strip.R) and apply_weapon(puppet, "R", nil) or Kit.give_weapon(puppet, "R", L.kit_w.R, L.kit_recipe and L.kit_recipe.R)
+        wl = wl or Kit.give_weapon(puppet, "L", L.kit_w.L, L.kit_recipe and L.kit_recipe.L)
     else
         wr = apply_weapon(puppet, "R", wR)
         wl = wl or apply_weapon(puppet, "L", wL)
@@ -1992,6 +2037,7 @@ Kit.init({
     class_path = class_path, bp_call = bp_call, spawn_weapon_actor = spawn_weapon_actor,
     enc_struct = enc_struct, dec_struct = dec_struct, WEAPON_FIELDS = WEAPON_FIELDS,
     set_hand_passport = set_hand_passport, weapon_passport_for = weapon_passport_for,
+    weapon_recipe_class = SI.weapon_presets_module and SI.weapon_presets_module.class_for,
     weapon_passport_matches = SI.weapon_passport_matches, armour_passports_match = SI.kit_armour_match,
     destroy_hand_weapon = destroy_hand_weapon, weapon_shown = weapon_shown,
     hand_weapon_replaced = bump_weapon_generation,
@@ -2007,19 +2053,19 @@ Kit.init({
 if SI.empty_left_module then
     SI.empty_left = SI.empty_left_module.new({
         context = SI.remote_hand_context,
-        wanted_key = function(w) return w.class .. "|" .. (w.record and Kit.weapon_passport_key(w.record) or "kit") end,
+        wanted_key = function(w) return w.class .. "|" .. (w.record and Kit.weapon_passport_key(w.record) or "kit") .. "|" .. tostring(w.recipe or "") end,
         matches = function(actor, wanted)
             if class_path(actor:GetClass()) ~= wanted.class then return false end
             if wanted.record then return SI.weapon_equal and SI.weapon_equal.matches(field(actor, "Weapon Passport"), wanted.record, WEAPON_FIELDS, class_path) end
             local cls = resolve_class(wanted.class)
-            local pass = cls and weapon_passport_for(cls)
+            local pass = cls and weapon_passport_for(cls, nil, wanted.recipe)
             return SI.weapon_passport_matches(actor, pass)
         end,
         clear_passport = function(pawn) return set_hand_passport(pawn, "L", nil) end,
         cleanup = function(pawn, record) bp_call(pawn, "Set Up Left Hand Weapon", nil, nil, false, true, dec_struct(record, WEAPON_FIELDS)) end,
         reequip = function(pawn, actor, wanted)
             if type(Kit.reequip) ~= "function" then return nil, "preflight" end
-            return Kit.reequip(pawn, "R", actor, wanted.class)
+            return Kit.reequip(pawn, "R", actor, wanted.class, wanted.recipe)
         end,
         replaced = bump_weapon_generation,
     })

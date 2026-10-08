@@ -55,11 +55,12 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "weapon_native_source" })
     T.isolated(T.script, "case", { kind = "weapon_gi_source" })
     T.isolated(T.script, "case", { kind = "weapon_fixed_rondel" })
+    T.isolated(T.script, "case", { kind = "weapon_presets" })
     T.isolated(T.script, "case", { kind = "empty_source_unavailable" })
     return
 end
 
-if opts.kind=="passport_variant" or opts.kind=="weapon_native_source" or opts.kind=="weapon_gi_source" or opts.kind=="weapon_fixed_rondel"
+if opts.kind=="passport_variant" or opts.kind=="weapon_native_source" or opts.kind=="weapon_gi_source" or opts.kind=="weapon_fixed_rondel" or opts.kind=="weapon_presets"
     or opts.kind=="native_empty_left" or opts.kind=="empty_left_attempted" or opts.kind=="empty_left_armour_retry" then
     package.path=T.path("mods/HSMPLoadout/Scripts/?.lua")..";"..T.path("mods/shared/?.lua")..";"..package.path
 end
@@ -341,6 +342,94 @@ if opts.kind == "armour_defaults" or opts.kind == "armour_defaults_unavailable" 
         T.check(setup_armor > before and T.contains(M.logtext(), "exact=false") and T.contains(M.logtext(), "TestCore passport"),
             "same-class same-count armor with wrong native " .. key .. " fails full output verification", M.logtext())
     end
+    return
+end
+
+if opts.kind == "weapon_presets" then
+    boot()
+    FName=function(v)return {ToString=function()return v end}end
+    local P=require("native_weapon_presets")
+    local Kit=require("kit")
+    local path="@Weapons/Blueprints/ModularWeaponBP"
+    local find=StaticFindObject
+    local function decode(r)
+        local pass={}
+        for _,fd in ipairs(weapon_fields)do
+            local key,kind,v=fd[1],fd[2],r[fd[3]]
+            if kind=="class"then
+                if v~=""then local p=v:gsub("^@","/Game/Assets/");pass[key]=find(p.."."..p:match("([^/]+)$").."_C")end
+            elseif kind=="name"then pass[key]=FName(v)
+            elseif kind=="vec"then pass[key]={X=v[1],Y=v[2],Z=v[3]}
+            elseif kind=="color"then pass[key]={R=v[1],G=v[2],B=v[3],A=v[4]}
+            else pass[key]=v end
+        end
+        return pass
+    end
+    local entries={}
+    for _,id in ipairs({"native_pollaxe","native_longsword","native_bastard_sword","native_arming_sword","native_mace"})do
+        local d=P.descriptor(id);entries[d.index]=decode(d.passport)
+    end
+    for i=6,18 do entries[i]=entries[5]end
+    local da={IsValid=function()return true end,Inventory={WeaponPssports_6_0FE43BA744FE0B9934051BA2CD2DD971=entries}}
+    local asset=P.descriptor("native_longsword").asset
+    local available=true
+    StaticFindObject=function(p)if p==asset then return available and da or nil end;return find(p)end
+    LoadAsset=function()end
+    local writes,setups,gi=0,0,0
+    local Mt=M.Methods
+    local oldmap=Mt["Set Up Right Hand Weapon"]
+    Mt["Set Up Right Hand Weapon"]=function(...)setups=setups+1;return oldmap(...)end
+    local cp={Equipment_26_741A2FC641801842FE691295645C604F={WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05={
+        Add=function()writes=writes+1 end}}}
+    M.standin.__props["Character Passport"]=cp
+    local UE=require("UEHelpers");UE.GetGameInstance=function()gi=gi+1;return M.null_object end
+    T.check(Kit.give_weapon(M.standin,"R",path,"native_longsword")=="ok" and gi==0,
+        "actual equip uses the complete authored preset without merchant stock")
+    local first=M.standin.__props["Weapon R"]
+    T.check(Kit.give_weapon(M.standin,"R",path,"native_arming_sword")=="ok"
+        and M.standin.__props["Weapon R"]~=first and setups==2,
+        "same base class with a different authored recipe replaces the actor")
+    local held=M.standin.__props["Weapon R"]
+    T.check(Kit.give_weapon(M.standin,"R",path,"native_arming_sword")=="same" and setups==2,
+        "the exact complete recipe permits reuse")
+    local same_ok=Kit.hands_check(M.standin,{r="native_arming_sword",l=""})
+    local wrong_ok=Kit.hands_check(M.standin,{r="native_longsword",l=""})
+    T.check(same_ok and not wrong_ok,"owner verification distinguishes two recipes with the same actual class")
+    local before=writes
+    available=false
+    T.check(Kit.give_weapon(M.standin,"R",path,"native_longsword"):find("^FAIL")
+        and writes==before and setups==2 and M.standin.__props["Weapon R"]==held and gi==0,
+        "missing exact native source refuses before hand writes or actor replacement")
+    available=true
+    local mass="CustomMassScaleHead_30_B95872A242AD944E2CE4D493F718F9D7"
+    local saved=entries[2][mass];entries[2][mass]=nil
+    T.check(Kit.give_weapon(M.standin,"R",path,"native_longsword"):find("^FAIL") and writes==before and setups==2,
+        "partial source cannot fabricate a missing native mass scale")
+    entries[2][mass]=saved
+    M.standin.__props.R_GripType_Current=14
+    T.check(Kit.reequip(M.standin,"R",held,path,"native_longsword")==nil and writes==before and setups==2,
+        "rearm cannot retain a same-class actor with the wrong recipe")
+    T.check(Kit.reequip(M.standin,"R",held,path,"native_arming_sword")~=nil and setups==3,
+        "rearm keeps the same exact actor only with its verified authored passport")
+    local original_read=Kit.read;Kit.read=function()return {class="custom",r="native_longsword",l="",rev=4}end
+    local L=Kit.effective_remote(2,nil)
+    T.check(L.kit_w.R==path and L.kit_recipe.R=="native_longsword",
+        "remote no-appearance fallback carries the same recipe identity")
+    local sig=Kit.weapon_sig(L);L.kit_recipe.R="native_arming_sword"
+    T.check(Kit.weapon_sig(L)~=sig,"remote application key separates recipes sharing the same base class")
+    Kit.read=original_read
+    local b=P.descriptor("native_baron_mace")
+    local mapped=decode(b.passport)
+    local map=setmetatable({Find=function(_,key)
+        if key~=3 then error("native key absent")end
+        return {get=function()return mapped end}
+    end},{__len=function()return 3 end})
+    local baron={IsValid=function()return true end,Loadout={WeaponsinSlots_11_B42349384F5EF74DE78A7F870D89656A=map}}
+    local prior=StaticFindObject
+    StaticFindObject=function(p)return p==b.asset and baron or prior(p)end
+    T.check(Kit.give_weapon(M.standin,"R",path,"native_baron_mace")=="ok"
+        and M.standin.__props["Weapon R"].__props["Weapon Passport"]["Name_57_3729B51148E846FE8DD336B9419BCEE1"]:ToString()=="Baron Mace",
+        "native map source resolves Baron Mace at proved key3 rather than suffix2")
     return
 end
 

@@ -2040,6 +2040,61 @@ do
         ME["Get Damage"],api.C3.replay_diag=old_gd,old_diag
         PC.GetWorld,PC.GetFName=old_world,old_name
         api.set_world("native-once-world")
+        local saved_dcd,saved_gd=ME["Deal Complex Damage"],ME["Get Damage"]
+        local saved_response_observer,observed_response=api.C3.cut_response_observe
+        api.C3.cut_response_observe=function(r)observed_response=r;error("optional journal writer unavailable")end
+        local dcd_calls,gd_calls,fail_copy=0,0,false
+        ME["Get Damage"]=function()gd_calls=gd_calls+1 end
+        ME["Deal Complex Damage"]=function(self,...)
+            dcd_calls=dcd_calls+1;self.Health=self.Health-1
+            local args={...}
+            T.check(args[18]==args[23],"owner DCD scalar outputs share one native-copy container")
+            args[18]["Hit Surface"]=0
+            if fail_copy then error("native copy-out failed after injury")end
+            -- Mirror the pinned bridge: all scalar fields are copied into
+            -- its first supplied out table, with exact property names.
+            args[18]["Damage Out"]=17.5;args[18]["Cutting Rate Out"]=9
+            args[18]["Rigidity Out"]=.75;args[18]["Material Density Out"]=321
+            args[18]["Lower Threshold Out"]=false
+        end
+        local response_hit=hit_rec{hit_id=1000020,round=3,target_peer_id=1,bone="pelvis",flags=32}
+        local _,response_status=api.apply_hit(response_hit,2)
+        local response=api.C3.last_native_response
+        T.check(dcd_calls==1 and gd_calls==0 and response_status==1 and response.complete,
+            "actual owner DCD retains six existing outputs with exactly one injury call")
+        T.check(observed_response==response and api.C3.body_replay==nil,
+            "bounded response observer receives copied output and its failure cannot interrupt native replay cleanup")
+        T.check(response.context.hit_id==1000020 and response.context.attacker==2
+            and response.context.victim==1 and response.fields["Hit Surface"].value==0
+            and response.fields["Material Density Out"].value==321
+            and response.fields["Lower Threshold Out"].value==false,
+            "actual owner response preserves exact hit context, native zero and false values")
+        fail_copy=true;response_hit.hit_id=1000021
+        _,response_status=api.apply_hit(response_hit,2);response=api.C3.last_native_response
+        T.check(dcd_calls==2 and gd_calls==0 and response_status==1 and not response.complete
+            and not response.call_ok and response.fields["Hit Surface"].available
+            and not response.fields["Damage Out"].available,
+            "injury-before-copy-out error keeps partial response incomplete without another native application")
+        local response_capture=api.C3.damage_response.capture
+        api.C3.damage_response.capture=function()error("optional response copy unavailable")end
+        fail_copy=false;response_hit.hit_id=1000022
+        _,response_status=api.apply_hit(response_hit,2)
+        T.check(dcd_calls==3 and gd_calls==0 and response_status==1
+            and api.C3.last_native_response==nil and api.C3.body_replay==nil,
+            "optional response-copy failure preserves owner injury result and replay cleanup")
+        api.C3.damage_response.capture=response_capture
+        local dcd_without_drop=ME["Deal Complex Damage"]
+        ME["Deal Complex Damage"]=function(self,...)
+            dcd_without_drop(self,...)
+            api.wg_drop("world changed");api.set_world("different-response-world")
+        end
+        response_hit.hit_id=1000023
+        api.apply_hit(response_hit,2)
+        T.check(dcd_calls==4 and gd_calls==0 and api.C3.last_native_response==nil,
+            "world drop during native invocation cannot relabel old response or repopulate cleared cache")
+        api.set_world("native-once-world");api.set_puppets({[SI.__name]=2},{[2]=SI})
+        ME["Deal Complex Damage"],ME["Get Damage"]=saved_dcd,saved_gd
+        api.C3.cut_response_observe=saved_response_observer
     end
 end
 
@@ -2098,4 +2153,87 @@ do
     api.C3.sever_projection_context,api.C3.topology_audit,api.C3.vitals_context=prior_context,prior_topology,prior_vitals
     api.WG.world,api.WG.settled=prior_world,prior_settled
     ME.GetWorld,ME["Dismemberment In Process"],ME.Mesh.IsBoneHiddenByName=prior_me_world,prior_process,prior_hidden
+end
+
+-- The cut journal's callback-only scope checks the current PC world before
+-- any borrowed event parameter, and does not invent a seven-input attacker.
+do
+    local C=api.C3;local old_live,old_now=C.cut_live,CLOCK
+    local old_pc_world,old_world,old_mesh_world=PC.GetWorld,ME.GetWorld,SI.GetWorld
+    local old_me_mesh,old_si_mesh=ME.Mesh,SI.Mesh
+    local old_life,old_display=C.life_for,C.displayed_for
+    local old_mode=NAT._rec.slots.mode
+    local original_peer=api.session().my_peer_id
+    local function world(a,n)return {IsValid=valid,GetAddress=function()return a end,
+        GetFName=function()return FName(n)end,GetFullName=function()return "World "..n end}end
+    local original,current_world=world(80001,"CutWorld"),nil;current_world=original
+    PC.GetWorld=function()return current_world end
+    ME.GetWorld=function()return original end;SI.GetWorld=function()return original end
+    local function mesh(a,n)return {GetAddress=function()return a end,IsValid=valid,
+        GetFName=function()return FName(n)end}end
+    ME.Mesh,SI.Mesh=mesh(80002,"ownerMesh"),mesh(80003,"proxyMesh")
+    api.set_my_peer_id(1);api.set_puppets({[SI.__name]=2},{[2]=SI})
+    api.set_world((api.WG.world_key()));CLOCK=100
+    C.cut_live=function()return true end
+    C.life_for=function(peer)return {match_id=4242,round=3,life=peer==1 and 5 or 6}end
+    C.displayed_for=function(peer)return peer==2 and {match_id=4242,round=3,life=6}end
+    NAT.sc_put("mode",{match_id=4242,round=3,seq=2222,mode=ES.game_mode.DUEL,
+        rows={{peer_id=1,life=5},{peer_id=2,life=6}}})
+    local ownctx=C.cut_scope("initiate",{ME})
+    T.check(ownctx and ownctx.victim_peer==1 and ownctx.victim_life==5 and not ownctx.attacker_attribution_available
+        and ownctx.attacker_peer==nil and ownctx.attacker_life==nil,"seven-input owner victim cannot be relabelled as its own attacker")
+    local proxyctx=C.cut_scope("delayed",{SI})
+    T.check(proxyctx and proxyctx.victim_peer==2 and proxyctx.local_peer==1 and proxyctx.attacker_peer==nil,
+        "displayed seven-input callback preserves victim scope with unknown caller attribution")
+    local old_fullname=original.GetFullName;local old_touches=0
+    local borrowed=setmetatable({},{__index=function()old_touches=old_touches+1;error("old callback object")end})
+    original.GetFName=function()current_world=world(80011,"NewWorld");return FName("CutWorld")end
+    local ok,ctx=pcall(C.cut_scope,"initiate",{borrowed})
+    T.check((not ok or not ctx)and old_touches==0,"PC-world-only change during first optional getter refuses before old event-object reads")
+    current_world=original;original.GetFName=function()return FName("CutWorld")end;original.GetFullName=old_fullname
+    local saved_journal=C.cut_journal
+    for _,loss in ipairs({"stop","deadline"})do
+        CLOCK=100;local emitted=0
+        C.cut_journal=C.cut_module.new({enabled=function()return true end,now=os.clock,unwrap=function(v)return v end,
+            emit=function()emitted=emitted+1 end})
+        C.cut_journal:start()
+        original.GetFName=function()
+            if loss=="stop"then C.cut_journal:stop("first resolver getter")else CLOCK=116 end
+            return FName("CutWorld")
+        end
+        C.cut_capture("initiate",borrowed)
+        T.check(old_touches==0 and emitted==0 and C.cut_journal.events==1,
+            "actual-main initial resolver "..loss.." prevents subsequent old argument reads or emission")
+    end
+    C.cut_journal=saved_journal;CLOCK=100;original.GetFName=function()return FName("CutWorld")end
+    local saved_key=api.WG.key;api.WG.key=api.WG.world_key()
+    current_world=world(80012,"AnotherWorld")
+    ok,ctx=pcall(C.cut_scope,"initiate",{borrowed},ownctx)
+    T.check((not ok or not ctx)and old_touches==0,"final resolver binds original native world before unwrapping retained arguments")
+    api.WG.key=saved_key;current_world=original
+    local installed=0;local old_register,old_getenv=RegisterHook,os.getenv
+    RegisterHook=function()installed=installed+1;return 1,1 end
+    os.getenv=function(k)if k=="HSMP_DEV"then return "1"end;return old_getenv(k)end
+    C.cut_live=function()return false end
+    T.check(not C.cut_control(true)and not C.cut_journal.armed and installed==0,"cut_probe on before Live cannot arm timer or install hooks")
+    T.check(not C.body_probe and not C.native_probe,"cut control never enables body or gameplay damage probes")
+    local old_session,old_link=NAT._rec.slots.session,NAT._rec.slots.link
+    local old_info=NAT.ipc_info
+    C.cut_live=old_live
+    NAT.sc_put("session",{phase=3,seq=9001,match_id=4242,round=3,rows={{peer_id=1,connected=true},{peer_id=2,connected=true}}})
+    sidecar("connected",1);hb(0.01);api.refresh_match()
+    api.WG.travel_from=nil;api.set_world((api.WG.world_key()))
+    NAT.ipc_info=function()return {sidecar_state="ready",sidecar_hb_age_s=0.01}end
+    T.check(C.cut_live()==true,"actual-main cut admission accepts fresh ready header and matching current local peer",
+        T.repr({key=api.WG.key,current=api.WG.world_key(),settled=api.WG.settled(),window=api.state().combat_window,
+            reader_peer=C.cut_reader and C.cut_reader.peer_id,reader_status=C.cut_reader and C.cut_reader.status,info=C.cut_info}))
+    sidecar("connected",2)
+    T.check(not C.cut_live(),"fresh reassigned link cannot reuse retained old local Mode/spawn/playback attribution")
+    sidecar("connected",1);NAT.ipc_info=function()return nil end
+    T.check(not C.cut_live(),"failed actual native header read cannot reuse cached healthy cut admission")
+    NAT.ipc_info=old_info;NAT._rec.slots.session,NAT._rec.slots.link=old_session,old_link
+    RegisterHook,os.getenv=old_register,old_getenv
+    C.cut_live,CLOCK=old_live,old_now;PC.GetWorld,ME.GetWorld,SI.GetWorld=old_pc_world,old_world,old_mesh_world
+    ME.Mesh,SI.Mesh=old_me_mesh,old_si_mesh;C.life_for,C.displayed_for=old_life,old_display
+    NAT._rec.slots.mode=old_mode;api.set_my_peer_id(original_peer);api.set_world("world#1")
 end

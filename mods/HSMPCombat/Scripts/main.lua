@@ -829,6 +829,7 @@ local C3 = {
     stuck_resolver = load_module("stuck_membership"),
     participation = load_module("claim_participation"),
     replay_batch = load_module("replay_batch"),
+    damage_response = load_module("native_damage_response"),
     STANDIN_INVULNERABLE = true,
     TOUCH_GAP_MS = 50,          -- per-peer touch report rate limit
     -- Bookkeeping Deal Complex Damage / Get Damage write besides FIELDS: their
@@ -1199,6 +1200,208 @@ if C3.body_audit then
         unwrap=pv,fname=FName,log=Log,context=C3.body_audit_context,source_context=C3.body_sever_context,
         topology_reader=C3.topology_audit,
     })
+end
+-- Independent bounded native-cut evidence. It never changes body/combat probes,
+-- marker tags, structural guards, damage inputs or replication authority.
+C3.cut_module=load_module("native_cut_journal")
+if C3.cut_module then
+    C3.cut_journal=C3.cut_module.new({enabled=function()return os.getenv("HSMP_DEV")=="1"end,now=os.clock,unwrap=pv,
+        emit=function(row)Log("NATIVECUT inst=%s %s",os.getenv("HSMP_INST")or "unavailable",HL.encode(row))end})
+end
+function C3.cut_live()
+    if not WG.check()or not WG.settled()or not combat_window or replaying then return false end
+    local ipc=rawget(_G,"HSMP_IPC");local info=ipc and ipc.N and ipc.N.ipc_info()
+    if type(info)~="table"or info.sidecar_state~="ready"and info.sidecar_state~=2
+        or type(info.sidecar_hb_age_s)~="number"or info.sidecar_hb_age_s~=info.sidecar_hb_age_s
+        or info.sidecar_hb_age_s<0 or info.sidecar_hb_age_s==math.huge then return false end
+    C3.cut_info=info
+    local reader=C3.cut_reader
+    if not reader and HSESS then
+        reader=HSESS.new({every_s=0,ipc={S=ipc.S,rec=ipc.rec,refresh_info=function()return C3.cut_info end}})
+        C3.cut_reader=reader
+    end
+    if not reader then return false end
+    reader:poll(true);if not reader:live()or reader.peer_id~=my_peer_id then return false end
+    local view=HSESS.view()
+    return view and view.state=="live"and view.my_peer_id==my_peer_id
+end
+function C3.cut_scope(kind,args,expected,admitted)
+    -- Native current-PC world is checked before any borrowed callback object.
+    if admitted and not admitted()then return nil end
+    if not C3.cut_live()then return nil end
+    local entry={key=WG.key,drops=WG.drops}
+    if expected and (entry.key~=expected.world or entry.drops~=expected.drops)then return nil end
+    local lost=false
+    local function live()
+        if lost then return false end
+        if admitted and not admitted()then lost=true;return false end
+        if not WG.same(entry)or not C3.cut_live()or WG.key~=entry.key or WG.drops~=entry.drops then lost=true;return false end
+        return true
+    end
+    local function read(fn)
+        assert(live(),"scope changed");local value,other=fn();assert(live(),"scope changed");return value,other
+    end
+    local function id(obj)
+        assert(obj and read(function()return obj:IsValid()end)==true,"identity unavailable")
+        local address=read(function()return obj:GetAddress()end)
+        local fn=read(function()return obj:GetFName()end);local name=read(function()return fn:ToString()end)
+        assert(type(address)=="number"and math.tointeger(address)and address>0 and type(name)=="string"and #name>0 and #name<=256,"identity unavailable")
+        return {address=address,name=name}
+    end
+    local world=WG.world();local wid=id(world)
+    wid.name=read(function()return world:GetFullName()end)
+    if expected and (wid.address~=expected.native_world.address or wid.name~=expected.native_world.name)then return nil end
+    local obj=read(function()return pv(args[1])end);local actor,con,body,coll,bone,weapon
+    if kind=="initiate"or kind=="delayed"then actor=obj
+    else
+        con=obj;actor=read(function()return con["Hit Actor"]end)
+        body=read(function()return con["Component 2 (Body)"]end)
+        coll=read(function()return con["Weapon Hit Module"]end);bone=read(function()return con["Bone Name 2"]end)
+        weapon=read(function()return con["My Weapon"]end)
+    end
+    local aid=id(actor);local mesh=read(function()return actor.Mesh end);local mid=id(mesh)
+    local aw=read(function()return actor:GetWorld()end)
+    assert(read(function()return aw:GetAddress()end)==wid.address and read(function()return aw:GetFullName()end)==wid.name,"actor world changed")
+    local peer=puppet_peer[aid.name]
+    local side="source"
+    local own=read(local_pawn);local oid=id(own)
+    if aid.address==oid.address and aid.name==oid.name then peer=my_peer_id;side="owner"end
+    local mine=read(function()return C3.life_for(my_peer_id,true)end)
+    local theirs=side=="owner"and mine or read(function()return C3.displayed_for(peer,actor)end)
+    if not peer or not mine or not theirs or mine.match_id~=theirs.match_id or mine.round~=theirs.round then return nil end
+    local mode=HSMP_IPC.rec("mode");local own_count,victim_count=0,0
+    if not mode or mode.match_id~=mine.match_id or mode.round~=mine.round then return nil end
+    for _,r in ipairs(mode.rows or {})do
+        if r.peer_id==my_peer_id and r.life==mine.life then own_count=own_count+1 end
+        if r.peer_id==peer and r.life==theirs.life then victim_count=victim_count+1 end
+    end
+    if own_count~=1 or victim_count~=1 then return nil end
+    local ctx={world=entry.key,drops=entry.drops,match_id=mine.match_id,round=mine.round,
+        attacker_attribution_available=false,local_peer=my_peer_id,local_life=mine.life,local_pawn=oid.name,
+        victim_peer=peer,victim_life=theirs.life,side=side,pawn=aid.name,actor=aid.address,
+        mesh=mid.address,mesh_name=mid.name,native_world=wid}
+    local parent={association="unavailable",server_verdict="unavailable",wear_history="unavailable"}
+    if con then
+        local cid=id(con);local cw=read(function()return con:GetWorld()end)
+        cid.name=read(function()return con:GetFullName()end)
+        if read(function()return cw:GetAddress()end)~=wid.address or read(function()return cw:GetFullName()end)~=wid.name then return nil end
+        local wi=id(weapon);local co=id(coll);local bo=id(body)
+        local parent_actor=read(function()return weapon["Parent Actor"]end)
+        if not parent_actor then parent_actor=read(function()return weapon:GetAttachParentActor()end)end
+        local pi=id(parent_actor);if pi.address~=oid.address or pi.name~=oid.name then return nil end
+        local owner=id(read(function()return coll:GetOwner()end));if owner.address~=wi.address or owner.name~=wi.name then return nil end
+        local right=id(read(function()return own["Weapon R"]end))
+        local hand=right.address==wi.address and right.name==wi.name and BF.RIGHT or nil
+        if not hand then local left=id(read(function()return own["Weapon L"]end));if left.address==wi.address and left.name==wi.name then hand=BF.LEFT end end
+        if not hand then return nil end
+        local modules=read(function()return weapon["Collision Components Array"]end)
+        local count=read(function()return modules:GetArrayNum()end)
+        assert(type(count)=="number"and math.tointeger(count)and count>=0 and count<=128,"module count unavailable")
+        local ordinal,seen=nil,0
+        read(function()modules:ForEach(function(_,v)
+            seen=seen+1;assert(seen<=count,"module capacity")
+            local ci=id(read(function()return pv(v)end))
+            if ci.address==co.address and ci.name==co.name then assert(not ordinal,"ambiguous module");ordinal=seen end
+        end)end)
+        if seen~=count or read(function()return modules:GetArrayNum()end)~=count or not ordinal or ordinal>15 then return nil end
+        local source=hand+ordinal*BF.COMPONENT
+        ctx.attacker_peer=my_peer_id;ctx.attacker_life=mine.life;ctx.attacker_attribution_available=true
+        local bn=read(function()return bone:ToString()end)
+        ctx.constraint=cid;ctx.weapon=wi;ctx.collider=co;ctx.body=bo;ctx.bone=bn;ctx.source=source;ctx.ordinal=ordinal
+        local cls=read(function()return weapon:GetClass()end);local clsname=read(function()return cls:GetFName()end)
+        local source_class=read(function()return clsname:ToString()end)
+        if source_class:find("Fists",1,true)then source=source+BF.FIST;ctx.source=source end
+        ctx.source_class=source_class
+        local binding=C3.stuck_parent and C3.stuck_parent[C3.stuck_resolver.key(cid,{world=WG.key,drops=WG.drops,
+            native_world=wid,match_id=mine.match_id,round=mine.round,attacker_peer=my_peer_id,victim_peer=peer,
+            attacker_life=mine.life,victim_life=theirs.life,victim_name=aid.name,source_address=co.address,
+            target_address=bo.address,source=source,ordinal=ordinal,source_class=source_class,bone=bn})]
+        if binding then parent.binding_state=binding.state end
+        if binding and binding.parent then parent={association="candidate_only",cid=binding.parent.cid,original=binding.header,
+            binding_state=binding.state,server_verdict="unavailable",wear_history="unavailable"}end
+    end
+    ctx.scope_key=table.concat({ctx.world,ctx.drops,ctx.match_id,ctx.round,ctx.local_peer,ctx.local_life,
+        ctx.victim_peer,ctx.victim_life,ctx.pawn,ctx.actor,ctx.mesh,ctx.mesh_name},"|")
+    if not live()then return nil end
+    return ctx,con,actor,parent
+end
+function C3.cut_current(ctx,victim,admitted)
+    -- Cheap record/world validation, not a repeated full constructor resolver.
+    local function bound()
+        return (not admitted or admitted())and WG.same({key=ctx.world,drops=ctx.drops})
+    end
+    if ctx.local_peer~=my_peer_id or not bound()or not C3.cut_live()then return false end
+    local ipc=rawget(_G,"HSMP_IPC")
+    local mode=HSESS.mode();local view=HSESS.view()
+    local mine=mode and mode.rows and mode.rows[ctx.local_peer]
+    local theirs=mode and mode.rows and mode.rows[ctx.victim_peer]
+    local order=view and view.spawns and view.spawns[ctx.local_peer]
+    local status=ipc.bus_table("spawn_status")
+    if not mode or not view or mode.match_id~=ctx.match_id or view.match_id~=ctx.match_id
+        or mode.round~=ctx.round or view.round~=ctx.round or not mine or mine.life~=ctx.local_life or mine.respawning
+        or not theirs or theirs.life~=ctx.victim_life or not order or not status or status.verified~=true
+        or status.spawn_id~=order.spawn_id or status.match_id~=ctx.match_id or status.round~=ctx.round
+        or status.life~=ctx.local_life or status.pawn~=ctx.local_pawn then return false end
+    if ctx.side~="owner"then
+        local playback=ipc.bus_table("playback");local found=0
+        for _,row in ipairs(playback and playback.rows or {})do
+            if row.peer==ctx.victim_peer and row.pawn==ctx.pawn and row.match_id==ctx.match_id and row.round==ctx.round
+                and row.life==ctx.victim_life and type(row.local_ms)=="number"and math.abs(now_ms()-row.local_ms)<=250 then found=found+1 end
+        end
+        if found~=1 then return false end
+    end
+    if not bound()then return false end
+    local mesh=victim.Mesh
+    if not bound()then return false end
+    local a=mesh:GetAddress()
+    if not bound()then return false end
+    local fn=mesh:GetFName()
+    if not bound()then return false end
+    local name=fn:ToString()
+    return bound()and a==ctx.mesh and name==ctx.mesh_name
+end
+function C3.cut_capture(kind,...)
+    local journal=C3.cut_journal
+    if not journal or not journal:pending()then return end
+    local args=table.pack(...)
+    local row,why=journal:capture(kind,function(admitted)
+        local ctx,con,victim,parent=C3.cut_scope(kind,args,nil,admitted);if not ctx then return nil end
+        local function current()return C3.cut_current(ctx,victim,admitted)end
+        local function finish()
+            local fresh=C3.cut_scope(kind,args,ctx,admitted)
+            if not fresh or fresh.scope_key~=ctx.scope_key then return false end
+            for _,k in ipairs({"constraint","weapon","collider","body"})do
+                local a,b=ctx[k],fresh[k]
+                if (a==nil)~=(b==nil)or a and (a.address~=b.address or a.name~=b.name)then return false end
+            end
+            return fresh.bone==ctx.bone and fresh.source==ctx.source
+        end
+        return {context=ctx,constraint=con,victim=victim,parent=parent,current=current,finish=finish,
+            damage=function()return pv(args[2])end,args={args[2],args[3],args[4],args[5],args[6],args[7],args[8]},
+            topology=function()
+                if not C3.topology_audit then return nil end
+                return C3.topology_audit.read(victim,{unwrap=pv,context=function()
+                    if not current()then return nil end
+                    local w=ctx.native_world
+                    return {world=tostring(w.address).."@"..w.name,peer=ctx.victim_peer,match_id=ctx.match_id,
+                        round=ctx.round,life=ctx.victim_life,pawn=ctx.pawn,actor=ctx.actor,mesh=ctx.mesh}
+                end})
+            end}
+    end)
+    if not row then Log("NATIVECUT refused inst=%s event=%s reason=%s authority=false",os.getenv("HSMP_INST")or "unavailable",kind,why or "unavailable")end
+end
+function C3.cut_response_observe(response)
+    if C3.cut_journal then return C3.cut_journal:response(response)end
+end
+function C3.cut_control(on)
+    local journal=C3.cut_journal
+    if not journal then return false end
+    if not on then journal:stop("developer stop");return false end
+    if not C3.cut_live()then return false end -- explicit Live activation, never process-start arming
+    if not journal:start()then return false end
+    local ok=journal:install(RegisterHook,function(kind,...)pcall(C3.cut_capture,kind,...)end)
+    Log("NATIVECUT control inst=%s armed=true hooks_complete=%s phase=Blueprint_POST relay_eligible=false",os.getenv("HSMP_INST")or "unavailable",tostring(ok))
+    return ok
 end
 function C3.body_replay_meta(d,attacker)
     return {attacker=attacker,hit_id=d.hit_id,cid=d.cid,parent_cid=d.parent_cid,
@@ -2790,7 +2993,23 @@ local function apply_hit(d, _attacker)
         gate0 = C3.gd_gate_open(me, _attacker, d, bone)
         C3.body_replay=C3.body_replay_meta(d,_attacker)
         if C3.body_audit then pcall(C3.body_audit.capture,me,"Deal Complex Damage invocation PRE",C3.body_replay) end
-        ok, err = bp_call(me, "Deal Complex Damage", table.unpack(C3.dcd_args(d, mesh, geo, coll, hit_box), 1, 23))
+        local args=C3.dcd_args(d,mesh,geo,coll,hit_box)
+        -- Pinned UE4SS retains the first scalar-out table on its argument
+        -- stack. Share a container so all exact names survive copy-out.
+        local scalar_outputs={};for slot=18,23 do args[slot]=scalar_outputs end
+        local response_context={world=WG.key,drops=WG.drops,match_id=d.match_id,round=d.round,
+            attacker=_attacker,attacker_life=d.attacker_life,victim=my_peer_id,
+            victim_life=d.victim_life,hit_id=d.hit_id}
+        C3.last_native_response=nil
+        ok, err = bp_call(me, "Deal Complex Damage", table.unpack(args,1,23))
+        if C3.damage_response and WG.key==response_context.world and WG.drops==response_context.drops
+            and my_peer_id==response_context.victim then
+            local copied,response=pcall(C3.damage_response.capture,args,ok,response_context)
+            if copied then
+                C3.last_native_response=response
+                if C3.cut_response_observe then pcall(C3.cut_response_observe,response)end
+            end
+        end
         if C3.body_audit then pcall(C3.body_audit.capture,me,"Deal Complex Damage invocation POST",C3.body_replay) end
         C3.body_replay=nil
         C3.gd_gate_note(me, _attacker, d, bone, gate0)
@@ -3534,6 +3753,9 @@ local puppets_stale = true   -- re-resolve stand-ins on the first tick of a worl
 -- without touching it. Stand-in FNames (puppet_peer) are plain strings and
 -- stay, so hits on stand-ins are still recognised until the refresh.
 wg_on_drop(function(why)
+    if C3.cut_journal then C3.cut_journal:stop("world dropped")end
+    C3.cut_reader,C3.cut_info=nil,nil
+    C3.last_native_response=nil
     C3.body_replay=nil
     if C3.body_audit then C3.body_audit.clear() end
     puppet_actor = {}
@@ -3754,6 +3976,8 @@ function C3.poll_probe()
         elseif type(d)=="table" and d.op==1 and d.key=="body_probe" then
             C3.body_probe=tostring(d.arg or "")=="on"
             Log("body_probe %s: current-owner native body readback only",C3.body_probe and "ON" or "OFF")
+        elseif type(d)=="table" and d.op==1 and d.key=="cut_probe" then
+            C3.cut_control(tostring(d.arg or "")=="on")
         elseif type(d)=="table" and d.op==1 and d.key=="body_snapshot" then
             if C3.body_audit then pcall(C3.body_audit.capture,local_pawn(),"manual readback",{pre="unavailable:manual_read"}) end
         elseif type(d)=="table" and d.op==1 and d.key=="armor_probe" then

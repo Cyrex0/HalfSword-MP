@@ -17,6 +17,14 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Add a bounded developer journal for native stuck-blade setup, marker wear and
+  sever callbacks, with explicit missing history and no sever authority.
+- Retain the existing owner damage call's native material-response outputs with
+  explicit incomplete results after copy-out failures and world changes.
+- Correct scalar output containers for the pinned game bridge, including current
+  joint settings, without adding native calls or changing guard limits.
+- Stage seven internal authored weapon recipes with exact native passports across
+  equip, verification and recovery; public selection awaits recipe-specific validation.
 - Restore source order within a single drained batch of approved hits when the
   full life context and source timestamps agree, preserving duplicate protection.
 - Identify the first failed developer joint-capture guard from existing sampled

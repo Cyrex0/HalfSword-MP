@@ -22,7 +22,9 @@ local function fixture()
         e.actor["R Two Handed Grip"]=peer==1;e.actor["L Hand In Offhand Attached"]=false
         e.library={GetAttachedBodyNames=function(_,a,p,c)
             x.reads=x.reads+1;for _,b in pairs(binding)do if a.Index==b.index then
-                p.ParentBody={ToString=function()return b.parent end};c.ChildBody={ToString=function()return x.bad_endpoint and "head"or b.child end};return end end
+                p.ParentBody={ToString=function()return b.parent end}
+                local child=x.first_scalar_only and p or c
+                child.ChildBody={ToString=function()return x.bad_endpoint and "head"or b.child end};return end end
         end}
         local methods={GetAngularLimits={"Swing1MotionType","Swing1LimitAngle","Swing2MotionType","Swing2LimitAngle","TwistMotionType","TwistLimitAngle"},
             GetAngularDriveParams={"OutPositionStrength","OutVelocityStrength","OutForceLimit"},
@@ -32,6 +34,11 @@ local function fixture()
         for name,fields in pairs(methods)do e.library[name]=function(_,ref,...)
             x.reads=x.reads+1;x.calls=x.calls or {};x.calls[#x.calls+1]=name
             local args={...};for i,k in ipairs(fields)do args[i][k]=k:sub(1,1)=="b"and false or 0 end
+            if x.first_scalar_only then
+                for i,k in ipairs(fields)do args[i][k]=nil end
+                for _,k in ipairs(fields)do args[1][k]=k:sub(1,1)=="b"and false or 0 end
+                for _,k in ipairs(fields)do if k:sub(1,1)=="b"then args[1][k]=false end end
+            end
             -- Avoid the Lua false-or-zero trap in the fixture too.
             for i,k in ipairs(fields)do if k:sub(1,1)=="b"then args[i][k]=false end end
             if x.nonfinite and name=="GetProjectionParams"then args[2].ProjectionLinearAlpha=0/0 end
@@ -51,6 +58,14 @@ local function fixture()
     return x
 end
 local x=fixture();local r=x:run()
+local fan_in=fixture();fan_in.first_scalar_only=true;local fused=fan_in:run()
+local all_fused=fused~=nil
+if fused then
+    for _,side in ipairs({fused.source,fused.proxy})do
+        for _,j in ipairs(side.joints)do all_fused=all_fused and j.current.available and j.current.value.complete end
+    end
+end
+T.check(all_fused,"pinned first-table scalar copy-out supplies both endpoints and every joint group")
 T.check(r and #r.source.joints==3 and #r.proxy.joints==3,"one pair captures the three exact right joints for each independent peer")
 T.check(r and r.source.peer==1 and r.proxy.peer==2 and r.source.life==1 and r.proxy.life==2 and not r.temporal_pairing,
     "different peers and legitimate different lives are explicit, not a same-owner or time pairing")

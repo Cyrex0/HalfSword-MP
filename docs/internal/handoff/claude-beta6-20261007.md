@@ -1832,3 +1832,111 @@ both production deltas. Focused4suites861assertions(28batch+371Combat+43profile+
 proves batch ordering, once-only native execution even when optional logging throws,
 and next-batch older-ID refusal. Artifact native41-focused.json. Native41 is pending,
 and no native material/sever/physical parity is inferred from these fixtures.
+
+### Native41 completed; full cuts and gear remain the next priority
+
+d8072b4d full G0 passed66Lua suites,1279Rust tests/75binaries, clippy0errors/
+2warnings, no skips; exact dev push and normal RequireG0 deploy passed. Raw
+20261008-132915-402757-combat_manual, owned session native-20261008-41. Only
+bounded joint profile enabled; expensive Combat/Box/Grip/Hand/Limb probes off.
+Both games normal menu_quit, no new crashes/orphans/forced kills; owner/exp exit0.
+Cloth recipe256/263=.973384, claim Box rotation mean39.155/max81.865degrees
+(21samples), clock0/20windows. This is a separate sample from accepted Native40
+98.35%, not an overall completion percentage or a loosened acceptance bound.
+
+Actual batch_order triggers once(records2,moved2). One lowerID66 still arrives
+after64/65/67/68/69/70 in round3 with identical source timestamp101784 and parent64.
+It remains below a prior batch watermark. All-raw-run unique owner receipts256=
+177changed+78no-observed-change+1expired. No repeated native application. This
+proves the correction runs, not complete ordering repair. Typed census/ingress and
+actual diagnostic lines saved in native-20261008-41/native-audit.json.
+
+Actual first predicate inst1: proxy audit_changed, fieldmode_seq8→9, even though
+active getter stage source:UserConstraint_12:accessor_before(total86ms). This
+identifies a version-change refusal, not a causal physics defect. Inst2 emits one
+pending/unqualified source/proxy configuration row; every rightjoint current output
+unavailable at ChildBody, assets match but hand flags differ. No counterpart pair
+or native joint/force parity. Comparison saved native41-joint-profile-native-comparison.json.
+
+User confirms missing natural decapitation, whole limbs and torso cuts. Priority
+is complete native sharp-cut transaction and owner-produced detached topology,
+not extra distal masks or HP-based forced sever. Exact cooked factory has25
+initializer inputs; current Damage lacks selected-tip and complete native setup/
+force/marker history. Source scalar DCD/GD cannot reproduce the native constraint's
+marker-wear→CallDismember→Initiate/Delayed transaction. Thrust is excluded from
+the sharp-sever branch; piercing injury must still follow native rules.
+
+Gear audit proves tier children inherit an empty passport and native BeginPlay
+overwrites module fields from the supplied passport. First-family merchant
+fallback cannot prove selected tier. Direct authored presets need their own exact
+asset/property/entry identities; runtime generation mutates the world and must
+choose/freeze one validated complete recipe for peers. Do not silently relabel
+generic base presets as tier children. Mid/High polearm list3haft cases but shown
+RNG0..1 reaches only2. Exact ignored audit native-tier-passport-provenance-20261008.json.
+
+Owner's next feature, ordered after dismemberment and clothing/armor are fixed:
+co-op Abyss, shared multiplayer waves against AI enemies. Preserve that request
+in the backlog and subsequent heartbeat handoffs; do not replace current combat
+and gear blockers with co-op work. Conditional PR/merge/release gates remain open.
+
+### Next checkpoint preparation: native scalar responses and explicit recipes
+
+Native bridge source LuaUObject.cpp203–225 registers scalar out tables and continues
+without consuming the original argument. Registry::make_ref pops only its duplicate.
+Consequently consecutive scalar outputs can all target the first supplied table;
+Native41's missing ChildBody is consistent with this source-proven incompatibility.
+Owner DCD now supplies one fresh shared container in slots18–23, preserving all
+exact output names; joint profile does the same for both FName outputs and each
+scalar getter group. Native inputs/getter counts/guards are unchanged. Actual
+effectiveness still requires the next run, not an inferred successful native capture.
+
+native_damage_response retains byte Hit Surface, doubles Damage/Cutting Rate/
+Rigidity/Material Density Out and native bool Lower Threshold Out from the existing
+single owner DCD call. No extra native call/getter, retry, default value or sever
+authority. Snapshot plain invocation context before native call, preserve only
+same world/drop/peer afterward, and clear on WG drop. Partial copy-out stays
+incomplete even when native injury receipt is successful; protected copying/logging
+cannot disrupt original cleanup. Tests model first-table fan-in, exact zero/false,
+missing bool slot, copy-out-after-injury, optional observer failure and actual
+world drop during invocation. Root4suites859assertions/6parses, Astra approved.
+
+Armor's frozen private native_weapon_presets module has7exact authored recipes:
+Pollaxe, Longsword, Bastard Sword, Arming Sword, Mace, Baron Sword and Baron Mace.
+Native asset/property/array entry or exact enum-map key is required, with all25
+saved fields and material enum numbers from actual Names. All175 literal fields
+match cooked evidence. Recipe identity reaches owner equip/verify/rearm and remote
+fallback/empty-left debt; explicit recipe refusal cannot borrow merchant templates.
+207assertions/5parses, Astra approved. No public catalogue/server admission change:
+all use ModularWeaponBP_C, whose mixed native families need exact historical
+recipe/source authentication before combat admission. Existing tier ambiguity and
+all-gear runtime geometry/material acceptance remain open.
+
+Cut journal implementation/review is in progress: independent developer control,
+POST-only bounded initializer/marker/cut-phase evidence, copied owner responses,
+explicit unknown baseline/history and zero relay permission. No executor, forced
+sever or unguarded proxy damage is introduced. Full native cutting/upper-body
+topology, fair native gear, spawn pose and native scenario gates are still blockers.
+
+All next-checkpoint source is now frozen and Astra approved. Root final7suites
+1120assertions,13Lua parses, direct state-files and diff-check pass. Journal43+
+Combat392 subset435 passes; explicit dev cut_probe on/off lazily installs5POST
+hooks only in fresh Live. One15s window,16source events/3failed admissions plus
+2separate owner scalar responses; world/drop checked before borrowed objects,
+stop/deadline token reaches nested topology and every existing read. No heavy
+caller probe or automatic start. Natural cut and native performance still pending.
+
+Actual enum Names must be used for labels: Head0,Neck1,Torso2,UpperArmR3,
+LowerArmR4,HandR5,UpperArmL6,LowerArmL7,HandL8,ThighR9,CalfR10,FootR11,
+ThighL12,CalfL13,FootL14. The existing distal projection is nevertheless correct:
+raw Delayed2298 ByteConst selects3→lowerarm_r,4→hand_r,etc, then8554 hides that
+subtree and24563 writes PartsMap using the original enum byte. Named cut segment
+and wholly hidden distal subtree differ for partial cuts. Never mechanically
+renumber projection from labels; hand/foot-at-seam and head/torso need geometry.
+
+Native42 proposed public w_axe2h cloth oracle: authored tips5/6 are candidates,
+ordinary w_axe tips max2; native selected Closest Tip overwrites current Sharp
+Level, so journal actual CutLevel/GoreRate rather than assuming authored maxima.
+At actual Gore1 torso needslevel5/6markers, headlevel2/4markers. Journal Live-only
+coverage ends on surrender/RoundOver; corpse continuation remains unavailable,
+though native Initiate/Delayed has no DED/alive prerequisite. This is a separate
+future topology observation scope, not permission to resume eliminated hit claims.

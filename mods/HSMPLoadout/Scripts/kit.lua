@@ -210,7 +210,11 @@ end
 
 local function item_path(id)
     local it = Cat and id and id ~= "" and Cat.items[id]
-    return it and it.path or nil
+    return it and it.path or (api.weapon_recipe_class and api.weapon_recipe_class(id)) or nil
+end
+local function item_recipe(id)
+    if api.weapon_recipe_class and api.weapon_recipe_class(id) then return id end
+    return nil
 end
 
 -- Kit armour as main.lua "pieces": { {slot, path}, ... } (+ unresolved ids).
@@ -297,7 +301,7 @@ end
 -- Give `pawn` the weapon class `path` in hand `side` ("R"/"L"); nil = empty hand.
 -- The native equip function builds from the complete canonical passport.
 -- The actor fallback receives that same passport before native construction.
-function Kit.give_weapon(pawn, side, path)
+function Kit.give_weapon(pawn, side, path, recipe)
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
     local cur = current_weapon(pawn, side)
     if not path then
@@ -313,7 +317,7 @@ function Kit.give_weapon(pawn, side, path)
     if not cls then return "FAIL noclass" end
     -- The game re-arms the hands from the character passport after a setup;
     -- keep it in line with the kit (see main.lua set_hand_passport).
-    local pass = api.weapon_passport_for and api.weapon_passport_for(cls)
+    local pass = api.weapon_passport_for and api.weapon_passport_for(cls, nil, recipe)
     if not pass then return "FAIL native weapon defaults unavailable" end
     if api.set_hand_passport and not api.set_hand_passport(pawn, side, cls, pass) then return "FAIL hand passport" end
     if cur then
@@ -398,7 +402,8 @@ function Kit.effective_remote(id, L)
     -- No appearance yet: show the kit itself.
     local pieces = Kit.pieces(kit)
     return { v = 0, p = pieces, a = {}, tint = Kit.tint(kit), w = {},
-             kit_w = { R = item_path(kit.r), L = item_path(kit.l) }, cos_kit = kit }, suffix
+             kit_w = { R = item_path(kit.r), L = item_path(kit.l) },
+             kit_recipe = { R = item_recipe(kit.r), L = item_recipe(kit.l) }, cos_kit = kit }, suffix
 end
 
 -- --- stand-in apply keys (pure; main.lua apply_remote) ---------------------------------
@@ -446,8 +451,9 @@ function Kit.weapon_sig(L, hsuf, strip)
         if Kit.weapon_passport_key then return Kit.weapon_passport_key(e) end
         return type(e) == "table" and tostring(e.class) or "-"
     end
-    return string.format("R=%s,L=%s,kR=%s,kL=%s%s%s%s", c(w.R), c(w.L), kw and tostring(kw.R) or "-",
-        kw and tostring(kw.L) or "-", hsuf or "", (strip and strip.R) and "|sR" or "", (strip and strip.L) and "|sL" or "")
+    local recipes = L.kit_recipe or {}
+    return string.format("R=%s,L=%s,kR=%s,kL=%s,pR=%s,pL=%s%s%s%s", c(w.R), c(w.L), kw and tostring(kw.R) or "-",
+        kw and tostring(kw.L) or "-", tostring(recipes.R or ""), tostring(recipes.L or ""), hsuf or "", (strip and strip.R) and "|sR" or "", (strip and strip.L) and "|sL" or "")
 end
 
 -- Dynamic world items in the text form of HSMPWorld's world manifest
@@ -507,14 +513,14 @@ Kit.is_bare = is_bare
 -- the pieces it actually spawned (source "equipped")
 -- when it reports anything, else the count of worn armour meshes.
 -- A hand counts only when it holds the kit class and complete native passport.
-local function weapon_ok(pawn, side, path)
+local function weapon_ok(pawn, side, path, recipe)
     local cur = current_weapon(pawn, side)
     local cp = ""
     if cur then pcall(function() cp = api.class_path(cur:GetClass()) end) end
     if not path then return is_bare(cp), cp end
     if cp ~= path or is_bare(cp) then return false, cp end
     local cls = api.resolve_class(path)
-    local pass = cls and api.weapon_passport_for and api.weapon_passport_for(cls)
+    local pass = cls and api.weapon_passport_for and api.weapon_passport_for(cls, nil, recipe)
     return pass ~= nil and api.weapon_passport_matches ~= nil and api.weapon_passport_matches(cur, pass), cp
 end
 
@@ -523,7 +529,7 @@ local function hands_check(pawn, kit)
     local bad, sides = {}, {}
     for _, side in ipairs({ "R", "L" }) do
         local path = item_path(side == "R" and kit.r or kit.l)
-        local ok, cp = weapon_ok(pawn, side, path)
+        local ok, cp = weapon_ok(pawn, side, path, item_recipe(side == "R" and kit.r or kit.l))
         if not ok then
             bad[#bad + 1] = side .. " (" .. (cp ~= "" and cp:match("([^/%.]+)$") or "empty") .. ")"
             sides[#sides + 1] = side
@@ -550,8 +556,8 @@ end
 Kit.hand_visible = hand_visible
 
 local function verify(pawn, kit, retain_weapon)
-    local wr, cr = weapon_ok(pawn, "R", item_path(kit.r))
-    local wl, cl = weapon_ok(pawn, "L", item_path(kit.l))
+    local wr, cr = weapon_ok(pawn, "R", item_path(kit.r), item_recipe(kit.r))
+    local wl, cl = weapon_ok(pawn, "L", item_path(kit.l), item_recipe(kit.l))
     local ok, missing, worn = verify_armour(pawn, kit)
     if not wr then missing[#missing + 1] = "R hand (" .. (cr ~= "" and cr:match("([^/]+)$") or "empty") .. ")" end
     if not wl then missing[#missing + 1] = "L hand (" .. (cl ~= "" and cl:match("([^/]+)$") or "empty") .. ")" end
@@ -621,8 +627,8 @@ local function apply_own(pawn, kit)
     local pieces, unresolved = Kit.pieces(kit)
     local L = { p = pieces, a = {}, tint = Kit.tint(kit) }
     local armour_ok, n, ares = api.apply_armour(pawn, L)
-    local wr = Kit.give_weapon(pawn, "R", item_path(kit.r))
-    local wl = Kit.give_weapon(pawn, "L", item_path(kit.l))
+    local wr = Kit.give_weapon(pawn, "R", item_path(kit.r), item_recipe(kit.r))
+    local wl = Kit.give_weapon(pawn, "L", item_path(kit.l), item_recipe(kit.l))
     local hair = Kit.apply_hair(pawn, kit)
     local face = Kit.apply_face(pawn, kit)
     Log("own kit %s rev=%s applied: pieces=%d%s %s | R=%s L=%s | hair=%s face=%s",
@@ -775,14 +781,15 @@ end
 -- string, or nil when it did not end up in hand. The optional second result
 -- distinguishes a refusal before native setup from attempted, unproved native
 -- completion: native setup can subtract weight before a later failure.
-function Kit.reequip(pawn, side, actor, path)
+function Kit.reequip(pawn, side, actor, path, recipe)
     local fname = side == "R" and "Set Up Right Hand Weapon" or "Set Up Left Hand Weapon"
     local prepared, input = pcall(function()
         if not api.valid(actor) then return nil end
         local cls = api.resolve_class(path)
         if not cls then return nil end
-        local pass = api.weapon_passport_for and api.weapon_passport_for(cls, actor)
+        local pass = api.weapon_passport_for and api.weapon_passport_for(cls, actor, recipe)
         if not pass then return nil end
+        if recipe and (not api.weapon_passport_matches or not api.weapon_passport_matches(actor, pass)) then return nil end
         local same = same_actor(current_weapon(pawn, side), actor)
         -- The native OR condition destroys grip0 even with Destroy Previous
         -- false. Refuse it before changing the hand passport.
@@ -830,7 +837,7 @@ local function rearm(pawn, kit, sides)
             end)
             pcall(function() cp = api.class_path(old:GetClass()) end)
             if cp == path and (held == false or same_actor(current_weapon(pawn, side), old)) then
-                r = Kit.reequip(pawn, side, old, path)
+                r = Kit.reequip(pawn, side, old, path, item_recipe(side == "R" and kit.r or kit.l))
                 if not r then r = "waiting(same actor retained) retained=" .. nm(old) .. "@" .. pawn_addr(old) end
             elseif cp == path and held == nil then
                 r = "waiting(actor ownership unavailable) retained=" .. nm(old) .. "@" .. pawn_addr(old)
@@ -838,7 +845,7 @@ local function rearm(pawn, kit, sides)
                 r = "waiting(actor class unavailable) retained=" .. nm(old) .. "@" .. pawn_addr(old)
             end
         end
-        r = r or tostring(Kit.give_weapon(pawn, side, path))
+        r = r or tostring(Kit.give_weapon(pawn, side, path, item_recipe(side == "R" and kit.r or kit.l)))
         local now_w = current_weapon(pawn, side)
         if own.held and now_w and not is_bare(short_class(now_w)) then own.held[side] = now_w end
         res[#res + 1] = side .. "=" .. r
