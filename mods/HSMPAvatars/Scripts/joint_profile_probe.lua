@@ -1,6 +1,6 @@
 -- Developer-only configuration evidence. Own source and remote proxy are
 -- different peers; counterpart rows must be joined across clients, not by time.
-local M={MAX_ATTEMPTS=3,JOINTS={{"UserConstraint_10","clavicle_r","upperarm_r"},
+local M={MAX_ATTEMPTS=3,RETRY_MS=5000,JOINTS={{"UserConstraint_10","clavicle_r","upperarm_r"},
     {"UserConstraint_11","upperarm_r","lowerarm_r"},{"UserConstraint_12","lowerarm_r","hand_r"}}}
 -- Cooked primary asset and native limb capture agree on this name/endpoints.
 -- The runtime accessor still proves its owner, index and both actual bodies.
@@ -218,13 +218,33 @@ function M.new(emit,focus,trigger)
         selection,side,coverage=copy(M.RIGHT_HAND),"right","right_hand_only"
     else return nil,"unsupported joint focus"end
     local s={attempts=0,used=false,trigger=trigger=="fault"and "fault"or "warm"}
-    function s:attempt()
+    local function finite(v)return type(v)=="number"and v==v and math.abs(v)<math.huge end
+    local function retryable(f)
+        if type(f)~="table"then return false end
+        if f.validator=="source"and f.predicate=="source_sample_age"and f.field=="sample_age_ms"then
+            return f.observed_available==true and finite(f.observed)and f.observed>250
+        end
+        local field=f.field
+        return (f.validator=="source"or f.validator=="proxy")and f.predicate=="raw_scope_changed"
+            and type(field)=="string"and (field:match("^raw%.session%.")~=nil
+                or field:match("^raw%.mode%.")~=nil or field=="raw.mode"or field=="raw.mode_present")
+    end
+    function s:attempt(now)
         if self.used or self.attempts>=M.MAX_ATTEMPTS then return false end
+        if self.trigger=="fault"and self.in_attempt then return false end
+        if self.retry_pending and(not finite(now)or not finite(self.last_attempt_ms)
+            or now-self.last_attempt_ms<M.RETRY_MS)then return false end
+        self.retry_attempt=self.retry_pending==true;self.retry_pending=false
+        self.last_attempt_ms=finite(now)and now or nil;self.in_attempt=true
         self.attempts=self.attempts+1;return true
     end
+    function s:abandon()
+        self.used=true;self.in_attempt=false;self.retry_pending=false;self.retry_attempt=false
+    end
     function s:capture(source,proxy,se,pe)
-        if self.used or self.attempts<1 then return nil end
-        self.used=true -- all optional native reads, including failed reads, are once-only.
+        if self.used or self.attempts<1 or self.trigger=="fault"and not self.in_attempt then return nil end
+        local retry=self.retry_attempt==true
+        self.used=true;self.in_attempt=false;self.retry_attempt=false
         local stage="pair:scope"
         local function clock()
             local ok,v=pcall(se.now)
@@ -255,6 +275,7 @@ function M.new(emit,focus,trigger)
             return true
         end
         local ok,result=pcall(function()
+            assert(not retry or source.pending==true and proxy.pending==true,"retry requires current pending peers")
             assert(source.peer~=proxy.peer,"source and proxy peer must differ")
             for _,k in ipairs({"world","generation","match_id","round"})do
                 assert(source[k]~=nil and source[k]==proxy[k],"source/proxy scope disagreement")
@@ -268,9 +289,12 @@ function M.new(emit,focus,trigger)
         end)
         if not ok then
             local finished=clock();local available=started~=nil and finished~=nil and finished>=started
+            local allowed=self.trigger=="fault"and source.pending==true and proxy.pending==true
+                and self.attempts<M.MAX_ATTEMPTS and finite(self.last_attempt_ms)and retryable(first_failure)
+            if allowed then self.used=false;self.retry_pending=true end
             -- Total capture-entry-to-refusal time, not a per-stage duration.
             return nil,M.reason(result),{stage=stage,elapsed_available=available,capture_elapsed_ms=available and finished-started or nil,
-                first_failure=first_failure}
+                first_failure=first_failure,retry_eligible=allowed}
         end
         pcall(emit,result);return result
     end

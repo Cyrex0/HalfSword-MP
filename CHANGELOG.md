@@ -17,6 +17,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Preserve complete session and mode state during developer wrist captures while
+  allowing sequence and server-clock heartbeats, retaining strict gameplay guards;
+  bound loading-phase retries and record the transported grip without changing it.
 - Keep initial spawn position anchored through Loading and Countdown while native
   limb motion stays active; require fresh settling after release before player input.
 - Make developer AI takeover wait for the controller's actual input release.

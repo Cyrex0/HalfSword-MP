@@ -55,7 +55,7 @@ local function fixture(focus)
             sample_ms=80,qualification=peer==1,role=peer==1 and "local_source"or "remote_proxy"}
     end
     x.sc,x.pc=context(1),context(2);x.probe=P.new(function(row)x.records[#x.records+1]=row end,focus)
-    function x:run()self.probe:attempt();return self.probe:capture(self.sc,self.pc,self.source,self.proxy)end
+    function x:run(now)self.probe:attempt(now);return self.probe:capture(self.sc,self.pc,self.source,self.proxy)end
     return x
 end
 local x=fixture();local r=x:run()
@@ -240,3 +240,49 @@ e.source.mesh.GetCurrentJointAngles=function()e.current=false end
 e.proxy.joint_angles=true;e.proxy.mesh.GetCurrentJointAngles=function()proxy_angle_reads=proxy_angle_reads+1 end
 r=e:run();T.check(r==nil and #e.records==0 and proxy_angle_reads==0,
     "scope loss in optional angle read stops every later proxy read and emission")
+
+local function retry_fixture(failure)
+    local f=fixture("hand_r");f.fail=true;f.lost=false
+    f.sc.pending,f.pc.pending=true,true
+    f.probe=P.new(function(record)f.records[#f.records+1]=record end,"hand_r","fault")
+    local original=f.source.mesh.SkeletalMesh.GetPhysicsAsset
+    f.source.mesh.SkeletalMesh.GetPhysicsAsset=function(...)
+        local value=original(...);if f.fail then f.lost=true end;return value
+    end
+    f.source.current=function()if f.lost then return false,failure end;return true end
+    return f
+end
+local transition=P.failure("source","raw_scope_changed","raw.session.rows.2.loaded_round",0,1)
+local f=retry_fixture(transition)
+local result,why,detail=f:run(100)
+T.check(not result and detail.retry_eligible and not f.probe.used and f.reads==1,
+    "fault-only pending semantic transition preserves one bounded retry after the first-loss latch")
+local count=f.reads
+T.check(not f.probe:attempt(5099)and not f.probe:attempt()and not f.probe:attempt(99)
+    and f.probe.attempts==1 and f.reads==count,
+    "cooldown, missing clock and clock rollback refuse without admission or optional native reads")
+f.fail,f.lost=false,false
+result=f:run(5100)
+T.check(result and f.probe.attempts==2 and f.probe.used and #f.records==1,
+    "fresh pending pair succeeds at five seconds and becomes terminal")
+count=f.reads;f:run(11000)
+T.check(f.reads==count and #f.records==1,"success cannot restart the process-total fault budget")
+f=retry_fixture(transition)
+for i=0,2 do f.lost=false;result,why,detail=f:run(100+i*5000)end
+T.check(f.probe.attempts==3 and f.probe.used and not detail.retry_eligible and not f.probe:attempt(15100)and f.reads==3,
+    "three complete failed pending attempts exhaust the process-total cap without another getter")
+f=retry_fixture(transition);f:run(100);count=f.reads
+f.fail,f.lost=false,false;f.sc.pending,f.pc.pending=false,false
+result,why,detail=f:run(5100)
+T.check(not result and f.reads==count and f.probe.used and not detail.retry_eligible,
+    "a now-Live pair refuses the repeat before every optional native getter")
+f=retry_fixture(P.failure("source","source_sample_age","sample_age_ms","0..250",251.25))
+result,why,detail=f:run(100)
+T.check(not result and detail.retry_eligible,"known expired source sample may retry only with fresh later pending admission")
+f=retry_fixture(P.failure("source","raw_scope_changed","raw.snapshot_unavailable",nil,nil))
+result,why,detail=f:run(100)
+T.check(not result and not detail.retry_eligible and f.probe.used,"malformed semantic snapshot is terminal structural unavailability")
+f=retry_fixture(P.failure("source","native_pc_world_changed","world","Old","New"))
+result,why,detail=f:run(100);count=f.reads;f.lost=false;f.fail=false;f:run(5100)
+T.check(not result and count==1 and f.reads==count and f.probe.used and #f.records==0,
+    "world loss stops before later old-object reads and cannot reopen on a synthetic recovery")

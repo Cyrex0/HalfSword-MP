@@ -2358,3 +2358,78 @@ body staysplaced, arm settling, postrelease input/AI and convergence. JOINTPROFI
 disabled to avoid123/156ms failed capture stalls; native caller/hand/limb probes off.
 Existing bounded drift observations and plain hold timing may remain enabled.
 No main/PR/release yet: Native46 visibly failed the user's spawning requirement.
+
+### Native47 actual outcome: protected position maintained, wrist still blocks release
+
+Commit d5ab91ce52 passed normal full G0 (69 Lua suites, 1283 Rust tests), exact
+dev push and RequireG0 deployment. Actual raw run is
+test-results/20261008-175608-61ecd8-combat_manual; expensive probes off, mover off.
+Bootstrap polearm round had bilateral six-limb settling and input release after
+explicit post-release-stabilizing waits. The cloth/axe recipe failed Ready in
+all three observed rounds because one proxy's right hand stayed twisted; two
+completed load_failed and the third was stopped. No AI takeover observed. The
+experiment exited 2 waiting for Live; combat_manual cleanup PASS is not spawn PASS.
+
+Initial protected placements all succeeded on try 1 with 0-5cm residuals and no
+Loading/Countdown watchdog re-placement. Native balance still moves: 94/98
+residual corrections in long protected holds show active anchoring, not natural
+convergence. Two large COM/capsule drift samples occur after round 1 load_failed,
+when anchoring has ended. Worst timed hold call was 72ms; combined logs cannot
+attribute this cost to an exact process/assignment or prove render FPS.
+61 right-hand stall/repose rows persisted. Typical failed wrist rotation was
+165-170 degrees while pelvis rotation stayed near zero. Do not claim fair spawn.
+
+Source hold release and post-release wait/input log chronology is available.
+The late read-only local-bus capture saw Menu with invalid empty SpawnStatus;
+it does not observe the original durable release t or prove its numeric suffix.
+Games stopped gracefully, saves preserved, no new crash dumps. Bounded audits:
+test-results/dev-feature-checks/native47-protected-anchor-analysis.json,
+native47-hold-drift-final.json, native47-anchor-chronology-final.json, and
+test-results/lab/native-20261008-47/settle-readonly-audit.json.
+
+Native48 bootstrapped the same deployed commit but was stopped before the proposed
+limits=150 recipe. TUNE actually defaults to zero, contrary to an old comment;
+the optional SetAngularLimits path uses bone names while native joints are named
+UserConstraint_N (replication.md), so this command is not a verified intervention.
+No joint-limit physics change was made. Existing close_limits selects the None
+profile whereas cooked native initialization selects Motor; it is not an exact
+prior-profile restoration. Neither 165-degree tracking error nor saved older
+bone-relative angles proves current constraint-frame clamping.
+
+Next bounded diagnostic preserves full actual raw Session/Mode semantics while
+admitting only sequence/server-clock heartbeat changes; production readiness,
+writer, hand and limb guards stay unchanged. This is needed because Native46
+refused an otherwise unchanged wrist capture on a Session heartbeat. Loaded,
+waiting, roster, spawn, map, phase and all other semantic transitions must still
+refuse. Capture actual current named wrist limits/reference/grip flags before
+choosing a physical repair. Main/release remains blocked by the twisted wrist,
+then requires G1 e2e and documented G2 scenarios twice green. Co-op Abyss follows.
+
+Static native gear candidate (not yet proved by current runtime data): Axe2H has
+native default right grip 10, left grip 1 and alternate 15. SetUpRH copies the
+actual held weapon default, but the native tick can reselect current right grip
+10 to 1 when left-arm tonus/offhand eligibility fails. Proxy neutralization zeros
+left-arm tonus. Current grips already travel in pose control C[2]/C[3], but Avatar
+does not apply them. Repose copies the proxy's own animation, not the source's
+DriverSkeleton. The bounded profile will include actual native current grips and
+copied transported values, explicitly without native-read availability or a
+separate control timestamp. Packet zero can be a sampler fallback; do not treat
+it as proved native state. Primary audit:
+test-results/dev-feature-checks/native49-axe-current-grip-audit.json.
+
+Diagnostic retries, if finalized, remain fault-only: at most three process-total
+attempts, five seconds apart, success terminal. Repeat full reads require fresh
+source/proxy Loading/Countdown admissions. Only explicit semantic transition or
+expired source sample may retry; snapshot availability, native world/binding/ABI
+or structural failures remain terminal. Each attempt keeps its own wrappers and
+first-loss latch; no old accessor/object reuse across attempts. Warm mode remains
+once-only. This is bounded evidence collection, not a physical repair.
+
+Native49 diagnostic source is frozen: six files, three focused suites with 616
+assertions passed (Avatar524, semantic helper11, joint probe81), six Lua parses
+and whitespace checks pass. A now-Live retry is stopped after fresh admission
+before optional library lookup; the actual-main control-boundary fixture retains
+the original measured fault via an explicit fixture-local oracle and proves no
+second lookup/capture. It does not refresh sample timestamps or change production
+fault predicates. Semantic snapshot and retry behavior are developer-only;
+ordinary gameplay/readiness/writer guards and all physics remain unchanged.

@@ -1451,6 +1451,7 @@ PX.LIMB_BURST=PX.LIMB_BURST_MODULE and PX.LIMB_BURST_MODULE.new(function(row)
     if HL and HL.encode then Log("LIMBBURST %s",HL.encode(row))end
 end)or nil
 PX.JOINT_PROFILE_MODULE=os.getenv("HSMP_DEV")=="1"and os.getenv("HSMP_JOINT_PROFILE_PROBE")=="1"and load_module("joint_profile_probe")or nil
+PX.JOINT_PROFILE_SESSION=PX.JOINT_PROFILE_MODULE and load_module("joint_profile_session")or nil
 if PX.JOINT_PROFILE_MODULE then
     PX.JOINT_PROFILE,PX.JOINT_PROFILE_REASON=PX.JOINT_PROFILE_MODULE.new(function(row)
         if HL and HL.encode then Log("JOINTPROFILE %s",HL.encode(row))end
@@ -1517,6 +1518,7 @@ function PX.hand_pipeline_scope(q,diagnose)
         if not reader then return fail("session_reader","reader_available",true,false)end
         reader:poll(true);if not reader:live()then return fail("session_liveness","live",true,false)end
         local function integer(v,low)return type(v)=="number"and math.tointeger(v)and v>=low and v or nil end
+        local raw_session=diagnose and HSMP_IPC.rec("session")or nil
         local session=HSM.view()
         if type(session)~="table"or not integer(session.seq,1)or not integer(session.match_id,1)
             or not integer(session.round,0)or not integer(session.phase,0)or session.match_id~=q.match_id then return fail("session_view","view_current",true,false)end
@@ -1546,6 +1548,12 @@ function PX.hand_pipeline_scope(q,diagnose)
             and integer(a.mode_life,1)~=nil and a.mode_life==q.life
         a.qualification_reason=a.qualification and "mode_current"or not a.mode_available and "mode_unavailable"or "mode_tuple_mismatch"
         if not a.qualification and not pending then return fail("mode_qualification","qualification",true,a.qualification)end -- preserve strict Live admission
+        if diagnose then
+            local helper=PX.JOINT_PROFILE_SESSION
+            if not helper then return fail("raw_scope_snapshot","helper_available",true,false)end
+            a.semantic,a.raw_versions=helper.capture(raw_session,mode)
+            if not a.semantic then return fail("raw_scope_snapshot","snapshot_available",true,false)end
+        end
         local pc=local_pc();local _,wid=world_identity(pc)
         if not wid or q.world~=tostring(world_gen).."|"..wid or not PX.grip_probe_same(PX.grip_probe_id(q.actor),q.pawn)then return fail("native_pc_actor_binding","binding_current",true,false)end
         local w=q.actor:GetWorld()
@@ -1562,13 +1570,16 @@ function PX.hand_pipeline_current(q,diagnose)
     local a,why=PX.hand_pipeline_scope(q,diagnose)
     if not a then return false,why end
     if not q.audit then return false,diagnose and PX.joint_profile_failure("proxy","audit_unavailable","audit_available",true,false)or nil end
+    local function compared(k)return not diagnose or(k~="session_seq"and k~="mode_seq"and k~="semantic"and k~="raw_versions")end
     if diagnose then
+        local same,field,expected,observed=PX.JOINT_PROFILE_SESSION.same(q.audit.semantic,a.semantic)
+        if not same then return false,PX.joint_profile_failure("proxy","raw_scope_changed",field,expected,observed)end
         for _,k in ipairs(PX.JOINT_PROFILE_MODULE.AUDIT_FIELDS)do
-            if q.audit[k]~=a[k]then return false,PX.joint_profile_failure("proxy","audit_changed",k,q.audit[k],a[k])end
+            if compared(k)and q.audit[k]~=a[k]then return false,PX.joint_profile_failure("proxy","audit_changed",k,q.audit[k],a[k])end
         end
     end
-    for k,v in pairs(a)do if q.audit[k]~=v then return false,diagnose and PX.joint_profile_failure("proxy","audit_changed",k,q.audit[k],v)or nil end end
-    for k,v in pairs(q.audit)do if a[k]~=v then return false,diagnose and PX.joint_profile_failure("proxy","audit_changed",k,v,a[k])or nil end end
+    for k,v in pairs(a)do if compared(k)and q.audit[k]~=v then return false,diagnose and PX.joint_profile_failure("proxy","audit_changed",k,q.audit[k],v)or nil end end
+    for k,v in pairs(q.audit)do if compared(k)and a[k]~=v then return false,diagnose and PX.joint_profile_failure("proxy","audit_changed",k,v,a[k])or nil end end
     return true
 end
 function PX.limb_writer_current(q)
@@ -1603,6 +1614,7 @@ function PX.joint_profile_source_scope(diagnose)
         local reader=PX.joint_profile_reader("source",info)
         reader:poll(true);if not reader:live()then return fail("session_liveness","live",true,false)end
         local function positive(v)return type(v)=="number"and math.tointeger(v)and v>0 and v or nil end
+        local raw_session=diagnose and HSMP_IPC.rec("session")or nil
         local session,peer=HSM.view(),HSM.my_peer_id()
         local status=HSMP_IPC.sample_status();local pose=status and status.pose
         local spawn=HSMP_IPC.bus_table("spawn_status")
@@ -1624,6 +1636,13 @@ function PX.joint_profile_source_scope(diagnose)
         local qualified=mode and positive(mode.seq)and mode.match_id==pose.match_id and mode.round==pose.round and count==1 and mr.life==pose.life or false
         if not pending and not qualified then return fail("mode_qualification","qualification",true,qualified)end
         if pending and mode and positive(mode.seq)and mode.match_id==pose.match_id and mode.round==pose.round and not qualified then return fail("pending_mode_qualification","qualification",true,qualified)end
+        local semantic,raw_versions
+        if diagnose then
+            local helper=PX.JOINT_PROFILE_SESSION
+            if not helper then return fail("raw_scope_snapshot","helper_available",true,false)end
+            semantic,raw_versions=helper.capture(raw_session,mode)
+            if not semantic then return fail("raw_scope_snapshot","snapshot_available",true,false)end
+        end
         pc=local_pc();local _,fresh_world=world_identity(pc)
         if fresh_world~=wid then return fail("native_pc_world_changed","world",wid,fresh_world)end
         local actor=local_pawn(pc);local pawn=PX.grip_probe_id(actor)
@@ -1632,10 +1651,11 @@ function PX.joint_profile_source_scope(diagnose)
         if not world or world:GetAddress().."@"..world:GetFullName()~=wid then return fail("native_actor_world","world_current",true,false)end
         local mesh=actor.Mesh;local body=PX.grip_probe_id(mesh)
         if not body or not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),pawn)then return fail("native_mesh_binding","binding_current",true,false)end
-        return {actor=actor,mesh=mesh,context={instance=os.getenv("HSMP_INST")or "unavailable",role="local_source",peer=peer,
+        return {actor=actor,mesh=mesh,semantic=semantic,context={instance=os.getenv("HSMP_INST")or "unavailable",role="local_source",peer=peer,
             pawn=pawn,mesh=body,world=cache_world,generation=world_gen,match_id=pose.match_id,round=pose.round,life=pose.life,
             qualification=qualified,pending=pending,spawn_id=order.spawn_id,observed_ms=now,
             sample_tick=pose.tick,sample_ms=pose.ts,admission_sample_age_ms=now-pose.ts,source_cut_available=false,
+            raw_record_versions=raw_versions,
             time_meaning="sample_ms is last successful own pose publication; observed_ms is current configuration read"}}
     end)
     if not ok then return fail("scope_exception","exception",nil,type(q)=="string"and q or nil)end
@@ -1649,6 +1669,8 @@ function PX.joint_profile_source_current(q)
     end
     if not PX.grip_probe_same(a.pawn,b.pawn)then return false,PX.joint_profile_failure("source","native_pawn_changed","identity_current",true,false)end
     if not PX.grip_probe_same(a.mesh,b.mesh)then return false,PX.joint_profile_failure("source","native_mesh_changed","identity_current",true,false)end
+    local same,field,expected,observed=PX.JOINT_PROFILE_SESSION.same(q.semantic,fresh.semantic)
+    if not same then return false,PX.joint_profile_failure("source","raw_scope_changed",field,expected,observed)end
     return true
 end
 function PX.joint_profile_row(p)
@@ -1660,8 +1682,9 @@ function PX.joint_profile_row(p)
             PX.settle_world,world_gen,now_ms(),PX.STALL_FRAMES or 20)
         if not trigger then return nil,true end -- no optional reads or consumed attempt before a real fault
     end
-    if not probe:attempt()then return nil,true end
+    if not probe:attempt(now_ms())then return nil,true end
     local q
+    local capture_started=false
     local stage="proxy_context"
     local ok,result,reason,detail=pcall(function()
         local cur,body,shown=p.last,p.body,p.shown or p.applied_context
@@ -1676,10 +1699,24 @@ function PX.joint_profile_row(p)
         end
         stage="proxy_scope";local failure;q.audit,failure=PX.hand_pipeline_scope(q,true);if not q.audit then return nil,"proxy scope unavailable",{stage=stage,first_failure=failure}end
         stage="source_scope";local own;own,failure=PX.joint_profile_source_scope(true);if not own then return nil,"source scope unavailable",{stage=stage,first_failure=failure}end
+        if probe.retry_attempt and(own.context.pending~=true or q.audit.pending~=true)then
+            probe:abandon();return nil,"retry requires current pending peers" -- before optional lookup/component reads
+        end
+        local transported={available=false,kind="transported_control",source_seq=q.source_seq,
+            native_read_availability=false,control_timestamp_available=false,authority=false}
+        if type(cur.control)=="table"then
+            local r,l=rawget(cur.control,2),rawget(cur.control,3)
+            if type(r)=="number"and math.tointeger(r)and r>=0 and r<=255
+                and type(l)=="number"and math.tointeger(l)and l>=0 and l<=255 then
+                transported.available,transported.grip_r,transported.grip_l=true,r,l
+            end
+        end
         local context={instance=os.getenv("HSMP_INST")or "unavailable",role="remote_proxy",peer=q.peer,pawn=q.pawn,mesh=q.body,
             world=q.world,generation=q.generation,match_id=q.match_id,round=q.round,life=q.life,source_cut=q.source_cut,
             source_seq=q.source_seq,source_mode=cur.mode,admission_source_age_ms=cur.age,source_pt=cur.pt,observed_ms=now_ms(),
             original_applied_ms=shown.at,original_body_ts=shown.label,original_arm_ts=shown.label,
+            raw_record_versions=q.audit.raw_versions,
+            source_control=transported,
             qualification=q.audit.qualification,pending=q.audit.pending,frame=PX.frame_no or 0,
             time_meaning="applied pose timestamps retained; configuration observation is a later read"}
         context.fault_trigger=trigger
@@ -1688,6 +1725,7 @@ function PX.joint_profile_row(p)
         -- the current PC world before resolving any retained proxy component.
         if not PX.limb_writer_current(q)then return nil,"writer scope changed after library lookup"end
         stage="capture"
+        capture_started=true
         return probe:capture(own.context,context,
             {actor=own.actor,mesh=own.mesh,library=lib,fname=fname,now=now_ms,joint_angles=trigger~=nil,current=function()return PX.joint_profile_source_current(own)end},
             {actor=p.actor,mesh=PX.injury_mesh(p),library=lib,fname=fname,now=now_ms,joint_angles=trigger~=nil,
@@ -1697,6 +1735,7 @@ function PX.joint_profile_row(p)
                 end or nil,current=function()return PX.hand_pipeline_current(q,true)end})
     end)
     if not ok or not result then
+        if not capture_started and probe.trigger=="fault"then probe:abandon()end -- warm pre-capture admission retains its existing retries
         local why=PX.JOINT_PROFILE_MODULE.reason(ok and (reason or "context unavailable")or result)
         local elapsed=type(detail)=="table"and detail.elapsed_available==true and detail.capture_elapsed_ms or nil
         pcall(Log,"JOINTPROFILE refused inst=%s attempt=%d stage=%s capture_elapsed_ms=%s reason=%s",

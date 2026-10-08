@@ -62,6 +62,9 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "joint_profile", change = "refusal" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "predicate" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "cached_reader" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "heartbeat" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "control_missing" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "retry_live" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "clock_epoch" })
@@ -95,8 +98,8 @@ local function boot(register_ok)
         HSMP_HAND_PIPELINE_PROBE = opts.kind=="hand_pipeline" and opts.gate~="off" and "1" or "0",
         HSMP_LIMB_BURST_PROBE = opts.kind=="limb_burst" and opts.gate~="off" and "1" or "0",
         HSMP_JOINT_PROFILE_PROBE = opts.kind=="joint_profile" and opts.gate~="off" and "1"or "0",
-        HSMP_JOINT_PROFILE_TRIGGER = opts.change=="actual_fault" and "fault" or "warm",
-        HSMP_JOINT_PROFILE_FOCUS = opts.change=="actual_fault" and "hand_r" or "right" }, strict = true })
+        HSMP_JOINT_PROFILE_TRIGGER = (opts.change=="actual_fault"or opts.change=="retry_live") and "fault" or "warm",
+        HSMP_JOINT_PROFILE_FOCUS = (opts.change=="actual_fault"or opts.change=="retry_live") and "hand_r" or "right" }, strict = true })
     package.path = T.path("mods/shared") .. "/?.lua;" .. package.path
     local arena = "World /Game/Maps/Arenas/Map_Arena_Pit/Map_Arena_Pit.Map_Arena_Pit"
     M.Methods.GetFullName = function(self)
@@ -1648,6 +1651,7 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         api.drive_v2(2,p,body,cur,true,now,false,false)
     end
     if opts.kind=="joint_profile"then
+        cur.control=opts.change~="control_missing"and {0,10,1}or nil
         local own=M.new_obj("Willie_BP_C","PROFILE_OWN");rawset(own,"__addr",9801)
         local ownmesh=M.new_obj("SkeletalMeshComponent","PROFILE_OWN_MESH");rawset(ownmesh,"__addr",9802)
         own.__props.Mesh=ownmesh;ownmesh.__props.Owner=own;M.pc.__props.Pawn=own
@@ -1659,7 +1663,16 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         local sample_life,sample_age=1,0.375
         HSMP_IPC.sample_status=function()return {pose={tick=7,ts=M.now-sample_age,match_id=419,round=1,life=sample_life}}end
         local captures=0
-        local source_current,proxy_current
+        local capture_original=PX.JOINT_PROFILE.capture
+        local library_lookups=0
+        if opts.change=="retry_live"then
+            local find=StaticFindObject
+            StaticFindObject=function(path)
+                if path=="/Script/Engine.Default__ConstraintInstanceBlueprintLibrary"then library_lookups=library_lookups+1 end
+                return find(path)
+            end
+        end
+        local source_current,proxy_current,profile_proxy
         if opts.change=="fault_wait"then PX.JOINT_PROFILE.trigger="fault"end
         local lookup_changed,old_touches=false,0
         if opts.change=="lookup_pc_world"then
@@ -1677,6 +1690,7 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         PX.JOINT_PROFILE.capture=function(self,source,proxy,se,pe)
             captures=captures+1
             source_current,proxy_current=se.current,pe.current
+            profile_proxy=proxy
             if opts.change=="actual_fault"then
                 T.check(proxy.fault_trigger and proxy.fault_trigger.frames>20
                     and proxy.fault_trigger.reason==p.settle_state.settle_reason
@@ -1688,6 +1702,18 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
                 "production scopes preserve independent peer/life and actual Mode0 pending source publication")
             T.check(source.sample_ms%1~=0 and source.admission_sample_age_ms==.375 and se.current()and pe.current(),
                 "production accepts fresh fractional successful source timestamp with exact current guards")
+            local c=proxy.source_control
+            T.check(c.kind=="transported_control"and c.source_seq==cur.seq and not c.authority
+                and c.native_read_availability==false and c.control_timestamp_available==false,
+                "copied remote source control is explicitly transport evidence without native availability or timestamp proof")
+            T.check(opts.change=="control_missing"and c.available==false and c.grip_r==nil and c.grip_l==nil
+                or opts.change~="control_missing"and c.available==true and c.grip_r==10 and c.grip_l==1,
+                "actual source grip bytes are copied exactly while missing control remains unavailable without blocking capture")
+            if opts.change=="retry_live"then
+                se.current=function()return false,PX.JOINT_PROFILE_MODULE.failure("source","raw_scope_changed",
+                    "raw.session.rows.2.loaded_round",0,1)end
+                return capture_original(self,source,proxy,se,pe)
+            end
             self.used=true
             if opts.change=="refusal"then
                 return nil,"actual native\nread failed\t"..string.rep("q",140),
@@ -1702,9 +1728,7 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
                 sample_age=.375
                 HSMPNative.sc_put("mode",{seq=3,match_id=419,round=0,rows={{peer_id=1,life=0},{peer_id=2,life=0}}})
                 valid,failure=pe.current()
-                T.check(valid==false and failure.validator=="proxy"and failure.predicate=="audit_changed"
-                    and failure.field=="mode_seq"and failure.expected==2 and failure.observed==3,
-                    "actual proxy validator attributes same-life audit sequence publication exactly")
+                T.check(valid==true,"joint-only diagnostic accepts an unchanged raw Mode with a new sequence")
                 HSMPNative.sc_put("mode",{seq=3,match_id=419,round=1,rows={{peer_id=1,life=1},{peer_id=2,life=2}}})
                 valid,failure=se.current()
                 T.check(valid==false and failure.predicate=="context_changed"and failure.field=="qualification"
@@ -1725,10 +1749,27 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
                 "actual main waits for a completed persistent wrist fault without consuming attempts or changing servo writes")
             return
         end
-        if opts.change=="actual_fault"then
+        if opts.change=="actual_fault"or opts.change=="retry_live"then
             T.check(captures==0 and PX.JOINT_PROFILE.attempts==0 and p.shown.cut==7,
                 "early real drive retains its source cut while persistent fault has not reached the threshold")
             for frame=2,27 do drive(1000+frame*16)end
+            if opts.change=="retry_live"then
+                T.check(captures==1 and library_lookups==1 and PX.JOINT_PROFILE.retry_pending and not PX.JOINT_PROFILE.used,
+                    "real production fault admission plus eligible helper loss leaves one pending retry")
+                -- Isolate retry control from the separately tested physical
+                -- trigger freshness. Keep the original real trigger unmodified.
+                local actual_trigger=profile_proxy.fault_trigger
+                PX.JOINT_PROFILE_MODULE.right_fault=function()return actual_trigger end
+                HSMPNative.sc_put("session",{seq=3,match_id=419,round=1,phase=3,
+                    rows={{peer_id=1,seat=0,connected=true,spawn_id=257,spawn_pos={0,0,0}},
+                        {peer_id=2,seat=1,connected=true,spawn_id=258,spawn_pos={0,0,0}}}})
+                HSMPNative.sc_put("mode",{seq=3,match_id=419,round=1,rows={{peer_id=1,life=1},{peer_id=2,life=2}}})
+                drive(1000+27*16+5000)
+                drive(1000+28*16+5000) -- the first frame completes a fresh physical sample after the long gap
+                T.check(captures==1 and library_lookups==1 and PX.JOINT_PROFILE.used and PX.JOINT_PROFILE.attempts==2,
+                    "fresh now-Live production retry terminates before library lookup or full helper call")
+                return
+            end
             T.check(captures==1 and PX.JOINT_PROFILE.used and p.body.stall[17]>20 and p.settle_state.settle_count==6,
                 "more than twenty actual capped RH frames reach the production fault diagnostic exactly once")
             T.check(PX.JOINT_PROFILE.trigger=="fault","positive actual fault fixture opts into fault independently of ambient host setting")
@@ -1785,6 +1826,51 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
             HSMPNative.sc_put("link",{status=1,state=1,my_peer_id=1})
             T.check(source_current()and proxy_current()and holders.source.reader==sr and holders.proxy.reader==pr,
                 "restored exact fresh scope succeeds with the same two allocations")
+            return
+        end
+        if opts.change=="heartbeat"then
+            local session=HSMP_IPC.rec("session")
+            local mode=HSMP_IPC.rec("mode")
+            local strict={actor=actor,p=p,pawn={address=9901,name="HAND_PROXY"},body={address=9902,name="HAND_MESH"},
+                peer=2,world=profile_proxy.world,generation=profile_proxy.generation,match_id=419,round=1,life=2,
+                source_seq=cur.seq,source_cut=cur.cut,cut=p.shown.cut,display={match_id=419,round=1,life=2}}
+            strict.audit=PX.hand_pipeline_scope(strict)
+            T.check(strict.audit and PX.hand_pipeline_current(strict),"non-diagnostic current scope starts with its original strict audit")
+            session.seq=session.seq+1;session.server_time_ms=(session.server_time_ms or 0)+334
+            mode.seq=mode.seq+1;mode.server_time_ms=(mode.server_time_ms or 0)+334
+            HSMPNative.sc_put("session",session);HSMPNative.sc_put("mode",mode)
+            T.check(source_current()and proxy_current()and not PX.hand_pipeline_current(strict),
+                "actual joint guards accept heartbeat-only updates while ordinary HAND/limb audit remains sequence-strict")
+            local function refuse(change,undo,label)
+                change();HSMPNative.sc_put("session",session)
+                local a,af=source_current();local b,bf=proxy_current()
+                T.check(a==false and b==false and af.predicate=="raw_scope_changed"and bf.predicate=="raw_scope_changed",label)
+                undo();HSMPNative.sc_put("session",session)
+                T.check(source_current()and proxy_current(),"restoring complete unchanged raw semantics restores only diagnostic admission")
+            end
+            refuse(function()session.rows[2].loaded_round=1 end,function()session.rows[2].loaded_round=0 end,
+                "another peer's loaded_round transition cannot hide behind unchanged selected tuple")
+            refuse(function()session.rows[2].waiting=true end,function()session.rows[2].waiting=false end,
+                "raw roster waiting transition refuses both diagnostic roles")
+            refuse(function()session.rows[2].spawn_pos[1]=88 end,function()session.rows[2].spawn_pos[1]=0 end,
+                "same-ID spawn position change refuses full raw semantic comparison")
+            local arena=session.config.arena
+            refuse(function()session.config.arena="New_Map"end,function()session.config.arena=arena end,
+                "map configuration change refuses despite unchanged world wrapper and full life")
+            local old=mode.rows[2].score;mode.rows[2].score=7;HSMPNative.sc_put("mode",mode)
+            T.check(not source_current()and not proxy_current(),"unselected raw Mode score still participates in the complete snapshot")
+            mode.rows[2].score=old;HSMPNative.sc_put("mode",mode)
+            local dead={[actor]=true,[mesh]=true,[own]=true,[ownmesh]=true};local touches=0
+            for _,name in ipairs({"IsValid","GetAddress","GetFName","GetWorld"})do
+                local original=M.Methods[name]
+                M.Methods[name]=function(o,...)
+                    if dead[o]then touches=touches+1;error("old native object after world loss")end
+                    return original(o,...)
+                end
+            end
+            M.pc.__props.NativeWorld=M.new_obj("World","PROFILE_HEARTBEAT_NEW_WORLD");rawset(M.pc.__props.NativeWorld,"__addr",19991)
+            T.check(not source_current()and not proxy_current()and touches==0,
+                "fresh PC-world loss refuses both semantic guards before any dead prior source/proxy object read")
             return
         end
         drive(1032);T.check(captures==1,"one whole-run capture adds no optional repeat")
