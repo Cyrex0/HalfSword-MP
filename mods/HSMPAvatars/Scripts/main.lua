@@ -663,7 +663,10 @@ local function puppet_body(p)
     if key then handle_cache[key] = hs end
     hs.bones = hs.bones or {}
     local lens, nlens = measure_lengths(pick)
+    local mesh_addr,mesh_fname
+    pcall(function()mesh_addr=pick:GetAddress();mesh_fname=pick:GetFName():ToString()end)
     p.body = { mesh = pick, field = field_name, sims = sims, bones = bones, motors = motors,
+               mesh_addr=mesh_addr,mesh_fname=mesh_fname,
                handles = hs.bones, wpn = hs.wpn, cache = hs, ctl = nil, snaps = 0,
                lens = lens, err_since = nil, made_at = now_ms(), stiff = stiff_mult }
     Log("pose: stand-in %s drives %s (%d simulated meshes), %d/%d bones, %d bone lengths, %d physical-animation comps; candidates: %s",
@@ -1723,6 +1726,8 @@ function PX.injury_mesh(p)
     local ok=pcall(function()
         local a=p.actor
         if not p.addr then why="body unavailable";return end
+        if type(p.body.mesh_addr)~="number" or p.body.mesh_addr<=0 or not math.tointeger(p.body.mesh_addr)
+            or type(p.body.mesh_fname)~="string" or p.body.mesh_fname==""then why="body unavailable";return end
         if not (a and a:IsValid()) or a:GetAddress()~=p.addr then why="actor changed";return end
         local w=a:GetWorld()
         if not (w and w:IsValid()) then why="body unavailable";return end
@@ -1730,7 +1735,9 @@ function PX.injury_mesh(p)
         if cache_world~=tostring(world_gen).."|"..wid then why="world changed";return end
         local m=a[p.body.field or "Mesh"]
         if not (m and m:IsValid()) then why="body unavailable";return end
-        if not (p.body.mesh and p.body.mesh:IsValid()) or m:GetAddress()~=p.body.mesh:GetAddress() then
+        -- Compare only the fresh field against the captured scalar identity.
+        -- The retained wrapper may already be freed after a native rebuild.
+        if m:GetAddress()~=p.body.mesh_addr or m:GetFName():ToString()~=p.body.mesh_fname then
             why="mesh changed";return
         end
         mesh=m
@@ -3589,8 +3596,12 @@ local function drive_frame(id, p, now)
                 PX.settle_reset(p,"mesh handoff")
                 local m; pcall(function() m = p.actor.Mesh end)
                 if not (m and m:IsValid()) then return end
+                local ma,mn
+                pcall(function()ma=m:GetAddress();mn=m:GetFName():ToString()end)
+                if type(ma)~="number" or ma<=0 or not math.tointeger(ma)or type(mn)~="string"or mn==""then return end
                 if PX.injury_release(p)==false then return end
                 body.mesh, body.field, body.sims, body.sv = m, "Mesh", { m }, nil
+                body.mesh_addr,body.mesh_fname=ma,mn
                 pcall(function() m:SetSimulatePhysics(true) end)
             end
             body.ctl = "servo" -- commit only after restoration and the required mesh switch
@@ -4500,33 +4511,44 @@ hook_note[#hook_note + 1] = "EndPlay=" .. tostring(ok_end)
 -- fails ("ReceiveTick=false" in the log) and the post-BP neutralising would
 -- never run. Retried once a second from the tick, forever, until it succeeds
 -- (one cheap failed lookup; same pattern as HSMPCombat).
--- UE4SS requires a function as the pre-callback; it is an empty one.
+-- Pinned UE4SS script hooks execute argument #2 AFTER the Blueprint; the
+-- native-only third callback slot is ignored for this non-native function.
 tick_hook.FN = "/Game/Character/Blueprints/Willie_BP.Willie_BP_C:ReceiveTick"
 function tick_hook.post(ctx)
     if next(_driven) == nil or cache_gen ~= world_gen then return end
-    local a; pcall(function() a = ctx:get() end)
-    PX.hook_calls = (PX.hook_calls or 0) + 1
-    if not a then return end
-    local addr; pcall(function() addr = a:GetAddress() end)
-    local p = addr and _driven[addr]
-    if p then PX.hook_hits = (PX.hook_hits or 0) + 1 end
-    if p and p.driving and p.gen == world_gen and p.body and p.body.ctl == "servo" then
-        neutralise_bp(p, p.body)
+    pcall(function()
+        local _,wid=world_identity(local_pc())
+        if not wid or cache_world~=tostring(world_gen).."|"..wid then return end
+        local a=ctx:get();PX.hook_calls=(PX.hook_calls or 0)+1
+        if not (a and a:IsValid())then return end
+        local addr,name=a:GetAddress(),a:GetFName():ToString()
+        local p=_driven[addr]
+        if not p or not p.body or p.body.ctl~="servo" or not PX.grip_drive_current(p)then return end
+        local shown=p.shown or p.applied_context
+        if not shown or shown.pawn~=name or not PURE.pose_context_ok(shown,HSM and HSM.view(),HSM and HSM.mode(),p.peer)then return end
+        local mesh,key=PX.injury_mesh(p)
+        if not mesh or p.actor:GetFName():ToString()~=name then return end
+        local owner=mesh:GetOwner()
+        if not (owner and owner:IsValid()) or owner:GetAddress()~=addr or owner:GetFName():ToString()~=name then return end
+        local body=p.body
+        local fresh,fresh_key=PX.injury_mesh(p)
+        if fresh~=mesh and not same(fresh,mesh) or fresh_key~=key or not PX.grip_drive_current(p)then return end
+        PX.hook_hits=(PX.hook_hits or 0)+1
+        neutralise_bp(p, {mesh=mesh,motors=body.motors}) -- current wrapper, no retained body-mesh access
         if TUNE.tdiag then
             pcall(function()
                 local gs = PX.gs
-                local l = p.body.mesh:GetSocketLocation(_sv_fn[1])
+                local l = mesh:GetSocketLocation(_sv_fn[1])
                 p.hook = { l.X, l.Y, l.Z, gs and gs:GetRealTimeSeconds(a) * 1000 or -1, os.clock() * 1000 }
             end)
         end
-    end
+    end)
 end
-tick_hook.pre = function() end
 tick_hook.try = function(force)
     if tick_hook.ok then return true end
     if not force and tick_num % 30 ~= 0 then return false end
     tick_hook.tries = tick_hook.tries + 1
-    local ok, err = pcall(function() RegisterHook(tick_hook.FN, tick_hook.pre, tick_hook.post) end)
+    local ok, err = pcall(function() RegisterHook(tick_hook.FN, tick_hook.post) end)
     tick_hook.ok = ok
     if ok then
         Log("ReceiveTick post-hook registered (try %d): BP neutralising active", tick_hook.tries)
@@ -4583,6 +4605,7 @@ if rawget(_G, "HSMP_AVATARS_TEST") then
         parse_standin_dead = DH.parse, combat_declared_dead = DH.declared,
         puppets = function() return puppets end,
         set_puppet = function(id, p) puppets[id] = p end,
+        set_driven = function(p) _driven[p.addr]=p end,
         PX = PX, drive_frame = drive_frame, drive_v2 = drive_v2, servo_weapon_parts = servo_weapon_parts, set_gravity = set_gravity,
         generation = function() return world_gen, cache_gen end,
         drop_caches = drop_caches,

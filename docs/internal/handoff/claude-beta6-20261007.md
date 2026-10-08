@@ -988,3 +988,50 @@ separate75degree quaternion correction. A safe restore needs a true before-nativ
 snapshot+exact post scope; Blueprint Lua callbacks are POST. No stale/CDO restore,
 paint reenablement or physical change is justified. TargetedC++hook feasibility
 is under read-only investigation; global caller probe remainsOFF.
+
+### Native26: publication recovery, second-respawn failure and ReceiveTick cause
+
+Clean commit3b9b2770 passed strict G0:60 Lua suites,1,279 Rust tests in75 binaries,
+94 production Lua parses,clippy0errors/2warnings. Normal RequireG0 deployment
+rebuilt matching compiled content. Actual stale-deploy refusal independently
+left the installed stamp,mod script and sidecar hashes unchanged:
+`test-results/lab/integration/native26-stale-deploy-refusal.{log,json}`.
+The dev push passed its independent pre-push G0. No main/tag/release action.
+
+Native26 session:`test-results/lab/native-20261008-26`,raw:
+`test-results/20261008-045042-64a926-combat_manual`. Both windows DISPLAY1;
+caller/body/armor/local-damage probes OFF. Repeated-death plan5 per player
+completed the first HSMP1 respawn in12,409ms in the same Live round. This
+verifies publication-beforeLOADED recovery for that life. The second HSMP2
+respawn timed out at35s on the physical peer hand_r position/integrated aim.
+Fresh60Hz sourcecut4 remained stable;hand_r12.5-12.8cm/51degrees and
+lowerarm_r27degrees while other limbs were0.1-0.3cm/<1.3degrees. Local reposes
+invalidated aim; this is not evidence to widen5uu/10degree/150ms proof.
+Only1 completed respawn sample; full A12-A14 remain unaccepted.
+
+Short90s clothed axe continuation run recorded21 accepted Inside records,
+18 delivery records and19 native records,not matched causal pairs.35
+Inside rejection records comprise8 missing accepted parents and27 target-down
+records. General damage decisions count42 refusals across both attackers:
+target-down28,round-over/target-down2,attacker-down3,parried4,no-parent5.
+These layers have different units and must not be added or called parity.
+Clock resets0/16windows;honest acceptance0.79234973(n183),proxy rotation
+mean29.76622/max94.27895degrees(n29).66 calibration samples,0exactclaimpairs.
+Normal teardown0newcrashes/noorphans;manual PASS covers only limited
+crash/teardown/network/state checks and does not override the modes failure.
+See `checkpoint-summary.json` and `modes-five-deaths/report.json`.
+
+Native26 frame logs show ReceiveTick hook calls/driven0 despite registration.
+Astra verified the pinned UE4SS Blueprint hook stores argument2 and ignores
+the native-only argument3: the empty callback ran while neutralisation never
+did. Correcting the callback slot preserves the existing physical policy and
+adds fresh world,pawn/life and mesh identity checks,including mesh replacement
+without touching a freed retained wrapper. Source review/focused checks and
+Native27 repeated respawns are the next checkpoint; physical improvement is
+not yet claimed. The true before/after cutting Box observer remains a separate
+default-OFF proof-only investigation; no restore or paint mutation is justified.
+
+Final two-file Avatar correction is Astra-approved and root-independently
+passes278 focused assertions and2 Lua parses. The actual callback is exercised
+after simulated Blueprint writes,including dead retained mesh and reused-address
+replacement refusals. Source approval is not native readiness or parity proof.

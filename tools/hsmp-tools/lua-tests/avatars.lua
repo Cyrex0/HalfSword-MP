@@ -15,6 +15,7 @@ local AV = T.path("mods/HSMPAvatars/Scripts/main.lua")
 
 if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "hook" })
+    T.isolated(T.script, "case", { kind = "hook_post" })
     T.isolated(T.script, "case", { kind = "parse" })
     T.isolated(T.script, "case", { kind = "corpse", standin_dead = true })
     T.isolated(T.script, "case", { kind = "corpse", standin_dead = false })
@@ -81,8 +82,15 @@ local function boot(register_ok)
         if path:find("Willie_BP_C:ReceiveTick", 1, true) and not M.register_ok then
             error("No UFunction with the specified name was found: " .. path)
         end
-        M.hooks[path] = { pre = pre, post = post }
+        M.hooks[path] = { callback = pre, ignored_post = post }
         return 1, 2
+    end
+    M.bp_tick=function(actor,native)
+        if native then native(actor)end
+        local h=M.hooks["/Game/Character/Blueprints/Willie_BP.Willie_BP_C:ReceiveTick"]
+        if h and h.callback then
+            h.callback({get=function()M.tick_unwraps=(M.tick_unwraps or 0)+1;return actor end})
+        end -- script functions run argument #2 POST; argument #3 is ignored
     end
     _G.HSMP_AVATARS_TEST = {}
     dofile(AV)
@@ -161,7 +169,7 @@ if opts.kind == "injury" then
     M.Methods.SetCollisionEnabled=function()disabled={}end -- a real physics rebuild defeats cached success
     local p={actor=actor,addr=9301,gen=api.generation(),peer=2,driving=false,
         shown={has_context=true,match_id=307,round=1,life=1,pawn="SEVER_PROXY"},
-        body={mesh=mesh,field="Mesh",handles={},sims={mesh},motors={},sv={wc={}}}}
+        body={mesh=mesh,mesh_addr=9302,mesh_fname="SEVER_MESH",field="Mesh",handles={},sims={mesh},motors={},sv={wc={}}}}
     local function vitals(seq,life,mask)
         HSMPNative.sc_put("peer_vitals",{seq=seq,match_id=307,round=1,life=life,dism=mask},2)
     end
@@ -259,7 +267,7 @@ if opts.kind=="injury_mesh_swap"then
     local p={actor=actor,addr=9401,gen=api.generation(),peer=2,in_range=true,driving=true,claimed_at=0,
         shown={has_context=true,match_id=308,round=1,life=1,pawn="SWAP_PROXY"},
         settle_state={settle_ready=true,settle_stable_ms=200,settle_count=6},
-        body={mesh=old,field="SK_Skeleton",ctl="handles",handles={},sims={old},motors={},sv={wc={}},snaps=0,
+        body={mesh=old,mesh_addr=9402,mesh_fname="ALTERNATE_MESH",field="SK_Skeleton",ctl="handles",handles={},sims={old},motors={},sv={wc={}},snaps=0,
             injury_disabled={lowerarm_l=true},injury_wanted={lowerarm_l=true}}}
     local _,key=api.PX.injury_mesh(p);p.body.injury_key=key
     api.PX.SETTLE.copy(p.shown,p.settle_state)
@@ -309,6 +317,9 @@ if opts.kind=="injury_mesh_swap"then
     frame(2016)
     T.check(p.body.mesh==visible and p.body.field=="Mesh"and p.body.ctl=="servo"and p.driving and p.body.repose,
         "next production frame commits visible Mesh and starts a fresh physical repose after recovery")
+    local current_mesh=api.PX.injury_mesh(p)
+    T.check(current_mesh==visible and p.body.mesh_addr==9403 and p.body.mesh_fname=="VISIBLE_MESH",
+        "legitimate alternate-to-visible handoff refreshes the immutable native component identity")
     T.check(not(p.shown and p.shown.settle_ready),"successful component replacement retains unqualified state until fresh measured convergence")
     for now=2032,2304,16 do frame(now)end
     local only_visible=#driven>0;for _,mesh in ipairs(driven)do if mesh~=visible then only_visible=false end end
@@ -545,11 +556,90 @@ if opts.kind == "hook" then
     T.check(api.tick_hook.ok == true, "registered once the BP class exists")
     T.check(T.contains(log, "ReceiveTick post-hook registered (try"), "registration is logged", log)
     local h = M.hooks["/Game/Character/Blueprints/Willie_BP.Willie_BP_C:ReceiveTick"]
-    T.check(h and type(h.pre) == "function" and type(h.post) == "function", "pre (no-op) + post callbacks")
+    T.check(h and h.callback==api.tick_hook.post and h.ignored_post==nil,
+        "Blueprint post handler occupies the actual second argument slot")
     local n = M.hook_calls
     M.run(3000)
     T.check(M.hook_calls == n, "no further RegisterHook calls once registered")
     T.check(not T.contains(M.logtext(), "LOOP ERR"), "no loop errors", M.logtext())
+end
+
+if opts.kind=="hook_post"then
+    T.write(sd.."/.settings.json",'{"avatars":true,"native_neutralise":false,"native_servo":false}\n')
+    local api=boot(true)
+    sidecar({{1,"Own"},{2,"Peer"}})
+    HSMPNative.sc_put("session",{seq=1,match_id=309,round=1,phase=3})
+    HSMPNative.sc_put("mode",{seq=1,match_id=309,round=1,rows={{peer_id=2,life=3}}})
+    api.on_tick()
+    local actor=M.new_obj("Willie_BP_C","TICK_PROXY");rawset(actor,"__addr",9501)
+    local mesh=M.new_obj("SkeletalMeshComponent","TICK_MESH");rawset(mesh,"__addr",9502)
+    local owner=actor;actor.__props.Mesh=mesh
+    local motors,native_first=0,false
+    M.Methods.GetOwner=function(self)if self==mesh then return owner end end
+    M.Methods.SetAllMotorsAngularDriveParams=function(self,stiff,damp,force,skip)
+        motors=motors+1
+        T.check(self==mesh and stiff==0 and damp==0 and force==0 and skip==false and native_first
+            and mesh.__props.motor_stiffness==800 and mesh.__props.motor_damping==100 and mesh.__props.motor_force==25,
+            "actual registered post callback resets the qualified mesh motor after native BP writes")
+        mesh.__props.motor_stiffness,mesh.__props.motor_damping,mesh.__props.motor_force=stiff,damp,force
+    end
+    local p={actor=actor,addr=9501,gen=api.generation(),peer=2,driving=true,
+        last={has_context=true,match_id=309,round=1,life=3},
+        shown={has_context=true,match_id=309,round=1,life=3,pawn="TICK_PROXY"},
+        body={mesh=mesh,mesh_addr=9502,mesh_fname="TICK_MESH",field="Mesh",ctl="servo",motors={}}}
+    api.set_puppet(2,p);api.set_driven(p)
+    local function native(a)
+        a.__props["Head Tonus"],a.__props["All Body Tonus"],a.__props["Muscle Power"]=42,100,35
+        mesh.__props.motor_stiffness,mesh.__props.motor_damping,mesh.__props.motor_force=800,100,25
+        native_first=true
+    end
+    M.bp_tick(actor,native)
+    T.check(motors==1 and actor.__props["Head Tonus"]==0 and actor.__props["All Body Tonus"]==0
+        and actor.__props["Muscle Power"]==0 and mesh.__props.motor_stiffness==0 and mesh.__props.motor_damping==0
+        and mesh.__props.motor_force==0 and api.PX.hook_calls==1 and api.PX.hook_hits==1,
+        "real second-slot Blueprint post callback neutralises native tone and records one qualified hit")
+    local before=motors
+    p.last.life=2;M.bp_tick(actor,native)
+    T.check(motors==before and actor.__props["Head Tonus"]==42,"previous source life fails before actor or physical neutralisation")
+    p.last.life=3;p.shown.life=2;M.bp_tick(actor,native)
+    T.check(motors==before and actor.__props["Head Tonus"]==42,"current source cannot relabel an older displayed native body life")
+    p.shown.life=3
+    local replacement=M.new_obj("Willie_BP_C","TICK_REPLACEMENT");rawset(replacement,"__addr",9501)
+    rawset(actor,"__dead",true);M.bp_tick(replacement,native)
+    T.check(motors==before and #M.dead_touch==0 and replacement.__props["Head Tonus"]==42,
+        "callback address reused by another native name fails before touching the old actor or body")
+    rawset(actor,"__dead",false)
+    local wrong_actor=M.new_obj("Willie_BP_C","TICK_WRONG_STORED_ACTOR");rawset(wrong_actor,"__addr",9551)
+    p.actor=wrong_actor;M.bp_tick(actor,native)
+    T.check(motors==before and actor.__props["Head Tonus"]==42 and wrong_actor.__props["Head Tonus"]==nil,
+        "stored actor no longer matching the driven address fails before native variable or physical writes")
+    p.actor=actor
+    local alternate=M.new_obj("SkeletalMeshComponent","TICK_REBUILT_MESH");rawset(alternate,"__addr",9503)
+    rawset(mesh,"__dead",true)
+    actor.__props.Mesh=alternate;M.bp_tick(actor,native)
+    T.check(motors==before and actor.__props["Head Tonus"]==42 and #M.dead_touch==0,
+        "native replacement of a freed mesh fails before touching the retained wrapper or writing physics")
+    rawset(alternate,"__addr",9502);M.bp_tick(actor,native)
+    T.check(motors==before and #M.dead_touch==0,"component address reused by another native name cannot inherit body identity")
+    rawset(mesh,"__dead",false)
+    actor.__props.Mesh=mesh;owner=replacement;M.bp_tick(actor,native)
+    T.check(motors==before and actor.__props["Head Tonus"]==42,"mesh owner with reused address and different native name fails before writes")
+    owner=nil;M.bp_tick(actor,native)
+    T.check(motors==before and actor.__props["Head Tonus"]==42,"unavailable mesh owner cannot authorize physical writes")
+    owner=actor
+    HSMPNative.sc_put("mode",{seq=2,match_id=309,round=1,rows={{peer_id=2,life=4}}});M.bp_tick(actor,native)
+    T.check(motors==before and actor.__props["Head Tonus"]==42,"authoritative owner life change rejects the retained callback target")
+    HSMPNative.sc_put("mode",{seq=3,match_id=309,round=1,rows={{peer_id=2,life=3}}})
+    local original_world=M.world
+    M.world=M.new_obj("World","TICK_WORLD_REPLACEMENT");rawset(M.world,"__addr",9601)
+    local unwraps=M.tick_unwraps;M.bp_tick(actor)
+    T.check(motors==before and M.tick_unwraps==unwraps,"fresh world identity change refuses the callback before unwrapping old native context")
+    M.world=original_world;M.bp_tick(actor,native)
+    T.check(motors==before+1,"unchanged exact actor/body/life continues after unavailable cases")
+    M.premap();M.kill_all();unwraps=M.tick_unwraps
+    M.bp_tick(actor)
+    T.check(motors==before+1 and M.tick_unwraps==unwraps and #M.dead_touch==0,
+        "world teardown leaves discarded callback and body wrappers untouched")
 end
 
 if opts.kind == "clock_probe" then

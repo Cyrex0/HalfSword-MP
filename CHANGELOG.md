@@ -17,6 +17,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Run stand-in arm neutralisation in the actual Blueprint ReceiveTick callback slot,
+  validating the current pawn, life, world and mesh before applying the existing policy.
 - Resolve stuck-blade memberships once with bounded reads and explicit parent ambiguity,
   retaining the proven same-constraint left-arm rebind and validation metadata on refusal.
 - Publish verified deathmatch respawn preparation frames before the loaded acknowledgement,
