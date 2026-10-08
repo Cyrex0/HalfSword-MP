@@ -1,6 +1,7 @@
 -- Synthetic native lifecycle checks; this is not engine/runtime evidence.
 local S=dofile("mods/HSMPMatch/Scripts/native_client_suppression.lua")
 local I=dofile("mods/HSMPMatch/Scripts/native_client_isolation.lua")
+local Arrays=dofile("mods/HSMPMatch/Scripts/native_client_array.lua")
 local n=0;local function check(ok,why)n=n+1;T.check(ok,why);assert(ok,why)end
 local function fixture()
     local f={valid=true,role=true,actors={},destroyed={},mutations=0,next=10}
@@ -46,7 +47,7 @@ local function fixture()
         UEHelpers={GetGameplayStatics=function()return{IsValid=function()return true end,GetGameMode=function()return f.gm end}end},
         find=function(path)return{path=path,IsValid=function()return true end}end,
         find_all=function(class)local out={};for _,a in ipairs(f.actors[class]or{})do if a.valid then out[#out+1]=a end end;return #out>0 and out or nil end,
-        FName=function(s)return s end,each=function(rows,fn)assert(type(rows)=="table");for _,v in ipairs(rows)do fn(v)end end}
+        FName=function(s)return s end,each=Arrays.each}
     return f,S.new(f.env)
 end
 do
@@ -55,7 +56,7 @@ do
     check(not f.driver.valid and counts.drivers==1,"native latent spawn owner is destroyed")
     check(table.concat(f.destroyed,",")=="BP_LevelManager_C_1,module_1,ModularWeaponBP_C_1","owned gear children are destroyed before their parent")
     check(f.pc.valid and f.pc.Pawn==nil and f.pawn.Controller==nil,"normal player controller is preserved and unpossessed")
-    check(f.pawn.valid and f.pawn.bHidden==true and f.pawn.collision==false and f.pawn.tick==false,"pooled Willie is retired without assuming actor destruction")
+    check(f.pawn.valid and f.pawn.bHidden==true and f.pawn.collision==false and f.pawn.tick==false,"still-present Willie is retired without assuming actor destruction")
     check(f.pawn.Mesh.visible==false and f.pawn.Mesh.simulating==false and f.pawn.Mesh.collision_mode==0,"body component is visually and physically inert")
     check(s:retirement(f.pawn.address,f.pawn.name)and s:proof(f.pawn),"scalar retirement identity requires complete current readback")
     f.pawn.Mesh.simulating=true;check(not s:proof(f.pawn),"reactivated body cannot pass a cached retirement proof")
@@ -66,6 +67,14 @@ end
 do
     local f,s=fixture();f.role=false
     check(not s:run()and f.mutations==0 and f.pc.Pawn==f.pawn,"nonclient role cannot suppress native actors")
+end
+do
+    local f,s=fixture()
+    for _,a in ipairs({f.driver,f.pawn,f.weapon,f.part})do
+        local rows=a.components
+        a.K2_GetComponentsByClass=function()local copied={};for i,c in ipairs(rows)do copied[i]={type=function()return"RemoteUnrealParam"end,get=function()return c end}end;return copied end
+    end
+    check(s:run()and s:proof(f.pawn),"production iterator handles the real plain-table hard-object component return")
 end
 do
     local f,s=fixture();f.pawn.protected=true;f.actors.ModularWeaponBP_C={};f.actors.Modular_Weapon_Part_Master_C={}

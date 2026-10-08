@@ -1,6 +1,6 @@
 -- Client-only retirement of map-native combat. Never touches presentation mirrors.
--- Willies are pooled; K2_DestroyActor does not prove removal. Retain only scalar
--- retirement identities and require a fresh complete inert census on every use.
+-- Actor removal may be deferred. Retain only scalar retirement identities and
+-- require a fresh complete inert census for every still-present native fighter.
 local M={}
 local DRIVERS={"BP_LevelManager_C","BP_SpawnerPoint_Willies_C","BP_Generator_Weapons_Random_C"}
 local DRIVER_PATHS={

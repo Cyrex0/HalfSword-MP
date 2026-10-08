@@ -15,8 +15,9 @@ function M.start()
     local Role,HW,IPC,SG,D,Core,Input=module("hsmp_runtime_role"),module("hsmp_wg"),module("hsmp_ipc"),module("hsmp_saveguard"),module("director"),module("native_client_core"),module("native_client_input")
     local Isolation=module("native_client_isolation")
     local Suppression=module("native_client_suppression")
+    local Arrays=module("native_client_array")
     local Presentation=module("native_presentation","../../HSMPAvatars/Scripts/native_presentation.lua")
-    if not Role or not Role.presentation()or not HW or not IPC or not SG or not D or not Core or not Input or not Isolation or not Suppression or not Presentation or not LoopInGameThreadWithDelay then print("[HSMPNativeClient] startup refused: client dependencies unavailable\n");return end
+    if not Role or not Role.presentation()or not HW or not IPC or not SG or not D or not Core or not Input or not Isolation or not Suppression or not Arrays or not Presentation or not LoopInGameThreadWithDelay then print("[HSMPNativeClient] startup refused: client dependencies unavailable\n");return end
     local UEH=require("UEHelpers")
     local state_dir=(os.getenv("HSMP_STATE_DIR")or"hsmp_state"):gsub("\\","/")
     local log=function(format,...)print(string.format("[HSMPNativeClient] "..format.."\n",...))end
@@ -32,10 +33,7 @@ function M.start()
     local nick=os.getenv("HSMP_NATIVE_NICK")or"native-client"
     local brain=os.getenv("HSMP_NATIVE_CLIENT_AI")=="1"
     local function now()return N.now_us()/1000000 end
-    local function each(array,fn)
-        if not array then error("native array unavailable")end
-        array:ForEach(function(_,v)local value=v;if v and v.get then value=v:get()end;fn(value)end)
-    end
+    local each=Arrays.each
     local mapping,last_key,loop
     local view=Presentation.new({native=N,world=function()if not WG.check()or not WG.settled()then return nil end;return WG.world(),WG.token()end,same=WG.same})
     local suppress=Suppression.new({role=Role,WG=WG,UEHelpers=UEH,find=StaticFindObject,find_all=FindAllOf,FName=FName,each=each})

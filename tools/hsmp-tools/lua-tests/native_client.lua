@@ -1,6 +1,7 @@
 -- Lifecycle/input regressions. Synthetic source frames are not native display evidence.
 local Core=dofile("mods/HSMPMatch/Scripts/native_client_core.lua")
 local Input=dofile("mods/HSMPMatch/Scripts/native_client_input.lua")
+local Arrays=dofile("mods/HSMPMatch/Scripts/native_client_array.lua")
 local n=0
 local function check(ok,why)n=n+1;T.check(ok,why);assert(ok,why)end
 local time,state,closed,cleared,applied,sent=0,"",0,0,0,{}
@@ -29,6 +30,31 @@ local map={keys={"W","MouseX","LeftShift"},axes={{{key=1,scale=1}},{},{{key=2,sc
 local a,b=Input.frame(map,{{1,1},{4,0},{1,1}});check(a[1]==1 and a[3]==-4 and b==1,"engine mapping scales and held actions")
 a,b=Input.frame(map,{{0,0},{0,0},{0,0}});check(a[1]==0 and b==0,"actual release clears held values")
 check(Input.frame(map,{})==nil,"incomplete key state refuses")
+do
+    local function parameter(kind,value)return{type=function()return kind end,get=function()return value end}end
+    local object={type=function()return"UObject"end,get=function()error("a direct object must not be treated as a parameter")end}
+    local out={};Arrays.each({parameter("RemoteUnrealParam",object),parameter("LocalUnrealParam",false)},function(v)out[#out+1]=v end)
+    check(out[1]==object and out[2]==false,"function-return plain arrays unwrap typed hard parameters and preserve false")
+    out={};Arrays.each({ForEach=function(_,fn)fn(1,parameter("LocalUnrealParam",7));fn(2,object)end},function(v)out[#out+1]=v end)
+    check(out[1]==7 and out[2]==object,"property TArray ForEach remains supported without dereferencing direct objects")
+    check(not pcall(Arrays.each,{[2]=object},function()end),"sparse return arrays refuse")
+    check(not pcall(Arrays.each,{field=object},function()end),"nonnumeric return arrays refuse")
+    check(not pcall(Arrays.each,setmetatable({object},{}),function()end),"return-array metamethods refuse")
+    check(not pcall(Arrays.each,{object,object},function()end,1),"return-array bounds refuse without truncated success")
+    check(not pcall(Arrays.each,nil,function()end),"missing array is not guessed empty")
+    local names={"Move Forward / Backward","Move Right / Left","Turn Right / Left Mouse","Look Up / Down Mouse","Right Guard Axis","Left Guard Axis","Right Arm Axis","Left Arm Axis"}
+    local actions={"Run","Crouch Hold","Thrust","Jump","Grab Right","Grab Left","Talk"}
+    local axis_rows,action_rows={},{}
+    for i,name in ipairs(names)do axis_rows[i]=parameter("LocalUnrealParam",{AxisName=name,Scale=1,Key={KeyName="Axis"..i}})end
+    for i,name in ipairs(actions)do action_rows[i]=parameter("LocalUnrealParam",{ActionName=name,Key={KeyName="Button"..i},bShift=false,bCtrl=false,bAlt=false,bCmd=false})end
+    local settings={AxisMappings=axis_rows,ActionMappings=action_rows}
+    local copied=Input.mapping(settings,Arrays.each)
+    check(copied and#copied.keys==15 and#copied.actions[1][1].mods==0,"input mapping supports copied function-return arrays with exact false modifiers")
+    settings.AxisMappings={ForEach=function(_,fn)for i,v in ipairs(axis_rows)do fn(i,v)end end}
+    settings.ActionMappings={ForEach=function(_,fn)for i,v in ipairs(action_rows)do fn(i,v)end end}
+    local property=Input.mapping(settings,Arrays.each)
+    check(property and table.concat(property.keys,",")==table.concat(copied.keys,","),"actual property mapping arrays preserve the same controls")
+end
 local observed,reported,frame
 local applied_scene={epoch=77,dir_seq=5,frame_seq=12,state=2,peer_id=9001,entities=scene.entities}
 local race=Core.new({now=function()return 0 end,link=function()return{connected=true}end,directory=function()return directory end,world=function()return{ready=true,arena=directory.arena,key="world"}end,
