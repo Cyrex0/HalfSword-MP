@@ -1451,9 +1451,72 @@ function PX.hand_pipeline_quat(v)
     if norm<=0 or norm~=norm or norm==math.huge then return nil end
     return {v[4]/norm,v[5]/norm,v[6]/norm,v[7]/norm},norm
 end
+-- Pending observations describe this actual drive, not an authoritative life.
+-- GRIP/Box and the production pose/readiness guards remain strict and separate.
+function PX.hand_pipeline_scope(q)
+    local ok,audit=pcall(function()
+        local p=q.p
+        if not p or not p.driving or p.actor~=q.actor or cache_gen~=world_gen or q.generation~=world_gen
+            or p.gen~=world_gen or q.world~=cache_world then return nil end
+        local source,shown=p.last,p.shown or p.applied_context
+        if type(source)~="table"or type(shown)~="table"or source.has_context~=true or shown.has_context~=true
+            or source.seq~=q.source_seq or source.cut~=q.source_cut or shown.cut~=q.cut or shown.pawn~=q.pawn.name then return nil end
+        for _,k in ipairs({"match_id","round","life"})do
+            if source[k]~=q[k]or shown[k]~=q.display[k]or shown[k]~=source[k]then return nil end
+        end
+        local info=HSMP_IPC and HSMP_IPC.N and HSMP_IPC.N.ipc_info()
+        if type(info)~="table"or info.sidecar_state~="ready"and info.sidecar_state~=2
+            or type(info.sidecar_hb_age_s)~="number"or PX.grip_probe_number(info.sidecar_hb_age_s)<0 then return nil end
+        local reader=HSM and HSM.new({every_s=0,ipc={S=HSMP_IPC.S,rec=HSMP_IPC.rec,refresh_info=function()return info end}})
+        if not reader then return nil end
+        reader:poll(true);if not reader:live()then return nil end
+        local function integer(v,low)return type(v)=="number"and math.tointeger(v)and v>=low and v or nil end
+        local session=HSM.view()
+        if type(session)~="table"or not integer(session.seq,1)or not integer(session.match_id,1)
+            or not integer(session.round,0)or not integer(session.phase,0)or session.match_id~=q.match_id then return nil end
+        local pending=session.phase==1 or session.phase==2
+        local round
+        if pending then round=integer(session.spawn_round,1)else round=integer(session.round,1)end
+        if not round or round~=q.round then return nil end
+        local spawn=pending and type(session.spawns)=="table"and session.spawns[q.peer]or nil
+        if pending and (type(spawn)~="table"or spawn.peer~=q.peer or not integer(spawn.spawn_id,1)
+            or (math.tointeger(spawn.spawn_id)>>8)~=q.round or session.spawn_round~=q.round)then return nil end
+        local mode=HSMP_IPC.rec("mode") -- actual fields; HSM.mode() supplies defaults for consumers
+        local present=type(mode)=="table"
+        local row,count=nil,0
+        if present and type(mode.rows)=="table"then
+            for _,r in ipairs(mode.rows)do
+                if type(r)=="table"and r.peer_id==q.peer then row=r;count=count+1 end
+            end
+        end
+        if count~=1 then row=nil end
+        local a={session_seq=session.seq,session_match=session.match_id,session_round=session.round,session_phase=session.phase,
+            effective_round=round,pending=pending,spawn_id=spawn and spawn.spawn_id or nil,spawn_peer=spawn and spawn.peer or nil,
+            mode_present=present,mode_seq=present and integer(mode.seq,0)or nil,mode_match=present and integer(mode.match_id,0)or nil,
+            mode_round=present and integer(mode.round,0)or nil,mode_row_available=row~=nil,mode_peer=row and row.peer_id or nil,
+            mode_life=row and integer(row.life,0)or nil}
+        a.mode_available=integer(a.mode_seq,1)~=nil
+        a.qualification=a.mode_available and a.mode_match==q.match_id and a.mode_round==q.round
+            and integer(a.mode_life,1)~=nil and a.mode_life==q.life
+        a.qualification_reason=a.qualification and "mode_current"or not a.mode_available and "mode_unavailable"or "mode_tuple_mismatch"
+        if not a.qualification and not pending then return nil end -- preserve strict Live admission
+        local pc=local_pc();local _,wid=world_identity(pc)
+        if not wid or q.world~=tostring(world_gen).."|"..wid or not PX.grip_probe_same(PX.grip_probe_id(q.actor),q.pawn)then return nil end
+        local w=q.actor:GetWorld()
+        if not w or w:IsValid()~=true or tostring(world_gen).."|"..w:GetAddress().."@"..w:GetFullName()~=q.world then return nil end
+        local mesh=PX.injury_mesh(p)
+        if not mesh or not PX.grip_probe_same(PX.grip_probe_id(mesh),q.body)
+            or not PX.grip_probe_same(PX.grip_probe_id(mesh:GetOwner()),q.pawn)then return nil end
+        return a
+    end)
+    return ok and audit or nil
+end
 function PX.hand_pipeline_current(q)
-    return PX.grip_probe_current(q) and q.p.last.seq==q.source_seq and q.p.last.cut==q.source_cut
-        and q.p.last.has_context==true
+    local a=PX.hand_pipeline_scope(q)
+    if not a or not q.audit then return false end
+    for k,v in pairs(a)do if q.audit[k]~=v then return false end end
+    for k,v in pairs(q.audit)do if a[k]~=v then return false end end
+    return true
 end
 function PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
     if not PX.HAND_PIPELINE_PROBE then return nil end
@@ -1463,7 +1526,8 @@ function PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
     if s.used>=60 or s.started and (at<s.started or at-s.started>=180000)then return nil end
     local shown=p.shown or p.applied_context
     if not shown or type(shown.pawn)~="string" or shown.pawn=="" or cur.has_context~=true
-        or type(p.addr)~="number" or p.addr<=0 or not math.tointeger(p.addr)then return nil end
+        or type(p.addr)~="number" or p.addr<=0 or not math.tointeger(p.addr)
+        or type(p.peer)~="number"or p.peer<=0 or not math.tointeger(p.peer)then return nil end
     for _,k in ipairs({"match_id","round","life","seq"})do
         local v=cur[k];if type(v)~="number" or v<=0 or not math.tointeger(v)then return nil end
     end
@@ -1472,19 +1536,22 @@ function PX.hand_pipeline_begin(p,body,cur,aim,label,aim_label,now)
         ..":"..cur.match_id..":"..cur.round..":"..cur.life..":"..cur.cut
     local prior=s.at[p.peer]
     if prior and prior.identity==identity and at-prior.at<5000 then return nil end
-    s.at[p.peer]={identity=identity,at=at};s.started=s.started or at;s.used=s.used+1
+    s.at[p.peer]={identity=identity,at=at};s.used=s.used+1 -- rejected attempts remain bounded
     local q={actor=p.actor,p=p,pawn={address=p.addr,name=shown.pawn},body={address=body.mesh_addr,name=body.mesh_fname},
         peer=p.peer,world=cache_world,generation=world_gen,match_id=cur.match_id,round=cur.round,life=cur.life,has_context=true,
         cut=shown.cut,source_cut=cur.cut,source_seq=cur.seq,group=s.used,instance=os.getenv("HSMP_INST") or "unavailable",
-        frame=PX.frame_no or 0,at=at,drive_ms=now}
-    if not PX.hand_pipeline_current(q)then return nil end
+        frame=PX.frame_no or 0,at=at,drive_ms=now,
+        display={match_id=shown.match_id,round=shown.round,life=shown.life,cut=shown.cut},state=s}
+    q.audit=PX.hand_pipeline_scope(q)
+    if not q.audit then return nil end
     local old=p.aim
     local prior_ok=old and old.has_context==true and old.match_id==q.match_id and old.round==q.round and old.life==q.life
         and old.cut==q.source_cut and old.pawn==q.pawn.name and old.pipeline_world==q.world and old.pipeline_generation==q.generation
         and PX.grip_probe_same(old.pipeline_mesh,q.body)
     q.record={instance=q.instance,peer=q.peer,pawn=q.pawn,mesh=q.body,world=q.world,generation=q.generation,group=q.group,
         frame=q.frame,at=q.at,drive_ms=now,match_id=q.match_id,round=q.round,life=q.life,source_seq=q.source_seq,source_cut=q.source_cut,
-        source_mode=cur.mode,source_age=cur.age,source_pt=cur.pt,display_label=label,aim_label=aim_label,
+        source_mode=cur.mode,source_age=cur.age,source_pt=cur.pt,display_label=label,aim_label=aim_label,display=q.display,
+        audit=q.audit,qualification=q.audit.qualification,authority=false,
         prior_available=prior_ok==true,prior_seq=prior_ok and old.seq or nil,prior_label=prior_ok and old.label or nil,
         prior_frame=prior_ok and old.pipeline_frame or nil,decoded={},aim={},prior={},current={},readback={}}
     for _,i in ipairs(PX.HAND_PIPELINE_SLOTS)do
@@ -1506,6 +1573,7 @@ function PX.hand_pipeline_observe(q,i,c,native)
 end
 function PX.hand_pipeline_finish(q)
     if not q or not PX.hand_pipeline_current(q)then return nil,"scope changed"end
+    if q.state.started and (now_ms()<q.state.started or now_ms()-q.state.started>=180000)then return nil,"capture expired"end
     local mesh=PX.injury_mesh(q.p) -- fresh field, never the retained body.mesh wrapper
     if not mesh then return nil,"mesh unavailable"end
     for _,i in ipairs({12,13,16,17})do
@@ -1519,6 +1587,10 @@ function PX.hand_pipeline_finish(q)
         if good then row.angular_velocity=velocity end
         if not PX.hand_pipeline_current(q)then return nil,"scope changed"end
     end
+    local at=now_ms()
+    if q.state.started and (at<q.state.started or at-q.state.started>=180000)then return nil,"capture expired"end
+    q.state.started=q.state.started or at -- only the first completed native-scope observation starts the window
+    q.record.window_started=q.state.started
     return q.record
 end
 function PX.hand_pipeline_emit(r,why,q)
@@ -1530,11 +1602,19 @@ function PX.hand_pipeline_emit(r,why,q)
     local c=r or q
     local pawn=c.pawn.name.."@"..c.pawn.address
     local mesh=(c.mesh or c.body).name.."@"..(c.mesh or c.body).address
-    Log("HANDPIPESTATE inst=%s group=%s peer=%s pawn=%s mesh=%s world=%s gen=%s match=%s round=%s life=%s frame=%s at_ms=%s drive_ms=%s source_seq=%s source_cut=%s source_mode=%s source_age=%s source_pt=%s display_label=%s aim_label=%s prior_available=%s prior_seq=%s prior_label=%s prior_frame=%s current_source=%s available=%s reason=%s current_phase=pre_driver_returned readback_phase=post_driver read_only=true",
+    local a=c.audit or {};local d=c.display or {}
+    local function actual(v)return v==nil and "unavailable"or tostring(v)end
+    Log("HANDCONTEXT inst=%s group=%s peer=%s available=%s qualification=%s authority=false qualification_reason=%s source_match=%s source_round=%s source_life=%s display_match=%s display_round=%s display_life=%s display_cut=%s session_seq=%s session_match=%s session_round=%s session_phase=%s effective_round=%s pending=%s spawn_id=%s spawn_peer=%s mode_present=%s mode_available=%s mode_seq=%s mode_match=%s mode_round=%s mode_row_available=%s mode_peer=%s mode_life=%s window_started_ms=%s",
+        tostring(c.instance),tostring(c.group),tostring(c.peer),tostring(r~=nil),tostring(r~=nil and c.qualification==true),r and a.qualification_reason or why or "unavailable",
+        tostring(c.match_id),tostring(c.round),tostring(c.life),tostring(d.match_id),tostring(d.round),tostring(d.life),tostring(d.cut),
+        actual(a.session_seq),actual(a.session_match),actual(a.session_round),actual(a.session_phase),actual(a.effective_round),actual(a.pending),
+        actual(a.spawn_id),actual(a.spawn_peer),actual(a.mode_present),actual(a.mode_available),actual(a.mode_seq),actual(a.mode_match),actual(a.mode_round),
+        actual(a.mode_row_available),actual(a.mode_peer),actual(a.mode_life),actual(c.window_started))
+    Log("HANDPIPESTATE inst=%s group=%s peer=%s pawn=%s mesh=%s world=%s gen=%s match=%s round=%s life=%s frame=%s at_ms=%s drive_ms=%s source_seq=%s source_cut=%s source_mode=%s source_age=%s source_pt=%s display_label=%s aim_label=%s prior_available=%s prior_seq=%s prior_label=%s prior_frame=%s current_source=%s available=%s qualification=%s authority=false reason=%s current_phase=pre_driver_returned readback_phase=post_driver read_only=true",
         tostring(c.instance),tostring(c.group),tostring(c.peer),pawn,mesh,tostring(c.world),tostring(c.generation),tostring(c.match_id),tostring(c.round),tostring(c.life),
         tostring(c.frame),tostring(c.at),tostring(c.drive_ms),tostring(c.source_seq),tostring(c.source_cut),tostring(c.source_mode),tostring(c.source_age),tostring(c.source_pt),
         tostring(c.display_label),tostring(c.aim_label),tostring(c.prior_available),tostring(c.prior_seq),tostring(c.prior_label),tostring(c.prior_frame),
-        tostring(c.current_source),tostring(r~=nil),why or "none")
+        tostring(c.current_source),tostring(r~=nil),tostring(r~=nil and c.qualification==true),why or "none")
     if not r then return end
     for _,i in ipairs({12,13,16,17})do
         local stage={}
@@ -1546,8 +1626,8 @@ function PX.hand_pipeline_emit(r,why,q)
             stage[#stage+1]=string.format("%s_available=%s %s_values=%s %s_norm=%s %s_relative=%s",name,tostring(quat~=nil),name,values(data),name,tostring(norm),name,values(relative))
         end
         local b=r.readback[i] or {}
-        Log("HANDPIPE inst=%s group=%s peer=%s slot=%d bone=%s parent_slot=%d parent_bone=%s %s sim_available=%s simulating=%s angular_velocity_available=%s angular_velocity_deg_s=%s",
-            tostring(r.instance),tostring(r.group),tostring(r.peer),i,PURE.V2_SLOTS[i],PURE.V2_PARENT[i],PURE.V2_SLOTS[PURE.V2_PARENT[i]],table.concat(stage," "),
+        Log("HANDPIPE inst=%s group=%s peer=%s slot=%d bone=%s parent_slot=%d parent_bone=%s qualification=%s authority=false %s sim_available=%s simulating=%s angular_velocity_available=%s angular_velocity_deg_s=%s",
+            tostring(r.instance),tostring(r.group),tostring(r.peer),i,PURE.V2_SLOTS[i],PURE.V2_PARENT[i],PURE.V2_SLOTS[PURE.V2_PARENT[i]],tostring(r.qualification),table.concat(stage," "),
             tostring(type(b.simulating)=="boolean"),type(b.simulating)=="boolean" and tostring(b.simulating) or "unavailable",
             tostring(b.angular_velocity~=nil),values(b.angular_velocity))
     end

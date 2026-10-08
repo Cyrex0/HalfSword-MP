@@ -1566,9 +1566,12 @@ if opts.kind=="hand_pipeline"then
     local mesh=M.new_obj("SkeletalMeshComponent","HAND_MESH");rawset(mesh,"__addr",9902)
     actor.__props.Mesh,mesh.__props.Owner=mesh,actor
     M.Methods.GetOwner=function(o)return o.__props.Owner end
-    M.Methods.GetWorld=function(o)return o.__props.NativeWorld or M.world end
+    M.Methods.GetWorld=function(o)
+        assert(rawget(o,"__cls")~="SkeletalMeshComponent","pinned Lua GetWorld is actor-only")
+        return o.__props.NativeWorld or M.world
+    end
     local sockets,sim_reads,velocity_reads,writes=0,0,0,0
-    local malformed,change_life=false,false
+    local malformed,change_life,change_phase=false,false,false
     M.Methods.GetSocketTransform=function(_,bone,space)
         sockets=sockets+1;assert(space==0,"existing driver uses native World space")
         return {Translation={X=7,Y=0,Z=0},Rotation={X=0,Y=0,Z=0,W=1}}
@@ -1584,6 +1587,10 @@ if opts.kind=="hand_pipeline"then
     M.Methods.GetPhysicsAngularVelocityInDegrees=function(_,bone)
         velocity_reads=velocity_reads+1
         if change_life then HSMPNative.sc_put("mode",{seq=2,match_id=419,round=1,rows={{peer_id=2,life=3}}})end
+        if change_phase then
+            HSMPNative.sc_put("session",{seq=9,match_id=419,round=1,phase=3})
+            HSMPNative.sc_put("mode",{seq=9,match_id=419,round=1,rows={{peer_id=2,life=1}}})
+        end
         return {X=malformed and 0/0 or 12,Y=34,Z=56}
     end
     local slots,sv={}, {n=6,com={},cmd={},wc={},err={n=0,e=0,emax=0,a=0,amax=0,hmax=0,capped=0}}
@@ -1690,6 +1697,95 @@ if opts.kind=="hand_pipeline"then
     T.check(PX.hand_pipeline_begin(nil,nil,nil,nil)==nil and velocity_reads==count,"total sixty-sample budget rejects before any native read")
     PX.hand_pipeline_state={used=0,started=M.now-180000,at={}}
     T.check(PX.hand_pipeline_begin(nil,nil,nil,nil)==nil and velocity_reads==count,"hard expiry rejects before any native read")
+    -- Invalid native scope attempts remain bounded without consuming the
+    -- only recording window before any useful sample can complete.
+    local mode_slot=HSMPNative._rec.slots.mode
+    PX.hand_pipeline_state=nil;HSMPNative._rec.slots.mode=nil;M.now=20000
+    T.check(PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)==nil
+        and PX.hand_pipeline_state.used==1 and PX.hand_pipeline_state.started==nil,
+        "missing Mode keeps Live strict and counts a rejected attempt without starting recording expiry")
+    HSMPNative._rec.slots.mode=mode_slot;M.now=220000
+    q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)
+    T.check(q and PX.hand_pipeline_state.used==2 and PX.hand_pipeline_state.started==nil,
+        "an earlier rejected attempt cannot expire the first later native-scope capture")
+    sample=PX.hand_pipeline_finish(q)
+    T.check(sample and sample.qualification and sample.authority==false and sample.window_started==220000,
+        "first completed native-scope record starts the single180s window without gaining topology authority")
+    -- This is the actual initial-placement shape from Native31: the
+    -- authoritative Mode still holds round0/life0, while real source and
+    -- displayed poses explicitly carry the assigned round1/life1.
+    cur.life=1;p.aim=nil;p.shown={has_context=true,pawn="HAND_PROXY",match_id=419,round=1,life=1,cut=7}
+    HSMPNative.sc_put("session",{seq=4,match_id=419,round=0,phase=1,rows={{peer_id=2,connected=true,spawn_id=257}}})
+    HSMPNative.sc_put("mode",{seq=4,match_id=419,round=0,rows={{peer_id=2,life=0}}})
+    local n=#records;drive(225000);sample=records[n+1]
+    T.check(sample and sample.authority==false and sample.qualification==false and sample.life==1 and sample.display.life==1
+        and sample.audit.mode_match==419 and sample.audit.mode_round==0 and sample.audit.mode_life==0
+        and sample.audit.spawn_id==257 and sample.audit.effective_round==1 and sample.window_started==220000,
+        "actual pending production drive records separate known source/display life1 and raw authoritative Mode0 values",T.repr(sample))
+    q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,225000)
+    T.check(q==nil,"pending observation retains the existing per-scope cadence")
+    local context=M.logtext():match("HANDCONTEXT inst=7 group=3[^\n]*qualification=false[^\n]*")or""
+    T.check(T.contains(context,"qualification=false authority=false qualification_reason=mode_tuple_mismatch")
+        and T.contains(context,"source_life=1 display_match=419 display_round=1 display_life=1")
+        and T.contains(context,"mode_round=0 mode_row_available=true mode_peer=2 mode_life=0"),
+        "pending log qualification and actual zero Mode fields cannot be mistaken for authoritative life proof",context)
+    M.now=230000;q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)
+    T.check(q and not PX.grip_probe_current(q),"HAND-only pending admission leaves strict GRIP qualification unchanged")
+    local before=velocity_reads;change_phase=true
+    sample,why=PX.hand_pipeline_finish(q)
+    T.check(sample==nil and why=="scope changed" and velocity_reads==before+1 and PX.hand_pipeline_state.started==220000,
+        "Loading-to-Live transition during getters discards mixed tuple data and never restarts the window")
+    change_phase=false
+    HSMPNative.sc_put("session",{seq=10,match_id=419,round=0,phase=2,rows={{peer_id=2,connected=true,spawn_id=257}}})
+    HSMPNative._rec.slots.mode=nil;M.now=235000
+    q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now);sample=PX.hand_pipeline_finish(q);emit(sample,nil,q)
+    T.check(sample and not sample.qualification and not sample.audit.mode_present and not sample.audit.mode_available
+        and sample.audit.mode_match==nil and sample.audit.mode_round==nil and sample.audit.mode_life==nil,
+        "Countdown may observe exact pending native scope while absent Mode remains wholly unavailable")
+    context=M.logtext():match("HANDCONTEXT inst=7 group=5[^\n]*")or""
+    T.check(T.contains(context,"mode_present=false mode_available=false mode_seq=unavailable mode_match=unavailable mode_round=unavailable")
+        and T.contains(context,"mode_row_available=false mode_peer=unavailable mode_life=unavailable"),
+        "absent Mode never fabricates zero fields or default life1 in observation output",context)
+    -- A first other peer's spawn_round must not qualify a mismatched target
+    -- peer assignment; missing/disconnected target rows are equally refused.
+    HSMPNative.sc_put("session",{seq=11,match_id=419,round=0,phase=1,rows={
+        {peer_id=1,connected=true,spawn_id=256},{peer_id=2,connected=true,spawn_id=513}}})
+    M.now=240000;before=velocity_reads
+    T.check(PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)==nil and velocity_reads==before,
+        "pending assignment encoded round must match this exact peer, not the first peer's spawn_round")
+    HSMPNative.sc_put("session",{seq=12,match_id=419,round=0,phase=1,rows={{peer_id=1,connected=true,spawn_id=256}}})
+    M.now=245000
+    T.check(PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)==nil,"missing exact peer pending assignment cannot admit an observation")
+    HSMPNative.sc_put("session",{seq=13,match_id=419,round=0,phase=1,rows={{peer_id=2,connected=false,spawn_id=257}}})
+    M.now=250000
+    T.check(PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)==nil,"disconnected pending spawn row is not current assignment evidence")
+    HSMPNative.sc_put("session",{seq=14,match_id=419,round=0,phase=1,rows={{peer_id=2,connected=true,spawn_id=257}}})
+    M.now=255000;local used=PX.hand_pipeline_state.used;cur.life=0
+    T.check(PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)==nil and PX.hand_pipeline_state.used==used,
+        "missing positive source life cannot use pending assignment as a life1 fallback")
+    cur.life=1;q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)
+    HSMPNative.sc_put("mode",{seq=15,match_id=419,round=0,rows={{peer_id=2,life=0}}})
+    before=velocity_reads
+    T.check(PX.hand_pipeline_finish(q)==nil and velocity_reads==before,
+        "raw Mode availability change after admission is revalidated before optional getters")
+    HSMPNative.sc_put("mode",{seq=16,match_id=419,round=0,rows={}});M.now=260000
+    q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now);sample=PX.hand_pipeline_finish(q)
+    T.check(sample and sample.audit.mode_available and not sample.audit.mode_row_available and sample.audit.mode_life==nil
+        and not sample.qualification and sample.life==1,
+        "a present raw Mode frame with no peer row cannot invent a life value from source life1")
+    M.now=265000;q=PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)
+    HSMPNative.sc_put("session",{seq=17,match_id=419,round=0,phase=1,rows={{peer_id=2,connected=true,spawn_id=258}}})
+    before=velocity_reads
+    T.check(PX.hand_pipeline_finish(q)==nil and velocity_reads==before,
+        "changed exact spawn assignment is refused even when its encoded pending round is unchanged")
+    M.now=400000;before=velocity_reads
+    T.check(PX.hand_pipeline_begin(nil,nil,nil,nil)==nil and velocity_reads==before and PX.hand_pipeline_state.started==220000,
+        "pending captures and later lifecycle changes cannot extend the exact original180s window")
+    PX.hand_pipeline_state={used=59,at={}};M.now=500000;HSMPNative._rec.slots.mode=nil
+    HSMPNative.sc_put("session",{seq=16,match_id=419,round=1,phase=3})
+    T.check(PX.hand_pipeline_begin(p,body,cur,p.aim.slots,0,0,M.now)==nil and PX.hand_pipeline_state.used==60
+        and PX.hand_pipeline_state.started==nil and PX.hand_pipeline_begin(nil,nil,nil,nil)==nil,
+        "sixty rejected attempts bound optional scope reads even if no recording window ever starts")
 end
 
 if opts.kind=="grip_probe"then
