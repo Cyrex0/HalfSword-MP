@@ -17,6 +17,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### What's new
 
+- Retain stuck-blade continuations while their known parent awaits pose coverage,
+  preserving source delivery order without requiring a child resend.
+- Reuse developer joint-capture session readers while preserving fresh native
+  header, link, peer and sample checks at every guard.
 - Add a bounded developer journal for native stuck-blade setup, marker wear and
   sever callbacks, with explicit missing history and no sever authority.
 - Retain the existing owner damage call's native material-response outputs with

@@ -1940,3 +1940,80 @@ At actual Gore1 torso needslevel5/6markers, headlevel2/4markers. Journal Live-on
 coverage ends on surrender/RoundOver; corpse continuation remains unavailable,
 though native Initiate/Delayed has no DED/alive prerequisite. This is a separate
 future topology observation scope, not permission to resume eliminated hit claims.
+
+### Native42 completed: material copy-out verified and natural wear observed
+
+Clean cf53c916 full G0/dev push/normal deploy passed (69Lua suites;1279Rust/
+75binaries; clippy0errors2warnings; no skips). Raw20261008-142911-96d320-combat_manual,
+session native-20261008-42, two-handed axe cloth recipe. Joint profile only startup
+flag; all expensive caller/Combat/Grip/Hand/Limb/Box probes off. Cut journal armed
+once via exact owned processes after both kit verdicts w_axe2h and RCON Live.
+Both5POST-hook sets returned complete registration, both normal menu_quit; no
+new crashes/orphans/forced kills, owner/exp/watcher exit0.
+
+Recipe157/158=.993671 claims, but below required200samples; do not call acceptance
+complete or compare directly with prior ordinary-axe recipe. Claim Box rotation
+mean24.251/max43.658degrees,n17; clock0,n14. Round1 and3 load_failed; round2 and
+later4/5 settled. Fair spawning remains blocked even with costly probes off.
+
+Native rows11=4owner scalar responses+4constraint_begin+3wear, all source rows
+inst2. All4owner responses have all6fields available, exact context and complete
+native call. Actual densities1000/1150, rigidity.5/.45, HitSurface1/2 and boolfalse
+retained, including a legitimate zero DamageOut. This verifies pinned scalar
+fan-in correction on actual DCD. It does not prove paired material/protection parity.
+
+All4native25-field initializers complete. BeginPOST Gore0/markers0 precedes
+latent setup; later actual wear Gore2, CutLevel6/5, Thrustfalse. Wear observations:
+ThighL(part12)3markers/2current,Damage657.157,HP099 first; Torso(part2)1/1,
+Damage476.261,HP100; same torso1/0,Damage53,916,185.127,HP000. Large input is an
+observed native value, not a proved servo cause or solo force parity. Torso marker
+count1 cannot meet native6-marker gate even atHP0. Zero cut_attempt/Initiate/Delayed
+rows, so no completed sever or full cut topology. Parent candidate original snapshots
+retain cidnil; first2wear rows have no assignedcid yet, third exposes currentcid39.
+Accepted whole wear history remains unknown; no relay authority. Source reads mean31.857/
+max53ms across7rows; whole capture/performance acceptance is a separate measure.
+
+Artifacts native42-cut-native-rows.json and native42-cut-native-summary.json.
+Both profile captures now fail actual scope before a complete row: inst1 proxy
+Mode_seq8→9 at source:UserConstraint_11:accessor_after,total165ms; inst2 original
+source sample_age250.334ms at source:asset_after,total221ms. No current joint pair,
+no threshold relaxation. Comparison native42-joint-profile-native-comparison.json.
+
+Next implementation while games stopped: preserve waiting-parent continuation
+in server lower-ID barrier. Existing inside_continuation can Hold before storing
+Decision; child66 then relies on120ms resend, allowing67–71 past. Native41 server
+order supports that branch but original hold was not logged. This is narrower than
+a new execution-sequence protocol or admitting old native timestamps. Sol owns
+Rust fix/regression, Astra reviews. Cuts/gear remain priority; co-op Abyss queued.
+
+### Native43 preparation: retained parent wait and cheaper scope allocations
+
+Sol server fix retains the original continuation and copied first-arrival context
+in the existing bounded Decision.waiting/active barrier when its known parent is
+waiting for stream coverage. Tick and retransmit use inside_continuation only;
+child pose evaluation, edited resend replacement and a second rate debit are
+excluded. Full match/round/attacker-life/victim-life ordering scope is preserved.
+Production Engine/Store v2 body-history regression proves65WAIT,66retained,
+65accepted,67held,flush66/67 without120ms child resend. Parent rejection/orphan,
+life130/131, immutable retry and existing160token admission are covered.
+50Combat+61lagcomp=111focusedRust tests pass; Astra approves frozen two-file delta.
+Artifact native42-parent-wait-regression.json. This repairs the demonstrated
+missing-retention mechanism, not all possible dispatch inversions or native parity.
+
+Avatar scope guards now reuse two lazy source/proxy Lua session readers. Each
+guard still freshly reads and validates native info, updates its own plain facade,
+force-polls and checks liveness at the original location. Current Mode, peer,
+assignment, world/pawn/mesh,250ms age, before/after guards and loss latch remain
+unchanged. No native result cache, getter removal, freshness reset or budget change.
+Actual-main success then fresh-header/heartbeat/link/peer refusal and restoration
+fixture passes. Root3Lua suites506assertions(Avatar429,joint44,session33),2parses,
+direct state-files and diff-check pass. Astra approves both-file delta. Native43
+performance, full joint pair and reliable spawning are pending actual game evidence.
+
+Native42 Astra audit confirms first two wear inputs exactly follow cooked initial
+impact*(1-DrawCut),657.1573457/476.260963959. ActualGore2 thigh count3 fails required
+5; torso count1 fails required6, independently of marker HP. The53,916,185 later
+input is consistent with clampedHP0 but cannot authenticate prior wear. No forced
+cut or threshold adjustment is warranted. Full owner-authorized cutting transaction,
+detached head/limb/torso geometry and all-gear runtime validation remain open.
+Co-op Abyss multiplayer AI waves follows those blockers. No PR/main/tag/release.

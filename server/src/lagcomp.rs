@@ -1629,6 +1629,14 @@ impl Store {
         }
         self.peer(id).strikers.push(ts,set);
     }
+    pub(crate) fn record_skeletal_v2(&mut self,id:PeerId,f:&posecodec::v2::Full,now_ms:i64)->bool {
+        let p=posecodec::v2::to_v1(f);
+        if !self.bind_pose_context(id,f.context) {return false;}
+        self.note_pose_codec(id,true);
+        let ok=self.record_pose(id,&p,now_ms);
+        if ok {self.record_body_strikers(id,p.ts,f);}
+        ok
+    }
     pub fn record_blade_hand(&mut self, id: PeerId, ts: u32, blade: Blade, now_ms: i64, offhand: bool) {
         let ok = finite(&blade.base) && finite(&blade.tip) && blade.vel.map_or(true, |v| finite(&v))
             && len(sub(blade.tip, blade.base)) <= 400.0;
@@ -2949,13 +2957,7 @@ pub fn has_accepted_pose_context(id:PeerId,match_id:u64,round:u32,life:u16)->boo
     store().lock().unwrap().has_accepted_pose_context(id,match_id,round,life)
 }
 pub fn record_skeletal_v2(id: PeerId, f: &posecodec::v2::Full) -> bool {
-    let p = posecodec::v2::to_v1(f);
-    let mut s = store().lock().unwrap();
-    if !s.bind_pose_context(id,f.context) {return false;}
-    s.note_pose_codec(id, true);
-    let ok=s.record_pose(id, &p, now_ms());
-    if ok {s.record_body_strikers(id,p.ts,f);}
-    ok
+    store().lock().unwrap().record_skeletal_v2(id,f,now_ms())
 }
 /// The relay forwarded `src`'s skeletal frame stamped `ts` (sender clock) to
 /// `viewer`, which currently receives `src`'s frames every `interval_ms`.

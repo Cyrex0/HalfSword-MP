@@ -58,6 +58,7 @@ if mode ~= "case" then
     T.isolated(T.script, "case", { kind = "joint_profile", change = "lookup_pc_world" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "refusal" })
     T.isolated(T.script, "case", { kind = "joint_profile", change = "predicate" })
+    T.isolated(T.script, "case", { kind = "joint_profile", change = "cached_reader" })
     T.isolated(T.script, "case", { kind = "pose_context" })
     T.isolated(T.script, "case", { kind = "clock_probe" })
     T.isolated(T.script, "case", { kind = "clock_epoch" })
@@ -1649,6 +1650,7 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         local sample_life,sample_age=1,0.375
         HSMP_IPC.sample_status=function()return {pose={tick=7,ts=M.now-sample_age,match_id=419,round=1,life=sample_life}}end
         local captures=0
+        local source_current,proxy_current
         local lookup_changed,old_touches=false,0
         if opts.change=="lookup_pc_world"then
             local find=StaticFindObject;local world_get=M.Methods.GetWorld;local address_get=M.Methods.GetAddress
@@ -1664,6 +1666,7 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
         end
         PX.JOINT_PROFILE.capture=function(self,source,proxy,se,pe)
             captures=captures+1
+            source_current,proxy_current=se.current,pe.current
             T.check(source.peer==1 and proxy.peer==2 and source.life==1 and proxy.life==2 and source.pending and not source.qualification,
                 "production scopes preserve independent peer/life and actual Mode0 pending source publication")
             T.check(source.sample_ms%1~=0 and source.admission_sample_age_ms==.375 and se.current()and pe.current(),
@@ -1724,6 +1727,33 @@ if opts.kind=="hand_pipeline"or opts.kind=="limb_burst"or opts.kind=="joint_prof
                 "actual production pcall preserves sanitized second-return reason and copied stage/time")
             T.check(not T.contains(log,"scope_or_capture_unavailable"),"specific capture refusal is not replaced by the old generic reason")
             drive(1032);T.check(captures==1,"refusal preserves once-only capture and normal writer without reopening")
+            return
+        end
+        if opts.change=="cached_reader"then
+            local holders=PX.joint_profile_readers
+            local sr,pr=holders.source.reader,holders.proxy.reader
+            local reads_source,reads_proxy=sr.reads,pr.reads
+            T.check(source_current()and proxy_current()and holders.source.reader==sr and holders.proxy.reader==pr
+                and sr~=pr and sr.reads>reads_source and pr.reads>reads_proxy,
+                "actual scope guards reuse separate allocations while force-polling both current links")
+            local header=HSMP_IPC.N.ipc_info
+            HSMP_IPC.N.ipc_info=function()return nil end
+            T.check(not source_current()and not proxy_current(),
+                "cached successful readers cannot borrow an old header after a fresh native read fails")
+            HSMP_IPC.N.ipc_info=header
+            HSMPNative._st.hb_age=6
+            T.check(not source_current()and not proxy_current(),
+                "both cached readers reject a newly expired heartbeat without refreshing the source timestamp")
+            HSMPNative._st.hb_age=.05
+            HSMPNative.sc_put("link",{status=7,state=1,my_peer_id=1})
+            T.check(not source_current()and not proxy_current(),
+                "forced polling rejects a newly ended link after cached success")
+            HSMPNative.sc_put("link",{status=1,state=1,my_peer_id=2})
+            T.check(not source_current(),
+                "fresh source peer and spawn assignment cannot inherit the cached reader's previous peer")
+            HSMPNative.sc_put("link",{status=1,state=1,my_peer_id=1})
+            T.check(source_current()and proxy_current()and holders.source.reader==sr and holders.proxy.reader==pr,
+                "restored exact fresh scope succeeds with the same two allocations")
             return
         end
         drive(1032);T.check(captures==1,"one whole-run capture adds no optional repeat")

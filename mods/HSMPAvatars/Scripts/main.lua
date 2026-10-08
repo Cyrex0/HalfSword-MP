@@ -1472,6 +1472,22 @@ end
 function PX.joint_profile_failure(validator,predicate,field,expected,observed)
     if PX.JOINT_PROFILE_MODULE then return PX.JOINT_PROFILE_MODULE.failure(validator,predicate,field,expected,observed)end
 end
+-- Reuse only reader allocations. Each guard supplies its already freshly
+-- validated native header and still force-polls the current link below.
+function PX.joint_profile_reader(role,info)
+    local holders=PX.joint_profile_readers
+    if not holders then holders={};PX.joint_profile_readers=holders end
+    local holder=holders[role]
+    if not holder then
+        holder={ipc={}}
+        holder.ipc.refresh_info=function()return holder.info end
+        holder.reader=HSM and HSM.new({every_s=0,ipc=holder.ipc})
+        holders[role]=holder
+    end
+    holder.info=info
+    holder.ipc.S,holder.ipc.rec=HSMP_IPC.S,HSMP_IPC.rec
+    return holder.reader
+end
 function PX.hand_pipeline_scope(q,diagnose)
     local function fail(predicate,field,expected,observed)
         if diagnose then return nil,PX.joint_profile_failure("proxy",predicate,field,expected,observed)end
@@ -1492,7 +1508,7 @@ function PX.hand_pipeline_scope(q,diagnose)
         if type(info)~="table"then return fail("native_header","header_available",true,false)end
         if info.sidecar_state~="ready"and info.sidecar_state~=2 then return fail("native_header_state","sidecar_state","ready or 2",info.sidecar_state)end
         if type(info.sidecar_hb_age_s)~="number"or PX.grip_probe_number(info.sidecar_hb_age_s)<0 then return fail("native_header_age","sidecar_hb_age_s","finite nonnegative number",info.sidecar_hb_age_s)end
-        local reader=HSM and HSM.new({every_s=0,ipc={S=HSMP_IPC.S,rec=HSMP_IPC.rec,refresh_info=function()return info end}})
+        local reader=PX.joint_profile_reader("proxy",info)
         if not reader then return fail("session_reader","reader_available",true,false)end
         reader:poll(true);if not reader:live()then return fail("session_liveness","live",true,false)end
         local function integer(v,low)return type(v)=="number"and math.tointeger(v)and v>=low and v or nil end
@@ -1579,7 +1595,7 @@ function PX.joint_profile_source_scope(diagnose)
         if type(info)~="table"then return fail("native_header","header_available",true,false)end
         if info.sidecar_state~="ready"and info.sidecar_state~=2 then return fail("native_header_state","sidecar_state","ready or 2",info.sidecar_state)end
         if type(info.sidecar_hb_age_s)~="number"or PX.grip_probe_number(info.sidecar_hb_age_s)<0 then return fail("native_header_age","sidecar_hb_age_s","finite nonnegative number",info.sidecar_hb_age_s)end
-        local reader=HSM.new({every_s=0,ipc={S=HSMP_IPC.S,rec=HSMP_IPC.rec,refresh_info=function()return info end}})
+        local reader=PX.joint_profile_reader("source",info)
         reader:poll(true);if not reader:live()then return fail("session_liveness","live",true,false)end
         local function positive(v)return type(v)=="number"and math.tointeger(v)and v>0 and v or nil end
         local session,peer=HSM.view(),HSM.my_peer_id()
