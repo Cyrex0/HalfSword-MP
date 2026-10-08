@@ -94,6 +94,7 @@ pub const CONTRACT: &[Entry] = &[
       &["world_valid", "census_complete", "willies", "world", "game_mode", "game_mode_class",
         "game_mode_options", "controller_valid", "controller", "controller_class", "controller_pawn",
         "controller_pawn_class", "willie_count", "census_error", "move_ignored", "look_ignored"]),
+    e("x_native_client_suppression", L, &["ok", "reason"], &["summary"]),
     e("x_native_worker_census", L, &["players", "ai", "pawn0", "pawn1", "first_ai"], &[]),
     e("native_travel_rewritten", L, &["from", "to", "soft"], &["phase", "n"]),
     // shared/hsmp_rvp.lua let a travel go while the Runtime Vertex Paint queue was still busy

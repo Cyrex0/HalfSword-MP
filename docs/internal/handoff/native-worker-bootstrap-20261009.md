@@ -55,3 +55,28 @@ that correction restores the second pawn. A bounded, world-qualified native
 spawner census records actual map compatibility and current Spawn Player/
 Spawn Mercenary flags; it does not construct a fallback pawn or change enemy AI.
 Exactly two normal clients and one headless source remain the acceptance topology.
+# Actual corrected-profile run and next candidate
+
+`test-results/20261009-001359-af698c-native-host` ran exact clean deployed
+5a31d1bf with two normal native clients and one NullRHI game authority. The
+authority reached native_ready at9.681s with two native human controllers/pawns,
+zero AI and actual opposing Team Int1/2. Arena1/Free1 therefore restored the
+missing second fighter; Foes1 remains the proven native two-fighter quantity.
+
+Both clients independently confirmed `/Script/Engine.GameModeBase`, but each
+still had one visible, collision-enabled, simulating nonPersistent Willie
+possessed by PC0. Isolation correctly refused and source frame_seq stayed0.
+Source descriptor capture also refused the unavailable `GetComponentsByClass`
+alias; pinned reflection exposes `K2_GetComponentsByClass`. No live input or
+complete render frame was demonstrated. All four owned process records (three
+games plus supervisor) stopped, original saves were unchanged, and crash and
+unobserved-child lists were empty.
+
+Narrow source getter correction dadd38ae uses the actual reflected getter and
+tests refusal of the plain alias. Client candidate e78d13cf suppresses the
+current-world native arena callback drivers and retires local nonPersistent
+fighters/owned gear/AI with fresh inert readback. Protected Persistent actors
+remain untouched and must pass their own inert proof. Pooled inactive fighters
+require the original scalar retirement identity and complete fresh checks;
+ordinary hidden actors cannot qualify. The new behavior still needs a fresh
+exact G0 deployment and three-game run. Do not claim playable mirroring yet.
