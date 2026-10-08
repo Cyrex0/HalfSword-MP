@@ -86,7 +86,10 @@ pub const CONTRACT: &[Entry] = &[
     e("save_redirected", L, &["fn", "slot", "to_slot", "op", "ok"], &["how"]),
     e("x_save_guard", L, &["active"], &["why", "session", "ok"]),
     e("x_career_recover", L, &["code", "ms"], &[]),   // HSMPMenu boot-time career-guard recovery
-    e("x_native_worker", L, &["state", "reason", "arena"], &[]),
+    e("x_native_worker", L, &["state", "reason", "arena"],
+      &["frame_seq", "sampled", "refused", "active_pc0", "active_pc1", "dispatched", "input_refused"]),
+    e("x_native_client", L, &["state", "reason"],
+      &["epoch", "dir_seq", "frame_seq", "own_entity", "own_incarnation"]),
     e("x_native_worker_census", L, &["players", "ai", "pawn0", "pawn1", "first_ai"], &[]),
     e("native_travel_rewritten", L, &["from", "to", "soft"], &["phase", "n"]),
     // shared/hsmp_rvp.lua let a travel go while the Runtime Vertex Paint queue was still busy
