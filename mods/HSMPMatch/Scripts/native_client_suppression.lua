@@ -2,6 +2,9 @@
 -- Actor removal may be deferred. Retain only scalar retirement identities and
 -- require a fresh complete inert census for every still-present native fighter.
 local M={}
+-- The cooked Willie has 384 component exports. Every owned component remains
+-- checked; one actor can use the same bounded 1024 budget as the whole pass.
+local COMPONENT_BUDGET=1024
 local DRIVERS={"BP_LevelManager_C","BP_SpawnerPoint_Willies_C","BP_Generator_Weapons_Random_C"}
 local DRIVER_PATHS={
     BP_LevelManager_C="/Game/Blueprints/Managers/BP_LevelManager.BP_LevelManager_C",
@@ -98,7 +101,8 @@ function M.new(env)
                     root_component={known=false,error="native garbage qualification not completed"},
                     default_scene_root={known=false,error="native garbage qualification not completed"},
                     world_listed={known=false,error="no native world-class membership census in this diagnostic"},
-                    components={getter="/Script/Engine.Actor:K2_GetComponentsByClass",class="/Script/Engine.ActorComponent",complete=false,count=0}}
+                    components={getter="/Script/Engine.Actor:K2_GetComponentsByClass",class="/Script/Engine.ActorComponent",complete=false,count=0,
+                        budget=COMPONENT_BUDGET,root_included={known=false},primitives=0}}
                 summary.refusal=evidence
                 -- Never read actor fields or dispatch actor functions after a
                 -- garbage/unknown native flag. Existing cohort current() checks
@@ -135,16 +139,21 @@ function M.new(env)
                 env.each(rows,function()
                     count=count+1;components_total=components_total+1
                     evidence.components.count=count
-                    if count>256 or components_total>1024 then error("suppression_component_bound",0)end
-                end)
+                    if count>COMPONENT_BUDGET or components_total>COMPONENT_BUDGET then error("suppression_component_bound",0)end
+                end,COMPONENT_BUDGET)
                 evidence.components.complete=true
                 evidence.mirrored_garbage_after=fact(function()return call(actor,"HasAnyFlags",0x40000000)end,"boolean")
                 if not evidence.mirrored_garbage_after.known then error("suppression_actor_garbage_unavailable",0)end
                 if evidence.mirrored_garbage_after.value~=false then error("suppression_actor_native_garbage",0)end
+                local seen={};local root=evidence.root_component.known and evidence.root_component.value
                 env.each(rows,function(c)
-                    if not live(c)or address(call(c,"GetOwner"))~=address(actor)then error("suppression_component_owner",0)end
+                    if not live(c)then error("suppression_component_owner",0)end
+                    if call(c,"HasAnyFlags",0x40000000)~=false then error("suppression_component_native_garbage",0)end
+                    if address(call(c,"GetOwner"))~=address(actor)then error("suppression_component_owner",0)end
+                    local a=address(c);if seen[a]then error("suppression_component_duplicate",0)end;seen[a]=true
                     call(c,"SetComponentTickEnabled",false)
                     if call(c,"IsA",primitive_class)==true then
+                        evidence.components.primitives=evidence.components.primitives+1
                         if call(c,"IsA",skeletal_class)==true then call(c,"SetAllBodiesSimulatePhysics",false)end
                         call(c,"SetSimulatePhysics",false);call(c,"SetCollisionEnabled",0)
                         call(c,"SetAllPhysicsLinearVelocity",{X=0,Y=0,Z=0},false)
@@ -152,7 +161,7 @@ function M.new(env)
                     end
                     if call(c,"IsA",scene_class)==true then call(c,"SetVisibility",false,true)end
                     if call(c,"IsComponentTickEnabled")~=false then error("suppression_component_tick_readback",0)end
-                end)
+                end,COMPONENT_BUDGET)
                 evidence.mirrored_garbage_after=fact(function()return call(actor,"HasAnyFlags",0x40000000)end,"boolean")
                 if not evidence.mirrored_garbage_after.known then error("suppression_actor_garbage_unavailable",0)end
                 if evidence.mirrored_garbage_after.value~=false then error("suppression_actor_native_garbage",0)end
@@ -160,6 +169,12 @@ function M.new(env)
                 evidence.actor_collision=fact(function()return call(actor,"GetActorEnableCollision")end,"boolean")
                 evidence.actor_tick=fact(function()return call(actor,"IsActorTickEnabled")end,"boolean")
                 if count==0 then error("suppression_component_census_empty",0)end
+                local latest_root=root_fact("RootComponent")
+                if not root or not root.pointer_known or not latest_root.known or latest_root.value.address~=root.address
+                    or(not latest_root.value.null and latest_root.value.mirrored_garbage~=false)
+                    or(kind=="fighter"and(root.null or root.mirrored_garbage~=false))then error("suppression_component_root_unavailable",0)end
+                evidence.components.root_included={known=true,value=root.null==true or seen[root.address]==true}
+                if not evidence.components.root_included.value then error("suppression_component_root_missing",0)end
                 if call(actor,"GetActorEnableCollision")~=false or call(actor,"IsActorTickEnabled")~=false or actor.bHidden~=true then error("suppression_actor_readback",0)end
                 fresh();summary.refusal=nil
             end
@@ -361,18 +376,23 @@ function M.new(env)
                 return v
             end
             local a=read(pawn,"GetAddress");local n=read(pawn,"GetFName"):ToString()
-            if not self:retirement(a,n)or pawn.bHidden~=true or read(pawn,"GetActorEnableCollision")~=false or read(pawn,"IsActorTickEnabled")~=false then return false end
+            if not self:retirement(a,n)or read(pawn,"HasAnyFlags",0x40000000)~=false or pawn.bHidden~=true or read(pawn,"GetActorEnableCollision")~=false or read(pawn,"IsActorTickEnabled")~=false then return false end
             local c=pawn.Controller;if c and c:IsValid()then return false end
             local component=env.find("/Script/Engine.ActorComponent");local primitive=env.find("/Script/Engine.PrimitiveComponent");local scene=env.find("/Script/Engine.SceneComponent")
             if not component or not primitive or not scene or not WG.same(token)then return false end
-            local count=0;local rows=read(pawn,"K2_GetComponentsByClass",component)
+            local root=pawn.RootComponent;if not root or not WG.same(token)then return false end
+            local root_address=read(root,"GetAddress");if root_address==0 or read(root,"HasAnyFlags",0x40000000)~=false then return false end
+            local count=0;local seen={};local rows=read(pawn,"K2_GetComponentsByClass",component)
             env.each(rows,function(cmp)
-                count=count+1;if count>256 then error("proof component bound",0)end
-                if read(read(cmp,"GetOwner"),"GetAddress")~=a or read(cmp,"IsComponentTickEnabled")~=false then error("proof component changed",0)end
+                count=count+1;if count>COMPONENT_BUDGET then error("proof component bound",0)end
+                local ca=read(cmp,"GetAddress");if seen[ca]then error("proof duplicate component",0)end;seen[ca]=true
+                if read(cmp,"HasAnyFlags",0x40000000)~=false or read(read(cmp,"GetOwner"),"GetAddress")~=a or read(cmp,"IsComponentTickEnabled")~=false then error("proof component changed",0)end
                 if read(cmp,"IsA",primitive)==true and(read(cmp,"GetCollisionEnabled")~=0 or read(cmp,"IsSimulatingPhysics",env.FName("None"))~=false)then error("proof primitive active",0)end
                 if read(cmp,"IsA",scene)==true and read(cmp,"IsVisible")~=false then error("proof component visible",0)end
-            end)
-            return count>0 and WG.same(token)
+            end,COMPONENT_BUDGET)
+            local latest=pawn.RootComponent
+            return count>0 and seen[root_address]==true and WG.same(token)and latest and read(latest,"GetAddress")==root_address
+                and read(latest,"HasAnyFlags",0x40000000)==false
         end)
         return ok and inert==true
     end

@@ -67,6 +67,11 @@ local function fixture()
     f.env.clear_native=function()f.cleared=(f.cleared or 0)+1 end
     return f,S.new(f.env)
 end
+local function body_components(f,count)
+    local rows={}
+    for i=1,count do rows[i]=f.mesh(f.pawn);rows[i].name="native_component_"..i end
+    f.pawn.components=rows;return rows
+end
 do
     local f,s=fixture();local ok,why,counts=s:run()
     check(ok,why or"qualified client suppression succeeds")
@@ -306,6 +311,56 @@ end
 do
     local f,s=fixture();f.pawn.Mesh.SetAllBodiesSimulatePhysics=function()end;f.pawn.Mesh.SetSimulatePhysics=function()end
     local ok,why=s:run();check(not ok and why=="suppression_primitive_readback"and not s:proof(f.pawn),"failed native physics shutdown cannot mark retirement complete")
+end
+do
+    local f,s=fixture();local rows=body_components(f,384)
+    local ok,why=s:run();check(ok and s:proof(f.pawn),why or"complete cooked-size body census exceeds256 without skipping any component")
+    local all=true;for _,c in ipairs(rows)do all=all and c.tick==false and c.simulating==false and c.visible==false and c.collision_mode==0 end
+    check(all,"all384 owned primitive/skeletal/scene components receive tick, physics, visibility and collision readback")
+    rows[384].simulating=true;check(not s:proof(f.pawn),"last collider beyond the former256 cap is still required physically inert")
+    rows[384].simulating=false;f.pawn.components={table.unpack(rows,1,383)}
+    check(not s:proof(f.pawn),"root omitted from a formerly complete body census cannot pass a cached retirement identity")
+end
+do
+    local f,s=fixture();local rows=body_components(f,1024)
+    f.actors.ModularWeaponBP_C={};f.actors.Modular_Weapon_Part_Master_C={}
+    local ok,why=s:run();check(ok and s:proof(f.pawn)and rows[1024].collision_mode==0,
+        why or"one complete actor may use exactly the existing1024 component pass budget and iterator cap")
+end
+do
+    local f,s=fixture();body_components(f,1023) -- plus the two qualified gear components already in this fixture
+    local ok,why,counts=s:run();check(not ok and why=="suppression_component_bound"and counts.refusal.components.complete==false
+        and counts.refusal.components.budget==1024 and counts.retired==0,
+        "aggregate gear and body census still fails at the unchanged1024 pass budget")
+end
+do
+    local f,s=fixture();body_components(f,1025)
+    f.actors.ModularWeaponBP_C={};f.actors.Modular_Weapon_Part_Master_C={}
+    local ok,why=s:run();check(not ok and why=="native return array bound"and not s:proof(f.pawn),
+        "an individual complete return above1024 remains bounded before component processing")
+end
+do
+    local f,s=fixture();local listed=f.pawn.Mesh;local missing_root=f.mesh(f.pawn)
+    f.pawn.components={listed}
+    local ok,why,counts=s:run();check(not ok and why=="suppression_component_root_missing"and counts.refusal.components.complete
+        and counts.refusal.components.root_included.value==false and missing_root.simulating==true,
+        "complete small census without the actual live root cannot mark native fighter inert")
+end
+do
+    local f,s=fixture();f.pawn.Mesh.flags=0x40000000
+    local ok,why=s:run();check(not ok and why=="suppression_component_native_garbage"and f.pawn.Mesh.simulating==true,
+        "native garbage component cannot be treated as a complete live collider through Lua wrapper validity")
+end
+do
+    local f,s=fixture();local root=f.pawn.Mesh
+    root.SetComponentTickEnabled=function(self,v)self.tick=v;f.pawn.RootComponent=f.mesh(f.actor("replacement_root_owner"))end
+    local ok,why=s:run();check(not ok and why=="suppression_component_root_unavailable"and not s:proof(f.pawn),
+        "changed actual root during component processing invalidates complete-census readiness")
+end
+do
+    local f,s=fixture();f.pawn.components={f.pawn.Mesh,f.pawn.Mesh}
+    local ok,why=s:run();check(not ok and why=="suppression_component_duplicate"and not s:proof(f.pawn),
+        "duplicate owned component addresses do not inflate a complete native component census")
 end
 do
     local f,s=fixture();local ai=f.actor("AIController",{["/Script/AIModule.AIController"]=true});f.mesh(ai)
