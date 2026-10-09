@@ -41,7 +41,11 @@ thread_local const HsmpViewGuard* active_guard{};
 thread_local Obj active_world{},active_game_instance{};
 void mesh_call_guard();
 struct LookupEntry {std::vector<HsmpNativePathNode> original,pinned;std::vector<uint32_t> flags,class_flags;uint64_t package{};void* zero_item{};};
-struct LookupState {Obj world{},gi{};HsmpNativePathNode world_node{},gi_node{};HsmpProp gi_property{};std::map<std::wstring,LookupEntry> entries;};
+// Copied expectations only: no successful validation survives a pure boundary.
+struct LookupObjectWitness {HsmpNativePathNode node{};uint64_t outer{};uint32_t flags{};void* zero_item{};};
+struct LookupClassWitness {Obj object{};uint64_t name{};uint32_t flags{};bool exact_serial{};};
+struct LookupWitnesses {std::map<uint64_t,LookupObjectWitness> objects;std::map<uint64_t,LookupClassWitness> classes;std::optional<uint64_t> package;};
+struct LookupState {Obj world{},gi{};HsmpNativePathNode world_node{},gi_node{};HsmpProp gi_property{};std::map<std::wstring,LookupEntry> entries;LookupWitnesses witnesses;};
 thread_local LookupState* active_lookup{};
 struct CaptureWatch;
 thread_local const CaptureWatch* active_capture_watch{};
@@ -49,6 +53,7 @@ Obj lookup_find(const wchar_t* path);
 void lookup_finish();
 void lookup_start(LookupState& state,Obj world,Obj gi);
 void capture_watch_finish();
+void capture_watch_links();
 void lookup_trace_begin();
 void lookup_trace_end(bool complete);
 void lookup_trace_request(const wchar_t* path,uint32_t category);
@@ -1044,7 +1049,57 @@ void lookup_entry_final(const LookupEntry& entry){
         require(flags&&class_flags&&*flags==entry.flags[i]&&*class_flags==entry.class_flags[i],"native lookup original RF/class flags changed");
         lookup_node_get(node,entry.zero_item);require(*flags==entry.flags[i]&&*class_flags==entry.class_flags[i],"native lookup RF/class flags changed during final qualification");}
 }
-void lookup_finish(){if(!active_lookup)return;lookup_world_final(*active_lookup);for(const auto& [path,entry]:active_lookup->entries){(void)path;lookup_entry_final(entry);}lookup_world_final(*active_lookup);capture_watch_finish();}
+uint64_t lookup_merge_weak(uint64_t original,uint64_t observed,uint64_t address){
+    if(original==observed)return original;
+    require(original&&observed,"native shared witness zero identity disagreement");
+    if(mesh_serial_assignment({original,address},{observed,address}))return observed;
+    require(mesh_serial_assignment({observed,address},{original,address}),"native shared witness original positive serial disagreement");return original;
+}
+void lookup_record(const LookupEntry& entry){
+    require(active_lookup&&!entry.original.empty()&&entry.original.size()==entry.pinned.size()&&entry.flags.size()==entry.pinned.size()&&entry.class_flags.size()==entry.pinned.size(),"native shared witness bounds");
+    auto& witnesses=active_lookup->witnesses;
+    require(!witnesses.package||*witnesses.package==entry.package,"native shared witness package disagreement");witnesses.package=entry.package;
+    for(const auto* path:{&entry.original,&entry.pinned})for(size_t i=0;i<path->size();++i){const auto& node=(*path)[i];
+        const uint64_t outer=i+1<path->size()?(*path)[i+1].address:0;
+        const LookupObjectWitness value{node,outer,entry.flags[i],node.weak?nullptr:entry.zero_item};
+        auto [object,inserted]=witnesses.objects.emplace(node.address,value);
+        if(!inserted){auto& saved=object->second;
+            require(saved.node.name==node.name&&saved.node.class_address==node.class_address&&saved.node.class_name==node.class_name&&saved.outer==outer&&saved.flags==value.flags&&saved.zero_item==value.zero_item,"native shared object/path witness disagreement");
+            saved.node.weak=lookup_merge_weak(saved.node.weak,node.weak,node.address);
+            if(!node.weak)require(saved.node.class_weak==node.class_weak,"native shared zero-package class serial disagreement");
+            else saved.node.class_weak=lookup_merge_weak(saved.node.class_weak,node.class_weak,node.class_address);
+        }
+        const LookupClassWitness cls{{node.class_weak,node.class_address},node.class_name,entry.class_flags[i],node.weak==0};
+        auto [type,type_inserted]=witnesses.classes.emplace(node.class_address,cls);
+        if(!type_inserted){auto& saved=type->second;require(saved.name==cls.name&&saved.flags==cls.flags,"native shared class witness disagreement");
+            if(saved.exact_serial||cls.exact_serial)require(saved.object.weak==cls.object.weak,"native shared exact class serial disagreement");
+            else saved.object.weak=lookup_merge_weak(saved.object.weak,cls.object.weak,node.class_address);
+            saved.exact_serial=saved.exact_serial||cls.exact_serial;
+        }
+        constexpr size_t maximum=(512+32*64*5+4)*64; // existing path, frame-row and hierarchy bounds
+        require(witnesses.objects.size()<=maximum&&witnesses.classes.size()<=maximum,"native shared witness aggregate bound");
+    }
+}
+void lookup_witness_finish(){
+    require(active_lookup&&vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native shared witness metadata unavailable");
+    const auto& witnesses=active_lookup->witnesses;
+    require(!witnesses.package||*source_package_name==*witnesses.package,"native shared original package changed");
+    // Fresh native reads on every invocation; these copied expectations never
+    // become a ticket across check_guard, a getter, nested scope or dispatch.
+    for(const auto& [address,cls]:witnesses.classes){void* p=vt->resolve(cls.object.weak);
+        require(cls.object.weak&&reinterpret_cast<uint64_t>(p)==address,"native shared original class slot changed");
+        const auto* flags=retirement_flags(p);const auto* n=object_name(p);
+        require(flags&&*flags==cls.flags&&(*flags&0x40000000u)==0&&n&&*n==cls.name&&(!cls.exact_serial||vt->weak(p)==cls.object.weak),"native shared original class metadata changed");}
+    for(const auto& [address,saved]:witnesses.objects){const auto& node=saved.node;
+        void* p=node.weak?vt->resolve(node.weak):lookup_zero_object(saved.zero_item,address);
+        require(reinterpret_cast<uint64_t>(p)==address,"native shared original object slot changed");
+        const auto* flags=retirement_flags(p);const auto* n=object_name(p);const auto* outer=source_outer(p);
+        require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0&&n&&*n==node.name&&vt->class_of(p)==reinterpret_cast<void*>(node.class_address)&&outer&&reinterpret_cast<uint64_t>(*outer)==saved.outer,"native shared original object/path metadata changed");
+        if(!node.weak)require(node.class_name==*source_package_name&&saved.outer==0&&lookup_zero_object(saved.zero_item,address)==p,"native shared original zero-package changed");
+    }
+    require(!witnesses.package||*source_package_name==*witnesses.package,"native shared package changed during pure boundary");
+}
+void lookup_finish(){if(!active_lookup)return;lookup_world_final(*active_lookup);lookup_witness_finish();capture_watch_links();lookup_witness_finish();lookup_world_final(*active_lookup);}
 void lookup_remember(const HsmpNativePathNode& node){
     const Identity value{node.address,node.name,node.class_weak,node.class_address};const auto found=identities.find(node.weak);
     if(found==identities.end()){require(identities.size()<65536,"native lookup identity bound");identities.emplace(node.weak,value);}
@@ -1059,7 +1114,7 @@ void lookup_pin(LookupEntry& entry){
         require(same(old_class,current_class)||mesh_serial_assignment(old_class,current_class),"native lookup positive class serial changed");node.class_weak=current_class.weak;}
     LookupEntry proposed=entry;proposed.pinned=std::move(candidate);lookup_entry_final(proposed);lookup_world_final(*active_lookup);
     for(const auto& node:proposed.pinned){if(node.weak)lookup_remember(node);const auto class_node=source_path_node(vt->resolve(node.class_weak));require(class_node.name==node.class_name&&class_node.address==node.class_address,"native lookup retained class identity changed");lookup_remember(class_node);}
-    lookup_entry_final(proposed);lookup_world_final(*active_lookup);entry.pinned=std::move(proposed.pinned);
+    lookup_entry_final(proposed);lookup_world_final(*active_lookup);entry.pinned=std::move(proposed.pinned);lookup_record(entry);
 }
 [[noreturn]] void lookup_cold_failure(const Error& error,const char* stage,uint32_t depth,Obj root,const LookupNodeEvidence& node){
     // Diagnostic-only slot access uses the admitted FUObjectItem getters. The

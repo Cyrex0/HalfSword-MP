@@ -53,11 +53,20 @@ find_program(CARGO cargo HINTS "$ENV{USERPROFILE}/.cargo/bin" REQUIRED)
 set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo" CACHE PATH "Cargo output directory shared with the release binary build")
 set(RUST_NATIVE_LIB "${RUST_TARGET_DIR}/release/hsmp_native.lib")
 set(FAKE_SIDECAR "${RUST_TARGET_DIR}/release/hsmp-fake-sidecar.exe")
+# Match SDK-variable absence in the direct build's configure environment.
+# MSBuild injects these for its custom step even when the caller had none.
+set(_cargo_env_unset --unset=VSTEL_MSBuildProjectFullPath)
+if(NOT DEFINED ENV{LIB})
+    list(APPEND _cargo_env_unset --unset=LIB)
+endif()
+if(NOT DEFINED ENV{INCLUDE})
+    list(APPEND _cargo_env_unset --unset=INCLUDE)
+endif()
 add_custom_target(rust_libs ALL
     # Match build-and-deploy's package selection as well as its output directory.
     # Changing the selected roots can invalidate shared dependency fingerprints.
     # MSBuild's project marker is tracked by cc/ring; keep it absent as in the direct build.
-    COMMAND "${CMAKE_COMMAND}" -E env --unset=VSTEL_MSBuildProjectFullPath --
+    COMMAND "${CMAKE_COMMAND}" -E env ${_cargo_env_unset} --
             "${CARGO}" build --release --locked --manifest-path "${REPO_ROOT}/Cargo.toml"
             --target-dir "${RUST_TARGET_DIR}" -p hsmp-server -p hsmp-native -p hsmp-fake-sidecar
     BYPRODUCTS "${RUST_NATIVE_LIB}" "${FAKE_SIDECAR}"

@@ -22,21 +22,17 @@ LookupEntry capture_path(Obj original){
         const auto* outer=source_outer(p);require(outer,"native batch original Outer missing");if(!*outer)break;node=lookup_node(const_cast<void*>(*outer),entry,true,nullptr);}
     entry.pinned=entry.original;entry.pinned.front()=first;lookup_pin(entry);lookup_entry_final(entry);return entry;
 }
-const uint8_t* capture_pointer(const LookupEntry& entry){lookup_entry_final(entry);return static_cast<const uint8_t*>(lookup_node_get(entry.pinned.front(),entry.zero_item));}
-void capture_watch_pure(const CaptureWatch& watch){
+void capture_watch_raw(const CaptureWatch& watch){
     require(capture_owner_admit&&capture_owner_admit(),"native batch GetOwner profile changed");
-    source_path_get(active_lookup->world_node);require(same(watch.world,active_lookup->world),"native batch original world changed");
-    for(const auto& entry:watch.dispatch)lookup_entry_final(entry);
-    for(const auto& row:watch.receivers){const auto* owner=capture_pointer(row.owner_path);const auto* level=capture_pointer(row.level_path);const auto* p=capture_pointer(row.component_path);
+    require(same(watch.world,active_lookup->world),"native batch original world changed");
+    for(const auto& row:watch.receivers){const auto* owner=reinterpret_cast<const uint8_t*>(row.owner.address);const auto* level=reinterpret_cast<const uint8_t*>(row.level.address);const auto* p=reinterpret_cast<const uint8_t*>(row.component.address);
         require(source_outer(owner)&&*source_outer(owner)==reinterpret_cast<const void*>(row.level.address),"native batch original owner Level changed");
         uint64_t world{},actual_owner{},parent{},socket{},root{};std::memcpy(&world,level+row.world_offset,8);std::memcpy(&actual_owner,p+0x90,8);std::memcpy(&parent,p+0xb0,8);std::memcpy(&socket,p+0xb8,8);std::memcpy(&root,owner+row.root_offset,8);
         require(row.world_offset==0xc0&&world==watch.world.address&&actual_owner==row.owner.address&&parent==row.parent.address&&socket==row.socket&&root==row.root.address,"native batch original world/owner/root/parent/socket changed");
-        if(row.parent.weak)capture_pointer(row.parent_path);
-        if(row.root.weak)capture_pointer(row.root_path);
-        capture_pointer(row.component_path);capture_pointer(row.owner_path);capture_pointer(row.level_path);
     }
 }
-void capture_watch_finish(){if(active_capture_watch){require(active_lookup,"native batch lookup scope missing");capture_watch_pure(*active_capture_watch);}}
+void capture_watch_links(){if(active_capture_watch){require(active_lookup,"native batch lookup scope missing");capture_watch_raw(*active_capture_watch);}}
+void capture_watch_finish(){if(active_capture_watch)lookup_finish();}
 struct CaptureWatchScope {
     const CaptureWatch* previous{active_capture_watch};
     explicit CaptureWatchScope(const CaptureWatch& watch){active_capture_watch=&watch;}
@@ -63,8 +59,8 @@ int32_t capture_frame(Obj world,const HsmpViewCaptureTarget* rows,uint32_t count
             for(const auto* path:{L"/Script/Engine.ActorComponent:GetOwner",L"/Script/Engine.Actor:GetLevel"}){Function f(path);require(f.fields.size()==1&&f.field(L"ReturnValue",L"ObjectProperty",8).offset==0,"native batch owner/Level getter ABI");watch.dispatch.push_back(capture_path(f.function));watch.dispatch.push_back(capture_path(f.cls));}
             for(uint32_t i=0;i<count;++i){require(rows[i].recipe&&rows[i].output,"native batch row missing");for(uint32_t j=0;j<i;++j)require(rows[i].component.address!=rows[j].component.address,"native batch duplicate original component");watch.receivers.push_back(capture_receiver(world,rows[i],r));capture_watch_finish();}
             for(const auto& row:watch.receivers)require(!row.parent.weak||std::any_of(watch.receivers.begin(),watch.receivers.end(),[&](const auto& parent){return parent.component.address==row.parent.address;}),"native batch parent outside complete original roster");
-            for(uint32_t i=0;i<count;++i){CaptureTrace trace(trace_allowed);capture_body(world,rows[i].owner,rows[i].component,rows[i].recipe,rows[i].output,trace,r);trace.row.complete=0;capture_textures(rows[i]);check_guard();capture_watch_finish();lookup_finish();trace.row.complete=1;}
-            check_guard();capture_watch_finish();lookup_finish();}
+            for(uint32_t i=0;i<count;++i){CaptureTrace trace(trace_allowed);capture_body(world,rows[i].owner,rows[i].component,rows[i].recipe,rows[i].output,trace,r);trace.row.complete=0;capture_textures(rows[i]);check_guard();lookup_finish();trace.row.complete=1;}
+            check_guard();lookup_finish();}
         lookup_trace_flush();r->complete=1;return 1;
     }catch(const std::exception& e){lookup_trace_flush();failure(r,e.what());return -1;}
 }

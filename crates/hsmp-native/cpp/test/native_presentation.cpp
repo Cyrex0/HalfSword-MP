@@ -348,6 +348,21 @@ void lookup_checks(HsmpReflect& reflect){
         rejects([&]{find(path);},"zero-slot replacement refuses cold ancestor binding");check(lookup_package_reads==0,"replacement zero slot refuses before any newly admitted candidate class/FName/RF/Outer read");}
     lifetime_reset(reflect);
 }
+int shared_package_names{},shared_actor_names{};
+const uint64_t* shared_name(const void* p){if(p==&path_package)++shared_package_names;if(p==&actor)++shared_actor_names;return lifetime_name(p);}
+void shared_witness_checks(HsmpReflect& reflect){
+    lookup_reset(reflect);int context=1;const HsmpViewGuard guard{&context,lookup_guard};const auto* path=L"/Game/Test/Lookup.Lookup";
+    {OperationScope scope(&guard,keep(&old_world));find(path);const auto original=active_lookup->entries.at(path);
+        active_lookup->entries.emplace(L"same-original-secondary-key",original);lookup_record(original);object_name=shared_name;shared_package_names=0;
+        lookup_finish();check(shared_package_names==2,"shared original Package is freshly checked once in each of the two pure boundary passes despite repeated path references");
+        lookup_object.name^=1;rejects([&]{lookup_finish();},"successful pure boundary creates no validation ticket for a later changed original");}
+    for(int conflict=0;conflict<4;++conflict){lookup_reset(reflect);OperationScope scope(&guard,keep(&old_world));find(path);auto changed=active_lookup->entries.at(path);
+        if(conflict==0)changed.flags[0]^=1;else if(conflict==1)changed.pinned[0].name^=1;else if(conflict==2)changed.pinned[0].class_name^=1;else changed.class_flags[0]^=1;
+        rejects([&]{lookup_record(changed);},"shared witness interning refuses disagreeing original RF/fullFName/className/classRF constraints");}
+    lookup_reset(reflect);{OperationScope scope(&guard,keep(&old_world));find(path);lookup_serial=7;find(path);auto changed=active_lookup->entries.at(path);changed.pinned.front().weak=(uint64_t{8}<<32)|static_cast<uint32_t>(changed.pinned.front().weak);
+        rejects([&]{lookup_record(changed);},"a later copied positive serial cannot replace the first original positive pin");}
+    object_name=lifetime_name;lifetime_reset(reflect);
+}
 // Original component memory and reflected array metadata exercise the actual
 // bounded census. Non-null override values are deliberately invalid pointers:
 // the provider must classify presence without following a color buffer.
@@ -1062,6 +1077,10 @@ void batch_call(void* object,void* fn,void* params){
     else if(batch_mutation==3)skeletal_pointer(skeletal_first,0xb8,1);
     else if(batch_mutation==4){auto* changed=&new_world;std::memcpy(scene_bytes(arm_level)+0xc0,&changed,8);}
     else if(batch_mutation==5)actor.property=&skeletal_second.identity;
+    else if(batch_mutation==6)skeletal_class.name^=1;
+    else if(batch_mutation==7)observed_material.flags^=1;
+    else if(batch_mutation==8)actor.outer=&level;
+    else if(batch_mutation==9)path_package_name^=1;
 }
 void batch_reset(HsmpReflect& reflect){
     skeletal_reset(reflect);arm_publication_fixture=true;arm_level={};arm_level.identity={940,&level_class};lifetime_objects.push_back(&arm_level.identity);
@@ -1081,7 +1100,7 @@ void batch_checks(HsmpReflect& reflect){
     check(batch_material_finds==2,"same exact asset uses one qualified cold double-find for the whole native frame");
     check(capture_trace_test_rows.size()==2&&capture_trace_test_rows[0].component==1&&capture_trace_test_rows[1].component==2,"batch diagnostics preserve original flattened row order without nested additions");
     capture_trace_test_active=false;
-    for(int mutation=1;mutation<=5;++mutation){batch_reset(reflect);batch_mutation=mutation;check(run()==-1&&result.complete==0,"later row callback refuses earlier original name/owner/socket/world/root mutation");check(!active_lookup&&!active_capture_watch,"failed batch discards all operation-owned lookup and receiver witnesses");}
+    for(int mutation=1;mutation<=9;++mutation){batch_reset(reflect);batch_mutation=mutation;check(run()==-1&&result.complete==0,"later row callback refuses earlier original name/owner/socket/world/root/classRF/Outer/package mutation");check(!active_lookup&&!active_capture_watch,"failed batch discards all operation-owned lookup and receiver witnesses");}
     batch_reset(reflect);capture_owner_admit=[](){return false;};check(run()==-1&&result.complete==0,"unsupported exact native owner profile refuses before batch capture");
     batch_reset(reflect);HsmpViewObject actual=keep(&observed_material);HsmpViewFrame frame{};frame.textures=&actual;frame.texture_count=1;const auto expected=txt(L"/Game/Test/ObservedMaterial.ObservedMaterial");HsmpViewCaptureTarget texture{keep(&actor),keep(&skeletal_first),&recipes[0],&frame,&expected,1,0};
     {OperationScope operation(&guard,keep(&old_world));capture_textures(texture);check(true,"batch preserves exact expected texture identity check");actual=keep(&other_material);rejects([&]{capture_textures(texture);},"different native texture cannot be blessed by expected path lookup");}
@@ -1515,7 +1534,7 @@ int main() {
         array={nullptr,1,1};std::memcpy(header.data(),&array,16);rejects([&]{spline_read_curve<NativeQuatPoint>(header.data(),curve,decoded,64);},"nonnull count with missing POD data refuses");
         HsmpViewSplineProfile empty{0,0,0,0,1};HsmpViewSplineFrame empty_frame{};spline_frame_valid(empty,empty_frame);check(true,"actual empty spline curves are preserved without invented points");
         SplineSnapshot a{},b{};a.value.version=b.value.version=7;check(spline_equal(a,b),"two identical empty raw copies agree");b.value.version=8;check(!spline_equal(a,b),"source curve version mutation invalidates coherent capture");b=a;b.value.settings.duration=2;check(!spline_equal(a,b),"source settings mutation invalidates coherent capture");
-        path_checks(reflect);lookup_checks(reflect);lookup_trace_checks(reflect);
+        path_checks(reflect);lookup_checks(reflect);shared_witness_checks(reflect);lookup_trace_checks(reflect);
         vertex_checks(reflect);
         scene_checks(reflect);
         arm_publication_checks(reflect);

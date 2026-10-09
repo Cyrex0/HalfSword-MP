@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Verify shared original native object and class witnesses once per complete
+  boundary, preserving every path, ownership and attachment constraint across
+  callbacks. Actual complete-frame timing remains pending.
 - Capture complete native frames within one temporary lookup scope, preserving
   original players, components and gear through final verification. Actual
   update cadence and gameplay verification remain pending.

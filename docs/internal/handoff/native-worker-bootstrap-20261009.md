@@ -1,5 +1,28 @@
 # Native authority bootstrap checkpoint
 
+## Next checkpoint: dedup pure metadata checks, preserve every boundary
+
+Operation-owned agreeing original node/class/flags/path expectations are interned;
+every callback/final boundary freshly reads the full unique set twice around all
+original receiver hard links. No successful ticket survives callbacks/nesting,
+no positive pin refresh, no global/cache lifetime change. CPP1718 strict checks
+pass; independent review closed, native timing pending. CMake Cargo-only
+conditional LIB/INCLUDE absence normalization joins the existing marker unset.
+
+## Actual 0c304fd2: complete-frame regression to7.186s
+
+Normal run002248-8ae887/fullG0/dev/all394, authority1676 clients27312/8676:
+firstframe98rows7.186s/provider7.141s, rowfind1.892s/160 vs prior2564finds.
+Fewer finds are not a speedgain: complete-frame time regresses. Dedup repeated
+original witness proofs within each operation while retaining all metadata,
+ownership/attachment and callback/final guards. Both recipes51.733s/scene61s;
+normal readiness fails during assets/nativecreate. Client1MirrorReady69.244s
+is4120ms AFTERstop; client2mirror-generation refusal is4505ms afterstop. Frame2
+publication66.168s is1691ms afterstop; no predeadline provider/transportfailure.
+No activeinput or view proof. CleanupPASS4absent20saves
+same/nodumps/bothsecondary. CMake markerunset works but LIB/INCLUDE remain
+tracked differences; normalize Cargochildenv only, actual warmgain pending.
+
 ## Reviewed complete-frame lookup scope checkpoint
 
 Private ABI12 uses one synchronous capture call with caller-owned outputs and

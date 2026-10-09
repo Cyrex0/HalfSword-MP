@@ -1,5 +1,45 @@
 # Native full-scene encoding checkpoint
 
+## Reviewed dedup of original native witness checks
+
+Each OperationScope interns agreeing original object/class expectations, full
+FName/RF/Outer/package/private zero-slot facts and retained positive pins. A
+conflicting copied witness refuses; only the existing original Natural0-to-first
+positive rule can strengthen a pin. Each boundary freshly reads every unique
+class/object, then all original raw row hard links, then every unique class/object
+again. No successful validation survives a callback or nested operation. Lookup
+key pinning retains its original exact-find/full-path qualification. Existing
+world/GI closure, ownership/root/parent/socket/Level-world, per-row tails and
+final batch proof remain; no field/check is omitted. Strict CPP provider/fixture
+compile and1718 checks pass, including shared Package read count, conflicting
+metadata/positive pin and changed next-boundary/later-row refusals. Independent
+review closed with no blocker; actual speed pending. CMake normalizes LIB/INCLUDE absence
+only for its Cargo child, preserving explicit configure-time SDK environment.
+
+## Actual 0c304fd2: fewer lookups, slower complete frame
+
+Exact fullG0/dev/all394 normal run20261010-002248-8ae887-native-host,
+source358042b2-3b1e-45d0-93d7-deb0737ee943, authority1676, clients27312/8676.
+First98-row complete frame7,186,196us/provider7,140,975us/CPP rows6,813,380us;
+row find time1,891,835us/160 calls, finish43,613us. Recorded row lookup count drops
+but complete-frame latency REGRESSES versus prior5.360s. Prebatch admission
+finds are outside row counters. Repeated full lookup-map/receiver path proofs
+are the next measured CPU target; dedup must retain every original admitted
+node, RF/class/weak/FName/Outer/world/owner/parent/socket relation and all
+callback/final boundaries. No dropped data/check, global cache or wider TTL.
+Both49/600/38 recipes bind35.220/51.733s; first frame publishes59.053s.
+Both clients receive completeScene61.088/60.768s, then nativePresent begins
+64.650/64.414s. Client1 MirrorReady69.244s occurs4120ms AFTERstopfiles; client2
+mirror-generation refusal follows stop by4505ms. Neither is a predeadline gate
+success/failure. Frame2 sampled66.168s follows stop by1691ms; publication gap
+7110ms. Later source guard/dir/incarnation refusals are teardown. No provider or
+transport failure beforestop. Normal pass=false, no active input/owned view proof.
+Independent cleanupPASS4absent/save20same/no dumps/unobserved children/both
+secondary. CMake marker is absent as intended, but LIB/INCLUDE remain injected
+and tracked by ring despite being absent in direct build:108s then107s plus
+0.23s repeat. Normalize only the Cargo child environment next, preserving
+MSBuild C++ environment and intentional configure-time compiler settings.
+
 ## Reviewed: one synchronous complete-frame native capture
 
 Private provider ABI12 appends capture_frame; the wire/schema remain unchanged.
