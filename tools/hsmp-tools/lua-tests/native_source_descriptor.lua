@@ -10,7 +10,7 @@ local function wrapped(v,kind)return {type=function()return kind or "RemoteUnrea
 local Array=dofile("mods/HSMPMatch/Scripts/native_source_array.lua")
 local array_env={guard=function()end,context="Actor.K2_GetComponentsByClass(MeshComponent) collect owner=FixturePawn"}
 local function collect_return(value,max)return Array.collect(value,max or 2,"return",array_env,function(v)return v end)end
-T.eq(collect_return({wrapped(17),wrapped(23)})[2],23,"known return-table numeric keys copy typed inner values")
+T.check(T.eq(collect_return({wrapped(17),wrapped(23)})[2],23),"known return-table numeric keys copy typed inner values")
 local bad_keys={"outTable",0,1.5,3,setmetatable({},{__tostring=function()error("unsafe key formatter",0)end})}
 for _,key in ipairs(bad_keys)do
     local ok,reason=pcall(collect_return,{[1]=wrapped(17),[key]=false})
@@ -54,16 +54,16 @@ local env={guard=function()return scope end,unwrap=function(v)return v:get()end,
     construction=function()return recipe.construction end,
     live_weapons=function()return {weapons={},hands={},sheaths={}}end,
     render=function()return {components=recipe.components,topology=recipe.topology}end}
-T.eq(#D.FIELDS.character,11,"all eleven native character fields captured")
-T.eq(#D.FIELDS.armor,24,"native armor includes sparse SlotsBlocked")
-T.eq(#D.FIELDS.weapon,25,"all native weapon fields captured")
+T.check(T.eq(#D.FIELDS.character,11),"all eleven native character fields captured")
+T.check(T.eq(#D.FIELDS.armor,24),"native armor includes sparse SlotsBlocked")
+T.check(T.eq(#D.FIELDS.weapon,25),"all native weapon fields captured")
 local source,why=D.capture(env)
 T.check(source~=nil,"complete synthetic source captures: "..tostring(why))
-T.eq(source.passport.height,recipe.passport.height,"native character double never rounded")
-T.eq(source.equipment.armor[1].passport.price,armor.price,"native armor price double preserved")
-T.eq(source.equipment.armor[1].passport.slots_blocked[1].value,false,"explicit false blocked slot preserved")
-T.eq(source.equipment.armor[1].passport.slots_blocked[2].slot,5,"sparse blocked-slot keys preserved")
-T.eq(#source.passport.equipment.armor,0,"consumed construction armor does not replace live armor")
+T.check(T.eq(source.passport.height,recipe.passport.height),"native character double never rounded")
+T.check(T.eq(source.equipment.armor[1].passport.price,armor.price),"native armor price double preserved")
+T.check(T.eq(source.equipment.armor[1].passport.slots_blocked[1].value,false),"explicit false blocked slot preserved")
+T.check(T.eq(source.equipment.armor[1].passport.slots_blocked[2].slot,5),"sparse blocked-slot keys preserved")
+T.check(T.eq(#source.passport.equipment.armor,0),"consumed construction armor does not replace live armor")
 local passport_phases={}
 env.phase=function(stage,edge,detail)passport_phases[#passport_phases+1]={stage=stage,edge=edge,detail=detail}end
 T.check(D.capture(env)~=nil,"coarse phases preserve exact two-pass source capture")
@@ -80,7 +80,7 @@ T.check(D.capture(env)==nil and passport_phases[#passport_phases].stage=="harves
     and passport_phases[#passport_phases].detail.ok==false,"native passport failure retains prior phase entry and capture refusal")
 env.character=character_getter;env.phase=nil
 native_armor[D.FIELDS.armor[2][1]]=123
-T.eq(source.equipment.armor[1].passport.id,armor.id,"captured passport is detached from native storage")
+T.check(T.eq(source.equipment.armor[1].passport.id,armor.id),"captured passport is detached from native storage")
 native_armor[D.FIELDS.armor[2][1]]=armor.id
 local hair_name=D.FIELDS.character[11][1]
 local hair=native_character[hair_name];native_character[hair_name]=nil
@@ -127,9 +127,9 @@ local adapter=Adapter.new({WG=WG,phase=function(context,stage,edge,detail)adapte
 local phase_context={epoch=7,id=9,incarnation=11,dir_seq=13,revision=17,frame_seq=19}
 local actual,bindings=adapter.capture(0,phase_context)
 T.check(actual~=nil,"actual source adapter entry captures typed native-style fields")
-T.eq(actual.team,2,"actual source Team Int copied without assumed team")
-T.eq(actual.topology.vertex_state,"unavailable","unverified vertex state remains incomplete")
-T.eq(bindings.pawn,10,"engine addresses remain in separate local binding table")
+T.check(T.eq(actual.team,2),"actual source Team Int copied without assumed team")
+T.check(T.eq(actual.topology.vertex_state,"unavailable"),"unverified vertex state remains incomplete")
+T.check(T.eq(bindings.pawn,10),"engine addresses remain in separate local binding table")
 T.check(actual.pawn==nil,"engine address never enters source recipe")
 T.check(adapter_phases[1].context==phase_context and adapter_phases[1].stage=="adapter_capture"and adapter_phases[1].edge=="enter"
     and adapter_phases[#adapter_phases].stage=="adapter_capture"and adapter_phases[#adapter_phases].detail.ok==true,
@@ -156,9 +156,9 @@ local vertex_env={guard=function()return scope end,lods=function()return 1 end,c
     colors=function()return color_array(colors)end,array_kind="property"}
 local lods=Vertex.capture(vertex_env)
 T.check(lods~=nil and #lods[1].runs==2,"native color RLE preserves complete source ordering")
-T.eq(lods[1].runs[1].count,2,"identical native colors compact exactly")
-T.eq(lods[1].runs[1].color[3],128,"native RGBA8 channels never gamma-converted")
-T.eq(lods[1].runs[1].color[4],0,"native cut alpha zero preserved")
+T.check(T.eq(lods[1].runs[1].count,2),"identical native colors compact exactly")
+T.check(T.eq(lods[1].runs[1].color[3],128),"native RGBA8 channels never gamma-converted")
+T.check(T.eq(lods[1].runs[1].color[4],0),"native cut alpha zero preserved")
 local function color_return(values)local out={};for i,v in ipairs(values)do out[i]=wrapped(v,"LocalUnrealParam")end;return out end
 vertex_env.array_kind="return";vertex_env.colors=function()return color_return(colors)end
 T.check(Vertex.capture(vertex_env)~=nil,"native function return colors use plain table of typed local struct parameters")
@@ -184,12 +184,15 @@ local Render=dofile("mods/HSMPMatch/Scripts/native_source_render.lua")
 local function fname(value)return {ToString=function()return value end}end
 local function array(values)return {GetArrayNum=function()return #values end,ForEach=function(_,fn)for i,v in ipairs(values)do fn(i,wrapped(v))end end}end
 local render_world={GetAddress=function()return 1 end,IsValid=function()return true end}
+local runtime_objects={}
 local function object(address,n,path,transient)
-    return {GetAddress=function()return address end,IsValid=function()return true end,GetFName=function()return fname(n)end,
+    local value={GetAddress=function()return address end,IsValid=function()return true end,GetFName=function()return fname(n)end,
         GetFullName=function()return "FixtureClass "..path end,HasAnyFlags=function()return transient end,
         GetWorld=function()return render_world end,GetClass=function()return {GetFullName=function()return "Class /Script/Engine.SceneComponent"end}end,
         IsA=function()return false end,ComponentHasTag=function()return false end,
         type=function()return "UObject"end,get=function()error("direct UObject is not a parameter",0)end}
+    runtime_objects[path]=value
+    return value
 end
 local saved_find,saved_fname=StaticFindObject,FName
 FName=function(n)return n end
@@ -267,36 +270,87 @@ local function unavailable_component_alias()plain_component_getter_calls=plain_c
 host.GetComponentsByClass=unavailable_component_alias;live_weapon.GetComponentsByClass=unavailable_component_alias
 local rvp={IsValid=function()return true end,GetMeshComponentAmountOfVerticesOnLOD=function(_,c)return #c.native_colors end,
     GetMeshComponentVertexColorsAtLOD_Wrapper=function(_,c)return color_return(c.native_colors)end}
-StaticFindObject=function(p)return p=="/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary"and rvp or p end
+StaticFindObject=function(p)return runtime_objects[p]or(p=="/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary"and rvp or p)end
 local render_env={read=function(fn)if not scope then error("scope",0)end;local value=fn({pawn=host,world=render_world});if not scope then error("scope",0)end;return value end,
     guard=function()if not scope then error("scope",0)end end,token_valid=function()return scope end,weapon=function()return live_weapon end}
 local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapon R"}}}
+-- Offline original-identity protocol mock. Native slot/flag/class semantics are
+-- tested independently in Rust; this validates the production Lua call shape.
+local scope_rows={}
+local function snapshot(o)
+    if not scope or o.GetWorld():GetAddress()~=1 or o.HasAnyFlags(0x40000000)then error("original native world/garbage changed",0)end
+    return {address=o.GetAddress(),name=o.GetFName():ToString(),class=o.GetClass():GetFullName(),
+        path=o.GetFullName():match("^%S+%s+(.+)$"),owner=o.GetOwner():GetAddress(),
+        root=o.GetOwner().RootComponent:GetAddress(),root_name=o.GetOwner().RootComponent:GetFName():ToString(),
+        root_path=o.GetOwner().RootComponent:GetFullName(),parent=o.GetAttachParent()and o.GetAttachParent():GetAddress()or 0}
+end
+render_env.scope={keep=function(row)
+    local o=runtime_objects[row.path];if not o or o:GetAddress()~=row.address then return nil,"original runtime path changed"end
+    local s=snapshot(o)
+    if (s.owner~=10 and s.owner~=200)or(row.owner~=0 and row.owner~=s.owner)then return nil,"original native owner changed"end
+    for i,old in ipairs(scope_rows)do if old.address==s.address then
+        if not T.eq(old,s)then return nil,"original native identity/link changed"end
+        return i,s.owner
+    end end
+    scope_rows[#scope_rows+1]=s;return #scope_rows,s.owner
+end,resolve=function(handle)
+    local s=scope_rows[handle];local o=s and runtime_objects[s.path]
+    if not s or not o or not T.eq(snapshot(o),s)then return nil,"original native identity/link changed"end
+    return s.address
+end}
 local render_phases={}
-render_env.phase=function(stage,edge,detail)render_phases[#render_phases+1]={stage=stage,edge=edge,detail=detail}end
+render_env.phase=function(stage,edge,detail)
+    if stage=="render_capture"and edge=="enter"then scope_rows={}end
+    render_phases[#render_phases+1]={stage=stage,edge=edge,detail=detail}
+end
 mesh_return_calls=0
 local rendered=Render.capture(render_env,native_bindings)
 local render_stats=render_phases[#render_phases].detail
 T.check(render_phases[1].stage=="render_capture"and render_phases[1].edge=="enter"
     and render_phases[#render_phases].stage=="render_capture"and render_stats.ok==true,"rare render scope has entry before native class lookup and exit after complete binding harvest")
-T.check(render_stats.mesh_census_calls==mesh_return_calls and render_stats.mesh_census_calls>240
+T.check(render_stats.mesh_census_calls==mesh_return_calls and render_stats.mesh_census_calls==4
     and render_stats.component_reads>120 and render_stats.qualifications>render_stats.component_reads,
-    "aggregate diagnostics exactly count repeated native mesh returns without perbone events")
+    "two owners use exactly begin/end full mesh censuses regardless of full bone getter count")
 local phase_scalars=true
 for _,event in ipairs(render_phases)do for _,value in pairs(event.detail)do
     local t=type(value);if t~="number"and t~="boolean"and t~="string"then phase_scalars=false end
 end end
 T.check(phase_scalars and #render_phases<80,"capture phase details remain bounded copied scalars with no UObject or perbone spam")
-T.eq(plain_component_getter_calls,0,"source census uses exact reflected K2 component getter")
+T.check(T.eq(plain_component_getter_calls,0),"source census uses exact reflected K2 component getter")
 T.check(#rendered.components==3 and #rendered.components[1].bones==40,"source collector retains full render dictionary and actual owner root")
-T.eq(rendered.components[1].materials[1].scalars[1].value,0.3125,"native scalar material override captured exactly")
-T.eq(rendered.components[1].materials[1].vectors[1].value[4],0.0,"native vector alpha zero captured exactly")
-T.eq(rendered.components[1].materials[1].textures[1].value,"/Game/Test/Texture.Texture","native texture exact full identity preserved")
-T.eq(rendered.components[1].hidden_bones[1],bone_names[40],"native hidden render bone retained")
-T.eq(rendered.components[3].parent,1,"native weapon attachment binds captured source body")
-T.eq(rendered.bindings[3].owner,200,"ephemeral binding uses actual owner address rather than logical wire id")
-T.eq(rendered.components[1].parent,2,"native body preserves actual capsule root rather than actor-root shortcut")
-T.eq(rendered.components[2].scene.type,"hidden_capsule","root eligibility follows actual native hidden flag")
-T.eq(rendered.topology.vertex_state,"captured","source vertex readiness follows actual complete getter data")
+T.check(T.eq(rendered.components[1].materials[1].scalars[1].value,0.3125),"native scalar material override captured exactly")
+T.check(T.eq(rendered.components[1].materials[1].vectors[1].value[4],0.0),"native vector alpha zero captured exactly")
+T.check(T.eq(rendered.components[1].materials[1].textures[1].value,"/Game/Test/Texture.Texture"),"native texture exact full identity preserved")
+T.check(T.eq(rendered.components[1].hidden_bones[1],bone_names[40]),"native hidden render bone retained")
+T.check(T.eq(rendered.components[3].parent,1),"native weapon attachment binds captured source body")
+T.check(T.eq(rendered.bindings[3].owner,200),"ephemeral binding uses actual owner address rather than logical wire id")
+T.check(T.eq(rendered.components[1].parent,2),"native body preserves actual capsule root rather than actor-root shortcut")
+T.check(T.eq(rendered.components[2].scene.type,"hidden_capsule"),"root eligibility follows actual native hidden flag")
+T.check(T.eq(rendered.topology.vertex_state,"captured"),"source vertex readiness follows actual complete getter data")
+-- Exercise the actual adapter -> native-scope -> production render collector
+-- lifecycle, including two complete equal harvests and failure cleanup.
+for k,v in pairs(pawn)do host[k]=v end
+host.GetActorScale3D=pawn.GetActorScale3D
+local native_scope_begins,native_scope_ends=0,0
+local adapter_scope={begin=function(meta,b)
+    native_scope_begins=native_scope_begins+1;scope_rows={}
+    if meta~=phase_context or b.pawn~=10 or b.world~=1 or b.controller~=9 or b.index~=0 then return nil,"exact scope metadata lost"end
+    return 101
+end,keep=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.keep(row)end,
+    resolve=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.resolve(row)end,
+    finish=function(id)native_scope_ends=native_scope_ends+1;return id==101 end}
+local real_adapter=Adapter.new({WG=WG,source_scope=adapter_scope,
+    resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Pawn",pawn=host,world=render_world}end})
+local captured_real,real_reason=real_adapter.capture(0,phase_context)
+T.check(captured_real~=nil and native_scope_begins==2 and native_scope_ends==2,
+    "production source adapter begins/ends original native scope for both equal full harvests: "..tostring(real_reason))
+local native_count=body.GetNumBones
+body.GetNumBones=function()error("fixture source getter failed",0)end
+T.check(real_adapter.capture(0,phase_context)==nil and native_scope_begins==3 and native_scope_ends==3,
+    "failed production source getter always releases scalar-only native scope")
+body.GetNumBones=native_count
+local absent_scope_adapter=Adapter.new({WG=WG,resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Pawn",pawn=host,world=render_world}end})
+T.check(absent_scope_adapter.capture(0,phase_context)==nil,"production source collector refuses missing native identity capability")
 host.K2_GetComponentsByClass=function(self,class)local out=source_mesh_return(self,class);out.outTable=false;return out end
 local malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not malformed and malformed_reason:find('K2_GetComponentsByClass(MeshComponent) collect owner=Pawn',1,true)
@@ -349,7 +403,7 @@ T.check(#closed.components==5 and closed_by_name.BodyMesh.parent==closed_by_name
 T.check(closed_by_name.ActualSceneAnchor.collision==false and closed_by_name.ActualSpline.collision~=false
     and closed_by_name.ActualSceneAnchor.vertex_state=="not_applicable" and closed_by_name.ActualSpline.scene.draw_debug==false,
     "anchor collision and geometry applicability reflect exact native classes")
-T.eq(closed_by_name.ActualSceneAnchor.relative.translation[1],0.125,"native anchor transform is copied without flattening")
+T.check(T.eq(closed_by_name.ActualSceneAnchor.relative.translation[1],0.125),"native anchor transform is copied without flattening")
 for i=1,300 do
     local helper=object(1000+i,"NativeCollisionHelper_"..i,"/Game/Test/Runtime.Helper_"..i,false)
     helper.GetOwner=function()error("nonmesh helper was enumerated",0)end
@@ -421,11 +475,11 @@ T.check(not pcall(Render.capture,render_env,native_bindings),"foreign world nati
 anchor.GetWorld=function()return render_world end;anchor.GetOwner=function()return foreign_actor end
 T.check(not pcall(Render.capture,render_env,native_bindings),"parent owned outside original source pawn/weapon set refuses capture")
 anchor.GetOwner=function()return host end;source_scenes={body,root};body.GetAttachParent=function()return root end
-T.eq(rendered.components[1].physics_asset,"/Game/Test/Physics.Physics","null native component override selects actual skeletal asset physics")
+T.check(T.eq(rendered.components[1].physics_asset,"/Game/Test/Physics.Physics"),"null native component override selects actual skeletal asset physics")
 local override_asset=object(321,"OverridePhysics","/Game/Test/OverridePhysics.OverridePhysics",false)
 body.PhysicsAssetOverride=override_asset
 local override_render=Render.capture(render_env,native_bindings)
-T.eq(override_render.components[1].physics_asset,"/Game/Test/OverridePhysics.OverridePhysics","nonnull native component override preserves its distinct exact physics asset")
+T.check(T.eq(override_render.components[1].physics_asset,"/Game/Test/OverridePhysics.OverridePhysics"),"nonnull native component override preserves its distinct exact physics asset")
 body.PhysicsAssetOverride=nil
 host.K2_GetComponentsByClass=function()return {body}end;live_weapon.K2_GetComponentsByClass=function()return {weapon_mesh}end
 T.check(pcall(Render.capture,render_env,native_bindings),"direct returned UObject entries never receive parameter get")
@@ -454,7 +508,7 @@ T.check(not pcall(Render.capture,render_env,native_bindings),"native hidden sect
 body.IsMaterialSectionShown=function()return true end;body_asset.HasAnyFlags=function()return true end
 body_asset.GetFullName=function()return "SkeletalMesh /Engine/Transient.SkeletalMesh_1"end
 local transient_render=Render.capture(render_env,native_bindings)
-T.eq(transient_render.components[1].geometry,"runtime_transient","RF_Transient does not invent an observed merge recipe")
+T.check(T.eq(transient_render.components[1].geometry,"runtime_transient"),"RF_Transient does not invent an observed merge recipe")
 body_asset.HasAnyFlags=function()return nil end
 T.check(not pcall(Render.capture,render_env,native_bindings),"missing native transient flag refuses rather than assumes cooked geometry")
 body_asset.HasAnyFlags=function()return true end;body.IsBoneHiddenByName=function()return nil end

@@ -32,5 +32,6 @@ pub mod native_host;
 pub mod native_descriptor_binding;
 pub mod native_presentation;
 pub mod native_input_capture;
+pub mod native_source_scope;
 
 pub use api::{hsmp_native_open, luaopen_hsmp_lua};

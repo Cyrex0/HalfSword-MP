@@ -20,11 +20,11 @@ end
 function M.new(opts)
     assert(type(opts)=="table" and type(opts.resolve)=="function" and opts.WG,"source adapter dependencies")
     local api={}
-    local function capture(index,phase)
+    local function capture(index,phase,context)
         if not opts.WG.check() or not opts.WG.settled()then return nil,"source world settling"end
         local token=opts.WG.token();local expected=opts.resolve(index)
         if not expected or not opts.WG.same(token)then return nil,"source binding unavailable"end
-        local bindings={pawn=expected.pawn_address,controller=expected.pc_address,components={},weapons={}}
+        local bindings={pawn=expected.pawn_address,controller=expected.pc_address,index=index,components={},weapons={}}
         local function current()
             if not opts.WG.same(token)then error("source world changed",0)end
             local fresh=opts.resolve(index)
@@ -107,12 +107,23 @@ function M.new(opts)
             local fresh=current()
             local captured,why
             if opts.capture_render then captured,why=opts.capture_render(fresh,bindings)
-            else captured=Render.capture({read=read,guard=function()current()end,weapon=weapon,vertex_state=opts.vertex_state,
+            else
+                local scope=opts.source_scope
+                if not scope or not scope.begin or not scope.keep or not scope.resolve or not scope.finish then error("native source identity scope unavailable",0)end
+                local handle,scope_reason=scope.begin(context,bindings)
+                if not handle then error(scope_reason or "native source identity scope refused",0)end
+                local ok,result=pcall(Render.capture,{read=read,guard=function()current()end,weapon=weapon,vertex_state=opts.vertex_state,
+                scope={keep=function(row)return scope.keep(handle,row)end,resolve=function(id)return scope.resolve(handle,id)end},
                 phase=function(stage,edge,detail)detail=detail or {};detail.pass=env.pass;phase(stage,edge,detail)end,
                 -- Pure copied FColor reads invoke no engine function. Fast token
                 -- checks inside that loop avoid a controller search per vertex;
                 -- every native getter still resolves the original binding.
-                token_valid=function()return opts.WG.key==token.key and opts.WG.drops==token.drops and opts.WG.travel_from==nil end},bindings)end
+                token_valid=function()return opts.WG.key==token.key and opts.WG.drops==token.drops and opts.WG.travel_from==nil end},bindings)
+                local ended,end_reason=scope.finish(handle)
+                if not ok then error(result,0)end
+                if ended~=true then error(end_reason or "native source identity scope end refused",0)end
+                captured=result
+            end
             current();if not captured then error(why or "native render descriptor incomplete",0)end
             if type(captured.bindings)~="table"then error("native component bindings incomplete",0)end
             bindings.components=captured.bindings
@@ -144,7 +155,7 @@ function M.new(opts)
         end
         local ok,recipe,bindings=pcall(function()
             phase("adapter_capture","enter",{getter="SourceAdapter.capture"})
-            return capture(index,phase)
+            return capture(index,phase,context)
         end)
         local completed,phase_reason=pcall(phase,"adapter_capture","exit",{ok=ok and recipe~=nil,
             reason=not ok and tostring(recipe) or recipe==nil and tostring(bindings) or nil})
