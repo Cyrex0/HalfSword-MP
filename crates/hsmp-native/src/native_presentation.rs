@@ -159,13 +159,13 @@ pub struct Provider {
         *const Guard,
         *mut ResultInfo,
     ) -> i32,
-    pub destroy: unsafe extern "C" fn(Object, u64),
+    pub destroy: unsafe extern "C" fn(Object, u64, *const Guard),
     pub discard: unsafe extern "C" fn(u64),
 }
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 2 {
+    if p.is_null() || unsafe { (*p).abi } == 3 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
     }
 }
@@ -1075,8 +1075,11 @@ impl Native {
                     .collect::<Vec<_>>();
                 for id in obsolete {
                     if let Some(m) = self.presentation.mirrors.remove(&id) {
-                        if m.world.weak == world.weak && m.world.address == world.address {
-                            (p.destroy)(world, m.handle);
+                        if m.world.weak == world.weak
+                            && m.world.address == world.address
+                            && context.valid()
+                        {
+                            (p.destroy)(world, m.handle, &guard);
                         } else {
                             (p.discard)(m.handle);
                         }
@@ -1208,11 +1211,23 @@ impl Native {
     }
     pub unsafe fn native_clear_mirrors(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
+            if !self.native_host.is_client() {
+                return nil_err(L, "client presentation role required");
+            }
             if let (Ok(p), Some(vt), Some(address)) = (provider(), reflect::vt(), arg_int(L, 1)) {
                 if let Ok(world) = object(vt, address) {
+                    let mut context = GuardContext::new(self, vt, world, None).ok();
+                    let guard = context.as_mut().map(GuardContext::ffi);
                     for m in self.presentation.mirrors.values() {
-                        if m.world.weak == world.weak && m.world.address == world.address {
-                            (p.destroy)(world, m.handle);
+                        if m.world.weak == world.weak
+                            && m.world.address == world.address
+                            && context.as_ref().is_some_and(|c| c.valid())
+                        {
+                            if let Some(guard) = &guard {
+                                (p.destroy)(world, m.handle, guard);
+                            } else {
+                                (p.discard)(m.handle);
+                            }
                         } else {
                             (p.discard)(m.handle);
                         }

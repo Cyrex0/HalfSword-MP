@@ -49,8 +49,9 @@ struct HsmpPresentation {
     // all collision/physics/combat/animation-event execution must be disabled.
     uint64_t (*create)(HsmpViewObject world,const HsmpViewComponent*,uint32_t count,const HsmpViewGuard*,HsmpViewResult*);
     int32_t (*apply)(HsmpViewObject world,uint64_t mirror,const HsmpViewComponent*,const HsmpViewFrame*,uint32_t count,const HsmpViewGuard*,HsmpViewResult*);
-    // destroy only in the same currently qualified world. discard touches no UObject.
-    void (*destroy)(HsmpViewObject world,uint64_t mirror);
+    // ABI3: destroy borrows the same per-call world guard. A stale scope only
+    // discards the handle; discard itself touches no UObject.
+    void (*destroy)(HsmpViewObject world,uint64_t mirror,const HsmpViewGuard*);
     void (*discard)(uint64_t mirror);
 };
 void hsmp_native_set_presentation(const HsmpPresentation*);

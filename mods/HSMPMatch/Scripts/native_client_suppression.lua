@@ -87,19 +87,54 @@ function M.new(env)
                 if call(actor,"GetActorEnableCollision")~=false or call(actor,"IsActorTickEnabled")~=false or actor.bHidden~=true then error("suppression_actor_readback",0)end
                 fresh()
             end
-            local function destroy(actor)
+            local function destroy(actor,kind)
                 if not current(actor)or protected(actor)then error("suppression_destroy_qualification",0)end
+                local function fact(fn,expected)
+                    fresh();local ok,value=pcall(fn);fresh()
+                    if ok and(expected==nil or type(value)==expected)then return{known=true,value=value}end
+                    return{known=false,error=(ok and"unexpected native value type"or tostring(value)):sub(1,192)}
+                end
+                local function actor_state(valid)
+                    local state={valid={known=true,value=valid}}
+                    -- UObject IsValid does not prove actor destruction. Record
+                    -- the native actor flag separately, and never touch a dead
+                    -- object after K2_DestroyActor.
+                    if valid then
+                        state.destroying=fact(function()return call(actor,"IsActorBeingDestroyed")end,"boolean")
+                        if state.destroying.known and state.destroying.value==true then return state end
+                        -- Exact EObjectFlags from pinned UE4SS shared/Types.lua
+                        -- 229-230. UObject teardown flags are distinct from the
+                        -- Actor:IsActorBeingDestroyed result above.
+                        state.begin_destroyed=fact(function()return call(actor,"HasAnyFlags",0x00008000)end,"boolean")
+                        state.finish_destroyed=fact(function()return call(actor,"HasAnyFlags",0x00010000)end,"boolean")
+                        state.hidden=fact(function()local value=actor.bHidden;fresh();return value end,"boolean")
+                        state.collision=fact(function()return call(actor,"GetActorEnableCollision")end,"boolean")
+                        state.tick=fact(function()return call(actor,"IsActorTickEnabled")end,"boolean")
+                        state.current_world=fact(function()return current(actor)end,"boolean")
+                    end
+                    return state
+                end
+                local evidence={kind=kind,phase="before_destroy",
+                    name=fact(function()return name(actor):sub(1,256)end,"string"),
+                    class=fact(function()return call(call(actor,"GetClass"),"GetFullName"):sub(1,512)end,"string"),
+                    persistent=fact(function()return protected(actor)end,"boolean"),before=actor_state(true)}
+                summary.refusal=evidence
                 actor:K2_DestroyActor() -- unsafe: ok only qualified nonPersistent native spawn drivers, owned gear or AI; never a Willie/player controller
                 fresh()
-                if live(actor)and actor:IsActorBeingDestroyed()~=true then fresh();error("suppression_destroy_readback",0)end
+                evidence.phase="after_destroy";evidence.call_returned=true
+                local valid=live(actor);evidence.after=actor_state(valid)
+                if valid and(not evidence.after.destroying.known or evidence.after.destroying.value~=true)then
+                    fresh();error("suppression_destroy_readback",0)
+                end
                 fresh()
+                summary.refusal=nil
             end
             -- Cancel native map-owned latent spawn callbacks by destroying their
             -- qualified owners, rather than merely disabling ReceiveTick.
             for _,class in ipairs(DRIVERS)do
                 for _,driver in pairs(objects(class))do if current(driver)then
                     if call(driver,"IsA",cls(DRIVER_PATHS[class]))~=true then error("suppression_driver_class",0)end
-                    inert(driver);destroy(driver);summary.drivers=summary.drivers+1
+                    inert(driver);destroy(driver,"driver");summary.drivers=summary.drivers+1
                 end end
             end
             local willies={};local targets={}
@@ -131,7 +166,7 @@ function M.new(env)
             end
             local removal={};for _,item in ipairs(gear)do local a=address(item);if selected[a]then removal[#removal+1]={actor=item,depth=selected[a]}end end
             table.sort(removal,function(a,b)return a.depth>b.depth end)
-            for _,item in ipairs(removal)do inert(item.actor);destroy(item.actor);summary.gear=summary.gear+1 end
+            for _,item in ipairs(removal)do inert(item.actor);destroy(item.actor,"gear");summary.gear=summary.gear+1 end
             for _,pawn in ipairs(willies)do
                 local controller=pawn.Controller;fresh()
                 if live(controller)then
@@ -140,7 +175,7 @@ function M.new(env)
                     if not player and call(controller,"IsA",ai_class)~=true then error("suppression_controller_class",0)end
                     call(controller,"StopMovement");call(controller,"UnPossess")
                     local after=call(controller,"K2_GetPawn");if live(after)then error("suppression_unpossess_readback",0)end
-                    if not player then inert(controller);destroy(controller);summary.ai=summary.ai+1 end
+                    if not player then inert(controller);destroy(controller,"ai");summary.ai=summary.ai+1 end
                 end
                 inert(pawn)
                 local after=pawn.Controller;fresh();if live(after)then error("suppression_fighter_controller_readback",0)end

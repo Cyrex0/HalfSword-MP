@@ -154,6 +154,9 @@ fn lua_api_end_to_end() {
         local r, e = N.send("death_report", {}); assert(r == nil and e == "not open", tostring(e))
         local info = N.ipc_info(); assert(info.state == "closed")
         assert(N.thread_ok() == true)
+        local cleared, why = N.native_clear_mirrors(0)
+        assert(cleared == nil and why == "client presentation role required",
+            "legacy game role cannot enter native mirror destruction")
     "#);
     let name = eval_str(a, "HSMPNative.ipc_open()");
     assert!(name.starts_with(&format!("Local\\HSMP.ipc.{}.", hsmp_ipc::ABI_MAJOR)), "{}", name);

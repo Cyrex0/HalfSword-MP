@@ -461,7 +461,11 @@ uint64_t next_mirror{1};
 void destroy_actor(Obj world,Obj actor) {
     require(same(actor_world(actor),world),"mirror destroy world mismatch");Function f(L"/Script/Engine.Actor:K2_DestroyActor");
     // Destroy invalidates the object, so only qualify immediately before the call.
-    require(vt->is_a(get(actor),get(f.cls))!=0,"mirror destroy class");vt->call(get(actor),get(f.function),f.buf.data());
+    require(vt->is_a(get(actor),get(f.cls))!=0,"mirror destroy class");
+    void* object=get(actor);void* function=get(f.function);check_guard();
+    vt->call(object,function,f.buf.data());
+    // The actor may now be dead. Only the borrowed world scope is checked.
+    check_guard();
 }
 void initialize_result(HsmpViewResult* r) {require(r!=nullptr,"native result missing");*r={};}
 void failure(HsmpViewResult* r,const char* why) {if(r){r->complete=0;std::snprintf(r->reason,sizeof(r->reason),"%s",why);}}
@@ -582,9 +586,9 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         }r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
-void destroy(Obj world,uint64_t id) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
+void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
 void discard(uint64_t id) {const std::lock_guard lock(mirror_mutex);mirrors.erase(id);}
-const HsmpPresentation provider{2,0,inspect,capture,create,apply,destroy,discard};
+const HsmpPresentation provider{3,0,inspect,capture,create,apply,destroy,discard};
 }
 void hsmp_presentation_register(const HsmpReflect* reflection) {
     const auto module=GetModuleHandleW(L"UE4SS.dll");

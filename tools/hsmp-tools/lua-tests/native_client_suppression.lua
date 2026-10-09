@@ -10,6 +10,7 @@ local function fixture()
         local a={name=name,address=f.next,valid=true,types=types or{},hidden=false,collision=true,tick=true,components={}}
         a.IsValid=function(self)return self.valid end;a.GetAddress=function(self)return self.address end
         a.GetFName=function(self)return{ToString=function()return self.name end}end
+        a.GetClass=function(self)return{IsValid=function()return true end,GetFullName=function()return"Class /Test/"..self.name end}end
         a.GetWorld=function()return f.world end;a.GetOwner=function(self)return self.owner end;a.GetAttachParentActor=function(self)return self.parent end
         a.IsA=function(self,c)return self.types[c.path]==true end;a.ActorHasTag=function(self)return self.protected==true end
         a.SetActorHiddenInGame=function(self,v)f.mutations=f.mutations+1;self.hidden=v;self.bHidden=v end
@@ -18,6 +19,7 @@ local function fixture()
         a.K2_GetComponentsByClass=function(self)return self.components end
         a.K2_DestroyActor=function(self)self.valid=false;f.destroyed[#f.destroyed+1]=self.name end
         a.IsActorBeingDestroyed=function(self)return not self.valid end
+        a.HasAnyFlags=function(self,mask)return self.flags and(self.flags&mask)~=0 or false end
         return a
     end
     f.actor=actor
@@ -83,6 +85,34 @@ end
 do
     local f,s=fixture();f.driver.protected=true
     check(not s:run()and f.driver.valid and f.driver.collision,"protected spawn driver refuses destructive handling")
+end
+do
+    local f,s=fixture();f.driver.K2_DestroyActor=function()end
+    local ok,why,counts=s:run();local evidence=counts.refusal
+    check(not ok and why=="suppression_destroy_readback"and counts.drivers==0,"valid non-destroying driver continues to refuse scene readiness")
+    check(evidence.kind=="driver"and evidence.phase=="after_destroy"and evidence.call_returned==true,"refusal records the completed void destroy call without claiming acceptance")
+    check(evidence.name.value==f.driver.name and evidence.class.value=="Class /Test/"..f.driver.name,"refusal identifies the actual native actor and class")
+    check(evidence.persistent.known and evidence.persistent.value==false and evidence.before.current_world.value==true,"known false Persistent and original-world proof survive the diagnostic")
+    check(evidence.after.valid.value==true and evidence.after.destroying.known and evidence.after.destroying.value==false,"UObject validity and actual actor destroy flag remain distinct")
+    check(evidence.after.begin_destroyed.known and evidence.after.begin_destroyed.value==false and evidence.after.finish_destroyed.value==false,"native UObject teardown flags retain their distinct known false values")
+    check(evidence.after.hidden.value==true and evidence.after.collision.value==false and evidence.after.tick.value==false,"inert actor flags do not waive failed native driver destruction")
+    check(f.pc.Pawn==f.pawn and not s:retirement(f.pawn.address,f.pawn.name),"failed driver retirement cannot proceed to fighter retirement")
+end
+do
+    local f,s=fixture();local reads=0;local native_flag=f.driver.IsActorBeingDestroyed
+    f.driver.IsActorBeingDestroyed=function(self)if not self.valid then reads=reads+1 end;return native_flag(self)end
+    local ok=s:run();check(ok and reads==0,"successful invalidation does not read an actor flag on the destroyed object")
+end
+do
+    local f,s=fixture();local reads=0;local collision=f.driver.GetActorEnableCollision
+    f.driver.K2_DestroyActor=function(self)self.pending=true end
+    f.driver.IsActorBeingDestroyed=function(self)return self.pending==true end
+    f.driver.GetActorEnableCollision=function(self)if self.pending then reads=reads+1 end;return collision(self)end
+    local ok=s:run();check(ok and reads==0,"an actual destroying flag prevents additional diagnostic actor-state reads")
+end
+do
+    local f,s=fixture();f.driver.K2_DestroyActor=function()end;f.driver.IsActorBeingDestroyed=function()return 0 end
+    local ok,why,counts=s:run();check(not ok and why=="suppression_destroy_readback"and counts.refusal.after.destroying.known==false,"non-boolean native destroy flag is explicit unavailable evidence and still refuses")
 end
 do
     local f,s=fixture();f.valid=false

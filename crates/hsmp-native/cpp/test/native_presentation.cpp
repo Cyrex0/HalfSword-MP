@@ -16,6 +16,74 @@ void* resolve(uint64_t id) {++touches;return id==2?&cls:id==1?&obj:nullptr;}
 void* class_of(void* p) {++touches;return p==&cls?&cls:static_cast<MockObject*>(p)->cls;}
 const uint64_t* mock_name(const void* p) {++touches;return &static_cast<const MockObject*>(p)->name;}
 int32_t guard_check(void* context) {return *static_cast<int32_t*>(context);}
+// A small reflected Actor:GetLevel/K2_DestroyActor path exercises the production
+// destroy entry, including a world change inside ProcessEvent while Lua's world
+// token still reports valid. These are lifetime tests, not rendering proof.
+struct LifetimeObject {uint64_t name{};LifetimeObject* cls{};LifetimeObject* property{};bool alive{true};};
+LifetimeObject meta{100},world_class{101},gi_class{102},actor_class{103},level_class{104},function_class{105};
+LifetimeObject old_world{110,&world_class},new_world{111,&world_class},gi{112,&gi_class};
+LifetimeObject actor{113,&actor_class},level{114,&level_class};
+LifetimeObject get_level_fn{115,&function_class},destroy_fn{116,&function_class};
+std::vector<LifetimeObject*> lifetime_objects;
+std::map<std::wstring,uint64_t> lifetime_names;
+LifetimeObject* current_world{};
+bool travel_on_get_level{};
+int level_calls{},destroy_calls{},post_destroy_actor_touches{};
+void lifetime_touch(LifetimeObject* o) {if(o==&actor&&!actor.alive)++post_destroy_actor_touches;}
+uint64_t lifetime_weak(void* p) {for(size_t i=0;i<lifetime_objects.size();++i)if(lifetime_objects[i]==p)return i+1;return 0;}
+void* lifetime_resolve(uint64_t id) {
+    if(id==0||id>lifetime_objects.size())return nullptr;
+    auto o=lifetime_objects[static_cast<size_t>(id-1)];lifetime_touch(o);return o->alive?o:nullptr;
+}
+void* lifetime_class(void* p) {auto o=static_cast<LifetimeObject*>(p);lifetime_touch(o);return o->cls;}
+const uint64_t* lifetime_name(const void* p) {auto o=const_cast<LifetimeObject*>(static_cast<const LifetimeObject*>(p));lifetime_touch(o);return &o->name;}
+uint64_t lifetime_fname(const uint16_t* key,int32_t) {
+    auto text=std::wstring(reinterpret_cast<const wchar_t*>(key));auto [it,_]=lifetime_names.emplace(text,lifetime_names.size()+1);return it->second;
+}
+void* lifetime_find(const uint16_t* key) {
+    const std::wstring path(reinterpret_cast<const wchar_t*>(key));
+    if(path==L"/Script/Engine.World")return &world_class;
+    if(path==L"/Script/Engine.GameInstance")return &gi_class;
+    if(path==L"/Script/Engine.Actor")return &actor_class;
+    if(path==L"/Script/Engine.Level")return &level_class;
+    if(path==L"/Script/Engine.Actor:GetLevel")return &get_level_fn;
+    if(path==L"/Script/Engine.Actor:K2_DestroyActor")return &destroy_fn;
+    return nullptr;
+}
+int32_t lifetime_is_a(void* object,void* type) {auto o=static_cast<LifetimeObject*>(object);lifetime_touch(o);return o->cls==type;}
+HsmpProp object_field(const wchar_t* key,int32_t offset) {
+    HsmpProp p{};p.name=lifetime_fname(u16(key),1);p.cls=lifetime_fname(u16(L"ObjectProperty"),1);p.offset=offset;p.size=8;return p;
+}
+int32_t lifetime_props(void* fn,HsmpProp* out,int32_t cap,int32_t* size) {
+    if(fn==&destroy_fn){*size=0;return 0;}
+    if(fn==&get_level_fn&&cap>0){*size=8;out[0]=object_field(L"ReturnValue",0);return 1;}
+    return -1;
+}
+int32_t lifetime_prop(void* object,const uint16_t* key,HsmpProp* out) {
+    const std::wstring field(reinterpret_cast<const wchar_t*>(key));
+    if((object==&old_world||object==&new_world)&&field==L"OwningGameInstance") {*out=object_field(L"OwningGameInstance",static_cast<int32_t>(offsetof(LifetimeObject,property)));return 1;}
+    if(object==&level&&field==L"OwningWorld") {*out=object_field(L"OwningWorld",static_cast<int32_t>(offsetof(LifetimeObject,property)));return 1;}
+    return 0;
+}
+void lifetime_call(void* object,void* fn,void* params) {
+    check(object==&actor,"destroy path invokes only its original actor");
+    if(fn==&get_level_fn){++level_calls;auto result=&level;std::memcpy(params,&result,sizeof(result));if(travel_on_get_level)current_world=&new_world;}
+    else if(fn==&destroy_fn){++destroy_calls;actor.alive=false;}
+    else throw std::runtime_error("unexpected lifetime function");
+}
+void* lifetime_world(const void* object) {return object==&gi?current_world:nullptr;}
+void lifetime_reset(HsmpReflect& reflect) {
+    for(auto c:{&meta,&world_class,&gi_class,&actor_class,&level_class,&function_class})c->cls=&meta;
+    lifetime_objects={&meta,&world_class,&gi_class,&actor_class,&level_class,&function_class,&old_world,&new_world,&gi,&actor,&level,&get_level_fn,&destroy_fn};
+    for(auto o:lifetime_objects)o->alive=true;
+    old_world.property=&gi;new_world.property=&gi;level.property=&old_world;current_world=&old_world;
+    travel_on_get_level=false;level_calls=0;destroy_calls=0;post_destroy_actor_touches=0;
+    identities.clear();names.clear();signatures.clear();lifetime_names.clear();mirrors.clear();
+    active_guard=nullptr;active_world={};active_game_instance={};
+    reflect.fname=lifetime_fname;reflect.find=lifetime_find;reflect.is_a=lifetime_is_a;reflect.class_of=lifetime_class;
+    reflect.props=lifetime_props;reflect.obj_prop=lifetime_prop;reflect.call=lifetime_call;
+    reflect.weak=lifetime_weak;reflect.resolve=lifetime_resolve;object_name=lifetime_name;object_world=lifetime_world;
+}
 }
 int main() {
     try {
@@ -46,8 +114,21 @@ int main() {
         check(status==-1&&touches==0,"wrong thread refuses before touching engine objects");
         mirrors.emplace(77,Mirror{{1,1},{2,2},{}});touches=0;discard(77);
         check(mirrors.empty()&&touches==0,"world discard never touches old UObject");
-        mirrors.emplace(78,Mirror{{1,1},{2,2},{}});touches=0;destroy({3,3},78);
+        mirrors.emplace(78,Mirror{{1,1},{2,2},{}});touches=0;destroy({3,3},78,nullptr);
         check(mirrors.empty()&&touches==0,"wrong-world destroy refuses before old actor access");
+        lifetime_reset(reflect);auto world=keep(&old_world);auto mirror_actor=keep(&actor);valid=0;
+        mirrors.emplace(90,Mirror{world,mirror_actor,{}});destroy(world,90,&guard);
+        check(mirrors.empty()&&level_calls==0&&destroy_calls==0,"changed borrowed binding discards without ProcessEvent");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=1;travel_on_get_level=true;
+        mirrors.emplace(91,Mirror{world,mirror_actor,{}});destroy(world,91,&guard);
+        check(level_calls==1&&destroy_calls==0&&mirrors.empty(),"GetLevel reentry with old world still alive discards without K2_DestroyActor");
+        check(active_guard==nullptr&&!active_game_instance.weak,"failed destroy restores borrowed operation scope");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);
+        mirrors.emplace(92,Mirror{world,mirror_actor,{}});destroy(world,92,&guard);
+        check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
+        check(post_destroy_actor_touches==0,"destroyed actor is never resolved or read after K2_DestroyActor");
+        destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
+        check(provider.abi==3,"guarded destruction requires presentation ABI3");
         std::cout<<checks<<" native presentation lifetime/rejection checks passed\n";return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }
