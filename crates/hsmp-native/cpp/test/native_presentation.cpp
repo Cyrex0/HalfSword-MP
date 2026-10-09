@@ -323,8 +323,8 @@ void vertex_checks(HsmpReflect& reflect){
     check(!vertex_owner.weak&&!vertex_component.weak&&!vertex_asset.weak,"borrowed vertex operation restores only scalar identities");
     auto finish_sources=[&](){int context{};const HsmpViewGuard guard{&context,vertex_guard_check};
         const auto owner=keep(&actor),mesh=keep(&vertex_mesh);
-        const std::array<HsmpViewVertexTarget,2> targets{{{owner,keep(&vertex_component_fixture),mesh},{owner,keep(&vertex_second_fixture),mesh}}};
-        return finish_vertex_sets(keep(&old_world),targets.data(),2,nullptr,0,&guard,&result);};
+        const std::array<HsmpViewFinishTarget,2> targets{{{owner,keep(&vertex_component_fixture),mesh},{owner,keep(&vertex_second_fixture),mesh}}};
+        return finish_scene_sets(keep(&old_world),targets.data(),2,nullptr,0,&guard,&result);};
     vertex_reset(reflect);check(finish_sources()==1&&result.complete==1,"complete source set accepts both original null component arrays");
     vertex_reset(reflect);vertex_mutate_earlier_on_second=true;
     check(finish_sources()==-1&&result.complete==0,"later source component callback cannot add an earlier override before whole-frame publication");
@@ -333,11 +333,172 @@ void vertex_checks(HsmpReflect& reflect){
         Part first{};first.render=keep(&vertex_component_fixture);first.native_asset=mesh;
         Part second{};second.render=keep(&vertex_second_fixture);second.native_asset=mesh;
         mirrors.emplace(71,Mirror{world,owner,{first}});mirrors.emplace(72,Mirror{world,owner,{second}});
-        const std::array<uint64_t,2> handles{71,72};return finish_vertex_sets(world,nullptr,0,handles.data(),2,&guard,&result);};
+        const std::array<uint64_t,2> handles{71,72};return finish_scene_sets(world,nullptr,0,handles.data(),2,&guard,&result);};
     vertex_reset(reflect);check(finish_mirrors()==1&&result.complete==1,"all current mirrors pass whole-scene original native asset proof");
     vertex_reset(reflect);vertex_mutate_earlier_on_second=true;
     check(finish_mirrors()==-1&&result.complete==0,"later mirror callback cannot mutate an earlier native asset before scene readiness");
     vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
+}
+// Synthetic original-class memory exercises the production scene helper. These
+// copied layouts do not claim game rendering, camera ownership or live parity.
+struct SceneObject {LifetimeObject identity;std::array<uint8_t,0xa00-sizeof(LifetimeObject)> storage{};};
+SceneObject arm_first{},arm_second{},camera_fixture{};
+LifetimeObject arm_class{900,&meta},camera_class{901,&meta};
+LifetimeObject socket_fn{902,&function_class},deactivate_fn{903,&function_class};
+LifetimeObject tick_fn{904,&function_class},active_fn{905,&function_class},tick_enabled_fn{906,&function_class};
+uint64_t scene_socket_value{};
+bool scene_profile_supported{true},scene_wrong_vtable{},scene_wrong_size{},scene_wrong_debug_layout{},scene_wrong_tick_layout{},scene_wrong_getter{};
+int scene_guards{},scene_events{},scene_mutation_at{};
+enum class SceneMutation {None,Endpoint,Socket,Debug,Tick,Active,Garbage,ClassName,Travel};
+SceneMutation scene_mutation{},scene_later_target_mutation{},scene_metadata_mutation{};
+bool scene_mutation_applied{};
+bool scene_object(const void* p){return p==&arm_first||p==&arm_second||p==&camera_fixture;}
+uint8_t* scene_bytes(SceneObject& object){return reinterpret_cast<uint8_t*>(&object);}
+void scene_write_arm(SceneObject& object,const HsmpViewSpringArmFrame& value){
+    std::memcpy(scene_bytes(object)+0x2f0,value.translation,24);std::memcpy(scene_bytes(object)+0x310,value.rotation,32);
+}
+void scene_mutate(SceneMutation change){
+    switch(change){
+    case SceneMutation::Endpoint:{auto value=arm_copy(&arm_first);value.translation[0]+=1;scene_write_arm(arm_first,value);break;}
+    case SceneMutation::Socket:scene_socket_value^=1;break;
+    case SceneMutation::Debug:scene_bytes(arm_first)[0x271]|=1;break;
+    case SceneMutation::Tick:scene_bytes(arm_first)[0x3b]=1;break;
+    case SceneMutation::Active:scene_bytes(arm_first)[0x8a]|=8;break;
+    case SceneMutation::Garbage:arm_first.identity.flags|=mirrored_garbage;break;
+    case SceneMutation::ClassName:arm_class.name^=1;break;
+    case SceneMutation::Travel:current_world=&new_world;break;
+    default:break;
+    }
+}
+int32_t scene_guard_check(void*){
+    ++scene_guards;if(scene_mutation_at&&scene_guards==scene_mutation_at)scene_mutate(scene_mutation);return 1;
+}
+uint64_t scene_fixture_vtable(const void* p){
+    const auto* object=static_cast<const LifetimeObject*>(p);
+    return scene_image+(object->cls==&camera_class?0x76085c0:0x76952b8)+(scene_wrong_vtable?8:0);
+}
+void* scene_find(const uint16_t* key){
+    const std::wstring path(reinterpret_cast<const wchar_t*>(key));
+    if(path==L"/Script/Engine.CameraComponent")return &camera_class;
+    if(path==L"/Script/Engine.SpringArmComponent")return &arm_class;
+    if(path==L"/Script/Engine.SceneComponent:GetSocketTransform")return &socket_fn;
+    if(path==L"/Script/Engine.ActorComponent:Deactivate")return &deactivate_fn;
+    if(path==L"/Script/Engine.ActorComponent:SetComponentTickEnabled")return &tick_fn;
+    if(path==L"/Script/Engine.ActorComponent:IsActive")return &active_fn;
+    if(path==L"/Script/Engine.ActorComponent:IsComponentTickEnabled")return &tick_enabled_fn;
+    return vertex_find(key);
+}
+int32_t scene_is_a(void* object,void* type){
+    if(scene_object(object)){auto original_class=static_cast<LifetimeObject*>(object)->cls;return type==original_class||type==&vertex_scene_class||type==&vertex_actor_component_class;}
+    return vertex_is_a(object,type);
+}
+HsmpProp scene_field(const wchar_t* key,const wchar_t* type,int32_t bytes,int32_t offset,uint8_t mask=0,const wchar_t* sub=nullptr){
+    auto p=object_field(key,offset);p.cls=name(type);p.size=bytes;p.bool_mask=mask;if(sub)p.sub=name(sub);return p;
+}
+int32_t scene_props(void* object,HsmpProp* out,int32_t cap,int32_t* size){
+    if(object==&camera_class||object==&arm_class){*size=scene_wrong_size?0x320:object==&camera_class?0x9e0:0x330;return 0;}
+    if(object==&deactivate_fn){*size=0;return 0;}
+    if(object==&tick_fn&&cap>0){*size=1;out[0]=scene_field(L"bEnabled",L"BoolProperty",1,0,1);return 1;}
+    if((object==&active_fn||object==&tick_enabled_fn)&&cap>0){*size=1;out[0]=scene_field(L"ReturnValue",L"BoolProperty",1,0,1);return 1;}
+    if(object==&socket_fn&&cap>=3){*size=112;out[0]=scene_field(L"InSocketName",L"NameProperty",8,0);
+        out[1]=scene_field(L"TransformSpace",L"ByteProperty",1,8);out[2]=scene_field(L"ReturnValue",L"StructProperty",96,16,0,L"Transform");return 3;}
+    return vertex_props(object,out,cap,size);
+}
+int32_t scene_prop(void* object,const uint16_t* key,HsmpProp* out){
+    const std::wstring field(reinterpret_cast<const wchar_t*>(key));
+    if(scene_object(object)){
+        if(field==L"bDrawDebugLagMarkers"){*out=scene_field(field.c_str(),L"BoolProperty",1,scene_wrong_debug_layout?0x270:0x271,1);return 1;}
+        if(field==L"bIsActive"){*out=scene_field(field.c_str(),L"BoolProperty",1,0x8a,8);return 1;}
+        if(field==L"PrimaryComponentTick"){
+            *out=scene_field(field.c_str(),L"StructProperty",0x30,scene_wrong_tick_layout?0x38:0x30);
+            if(object==&arm_first&&scene_metadata_mutation!=SceneMutation::None&&!scene_mutation_applied){scene_mutation_applied=true;scene_mutate(scene_metadata_mutation);}
+            return 1;
+        }
+    }
+    return vertex_prop(object,key,out);
+}
+void scene_call(void* object,void* fn,void* params){
+    ++scene_events;
+    if(scene_object(object)){
+        auto* p=static_cast<uint8_t*>(object);
+        if(fn==&vertex_owner_function){
+            if(object==&arm_second&&scene_later_target_mutation!=SceneMutation::None&&!scene_mutation_applied){scene_mutation_applied=true;scene_mutate(scene_later_target_mutation);}
+            auto owner=&actor;std::memcpy(params,&owner,8);return;
+        }
+        if(fn==&socket_fn){uint64_t socket{};std::memcpy(&socket,params,8);
+            check(socket==scene_socket_value&&static_cast<uint8_t*>(params)[8]==2,"native socket read uses observed singleton and component space2");
+            auto value=arm_copy(object);if(scene_wrong_getter)value.translation[0]+=1;
+            const auto result=engine(arm_transform(value));std::memcpy(static_cast<uint8_t*>(params)+16,&result,sizeof(result));return;
+        }
+        if(fn==&deactivate_fn){p[0x8a]&=static_cast<uint8_t>(~8u);return;}
+        if(fn==&tick_fn){p[0x3b]=static_cast<uint8_t*>(params)[0]&1;return;}
+        if(fn==&active_fn){static_cast<uint8_t*>(params)[0]=(p[0x8a]&8)?1:0;return;}
+        if(fn==&tick_enabled_fn){static_cast<uint8_t*>(params)[0]=p[0x3b]?1:0;return;}
+    }
+    vertex_call(object,fn,params);
+}
+void scene_reset(HsmpReflect& reflect){
+    vertex_reset(reflect);arm_first={};arm_second={};camera_fixture={};
+    arm_first.identity.name=910;arm_first.identity.cls=&arm_class;arm_second.identity.name=911;arm_second.identity.cls=&arm_class;
+    camera_fixture.identity.name=912;camera_fixture.identity.cls=&camera_class;arm_class.name=900;camera_class.name=901;
+    for(auto object:{&arm_first.identity,&arm_second.identity,&camera_fixture.identity,&arm_class,&camera_class,&socket_fn,&deactivate_fn,&tick_fn,&active_fn,&tick_enabled_fn}){
+        object->alive=true;object->flags=0;lifetime_objects.push_back(object);
+    }
+    const HsmpViewSpringArmFrame endpoint{{-0.0,3.125,-800.25},{0.0,-0.0,0.75,0.75}};
+    scene_write_arm(arm_first,endpoint);scene_write_arm(arm_second,endpoint);
+    scene_profile_supported=true;scene_wrong_vtable=scene_wrong_size=scene_wrong_debug_layout=scene_wrong_tick_layout=scene_wrong_getter=false;
+    scene_guards=scene_events=scene_mutation_at=0;scene_mutation=scene_later_target_mutation=scene_metadata_mutation=SceneMutation::None;scene_mutation_applied=false;
+    reflect.find=scene_find;reflect.is_a=scene_is_a;reflect.props=scene_props;reflect.obj_prop=scene_prop;reflect.call=scene_call;
+    scene_image=0x10000000;scene_build_admit=[](){return scene_profile_supported;};scene_vtable_read=scene_fixture_vtable;
+    scene_socket_read=[](){return scene_socket_value;};scene_socket_value=name(L"OfflineExactSocket");scene_owner={};scene_component={};active_scene_kind=0;
+}
+void scene_checks(HsmpReflect& reflect){
+    const wchar_t socket_text[]=L"OfflineExactSocket";const HsmpViewText socket{u16(socket_text),static_cast<uint32_t>(std::wcslen(socket_text)),0};
+    HsmpViewResult result{};auto observe=[&]{int context{};const HsmpViewGuard guard{&context,scene_guard_check};
+        OperationScope operation(&guard,keep(&old_world));return arm_observe(keep(&old_world),keep(&actor),keep(&arm_first),socket,&result);};
+    scene_reset(reflect);const auto raw=arm_copy(&arm_first);const auto captured=observe();
+    check(arm_equal(raw,captured)&&std::signbit(captured.translation[0])&&std::signbit(captured.rotation[1]),"source arm cache preserves finite raw doubles and signed zero without normalization");
+    check(scene_events>0&&!scene_owner.weak&&!scene_component.weak&&!active_scene_kind,"native getter is exercised and borrowed scene scope restores original state");
+    scene_reset(reflect);rejects([&]{arm_socket({});},"missing native socket cannot become a guessed default");
+    scene_socket_value^=1;rejects([&]{arm_socket(socket);},"different original singleton FName bits refuse");
+    for(int invalid=0;invalid<5;++invalid){scene_reset(reflect);
+        if(invalid==0)scene_profile_supported=false;else if(invalid==1)scene_wrong_vtable=true;else if(invalid==2)scene_wrong_size=true;
+        else if(invalid==3)scene_wrong_debug_layout=true;else scene_bytes(arm_first)[0x271]=1;
+        rejects([&]{observe();},"unverified image/vtable/layout/debug profile refuses native arm capture");}
+    scene_reset(reflect);scene_wrong_getter=true;rejects([&]{observe();},"original cache and native socket output mismatch refuses");
+    scene_reset(reflect);arm_first.identity.flags=mirrored_garbage;rejects([&]{observe();},"original garbage arm refuses before getter");check(scene_events==0,"garbage original arm receives no native dispatch");
+    scene_reset(reflect);arm_first.identity.cls=&camera_class;rejects([&]{observe();},"camera cannot impersonate exact native spring arm");
+    for(int invalid=0;invalid<7;++invalid){auto bad=raw;if(invalid<3)bad.translation[invalid]=std::numeric_limits<double>::quiet_NaN();else bad.rotation[invalid-3]=std::numeric_limits<double>::infinity();
+        rejects([&]{arm_valid(bad);},"every raw arm scalar rejects nonfinite values");}
+    HsmpViewComponent recipe_value{};recipe_value.kind=7;recipe_value.vertex_state=4;recipe_value.visible=1;
+    const wchar_t arm_path[]=L"/Script/Engine.SpringArmComponent",camera_path[]=L"/Script/Engine.CameraComponent";
+    recipe_value.asset={u16(arm_path),static_cast<uint32_t>(std::wcslen(arm_path)),0};recipe_value.relative={{0,0,0},{0,0,0,1},{1,1,1}};recipe_value.spring_arm_socket=socket;
+    HsmpViewFrame frame_value{};frame_value.world=recipe_value.relative;auto value=raw;frame_value.spring_arm=&value;frame(recipe_value,frame_value);check(true,"exact arm recipe requires raw endpoint frame");
+    frame_value.spring_arm=nullptr;rejects([&]{frame(recipe_value,frame_value);},"arm frame presence cannot be omitted");frame_value.spring_arm=&value;
+    recipe_value.kind=6;recipe_value.asset={u16(camera_path),static_cast<uint32_t>(std::wcslen(camera_path)),0};recipe_value.spring_arm_socket={};
+    rejects([&]{frame(recipe_value,frame_value);},"camera cannot carry a spring arm payload");frame_value.spring_arm=nullptr;frame(recipe_value,frame_value);check(true,"actual camera has its own inert scene recipe");
+    recipe_value.kind=4;rejects([&]{recipe(recipe_value);},"actual camera cannot be downgraded to plain Scene evidence");
+    auto finish=[&](bool owned){int context{};const HsmpViewGuard guard{&context,scene_guard_check};const auto owner=keep(&actor),world=keep(&old_world);
+        if(!owned){const std::array<HsmpViewFinishTarget,3> targets{{{owner,keep(&arm_first),{},7,0,socket,raw},{owner,keep(&arm_second),{},7,0,socket,raw},{owner,keep(&camera_fixture),{},6}}};
+            return finish_scene_sets(world,targets.data(),3,nullptr,0,&guard,&result);}
+        Part first{};first.kind=7;first.render=keep(&arm_first);first.arm=raw;first.arm_socket=socket_text;
+        Part second=first;second.render=keep(&arm_second);Part camera{};camera.kind=6;camera.render=keep(&camera_fixture);
+        mirrors.emplace(81,Mirror{world,owner,{first,camera}});mirrors.emplace(82,Mirror{world,owner,{second}});const std::array<uint64_t,2> handles{81,82};
+        return finish_scene_sets(world,nullptr,0,handles.data(),2,&guard,&result);};
+    scene_reset(reflect);scene_bytes(arm_first)[0x3b]=1;scene_bytes(arm_first)[0x8a]=8;
+    check(finish(false)==1&&result.complete==1&&scene_bytes(arm_first)[0x3b]==1&&scene_bytes(arm_first)[0x8a]==8,"source set captures native outputs without deactivating authoritative arm");
+    scene_reset(reflect);check(finish(true)==1&&result.complete==1,"complete owned mirror set verifies exact cameras and arm outputs");const int last_guard=scene_guards;
+    for(auto mutation:{SceneMutation::Endpoint,SceneMutation::Socket,SceneMutation::Debug}){scene_reset(reflect);scene_later_target_mutation=mutation;
+        check(finish(false)==-1&&result.complete==0&&scene_mutation_applied,"later native target callback invalidates earlier arm endpoint/socket/debug");}
+    for(auto mutation:{SceneMutation::Endpoint,SceneMutation::Socket,SceneMutation::Debug,SceneMutation::Tick,SceneMutation::Active}){
+        scene_reset(reflect);scene_mutation=mutation;scene_mutation_at=last_guard;
+        check(finish(true)==-1&&result.complete==0,"final guard cannot alter earlier owned mirror output/activation/tick");
+        check(scene_guards==last_guard,"no callback follows the failed final whole-scene raw census");}
+    for(auto mutation:{SceneMutation::Tick,SceneMutation::Active}){scene_reset(reflect);scene_metadata_mutation=mutation;
+        check(finish(true)==-1&&result.complete==0&&scene_mutation_applied,"metadata after native disabled getter cannot bless enabled mirror snapshot");}
+    scene_reset(reflect);scene_wrong_tick_layout=true;check(finish(true)==-1&&result.complete==0,"unknown tick layout cannot prove owned mirror inertness");
+    scene_build_admit=scene_shipping_profile;scene_vtable_read=scene_vtable;scene_socket_read=scene_socket_bits;scene_image=0;
+    scene_owner={};scene_component={};active_scene_kind=0;vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
 }
 }
 int main() {
@@ -401,7 +562,7 @@ int main() {
         check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
         check(post_destroy_actor_touches==0&&invalid_actor_resolves==0,"destroyed mirror actor is never resolved or read after K2_DestroyActor");
         destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
-        check(provider.abi==8&&sizeof(provider)==112,"original vertex completion requires presentation ABI8");
+        check(provider.abi==9&&sizeof(provider)==112&&sizeof(HsmpViewFinishTarget)==128,"complete native scene requires presentation ABI9");
         HsmpViewActorScope actor_scope_result{};
         lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=1;
         check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.qualified==1
@@ -536,6 +697,7 @@ int main() {
         SplineSnapshot a{},b{};a.value.version=b.value.version=7;check(spline_equal(a,b),"two identical empty raw copies agree");b.value.version=8;check(!spline_equal(a,b),"source curve version mutation invalidates coherent capture");b=a;b.value.settings.duration=2;check(!spline_equal(a,b),"source settings mutation invalidates coherent capture");
         path_checks(reflect);
         vertex_checks(reflect);
+        scene_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);
