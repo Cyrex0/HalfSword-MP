@@ -40,7 +40,7 @@ void require(bool ok, const char* why) { if (!ok) throw Error(why); }
 thread_local const HsmpViewGuard* active_guard{};
 thread_local Obj active_world{},active_game_instance{};
 void mesh_call_guard();
-struct LookupEntry {std::vector<HsmpNativePathNode> original,pinned;std::vector<uint32_t> flags,class_flags;uint64_t package{};};
+struct LookupEntry {std::vector<HsmpNativePathNode> original,pinned;std::vector<uint32_t> flags,class_flags;uint64_t package{};void* zero_item{};};
 struct LookupState {Obj world{},gi{};HsmpNativePathNode world_node{},gi_node{};HsmpProp gi_property{};std::map<std::wstring,LookupEntry> entries;};
 thread_local LookupState* active_lookup{};
 Obj lookup_find(const wchar_t* path);
@@ -923,9 +923,9 @@ void* source_path_get(const HsmpNativePathNode& node) {
     require(object_name_value&&*object_name_value==node.name&&class_name_value&&*class_name_value==node.class_name&&vt->class_of(object)==cls,"native path original FName/class changed");return object;
 }
 struct LookupNodeEvidence {uint64_t address{},weak{};};
-HsmpNativePathNode source_path_node(void* object,LookupNodeEvidence* evidence=nullptr) {
+HsmpNativePathNode source_path_node(void* object,LookupNodeEvidence* evidence=nullptr,std::optional<uint64_t> observed_weak=std::nullopt) {
     require(vt&&object_name&&retirement_flags&&source_outer,"native path metadata unavailable");
-    require(object!=nullptr,"native path node missing");HsmpNativePathNode node{};node.weak=vt->weak(object);node.address=reinterpret_cast<uint64_t>(object);
+    require(object!=nullptr,"native path node missing");HsmpNativePathNode node{};node.weak=observed_weak?*observed_weak:vt->weak(object);node.address=reinterpret_cast<uint64_t>(object);
     if(evidence)*evidence={node.address,node.weak};
     require(node.weak&&vt->resolve(node.weak)==object,"native path node weak unavailable");auto flags=retirement_flags(object);require(flags&&(*flags&0x40000000u)==0,"native path node garbage");
     void* cls=vt->class_of(object);require(cls!=nullptr,"native path class missing");node.class_weak=vt->weak(cls);node.class_address=reinterpret_cast<uint64_t>(cls);
@@ -950,12 +950,52 @@ void lookup_start(LookupState& state,Obj world,Obj gi){
     state.world_node=source_path_node(get(world));
     state.gi_node=source_path_node(get(gi));check_guard();lookup_world_final(state);
 }
+void* lookup_zero_object(void* original_item,uint64_t address){
+    require(original_item&&address&&retirement_index&&retirement_object&&retirement_serial,"native lookup zero-package slot metadata unavailable");
+    void* item=retirement_index(0);require(item==original_item,"native lookup original zero-package slot changed");
+    const auto* object=retirement_object(item);const auto* serial=retirement_serial(item);
+    require(object&&serial&&reinterpret_cast<uint64_t>(*object)==address&&*serial==0,"native lookup original zero-package object/serial changed");return *object;
+}
+void* lookup_node_get(const HsmpNativePathNode& node,void* zero_item){
+    if(node.weak)return source_path_get(node);
+    require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native lookup zero-package metadata unavailable");
+    void* object=lookup_zero_object(zero_item,node.address);
+    const auto* flags=retirement_flags(object);require(flags&&(*flags&0x40000000u)==0,"native lookup zero-package object garbage");
+    void* cls=vt->resolve(node.class_weak);require(node.class_weak&&cls&&reinterpret_cast<uint64_t>(cls)==node.class_address&&vt->weak(cls)==node.class_weak,"native lookup zero-package class slot/serial changed");
+    flags=retirement_flags(cls);require(flags&&(*flags&0x40000000u)==0,"native lookup zero-package class garbage");
+    const auto* object_name_value=object_name(object);const auto* class_name_value=object_name(cls);const auto* outer=source_outer(object);
+    require(object_name_value&&*object_name_value==node.name&&class_name_value&&*class_name_value==node.class_name&&node.class_name==*source_package_name&&
+        vt->class_of(object)==cls&&outer&&*outer==nullptr,"native lookup original zero-package FName/class/Outer changed");
+    require(lookup_zero_object(zero_item,node.address)==object,"native lookup zero-package slot changed during qualification");return object;
+}
+HsmpNativePathNode lookup_node(void* object,LookupEntry& entry,bool ancestor,LookupNodeEvidence* evidence){
+    require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native lookup path metadata unavailable");
+    require(object!=nullptr,"native lookup path node missing");const auto weak=vt->weak(object);
+    if(evidence)*evidence={reinterpret_cast<uint64_t>(object),weak};if(weak)return source_path_node(object,evidence,weak);
+    require(ancestor&&retirement_index&&retirement_object&&retirement_serial,"native lookup zero-package ancestor slot unavailable");
+    void* item=retirement_index(0);require(item!=nullptr,"native lookup zero-package slot unavailable");
+    require(!entry.zero_item||entry.zero_item==item,"native lookup zero-package original slot changed");
+    lookup_zero_object(item,reinterpret_cast<uint64_t>(object)); // before newly admitted class/FName/RF/Outer reads
+    HsmpNativePathNode node{};node.address=reinterpret_cast<uint64_t>(object);void* cls=vt->class_of(object);
+    require(cls!=nullptr,"native lookup zero-package class missing");node.class_weak=vt->weak(cls);node.class_address=reinterpret_cast<uint64_t>(cls);
+    require(node.class_weak&&vt->resolve(node.class_weak)==cls,"native lookup zero-package class weak unavailable");
+    const auto* own=object_name(object);const auto* class_name_value=object_name(cls);require(own&&class_name_value,"native lookup zero-package FName unavailable");
+    node.name=*own;node.class_name=*class_name_value;lookup_node_get(node,item);entry.zero_item=item;return node;
+}
+void lookup_path_verify(const std::vector<HsmpNativePathNode>& nodes,const LookupEntry& entry){
+    require(source_package_name&&*source_package_name==entry.package&&!nodes.empty()&&nodes.size()<=64,"native lookup original path/package changed");
+    for(size_t i=0;i<nodes.size();++i){require(nodes[i].weak||i>0,"native lookup returned root weak unavailable");
+        for(size_t j=0;j<i;++j)require(nodes[i].address!=nodes[j].address,"native lookup original path cycle");
+        void* object=lookup_node_get(nodes[i],entry.zero_item);const auto* field=source_outer(object);require(field,"native lookup original Outer metadata unavailable");
+        const void* outer{};std::memcpy(&outer,field,sizeof(outer));require(reinterpret_cast<uint64_t>(outer)==(i+1<nodes.size()?nodes[i+1].address:0),"native lookup original Outer changed");lookup_node_get(nodes[i],entry.zero_item);}
+    require(*source_package_name==entry.package,"native lookup original package discriminator changed during walk");
+}
 void lookup_entry_final(const LookupEntry& entry){
     require(!entry.original.empty()&&entry.original.size()==entry.pinned.size(),"native lookup witness missing");
-    source_path_verify(entry.original.data(),static_cast<uint32_t>(entry.original.size()),entry.package);
-    source_path_verify(entry.pinned.data(),static_cast<uint32_t>(entry.pinned.size()),entry.package);
-    for(size_t i=0;i<entry.pinned.size();++i){const auto& node=entry.pinned[i];const auto* p=source_path_get(node);const auto* flags=retirement_flags(p);const auto* cls=vt->resolve(node.class_weak);const auto* class_flags=retirement_flags(cls);
-        require(flags&&class_flags&&*flags==entry.flags[i]&&*class_flags==entry.class_flags[i],"native lookup original RF/class flags changed");}
+    lookup_path_verify(entry.original,entry);lookup_path_verify(entry.pinned,entry);
+    for(size_t i=0;i<entry.pinned.size();++i){const auto& node=entry.pinned[i];const auto* p=lookup_node_get(node,entry.zero_item);const auto* flags=retirement_flags(p);const auto* cls=vt->resolve(node.class_weak);const auto* class_flags=retirement_flags(cls);
+        require(flags&&class_flags&&*flags==entry.flags[i]&&*class_flags==entry.class_flags[i],"native lookup original RF/class flags changed");
+        lookup_node_get(node,entry.zero_item);require(*flags==entry.flags[i]&&*class_flags==entry.class_flags[i],"native lookup RF/class flags changed during final qualification");}
 }
 void lookup_finish(){if(!active_lookup)return;lookup_world_final(*active_lookup);for(const auto& [path,entry]:active_lookup->entries){(void)path;lookup_entry_final(entry);}lookup_world_final(*active_lookup);}
 void lookup_remember(const HsmpNativePathNode& node){
@@ -965,12 +1005,13 @@ void lookup_remember(const HsmpNativePathNode& node){
 }
 void lookup_pin(LookupEntry& entry){
     lookup_entry_final(entry);auto candidate=entry.pinned;
-    for(auto& node:candidate){auto* p=source_path_get(node);const Obj old{node.weak,node.address},current{vt->weak(p),node.address};
+    for(auto& node:candidate){auto* p=lookup_node_get(node,entry.zero_item);const Obj old{node.weak,node.address},current{vt->weak(p),node.address};
+        if(!node.weak){require(current.weak==0,"native lookup zero-package serial assignment unsupported");continue;}
         require(same(old,current)||mesh_serial_assignment(old,current),"native lookup positive object serial changed");node.weak=current.weak;
         void* cls=vt->resolve(node.class_weak);const Obj old_class{node.class_weak,node.class_address},current_class{vt->weak(cls),node.class_address};
         require(same(old_class,current_class)||mesh_serial_assignment(old_class,current_class),"native lookup positive class serial changed");node.class_weak=current_class.weak;}
     LookupEntry proposed=entry;proposed.pinned=std::move(candidate);lookup_entry_final(proposed);lookup_world_final(*active_lookup);
-    for(const auto& node:proposed.pinned){lookup_remember(node);const auto class_node=source_path_node(vt->resolve(node.class_weak));require(class_node.name==node.class_name&&class_node.address==node.class_address,"native lookup retained class identity changed");lookup_remember(class_node);}
+    for(const auto& node:proposed.pinned){if(node.weak)lookup_remember(node);const auto class_node=source_path_node(vt->resolve(node.class_weak));require(class_node.name==node.class_name&&class_node.address==node.class_address,"native lookup retained class identity changed");lookup_remember(class_node);}
     lookup_entry_final(proposed);lookup_world_final(*active_lookup);entry.pinned=std::move(proposed.pinned);
 }
 [[noreturn]] void lookup_cold_failure(const Error& error,const char* stage,uint32_t depth,Obj root,const LookupNodeEvidence& node){
@@ -995,10 +1036,10 @@ Obj lookup_find(const wchar_t* path){
     const char* stage="package";uint32_t depth{};LookupNodeEvidence evidence{};
     try{
     require(source_package_name!=nullptr,"native lookup package metadata unavailable");
-    stage="root_node";LookupEntry entry;entry.package=*source_package_name;auto node=source_path_node(get(original),&evidence);const auto first_observed=node;node.weak=original.weak;
+    stage="root_node";LookupEntry entry;entry.package=*source_package_name;auto node=lookup_node(get(original),entry,false,&evidence);const auto first_observed=node;node.weak=original.weak;
     for(;;){require(entry.original.size()<64,"native lookup full path bound");for(const auto& prior:entry.original)require(prior.address!=node.address,"native lookup path cycle");entry.original.push_back(node);
-        const auto* p=source_path_get(node);const auto* flags=retirement_flags(p);const auto* class_flags=retirement_flags(vt->resolve(node.class_weak));require(flags&&class_flags,"native lookup RF metadata unavailable");entry.flags.push_back(*flags);entry.class_flags.push_back(*class_flags);
-        const auto* outer=source_outer(p);require(outer,"native lookup Outer metadata unavailable");if(!*outer)break;stage="outer_node";++depth;evidence={reinterpret_cast<uint64_t>(*outer),0};node=source_path_node(const_cast<void*>(*outer),&evidence);}
+        const auto* p=lookup_node_get(node,entry.zero_item);const auto* flags=retirement_flags(p);const auto* class_flags=retirement_flags(vt->resolve(node.class_weak));require(flags&&class_flags,"native lookup RF metadata unavailable");entry.flags.push_back(*flags);entry.class_flags.push_back(*class_flags);
+        const auto* outer=source_outer(p);require(outer,"native lookup Outer metadata unavailable");if(!*outer)break;stage="outer_node";++depth;evidence={reinterpret_cast<uint64_t>(*outer),0};node=lookup_node(const_cast<void*>(*outer),entry,true,&evidence);}
     stage="path_close";
     entry.pinned=entry.original;entry.pinned.front()=first_observed;lookup_pin(entry);check_guard();lookup_entry_final(entry);
     // The first lookup may be followed by a callback before its witness is

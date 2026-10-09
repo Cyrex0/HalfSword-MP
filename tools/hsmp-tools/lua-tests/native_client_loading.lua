@@ -46,13 +46,19 @@ do
     check(f.ui.host.signature:find("Waiting for the match",1,true)and f:last("SetText").args[1]:find("Progress is not available",1,true),
         "actual stage transition bypasses cosmetic throttling immediately")
     f.ui:set("assets",0,0);f.ui:tick();f.ui:set("assets",1,4);f.ui:tick()
-    check(f:last("SetPercent").args[1]==.25 and f:last("SetText").args[1]:find("Preparation: 1 / 4",1,true),
+    check(f:last("SetPercent").args[1]==.25 and f:last("SetText").args[1]:find("Player assets: 1 / 4",1,true),
         "the first real asset count appears immediately even within the same half-second")
     f.ui:set("assets",2,4);f.ui:tick()
-    check(f:last("SetPercent").args[1]==.5 and f:last("SetText").args[1]:find("Preparation: 2 / 4",1,true),
+    check(f:last("SetPercent").args[1]==.5 and f:last("SetText").args[1]:find("Player assets: 2 / 4",1,true),
         "every changed actual asset count bypasses the cosmetic throttle immediately")
     text_calls=f:count("SetText");f.ui:set("assets",2,4);f.ui:tick()
     check(f:count("SetText")==text_calls,"unchanged actual counts retain the2Hz cosmetic throttle")
+    local percent_calls=f:count("SetPercent");f.ui:set("assets",4,4);f.ui:tick()
+    check(f:last("SetIsMarquee").args[1]==true and f:count("SetPercent")==percent_calls
+        and f.ui.host.signature:find("Player assets loaded",1,true)
+        and f:last("SetText").args[1]:find("Player models and your view are still loading",1,true),
+        "completed assets keep their exact count but cannot show a completed match bar")
+    check(not f.ui.ready and f:count("RemoveFromParent")==0,"asset completion never supplies model or owned-view readiness")
     f.ui:set("present");f.ui:tick()
     check(f.ui.host.signature:find("Creating player models",1,true)and f:last("SetIsMarquee").args[1]==true,
         "completed asset preparation switches immediately to creating models without claiming match completion")
@@ -60,12 +66,25 @@ do
     check(f.ui.stage=="present","only exact known preparation pending preserves the real model-creation stage")
     f.ui:status("wait_scene",nil,nil,"native applied scene is stale");f.ui:tick()
     check(f.ui.stage=="waiting","stale or missing source data cannot retain a misleading model-creation stage")
-    f.ui:fail();f.ui:tick()
-    check(f.ui.host.signature:find("Unable to load the match",1,true)and f:last("SetText").args[1]:find("Close and join again",1,true),
-        "fatal errors bypass cosmetic throttling and remain visible")
+    f.ui:status("error",nil,nil,"Player models could not be created");f.ui:tick()
+    check(f.ui.host.signature:find("Unable to load the match",1,true)and f:last("SetText").args[1]:find("Player models could not be created",1,true)
+        and f:last("SetText").args[1]:find("Close and join again",1,true),"fatal cause bypasses cosmetic throttling and remains visible")
+    f.ui:status("stopped",nil,nil,"stop requested");f.ui:set("present");f.ui:tick()
+    check(f:last("SetText").args[1]:find("Player models could not be created",1,true)and not f:last("SetText").args[1]:find("stop requested",1,true),
+        "later stop and preparation reports cannot replace the first fatal cause")
+    f.generation=2;f.ui:drop();f.ui:tick()
+    check(f:last("SetText").args[1]:find("Player models could not be created",1,true)and f.stale==0,
+        "fatal cause survives safe world drop without touching previous widgets")
     f=fixture();f.ui:tick();f.ui:status("mirror_ready",{fresh=true},{});f.ui:tick();f.ui:set("present");f.ui:tick()
     check(f.ui.stage=="view"and not f.ui.ready and f:count("RemoveFromParent")==0,
         "repeated native presentation cannot replace the precise unverified-view waiting stage")
+end
+do
+    local f=fixture();f.ui:tick()
+    f.ui:status("error",nil,nil,string.rep("x",191).."é"..string.rep("y",400).."\ncontrol")
+    f.ui:tick()
+    check(#f.ui.failure_reason<=195 and utf8.len(f.ui.failure_reason)~=nil and not f.ui.failure_reason:find("\n",1,true),
+        "visible copied error is bounded and cannot split a UTF-8 character or add control lines")
 end
 do
     local f=fixture();local attempts=0

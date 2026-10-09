@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Qualify the native slot-zero package ancestor explicitly within each lookup
+  operation, preserving strict null-reference checks elsewhere.
+- Label loading counts as player assets, keep preparation animated after asset
+  completion, and retain the first failure reason on screen.
 - Retain the original native scene-preparation refusal before any later scope
   access, with bounded cold-lookup context for exact diagnosis.
 - Reuse verified exact native object lookups within a single scene operation,

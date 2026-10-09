@@ -1,5 +1,30 @@
 # Native authority bootstrap checkpoint
 
+## Current actual: original slot-zero Outer witness localized
+
+Exactd9823407/full G0/all394 non-CDB run223840-80958f, authority33344,
+client14296/27956, preserves first21.811s failure: source spline profile native
+path node weak unavailable, outer_node depth1 weak0 and idx0=1/1/1/1. Admitted
+FUObjectItem0 points to the copied failed Outer address and has serial0. Private
+operation lookup needs an explicit original slot witness; global weak/null policy
+and native serial allocation remain unchanged. Implementation and independent
+review are in progress; no accepted recipe/frame, view or input claim.
+Root stopped this diagnostic gracefully after the cause was captured. All four
+original processes absent, save20 unchanged, no new dump/unobserved child, both
+original physical client windows on secondary. No debugger attached; pass=false.
+
+Loading fix labels exact player assets, keeps n/n indeterminate pending models/
+owned view, and retains first fatal cause; focused63/syntax2 pass/root review.
+User's separately installed Steam game7736/server46100 is playing and must remain
+untouched. Ignored root operators distinguish its exact original PID/start/exe;
+all G0/freshness/view bounds and original save/dump audit remain strict.
+
+Private cache correction admits only terminal Package ancestor with original
+item0/address/serial0 and complete original class serial/FName/RF/Outer closure,
+before metadata reads and at final tails. No global weak0, serial allocation,
+promotion or schema/ABI change. Strict native provider/fixture1233 checks pass;
+compiler released. New-build actual cadence/model/input/view proof pending.
+
 ## Current actual: preserve cold lookup refusal; avoid old CDB helper
 
 Exact0bb472af/full G0/all394 run221837-e888fa refuses the first Vector path

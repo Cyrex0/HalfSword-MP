@@ -1,5 +1,41 @@
 # Native full-scene encoding checkpoint
 
+## Actual d9823407: first original refusal proves the slot-zero case
+
+Exact clean dev/full G0/all394 hashes, non-CDB run20261009-223840-80958f-native-host,
+source31b4341b-3b5c-42a0-9e77-b2041cc75a0a, authority33344, client14296/27956.
+First source failure21.811s preserves `native path node weak unavailable` at
+outer_node depth1, weak0; idx0=1/1/1/1 proves admitted slot metadata, present item,
+copied failed Outer address equal to slot0 object, and slot serial0. No complete
+recipe/frame/model, owned view or active input. This is a legitimate original
+slot witness missing from the private lookup cache, not evidence for global
+null-weak relaxation. Net owns the narrow correction; Host independent review.
+
+Root requested supported graceful stop after capturing the predicate, retaining
+pass=false and operator_stop.json; harness stop-request result is not the cause.
+Independent cleanup verifies all four original processes absent, original save20
+unchanged, no fresh dumps or unobserved children. Both qualified client physical
+windows were contained on the smallest secondary display. No debugger attached.
+Operator summary retains original failure and deliberate diagnostic stop.
+
+Loading UI correction labels only player assets and changes n/n to an animated
+pending model/view stage rather than a completed match bar. First bounded UTF-8
+fatal cause survives later stop/progress/world drop. Focused63 checks/syntax2
+pass, root review closed; no positive owned-view/readiness change. Actual pixel
+verification remains pending. User is playing separate Steam PvP game7736 and
+server46100 and explicitly requires leaving them running. Root ignored operator
+preserves their exact PID/start/exe records, refuses any other existing session;
+original save audit stays strict and any concurrent change is retained as failure.
+
+Private operation lookup now admits only a terminal Package ancestor with the
+exact original FUObjectItem0 pointer/address/serial0, full Package discriminator,
+original class serial/FName/RF and original Outer/path closure. Slot evidence is
+checked before newly admitted UObject metadata reads and at capture/hit/final
+tails. No weak0 root/returned Obj/source path/global identity entry, serial write,
+promotion, cross-operation cache or lowered gameplay bound. Strict provider/
+fixture /W4 /WX pass1233 checks (1215 retained plus18); compiler released. Actual
+cache cadence and model/gameplay verification remain pending on the new build.
+
 ## Actual 0bb472af: cold witness refuses; debugger shutdown needs correction
 
 Exact clean dev/full G0/all394 hashes run20261009-221837-e888fa-native-host,

@@ -2,7 +2,7 @@
 -- server transfer and unknown view readiness never receive a timer percentage.
 local M={}
 local labels={connecting="Connecting to your match",travel="Loading the arena",waiting="Waiting for the match",
-    assets="Preparing the match",present="Creating player models",view="Preparing your view",error="Unable to load the match"}
+    assets="Loading player assets",present="Creating player models",view="Preparing your view",error="Unable to load the match"}
 function M.new(env)
     local self={host=nil,stage="connecting",done=nil,total=nil,failed=false,ready=false,retry_at=0,failures=0,
         started_at=env.now(),paint_at=0,force_update=true}
@@ -18,7 +18,7 @@ function M.new(env)
         if not same(token)then self:drop();return false end
         local reason="loading view unavailable: "..tostring(why):sub(1,192)
         if reason~=self.last_error and env.log then env.log("%s",reason)end
-        self.last_error=reason;self.failures=self.failures+1;self.retry_at=env.now()+1;self:fail()
+        self.last_error=reason;self.failures=self.failures+1;self.retry_at=env.now()+1;self:fail(reason)
         return nil,reason
     end
     local function build(token,world,pc)
@@ -57,7 +57,7 @@ function M.new(env)
             checked(token,function()w:SetJustification(1)end)
             checked(token,function()local font=w.Font;font.Size=size;w:SetFont(font)end)
             checked(token,function()w:SetColorAndOpacity({SpecifiedColor={R=0.92,G=0.94,B=0.97,A=1},ColorUseRule=0})end)
-            place(w,-320,y,640,52,false);return w
+            place(w,-320,y,640,tag=="detail"and 100 or 52,false);return w
         end
         text("title","HALF SWORD MULTIPLAYER",-116,36)
         local stage=text("stage",labels[self.stage],-38,24)
@@ -91,7 +91,7 @@ function M.new(env)
         end
     end
     function self:status(state,scene,own,reason)
-        if state=="error"or state=="stopped"then self:fail();return end
+        if state=="error"or state=="stopped"then self:fail(reason);return end
         if self.failed then return end
         if state=="live"or state=="mirror_ready"then
             self:set("view")
@@ -107,7 +107,15 @@ function M.new(env)
         elseif state=="wait_scene"and reason=="native scene assets loading"and self.stage=="present"then return
         elseif self.stage~="assets"then self:set("waiting")end
     end
-    function self:fail()self.failed=true;self.ready=false;self.stage="error";self.done,self.total=nil,nil;self.force_update=true end
+    function self:fail(reason)
+        if not self.failure_reason and type(reason)=="string"and reason~=""then
+            local text=reason:gsub("%c"," ");local cut=math.min(#text,192)
+            -- Keep a bounded UTF-8 prefix without cutting a multibyte character.
+            while cut>0 and text:byte(cut+1)and text:byte(cut+1)>=0x80 and text:byte(cut+1)<=0xBF do cut=cut-1 end
+            self.failure_reason=text:sub(1,cut)..(#text>cut and "..."or "")
+        end
+        self.failed=true;self.ready=false;self.stage="error";self.done,self.total=nil,nil;self.force_update=true
+    end
     function self:tick()
         if not env.WG.check()then return false end
         local token=env.WG.token()
@@ -132,16 +140,18 @@ function M.new(env)
             local now=env.now()
             if not self.force_update and now<self.paint_at then return true end
             local elapsed=math.max(0,math.floor(now-self.started_at))
-            local title=labels[self.stage]..(self.failed and ""or string.rep(".",math.floor(now*2)%4))
-            local detail=self.failed and "Close and join again to retry.\nElapsed: "..elapsed.."s"or self.total
-                and string.format("Preparation: %d / %d  |  Elapsed: %ds",self.done,self.total,elapsed)
+            local assets_complete=self.total~=nil and self.done==self.total
+            local title=(assets_complete and "Player assets loaded"or labels[self.stage])..(self.failed and ""or string.rep(".",math.floor(now*2)%4))
+            local detail=self.failed and ((self.failure_reason and self.failure_reason.."\n"or "").."Close and join again to retry.\nElapsed: "..elapsed.."s")or self.total
+                and string.format("Player assets: %d / %d  |  Elapsed: %ds",self.done,self.total,elapsed)
+                    ..(assets_complete and "\nPlayer models and your view are still loading."or "")
                 or "Elapsed: "..elapsed.."s"..(self.stage=="waiting"and "\nProgress is not available yet."or "")
             local signature=title..":"..detail
             if host.signature~=signature then
                 checked(host.token,function()host.stage:SetText(env.text(title))end)
                 checked(host.token,function()host.detail:SetText(env.text(detail))end)
-                checked(host.token,function()host.bar:SetIsMarquee(self.total==nil)end)
-                if self.total then checked(host.token,function()host.bar:SetPercent(self.done/self.total)end)end
+                checked(host.token,function()host.bar:SetIsMarquee(self.total==nil or assets_complete)end)
+                if self.total and not assets_complete then checked(host.token,function()host.bar:SetPercent(self.done/self.total)end)end
                 host.signature=signature
             end
             self.paint_at=now+.5;self.force_update=false
