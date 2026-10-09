@@ -709,3 +709,35 @@ USplineComponent is a UPrimitiveComponent with a hard bDrawDebug bool at0x5F8;
 pinned LuaUObject BoolProperty Get pushes an actual Lua boolean. Cooked/live
 debug/visibility values and shipping rendering absence remain unproved. The next
 ordinary actual capture must supply these facts before changing support.
+
+## Actual spline facts: visible/debug enabled, publication still refused
+
+Exact clean55b2ed06 passed full G0 (74 Lua suites, 1314 Rust tests/79 binaries,
+events141/zero violations, clippy six warnings/zero errors), pushed and deployed
+with matching clean binary/G0/native stamps. Actual45s run
+`test-results/20261009-044807-1a4b12-native-host`, source UUID
+29c8f909-86be-4c70-9df3-282e49382f51, records native Aim Spline facts:
+class /Script/Engine.SplineComponent, address1189686658720, bDrawDebug is an
+actual boolean true, component visible=true/hidden=false, owner_hidden=false.
+Component/owner transient and native garbage reads are all false. Thus this is
+not a missing bool conversion or an observed hidden-spline case. Native component
+flags alone do not establish that shipping spline scene proxies render pixels;
+rendering absence has not been proved, so strict eligibility stays refused.
+
+First capture refuses at26.309s. Pawn mesh census26 took3.823s (10.972 to14.795),
+axe mesh13 took2.089s (14.800 to16.889), closure47 took8.217s (16.889 to25.106).
+These are only small changes from the previous4.328/1.984/8.958s and do not
+establish a useful speed gain from schema caching. Both clients again completed
+suppression and reached wait_scene, with canonical samples/frame zero and active
+inputs[0,0]. Repeated refusal occurs40.221/53.794s; the45s stop request was
+serviced after capture, with own stopped at53.815s and clean supervisor exit.
+Original owned PIDs8640/35252/32640/2488 were independently absent, original
+saves unchanged and crash/unobserved-child lists empty; source remained exact
+clean55b2ed06 throughout.
+
+The next investigation must establish shipping spline rendering or implement
+faithful native spline geometry/settings and dynamic state on both ends. Do not
+accept debug=true by name, discard rendering or invent a static curve. In
+parallel, audit repeated Lua indexed-controller/world resolution while retaining
+actual GameInstance current-world and original player/possession checks around
+callbacks. No native playable state or parity is established by this run.
