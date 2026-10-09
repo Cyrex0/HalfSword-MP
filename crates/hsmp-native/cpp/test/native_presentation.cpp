@@ -919,16 +919,18 @@ void empty_checks(HsmpReflect& reflect){
     vertex_empty_build_admit=vertex_empty_shipping_build;vertex_empty_vtable_read=vertex_empty_vtable;vertex_empty_image=0;vertex_empty=false;
     scene_owner={};scene_component={};active_scene_kind=0;vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
 }
-LifetimeObject pose_class{1200,&meta},pose_count_fn{1201,&function_class};
+LifetimeObject pose_class{1200,&meta},pose_count_fn{1201,&function_class},pose_asset_fn{1203,&function_class};
 SkeletalObject pose_level{};
 alignas(16) std::array<EngineTransform,2> pose_calc_a{},pose_calc_b{},pose_render_a{},pose_render_b{},pose_input{};
-std::vector<uint32_t> pose_stages;bool pose_callback_replace{},pose_callback_dirty{};
+std::vector<uint32_t> pose_stages;bool pose_callback_replace{},pose_callback_dirty{};uint32_t pose_asset_reads{};
 void* pose_find(const uint16_t* key){const std::wstring path(reinterpret_cast<const wchar_t*>(key));
     if(path==L"/Script/Engine.PoseableMeshComponent")return &pose_class;
+    if(path==L"/Script/Engine.SkinnedMeshComponent:GetSkinnedAsset")return &pose_asset_fn;
     if(path==L"/Script/Engine.SkinnedMeshComponent:GetNumBones")return &pose_count_fn;return scene_find(key);}
 int32_t pose_props(void* object,HsmpProp* out,int32_t cap,int32_t* bytes){
     if(object==&pose_class){*bytes=0xa20;return 0;}
     if(object==&pose_count_fn){*bytes=4;if(cap){out[0]=scene_field(L"ReturnValue",L"IntProperty",4,0);return 1;}return -1;}
+    if(object==&pose_asset_fn){*bytes=8;if(cap){out[0]=object_field(L"ReturnValue",0);return 1;}return -1;}
     return scene_props(object,out,cap,bytes);}
 int32_t pose_prop(void* object,const uint16_t* key,HsmpProp* out){
     if(object==&pose_level&&std::wstring(reinterpret_cast<const wchar_t*>(key))==L"OwningWorld"){*out=object_field(L"OwningWorld",0xc0);return 1;}return scene_prop(object,key,out);}
@@ -936,6 +938,7 @@ uint64_t pose_vtable(const void* p){if(p==&skeletal_second)return pose_image+0x7
 int32_t pose_is_a(void* object,void* type){if(object==&skeletal_second&&type==&skinned_class)return 1;return scene_is_a(object,type);}
 void pose_event(void* object,void* fn,void* params){
     if(fn==&get_level_fn){auto value=&pose_level;std::memcpy(params,&value,8);return;}
+    if(fn==&pose_asset_fn){++pose_asset_reads;uint64_t value{};std::memcpy(&value,static_cast<uint8_t*>(object)+0x558,8);if(!value)std::memcpy(&value,static_cast<uint8_t*>(object)+0x560,8);std::memcpy(params,&value,8);return;}
     if(fn==&pose_count_fn){const int32_t value=2;std::memcpy(params,&value,4);return;}scene_call(object,fn,params);}
 void pose_action(Obj component,uint32_t stage){
     pose_stages.push_back(stage);auto* object=reinterpret_cast<SkeletalObject*>(component.address);auto* raw=reinterpret_cast<uint8_t*>(object);
@@ -947,12 +950,12 @@ void pose_action(Obj component,uint32_t stage){
     if(stage==5&&pose_callback_dirty)raw[0x798]|=0x40;
 }
 void pose_reset(HsmpReflect& reflect){
-    skeletal_reset(reflect);pose_class={1200,&meta};pose_count_fn={1201,&function_class};pose_level={};pose_level.identity={1202,&level_class};
-    lifetime_objects.push_back(&pose_class);lifetime_objects.push_back(&pose_count_fn);lifetime_objects.push_back(&pose_level.identity);actor.outer=&pose_level.identity;
+    skeletal_reset(reflect);pose_class={1200,&meta};pose_count_fn={1201,&function_class};pose_asset_fn={1203,&function_class};pose_level={};pose_level.identity={1202,&level_class};
+    lifetime_objects.push_back(&pose_class);lifetime_objects.push_back(&pose_count_fn);lifetime_objects.push_back(&pose_asset_fn);lifetime_objects.push_back(&pose_level.identity);actor.outer=&pose_level.identity;
     skeletal_pointer(pose_level,0xc0,reinterpret_cast<uint64_t>(&old_world));skeletal_second.identity.cls=&pose_class;
     reflect.find=pose_find;reflect.is_a=pose_is_a;reflect.props=pose_props;reflect.obj_prop=pose_prop;reflect.call=pose_event;source_outer=lifetime_outer;
     pose_image=scene_image;pose_build_admit=[](){return true;};scene_vtable_read=pose_vtable;pose_native_call=pose_action;
-    pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=false;
+    pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=false;pose_asset_reads=0;
     for(size_t i=0;i<2;++i){Transform value{{static_cast<double>(i)+1,2,3},{0,0,0,1},{1,1,1}};pose_input[i]=engine(value);}
     for(auto* object:{&skeletal_first,&skeletal_second}){skeletal_pointer(*object,0x558,reinterpret_cast<uint64_t>(&vertex_mesh));skeletal_pointer(*object,0x560,reinterpret_cast<uint64_t>(&vertex_mesh));
         skeletal_pointer(*object,0x90,reinterpret_cast<uint64_t>(&actor));auto* p=reinterpret_cast<uint8_t*>(object);p[0x798]=0x20;p[0x88]=3;p[0xa41]=1;p[0xa52]=8;
@@ -963,6 +966,16 @@ void pose_reset(HsmpReflect& reflect){
 }
 void pose_checks(HsmpReflect& reflect){
     HsmpViewResult result{};const auto binding=[&](){return pose_bind(keep(&old_world),keep(&actor),keep(&skeletal_second),keep(&skeletal_first),keep(&vertex_mesh),2,&result);};
+    const wchar_t requested[]=L"/Game/ObservedClothing.ObservedClothing";const HsmpViewText requested_path{u16(requested),static_cast<uint32_t>(std::wcslen(requested)),0};
+    pose_reset(reflect);mesh_assignment(keep(&skeletal_first),keep(&vertex_mesh),requested_path,false,&result);
+    mesh_assignment(keep(&skeletal_second),keep(&vertex_mesh),requested_path,true,&result);check(pose_asset_reads==2,"both exact assigned mesh identities still pass their native getters");
+    for(bool calculator:{false,true})for(bool absent:{false,true}){pose_reset(reflect);auto& target=calculator?skeletal_second:skeletal_first;
+        const auto actual=absent?0:reinterpret_cast<uint64_t>(&vertex_mesh_other);skeletal_pointer(target,0x558,actual);skeletal_pointer(target,0x560,actual);bool exact{};
+        try{mesh_assignment(keep(&target),keep(&vertex_mesh),requested_path,calculator,&result);}catch(const Error& e){const std::string reason=e.what();
+            exact=reason.find(calculator?"mirror pose calculator mesh assignment failed":"mirror render mesh assignment failed")==0&&
+                reason.find(absent?"actual=absent":"actual=different")!=std::string::npos&&reason.find("expected_asset=/Game/ObservedClothing.ObservedClothing")!=std::string::npos&&reason.size()<sizeof(result.reason);}
+        check(exact,"mesh assignment refusal names the exact target and observed missing/different identity without native metadata queries");
+        check(pose_asset_reads==1,"failed assignment performs one original native getter without checking the other target");}
     pose_reset(reflect);auto b=binding();auto output=pose_transfer(b,&result);pose_final(b,output);
     check(pose_stages==std::vector<uint32_t>({0,1,2,3,4,5}),"native calculator refresh precedes complete transfer/finalize/children/bounds/dirty notifications");
     check(std::memcmp(output.values.data(),pose_input.data(),sizeof(pose_input))==0&&std::memcmp(pose_render_a.data(),pose_input.data(),sizeof(pose_input))==0,

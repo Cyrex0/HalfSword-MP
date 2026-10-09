@@ -333,6 +333,15 @@ void qualify(Obj world, Obj owner, Obj component, HsmpViewResult* r = nullptr) {
     require(same(actual_owner,owner) && same(actor_world(owner,r),world),"native component owner/world mismatch");
 }
 Obj mesh_asset(Obj component, HsmpViewResult* r) { return returned(component,L"/Script/Engine.SkinnedMeshComponent:GetSkinnedAsset",r); }
+void mesh_assignment(Obj component,Obj expected,HsmpViewText expected_path,bool calculator,HsmpViewResult* r){
+    const auto actual=mesh_asset(component,r);if(same(actual,expected))return;
+    // The path is copied from the already validated recipe. No UObject name or
+    // class conversion, pointer formatting or new native query is needed here.
+    const auto path=text(expected_path);char label[81]{};const auto count=std::min(path.size(),sizeof(label)-1);
+    for(size_t i=0;i<count;++i){const auto ch=path[i];label[i]=ch>=32&&ch<127&&ch!='"'&&ch!='\\'?static_cast<char>(ch):'?';}
+    char reason[192]{};std::snprintf(reason,sizeof(reason),"mirror %s mesh assignment failed; actual=%s; required_class=SkeletalMesh; expected_asset=%s",
+        calculator?"pose calculator":"render",actual.weak?"different":"absent",label);throw Error(reason);
+}
 bool effective_visible(Obj component) {return bool_property(component,L"bVisible")&&!bool_property(component,L"bHiddenInGame");}
 void visibility(Obj component,bool visible,HsmpViewResult* r);
 void collision_off(Obj component,HsmpViewResult* r);
@@ -671,7 +680,7 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
                 Function suspend(L"/Script/Engine.SkeletalMeshComponent:SuspendClothingSimulation");suspend.call(part.render,r);
                 finish_component(actor,part.render,c.relative,r);require(!object_property(part.render,L"AnimScriptInstance").weak&&!object_property(part.render,L"PostProcessAnimInstance").weak,"mirror animation instance active");
                 scene_inert(part.leader,r);scene_inert(part.render,r);
-                require(same(mesh_asset(part.render,r),mesh)&&same(mesh_asset(part.leader,r),mesh),"mirror mesh assignment failed");
+                mesh_assignment(part.render,mesh,c.asset,false,r);mesh_assignment(part.leader,mesh,c.asset,true,r);
                 for(uint32_t b=0;b<c.hidden_count;++b)for(auto target:{part.leader,part.render}) {
                     Function hide(L"/Script/Engine.SkinnedMeshComponent:HideBoneByName");hide.put(L"BoneName",L"NameProperty",name(c.hidden_bones[b]));hide.enumeration(L"PhysBodyOption",0);hide.call(target,r);
                     Function check(L"/Script/Engine.SkinnedMeshComponent:IsBoneHiddenByName");check.put(L"BoneName",L"NameProperty",name(c.hidden_bones[b]));check.call(target,r);
