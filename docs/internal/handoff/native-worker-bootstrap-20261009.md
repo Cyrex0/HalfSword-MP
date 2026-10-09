@@ -1,5 +1,29 @@
 # Native authority bootstrap checkpoint
 
+## Next exact run: bounded native lookup attribution
+
+Independent review and strict provider/fixture compilation closed,1586 checks
+pass. First attempted native frame records at most64 path categories with all
+raw lookup totals, costs and explicit overflow/completion status. Original
+scope/lookup checks are unchanged. Normal CMake Cargo verification now matches
+deployment's exact three-package selection. Both actual effects remain pending.
+
+## Current actual: both models ready; LIVE publication cadence fails
+
+Exacta99dbc05/fullG0/dev/all394 normal run233229-884aad authority46188,
+clients45780/32416, bothrecipes45.279s; completeScene51.280/51.985s and actual
+fullcreation/readback/MirrorReady58.743/61.550s. Bothframe4dir7 laterstale
+64.593/64.045s. Actual publications4.569/4.489/4.413s apart, original receipt
+250ms gate unchanged; no activeinput/ownedview/parity claim. Logged waitingzero
+fields are placeholders; no actualtransportfailure. Standard pass=false.
+FirstCPPframe98rows complete4.449s/find4.334s/2564finds/finish33.986ms. Repeated
+freshpercomponentScope causes cold lookups; max36finds/component excludes512cap.
+Next boundedfirst-frame lookup evidence then whole-frame batch originalguard
+lifetime. FullfirstScope15.660s with49retained keeps3.226ms vs49cold3.322s.
+Alloriginal4 absent/save20 unchanged/no dumps/unobservedchildren/bothsecondary;
+userSteam untouched. Build112s then87s mismatchedpackageverify; exact3package
+CMake selection fixed/timingpending. No PR/main/tag/release, reduceanalysis.
+
 ## Current actual: source recipe harvest exceeds standard readiness
 
 Exact314b40d6 full G0/dev/all394 normal run225731-b9c50f, authority39632,

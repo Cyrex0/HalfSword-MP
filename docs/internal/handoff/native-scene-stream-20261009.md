@@ -1,5 +1,49 @@
 # Native full-scene encoding checkpoint
 
+## Reviewed first-frame lookup diagnostic
+
+First attempted capture reports up to64 distinct class/asset paths, original
+cold/hit/bootstrap/capacity counts and raw find time. Overflow remains explicit
+and totals retain all events; failure and smaller-roster boundaries are labelled.
+Copied reports emit only after the native operation and capture TLS restore.
+No extra engine lookup, acceptance change, provider ABI or wire change.
+Independent review closed; strict provider/fixture compilation and1586 checks
+pass. CMake now selects the same three packages as normal deployment. Actual
+lookup distribution and warm verification time await the exact next run.
+
+## Actual a99dbc05: both recipes/models succeed; LIVE frames are too slow
+
+Exact clean fullG0/dev/all394 normal65s run20261009-233229-884aad-native-host,
+source1b0951fb-1ce2-4e0c-868d-436581081bd6, authority46188, clients45780/32416.
+Both full adapters complete by45.279s. First originalScope15.659969s:49 cold
+keeps3.322425s,49 retained keeps3.226ms;102 native finds3.320631s. Inclusive
+costs overlap; remaining firstScope costs are retained in authority PID log.
+First CPP capture COMPLETE98rows: total4,449,330us, provider4,414,712us,
+find4,334,326us/2564calls, aggregate finish33,986us; no truncation. Old4cf total
+6,096,600us/find5,300,958us/5634calls. These are actual separate runs, not a
+normalized hardware/gear benchmark or a latency/parity claim.
+
+Both clients receive coherent complete scenes at51.280/51.985s; native full
+creation/readback succeeds, MirrorReady58.743/61.550s (epoch2025201219372449035,
+dir7, refs1/2 inc5 rev1). Client1 also MirrorReadyframe3 at61.702s. Both receive
+frame4/dir7 then refuse LIVE stale64.593/64.045s. Publication gaps4.569/4.489/
+4.413s cannot meet original receipt250ms. No active input or owned view proof.
+Native client zero fields while waiting are report placeholders, not directory
+loss. No actual transport/reassembly failure; receipt starts at complete publish,
+and exact packet timestamps are absent. Source sampled1–4; later frame5 no-source
+and generation changes belong to deadline teardown. Standard pass=false.
+
+All original4 absent/save20 unchanged/no fresh dumps/unobserved children; both
+physical windows secondary, separate Steam session untouched. Lookup maps work,
+but restart per component:2 bootstrap class finds then cold double-finds; observed
+max36/component proves512 capacity is not responsible. Skeletal/static find
+time4.041s of4.334s. Next bounded first-frame path/category/time evidence and one
+whole-frame batch lifetime with original identity/world/dispatch/final guards.
+No global/cross-frame cache, no freshness relaxation. Build first combined112s,
+two-package CMake verification87s, identical repeat0.22s; CMake now matches the
+exact three-package selection, timing gain pending. No release/main authorization
+from these results. User explicitly demands less analysis and faster actual work.
+
 ## Actual 314b40d6: slot-zero fixed; standard readiness misses metadata harvest
 
 Exact clean full G0/dev/all394 deployment, normal100s/65s readiness run

@@ -266,6 +266,28 @@ void lookup_reset(HsmpReflect& reflect){
     lookup_serial=lookup_class_serial=0;lookup_searches=lookup_mutation=lookup_package_reads=0;lookup_pending=lookup_second_positive=lookup_zero_package=false;
     reflect.find=lookup_native_find;reflect.weak=lookup_weak;reflect.resolve=lookup_resolve;reflect.class_of=lookup_class;object_name=lookup_name;retirement_flags=lookup_flags;
 }
+void record_lookup(const char* stage,uint32_t edge,uint64_t operation,uint32_t marker,uint32_t component,uint32_t kind,uint32_t hash,const char* label){
+    check(!active_lookup&&!active_capture_trace,"lookup report is copied after native operation and capture TLS restoration");record_create(stage,edge,operation,marker,component,kind,hash,label);
+}
+void lookup_trace_checks(HsmpReflect& reflect){
+    int context=1;const HsmpViewGuard guard{&context,lookup_guard};const wchar_t* path=L"/Game/Test/Lookup.Lookup";
+    lookup_reset(reflect);lookup_trace_report={};create_markers.clear();capture_trace_test_rows.clear();hsmp_presentation_set_create_log(record_lookup);capture_trace_test_active=true;
+    for(int i=0;i<98;++i){{CaptureTrace trace;{OperationScope scope(&guard,keep(&old_world));const auto first=find(path);check(same(first,find(path)),"diagnostic lookup still returns original qualified hit");lookup_finish();}trace.row.complete=1;}
+        if(i<97)check(create_markers.empty(),"lookup report stays bounded in memory until first98-row boundary");}
+    check(lookup_searches==196&&create_markers.size()==9,"98 separate operations retain cold double-finds and report three unique paths once");
+    const auto counts=std::find_if(create_markers.begin(),create_markers.end(),[](const auto& m){return m.stage=="capture_lookup_counts"&&m.name=="__first_frame__";});
+    check(counts!=create_markers.end()&&counts->operation==392&&counts->marker==98&&counts->component==98&&counts->edge==196&&counts->kind==0,"copied aggregate distinguishes all raw finds, cold, hit, bootstrap and capacity");
+    check(create_markers.back().stage=="capture_lookup_summary"&&create_markers.back().operation==98&&create_markers.back().marker==3&&create_markers.back().edge==1,"row-budget completion is explicit and not a production scene bound");
+    const auto emitted=create_markers.size();{CaptureTrace trace;trace.row.complete=1;}check(create_markers.size()==emitted,"first-frame attempt never restarts or logs future retries");
+    lookup_trace_report={};create_markers.clear();{CaptureTrace trace;{OperationScope scope(&guard,keep(&old_world));rejects([&]{find(L"/Game/Test/Missing.Missing");},"original unavailable lookup still refuses");}}
+    check(create_markers.back().stage=="capture_lookup_summary"&&create_markers.back().edge==2&&create_markers.back().operation==1,"first failed capture emits one partial report after unwind");
+    lookup_trace_report={};create_markers.clear();{CaptureTrace trace;for(uint32_t i=0;i<70;++i){const auto p=L"/Game/Test/Asset.Asset"+std::to_wstring(i);lookup_trace_request(p.c_str(),1);lookup_trace_native(p.c_str(),10);}trace.row.complete=1;}
+    check(lookup_trace_report.paths.size()==64&&lookup_trace_report.total.raw==70&&lookup_trace_report.total.us==700&&lookup_trace_report.truncated==12,"64-path cap tracks overflow events without dropping total counts or timing");
+    capture_trace_test_active=false;{CaptureTrace next_frame;}
+    check(create_markers.size()==131&&create_markers.back().edge==3&&create_markers.back().component==12,"smaller first roster flushes once at next unprofiled boundary with explicit truncation");
+    check(std::all_of(create_markers.begin(),create_markers.end(),[](const auto& m){return m.name.size()<64;}),"every copied class/asset label has a fixed bound");
+    lookup_trace_report={};create_markers.clear();capture_trace_test_rows.clear();hsmp_presentation_set_create_log(nullptr);lifetime_reset(reflect);
+}
 void lookup_checks(HsmpReflect& reflect){
     int context=1;const HsmpViewGuard guard{&context,lookup_guard};const wchar_t* path=L"/Game/Test/Lookup.Lookup";
     lookup_reset(reflect);
@@ -1451,7 +1473,7 @@ int main() {
         array={nullptr,1,1};std::memcpy(header.data(),&array,16);rejects([&]{spline_read_curve<NativeQuatPoint>(header.data(),curve,decoded,64);},"nonnull count with missing POD data refuses");
         HsmpViewSplineProfile empty{0,0,0,0,1};HsmpViewSplineFrame empty_frame{};spline_frame_valid(empty,empty_frame);check(true,"actual empty spline curves are preserved without invented points");
         SplineSnapshot a{},b{};a.value.version=b.value.version=7;check(spline_equal(a,b),"two identical empty raw copies agree");b.value.version=8;check(!spline_equal(a,b),"source curve version mutation invalidates coherent capture");b=a;b.value.settings.duration=2;check(!spline_equal(a,b),"source settings mutation invalidates coherent capture");
-        path_checks(reflect);lookup_checks(reflect);
+        path_checks(reflect);lookup_checks(reflect);lookup_trace_checks(reflect);
         vertex_checks(reflect);
         scene_checks(reflect);
         arm_publication_checks(reflect);

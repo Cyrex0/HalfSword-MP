@@ -20,6 +20,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <string>
 
@@ -95,6 +96,9 @@ namespace
     void create_log(const char* stage,uint32_t edge,uint64_t operation,uint32_t marker,
                     uint32_t component,uint32_t kind,uint32_t function_id,const char* function_name)
     {
+        if(std::strcmp(stage,"capture_lookup_counts")==0){logf("NATIVE_CAPTURE_LOOKUP path_hash=%u path=%.64s raw_finds=%llu cold=%u hit=%u bootstrap=%u capacity=%u diagnostic_only=true",function_id,function_name,static_cast<unsigned long long>(operation),marker,component,edge,kind);return;}
+        if(std::strcmp(stage,"capture_lookup_time")==0){logf("NATIVE_CAPTURE_LOOKUP_TIME path_hash=%u path=%.64s find_us=%llu diagnostic_only=true",function_id,function_name,static_cast<unsigned long long>(operation));return;}
+        if(std::strcmp(stage,"capture_lookup_summary")==0){logf("NATIVE_CAPTURE_LOOKUP_SUMMARY rows=%llu paths=%u untracked_events=%u status=%s diagnostic_only=true",static_cast<unsigned long long>(operation),marker,component,edge==1?"row_budget":edge==2?"cpp_failure":"next_frame_boundary");return;}
         logf("NATIVE_CREATE operation=%llu marker=%u stage=%.32s edge=%s component=%u kind=%u function_id=%u function=%.64s diagnostic_only=true",
             static_cast<unsigned long long>(operation),marker,stage,
             edge==0?"enter":edge==1?"exit":edge==2?"error":"limit",component,kind,function_id,function_name);

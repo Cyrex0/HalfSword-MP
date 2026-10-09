@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Report bounded first-frame native lookup counts and costs by class or asset,
+  preserving all capture checks. Match deployment's three Cargo build packages
+  to avoid recompiling shared dependencies during native build verification.
 - Retain one native identity scope across both complete source recipe reads,
   reusing original component witnesses and checking the whole set before closing.
   Add bounded first-scope timings; actual loading-time improvement is pending.

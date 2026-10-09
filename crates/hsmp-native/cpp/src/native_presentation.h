@@ -161,7 +161,8 @@ static_assert(sizeof(HsmpViewResult)==200);
 void hsmp_presentation_register(const HsmpReflect*);
 // Private startup diagnostics only; does not change the provider/wire ABI.
 // The callback must not call Unreal or throw. All names come from fixed code
-// paths; each create operation emits at most 128 markers, never frame updates.
+// paths; each create operation emits at most 128 markers. First-frame lookup
+// diagnostics reuse this copied callback for at most 64 bounded path labels.
 using HsmpPresentationCreateLog = void(*)(const char* stage,uint32_t edge,uint64_t operation,
     uint32_t marker,uint32_t component,uint32_t kind,uint32_t function_id,const char* function_name);
 void hsmp_presentation_set_create_log(HsmpPresentationCreateLog);

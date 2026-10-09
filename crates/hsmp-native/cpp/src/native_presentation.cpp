@@ -46,9 +46,17 @@ thread_local LookupState* active_lookup{};
 Obj lookup_find(const wchar_t* path);
 void lookup_finish();
 void lookup_start(LookupState& state,Obj world,Obj gi);
+void lookup_trace_begin();
+void lookup_trace_end(bool complete);
+void lookup_trace_request(const wchar_t* path,uint32_t category);
+void lookup_trace_native(const wchar_t* path,uint64_t elapsed_us);
 bool mesh_serial_assignment(Obj original,Obj current);
 thread_local bool static_profile_trace{};
 thread_local HsmpNativeCaptureRow* active_capture_trace{};
+struct LookupNativeTrace {const wchar_t* path;HsmpNativeCaptureRow* row;uint64_t before;
+    explicit LookupNativeTrace(const wchar_t* key):path(key),row(active_capture_trace),before(row?row->us[6]:0){}
+    ~LookupNativeTrace(){lookup_trace_native(path,row?row->us[6]-before:0);}
+};
 struct CaptureTimer {
     uint64_t* target{};std::chrono::steady_clock::time_point start{};
     explicit CaptureTimer(uint32_t index){if(active_capture_trace){target=&active_capture_trace->us[index];start=std::chrono::steady_clock::now();}}
@@ -57,15 +65,43 @@ struct CaptureTimer {
 struct CaptureTrace {
     HsmpNativeCaptureRow row{};HsmpNativeCaptureRow* previous{active_capture_trace};bool enabled{hsmp_native_capture_profile_active()==1};
     std::chrono::steady_clock::time_point start{},boundary{};
-    CaptureTrace(){if(enabled){start=boundary=std::chrono::steady_clock::now();active_capture_trace=&row;}}
+    CaptureTrace(){if(enabled){lookup_trace_begin();start=boundary=std::chrono::steady_clock::now();active_capture_trace=&row;}else lookup_trace_end(true);}
     void label(const HsmpViewComponent& c){row.component=c.id;row.kind=c.kind;}
     void mark(uint32_t stage){if(enabled){const auto now=std::chrono::steady_clock::now();row.us[stage]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(now-boundary).count());boundary=now;}}
-    ~CaptureTrace(){if(enabled){row.us[0]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());active_capture_trace=previous;hsmp_native_capture_profile_row(&row);}}
+    ~CaptureTrace(){if(enabled){row.us[0]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());active_capture_trace=previous;hsmp_native_capture_profile_row(&row);lookup_trace_end(row.complete==1);}}
 };
 struct StaticProfileTraceScope {bool previous;StaticProfileTraceScope():previous(static_profile_trace){static_profile_trace=true;}~StaticProfileTraceScope(){static_profile_trace=previous;}};
 void profile_phase(const char* stage,uint32_t edge){if(static_profile_trace)hsmp_native_profile_checkpoint(stage,edge);}
 void profile_tick(uint32_t counter){if(active_capture_trace){if(counter==0)++active_capture_trace->guards;else if(counter==2)++active_capture_trace->finds;else if(counter==3)++active_capture_trace->events;}if(static_profile_trace)hsmp_native_profile_tick(counter);}
 std::atomic<HsmpPresentationCreateLog> create_logger{};
+struct LookupTraceCount {uint64_t raw{},us{};uint32_t cold{},hit{},bootstrap{},capacity{};};
+struct LookupTraceReport {bool attempted{},collecting{};uint32_t rows{},truncated{};LookupTraceCount total{};std::map<std::wstring,LookupTraceCount> paths;};
+thread_local LookupTraceReport lookup_trace_report;
+void lookup_trace_begin(){auto& r=lookup_trace_report;if(!r.attempted&&create_logger.load()){r.attempted=true;r.collecting=true;}}
+LookupTraceCount* lookup_trace_path(const wchar_t* path)noexcept{auto& r=lookup_trace_report;if(!r.collecting)return nullptr;try{
+    const auto found=r.paths.find(path);if(found!=r.paths.end())return &found->second;
+    if(r.paths.size()>=64){++r.truncated;return nullptr;}return &r.paths.emplace(path,LookupTraceCount{}).first->second;}catch(...){++r.truncated;return nullptr;}}
+void lookup_trace_request(const wchar_t* path,uint32_t category){if(!active_capture_trace||!lookup_trace_report.collecting)return;
+    auto add=[category](LookupTraceCount& c){if(category==0)++c.hit;else if(category==1)++c.cold;else if(category==2)++c.bootstrap;else if(category==3)++c.capacity;};
+    add(lookup_trace_report.total);if(auto* c=lookup_trace_path(path))add(*c);}
+void lookup_trace_native(const wchar_t* path,uint64_t elapsed_us){if(!active_capture_trace||!lookup_trace_report.collecting)return;
+    ++lookup_trace_report.total.raw;lookup_trace_report.total.us+=elapsed_us;if(auto* c=lookup_trace_path(path)){++c->raw;c->us+=elapsed_us;}}
+uint32_t lookup_trace_hash(const std::wstring& path){uint32_t hash=2166136261u;for(const auto ch:path){hash^=static_cast<uint16_t>(ch);hash*=16777619u;}return hash;}
+void lookup_trace_emit(uint32_t status){auto report=std::move(lookup_trace_report);lookup_trace_report=LookupTraceReport{};lookup_trace_report.attempted=true;
+    const auto logger=create_logger.load();if(!logger)return;
+    const auto emit=[logger](const char* label,uint32_t hash,const LookupTraceCount& c){logger("capture_lookup_counts",c.bootstrap,c.raw,c.cold,c.hit,c.capacity,hash,label);
+        logger("capture_lookup_time",0,c.us,0,0,0,hash,label);};
+    for(const auto& [path,c]:report.paths){char label[64]{};const auto split=path.find_last_of(L'.');const auto first=path.size()<sizeof(label)?0:split==std::wstring::npos?0:split+1;
+        const auto length=std::min(path.size()-first,sizeof(label)-1);for(size_t i=0;i<length;++i){const auto ch=path[first+i];label[i]=ch>=32&&ch<127&&ch!='"'&&ch!='\\'?static_cast<char>(ch):'?';}
+        emit(label,lookup_trace_hash(path),c);}
+    emit("__first_frame__",0,report.total);
+    logger("capture_lookup_summary",status,report.rows,static_cast<uint32_t>(report.paths.size()),report.truncated,0,0,"__first_frame__");
+}
+void lookup_trace_end(bool complete){if(!lookup_trace_report.collecting)return;
+    if(!active_capture_trace){if(!complete){++lookup_trace_report.rows;lookup_trace_emit(2);}
+        else if(hsmp_native_capture_profile_active()==1){if(++lookup_trace_report.rows>=98)lookup_trace_emit(1);}
+        else lookup_trace_emit(3);}
+}
 std::atomic<uint64_t> create_operation{};
 struct CreateTrace;
 thread_local CreateTrace* active_create_trace{};
@@ -1027,12 +1063,13 @@ void lookup_pin(LookupEntry& entry){
 }
 Obj lookup_find(const wchar_t* path){
     check_guard();const std::wstring key(path);if(active_lookup){const auto hit=active_lookup->entries.find(key);
-        if(hit!=active_lookup->entries.end()){lookup_pin(hit->second);check_guard();lookup_entry_final(hit->second);lookup_world_final(*active_lookup);const auto& root=hit->second.pinned.front();return {root.weak,root.address};}}
-    profile_tick(2);void* object{};{CaptureTimer timer(6);object=vt->find(u16(path));}const auto original=keep(object);
+        if(hit!=active_lookup->entries.end()){lookup_trace_request(path,0);lookup_pin(hit->second);check_guard();lookup_entry_final(hit->second);lookup_world_final(*active_lookup);const auto& root=hit->second.pinned.front();return {root.weak,root.address};}}
+    lookup_trace_request(path,active_lookup?1u:2u);
+    profile_tick(2);void* object{};{LookupNativeTrace diagnostic(path);CaptureTimer timer(6);object=vt->find(u16(path));}const auto original=keep(object);
     if(!active_lookup)return original;
     // Cache capacity limits reuse only; an admitted larger operation continues
     // through the unchanged native lookup path without a new scene bound.
-    if(active_lookup->entries.size()>=512)return original;
+    if(active_lookup->entries.size()>=512){lookup_trace_request(path,3);return original;}
     const char* stage="package";uint32_t depth{};LookupNodeEvidence evidence{};
     try{
     require(source_package_name!=nullptr,"native lookup package metadata unavailable");
@@ -1044,7 +1081,7 @@ Obj lookup_find(const wchar_t* path){
     entry.pinned=entry.original;entry.pinned.front()=first_observed;lookup_pin(entry);check_guard();lookup_entry_final(entry);
     // The first lookup may be followed by a callback before its witness is
     // complete. A second exact native lookup closes the requested-key binding.
-    stage="exact_find";profile_tick(2);void* second{};{CaptureTimer timer(6);second=vt->find(u16(path));}const auto exact=keep(second);
+    stage="exact_find";profile_tick(2);void* second{};{LookupNativeTrace diagnostic(path);CaptureTimer timer(6);second=vt->find(u16(path));}const auto exact=keep(second);
     const Obj pinned{entry.pinned.front().weak,entry.pinned.front().address};
     require(same(pinned,exact)||mesh_serial_assignment(pinned,exact),"native lookup exact requested path changed");
     // Preserve the first positive serial observed by the second exact lookup
