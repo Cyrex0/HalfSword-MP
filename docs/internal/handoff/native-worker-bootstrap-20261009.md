@@ -398,3 +398,46 @@ profile. The next bootstrap correction must seed the diverted native profile
 after verification and before travel, then requalify original world/profile
 after the native call. Never delete saves, fabricate spawns or patch loaded
 mode fields repeatedly to conceal that initialization order.
+
+Bootstrap candidate 2452d700 adds the required protected session seed after
+verified profile and before travel. Original world/profile are requalified
+around native seeding and held travel; seed/reflection/world/profile failures
+refuse without fallback spawning or field reapplication. Focused worker125
+and Director335 checks plus two syntax files passed. The in-memory saveguard
+fixture reproduces original career Hell5 and both native BeginPlay loads:
+they read the diverted Arena profile while the original remains unchanged.
+That is fixture evidence; another actual three-game run must prove the fix.
+Standalone travel lint reported the pre-existing legacy_travel.lua allowance;
+full G0 must validate its configured legacy exception before deployment.
+
+The next client correction adds a guarded read-only native actor scope and
+uses scope then strict native retirement for the exact allowed spawn drivers.
+Native world/class membership is freshly enumerated and original raw-slot,
+address/name/class and garbage state requalified afterward. Unknown, absent
+or garbage scope refuses before new actor ProcessEvent. The scope's original
+weak identity must still match immediately before removal. Full native
+retirement remains the required final proof; a generic component inert census
+is unnecessary for a driver that is demonstrably removed from the engine
+world. This does not accept an empty fighter/gear/AI physics census or broaden
+removal classes. Client scope and final driver proofs are retained for the
+actual next run. Native acceptance remains pending.
+
+The coherent ABI6 candidate's focused native checks now passed: strict C++
+provider compile and 196 lifetime/scope/retirement checks, two Rust binding
+checks and one native API check; client Lua101 and three syntax files passed.
+ActorScope is 304 bytes and explicitly distinguishes verified native world
+membership from retirement. Scope absence/garbage refuses without new actor
+ProcessEvent, and retirement accepts only the original scope weak/address;
+wrong-generation inputs dispatch zero K2 calls. Full G0/deployment and actual
+source readiness, capture, isolation and active input remain pending.
+
+Read-only NullRHI preparation audit found the worker already sets verified
+VisibilityBasedAnimTickOption0 (AlwaysTickPoseAndRefreshBones), rate skipping
+false and ticking enabled for four named source mesh fields (Mesh,
+SK_Skeleton, BoneCore, DriverSkeleton). It does not yet read back the tick
+getter or measure complete live skeletal/armour component progression. This
+establishes configuration code, not actual NullRHI animation/physics parity.
+After canonical frames work, measure the complete current skeletal census,
+actual policy/tick state, LastPoseTickFrame and coherent bone/physics changes
+under legal input. A NullRHI client host does not establish UE dedicated-server
+netmode from its label.
