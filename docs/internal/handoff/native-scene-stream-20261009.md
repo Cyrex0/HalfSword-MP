@@ -1,6 +1,60 @@
 # Native full-scene encoding checkpoint
 
-## Latest actual: 5339682b
+## Latest actual: 0b9301bd
+
+Combined construction armour/Lua sizing/cancellation and test-global isolation
+checkpoint passes full G0: 74 Lua suites, 1358 Rust checks in79 binaries,
+clippy0 errors/13 warnings. It is pushed to dev and cleanly RequireG0 deployed;
+all393 deployed hashes match0b9301bd62447195157d569e590cac09091ed212.
+
+Actual `test-results/20261009-140709-303c3a-native-host` uses source UUID
+a9899fb6-d2db-434b-8acd-ce76714274fd, supervisor32796/authority22152 and normal
+clients35688/42556. Both original PID/start/exe/HWND windows are qualified
+early and fit/read back fully secondary: (-1760,0,-880,527) and(-880,0,0,527),
+both880x527. The earlier window containment blocker is closed for this run.
+
+Entity1 epoch4662431686152274015/incarnation5/directory6/revision1/frame1
+completes both49-component captures at40.238s. NativeBind refuses at40.244s:
+`armor slot binding table=equipment.armor row=0 slot=12 pslot=2`, exact class
+`/Game/Assets/Armor/Blueprints/Modular_Armor/BP_Armor_Modular_Core_Body_Doublet_Arming.BP_Armor_Modular_Core_Body_Doublet_Arming_C`.
+Copied typed planned sizes are compact35316/rawJSON74310/nodes6556,
+dictionary8771/tokens26545/components49/bones600/material_slots38. These actual
+measurements close unknown first-entity sizing; semantic registration still
+fails before canonical/native binding/publication, so no scene delivery,
+MirrorReady, active inputs[0,0], entity2 size or gameplay parity is established.
+The next correction requires exact Doublet actor-slot/passport-slot dataflow and
+raw source field proof; do not rewrite either observed value to force equality.
+
+The unchanged65s readiness gate fails. New cooperative cancellation is proven
+in actual source collection: seq929 stopped at67.708s, reason stop requested,
+during the replacement generation's mesh census. The supervisor reports
+`Native authority stopped cleanly`; no owned stop fallback. Independent all4
+original PIDs absent/Shipping[],20/20 original save hashes unchanged,
+crash[]/unobservedchildren[]. Full Native log, exact692-line authority22152
+trace and live window evidence are preserved. Capture/delivery/pose/body/gear
+playability gates remain open; this is an actual cancellation/window milestone.
+
+The exact live Doublet refusal is now corrected from complete native/cooked/raw
+field evidence. Source Slot_30 maps the SDK enum byte at0x78 and the pinned
+UE4SS getter reads the raw u8. Exact Doublet CDO actor slot NewEnumerator1 is12;
+its child construction script changes team colours and calls the core super,
+without slot normalization. Base passport default NewEnumerator0 is2; the core
+preserves that passport Slot. Live Map_Add independently uses actor Armor Slot
+and the current passport. Both actual12/2 observations therefore remain exact.
+Remove only their unsupported equality; live class, enum/order/full-field gates
+remain. Focused descriptor23/parser11/Lua261/syntax2 and independent Sol review
+pass. No actual canonical/native mirror success is inferred before the next run.
+
+The user reports a grey checkerboard sphere and no player models during tests.
+Current actual clients stayed wait_scene, so the native Presentation factory
+never created player/gear mirrors or a placeholder sphere. Per-client isolation
+proves GameModeBase/PlayerController and original Willie hidden/collision0/simfalse
+after UnPossess. The sphere's exact creator is unproved by these records. Source
+Aim Spline Scene sphere was authority-only and never published. The next actual
+must show real skeletal bodies and gear on both clients; sphere-only presentation
+cannot satisfy playability. This concern is preserved alongside native readback.
+
+## Previous actual: 5339682b
 
 The complete lossless codec/stream/lifecycle checkpoint passes full G0: 74 Lua
 suites, 1355 Rust checks in 79 binaries and clippy with 0 errors/13 warnings.

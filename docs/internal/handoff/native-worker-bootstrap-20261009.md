@@ -1,6 +1,33 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build5339682b
+## Current state: 2026-10-09, latest actual build0b9301bd
+
+Combined armour/sizing/cancellation/test-isolation checkpoint passes full G0
+(74 Lua/1358 Rust79 binaries; clippy0 errors/13 warnings), dev push and clean
+RequireG0 deployment;393 deployed hashes unchanged. Actual
+`20261009-140709-303c3a-native-host` proves both original visible clients fitted
+fully secondary880x527 and authority cooperative stop67.708s during capture,
+with normal supervisor exit/no fallback. All4original PIDs independently gone,
+20save hashes unchanged/no crashes/children.
+
+Entity1 both49-component captures complete40.238s. NativeBind40.244s refuses
+live equipment.armor row0/key12/passport slot2 for exact DoubletArming class.
+Actual copied Plan counts35316compact/74310rawJSON/6556nodes/dict8771/tokens26545,
+49components/600bones/38material slots. Registration/canonical/scene delivery,
+entity2 and active inputs remain unproved. The next native audit verifies exact
+Doublet CDO/child/super and raw Slot getter; do not overwrite independent data.
+See `native-scene-stream-20261009.md` for precise evidence and remaining gates.
+
+The live12/2 Doublet observations are now proved independent by exact child/super
+construction, CDO enum values and raw-byte source getter. The proposed equality
+is removed while preserving both values and every field; focused23/11/Lua261/
+syntax2 and independent review pass. Full G0/deploy/actual follow. User reports
+only a grey checkerboard sphere/no player models. Current clients never created
+native mirrors (wait_scene); the sphere's exact origin is unproved. Actual
+visible skeletal bodies+gear on BOTH clients are required next, with native
+readback/freshness/input gates unchanged.
+
+## Previous actual5339682b
 
 Lossless codec/complete-scene stream and mirror lifecycle checkpoint passes full
 G0 (74 Lua/1355 Rust in79 binaries; clippy0 errors/13 warnings), dev push and

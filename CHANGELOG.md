@@ -10,7 +10,7 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
-- Preserve independent native construction armour-map keys and passport slots,
+- Preserve independent native construction/live armour-map keys and passport slots,
   retaining empty rows and all gear fields. Extend the larger node budget to
   Lua capture signatures and make long native captures cooperatively stop.
   Actual registration and playable verification remain pending.
