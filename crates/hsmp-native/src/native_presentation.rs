@@ -180,6 +180,27 @@ impl Default for Retirement {
         }
     }
 }
+#[repr(C)]
+pub struct ActorScope {
+    pub qualified: u32,
+    pub pad: u32,
+    pub weak: u64,
+    pub address: u64,
+    pub state: Lifecycle,
+    pub reason: [u8; 192],
+}
+impl Default for ActorScope {
+    fn default() -> Self {
+        Self {
+            qualified: 0,
+            pad: 0,
+            weak: 0,
+            address: 0,
+            state: Lifecycle::default(),
+            reason: [0; 192],
+        }
+    }
+}
 unsafe fn push_lifecycle(L: *mut lua_State, state: &Lifecycle) {
     unsafe {
         lua_createtable(L, 0, 14);
@@ -261,11 +282,12 @@ pub struct Provider {
     pub probe_retirement:
         unsafe extern "C" fn(Object, Object, *const Guard, *mut Retirement) -> i32,
     pub forget_retirements: unsafe extern "C" fn(),
+    pub actor_scope: unsafe extern "C" fn(Object, Object, *const Guard, *mut ActorScope) -> i32,
 }
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 5 {
+    if p.is_null() || unsafe { (*p).abi } == 6 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
     }
 }
@@ -1324,6 +1346,50 @@ impl Native {
             }
         }
     }
+    pub unsafe fn native_actor_scope(&mut self, L: *mut lua_State) -> c_int {
+        unsafe {
+            if !self.native_host.is_client() {
+                return nil_err(L, "client actor scope role required");
+            }
+            let result = (|| -> Result<(i32, ActorScope), String> {
+                let p = provider()?;
+                let vt = reflect::vt().ok_or("native reflection unavailable")?;
+                if !self.native_guard_ok(vt) {
+                    return Err("native actor scope world guard unavailable".into());
+                }
+                let world = object(vt, arg_int(L, 1).ok_or("native actor scope world")?)?;
+                let actor = object(vt, arg_int(L, 2).ok_or("native actor scope actor")?)?;
+                let mut context = GuardContext::new(self, vt, world, None)?;
+                let guard = context.ffi();
+                if !context.valid() {
+                    return Err("native actor scope world changed".into());
+                }
+                let mut out = ActorScope::default();
+                let status = (p.actor_scope)(world, actor, &guard, &mut out);
+                Ok((status, out))
+            })();
+            match result {
+                Ok((status, out)) => {
+                    lua_createtable(L, 0, 6);
+                    let t = lua_gettop(L);
+                    set_bool(L, t, "ok", status == 1 && out.qualified == 1);
+                    set_bool(L, t, "qualified", out.qualified == 1);
+                    set_int(L, t, "weak", out.weak as i64);
+                    set_int(L, t, "address", out.address as i64);
+                    push_lifecycle(L, &out.state);
+                    rawset_str(L, t, "state");
+                    let n = out
+                        .reason
+                        .iter()
+                        .position(|b| *b == 0)
+                        .unwrap_or(out.reason.len());
+                    set_str(L, t, "reason", &String::from_utf8_lossy(&out.reason[..n]));
+                    1
+                }
+                Err(e) => nil_err(L, &e),
+            }
+        }
+    }
     pub unsafe fn native_retire_actor(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
             if !self.native_host.is_client() {
@@ -1336,8 +1402,22 @@ impl Native {
                     return Err("native retirement world guard unavailable".into());
                 }
                 let world = object(vt, arg_int(L, 1).ok_or("native retirement world")?)?;
-                let actor = object(vt, arg_int(L, 2).ok_or("native retirement actor")?)?;
                 let kind = arg_int(L, 3).ok_or("native retirement kind")?;
+                let original = arg_int(L, 4).ok_or("native retirement original scope weak")? as u64;
+                let actor = Object {
+                    weak: original,
+                    address: arg_int(L, 2).ok_or("native retirement actor")? as u64,
+                };
+                // Resolve the original scope handle first. Never ask a reused
+                // raw address for a new weak generation before destruction.
+                let pointer = reflect::get(vt, original);
+                if original == 0
+                    || actor.address == 0
+                    || pointer.is_null()
+                    || pointer as u64 != actor.address
+                {
+                    return Err("native retirement scoped actor generation changed".into());
+                }
                 if kind != 0 {
                     return Err("native retirement kind unsupported".into());
                 }
@@ -1586,5 +1666,6 @@ mod presentation_binding_tests {
         );
         assert_eq!(std::mem::size_of::<Lifecycle>(), 88);
         assert_eq!(std::mem::size_of::<Retirement>(), 400);
+        assert_eq!(std::mem::size_of::<ActorScope>(), 304);
     }
 }

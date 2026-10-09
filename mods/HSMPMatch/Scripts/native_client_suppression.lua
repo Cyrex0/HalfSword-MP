@@ -164,6 +164,29 @@ function M.new(env)
                 fresh();summary.refusal=nil
             end
             local function destroy(actor,kind)
+                local driver_scope
+                if kind=="driver"then
+                    local original=address(actor)
+                    local evidence={kind=kind,phase="native_scope",address={known=true,value=original},
+                        name=fact(function()return name(actor):sub(1,256)end,"string"),
+                        class=fact(function()return call(call(actor,"GetClass"),"GetFullName"):sub(1,512)end,"string")}
+                    summary.refusal=evidence
+                    if type(env.scope_native)~="function"then error("suppression_native_actor_scope_unavailable",0)end
+                    fresh();local scope,why=env.scope_native(world_address,original);fresh()
+                    evidence.native=scope or{ok=false,reason=tostring(why):sub(1,192)}
+                    local state=type(scope)=="table"and scope.state
+                    if type(scope)~="table"or scope.ok~=true or scope.qualified~=true or scope.address~=original
+                        or type(scope.weak)~="number"or scope.weak==0 or type(state)~="table"
+                        or not state.object_flags or state.object_flags.known~=true or type(state.object_flags.value)~="number"
+                        or not state.world_listed or state.world_listed.known~=true or type(state.world_listed.value)~="boolean"then
+                        error("suppression_native_actor_scope_refused",0)
+                    end
+                    if(state.object_flags.value&0x40000000)~=0 then error("suppression_driver_native_garbage",0)end
+                    -- World absence alone does not prove inactivity or removal.
+                    -- Report it, and never call actor PE for that scope.
+                    if state.world_listed.value~=true then error("suppression_driver_world_unlisted",0)end
+                    driver_scope=scope
+                end
                 if not current(actor)or protected(actor)then error("suppression_destroy_qualification",0)end
                 local function actor_state(valid)
                     local state={valid={known=true,value=valid}}
@@ -192,11 +215,12 @@ function M.new(env)
                     name=fact(function()return name(actor):sub(1,256)end,"string"),
                     class=fact(function()return call(call(actor,"GetClass"),"GetFullName"):sub(1,512)end,"string"),
                     persistent=fact(function()return protected(actor)end,"boolean"),before=actor_state(true)}
+                if driver_scope then evidence.scope=driver_scope end
                 summary.refusal=evidence
                 if kind=="driver"then
                     if type(env.retire_native)~="function"then error("suppression_native_retirement_unavailable",0)end
                     local original=address(actor);fresh()
-                    local proof,why=env.retire_native(world_address,original,0);fresh()
+                    local proof,why=env.retire_native(world_address,original,0,driver_scope.weak);fresh()
                     evidence.phase="after_native_retire";evidence.native=proof or{ok=false,reason=tostring(why):sub(1,192)}
                     -- Native actor liveness differs from UE4SS's legacy weak
                     -- validity rule on this engine. The provider requires live
@@ -204,14 +228,14 @@ function M.new(env)
                     -- absence AND fresh original mirrored garbage/global absence.
                     -- It makes no actor ProcessEvent call after dispatch.
                     if type(proof)~="table"or proof.ok~=true or proof.qualified~=true or proof.dispatched~=true
-                        or proof.alive_after~=0 or not engine_retired(proof)or type(proof.weak)~="number"or proof.weak==0 or proof.address~=original then
+                        or proof.alive_after~=0 or not engine_retired(proof)or type(proof.weak)~="number"or proof.weak~=driver_scope.weak or proof.address~=original then
                         error("suppression_native_retirement_refused",0)
                     end
                     if not evidence.name.known or not evidence.class.known then error("suppression_native_retirement_identity_unavailable",0)end
                     local count=0;for _ in pairs(self.removed_drivers)do count=count+1 end
                     if count>=512 then error("suppression_native_retirement_bound",0)end
                     self.removed_drivers[original]={weak=proof.weak,address=original,name=evidence.name.value,class=evidence.class.value,world=self.key}
-                    summary.driver_proofs[#summary.driver_proofs+1]={phase="retire",name=evidence.name.value,class=evidence.class.value,address=original,weak=proof.weak,native=proof}
+                    summary.driver_proofs[#summary.driver_proofs+1]={phase="retire",name=evidence.name.value,class=evidence.class.value,address=original,weak=proof.weak,native=proof,scope=driver_scope}
                     summary.refusal=nil;return
                 end
                 actor:K2_DestroyActor() -- unsafe: ok only qualified nonPersistent native spawn drivers, owned gear or AI; never a Willie/player controller
@@ -247,7 +271,10 @@ function M.new(env)
                     if type(raw)~="number"then error("suppression_driver_address",0)end
                     if not confirmed[raw]and current(driver)then
                     if call(driver,"IsA",cls(DRIVER_PATHS[class]))~=true then error("suppression_driver_class",0)end
-                    inert(driver,"driver");destroy(driver,"driver");summary.drivers=summary.drivers+1
+                    -- Complete native world removal replaces the generic inert
+                    -- component prerequisite only for these exact spawn drivers.
+                    -- Zero components never becomes a body/physics proof.
+                    destroy(driver,"driver");summary.drivers=summary.drivers+1
                 end end
             end
             local willies={};local targets={}

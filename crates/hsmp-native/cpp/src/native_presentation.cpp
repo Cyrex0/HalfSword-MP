@@ -760,7 +760,22 @@ int32_t probe_retirement(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpView
         require(retirement_after(world,actor,record->second.identity,record->second.layout,result),"native original actor retirement no longer proved");return 1;
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
-const HsmpPresentation provider{5,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements};
+int32_t actor_scope(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewActorScope* result){
+    try {
+        require(result!=nullptr,"native actor scope result missing");*result={};
+        thread();OperationScope scope(guard,world);get(actor);
+        require(is(actor,L"/Script/Engine.Actor"),"native actor scope class");
+        result->weak=actor.weak;result->address=actor.address;
+        const auto identity=identities.at(actor.weak);const auto layout=retirement_layout(actor);
+        const bool listed=world_contains(world,identity,actor.address);
+        // The static census may reenter. Never accept metadata captured before
+        // it, nor resolve a reused/disappeared original as a fresh actor.
+        void* original=original_slot(actor,identity);require(original!=nullptr,"native actor scope original disappeared");
+        result->state=lifecycle(original,identity,layout);result->state.listed=listed;result->state.known|=4;
+        result->qualified=1;return 1;
+    }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
+}
+const HsmpPresentation provider{6,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope};
 }
 void hsmp_presentation_register(const HsmpReflect* reflection) {
     const auto module=GetModuleHandleW(L"UE4SS.dll");

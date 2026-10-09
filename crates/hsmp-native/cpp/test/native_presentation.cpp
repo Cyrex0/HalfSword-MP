@@ -36,6 +36,7 @@ bool travel_on_get_level{};
 bool actor_persistent{},destroy_invalidates{true},reuse_after_destroy{},travel_on_destroy{};
 bool destroy_garbage{},omit_world{},omit_after_destroy{},reuse_during_post_census{},travel_during_post_census{};
 bool actor_memory_unqualified{};
+bool scope_reuse_during_census{},scope_travel_during_census{},scope_garbage_during_census{},scope_disappear_during_census{};
 int post_destroy_actor_events{},array_frees{};
 int level_calls{},destroy_calls{},post_destroy_actor_touches{},invalid_actor_resolves{};
 void lifetime_touch(LifetimeObject* o) {if(o==&actor&&!actor.alive)++post_destroy_actor_touches;}
@@ -112,6 +113,10 @@ void lifetime_call(void* object,void* fn,void* params) {
         std::memcpy(static_cast<uint8_t*>(params)+16,&a,sizeof(a));
         if(destroy_calls&&reuse_during_post_census)reuse_after_destroy=true;
         if(destroy_calls&&travel_during_post_census)current_world=&new_world;
+        if(scope_reuse_during_census)actor.name=999;
+        if(scope_travel_during_census)current_world=&new_world;
+        if(scope_garbage_during_census)actor.flags|=mirrored_garbage;
+        if(scope_disappear_during_census)actor.alive=false;
     }
     else throw std::runtime_error("unexpected lifetime function");
 }
@@ -127,6 +132,7 @@ void lifetime_reset(HsmpReflect& reflect) {
     actor_persistent=false;destroy_invalidates=true;reuse_after_destroy=false;travel_on_destroy=false;
     destroy_garbage=false;omit_world=false;omit_after_destroy=false;reuse_during_post_census=false;travel_during_post_census=false;post_destroy_actor_events=0;array_frees=0;
     actor_memory_unqualified=false;
+    scope_reuse_during_census=false;scope_travel_during_census=false;scope_garbage_during_census=false;scope_disappear_during_census=false;
     identities.clear();names.clear();signatures.clear();lifetime_names.clear();mirrors.clear();
     retired_drivers.clear();
     active_guard=nullptr;active_world={};active_game_instance={};
@@ -198,8 +204,48 @@ int main() {
         check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
         check(post_destroy_actor_touches==0&&invalid_actor_resolves==0,"destroyed mirror actor is never resolved or read after K2_DestroyActor");
         destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
-        check(provider.abi==5,"engine actor retirement requires presentation ABI5");
+        check(provider.abi==6,"read-only original actor scope requires presentation ABI6");
+        HsmpViewActorScope actor_scope_result{};
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=1;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.qualified==1
+            &&actor_scope_result.state.listed==1&&(actor_scope_result.state.known&5)==5&&actor_scope_result.state.flags==0,
+            "read-only scope preserves actual original native world membership and flags");
+        check(level_calls==0&&destroy_calls==0&&array_frees==1,"actor scope invokes only static native census and frees its POD array");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);omit_world=true;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.state.listed==0&&actor_scope_result.state.flags==0,
+            "global memory-qualified actor absence is reported without guessed inactivity or removal");
+        check(level_calls==0&&destroy_calls==0,"unlisted original receives no actor ProcessEvent");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);actor.flags=mirrored_garbage;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.state.listed==0&&actor_scope_result.state.flags==mirrored_garbage,
+            "memory-qualified engine garbage can be diagnosed without actor ProcessEvent");
+        check(level_calls==0&&destroy_calls==0,"garbage actor receives no scope actor events");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);scope_garbage_during_census=true;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.state.flags==mirrored_garbage,
+            "scope flags are freshly read after static enumeration reentry");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);scope_reuse_during_census=true;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==-1&&actor_scope_result.qualified==0&&level_calls==0&&destroy_calls==0,
+            "original name reuse during static enumeration cannot pass a stale metadata snapshot");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);scope_travel_during_census=true;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==-1&&actor_scope_result.qualified==0&&array_frees==1,
+            "travel during scope enumeration refuses and frees the native output array");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);scope_disappear_during_census=true;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==-1&&actor_scope_result.qualified==0,
+            "original disappearance during scope census stays unavailable rather than qualifying a new actor");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);retirement_flags=nullptr;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==-1&&actor_scope_result.qualified==0&&destroy_calls==0,
+            "unknown native flag API cannot produce a qualified actor scope");
+        lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=0;
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==-1&&actor_scope_result.qualified==0&&array_frees==0&&level_calls==0&&destroy_calls==0,
+            "changed borrowed guard stops scope before native census or actor events");valid=1;
         HsmpViewRetirement retired{};
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1,"fixture obtains qualified original scope before retirement");
+        const Obj mismatched_scope{mirror_actor.weak+1,mirror_actor.address};
+        check(retire(world,mismatched_scope,0,{},&guard,&retired)==-1&&retired.qualified==0&&destroy_calls==0&&level_calls==0,
+            "mismatched original weak cannot dispatch retirement against the address");
+        actor.name=999;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&destroy_calls==0&&level_calls==0,
+            "original name reuse between scope and retirement refuses before Actor ProcessEvent");
         lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);actor.alive=false;
         check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.qualified==0&&destroy_calls==0,"initially invalid weak actor cannot manufacture retirement proof");
         lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);

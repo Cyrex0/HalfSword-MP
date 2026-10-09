@@ -51,6 +51,12 @@ struct HsmpViewRetirement {
     uint64_t weak; uint64_t address; HsmpViewLifecycle before; HsmpViewLifecycle after;
     char reason[192]; // alive_after:0 engine-retired,1 unresolved/present,2 unknown; weak_present:0 absent,1 present,2 unknown
 };
+// ABI6 diagnostic only. qualified means original memory/identity and native
+// census scope were verified; listed=false is not a retirement/inactive proof.
+struct HsmpViewActorScope {
+    uint32_t qualified; uint32_t pad; uint64_t weak; uint64_t address;
+    HsmpViewLifecycle state; char reason[192];
+};
 struct HsmpPresentation {
     uint32_t abi; uint32_t pad;
     // Inspect kind/cloth/deformer state. Vertex colors still require the exact
@@ -74,6 +80,9 @@ struct HsmpPresentation {
     // the expired actor; native-live or reused identities fail closed.
     int32_t (*probe_retirement)(HsmpViewObject world,HsmpViewObject original,const HsmpViewGuard*,HsmpViewRetirement*);
     void (*forget_retirements)(); // scalar-only world-drop cleanup, no UObject access
+    // Read-only static world/class enumeration followed by fresh original-slot
+    // identity and flag reads. Never invokes an actor ProcessEvent.
+    int32_t (*actor_scope)(HsmpViewObject world,HsmpViewObject actor,const HsmpViewGuard*,HsmpViewActorScope*);
 };
 void hsmp_native_set_presentation(const HsmpPresentation*);
 }
@@ -82,6 +91,7 @@ static_assert(sizeof(HsmpViewObject)==16);
 static_assert(sizeof(HsmpViewGuard)==16);
 static_assert(sizeof(HsmpViewLifecycle)==88);
 static_assert(sizeof(HsmpViewRetirement)==400);
+static_assert(sizeof(HsmpViewActorScope)==304);
 static_assert(sizeof(HsmpViewTransform)==80);
 static_assert(sizeof(HsmpViewParameter)==24);
 static_assert(sizeof(HsmpViewMaterial)==72);
