@@ -646,3 +646,42 @@ checks each missing API independently. A read-only second-agent audit confirmed
 all endpoint argument/return shapes against lifecycle integer metadata and native
 source-role/game-thread admission. This candidate still requires an exact clean
 deployment and the actual three-game run; no frame or input progress is claimed.
+
+## Actual wired scope run: complete attachment closure, Aim Spline refusal
+
+Exact clean281c3784 passed full G0 (74 Lua suites, 1314 Rust tests/79 binaries,
+events141/zero violations, clippy six warnings/zero errors), pushed and deployed
+with matching clean binary/G0/native stamps. Run
+`test-results/20261009-042355-626e08-native-host` configured the standard100s
+actual three-game topology. Source UUID6cb8539b-2f26-4899-833b-89bba21324e1;
+exact epoch_text6598923911927418815, first entity1/incarnation5/directory6/
+revision1/frame1/pass1. Native_ready occurred9.375s.
+
+The source helper now executes. First capture9.996 to26.692s: pawn mesh census26
+completed10.359 to14.687s, axe mesh13 completed14.691 to16.675s, and complete
+attachment closure47 nodes returned16.675 to25.633s. Component_static entered
+25.634s for Aim Spline, original address1422673405696, and refused at26.692s:
+`native spline anchor rendering not proved absent: Aim Spline`. Later attempts
+report the same refusal at41.882/56.953s. This establishes complete attachment
+progress, not usable scene publication. bDrawDebug type/value and shipping spline
+rendering remain to be established; do not assume absent or strip native content.
+
+Both clients passed suppression (two own retired drivers,95 qualified external
+drivers and one fighter), then remained wait_scene with frame/entity zero. The
+unchanged65s client readiness deadline requested stop at65.348/65.784s despite
+the configured100s run. Directory7/8 and incarnation6 changes followed that
+teardown, so they do not establish an ordinary gameplay lifecycle fault. The
+final retry completed closure47 at76.881s and entered Aim Spline static at
+76.882s before missing graceful shutdown. Canonical samples/frames and active
+inputs remained zero/[0,0]; no vertex/bind/core/render/publish stage was reached.
+All original owned PIDs42196/30608/5952/38208 were independently absent after
+verified fallback; saves were unchanged and crash/unobserved-child lists empty.
+
+Separate read-only cost audits identified repeated native GetOwner function/class
+lookup and ABI enumeration, repeated hard-property layout lookup, plus redundant
+Lua indexed-controller/world resolution. The immediate safe native candidate is
+a scope-local scalar function/class identity and copied HsmpProp schema cache,
+with original identity/flags admission before and after callbacks and all actual
+link values freshly read. A pure-token-only Lua guard is not yet equivalent:
+actual GI current-world and indexed-player mapping must remain checked. Keep the
+present Lua current() checks until equivalent native admission is demonstrated.
