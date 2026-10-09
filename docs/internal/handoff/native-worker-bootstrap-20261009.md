@@ -175,11 +175,12 @@ RF_BeginDestroyed and RF_FinishDestroyed were false. These facts neither prove
 engine rejection nor exclude pending kill. The pinned Lua method dispatch uses
 the correct colon receiver and reaches ProcessEvent; no LevelManager override
 or tracked mod hook suppressing destruction was found. Native PendingKill is
-an internal object flag distinct from begin/finish destruction. Capture an
-original qualified weak identity before dispatch and resolve it afterward
-with the pinned native GUObjectItem::IsValid(false); do not dereference an
-invalidated actor, waive the test, or claim that changing call language proves
-removal. All four owned processes were absent after cleanup, saves unchanged,
+an internal object flag distinct from begin/finish destruction. The initial
+candidate captured an original weak identity and resolved it afterward; the
+matched native analysis below shows why that weak validity alone does not
+prove actor-world liveness. Do not dereference an invalidated actor, waive the
+test, or claim that changing call language proves removal. All four owned
+processes were absent after cleanup, saves unchanged,
 and crash/orphan lists empty.
 
 The next candidate adds explicitly typed nonrendering scene anchors and a
@@ -198,9 +199,11 @@ graph is cycle/bound/owner/world checked. C++ source capture rechecks eligible
 anchor classes and visibility/debug facts, creates inert plain scene anchors,
 and rejects missing parents before applying transforms in parent-first order.
 
-Presentation ABI4 adds guarded native driver retirement using the originally
-live weak identity and GUObjectItem validity. Still-live, foreign, protected,
-changed-world and reused identities refuse. Scalar proof records are probed
+Presentation ABI4 adds a guarded driver-retirement candidate using the
+originally live weak identity and GUObjectItem validity. Foreign, protected,
+changed-world and reused identities refuse. Its weak-invalidity-only success
+predicate is insufficient for actor-world retirement, as established below.
+Scalar proof records are probed
 before any later engine call on a pending-garbage Lua wrapper; same-world
 reconnect retains these proofs and actual world drop clears them. Native
 invalidity does not mean UObject memory has been deallocated. Gear/AI removal
@@ -208,3 +211,54 @@ keeps its prior strict path until corresponding native evidence justifies a
 qualified extension. Focused checks passed: source Lua46, DTO8/parser4;
 native C++82, two native Rust filters, client/suppression Lua82. None substitutes
 for the next exact three-game scene and control proof.
+
+## Actual scene-anchor and ABI4 retirement run
+
+Exact clean d45b74c2 passed full G0 (74 Lua suites, 1314 Rust tests and 79
+binaries) and deployed matching native modules. The requested topology ran in
+`test-results/20261009-014908-007ad9-native-host`: two normal AI-driven clients,
+one NullRHI game authority, plus its non-game supervisor. The authority again
+proved two native human pawns with opposed Team Int1/2 and no native AI. It
+produced zero canonical samples/frames, 115 source capture refusals and active
+input [0,0]; the 230 dispatches were neutral. The concrete source refusal was
+`native returned array key`. Diagnostic commit 8a39317f records the exact
+getter, owner/component, key and value types without relaxing array acceptance.
+That diagnostic has not yet run in the game.
+
+Both clients refused retirement of the same qualified original
+`BP_LevelManager_C_1`. Native dispatch was recorded, but its original weak
+handle still resolved (`alive_after=1`). Authority/role observations were
+HasAuthority=true, LocalRole3 and RemoteRole0. This observation does not prove
+that DestroyActor failed. Neither client reached isolation, canonical scene
+acceptance or active input. All four recorded process identities (38460,
+19380, 27756 and 23528) were independently absent after cleanup; original
+saves remained unchanged, with no new crash or unobserved-child records.
+
+## Matched native retirement correction
+
+The existing matched evidence in
+`combat-evidence-20261005/actor-retirement-proof.md` requires positive original
+actor membership in the exact current world before removal, followed by
+successful same-world/class enumeration absence AND either original-object
+global absence or its fresh native RF_MirroredGarbage flag. World absence
+alone can reflect inactive-level filtering; a valid Lua wrapper or resolving
+weak handle proves neither retirement success nor failure.
+
+Read-only LLVM inspection confirmed the installed game executable still
+matches SHA256
+`367dfccf1aaca3bbf6824c9bb616f2f31bc30e7ac70c5fa8657e212dbb2c2e03`.
+Its KismetSystemLibrary::IsValid at RVA 0x3708ce0 checks nonnull and native
+object flag bit30 clear. The matched GetAllActorsOfClass iterator rejects
+RF_MirroredGarbage (0x40000000), inactive levels and foreign worlds. The
+deployed pinned UE4SS.dll, SHA256
+`680a026890abb4d0df2211251f8defc1681a584275f1521dcc0fe30af480006f`,
+has FUObjectItem::IsValid(false) at RVA 0x439fe0 checking internal bits28/29.
+Its UE5.4 GetFlagsInternal path reads raw internal flags without mapping the
+game's mirrored-garbage flag. General weak lifetime guards therefore also
+must not be described as proof of native actor-world activity.
+
+The next correction preserves original identity, current-world, role and
+protection guards and uses the matched compound retirement predicate. It
+must not call actor ProcessEvent or GetWorld after destruction, force garbage
+collection, waive missing evidence, or assume deallocation. Native scene
+replication and controls still require a fresh exact three-game proof.
