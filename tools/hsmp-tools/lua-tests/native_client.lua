@@ -264,7 +264,7 @@ do
             loading={ticks=0,env=env,drop_count=0}
             function loading:set(stage,done,total)self.stage=stage;self.done=done;self.total=total end
             function loading:tick()self.ticks=self.ticks+1;if self.refusal then return nil,self.refusal end;return true end
-            function loading:status(state)self.state=state;if state=="error"or state=="stopped"then self.failed=true end end
+            function loading:status(state,_,_,reason)self.state=state;self.reason=reason;if state=="error"or state=="stopped"then self.failed=true end end
             function loading:drop()self.drop_count=self.drop_count+1 end
             return loading
         end},
@@ -313,6 +313,7 @@ do
     loading.refusal="loading view unavailable: exact widget refusal"
     check(callback()==false and closed==1 and quits==0 and loading.failed,"fatal loading refusal closes the endpoint while leaving the visible error loop alive")
     check(events[#events].ev=="x_native_client"and events[#events].row.state=="stopped"and events[#events].row.reason==loading.refusal,"loading failure reaches the existing harness status with its exact reason")
+    check(loading.reason==loading.refusal,"actual client forwards the unchanged status reason to the loading stage discriminator")
     local ticks,calls,input_count=loading.ticks,present_calls,sends
     callback();callback()
     check(loading.ticks==ticks+4 and present_calls==calls and sends==input_count and quits==0,"stopped client continues only loading/WG updates and cannot present or send further input")

@@ -125,7 +125,7 @@ function M.start(opts)
             return Input.frame(mapping,values)
         end,
         report=function(state,reason,scene,own)
-            loading:status(state,scene,own)
+            loading:status(state,scene,own,reason)
             log("state=%s reason=%s frame=%s",state,tostring(reason or""),tostring(scene and scene.frame_seq or 0))
             if HL then HL.event("x_native_client",{state=state,reason=reason or"",epoch=scene and scene.epoch or 0,dir_seq=scene and scene.dir_seq or 0,frame_seq=scene and scene.frame_seq or 0,own_entity=own and own.id or 0,own_incarnation=own and own.incarnation or 0})end
         end})

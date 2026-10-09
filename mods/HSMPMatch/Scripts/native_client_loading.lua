@@ -2,9 +2,10 @@
 -- server transfer and unknown view readiness never receive a timer percentage.
 local M={}
 local labels={connecting="Connecting to your match",travel="Loading the arena",waiting="Waiting for the match",
-    assets="Preparing the match",present="Getting players ready",view="Preparing your view",error="Unable to load the match"}
+    assets="Preparing the match",present="Creating player models",view="Preparing your view",error="Unable to load the match"}
 function M.new(env)
-    local self={host=nil,stage="connecting",done=nil,total=nil,failed=false,ready=false,retry_at=0,failures=0}
+    local self={host=nil,stage="connecting",done=nil,total=nil,failed=false,ready=false,retry_at=0,failures=0,
+        started_at=env.now(),paint_at=0,force_update=true}
     local serial=0
     local function same(token)return env.WG.same(token)end
     local function checked(token,fn)
@@ -73,16 +74,23 @@ function M.new(env)
     function self:drop()
         self.host=nil;self.ready=false;self.done,self.total=nil,nil
         self.retry_at=0;self.failures=0;self.last_error=nil
+        self.paint_at=0;self.force_update=true
         if not self.failed then self.stage="waiting"end
     end -- world drop never touches old UObjects
     function self:set(stage,done,total)
         if self.failed then return end
-        if self.ready and stage=="present"then return end
-        self.stage=labels[stage]and stage or "waiting";self.done,self.total=nil,nil;self.ready=false
+        if (self.ready or self.stage=="view")and stage=="present"then return end
+        local next_stage=labels[stage]and stage or "waiting"
+        local previous_done,previous_total=self.done,self.total
+        if self.stage~=next_stage then self.force_update=true end
+        self.stage=next_stage;self.done,self.total=nil,nil;self.ready=false
         if stage=="assets"and type(done)=="number"and math.type(done)=="integer"and type(total)=="number"
-            and math.type(total)=="integer"and total>0 and done>=0 and done<=total then self.done,self.total=done,total end
+            and math.type(total)=="integer"and total>0 and done>=0 and done<=total then
+            self.done,self.total=done,total
+            if previous_done~=done or previous_total~=total then self.force_update=true end
+        end
     end
-    function self:status(state,scene,own)
+    function self:status(state,scene,own,reason)
         if state=="error"or state=="stopped"then self:fail();return end
         if self.failed then return end
         if state=="live"or state=="mirror_ready"then
@@ -96,9 +104,10 @@ function M.new(env)
             end
         elseif state=="travel"then self:set("travel")
         elseif state=="boot"or state=="connected"then self:set("connecting")
+        elseif state=="wait_scene"and reason=="native scene assets loading"and self.stage=="present"then return
         elseif self.stage~="assets"then self:set("waiting")end
     end
-    function self:fail()self.failed=true;self.ready=false;self.stage="error";self.done,self.total=nil,nil end
+    function self:fail()self.failed=true;self.ready=false;self.stage="error";self.done,self.total=nil,nil;self.force_update=true end
     function self:tick()
         if not env.WG.check()then return false end
         local token=env.WG.token()
@@ -120,16 +129,22 @@ function M.new(env)
                 self.host=build(token,world,pc)
             end
             local host=self.host
-            local detail=self.failed and "Close and join again to retry."or self.total and string.format("Preparation: %d / %d",self.done,self.total)
-                or self.stage=="waiting"and "Waiting for the server. Progress is not available yet."or "Please wait."
-            local signature=self.stage..":"..detail
+            local now=env.now()
+            if not self.force_update and now<self.paint_at then return true end
+            local elapsed=math.max(0,math.floor(now-self.started_at))
+            local title=labels[self.stage]..(self.failed and ""or string.rep(".",math.floor(now*2)%4))
+            local detail=self.failed and "Close and join again to retry.\nElapsed: "..elapsed.."s"or self.total
+                and string.format("Preparation: %d / %d  |  Elapsed: %ds",self.done,self.total,elapsed)
+                or "Elapsed: "..elapsed.."s"..(self.stage=="waiting"and "\nProgress is not available yet."or "")
+            local signature=title..":"..detail
             if host.signature~=signature then
-                checked(host.token,function()host.stage:SetText(env.text(labels[self.stage]))end)
+                checked(host.token,function()host.stage:SetText(env.text(title))end)
                 checked(host.token,function()host.detail:SetText(env.text(detail))end)
                 checked(host.token,function()host.bar:SetIsMarquee(self.total==nil)end)
                 if self.total then checked(host.token,function()host.bar:SetPercent(self.done/self.total)end)end
                 host.signature=signature
             end
+            self.paint_at=now+.5;self.force_update=false
             return true
         end)
         if not ok then

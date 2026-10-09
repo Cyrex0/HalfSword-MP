@@ -1,5 +1,17 @@
 # Native authority bootstrap checkpoint
 
+## Native creation cause now proved
+
+Actual9b2721d9 diagnostic191021-69d625 admits original-client CDB captures on
+35560/7308. Both fault at shippingRVA3C09521 readingNULL+8D0. CPP return4622E6
+is SetLeaderPoseComponent linking a Skeletal render to a Poseable driver.
+Native update casts weak leader field568 to SkeletalMeshComponent and reads
+AnimScriptInstance8D0 without a NULL guard; SDK/object dump/native registration
+agree. Preserve poses/morphs/materials/hidden bones when replacing this link.
+No semantic fix or playable result yet. All original games/debuggers gone,
+save20same, no new dump; extended verdict remainsfalse. Separate190839 shutdown
+dump is detected and retained, not attributed to this creation stack.
+
 ## Bounded creation diagnostics ready
 
 Create-only checkpoints preserve all provider/wire/validation contracts and

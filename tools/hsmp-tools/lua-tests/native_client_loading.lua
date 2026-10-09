@@ -1,5 +1,5 @@
 -- Offline UMG/cursor contracts, not native on-screen or owned-camera evidence.
-local Loading=dofile("mods/HSMPMatch/Scripts/native_client_loading.lua")
+local Loading=dofile((...)or "mods/HSMPMatch/Scripts/native_client_loading.lua")
 local Presentation=dofile("mods/HSMPAvatars/Scripts/native_presentation.lua")
 local n=0
 local function check(ok,why)n=n+1;T.check(ok,why);assert(ok,why)end
@@ -30,6 +30,42 @@ local function fixture(view_ready)
     function f:count(name)local total=0;for _,row in ipairs(self.calls)do if row.name==name then total=total+1 end end;return total end
     function f:last(name)for i=#self.calls,1,-1 do if self.calls[i].name==name then return self.calls[i]end end end
     return f
+end
+do
+    local f=fixture();f.ui:tick();local text_calls=f:count("SetText")
+    f.time=.1;f.ui:tick();f.time=.4;f.ui:tick()
+    check(f:count("SetText")==text_calls,"cosmetic waiting updates stay below2Hz between genuine stage changes")
+    f.time=.5;f.ui:tick()
+    check(f.ui.host.signature:find("Connecting to your match.",1,true)and f:last("SetText").args[1]=="Elapsed: 0s",
+        "waiting dots advance on the real half-second clock while elapsed time stays truthful")
+    f.time=1;f.ui:tick();text_calls=f:count("SetText")
+    check(f:last("SetText").args[1]=="Elapsed: 1s"and f:count("SetPercent")==0,"elapsed seconds never become unknown server progress")
+    for _=1,100 do f.time=f.time+.002;f.ui:tick()end
+    check(f:count("SetText")==text_calls,"one hundred high-frequency ticks cannot flood the cosmetic widget updates")
+    f.ui:set("waiting");f.ui:tick()
+    check(f.ui.host.signature:find("Waiting for the match",1,true)and f:last("SetText").args[1]:find("Progress is not available",1,true),
+        "actual stage transition bypasses cosmetic throttling immediately")
+    f.ui:set("assets",0,0);f.ui:tick();f.ui:set("assets",1,4);f.ui:tick()
+    check(f:last("SetPercent").args[1]==.25 and f:last("SetText").args[1]:find("Preparation: 1 / 4",1,true),
+        "the first real asset count appears immediately even within the same half-second")
+    f.ui:set("assets",2,4);f.ui:tick()
+    check(f:last("SetPercent").args[1]==.5 and f:last("SetText").args[1]:find("Preparation: 2 / 4",1,true),
+        "every changed actual asset count bypasses the cosmetic throttle immediately")
+    text_calls=f:count("SetText");f.ui:set("assets",2,4);f.ui:tick()
+    check(f:count("SetText")==text_calls,"unchanged actual counts retain the2Hz cosmetic throttle")
+    f.ui:set("present");f.ui:tick()
+    check(f.ui.host.signature:find("Creating player models",1,true)and f:last("SetIsMarquee").args[1]==true,
+        "completed asset preparation switches immediately to creating models without claiming match completion")
+    f.ui:status("wait_scene",nil,nil,"native scene assets loading");f.ui:tick()
+    check(f.ui.stage=="present","only exact known preparation pending preserves the real model-creation stage")
+    f.ui:status("wait_scene",nil,nil,"native applied scene is stale");f.ui:tick()
+    check(f.ui.stage=="waiting","stale or missing source data cannot retain a misleading model-creation stage")
+    f.ui:fail();f.ui:tick()
+    check(f.ui.host.signature:find("Unable to load the match",1,true)and f:last("SetText").args[1]:find("Close and join again",1,true),
+        "fatal errors bypass cosmetic throttling and remain visible")
+    f=fixture();f.ui:tick();f.ui:status("mirror_ready",{fresh=true},{});f.ui:tick();f.ui:set("present");f.ui:tick()
+    check(f.ui.stage=="view"and not f.ui.ready and f:count("RemoveFromParent")==0,
+        "repeated native presentation cannot replace the precise unverified-view waiting stage")
 end
 do
     local f=fixture();local attempts=0
@@ -144,7 +180,9 @@ do
     check(ok==nil and why=="native scene assets loading"and#f.loads==1 and f.presents==0,"first tick completes one actual asset and returns the explicit nonfatal pending reason")
     check(f.steps[#f.steps].done==1 and f.steps[#f.steps].total==3,"progress reports completed work rather than a timer")
     p:apply();check(#f.loads==2 and f.presents==0,"second tick yields after the second exact asset")
-    ok,why=p:apply();check(ok==true and why==source and#f.loads==3 and f.presents==1,"only a completely prepared current generation reaches native presentation")
+    ok,why=p:apply();check(ok==nil and why=="native scene assets loading"and#f.loads==3 and f.presents==0 and f.steps[#f.steps].stage=="present",
+        "last asset yields one complete tick for the model-creation label without entering native presentation")
+    ok,why=p:apply();check(ok==true and why==source and#f.loads==3 and f.presents==1,"following tick rechecks the exact current generation before entering native presentation")
     check(source.frame_seq==9 and source.receipt==123 and source.fresh==false,"preparation does not renew receipt age, rewrite the frame, or invent freshness")
     p:apply();check(#f.loads==3 and f.presents==2,"same complete generation does not reload prepared assets")
     f.generation="g2";p:apply();check(#f.loads==4 and p.loading.done==1,"new recipe generation restarts preparation from its exact asset list")
@@ -154,6 +192,15 @@ do
     check(p.loading.token==2 and p.loading.done==1,"world drop resets the cursor without reading a previous-world asset wrapper")
     f.generation="g5";f.on_name=function()f.token=3;p:drop()end
     ok,why=p:apply();check(ok==nil and why=="world changed during source asset load"and f.presents==2,"callback travel during name conversion refuses before any native present")
+    f.on_name=nil;f.paths={"/Game/A.A"};f.generation="g6";p:drop();p:apply()
+    f.generation="g7";ok,why=p:apply()
+    check(ok==nil and why=="native scene assets loading"and p.key=="g7"and f.presents==2,
+        "generation change between last-asset yield and native create prepares the latest generation instead of presenting the old one")
+    f.token=4;p:drop();ok,why=p:apply()
+    check(ok==nil and why=="native scene assets loading"and f.presents==2,
+        "world drop during the model-stage yield restarts current-world preparation before any native create")
+    ok,why=p:apply();check(ok==true and why==source and f.presents==3 and source.receipt==123,
+        "only the following exact current-world/current-generation tick creates models without renewing the original receipt")
     StaticFindObject,LoadAsset=old_find,old_load
 end
 print(string.format("native_client_loading: %d checks passed",n))

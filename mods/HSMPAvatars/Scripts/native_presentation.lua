@@ -54,6 +54,11 @@ function M.new(env)
                 if cursor.done<#cursor.paths then return nil,"native scene assets loading"end
             end
             self.key=scope;self.loading=nil
+            if #cursor.paths>0 then
+                -- Let the loading view paint its real next stage before the
+                -- first native create batch. Never renew the scene receipt.
+                progress("present");return nil,"native scene assets loading"
+            end
         end
         progress("present")
         local ok,reason=env.native.native_present(world:GetAddress())

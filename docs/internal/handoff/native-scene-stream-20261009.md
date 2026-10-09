@@ -1,5 +1,50 @@
 # Native full-scene encoding checkpoint
 
+## Reactive loading follow-up
+
+User reports asset counts briefly visible and the bar completing before exit.
+Loading now paints changed actual counts immediately; cosmetic waiting dots/
+QPC elapsed seconds are capped2Hz. Final nonempty asset preparation yields once
+with the existing known pending reason after setting Creating player models,
+giving the outer UI tick a paint boundary before native creation. Next apply
+rechecks original world/current scope; generation changes restart preparation.
+Only that exact pending reason preserves the model stage. Unknown work remains
+marquee; no receipt refresh, camera shortcut or fake percentage. Focused
+loading58/client98=156 assertions and syntax5 pass. Actual new UI appearance
+remains pending deployment; this does not fix the native creation defect below.
+
+## Actual creation fault identified: skeletal follower with poseable leader
+
+Exact9b2721d9/all394 deployed hashes/full G0 are used for bounded extended
+diagnostics. Run20261009-185331-da3331-native-host publishes60.445s; client1
+PID39360 enters presentation63.384s and exits3. Marker70 enters component4
+kind0 after the explicit first32-PE limit. Run185828-2e5ae8 reproduces the
+same marker/exit on client2PID40256. A separate190121 run exits3 during travel.
+No specific call is inferred from these capped markers alone.
+
+Ignored early CDB capture attaches only to original held client identities,
+uses local symbols, preserves first/second-chance exception disposition, caps
+stacks and automatically detaches. Initial ambiguous exit symbols and echoed
+guard false positives are corrected; those captures were refused, not certified.
+Run190839 produces a separate shutdown dump19_09_47.2674283, SHA256
+37780DE7303E5BC1E813A02427D6D51DEC1B9ABAF8611A3DA4EEC51B43DDB3B0;
+the corrected harness detects it. All original game PIDs gone/save20same.
+
+Run20261009-191021-69d625-native-host admits both CDB captures on original
+clients35560/7308. Both first-chance AVs read0x8D0 at shippingRVA3C09521.
+CPP returnRVA4622E6 is exactly SetLeaderPoseComponent(renderSkeletal,
+leaderPoseable,force=true,followerTick=false), proved by the fixed setter
+argument string/call disassembly. Native update resolves weak LeaderPoseComponent
+at568, casts to SkeletalMeshComponent, sets the result NULL for Poseable, then
+unconditionally reads AnimScriptInstance at8D0. SDK/object dump/native class
+registration agree. This identifies the creation defect; it is distinct from
+shutdown cleanup. A setter-flag change does not guard this path. Replacement
+pose-driver implementation remains under native investigation; no parity claim.
+
+All4 game processes and both original CDB processes are independently gone,
+helper exits0/complete output/detach verified, original20 saves match, no new
+dump in191021. Diagnostic pass remainsfalse and active input remains0.
+
 ## Creation fault localization checkpoint
 
 Create-only native diagnostics now emit at most128 markers per operation,
