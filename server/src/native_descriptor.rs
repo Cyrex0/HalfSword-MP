@@ -3,9 +3,15 @@
 //! strings mean an observed native null; missing fields never acquire defaults.
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+#[path = "native_descriptor_codec.rs"]
+mod codec;
+pub const RECIPE_CODEC_VERSION: u8 = codec::VERSION;
+pub const MAX_RECIPE_DEPTH: usize = codec::MAX_DEPTH;
+pub const MAX_RECIPE_NODES: usize = codec::MAX_NODES;
+pub const MAX_RECIPE_STRING_BYTES: usize = codec::MAX_STRING_BYTES;
 
 pub const SCHEMA: u16 = 6;
-pub const MAX_RECIPE_BYTES: usize = 60 * 1024;
+pub const MAX_RECIPE_BYTES: usize = 512 * 1024;
 pub const MAX_COMPONENTS: usize = 64;
 pub const MAX_BONES: usize = 512;
 pub const MAX_MATERIALS: usize = 32;
@@ -795,23 +801,75 @@ impl SourceRecipe {
     }
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, &'static str> {
         self.validate()?;
-        let bytes = serde_json::to_vec(self).map_err(|_| "source recipe serialization")?;
-        if bytes.len() > MAX_RECIPE_BYTES {
-            return Err("source recipe byte bound");
+        let value = serde_json::to_value(self).map_err(|_| "source recipe serialization")?;
+        codec::Plan::new(&value)?.encode()
+    }
+    pub fn encoding_stats(&self) -> Result<RecipeEncodingStats, &'static str> {
+        self.validate()?;
+        let value = serde_json::to_value(self).map_err(|_| "source recipe serialization")?;
+        let plan = codec::Plan::new(&value)?;
+        struct Counter(usize);
+        impl std::io::Write for Counter {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.0 += b.len();
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
         }
-        Ok(bytes)
+        let mut counter = Counter(0);
+        serde_json::to_writer(&mut counter, self).map_err(|_| "source recipe serialization")?;
+        Ok(RecipeEncodingStats {
+            json_bytes: counter.0,
+            encoded_bytes: plan.len(),
+            dictionary_bytes: plan.dictionary_bytes,
+            token_bytes: plan.token_bytes,
+            nodes: plan.nodes,
+            components: self.components.len(),
+            bones: self.components.iter().map(|c| c.bones.len()).sum(),
+            material_slots: self.components.iter().map(|c| c.materials.len()).sum(),
+        })
     }
     pub fn decode_recipe(bytes: &[u8]) -> Result<Self, &'static str> {
         decode_recipe(bytes)
     }
 }
 pub fn decode_recipe(bytes: &[u8]) -> Result<SourceRecipe, &'static str> {
-    if bytes.is_empty() || bytes.len() > MAX_RECIPE_BYTES {
-        return Err("source recipe byte bound");
-    }
-    let recipe: SourceRecipe = serde_json::from_slice(bytes).map_err(|_| "source recipe schema")?;
+    let recipe: SourceRecipe =
+        serde_json::from_value(codec::decode(bytes)?).map_err(|_| "source recipe schema")?;
     recipe.validate()?;
+    if recipe.canonical_bytes()? != bytes {
+        return Err("noncanonical source recipe codec");
+    }
     Ok(recipe)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RecipeEncodingStats {
+    pub json_bytes: usize,
+    pub encoded_bytes: usize,
+    pub dictionary_bytes: usize,
+    pub token_bytes: usize,
+    pub nodes: usize,
+    pub components: usize,
+    pub bones: usize,
+    pub material_slots: usize,
+}
+impl RecipeEncodingStats {
+    pub fn diagnostic(&self) -> String {
+        format!(
+            "compact_bytes={} raw_json_bytes={} nodes={} dictionary_bytes={} token_bytes={} components={} bones={} material_slots={}",
+            self.encoded_bytes,
+            self.json_bytes,
+            self.nodes,
+            self.dictionary_bytes,
+            self.token_bytes,
+            self.components,
+            self.bones,
+            self.material_slots
+        )
+    }
 }
 
 /// Synthetic offline data for codec/coherence tests; no native display proof.
@@ -829,6 +887,117 @@ mod tests {
     fn fixture() -> SourceRecipe {
         fixture_recipe()
     }
+    fn value_bytes(value: &serde_json::Value) -> Vec<u8> {
+        codec::Plan::new(value).unwrap().encode().unwrap()
+    }
+    #[test]
+    fn compact_recipe_keeps_all49_components_and600_bones_beyond_json_cap() {
+        let mut recipe = fixture();
+        let template = recipe.components[0].clone();
+        recipe.components.clear();
+        for i in 0..49 {
+            let mut c = template.clone();
+            c.id = i + 1;
+            c.parent = if i == 0 { 0 } else { 1 };
+            c.name = format!("Offline component {i}");
+            if i > 0 {
+                c.role = "attachment".into();
+            }
+            if i < 9 {
+                let count = if [0, 3, 7].contains(&i) { 66 } else { 67 };
+                c.bones = (0..count)
+                    .map(|j| Bone {
+                        name: format!("offline_full_render_dictionary_bone_{j:03}"),
+                        parent: if j == 0 { -1 } else { j - 1 },
+                    })
+                    .collect();
+            } else {
+                c.kind = ComponentKind::Static;
+                c.component_class = "/Script/Engine.StaticMeshComponent".into();
+                c.geometry = Geometry::NativeEmpty;
+                c.asset.clear();
+                c.skeleton.clear();
+                c.physics_asset.clear();
+                c.bones.clear();
+                c.vertex_state = VertexState::NotApplicable;
+            }
+            recipe.components.push(c);
+        }
+        let stats = recipe.encoding_stats().unwrap();
+        assert_eq!(stats.components, 49);
+        assert_eq!(stats.bones, 600);
+        assert!(stats.json_bytes > 60 * 1024);
+        assert!(stats.encoded_bytes < MAX_RECIPE_BYTES);
+        let bytes = recipe.canonical_bytes().unwrap();
+        assert_eq!(bytes.len(), stats.encoded_bytes);
+        assert_eq!(SourceRecipe::decode_recipe(&bytes).unwrap(), recipe);
+        println!("offline49/600 {}", stats.diagnostic());
+        let started = std::time::Instant::now();
+        for _ in 0..8 {
+            std::hint::black_box(recipe.canonical_bytes().unwrap());
+        }
+        println!(
+            "offline49/600 encode_mean_us={} debug_assertions={}",
+            started.elapsed().as_micros() / 8,
+            cfg!(debug_assertions)
+        );
+    }
+    #[test]
+    fn compact_typed_float_widths_preserve_signed_zero_and_subnormal_bits() {
+        let mut recipe = fixture();
+        recipe.passport.height = -0.0;
+        recipe.passport.hair_color = [-0.0, f32::from_bits(1), f32::MAX, 0.3125];
+        let decoded = SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap();
+        assert_eq!(
+            decoded.passport.height.to_bits(),
+            recipe.passport.height.to_bits()
+        );
+        for (a, b) in decoded
+            .passport
+            .hair_color
+            .iter()
+            .zip(&recipe.passport.hair_color)
+        {
+            assert_eq!(a.to_bits(), b.to_bits());
+        }
+        assert!(
+            SourceRecipe::decode_recipe(&serde_json::to_vec(&recipe).unwrap()).is_err(),
+            "legacyJSON requires explicit incompatible negotiation"
+        );
+    }
+    #[test]
+    fn compact_recipe_node_budget_supports_complete64_by512_bone_dictionaries() {
+        let mut recipe = fixture();
+        let template = recipe.components[0].clone();
+        recipe.components.clear();
+        for i in 0..64 {
+            let mut c = template.clone();
+            c.id = i + 1;
+            c.parent = if i == 0 { 0 } else { 1 };
+            c.name = format!("Offline full dictionary component {i}");
+            if i > 0 {
+                c.role = "attachment".into();
+            }
+            c.bones = (0..512)
+                .map(|j| Bone {
+                    name: format!("offline_full_render_dictionary_bone_{j:03}"),
+                    parent: if j == 0 { -1 } else { j - 1 },
+                })
+                .collect();
+            recipe.components.push(c);
+        }
+        let stats = recipe.encoding_stats().unwrap();
+        assert_eq!(stats.components, 64);
+        assert_eq!(stats.bones, 32768);
+        assert!(stats.nodes > 16000);
+        assert!(stats.nodes <= MAX_RECIPE_NODES);
+        assert!(stats.encoded_bytes <= MAX_RECIPE_BYTES);
+        assert_eq!(
+            SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap(),
+            recipe
+        );
+        println!("offline64/32768 {}", stats.diagnostic());
+    }
     #[test]
     fn exact_recipe_roundtrip_and_missing_fields_refuse() {
         let recipe = fixture();
@@ -840,10 +1009,10 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("hair_length");
-        assert!(decode_recipe(&serde_json::to_vec(&value).unwrap()).is_err());
+        assert!(decode_recipe(&value_bytes(&value)).is_err());
         let mut value = serde_json::to_value(&recipe).unwrap();
         value["invented_default"] = true.into();
-        assert!(decode_recipe(&serde_json::to_vec(&value).unwrap()).is_err());
+        assert!(decode_recipe(&value_bytes(&value)).is_err());
     }
     fn anchor(id: u32, parent: u32, evidence: SceneEvidence) -> RenderComponent {
         let mut c = fixture().components.remove(0);
@@ -930,7 +1099,7 @@ mod tests {
                 .unwrap()
                 .remove(missing);
             assert!(
-                SourceRecipe::decode_recipe(&serde_json::to_vec(&value).unwrap()).is_err(),
+                SourceRecipe::decode_recipe(&value_bytes(&value)).is_err(),
                 "missing {missing}"
             );
         }
@@ -979,11 +1148,11 @@ mod tests {
                 .as_object_mut()
                 .unwrap()
                 .remove(missing);
-            assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err());
+            assert!(SourceRecipe::decode_recipe(&value_bytes(&json)).is_err());
         }
         let mut json = serde_json::to_value(&recipe).unwrap();
         json["schema"] = 3.into();
-        assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err());
+        assert!(SourceRecipe::decode_recipe(&value_bytes(&json)).is_err());
     }
     #[test]
     fn native_empty_static_retains_observations_and_refuses_counterfeits() {
@@ -1067,13 +1236,13 @@ mod tests {
                 .unwrap()
                 .remove(absent);
             assert!(
-                SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err(),
+                SourceRecipe::decode_recipe(&value_bytes(&json)).is_err(),
                 "missing {absent}"
             );
         }
         let mut old = serde_json::to_value(&recipe).unwrap();
         old["schema"] = 4.into();
-        assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&old).unwrap()).is_err());
+        assert!(SourceRecipe::decode_recipe(&value_bytes(&old)).is_err());
     }
     #[test]
     fn native_empty_skeletal_retains_explicit_null_material_slots() {
@@ -1152,7 +1321,7 @@ mod tests {
         for schema in [4, 5] {
             let mut json = serde_json::to_value(&recipe).unwrap();
             json["schema"] = schema.into();
-            assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err());
+            assert!(SourceRecipe::decode_recipe(&value_bytes(&json)).is_err());
         }
     }
     #[test]
@@ -1191,7 +1360,7 @@ mod tests {
                 .unwrap()
                 .remove(missing);
             assert!(
-                SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err(),
+                SourceRecipe::decode_recipe(&value_bytes(&json)).is_err(),
                 "missing {missing}"
             );
         }
@@ -1247,12 +1416,10 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("collision");
-        assert!(
-            SourceRecipe::decode_recipe(&serde_json::to_vec(&absent_collision).unwrap()).is_err()
-        );
+        assert!(SourceRecipe::decode_recipe(&value_bytes(&absent_collision)).is_err());
         let mut old = serde_json::to_value(recipe).unwrap();
         old["schema"] = 3.into();
-        assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&old).unwrap()).is_err());
+        assert!(SourceRecipe::decode_recipe(&value_bytes(&old)).is_err());
     }
     #[test]
     fn topology_components_and_complete_bones_never_default() {

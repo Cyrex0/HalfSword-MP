@@ -1,78 +1,62 @@
 //! Bounded raw Lua table -> exact source recipe. No engine access, metamethod,
 //! implicit field default, or network publication occurs in this parser.
 use crate::lua::*;
-use hsmp_server::native_descriptor::{MAX_RECIPE_BYTES, SourceRecipe};
+use hsmp_server::native_descriptor::{
+    MAX_RECIPE_DEPTH, MAX_RECIPE_NODES, MAX_RECIPE_STRING_BYTES, SourceRecipe,
+};
+use serde_json::{Map, Number, Value};
 use std::ffi::c_int;
-
-fn quoted(out: &mut String, s: &str) -> Result<(), String> {
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if c < ' ' => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    if out.len() > MAX_RECIPE_BYTES {
-        return Err("source recipe byte bound".into());
-    }
-    Ok(())
-}
-unsafe fn encode(
+unsafe fn copied_value(
     L: *mut lua_State,
     index: c_int,
-    out: &mut String,
     depth: usize,
     nodes: &mut usize,
     nullable_field: bool,
-) -> Result<(), String> {
+) -> Result<Value, String> {
     unsafe {
         *nodes += 1;
-        if depth > 24 || *nodes > 16000 || out.len() > MAX_RECIPE_BYTES {
-            return Err("source recipe table bound".into());
+        if depth > MAX_RECIPE_DEPTH || *nodes > MAX_RECIPE_NODES {
+            return Err(format!(
+                "source recipe table bound nodes={} depth={depth}",
+                *nodes
+            ));
         }
         let index = lua_absindex(L, index);
-        match lua_type(L, index) {
+        Ok(match lua_type(L, index) {
             LUA_TBOOLEAN => {
-                let value = lua_toboolean(L, index) != 0;
-                out.push_str(if nullable_field && !value {
-                    "null"
-                } else if value {
-                    "true"
+                let b = lua_toboolean(L, index) != 0;
+                if nullable_field && !b {
+                    Value::Null
                 } else {
-                    "false"
-                });
+                    Value::Bool(b)
+                }
             }
             LUA_TNUMBER => {
                 if lua_isinteger(L, index) != 0 {
-                    out.push_str(&arg_int(L, index).ok_or("source integer")?.to_string());
+                    Value::Number(Number::from(arg_int(L, index).ok_or("source integer")?))
                 } else {
-                    let value = arg_num(L, index)
-                        .filter(|x| x.is_finite())
-                        .ok_or("source finite number")?;
-                    let mut text = value.to_string();
-                    if !text.contains('.') && !text.contains('e') && !text.contains('E') {
-                        text.push_str(".0");
-                    }
-                    out.push_str(&text);
+                    Value::Number(
+                        Number::from_f64(arg_num(L, index).ok_or("source number")?)
+                            .ok_or("source finite number")?,
+                    )
                 }
             }
-            LUA_TSTRING => quoted(out, arg_str(L, index).ok_or("source utf8")?)?,
+            LUA_TSTRING => {
+                let s = arg_str(L, index).ok_or("source utf8")?;
+                if s.len() > MAX_RECIPE_STRING_BYTES {
+                    return Err("source recipe string bound".into());
+                }
+                Value::String(s.to_owned())
+            }
             LUA_TTABLE => {
                 if lua_checkstack(L, 6) == 0 {
                     return Err("source stack bound".into());
                 }
                 let n = lua_rawlen(L, index) as usize;
-                if n > 16000 {
+                if n > MAX_RECIPE_NODES - *nodes {
                     return Err("source array bound".into());
                 }
-                // Empty tables encode as arrays. Every recipe object has required
-                // fields, so an empty object still fails the typed schema.
+                // Empty arrays stay explicit; empty objects fail required fields.
                 lua_pushnil(L);
                 let nonempty = lua_next(L, index) != 0;
                 let array = n > 0 || !nonempty;
@@ -83,74 +67,74 @@ unsafe fn encode(
                     let mut count = 0;
                     lua_pushnil(L);
                     while lua_next(L, index) != 0 {
-                        let key = arg_int(L, -2)
+                        arg_int(L, -2)
                             .filter(|x| *x >= 1 && *x as usize <= n)
                             .ok_or("source dense array keys")?;
-                        let _ = key;
                         count += 1;
                         pop(L, 1);
                     }
                     if count != n {
                         return Err("source dense array count".into());
                     }
-                    out.push('[');
+                    if n != 0 && depth == MAX_RECIPE_DEPTH {
+                        return Err("source recipe table bound".into());
+                    }
+                    let mut a = Vec::with_capacity(n);
                     for i in 1..=n {
-                        if i != 1 {
-                            out.push(',');
-                        }
                         lua_rawgeti(L, index, i as i64);
-                        encode(L, -1, out, depth + 1, nodes, false)?;
+                        a.push(copied_value(L, -1, depth + 1, nodes, false)?);
                         pop(L, 1);
                     }
-                    out.push(']');
+                    Value::Array(a)
                 } else {
                     let mut keys = Vec::new();
                     lua_pushnil(L);
                     while lua_next(L, index) != 0 {
-                        let key = arg_str(L, -2).ok_or("source object key")?;
-                        if key.len() > 128 || keys.len() >= 256 {
+                        let k = arg_str(L, -2).ok_or("source object key")?;
+                        if k.len() > 128
+                            || keys.len() >= 256
+                            || keys.len() >= MAX_RECIPE_NODES - *nodes
+                        {
                             return Err("source object bound".into());
                         }
-                        keys.push(key.to_owned());
+                        keys.push(k.to_owned());
                         pop(L, 1);
                     }
                     keys.sort();
-                    out.push('{');
-                    for (i, key) in keys.iter().enumerate() {
-                        if i != 0 {
-                            out.push(',');
-                        }
-                        quoted(out, key)?;
-                        out.push(':');
-                        rawget_str(L, index, key);
-                        encode(
+                    let mut o = Map::new();
+                    for k in keys {
+                        rawget_str(L, index, &k);
+                        let v = copied_value(
                             L,
                             -1,
-                            out,
                             depth + 1,
                             nodes,
-                            key == "collision" || key == "spline_profile",
+                            k == "collision" || k == "spline_profile",
                         )?;
                         pop(L, 1);
+                        o.insert(k, v);
                     }
-                    out.push('}');
+                    Value::Object(o)
                 }
             }
             _ => return Err("source copied scalar/table required".into()),
-        }
-        if out.len() > MAX_RECIPE_BYTES {
-            return Err("source recipe byte bound".into());
-        }
-        Ok(())
+        })
     }
 }
-/// Reads without raising into Lua; restores the original stack on every refusal.
+/// Restores the original stack on every refusal, without raising into Lua.
 pub unsafe fn read_recipe(L: *mut lua_State, index: c_int) -> Result<SourceRecipe, String> {
     unsafe {
         let top = lua_gettop(L);
-        let mut bytes = String::new();
-        let result = encode(L, index, &mut bytes, 0, &mut 0, false)
-            .and_then(|()| SourceRecipe::decode_recipe(bytes.as_bytes()).map_err(str::to_owned));
+        let result = (|| {
+            let value = copied_value(L, index, 0, &mut 0, false)?;
+            let recipe: SourceRecipe =
+                serde_json::from_value(value).map_err(|_| "source recipe schema")?;
+            let stats = recipe.encoding_stats().map_err(str::to_owned)?;
+            recipe
+                .canonical_bytes()
+                .map_err(|reason| format!("{reason}: {}", stats.diagnostic()))?;
+            Ok(recipe)
+        })();
         lua_settop(L, top);
         result
     }

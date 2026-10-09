@@ -95,6 +95,40 @@ unsafe fn push_json(l: *mut ffi::lua_State, value: &Value) {
 }
 
 #[test]
+fn direct_raw_recipe_retains_full64_by512_dictionaries_above_old_node_limit() {
+    let lua = State::new();
+    lua.run("local function copy(v) if type(v)~='table' then return v end;local o={};for k,x in pairs(v)do o[k]=copy(x)end;return o end;local template=recipe.components[1];recipe.components={};for i=1,64 do local c=copy(template);c.id=i;c.parent=i==1 and 0 or 1;c.name='Offline full dictionary component '..i;if i>1 then c.role='attachment'end;c.bones={};for j=1,512 do c.bones[j]={name=string.format('offline_full_render_dictionary_bone_%03d',j-1),parent=j==1 and -1 or j-2}end;recipe.components[i]=c end");
+    let recipe = lua.read().unwrap();
+    let stats = recipe.encoding_stats().unwrap();
+    assert_eq!(stats.components, 64);
+    assert_eq!(stats.bones, 32768);
+    assert!(stats.nodes > 16000);
+    assert!(stats.nodes <= hsmp_server::native_descriptor::MAX_RECIPE_NODES);
+    assert!(stats.encoded_bytes <= hsmp_server::native_descriptor::MAX_RECIPE_BYTES);
+    assert_eq!(
+        SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap(),
+        recipe
+    );
+}
+
+#[test]
+fn direct_raw_recipe_keeps_complete49_component600_bone_shape_above_json_bound() {
+    let lua = State::new();
+    lua.run("local function copy(v) if type(v)~='table' then return v end;local o={};for k,x in pairs(v)do o[k]=copy(x)end;return o end;local template=recipe.components[1];recipe.components={};for i=1,49 do local c=copy(template);c.id=i;c.parent=i==1 and 0 or 1;c.name='Offline component '..i;if i>1 then c.role='attachment'end;if i<=9 then c.bones={};local n=(i==1 or i==4 or i==8)and 66 or 67;for j=1,n do c.bones[j]={name=string.format('offline_full_render_dictionary_bone_%03d',j-1),parent=j==1 and -1 or j-2}end;else c.kind='static';c.component_class='/Script/Engine.StaticMeshComponent';c.geometry='native_empty';c.asset='';c.skeleton='';c.physics_asset='';c.bones={};c.vertex_state='not_applicable'end;recipe.components[i]=c end");
+    let recipe = lua.read().unwrap();
+    let stats = recipe.encoding_stats().unwrap();
+    assert_eq!(stats.components, 49);
+    assert_eq!(stats.bones, 600);
+    assert!(stats.json_bytes > 60 * 1024);
+    assert!(stats.encoded_bytes < hsmp_server::native_descriptor::MAX_RECIPE_BYTES);
+    assert_eq!(
+        SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap(),
+        recipe
+    );
+    assert!(stats.diagnostic().contains("bones=600"));
+}
+
+#[test]
 fn copied_native_widths_empty_arrays_and_explicit_false_survive() {
     let lua = State::new();
     let recipe = lua.read().unwrap();

@@ -18,6 +18,7 @@ test = false
 doctest = false
 
 [dependencies]
+serde_json = { version = "1", features = ["float_roundtrip"] }
 hsmp-ipc = { path = "../hsmp-ipc" }
 hsmp-pose = { path = "../hsmp-pose" }
 hsmp-server = { path = "../../server" }
@@ -25,7 +26,6 @@ bytemuck = "1"
 
 [dev-dependencies]
 bytemuck = "1"
-serde_json = { version = "1", features = ["float_roundtrip"] }
 # Tests only: provides the lua_* symbols (vendored Lua 5.4) and a host state.
 mlua = { version = "0.10", features = ["lua54", "vendored"] }
 
