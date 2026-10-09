@@ -606,3 +606,32 @@ the focused contracts only; actual attachment completion, frame publication,
 client mirror acceptance and positive native player inputs remain unverified.
 The next deployment/run must use one exact clean head and two rendered native
 AI-intent clients plus one actual NullRHI game authority.
+
+## Actual source-scope run: client census fixed, worker injection missing
+
+Exact clean 767110e3 passed full G0 (74 Lua suites, 1314 Rust tests/79 binaries,
+events141/zero violations, clippy zero errors/six warnings), pushed to dev and
+deployed with matching clean commit/binary/nested G0/native stamps.
+The actual45s three-game run is `test-results/20261009-041101-6fe6f8-native-host`;
+source UUID is06ef078c-74b8-4c6d-9e54-f85e511a49d1.
+
+Source reached native_ready at9.540s. Both clients completed native suppression
+(two own retired drivers and95 qualified already-garbage external records) and
+reached wait_scene; the earlier live fighter component257/max256 blocker is
+cleared. Source capture now refused promptly at10.226 to10.617s with
+`native source identity scope unavailable`, exact epoch_text
+`-8112226904552778149`, entity1/incarnation5/directory6/revision1/frame1.
+The production worker Adapter.new passed only resolve/WG/phase and omitted the
+new source_scope dependency. Thus this run did not exercise native scope entry,
+attachment closure or native render publication. This is a concrete integration
+omission; the isolated scope/Lua checks did not establish production wiring.
+
+Canonical frames/samples and active inputs remained zero/[0,0]. The2044 neutral
+dispatches at44.082s do not establish player input. Source stopped cleanly at
+44.978s, supervisor exited cleanly and all original owned identities
+(supervisor11376, source24624, clients34680/14048) were independently absent.
+Original saves remained unchanged, crash/unobserved-child lists were empty and
+source remained exact clean767110e3 throughout. The immediate correction is
+explicit injection/type checks for all four native scope APIs, with a worker
+fixture exercising actual production adapter options instead of bypassing this
+dependency via a capture_render substitute. Real native acceptance remains open.
