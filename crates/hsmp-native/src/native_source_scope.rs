@@ -1143,11 +1143,18 @@ struct StaticVertexState {
     lod_info_count: u32,
     no_override: bool,
     asset_present: bool,
+    material_count: u32,
+    material_null_mask: u32,
+    component_kind: u32,
 }
 impl StaticVertexState {
     fn state(self) -> &'static str {
         if !self.asset_present {
-            "native_empty"
+            if self.component_kind == 0 {
+                "native_empty_skeletal"
+            } else {
+                "native_empty"
+            }
         } else if self.no_override {
             "native_asset"
         } else {
@@ -1161,6 +1168,10 @@ fn checked_vertex_state(
     if proof.lod_info_count > 16
         || proof.no_override > 1
         || proof.asset_present > 1
+        || proof.component_kind > 1
+        || proof.material_count > 32
+        || (proof.material_count < 32 && (proof.material_null_mask >> proof.material_count) != 0)
+        || (proof.component_kind == 0 && proof.asset_present != 0)
         || (proof.asset_present == 0 && proof.no_override == 0)
         || (proof.no_override == 0 && proof.lod_info_count == 0)
     {
@@ -1170,6 +1181,9 @@ fn checked_vertex_state(
         lod_info_count: proof.lod_info_count,
         no_override: proof.no_override == 1,
         asset_present: proof.asset_present == 1,
+        material_count: proof.material_count,
+        material_null_mask: proof.material_null_mask,
+        component_kind: proof.component_kind,
     })
 }
 fn capture_static_vertex_state(
@@ -1281,12 +1295,24 @@ impl Native {
         unsafe {
             match result {
                 Ok(proof) => {
-                    lua_createtable(L, 0, 4);
+                    lua_createtable(L, 0, 7);
                     let t = lua_gettop(L);
                     set_str(L, t, "state", proof.state());
                     set_int(L, t, "lod_info_count", proof.lod_info_count.into());
                     set_bool(L, t, "no_override", proof.no_override);
                     set_bool(L, t, "asset_present", proof.asset_present);
+                    set_int(L, t, "material_count", proof.material_count.into());
+                    set_int(L, t, "material_null_mask", proof.material_null_mask.into());
+                    set_str(
+                        L,
+                        t,
+                        "component_kind",
+                        if proof.component_kind == 0 {
+                            "skeletal"
+                        } else {
+                            "static"
+                        },
+                    );
                     1
                 }
                 Err(reason) => nil_err(L, &reason),
@@ -1951,6 +1977,9 @@ mod source_scope_tests {
         use crate::native_presentation::VertexStateProof;
         for count in [0, 1, 16] {
             let proof = checked_vertex_state(VertexStateProof {
+                material_count: 0,
+                material_null_mask: 0,
+                component_kind: 1,
                 lod_info_count: count,
                 no_override: 1,
                 asset_present: 1,
@@ -1963,6 +1992,9 @@ mod source_scope_tests {
         }
         assert!(
             !checked_vertex_state(VertexStateProof {
+                material_count: 0,
+                material_null_mask: 0,
+                component_kind: 1,
                 lod_info_count: 1,
                 no_override: 0,
                 asset_present: 1,
@@ -1973,6 +2005,9 @@ mod source_scope_tests {
         for (count, state) in [(0, 0), (17, 1), (17, 0), (1, 2), (0, u32::MAX)] {
             assert!(
                 checked_vertex_state(VertexStateProof {
+                    material_count: 0,
+                    material_null_mask: 0,
+                    component_kind: 1,
                     lod_info_count: count,
                     no_override: state,
                     asset_present: 1,
@@ -1986,6 +2021,9 @@ mod source_scope_tests {
         use crate::native_presentation::VertexStateProof;
         for count in [0, 1, 16] {
             let proof = checked_vertex_state(VertexStateProof {
+                material_count: 0,
+                material_null_mask: 0,
+                component_kind: 1,
                 lod_info_count: count,
                 no_override: 1,
                 asset_present: 0,
@@ -1997,6 +2035,9 @@ mod source_scope_tests {
             assert_eq!(proof.lod_info_count, count);
         }
         let present = checked_vertex_state(VertexStateProof {
+            material_count: 0,
+            material_null_mask: 0,
+            component_kind: 1,
             lod_info_count: 1,
             no_override: 0,
             asset_present: 1,
@@ -2014,12 +2055,94 @@ mod source_scope_tests {
         ] {
             assert!(
                 checked_vertex_state(VertexStateProof {
+                    material_count: 0,
+                    material_null_mask: 0,
+                    component_kind: 1,
                     lod_info_count: count,
                     no_override,
                     asset_present,
                 })
                 .is_err(),
                 "invalid native empty proof {count}/{no_override}/{asset_present}"
+            );
+        }
+    }
+    #[test]
+    fn source_scope_skeletal_empty_proof_preserves_material_null_mask() {
+        use crate::native_presentation::VertexStateProof;
+        for (count, mask) in [(0, 0), (3, 5), (32, u32::MAX)] {
+            let proof = checked_vertex_state(VertexStateProof {
+                lod_info_count: 0,
+                no_override: 1,
+                asset_present: 0,
+                material_count: count,
+                material_null_mask: mask,
+                component_kind: 0,
+            })
+            .unwrap();
+            assert_eq!(proof.state(), "native_empty_skeletal");
+            assert_eq!(proof.material_count, count);
+            assert_eq!(proof.material_null_mask, mask);
+            assert_eq!(proof.component_kind, 0);
+        }
+        for (count, mask, kind, present, no_override) in [
+            (0, 1, 0, 0, 1),
+            (3, 8, 0, 0, 1),
+            (31, u32::MAX, 0, 0, 1),
+            (33, 0, 0, 0, 1),
+            (0, 0, 2, 0, 1),
+            (0, 0, 0, 1, 1),
+            (0, 0, 0, 0, 0),
+        ] {
+            assert!(
+                checked_vertex_state(VertexStateProof {
+                    lod_info_count: 1,
+                    no_override,
+                    asset_present: present,
+                    material_count: count,
+                    material_null_mask: mask,
+                    component_kind: kind,
+                })
+                .is_err()
+            );
+        }
+    }
+    #[test]
+    fn source_scope_material_or_kind_change_between_native_censuses_refuses() {
+        for mutation in 0..3 {
+            let (mut scope, engine) = fixture();
+            let path = engine.rows.borrow()[&7].path.clone();
+            let handle = scope.keep(&engine, 7, 5, path).unwrap();
+            let calls = std::cell::Cell::new(0);
+            let result = capture_static_vertex_state(
+                &scope,
+                &engine,
+                handle,
+                || {
+                    calls.set(calls.get() + 1);
+                    let mut p = crate::native_presentation::VertexStateProof {
+                        lod_info_count: 0,
+                        no_override: 1,
+                        asset_present: 0,
+                        material_count: 3,
+                        material_null_mask: 5,
+                        component_kind: 0,
+                    };
+                    if calls.get() == 2 {
+                        match mutation {
+                            0 => p.material_count = 4,
+                            1 => p.material_null_mask = 1,
+                            _ => p.component_kind = 1,
+                        }
+                    }
+                    Ok(p)
+                },
+                || panic!("changed material/kind cannot pass final acceptance"),
+            );
+            assert_eq!(calls.get(), 2);
+            assert!(
+                result.is_err(),
+                "native raw material/kind mutation {mutation}"
             );
         }
     }
@@ -2037,6 +2160,9 @@ mod source_scope_tests {
                 || {
                     calls.set(calls.get() + 1);
                     Ok(crate::native_presentation::VertexStateProof {
+                        material_count: 0,
+                        material_null_mask: 0,
+                        component_kind: 1,
                         lod_info_count: 0,
                         no_override: 1,
                         asset_present: u32::from(if calls.get() == 1 {
@@ -2075,6 +2201,9 @@ mod source_scope_tests {
                             .set(*engine.owner_calls.borrow() + 1);
                     }
                     Ok(crate::native_presentation::VertexStateProof {
+                        material_count: 0,
+                        material_null_mask: 0,
+                        component_kind: 1,
                         lod_info_count: 1,
                         no_override: u32::from(!engine.vertex_override.get()),
                         asset_present: 1,
@@ -2115,6 +2244,9 @@ mod source_scope_tests {
                         _ => row.world = 8,
                     });
                     Ok(crate::native_presentation::VertexStateProof {
+                        material_count: 0,
+                        material_null_mask: 0,
+                        component_kind: 1,
                         lod_info_count: 1,
                         no_override: 1,
                         asset_present: 1,
@@ -2141,6 +2273,9 @@ mod source_scope_tests {
                 calls.set(calls.get() + 1);
                 last_owner_calls.set(*engine.owner_calls.borrow());
                 Ok(crate::native_presentation::VertexStateProof {
+                    material_count: 0,
+                    material_null_mask: 0,
+                    component_kind: 1,
                     lod_info_count: 0,
                     no_override: 1,
                     asset_present: 1,
@@ -2157,6 +2292,9 @@ mod source_scope_tests {
                 lod_info_count: 0,
                 no_override: true,
                 asset_present: true,
+                material_count: 0,
+                material_null_mask: 0,
+                component_kind: 1,
             }
         );
         let refused = capture_static_vertex_state(
@@ -2197,6 +2335,9 @@ mod source_scope_tests {
                         final_world_calls.set(engine.world_calls.get());
                     }
                     Ok(crate::native_presentation::VertexStateProof {
+                        material_count: 0,
+                        material_null_mask: 0,
+                        component_kind: 1,
                         lod_info_count: 1,
                         no_override: 1,
                         asset_present: 1,

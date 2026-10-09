@@ -172,28 +172,37 @@ function M.capture(env,bindings)
         if get(row,function(o)return o.bDrawDebugLagMarkers end)~=draw then fail("native spring arm debug flag changed during sockets")end
         return {type="spring_arm",draw_debug_lag_markers=draw,socket_name=sockets[1]}
     end
-    local spring_arms,empty_statics={},{}
-    local function static_vertex_proof(row,component_class,asset_check)
+    local spring_arms,empty_meshes={},{}
+    local function mesh_vertex_proof(row,kind,component_class,asset_check)
         phase("vertex_state","enter",{getter="Native.native_source_scope_vertex_state",class=component_class},row)
-        if type(env.scope.vertex_state)~="function"then fail("native static vertex proof capability unavailable")end
+        if type(env.scope.vertex_state)~="function"then fail("native mesh vertex proof capability unavailable")end
         guard();component(row);asset_check()
         local proof,reason=env.scope.vertex_state(row.handle)
         guard();component(row);asset_check()
         if type(proof)~="table"then fail(type(reason)=="string"and reason or "native static vertex proof unavailable")end
         for key in pairs(proof)do
-            if key~="state"and key~="lod_info_count"and key~="no_override"and key~="asset_present"then fail("native static vertex proof field unsupported")end
+            if key~="state"and key~="lod_info_count"and key~="no_override"and key~="asset_present"
+                and key~="material_count"and key~="material_null_mask"and key~="component_kind"then fail("native mesh vertex proof field unsupported")end
         end
         local count=proof.lod_info_count
         if type(count)~="number"or not math.tointeger(count)or count<0 or count>16 then fail("native static vertex proof LOD bound")end
         if type(proof.asset_present)~="boolean"or type(proof.no_override)~="boolean"then fail("native static vertex proof presence unavailable")end
-        if proof.state=="native_empty"and proof.asset_present==false and proof.no_override==true then
+        local material_count,mask=proof.material_count,proof.material_null_mask
+        if type(material_count)~="number"or not math.tointeger(material_count)or material_count<0 or material_count>32
+            or type(mask)~="number"or not math.tointeger(mask)or mask<0 or mask>0xFFFFFFFF
+            or mask>>material_count~=0 then fail("native mesh material proof bounds/mask")end
+        if proof.component_kind~=kind then fail("native mesh proof component kind disagreement")end
+        if kind=="skeletal"and proof.state=="native_empty_skeletal"and proof.asset_present==false and proof.no_override==true then
+        elseif kind=="static"and proof.state=="native_empty"and proof.asset_present==false and proof.no_override==true then
             -- Actual hard-null native geometry, not an absent Lua wrapper.
-        elseif proof.state=="native_asset"and proof.asset_present==true and proof.no_override==true then
-        elseif proof.state=="captured_required"and proof.asset_present==true and proof.no_override==false and count>=1 then
+        elseif kind=="static"and proof.state=="native_asset"and proof.asset_present==true and proof.no_override==true then
+        elseif kind=="static"and proof.state=="captured_required"and proof.asset_present==true and proof.no_override==false and count>=1 then
         else fail("native static vertex proof incomplete")end
         phase("vertex_state","exit",{getter="Native.native_source_scope_vertex_state",class=component_class,ok=true,
-            count=count,reason="state="..proof.state.." no_override="..tostring(proof.no_override).." asset_present="..tostring(proof.asset_present)},row)
-        return {state=proof.state,lod_info_count=count,no_override=proof.no_override,asset_present=proof.asset_present}
+            count=count,reason="state="..proof.state.." no_override="..tostring(proof.no_override).." asset_present="..tostring(proof.asset_present)
+                .." component_kind="..proof.component_kind.." material_count="..material_count.." material_null_mask="..mask},row)
+        return {state=proof.state,lod_info_count=count,no_override=proof.no_override,asset_present=proof.asset_present,
+            component_kind=kind,material_count=material_count,material_null_mask=mask}
     end
     local function vec(v,keys)
         local out={};for i,k in ipairs(keys)do out[i]=checked(function()return v[k]end);if type(out[i])~="number"then fail("native render vector unavailable")end end
@@ -302,9 +311,14 @@ function M.capture(env,bindings)
     table.sort(rows,function(a,b)if a.owner~=b.owner then return a.owner<b.owner end;return a.name<b.name end)
     for i,row in ipairs(rows)do row.id=i end
     phase("parent_closure","exit",{ok=true,count=#rows})
-    local function material(row,slot)
+    local function material(row,slot,expected_null)
         local scalar,vector,texture={},{},{}
         local current=get(row,function(c)return c:GetMaterial(slot)end)
+        if expected_null~=nil then
+            local absent=object_id(current)==nil
+            if absent~=expected_null then fail("native material null-mask disagreement")end
+            if absent then return {slot=slot,base="",scalars={},vectors={},textures={}}end
+        end
         local base,transient=path(current);local depth=0
         while transient do
             depth=depth+1;if depth>16 or checked(function()return current:IsA(mi_class)end)~=true then fail("native dynamic material parent incomplete")end
@@ -455,22 +469,28 @@ function M.capture(env,bindings)
         if kind=="skeletal"then asset_obj=get(row,function(o)return o:GetSkeletalMeshAsset()end)
         elseif kind=="static"then asset_obj=get(row,function(o)return o.StaticMesh end)
         elseif kind=="groom"then asset_obj=get(row,function(o)return o.GroomAsset end)end
-        local asset_read,asset_identity,asset_class,current_asset,empty_static
-        if kind=="static"and not object_id(asset_obj)then
-            if component_class~="/Script/Engine.StaticMeshComponent"then fail("native empty static class unsupported")end
+        local asset_read,asset_identity,asset_class,current_asset,empty_mesh,empty_proof
+        if (kind=="static"or kind=="skeletal")and not object_id(asset_obj)then
+            if component_class~="/Script/Engine."..(kind=="static"and "StaticMeshComponent"or "SkeletalMeshComponent")then fail("native empty mesh class unsupported")end
             current_asset=function()
-                if object_id(get(row,function(o)return o.StaticMesh end))then fail("native static empty asset changed")end
+                if kind=="static"then
+                    if object_id(get(row,function(o)return o.StaticMesh end))then fail("native static empty asset changed")end
+                else
+                    if object_id(get(row,function(o)return o:GetSkeletalMeshAsset()end))
+                        or object_id(get(row,function(o)return o.SkeletalMesh end))
+                        or object_id(get(row,function(o)return o.SkinnedAsset end))then fail("native skeletal empty asset changed")end
+                end
             end
-            local proof=static_vertex_proof(row,component_class,current_asset)
-            if proof.state~="native_empty"then fail("native static proof disagrees with unavailable asset")end
-            empty_static=true
-            empty_statics[#empty_statics+1]={row=row,class=component_class,check=current_asset,proof=proof}
+            empty_proof=mesh_vertex_proof(row,kind,component_class,current_asset)
+            if empty_proof.state~=(kind=="static"and "native_empty"or "native_empty_skeletal")then fail("native mesh proof disagrees with unavailable asset")end
+            empty_mesh=true
+            empty_meshes[#empty_meshes+1]={row=row,kind=kind,class=component_class,check=current_asset,proof=empty_proof}
         end
         local transient;c.asset,transient=path(asset_obj)
         -- RF_Transient is evidence of a runtime asset, not a specific merge.
-        c.geometry=empty_static and "native_empty"or kind=="procedural" and "procedural" or transient and "runtime_transient" or "cooked"
+        c.geometry=empty_mesh and "native_empty"or kind=="procedural" and "procedural" or transient and "runtime_transient" or "cooked"
         c.skeleton="";c.physics_asset=""
-        if kind=="skeletal"or kind=="static"and not empty_static then
+        if (kind=="skeletal"or kind=="static")and not empty_mesh then
             asset_identity=object_id(asset_obj)
             if not asset_identity then fail("native "..kind.." asset unavailable")end
             asset_class=checked(function()return asset_obj:GetClass():GetFullName()end)
@@ -506,12 +526,14 @@ function M.capture(env,bindings)
             end
         end
         if kind=="skeletal"then
+            if not empty_mesh then
             if path(asset_read(function(o)return o:GetOverlayMaterial()end))~="" then fail("native asset overlay material unsupported")end
             if path(asset_read(function(o)return o:GetDefaultMeshDeformer()end))~="" then fail("native asset mesh deformer unsupported")end
             c.skeleton=path(asset_read(function(o)return o.Skeleton end))
+            end
             local override=get(row,function(o)return o.PhysicsAssetOverride end)
             local override_identity=object_id(override)
-            c.physics_asset=path(override_identity and override or asset_read(function(o)return o:GetPhysicsAsset()end))
+            c.physics_asset=path(override_identity and override or not empty_mesh and asset_read(function(o)return o:GetPhysicsAsset()end)or nil)
             local after_override=object_id(get(row,function(o)return o.PhysicsAssetOverride end))
             if (override_identity==nil)~=(after_override==nil) or (override_identity and
                 (override_identity.address~=after_override.address or override_identity.name~=after_override.name))then fail("native physics asset override changed")end
@@ -527,12 +549,16 @@ function M.capture(env,bindings)
                 if flag then fail("native render flag unsupported: "..field)end
             end
             local disable_cloth=get(row,function(o)return o.bDisableClothSimulation end)
-            local clothing=asset_read(function(o)return o.MeshClothingAssets end)
-            if type(disable_cloth)~="boolean" or not clothing then fail("native cloth state unavailable")end
-            c.cloth=not disable_cloth and checked(function()return clothing:GetArrayNum()end)>0
+            if type(disable_cloth)~="boolean"then fail("native cloth state unavailable")end
+            if not empty_mesh then
+                local clothing=asset_read(function(o)return o.MeshClothingAssets end)
+                if not clothing then fail("native cloth state unavailable")end
+                c.cloth=not disable_cloth and checked(function()return clothing:GetArrayNum()end)>0
+            end -- Native-proven absent skin assets have no asset clothing to render.
             phase("bone_dictionary","enter",{getter="GetNumBones/GetBoneName/GetParentBone/IsBoneHiddenByName",class=component_class},row)
             local count=get(row,function(o)return o:GetNumBones()end)
-            if type(count)~="number" or not math.tointeger(count) or count<1 or count>512 then fail("native complete bone count unavailable")end
+            if type(count)~="number" or not math.tointeger(count) or count<(empty_mesh and 0 or 1)or count>512
+                or empty_mesh and count~=0 then fail("native complete bone count unavailable")end
             local names={};for i=0,count-1 do names[i+1]=name(get(row,function(o)return o:GetBoneName(i)end))end
             local index={};for i,n in ipairs(names)do index[n]=i-1 end
             for _,n in ipairs(names)do
@@ -545,10 +571,12 @@ function M.capture(env,bindings)
                 if hidden then c.hidden_bones[#c.hidden_bones+1]=n end
             end
             phase("bone_dictionary","exit",{ok=true,count=count,class=component_class},row)
+            if not empty_mesh then
             phase("morph_dictionary","enter",{getter="SkeletalMesh.GetMorphTargetsPtrConv/GetMorphTarget",class=component_class},row)
             array(asset_read(function(o)return o:GetMorphTargetsPtrConv()end),128,function(m)
                 current_asset();local n=name(checked(function()return m:GetFName()end));c.morphs[#c.morphs+1]={name=n,value=get(row,function(o)return o:GetMorphTarget(FName(n))end)};current_asset();return true end,"return","SkeletalMesh.GetMorphTargetsPtrConv component="..row.name)
             phase("morph_dictionary","exit",{ok=true,count=#c.morphs,class=component_class},row)
+            end
         elseif kind=="groom"then
             local groups=array(get(row,function(o)return o.GroomGroupsDesc end),32,function(v)
                 local group={};for _,fd in ipairs(group_fields)do group[fd[2]]=checked(function()return v[fd[1]]end);if group[fd[2]]==nil then fail("native groom group incomplete")end end;return group end,"property","GroomComponent.GroomGroupsDesc component="..row.name)
@@ -560,17 +588,25 @@ function M.capture(env,bindings)
         if path(get(row,function(o)return o:GetOverlayMaterial()end))~="" then fail("native component overlay material unsupported")end
         local count=get(row,function(o)return o:GetNumMaterials()end)
         if type(count)~="number" or not math.tointeger(count) or count<0 or count>32 then fail("native material slots incomplete")end
+        if empty_mesh and kind=="skeletal"then
+            if count~=0 then fail("native empty skeletal material getter changed")end
+            count=empty_proof.material_count -- Complete native hard override array, including null entries.
+        end
         phase("material","enter",{getter="MeshComponent.GetMaterial/MaterialInstance parameters",count=count,class=component_class},row)
-        for slot=0,count-1 do c.materials[#c.materials+1]=material(row,slot)end
+        for slot=0,count-1 do
+            local expected_null
+            if empty_mesh and kind=="skeletal"then expected_null=empty_proof.material_null_mask&(1<<slot)~=0 end
+            c.materials[#c.materials+1]=material(row,slot,expected_null)
+        end
         phase("material","exit",{ok=true,count=count,class=component_class},row)
-        if empty_static then
+        if empty_mesh then
             c.vertex_state="not_applicable"
             current_asset()
         elseif kind=="skeletal" or kind=="static"then
             local native_asset=false
             if kind=="static"then
                 if c.geometry~="cooked"then fail("native static runtime geometry unsupported")end
-                local proof=static_vertex_proof(row,component_class,current_asset)
+                local proof=mesh_vertex_proof(row,kind,component_class,current_asset)
                 if proof.asset_present~=true then fail("native static proof disagrees with present asset")end
                 native_asset=proof.state=="native_asset"
             end
@@ -663,10 +699,11 @@ function M.capture(env,bindings)
             fail("native spring arm evidence changed during harvest")
         end
     end
-    for _,record in ipairs(empty_statics)do
-        local again=static_vertex_proof(record.row,record.class,record.check)
-        if again.state~=record.proof.state or again.lod_info_count~=record.proof.lod_info_count then
-            fail("native static empty proof changed during harvest")
+    for _,record in ipairs(empty_meshes)do
+        local again=mesh_vertex_proof(record.row,record.kind,record.class,record.check)
+        if again.state~=record.proof.state or again.lod_info_count~=record.proof.lod_info_count
+            or again.material_count~=record.proof.material_count or again.material_null_mask~=record.proof.material_null_mask then
+            fail("native empty mesh proof changed during harvest")
         end
     end
     for _,row in ipairs(rows)do component(row)end

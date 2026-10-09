@@ -297,6 +297,38 @@ fn native_empty_static_raw_fields_are_explicit_and_complete() {
 }
 
 #[test]
+fn native_empty_skeletal_raw_slots_keep_explicit_nulls() {
+    let lua = State::new();
+    let reset = "local c=recipe.components[1]; c.geometry='native_empty'; c.asset=''; c.skeleton=''; c.bones={}; c.physics_asset=''; c.vertex_state='not_applicable'; c.vertex_colors={}; c.materials={{slot=0,base='',scalars={},vectors={},textures={}},{slot=1,base='/Game/Test/Material.Material',scalars={},vectors={},textures={}},{slot=2,base='',scalars={},vectors={},textures={}}}";
+    lua.run(reset);
+    let recipe = lua.read().unwrap();
+    recipe.validate_mirror_profile().unwrap();
+    assert_eq!(recipe.components[0].materials.len(), 3);
+    assert_eq!(recipe.components[0].materials[0].base, "");
+    assert_eq!(recipe.components[0].materials[1].slot, 1);
+    for mutation in [
+        "recipe.components[1].materials[1].base=nil",
+        "recipe.components[1].materials[1].scalars={{info={name='Unknown',association=0,index=-1},value=0}}",
+        "recipe.components[1].materials[3].slot=3",
+        "recipe.components[1].materials[2]=nil",
+        "recipe.components[1].kind='static'",
+        "recipe.components[1].asset='/Game/Test/Body.Body'",
+        "recipe.components[1].component_class='/Script/Engine.UnprovedSkeletalSubclass'",
+        "recipe.components[1].bones={{name='root',parent=-1}}",
+        "recipe.components[1].collision=false",
+        "recipe.schema=5",
+    ] {
+        let lua = State::new();
+        lua.run(reset);
+        lua.run(mutation);
+        assert!(
+            lua.read().is_err(),
+            "counterfeit empty skeletal: {mutation}"
+        );
+    }
+}
+
+#[test]
 fn sparse_native_blocked_slots_preserve_observed_false() {
     let lua = State::new();
     unsafe {

@@ -260,7 +260,7 @@ local weapon_asset=object(330,"WeaponMesh","/Game/Test/WeaponMesh.WeaponMesh",fa
 weapon_asset.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.StaticMesh"end}end
 weapon_asset.bAllowCPUAccess=true
 local weapon_mesh=mesh(201,"WeaponMesh",live_weapon,"static",weapon_asset);weapon_mesh.GetAttachParent=function()return body end
-weapon_mesh.native_vertex_proof={state="captured_required",lod_info_count=1,no_override=false,asset_present=true}
+weapon_mesh.native_vertex_proof={state="captured_required",lod_info_count=1,no_override=false,asset_present=true,material_count=1,material_null_mask=0,component_kind="static"}
 local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or mesh_is_a(self,k)end
 local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
 live_weapon.RootComponent=weapon_mesh
@@ -324,7 +324,7 @@ end,vertex_state=function(handle)
     local address,reason=render_env.scope.resolve(handle)
     if not address then return nil,reason end
     local o=runtime_objects[scope_rows[handle].path]
-    if o:GetClass():GetFullName()~="Class /Script/Engine.StaticMeshComponent"then return nil,"native static class changed"end
+    local class=o:GetClass():GetFullName(); if class~="Class /Script/Engine.StaticMeshComponent"and class~="Class /Script/Engine.SkeletalMeshComponent"then return nil,"native mesh class changed"end
     return plain(o.native_vertex_proof),"fixture native override proof unavailable"
 end}
 local render_phases={}
@@ -359,7 +359,7 @@ T.check(T.eq(rendered.components[2].scene.type,"hidden_capsule"),"root eligibili
 T.check(T.eq(rendered.topology.vertex_state,"captured"),"source vertex readiness follows actual complete getter data")
 local actual_vertex_proof=render_env.scope.vertex_state
 local native_present_proof=plain(weapon_mesh.native_vertex_proof)
-local no_override_proof={state="native_asset",lod_info_count=0,no_override=true,asset_present=true}
+local no_override_proof={state="native_asset",lod_info_count=0,no_override=true,asset_present=true,material_count=1,material_null_mask=0,component_kind="static"}
 weapon_mesh.native_vertex_proof=plain(no_override_proof);weapon_asset.bAllowCPUAccess=false
 local saved_static_count,saved_static_colors=rvp.GetMeshComponentAmountOfVerticesOnLOD,rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
 local static_paint_calls=0
@@ -396,9 +396,10 @@ for _,bad in ipairs({
     {state="native_asset",lod_info_count=0,no_override=true},
     {state="native_asset",lod_info_count=0,no_override=true,asset_present="true"},
     {state="native_asset",lod_info_count=0,no_override=true,asset_present=false},
-    {state="native_empty",lod_info_count=0,no_override=true,asset_present=true},
+    {state="native_empty",lod_info_count=0,no_override=true,asset_present=true,material_count=1,material_null_mask=0,component_kind="static"},
     {state="native_empty",lod_info_count=0,no_override=true,asset_present=false},
 })do
+    bad.material_count=1;bad.material_null_mask=0;bad.component_kind="static"
     weapon_mesh.native_vertex_proof=bad
     T.check(not pcall(Render.capture,render_env,native_bindings),"malformed native static override proof refuses")
 end
@@ -407,7 +408,7 @@ local proof_ok,proof_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not proof_ok and proof_reason:find("fixture native override proof unavailable",1,true),"unknown native override proof never falls back to asset colors")
 render_env.scope.vertex_state=nil
 proof_ok,proof_reason=pcall(Render.capture,render_env,native_bindings)
-T.check(not proof_ok and proof_reason:find("native static vertex proof capability unavailable",1,true),"absent sixth native capability refuses static source capture")
+T.check(not proof_ok and proof_reason:find("native mesh vertex proof capability unavailable",1,true),"absent sixth native capability refuses static source capture")
 render_env.scope.vertex_state=actual_vertex_proof;weapon_mesh.native_vertex_proof=plain(no_override_proof)
 local static_flags=weapon_asset.HasAnyFlags;weapon_asset.HasAnyFlags=function(_,flag)return flag==0x40 end
 local proof_calls=0
@@ -426,7 +427,7 @@ render_env.scope.vertex_state=function(handle)local result=actual_vertex_proof(h
 T.check(not pcall(Render.capture,render_env,native_bindings),"world loss during native override proof refuses source recipe")
 scope=true;render_env.scope.vertex_state=actual_vertex_proof;weapon_mesh.native_vertex_proof=plain(native_present_proof)
 ;(function()
-    local empty_proof={state="native_empty",lod_info_count=0,no_override=true,asset_present=false}
+    local empty_proof={state="native_empty",lod_info_count=0,no_override=true,asset_present=false,material_count=1,material_null_mask=0,component_kind="static"}
     local paint_calls=0
     local count_getter,colors_getter=rvp.GetMeshComponentAmountOfVerticesOnLOD,rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
     rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)
@@ -458,11 +459,12 @@ scope=true;render_env.scope.vertex_state=actual_vertex_proof;weapon_mesh.native_
     T.check(not pcall(Render.capture,render_env,native_bindings),"nil asset wrapper never establishes empty native geometry without proof")
     for _,bad in ipairs({
         {state="native_empty",lod_info_count=0,no_override=true},
-        {state="native_empty",lod_info_count=0,no_override=true,asset_present=true},
+        {state="native_empty",lod_info_count=0,no_override=true,asset_present=true,material_count=1,material_null_mask=0,component_kind="static"},
         {state="native_empty",lod_info_count=1,no_override=false,asset_present=false},
-        {state="native_asset",lod_info_count=0,no_override=true,asset_present=true},
-        {state="captured_required",lod_info_count=1,no_override=false,asset_present=true},
+        {state="native_asset",lod_info_count=0,no_override=true,asset_present=true,material_count=1,material_null_mask=0,component_kind="static"},
+        {state="captured_required",lod_info_count=1,no_override=false,asset_present=true,material_count=1,material_null_mask=0,component_kind="static"},
     })do
+        bad.material_count=1;bad.material_null_mask=0;bad.component_kind="static"
         weapon_mesh.native_vertex_proof=bad
         T.check(not pcall(Render.capture,render_env,native_bindings),"unavailable wrapper cannot turn malformed or present geometry proof into empty")
     end
@@ -493,6 +495,92 @@ scope=true;render_env.scope.vertex_state=actual_vertex_proof;weapon_mesh.native_
     render_env.scope.vertex_state=actual_vertex_proof
     weapon_mesh.StaticMesh=weapon_asset;weapon_mesh.native_vertex_proof=plain(native_present_proof)
     rvp.GetMeshComponentAmountOfVerticesOnLOD=count_getter;rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=colors_getter
+end)()
+;(function()
+    -- Actual skeletal GetNumMaterials returns0 with both assets absent; raw
+    -- OverrideMaterials can still contain null and nonnull entries.
+    local holder=mesh(202,"EmptySkeletalHolder",live_weapon,"skeletal",nil)
+    local mesh_predicate=holder.IsA
+    holder.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or mesh_predicate(self,k)end
+    holder.GetAttachParent=function()return weapon_mesh end
+    holder.GetNumBones=function()return 0 end
+    holder.GetBoneName=function()error("empty holder must not invent a bone dictionary",0)end
+    holder.GetNumMaterials=function()return 0 end
+    local slots={ [1]=dynamic_mat }
+    holder.GetMaterial=function(_,slot)return slots[slot]end
+    holder.native_vertex_proof={state="native_empty_skeletal",lod_info_count=0,no_override=true,asset_present=false,
+        material_count=3,material_null_mask=5,component_kind="skeletal"}
+    local original_census=live_weapon.K2_GetComponentsByClass
+    live_weapon.K2_GetComponentsByClass=function(_,class)
+        if class=="/Script/Engine.SplineComponent"then return {}end
+        if class~="/Script/Engine.MeshComponent"then error("only complete mesh/spline census",0)end
+        return {wrapped(weapon_mesh),wrapped(holder)}
+    end
+    local function captured_holder()
+        local capture=Render.capture(render_env,native_bindings)
+        for _,c in ipairs(capture.components)do if c.name=="EmptySkeletalHolder"then return c,capture end end
+        error("complete holder missing",0)
+    end
+    local copied,capture=captured_holder()
+    T.check(copied.kind=="skeletal"and copied.component_class=="/Script/Engine.SkeletalMeshComponent"
+        and copied.geometry=="native_empty"and copied.asset==""and copied.skeleton==""and #copied.bones==0
+        and copied.vertex_state=="not_applicable"and #copied.vertex_colors==0,
+        "qualified empty skeletal keeps its original component without invented asset/bones/paint")
+    T.check(#copied.materials==3 and copied.materials[1].slot==0 and copied.materials[1].base==""
+        and #copied.materials[1].scalars==0 and copied.materials[2].slot==1
+        and copied.materials[2].base=="/Game/Test/Material.Material"and copied.materials[2].scalars[1].value==0.3125
+        and copied.materials[3].slot==2 and copied.materials[3].base=="",
+        "raw material count preserves explicit null/material/null slots despite native GetNumMaterials0")
+    local parent_id;for _,c in ipairs(capture.components)do if c.name=="WeaponMesh"then parent_id=c.id end end
+    T.check(copied.parent==parent_id and copied.owner==1 and copied.collision.enabled==3
+        and copied.collision.simulating==true and T.eq(copied.relative.translation,{0.125,0.25,0.5}),
+        "empty skeletal retains original owner attachment transforms and collision observations")
+    local valid=plain(holder.native_vertex_proof)
+    for _,key in ipairs({"state","lod_info_count","no_override","asset_present","material_count","material_null_mask","component_kind"})do
+        holder.native_vertex_proof=plain(valid);holder.native_vertex_proof[key]=nil
+        T.check(not pcall(captured_holder),"empty skeletal missing proof field "..key.." refuses")
+    end
+    for _,mutation in ipairs({
+        {"material_count",33},{"material_count",1.5},{"material_null_mask",8},{"material_null_mask",-1},
+        {"material_null_mask",0x100000000},{"component_kind","static"},{"component_kind",0},
+        {"state","native_asset"},{"asset_present",true},{"no_override",false},{"guessed",true},
+    })do
+        holder.native_vertex_proof=plain(valid);holder.native_vertex_proof[mutation[1]]=mutation[2]
+        T.check(not pcall(captured_holder),"empty skeletal counterfeit "..mutation[1].." refuses")
+    end
+    holder.native_vertex_proof=plain(valid)
+    slots[0]=dynamic_mat
+    T.check(not pcall(captured_holder),"native-null mask cannot hide a nonnull material slot")
+    slots[0]=nil;slots[1]=nil
+    T.check(not pcall(captured_holder),"native-nonnull slot cannot be silently converted to null")
+    slots[1]={GetAddress=function()return 909 end,IsValid=function()return false end}
+    T.check(not pcall(captured_holder),"nonnull invalid material wrapper cannot become a null slot")
+    slots[1]=dynamic_mat
+    holder.SkinnedAsset=body_asset
+    T.check(not pcall(captured_holder),"nonzero hard SkinnedAsset alias refuses empty skeletal")
+    holder.SkinnedAsset=nil;holder.SkeletalMesh=body_asset
+    T.check(not pcall(captured_holder),"nonzero hard legacy skeletal alias refuses empty skeletal")
+    holder.SkeletalMesh=nil;holder.GetNumBones=function()return 1 end
+    T.check(not pcall(captured_holder),"empty native proof still requires actual zero render-bone getter")
+    holder.GetNumBones=function()return 0 end
+    local original_material=holder.GetMaterial
+    holder.GetMaterial=function(self,slot)holder.SkinnedAsset=body_asset;return original_material(self,slot)end
+    T.check(not pcall(captured_holder),"native material callback populating empty skeletal asset refuses")
+    holder.SkinnedAsset=nil;holder.GetMaterial=original_material
+    local proof_calls=0
+    render_env.scope.vertex_state=function(handle)
+        local p=actual_vertex_proof(handle)
+        if p and p.component_kind=="skeletal"then proof_calls=proof_calls+1;if proof_calls>1 then p.material_null_mask=1 end end
+        return p
+    end
+    T.check(not pcall(captured_holder),"ending raw material census change refuses whole source harvest")
+    render_env.scope.vertex_state=actual_vertex_proof
+    holder.native_vertex_proof.material_count=32;holder.native_vertex_proof.material_null_mask=0xFFFFFFFF
+    slots={}
+    copied=captured_holder()
+    T.check(#copied.materials==32 and copied.materials[32].slot==31 and copied.materials[32].base=="",
+        "all32 native null material slots and unsigned high mask bit are retained exactly")
+    live_weapon.K2_GetComponentsByClass=original_census
 end)()
 local static_lod_getter=weapon_asset.GetNumLODs
 for _,case in ipairs({
