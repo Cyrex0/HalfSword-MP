@@ -1,5 +1,35 @@
 # Native authority bootstrap checkpoint
 
+## Current state: 2026-10-09, latest actual build55b2ed06
+
+The actual topology launches: one NullRHI game authority and two rendered native
+clients. The authority qualifies two human fighters on opposing native teams;
+both clients now complete local combat suppression. Original attachment closure
+also completes (47 nodes:26 pawn meshes,13 axe meshes plus native parents).
+The production helper wiring and the client256-component resource assumption are
+fixed. No canonical scene frame or active client input has been proved yet.
+
+Current publication blocker: native Aim Spline has actual bDrawDebug=true,
+visible=true, hidden=false and owner_hidden=false. Existing scene-anchor support
+refuses it. Shipping non-rendering has not been proved, and faithful native spline
+curve/settings/dynamic-state replication is not implemented. Do not bypass this
+refusal or infer pixels from component visibility alone.
+
+Current performance blocker: first capture still spends roughly16 seconds before
+that refusal. Scope-local schema caching passed focused checks but the real run
+showed only small timing changes. Repeated Lua indexed-controller/current-world
+resolution is under audit; all source lifetime/world/player checks remain required.
+
+Next acceptance steps are (1) evidenced spline support, (2) complete recipes and
+advancing source/mirror frames for both clients, (3) positive legal native inputs
+for both owned controllers. Native combat/body/gear parity, camera/HUD ownership,
+mode/end-state handling and co-op Abyss remain subsequent open gates. The public
+existing PvP beta.6 release is separate and already published; the native headless
+branch has not passed playable or release acceptance.
+
+The remainder preserves the historical evidence in order; its older “next run”
+instructions are superseded by this current state and the final recorded run.
+
 The exact gated build `6b49c29670c77d49e4b4f7102f35d8e10b8b9f3d` ran one NullRHI
 authority and two normal native clients. Raw evidence is retained in ignored
 `test-results/20261008-235227-91548c-native-host`.
