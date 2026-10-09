@@ -112,3 +112,45 @@ the pinned return representation and trap the unavailable component getter.
 source refusal in authority-owned native_evidence. These fixes require a new
 exact deployment and actual three-game proof; their offline checks do not
 establish live presentation or controls.
+
+## Actual native-return corrective run
+
+Exact clean4842e8bd passed full G0 (74 Lua suites, 1311 Rust tests) and deployed
+matching binaries/native modules. `test-results/20261009-005629-ebdcae-native-host`
+then ran two normal clients and one NullRHI authority. Native-ready occurred
+at9.575s with two opposed humans and no AI, reproducing the bootstrap proof.
+The earlier nil iterator errors did not recur. Both clients instead refused
+`suppression_destroy_readback` at14.020/13.723s; the event does not yet identify
+the first actor. The source's own event file retained the concrete failure
+`native render attachment parent not captured`, with zero canonical frames/
+samples, three refusals, six neutral dispatches and active input [0,0]. Neither
+actor destruction nor complete attachment mirroring is therefore demonstrated.
+All four recorded processes were independently absent after cleanup, original
+saves remained unchanged, and no crash/unobserved-child record appeared.
+
+Bounded review also found that C++ mirror destruction lacks the borrowed world
+guard even though its GetLevel qualification invokes ProcessEvent. A reentrant
+map change can make that qualification stale; guarded ABI3 destruction and
+discard-only behavior for stale worlds require explicit lifetime verification.
+The source attachment representation currently lacks nonmesh scene anchors.
+Collect exact native child/parent/owner identities before extending it; never
+pretend an uncaptured parent is the actor root or skip closure verification.
+
+Corrective/diagnostic commits: 940d506c adds ABI3 borrowed guards to mirror
+destruction and preserves discard-only stale-world handling. Focused native
+checks verify zero K2_DestroyActor calls when GetLevel changes the active world,
+exactly-once destruction in the original current world, and no actor reads
+after destruction (31 C++ checks plus the native Rust API check passed).
+Client suppression retains its strict refusal and now records the target's
+native name/class, world/protection facts and pre/post lifecycle flags.
+4f212ae1 retains strict attachment closure and reports freshly qualified native
+child/parent/owner/root identities and exact parent transforms (37 source Lua
+checks passed). Actual success still requires another exact three-game run.
+
+Native cancellation facts: the only reflected CancelLatentActions is the
+parameterless UUserWidget method. KismetSystemLibrary has no generic actor
+cancellation method in the pinned dump. LevelManager and Spawner use native
+delays with CallbackTarget=self; disabling tick alone cannot cancel these
+continuations or prevent direct spawn function calls. Lua UObject:IsValid
+does not supply an actor pending-destruction proof. Never admit a client based
+on an invented cancellation call or weakened same-world fighter census.
