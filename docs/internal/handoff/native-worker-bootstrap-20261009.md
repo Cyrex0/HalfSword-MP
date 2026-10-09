@@ -1,6 +1,27 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build0b9301bd
+## Current state: 2026-10-09, latest actual buildf13e9233
+
+Independent live armour checkpoint passes full G074 Lua/1358 Rust79 binaries,
+clippy0 errors/13 warnings, dev push and clean RequireG0 deployment with393
+hashes verified. Actual `20261009-144122-23a921-native-host` NativeReady15.226s
+and both49-component entity1 captures40.812s. NativeBind40.815s advances past
+armour to `render material`; exact offending material fields remain unlogged.
+Copied Plan35316compact/74312rawJSON/6556nodes/8771dictionary/26545tokens,
+49components/600bones/38materials. Next change adds precise copied component/
+material diagnostics without changing acceptance. No accepted recipes, frames,
+mirrors or active inputs; both clients fail unchanged65s readiness/wait_scene.
+
+Both original880x527 client windows are immediately qualified and fully on the
+smallest secondary. Authority cleanly cancels67.582s without fallback; all4
+original PIDs independently absent,20save hashes unchanged/crashchildrenempty.
+User-reported sphere-only view is still unresolved: current clients never create
+native mirrors, and an owned effective player-camera/view-target integration is
+also missing. Actual visible skeletal bodies and gear on BOTH clients remain
+required. See native-scene-stream for exact run/identity/evidence and camera
+proof boundaries. Continue concrete work; no headless/co-op release claim.
+
+## Previous actual build0b9301bd
 
 Combined armour/sizing/cancellation/test-isolation checkpoint passes full G0
 (74 Lua/1358 Rust79 binaries; clippy0 errors/13 warnings), dev push and clean

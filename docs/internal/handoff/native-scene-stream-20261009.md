@@ -1,6 +1,52 @@
 # Native full-scene encoding checkpoint
 
-## Latest actual: 0b9301bd
+## Latest actual: f13e9233
+
+Independent live armour semantics checkpoint passes full G0 (74 Lua suites,
+1358 Rust checks in79 binaries; clippy0 errors/13 warnings), dev push and
+clean RequireG0 deployment. All393 deployed hashes match
+f13e9233b5620be381702413391b071248eeca36 before launch.
+
+Actual `test-results/20261009-144122-23a921-native-host` uses source UUID
+75f67dbe-95e3-4109-adea-de54f4a201a6, supervisor39032/authority27816 and
+normal clients43408/42256. The first qualified original PID/start/exe/HWND
+window operation fits and reads back both880x527 windows fully secondary:
+(-1760,0,-880,527) and(-880,0,0,527). NativeReady15.226s.
+
+Entity1 epoch text-8881493164514497873/incarnation5/directory6/revision1/frame1
+completes both49-component captures40.812s. NativeBind40.815s now passes the
+independent armour-slot observations and refuses `render material`. Copied
+prevalidation Plan compact35316/rawJSON74312/nodes6556/dictionary8771/
+tokens26545/components49/bones600/material_slots38. The rejected material's
+component, slot and exact predicate are not emitted yet. No material semantic
+change is justified without those values. Next diagnostics locate the first
+failed copied component/material field while retaining existing validation.
+
+Precise diagnostics are implemented and independently reviewed: component id,
+material index/slot, the exact failed predicate, parameter identity/native index
+and bounded escaped asset labels precede descriptive labels. Asset predicate
+flags expose faults beyond the quoted path prefix. The existing native-empty
+skeletal null-material exemption and validator bodies remain unchanged.
+Focused descriptor25/raw parser12 checks pass. This establishes observability;
+the actual material values and semantic correction await the next exact run.
+
+Both clients remain wait_scene and fail unchanged65s readiness. Accepted
+recipes/canonical frames/native mirrors/active inputs remain0; entity2 and
+visible bodies/gear are unproved. The player view path separately lacks owned
+client view-target and effective camera-state integration; mirror readiness
+alone cannot establish usable presentation. Native camera work must preserve
+actual selected final view, projection and post-processing rather than guessed
+defaults. Cooked fringe/vignette writes are an ArrowTime effect; injury-specific
+camera behaviour has not been established by that branch.
+
+Source cooperatively stops67.582s/seq929 during the replacement capture; the
+supervisor reports clean authority stop without fallback. Independent all4
+original PIDs absent/Shipping[],20/20 original save SHA256 unchanged,
+crash[]/unobservedchildren[]. Full Native log and exact692-line authority27816
+trace are preserved with independent cleanup and live window evidence. This
+closes the actual armour-slot refusal, not scene or gameplay acceptance.
+
+## Previous actual: 0b9301bd
 
 Combined construction armour/Lua sizing/cancellation and test-global isolation
 checkpoint passes full G0: 74 Lua suites, 1358 Rust checks in79 binaries,

@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Identify the exact copied component/material field when experimental native
+  scene registration fails, retaining native values and existing validation.
+  Actual player meshes and owned client views remain under verification.
 - Preserve independent native construction/live armour-map keys and passport slots,
   retaining empty rows and all gear fields. Extend the larger node budget to
   Lua capture signatures and make long native captures cooperatively stop.

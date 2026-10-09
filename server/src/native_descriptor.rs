@@ -357,6 +357,182 @@ impl Material {
         }
         Ok(())
     }
+    /// Explains the existing ordered validation predicates using copied values
+    /// only. This diagnostic never changes material admission or source data.
+    fn validation_detail(&self) -> String {
+        let info_detail = |kind: &str, index: usize, info: &ParameterInfo, field: &str| {
+            format!(
+                "field={kind}.info.{field} parameter_index={index} association={} native_index={} parameter_name={}",
+                info.association,
+                info.index,
+                diagnostic_quoted(&info.name, 64)
+            )
+        };
+        if self.slot as usize >= MAX_MATERIALS {
+            return "field=slot".into();
+        }
+        if !asset(&self.base, false) {
+            return format!("field=base {}", asset_diagnostic(&self.base));
+        }
+        if self.scalars.len() + self.vectors.len() + self.textures.len() > MAX_PARAMETERS {
+            return "field=parameter_count".into();
+        }
+        for (kind, failure) in [
+            (
+                "scalars",
+                parameter_info_failure(self.scalars.iter().map(|p| &p.info)),
+            ),
+            (
+                "vectors",
+                parameter_info_failure(self.vectors.iter().map(|p| &p.info)),
+            ),
+            (
+                "textures",
+                parameter_info_failure(self.textures.iter().map(|p| &p.info)),
+            ),
+        ] {
+            if let Some((index, info, field)) = failure {
+                return info_detail(kind, index, info, field);
+            }
+        }
+        if let Some((index, parameter)) = self
+            .scalars
+            .iter()
+            .enumerate()
+            .find(|(_, p)| !p.value.is_finite())
+        {
+            return format!(
+                "field=scalars.value parameter_index={index} value={:?}",
+                parameter.value
+            );
+        }
+        if let Some((index, parameter)) = self
+            .vectors
+            .iter()
+            .enumerate()
+            .find(|(_, p)| !finite32(&p.value))
+        {
+            let channel = parameter.value.iter().position(|v| !v.is_finite()).unwrap();
+            return format!(
+                "field=vectors.value parameter_index={index} channel={channel} value={:?}",
+                parameter.value[channel]
+            );
+        }
+        if let Some((index, parameter)) = self
+            .textures
+            .iter()
+            .enumerate()
+            .find(|(_, p)| !asset(&p.value, true))
+        {
+            return format!(
+                "field=textures.value parameter_index={index} association={} native_index={} {} parameter_name={} texture={}",
+                parameter.info.association,
+                parameter.info.index,
+                asset_diagnostic(&parameter.value),
+                diagnostic_quoted(&parameter.info.name, 64),
+                diagnostic_quoted(&parameter.value, 128)
+            );
+        }
+        "field=unknown".into()
+    }
+}
+fn parameter_info_failure<'a>(
+    values: impl Iterator<Item = &'a ParameterInfo>,
+) -> Option<(usize, &'a ParameterInfo, &'static str)> {
+    let mut seen = HashSet::new();
+    for (index, info) in values.enumerate() {
+        let field = if !text(&info.name, 128, false) {
+            "name"
+        } else if info.association > 2 {
+            "association"
+        } else if info.index < -1 {
+            "index"
+        } else if !seen.insert(info.key()) {
+            "duplicate"
+        } else {
+            continue;
+        };
+        return Some((index, info, field));
+    }
+    None
+}
+fn diagnostic_quoted(value: &str, max_bytes: usize) -> String {
+    let mut quoted = String::from("\"");
+    for character in value.chars() {
+        let escaped = character.escape_debug().to_string();
+        if quoted.len() + escaped.len() + 1 > max_bytes {
+            break;
+        }
+        quoted.push_str(&escaped);
+    }
+    quoted.push('"');
+    quoted
+}
+fn asset_diagnostic(value: &str) -> String {
+    format!(
+        "asset_bytes={} asset_empty={} asset_nul={} asset_prefix={} asset_transient={} asset_space={} asset_dot={} asset_colon={}",
+        value.len(),
+        value.is_empty(),
+        value.contains('\0'),
+        value.starts_with("/Game/")
+            || value.starts_with("/Engine/")
+            || value.starts_with("/Script/"),
+        value.contains("Transient"),
+        value.contains(' '),
+        value.contains('.'),
+        value.contains(':')
+    )
+}
+impl RenderComponent {
+    fn validation_detail(&self, reason: &'static str) -> String {
+        for (index, material) in self.materials.iter().enumerate() {
+            let null_slot = self.geometry == Geometry::NativeEmpty
+                && self.kind == ComponentKind::Skeletal
+                && material.base.is_empty();
+            let detail = if null_slot {
+                if !material.scalars.is_empty()
+                    || !material.vectors.is_empty()
+                    || !material.textures.is_empty()
+                {
+                    Some((
+                        "native null material parameters",
+                        "field=null_material_parameters".into(),
+                    ))
+                } else {
+                    None
+                }
+            } else if material.validate().is_err() {
+                Some(("render material", material.validation_detail()))
+            } else {
+                None
+            };
+            if let Some((failed, detail)) = detail {
+                if failed == reason {
+                    let (field, facts) = detail.split_once(' ').unwrap_or((&detail, ""));
+                    return format!(
+                        "{field} material_index={index} slot={} scalars={} vectors={} textures={} {facts} base_bytes={} base={}",
+                        material.slot,
+                        material.scalars.len(),
+                        material.vectors.len(),
+                        material.textures.len(),
+                        material.base.len(),
+                        diagnostic_quoted(&material.base, 128)
+                    );
+                }
+                break;
+            }
+            if material.slot as usize != index {
+                if reason == "material slots" {
+                    return format!(
+                        "field=material_slot_order material_index={index} slot={}",
+                        material.slot
+                    );
+                }
+                break;
+            }
+        }
+        String::new()
+    }
 }
 impl RenderComponent {
     pub fn validate(&self) -> Result<(), &'static str> {
@@ -841,8 +1017,8 @@ impl SourceRecipe {
             material_slots: self.components.iter().map(|c| c.materials.len()).sum(),
         })
     }
-    /// Describes the first rejected armor observation without reading native
-    /// objects or changing any copied field. All other errors keep their reason.
+    /// Describes the first rejected armor/component observation without reading
+    /// native objects or changing any copied field. Critical facts precede labels.
     pub fn validation_diagnostic(&self, reason: &'static str) -> String {
         for (table, rows, live) in [
             (
@@ -869,6 +1045,19 @@ impl SourceRecipe {
                 return format!(
                     "{reason} table={table} row={index} slot={} pslot={} class={:?}",
                     row.slot, row.passport.pslot, row.passport.class
+                );
+            }
+        }
+        for (index, component) in self.components.iter().enumerate() {
+            if component.validate().err() == Some(reason) {
+                return format!(
+                    "{reason} component_id={} {} component_index={index} owner={} name={} class={} role={}",
+                    component.id,
+                    component.validation_detail(reason),
+                    component.owner,
+                    diagnostic_quoted(&component.name, 64),
+                    diagnostic_quoted(&component.component_class, 128),
+                    diagnostic_quoted(&component.role, 32)
                 );
             }
         }
@@ -929,6 +1118,177 @@ mod tests {
     use super::*;
     fn fixture() -> SourceRecipe {
         fixture_recipe()
+    }
+    fn diagnostic_material() -> Material {
+        let info = ParameterInfo {
+            name: "ObservedParameter".into(),
+            association: 2,
+            index: -1,
+        };
+        Material {
+            slot: 0,
+            base: "/Game/Test/ObservedMaterial.ObservedMaterial".into(),
+            scalars: vec![ScalarParameter {
+                info: info.clone(),
+                value: -0.0,
+            }],
+            vectors: vec![VectorParameter {
+                info: info.clone(),
+                value: [0.0, 1.0, -0.0, 1.0],
+            }],
+            textures: vec![TextureParameter {
+                info,
+                value: String::new(),
+            }],
+        }
+    }
+    #[test]
+    fn copied_material_diagnostics_locate_every_existing_predicate_without_admission_changes() {
+        let mutations: &[(&str, fn(&mut Material))] = &[
+            ("field=slot", |m| m.slot = 32),
+            ("field=base", |m| {
+                m.base = "/Game/Test/Observed Material.Observed Material".into()
+            }),
+            ("field=parameter_count", |m| {
+                m.scalars.resize(129, m.scalars[0].clone())
+            }),
+            ("field=scalars.info.name", |m| {
+                m.scalars[0].info.name.clear()
+            }),
+            ("field=scalars.info.association", |m| {
+                m.scalars[0].info.association = 3
+            }),
+            ("field=scalars.info.index", |m| m.scalars[0].info.index = -2),
+            ("field=scalars.info.duplicate", |m| {
+                m.scalars.push(m.scalars[0].clone())
+            }),
+            ("field=vectors.info.name", |m| {
+                m.vectors[0].info.name = "a".repeat(129)
+            }),
+            ("field=vectors.info.association", |m| {
+                m.vectors[0].info.association = 255
+            }),
+            ("field=vectors.info.index", |m| {
+                m.vectors[0].info.index = i32::MIN
+            }),
+            ("field=vectors.info.duplicate", |m| {
+                m.vectors.push(m.vectors[0].clone())
+            }),
+            ("field=textures.info.name", |m| {
+                m.textures[0].info.name = "bad\0name".into()
+            }),
+            ("field=textures.info.association", |m| {
+                m.textures[0].info.association = 3
+            }),
+            ("field=textures.info.index", |m| {
+                m.textures[0].info.index = -7
+            }),
+            ("field=textures.info.duplicate", |m| {
+                m.textures.push(m.textures[0].clone())
+            }),
+            ("field=scalars.value", |m| m.scalars[0].value = f32::NAN),
+            ("field=vectors.value", |m| {
+                m.vectors[0].value[3] = f32::INFINITY
+            }),
+            ("field=textures.value", |m| {
+                m.textures[0].value = "/Transient/Observed.Texture".into()
+            }),
+        ];
+        for (field, mutate) in mutations {
+            let mut recipe = fixture();
+            let mut material = diagnostic_material();
+            material.validate().unwrap();
+            mutate(&mut material);
+            assert_eq!(material.validate(), Err("render material"), "{field}");
+            let snapshot = format!("{material:?}");
+            recipe.components[0].materials = vec![material];
+            let detail = recipe.validation_diagnostic("render material");
+            assert!(
+                detail.starts_with(&format!("render material component_id=1 {field}")),
+                "{detail}"
+            );
+            assert!(detail.contains("material_index=0 slot="), "{detail}");
+            assert_eq!(format!("{:?}", recipe.components[0].materials[0]), snapshot);
+        }
+        let mut material = diagnostic_material();
+        material.base.clear();
+        material.scalars[0].info.index = -2;
+        assert!(
+            material.validation_detail().starts_with("field=base "),
+            "first ordered predicate wins"
+        );
+    }
+    #[test]
+    fn copied_component_diagnostics_keep_null_material_exemption_and_critical_prefix() {
+        let mut recipe = fixture();
+        let mut later = recipe.components[0].clone();
+        later.id = 2;
+        later.role = "attachment".into();
+        later.geometry = Geometry::NativeEmpty;
+        later.asset.clear();
+        later.skeleton.clear();
+        later.bones.clear();
+        later.vertex_state = VertexState::NotApplicable;
+        later.materials = vec![
+            Material {
+                slot: 0,
+                base: String::new(),
+                scalars: vec![],
+                vectors: vec![],
+                textures: vec![],
+            },
+            diagnostic_material(),
+        ];
+        later.materials[1].slot = 1;
+        later.name = "x".repeat(128);
+        recipe.components.push(later);
+        recipe.validate().unwrap();
+        recipe.components[1].materials[1].scalars[0].info.index = -2;
+        let detail = recipe.validation_diagnostic(recipe.validate().unwrap_err());
+        let first512 = detail.chars().take(512).collect::<String>();
+        assert!(first512.starts_with("render material component_id=2 field=scalars.info.index"));
+        assert!(first512.contains("parameter_index=0 association=2 native_index=-2"));
+        assert!(first512.contains("material_index=1 slot=1"));
+        recipe.components[1].materials[1].scalars[0].info.index = -1;
+        recipe.components[1].materials[0]
+            .scalars
+            .push(diagnostic_material().scalars.remove(0));
+        assert_eq!(recipe.validate(), Err("native null material parameters"));
+        assert!(recipe.validation_diagnostic("native null material parameters").starts_with("native null material parameters component_id=2 field=null_material_parameters material_index=0 slot=0"));
+        recipe.components[1].materials[0].scalars.clear();
+        recipe.components[1].materials[1].slot = 7;
+        assert_eq!(recipe.validate(), Err("material slots"));
+        assert!(
+            recipe
+                .validation_diagnostic("material slots")
+                .contains("component_id=2 field=material_slot_order material_index=1 slot=7")
+        );
+        recipe.components[1].materials[1].slot = 1;
+        recipe.components[1].relative.rotation[3] = 2.0;
+        assert_eq!(recipe.validate(), Err("render transform"));
+        assert!(
+            recipe
+                .validation_diagnostic("render transform")
+                .starts_with("render transform component_id=2")
+        );
+        let escaped = diagnostic_quoted(&"\0\n\"\\界😀".repeat(128), 128);
+        assert!(escaped.len() <= 128, "escaped output has a byte budget");
+        assert!(escaped.starts_with('"') && escaped.ends_with('"'));
+        recipe.components[1].relative.rotation[3] = 1.0;
+        recipe.components[1].materials[1].base =
+            format!("/Game/Test/{}.Material ", "a".repeat(200));
+        let detail = recipe.validation_diagnostic(recipe.validate().unwrap_err());
+        assert!(
+            detail
+                .chars()
+                .take(512)
+                .collect::<String>()
+                .contains("asset_space=true"),
+            "culprit after quoted prefix must remain visible"
+        );
+        assert!(
+            detail.starts_with("render material component_id=2 field=base material_index=1 slot=1")
+        );
     }
     fn value_bytes(value: &serde_json::Value) -> Vec<u8> {
         codec::Plan::new(value).unwrap().encode().unwrap()

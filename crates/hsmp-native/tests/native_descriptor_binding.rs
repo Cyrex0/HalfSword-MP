@@ -176,6 +176,73 @@ fn direct_raw_recipe_retains_full64_by512_dictionaries_above_old_node_limit() {
 }
 
 #[test]
+fn copied_material_refusal_reports_exact_component_slot_and_predicate_without_admitting_it() {
+    let lua = State::new();
+    lua.run("local c=recipe.components[1];c.materials={{slot=0,base='/Game/Test/Observed Material.Observed Material',scalars={{info={name='CopiedParameter',association=2,index=-2},value=-0.0}},vectors={},textures={}}}");
+    let error = lua.read().unwrap_err();
+    assert!(
+        error.starts_with("render material component_id=1 field=base material_index=0 slot=0"),
+        "{error}"
+    );
+    assert!(error.contains("asset_space=true"), "{error}");
+    assert!(
+        error.contains("compact_bytes="),
+        "copied rejected recipe still has bounded stats"
+    );
+    lua.run(
+        "recipe.components[1].materials[1].base='/Game/Test/ObservedMaterial.ObservedMaterial'",
+    );
+    let error = lua.read().unwrap_err();
+    assert!(
+        error.starts_with(
+            "render material component_id=1 field=scalars.info.index material_index=0 slot=0"
+        ),
+        "{error}"
+    );
+    assert!(
+        error.contains(
+            "parameter_index=0 association=2 native_index=-2 parameter_name=\"CopiedParameter\""
+        ),
+        "{error}"
+    );
+    lua.run("local c=recipe.components[1];c.geometry='native_empty';c.asset='';c.skeleton='';c.bones={};c.vertex_state='not_applicable';c.materials={{slot=0,base='',scalars={},vectors={},textures={}},{slot=1,base='/Game/Test/ObservedMaterial.ObservedMaterial',scalars={},vectors={},textures={{info={name='CopiedTexture',association=2,index=-1},value='/Game/Test/Texture:Subobject'}}}}");
+    let error = lua.read().unwrap_err();
+    assert!(
+        error.starts_with(
+            "render material component_id=1 field=textures.value material_index=1 slot=1"
+        ),
+        "native null first slot must remain exempt: {error}"
+    );
+    assert!(error.contains("asset_colon=true"), "{error}");
+    assert!(
+        error.contains("texture=\"/Game/Test/Texture:Subobject\""),
+        "{error}"
+    );
+    lua.run("recipe.components[1].materials[2].textures[1].value='';recipe.components[1].materials[1].scalars={{info={name='NullMustHaveNoParameters',association=2,index=-1},value=0}}");
+    let error = lua.read().unwrap_err();
+    assert!(error.starts_with("native null material parameters component_id=1 field=null_material_parameters material_index=0 slot=0"), "{error}");
+    lua.run(
+        "recipe.components[1].materials[1].scalars={};recipe.components[1].materials[2].slot=7",
+    );
+    let error = lua.read().unwrap_err();
+    assert!(
+        error.starts_with(
+            "material slots component_id=1 field=material_slot_order material_index=1 slot=7"
+        ),
+        "{error}"
+    );
+    lua.run("recipe.components[1].materials[2].slot=1");
+    let recipe = lua.read().unwrap();
+    assert_eq!(recipe.components[0].materials.len(), 2);
+    assert!(recipe.components[0].materials[0].base.is_empty());
+    assert!(
+        recipe.components[0].materials[1].textures[0]
+            .value
+            .is_empty()
+    );
+}
+
+#[test]
 fn direct_raw_recipe_keeps_complete49_component600_bone_shape_above_json_bound() {
     let lua = State::new();
     lua.run("local function copy(v) if type(v)~='table' then return v end;local o={};for k,x in pairs(v)do o[k]=copy(x)end;return o end;local template=recipe.components[1];recipe.components={};for i=1,49 do local c=copy(template);c.id=i;c.parent=i==1 and 0 or 1;c.name='Offline component '..i;if i>1 then c.role='attachment'end;if i<=9 then c.bones={};local n=(i==1 or i==4 or i==8)and 66 or 67;for j=1,n do c.bones[j]={name=string.format('offline_full_render_dictionary_bone_%03d',j-1),parent=j==1 and -1 or j-2}end;else c.kind='static';c.component_class='/Script/Engine.StaticMeshComponent';c.geometry='native_empty';c.asset='';c.skeleton='';c.physics_asset='';c.bones={};c.vertex_state='not_applicable'end;recipe.components[i]=c end");
