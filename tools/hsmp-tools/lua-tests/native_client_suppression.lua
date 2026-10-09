@@ -31,7 +31,7 @@ local function fixture()
         c.SetCollisionEnabled=function(self,v)self.collision_mode=v end;c.GetCollisionEnabled=function(self)return self.collision_mode end
         c.SetAllPhysicsLinearVelocity=function()end;c.IsSimulatingPhysics=function(self)return self.simulating end
         c.SetVisibility=function(self,v)self.visible=v end;c.IsVisible=function(self)return self.visible end
-        owner.components={c};owner.Mesh=c;return c
+        owner.components={c};owner.Mesh=c;owner.RootComponent=c;return c
     end
     f.mesh=mesh
     f.world=actor("world");f.world.GetFullName=function()return"World /Game/Maps/Arenas/Map_Arena_Yard.Map_Arena_Yard"end
@@ -64,6 +64,9 @@ do
     local f,s=fixture();local ok,why,counts=s:run()
     check(ok,why or"qualified client suppression succeeds")
     check(not f.driver.valid and counts.drivers==1,"native latent spawn owner is destroyed")
+    check(#counts.driver_proofs==1 and counts.driver_proofs[1].name==f.driver.name and counts.driver_proofs[1].address==f.driver.address
+        and counts.driver_proofs[1].native.before.world_listed.value==true and counts.driver_proofs[1].native.after.world_listed.value==false,
+        "successful native retirement retains the exact original before/after proof")
     check(table.concat(f.destroyed,",")=="BP_LevelManager_C_1,module_1,ModularWeaponBP_C_1","owned gear children are destroyed before their parent")
     check(f.pc.valid and f.pc.Pawn==nil and f.pawn.Controller==nil,"normal player controller is preserved and unpossessed")
     check(f.pawn.valid and f.pawn.bHidden==true and f.pawn.collision==false and f.pawn.tick==false,"still-present Willie is retired without assuming actor destruction")
@@ -145,7 +148,9 @@ do
     for _,method in ipairs({"IsValid","GetWorld","GetFName","GetClass","SetActorHiddenInGame","SetActorTickEnabled","SetActorEnableCollision","K2_DestroyActor"})do
         f.driver[method]=function()calls=calls+1;error("pending driver must not be touched")end
     end
-    local again,why=s:run();check(again and calls==0,why or"repeated census uses only original scalar native proof before pending driver methods")
+    local again,why,counts=s:run();check(again and calls==0,why or"repeated census uses only original scalar native proof before pending driver methods")
+    check(#counts.driver_proofs==1 and counts.driver_proofs[1].phase=="probe"and counts.driver_proofs[1].weak==1001,
+        "periodic native probe evidence is retained without actor lookup")
     f.env.probe_native=function(_,weak,original)return{ok=false,qualified=true,dispatched=false,alive_after=1,weak=weak,address=original,reason="native identity became live"}end
     local live,refusal=s:run();check(not live and refusal=="suppression_native_retirement_probe_refused"and calls==0,"native-live/reused original proof fails before pending actor methods")
     s:drop();check(next(s.removed_drivers)==nil and f.cleared>=2,"world drop forgets Lua and provider scalar retirement records")
@@ -154,6 +159,63 @@ do
     local f,s=fixture();f.env.retire_native=function(_,original)return{ok=true,qualified=true,dispatched=true,alive_after=0,weak_present=1,weak=1001,address=original,
         before={world_listed={known=true,value=true}},after={world_listed={known=true,value=false},object_flags={known=true,value=0}}}end
     local ok,why=s:run();check(not ok and why=="suppression_native_retirement_refused","world absence and live weak without native garbage cannot be disguised as a successful native proof")
+end
+do
+    local f,s=fixture();local generator=f.actor("BP_Generator_Weapons_Random_C_19",{
+        ["/Game/Blueprints/Generators/BP_Generator_Weapons_Random.BP_Generator_Weapons_Random_C"]=true})
+    local null={IsValid=function()return false end,GetAddress=function()return 0 end}
+    generator.RootComponent=null;generator.DefaultSceneRoot=null;f.actors.BP_Generator_Weapons_Random_C={generator}
+    local ok,why,counts=s:run();local evidence=counts.refusal
+    check(not ok and why=="suppression_component_census_empty"and counts.drivers==1,"empty driver census remains refused after prior successful retirement")
+    check(evidence.kind=="driver"and evidence.name.value==generator.name and evidence.class.value=="Class /Test/"..generator.name
+        and evidence.address.value==generator.address,"empty component census identifies the exact actor rather than assuming fighter identity")
+    check(evidence.current_world.value==true and evidence.expected_world.value==f.world.address and evidence.persistent.value==false
+        and evidence.mirrored_garbage.value==false and evidence.world_listed.known==false,"native garbage and current world facts retain their actual scope without invented world-membership proof")
+    check(evidence.root_component.value.null==true and evidence.root_component.value.address==0
+        and evidence.default_scene_root.value.null==true,"actual null hard root properties use wrapper pointer copy without null-object methods")
+    check(evidence.components.complete and evidence.components.count==0 and evidence.components.return_type=="table"
+        and evidence.components.getter=="/Script/Engine.Actor:K2_GetComponentsByClass"and evidence.components.class=="/Script/Engine.ActorComponent",
+        "empty reflected hard-object return records the exact getter, class, completeness and count")
+    check(evidence.actor_hidden.value==true and evidence.actor_collision.value==false and evidence.actor_tick.value==false,
+        "inert actor flags remain diagnostic and cannot waive an empty component census")
+    check(#counts.driver_proofs==1 and counts.driver_proofs[1].native.dispatched==true and f.pc.Pawn==f.pawn,
+        "later refusal preserves the prior successful native driver proof while preventing fighter cleanup")
+end
+do
+    local f,s=fixture();f.pawn.components={}
+    local ok,why,counts=s:run()
+    check(not ok and why=="suppression_component_census_empty"and counts.refusal.kind=="fighter"
+        and counts.refusal.name.value==f.pawn.name and not s:retirement(f.pawn.address,f.pawn.name),
+        "component-free fighter remains refused with exact target identity")
+end
+do
+    local f,s=fixture();f.driver.flags=0x40000000;local events=0;local root_reads=0
+    for _,method in ipairs({"ActorHasTag","SetActorHiddenInGame","SetActorEnableCollision","SetActorTickEnabled","K2_GetComponentsByClass"})do
+        f.driver[method]=function()events=events+1;error("garbage actor PE")end
+    end
+    f.driver.RootComponent=nil;setmetatable(f.driver,{__index=function(_,key)if key=="RootComponent"or key=="DefaultSceneRoot"then root_reads=root_reads+1;error("garbage root field")end end})
+    local ok,why,counts=s:run()
+    check(not ok and why=="suppression_actor_native_garbage"and counts.refusal.mirrored_garbage.value==true
+        and events==0 and root_reads==0,"native garbage observed at inert entry refuses before actor PE or root fields")
+    check(counts.refusal.name.value==f.driver.name and counts.refusal.lua_valid.value==true,
+        "Lua wrapper validity does not label an engine-garbage actor alive")
+end
+do
+    local f,s=fixture();f.driver.HasAnyFlags=function()return 0 end
+    local ok,why,counts=s:run()
+    check(not ok and why=="suppression_actor_garbage_unavailable"and counts.refusal.mirrored_garbage.known==false
+        and f.mutations==0,"unknown native garbage value fails closed before inert mutation")
+end
+do
+    local f,s=fixture();local touches=0
+    f.driver.K2_GetComponentsByClass=function(self)self.flags=0x40000000;return{}end
+    for _,method in ipairs({"GetActorEnableCollision","IsActorTickEnabled"})do
+        f.driver[method]=function()touches=touches+1;error("post-getter garbage actor PE")end
+    end
+    local ok,why,counts=s:run()
+    check(not ok and why=="suppression_actor_native_garbage"and counts.refusal.components.complete
+        and counts.refusal.components.count==0 and touches==0,
+        "native garbage raised during the getter retains pure census count and refuses further actor readback")
 end
 do
     local f,s=fixture();f.valid=false

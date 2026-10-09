@@ -30,7 +30,7 @@ function M.new(env)
         local WG=env.WG;local token=WG.token();local world=WG.world()
         if not world or not WG.same(token)then return false,"suppression_world_unavailable"end
         if self.key~=WG.key then self:drop();self.key=WG.key end
-        local summary={drivers=0,retired=0,gear=0,ai=0}
+        local summary={drivers=0,retired=0,gear=0,ai=0,driver_proofs={}}
         local result,reason=pcall(function()
             local function fresh()if not WG.same(token)then error("suppression_world_changed",0)end end
             local function live(o)
@@ -41,6 +41,11 @@ function M.new(env)
                 local value=o[name](o,...);fresh()
                 if not live(o)then error("suppression_object_changed:"..name,0)end
                 return value
+            end
+            local function fact(fn,expected)
+                fresh();local ok,value=pcall(fn);fresh()
+                if ok and(expected==nil or type(value)==expected)then return{known=true,value=value}end
+                return{known=false,error=(ok and"unexpected native value type"or tostring(value)):sub(1,192)}
             end
             local world_address=call(world,"GetAddress")
             local function current(o)
@@ -77,13 +82,66 @@ function M.new(env)
                 return rows
             end
             local function protected(o)return call(o,"ActorHasTag",env.FName("Persistent"))==true end
-            local function inert(actor)
-                if not current(actor)or protected(actor)then error("suppression_protected_or_foreign_actor",0)end
+            local function inert(actor,kind)
+                -- Lua IsValid is a wrapper/memory qualifier, not this engine's
+                -- actor liveness rule. HasAnyFlags is pinned direct UObject
+                -- metadata (LuaUObject.hpp679), not an actor ProcessEvent.
+                local evidence={kind=kind,phase="before_inert",
+                    address=fact(function()return address(actor)end,"number"),
+                    name=fact(function()return name(actor):sub(1,256)end,"string"),
+                    class=fact(function()return call(call(actor,"GetClass"),"GetFullName"):sub(1,512)end,"string"),
+                    lua_valid=fact(function()return live(actor)end,"boolean"),
+                    mirrored_garbage=fact(function()return call(actor,"HasAnyFlags",0x40000000)end,"boolean"),
+                    expected_world={known=true,value=world_address},
+                    current_world={known=false,error="native garbage qualification not completed"},
+                    persistent={known=false,error="native garbage qualification not completed"},
+                    root_component={known=false,error="native garbage qualification not completed"},
+                    default_scene_root={known=false,error="native garbage qualification not completed"},
+                    world_listed={known=false,error="no native world-class membership census in this diagnostic"},
+                    components={getter="/Script/Engine.Actor:K2_GetComponentsByClass",class="/Script/Engine.ActorComponent",complete=false,count=0}}
+                summary.refusal=evidence
+                -- Never read actor fields or dispatch actor functions after a
+                -- garbage/unknown native flag. Existing cohort current() checks
+                -- precede this entry; this gate does not claim to qualify those.
+                if not evidence.mirrored_garbage.known then error("suppression_actor_garbage_unavailable",0)end
+                if evidence.mirrored_garbage.value~=false then error("suppression_actor_native_garbage",0)end
+                evidence.current_world=fact(function()return current(actor)end,"boolean")
+                evidence.persistent=fact(function()return protected(actor)end,"boolean")
+                if not evidence.current_world.known or evidence.current_world.value~=true
+                    or not evidence.persistent.known or evidence.persistent.value~=false then error("suppression_protected_or_foreign_actor",0)end
+                local function root_fact(field)
+                    return fact(function()
+                        local root=actor[field];fresh()
+                        if root==nil then error("hard object property returned nil",0)end
+                        -- Pinned GetAddress copies only the wrapper pointer; a
+                        -- native nullptr is identifiable without IsValid/PE.
+                        local a=root:GetAddress();fresh()
+                        if type(a)~="number"then error("root native pointer unavailable",0)end
+                        if a==0 then return{pointer_known=true,address=0,null=true}end
+                        local garbage=call(root,"HasAnyFlags",0x40000000)
+                        if type(garbage)~="boolean"then error("root native garbage flag unavailable",0)end
+                        local value={pointer_known=true,address=a,null=false,mirrored_garbage=garbage}
+                        if not garbage then value.name=name(root):sub(1,256);value.class=call(call(root,"GetClass"),"GetFullName"):sub(1,512)end
+                        return value
+                    end,"table")
+                end
+                -- RootComponent is a native hard SceneComponent property;
+                -- DefaultSceneRoot is a distinct optional Blueprint member.
+                evidence.root_component=root_fact("RootComponent")
+                evidence.default_scene_root=root_fact("DefaultSceneRoot")
                 call(actor,"SetActorHiddenInGame",true);call(actor,"SetActorEnableCollision",false);call(actor,"SetActorTickEnabled",false)
                 local rows=call(actor,"K2_GetComponentsByClass",component_class);local count=0
-                env.each(rows,function(c)
+                evidence.phase="component_census";evidence.components.return_type=type(rows)
+                env.each(rows,function()
                     count=count+1;components_total=components_total+1
+                    evidence.components.count=count
                     if count>256 or components_total>1024 then error("suppression_component_bound",0)end
+                end)
+                evidence.components.complete=true
+                evidence.mirrored_garbage_after=fact(function()return call(actor,"HasAnyFlags",0x40000000)end,"boolean")
+                if not evidence.mirrored_garbage_after.known then error("suppression_actor_garbage_unavailable",0)end
+                if evidence.mirrored_garbage_after.value~=false then error("suppression_actor_native_garbage",0)end
+                env.each(rows,function(c)
                     if not live(c)or address(call(c,"GetOwner"))~=address(actor)then error("suppression_component_owner",0)end
                     call(c,"SetComponentTickEnabled",false)
                     if call(c,"IsA",primitive_class)==true then
@@ -95,17 +153,18 @@ function M.new(env)
                     if call(c,"IsA",scene_class)==true then call(c,"SetVisibility",false,true)end
                     if call(c,"IsComponentTickEnabled")~=false then error("suppression_component_tick_readback",0)end
                 end)
+                evidence.mirrored_garbage_after=fact(function()return call(actor,"HasAnyFlags",0x40000000)end,"boolean")
+                if not evidence.mirrored_garbage_after.known then error("suppression_actor_garbage_unavailable",0)end
+                if evidence.mirrored_garbage_after.value~=false then error("suppression_actor_native_garbage",0)end
+                evidence.actor_hidden=fact(function()local value=actor.bHidden;fresh();return value end,"boolean")
+                evidence.actor_collision=fact(function()return call(actor,"GetActorEnableCollision")end,"boolean")
+                evidence.actor_tick=fact(function()return call(actor,"IsActorTickEnabled")end,"boolean")
                 if count==0 then error("suppression_component_census_empty",0)end
                 if call(actor,"GetActorEnableCollision")~=false or call(actor,"IsActorTickEnabled")~=false or actor.bHidden~=true then error("suppression_actor_readback",0)end
-                fresh()
+                fresh();summary.refusal=nil
             end
             local function destroy(actor,kind)
                 if not current(actor)or protected(actor)then error("suppression_destroy_qualification",0)end
-                local function fact(fn,expected)
-                    fresh();local ok,value=pcall(fn);fresh()
-                    if ok and(expected==nil or type(value)==expected)then return{known=true,value=value}end
-                    return{known=false,error=(ok and"unexpected native value type"or tostring(value)):sub(1,192)}
-                end
                 local function actor_state(valid)
                     local state={valid={known=true,value=valid}}
                     -- UObject IsValid does not prove actor destruction. Record
@@ -152,6 +211,7 @@ function M.new(env)
                     local count=0;for _ in pairs(self.removed_drivers)do count=count+1 end
                     if count>=512 then error("suppression_native_retirement_bound",0)end
                     self.removed_drivers[original]={weak=proof.weak,address=original,name=evidence.name.value,class=evidence.class.value,world=self.key}
+                    summary.driver_proofs[#summary.driver_proofs+1]={phase="retire",name=evidence.name.value,class=evidence.class.value,address=original,weak=proof.weak,native=proof}
                     summary.refusal=nil;return
                 end
                 actor:K2_DestroyActor() -- unsafe: ok only qualified nonPersistent native spawn drivers, owned gear or AI; never a Willie/player controller
@@ -176,6 +236,8 @@ function M.new(env)
                     error("suppression_native_retirement_probe_refused",0)
                 end
                 confirmed[a]=true
+                if #summary.driver_proofs>=512 then error("suppression_native_retirement_bound",0)end
+                summary.driver_proofs[#summary.driver_proofs+1]={phase="probe",name=record.name,class=record.class,address=record.address,weak=record.weak,native=proof}
             end
             for _,class in ipairs(DRIVERS)do
                 for _,driver in pairs(objects(class))do
@@ -185,7 +247,7 @@ function M.new(env)
                     if type(raw)~="number"then error("suppression_driver_address",0)end
                     if not confirmed[raw]and current(driver)then
                     if call(driver,"IsA",cls(DRIVER_PATHS[class]))~=true then error("suppression_driver_class",0)end
-                    inert(driver);destroy(driver,"driver");summary.drivers=summary.drivers+1
+                    inert(driver,"driver");destroy(driver,"driver");summary.drivers=summary.drivers+1
                 end end
             end
             local willies={};local targets={}
@@ -217,7 +279,7 @@ function M.new(env)
             end
             local removal={};for _,item in ipairs(gear)do local a=address(item);if selected[a]then removal[#removal+1]={actor=item,depth=selected[a]}end end
             table.sort(removal,function(a,b)return a.depth>b.depth end)
-            for _,item in ipairs(removal)do inert(item.actor);destroy(item.actor,"gear");summary.gear=summary.gear+1 end
+            for _,item in ipairs(removal)do inert(item.actor,"gear");destroy(item.actor,"gear");summary.gear=summary.gear+1 end
             for _,pawn in ipairs(willies)do
                 local controller=pawn.Controller;fresh()
                 if live(controller)then
@@ -226,9 +288,9 @@ function M.new(env)
                     if not player and call(controller,"IsA",ai_class)~=true then error("suppression_controller_class",0)end
                     call(controller,"StopMovement");call(controller,"UnPossess")
                     local after=call(controller,"K2_GetPawn");if live(after)then error("suppression_unpossess_readback",0)end
-                    if not player then inert(controller);destroy(controller,"ai");summary.ai=summary.ai+1 end
+                    if not player then inert(controller,"ai");destroy(controller,"ai");summary.ai=summary.ai+1 end
                 end
-                inert(pawn)
+                inert(pawn,"fighter")
                 local after=pawn.Controller;fresh();if live(after)then error("suppression_fighter_controller_readback",0)end
                 local a=address(pawn)
                 if not self.retired[a]then local count=0;for _ in pairs(self.retired)do count=count+1 end;if count>=64 then error("suppression_retirement_bound",0)end end
