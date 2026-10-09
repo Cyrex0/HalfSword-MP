@@ -993,3 +993,22 @@ and crash/unobserved-child lists are empty. Null PIDs32556/34320/18532/27728;
 offscreen PIDs9944/41760/2200/34456. Complete and authority-filtered native logs
 are preserved. Rendering/native color override qualification and the separate
 client2 exit remain open; no playable headless or co-op release is established.
+
+Follow-up source diagnostics are committed as91d19a5a: typed vertex_count
+return/error, requestedLOD and original staticasset bAllowCPUAccess value (or
+explicit unknown), preserving strict counts and no flag writes. Focused Lua147
+assertions/syntax3 and independent narrow review pass; these values have not yet
+been observed in another game run.
+
+Separate primary analysis identifies a possible native-asset path only with
+proved original override absence. Matched RVP body144A697AB–144A697C5 accesses
+StaticMeshComponent LODData header(+0x588/+0x590), stride0x90 and each row's
+override-color buffer pointer(+0x30); a nonnull buffer supplies count(+0x34).
+Pinned StaticMeshComponent.hpp63/StaticMeshComponentLODInfo.hpp11–26 and
+ObjectDump2901–2902 establish reflected array/struct stride. A guarded complete
+header/row census can prove no overrides without reading asset CPU vertices.
+Existing NativeAsset DTO acceptance alone is insufficient: source capture,
+mirror apply/readiness and ongoing frames must freshly prove absence; unknown
+or nonnull buffer must not become native_asset. No such implementation or actual
+rendering proof exists yet. NullRHI combat/paint/body parity also cannot be
+inferred from an override-absence check.
