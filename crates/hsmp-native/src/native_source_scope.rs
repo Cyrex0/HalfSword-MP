@@ -1142,12 +1142,26 @@ unsafe extern "C" fn spline_scope_guard(context: *mut c_void) -> i32 {
 struct StaticVertexState {
     lod_info_count: u32,
     no_override: bool,
+    asset_present: bool,
+}
+impl StaticVertexState {
+    fn state(self) -> &'static str {
+        if !self.asset_present {
+            "native_empty"
+        } else if self.no_override {
+            "native_asset"
+        } else {
+            "captured_required"
+        }
+    }
 }
 fn checked_vertex_state(
     proof: crate::native_presentation::VertexStateProof,
 ) -> Result<StaticVertexState, String> {
     if proof.lod_info_count > 16
         || proof.no_override > 1
+        || proof.asset_present > 1
+        || (proof.asset_present == 0 && proof.no_override == 0)
         || (proof.no_override == 0 && proof.lod_info_count == 0)
     {
         return Err("source static vertex proof bounds/state incomplete".into());
@@ -1155,6 +1169,7 @@ fn checked_vertex_state(
     Ok(StaticVertexState {
         lod_info_count: proof.lod_info_count,
         no_override: proof.no_override == 1,
+        asset_present: proof.asset_present == 1,
     })
 }
 fn capture_static_vertex_state(
@@ -1266,20 +1281,12 @@ impl Native {
         unsafe {
             match result {
                 Ok(proof) => {
-                    lua_createtable(L, 0, 3);
+                    lua_createtable(L, 0, 4);
                     let t = lua_gettop(L);
-                    set_str(
-                        L,
-                        t,
-                        "state",
-                        if proof.no_override {
-                            "native_asset"
-                        } else {
-                            "captured_required"
-                        },
-                    );
+                    set_str(L, t, "state", proof.state());
                     set_int(L, t, "lod_info_count", proof.lod_info_count.into());
                     set_bool(L, t, "no_override", proof.no_override);
+                    set_bool(L, t, "asset_present", proof.asset_present);
                     1
                 }
                 Err(reason) => nil_err(L, &reason),
@@ -1946,25 +1953,106 @@ mod source_scope_tests {
             let proof = checked_vertex_state(VertexStateProof {
                 lod_info_count: count,
                 no_override: 1,
+                asset_present: 1,
             })
             .unwrap();
             assert!(proof.no_override);
+            assert!(proof.asset_present);
+            assert_eq!(proof.state(), "native_asset");
             assert_eq!(proof.lod_info_count, count);
         }
         assert!(
             !checked_vertex_state(VertexStateProof {
                 lod_info_count: 1,
                 no_override: 0,
+                asset_present: 1,
             })
             .unwrap()
             .no_override
         );
         for (count, state) in [(0, 0), (17, 1), (17, 0), (1, 2), (0, u32::MAX)] {
-            assert!(checked_vertex_state(VertexStateProof {
+            assert!(
+                checked_vertex_state(VertexStateProof {
+                    lod_info_count: count,
+                    no_override: state,
+                    asset_present: 1,
+                })
+                .is_err()
+            );
+        }
+    }
+    #[test]
+    fn source_scope_empty_static_presence_is_explicit_and_strict() {
+        use crate::native_presentation::VertexStateProof;
+        for count in [0, 1, 16] {
+            let proof = checked_vertex_state(VertexStateProof {
                 lod_info_count: count,
-                no_override: state,
+                no_override: 1,
+                asset_present: 0,
             })
-            .is_err());
+            .unwrap();
+            assert!(!proof.asset_present);
+            assert!(proof.no_override);
+            assert_eq!(proof.state(), "native_empty");
+            assert_eq!(proof.lod_info_count, count);
+        }
+        let present = checked_vertex_state(VertexStateProof {
+            lod_info_count: 1,
+            no_override: 0,
+            asset_present: 1,
+        })
+        .unwrap();
+        assert_eq!(present.state(), "captured_required");
+        for (count, no_override, asset_present) in [
+            (0, 0, 0),
+            (1, 0, 0),
+            (16, 0, 0),
+            (17, 1, 0),
+            (0, 1, 2),
+            (0, 1, u32::MAX),
+            (0, 2, 0),
+        ] {
+            assert!(
+                checked_vertex_state(VertexStateProof {
+                    lod_info_count: count,
+                    no_override,
+                    asset_present,
+                })
+                .is_err(),
+                "invalid native empty proof {count}/{no_override}/{asset_present}"
+            );
+        }
+    }
+    #[test]
+    fn source_scope_asset_presence_change_between_censuses_refuses() {
+        for first_present in [false, true] {
+            let (mut scope, engine) = fixture();
+            let path = engine.rows.borrow()[&7].path.clone();
+            let handle = scope.keep(&engine, 7, 5, path).unwrap();
+            let calls = std::cell::Cell::new(0);
+            let result = capture_static_vertex_state(
+                &scope,
+                &engine,
+                handle,
+                || {
+                    calls.set(calls.get() + 1);
+                    Ok(crate::native_presentation::VertexStateProof {
+                        lod_info_count: 0,
+                        no_override: 1,
+                        asset_present: u32::from(if calls.get() == 1 {
+                            first_present
+                        } else {
+                            !first_present
+                        }),
+                    })
+                },
+                || panic!("changed native presence must fail before final acceptance"),
+            );
+            assert_eq!(calls.get(), 2);
+            assert_eq!(
+                result.unwrap_err(),
+                "source static vertex state changed during native getters"
+            );
         }
     }
     #[test]
@@ -1989,6 +2077,7 @@ mod source_scope_tests {
                     Ok(crate::native_presentation::VertexStateProof {
                         lod_info_count: 1,
                         no_override: u32::from(!engine.vertex_override.get()),
+                        asset_present: 1,
                     })
                 },
                 || scope.pure_hard_links(&engine, handle),
@@ -2028,6 +2117,7 @@ mod source_scope_tests {
                     Ok(crate::native_presentation::VertexStateProof {
                         lod_info_count: 1,
                         no_override: 1,
+                        asset_present: 1,
                     })
                 },
                 || scope.pure_hard_links(&engine, handle),
@@ -2053,6 +2143,7 @@ mod source_scope_tests {
                 Ok(crate::native_presentation::VertexStateProof {
                     lod_info_count: 0,
                     no_override: 1,
+                    asset_present: 1,
                 })
             },
             || scope.pure_hard_links(&engine, handle),
@@ -2064,7 +2155,8 @@ mod source_scope_tests {
             proof,
             StaticVertexState {
                 lod_info_count: 0,
-                no_override: true
+                no_override: true,
+                asset_present: true,
             }
         );
         let refused = capture_static_vertex_state(
@@ -2107,6 +2199,7 @@ mod source_scope_tests {
                     Ok(crate::native_presentation::VertexStateProof {
                         lod_info_count: 1,
                         no_override: 1,
+                        asset_present: 1,
                     })
                 },
                 || scope.pure_hard_links(&engine, handle),
@@ -2758,9 +2851,10 @@ mod source_scope_tests {
             PATH_CALLBACK_COUNT.with(|p| p.set(0));
             let _trace = ProfileOperation::begin(e.reference, e.dir_seq, 1);
             let pure = ProfileGuardEngine { runtime: e };
-            assert!(pure
-                .path_matches(id, "initial exact path", Some(&witness))
-                .unwrap());
+            assert!(
+                pure.path_matches(id, "initial exact path", Some(&witness))
+                    .unwrap()
+            );
             assert_eq!(
                 PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.finds),
                 0
@@ -2772,9 +2866,10 @@ mod source_scope_tests {
             let mut changed = witness.clone();
             changed.nodes[0].address += 1;
             let calls = PATH_CALLBACK_COUNT.with(|p| p.get());
-            assert!(pure
-                .path_matches(id, "ignored text", Some(&changed))
-                .is_err());
+            assert!(
+                pure.path_matches(id, "ignored text", Some(&changed))
+                    .is_err()
+            );
             assert_eq!(
                 PATH_CALLBACK_COUNT.with(|p| p.get()),
                 calls,
@@ -2782,9 +2877,10 @@ mod source_scope_tests {
             );
             changed = witness.clone();
             changed.package_name ^= 1;
-            assert!(pure
-                .path_matches(id, "ignored text", Some(&changed))
-                .is_err());
+            assert!(
+                pure.path_matches(id, "ignored text", Some(&changed))
+                    .is_err()
+            );
             assert!(pure.path_matches(id, "ignored text", None).is_err());
             PATH_CALLBACK_GARBAGE.with(|p| p.set(true));
             assert!(
@@ -2853,14 +2949,16 @@ mod source_scope_tests {
                 schema: engine.schema.clone(),
             };
             NAME_READS.with(|reads| reads.set(0));
-            assert!(capture_static_vertex_state(
-                &scope,
-                engine,
-                1,
-                || { panic!("unadmitted client cannot receive a native asset proof") },
-                || panic!("unadmitted client cannot finish a native asset proof")
-            )
-            .is_err());
+            assert!(
+                capture_static_vertex_state(
+                    &scope,
+                    engine,
+                    1,
+                    || { panic!("unadmitted client cannot receive a native asset proof") },
+                    || panic!("unadmitted client cannot finish a native asset proof")
+                )
+                .is_err()
+            );
             assert_eq!(NAME_READS.with(|reads| reads.get()), 0);
         });
     }

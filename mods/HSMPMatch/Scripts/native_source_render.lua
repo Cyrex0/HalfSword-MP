@@ -172,7 +172,29 @@ function M.capture(env,bindings)
         if get(row,function(o)return o.bDrawDebugLagMarkers end)~=draw then fail("native spring arm debug flag changed during sockets")end
         return {type="spring_arm",draw_debug_lag_markers=draw,socket_name=sockets[1]}
     end
-    local spring_arms={}
+    local spring_arms,empty_statics={},{}
+    local function static_vertex_proof(row,component_class,asset_check)
+        phase("vertex_state","enter",{getter="Native.native_source_scope_vertex_state",class=component_class},row)
+        if type(env.scope.vertex_state)~="function"then fail("native static vertex proof capability unavailable")end
+        guard();component(row);asset_check()
+        local proof,reason=env.scope.vertex_state(row.handle)
+        guard();component(row);asset_check()
+        if type(proof)~="table"then fail(type(reason)=="string"and reason or "native static vertex proof unavailable")end
+        for key in pairs(proof)do
+            if key~="state"and key~="lod_info_count"and key~="no_override"and key~="asset_present"then fail("native static vertex proof field unsupported")end
+        end
+        local count=proof.lod_info_count
+        if type(count)~="number"or not math.tointeger(count)or count<0 or count>16 then fail("native static vertex proof LOD bound")end
+        if type(proof.asset_present)~="boolean"or type(proof.no_override)~="boolean"then fail("native static vertex proof presence unavailable")end
+        if proof.state=="native_empty"and proof.asset_present==false and proof.no_override==true then
+            -- Actual hard-null native geometry, not an absent Lua wrapper.
+        elseif proof.state=="native_asset"and proof.asset_present==true and proof.no_override==true then
+        elseif proof.state=="captured_required"and proof.asset_present==true and proof.no_override==false and count>=1 then
+        else fail("native static vertex proof incomplete")end
+        phase("vertex_state","exit",{getter="Native.native_source_scope_vertex_state",class=component_class,ok=true,
+            count=count,reason="state="..proof.state.." no_override="..tostring(proof.no_override).." asset_present="..tostring(proof.asset_present)},row)
+        return {state=proof.state,lod_info_count=count,no_override=proof.no_override,asset_present=proof.asset_present}
+    end
     local function vec(v,keys)
         local out={};for i,k in ipairs(keys)do out[i]=checked(function()return v[k]end);if type(out[i])~="number"then fail("native render vector unavailable")end end
         return out
@@ -433,12 +455,22 @@ function M.capture(env,bindings)
         if kind=="skeletal"then asset_obj=get(row,function(o)return o:GetSkeletalMeshAsset()end)
         elseif kind=="static"then asset_obj=get(row,function(o)return o.StaticMesh end)
         elseif kind=="groom"then asset_obj=get(row,function(o)return o.GroomAsset end)end
+        local asset_read,asset_identity,asset_class,current_asset,empty_static
+        if kind=="static"and not object_id(asset_obj)then
+            if component_class~="/Script/Engine.StaticMeshComponent"then fail("native empty static class unsupported")end
+            current_asset=function()
+                if object_id(get(row,function(o)return o.StaticMesh end))then fail("native static empty asset changed")end
+            end
+            local proof=static_vertex_proof(row,component_class,current_asset)
+            if proof.state~="native_empty"then fail("native static proof disagrees with unavailable asset")end
+            empty_static=true
+            empty_statics[#empty_statics+1]={row=row,class=component_class,check=current_asset,proof=proof}
+        end
         local transient;c.asset,transient=path(asset_obj)
         -- RF_Transient is evidence of a runtime asset, not a specific merge.
-        c.geometry=kind=="procedural" and "procedural" or transient and "runtime_transient" or "cooked"
+        c.geometry=empty_static and "native_empty"or kind=="procedural" and "procedural" or transient and "runtime_transient" or "cooked"
         c.skeleton="";c.physics_asset=""
-        local asset_read,asset_identity,asset_class,current_asset
-        if kind=="skeletal"or kind=="static"then
+        if kind=="skeletal"or kind=="static"and not empty_static then
             asset_identity=object_id(asset_obj)
             if not asset_identity then fail("native "..kind.." asset unavailable")end
             asset_class=checked(function()return asset_obj:GetClass():GetFullName()end)
@@ -531,25 +563,16 @@ function M.capture(env,bindings)
         phase("material","enter",{getter="MeshComponent.GetMaterial/MaterialInstance parameters",count=count,class=component_class},row)
         for slot=0,count-1 do c.materials[#c.materials+1]=material(row,slot)end
         phase("material","exit",{ok=true,count=count,class=component_class},row)
-        if kind=="skeletal" or kind=="static"then
+        if empty_static then
+            c.vertex_state="not_applicable"
+            current_asset()
+        elseif kind=="skeletal" or kind=="static"then
             local native_asset=false
             if kind=="static"then
                 if c.geometry~="cooked"then fail("native static runtime geometry unsupported")end
-                phase("vertex_state","enter",{getter="Native.native_source_scope_vertex_state",class=component_class},row)
-                if type(env.scope.vertex_state)~="function"then fail("native static vertex proof capability unavailable")end
-                guard();component(row);current_asset()
-                local proof,proof_reason=env.scope.vertex_state(row.handle)
-                guard();component(row);current_asset()
-                if type(proof)~="table"then fail(type(proof_reason)=="string"and proof_reason or "native static vertex proof unavailable")end
-                for key in pairs(proof)do
-                    if key~="state"and key~="lod_info_count"and key~="no_override"then fail("native static vertex proof field unsupported")end
-                end
-                local lod_count=proof.lod_info_count
-                if type(lod_count)~="number"or not math.tointeger(lod_count)or lod_count<0 or lod_count>16 then fail("native static vertex proof LOD bound")end
-                if proof.state=="native_asset"and proof.no_override==true then native_asset=true
-                elseif proof.state~="captured_required"or proof.no_override~=false or lod_count<1 then fail("native static vertex proof incomplete")end
-                phase("vertex_state","exit",{getter="Native.native_source_scope_vertex_state",class=component_class,ok=true,
-                    count=lod_count,reason="state="..proof.state.." no_override="..tostring(proof.no_override)},row)
+                local proof=static_vertex_proof(row,component_class,current_asset)
+                if proof.asset_present~=true then fail("native static proof disagrees with present asset")end
+                native_asset=proof.state=="native_asset"
             end
             if native_asset then
                 -- Complete original native LODData proof establishes absence of
@@ -638,6 +661,12 @@ function M.capture(env,bindings)
         local again=spring_arm_evidence(record.row)
         if again.draw_debug_lag_markers~=record.evidence.draw_debug_lag_markers or again.socket_name~=record.evidence.socket_name then
             fail("native spring arm evidence changed during harvest")
+        end
+    end
+    for _,record in ipairs(empty_statics)do
+        local again=static_vertex_proof(record.row,record.class,record.check)
+        if again.state~=record.proof.state or again.lod_info_count~=record.proof.lod_info_count then
+            fail("native static empty proof changed during harvest")
         end
     end
     for _,row in ipairs(rows)do component(row)end

@@ -266,6 +266,37 @@ fn exact_camera_and_spring_arm_raw_fields_do_not_default() {
 }
 
 #[test]
+fn native_empty_static_raw_fields_are_explicit_and_complete() {
+    let lua = State::new();
+    let reset = "local c=recipe.components[1]; c.component_class='/Script/Engine.StaticMeshComponent'; c.kind='static'; c.geometry='native_empty'; c.asset=''; c.skeleton=''; c.physics_asset=''; c.bones={}; c.vertex_state='not_applicable'; c.collision={enabled=3,object_type=3,profile='ObservedHolder',responses={0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1,2,0,1},simulating=true}";
+    lua.run(reset);
+    let recipe = lua.read().unwrap();
+    recipe.validate_mirror_profile().unwrap();
+    assert_eq!(
+        recipe.components[0].geometry,
+        hsmp_server::native_descriptor::Geometry::NativeEmpty
+    );
+    assert_eq!(
+        recipe.components[0].collision.as_ref().unwrap().profile,
+        "ObservedHolder"
+    );
+    for mutation in [
+        "recipe.components[1].asset=nil",
+        "recipe.components[1].asset='/Game/Test/Other.Other'",
+        "recipe.components[1].component_class=nil",
+        "recipe.components[1].component_class='/Script/Engine.CustomStaticSubclass'",
+        "recipe.components[1].vertex_state=nil",
+        "recipe.components[1].vertex_state='native_asset'",
+        "recipe.components[1].collision=false",
+        "recipe.components[1].collision=nil",
+    ] {
+        lua.run(reset);
+        lua.run(mutation);
+        assert!(lua.read().is_err(), "counterfeit native empty: {mutation}");
+    }
+}
+
+#[test]
 fn sparse_native_blocked_slots_preserve_observed_false() {
     let lua = State::new();
     unsafe {

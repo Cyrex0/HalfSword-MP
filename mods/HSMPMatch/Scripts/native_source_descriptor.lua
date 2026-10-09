@@ -4,7 +4,7 @@
 local source=(debug.getinfo(1,"S").source or ""):gsub("^@","")
 local directory=source:match("^(.*)[/\\]") or "."
 local Fields=dofile(directory.."/native_source_fields.lua")
-local M={SCHEMA=4,FIELDS=Fields}
+local M={SCHEMA=5,FIELDS=Fields}
 local equipment_fields={armor="ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358",
     sheaths="WeaponsinSlots_11_B42349384F5EF74DE78A7F870D89656A",
     hands="WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"}

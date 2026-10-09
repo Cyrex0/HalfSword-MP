@@ -260,7 +260,7 @@ local weapon_asset=object(330,"WeaponMesh","/Game/Test/WeaponMesh.WeaponMesh",fa
 weapon_asset.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.StaticMesh"end}end
 weapon_asset.bAllowCPUAccess=true
 local weapon_mesh=mesh(201,"WeaponMesh",live_weapon,"static",weapon_asset);weapon_mesh.GetAttachParent=function()return body end
-weapon_mesh.native_vertex_proof={state="captured_required",lod_info_count=1,no_override=false}
+weapon_mesh.native_vertex_proof={state="captured_required",lod_info_count=1,no_override=false,asset_present=true}
 local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or mesh_is_a(self,k)end
 local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
 live_weapon.RootComponent=weapon_mesh
@@ -359,7 +359,7 @@ T.check(T.eq(rendered.components[2].scene.type,"hidden_capsule"),"root eligibili
 T.check(T.eq(rendered.topology.vertex_state,"captured"),"source vertex readiness follows actual complete getter data")
 local actual_vertex_proof=render_env.scope.vertex_state
 local native_present_proof=plain(weapon_mesh.native_vertex_proof)
-local no_override_proof={state="native_asset",lod_info_count=0,no_override=true}
+local no_override_proof={state="native_asset",lod_info_count=0,no_override=true,asset_present=true}
 weapon_mesh.native_vertex_proof=plain(no_override_proof);weapon_asset.bAllowCPUAccess=false
 local saved_static_count,saved_static_colors=rvp.GetMeshComponentAmountOfVerticesOnLOD,rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
 local static_paint_calls=0
@@ -382,17 +382,22 @@ local present_capture=Render.capture(render_env,native_bindings)
 T.check(present_capture.components[3].vertex_state=="captured"and #present_capture.components[3].vertex_colors==1,
     "present native override proof requires the existing exact full RVP color capture")
 for _,bad in ipairs({
-    {state="native_asset",lod_info_count=0},
-    {state="native_asset",lod_info_count=0,no_override=false},
-    {state="captured_required",lod_info_count=1,no_override=true},
-    {state="captured_required",lod_info_count=0,no_override=false},
-    {state="unknown",lod_info_count=1,no_override=true},
-    {state="native_asset",no_override=true},
-    {state="native_asset",lod_info_count=-1,no_override=true},
-    {state="native_asset",lod_info_count=17,no_override=true},
-    {state="native_asset",lod_info_count=1.5,no_override=true},
-    {state="native_asset",lod_info_count=1,no_override="true"},
-    {state="native_asset",lod_info_count=1,no_override=true,guessed=true},
+    {state="native_asset",lod_info_count=0,asset_present=true},
+    {state="native_asset",lod_info_count=0,no_override=false,asset_present=true},
+    {state="captured_required",lod_info_count=1,no_override=true,asset_present=true},
+    {state="captured_required",lod_info_count=0,no_override=false,asset_present=true},
+    {state="unknown",lod_info_count=1,no_override=true,asset_present=true},
+    {state="native_asset",no_override=true,asset_present=true},
+    {state="native_asset",lod_info_count=-1,no_override=true,asset_present=true},
+    {state="native_asset",lod_info_count=17,no_override=true,asset_present=true},
+    {state="native_asset",lod_info_count=1.5,no_override=true,asset_present=true},
+    {state="native_asset",lod_info_count=1,no_override="true",asset_present=true},
+    {state="native_asset",lod_info_count=1,no_override=true,asset_present=true,guessed=true},
+    {state="native_asset",lod_info_count=0,no_override=true},
+    {state="native_asset",lod_info_count=0,no_override=true,asset_present="true"},
+    {state="native_asset",lod_info_count=0,no_override=true,asset_present=false},
+    {state="native_empty",lod_info_count=0,no_override=true,asset_present=true},
+    {state="native_empty",lod_info_count=0,no_override=true,asset_present=false},
 })do
     weapon_mesh.native_vertex_proof=bad
     T.check(not pcall(Render.capture,render_env,native_bindings),"malformed native static override proof refuses")
@@ -420,6 +425,75 @@ weapon_mesh.GetAttachParent=function()return body end
 render_env.scope.vertex_state=function(handle)local result=actual_vertex_proof(handle);scope=false;return result end
 T.check(not pcall(Render.capture,render_env,native_bindings),"world loss during native override proof refuses source recipe")
 scope=true;render_env.scope.vertex_state=actual_vertex_proof;weapon_mesh.native_vertex_proof=plain(native_present_proof)
+;(function()
+    local empty_proof={state="native_empty",lod_info_count=0,no_override=true,asset_present=false}
+    local paint_calls=0
+    local count_getter,colors_getter=rvp.GetMeshComponentAmountOfVerticesOnLOD,rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
+    rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)
+        if c==weapon_mesh then paint_calls=paint_calls+1;error("hard-null mesh has no invented vertex count",0)end
+        return count_getter(self,c,lod)
+    end
+    rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=function(self,c,lod)
+        if c==weapon_mesh then paint_calls=paint_calls+1;error("hard-null mesh has no synthesized colors",0)end
+        return colors_getter(self,c,lod)
+    end
+    weapon_mesh.StaticMesh=nil;weapon_mesh.native_vertex_proof=plain(empty_proof)
+    local capture=Render.capture(render_env,native_bindings)
+    local copied=capture.components[3]
+    T.check(copied.kind=="static"and copied.component_class=="/Script/Engine.StaticMeshComponent"
+        and copied.geometry=="native_empty"and copied.asset==""and copied.vertex_state=="not_applicable",
+        "native hard-null proof preserves the actual static component with explicit empty geometry")
+    T.check(#capture.components==3 and copied.parent==capture.components[1].id and copied.owner==1
+        and T.eq(copied.relative.translation,{0.125,0.25,0.5})and copied.collision.enabled==3
+        and copied.collision.profile=="ExactNativeProfile"and copied.collision.simulating==true,
+        "empty native mesh keeps its complete native parent transform ownership and collision observations")
+    T.check(#copied.materials==1 and copied.materials[1].base=="/Game/Test/Material.Material"
+        and copied.materials[1].scalars[1].value==0.3125 and copied.materials[1].vectors[1].value[4]==0,
+        "empty native static retains actual material slots and overrides rather than assuming zero")
+    T.check(paint_calls==0 and #copied.vertex_colors==0 and #copied.bones==0,
+        "native empty static never queries asset LODs or fabricates bone and paint data")
+    weapon_mesh.StaticMesh={GetAddress=function()return 0 end,IsValid=function()return false end}
+    T.check(pcall(Render.capture,render_env,native_bindings),"address-zero wrapper still requires explicit native hard-null proof")
+    weapon_mesh.StaticMesh=nil;weapon_mesh.native_vertex_proof=nil
+    T.check(not pcall(Render.capture,render_env,native_bindings),"nil asset wrapper never establishes empty native geometry without proof")
+    for _,bad in ipairs({
+        {state="native_empty",lod_info_count=0,no_override=true},
+        {state="native_empty",lod_info_count=0,no_override=true,asset_present=true},
+        {state="native_empty",lod_info_count=1,no_override=false,asset_present=false},
+        {state="native_asset",lod_info_count=0,no_override=true,asset_present=true},
+        {state="captured_required",lod_info_count=1,no_override=false,asset_present=true},
+    })do
+        weapon_mesh.native_vertex_proof=bad
+        T.check(not pcall(Render.capture,render_env,native_bindings),"unavailable wrapper cannot turn malformed or present geometry proof into empty")
+    end
+    weapon_mesh.native_vertex_proof=plain(empty_proof)
+    local nonzero_invalid={GetAddress=function()return 9876 end,IsValid=function()return false end}
+    weapon_mesh.StaticMesh=nonzero_invalid
+    local proof_calls=0
+    render_env.scope.vertex_state=function(handle)proof_calls=proof_calls+1;return actual_vertex_proof(handle)end
+    T.check(not pcall(Render.capture,render_env,native_bindings)and proof_calls==0,
+        "nonnull invalid asset wrapper is refused before any empty proof request")
+    weapon_mesh.StaticMesh=nil;render_env.scope.vertex_state=actual_vertex_proof
+    local material_getter=weapon_mesh.GetMaterial
+    weapon_mesh.GetMaterial=function()weapon_mesh.StaticMesh=weapon_asset;return material_getter()end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"native material callback populating an empty mesh refuses capture")
+    weapon_mesh.StaticMesh=nil;weapon_mesh.GetMaterial=material_getter
+    render_env.scope.vertex_state=function(handle)local result=actual_vertex_proof(handle);weapon_mesh.StaticMesh=weapon_asset;return result end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"native empty proof callback populating the original mesh refuses capture")
+    weapon_mesh.StaticMesh=nil;render_env.scope.vertex_state=actual_vertex_proof
+    local tag_getter=weapon_mesh.ComponentHasTag
+    weapon_mesh.ComponentHasTag=function()weapon_mesh.StaticMesh=weapon_asset;return false end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"late metadata callback populating empty static refuses final evidence")
+    weapon_mesh.StaticMesh=nil;weapon_mesh.ComponentHasTag=tag_getter
+    local count=0
+    render_env.scope.vertex_state=function(handle)
+        count=count+1;local proof=actual_vertex_proof(handle);proof.lod_info_count=count==1 and 0 or 1;return proof
+    end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"changed actual empty LOD census refuses ending proof")
+    render_env.scope.vertex_state=actual_vertex_proof
+    weapon_mesh.StaticMesh=weapon_asset;weapon_mesh.native_vertex_proof=plain(native_present_proof)
+    rvp.GetMeshComponentAmountOfVerticesOnLOD=count_getter;rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=colors_getter
+end)()
 local static_lod_getter=weapon_asset.GetNumLODs
 for _,case in ipairs({
     {label="zero",getter=function()return 0 end,kind="number",value="0"},

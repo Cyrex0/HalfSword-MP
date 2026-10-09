@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-pub const SCHEMA: u16 = 4;
+pub const SCHEMA: u16 = 5;
 pub const MAX_RECIPE_BYTES: usize = 60 * 1024;
 pub const MAX_COMPONENTS: usize = 64;
 pub const MAX_BONES: usize = 512;
@@ -180,6 +180,7 @@ pub enum Geometry {
     Procedural,
     NotApplicable,
     NativeSpline,
+    NativeEmpty,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -379,9 +380,23 @@ impl RenderComponent {
             && (self.collision.is_none()
                 || self.scene != SceneEvidence::NotApplicable
                 || self.geometry == Geometry::NotApplicable
-                || self.vertex_state == VertexState::NotApplicable)
+                || (self.vertex_state == VertexState::NotApplicable
+                    && self.geometry != Geometry::NativeEmpty))
         {
             return Err("render applicability");
+        }
+        if self.geometry == Geometry::NativeEmpty
+            && (self.kind != ComponentKind::Static
+                || self.component_class != "/Script/Engine.StaticMeshComponent"
+                || !self.asset.is_empty()
+                || self.vertex_state != VertexState::NotApplicable
+                || !self.physics_asset.is_empty()
+                || !self.deformer.is_empty()
+                || self.cloth
+                || !self.morphs.is_empty()
+                || !self.hidden_bones.is_empty())
+        {
+            return Err("native empty static recipe");
         }
         if (self.kind == ComponentKind::Spline) != self.spline_profile.is_some()
             || (self.kind != ComponentKind::Spline && self.geometry == Geometry::NativeSpline)
@@ -709,8 +724,8 @@ impl SourceRecipe {
         }
         Ok(())
     }
-    /// The display profile covers intact cooked meshes and exact native spline
-    /// replay profiles. Native
+    /// The display profile covers intact cooked meshes, native-proven empty
+    /// static components and exact native spline replay profiles. Native
     /// host readiness remains independent; a refused profile is not a healthy
     /// body, an empty census, or successful mirror readback.
     pub fn validate_mirror_profile(&self) -> Result<(), &'static str> {
@@ -733,6 +748,11 @@ impl SourceRecipe {
         for c in &self.components {
             if matches!(c.kind, ComponentKind::Scene | ComponentKind::Spline) {
                 // Native capture must keep verifying these live class/flags.
+                continue;
+            }
+            if c.geometry == Geometry::NativeEmpty {
+                // Native capture and mirror readback must prove hard-null
+                // geometry while retaining the complete component recipe.
                 continue;
             }
             if c.geometry != Geometry::Cooked || c.kind == ComponentKind::Procedural {
@@ -944,6 +964,96 @@ mod tests {
         let mut json = serde_json::to_value(&recipe).unwrap();
         json["schema"] = 3.into();
         assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err());
+    }
+    #[test]
+    fn native_empty_static_retains_observations_and_refuses_counterfeits() {
+        let mut recipe = fixture();
+        let mut empty = recipe.components[0].clone();
+        empty.id = 2;
+        empty.name = "Offline native empty holder".into();
+        empty.kind = ComponentKind::Static;
+        empty.component_class = "/Script/Engine.StaticMeshComponent".into();
+        empty.role = "attachment".into();
+        empty.geometry = Geometry::NativeEmpty;
+        empty.asset.clear();
+        empty.skeleton.clear();
+        empty.physics_asset.clear();
+        empty.bones.clear();
+        empty.vertex_state = VertexState::NotApplicable;
+        empty.materials = vec![Material {
+            slot: 0,
+            base: "/Game/Test/Material.Material".into(),
+            scalars: vec![ScalarParameter {
+                info: ParameterInfo {
+                    name: "ObservedScalar".into(),
+                    association: 0,
+                    index: -1,
+                },
+                value: 0.3125,
+            }],
+            vectors: vec![],
+            textures: vec![],
+        }];
+        let collision = empty.collision.as_mut().unwrap();
+        collision.enabled = 3;
+        collision.profile = "ObservedEmptyHolder".into();
+        collision.simulating = true;
+        recipe.components[0].parent = 2;
+        recipe.components.push(empty.clone());
+        recipe.validate_mirror_profile().unwrap();
+        assert_eq!(
+            SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap(),
+            recipe
+        );
+        assert_eq!(recipe.components[1].materials[0].scalars[0].value, 0.3125);
+        assert_eq!(
+            recipe.components[1].collision.as_ref().unwrap().profile,
+            "ObservedEmptyHolder"
+        );
+        let counterfeits: &[fn(&mut RenderComponent)] = &[
+            |c| c.kind = ComponentKind::Scene,
+            |c| c.kind = ComponentKind::Skeletal,
+            |c| c.component_class = "/Script/Engine.UnprovedStaticSubclass".into(),
+            |c| c.asset = "/Game/Test/Mesh.Mesh".into(),
+            |c| c.vertex_state = VertexState::NativeAsset,
+            |c| c.collision = None,
+            |c| {
+                c.bones.push(Bone {
+                    name: "root".into(),
+                    parent: -1,
+                })
+            },
+            |c| c.skeleton = "/Game/Test/Skeleton.Skeleton".into(),
+            |c| c.physics_asset = "/Game/Test/Physics.Physics".into(),
+            |c| c.deformer = "/Game/Test/Deformer.Deformer".into(),
+            |c| c.cloth = true,
+            |c| {
+                c.morphs.push(Morph {
+                    name: "UnknownMorph".into(),
+                    value: 0.5,
+                })
+            },
+            |c| c.hidden_bones.push("UnknownBone".into()),
+        ];
+        for mutate in counterfeits {
+            let mut c = empty.clone();
+            mutate(&mut c);
+            assert!(c.validate().is_err(), "counterfeit empty recipe {c:?}");
+        }
+        for absent in ["asset", "component_class", "vertex_state", "collision"] {
+            let mut json = serde_json::to_value(&recipe).unwrap();
+            json["components"][1]
+                .as_object_mut()
+                .unwrap()
+                .remove(absent);
+            assert!(
+                SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err(),
+                "missing {absent}"
+            );
+        }
+        let mut old = serde_json::to_value(&recipe).unwrap();
+        old["schema"] = 4.into();
+        assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&old).unwrap()).is_err());
     }
     #[test]
     fn spline_profile_is_explicit_exact_and_bounded() {
