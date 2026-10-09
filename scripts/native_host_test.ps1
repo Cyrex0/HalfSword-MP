@@ -102,6 +102,41 @@ function Start-NativeClient([int]$index, [int]$port) {
     Write-Json (Join-Path $Run "processes.json") @($tracked)
     return @{ process=$process; record=$record; state=$launch.state; stop=$launch.stop; index=$index }
 }
+function Native-ClientExit($client, [string]$phase) {
+    if ($client.exit_record) { return $client.exit_record }
+    # Process.Start's original handle distinguishes this client from PID reuse.
+    # Do not look up another process or infer an exit from unavailable identity.
+    [void]$client.process.Refresh()
+    $hasExited = $client.process.HasExited
+    if ($hasExited -isnot [bool]) { throw "Native client $($client.index) original process exit state unavailable." }
+    if (-not $hasExited) { return $null }
+    $exit = [ordered]@{
+        role=$client.record.role; pid=$client.record.pid; exe=$client.record.exe
+        start_ticks=$client.record.start_ticks; phase=$phase
+        observed_utc=[DateTime]::UtcNow.ToString("o"); observed_from="original_process_handle"
+        exited=$true; exit_code_known=$false; exit_code=$null; exit_code_hex=$null
+    }
+    try {
+        $code = $client.process.ExitCode
+        if ($code -isnot [int]) { throw "Original process exit code unavailable." }
+        $bits = [BitConverter]::ToUInt32([BitConverter]::GetBytes($code), 0)
+        $exit.exit_code = $code
+        $exit.exit_code_hex = "0x{0:X8}" -f $bits
+        $exit.exit_code_known = $true
+    } catch { $exit.exit_code_error = $_.Exception.Message }
+    $client.exit_record = $exit
+    # Harness evidence lives outside HSMP_STATE_DIR's file allow-list.
+    Write-Json (Join-Path $Run "client$($client.index).exit.json") $exit
+    return $exit
+}
+function Assert-NativeClientRunning($client, [string]$phase) {
+    if (Native-ClientExit $client $phase) { throw "Native client $($client.index) exited $phase." }
+    if (-not (Native-SameProcess $client.record)) {
+        # It can exit between the first handle read and ownership lookup.
+        if (Native-ClientExit $client $phase) { throw "Native client $($client.index) exited $phase." }
+        throw "Native client $($client.index) original process identity unavailable $phase."
+    }
+}
 function Native-ClientStatus($client) {
     $latest = $null
     foreach ($file in @(Get-ChildItem -LiteralPath $client.state -Filter "hsmp_events*.jsonl" -File -ErrorAction SilentlyContinue)) {
@@ -199,7 +234,7 @@ try {
         while ([DateTime]::UtcNow -lt $readyDeadline) {
             $clientEvidence = @()
             foreach ($client in $clients) {
-                if (-not (Native-SameProcess $client.record)) { throw "Native client $($client.index) exited before live verification." }
+                Assert-NativeClientRunning $client "before live verification"
                 $status = Native-ClientStatus $client
                 if ($status -and $status.state -eq "error") { throw "Native client $($client.index) refused presentation: $($status.reason)" }
                 $clientEvidence += $status
@@ -216,7 +251,7 @@ try {
         $observeDeadline = [DateTime]::UtcNow.AddSeconds(10)
         while ([DateTime]::UtcNow -lt $observeDeadline) {
             foreach ($client in $clients) {
-                if (-not (Native-SameProcess $client.record)) { throw "Native client $($client.index) exited during observation." }
+                Assert-NativeClientRunning $client "during observation"
                 $status = Native-ClientStatus $client
                 if (-not $status -or $status.state -ne "live") { throw "Native client $($client.index) lost verified live presentation." }
             }
@@ -268,7 +303,7 @@ finally {
         if (-not $DiagnosticProbeOnly -and -not $BootOnly -and @($activeDispatch | Where-Object { $_ -le 0 }).Count -and -not $failure) { $failure = "Both real clients were not proven to dispatch active native source input." }
         if ($newCrashes.Count -and -not $failure) { $failure = "Native game created a crash report." }
         if (-not $savesMatch -and -not $failure) { $failure = "A player save changed during the native run; retained for investigation." }
-        Write-Json (Join-Path $Run "native_test.json") @{source_commit=$sourceCommit;evidence_level=$(if ($DiagnosticProbeOnly -or $BootOnly) { "explicit diagnostic bootstrap/network only" } else { "two actual game clients plus one native authority; no combat parity claim" }); backend=$Backend; mode=$mode; boot_only=[bool]$BootOnly; diagnostic_probe_only=[bool]$DiagnosticProbeOnly; client_evidence=$clientEvidence; active_native_dispatch_by_controller=$activeDispatch;
+        Write-Json (Join-Path $Run "native_test.json") @{source_commit=$sourceCommit;evidence_level=$(if ($DiagnosticProbeOnly -or $BootOnly) { "explicit diagnostic bootstrap/network only" } else { "two actual game clients plus one native authority; no combat parity claim" }); backend=$Backend; mode=$mode; boot_only=[bool]$BootOnly; diagnostic_probe_only=[bool]$DiagnosticProbeOnly; client_evidence=$clientEvidence; client_exit_records=@($clients | Where-Object { $_.exit_record } | ForEach-Object { $_.exit_record }); active_native_dispatch_by_controller=$activeDispatch;
             failure=$failure; own_saves_unchanged=$savesMatch; processes_stopped=$allStopped; unobserved_children=$unobservedChildren; new_crashes=$newCrashes;
             native_ready_observed=$readyObserved; pass=($null -eq $failure -and $allStopped -and $savesMatch -and $readyObserved -and $newCrashes.Count -eq 0)}
     }
