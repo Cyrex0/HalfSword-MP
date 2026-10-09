@@ -414,18 +414,41 @@ function M.capture(env,bindings)
         -- RF_Transient is evidence of a runtime asset, not a specific merge.
         c.geometry=kind=="procedural" and "procedural" or transient and "runtime_transient" or "cooked"
         c.skeleton="";c.physics_asset=""
-        if kind=="skeletal"then
-            local asset_identity=object_id(asset_obj)
-            if not asset_identity then fail("native skeletal asset unavailable")end
-            local function current_asset()
-                local actual=get(row,function(o)return o:GetSkeletalMeshAsset()end)
+        local asset_read,asset_identity,asset_class,current_asset
+        if kind=="skeletal"or kind=="static"then
+            asset_identity=object_id(asset_obj)
+            if not asset_identity then fail("native "..kind.." asset unavailable")end
+            asset_class=checked(function()return asset_obj:GetClass():GetFullName()end)
+            if type(asset_class)~="string"or #asset_class>512 then fail("native render asset class unavailable")end
+            local original_asset_path=c.asset
+            current_asset=function()
+                local actual=get(row,function(o)
+                    if kind=="skeletal"then return o:GetSkeletalMeshAsset()end
+                    return o.StaticMesh
+                end)
                 local identity=object_id(actual)
-                if not identity or identity.address~=asset_identity.address or identity.name~=asset_identity.name then fail("native skeletal asset changed")end
+                if not identity or identity.address~=asset_identity.address or identity.name~=asset_identity.name then
+                    fail("native "..kind.." asset changed")
+                end
+                if kind=="static"then
+                    if path(actual)~=original_asset_path or checked(function()return actual:GetClass():GetFullName()end)~=asset_class then
+                        fail("native static asset changed")
+                    end
+                    -- FName conversion above can enter a native PE fallback.
+                    -- Finish all qualifications before the final hard-link read;
+                    -- no conversion/callback occurs between this and dispatch.
+                    guard();local current_component=component(row)
+                    local fresh=current_component.StaticMesh
+                    if not fresh or fresh:GetAddress()~=asset_identity.address then fail("native static asset changed")end
+                    return fresh
+                end
                 return actual
             end
-            local function asset_read(fn)
+            asset_read=function(fn)
                 guard();local value=fn(current_asset());guard();current_asset();return value
             end
+        end
+        if kind=="skeletal"then
             if path(asset_read(function(o)return o:GetOverlayMaterial()end))~="" then fail("native asset overlay material unsupported")end
             if path(asset_read(function(o)return o:GetDefaultMeshDeformer()end))~="" then fail("native asset mesh deformer unsupported")end
             c.skeleton=path(asset_read(function(o)return o.Skeleton end))
@@ -485,10 +508,21 @@ function M.capture(env,bindings)
         phase("material","exit",{ok=true,count=count,class=component_class},row)
         if kind=="skeletal" or kind=="static"then
             if not rvp or checked(function()return rvp:IsValid()end)~=true then fail("native vertex getter unavailable")end
+            local function label(value,max)return #value<=max and value or value:sub(1,max).."[truncated]"end
+            local lod_getter=kind=="skeletal"and "SkeletalMeshComponent.GetNumLODs"or "StaticMesh.GetNumLODs"
+            local lod_context=" asset_address="..string.format("0x%X",asset_identity.address)
+                .." asset_class="..label(string.format("%q",asset_class),80)
+                .." asset_path="..label(string.format("%q",c.asset),160)
             local colors,why=Vertex.capture({
                 guard=env.token_valid or function()guard();return true end,
                 phase=function(stage,edge,detail)detail=detail or {};detail.class=component_class;phase(stage,edge,detail,row)end,
-                lods=function()return get(row,function(o)return kind=="skeletal" and o:GetNumLODs() or asset_obj:GetNumLODs()end)end,
+                lod_getter=lod_getter,lod_context=lod_context,
+                lods=function()
+                    if kind=="skeletal"then return get(row,function(o)return o:GetNumLODs()end)end
+                    -- GetNumLODs is reflected on UStaticMesh, not its component.
+                    -- Reacquire the original hard asset across the native call.
+                    return asset_read(function(o)return o:GetNumLODs()end)
+                end,
                 count=function(lod)
                     if kind=="skeletal"then
                         local usage=get(row,function(o)return o:GetVertexOffsetUsage(lod)end)

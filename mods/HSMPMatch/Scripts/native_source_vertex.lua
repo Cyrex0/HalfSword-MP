@@ -7,12 +7,29 @@ local M={MAX_LODS=16,MAX_VERTICES=1000000,MAX_RUNS=4096}
 local function guard(env)if env.guard()~=true then error("native vertex scope changed",0)end end
 function M.capture(env)
     local function phase(stage,edge,detail)if env.phase then env.phase(stage,edge,detail or {})end end
+    local function scalar(value)
+        local t=type(value)
+        if t=="nil"or t=="number"or t=="boolean"then return tostring(value)end
+        if t=="string"then
+            local quoted=string.format("%q",value:sub(1,120))
+            return #quoted<=120 and quoted or quoted:sub(1,120).."[truncated]"
+        end
+        return "<non-scalar>" -- never invoke a returned wrapper's formatter
+    end
     local ok,result=pcall(function()
         phase("vertex","enter",{getter="VertexPaintFunctionLibrary.GetMeshComponentVertexColorsAtLOD_Wrapper"})
-        phase("vertex_lods","enter",{getter="GetNumLODs"})
-        guard(env);local lods=env.lods();guard(env)
-        if type(lods)~="number" or not math.tointeger(lods) or lods<1 or lods>M.MAX_LODS then error("native vertex LOD count unavailable",0)end
-        phase("vertex_lods","exit",{ok=true,count=lods})
+        local getter=env.lod_getter or "GetNumLODs"
+        local context=env.lod_context or ""
+        phase("vertex_lods","enter",{getter=getter,reason=context})
+        guard(env);local called,lods=pcall(env.lods);guard(env)
+        if not called or type(lods)~="number" or not math.tointeger(lods) or lods<1 or lods>M.MAX_LODS then
+            local reason="native vertex LOD count unavailable: getter="..getter
+                ..(called and " returned_type=" or " error_type=")..type(lods)
+                ..(called and " returned_value=" or " error=")..scalar(lods)..context
+            phase("vertex_lods","exit",{getter=getter,ok=false,reason=reason})
+            error(reason,0)
+        end
+        phase("vertex_lods","exit",{getter=getter,ok=true,count=lods,reason=context})
         local out={}
         for lod=0,lods-1 do
             phase("vertex_count","enter",{getter="GetMeshComponentAmountOfVerticesOnLOD",lod=lod})

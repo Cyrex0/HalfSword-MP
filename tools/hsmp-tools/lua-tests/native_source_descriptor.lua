@@ -216,6 +216,7 @@ end
 scene(root,host,"/Script/Engine.CapsuleComponent");root.bHiddenInGame=true
 local live_weapon=object(200,"LiveWeapon","/Game/Test/WeaponActor.WeaponActor",false)
 local body_asset=object(300,"Body","/Game/Test/Body.Body",false)
+body_asset.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.SkeletalMesh"end}end
 body_asset.Skeleton=object(301,"Skeleton","/Game/Test/Skeleton.Skeleton",false)
 body_asset.GetOverlayMaterial=function()return nil end;body_asset.GetDefaultMeshDeformer=function()return nil end
 body_asset.MeshClothingAssets=array({});body_asset.GetMorphTargetsPtrConv=function()return {wrapped(object(302,"ExactMorph","/Game/Test/Morph.Morph",false))}end
@@ -248,12 +249,15 @@ local function mesh(address,n,actor,kind,asset)
     c.bHideSkin=false;c.bDisableMorphTarget=false;c.bForceWireframe=false;c.GetVertexOffsetUsage=function()return 0 end;c.IsMaterialSectionShown=function()return true end
     c.GetParentBone=function(_,n)return fname(bone_index[n]==1 and "None"or bone_names[bone_index[n]-1])end
     c.IsBoneHiddenByName=function(_,n)return n==bone_names[40]end;c.GetMorphTarget=function()return 0.6875 end
-    c.GetNumMaterials=function()return 1 end;c.GetMaterial=function()return dynamic_mat end;c.GetNumLODs=function()return 1 end
+    c.GetNumMaterials=function()return 1 end;c.GetMaterial=function()return dynamic_mat end
+    if kind=="skeletal"then c.GetNumLODs=function()return 1 end
+    else c.GetNumLODs=function()error("GetNumLODs is not reflected on StaticMeshComponent",0)end end
     c.ComponentHasTag=function()return false end;c.native_colors={{R=255,G=128,B=0,A=255},{R=255,G=128,B=0,A=255}}
     return c
 end
 local body=mesh(11,"BodyMesh",host,"skeletal",body_asset);host.Mesh=body;body.GetAttachParent=function()return root end
 local weapon_asset=object(330,"WeaponMesh","/Game/Test/WeaponMesh.WeaponMesh",false);weapon_asset.GetNumLODs=function()return 1 end
+weapon_asset.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.StaticMesh"end}end
 local weapon_mesh=mesh(201,"WeaponMesh",live_weapon,"static",weapon_asset);weapon_mesh.GetAttachParent=function()return body end
 local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or mesh_is_a(self,k)end
 local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
@@ -340,6 +344,62 @@ T.check(T.eq(rendered.bindings[3].owner,200),"ephemeral binding uses actual owne
 T.check(T.eq(rendered.components[1].parent,2),"native body preserves actual capsule root rather than actor-root shortcut")
 T.check(T.eq(rendered.components[2].scene.type,"hidden_capsule"),"root eligibility follows actual native hidden flag")
 T.check(T.eq(rendered.topology.vertex_state,"captured"),"source vertex readiness follows actual complete getter data")
+local static_lod_getter=weapon_asset.GetNumLODs
+for _,case in ipairs({
+    {label="zero",getter=function()return 0 end,kind="number",value="0"},
+    {label="nil",getter=function()return nil end,kind="nil",value="nil"},
+    {label="false",getter=function()return false end,kind="boolean",value="false"},
+    {label="error",getter=function()error("exact native getter error",0)end,kind="string",value="exact native getter error"},
+})do
+    weapon_asset.GetNumLODs=case.getter;render_phases={}
+    local captured,reason=pcall(Render.capture,render_env,native_bindings)
+    local last=render_phases[#render_phases]
+    T.check(not captured and last.stage=="vertex_lods"and last.edge=="exit"and last.detail.ok==false
+        and last.detail.getter=="StaticMesh.GetNumLODs"and reason:find(case.kind,1,true)and reason:find(case.value,1,true)
+        and reason:find('asset_address=0x14A',1,true)and reason:find('asset_class="Class /Script/Engine.StaticMesh"',1,true)
+        and reason:find('asset_path="/Game/Test/WeaponMesh.WeaponMesh"',1,true),
+        "static native LOD "..case.label.." preserves typed original asset diagnostic and refuses")
+end
+weapon_asset.GetNumLODs=static_lod_getter
+local original_static_asset=weapon_mesh.StaticMesh
+local replacement_static_asset=object(331,"ReplacementMesh","/Game/Test/ReplacementMesh.ReplacementMesh",false)
+replacement_static_asset.GetClass=weapon_asset.GetClass
+weapon_asset.GetNumLODs=function()weapon_mesh.StaticMesh=replacement_static_asset;return 1 end
+local static_changed,static_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not static_changed and static_reason:find("native static asset changed",1,true),
+    "static native asset replacement inside GetNumLODs refuses the original asset recipe")
+weapon_mesh.StaticMesh=original_static_asset;weapon_asset.GetNumLODs=static_lod_getter
+local original_static_path=weapon_asset.GetFullName
+weapon_asset.GetNumLODs=function()weapon_asset.GetFullName=function()return "StaticMesh /Game/Test/ChangedPath.ChangedPath"end;return 1 end
+static_changed,static_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not static_changed and static_reason:find("native static asset changed",1,true),
+    "static asset path mutation inside GetNumLODs refuses original identity")
+weapon_asset.GetFullName=original_static_path;weapon_asset.GetNumLODs=static_lod_getter
+local original_static_class=weapon_asset.GetClass
+weapon_asset.GetNumLODs=function()weapon_asset.GetClass=body_asset.GetClass;return 1 end
+static_changed,static_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not static_changed and static_reason:find("native static asset changed",1,true),
+    "static asset class mutation inside GetNumLODs refuses original identity")
+weapon_asset.GetClass=original_static_class;weapon_asset.GetNumLODs=static_lod_getter
+local metadata_class_reads,old_static_lod_calls=0,0
+weapon_asset.GetClass=function()return {GetFullName=function()
+    metadata_class_reads=metadata_class_reads+1
+    if metadata_class_reads==2 then weapon_mesh.StaticMesh=replacement_static_asset end
+    return "Class /Script/Engine.StaticMesh"
+end}end
+weapon_asset.GetNumLODs=function()old_static_lod_calls=old_static_lod_calls+1;return 1 end
+static_changed,static_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not static_changed and static_reason:find("native static asset changed",1,true)and old_static_lod_calls==0,
+    "asset metadata callback replacement refuses before old asset GetNumLODs dispatch")
+weapon_mesh.StaticMesh=original_static_asset;weapon_asset.GetClass=original_static_class;weapon_asset.GetNumLODs=static_lod_getter
+local original_body_lods=body.GetNumLODs
+local asset_fallback_calls=0
+body_asset.GetNumLODs=function()asset_fallback_calls=asset_fallback_calls+1;return 1 end
+body.GetNumLODs=function()return false end
+local body_lod_ok,body_lod_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not body_lod_ok and asset_fallback_calls==0 and body_lod_reason:find("SkeletalMeshComponent.GetNumLODs returned_type=boolean returned_value=false",1,true),
+    "false skeletal component LOD return never falls through to the asset getter")
+body.GetNumLODs=original_body_lods;body_asset.GetNumLODs=nil
 -- Exercise the actual adapter -> native-scope -> production render collector
 -- lifecycle, including two complete equal harvests and failure cleanup.
 for k,v in pairs(pawn)do host[k]=v end
