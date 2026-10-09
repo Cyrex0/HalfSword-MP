@@ -134,6 +134,10 @@ fn copied_native_widths_empty_arrays_and_explicit_false_survive() {
 fn raw_access_refuses_missing_sparse_and_unsupported_values() {
     for mutation in [
         "recipe.passport.hair_length=nil",
+        "recipe.components[1].component_class=nil",
+        "recipe.components[1].scene=nil",
+        "recipe.components[1].collision=nil",
+        "recipe.components[1].collision=false",
         "recipe.invented_default=true",
         "recipe.components[1].relative.scale[2]=nil",
         "recipe.components[1].relative.scale.extra=1",
@@ -155,6 +159,25 @@ fn raw_access_refuses_missing_sparse_and_unsupported_values() {
     assert!(
         lua.read().is_err(),
         "raw required field does not invoke __index"
+    );
+}
+
+#[test]
+fn scene_collision_sentinel_is_explicit_required_and_class_qualified() {
+    let lua = State::new();
+    lua.run("local c=recipe.components[1]; c.id=2; c.name='Offline scene'; c.role='anchor'; c.component_class='/Script/Engine.SceneComponent'; c.kind='scene'; c.geometry='not_applicable'; c.scene={type='scene'}; c.vertex_state='not_applicable'; c.asset=''; c.skeleton=''; c.physics_asset=''; c.bones={}; c.collision=false");
+    let recipe = lua.read().unwrap();
+    assert!(recipe.components[0].collision.is_none());
+    recipe.validate_mirror_profile().unwrap();
+    lua.run("recipe.components[1].collision=nil");
+    assert!(
+        lua.read().is_err(),
+        "missing is not observed not-applicable"
+    );
+    lua.run("recipe.components[1].collision=false; recipe.components[1].component_class='/Script/Engine.CapsuleComponent'; recipe.components[1].scene={type='hidden_capsule'}; recipe.components[1].hidden=true");
+    assert!(
+        lua.read().is_err(),
+        "primitive capsule cannot claim absent collision"
     );
 }
 

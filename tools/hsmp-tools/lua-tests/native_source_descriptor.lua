@@ -152,6 +152,7 @@ local function object(address,n,path,transient)
     return {GetAddress=function()return address end,IsValid=function()return true end,GetFName=function()return fname(n)end,
         GetFullName=function()return "FixtureClass "..path end,HasAnyFlags=function()return transient end,
         GetWorld=function()return render_world end,GetClass=function()return {GetFullName=function()return "Class /Script/Engine.SceneComponent"end}end,
+        IsA=function()return false end,ComponentHasTag=function()return false end,
         type=function()return "UObject"end,get=function()error("direct UObject is not a parameter",0)end}
 end
 local saved_find,saved_fname=StaticFindObject,FName
@@ -159,6 +160,17 @@ FName=function(n)return n end
 scope=true
 local root=object(100,"CapsuleRoot","/Game/Test/Root.Root",false)
 local host=object(10,"Pawn","/Game/Test/Pawn.Pawn",false);host.RootComponent=root
+local function scene(c,actor,cls)
+    c.GetOwner=function()return actor end;c.GetClass=function()return {GetFullName=function()return "Class "..cls end}end
+    c.GetAttachParent=function()return nil end;c.GetAttachSocketName=function()return fname("None")end
+    c.IsVisible=function()return true end;c.bHiddenInGame=false
+    c.GetRelativeTransform=function()return {Translation={X=0.125,Y=-2.5,Z=3},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=0.5,Y=1,Z=2}}end
+    c.K2_GetComponentToWorld=function()return {Translation={X=10.125,Y=20,Z=-30},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=0.5,Y=1,Z=2}}end
+    c.GetCollisionResponseToChannel=function(_,channel)return channel%3 end;c.GetCollisionEnabled=function()return 3 end
+    c.GetCollisionObjectType=function()return 3 end;c.GetCollisionProfileName=function()return fname("ExactAnchorProfile")end;c.IsSimulatingPhysics=function()return false end
+    return c
+end
+scene(root,host,"/Script/Engine.CapsuleComponent");root.bHiddenInGame=true
 local live_weapon=object(200,"LiveWeapon","/Game/Test/WeaponActor.WeaponActor",false)
 local body_asset=object(300,"Body","/Game/Test/Body.Body",false)
 body_asset.Skeleton=object(301,"Skeleton","/Game/Test/Skeleton.Skeleton",false)
@@ -181,6 +193,7 @@ body_asset.GetPhysicsAsset=function()return physical_asset end
 local function mesh(address,n,actor,kind,asset)
     local c=object(address,n,"/Game/Test/Runtime."..n,false)
     c.GetOwner=function()return actor end;c.IsA=function(_,k)return k=="/Script/Engine."..(kind=="skeletal"and "SkeletalMeshComponent"or "StaticMeshComponent")end
+    c.GetClass=function()return {GetFullName=function()return "Class /Script/Engine."..(kind=="skeletal"and "SkeletalMeshComponent"or "StaticMeshComponent")end}end
     c.GetRelativeTransform=function()return {Translation={X=0.125,Y=0.25,Z=0.5},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=1,Y=1,Z=1}}end
     c.IsVisible=function()return true end;c.bHiddenInGame=false;c.GetAttachSocketName=function()return fname("None")end
     c.GetCollisionResponseToChannel=function(_,channel)return channel%3 end;c.GetCollisionEnabled=function()return 3 end
@@ -199,7 +212,12 @@ end
 local body=mesh(11,"BodyMesh",host,"skeletal",body_asset);host.Mesh=body;body.GetAttachParent=function()return root end
 local weapon_asset=object(330,"WeaponMesh","/Game/Test/WeaponMesh.WeaponMesh",false);weapon_asset.GetNumLODs=function()return 1 end
 local weapon_mesh=mesh(201,"WeaponMesh",live_weapon,"static",weapon_asset);weapon_mesh.GetAttachParent=function()return body end
-host.K2_GetComponentsByClass=function()return {wrapped(body)}end;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
+local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or mesh_is_a(self,k)end
+local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
+live_weapon.RootComponent=weapon_mesh
+local source_scenes={body,root}
+local function source_scene_return()local out={};for i,c in ipairs(source_scenes)do out[i]=wrapped(c)end;return out end
+host.K2_GetComponentsByClass=source_scene_return;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
 local plain_component_getter_calls=0
 local function unavailable_component_alias()plain_component_getter_calls=plain_component_getter_calls+1;error("unreflected GetComponentsByClass alias",0)end
 host.GetComponentsByClass=unavailable_component_alias;live_weapon.GetComponentsByClass=unavailable_component_alias
@@ -211,18 +229,18 @@ local render_env={read=function(fn)if not scope then error("scope",0)end;local v
 local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapon R"}}}
 local rendered=Render.capture(render_env,native_bindings)
 T.eq(plain_component_getter_calls,0,"source census uses exact reflected K2 component getter")
-T.check(#rendered.components==2 and #rendered.components[1].bones==40,"default source collector keeps complete render dictionary beyond physical bones")
+T.check(#rendered.components==3 and #rendered.components[1].bones==40,"source collector retains full render dictionary and actual owner root")
 T.eq(rendered.components[1].materials[1].scalars[1].value,0.3125,"native scalar material override captured exactly")
 T.eq(rendered.components[1].materials[1].vectors[1].value[4],0.0,"native vector alpha zero captured exactly")
 T.eq(rendered.components[1].materials[1].textures[1].value,"/Game/Test/Texture.Texture","native texture exact full identity preserved")
 T.eq(rendered.components[1].hidden_bones[1],bone_names[40],"native hidden render bone retained")
-T.eq(rendered.components[2].parent,1,"native weapon attachment binds captured source body")
-T.eq(rendered.bindings[2].owner,200,"ephemeral binding uses actual owner address rather than logical wire id")
+T.eq(rendered.components[3].parent,1,"native weapon attachment binds captured source body")
+T.eq(rendered.bindings[3].owner,200,"ephemeral binding uses actual owner address rather than logical wire id")
+T.eq(rendered.components[1].parent,2,"native body preserves actual capsule root rather than actor-root shortcut")
+T.eq(rendered.components[2].scene.type,"hidden_capsule","root eligibility follows actual native hidden flag")
 T.eq(rendered.topology.vertex_state,"captured","source vertex readiness follows actual complete getter data")
-local anchor=object(101,"ActualSceneAnchor","/Game/Test/Runtime.ActualSceneAnchor",false)
-anchor.GetOwner=function()return host end;anchor.GetAttachParent=function()return root end;anchor.GetAttachSocketName=function()return fname("ExactAnchorSocket")end
-anchor.GetRelativeTransform=function()return {Translation={X=0.125,Y=-2.5,Z=3},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=0.5,Y=1,Z=2}}end
-anchor.K2_GetComponentToWorld=function()return {Translation={X=10.125,Y=20,Z=-30},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=0.5,Y=1,Z=2}}end
+local anchor=scene(object(101,"ActualSceneAnchor","/Game/Test/Runtime.ActualSceneAnchor",false),host,"/Script/Engine.SceneComponent")
+anchor.GetAttachParent=function()return root end;anchor.GetAttachSocketName=function()return fname("ExactAnchorSocket")end
 body.GetAttachParent=function()return anchor end
 local anchored,anchor_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not anchored and anchor_reason:find('child=0xB:"BodyMesh"',1,true) and anchor_reason:find('parent=0x65:"ActualSceneAnchor"',1,true)
@@ -233,17 +251,45 @@ local parent_ops=0;anchor.GetWorld=function()scope=false;return render_world end
 anchor.GetRelativeTransform=function()parent_ops=parent_ops+1;return {}end
 T.check(not pcall(Render.capture,render_env,native_bindings) and parent_ops==0,"world change during attachment evidence prevents later parent getters")
 scope=true;body.GetAttachParent=function()return root end
+anchor.GetWorld=function()return render_world end
+scene(anchor,host,"/Script/Engine.SceneComponent")
+local spline=scene(object(102,"ActualSpline","/Game/Test/Runtime.ActualSpline",false),host,"/Script/Engine.SplineComponent")
+spline.bDrawDebug=false;spline.GetAttachParent=function()return root end;anchor.GetAttachParent=function()return spline end;body.GetAttachParent=function()return anchor end
+source_scenes={body,root,anchor,spline}
+local closed=Render.capture(render_env,native_bindings)
+local closed_by_name={};for _,c in ipairs(closed.components)do closed_by_name[c.name]=c end
+T.check(#closed.components==5 and closed_by_name.BodyMesh.parent==closed_by_name.ActualSceneAnchor.id
+    and closed_by_name.ActualSceneAnchor.parent==closed_by_name.ActualSpline.id and closed_by_name.ActualSpline.parent==closed_by_name.CapsuleRoot.id,
+    "actual scene spline capsule ancestor graph closes without dropping native parents")
+T.check(closed_by_name.ActualSceneAnchor.collision==false and closed_by_name.ActualSpline.collision~=false
+    and closed_by_name.ActualSceneAnchor.vertex_state=="not_applicable" and closed_by_name.ActualSpline.scene.draw_debug==false,
+    "anchor collision and geometry applicability reflect exact native classes")
+T.eq(closed_by_name.ActualSceneAnchor.relative.translation[1],0.125,"native anchor transform is copied without flattening")
+spline.bDrawDebug=true;T.check(not pcall(Render.capture,render_env,native_bindings),"debug drawn spline refuses unharvested rendering")
+spline.bDrawDebug=nil;T.check(not pcall(Render.capture,render_env,native_bindings),"unknown spline debug state refuses capture")
+spline.bDrawDebug=false;root.bHiddenInGame=false
+T.check(not pcall(Render.capture,render_env,native_bindings),"visible capsule root never becomes nonrendering anchor by class")
+root.bHiddenInGame=true;spline.GetAttachParent=function()return anchor end
+T.check(not pcall(Render.capture,render_env,native_bindings),"native scene ancestor cycle refuses capture")
+spline.GetAttachParent=function()return root end;anchor.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.UnknownSceneSubclass"end}end
+T.check(not pcall(Render.capture,render_env,native_bindings),"unknown scene subclass cannot claim absent rendering")
+anchor.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.SceneComponent"end}end
+anchor.GetWorld=function()return {IsValid=function()return true end,GetAddress=function()return 99 end}end
+T.check(not pcall(Render.capture,render_env,native_bindings),"foreign world native ancestor refuses source capture")
+anchor.GetWorld=function()return render_world end;anchor.GetOwner=function()return live_weapon end
+T.check(not pcall(Render.capture,render_env,native_bindings),"foreign owner component cannot enter pawn scene census")
+anchor.GetOwner=function()return host end;source_scenes={body,root};body.GetAttachParent=function()return root end
 T.eq(rendered.components[1].physics_asset,"/Game/Test/Physics.Physics","null native component override selects actual skeletal asset physics")
 local override_asset=object(321,"OverridePhysics","/Game/Test/OverridePhysics.OverridePhysics",false)
 body.PhysicsAssetOverride=override_asset
 local override_render=Render.capture(render_env,native_bindings)
 T.eq(override_render.components[1].physics_asset,"/Game/Test/OverridePhysics.OverridePhysics","nonnull native component override preserves its distinct exact physics asset")
 body.PhysicsAssetOverride=nil
-host.K2_GetComponentsByClass=function()return {body}end;live_weapon.K2_GetComponentsByClass=function()return {weapon_mesh}end
+host.K2_GetComponentsByClass=function()return {body,root}end;live_weapon.K2_GetComponentsByClass=function()return {weapon_mesh}end
 T.check(pcall(Render.capture,render_env,native_bindings),"direct returned UObject entries never receive parameter get")
 host.K2_GetComponentsByClass=function()return {[2]=wrapped(body)}end
 T.check(not pcall(Render.capture,render_env,native_bindings),"malformed native component return table refuses capture")
-host.K2_GetComponentsByClass=function()return {wrapped(body)}end;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
+host.K2_GetComponentsByClass=source_scene_return;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
 local bones_after_loss=0;body_asset.GetPhysicsAsset=function()scope=false;return physical_asset end
 body.GetNumBones=function()bones_after_loss=bones_after_loss+1;return #bone_names end
 T.check(not pcall(Render.capture,render_env,native_bindings) and bones_after_loss==0,"world loss inside render getter prevents next source operation")

@@ -49,30 +49,40 @@ function M.capture(env,bindings)
     local classes={}
     for kind,p in pairs(kinds)do classes[kind]=checked(function()return StaticFindObject(p)end)end
     local mesh_class=checked(function()return StaticFindObject("/Script/Engine.MeshComponent")end)
+    local scene_class=checked(function()return StaticFindObject("/Script/Engine.SceneComponent")end)
     local mi_class=checked(function()return StaticFindObject("/Script/Engine.MaterialInstance")end)
     local rvp=checked(function()return StaticFindObject("/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary")end)
-    if not mesh_class or not mi_class then fail("native render classes unavailable")end
+    if not mesh_class or not scene_class or not mi_class then fail("native render classes unavailable")end
+    local world_address=read(function(b)return b.world:GetAddress()end)
     local function owner(row)
         if row.owner==0 then return read(function(b)return b.pawn end)end
         for _,w in ipairs(bindings.weapons)do if w.id==row.owner then return env.weapon(w.field,w)end end
         fail("native render owner unavailable")
     end
-    local rows={}
+    local rows,catalog,by_address={}, {}, {}
     local function collect(actor,owner_id)
-        local a=checked(function()return actor:K2_GetComponentsByClass(mesh_class)end)
-        array(a,64,function(c)
+        local actor_id=object_id(actor)
+        if not actor_id then fail("native scene owner unavailable")end
+        local a=checked(function()return actor:K2_GetComponentsByClass(scene_class)end)
+        array(a,256,function(c)
             local id=object_id(c)
-            if id then id.owner=owner_id;rows[#rows+1]=id;if #rows>64 then fail("native render component bound")end end
+            if not id or by_address[id.address]then fail("native scene component identity duplicate or unavailable")end
+            local actual_owner=object_id(checked(function()return c:GetOwner()end))
+            if not actual_owner or actual_owner.address~=actor_id.address or actual_owner.name~=actor_id.name then fail("native scene component owner changed")end
+            local world=checked(function()return c:GetWorld()end)
+            if not world or checked(function()return world:IsValid()end)~=true or checked(function()return world:GetAddress()end)~=world_address then fail("native scene component world changed")end
+            id.owner=owner_id;id.mesh=checked(function()return c:IsA(mesh_class)end)
+            if type(id.mesh)~="boolean"then fail("native scene component kind unavailable")end
+            catalog[#catalog+1]=id;by_address[id.address]=id
+            if #catalog>512 then fail("native scene census bound")end
             return true
         end,"return")
     end
     collect(read(function(b)return b.pawn end),0)
     for _,w in ipairs(bindings.weapons)do collect(env.weapon(w.field,w),w.id)end
-    table.sort(rows,function(a,b)if a.owner~=b.owner then return a.owner<b.owner end;return a.name<b.name end)
-    local seen={};for i,r in ipairs(rows)do if seen[r.address]then fail("native render component duplicate")end;seen[r.address]=true;r.id=i end
     local function component(row)
         local actor=owner(row);local found
-        array(checked(function()return actor:K2_GetComponentsByClass(mesh_class)end),64,function(c)
+        array(checked(function()return actor:K2_GetComponentsByClass(scene_class)end),256,function(c)
             local identity=object_id(c)
             if identity and identity.address==row.address and identity.name==row.name then found=c end
             return true
@@ -80,7 +90,9 @@ function M.capture(env,bindings)
         if not found then fail("native render component changed")end
         local actual=checked(function()return found:GetOwner()end)
         local current_owner=owner(row)
-        if not actual or actual:GetAddress()~=current_owner:GetAddress()then fail("native render component owner changed")end
+        if not actual or checked(function()return actual:GetAddress()end)~=checked(function()return current_owner:GetAddress()end)then fail("native render component owner changed")end
+        local world=checked(function()return found:GetWorld()end)
+        if not world or checked(function()return world:IsValid()end)~=true or checked(function()return world:GetAddress()end)~=world_address then fail("native scene component world changed")end
         return found
     end
     local function get(row,fn)
@@ -144,6 +156,51 @@ function M.capture(env,bindings)
             .." child_class="..bounded(child_class,160).." parent_class="..bounded(parent_class,160)
             .." parent_relative_p3q4s3="..relative.." parent_world_p3q4s3="..world
     end
+    -- Include the real source roots and every direct ancestor of every mesh.
+    -- Keep only scalar identities; each subsequent getter resolves the exact
+    -- current owner/world-qualified component through the native scene census.
+    local included={}
+    local function include(row)
+        if not included[row.address]then
+            included[row.address]=true;rows[#rows+1]=row
+            if #rows>64 then fail("native complete attachment component bound")end
+        end
+    end
+    for _,row in ipairs(catalog)do if row.mesh then include(row)end end
+    local function include_root(actor)
+        local identity=object_id(checked(function()return actor.RootComponent end))
+        local row=identity and by_address[identity.address]
+        if not row or row.name~=identity.name then fail("native actor root missing from qualified scene census")end
+        include(row)
+    end
+    include_root(read(function(b)return b.pawn end))
+    for _,weapon in ipairs(bindings.weapons)do include_root(env.weapon(weapon.field,weapon))end
+    local cursor=1
+    while cursor<=#rows do
+        local row=rows[cursor]
+        local parent=object_id(get(row,function(o)return o:GetAttachParent()end))
+        row.parent_address=parent and parent.address or 0
+        if parent then
+            local ancestor=by_address[parent.address]
+            if not ancestor or ancestor.name~=parent.name then
+                local root=object_id(checked(function()return owner(row).RootComponent end))
+                fail(attachment_refusal(row,parent,root))
+            end
+            include(ancestor)
+        end
+        cursor=cursor+1
+    end
+    for _,row in ipairs(rows)do
+        local seen={};local address=row.address
+        while address~=0 do
+            if seen[address]then fail("native attachment cycle")end;seen[address]=true
+            local ancestor=by_address[address]
+            if not ancestor or not included[address]then fail("native attachment closure changed")end
+            address=ancestor.parent_address
+        end
+    end
+    table.sort(rows,function(a,b)if a.owner~=b.owner then return a.owner<b.owner end;return a.name<b.name end)
+    for i,row in ipairs(rows)do row.id=i end
     local function material(row,slot)
         local scalar,vector,texture={},{},{}
         local current=get(row,function(c)return c:GetMaterial(slot)end)
@@ -188,28 +245,46 @@ function M.capture(env,bindings)
     local vertex_total=0
     local main_address=read(function(b)return b.pawn.Mesh:GetAddress()end)
     for _,row in ipairs(rows)do
-        local kind
+        local kind;if not row.mesh then kind="scene"end
         for _,k in ipairs({"skeletal","static","groom","procedural"})do
             if classes[k] and get(row,function(c)return c:IsA(classes[k])end)==true then kind=k;break end
         end
         if not kind then fail("native render component kind unsupported")end
+        local class_full=get(row,function(o)return o:GetClass():GetFullName()end)
+        local component_class=type(class_full)=="string" and class_full:match("^%S+%s+(.+)$")
+        if not component_class then fail("native component class unavailable")end
         local relative=get(row,function(c)return c:GetRelativeTransform()end)
-        local c={id=row.id,owner=row.owner,name=row.name,kind=kind,role=row.address==main_address and "body" or row.owner~=0 and "weapon" or "attachment",
+        local c={id=row.id,owner=row.owner,name=row.name,component_class=component_class,kind=kind,scene={type="not_applicable"},
+            role=kind=="scene" and "anchor" or row.address==main_address and "body" or row.owner~=0 and "weapon" or "attachment",
             relative={translation=vec(relative.Translation,{"X","Y","Z"}),rotation=vec(relative.Rotation,{"X","Y","Z","W"}),scale=vec(relative.Scale3D,{"X","Y","Z"})},
             visible=get(row,function(o)return o:IsVisible()end),hidden=get(row,function(o)return o.bHiddenInGame end),
             socket=name(get(row,function(o)return o:GetAttachSocketName()end)),bones={},materials={},morphs={},hidden_bones={},groom={},
             vertex_state="unavailable",vertex_colors={},deformer="",cloth=false}
         local parent=object_id(get(row,function(o)return o:GetAttachParent()end));c.parent=0
+        if (parent and parent.address or 0)~=row.parent_address then fail("native attachment parent changed after closure")end
         if parent then
             for _,p in ipairs(rows)do if p.address==parent.address and p.name==parent.name then c.parent=p.id;break end end
-            if c.parent==0 then
-                local root=object_id(checked(function()return owner(row).RootComponent end))
-                if not root or root.address~=parent.address or root.name~=parent.name then fail(attachment_refusal(row,parent,root))end
-            end
+            if c.parent==0 then fail("native complete attachment parent missing")end
         end
+        if type(c.visible)~="boolean" or type(c.hidden)~="boolean"then fail("native component visibility unavailable")end
+        if kind=="scene"then
+            if component_class=="/Script/Engine.SceneComponent"then c.scene={type="scene"};c.collision=false
+            elseif component_class=="/Script/Engine.SplineComponent"then
+                local draw_debug=get(row,function(o)return o.bDrawDebug end)
+                if type(draw_debug)~="boolean" or draw_debug then fail("native spline anchor rendering not proved absent: "..row.name)end
+                c.scene={type="spline",draw_debug=draw_debug}
+            elseif component_class=="/Script/Engine.CapsuleComponent"then
+                if c.visible and not c.hidden then fail("native capsule anchor rendering not proved absent: "..row.name)end
+                c.scene={type="hidden_capsule"}
+            else fail("native scene anchor class unsupported: "..component_class)end
+            c.asset="";c.skeleton="";c.physics_asset="";c.geometry="not_applicable";c.vertex_state="not_applicable"
+        end
+        if c.collision~=false then
         local responses={};for channel=0,31 do responses[channel+1]=get(row,function(o)return o:GetCollisionResponseToChannel(channel)end)end
         c.collision={enabled=get(row,function(o)return o:GetCollisionEnabled()end),object_type=get(row,function(o)return o:GetCollisionObjectType()end),
             profile=name(get(row,function(o)return o:GetCollisionProfileName()end)),responses=responses,simulating=get(row,function(o)return o:IsSimulatingPhysics(FName("None"))end)}
+        end
+        if kind~="scene"then
         local asset_obj
         if kind=="skeletal"then asset_obj=get(row,function(o)return o:GetSkeletalMeshAsset()end)
         elseif kind=="static"then asset_obj=get(row,function(o)return o.StaticMesh end)
@@ -309,6 +384,7 @@ function M.capture(env,bindings)
             if not colors then fail(why)end
             c.vertex_colors,c.vertex_state=colors,"captured"
         elseif env.vertex_state then c.vertex_state=env.vertex_state(row)end
+        end
         local detached_tag=get(row,function(o)return o:ComponentHasTag(FName("Dismembered"))end)
         local gore_tag=get(row,function(o)return o:ComponentHasTag(FName("Gore"))end)
         if type(detached_tag)~="boolean" or type(gore_tag)~="boolean"then fail("native persistent component tags unavailable")end
@@ -318,7 +394,7 @@ function M.capture(env,bindings)
     end
     local bound={};for _,r in ipairs(rows)do bound[#bound+1]={id=r.id,address=r.address,
         owner=checked(function()return owner(r):GetAddress()end),name=r.name}end
-    local complete=true;for _,c in ipairs(components)do if c.vertex_state~="captured" and c.vertex_state~="native_asset"then complete=false end end
+    local complete=true;for _,c in ipairs(components)do if c.vertex_state~="captured" and c.vertex_state~="native_asset" and c.vertex_state~="not_applicable"then complete=false end end
     return {components=components,bindings=bound,topology={detached=detached,gore=gore,vertex_state=complete and "captured" or "unavailable"}}
 end
 return M

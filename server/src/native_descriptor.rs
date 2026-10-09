@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-pub const SCHEMA: u16 = 1;
+pub const SCHEMA: u16 = 2;
 pub const MAX_RECIPE_BYTES: usize = 60 * 1024;
 pub const MAX_COMPONENTS: usize = 64;
 pub const MAX_BONES: usize = 512;
@@ -81,13 +81,6 @@ dto! {
         binding_asset: String, source_mesh: String, cache: String, physics_asset: String,
         attachment_name: String, use_cards: bool, simulation: bool, groups: Vec<GroomGroup>
     }
-    RenderComponent {
-        id: u32, owner: u32, name: String, role: String, kind: ComponentKind, geometry: Geometry,
-        asset: String, skeleton: String, physics_asset: String, parent: u32, socket: String,
-        relative: Transform, visible: bool, hidden: bool, collision: Collision,
-        bones: Vec<Bone>, materials: Vec<Material>, morphs: Vec<Morph>, hidden_bones: Vec<String>,
-        groom: Vec<GroomRecipe>, vertex_state: VertexState, vertex_colors: Vec<VertexLod>, deformer: String, cloth: bool
-    }
     Topology {
         in_process: bool, parts: Vec<SlotFlag>, dismembered_bones: Vec<String>,
         detached: Vec<u32>, gore: Vec<u32>, vertex_state: VertexState
@@ -98,6 +91,54 @@ dto! {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SceneEvidence {
+    NotApplicable,
+    Scene,
+    Spline { draw_debug: bool },
+    HiddenCapsule,
+}
+
+fn required_collision<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Collision>, D::Error> {
+    Option::<Collision>::deserialize(deserializer)
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RenderComponent {
+    pub id: u32,
+    pub owner: u32,
+    pub name: String,
+    pub role: String,
+    pub component_class: String,
+    pub kind: ComponentKind,
+    pub geometry: Geometry,
+    pub scene: SceneEvidence,
+    pub asset: String,
+    pub skeleton: String,
+    pub physics_asset: String,
+    pub parent: u32,
+    pub socket: String,
+    pub relative: Transform,
+    pub visible: bool,
+    pub hidden: bool,
+    // This field must be present: null means proven nonprimitive SceneComponent.
+    #[serde(deserialize_with = "required_collision")]
+    pub collision: Option<Collision>,
+    pub bones: Vec<Bone>,
+    pub materials: Vec<Material>,
+    pub morphs: Vec<Morph>,
+    pub hidden_bones: Vec<String>,
+    pub groom: Vec<GroomRecipe>,
+    pub vertex_state: VertexState,
+    pub vertex_colors: Vec<VertexLod>,
+    pub deformer: String,
+    pub cloth: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComponentKind {
@@ -105,6 +146,7 @@ pub enum ComponentKind {
     Static,
     Groom,
     Procedural,
+    Scene,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -113,6 +155,7 @@ pub enum Geometry {
     RuntimeTransient,
     RuntimeMerged,
     Procedural,
+    NotApplicable,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -121,6 +164,7 @@ pub enum VertexState {
     Captured,
     RuntimeOverride,
     Unavailable,
+    NotApplicable,
 }
 
 fn text(s: &str, max: usize, empty: bool) -> bool {
@@ -284,6 +328,7 @@ impl RenderComponent {
             || !text(&self.name, 128, false)
             || !text(&self.role, 32, false)
             || !text(&self.socket, 128, true)
+            || !asset(&self.component_class, false)
             || !asset(&self.physics_asset, true)
             || !asset(&self.deformer, true)
             || self.parent == self.id
@@ -297,12 +342,22 @@ impl RenderComponent {
             return Err("runtime geometry identity");
         }
         self.relative.validate()?;
-        if self.collision.enabled > 5
-            || self.collision.object_type > 31
-            || !text(&self.collision.profile, 128, true)
-            || self.collision.responses.iter().any(|x| *x > 2)
+        if let Some(collision) = &self.collision {
+            if collision.enabled > 5
+                || collision.object_type > 31
+                || !text(&collision.profile, 128, true)
+                || collision.responses.iter().any(|x| *x > 2)
+            {
+                return Err("source collision");
+            }
+        }
+        if self.kind != ComponentKind::Scene
+            && (self.collision.is_none()
+                || self.scene != SceneEvidence::NotApplicable
+                || self.geometry == Geometry::NotApplicable
+                || self.vertex_state == VertexState::NotApplicable)
         {
-            return Err("source collision");
+            return Err("render applicability");
         }
         if self.bones.len() > MAX_BONES
             || self.materials.len() > MAX_MATERIALS
@@ -344,6 +399,38 @@ impl RenderComponent {
             ComponentKind::Groom => {
                 if !self.bones.is_empty() || !self.skeleton.is_empty() || self.groom.len() != 1 {
                     return Err("groom recipe");
+                }
+            }
+            ComponentKind::Scene => {
+                if self.role != "anchor"
+                    || self.geometry != Geometry::NotApplicable
+                    || self.vertex_state != VertexState::NotApplicable
+                    || !self.asset.is_empty()
+                    || !self.skeleton.is_empty()
+                    || !self.physics_asset.is_empty()
+                    || !self.deformer.is_empty()
+                    || self.cloth
+                    || !self.bones.is_empty()
+                    || !self.materials.is_empty()
+                    || !self.morphs.is_empty()
+                    || !self.hidden_bones.is_empty()
+                    || !self.groom.is_empty()
+                    || !self.vertex_colors.is_empty()
+                {
+                    return Err("scene anchor applicability");
+                }
+                match &self.scene {
+                    SceneEvidence::Scene
+                        if self.component_class == "/Script/Engine.SceneComponent"
+                            && self.collision.is_none() => {}
+                    SceneEvidence::Spline { draw_debug: false }
+                        if self.component_class == "/Script/Engine.SplineComponent"
+                            && self.collision.is_some() => {}
+                    SceneEvidence::HiddenCapsule
+                        if self.component_class == "/Script/Engine.CapsuleComponent"
+                            && self.collision.is_some()
+                            && (!self.visible || self.hidden) => {}
+                    _ => return Err("native anchor rendering not proved absent"),
                 }
             }
         }
@@ -564,6 +651,10 @@ impl SourceRecipe {
             return Err("native vertex state incomplete");
         }
         for c in &self.components {
+            if c.kind == ComponentKind::Scene {
+                // Native capture must keep verifying these live class/flags.
+                continue;
+            }
             if c.geometry != Geometry::Cooked || c.kind == ComponentKind::Procedural {
                 return Err("native runtime geometry unsupported");
             }
@@ -633,6 +724,91 @@ mod tests {
         let mut value = serde_json::to_value(&recipe).unwrap();
         value["invented_default"] = true.into();
         assert!(decode_recipe(&serde_json::to_vec(&value).unwrap()).is_err());
+    }
+    fn anchor(id: u32, parent: u32, evidence: SceneEvidence) -> RenderComponent {
+        let mut c = fixture().components.remove(0);
+        c.id = id;
+        c.parent = parent;
+        c.name = format!("Offline anchor {id}");
+        c.role = "anchor".into();
+        c.kind = ComponentKind::Scene;
+        c.geometry = Geometry::NotApplicable;
+        c.vertex_state = VertexState::NotApplicable;
+        c.component_class = match evidence {
+            SceneEvidence::Scene => "/Script/Engine.SceneComponent",
+            SceneEvidence::Spline { .. } => "/Script/Engine.SplineComponent",
+            SceneEvidence::HiddenCapsule => "/Script/Engine.CapsuleComponent",
+            SceneEvidence::NotApplicable => unreachable!(),
+        }
+        .into();
+        if evidence == SceneEvidence::Scene {
+            c.collision = None;
+        }
+        c.scene = evidence;
+        c.asset.clear();
+        c.skeleton.clear();
+        c.physics_asset.clear();
+        c.bones.clear();
+        c.materials.clear();
+        c.morphs.clear();
+        c.hidden_bones.clear();
+        c.groom.clear();
+        c.vertex_colors.clear();
+        c.hidden = true;
+        c.relative.translation = [1.0000000000000002, -2.5, 3.0];
+        c
+    }
+    #[test]
+    fn exact_scene_spline_hidden_capsule_graph_roundtrips() {
+        let mut recipe = fixture();
+        recipe.components[0].parent = 2;
+        recipe.components.extend([
+            anchor(2, 3, SceneEvidence::Scene),
+            anchor(3, 4, SceneEvidence::Spline { draw_debug: false }),
+            anchor(4, 0, SceneEvidence::HiddenCapsule),
+        ]);
+        recipe.validate_mirror_profile().unwrap();
+        let decoded = SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap();
+        assert_eq!(decoded, recipe);
+        assert_eq!(decoded.components[1].collision, None);
+        assert!(decoded.components[2].collision.is_some());
+        assert_eq!(
+            decoded.components[1].relative.translation[0].to_bits(),
+            1.0000000000000002f64.to_bits()
+        );
+        recipe.components[2].parent = 2;
+        assert_eq!(recipe.validate(), Err("attachment cycle"));
+    }
+    #[test]
+    fn anchor_applicability_and_render_absence_never_default() {
+        let mut scene = anchor(2, 0, SceneEvidence::Scene);
+        scene.validate().unwrap();
+        scene.component_class = "/Script/Engine.UnknownSceneSubclass".into();
+        assert!(scene.validate().is_err());
+        let mut scene = anchor(2, 0, SceneEvidence::Spline { draw_debug: true });
+        assert!(scene.validate().is_err());
+        scene.scene = SceneEvidence::Spline { draw_debug: false };
+        scene.collision = None;
+        assert!(scene.validate().is_err());
+        let mut capsule = anchor(2, 0, SceneEvidence::HiddenCapsule);
+        capsule.hidden = false;
+        capsule.visible = true;
+        assert!(capsule.validate().is_err());
+        let mut recipe = fixture();
+        recipe.components[0].collision = None;
+        assert!(recipe.validate().is_err());
+        let recipe = fixture();
+        for missing in ["component_class", "scene", "collision"] {
+            let mut value = serde_json::to_value(&recipe).unwrap();
+            value["components"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove(missing);
+            assert!(
+                SourceRecipe::decode_recipe(&serde_json::to_vec(&value).unwrap()).is_err(),
+                "missing {missing}"
+            );
+        }
     }
     #[test]
     fn topology_components_and_complete_bones_never_default() {

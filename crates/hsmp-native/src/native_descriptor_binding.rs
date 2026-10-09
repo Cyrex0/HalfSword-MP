@@ -29,6 +29,7 @@ unsafe fn encode(
     out: &mut String,
     depth: usize,
     nodes: &mut usize,
+    collision_field: bool,
 ) -> Result<(), String> {
     unsafe {
         *nodes += 1;
@@ -37,11 +38,16 @@ unsafe fn encode(
         }
         let index = lua_absindex(L, index);
         match lua_type(L, index) {
-            LUA_TBOOLEAN => out.push_str(if lua_toboolean(L, index) != 0 {
-                "true"
-            } else {
-                "false"
-            }),
+            LUA_TBOOLEAN => {
+                let value = lua_toboolean(L, index) != 0;
+                out.push_str(if collision_field && !value {
+                    "null"
+                } else if value {
+                    "true"
+                } else {
+                    "false"
+                });
+            }
             LUA_TNUMBER => {
                 if lua_isinteger(L, index) != 0 {
                     out.push_str(&arg_int(L, index).ok_or("source integer")?.to_string());
@@ -93,7 +99,7 @@ unsafe fn encode(
                             out.push(',');
                         }
                         lua_rawgeti(L, index, i as i64);
-                        encode(L, -1, out, depth + 1, nodes)?;
+                        encode(L, -1, out, depth + 1, nodes, false)?;
                         pop(L, 1);
                     }
                     out.push(']');
@@ -117,7 +123,7 @@ unsafe fn encode(
                         quoted(out, key)?;
                         out.push(':');
                         rawget_str(L, index, key);
-                        encode(L, -1, out, depth + 1, nodes)?;
+                        encode(L, -1, out, depth + 1, nodes, key == "collision")?;
                         pop(L, 1);
                     }
                     out.push('}');
@@ -136,7 +142,7 @@ pub unsafe fn read_recipe(L: *mut lua_State, index: c_int) -> Result<SourceRecip
     unsafe {
         let top = lua_gettop(L);
         let mut bytes = String::new();
-        let result = encode(L, index, &mut bytes, 0, &mut 0)
+        let result = encode(L, index, &mut bytes, 0, &mut 0, false)
             .and_then(|()| SourceRecipe::decode_recipe(bytes.as_bytes()).map_err(str::to_owned));
         lua_settop(L, top);
         result
