@@ -1,5 +1,23 @@
 # Native authority bootstrap checkpoint
 
+## Current actual: repeated native lookup is the measured bottleneck
+
+Exact4cf0c143/full G0/all394 hashes run215308-6ea88e preserves both completed
+49-component entity mirrors on BOTH clients without post-ready retravel. Actual
+first capture6.097s includes5.301s of5634 native exact-path finds; provider5.371s
+and aggregate finish0.725s. Guard time3ms and4000 PE calls2ms are nested metrics,
+not additional stages. LIVE still faults, input0 and owned view unproved.
+Next implement bounded operation-scoped original-lookup reuse with full original
+identity/path/Outer/flags and final closure; keep all native proofs and timing bounds.
+All original processes gone, save20 unchanged, no fresh dump, both initial game
+windows physically contained on secondary. Native logs/operator summary retained.
+
+Provider-only operation-scoped lookup reuse is implemented/reviewed: cold double
+exact binding, first-positive pin before callbacks, complete original full path/
+Outer/FName/class/RF proof on hits and pure dispatch/success closure. Dispose on
+operation exit; no permanent cache, guard removal or roster cap. Strict compile
+and1205 focused checks pass. Exact gated native measurement remains pending.
+
 ## Current actual: model readback passes; LIVE publication is too slow
 
 Exacte7321504/full G0/all394 hashes run213011-14ba4f verifies both49-component

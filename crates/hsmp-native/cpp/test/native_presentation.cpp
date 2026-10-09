@@ -164,6 +164,7 @@ void lifetime_reset(HsmpReflect& reflect) {
     reflect.props=lifetime_props;reflect.obj_prop=lifetime_prop;reflect.call=lifetime_call;
     reflect.weak=lifetime_weak;reflect.resolve=lifetime_resolve;object_name=lifetime_name;object_world=lifetime_world;
     retirement_flags=lifetime_flags;retirement_free=lifetime_free;
+    source_outer=lifetime_outer;source_package_name=&path_package_name;path_package_name=700;path_mutate_name=path_mutate_class=path_mutate_package=false;
     retirement_index=lifetime_index;retirement_object=lifetime_slot_object;retirement_serial=lifetime_slot_serial;
 }
 struct CreateMarker {std::string stage,name;uint32_t edge,marker,component,kind,function;uint64_t operation;};
@@ -234,6 +235,59 @@ void path_checks(HsmpReflect& reflect){
     source_outer=nullptr;check(source_path_reader(witness.data(),count,0,nullptr,0,nullptr,&package,reason,sizeof(reason))==-1,"missing original Outer export refuses");
     source_outer=lifetime_outer;source_package_name=nullptr;check(source_path_reader(witness.data(),count,0,nullptr,0,nullptr,&package,reason,sizeof(reason))==-1,"missing native package discriminator refuses");
     source_outer=nullptr;lifetime_reset(reflect);
+}
+// Exact path reuse lasts only for one OperationScope. These real metadata
+// witnesses model callbacks and natural slot serial assignment, never allocation.
+LifetimeObject lookup_object{1400,&actor_class},lookup_replacement{1401,&actor_class};
+uint32_t lookup_serial{};int lookup_searches{},lookup_mutation{};bool lookup_pending{},lookup_second_positive{};
+uint64_t lookup_weak(void* p){const auto value=lifetime_weak(p)|(p==&lookup_object?static_cast<uint64_t>(lookup_serial)<<32:0);
+    if(p==&lookup_object&&lookup_serial==7&&lookup_second_positive&&lookup_mutation==3){lookup_pending=true;lookup_second_positive=false;}return value;}
+void* lookup_resolve(uint64_t value){auto* p=lifetime_resolve(value);if(p==&lookup_object&&(value>>32)&&value>>32!=lookup_serial)return nullptr;return p;}
+int32_t lookup_guard(void*){
+    if(lookup_pending){lookup_pending=false;if(lookup_mutation==1)lookup_object.name^=1;
+        else if(lookup_mutation==2)lookup_object.outer=&actor;
+        else if(lookup_mutation==3)++lookup_serial;}
+    return 1;
+}
+void* lookup_native_find(const uint16_t* key){
+    if(std::wstring(reinterpret_cast<const wchar_t*>(key))!=L"/Game/Test/Lookup.Lookup")return lifetime_find(key);
+    ++lookup_searches;if(lookup_searches==1&&(lookup_mutation==1||lookup_mutation==2))lookup_pending=true;
+    if(lookup_searches==2&&lookup_second_positive)lookup_serial=7;
+    return lookup_object.name==1400&&lookup_object.outer==&path_package?&lookup_object:nullptr;
+}
+void lookup_reset(HsmpReflect& reflect){
+    lifetime_reset(reflect);path_package={127,&meta};lookup_object={1400,&actor_class};lookup_replacement={1401,&actor_class};
+    lookup_object.outer=&path_package;lifetime_objects.push_back(&path_package);lifetime_objects.push_back(&lookup_object);lifetime_objects.push_back(&lookup_replacement);
+    lookup_serial=0;lookup_searches=lookup_mutation=0;lookup_pending=lookup_second_positive=false;
+    reflect.find=lookup_native_find;reflect.weak=lookup_weak;reflect.resolve=lookup_resolve;
+}
+void lookup_checks(HsmpReflect& reflect){
+    int context=1;const HsmpViewGuard guard{&context,lookup_guard};const wchar_t* path=L"/Game/Test/Lookup.Lookup";
+    lookup_reset(reflect);
+    {OperationScope scope(&guard,keep(&old_world));const auto first=find(path);for(int i=0;i<20;++i)check(same(first,find(path)),"operation hit returns original qualified exact object");
+        check(lookup_searches==2,"twenty hits do not repeat either native path search");
+        {OperationScope nested(&guard,keep(&old_world));check(same(first,find(path))&&lookup_searches==4,"nested operation independently binds exact original path");lookup_finish();}
+        check(same(first,find(path))&&lookup_searches==4,"nested completion restores original operation reuse");lookup_finish();}
+    check(active_lookup==nullptr,"finished operation retains no lookup state");
+    {OperationScope scope(&guard,keep(&old_world));find(path);check(lookup_searches==6,"later operation reacquires fresh exact path");lookup_finish();}
+    for(int mutation:{1,2}){lookup_reset(reflect);OperationScope scope(&guard,keep(&old_world));lookup_mutation=mutation;
+        rejects([&]{find(path);},"rename or reparent after first native lookup refuses exact key binding");check(active_lookup->entries.empty(),"failed cold binding never enters operation map");}
+    lookup_reset(reflect);{OperationScope scope(&guard,keep(&old_world));source_package_name=nullptr;rejects([&]{find(path);},"unavailable package metadata refuses before copy");}
+    lookup_reset(reflect);{OperationScope scope(&guard,keep(&old_world));const auto zero=find(path);lookup_serial=7;const auto positive=find(path);
+        check((zero.weak>>32)==0&&(positive.weak>>32)==7&&positive.address==zero.address,"natural same-slot positive serial is qualified and pinned");
+        lookup_serial=8;rejects([&]{find(path);},"later positive serial change refuses hit without replacement lookup");check(lookup_searches==2,"positive mismatch does not refresh by path");}
+    lookup_reset(reflect);{OperationScope scope(&guard,keep(&old_world));lookup_second_positive=true;lookup_mutation=3;
+        rejects([&]{find(path);},"second exact lookup positive serial cannot be forgotten across final callback");}
+    lookup_reset(reflect);{OperationScope scope(&guard,keep(&old_world));find(path);Function f(L"/Script/Engine.Actor:GetLevel");lookup_mutation=1;lookup_pending=true;
+        rejects([&]{f.call(keep(&actor));},"last guard mutation of an earlier path refuses before native dispatch");check(level_calls==0,"unqualified retained path never crosses PE boundary");}
+    for(int mutation=0;mutation<7;++mutation){lookup_reset(reflect);OperationScope scope(&guard,keep(&old_world));const auto original=find(path);
+        if(mutation==0)lookup_object.flags=mirrored_garbage;else if(mutation==1)lookup_object.name^=uint64_t{1}<<32;
+        else if(mutation==2)lookup_object.outer=&actor;else if(mutation==3)actor_class.flags^=1;
+        else if(mutation==4)lifetime_objects[static_cast<uint32_t>(original.weak)-1]=&lookup_replacement;
+        else if(mutation==5)old_world.property=&new_world;else path_package_name^=1;
+        rejects([&]{lookup_finish();},"complete pure operation tail refuses garbage/name-number/Outer/classflags/slot/world/package mutation");}
+    lookup_reset(reflect);{OperationScope scope(&guard,keep(&old_world));find(path);lookup_object.flags^=1;rejects([&]{find(path);},"non-garbage RF changes still refuse retained original profile");}
+    lifetime_reset(reflect);
 }
 // Original component memory and reflected array metadata exercise the actual
 // bounded census. Non-null override values are deliberately invalid pointers:
@@ -1360,7 +1414,7 @@ int main() {
         array={nullptr,1,1};std::memcpy(header.data(),&array,16);rejects([&]{spline_read_curve<NativeQuatPoint>(header.data(),curve,decoded,64);},"nonnull count with missing POD data refuses");
         HsmpViewSplineProfile empty{0,0,0,0,1};HsmpViewSplineFrame empty_frame{};spline_frame_valid(empty,empty_frame);check(true,"actual empty spline curves are preserved without invented points");
         SplineSnapshot a{},b{};a.value.version=b.value.version=7;check(spline_equal(a,b),"two identical empty raw copies agree");b.value.version=8;check(!spline_equal(a,b),"source curve version mutation invalidates coherent capture");b=a;b.value.settings.duration=2;check(!spline_equal(a,b),"source settings mutation invalidates coherent capture");
-        path_checks(reflect);
+        path_checks(reflect);lookup_checks(reflect);
         vertex_checks(reflect);
         scene_checks(reflect);
         arm_publication_checks(reflect);

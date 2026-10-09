@@ -40,6 +40,13 @@ void require(bool ok, const char* why) { if (!ok) throw Error(why); }
 thread_local const HsmpViewGuard* active_guard{};
 thread_local Obj active_world{},active_game_instance{};
 void mesh_call_guard();
+struct LookupEntry {std::vector<HsmpNativePathNode> original,pinned;std::vector<uint32_t> flags,class_flags;uint64_t package{};};
+struct LookupState {Obj world{},gi{};HsmpNativePathNode world_node{},gi_node{};HsmpProp gi_property{};std::map<std::wstring,LookupEntry> entries;};
+thread_local LookupState* active_lookup{};
+Obj lookup_find(const wchar_t* path);
+void lookup_finish();
+void lookup_start(LookupState& state,Obj world,Obj gi);
+bool mesh_serial_assignment(Obj original,Obj current);
 thread_local bool static_profile_trace{};
 thread_local HsmpNativeCaptureRow* active_capture_trace{};
 struct CaptureTimer {
@@ -164,7 +171,7 @@ void* get(Obj o) {
     }
     return p;
 }
-Obj find(const wchar_t* path) {check_guard();profile_tick(2);void* object{};{CaptureTimer capture_find_time(6);object=vt->find(u16(path));}return keep(object);}
+Obj find(const wchar_t* path) {return lookup_find(path);}
 bool is(Obj o, const wchar_t* cls) { const auto c = find(cls); return vt->is_a(get(o), get(c)) != 0; }
 Obj asset(HsmpViewText path, const wchar_t* cls) {
     const auto p = text(path);
@@ -189,16 +196,17 @@ Obj object_property(Obj o, const wchar_t* key) {
 }
 struct OperationScope {
     const HsmpViewGuard* previous{};Obj previous_world{},previous_gi{};
-    explicit OperationScope(const HsmpViewGuard* guard,Obj world):previous(active_guard),previous_world(active_world),previous_gi(active_game_instance) {
+    LookupState lookup{};LookupState* previous_lookup{};
+    explicit OperationScope(const HsmpViewGuard* guard,Obj world):previous(active_guard),previous_world(active_world),previous_gi(active_game_instance),previous_lookup(active_lookup) {
         require(guard && guard->context && guard->check && guard->check(guard->context)==1,"native borrowed guard missing");
-        active_guard=guard;active_world={};active_game_instance={};
+        active_guard=guard;active_world={};active_game_instance={};active_lookup=nullptr;
         try {
             get(world);require(is(world,L"/Script/Engine.World"),"native guard world class");
             auto gi=object_property(world,L"OwningGameInstance");require(gi.weak&&is(gi,L"/Script/Engine.GameInstance"),"native owning game-instance missing");
-            active_world=world;active_game_instance=gi;check_guard();
-        }catch(...) {active_guard=previous;active_world=previous_world;active_game_instance=previous_gi;throw;}
+            active_world=world;active_game_instance=gi;check_guard();lookup_start(lookup,world,gi);active_lookup=&lookup;
+        }catch(...) {active_guard=previous;active_world=previous_world;active_game_instance=previous_gi;active_lookup=previous_lookup;throw;}
     }
-    ~OperationScope(){active_guard=previous;active_world=previous_world;active_game_instance=previous_gi;}
+    ~OperationScope(){active_guard=previous;active_world=previous_world;active_game_instance=previous_gi;active_lookup=previous_lookup;}
 };
 bool bool_property(Obj o, const wchar_t* key) {
     auto p = property(o, key, L"BoolProperty", 1);
@@ -284,6 +292,7 @@ struct Function {
         void* object_pointer=get(object);void* function_pointer=get(function);
         vertex_dispatch_guard(object,function,cls);
         scene_dispatch_guard(object,function,cls);
+        lookup_finish();
         profile_tick(3);profile_phase("cpp_pe",0);
         auto* trace=active_create_trace;
         const bool traced=trace&&trace->pe_enter(create_id,create_name);
@@ -663,7 +672,7 @@ void destroy_actor(Obj world,Obj actor) {
     require(same(actor_world(actor),world),"mirror destroy world mismatch");Function f(L"/Script/Engine.Actor:K2_DestroyActor");
     // Destroy invalidates the object, so only qualify immediately before the call.
     require(vt->is_a(get(actor),get(f.cls))!=0,"mirror destroy class");
-    void* object=get(actor);void* function=get(f.function);check_guard();
+    void* object=get(actor);void* function=get(f.function);check_guard();lookup_finish();
     vt->call(object,function,f.buf.data());
     // The actor may now be dead. Only the borrowed world scope is checked.
     check_guard();
@@ -671,7 +680,7 @@ void destroy_actor(Obj world,Obj actor) {
 void initialize_result(HsmpViewResult* r) {require(r!=nullptr,"native result missing");*r={};}
 void failure(HsmpViewResult* r,const char* why) {if(r){r->complete=0;std::snprintf(r->reason,sizeof(r->reason),"%s",why);}}
 int32_t inspect(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,HsmpViewResult* r) {
-    try{initialize_result(r);thread();OperationScope scope(guard,world);supported(world,owner,component,r);r->complete=1;return 1;}
+    try{initialize_result(r);thread();OperationScope scope(guard,world);supported(world,owner,component,r);lookup_finish();r->complete=1;return 1;}
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,const HsmpViewGuard* guard,HsmpViewResult* r) {
@@ -691,7 +700,7 @@ int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,Hsm
         if(c->kind==7)*out->spring_arm=arm_observe(world,owner,component,c->spring_arm_socket,r);
         trace.mark(3);
         vertex_native_asset(world,owner,component,*c,r);
-        trace.mark(4);trace.row.complete=1;r->complete=1;return 1;
+        lookup_finish();trace.mark(4);trace.row.complete=1;r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const HsmpViewGuard* guard,HsmpViewResult* r) {
@@ -808,7 +817,7 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
         trace.emit("finish_set",0);finish_scene_set(world,targets,r);trace.emit("finish_set",1);
         for(const auto& part:mirror.parts)if(part.pose){pose_pure(*part.pose);pose_buffers(vertex_pure(part.render),part.pose->count);}
         for(const auto& part:mirror.parts)if(part.mesh)mesh_binding_final(*part.mesh);
-        require(next_mirror!=0,"mirror handle exhausted");const auto id=next_mirror++;mirrors.emplace(id,std::move(mirror));r->complete=1;trace.terminal(1);return id;
+        lookup_finish();require(next_mirror!=0,"mirror handle exhausted");const auto id=next_mirror++;mirrors.emplace(id,std::move(mirror));r->complete=1;trace.terminal(1);return id;
     }catch(const std::exception& e){trace.terminal(2);failure(r,e.what());if(actor.weak){forget_owned_materials(actor);try{OperationScope scope(guard,world);destroy_actor(world,actor);}catch(const std::exception&){}}return 0;}
 }
 void world_transform(Obj component,const Transform& t,HsmpViewResult* r) {
@@ -889,10 +898,10 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         for(const auto& [index,published]:published_poses)pose_final(*mirror.parts[index].pose,published);
         for(const auto& part:mirror.parts)if(part.mesh)mesh_binding_final(*part.mesh);
         for(const auto& part:mirror.parts)if(part.arm_publication)arm_publication_final(*part.arm_publication);
-        r->complete=1;return 1;
+        lookup_finish();r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
-void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;forget_mirror_materials(mirror);mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
+void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;forget_mirror_materials(mirror);mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);lookup_finish();}catch(const std::exception&) {}}
 void discard(uint64_t id) {const std::lock_guard lock(mirror_mutex);const auto found=mirrors.find(id);if(found!=mirrors.end()){forget_mirror_materials(found->second);mirrors.erase(found);}}
 using ObjectFlags=const uint32_t*(*)(const void*);
 ObjectFlags retirement_flags{};
@@ -914,6 +923,7 @@ void* source_path_get(const HsmpNativePathNode& node) {
     require(object_name_value&&*object_name_value==node.name&&class_name_value&&*class_name_value==node.class_name&&vt->class_of(object)==cls,"native path original FName/class changed");return object;
 }
 HsmpNativePathNode source_path_node(void* object) {
+    require(vt&&object_name&&retirement_flags&&source_outer,"native path metadata unavailable");
     require(object!=nullptr,"native path node missing");HsmpNativePathNode node{};node.weak=vt->weak(object);node.address=reinterpret_cast<uint64_t>(object);
     require(node.weak&&vt->resolve(node.weak)==object,"native path node weak unavailable");auto flags=retirement_flags(object);require(flags&&(*flags&0x40000000u)==0,"native path node garbage");
     void* cls=vt->class_of(object);require(cls!=nullptr,"native path class missing");node.class_weak=vt->weak(cls);node.class_address=reinterpret_cast<uint64_t>(cls);
@@ -927,6 +937,63 @@ void source_path_verify(const HsmpNativePathNode* nodes,uint32_t count,uint64_t 
         void* object=source_path_get(nodes[i]);const void* const* field=source_outer(object);require(field!=nullptr,"native path Outer field unavailable");
         const void* outer{};std::memcpy(&outer,field,sizeof(outer));require(reinterpret_cast<uint64_t>(outer)==(i+1<count?nodes[i+1].address:0),"native path original Outer link changed");source_path_get(nodes[i]);}
     require(*source_package_name==package_name,"native path package discriminator changed during walk");
+}
+void lookup_world_final(const LookupState& state){
+    const auto* world=source_path_get(state.world_node);source_path_get(state.gi_node);void* gi{};
+    std::memcpy(&gi,static_cast<const uint8_t*>(world)+state.gi_property.offset,8);
+    require(reinterpret_cast<uint64_t>(gi)==state.gi.address,"native lookup original world/game-instance changed");
+}
+void lookup_start(LookupState& state,Obj world,Obj gi){
+    state.world=world;state.gi=gi;state.gi_property=property(world,L"OwningGameInstance",L"ObjectProperty",8);
+    state.world_node=source_path_node(get(world));
+    state.gi_node=source_path_node(get(gi));check_guard();lookup_world_final(state);
+}
+void lookup_entry_final(const LookupEntry& entry){
+    require(!entry.original.empty()&&entry.original.size()==entry.pinned.size(),"native lookup witness missing");
+    source_path_verify(entry.original.data(),static_cast<uint32_t>(entry.original.size()),entry.package);
+    source_path_verify(entry.pinned.data(),static_cast<uint32_t>(entry.pinned.size()),entry.package);
+    for(size_t i=0;i<entry.pinned.size();++i){const auto& node=entry.pinned[i];const auto* p=source_path_get(node);const auto* flags=retirement_flags(p);const auto* cls=vt->resolve(node.class_weak);const auto* class_flags=retirement_flags(cls);
+        require(flags&&class_flags&&*flags==entry.flags[i]&&*class_flags==entry.class_flags[i],"native lookup original RF/class flags changed");}
+}
+void lookup_finish(){if(!active_lookup)return;lookup_world_final(*active_lookup);for(const auto& [path,entry]:active_lookup->entries){(void)path;lookup_entry_final(entry);}lookup_world_final(*active_lookup);}
+void lookup_remember(const HsmpNativePathNode& node){
+    const Identity value{node.address,node.name,node.class_weak,node.class_address};const auto found=identities.find(node.weak);
+    if(found==identities.end()){require(identities.size()<65536,"native lookup identity bound");identities.emplace(node.weak,value);}
+    else require(found->second.address==value.address&&found->second.name==value.name&&found->second.class_address==value.class_address,"native lookup retained identity changed");
+}
+void lookup_pin(LookupEntry& entry){
+    lookup_entry_final(entry);auto candidate=entry.pinned;
+    for(auto& node:candidate){auto* p=source_path_get(node);const Obj old{node.weak,node.address},current{vt->weak(p),node.address};
+        require(same(old,current)||mesh_serial_assignment(old,current),"native lookup positive object serial changed");node.weak=current.weak;
+        void* cls=vt->resolve(node.class_weak);const Obj old_class{node.class_weak,node.class_address},current_class{vt->weak(cls),node.class_address};
+        require(same(old_class,current_class)||mesh_serial_assignment(old_class,current_class),"native lookup positive class serial changed");node.class_weak=current_class.weak;}
+    LookupEntry proposed=entry;proposed.pinned=std::move(candidate);lookup_entry_final(proposed);lookup_world_final(*active_lookup);
+    for(const auto& node:proposed.pinned){lookup_remember(node);const auto class_node=source_path_node(vt->resolve(node.class_weak));require(class_node.name==node.class_name&&class_node.address==node.class_address,"native lookup retained class identity changed");lookup_remember(class_node);}
+    lookup_entry_final(proposed);lookup_world_final(*active_lookup);entry.pinned=std::move(proposed.pinned);
+}
+Obj lookup_find(const wchar_t* path){
+    check_guard();const std::wstring key(path);if(active_lookup){const auto hit=active_lookup->entries.find(key);
+        if(hit!=active_lookup->entries.end()){lookup_pin(hit->second);check_guard();lookup_entry_final(hit->second);lookup_world_final(*active_lookup);const auto& root=hit->second.pinned.front();return {root.weak,root.address};}}
+    profile_tick(2);void* object{};{CaptureTimer timer(6);object=vt->find(u16(path));}const auto original=keep(object);
+    if(!active_lookup)return original;
+    // Cache capacity limits reuse only; an admitted larger operation continues
+    // through the unchanged native lookup path without a new scene bound.
+    if(active_lookup->entries.size()>=512)return original;
+    require(source_package_name!=nullptr,"native lookup package metadata unavailable");
+    LookupEntry entry;entry.package=*source_package_name;auto node=source_path_node(get(original));const auto first_observed=node;node.weak=original.weak;
+    for(;;){require(entry.original.size()<64,"native lookup full path bound");for(const auto& prior:entry.original)require(prior.address!=node.address,"native lookup path cycle");entry.original.push_back(node);
+        const auto* p=source_path_get(node);const auto* flags=retirement_flags(p);const auto* class_flags=retirement_flags(vt->resolve(node.class_weak));require(flags&&class_flags,"native lookup RF metadata unavailable");entry.flags.push_back(*flags);entry.class_flags.push_back(*class_flags);
+        const auto* outer=source_outer(p);require(outer,"native lookup Outer metadata unavailable");if(!*outer)break;node=source_path_node(const_cast<void*>(*outer));}
+    entry.pinned=entry.original;entry.pinned.front()=first_observed;lookup_pin(entry);check_guard();lookup_entry_final(entry);
+    // The first lookup may be followed by a callback before its witness is
+    // complete. A second exact native lookup closes the requested-key binding.
+    profile_tick(2);void* second{};{CaptureTimer timer(6);second=vt->find(u16(path));}const auto exact=keep(second);
+    const Obj pinned{entry.pinned.front().weak,entry.pinned.front().address};
+    require(same(pinned,exact)||mesh_serial_assignment(pinned,exact),"native lookup exact requested path changed");
+    // Preserve the first positive serial observed by the second exact lookup
+    // before another guard callback can assign a different positive serial.
+    lookup_pin(entry);require(same(Obj{entry.pinned.front().weak,entry.pinned.front().address},exact),"native lookup first observed serial changed");
+    check_guard();lookup_pin(entry);lookup_finish();const auto root=entry.pinned.front();active_lookup->entries.emplace(key,std::move(entry));return {root.weak,root.address};
 }
 int32_t source_path_reader(const HsmpNativePathNode* nodes,uint32_t count,uint32_t capture,HsmpNativePathNode* output,uint32_t capacity,uint32_t* output_count,uint64_t* package_name,char* reason,uint32_t reason_capacity) {
     try{require(vt&&vt->abi==HSMP_REFLECT_ABI,"native path reflection unavailable");const DWORD current=GetCurrentThreadId();if(!game_thread)game_thread=current;require(current==game_thread,"native path game-thread admission");
@@ -1130,10 +1197,10 @@ int32_t retire(Obj world,Obj actor,uint32_t kind,Obj target,const HsmpViewGuard*
         Function f(L"/Script/Engine.Actor:K2_DestroyActor");require(f.fields.empty(),"native retirement destroy signature changed");
         require(vt->is_a(get(actor),get(f.cls))!=0,"native retirement destroy owner class");
         void* object=get(actor);void* function=get(f.function);check_guard();require((flags_of(object)&mirrored_garbage)==0,"native actor changed before retirement dispatch");result->qualified=1;
-        result->dispatched=1;vt->call(object,function,f.buf.data());
+        lookup_finish();result->dispatched=1;vt->call(object,function,f.buf.data());
         // Never invoke actor GetWorld/GetLevel/ProcessEvent after dispatch.
         check_guard();require(retirement_after(world,actor,identity,layout,result),"native actor retirement not proved");
-        retired_drivers.emplace(actor.weak,RetiredDriver{world,actor,identity,result->before,layout});return 1;
+        lookup_finish();retired_drivers.emplace(actor.weak,RetiredDriver{world,actor,identity,result->before,layout});return 1;
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
 int32_t probe_retirement(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewRetirement* result){
@@ -1144,7 +1211,7 @@ int32_t probe_retirement(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpView
         require(record!=retired_drivers.end()&&same(record->second.world,world)&&same(record->second.actor,actor),"native original retirement proof unavailable");
         result->qualified=1;result->weak=actor.weak;result->address=actor.address;
         result->before=record->second.before;
-        require(retirement_probe_after(record->second,result),"native original actor retirement no longer proved");return 1;
+        require(retirement_probe_after(record->second,result),"native original actor retirement no longer proved");lookup_finish();return 1;
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
 int32_t actor_scope(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewActorScope* result){
@@ -1159,19 +1226,19 @@ int32_t actor_scope(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewActor
         // it, nor resolve a reused/disappeared original as a fresh actor.
         void* original=original_slot(actor,identity);require(original!=nullptr,"native actor scope original disappeared");
         result->state=lifecycle(original,identity,layout);result->state.listed=listed;result->state.known|=4;
-        result->qualified=1;return 1;
+        lookup_finish();result->qualified=1;return 1;
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
 int32_t describe_spline(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,HsmpViewSplineProfile* out,HsmpViewResult* r) {
     const StaticProfileTraceScope tracing;
     try{profile_phase("cpp_admission",0);initialize_result(r);thread();OperationScope scope(guard,world);require(out!=nullptr,"native spline profile output missing");profile_phase("cpp_admission",1);
         profile_phase("core_layout",0);layouts();profile_phase("core_layout",1);
-        auto snapshot=spline_coherent(world,owner,component,r);*out=spline_profile(snapshot);spline_profile_valid(*out);r->complete=1;return 1;}
+        auto snapshot=spline_coherent(world,owner,component,r);*out=spline_profile(snapshot);spline_profile_valid(*out);lookup_finish();r->complete=1;return 1;}
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 int32_t describe_vertex_state(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,HsmpViewVertexState* out,HsmpViewResult* r){
     try{initialize_result(r);thread();OperationScope scope(guard,world);require(out!=nullptr,"native vertex state output missing");
-        *out=vertex_observe(world,owner,component,r);r->complete=1;return 1;
+        *out=vertex_observe(world,owner,component,r);lookup_finish();r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t source_count,const uint64_t* handles,uint32_t mirror_count,const HsmpViewGuard* guard,HsmpViewResult* r){
@@ -1189,7 +1256,7 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
         MeshWatch mesh_watch(mesh_mirrors);finish_scene_set(world,targets,r);
         for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.mesh){mesh_binding_final(*part.mesh);if(part.pose)pose_pure(*part.pose);}
         for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.arm_publication)arm_publication_final(*part.arm_publication);
-        r->complete=1;return 1;
+        lookup_finish();r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 const HsmpPresentation provider{11,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets};

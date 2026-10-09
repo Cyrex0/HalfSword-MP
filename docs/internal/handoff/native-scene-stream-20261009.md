@@ -1,5 +1,40 @@
 # Native full-scene encoding checkpoint
 
+## Actual 4cf0c143: retirement holds; exact lookups dominate capture
+
+Exact clean dev/full G0/all394 hashes run20261009-215308-6ea88e-native-host,
+source09a3ea6c-2e91-43ab-9ab9-27cf231059d5, authority23796, reports one complete
+98-component capture with no truncation. Total6,096,600us, provider5,370,536us,
+native exact-path find5,300,958us across5634 calls; aggregate finish725,204us.
+Nested guard time3019us/229033 calls and PE2013us/4000 calls do not explain the
+delay. Rust preparation158us/copy167us/encoding346us. Nested measurements are
+not added to contiguous stage totals. This is actual data, not a speed claim.
+
+Both clients again complete both49-component mirrors, and the corrected native
+retirement probe prevents the post-MirrorReady retravel/reload observed before.
+Client1 also applies frame3 while retaining its mirrors. The LIVE publication
+watchdog still faults; no owned view, active input, visible pixels or gameplay
+claim. Keep the2s publication and250ms freshness bounds unchanged.
+
+Next: bounded operation-scoped reuse of the original exact lookup, with full
+original path/Outer/FName/class/flags/weak witnesses and final pure closure.
+No blind persistent path cache or original-object replacement. All original
+games/debuggers/helpers are gone, all20 save hashes unchanged, no fresh dump;
+both initial game windows physically on secondary. Capture rows, primary weak
+proofs, native logs and cleanup are retained in the ignored run.
+
+The reviewed provider-only correction reuses exact lookups within OperationScope
+and discards them on exit. Cold binding brackets the full original witness with
+two native exact lookups and pins the first observed positive before callbacks.
+Hits qualify original full Outer/FName/class/RF and pinned serial; no path refresh
+on mismatch. Pure complete-cache closure precedes every reflected/direct native
+dispatch and all successful operation returns. Existing native guards/getters/
+readbacks stay intact. The512-entry reuse bound falls back to ordinary exact
+lookup, imposing no new roster/scene limit. Missing metadata refuses before reads.
+Four native files pass strict compile and1205 focused checks, including42 new
+reuse/lifetime/negative cases; independent review closes. No Rust/ABI/wire change
+or claimed speed gain. Exact full G0 deployment and native measurement are next.
+
 ## Actual e7321504: both full mirrors pass; publication cadence fails LIVE
 
 Exact clean dev/full G0/all394 hashes run20261009-213011-14ba4f-native-host,

@@ -95,7 +95,7 @@ void (*pose_native_call)(Obj,uint32_t)=pose_native;
 void pose_call(const PoseBinding& b,Obj component,uint32_t stage,HsmpViewResult* r){
     qualify(b.world,b.owner,b.calculator,r);qualify(b.world,b.owner,b.render,r);check_guard();pose_pure(b);
     const auto calculator=pose_buffers(vertex_pure(b.calculator),b.count),render=pose_buffers(vertex_pure(b.render),b.count);const auto local=pose_local(vertex_pure(b.calculator),b.count);
-    pose_native_call(component,stage);
+    lookup_finish();pose_native_call(component,stage);
     check_guard();qualify(b.world,b.owner,b.calculator,r);qualify(b.world,b.owner,b.render,r);check_guard();pose_pure(b);if(r)++r->operations;
     const auto after_calculator=pose_buffers(vertex_pure(b.calculator),b.count),after_render=pose_buffers(vertex_pure(b.render),b.count);
     require(pose_array_equal(local,pose_local(vertex_pure(b.calculator),b.count)),"native pose local allocation changed during callback");

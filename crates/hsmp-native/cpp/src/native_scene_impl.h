@@ -128,7 +128,7 @@ ArmPublication arm_apply(Obj world,Obj owner,Obj component,HsmpViewText socket,c
     auto* p=static_cast<uint8_t*>(vertex_pure(component));std::memcpy(p+0x2f0,value.translation,24);std::memcpy(p+0x310,value.rotation,32);
     // Exact shipping UpdateDesiredArmLocation publishes this cache through
     // UpdateChildTransforms(this,0,0). It can update the complete owned subtree.
-    require(arm_notify_children!=nullptr,"native spring child publication unavailable");arm_notify_children(component);
+    require(arm_notify_children!=nullptr,"native spring child publication unavailable");lookup_finish();arm_notify_children(component);
     check_guard();for(const auto& child:owned)qualify(world,owner,child.component,r);qualify(world,owner,component,r);check_guard();
     arm_children_final(world,owner,level,world_field.offset,owned,snapshots);scene_pure_profile(component,7);
     require(scene_socket_read()==expected_socket&&arm_equal(arm_copy(vertex_pure(component)),value),"native spring output changed during child publication");if(r)++r->operations;

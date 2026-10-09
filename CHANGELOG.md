@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Reuse verified exact native object lookups within a single scene operation,
+  retaining complete original object and callback checks. Actual timing pending.
 - Preserve confirmed removal of native map managers after their original positive
   references expire, without reading or deleting replacement objects. Add bounded
   scene capture timings to locate the current slow native update stage.
