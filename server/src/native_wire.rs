@@ -10,6 +10,7 @@ pub const K_WORLD: u16 = 0x0A10;
 pub const K_INPUT: u16 = 0x0A80;
 pub const K_DESCRIPTOR: u16 = 0x0AC1;
 pub const K_RENDER_WORLD: u16 = 0x0A11;
+pub const K_RENDER_WORLD_V2: u16 = 0x0A12;
 pub const K_MIRROR_READY: u16 = 0x0A81;
 pub const MAX_ENTITIES: usize = 32;
 pub const MAX_WORLD_BYTES: usize = 17
@@ -124,6 +125,298 @@ pub struct RenderComponent {
     pub bones: Vec<[f64; 10]>,
     pub morphs: Vec<f32>,
     pub materials: Vec<RenderMaterial>,
+    /// Present only for a descriptor-qualified native spline component.
+    pub spline: Option<NativeSplineFrame>,
+}
+
+pub const MAX_SPLINE_POINTS: usize = 64;
+pub const MAX_SPLINE_REPARAM_POINTS: usize = 1024;
+
+/// Raw native interpolation data. Quaternion tangents may be zero or nonunit;
+/// they are copied exactly, never normalized as actor transforms.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeSplineVectorPoint {
+    pub key: f32,
+    pub out: [f64; 3],
+    pub arrive: [f64; 3],
+    pub leave: [f64; 3],
+    pub interp: u8,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeSplineQuatPoint {
+    pub key: f32,
+    pub out: [f64; 4],
+    pub arrive: [f64; 4],
+    pub leave: [f64; 4],
+    pub interp: u8,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeSplineFloatPoint {
+    pub key: f32,
+    pub out: f32,
+    pub arrive: f32,
+    pub leave: f32,
+    pub interp: u8,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeSplineCurve<T> {
+    pub looped: bool,
+    pub loop_key_offset: f32,
+    pub points: Vec<T>,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeSplineSettings {
+    pub allow_spline_editing_per_instance: bool,
+    pub reparam_steps_per_segment: i32,
+    pub duration: f32,
+    pub stationary_endpoints: bool,
+    pub spline_has_been_edited: bool,
+    pub modified_by_construction_script: bool,
+    pub input_spline_points_to_construction_script: bool,
+    pub draw_debug: bool,
+    pub closed_loop: bool,
+    pub loop_position_override: bool,
+    pub loop_position: f32,
+    pub default_up_vector: [f64; 3],
+}
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeSplineFrame {
+    pub visible: bool,
+    pub hidden: bool,
+    pub owner_hidden: bool,
+    pub version: u32,
+    pub settings: NativeSplineSettings,
+    pub position: NativeSplineCurve<NativeSplineVectorPoint>,
+    pub rotation: NativeSplineCurve<NativeSplineQuatPoint>,
+    pub scale: NativeSplineCurve<NativeSplineVectorPoint>,
+    pub reparam: NativeSplineCurve<NativeSplineFloatPoint>,
+}
+impl NativeSplineFrame {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        let vector_point = |p: &NativeSplineVectorPoint| {
+            p.key.is_finite()
+                && p.interp <= 5
+                && p.out
+                    .iter()
+                    .chain(&p.arrive)
+                    .chain(&p.leave)
+                    .all(|v| v.is_finite())
+        };
+        let quat_point = |p: &NativeSplineQuatPoint| {
+            p.key.is_finite()
+                && p.interp <= 5
+                && p.out
+                    .iter()
+                    .chain(&p.arrive)
+                    .chain(&p.leave)
+                    .all(|v| v.is_finite())
+        };
+        let float_point = |p: &NativeSplineFloatPoint| {
+            p.interp <= 5
+                && [p.key, p.out, p.arrive, p.leave]
+                    .iter()
+                    .all(|v| v.is_finite())
+        };
+        let settings = &self.settings;
+        if self.position.points.len() > MAX_SPLINE_POINTS
+            || self.rotation.points.len() > MAX_SPLINE_POINTS
+            || self.scale.points.len() > MAX_SPLINE_POINTS
+            || self.reparam.points.len() > MAX_SPLINE_REPARAM_POINTS
+        {
+            return Err("render spline point bound");
+        }
+        if !settings.duration.is_finite()
+            || !settings.loop_position.is_finite()
+            || !settings.default_up_vector.iter().all(|v| v.is_finite())
+            || ![
+                self.position.loop_key_offset,
+                self.rotation.loop_key_offset,
+                self.scale.loop_key_offset,
+                self.reparam.loop_key_offset,
+            ]
+            .iter()
+            .all(|v| v.is_finite())
+            || !self
+                .position
+                .points
+                .iter()
+                .chain(&self.scale.points)
+                .all(vector_point)
+            || !self.rotation.points.iter().all(quat_point)
+            || !self.reparam.points.iter().all(float_point)
+        {
+            return Err("render spline values");
+        }
+        Ok(())
+    }
+}
+fn read_bool(r: &mut Reader<'_>) -> Result<bool, &'static str> {
+    match r.u8().or_else(fail)? {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err("render spline boolean"),
+    }
+}
+fn read_f32(r: &mut Reader<'_>) -> Result<f32, &'static str> {
+    Ok(f32::from_bits(r.u32().or_else(fail)?))
+}
+fn read_f64_array<const N: usize>(r: &mut Reader<'_>) -> Result<[f64; N], &'static str> {
+    let mut values = [0.0; N];
+    for value in &mut values {
+        *value = f64::from_bits(r.u64().or_else(fail)?);
+    }
+    Ok(values)
+}
+fn put_f64_array<const N: usize>(b: &mut Vec<u8>, values: &[f64; N]) {
+    for value in values {
+        b.put_u64(value.to_bits());
+    }
+}
+fn encode_spline_curve<T>(
+    b: &mut Vec<u8>,
+    curve: &NativeSplineCurve<T>,
+    point: impl Fn(&mut Vec<u8>, &T),
+) {
+    b.put_u8(u8::from(curve.looped));
+    b.put_u32(curve.loop_key_offset.to_bits());
+    b.put_u16(curve.points.len() as u16);
+    for value in &curve.points {
+        point(b, value);
+    }
+}
+fn decode_spline_curve<T>(
+    r: &mut Reader<'_>,
+    limit: usize,
+    point_bytes: usize,
+    point: impl Fn(&mut Reader<'_>) -> Result<T, &'static str>,
+) -> Result<NativeSplineCurve<T>, &'static str> {
+    let looped = read_bool(r)?;
+    let loop_key_offset = read_f32(r)?;
+    let count = r.u16().or_else(fail)? as usize;
+    if count > limit {
+        return Err("render spline point bound");
+    }
+    if r.remaining() < count * point_bytes {
+        return Err("short render spline curve");
+    }
+    let mut points = Vec::with_capacity(count);
+    for _ in 0..count {
+        points.push(point(r)?);
+    }
+    Ok(NativeSplineCurve {
+        looped,
+        loop_key_offset,
+        points,
+    })
+}
+fn encode_spline(b: &mut Vec<u8>, frame: &NativeSplineFrame) -> Result<(), &'static str> {
+    frame.validate()?;
+    for flag in [frame.visible, frame.hidden, frame.owner_hidden] {
+        b.put_u8(u8::from(flag));
+    }
+    b.put_u32(frame.version);
+    let s = &frame.settings;
+    b.put_u8(u8::from(s.allow_spline_editing_per_instance));
+    b.put_u32(s.reparam_steps_per_segment as u32);
+    b.put_u32(s.duration.to_bits());
+    for flag in [
+        s.stationary_endpoints,
+        s.spline_has_been_edited,
+        s.modified_by_construction_script,
+        s.input_spline_points_to_construction_script,
+        s.draw_debug,
+        s.closed_loop,
+        s.loop_position_override,
+    ] {
+        b.put_u8(u8::from(flag));
+    }
+    b.put_u32(s.loop_position.to_bits());
+    put_f64_array(b, &s.default_up_vector);
+    let vector = |b: &mut Vec<u8>, p: &NativeSplineVectorPoint| {
+        b.put_u32(p.key.to_bits());
+        put_f64_array(b, &p.out);
+        put_f64_array(b, &p.arrive);
+        put_f64_array(b, &p.leave);
+        b.put_u8(p.interp);
+    };
+    encode_spline_curve(b, &frame.position, vector);
+    encode_spline_curve(b, &frame.rotation, |b, p| {
+        b.put_u32(p.key.to_bits());
+        put_f64_array(b, &p.out);
+        put_f64_array(b, &p.arrive);
+        put_f64_array(b, &p.leave);
+        b.put_u8(p.interp);
+    });
+    encode_spline_curve(b, &frame.scale, vector);
+    encode_spline_curve(b, &frame.reparam, |b, p| {
+        for value in [p.key, p.out, p.arrive, p.leave] {
+            b.put_u32(value.to_bits());
+        }
+        b.put_u8(p.interp);
+    });
+    Ok(())
+}
+fn decode_spline(r: &mut Reader<'_>) -> Result<NativeSplineFrame, &'static str> {
+    let visible = read_bool(r)?;
+    let hidden = read_bool(r)?;
+    let owner_hidden = read_bool(r)?;
+    let version = r.u32().or_else(fail)?;
+    let settings = NativeSplineSettings {
+        allow_spline_editing_per_instance: read_bool(r)?,
+        reparam_steps_per_segment: r.u32().or_else(fail)? as i32,
+        duration: read_f32(r)?,
+        stationary_endpoints: read_bool(r)?,
+        spline_has_been_edited: read_bool(r)?,
+        modified_by_construction_script: read_bool(r)?,
+        input_spline_points_to_construction_script: read_bool(r)?,
+        draw_debug: read_bool(r)?,
+        closed_loop: read_bool(r)?,
+        loop_position_override: read_bool(r)?,
+        loop_position: read_f32(r)?,
+        default_up_vector: read_f64_array(r)?,
+    };
+    let vector = |r: &mut Reader<'_>| {
+        Ok(NativeSplineVectorPoint {
+            key: read_f32(r)?,
+            out: read_f64_array(r)?,
+            arrive: read_f64_array(r)?,
+            leave: read_f64_array(r)?,
+            interp: r.u8().or_else(fail)?,
+        })
+    };
+    let position = decode_spline_curve(r, MAX_SPLINE_POINTS, 77, vector)?;
+    let rotation = decode_spline_curve(r, MAX_SPLINE_POINTS, 101, |r| {
+        Ok(NativeSplineQuatPoint {
+            key: read_f32(r)?,
+            out: read_f64_array(r)?,
+            arrive: read_f64_array(r)?,
+            leave: read_f64_array(r)?,
+            interp: r.u8().or_else(fail)?,
+        })
+    })?;
+    let scale = decode_spline_curve(r, MAX_SPLINE_POINTS, 77, vector)?;
+    let reparam = decode_spline_curve(r, MAX_SPLINE_REPARAM_POINTS, 17, |r| {
+        Ok(NativeSplineFloatPoint {
+            key: read_f32(r)?,
+            out: read_f32(r)?,
+            arrive: read_f32(r)?,
+            leave: read_f32(r)?,
+            interp: r.u8().or_else(fail)?,
+        })
+    })?;
+    let frame = NativeSplineFrame {
+        visible,
+        hidden,
+        owner_hidden,
+        version,
+        settings,
+        position,
+        rotation,
+        scale,
+        reparam,
+    };
+    frame.validate()?;
+    Ok(frame)
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct RenderMaterial {
@@ -204,6 +497,12 @@ fn transform_ok(v: &[f64; 10]) -> bool {
         && v[7..].iter().all(|x| x.abs() < 1000.0)
 }
 pub fn encode_render_world(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
+    encode_render_world_revision(v, false)
+}
+pub fn encode_render_world_v2(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
+    encode_render_world_revision(v, true)
+}
+fn encode_render_world_revision(v: &RenderWorld, v2: bool) -> Result<Vec<u8>, &'static str> {
     let core = encode_world(&v.world)?;
     if v.entities.len() != v.world.entities.len() {
         return Err("render entity count");
@@ -223,6 +522,9 @@ pub fn encode_render_world(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
         b.put_u8(e.components.len() as u8);
         let mut ids = std::collections::HashSet::new();
         for c in &e.components {
+            if !v2 && c.spline.is_some() {
+                return Err("render revision 1 has no spline support");
+            }
             if c.id == 0
                 || !ids.insert(c.id)
                 || c.bones.len() > 512
@@ -279,6 +581,12 @@ pub fn encode_render_world(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
                     b.put(t.as_bytes());
                 }
             }
+            if v2 {
+                b.put_u8(u8::from(c.spline.is_some()));
+                if let Some(spline) = &c.spline {
+                    encode_spline(&mut b, spline)?;
+                }
+            }
             if b.len() + hsmp_ipc::wire::HDR > hsmp_net::net::frag::MAX_MESSAGE {
                 return Err("render world bound");
             }
@@ -287,6 +595,12 @@ pub fn encode_render_world(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
     Ok(b)
 }
 pub fn decode_render_world(b: &[u8]) -> Result<RenderWorld, &'static str> {
+    decode_render_world_revision(b, false)
+}
+pub fn decode_render_world_v2(b: &[u8]) -> Result<RenderWorld, &'static str> {
+    decode_render_world_revision(b, true)
+}
+fn decode_render_world_revision(b: &[u8], v2: bool) -> Result<RenderWorld, &'static str> {
     if b.len() + hsmp_ipc::wire::HDR > hsmp_net::net::frag::MAX_MESSAGE {
         return Err("render world bound");
     }
@@ -381,6 +695,11 @@ pub fn decode_render_world(b: &[u8]) -> Result<RenderWorld, &'static str> {
                 bones,
                 morphs,
                 materials,
+                spline: if v2 && read_bool(&mut r)? {
+                    Some(decode_spline(&mut r)?)
+                } else {
+                    None
+                },
             });
         }
         entities.push(RenderEntity {
@@ -393,7 +712,7 @@ pub fn decode_render_world(b: &[u8]) -> Result<RenderWorld, &'static str> {
         return Err("trailing render bytes");
     }
     let v = RenderWorld { world, entities };
-    encode_render_world(&v)?;
+    encode_render_world_revision(&v, v2)?;
     Ok(v)
 }
 pub fn encode_mirror_ready(v: &MirrorReady) -> Result<Vec<u8>, &'static str> {
@@ -725,8 +1044,220 @@ pub fn matches_directory(w: &World, d: &Directory) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    pub(crate) fn spline_fixture() -> NativeSplineFrame {
+        let vector = NativeSplineVectorPoint {
+            key: -0.0,
+            out: [0.12345678901234567, -0.0, 3.0],
+            arrive: [0.0, 0.0, 0.0],
+            leave: [-2.0, 4.0, 8.0],
+            interp: 5,
+        };
+        NativeSplineFrame {
+            visible: true,
+            hidden: false,
+            owner_hidden: false,
+            version: u32::MAX,
+            settings: NativeSplineSettings {
+                allow_spline_editing_per_instance: true,
+                reparam_steps_per_segment: -3,
+                duration: 1.25,
+                stationary_endpoints: false,
+                spline_has_been_edited: true,
+                modified_by_construction_script: false,
+                input_spline_points_to_construction_script: true,
+                draw_debug: true,
+                closed_loop: true,
+                loop_position_override: true,
+                loop_position: -0.0,
+                default_up_vector: [0.0, -0.0, 1.0],
+            },
+            position: NativeSplineCurve {
+                looped: true,
+                loop_key_offset: 3.25,
+                points: vec![vector.clone()],
+            },
+            rotation: NativeSplineCurve {
+                looped: false,
+                loop_key_offset: -0.0,
+                points: vec![NativeSplineQuatPoint {
+                    key: 0.125,
+                    out: [2.0, -3.0, 4.0, 5.0],
+                    arrive: [0.0; 4],
+                    leave: [-0.0, 2.0, 3.0, 4.0],
+                    interp: 3,
+                }],
+            },
+            scale: NativeSplineCurve {
+                looped: false,
+                loop_key_offset: 0.0,
+                points: vec![vector],
+            },
+            reparam: NativeSplineCurve {
+                looped: false,
+                loop_key_offset: 0.0,
+                points: vec![NativeSplineFloatPoint {
+                    key: -0.0,
+                    out: 3.0,
+                    arrive: 0.0,
+                    leave: -0.0,
+                    interp: 0,
+                }],
+            },
+        }
+    }
+    fn spline_world() -> RenderWorld {
+        let reference = EntityRef {
+            epoch: 9,
+            id: 1,
+            incarnation: 2,
+        };
+        RenderWorld {
+            world: World {
+                epoch: 9,
+                directory_seq: 1,
+                frame_seq: 1,
+                entities: vec![EntitySnapshot {
+                    reference,
+                    root: Root {
+                        rot: [0.0, 0.0, 0.0, 1.0],
+                        match_id: 9,
+                        round: 1,
+                        life: 1,
+                        ..Default::default()
+                    },
+                    vitals: Vitals {
+                        match_id: 9,
+                        round: 1,
+                        life: 1,
+                        ..Default::default()
+                    },
+                    pose: hsmp_pose::posecodec::v2::encode(&hsmp_pose::posecodec::v2::Full {
+                        context: Some(hsmp_pose::posecodec::v2::Context {
+                            match_id: 9,
+                            round: 1,
+                            life: 1,
+                        }),
+                        ..Default::default()
+                    }),
+                }],
+            },
+            entities: vec![RenderEntity {
+                reference,
+                revision: 4,
+                components: vec![RenderComponent {
+                    id: 1,
+                    transform: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0],
+                    bones: vec![],
+                    morphs: vec![],
+                    materials: vec![],
+                    spline: Some(spline_fixture()),
+                }],
+            }],
+        }
+    }
+    #[test]
+    fn native_spline_v2_preserves_raw_curves_and_rejects_all_truncations() {
+        let frame = spline_world();
+        let encoded = encode_render_world_v2(&frame).unwrap();
+        let decoded = decode_render_world_v2(&encoded).unwrap();
+        assert_eq!(decoded, frame);
+        assert_eq!(
+            encode_render_world_v2(&decoded).unwrap(),
+            encoded,
+            "signed zero and all raw bits must survive"
+        );
+        for n in 0..encoded.len() {
+            assert!(
+                decode_render_world_v2(&encoded[..n]).is_err(),
+                "accepted V2 truncation {n}"
+            );
+        }
+        let mut extra = encoded.clone();
+        extra.push(0);
+        assert!(decode_render_world_v2(&extra).is_err());
+        assert!(decode_render_world(&encoded).is_err());
+        assert!(encode_render_world(&frame).is_err());
+        let mut no_spline = frame;
+        no_spline.entities[0].components[0].spline = None;
+        let v2 = encode_render_world_v2(&no_spline).unwrap();
+        assert_eq!(decode_render_world_v2(&v2).unwrap(), no_spline);
+        let v1 = encode_render_world(&no_spline).unwrap();
+        assert!(decode_render_world_v2(&v1).is_err());
+    }
+    #[test]
+    fn native_spline_decoder_checks_flags_counts_and_finiteness_before_use() {
+        let spline = spline_fixture();
+        let mut bytes = Vec::new();
+        encode_spline(&mut bytes, &spline).unwrap();
+        // Fixed scalar prefix is 51 bytes; position header is bool/f32/u16.
+        for offset in [0, 1, 2, 7, 16, 17, 18, 19, 20, 21, 22, 51] {
+            let mut bad = bytes.clone();
+            bad[offset] = 2;
+            assert!(
+                decode_spline(&mut Reader::new(&bad)).is_err(),
+                "accepted invalid flag at {offset}"
+            );
+        }
+        let mut bad = bytes.clone();
+        bad[56..58].copy_from_slice(&65u16.to_le_bytes());
+        assert_eq!(
+            decode_spline(&mut Reader::new(&bad)).unwrap_err(),
+            "render spline point bound"
+        );
+        let mut bad = bytes.clone();
+        bad[58..62].copy_from_slice(&f32::NAN.to_bits().to_le_bytes());
+        assert!(decode_spline(&mut Reader::new(&bad)).is_err());
+        let mut bad = bytes;
+        bad[134] = 6;
+        assert!(decode_spline(&mut Reader::new(&bad)).is_err());
+        let mut bad = spline.clone();
+        bad.rotation.points[0].leave[2] = f64::INFINITY;
+        assert!(bad.validate().is_err());
+        let mut bad = spline.clone();
+        bad.reparam
+            .points
+            .resize(MAX_SPLINE_REPARAM_POINTS + 1, bad.reparam.points[0].clone());
+        assert!(bad.validate().is_err());
+        let mut bad = spline;
+        bad.settings.default_up_vector[1] = f64::NAN;
+        assert!(bad.validate().is_err());
+    }
+    #[test]
+    fn native_spline_aggregate_keeps_the_existing_message_bound() {
+        let mut frame = spline_world();
+        let spline = frame.entities[0].components[0].spline.as_mut().unwrap();
+        spline
+            .position
+            .points
+            .resize(MAX_SPLINE_POINTS, spline.position.points[0].clone());
+        spline
+            .rotation
+            .points
+            .resize(MAX_SPLINE_POINTS, spline.rotation.points[0].clone());
+        spline
+            .scale
+            .points
+            .resize(MAX_SPLINE_POINTS, spline.scale.points[0].clone());
+        spline
+            .reparam
+            .points
+            .resize(MAX_SPLINE_REPARAM_POINTS, spline.reparam.points[0].clone());
+        assert!(encode_render_world_v2(&frame).is_ok());
+        let mut second = frame.entities[0].components[0].clone();
+        second.id = 2;
+        frame.entities[0].components.push(second);
+        assert_eq!(
+            encode_render_world_v2(&frame).unwrap_err(),
+            "render world bound"
+        );
+        let too_large = vec![0; hsmp_net::net::frag::MAX_MESSAGE];
+        assert_eq!(
+            decode_render_world_v2(&too_large).unwrap_err(),
+            "render world bound"
+        );
+    }
     #[test]
     fn native_wire_rejects_all_truncations_trailing_bytes_and_unbounded_fields() {
         let reference = EntityRef {
@@ -902,6 +1433,7 @@ mod tests {
                         vectors: vec![[0.1, 0.2, 0.3, 1.0]],
                         textures: vec!["/Game/Test.Tex".into()],
                     }],
+                    spline: None,
                 }],
             }],
         };

@@ -131,6 +131,9 @@ pub mod caps {
     /// Exact native render recipes and verified current-scene readiness.
     /// Diagnostic observers do not advertise this capability.
     pub const NATIVE_PRESENTATION: u64 = 1 << 21;
+    /// Native render revision 2, including coherent dynamic spline state.
+    /// Presentation peers must negotiate this before any scene is admitted.
+    pub const NATIVE_RENDER_V2: u64 = 1 << 22;
     /// Application: server-served mods (`mod_manifest` / `mod_files` / `mod_chunk` down,
     /// `mod_chunk_req` / `mod_ready` up; docs/hosting/server-mods.md). The server offers it
     /// only when it has a `--mods-dir`, the sidecar always; a server with mods refuses a

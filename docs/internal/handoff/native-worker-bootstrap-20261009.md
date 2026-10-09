@@ -9,16 +9,20 @@ also completes (47 nodes:26 pawn meshes,13 axe meshes plus native parents).
 The production helper wiring and the client256-component resource assumption are
 fixed. No canonical scene frame or active client input has been proved yet.
 
-Current publication blocker: native Aim Spline has actual bDrawDebug=true,
+Last live publication blocker: native Aim Spline has actual bDrawDebug=true,
 visible=true, hidden=false and owner_hidden=false. Existing scene-anchor support
 refuses it. Shipping non-rendering has not been proved, and faithful native spline
-curve/settings/dynamic-state replication is not implemented. Do not bypass this
-refusal or infer pixels from component visibility alone.
+curve/settings/dynamic-state replication is being implemented as ABI7, source
+schema3 and capability-negotiated render V2. This coupled change has not run in
+the game yet. Do not bypass this refusal or infer pixels from visibility alone.
 
 Current performance blocker: first capture still spends roughly16 seconds before
 that refusal. Scope-local schema caching passed focused checks but the real run
 showed only small timing changes. Repeated Lua indexed-controller/current-world
-resolution is under audit; all source lifetime/world/player checks remain required.
+resolution now avoids duplicate qualification (six indexed controller queries
+become three per guarded source read); focused worker checks pass, but actual
+runtime improvement remains unmeasured. All source lifetime/world/player checks
+remain required.
 
 Next acceptance steps are (1) evidenced spline support, (2) complete recipes and
 advancing source/mirror frames for both clients, (3) positive legal native inputs
@@ -29,6 +33,27 @@ branch has not passed playable or release acceptance.
 
 The remainder preserves the historical evidence in order; its older “next run”
 instructions are superseded by this current state and the final recorded run.
+
+## Pending spline integration: focused evidence
+
+Source schema3 changes are committed as2a5905bb; the worker requires and forwards
+all five native scope APIs as80f23cac. Source Lua133 assertions and syntax3 pass;
+worker216 assertions and syntax checks pass. Native Rust presentation4,
+source scope16, table parser5 and API1 checks pass. C++216 checks cover bounded
+raw curve copying and allocation cleanup, without claiming rendered parity.
+
+The combined server native filter passes45 tests, including complete profile
+readiness, raw nonunit quaternion/zero tangent and signed-zero transmission,
+all frame truncations, invalid flags/counts/values, unchanged64KiB message bounds
+and authenticated UDP scene delivery. The UDP test initially caught missing
+0x0A12 routing; adding the route made the same test pass. No full G0, deployed
+ABI7 build or native game run is claimed by these focused checks.
+
+The observed menu-to-exit behaviour is the bounded harness ending initialization
+after no canonical scene becomes available. Last live builds recorded clean
+supervisor shutdown and no orphan/crash process. The spline integration still
+needs actual source capture, two mirror readbacks, advancing frames and positive
+owned input before the native branch can be considered playable.
 
 The exact gated build `6b49c29670c77d49e4b4f7102f35d8e10b8b9f3d` ran one NullRHI
 authority and two normal native clients. Raw evidence is retained in ignored

@@ -86,9 +86,11 @@ impl NativeCore {
             | if self.diagnostic {
                 0
             } else {
-                hsmp_net::net::caps::NATIVE_PRESENTATION
+                hsmp_net::net::caps::NATIVE_PRESENTATION | hsmp_net::net::caps::NATIVE_RENDER_V2
             };
         caps & required == required
+            && (caps & hsmp_net::net::caps::NATIVE_PRESENTATION == 0
+                || caps & hsmp_net::net::caps::NATIVE_RENDER_V2 != 0)
     }
     fn changed(&mut self) {
         if let Some(seq) = self.directory.seq.checked_add(1) {
@@ -388,10 +390,10 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
     }
     if let Some(frame) = n.bridge.take_render() {
         if w::matches_directory(&frame.world, &n.directory) {
-            if let Ok(payload) = w::encode_render_world(&frame) {
+            if let Ok(payload) = w::encode_render_world_v2(&frame) {
                 inner.out_msgs.push((
                     None,
-                    hsmp_ipc::wire::message(w::K_RENDER_WORLD, 0, 0, &payload),
+                    hsmp_ipc::wire::message(w::K_RENDER_WORLD_V2, 0, 0, &payload),
                 ));
             }
         }
@@ -478,7 +480,10 @@ mod tests {
         );
         assert!(!pvp.admits_capabilities(0));
         assert!(!pvp.admits_capabilities(caps));
-        assert!(pvp.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
+        assert!(!pvp.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
+        assert!(pvp.admits_capabilities(
+            caps | hsmp_net::net::caps::NATIVE_PRESENTATION | hsmp_net::net::caps::NATIVE_RENDER_V2
+        ));
         for entity in &mut pvp.directory.entities {
             entity.owner_peer = entity.reference.id;
         }
@@ -489,6 +494,10 @@ mod tests {
         let mut diagnostic = NativeCore::new(Arc::new(Bridge::default()), 19, "Map_Arena_Yard");
         assert!(!diagnostic.admits_capabilities(0));
         assert!(diagnostic.admits_capabilities(caps));
+        assert!(!diagnostic.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
+        assert!(diagnostic.admits_capabilities(
+            caps | hsmp_net::net::caps::NATIVE_PRESENTATION | hsmp_net::net::caps::NATIVE_RENDER_V2
+        ));
         for entity in &mut diagnostic.directory.entities {
             if entity.kind == w::HUMAN {
                 entity.owner_peer = entity.reference.id;

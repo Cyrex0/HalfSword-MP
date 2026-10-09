@@ -18,6 +18,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   authority; qualify native scene attachment anchors and client actor
   retirement against the installed game's world and garbage-state evidence.
   Scene replication and live input remain unverified.
+- Carry complete native spline curves, interpolation settings and visibility
+  through a negotiated experimental scene format; require source profiles and
+  native readbacks before accepting a mirrored scene. Live verification remains
+  pending.
 
 ## [0.1.0-beta.6] - 2026-10-08
 

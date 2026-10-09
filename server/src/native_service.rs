@@ -221,6 +221,22 @@ impl Bridge {
                                     && r.bones.len() == c.bones.len()
                                     && r.morphs.len() == c.morphs.len()
                                     && r.materials.len() == c.materials.len()
+                                    && match (&r.spline_profile, &c.spline) {
+                                        (Some(profile), Some(spline)) => {
+                                            profile.metadata_null
+                                                && spline.position.points.len()
+                                                    == usize::from(profile.position_count)
+                                                && spline.rotation.points.len()
+                                                    == usize::from(profile.rotation_count)
+                                                && spline.scale.points.len()
+                                                    == usize::from(profile.scale_count)
+                                                && spline.reparam.points.len()
+                                                    == usize::from(profile.reparam_count)
+                                                && spline.validate().is_ok()
+                                        }
+                                        (None, None) => true,
+                                        _ => false,
+                                    }
                                     && r.materials.iter().zip(&c.materials).all(|(a, b)| {
                                         a.scalars.len() == b.scalars.len()
                                             && a.vectors.len() == b.vectors.len()
@@ -232,7 +248,7 @@ impl Bridge {
             })
     }
     pub(crate) fn publish_render(&self, frame: w::RenderWorld) -> Result<(), &'static str> {
-        w::encode_render_world(&frame)?;
+        w::encode_render_world_v2(&frame)?;
         let mut s = self.lock();
         if s.world_reset || !Self::render_matches(&s, &frame) {
             return Err("render descriptor generation");
@@ -344,7 +360,9 @@ impl HostHandle {
         let transport = crate::net::Net::with_caps(
             key,
             Some(crate::build_id::content_hash()),
-            hsmp_net::net::caps::NATIVE_WORLD | hsmp_net::net::caps::NATIVE_PRESENTATION,
+            hsmp_net::net::caps::NATIVE_WORLD
+                | hsmp_net::net::caps::NATIVE_PRESENTATION
+                | hsmp_net::net::caps::NATIVE_RENDER_V2,
         );
         let state = Arc::new(crate::server::ServerState::with_native_mode(
             2,
@@ -476,7 +494,8 @@ impl ClientHandle {
         cfg.content_hash = crate::build_id::content_hash();
         cfg.caps |= hsmp_net::net::caps::NATIVE_WORLD | hsmp_net::net::caps::MODES;
         if presentation {
-            cfg.caps |= hsmp_net::net::caps::NATIVE_PRESENTATION;
+            cfg.caps |=
+                hsmp_net::net::caps::NATIVE_PRESENTATION | hsmp_net::net::caps::NATIVE_RENDER_V2;
         }
         let bridge = Arc::new(Bridge::default());
         let network_bridge = bridge.clone();
@@ -683,6 +702,13 @@ async fn client_loop(
                         bridge.lock().error = "server has no native presentation".into();
                         return;
                     }
+                    if cfg.caps & hsmp_net::net::caps::NATIVE_RENDER_V2 != 0
+                        && caps & hsmp_net::net::caps::NATIVE_RENDER_V2 == 0
+                    {
+                        bridge.lock().error =
+                            "server does not support the required native scene protocol".into();
+                        return;
+                    }
                     cfg.pinned_server_key = Some(server_key);
                     let mut s = bridge.lock();
                     s.connected = true;
@@ -741,7 +767,15 @@ async fn client_loop(
                                 }
                             }
                             w::K_RENDER_WORLD => {
-                                if let Ok(frame) = w::decode_render_world(payload) {
+                                let mut s = bridge.lock();
+                                s.error = "server sent an incompatible native scene frame".into();
+                                s.connected = false;
+                                s.render = None;
+                                s.render_received = None;
+                                return;
+                            }
+                            w::K_RENDER_WORLD_V2 => {
+                                if let Ok(frame) = w::decode_render_world_v2(payload) {
                                     let _ = bridge.publish_render(frame);
                                 }
                             }
@@ -884,6 +918,167 @@ mod tests {
         }
     }
     #[test]
+    fn native_spline_readiness_requires_the_complete_current_descriptor_profile() {
+        use crate::native_descriptor::{
+            ComponentKind, Geometry, SceneEvidence, SplineProfile, VertexState,
+        };
+        let bridge = Bridge::default();
+        let reference = w::EntityRef {
+            epoch: 19,
+            id: 1,
+            incarnation: 2,
+        };
+        let directory = Directory {
+            epoch: 19,
+            seq: 3,
+            state: w::READY,
+            arena: "Map_Arena_Yard".into(),
+            error: String::new(),
+            entities: vec![w::Entity {
+                reference,
+                owner_peer: 9001,
+                slot: 0,
+                kind: w::HUMAN,
+                controller: 0,
+                team: None,
+            }],
+        };
+        bridge.set_directory(directory.clone());
+        let mut recipe = crate::native_descriptor::fixture_recipe();
+        let mut component = recipe.components[0].clone();
+        component.id = 2;
+        component.name = "Aim Spline".into();
+        component.role = "attachment".into();
+        component.component_class = "/Script/Engine.SplineComponent".into();
+        component.kind = ComponentKind::Spline;
+        component.geometry = Geometry::NativeSpline;
+        component.scene = SceneEvidence::NotApplicable;
+        component.vertex_state = VertexState::NotApplicable;
+        component.asset.clear();
+        component.skeleton.clear();
+        component.physics_asset.clear();
+        component.bones.clear();
+        component.materials.clear();
+        component.morphs.clear();
+        component.hidden_bones.clear();
+        component.groom.clear();
+        component.vertex_colors.clear();
+        component.deformer.clear();
+        component.cloth = false;
+        component.parent = 0;
+        component.spline_profile = Some(SplineProfile {
+            position_count: 1,
+            rotation_count: 1,
+            scale_count: 1,
+            reparam_count: 1,
+            metadata_null: true,
+        });
+        recipe.components.push(component);
+        let descriptor = w::Descriptor {
+            reference,
+            slot: 0,
+            directory_seq: 3,
+            revision: 4,
+            source_frame_seq: 1,
+            recipe,
+        };
+        bridge.publish_descriptor(descriptor.clone()).unwrap();
+        let transform = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+        let frame = w::RenderWorld {
+            world: fixture_world(&directory, 1, false),
+            entities: vec![w::RenderEntity {
+                reference,
+                revision: 4,
+                components: descriptor
+                    .recipe
+                    .components
+                    .iter()
+                    .map(|c| w::RenderComponent {
+                        id: c.id,
+                        transform,
+                        bones: vec![transform; c.bones.len()],
+                        morphs: c.morphs.iter().map(|m| m.value).collect(),
+                        materials: c
+                            .materials
+                            .iter()
+                            .map(|m| w::RenderMaterial {
+                                scalars: m.scalars.iter().map(|p| p.value).collect(),
+                                vectors: m.vectors.iter().map(|p| p.value).collect(),
+                                textures: m.textures.iter().map(|p| p.value.clone()).collect(),
+                            })
+                            .collect(),
+                        spline: c
+                            .spline_profile
+                            .as_ref()
+                            .map(|_| w::tests::spline_fixture()),
+                    })
+                    .collect(),
+            }],
+        };
+        let receipt = w::MirrorReady {
+            epoch: 19,
+            directory_seq: 3,
+            frame_seq: 1,
+            entities: vec![(reference, 4)],
+        };
+        for change in 0..7 {
+            let mut bad = frame.clone();
+            match change {
+                0 => bad.entities[0].components[1].spline = None,
+                1 => bad.entities[0].components[0].spline = Some(w::tests::spline_fixture()),
+                2 => bad.entities[0].components[1]
+                    .spline
+                    .as_mut()
+                    .unwrap()
+                    .position
+                    .points
+                    .clear(),
+                3 => bad.entities[0].components[1]
+                    .spline
+                    .as_mut()
+                    .unwrap()
+                    .rotation
+                    .points
+                    .clear(),
+                4 => bad.entities[0].components[1]
+                    .spline
+                    .as_mut()
+                    .unwrap()
+                    .scale
+                    .points
+                    .clear(),
+                5 => bad.entities[0].components[1]
+                    .spline
+                    .as_mut()
+                    .unwrap()
+                    .reparam
+                    .points
+                    .clear(),
+                _ => bad.entities[0].reference.incarnation += 1,
+            }
+            assert!(
+                bridge.publish_render(bad).is_err(),
+                "accepted incomplete profile {change}"
+            );
+            assert!(bridge.accept_mirror(9001, receipt.clone()).is_err());
+            assert!(!bridge.mirror_ready(9001));
+        }
+        bridge.publish_render(frame.clone()).unwrap();
+        bridge.accept_mirror(9001, receipt.clone()).unwrap();
+        assert!(bridge.mirror_ready(9001));
+        let mut newer = descriptor;
+        newer.revision += 1;
+        newer.recipe.components[1]
+            .spline_profile
+            .as_mut()
+            .unwrap()
+            .position_count += 1;
+        bridge.publish_descriptor(newer).unwrap();
+        assert!(!bridge.mirror_ready(9001));
+        assert!(bridge.publish_render(frame).is_err());
+        assert!(bridge.accept_mirror(9001, receipt).is_err());
+    }
+    #[test]
     fn native_descriptor_scene_and_ready_reject_stale_incarnations_and_missing_bones() {
         let bridge = Arc::new(Bridge::default());
         let reference = w::EntityRef {
@@ -936,6 +1131,7 @@ mod tests {
                         textures: m.textures.iter().map(|p| p.value.clone()).collect(),
                     })
                     .collect(),
+                spline: None,
             })
             .collect();
         let mut frame = w::RenderWorld {
@@ -971,6 +1167,93 @@ mod tests {
         assert!(!bridge.mirror_ready(9001));
         assert!(bridge.lock().render.is_none());
         assert!(bridge.publish_descriptor(descriptor).is_err());
+    }
+    #[test]
+    fn native_render_v2_reaches_a_presentation_client_over_authenticated_udp() {
+        let dir = std::env::temp_dir().join(format!(
+            "hsmp-native-scene-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        {
+            let host = HostHandle::start_with_parent_mode(
+                "127.0.0.1:0".parse().unwrap(),
+                &dir.join("host"),
+                "Map_Arena_Yard",
+                None,
+                crate::native_mode::Mode::Diagnostic,
+            )
+            .unwrap();
+            host.status(w::READY, "").unwrap();
+            let client =
+                ClientHandle::start_presentation(host.address, &dir.join("client"), "Scene", None)
+                    .unwrap();
+            wait_for(|| {
+                client.connected()
+                    && host.directory().is_some_and(|d| {
+                        d.entities.iter().any(|e| e.owner_peer == client.peer_id())
+                    })
+            });
+            let directory = host.directory().unwrap();
+            wait_for(|| client.directory().is_some_and(|d| d.seq == directory.seq));
+            let recipe = crate::native_descriptor::fixture_recipe();
+            for entity in &directory.entities {
+                host.publish_descriptor(w::Descriptor {
+                    reference: entity.reference,
+                    slot: entity.slot,
+                    directory_seq: directory.seq,
+                    revision: 1,
+                    source_frame_seq: 1,
+                    recipe: recipe.clone(),
+                })
+                .unwrap();
+            }
+            let transform = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+            let frame = w::RenderWorld {
+                world: fixture_world(&directory, 1, false),
+                entities: directory
+                    .entities
+                    .iter()
+                    .map(|e| w::RenderEntity {
+                        reference: e.reference,
+                        revision: 1,
+                        components: recipe
+                            .components
+                            .iter()
+                            .map(|c| w::RenderComponent {
+                                id: c.id,
+                                transform,
+                                bones: vec![transform; c.bones.len()],
+                                morphs: c.morphs.iter().map(|m| m.value).collect(),
+                                materials: c
+                                    .materials
+                                    .iter()
+                                    .map(|m| w::RenderMaterial {
+                                        scalars: m.scalars.iter().map(|p| p.value).collect(),
+                                        vectors: m.vectors.iter().map(|p| p.value).collect(),
+                                        textures: m
+                                            .textures
+                                            .iter()
+                                            .map(|p| p.value.clone())
+                                            .collect(),
+                                    })
+                                    .collect(),
+                                spline: None,
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+            };
+            host.publish_render(frame.clone()).unwrap();
+            wait_for(|| client.bridge.lock().render.is_some());
+            assert_eq!(**client.bridge.lock().render.as_ref().unwrap(), frame);
+            assert!(client.connected());
+            assert!(client.error().is_empty());
+        }
+        let canonical = std::fs::canonicalize(&dir).unwrap();
+        let root = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        assert!(canonical.starts_with(root));
+        std::fs::remove_dir_all(canonical).unwrap();
     }
     #[test]
     fn real_udp_two_players_native_snapshot_and_held_release() {
