@@ -925,3 +925,20 @@ new_crashes[]/unobserved_children[] are empty. Full HSMPNative.log, the
 authority44692-filtered trace and native_operator_summary.json are preserved.
 Native presentation, camera/HUD, attacks, forces, gear/body parity and co-op
 remain unverified; this run does not establish a playable headless release.
+
+The matched shipping UStaticMesh.GetNumLODs thunk at VA0x143951B90 reads the
+native render-data pointer at asset+0xE0 and returns0 when it is null. The RVP
+GetAmountOfLODsToPaintOn route at VA0x1439496B0 reads the same pointer; its
+invalid-input return1 must not be treated as a native count. The current source
+refusal does not yet record the actual returned value, so absent NullRHI render
+data remains a hypothesis. The next diagnostic retains the strict1..16 bound,
+records typed zero/nil/error and original asset address/class/path, and freshly
+rechecks the hard static asset around the call. Focused Lua141 assertions and
+syntax3 pass; actual getter/backend evidence is still required.
+
+Existing offscreen authority mode selects `-RenderOffscreen` instead of
+`-nullrhi`, retaining the normal rendering configuration without a software
+renderer override. Existing startup tests establish the flags and native role;
+they do not establish actual window suppression, render-data retention or GPU
+cost. Use the same real two-client topology and unchanged acceptance checks to
+compare the two modes, rather than substituting a count or omitting geometry.

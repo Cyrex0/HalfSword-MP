@@ -27,6 +27,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   avoiding repeated full object searches. The actual headless test reduced one
   spline profile from24.406s to0.059s; complete scene capture still refuses a
   static-mesh LOD getter, so playable mirroring remains unverified.
+- Recheck the original static mesh asset around native LOD reads and report the
+  exact getter result, asset class and path when scene capture refuses it.
 
 ## [0.1.0-beta.6] - 2026-10-08
 
