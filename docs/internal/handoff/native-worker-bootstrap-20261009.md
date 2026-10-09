@@ -441,3 +441,75 @@ After canonical frames work, measure the complete current skeletal census,
 actual policy/tick state, LastPoseTickFrame and coherent bone/physics changes
 under legal input. A NullRHI client host does not establish UE dedicated-server
 netmode from its label.
+
+## Actual protected-seed and ABI6 run
+
+Exact clean c0b37e11 passed full G0 (74 Lua suites, 1314 Rust tests/79
+binaries; clippy zero errors/six warnings), pushed to dev and deployed with
+matching clean G0/native/binary stamps. Actual two normal AI-input clients
+plus one NullRHI authority ran in
+`test-results/20261009-030024-b1ff11-native-host`.
+
+Authority-owned evidence records the diverted GameProgress seed write at
+6.806s before travel at6.807s. All subsequent arena GameProgress loads were
+redirected to that protected session slot. Qualified two-human native_ready
+occurred at9.600s. No direct post-load GI Game Mode getter was logged; these
+are actual initialization/readiness facts, not an invented mode readback.
+
+Both clients' fresh ABI6 scopes now identify Spawner_C_1 as world-listed=false,
+RF_MirroredGarbage=true (flags0x40280008), native actor-destroying=true and
+root-live=false. Original memory/class/name qualification succeeds. Strict
+`suppression_driver_native_garbage` refusals occur at14.515/14.903s. This is
+an already-engine-retired global wrapper; it is not a new driver requiring a
+component census or own-mod destruction. The next live driver census must
+classify only fresh qualified world-absent AND garbage wrappers separately,
+without calling actor functions or manufacturing own pre-removal/probe proof.
+Unknown, contradictory or nongarbage absent evidence remains refused.
+
+The authority's own JSONL ends immediately after native_ready (seq47), with
+no capture/refusal/frame/input or stopped event. Supervisor stderr records
+that its graceful shutdown deadline was missed and its verified owned
+process was stopped. Cleanup therefore succeeded by owned-process fallback,
+not graceful source shutdown. An unidentified synchronous post-ready
+operation may have blocked; no own phase/stack evidence identifies it yet.
+Do not assert a particular deadlock, renderer dependency or capture failure.
+Narrow rare capture-stage entry/exit diagnostics are required before another
+game run, with the expensive native caller probe still off.
+
+No accepted canonical frame or active input was demonstrated: active [0,0].
+All four owned process identities (supervisor26376, authority6832,
+clients44812/18556) were independently absent after cleanup. Original saves
+remained unchanged, with no new crash or unobserved-child records; tracked
+source stayed exact clean c0b37e11.
+
+The follow-up client correction 94ce250c scopes each exact driver before
+wrapper GetWorld, protection or actor functions. Fresh verified world absence
+AND native RF_MirroredGarbage is logged separately in external_drivers and
+skipped; it is not stored as own removal/probe proof. Original external scalar
+identity is bounded and rechecked for reuse. Listed nongarbage drivers still
+require scope-bound strict native retirement. Unknown scope/class, absent
+nongarbage, contradictory listed garbage, reuse and external-to-live changes
+refuse. Fighter/gear/AI census policy is unchanged. Focused client Lua110 and
+two syntax files passed.
+
+Rare capture diagnostics use existing x_native_worker events with exact
+epoch/entity/incarnation/directory/revision/frame references, stage and
+enter/exit edges. First status/directory/control/config calls are covered
+before Adapter.capture; static harvest/passport/equipment, class/mesh census,
+parent closure, component/bone/morph/material dictionaries, vertex LOD/count/
+native getter/RGBA copy and signature passes precede bind/core/render/publish.
+Scalar details are copied without querying/stringifying engine objects.
+Records are capped at4096 per world with an explicit limit marker; repeated
+hot frames stay quiet. Existing native acceptance checks remain unchanged.
+Worker146 and source74 checks plus four/five syntax files respectively passed.
+
+Read-only audit found no evidenced ordinary capture deadlock: API reentry
+uses try_lock, borrowed guards do not reacquire it, source capture does not
+hold mirror_mutex, bridge reads release locks before engine calls and pinned
+UE4SS/Lua locks are recursive on these paths. No lock was rewritten. Concrete
+static capture costs are high: bone metadata uses12B complete mesh censuses
+across two harvests, each qualifying every mesh, and typed RGBA copying may
+read four reflected channels per vertex with repeated guards. These are
+algorithmic cost facts, not measured attribution of the actual stall. Use
+the next native stage evidence before claiming a specific blocking operation
+or weakening consistency checks.
