@@ -762,6 +762,7 @@ mod tests {
     /// its next death record in that round reaches the game (not swallowed as a resend).
     #[test]
     fn a_respawn_reopens_the_peers_death_dedup() {
+        let _serial = crate::ipc_shm::ShmLink::test_lock();
         let e = 0xD1E7_0000 + std::process::id() as u64;
         let mode = |life: u16| to_payload(&rs::ModeHead { round: 4, seq: 1, ..Default::default() },
                                           &[rs::ModeRow { peer_id: 88_001, life, seat: 1, ..Default::default() }]);

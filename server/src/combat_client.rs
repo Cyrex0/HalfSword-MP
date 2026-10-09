@@ -834,6 +834,7 @@ mod tests {
 
     #[test]
     fn native_defeat_delivery_retries_full_game_ring_before_dedup() {
+        let _g = serial();
         let d = Death { match_id: 891, peer_id: 89101, round: 3, life: 130,
             cause: 5, ..Default::default() };
         assert!(!deliver_death_once(891, &d, || false));
@@ -845,6 +846,7 @@ mod tests {
 
     #[test]
     fn deaths_are_scoped_by_match_and_epoch() {
+        let _g = serial();
         let e = 0xD1E6_0000 + std::process::id() as u64;
         assert!(death_is_new(e, 100, 2, 1));
         assert!(!death_is_new(e, 100, 2, 1));
