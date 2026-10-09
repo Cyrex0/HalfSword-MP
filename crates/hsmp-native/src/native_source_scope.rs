@@ -255,6 +255,50 @@ struct Scope {
     schema: Rc<RefCell<SchemaCache>>,
 }
 impl Scope {
+    // Borrowed provider guards never dispatch GetOwner recursively. Complete
+    // owner PE checks bracket the bulk operation; its guard checks original
+    // identities and fresh hard links on each native callback boundary.
+    fn profile_guard(&self, e: &impl Engine, handle: u64) -> Result<(), String> {
+        self.base(e)?;
+        let c = self
+            .components
+            .get(handle.checked_sub(1).ok_or("source scope handle")? as usize)
+            .ok_or("source scope handle")?;
+        e.verify(c.object)?;
+        if e.find(&c.path)? != c.object.address || e.world(c.object)? != self.world.address {
+            return Err("source spline original path/world changed".into());
+        }
+        let owner_check = |address| -> Result<(), String> {
+            let o = self
+                .owners
+                .get(&address)
+                .ok_or("source spline original owner")?;
+            e.verify(o.object)?;
+            e.verify(o.root)?;
+            if e.world(o.object)? != self.world.address
+                || e.world(o.root)? != self.world.address
+                || e.field(o.object, "RootComponent")? != o.root.address
+                || o.field
+                    .as_ref()
+                    .is_some_and(|f| e.field(self.pawn, f).ok() != Some(address))
+            {
+                return Err("source spline owner/root/world changed".into());
+            }
+            Ok(())
+        };
+        owner_check(c.owner)?;
+        if let Some(p) = c.parent {
+            e.verify(p.object)?;
+            owner_check(p.owner)?;
+            if e.world(p.object)? != self.world.address {
+                return Err("source spline original parent world changed".into());
+            }
+        }
+        if e.field(c.object, "AttachParent")? != c.parent.map_or(0, |p| p.object.address) {
+            return Err("source spline original parent changed".into());
+        }
+        self.base(e)
+    }
     fn base(&self, e: &impl Engine) -> Result<(), String> {
         for id in [self.world, self.pawn, self.controller] {
             e.verify(id)?;
@@ -620,7 +664,115 @@ fn reference(epoch: i64, id: i64, incarnation: i64) -> Result<EntityRef, String>
         Err("source scope reference".into())
     }
 }
+struct SplineScopeGuard<'a> {
+    scope: &'a Scope,
+    engine: Runtime<'a>,
+    handle: u64,
+}
+impl SplineScopeGuard<'_> {
+    fn valid(&self) -> Result<(), String> {
+        let e = &self.engine;
+        e.admit()?;
+        self.scope.profile_guard(e, self.handle)?;
+        e.admit()
+    }
+}
+unsafe extern "C" fn spline_scope_guard(context: *mut c_void) -> i32 {
+    if context.is_null() {
+        return 0;
+    }
+    let c = unsafe { &*(context as *const SplineScopeGuard<'_>) };
+    i32::from(c.valid().is_ok())
+}
 impl Native {
+    pub unsafe fn source_scope_spline_profile(&mut self, L: *mut lua_State) -> c_int {
+        let result = (|| unsafe {
+            let id = arg_int(L, 1).ok_or("source scope id")? as u64;
+            let handle = arg_int(L, 2).ok_or("source scope handle")? as u64;
+            let scope = STATE
+                .with(|s| s.borrow_mut().scope.take())
+                .ok_or("source scope unavailable")?;
+            if scope.id != id {
+                return Err("source scope id changed".into());
+            }
+            let vt = reflect::vt().ok_or("source scope reflection")?;
+            let engine = runtime(self, vt, exports()?, &scope);
+            scope.resolve(&engine, handle)?;
+            let row = scope
+                .components
+                .get(handle.checked_sub(1).ok_or("source scope handle")? as usize)
+                .ok_or("source scope handle")?;
+            let owner = scope
+                .owners
+                .get(&row.owner)
+                .ok_or("source scope owner")?
+                .object;
+            let object = |i: Identity| crate::native_presentation::Object {
+                weak: i.weak,
+                address: i.address,
+            };
+            let mut context = SplineScopeGuard {
+                scope: &scope,
+                engine,
+                handle,
+            };
+            context.valid()?;
+            let guard = crate::native_presentation::Guard {
+                context: (&mut context as *mut SplineScopeGuard<'_>).cast(),
+                check: spline_scope_guard,
+            };
+            let mut profile = crate::native_presentation::SplineProfile::default();
+            let mut info = crate::native_presentation::ResultInfo::default();
+            let p = crate::native_presentation::provider()?;
+            if (p.describe_spline)(
+                object(scope.world),
+                object(owner),
+                object(row.object),
+                &guard,
+                &mut profile,
+                &mut info,
+            ) != 1
+                || info.complete != 1
+            {
+                return Err(format!("source spline profile: {}", info.reason()));
+            }
+            context.valid()?;
+            scope.resolve(&context.engine, handle)?;
+            if profile.metadata_null != 1
+                || profile.position_count > 64
+                || profile.rotation_count > 64
+                || profile.scale_count > 64
+                || profile.reparam_count > 1024
+            {
+                return Err("source spline profile bounds/metadata".into());
+            }
+            drop(context);
+            STATE.with(|s| {
+                let mut state = s.borrow_mut();
+                if state.scope.is_some() || state.seq != id {
+                    return Err("source scope reentry changed".into());
+                }
+                state.scope = Some(scope);
+                Ok::<_, String>(())
+            })?;
+            Ok(profile)
+        })();
+        unsafe {
+            match result {
+                Ok(p) => {
+                    lua_createtable(L, 0, 5);
+                    let t = lua_gettop(L);
+                    set_int(L, t, "position_count", p.position_count.into());
+                    set_int(L, t, "rotation_count", p.rotation_count.into());
+                    set_int(L, t, "scale_count", p.scale_count.into());
+                    set_int(L, t, "reparam_count", p.reparam_count.into());
+                    set_bool(L, t, "metadata_null", true);
+                    1
+                }
+                Err(e) => nil_err(L, &e),
+            }
+        }
+    }
     pub unsafe fn source_scope_begin(&mut self, L: *mut lua_State) -> c_int {
         let result = (|| unsafe {
             if !is_table(L, 1) || !is_table(L, 2) {
@@ -1081,6 +1233,38 @@ mod source_scope_tests {
         assert!(s.keep(&e, 7, 0, path).is_err());
         assert!(s.resolve(&e, 0).is_err());
         assert!(s.resolve(&e, 65).is_err());
+    }
+    #[test]
+    fn source_scope_spline_guard_checks_original_links_without_owner_reentry() {
+        let (mut s, e) = fixture();
+        let path = e.rows.borrow()[&7].path.clone();
+        let h = s.keep(&e, 7, 5, path).unwrap();
+        let calls = *e.owner_calls.borrow();
+        assert!(s.profile_guard(&e, h).is_ok());
+        assert_eq!(*e.owner_calls.borrow(), calls);
+        assert!(s.profile_guard(&e, 0).is_err());
+        assert!(s.profile_guard(&e, 65).is_err());
+        for mutation in 0..7 {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            let h = s.keep(&e, 7, 5, path).unwrap();
+            let calls = *e.owner_calls.borrow();
+            match mutation {
+                0 => e.change(7, |r| r.flags = GARBAGE),
+                1 => e.change(7, |r| r.id.name += 1),
+                2 => e.change(7, |r| r.parent = 6),
+                3 => e.change(5, |r| r.root = 4),
+                4 => e.change(4, |r| r.world = 99),
+                5 => e.change(7, |r| r.path.push_str("_reuse")),
+                _ => e.change(6, |r| r.flags = GARBAGE),
+            };
+            assert!(s.profile_guard(&e, h).is_err(), "mutation {mutation}");
+            assert_eq!(
+                *e.owner_calls.borrow(),
+                calls,
+                "no recursive owner PE {mutation}"
+            );
+        }
     }
 
     // Synthetic schema/callback fixture: exercises the production cache paths,

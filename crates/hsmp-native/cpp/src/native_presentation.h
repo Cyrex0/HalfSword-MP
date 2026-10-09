@@ -17,6 +17,27 @@ struct HsmpViewMaterial {
     const HsmpViewParameter* textures; uint32_t texture_count; uint32_t pad_t;
 };
 struct HsmpViewVertexLod { uint32_t lod; uint32_t count; const uint8_t* rgba; uint32_t bytes; uint32_t pad; };
+// ABI7: counts are actual source counts, not capacities/default curve recipes.
+struct HsmpViewSplineProfile {
+    uint32_t position_count,rotation_count,scale_count,reparam_count,metadata_null;
+};
+struct HsmpViewSplineVectorPoint { float key; uint32_t interp; double out[3],arrive[3],leave[3]; };
+struct HsmpViewSplineQuatPoint { float key; uint32_t interp; double out[4],arrive[4],leave[4]; };
+struct HsmpViewSplineFloatPoint { float key,out,arrive,leave; uint32_t interp; };
+struct HsmpViewSplineSettings {
+    uint32_t allow_spline_editing_per_instance; int32_t reparam_steps_per_segment; float duration;
+    uint32_t stationary_endpoints,spline_has_been_edited,modified_by_construction_script;
+    uint32_t input_spline_points_to_construction_script,draw_debug,closed_loop,loop_position_override;
+    float loop_position; uint32_t pad; double default_up_vector[3];
+};
+struct HsmpViewSplineVectorCurve { HsmpViewSplineVectorPoint* points; uint32_t count,looped; float loop_key_offset; uint32_t pad; };
+struct HsmpViewSplineQuatCurve { HsmpViewSplineQuatPoint* points; uint32_t count,looped; float loop_key_offset; uint32_t pad; };
+struct HsmpViewSplineFloatCurve { HsmpViewSplineFloatPoint* points; uint32_t count,looped; float loop_key_offset; uint32_t pad; };
+struct HsmpViewSplineFrame {
+    uint32_t visible,hidden,owner_hidden,version; HsmpViewSplineSettings settings;
+    HsmpViewSplineVectorCurve position; HsmpViewSplineQuatCurve rotation;
+    HsmpViewSplineVectorCurve scale; HsmpViewSplineFloatCurve reparam;
+};
 struct HsmpViewComponent {
     uint32_t id; uint32_t parent; uint32_t kind; uint32_t visible;
     HsmpViewText asset; HsmpViewText skeleton; HsmpViewText socket;
@@ -27,6 +48,7 @@ struct HsmpViewComponent {
     const HsmpViewMaterial* materials; uint32_t material_count; uint32_t pad_mat;
     uint32_t vertex_state; uint32_t pad_vertex; // native_asset0/captured1/runtime2/unavailable3/scene_not_applicable4
     const HsmpViewVertexLod* vertex_lods; uint32_t vertex_count; uint32_t pad_lod;
+    HsmpViewSplineProfile spline; uint32_t pad_spline;
 };
 struct HsmpViewFrame {
     HsmpViewTransform world;
@@ -35,6 +57,7 @@ struct HsmpViewFrame {
     float* scalars; uint32_t scalar_count; uint32_t pad_s;
     float* vectors; uint32_t vector_count; uint32_t pad_v; // four floats per vector
     HsmpViewObject* textures; uint32_t texture_count; uint32_t pad_t;
+    HsmpViewSplineFrame* spline;
 };
 struct HsmpViewResult { uint32_t complete; uint32_t operations; char reason[192]; };
 // ABI5 engine retirement requires positive original world membership, then
@@ -83,6 +106,9 @@ struct HsmpPresentation {
     // Read-only static world/class enumeration followed by fresh original-slot
     // identity and flag reads. Never invokes an actor ProcessEvent.
     int32_t (*actor_scope)(HsmpViewObject world,HsmpViewObject actor,const HsmpViewGuard*,HsmpViewActorScope*);
+    // Original source scope/handle must be qualified by Rust before/after this
+    // operation. No arbitrary-address admission or rendering-ready assertion.
+    int32_t (*describe_spline)(HsmpViewObject world,HsmpViewObject owner,HsmpViewObject component,const HsmpViewGuard*,HsmpViewSplineProfile*,HsmpViewResult*);
 };
 void hsmp_native_set_presentation(const HsmpPresentation*);
 }
@@ -96,8 +122,17 @@ static_assert(sizeof(HsmpViewTransform)==80);
 static_assert(sizeof(HsmpViewParameter)==24);
 static_assert(sizeof(HsmpViewMaterial)==72);
 static_assert(sizeof(HsmpViewVertexLod)==24);
-static_assert(sizeof(HsmpViewComponent)==232);
-static_assert(sizeof(HsmpViewFrame)==160);
+static_assert(sizeof(HsmpViewSplineProfile)==20);
+static_assert(sizeof(HsmpViewSplineVectorPoint)==80);
+static_assert(sizeof(HsmpViewSplineQuatPoint)==104);
+static_assert(sizeof(HsmpViewSplineFloatPoint)==20);
+static_assert(sizeof(HsmpViewSplineSettings)==72);
+static_assert(sizeof(HsmpViewSplineVectorCurve)==24);
+static_assert(sizeof(HsmpViewSplineQuatCurve)==24);
+static_assert(sizeof(HsmpViewSplineFloatCurve)==24);
+static_assert(sizeof(HsmpViewSplineFrame)==184);
+static_assert(sizeof(HsmpViewComponent)==256);
+static_assert(sizeof(HsmpViewFrame)==168);
 static_assert(sizeof(HsmpViewResult)==200);
 // All ops borrow recipe strings/arrays only for the duration of the call.
 // Caps: components64, bones512/component, morphs128/component, materials32,

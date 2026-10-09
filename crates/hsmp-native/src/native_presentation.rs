@@ -67,6 +67,92 @@ pub struct VertexLod {
     pub pad: u32,
 }
 #[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct SplineProfile {
+    pub position_count: u32,
+    pub rotation_count: u32,
+    pub scale_count: u32,
+    pub reparam_count: u32,
+    pub metadata_null: u32,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct SplineVectorPoint {
+    pub key: f32,
+    pub interp: u32,
+    pub out: [f64; 3],
+    pub arrive: [f64; 3],
+    pub leave: [f64; 3],
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct SplineQuatPoint {
+    pub key: f32,
+    pub interp: u32,
+    pub out: [f64; 4],
+    pub arrive: [f64; 4],
+    pub leave: [f64; 4],
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct SplineFloatPoint {
+    pub key: f32,
+    pub out: f32,
+    pub arrive: f32,
+    pub leave: f32,
+    pub interp: u32,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct SplineSettings {
+    pub allow_spline_editing_per_instance: u32,
+    pub reparam_steps_per_segment: i32,
+    pub duration: f32,
+    pub stationary_endpoints: u32,
+    pub spline_has_been_edited: u32,
+    pub modified_by_construction_script: u32,
+    pub input_spline_points_to_construction_script: u32,
+    pub draw_debug: u32,
+    pub closed_loop: u32,
+    pub loop_position_override: u32,
+    pub loop_position: f32,
+    pub pad: u32,
+    pub default_up_vector: [f64; 3],
+}
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct SplineCurve<T> {
+    pub points: *mut T,
+    pub count: u32,
+    pub looped: u32,
+    pub loop_key_offset: f32,
+    pub pad: u32,
+}
+impl<T> Default for SplineCurve<T> {
+    fn default() -> Self {
+        Self {
+            points: std::ptr::null_mut(),
+            count: 0,
+            looped: 0,
+            loop_key_offset: 0.0,
+            pad: 0,
+        }
+    }
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct SplineFrame {
+    pub visible: u32,
+    pub hidden: u32,
+    pub owner_hidden: u32,
+    pub version: u32,
+    pub settings: SplineSettings,
+    pub position: SplineCurve<SplineVectorPoint>,
+    pub rotation: SplineCurve<SplineQuatPoint>,
+    pub scale: SplineCurve<SplineVectorPoint>,
+    pub reparam: SplineCurve<SplineFloatPoint>,
+}
+#[repr(C)]
 pub struct Component {
     pub id: u32,
     pub parent: u32,
@@ -93,6 +179,8 @@ pub struct Component {
     pub vertex_lods: *const VertexLod,
     pub vertex_count: u32,
     pub pad_lod: u32,
+    pub spline: SplineProfile,
+    pub pad_spline: u32,
 }
 #[repr(C)]
 pub struct Frame {
@@ -112,6 +200,7 @@ pub struct Frame {
     pub textures: *mut Object,
     pub texture_count: u32,
     pub pad_t: u32,
+    pub spline: *mut SplineFrame,
 }
 #[repr(C)]
 pub struct ResultInfo {
@@ -129,7 +218,7 @@ impl Default for ResultInfo {
     }
 }
 impl ResultInfo {
-    fn reason(&self) -> String {
+    pub(crate) fn reason(&self) -> String {
         let n = self.reason.iter().position(|x| *x == 0).unwrap_or(192);
         String::from_utf8_lossy(&self.reason[..n]).into_owned()
     }
@@ -283,15 +372,23 @@ pub struct Provider {
         unsafe extern "C" fn(Object, Object, *const Guard, *mut Retirement) -> i32,
     pub forget_retirements: unsafe extern "C" fn(),
     pub actor_scope: unsafe extern "C" fn(Object, Object, *const Guard, *mut ActorScope) -> i32,
+    pub describe_spline: unsafe extern "C" fn(
+        Object,
+        Object,
+        Object,
+        *const Guard,
+        *mut SplineProfile,
+        *mut ResultInfo,
+    ) -> i32,
 }
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 6 {
+    if p.is_null() || unsafe { (*p).abi } == 7 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
     }
 }
-fn provider() -> Result<&'static Provider, String> {
+pub(crate) fn provider() -> Result<&'static Provider, String> {
     let p = PROVIDER.load(Ordering::Acquire);
     if p.is_null() {
         Err("native presentation provider unavailable".into())
@@ -478,13 +575,16 @@ impl Arena {
                 d::ComponentKind::Groom => 2,
                 d::ComponentKind::Procedural => 3,
                 d::ComponentKind::Scene => 4,
+                d::ComponentKind::Spline => 5,
             },
             visible: (c.visible && !c.hidden) as u32,
-            asset: self.text(if c.kind == d::ComponentKind::Scene {
-                &c.component_class
-            } else {
-                &c.asset
-            }),
+            asset: self.text(
+                if matches!(c.kind, d::ComponentKind::Scene | d::ComponentKind::Spline) {
+                    &c.component_class
+                } else {
+                    &c.asset
+                },
+            ),
             skeleton: self.text(&c.skeleton),
             socket: self.text(&c.socket),
             relative: Transform {
@@ -515,7 +615,250 @@ impl Arena {
             vertex_lods,
             vertex_count,
             pad_lod: 0,
+            spline: c
+                .spline_profile
+                .as_ref()
+                .map(|p| SplineProfile {
+                    position_count: p.position_count.into(),
+                    rotation_count: p.rotation_count.into(),
+                    scale_count: p.scale_count.into(),
+                    reparam_count: p.reparam_count.into(),
+                    metadata_null: p.metadata_null.into(),
+                })
+                .unwrap_or_default(),
+            pad_spline: 0,
         }
+    }
+}
+struct SplineStorage {
+    value: Box<SplineFrame>,
+    position: Vec<SplineVectorPoint>,
+    rotation: Vec<SplineQuatPoint>,
+    scale: Vec<SplineVectorPoint>,
+    reparam: Vec<SplineFloatPoint>,
+}
+impl SplineStorage {
+    fn source(p: &d::SplineProfile) -> Self {
+        Self {
+            value: Box::default(),
+            position: vec![SplineVectorPoint::default(); p.position_count as usize],
+            rotation: vec![SplineQuatPoint::default(); p.rotation_count as usize],
+            scale: vec![SplineVectorPoint::default(); p.scale_count as usize],
+            reparam: vec![SplineFloatPoint::default(); p.reparam_count as usize],
+        }
+    }
+    fn ffi(&mut self) -> &mut SplineFrame {
+        self.value.position.points = self.position.as_mut_ptr();
+        self.value.position.count = self.position.len() as u32;
+        self.value.rotation.points = self.rotation.as_mut_ptr();
+        self.value.rotation.count = self.rotation.len() as u32;
+        self.value.scale.points = self.scale.as_mut_ptr();
+        self.value.scale.count = self.scale.len() as u32;
+        self.value.reparam.points = self.reparam.as_mut_ptr();
+        self.value.reparam.count = self.reparam.len() as u32;
+        &mut self.value
+    }
+    fn from_wire(f: &w::NativeSplineFrame) -> Result<Self, String> {
+        f.validate().map_err(str::to_owned)?;
+        let s = &f.settings;
+        let mut out = Self {
+            value: Box::new(SplineFrame {
+                visible: f.visible.into(),
+                hidden: f.hidden.into(),
+                owner_hidden: f.owner_hidden.into(),
+                version: f.version,
+                settings: SplineSettings {
+                    allow_spline_editing_per_instance: s.allow_spline_editing_per_instance.into(),
+                    reparam_steps_per_segment: s.reparam_steps_per_segment,
+                    duration: s.duration,
+                    stationary_endpoints: s.stationary_endpoints.into(),
+                    spline_has_been_edited: s.spline_has_been_edited.into(),
+                    modified_by_construction_script: s.modified_by_construction_script.into(),
+                    input_spline_points_to_construction_script: s
+                        .input_spline_points_to_construction_script
+                        .into(),
+                    draw_debug: s.draw_debug.into(),
+                    closed_loop: s.closed_loop.into(),
+                    loop_position_override: s.loop_position_override.into(),
+                    loop_position: s.loop_position,
+                    pad: 0,
+                    default_up_vector: s.default_up_vector,
+                },
+                ..Default::default()
+            }),
+            position: f
+                .position
+                .points
+                .iter()
+                .map(|p| SplineVectorPoint {
+                    key: p.key,
+                    interp: p.interp.into(),
+                    out: p.out,
+                    arrive: p.arrive,
+                    leave: p.leave,
+                })
+                .collect(),
+            rotation: f
+                .rotation
+                .points
+                .iter()
+                .map(|p| SplineQuatPoint {
+                    key: p.key,
+                    interp: p.interp.into(),
+                    out: p.out,
+                    arrive: p.arrive,
+                    leave: p.leave,
+                })
+                .collect(),
+            scale: f
+                .scale
+                .points
+                .iter()
+                .map(|p| SplineVectorPoint {
+                    key: p.key,
+                    interp: p.interp.into(),
+                    out: p.out,
+                    arrive: p.arrive,
+                    leave: p.leave,
+                })
+                .collect(),
+            reparam: f
+                .reparam
+                .points
+                .iter()
+                .map(|p| SplineFloatPoint {
+                    key: p.key,
+                    interp: p.interp.into(),
+                    out: p.out,
+                    arrive: p.arrive,
+                    leave: p.leave,
+                })
+                .collect(),
+        };
+        out.value.position.looped = f.position.looped.into();
+        out.value.position.loop_key_offset = f.position.loop_key_offset;
+        out.value.rotation.looped = f.rotation.looped.into();
+        out.value.rotation.loop_key_offset = f.rotation.loop_key_offset;
+        out.value.scale.looped = f.scale.looped.into();
+        out.value.scale.loop_key_offset = f.scale.loop_key_offset;
+        out.value.reparam.looped = f.reparam.looped.into();
+        out.value.reparam.loop_key_offset = f.reparam.loop_key_offset;
+        out.ffi();
+        Ok(out)
+    }
+    fn to_wire(&self) -> Result<w::NativeSplineFrame, String> {
+        let b = |v: u32| match v {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err("native spline invalid boolean".to_owned()),
+        };
+        let mode = |v: u32| {
+            u8::try_from(v)
+                .ok()
+                .filter(|v| *v <= 5)
+                .ok_or_else(|| "native spline invalid interpolation".to_owned())
+        };
+        let f = &self.value;
+        let s = &f.settings;
+        if f.position.count as usize != self.position.len()
+            || f.rotation.count as usize != self.rotation.len()
+            || f.scale.count as usize != self.scale.len()
+            || f.reparam.count as usize != self.reparam.len()
+        {
+            return Err("native spline returned array counts".into());
+        }
+        let frame = w::NativeSplineFrame {
+            visible: b(f.visible)?,
+            hidden: b(f.hidden)?,
+            owner_hidden: b(f.owner_hidden)?,
+            version: f.version,
+            settings: w::NativeSplineSettings {
+                allow_spline_editing_per_instance: b(s.allow_spline_editing_per_instance)?,
+                reparam_steps_per_segment: s.reparam_steps_per_segment,
+                duration: s.duration,
+                stationary_endpoints: b(s.stationary_endpoints)?,
+                spline_has_been_edited: b(s.spline_has_been_edited)?,
+                modified_by_construction_script: b(s.modified_by_construction_script)?,
+                input_spline_points_to_construction_script: b(
+                    s.input_spline_points_to_construction_script
+                )?,
+                draw_debug: b(s.draw_debug)?,
+                closed_loop: b(s.closed_loop)?,
+                loop_position_override: b(s.loop_position_override)?,
+                loop_position: s.loop_position,
+                default_up_vector: s.default_up_vector,
+            },
+            position: w::NativeSplineCurve {
+                looped: b(f.position.looped)?,
+                loop_key_offset: f.position.loop_key_offset,
+                points: self
+                    .position
+                    .iter()
+                    .map(|p| {
+                        Ok(w::NativeSplineVectorPoint {
+                            key: p.key,
+                            out: p.out,
+                            arrive: p.arrive,
+                            leave: p.leave,
+                            interp: mode(p.interp)?,
+                        })
+                    })
+                    .collect::<Result<_, String>>()?,
+            },
+            rotation: w::NativeSplineCurve {
+                looped: b(f.rotation.looped)?,
+                loop_key_offset: f.rotation.loop_key_offset,
+                points: self
+                    .rotation
+                    .iter()
+                    .map(|p| {
+                        Ok(w::NativeSplineQuatPoint {
+                            key: p.key,
+                            out: p.out,
+                            arrive: p.arrive,
+                            leave: p.leave,
+                            interp: mode(p.interp)?,
+                        })
+                    })
+                    .collect::<Result<_, String>>()?,
+            },
+            scale: w::NativeSplineCurve {
+                looped: b(f.scale.looped)?,
+                loop_key_offset: f.scale.loop_key_offset,
+                points: self
+                    .scale
+                    .iter()
+                    .map(|p| {
+                        Ok(w::NativeSplineVectorPoint {
+                            key: p.key,
+                            out: p.out,
+                            arrive: p.arrive,
+                            leave: p.leave,
+                            interp: mode(p.interp)?,
+                        })
+                    })
+                    .collect::<Result<_, String>>()?,
+            },
+            reparam: w::NativeSplineCurve {
+                looped: b(f.reparam.looped)?,
+                loop_key_offset: f.reparam.loop_key_offset,
+                points: self
+                    .reparam
+                    .iter()
+                    .map(|p| {
+                        Ok(w::NativeSplineFloatPoint {
+                            key: p.key,
+                            out: p.out,
+                            arrive: p.arrive,
+                            leave: p.leave,
+                            interp: mode(p.interp)?,
+                        })
+                    })
+                    .collect::<Result<_, String>>()?,
+            },
+        };
+        frame.validate().map_err(str::to_owned)?;
+        Ok(frame)
     }
 }
 struct FrameStorage {
@@ -525,6 +868,7 @@ struct FrameStorage {
     scalars: Vec<f32>,
     vectors: Vec<f32>,
     textures: Vec<Object>,
+    spline: Option<SplineStorage>,
 }
 impl FrameStorage {
     fn source(c: &d::RenderComponent) -> Self {
@@ -535,6 +879,7 @@ impl FrameStorage {
             scalars: vec![0.0; c.materials.iter().map(|m| m.scalars.len()).sum()],
             vectors: vec![0.0; c.materials.iter().map(|m| m.vectors.len() * 4).sum()],
             textures: vec![Object::default(); c.materials.iter().map(|m| m.textures.len()).sum()],
+            spline: c.spline_profile.as_ref().map(SplineStorage::source),
         }
     }
     fn ffi(&mut self) -> Frame {
@@ -555,6 +900,11 @@ impl FrameStorage {
             textures: self.textures.as_mut_ptr(),
             texture_count: self.textures.len() as u32,
             pad_t: 0,
+            spline: self
+                .spline
+                .as_mut()
+                .map(|s| s.ffi() as *mut SplineFrame)
+                .unwrap_or(std::ptr::null_mut()),
         }
     }
 }
@@ -825,7 +1175,7 @@ impl Native {
                         .validate_mirror_profile()
                         .map_err(str::to_owned)?;
                     for c in &descriptor.recipe.components {
-                        if c.kind == d::ComponentKind::Scene {
+                        if matches!(c.kind, d::ComponentKind::Scene | d::ComponentKind::Spline) {
                             assets.insert(c.component_class.clone());
                         }
                         for s in [&c.asset, &c.skeleton] {
@@ -1131,12 +1481,18 @@ impl Native {
                                 textures,
                             });
                         }
+                        let spline = values
+                            .spline
+                            .as_ref()
+                            .map(SplineStorage::to_wire)
+                            .transpose()?;
                         components.push(w::RenderComponent {
                             id: c.id,
                             transform: numbers(values.world),
                             bones: values.bones.into_iter().map(numbers).collect(),
                             morphs: values.morphs,
                             materials,
+                            spline,
                         });
                     }
                     entities.push(w::RenderEntity {
@@ -1146,7 +1502,7 @@ impl Native {
                     });
                 }
                 let render = w::RenderWorld { world, entities };
-                w::encode_render_world(&render).map_err(str::to_owned)?;
+                w::encode_render_world_v2(&render).map_err(str::to_owned)?;
                 self.presentation.pending = Some(render);
                 Ok(())
             })();
@@ -1268,6 +1624,14 @@ impl Native {
                             .find(|c| c.id == recipe.id)
                             .ok_or("mirror complete component frame")?;
                         let mut values = FrameStorage::source(recipe);
+                        if (recipe.kind == d::ComponentKind::Spline) != frame.spline.is_some() {
+                            return Err("mirror spline frame presence".into());
+                        }
+                        values.spline = frame
+                            .spline
+                            .as_ref()
+                            .map(SplineStorage::from_wire)
+                            .transpose()?;
                         values.world = transform(frame.transform);
                         values.bones = frame.bones.iter().copied().map(transform).collect();
                         values.morphs = frame.morphs.clone();
@@ -1667,5 +2031,161 @@ mod presentation_binding_tests {
         assert_eq!(std::mem::size_of::<Lifecycle>(), 88);
         assert_eq!(std::mem::size_of::<Retirement>(), 400);
         assert_eq!(std::mem::size_of::<ActorScope>(), 304);
+        assert_eq!(std::mem::size_of::<Component>(), 256);
+        assert_eq!(std::mem::size_of::<Frame>(), 168);
+        assert_eq!(std::mem::size_of::<SplineProfile>(), 20);
+        assert_eq!(std::mem::size_of::<SplineSettings>(), 72);
+        assert_eq!(std::mem::size_of::<SplineVectorPoint>(), 80);
+        assert_eq!(std::mem::size_of::<SplineQuatPoint>(), 104);
+        assert_eq!(std::mem::size_of::<SplineFloatPoint>(), 20);
+        assert_eq!(std::mem::size_of::<SplineFrame>(), 184);
+    }
+    fn raw_spline_fixture() -> w::NativeSplineFrame {
+        w::NativeSplineFrame {
+            visible: true,
+            hidden: false,
+            owner_hidden: true,
+            version: u32::MAX,
+            settings: w::NativeSplineSettings {
+                allow_spline_editing_per_instance: true,
+                reparam_steps_per_segment: 7,
+                duration: 1.25,
+                stationary_endpoints: true,
+                spline_has_been_edited: false,
+                modified_by_construction_script: true,
+                input_spline_points_to_construction_script: false,
+                draw_debug: true,
+                closed_loop: false,
+                loop_position_override: true,
+                loop_position: -0.0,
+                default_up_vector: [1.2345678901234567, 0.0, -2.0],
+            },
+            position: w::NativeSplineCurve {
+                looped: true,
+                loop_key_offset: -2.5,
+                points: vec![w::NativeSplineVectorPoint {
+                    key: 0.5,
+                    out: [1.2345678901234567, 2.0, 3.0],
+                    arrive: [0.0; 3],
+                    leave: [4.0, 5.0, 6.0],
+                    interp: 5,
+                }],
+            },
+            rotation: w::NativeSplineCurve {
+                looped: false,
+                loop_key_offset: 0.0,
+                points: vec![w::NativeSplineQuatPoint {
+                    key: 1.5,
+                    out: [2.0, 3.0, 4.0, 5.0],
+                    arrive: [0.0; 4],
+                    leave: [7.0, 8.0, 9.0, 10.0],
+                    interp: 3,
+                }],
+            },
+            scale: w::NativeSplineCurve {
+                looped: false,
+                loop_key_offset: 0.0,
+                points: vec![],
+            },
+            reparam: w::NativeSplineCurve {
+                looped: false,
+                loop_key_offset: 1.25,
+                points: vec![w::NativeSplineFloatPoint {
+                    key: 2.0,
+                    out: 3.0,
+                    arrive: 4.0,
+                    leave: 5.0,
+                    interp: 4,
+                }],
+            },
+        }
+    }
+    #[test]
+    fn raw_spline_marshaled_arrays_preserve_all_dynamic_fields_after_move() {
+        let raw = raw_spline_fixture();
+        let stored = SplineStorage::from_wire(&raw).unwrap();
+        let mut moved = vec![stored];
+        let ffi = moved[0].ffi();
+        assert_eq!(ffi.position.count, 1);
+        assert_eq!(ffi.scale.count, 0);
+        assert!(!ffi.rotation.points.is_null());
+        assert_eq!(moved[0].to_wire().unwrap(), raw);
+        assert_eq!(
+            moved[0].value.settings.loop_position.to_bits(),
+            (-0.0f32).to_bits()
+        );
+        assert_eq!(moved[0].rotation[0].arrive, [0.0; 4]);
+        assert_eq!(moved[0].rotation[0].out, [2.0, 3.0, 4.0, 5.0]);
+        moved[0].value.position.count = 0;
+        assert!(moved[0].to_wire().is_err());
+    }
+    #[test]
+    fn raw_spline_marshaling_refuses_invalid_native_flags_modes_and_nonfinite() {
+        let raw = raw_spline_fixture();
+        let mut storage = SplineStorage::from_wire(&raw).unwrap();
+        storage.value.visible = 2;
+        assert!(storage.to_wire().is_err());
+        storage.value.visible = 1;
+        storage.rotation[0].interp = 6;
+        assert!(storage.to_wire().is_err());
+        storage.rotation[0].interp = 3;
+        storage.reparam[0].arrive = f32::INFINITY;
+        assert!(storage.to_wire().is_err());
+        let mut raw = raw;
+        raw.position.points[0].out[2] = f64::NAN;
+        assert!(SplineStorage::from_wire(&raw).is_err());
+    }
+    #[test]
+    fn native_spline_binding_uses_exact_class_profile_and_owned_caller_arrays() {
+        let recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+            "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
+        ))
+        .unwrap();
+        let mut component = recipe.components[0].clone();
+        component.kind = d::ComponentKind::Spline;
+        component.component_class = "/Script/Engine.SplineComponent".into();
+        component.asset.clear();
+        component.spline_profile = Some(d::SplineProfile {
+            position_count: 2,
+            rotation_count: 1,
+            scale_count: 0,
+            reparam_count: 11,
+            metadata_null: true,
+        });
+        let mut arena = Arena::new();
+        let bound = arena.component(&component);
+        assert_eq!(bound.kind, 5);
+        assert_eq!(
+            (
+                bound.spline.position_count,
+                bound.spline.rotation_count,
+                bound.spline.scale_count,
+                bound.spline.reparam_count,
+                bound.spline.metadata_null
+            ),
+            (2, 1, 0, 11, 1)
+        );
+        let class =
+            unsafe { std::slice::from_raw_parts(bound.asset.data, bound.asset.len as usize) };
+        assert_eq!(
+            String::from_utf16(class).unwrap(),
+            component.component_class
+        );
+        let mut storage = FrameStorage::source(&component);
+        let frame = storage.ffi();
+        assert!(!frame.spline.is_null());
+        let spline = unsafe { &*frame.spline };
+        assert_eq!(
+            (
+                spline.position.count,
+                spline.rotation.count,
+                spline.scale.count,
+                spline.reparam.count
+            ),
+            (2, 1, 0, 11)
+        );
+        component.spline_profile = None;
+        component.kind = d::ComponentKind::Scene;
+        assert!(FrameStorage::source(&component).ffi().spline.is_null());
     }
 }

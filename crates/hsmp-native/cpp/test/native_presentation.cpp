@@ -8,6 +8,9 @@ static const HsmpPresentation* installed{};
 extern "C" void hsmp_native_set_presentation(const HsmpPresentation* p) {installed=p;}
 namespace {
 int checks{}, touches{};
+int spline_allocations{},spline_releases{},spline_fail_after{-1};
+void* test_spline_allocate(uint64_t bytes,uint32_t alignment){++spline_allocations;if(spline_fail_after>=0&&spline_allocations>spline_fail_after)return nullptr;return _aligned_malloc(static_cast<size_t>(bytes),alignment);}
+void test_spline_release(void* p){if(p){++spline_releases;_aligned_free(p);}}
 void check(bool ok,const char* why) {++checks;if(!ok)throw std::runtime_error(why);}
 template<class F> void rejects(F f,const char* why) {bool refused{};try{f();}catch(const Error&){refused=true;}check(refused,why);}
 struct MockObject {uint64_t name;MockObject* cls;};
@@ -37,6 +40,7 @@ bool actor_persistent{},destroy_invalidates{true},reuse_after_destroy{},travel_o
 bool destroy_garbage{},omit_world{},omit_after_destroy{},reuse_during_post_census{},travel_during_post_census{};
 bool actor_memory_unqualified{};
 bool scope_reuse_during_census{},scope_travel_during_census{},scope_garbage_during_census{},scope_disappear_during_census{};
+bool spline_garbage_after_call{};
 int post_destroy_actor_events{},array_frees{};
 int level_calls{},destroy_calls{},post_destroy_actor_touches{},invalid_actor_resolves{};
 void lifetime_touch(LifetimeObject* o) {if(o==&actor&&!actor.alive)++post_destroy_actor_touches;}
@@ -103,7 +107,7 @@ int32_t lifetime_prop(void* object,const uint16_t* key,HsmpProp* out) {
 void lifetime_call(void* object,void* fn,void* params) {
     if(object==&actor&&destroy_calls)++post_destroy_actor_events;
     check(object==&actor||(object==&foreign_owner&&fn==&get_level_fn)||(object==&statics&&fn==&census_fn),"retirement calls only qualified actor/owner or static world census");
-    if(fn==&get_level_fn){++level_calls;auto result=object==&foreign_owner?&foreign_level:&level;std::memcpy(params,&result,sizeof(result));if(travel_on_get_level)current_world=&new_world;}
+    if(fn==&get_level_fn){++level_calls;auto result=object==&foreign_owner?&foreign_level:&level;std::memcpy(params,&result,sizeof(result));if(travel_on_get_level)current_world=&new_world;if(spline_garbage_after_call)actor.flags|=mirrored_garbage;}
     else if(fn==&destroy_fn){++destroy_calls;if(destroy_invalidates)actor.alive=false;if(destroy_garbage)actor.flags|=mirrored_garbage;if(travel_on_destroy)current_world=&new_world;}
     else if(fn==&tag_fn){static_cast<uint8_t*>(params)[8]=actor_persistent?1:0;}
     else if(fn==&owner_fn){std::memcpy(params,&retirement_owner,sizeof(retirement_owner));}
@@ -204,7 +208,7 @@ int main() {
         check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
         check(post_destroy_actor_touches==0&&invalid_actor_resolves==0,"destroyed mirror actor is never resolved or read after K2_DestroyActor");
         destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
-        check(provider.abi==6,"read-only original actor scope requires presentation ABI6");
+        check(provider.abi==7,"raw native spline path requires presentation ABI7");
         HsmpViewActorScope actor_scope_result{};
         lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=1;
         check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.qualified==1
@@ -294,6 +298,49 @@ int main() {
         lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);destroy_invalidates=false;destroy_garbage=true;
         check(retire(world,mirror_actor,0,{},&guard,&retired)==1,"fixture obtains original garbage retirement proof");actor_memory_unqualified=true;
         check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2,"weak-invalid but globally present object cannot masquerade as global disappearance");
+        lifetime_reset(reflect);actor.cls=&driver_class;spline_flags=lifetime_flags;
+        reflect.find=[](const uint16_t* key)->void*{if(std::wstring(reinterpret_cast<const wchar_t*>(key))==L"/Script/Engine.SplineComponent")return &driver_class;return lifetime_find(key);};
+        const auto spline_owner_fixture=keep(&foreign_owner),spline_component_fixture=keep(&actor);
+        actor.flags=mirrored_garbage;rejects([&]{SplineOperation op(spline_owner_fixture,spline_component_fixture);},"garbage original spline refuses before qualifier PE");check(level_calls==0,"no GetLevel dispatch on initially garbage component");
+        actor.flags=0;foreign_owner.flags=mirrored_garbage;rejects([&]{SplineOperation op(spline_owner_fixture,spline_component_fixture);},"garbage original owner refuses before qualifier PE");foreign_owner.flags=0;
+        {SplineOperation op(spline_owner_fixture,spline_component_fixture);Function spline_level(L"/Script/Engine.Actor:GetLevel");get_level_fn.flags=mirrored_garbage;
+            rejects([&]{spline_level.call(spline_owner_fixture);},"garbage original function refuses before dispatch");check(level_calls==0,"no PE dispatched through garbage function");get_level_fn.flags=0;spline_garbage_after_call=true;
+            rejects([&]{spline_level.call(spline_owner_fixture);},"native garbage callback invalidation refuses before continuation");check(level_calls==1,"callback invalidation has exactly one qualified dispatch");
+            rejects([&]{spline_level.call(spline_owner_fixture);},"pending spline receives no repeated qualification PE");check(level_calls==1,"native weak-valid garbage never gets a second PE");}
+        spline_garbage_after_call=false;spline_flags=nullptr;
+        // Raw curve protocol tests retain original zero quaternion tangents and
+        // engine POD alignment; they do not claim native rendering parity.
+        HsmpViewSplineProfile profile{1,1,0,1,1};HsmpViewSplineFrame raw{};
+        HsmpViewSplineVectorPoint vp{0,5,{1,2,3},{0,0,0},{4,5,6}};
+        HsmpViewSplineQuatPoint qp{1,3,{2,3,4,5},{0,0,0,0},{7,8,9,10}};
+        HsmpViewSplineFloatPoint fp{2,3,4,5,4};
+        raw.position={&vp,1,1,-2.5f,0};raw.rotation={&qp,1,0,0,0};raw.reparam={&fp,1,0,1.25f,0};raw.settings.draw_debug=1;raw.version=99;
+        spline_frame_valid(profile,raw);check(true,"raw nonunit quaternion and zero tangents are admitted without normalization");
+        auto bad_profile=profile;bad_profile.metadata_null=0;rejects([&]{spline_frame_valid(bad_profile,raw);},"unknown spline metadata refuses");
+        bad_profile=profile;bad_profile.position_count=65;rejects([&]{spline_frame_valid(bad_profile,raw);},"spline profile cap refuses before allocation");
+        auto bad_frame=raw;bad_frame.position.count=0;rejects([&]{spline_frame_valid(profile,bad_frame);},"changed raw array count requires recipe revision");
+        bad_frame=raw;bad_frame.settings.closed_loop=2;rejects([&]{spline_frame_valid(profile,bad_frame);},"unknown native settings bool refuses");
+        qp.interp=6;rejects([&]{spline_frame_valid(profile,raw);},"unknown native interpolation mode refuses");qp.interp=3;
+        fp.arrive=std::numeric_limits<float>::infinity();rejects([&]{spline_frame_valid(profile,raw);},"nonfinite native reparam tangent refuses");fp.arrive=4;
+        spline_api.allocate=test_spline_allocate;spline_api.release=test_spline_release;
+        spline_allocations=spline_releases=0;
+        {SplineOwnedArray owned;spline_allocate<NativeQuatPoint>(owned,raw.rotation);auto* point=static_cast<NativeQuatPoint*>(owned.data);
+            check(reinterpret_cast<uintptr_t>(point)%16==0&&owned.bytes==128,"engine quaternion POD buffer has native size/alignment");
+            check(point->out[0]==2&&point->arrive[3]==0&&point->leave[3]==10&&point->interp==3,"raw quaternion/tangents copied exactly");
+            check(qp.out[0]==2&&qp.arrive[3]==0,"destination allocation never edits source raw points");}
+        check(spline_allocations==1&&spline_releases==1,"uncommitted engine array freed exactly once");
+        spline_allocations=spline_releases=0;spline_fail_after=1;
+        rejects([&]{SplineOwnedArray first,second;spline_allocate<NativeVectorPoint>(first,raw.position);spline_allocate<NativeQuatPoint>(second,raw.rotation);},"partial native allocation failure refuses");
+        check(spline_allocations==2&&spline_releases==1,"partial allocation failure frees every allocated array");spline_fail_after=-1;
+        alignas(16) NativeQuatPoint spline_native{};spline_native.key=1;spline_native.out[0]=2;spline_native.arrive[3]=0;spline_native.leave[3]=10;spline_native.interp=3;
+        std::array<uint8_t,24> header{};Array array{&spline_native,1,1};std::memcpy(header.data(),&array,16);header[16]=1;float offset=-1.75f;std::memcpy(header.data()+20,&offset,4);
+        HsmpViewSplineQuatCurve curve{};std::vector<HsmpViewSplineQuatPoint> decoded;
+        spline_read_curve<NativeQuatPoint>(header.data(),curve,decoded,64);
+        check(curve.looped==1&&curve.loop_key_offset==-1.75f&&decoded[0].out[0]==2&&decoded[0].arrive[3]==0,"checked POD raw read preserves loop and zero tangent");
+        array.capacity=0;std::memcpy(header.data(),&array,16);rejects([&]{spline_read_curve<NativeQuatPoint>(header.data(),curve,decoded,64);},"count exceeding native capacity refuses");
+        array={nullptr,1,1};std::memcpy(header.data(),&array,16);rejects([&]{spline_read_curve<NativeQuatPoint>(header.data(),curve,decoded,64);},"nonnull count with missing POD data refuses");
+        HsmpViewSplineProfile empty{0,0,0,0,1};HsmpViewSplineFrame empty_frame{};spline_frame_valid(empty,empty_frame);check(true,"actual empty spline curves are preserved without invented points");
+        SplineSnapshot a{},b{};a.value.version=b.value.version=7;check(spline_equal(a,b),"two identical empty raw copies agree");b.value.version=8;check(!spline_equal(a,b),"source curve version mutation invalidates coherent capture");b=a;b.value.settings.duration=2;check(!spline_equal(a,b),"source settings mutation invalidates coherent capture");
         std::cout<<checks<<" native presentation lifetime/rejection checks passed\n";return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }

@@ -226,6 +226,7 @@ entry! {
     l_native_source_scope_keep => Guard::GameThread, |n,L| n.source_scope_keep(L);
     l_native_source_scope_resolve => Guard::GameThread, |n,L| n.source_scope_resolve(L);
     l_native_source_scope_end => Guard::GameThread, |n,L| n.source_scope_end(L);
+    l_native_source_scope_spline_profile => Guard::GameThread, |n,L| n.source_scope_spline_profile(L);
     l_native_capture_render => Guard::GameThread, |n,L| n.native_capture_render(L);
     l_native_scene => Guard::GameThread, |n,L| n.native_scene(L);
     l_native_present => Guard::GameThread, |n,L| n.native_present(L);
@@ -314,6 +315,7 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("native_source_scope_keep",l_native_source_scope_keep),
     ("native_source_scope_resolve",l_native_source_scope_resolve),
     ("native_source_scope_end",l_native_source_scope_end),
+    ("native_source_scope_spline_profile",l_native_source_scope_spline_profile),
     ("native_capture_render",l_native_capture_render),
     ("native_scene",l_native_scene),
     ("native_present",l_native_present),

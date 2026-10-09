@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <vector>
 
 namespace {
@@ -144,6 +145,7 @@ struct Array { void* data; int32_t count, capacity; };
 static_assert(sizeof(Array) == 16);
 struct Signature {Obj function{},cls{};std::vector<HsmpProp> fields;};
 std::map<std::wstring,Signature> signatures;
+void spline_call_guard(Obj object,Obj function,Obj cls);
 
 struct Function {
     Obj function{}, cls{};
@@ -204,10 +206,12 @@ struct Function {
         put(key, class_parameter ? L"ClassProperty" : L"ObjectProperty", p);
     }
     void call(Obj object, HsmpViewResult* result = nullptr) {
+        spline_call_guard(object,function,cls);
         require(vt->is_a(get(object), get(cls)) != 0, "native function owner class mismatch");
         vt->call(get(object), get(function), buf.data());
         check_guard();
-        get(object); get(function); if (result) ++result->operations;
+        spline_call_guard(object,function,cls);
+        get(object); get(function); get(cls); if (result) ++result->operations;
     }
     Obj returned() const { auto p = value<void*>(L"ReturnValue", L"ObjectProperty"); return p ? keep(p) : Obj{}; }
 };
@@ -265,6 +269,9 @@ void qualify(Obj world, Obj owner, Obj component, HsmpViewResult* r = nullptr) {
 }
 Obj mesh_asset(Obj component, HsmpViewResult* r) { return returned(component,L"/Script/Engine.SkinnedMeshComponent:GetSkinnedAsset",r); }
 bool effective_visible(Obj component) {return bool_property(component,L"bVisible")&&!bool_property(component,L"bHiddenInGame");}
+void visibility(Obj component,bool visible,HsmpViewResult* r);
+void collision_off(Obj component,HsmpViewResult* r);
+#include "native_spline_impl.h"
 void scene_anchor(Obj component) {
     const auto cls=keep(vt->class_of(get(component)));
     if(same(cls,find(L"/Script/Engine.SceneComponent")))return;
@@ -287,15 +294,16 @@ void supported(Obj world,Obj owner,Obj component,HsmpViewResult* r) {
         require(!bool_property(component,L"bSetMeshDeformer"),"native deformer override unsupported");
         auto deformer=returned(component,L"/Script/Engine.SkinnedMeshComponent:GetMeshDeformerInstance",r);
         require(!deformer.weak,"native deformer instance unsupported");
-    } else if(!is(component,L"/Script/Engine.StaticMeshComponent"))scene_anchor(component);
+    } else if(is(component,L"/Script/Engine.SplineComponent"))spline_class(component);
+    else if(!is(component,L"/Script/Engine.StaticMeshComponent"))scene_anchor(component);
     qualify(world,owner,component,r);
 }
 bool pointers(const void* p,uint32_t n,uint32_t cap) { return n<=cap && (!n||p); }
 void recipe(const HsmpViewComponent& c) {
-    require((c.kind<=1||c.kind==4) && c.visible<=1 && pointers(c.bones,c.bone_count,512) && pointers(c.morphs,c.morph_count,128) &&
+    require((c.kind<=1||c.kind==4||c.kind==5) && c.visible<=1 && pointers(c.bones,c.bone_count,512) && pointers(c.morphs,c.morph_count,128) &&
         pointers(c.hidden_bones,c.hidden_count,512) && pointers(c.materials,c.material_count,32) &&
         pointers(c.vertex_lods,c.vertex_count,16),"native component recipe bounds");
-    if(c.kind==4) {
+    if(c.kind==4||c.kind==5) {
         require(c.vertex_state==4&&!c.bone_count&&!c.morph_count&&!c.hidden_count&&!c.material_count&&!c.vertex_count,
                 "native scene anchor render dictionary");
         const auto cls=text(c.asset);
@@ -303,7 +311,9 @@ void recipe(const HsmpViewComponent& c) {
                 "native scene anchor recipe class");
         require(cls!=L"/Script/Engine.CapsuleComponent"||c.visible==0,"native scene anchor capsule visibility");
         require(text(c.skeleton).empty(),"native scene anchor skeletal asset");
+        if(c.kind==5){require(cls==L"/Script/Engine.SplineComponent","native spline recipe exact class");spline_profile_valid(c.spline);}
     }else require(c.vertex_state==0 || c.vertex_state==1,"native vertex recipe incomplete");
+    if(c.kind!=5)require(c.spline.position_count==0&&c.spline.rotation_count==0&&c.spline.scale_count==0&&c.spline.reparam_count==0&&c.spline.metadata_null==0,"native non-spline profile present");
     require(c.vertex_state!=1 || c.vertex_count>0,"native vertex colors missing");
     require(c.kind==0 || (!c.bone_count&&!c.morph_count&&!c.hidden_count),"static component skeletal dictionary");
     engine(c.relative); for(uint32_t i=0;i<c.material_count;++i) {
@@ -339,6 +349,7 @@ void frame(const HsmpViewComponent& c,const HsmpViewFrame& f) {
     require(f.bone_count==c.bone_count && f.morph_count==c.morph_count && f.scalar_count==ns && f.vector_count==nv && f.texture_count==nt &&
         pointers(f.bones,f.bone_count,512) && pointers(f.morphs,f.morph_count,128) && pointers(f.scalars,ns,4096) &&
         pointers(f.vectors,nv,4096) && pointers(f.textures,nt,4096),"native frame dictionary mismatch"); engine(f.world);
+    require((c.kind==5)==(f.spline!=nullptr),"native spline frame presence");if(f.spline)spline_frame_valid(c.spline,*f.spline);
 }
 Transform transform(Obj component,const wchar_t* path,HsmpViewResult* r) {
     Function f(path); f.call(component,r); return wire(f.value<EngineTransform>(L"ReturnValue",L"StructProperty",L"Transform"));
@@ -519,12 +530,13 @@ int32_t inspect(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,Hsm
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,const HsmpViewGuard* guard,HsmpViewResult* r) {
-    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");layouts();frame(*c,*out);supported(world,owner,component,r);
+    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});supported(world,owner,component,r);
         if(c->kind==0) {require(same(mesh_asset(component,r),asset(c->asset,L"/Script/Engine.SkeletalMesh")),"source mesh recipe changed");}
-        else if(c->kind==4)require(same(keep(vt->class_of(get(component))),asset(c->asset,L"/Script/CoreUObject.Class")),"source scene anchor class changed");
+        else if(c->kind==4||c->kind==5)require(same(keep(vt->class_of(get(component))),asset(c->asset,L"/Script/CoreUObject.Class")),"source scene anchor class changed");
         else require(same(object_property(component,L"StaticMesh"),asset(c->asset,L"/Script/Engine.StaticMesh")),"source static mesh recipe changed");
-        source_static(component,*c,r);if(c->kind!=4)verify_colors(component,*c,r);
+        if(c->kind!=5)source_static(component,*c,r);if(c->kind<=1)verify_colors(component,*c,r);
         capture_values(component,*c,*out,r);qualify(world,owner,component,r);
+        if(c->kind==5)spline_capture(world,owner,component,c->spline,*out->spline,r);
         if(c->kind==4){scene_anchor(component);source_static(component,*c,r);}
         r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
@@ -567,6 +579,10 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
             }else if(c.kind==4) {
                 part.render=add_component(actor,L"/Script/Engine.SceneComponent",c.relative,r);
                 finish_component(actor,part.render,c.relative,r);
+            }else if(c.kind==5) {
+                part.render=add_component(actor,L"/Script/Engine.SplineComponent",c.relative,r);
+                finish_component(actor,part.render,c.relative,r);
+                Function tick(L"/Script/Engine.ActorComponent:SetComponentTickEnabled");tick.boolean(L"bEnabled",false);tick.call(part.render,r);
             }else {
                 part.render=add_component(actor,L"/Script/Engine.StaticMeshComponent",c.relative,r);
                 auto mesh=asset(c.asset,L"/Script/Engine.StaticMesh");Function set_mesh(L"/Script/Engine.StaticMeshComponent:SetStaticMesh");set_mesh.object(L"NewMesh",mesh);set_mesh.call(part.render,r);
@@ -576,7 +592,7 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
                 const auto& m=c.materials[j];Function mid(L"/Script/Engine.PrimitiveComponent:CreateDynamicMaterialInstance");mid.put(L"ElementIndex",L"IntProperty",static_cast<int32_t>(m.slot));mid.object(L"SourceMaterial",asset(m.base,L"/Script/Engine.MaterialInterface"));mid.put(L"OptionalName",L"NameProperty",uint64_t{});mid.call(part.render,r);
                 auto instance=mid.returned();require(instance.weak&&is(instance,L"/Script/Engine.MaterialInstanceDynamic")&&same(material(part.render,m.slot,r),instance),"mirror material creation failed");part.materials.push_back(instance);
             }
-            if(c.kind!=4)colors(part.render,c,r);visibility(part.render,c.visible!=0,r);qualify(world,actor,part.render,r);
+            if(c.kind<=1)colors(part.render,c,r);visibility(part.render,c.visible!=0,r);qualify(world,actor,part.render,r);
             if(part.leader.weak)qualify(world,actor,part.leader,r);mirror.parts.push_back(std::move(part));
         }
         // Source roots have no parent; every other direct parent must be in the
@@ -612,7 +628,9 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         const auto order=parent_order(recipes,count);
         for(const auto i:order) {
             const auto& c=recipes[i];const auto& f=frames[i];auto& part=mirror.parts[i];frame(c,f);require(c.id==part.id&&c.kind==part.kind,"mirror recipe generation mismatch");
+            SplineOperation spline_scope(c.kind==5?mirror.actor:Obj{},c.kind==5?part.render:Obj{});
             qualify(world,mirror.actor,part.render,r);world_transform(part.render,f.world,r);if(part.leader.weak)world_transform(part.leader,f.world,r);
+            if(c.kind==5)spline_apply(world,mirror.actor,part.render,c.spline,*f.spline,r);
             for(uint32_t j=0;j<c.bone_count;++j) {
                 Function b(L"/Script/Engine.PoseableMeshComponent:SetBoneTransformByName");b.put(L"BoneName",L"NameProperty",name(c.bones[j]));b.put(L"InTransform",L"StructProperty",engine(f.bones[j]),L"Transform");b.enumeration(L"BoneSpace",1);b.call(part.leader,r);
             }
@@ -775,17 +793,33 @@ int32_t actor_scope(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewActor
         result->qualified=1;return 1;
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
-const HsmpPresentation provider{6,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope};
+int32_t describe_spline(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,HsmpViewSplineProfile* out,HsmpViewResult* r) {
+    try{initialize_result(r);thread();OperationScope scope(guard,world);require(out!=nullptr,"native spline profile output missing");layouts();auto snapshot=spline_coherent(world,owner,component,r);*out=spline_profile(snapshot);spline_profile_valid(*out);r->complete=1;return 1;}
+    catch(const std::exception& e){failure(r,e.what());return -1;}
+}
+const HsmpPresentation provider{7,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline};
 }
 void hsmp_presentation_register(const HsmpReflect* reflection) {
     const auto module=GetModuleHandleW(L"UE4SS.dll");
     object_name=reinterpret_cast<NamePrivate>(module?GetProcAddress(module,"?GetNamePrivate@UObjectBase@Unreal@RC@@QEBAAEBVFName@23@XZ"):nullptr);
     object_world=reinterpret_cast<GetWorld>(module?GetProcAddress(module,"?GetWorld@UObject@Unreal@RC@@QEBAPEAVUWorld@23@XZ"):nullptr);
     retirement_flags=reinterpret_cast<ObjectFlags>(module?GetProcAddress(module,"?GetObjectFlags@UObjectBase@Unreal@RC@@QEBAAEBW4EObjectFlags@23@XZ"):nullptr);
+    spline_flags=retirement_flags;
     retirement_free=reinterpret_cast<Free>(module?GetProcAddress(module,"?Free@FMemory@Unreal@RC@@SAXPEAX@Z"):nullptr);
     retirement_index=reinterpret_cast<RetirementIndex>(module?GetProcAddress(module,"?IndexToObject@FUObjectArray@Unreal@RC@@SAPEAUFUObjectItem@23@H@Z"):nullptr);
     retirement_object=reinterpret_cast<RetirementSlotObject>(module?GetProcAddress(module,"?GetObject@FUObjectItem@Unreal@RC@@AEAAAEAPEAVUObjectBase@23@XZ"):nullptr);
     retirement_serial=reinterpret_cast<RetirementSlotSerial>(module?GetProcAddress(module,"?GetSerialNumber@FUObjectItem@Unreal@RC@@QEAAAEAHXZ"):nullptr);
+    spline_api.allocate=reinterpret_cast<SplineMalloc>(module?GetProcAddress(module,"?Malloc@FMemory@Unreal@RC@@SAPEAX_KI@Z"):nullptr);
+    spline_api.release=retirement_free;
+    spline_api.children=reinterpret_cast<SplineChildren>(module?GetProcAddress(module,"?GetChildProperties@UStruct@Unreal@RC@@QEAAAEAPEAVFField@23@XZ"):nullptr);
+    spline_api.next=reinterpret_cast<SplineNext>(module?GetProcAddress(module,"?GetNextFieldAsProperty@FField@Unreal@RC@@QEAAPEAVFProperty@23@XZ"):nullptr);
+    spline_api.inner=reinterpret_cast<SplineInner>(module?GetProcAddress(module,"?GetInner@FArrayProperty@Unreal@RC@@QEAAAEAPEAVFProperty@23@XZ"):nullptr);
+    spline_api.structure=reinterpret_cast<SplineStruct>(module?GetProcAddress(module,"?GetStruct@FStructProperty@Unreal@RC@@QEAAAEAV?$TObjectPtr@VUScriptStruct@Unreal@RC@@@23@XZ"):nullptr);
+    spline_api.size=reinterpret_cast<SplineInt>(module?GetProcAddress(module,"?GetElementSize@FProperty@Unreal@RC@@QEAAAEAHXZ"):nullptr);
+    spline_api.offset=reinterpret_cast<SplineInt>(module?GetProcAddress(module,"?GetOffset_Internal@FProperty@Unreal@RC@@QEAAAEAHXZ"):nullptr);
+    spline_api.field_name=reinterpret_cast<SplineFieldName>(module?GetProcAddress(module,"?GetFName@FField@Unreal@RC@@QEBA?AVFName@23@XZ"):nullptr);
+    spline_api.field_class=reinterpret_cast<SplineFieldClass>(module?GetProcAddress(module,"?GetClass@FField@Unreal@RC@@QEAA?AVFFieldClassVariant@23@XZ"):nullptr);
+    spline_api.variant_name=reinterpret_cast<SplineVariantName>(module?GetProcAddress(module,"?GetFName@FFieldClassVariant@Unreal@RC@@QEBA?AVFName@23@XZ"):nullptr);
     vt=reflection;game_thread=0;names.clear();signatures.clear();identities.clear();mirrors.clear();retired_drivers.clear();
-    layouts_verified=false;layout_objects.clear();hsmp_native_set_presentation(vt?&provider:nullptr);
+    layouts_verified=false;layout_objects.clear();spline_layout_verified=false;spline_layout_objects.clear();hsmp_native_set_presentation(vt?&provider:nullptr);
 }
