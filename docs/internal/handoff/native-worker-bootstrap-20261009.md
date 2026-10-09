@@ -354,3 +354,47 @@ and actor inert readbacks. Empty census still refuses. Unknown/garbage flags
 stop new actor calls/root reads; earlier cohort GetWorld checks remain an
 explicit limitation. Focused client Lua97 checks and two syntax files passed.
 Neither candidate has yet passed a fresh actual three-game run.
+
+## Actual mesh-closure revision run and bootstrap regression
+
+Exact clean ec06613e passed full G0 (74 Lua suites, 1314 Rust tests/79
+binaries, clippy zero errors/six warnings), pushed to dev and deployed with
+matching nested G0/native/binary stamps. The default actual three-game run is
+`test-results/20261009-023819-95f629-native-host`. The authority never reached
+native_ready: both controllers existed but neither had a pawn; total Willie
+was zero and compatible spawners were zero of12. Its current native Game Mode
+had changed to Hell5 instead of selected Arena1. Mesh-seeded descriptor
+capture was never exercised, so this run proves no capture regression/fix.
+
+The retained client proofs now directly establish the first two driver
+retirements. Each original LevelManager_C_1 and Spawner_C_0 changed from exact
+world membership=true and native flags2621448 to membership=false and
+flags1076363272 (including RF_MirroredGarbage), while its weak handle remained
+present. Native actor-destroying=true and root-live=false were also observed.
+This is actual matched engine retirement evidence, not inferred weak death.
+
+The exact next refusal is driver `BP_SpawnerPoint_Willies_C_1`. Its hard
+RootComponent and Blueprint DefaultSceneRoot reference the same nonnull
+native SceneComponent with garbage=false. Actor garbage was false before/
+after and its typed ActorComponent getter completed with an empty table.
+Current-world and nonPersistent facts were true; hidden readback was false,
+collision/tick false. Native world-class membership remains unobserved for
+this actor. Do not infer garbage, pooling, inactive level or successful
+suppression from those facts; the native actor iterator filters inactive
+levels whereas global FindAllOf does not establish active membership.
+
+Active input remained [0,0], with no accepted frames. All four owned process
+identities (supervisor11348, authority21596, clients28628/42792) were
+independently absent after cleanup, original saves unchanged, and crash/
+unobserved-child lists empty. The tracked tree stayed exact clean ec06613e.
+
+Own authority events explain the mode regression: selected profile was
+verified/travel dispatched at6.899/7.104s, followed by unredirected career
+GameProgress loads at7.458/7.596s. Native GameManager BeginPlay invokes GI
+Load Game (bytecode2211); GI Load Game copies saved CurrentGameMode into GI
+(statement2528). The worker omitted Director's established
+SG.seed_session_slot step, allowing the later native load to overwrite the
+profile. The next bootstrap correction must seed the diverted native profile
+after verification and before travel, then requalify original world/profile
+after the native call. Never delete saves, fabricate spawns or patch loaded
+mode fields repeatedly to conceal that initialization order.
