@@ -583,3 +583,26 @@ bind/capture guards, complete geometry, cycle/final64/wire bounds and all
 fairness tolerances remain required. This removes repeated whole-mesh work
 without treating a stale wrapper as lifetime proof. Implementation and actual
 verification remain pending.
+
+## Source identity scope candidate ready for native verification
+
+Commits bb4e87a7 and 92daec38 implement the source scope described above.
+Four game-thread-only native APIs admit, keep, resolve and close original
+scalar identities. Admission also checks the source role, current world and
+directory/entity generation. Component reads qualify slot/serial/address,
+native FName/class, garbage flags, owner/world/root/path and attachment links
+before and after obtaining fresh exact-path Lua wrappers. Serial-zero slots
+retain the checked original-name/class/address strategy; no serial is allocated.
+Unknown ancestor owners are discovered natively and admitted only within the
+original pawn/weapon owner set. No unchecked wrapper is retained across calls.
+
+Both equal render harvests retain complete mesh sets at their start and end.
+The two-owner fixture now performs four complete censuses instead of more
+than240, without changing final64-component, geometry, wire or fairness bounds.
+Focused native scope tests10, native API test1, source Lua107 genuine registered
+assertions and three Lua syntax checks passed. Thirty older standalone T.eq
+predicates were corrected into registered assertions. These results establish
+the focused contracts only; actual attachment completion, frame publication,
+client mirror acceptance and positive native player inputs remain unverified.
+The next deployment/run must use one exact clean head and two rendered native
+AI-intent clients plus one actual NullRHI game authority.
