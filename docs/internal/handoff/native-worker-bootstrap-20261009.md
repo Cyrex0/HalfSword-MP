@@ -1,6 +1,6 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build b2fc9ac7
+## Current state: 2026-10-09, latest actual build 704d0fb9
 
 The actual topology launches: one NullRHI game authority and two rendered native
 clients. The authority qualifies two human fighters on opposing native teams;
@@ -10,11 +10,14 @@ native parents).
 The production helper wiring and the client256-component resource assumption are
 fixed. No canonical scene frame or active client input has been proved yet.
 
-Current publication blocker: complete source harvest refuses
-`native vertex LOD count unavailable` on StaticMeshComponent
-`Aim Spline Scene Sphere` at16.869s. The current static asset GetNumLODs call
-needs primary native API verification. Do not guess a count or omit this component.
-No canonical scene frame or active input has been proved.
+Current publication blocker: the paired real runs prove native Sphere.Sphere
+LOD count0 under NullRHI and1 under offscreen. Offscreen advances to
+`native vertex count unavailable` on StaticMeshComponent
+`Aim Spline Scene Sphere` at19.902s. The RVP vertex-count getter has a proven
+bAllowCPUAccess gate, but the actual return/flag is not yet recorded. Do not
+guess a count, mutate that flag or omit geometry. No canonical scene frame or
+active input has been proved. Offscreen client2 also exits unexpectedly during
+travel; its own logs do not establish a cause.
 
 The reviewed direct native path witness and pure callback admission batching
 are committed, gated and deployed. Actual Aim Spline profile time falls from
@@ -944,3 +947,49 @@ renderer override. Existing startup tests establish the flags and native role;
 they do not establish actual window suppression, render-data retention or GPU
 cost. Use the same real two-client topology and unchanged acceptance checks to
 compare the two modes, rather than substituting a count or omitting geometry.
+
+## Actual paired headless modes:704d0fb9
+
+Full clean G0, dev push and deployment match
+704d0fb99257cfc49f399ad9471ff9f9c3ff2f46. The paired45-second runs retain two
+normal rendered clients, one real authority, legal input exercise, probes0 and
+the secondary display arguments. Evidence:
+`test-results/20261009-072853-6949d8-native-host` (null),
+`test-results/20261009-073030-532fbb-native-host` (offscreen), and
+`test-results/native-paired-704d0fb9.json`.
+
+NullRHI seq94 at17.766s records actual StaticMesh.GetNumLODs
+returned_type=number/returned_value=0 on original asset0x2140806C900,
+`Class /Script/Engine.StaticMesh`, `/Engine/BasicShapes/Sphere.Sphere`.
+Offscreen seq94 at19.901s records the same original asset class/path with native
+LOD count1 (address0x20193C4C900). Thus offscreen preserves data missing from the
+null mode for this asset; this is not complete mesh/renderer parity. Its next
+GetMeshComponentAmountOfVerticesOnLOD call at19.902s refuses
+`native vertex count unavailable`. Neither run publishes complete recipes or
+canonical frames, and both active input counters remain[0,0].
+
+The vertex-count API has no out parameters: pinned ObjectDump40526–40529 is hard
+MeshComponent@0, Lod IntProperty@8, ReturnValue IntProperty@0xC. The matched exec
+VA0x144A17AB0 calls helper0x144A696E0 at0x144A17B5F. Its StaticMeshComponent
+branch reads hard StaticMesh@0x560 and tests bAllowCPUAccess at asset+0x185,
+mask0x2 (pinned StaticMesh.hpp56/ObjectDump25602). A false bit returns0 at
+0x144A69A8A before vertex-count access. That is a concrete candidate; the actual
+flag and returned count remain unproved. Next typed vertex_count diagnostics
+retain the strict bounds and original asset guard, with no flag mutation,
+fallback color or omitted geometry.
+
+Offscreen client2 unexpectedly exits during travel: own events end after travel
+at11.134s and redirected save/load calls through11.480s, without a suppression,
+isolation, refusal or stopped event. Its native log contains startup registration
+only. The harness reports client2 exited before live verification, then requests
+source stop at19.923s. No own-log evidence establishes why it exited; shared
+logs must not supply attribution. Client1 reaches wait_scene and stops through
+the owned path. The attempted MainWindowHandle snapshot occurs after cleanup
+and is empty, so actual windowlessness is not proved.
+
+Both authorities stop cleanly without fallback. Both sets of four owned records
+are independently absent, all20 original save SHA256 values match in each run,
+and crash/unobserved-child lists are empty. Null PIDs32556/34320/18532/27728;
+offscreen PIDs9944/41760/2200/34456. Complete and authority-filtered native logs
+are preserved. Rendering/native color override qualification and the separate
+client2 exit remain open; no playable headless or co-op release is established.

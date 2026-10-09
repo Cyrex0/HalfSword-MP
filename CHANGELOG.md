@@ -29,6 +29,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   static-mesh LOD getter, so playable mirroring remains unverified.
 - Recheck the original static mesh asset around native LOD reads and report the
   exact getter result, asset class and path when scene capture refuses it.
+  Real paired tests prove LOD0 under no-render mode and LOD1 offscreen for one
+  engine mesh; complete vertex capture and a client travel exit remain open.
 
 ## [0.1.0-beta.6] - 2026-10-08
 
