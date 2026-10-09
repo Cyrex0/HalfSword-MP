@@ -337,10 +337,13 @@ void mesh_assignment(Obj component,Obj expected,HsmpViewText expected_path,bool 
     const auto actual=mesh_asset(component,r);if(same(actual,expected))return;
     // The path is copied from the already validated recipe. No UObject name or
     // class conversion, pointer formatting or new native query is needed here.
-    const auto path=text(expected_path);char label[81]{};const auto count=std::min(path.size(),sizeof(label)-1);
-    for(size_t i=0;i<count;++i){const auto ch=path[i];label[i]=ch>=32&&ch<127&&ch!='"'&&ch!='\\'?static_cast<char>(ch):'?';}
-    char reason[192]{};std::snprintf(reason,sizeof(reason),"mirror %s mesh assignment failed; stage=%s; actual=%s; class=SkeletalMesh; asset=%s",
-        calculator?"pose calculator":"render",stage,actual.weak?"different":"absent",label);throw Error(reason);
+    const auto path=text(expected_path);const auto separator=path.find_last_of(L"./");const auto begin=separator==std::wstring::npos?0:separator+1;
+    char label[33]{};const auto count=std::min(path.size()-begin,sizeof(label)-1);
+    for(size_t i=0;i<count;++i){const auto ch=path[begin+i];label[i]=ch>=32&&ch<127&&ch!='"'&&ch!='\\'?static_cast<char>(ch):'?';}
+    const bool address_equal=actual.address==expected.address,index_equal=static_cast<uint32_t>(actual.weak)==static_cast<uint32_t>(expected.weak);
+    const bool zero_to_nonzero=(expected.weak>>32)==0&&(actual.weak>>32)!=0;
+    char reason[192]{};std::snprintf(reason,sizeof(reason),"mirror %s mesh assignment failed; stage=%s; actual=%s; class=SkeletalMesh; address_equal=%u; index_equal=%u; zero_to_nonzero=%u; asset=%s",
+        calculator?"pose calculator":"render",stage,actual.weak?"different":"absent",address_equal?1u:0u,index_equal?1u:0u,zero_to_nonzero?1u:0u,label);throw Error(reason);
 }
 bool effective_visible(Obj component) {return bool_property(component,L"bVisible")&&!bool_property(component,L"bHiddenInGame");}
 void visibility(Obj component,bool visible,HsmpViewResult* r);

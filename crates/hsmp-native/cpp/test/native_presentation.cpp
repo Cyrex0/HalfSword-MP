@@ -922,7 +922,10 @@ void empty_checks(HsmpReflect& reflect){
 LifetimeObject pose_class{1200,&meta},pose_count_fn{1201,&function_class},pose_asset_fn{1203,&function_class};
 SkeletalObject pose_level{};
 alignas(16) std::array<EngineTransform,2> pose_calc_a{},pose_calc_b{},pose_render_a{},pose_render_b{},pose_input{};
-std::vector<uint32_t> pose_stages;bool pose_callback_replace{},pose_callback_dirty{};uint32_t pose_asset_reads{};
+std::vector<uint32_t> pose_stages;bool pose_callback_replace{},pose_callback_dirty{},pose_allocate_mesh_serial{};uint32_t pose_asset_reads{},pose_mesh_serial{};
+uint64_t pose_weak(void* p){return lifetime_weak(p)|(p==&vertex_mesh?static_cast<uint64_t>(pose_mesh_serial)<<32:0);}
+void* pose_resolve(uint64_t id){const auto index=static_cast<uint32_t>(id),serial=static_cast<uint32_t>(id>>32);auto* p=lifetime_resolve(index);
+    return serial&&(p!=&vertex_mesh||serial!=pose_mesh_serial)?nullptr:p;}
 void* pose_find(const uint16_t* key){const std::wstring path(reinterpret_cast<const wchar_t*>(key));
     if(path==L"/Script/Engine.PoseableMeshComponent")return &pose_class;
     if(path==L"/Script/Engine.SkinnedMeshComponent:GetSkinnedAsset")return &pose_asset_fn;
@@ -938,7 +941,7 @@ uint64_t pose_vtable(const void* p){if(p==&skeletal_second)return pose_image+0x7
 int32_t pose_is_a(void* object,void* type){if(object==&skeletal_second&&type==&skinned_class)return 1;return scene_is_a(object,type);}
 void pose_event(void* object,void* fn,void* params){
     if(fn==&get_level_fn){auto value=&pose_level;std::memcpy(params,&value,8);return;}
-    if(fn==&pose_asset_fn){++pose_asset_reads;uint64_t value{};std::memcpy(&value,static_cast<uint8_t*>(object)+0x558,8);if(!value)std::memcpy(&value,static_cast<uint8_t*>(object)+0x560,8);std::memcpy(params,&value,8);return;}
+    if(fn==&pose_asset_fn){++pose_asset_reads;if(pose_allocate_mesh_serial)pose_mesh_serial=9;uint64_t value{};std::memcpy(&value,static_cast<uint8_t*>(object)+0x558,8);if(!value)std::memcpy(&value,static_cast<uint8_t*>(object)+0x560,8);std::memcpy(params,&value,8);return;}
     if(fn==&pose_count_fn){const int32_t value=2;std::memcpy(params,&value,4);return;}scene_call(object,fn,params);}
 void pose_action(Obj component,uint32_t stage){
     pose_stages.push_back(stage);auto* object=reinterpret_cast<SkeletalObject*>(component.address);auto* raw=reinterpret_cast<uint8_t*>(object);
@@ -953,9 +956,9 @@ void pose_reset(HsmpReflect& reflect){
     skeletal_reset(reflect);pose_class={1200,&meta};pose_count_fn={1201,&function_class};pose_asset_fn={1203,&function_class};pose_level={};pose_level.identity={1202,&level_class};
     lifetime_objects.push_back(&pose_class);lifetime_objects.push_back(&pose_count_fn);lifetime_objects.push_back(&pose_asset_fn);lifetime_objects.push_back(&pose_level.identity);actor.outer=&pose_level.identity;
     skeletal_pointer(pose_level,0xc0,reinterpret_cast<uint64_t>(&old_world));skeletal_second.identity.cls=&pose_class;
-    reflect.find=pose_find;reflect.is_a=pose_is_a;reflect.props=pose_props;reflect.obj_prop=pose_prop;reflect.call=pose_event;source_outer=lifetime_outer;
+    reflect.find=pose_find;reflect.is_a=pose_is_a;reflect.props=pose_props;reflect.obj_prop=pose_prop;reflect.call=pose_event;reflect.weak=pose_weak;reflect.resolve=pose_resolve;source_outer=lifetime_outer;
     pose_image=scene_image;pose_build_admit=[](){return true;};scene_vtable_read=pose_vtable;pose_native_call=pose_action;
-    pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=false;pose_asset_reads=0;
+    pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=pose_allocate_mesh_serial=false;pose_asset_reads=pose_mesh_serial=0;
     for(size_t i=0;i<2;++i){Transform value{{static_cast<double>(i)+1,2,3},{0,0,0,1},{1,1,1}};pose_input[i]=engine(value);}
     for(auto* object:{&skeletal_first,&skeletal_second}){skeletal_pointer(*object,0x558,reinterpret_cast<uint64_t>(&vertex_mesh));skeletal_pointer(*object,0x560,reinterpret_cast<uint64_t>(&vertex_mesh));
         skeletal_pointer(*object,0x90,reinterpret_cast<uint64_t>(&actor));auto* p=reinterpret_cast<uint8_t*>(object);p[0x798]=0x20;p[0x88]=3;p[0xa41]=1;p[0xa52]=8;
@@ -973,9 +976,13 @@ void pose_checks(HsmpReflect& reflect){
         const auto actual=absent?0:reinterpret_cast<uint64_t>(&vertex_mesh_other);skeletal_pointer(target,0x558,actual);skeletal_pointer(target,0x560,actual);bool exact{};
         try{mesh_assignment(keep(&target),keep(&vertex_mesh),requested_path,calculator,"mesh_set",&result);}catch(const Error& e){const std::string reason=e.what();
             exact=reason.find(calculator?"mirror pose calculator mesh assignment failed":"mirror render mesh assignment failed")==0&&
-                reason.find("stage=mesh_set")!=std::string::npos&&reason.find(absent?"actual=absent":"actual=different")!=std::string::npos&&reason.find("asset=/Game/ObservedClothing.ObservedClothing")!=std::string::npos&&reason.size()<sizeof(result.reason);}
+                reason.find("stage=mesh_set")!=std::string::npos&&reason.find(absent?"actual=absent":"actual=different")!=std::string::npos&&reason.find("address_equal=0; index_equal=0; zero_to_nonzero=0")!=std::string::npos&&reason.find("asset=ObservedClothing")!=std::string::npos&&reason.size()<sizeof(result.reason);}
         check(exact,"mesh assignment refusal names the exact target and observed missing/different identity without native metadata queries");
         check(pose_asset_reads==1,"failed assignment performs one original native getter without checking the other target");}
+    pose_reset(reflect);const auto original_mesh=keep(&vertex_mesh);pose_allocate_mesh_serial=true;bool serial_detail{};
+    try{mesh_assignment(keep(&skeletal_first),original_mesh,requested_path,false,"mesh_set",&result);}catch(const Error& e){serial_detail=std::string(e.what()).find("address_equal=1; index_equal=1; zero_to_nonzero=1")!=std::string::npos;}
+    check(serial_detail,"same original address/index with newly allocated native serial is distinguished without accepting the changed weak identity");
+    check(pose_asset_reads==1,"serial mismatch diagnostic uses only the already-qualified getter result and original copied identity");
     pose_reset(reflect);auto b=binding();auto output=pose_transfer(b,&result);pose_final(b,output);
     check(pose_stages==std::vector<uint32_t>({0,1,2,3,4,5}),"native calculator refresh precedes complete transfer/finalize/children/bounds/dirty notifications");
     check(std::memcmp(output.values.data(),pose_input.data(),sizeof(pose_input))==0&&std::memcmp(pose_render_a.data(),pose_input.data(),sizeof(pose_input))==0,
