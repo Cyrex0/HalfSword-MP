@@ -33,6 +33,25 @@ checks that array first. Capture all original raw slots, including explicit null
 bounded to32, and recheck the original header, identities and null mask after
 all callbacks. Null and nonnull slots must remain in order on owned inert mirrors.
 
+Matched SetMaterial exec143451440 dispatches slot668 to143BBA450. The equality
+early return143BBA485..143BBA4A3 applies only to an existing slot. An out-of-range
+null reaches143BBA4A9, grows count to index+1 at143BBA4C5, zero-fills new slots
+143BBA4E0..143BBA4F0, then writes the requested material. Explicit trailing null
+slots can therefore be reproduced without writing raw source arrays.
+CreateDynamicMaterialInstance exec14344B170 dispatches slot688 to143BD11C0.
+Nonnull SourceMaterial first calls SetMaterial143BD11E4, then GetMaterial
+143BD11F2, creates the MID143BD1236 and assigns it143BD1249. It does not call
+GetNumMaterials, so native getter count0 does not prevent nonnull slot setup.
+
+MeshDeformerInstanceSet size20 contains DeformerInstances Array at0 with
+ObjectProperty inner8 (SDK MeshDeformerInstanceSet.hpp34; ObjectDump82134–36).
+GetMeshDeformerInstance exec143461C60 calls143C1AC60: it reads count5A0,
+then array598/element0 if positive, otherwise returns0 at143C1AC9F. The absence
+check validates that exact reflected member and inner layout and the complete
+array header. The opaque remaining16 bytes are retained only for coherence,
+without assigning meaning or defaults. bSetMeshDeformer uses its reflected,
+admitted bool mask; unrelated bits in byte580 do not become that flag.
+
 Cooked BaseModularWeapon has four assetless skeletal templates: GripSk, GuardSk,
 HeadSk and PommelSk. Its SetUpModulePartSk checks component validity but does
 not check asset validity before SetMesh/GetMaterial/SetMaterial, so a null asset
@@ -50,4 +69,23 @@ untouched; only owned presentation mirrors become inert.
 Current runtime evidence remains c87dda89: Grip39 passes empty-static proof,
 then GripSk40 refuses native skeletal asset unavailable. No actual empty skeletal
 proof, complete recipe, mirror frame or owned active input has passed yet.
-Implementation/focused verification and the next exact native scenario are pending.
+Schema/source checkpoint181cef2f passes Lua243 assertions/syntax3, source scopes32,
+raw parser8, presentation binding8 and descriptor filter12. Independent source/
+schema review is closed. Provider and direct production-path C++ verification
+pass925 assertions (all prior567 retained) and strict /W4 /WX compilation after
+the final reflected deformer-layout check. Fixture checkpoint0d62a43d exercises
+actual capture/create/material branches, source remaining untouched, owned inert
+state, complete original material provenance, late callbacks and scalar-only
+snapshot cleanup. Independent native/provider/FFI review is closed. The exact
+clean G0/deployment/native scenario remains pending.
+
+Read-only byte audit of that same actual UUID/pass1 finds39 completed component
+rows,600 bones,15 morphs and37 material slots. Three observed splines contribute
+776/1201/1201 bytes, plus one56-byte SpringArm payload. Known entity1 V3 lower
+bound is54,959 bytes before embedded core and any material parameter/texture
+payload; counting all49 closure row headers raises it to55,869. Entity2 and the
+last10 rows were not captured, and no canonical recipe JSON exists. Do not invent
+their exact size. A second entity with the observed composition would exceed the
+unchanged65,536-byte fragmented-message cap (HDR8). The next actual must preserve
+exact source/encoding refusal evidence; any fix must use bounded lossless chunks
+with atomic complete-frame verification, without dropping bones or raising caps.

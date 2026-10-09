@@ -22,13 +22,20 @@ after incomplete source capture. Latest source/manifest stayed frozen in game.
 The remaining-holder audit is complete for the current native/cooked roster:
 four BaseModularWeapon skeletal holders and generic armor holders need the
 qualified exact SkeletalMeshComponent profile. No nullable Groom is required.
-Implementation is in progress as schema6/private ABI11/capability26. Native
+Implementation is verified offline as schema6/private ABI11/capability26. Native
 asset aliases, MeshObject, both proxy links and all LOD override rows must be
 null; the complete raw material array must be retained, including explicit
 null slots. See `native-empty-skeletal-proof-20261009.md` for matched semantics.
 Focused server native filter48 passes, including old-capability refusal and
-authenticated V3 delivery. Full combined checks/deployment/native scenario wait
-for the coherent source/provider/mirror implementation and independent review.
+authenticated V3 delivery. Source/schema181cef2f passes Lua243/syntax3, scopes32,
+parser8/presentation8/descriptor12. Provider+fixture925 and strict /W4 /WX pass;
+fixture0d62a43d retains all prior567 cases and exercises real production helpers.
+Independent source/native/FFI reviews are closed. Full combined G0/deployment
+and actual scenario are next; no empty skeletal runtime gain is established yet.
+The same prior actual first entity has600 observed bones and a V3 lower bound
+54,959 bytes before core/material parameters; a second equal composition would
+exceed the unchanged64KiB message cap. Entity2/full recipe sizes are unobserved.
+Bounded lossless atomic chunking is mapped for any confirmed encoding refusal.
 
 Do not accept missing wrappers as native null, substitute geometry or drop
 components. Need current original native null/proxy/socket/pose/cloth/material
