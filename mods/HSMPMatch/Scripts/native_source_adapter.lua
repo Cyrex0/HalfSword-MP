@@ -114,7 +114,7 @@ function M.new(opts)
                 local handle,scope_reason=scope.begin(context,bindings)
                 if not handle then error(scope_reason or "native source identity scope refused",0)end
                 local ok,result=pcall(Render.capture,{read=read,guard=function()current()end,weapon=weapon,vertex_state=opts.vertex_state,
-                scope={keep=function(row)return scope.keep(handle,row)end,resolve=function(id)return scope.resolve(handle,id)end,
+                scope={keep=function(row)return scope.keep(handle,row)end,resolve=function(id,...)return scope.resolve(handle,id,...)end,
                     profile=function(id)return scope.profile(handle,id)end,
                     vertex_state=function(id)return scope.vertex_state(handle,id)end},
                 phase=function(stage,edge,detail)detail=detail or {};detail.pass=env.pass;phase(stage,edge,detail)end,

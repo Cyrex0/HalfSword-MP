@@ -736,6 +736,7 @@ impl Scope {
         e.admit()?;
         Ok(c.object.address)
     }
+    #[cfg(test)]
     fn resolve_object(
         &self,
         e: &impl Engine,
@@ -743,13 +744,27 @@ impl Scope {
         factory: impl FnOnce(u64) -> Result<(), String>,
         finish: impl FnOnce() -> Result<(), String>,
     ) -> Result<u64, String> {
+        self.resolve_return(e, handle, false, factory, finish)
+    }
+    fn resolve_return(
+        &self,
+        e: &impl Engine,
+        handle: u64,
+        address_only: bool,
+        factory: impl FnOnce(u64) -> Result<(), String>,
+        finish: impl FnOnce() -> Result<(), String>,
+    ) -> Result<u64, String> {
         let address = self.resolve(e, handle)?;
-        factory(address)?;
-        // Factory allocation, UE4SS dispatch postcallbacks and any Lua GC have
-        // completed. Never bless a freshly rebound object after these callbacks.
-        if self.resolve(e, handle)? != address {
-            return Err("source wrapper original object changed".into());
+        if !address_only {
+            factory(address)?;
+            // Factory allocation, UE4SS dispatch postcallbacks and any Lua GC
+            // have completed. Never bless a rebound object after callbacks.
+            if self.resolve(e, handle)? != address {
+                return Err("source wrapper original object changed".into());
+            }
         }
+        // Scalar validation still needs the same original path/hard-link and
+        // admission tail; it skips only construction and its postcallbacks.
         finish()?;
         Ok(address)
     }
@@ -1253,6 +1268,16 @@ fn capture_static_vertex_state(
     final_check()?;
     Ok(last)
 }
+unsafe fn resolve_address_only(L: *mut lua_State) -> Result<bool, String> {
+    unsafe {
+        match lua_gettop(L) {
+            2 => Ok(false),
+            3 if lua_type(L, 3) == LUA_TBOOLEAN => Ok(lua_toboolean(L, 3) != 0),
+            _ => Err("source scope resolve mode must be an optional boolean".into()),
+        }
+    }
+}
+
 impl Native {
     pub unsafe fn source_scope_vertex_state(&mut self, L: *mut lua_State) -> c_int {
         let result: Result<StaticVertexState, String> = (|| unsafe {
@@ -1610,6 +1635,7 @@ impl Native {
         let result = (|| unsafe {
             let id = arg_int(L, 1).ok_or("source scope id")? as u64;
             let handle = arg_int(L, 2).ok_or("source scope handle")? as u64;
+            let address_only = resolve_address_only(L)?;
             // Release STATE before any engine getter or protected Lua call.
             // A reentrant begin/end cannot borrow through this operation or
             // overwrite its original scope; the sequence is checked at restore.
@@ -1622,11 +1648,12 @@ impl Native {
             let vt = reflect::vt().ok_or("source scope reflection")?;
             let e = runtime(self, vt, exports()?, &scope);
             e.admit()?;
-            let factory = object_factory()?;
-            scope.resolve_object(
+            let address = scope.resolve_return(
                 &e,
                 handle,
+                address_only,
                 |address| {
+                    let factory = object_factory()?;
                     // Scalar push is nonallocating. The C++ protected factory
                     // adds the fresh userdata after it, preserving return order.
                     lua_pushinteger(L, address as i64);
@@ -1673,11 +1700,14 @@ impl Native {
                 state.scope = Some(scope);
                 Ok::<_, String>(())
             })?;
-            Ok::<_, String>(())
+            if address_only {
+                lua_pushinteger(L, address as i64);
+            }
+            Ok::<_, String>(if address_only { 1 } else { 2 })
         })();
         unsafe {
             match result {
-                Ok(()) => 2,
+                Ok(count) => count,
                 Err(reason) => {
                     STATE.with(|s| s.borrow_mut().scope = None);
                     lua_settop(L, top);
@@ -2097,6 +2127,153 @@ mod source_scope_tests {
         assert_eq!(s.components[0].parent.unwrap().object.address, 4);
     }
     #[test]
+    fn source_scope_address_only_mode_is_explicit_and_does_not_change_lua_stack() {
+        unsafe {
+            let L: *mut lua_State = mlua::ffi::luaL_newstate().cast();
+            assert!(!L.is_null());
+            lua_pushinteger(L, 1);
+            lua_pushinteger(L, 2);
+            assert!(!resolve_address_only(L).unwrap());
+            for mode in [false, true] {
+                lua_settop(L, 2);
+                lua_pushboolean(L, i32::from(mode));
+                assert_eq!(resolve_address_only(L).unwrap(), mode);
+                assert_eq!(lua_gettop(L), 3);
+            }
+            lua_settop(L, 2);
+            lua_pushnil(L);
+            assert!(resolve_address_only(L).is_err());
+            lua_settop(L, 2);
+            lua_pushinteger(L, 1);
+            assert!(resolve_address_only(L).is_err());
+            lua_settop(L, 2);
+            lua_pushboolean(L, 1);
+            lua_pushnil(L);
+            assert!(resolve_address_only(L).is_err());
+            assert_eq!(lua_gettop(L), 4);
+            mlua::ffi::lua_close(L.cast());
+        }
+    }
+    #[test]
+    fn source_scope_address_only_keeps_full_owner_proof_and_same_pure_tail_without_factory() {
+        for address_only in [false, true] {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            let h = s.keep(&e, 7, 5, path).unwrap();
+            let before = *e.owner_calls.borrow();
+            let factories = std::cell::Cell::new(0);
+            let tails = std::cell::Cell::new(0);
+            assert_eq!(
+                s.resolve_return(
+                    &e,
+                    h,
+                    address_only,
+                    |address| {
+                        assert_eq!(address, 7);
+                        factories.set(factories.get() + 1);
+                        Ok(())
+                    },
+                    || {
+                        e.admit()?;
+                        s.pure_hard_links(&e, h)?;
+                        e.admit()?;
+                        tails.set(tails.get() + 1);
+                        Ok(())
+                    }
+                )
+                .unwrap(),
+                7
+            );
+            assert_eq!(factories.get(), u32::from(!address_only));
+            assert_eq!(tails.get(), 1);
+            assert_eq!(
+                *e.owner_calls.borrow() - before,
+                if address_only { 4 } else { 8 }
+            );
+        }
+    }
+    #[test]
+    fn source_scope_address_only_refuses_original_identity_and_link_replacement() {
+        for mutation in 0..10 {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            let h = s.keep(&e, 7, 5, path).unwrap();
+            match mutation {
+                0 => e.change(7, |r| r.id.weak += 1),
+                1 => e.change(7, |r| r.id.name += 1),
+                2 => e.change(7, |r| r.id.class_address += 1),
+                3 => e.change(7, |r| r.flags |= GARBAGE),
+                4 => e.change(7, |r| r.path.push_str("_new")),
+                5 => e.change(7, |r| r.world = 99),
+                6 => e.change(7, |r| r.owner = 2),
+                7 => e.change(7, |r| r.parent = 6),
+                8 => e.change(5, |r| r.root = 4),
+                9 => e.change(4, |r| r.id.name += 1),
+                _ => unreachable!(),
+            }
+            assert!(
+                s.resolve_return(
+                    &e,
+                    h,
+                    true,
+                    |_| panic!("scalar factory"),
+                    || panic!("invalid original tail")
+                )
+                .is_err()
+            );
+        }
+    }
+    #[test]
+    fn source_scope_address_only_refuses_generation_changes_during_native_getters() {
+        for owner_callback in [false, true] {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            let h = s.keep(&e, 7, 5, path).unwrap();
+            if owner_callback {
+                e.generation_on_owner.set(*e.owner_calls.borrow() + 1);
+            } else {
+                e.generation_on_world.set(e.world_calls.get() + 1);
+            }
+            assert!(
+                s.resolve_return(
+                    &e,
+                    h,
+                    true,
+                    |_| panic!("scalar factory"),
+                    || panic!("changed generation tail")
+                )
+                .is_err()
+            );
+        }
+    }
+    #[test]
+    fn source_scope_address_only_final_pure_tail_cannot_accept_later_link_or_generation_changes() {
+        for generation in [false, true] {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            let h = s.keep(&e, 7, 5, path).unwrap();
+            assert!(
+                s.resolve_return(
+                    &e,
+                    h,
+                    true,
+                    |_| panic!("scalar factory"),
+                    || {
+                        if generation {
+                            e.generation_changed.set(true);
+                        } else {
+                            e.change(7, |r| r.parent = 6);
+                        }
+                        e.admit()?;
+                        s.pure_hard_links(&e, h)?;
+                        e.admit()
+                    }
+                )
+                .is_err()
+            );
+        }
+    }
+    #[test]
     fn source_scope_fresh_factory_preserves_original_address_and_rechecks_after_callbacks() {
         let (mut s, e) = fixture();
         let path = e.rows.borrow()[&7].path.clone();
@@ -2167,23 +2344,25 @@ mod source_scope_tests {
         let (mut s, e) = fixture();
         let path = e.rows.borrow()[&7].path.clone();
         let h = s.keep(&e, 7, 5, path).unwrap();
-        assert!(s
-            .resolve_object(
+        assert!(
+            s.resolve_object(
                 &e,
                 h,
                 |_| Err("factory refused".into()),
                 || panic!("failed factory cannot finish")
             )
-            .is_err());
+            .is_err()
+        );
         e.change(7, |r| r.flags |= GARBAGE);
-        assert!(s
-            .resolve_object(
+        assert!(
+            s.resolve_object(
                 &e,
                 h,
                 |_| panic!("retired original cannot construct"),
                 || panic!("retired original cannot finish")
             )
-            .is_err());
+            .is_err()
+        );
     }
     #[test]
     fn source_scope_fresh_factory_final_generation_admission_is_required() {
@@ -2191,8 +2370,8 @@ mod source_scope_tests {
         let path = e.rows.borrow()[&7].path.clone();
         let h = s.keep(&e, 7, 5, path).unwrap();
         let generation = std::cell::Cell::new(s.dir_seq);
-        assert!(s
-            .resolve_object(
+        assert!(
+            s.resolve_object(
                 &e,
                 h,
                 |_| {
@@ -2208,7 +2387,8 @@ mod source_scope_tests {
                     }
                 }
             )
-            .is_err());
+            .is_err()
+        );
     }
     #[test]
     fn source_scope_callback_generation_changes_refuse_before_next_callback_or_factory() {
@@ -2223,14 +2403,15 @@ mod source_scope_tests {
             } else {
                 e.generation_on_world.set(1);
             }
-            assert!(s
-                .resolve_object(
+            assert!(
+                s.resolve_object(
                     &e,
                     h,
                     |_| panic!("changed callback generation cannot construct"),
                     || panic!("changed callback generation cannot return")
                 )
-                .is_err());
+                .is_err()
+            );
             assert_eq!(
                 *e.owner_calls.borrow() - owner_before,
                 u32::from(owner_callback)
@@ -2243,8 +2424,8 @@ mod source_scope_tests {
         let path = e.rows.borrow()[&7].path.clone();
         let h = s.keep(&e, 7, 5, path).unwrap();
         let worlds = std::cell::Cell::new(0);
-        assert!(s
-            .resolve_object(
+        assert!(
+            s.resolve_object(
                 &e,
                 h,
                 |_| {
@@ -2254,7 +2435,8 @@ mod source_scope_tests {
                 },
                 || panic!("changed factory generation cannot return")
             )
-            .is_err());
+            .is_err()
+        );
         assert_eq!(
             e.world_calls.get(),
             worlds.get(),
@@ -2344,15 +2526,17 @@ mod source_scope_tests {
             .no_override
         );
         for (count, state) in [(0, 0), (17, 1), (17, 0), (1, 2), (0, u32::MAX)] {
-            assert!(checked_vertex_state(VertexStateProof {
-                material_count: 0,
-                material_null_mask: 0,
-                component_kind: 1,
-                lod_info_count: count,
-                no_override: state,
-                asset_present: 1,
-            })
-            .is_err());
+            assert!(
+                checked_vertex_state(VertexStateProof {
+                    material_count: 0,
+                    material_null_mask: 0,
+                    component_kind: 1,
+                    lod_info_count: count,
+                    no_override: state,
+                    asset_present: 1,
+                })
+                .is_err()
+            );
         }
     }
     #[test]
@@ -2433,15 +2617,17 @@ mod source_scope_tests {
             (0, 0, 0, 1, 1),
             (0, 0, 0, 0, 0),
         ] {
-            assert!(checked_vertex_state(VertexStateProof {
-                lod_info_count: 1,
-                no_override,
-                asset_present: present,
-                material_count: count,
-                material_null_mask: mask,
-                component_kind: kind,
-            })
-            .is_err());
+            assert!(
+                checked_vertex_state(VertexStateProof {
+                    lod_info_count: 1,
+                    no_override,
+                    asset_present: present,
+                    material_count: count,
+                    material_null_mask: mask,
+                    component_kind: kind,
+                })
+                .is_err()
+            );
         }
     }
     #[test]
@@ -3398,9 +3584,10 @@ mod source_scope_tests {
             PATH_CALLBACK_COUNT.with(|p| p.set(0));
             let _trace = ProfileOperation::begin(e.reference, e.dir_seq, 1);
             let pure = ProfileGuardEngine { runtime: e };
-            assert!(pure
-                .path_matches(id, "initial exact path", Some(&witness))
-                .unwrap());
+            assert!(
+                pure.path_matches(id, "initial exact path", Some(&witness))
+                    .unwrap()
+            );
             assert_eq!(
                 PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.finds),
                 0
@@ -3412,9 +3599,10 @@ mod source_scope_tests {
             let mut changed = witness.clone();
             changed.nodes[0].address += 1;
             let calls = PATH_CALLBACK_COUNT.with(|p| p.get());
-            assert!(pure
-                .path_matches(id, "ignored text", Some(&changed))
-                .is_err());
+            assert!(
+                pure.path_matches(id, "ignored text", Some(&changed))
+                    .is_err()
+            );
             assert_eq!(
                 PATH_CALLBACK_COUNT.with(|p| p.get()),
                 calls,
@@ -3422,9 +3610,10 @@ mod source_scope_tests {
             );
             changed = witness.clone();
             changed.package_name ^= 1;
-            assert!(pure
-                .path_matches(id, "ignored text", Some(&changed))
-                .is_err());
+            assert!(
+                pure.path_matches(id, "ignored text", Some(&changed))
+                    .is_err()
+            );
             assert!(pure.path_matches(id, "ignored text", None).is_err());
             PATH_CALLBACK_GARBAGE.with(|p| p.set(true));
             assert!(
@@ -3493,14 +3682,16 @@ mod source_scope_tests {
                 schema: engine.schema.clone(),
             };
             NAME_READS.with(|reads| reads.set(0));
-            assert!(capture_static_vertex_state(
-                &scope,
-                engine,
-                1,
-                || { panic!("unadmitted client cannot receive a native asset proof") },
-                || panic!("unadmitted client cannot finish a native asset proof")
-            )
-            .is_err());
+            assert!(
+                capture_static_vertex_state(
+                    &scope,
+                    engine,
+                    1,
+                    || { panic!("unadmitted client cannot receive a native asset proof") },
+                    || panic!("unadmitted client cannot finish a native asset proof")
+                )
+                .is_err()
+            );
             assert_eq!(NAME_READS.with(|reads| reads.get()), 0);
         });
     }

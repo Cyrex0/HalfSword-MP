@@ -919,6 +919,70 @@ void empty_checks(HsmpReflect& reflect){
     vertex_empty_build_admit=vertex_empty_shipping_build;vertex_empty_vtable_read=vertex_empty_vtable;vertex_empty_image=0;vertex_empty=false;
     scene_owner={};scene_component={};active_scene_kind=0;vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
 }
+LifetimeObject pose_class{1200,&meta},pose_count_fn{1201,&function_class};
+SkeletalObject pose_level{};
+alignas(16) std::array<EngineTransform,2> pose_calc_a{},pose_calc_b{},pose_render_a{},pose_render_b{},pose_input{};
+std::vector<uint32_t> pose_stages;bool pose_callback_replace{},pose_callback_dirty{};
+void* pose_find(const uint16_t* key){const std::wstring path(reinterpret_cast<const wchar_t*>(key));
+    if(path==L"/Script/Engine.PoseableMeshComponent")return &pose_class;
+    if(path==L"/Script/Engine.SkinnedMeshComponent:GetNumBones")return &pose_count_fn;return scene_find(key);}
+int32_t pose_props(void* object,HsmpProp* out,int32_t cap,int32_t* bytes){
+    if(object==&pose_class){*bytes=0xa20;return 0;}
+    if(object==&pose_count_fn){*bytes=4;if(cap){out[0]=scene_field(L"ReturnValue",L"IntProperty",4,0);return 1;}return -1;}
+    return scene_props(object,out,cap,bytes);}
+int32_t pose_prop(void* object,const uint16_t* key,HsmpProp* out){
+    if(object==&pose_level&&std::wstring(reinterpret_cast<const wchar_t*>(key))==L"OwningWorld"){*out=object_field(L"OwningWorld",0xc0);return 1;}return scene_prop(object,key,out);}
+uint64_t pose_vtable(const void* p){if(p==&skeletal_second)return pose_image+0x7646b38;return scene_fixture_vtable(p);}
+int32_t pose_is_a(void* object,void* type){if(object==&skeletal_second&&type==&skinned_class)return 1;return scene_is_a(object,type);}
+void pose_event(void* object,void* fn,void* params){
+    if(fn==&get_level_fn){auto value=&pose_level;std::memcpy(params,&value,8);return;}
+    if(fn==&pose_count_fn){const int32_t value=2;std::memcpy(params,&value,4);return;}scene_call(object,fn,params);}
+void pose_action(Obj component,uint32_t stage){
+    pose_stages.push_back(stage);auto* object=reinterpret_cast<SkeletalObject*>(component.address);auto* raw=reinterpret_cast<uint8_t*>(object);
+    if(stage==0){auto buffers=pose_buffers(object,2);std::memcpy(buffers.arrays[buffers.editable].data,pose_input.data(),sizeof(pose_input));
+        const auto old=buffers.editable;std::memcpy(raw+0x610,&old,4);const int32_t next=1-old;std::memcpy(raw+0x60c,&next,4);raw[0x798]&=static_cast<uint8_t>(~0x40u);}
+    if(stage==1){check((raw[0x798]&0x40)!=0,"production transfer marks native needs-flip before finalize");
+        auto buffers=pose_buffers(object,2);std::memcpy(raw+0x610,&buffers.editable,4);std::memcpy(raw+0x60c,&buffers.read,4);raw[0x798]&=static_cast<uint8_t>(~0x40u);}
+    if(stage==5&&pose_callback_replace)skeletal_pointer(skeletal_first,0x558,reinterpret_cast<uint64_t>(&vertex_mesh_other));
+    if(stage==5&&pose_callback_dirty)raw[0x798]|=0x40;
+}
+void pose_reset(HsmpReflect& reflect){
+    skeletal_reset(reflect);pose_class={1200,&meta};pose_count_fn={1201,&function_class};pose_level={};pose_level.identity={1202,&level_class};
+    lifetime_objects.push_back(&pose_class);lifetime_objects.push_back(&pose_count_fn);lifetime_objects.push_back(&pose_level.identity);actor.outer=&pose_level.identity;
+    skeletal_pointer(pose_level,0xc0,reinterpret_cast<uint64_t>(&old_world));skeletal_second.identity.cls=&pose_class;
+    reflect.find=pose_find;reflect.is_a=pose_is_a;reflect.props=pose_props;reflect.obj_prop=pose_prop;reflect.call=pose_event;source_outer=lifetime_outer;
+    pose_image=scene_image;pose_build_admit=[](){return true;};scene_vtable_read=pose_vtable;pose_native_call=pose_action;
+    pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=false;
+    for(size_t i=0;i<2;++i){Transform value{{static_cast<double>(i)+1,2,3},{0,0,0,1},{1,1,1}};pose_input[i]=engine(value);}
+    for(auto* object:{&skeletal_first,&skeletal_second}){skeletal_pointer(*object,0x558,reinterpret_cast<uint64_t>(&vertex_mesh));skeletal_pointer(*object,0x560,reinterpret_cast<uint64_t>(&vertex_mesh));
+        skeletal_pointer(*object,0x90,reinterpret_cast<uint64_t>(&actor));auto* p=reinterpret_cast<uint8_t*>(object);p[0x798]=0x20;p[0x88]=3;p[0xa41]=1;p[0xa42]=4;
+        const int32_t editable=0,read_index=1;std::memcpy(p+0x60c,&editable,4);std::memcpy(p+0x610,&read_index,4);}
+    skeletal_array(skeletal_second,0x5c8,{pose_calc_a.data(),2,2});skeletal_array(skeletal_second,0x5d8,{pose_calc_b.data(),2,2});
+    skeletal_array(skeletal_second,0x8b8,{pose_input.data(),2,2});
+    skeletal_array(skeletal_first,0x5c8,{pose_render_a.data(),2,2});skeletal_array(skeletal_first,0x5d8,{pose_render_b.data(),2,2});
+}
+void pose_checks(HsmpReflect& reflect){
+    HsmpViewResult result{};const auto binding=[&](){return pose_bind(keep(&old_world),keep(&actor),keep(&skeletal_second),keep(&skeletal_first),keep(&vertex_mesh),2,&result);};
+    pose_reset(reflect);auto b=binding();auto output=pose_transfer(b,&result);pose_final(b,output);
+    check(pose_stages==std::vector<uint32_t>({0,1,2,3,4,5}),"native calculator refresh precedes complete transfer/finalize/children/bounds/dirty notifications");
+    check(std::memcmp(output.values.data(),pose_input.data(),sizeof(pose_input))==0&&std::memcmp(pose_render_a.data(),pose_input.data(),sizeof(pose_input))==0,
+        "production pose transfer preserves every complete component-space transform");
+    check(pose_render_b[0].p[0]==0&&reinterpret_cast<uint8_t*>(&skeletal_first)[0x3b]==0,"previous engine read allocation and inert tick remain intact");
+    for(int fault=0;fault<4;++fault){pose_reset(reflect);b=binding();if(fault==0){const int32_t index=1;std::memcpy(reinterpret_cast<uint8_t*>(&skeletal_first)+0x60c,&index,4);}
+        else if(fault==1)skeletal_array(skeletal_first,0x5c8,{pose_render_b.data(),2,2});else if(fault==2)skeletal_array(skeletal_first,0x5c8,{pose_render_a.data(),1,2});
+        else skeletal_array(skeletal_first,0x5c8,{pose_calc_a.data(),2,2});
+        rejects([&]{pose_transfer(b,&result);},"aliased indices/storage or incomplete native pose buffers refuse without resizing");}
+    pose_reset(reflect);b=binding();pose_callback_replace=true;rejects([&]{pose_transfer(b,&result);},"native notification callback cannot replace original render asset");
+    pose_reset(reflect);b=binding();skeletal_array(skeletal_second,0x8b8,{pose_input.data(),1,2});
+    rejects([&]{pose_transfer(b,&result);},"native calculator refresh refuses an incomplete local buffer before dispatch");check(pose_stages.empty(),"unproved local buffer never enters native refresh");
+    pose_reset(reflect);b=binding();output=pose_transfer(b,&result);reinterpret_cast<uint8_t*>(&skeletal_first)[0x798]|=0x40;
+    rejects([&]{pose_final(b,output);},"later component callback cannot leave a new unpublished pose dirty");
+    pose_reset(reflect);b=binding();output=pose_transfer(b,&result);reinterpret_cast<uint8_t*>(&skeletal_first)[0x8a]|=8;
+    rejects([&]{pose_final(b,output);},"later callback cannot activate the owned skeletal renderer");
+    pose_reset(reflect);b=binding();output=pose_transfer(b,&result);skeletal_pointer(skeletal_first,0x568,UINT32_MAX);pose_final(b,output);
+    check(pose_null_leader(0)&&pose_null_leader(UINT32_MAX)&&!pose_null_leader(uint64_t{1}<<32),"native ctor/reset NULL weak forms refuse a live leader serial");
+    pose_build_admit=pose_shipping_build;pose_native_call=pose_native;pose_image=0;scene_vtable_read=scene_vtable;lifetime_reset(reflect);
+}
 }
 int main() {
     try {
@@ -1119,6 +1183,7 @@ int main() {
         scene_checks(reflect);
         empty_checks(reflect);
         skeletal_checks(reflect);
+        pose_checks(reflect);
         create_trace_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}

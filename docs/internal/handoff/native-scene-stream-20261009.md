@@ -1,5 +1,28 @@
 # Native full-scene encoding checkpoint
 
+## Replacement and startup checkpoint under verification
+
+The source scalar tail is implemented in four files and independently reviewed:
+explicit optional boolean mode retains complete Scope.resolve and the same final
+pure path/hard-link/admission closure, releases STATE before callbacks and restores
+only its original sequence. Default fresh pre-getter userdata remains unchanged.
+Only discarded post-getter wrappers are omitted. Rust44/Lua317/syntax3 pass;
+actual startup improvement is not yet measured.
+
+Native pose replacement keeps the hidden Poseable calculator unlinked from the
+visible Skeletal renderer. Preserve ComponentSpace enums (socket2/setter1).
+Pinned Poseable AB0 refresh publishes its complete engine-calculated CS buffer;
+copy all elements into the renderer's existing editable buffer, set the native
+publication bit, call Skeletal AF0/finalizer and native bounds/render/transform
+notifications. No engine array allocation/resize, leader spoof, fallback pose,
+wire change or removed bone/morph/material/hidden readback. Component ticks are
+explicitly disabled. Original class/asset/world/owner, buffer allocation and
+publication/inert state are checked around calls and after the whole batch.
+Strict actual provider object compilation and952 focused native assertions pass;
+independent final review is closed. Primary native proof/ASM is retained under
+191021-69d625/creation-pose-transfer-proof.md with the original image SHA256.
+An exact deployment/game run remains pending; no native rendering parity claim.
+
 ## Reactive loading follow-up
 
 User reports asset counts briefly visible and the bar completing before exit.

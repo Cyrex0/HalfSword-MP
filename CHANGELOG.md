@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Replace the unsupported skeletal-to-poseable leader link with complete native
+  pose-buffer publication; actual model and gameplay verification remains pending.
+- Skip discarded post-getter object wrappers while preserving the complete native
+  identity and final closure checks used during scene preparation.
 - Make native loading visibly active with real elapsed time and immediate asset
   counts; distinguish asset preparation from player-model creation.
 - Add bounded native model-creation checkpoints to identify engine-call failures

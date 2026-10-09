@@ -379,7 +379,7 @@ local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapo
 -- Offline original-identity protocol mock. Native slot/flag/class semantics are
 -- tested independently in Rust; this validates the production Lua call shape.
 local scope_rows,scope_keeps,scope_duplicate_keeps={},0,0
-local wrapper_state={revision=0,stale_reads=0,count=0,generation=1}
+local wrapper_state={revision=0,stale_reads=0,count=0,scalar_count=0,generation=1}
 local function fresh_wrapper(o)
     wrapper_state.revision=wrapper_state.revision+1;wrapper_state.count=wrapper_state.count+1
     local revision=wrapper_state.revision
@@ -413,9 +413,15 @@ render_env.scope={keep=function(row)
         return i,s.owner
     end end
     scope_rows[#scope_rows+1]=s;return #scope_rows,s.owner
-end,resolve=function(handle)
+end,resolve=function(handle,address_only)
     local s=scope_rows[handle];local o=s and runtime_objects[s.path]
     if not s or not o or not T.eq(snapshot(o),s)then return nil,"original native identity/link changed"end
+    if address_only==true then
+        wrapper_state.scalar_count=wrapper_state.scalar_count+1
+        if wrapper_state.scalar_tail then wrapper_state.scalar_tail(o,handle)end
+        if not scope or not T.eq(snapshot(o),s)then return nil,"original native identity changed during scalar tail"end
+        return s.address
+    end
     local wrapper=fresh_wrapper(o)
     if wrapper_state.factory then wrapper=wrapper_state.factory(wrapper,o,handle)end
     if not scope or not T.eq(snapshot(o),s)then return nil,"original native identity changed during wrapper construction"end
@@ -463,11 +469,28 @@ T.check(scope_keeps==#rendered.components and scope_duplicate_keeps==0,
         return saved_find(p)
     end
     render_phases={}
+    local before_wrappers,before_scalars=wrapper_state.count,wrapper_state.scalar_count
     local copied=Render.capture(render_env,native_bindings)
+    local current_stats=render_phases[#render_phases].detail
+    local actual_wrappers=wrapper_state.count-before_wrappers
+    local actual_scalars=wrapper_state.scalar_count-before_scalars
     T.check(searches==0 and D.signature(copied)==D.signature(rendered),
         "fresh native wrappers remove hot original-component searches while preserving every captured field/binding byte")
-    T.check(wrapper_state.stale_reads==0 and wrapper_state.count>render_stats.qualifications,
-        "each resolution supplies another wrapper and the complete production collector never touches one after another resolution")
+    T.check(wrapper_state.stale_reads==0 and actual_scalars==current_stats.component_reads,
+        "every actual component getter retains fresh pre-read wrapper and scalar post-read validation without stale-wrapper reads")
+    local saved_resolve=render_env.scope.resolve
+    render_env.scope.resolve=function(id,address_only)
+        if address_only==true then return saved_resolve(id)end -- Offline prior factory path; same complete fields.
+        return saved_resolve(id,address_only)
+    end
+    before_wrappers=wrapper_state.count
+    local previous=Render.capture(render_env,native_bindings)
+    T.check(D.signature(previous)==D.signature(copied)and wrapper_state.count-before_wrappers-actual_wrappers==current_stats.component_reads,
+        "scalar post-read validation removes exactly one discarded factory per getter without omitting any field or binding")
+    T.check(render_phases[#render_phases].detail.mesh_census_calls==current_stats.mesh_census_calls
+        and render_phases[#render_phases].detail.qualifications==current_stats.qualifications,
+        "scalar tail preserves complete boundary censuses and every qualification occurrence")
+    render_env.scope.resolve=saved_resolve
     StaticFindObject=saved_find;render_env.scope.keep=saved_keep;render_env.phase=saved_phase;render_phases=saved_phases
     local handle=1
     local _,first=render_env.scope.resolve(handle)
@@ -475,7 +498,8 @@ T.check(scope_keeps==#rendered.components and scope_duplicate_keeps==0,
     T.check(first~=second and not pcall(function()return first:GetAddress()end),
         "offline wrapper trap detects retained-wrapper reads rather than disguising cached objects")
     wrapper_state.stale_reads=0
-    local saved_resolve=render_env.scope.resolve
+    render_phases={} -- Negative captures must not append into the original trace-bound fixture.
+    saved_resolve=render_env.scope.resolve
     for _,value in ipairs({false,true,17,{GetAddress=function()return 999 end}})do
         render_env.scope.resolve=function(id)local address=saved_resolve(id);return address,value end
         T.check(not pcall(Render.capture,render_env,native_bindings),"missing/wrong native wrapper cannot fall back to a runtime search")
@@ -483,6 +507,18 @@ T.check(scope_keeps==#rendered.components and scope_duplicate_keeps==0,
     render_env.scope.resolve=function(id)local address=saved_resolve(id);return address end
     T.check(not pcall(Render.capture,render_env,native_bindings),"legacy scalar-only resolve explicitly refuses unsupported wrapper construction")
     render_env.scope.resolve=saved_resolve
+    local original_count,original_name=body.GetNumBones,body.GetFName
+    body.GetNumBones=function()
+        local before=body:GetFName();body.GetFName=function()return fname(before.value,before.number+1)end
+        return original_count()
+    end
+    T.check(not pcall(Render.capture,render_env,native_bindings),
+        "getter-side same-address full-FName change refuses in scalar post-read validation")
+    body.GetNumBones=original_count;body.GetFName=original_name
+    local generation=wrapper_state.generation
+    wrapper_state.scalar_tail=function()wrapper_state.generation=wrapper_state.generation+1 end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"final scalar-tail generation mutation cannot return admitted data")
+    wrapper_state.scalar_tail=nil;wrapper_state.generation=generation
     for _,change in ipairs({"name_number","class","path","owner","parent","garbage","world","generation","gc"})do
         local changed,old={},{}
         local original_generation=wrapper_state.generation
@@ -978,17 +1014,20 @@ local adapter_scope={begin=function(meta,b)
     if meta~=phase_context or b.pawn~=10 or b.world~=1 or b.controller~=9 or b.index~=0 then return nil,"exact scope metadata lost"end
     return 101
 end,keep=function(id,row)if id~=101 then return nil,"scope id changed"end;native_scope_keeps=native_scope_keeps+1;return render_env.scope.keep(row)end,
-    resolve=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.resolve(row)end,
+    resolve=function(id,row,...)if id~=101 then return nil,"scope id changed"end;return render_env.scope.resolve(row,...)end,
     profile=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.profile(row)end,
     vertex_state=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.vertex_state(row)end,
     finish=function(id)native_scope_ends=native_scope_ends+1;return id==101 end}
 local real_adapter=Adapter.new({WG=WG,source_scope=adapter_scope,
     resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Pawn",pawn=host,world=render_world}end})
+wrapper_state.adapter_scalars=wrapper_state.scalar_count
 local captured_real,real_reason=real_adapter.capture(0,phase_context)
 T.check(captured_real~=nil and native_scope_begins==2 and native_scope_ends==2,
     "production source adapter begins/ends original native scope for both equal full harvests: "..tostring(real_reason))
 T.check(captured_real and native_scope_keeps==2*#captured_real.components,
     "both complete production adapter harvests initialize each native component exactly once despite repeated roots/parents")
+T.check(captured_real and wrapper_state.scalar_count>wrapper_state.adapter_scalars,
+    "production source adapter forwards the explicit scalar mode across both complete equal harvests")
 local native_count=body.GetNumBones
 body.GetNumBones=function()error("fixture source getter failed",0)end
 T.check(real_adapter.capture(0,phase_context)==nil and native_scope_begins==3 and native_scope_ends==3,

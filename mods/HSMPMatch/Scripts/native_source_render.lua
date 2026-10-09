@@ -158,6 +158,14 @@ function M.capture(env,bindings)
     local function component(row)
         return qualify(nil,row)
     end
+    local function validate(row)
+        stats.qualifications=stats.qualifications+1
+        if not row.handle then fail("native source original component handle unavailable")end
+        -- The native scalar mode keeps the full original resolve and final
+        -- pure closure. No wrapper is needed after the actual getter returns.
+        local address,reason=env.scope.resolve(row.handle,true)
+        if address~=row.address then fail(type(reason)=="string"and reason or "native source original component changed")end
+    end
     local function original_row(c,identity)
         local recorded=by_address[identity.address]
         if not recorded then qualify(c,identity);return identity end
@@ -176,7 +184,7 @@ function M.capture(env,bindings)
     end
     local function get(row,fn)
         stats.component_reads=stats.component_reads+1
-        guard();local c=component(row);local value=fn(c);c=nil;guard();component(row);return value
+        guard();local c=component(row);local value=fn(c);c=nil;guard();validate(row);return value
     end
     local function spring_arm_evidence(row)
         local draw=get(row,function(o)return o.bDrawDebugLagMarkers end)

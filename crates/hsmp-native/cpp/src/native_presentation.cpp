@@ -30,6 +30,8 @@ using NamePrivate = const uint64_t*(*)(const void*);
 NamePrivate object_name{};
 using GetWorld = void*(*)(const void*);
 GetWorld object_world{};
+using SourceOuter=const void* const*(*)(const void*);
+SourceOuter source_outer{};
 struct Identity {uint64_t address{},name{},class_weak{},class_address{};};
 std::map<uint64_t,Identity> identities;
 struct Error : std::runtime_error { using std::runtime_error::runtime_error; };
@@ -338,6 +340,7 @@ void collision_off(Obj component,HsmpViewResult* r);
 #include "native_vertex_state_impl.h"
 bool close(const Transform&,const Transform&);
 #include "native_scene_impl.h"
+#include "native_pose_impl.h"
 void scene_anchor(Obj component) {
     const auto cls=keep(vt->class_of(get(component)));
     if(same(cls,find(L"/Script/Engine.CameraComponent"))){scene_profile(component,6);return;}
@@ -592,7 +595,7 @@ void finish_component(Obj actor,Obj component,const Transform& relative,HsmpView
     Function f(L"/Script/Engine.Actor:FinishAddComponent");f.object(L"Component",component);f.boolean(L"bManualAttachment",true);
     f.put(L"RelativeTransform",L"StructProperty",engine(relative),L"Transform");f.call(actor,r);collision_off(component,r);
 }
-struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};std::wstring arm_socket;HsmpViewSpringArmFrame arm{};};
+struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};std::wstring arm_socket;HsmpViewSpringArmFrame arm{};std::optional<PoseBinding> pose;};
 struct Mirror {Obj world{},actor{};std::vector<Part> parts;};
 void forget_owned_materials(Obj actor){
     for(auto it=vertex_source_materials.begin();it!=vertex_source_materials.end();){
@@ -665,14 +668,16 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
                 Function anim(L"/Script/Engine.SkeletalMeshComponent:SetAnimClass");anim.object(L"NewClass",{},true);anim.call(part.render,r);
                 Function set_mesh(L"/Script/Engine.SkeletalMeshComponent:SetSkeletalMeshAsset");set_mesh.object(L"NewMesh",mesh);set_mesh.call(part.render,r);
                 Function allow_cloth(L"/Script/Engine.SkeletalMeshComponent:SetAllowClothActors");allow_cloth.boolean(L"bInAllow",false);allow_cloth.call(part.render,r);
-                Function follow(L"/Script/Engine.SkinnedMeshComponent:SetLeaderPoseComponent");follow.object(L"NewLeaderBoneComponent",part.leader);follow.boolean(L"bForceUpdate",true);follow.boolean(L"bInFollowerShouldTickPose",false);follow.call(part.render,r);
+                Function suspend(L"/Script/Engine.SkeletalMeshComponent:SuspendClothingSimulation");suspend.call(part.render,r);
                 finish_component(actor,part.render,c.relative,r);require(!object_property(part.render,L"AnimScriptInstance").weak&&!object_property(part.render,L"PostProcessAnimInstance").weak,"mirror animation instance active");
+                scene_inert(part.leader,r);scene_inert(part.render,r);
                 require(same(mesh_asset(part.render,r),mesh)&&same(mesh_asset(part.leader,r),mesh),"mirror mesh assignment failed");
                 for(uint32_t b=0;b<c.hidden_count;++b)for(auto target:{part.leader,part.render}) {
                     Function hide(L"/Script/Engine.SkinnedMeshComponent:HideBoneByName");hide.put(L"BoneName",L"NameProperty",name(c.hidden_bones[b]));hide.enumeration(L"PhysBodyOption",0);hide.call(target,r);
                     Function check(L"/Script/Engine.SkinnedMeshComponent:IsBoneHiddenByName");check.put(L"BoneName",L"NameProperty",name(c.hidden_bones[b]));check.call(target,r);
                     auto p=check.field(L"ReturnValue",L"BoolProperty",1);require((check.buf[static_cast<size_t>(p.offset+p.bool_offset)]&p.bool_mask)!=0,"mirror hidden bone readback failed");
                 }
+                trace.emit("pose_bind",0);part.pose=pose_bind(world,actor,part.leader,part.render,mesh,c.bone_count,r);trace.emit("pose_bind",1);
             }else if(c.kind==4) {
                 part.render=add_component(actor,L"/Script/Engine.SceneComponent",c.relative,r);
                 finish_component(actor,part.render,c.relative,r);
@@ -736,6 +741,7 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
         std::vector<HsmpViewFinishTarget> targets;for(const auto& part:mirror.parts){if(part.native_asset.weak)targets.push_back({actor,part.render,part.native_asset});
             else if(part.kind>=6)targets.push_back({actor,part.render,{},part.kind,1,{u16(part.arm_socket.c_str()),static_cast<uint32_t>(part.arm_socket.size()),0},part.arm});}
         trace.emit("finish_set",0);finish_scene_set(world,targets,r);trace.emit("finish_set",1);
+        for(const auto& part:mirror.parts)if(part.pose){pose_pure(*part.pose);pose_buffers(vertex_pure(part.render),part.pose->count);}
         require(next_mirror!=0,"mirror handle exhausted");const auto id=next_mirror++;mirrors.emplace(id,std::move(mirror));r->complete=1;trace.terminal(1);return id;
     }catch(const std::exception& e){trace.terminal(2);failure(r,e.what());if(actor.weak){forget_owned_materials(actor);try{OperationScope scope(guard,world);destroy_actor(world,actor);}catch(const std::exception&){}}return 0;}
 }
@@ -755,6 +761,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
     try{initialize_result(r);thread();OperationScope scope(guard,world);get(world);auto it=mirrors.find(id);require(it!=mirrors.end(),"mirror handle missing");auto& mirror=it->second;
         require(same(mirror.world,world)&&same(actor_world(mirror.actor,r),world)&&count==mirror.parts.size()&&pointers(recipes,count,64)&&pointers(frames,count,64),"mirror apply scope");
         const auto order=parent_order(recipes,count);
+        std::vector<std::pair<size_t,PosePublished>> published_poses;
         for(const auto i:order) {
             const auto& c=recipes[i];const auto& f=frames[i];auto& part=mirror.parts[i];frame(c,f);require(c.id==part.id&&c.kind==part.kind,"mirror recipe generation mismatch");
             SplineOperation spline_scope(c.kind==5?mirror.actor:Obj{},c.kind==5?part.render:Obj{});
@@ -772,6 +779,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
             for(uint32_t j=0;j<c.bone_count;++j) {
                 Function b(L"/Script/Engine.PoseableMeshComponent:SetBoneTransformByName");b.put(L"BoneName",L"NameProperty",name(c.bones[j]));b.put(L"InTransform",L"StructProperty",engine(f.bones[j]),L"Transform");b.enumeration(L"BoneSpace",1);b.call(part.leader,r);
             }
+            if(c.kind==0){require(part.pose.has_value(),"native mirror pose binding missing");published_poses.emplace_back(i,pose_transfer(*part.pose,r));}
             for(uint32_t j=0;j<c.morph_count;++j) {
                 require(std::isfinite(f.morphs[j]),"mirror morph invalid");Function m(L"/Script/Engine.SkeletalMeshComponent:SetMorphTarget");m.put(L"MorphTargetName",L"NameProperty",name(c.morphs[j]));m.put(L"Value",L"FloatProperty",f.morphs[j]);m.boolean(L"bRemoveZeroWeight",false);m.call(part.render,r);
             }
@@ -796,7 +804,9 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         }
         std::vector<HsmpViewFinishTarget> targets;for(const auto& part:mirror.parts){if(part.native_asset.weak)targets.push_back({mirror.actor,part.render,part.native_asset});
             else if(part.kind>=6)targets.push_back({mirror.actor,part.render,{},part.kind,1,{u16(part.arm_socket.c_str()),static_cast<uint32_t>(part.arm_socket.size()),0},part.arm});}
-        finish_scene_set(world,targets,r);r->complete=1;return 1;
+        finish_scene_set(world,targets,r);
+        for(const auto& [index,published]:published_poses)pose_final(*mirror.parts[index].pose,published);
+        r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;forget_mirror_materials(mirror);mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
@@ -808,8 +818,6 @@ using RetirementIndex=void*(*)(int32_t);
 using RetirementSlotObject=void**(*)(void*);
 using RetirementSlotSerial=int32_t*(*)(void*);
 RetirementIndex retirement_index{};RetirementSlotObject retirement_object{};RetirementSlotSerial retirement_serial{};
-using SourceOuter=const void* const*(*)(const void*);
-SourceOuter source_outer{};
 const uint64_t* source_package_name{};
 // This is called from the borrowed provider guard itself. Never use get/keep,
 // check_guard, Function or string conversion here: those would reenter it.
