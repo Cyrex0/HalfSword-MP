@@ -1,6 +1,6 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build 704d0fb9
+## Current state: 2026-10-09, latest actual build 689f2913
 
 The actual topology launches: one NullRHI game authority and two rendered native
 clients. The authority qualifies two human fighters on opposing native teams;
@@ -13,11 +13,13 @@ fixed. No canonical scene frame or active client input has been proved yet.
 Current publication blocker: the paired real runs prove native Sphere.Sphere
 LOD count0 under NullRHI and1 under offscreen. Offscreen advances to
 `native vertex count unavailable` on StaticMeshComponent
-`Aim Spline Scene Sphere` at19.902s. The RVP vertex-count getter has a proven
-bAllowCPUAccess gate, but the actual return/flag is not yet recorded. Do not
-guess a count, mutate that flag or omit geometry. No canonical scene frame or
-active input has been proved. Offscreen client2 also exits unexpectedly during
-travel; its own logs do not establish a cause.
+`Aim Spline Scene Sphere`. Actual689f records count0 and original asset
+bAllowCPUAccess=false at22.802s. Capture currently requires a CPU-paint getter
+even for this unreadable cooked mesh. A guarded native override-array census
+is being implemented; absence is never assumed from the CPU flag alone. Do not
+guess colors/counts, mutate that flag or omit geometry. No canonical scene frame
+or active input has been proved. The prior offscreen client2 travel exit remains
+unexplained but did not recur in689f.
 
 The reviewed direct native path witness and pure callback admission batching
 are committed, gated and deployed. Actual Aim Spline profile time falls from
@@ -1012,3 +1014,41 @@ mirror apply/readiness and ongoing frames must freshly prove absence; unknown
 or nonnull buffer must not become native_asset. No such implementation or actual
 rendering proof exists yet. NullRHI combat/paint/body parity also cannot be
 inferred from an override-absence check.
+
+## Actual CPU-access and owned-exit diagnostics: 689f2913
+
+Full clean G0, dev push and deployment match
+689f29139b76beb7759f1418e93bb7901a7b98c3. Evidence is retained in
+`test-results/20261009-075353-7198ee-native-host`: source authority PID39476,
+supervisor44340 and normal clients2260/2696. The same45-second offscreen
+authority and two rendered clients use legal input exercise, probes0 and
+unchanged secondary display arguments.
+
+Sphere.Sphere LOD count1 succeeds at22.795s. At22.802s own seq96 records
+GetMeshComponentAmountOfVerticesOnLOD LOD0 returned_type=number/value0 and
+original asset allow_cpu_access_type=boolean/false, asset0x197D1B0E480,
+`Class /Script/Engine.StaticMesh`, `/Engine/BasicShapes/Sphere.Sphere`.
+This establishes the actual native getter restriction; it does not prove
+override absence. Five strict refusals leave canonical frame0 and active
+inputs[0,0]. Native no-override proof must precede NativeAsset admission;
+present overrides retain exact capture or explicit refusal.
+
+The prior early-travel exit does not reproduce. Both clients reach wait_scene
+and end only at about49.4s with native session closed. Held original-process
+handle diagnostics record client1 exit0/0x00000000 at06:54:44.746UTC. Source
+cleanly stops at49.581s and the supervisor confirms no fallback. All four
+original owned processes are independently absent, all20 original save SHA256
+values match, and crash/unobserved-child lists are empty. Full HSMPNative.log
+and the authority39476-filtered trace are preserved with native_operator_summary.json.
+Unqualified/after-cleanup window observations are excluded; windowlessness
+remains unproved.
+
+Pending correction adds source-only native_source_scope_vertex_state as the
+sixth exact scope API, private providerABI8 if its function table is extended,
+and native presentation capability NATIVE_VERTEX_STATE(bit23). Protocol12,
+IPC2 and scene DTOs remain unchanged. Old presentation peers lack the override
+guarantee and are explicitly rejected; world-only diagnostic observers retain
+their limited mode. Focused server native45 checks pass, including old-peer
+refusal and authenticated UDP scene delivery. Worker sixth raw-function wiring
+is committed asda4de4f7 and passes220 focused Lua assertions/syntax2. Native
+proof, recipe integration and source/mirror ongoing checks remain in development.
