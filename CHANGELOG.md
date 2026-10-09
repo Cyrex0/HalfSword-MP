@@ -25,8 +25,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 - Verify admitted native source paths through their complete original object
   hierarchy, retaining exact initial lookups and lifetime/world checks while
   avoiding repeated full object searches. The actual headless test reduced one
-  spline profile from24.406s to0.059s; complete scene capture still refuses a
-  static-mesh LOD getter, so playable mirroring remains unverified.
+  spline profile from24.406s to0.059s; complete scene capture and playable
+  mirroring remain unverified.
 - Recheck the original static mesh asset around native LOD reads and report the
   exact getter result, asset class and path when scene capture refuses it.
   Real paired tests prove LOD0 under no-render mode and LOD1 offscreen for one
@@ -39,7 +39,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 - Preserve cooked static asset colors only after a complete guarded native
   override-array census. Recheck original source and mirror state before whole
   scene publication/readiness; present paint overrides retain exact capture,
-  and unknown state remains an explicit refusal. Actual scene verification is pending.
+  and unknown state remains an explicit refusal. The actual Sphere.Sphere
+  absence proof passes; complete scene verification remains pending.
 - Extend the experimental source scene with exact native Camera and SpringArm
   ancestors. Negotiate a new scene revision for cached spring-arm socket output;
   require complete current source and inert mirror readbacks. Complete scene,

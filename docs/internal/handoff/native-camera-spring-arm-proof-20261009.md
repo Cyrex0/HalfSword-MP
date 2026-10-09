@@ -52,6 +52,14 @@ of the component. The final native census pins that query body and compares the
 original global FName bits with the guarded prepared recipe name. No name
 conversion/lookup, socket getter or ProcessEvent follows the final census.
 
+Matched ActorComponent IsComponentTickEnabled143B51630 is the eight-byte body
+`80 79 3B 00 0F 95 C0 C3`: it returns whether byte3B is nonzero. The Camera,
+SpringArm and base Scene vtables inherit it at slot3E8. The final owned-mirror
+check pins these targets and reads disabled byte3B==0, alongside reflected
+PrimaryComponentTick offset30/size30 and bIsActive8A/mask8. Review caught that
+comparing a later tick snapshot alone could accept activation between getter
+and snapshot; the direct matched disabled-byte check closes that gap.
+
 Camera constructor143AFB160 calls Scene143BEA040, installs vtable1476085C0 and
 has exact size9E0. Comparison of base Scene virtual slots below5F0 differs only
 at destruction,330 and528. Camera330/143AFD800 tail-jumps to Scene OnRegister
@@ -82,3 +90,26 @@ Focused checks and review establish bounded implementation behavior only.
 Actual complete recipes, advancing source/mirror frames, both legal controller
 inputs, combat/gear/body/cut parity and camera/HUD ownership are still required.
 There is no headless release acceptance at this checkpoint.
+
+## Focused checkpoint before the next native run
+
+Transport committed047eeadc/3f0a64ce; source six-file checkpoint9546c74b.
+Server native filter46 passed before the final source test addition; the
+strengthened authenticated UDP endpoint test passed separately and preserves
+encoded endpoint bits. Source Lua192 assertions, syntax3 files, descriptor
+filter10 and raw parser6 passed. Native Rust presentation filter6 passed,
+including exact private kinds6/7, actual socket text, arm-only allocation,
+Box-backed pointer lifetime and raw values. The provider object compiles with
+/W4 /WX. Source stores pointer-free vertex bindings and builds borrowed FFI
+finish targets only for the guarded call; no unsafe Send was added.
+
+Native C++ fixture compiles /W4 /WX and passes487 checks, preserving all prior340.
+The new cases cover exact Camera/Arm profiles and frame presence, original
+raw output/getter mismatch, earlier-arm mutation by later target callbacks,
+and mirror tick/activation changes after getters, metadata and the final guard.
+Independent native review and root integration/fixture review are closed.
+Root independently rechecked the installed native tick getter's eight bytes.
+
+Combined full G0, clean deployment and the actual two-client/one-authority run
+remain pending. These checks do not establish scene publication, active input,
+native parity or release readiness.

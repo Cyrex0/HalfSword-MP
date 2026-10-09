@@ -2,6 +2,16 @@
 
 ## Current state: 2026-10-09, latest actual build 02909df8
 
+The next coherent Camera/SpringArm implementation is now reviewed and focused
+checks pass: source schema4, render revision3/capability24 and private provider
+ABI9. Exact native classes, cached socket output, debugfalse and final pure
+whole-scene checks replace the unsupported ancestor refusal. Source Lua192,
+syntax3, descriptor10, raw parser6, Rust presentation6 and C++487 checks pass;
+the changed provider compiles /W4 /WX. The tick-enabled snapshot review defect
+is closed with the matched native byte3B check. Full G0/deploy/actual game run
+are pending; latest actual evidence below remains02909df8. Detailed proof:
+`native-camera-spring-arm-proof-20261009.md`.
+
 The actual topology launches: one NullRHI game authority and two rendered native
 clients. The authority qualifies two human fighters on opposing native teams;
 both clients now complete local combat suppression. Original attachment closure
