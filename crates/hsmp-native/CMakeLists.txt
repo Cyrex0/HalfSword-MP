@@ -56,7 +56,9 @@ set(FAKE_SIDECAR "${RUST_TARGET_DIR}/release/hsmp-fake-sidecar.exe")
 add_custom_target(rust_libs ALL
     # Match build-and-deploy's package selection as well as its output directory.
     # Changing the selected roots can invalidate shared dependency fingerprints.
-    COMMAND "${CARGO}" build --release --locked --manifest-path "${REPO_ROOT}/Cargo.toml"
+    # MSBuild's project marker is tracked by cc/ring; keep it absent as in the direct build.
+    COMMAND "${CMAKE_COMMAND}" -E env --unset=VSTEL_MSBuildProjectFullPath --
+            "${CARGO}" build --release --locked --manifest-path "${REPO_ROOT}/Cargo.toml"
             --target-dir "${RUST_TARGET_DIR}" -p hsmp-server -p hsmp-native -p hsmp-fake-sidecar
     BYPRODUCTS "${RUST_NATIVE_LIB}" "${FAKE_SIDECAR}"
     WORKING_DIRECTORY "${REPO_ROOT}"

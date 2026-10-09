@@ -10,6 +10,11 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Capture complete native frames within one temporary lookup scope, preserving
+  original players, components and gear through final verification. Actual
+  update cadence and gameplay verification remain pending.
+- Keep MSBuild's project marker out of the Cargo invocation, matching direct
+  deployment's dependency environment to avoid redundant rebuilds.
 - Report bounded first-frame native lookup counts and costs by class or asset,
   preserving all capture checks. Match deployment's three Cargo build packages
   to avoid recompiling shared dependencies during native build verification.

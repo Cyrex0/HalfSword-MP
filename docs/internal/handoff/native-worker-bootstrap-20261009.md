@@ -1,5 +1,30 @@
 # Native authority bootstrap checkpoint
 
+## Reviewed complete-frame lookup scope checkpoint
+
+Private ABI12 uses one synchronous capture call with caller-owned outputs and
+texture paths. Full original roster/descriptorArc/dir/ref/revision and possession
+guards bracket all callbacks and external native finish. CPP preserves complete
+original receiver/owner/attachment/Level witnesses through its return; nested
+scopes isolate/restore, failures discard the batch. Existing encode/finish and
+separate prepublish proof remain. CPP1667 and Rust16 focused checks pass;
+independent Rust/CPP review closed. Actual speed remains
+pending. CMake unsets only the concrete cc/ring-tracked MSBuild project marker.
+
+## Actual ea02f223: measured repeated asset lookup cost
+
+Normal run235522-a0d66a/fullG0/dev/all394, authority28888, clients41900/7296:
+both49/600/38 recipes bind46.561s; first98-row frame5.360s/find5.231s/2564.
+64 captured paths/540 overflow events with complete aggregate totals. Repeated
+gear/material asset searches dominate; implement one synchronous frame lookup
+scope with all original receiver/owner/attachment final witnesses. Both clients
+MirrorReady59.918/61.898s, then stale/stoppedpublishing before stopfiles. Source
+descriptor refusal is447ms after stopfiles, not the initial cause. Publication
+gaps5463/5405ms, no activeinput/ownedview proof; normal pass=false.
+CleanupPASS original4 absent/save20 same/no dumps/unobserved children/both
+secondary. Same3 Cargo packages still rebuild ring due tracked MSBuild project
+marker; isolated env-unset fix is saved, actual cache gain pending.
+
 ## Next exact run: bounded native lookup attribution
 
 Independent review and strict provider/fixture compilation closed,1586 checks

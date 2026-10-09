@@ -1049,6 +1049,48 @@ void arm_publication_checks(HsmpReflect& reflect){
     scene_build_admit=scene_shipping_profile;scene_vtable_read=scene_vtable;scene_socket_read=scene_socket_bits;scene_image=0;
     vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
 }
+int batch_mutation{},batch_material_finds{};bool batch_nested{};
+void* batch_find(const uint16_t* path){if(std::wstring(reinterpret_cast<const wchar_t*>(path))==L"/Game/Test/ObservedMaterial.ObservedMaterial")++batch_material_finds;return scene_find(path);}
+void batch_call(void* object,void* fn,void* params){
+    scene_call(object,fn,params);
+    if(object!=&skeletal_second||fn!=&component_world_fn)return;
+    if(batch_nested){batch_nested=false;const auto* original=active_capture_watch;auto* lookup=active_lookup;int context{};const HsmpViewGuard guard{&context,scene_guard_check};
+        {OperationScope nested(&guard,keep(&old_world));check(!active_capture_watch&&active_lookup!=lookup,"nested operation isolates original capture watch and lookup");CaptureTrace trace(false);check(!trace.enabled,"nested unrelated capture cannot shift outer diagnostic row attribution");}
+        check(active_capture_watch==original&&active_lookup==lookup,"nested operation restores original batch watch and cache");}
+    if(batch_mutation==1)skeletal_first.identity.name^=1;
+    else if(batch_mutation==2)skeletal_pointer(skeletal_first,0x90,reinterpret_cast<uint64_t>(&foreign_owner));
+    else if(batch_mutation==3)skeletal_pointer(skeletal_first,0xb8,1);
+    else if(batch_mutation==4){auto* changed=&new_world;std::memcpy(scene_bytes(arm_level)+0xc0,&changed,8);}
+    else if(batch_mutation==5)actor.property=&skeletal_second.identity;
+}
+void batch_reset(HsmpReflect& reflect){
+    skeletal_reset(reflect);arm_publication_fixture=true;arm_level={};arm_level.identity={940,&level_class};lifetime_objects.push_back(&arm_level.identity);
+    actor.outer=&arm_level.identity;actor.property=&skeletal_first.identity;skeletal_first.identity.outer=&actor;skeletal_second.identity.outer=&actor;
+    auto* world=&old_world;std::memcpy(scene_bytes(arm_level)+0xc0,&world,8);skeletal_pointer(skeletal_first,0x90,reinterpret_cast<uint64_t>(&actor));skeletal_pointer(skeletal_second,0x90,reinterpret_cast<uint64_t>(&actor));
+    skeletal_pointer(skeletal_second,0xb0,reinterpret_cast<uint64_t>(&skeletal_first));
+    capture_owner_admit=[](){return true;};reflect.find=batch_find;reflect.call=batch_call;batch_material_finds=batch_mutation=0;batch_nested=false;
+}
+void batch_checks(HsmpReflect& reflect){
+    const auto txt=[](const wchar_t* value)->HsmpViewText{return {u16(value),static_cast<uint32_t>(std::wcslen(value)),0};};
+    std::array<HsmpViewMaterial,3> materials{};for(uint32_t i=0;i<3;++i)materials[i].slot=i;materials[1].base=txt(L"/Game/Test/ObservedMaterial.ObservedMaterial");
+    std::array<HsmpViewComponent,2> recipes{};for(uint32_t i=0;i<2;++i){auto& c=recipes[i];c.id=i+1;c.kind=9;c.vertex_state=4;c.asset=txt(L"/Script/Engine.SkeletalMeshComponent");c.materials=materials.data();c.material_count=3;c.relative={{0,0,0},{0,0,0,1},{1,1,1}};}
+    std::array<HsmpViewFrame,2> outputs{};std::array<HsmpViewCaptureTarget,2> targets{};HsmpViewResult result{};int context{};const HsmpViewGuard guard{&context,scene_guard_check};
+    auto run=[&]{for(uint32_t i=0;i<2;++i){outputs[i]={};outputs[i].world=recipes[i].relative;targets[i]={keep(&actor),keep(i?&skeletal_second:&skeletal_first),&recipes[i],&outputs[i],nullptr,0,0};}return capture_frame(keep(&old_world),targets.data(),2,&guard,&result);};
+    batch_reset(reflect);capture_trace_test_rows.clear();capture_trace_test_active=true;batch_nested=true;
+    check(run()==1&&result.complete==1&&outputs[0].world.p[0]==1.25&&outputs[1].world.p[0]==1.25,"production batch completely captures two original rows with preserved full values");
+    check(batch_material_finds==2,"same exact asset uses one qualified cold double-find for the whole native frame");
+    check(capture_trace_test_rows.size()==2&&capture_trace_test_rows[0].component==1&&capture_trace_test_rows[1].component==2,"batch diagnostics preserve original flattened row order without nested additions");
+    capture_trace_test_active=false;
+    for(int mutation=1;mutation<=5;++mutation){batch_reset(reflect);batch_mutation=mutation;check(run()==-1&&result.complete==0,"later row callback refuses earlier original name/owner/socket/world/root mutation");check(!active_lookup&&!active_capture_watch,"failed batch discards all operation-owned lookup and receiver witnesses");}
+    batch_reset(reflect);capture_owner_admit=[](){return false;};check(run()==-1&&result.complete==0,"unsupported exact native owner profile refuses before batch capture");
+    batch_reset(reflect);HsmpViewObject actual=keep(&observed_material);HsmpViewFrame frame{};frame.textures=&actual;frame.texture_count=1;const auto expected=txt(L"/Game/Test/ObservedMaterial.ObservedMaterial");HsmpViewCaptureTarget texture{keep(&actor),keep(&skeletal_first),&recipes[0],&frame,&expected,1,0};
+    {OperationScope operation(&guard,keep(&old_world));capture_textures(texture);check(true,"batch preserves exact expected texture identity check");actual=keep(&other_material);rejects([&]{capture_textures(texture);},"different native texture cannot be blessed by expected path lookup");}
+    lookup_reset(reflect);lookup_trace_report={};create_markers.clear();capture_trace_test_active=true;hsmp_presentation_set_create_log(record_lookup);
+    {OperationScope operation(&guard,keep(&old_world));{CaptureTrace trace;lookup_trace_report.rows=97;trace.row.complete=1;}check(create_markers.empty()&&lookup_trace_report.pending==1,"98th bulk diagnostic row defers logger while operation owns cache");}
+    lookup_trace_flush();check(!create_markers.empty()&&create_markers.back().stage=="capture_lookup_summary","bulk diagnostic emits only after native operation destruction");
+    capture_trace_test_active=false;lookup_trace_report={};create_markers.clear();hsmp_presentation_set_create_log(nullptr);capture_owner_admit=capture_owner_build;arm_publication_fixture=false;
+    scene_build_admit=scene_shipping_profile;scene_vtable_read=scene_vtable;scene_socket_read=scene_socket_bits;scene_image=0;vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
+}
 void empty_checks(HsmpReflect& reflect){
     HsmpViewResult result{};HsmpViewVertexState proof{};
     auto observe=[&]{int context{};const HsmpViewGuard guard{&context,scene_guard_check};
@@ -1297,7 +1339,7 @@ int main() {
         check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
         check(post_destroy_actor_touches==0&&invalid_actor_resolves==0,"destroyed mirror actor is never resolved or read after K2_DestroyActor");
         destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
-        check(provider.abi==11&&sizeof(provider)==112&&sizeof(HsmpViewFinishTarget)==128&&sizeof(HsmpViewVertexState)==24,"complete native empty-skeletal proof requires presentation ABI11");
+        check(provider.abi==12&&sizeof(provider)==120&&sizeof(HsmpViewCaptureTarget)==64&&sizeof(HsmpViewFinishTarget)==128&&sizeof(HsmpViewVertexState)==24,"complete synchronous frame proof requires presentation ABI12");
         HsmpViewActorScope actor_scope_result{};
         lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=1;
         check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.qualified==1
@@ -1479,6 +1521,7 @@ int main() {
         arm_publication_checks(reflect);
         empty_checks(reflect);
         skeletal_checks(reflect);
+        batch_checks(reflect);
         pose_checks(reflect);
         create_trace_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");

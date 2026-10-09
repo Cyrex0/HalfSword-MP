@@ -43,13 +43,17 @@ void mesh_call_guard();
 struct LookupEntry {std::vector<HsmpNativePathNode> original,pinned;std::vector<uint32_t> flags,class_flags;uint64_t package{};void* zero_item{};};
 struct LookupState {Obj world{},gi{};HsmpNativePathNode world_node{},gi_node{};HsmpProp gi_property{};std::map<std::wstring,LookupEntry> entries;};
 thread_local LookupState* active_lookup{};
+struct CaptureWatch;
+thread_local const CaptureWatch* active_capture_watch{};
 Obj lookup_find(const wchar_t* path);
 void lookup_finish();
 void lookup_start(LookupState& state,Obj world,Obj gi);
+void capture_watch_finish();
 void lookup_trace_begin();
 void lookup_trace_end(bool complete);
 void lookup_trace_request(const wchar_t* path,uint32_t category);
 void lookup_trace_native(const wchar_t* path,uint64_t elapsed_us);
+void lookup_trace_flush();
 bool mesh_serial_assignment(Obj original,Obj current);
 thread_local bool static_profile_trace{};
 thread_local HsmpNativeCaptureRow* active_capture_trace{};
@@ -65,7 +69,7 @@ struct CaptureTimer {
 struct CaptureTrace {
     HsmpNativeCaptureRow row{};HsmpNativeCaptureRow* previous{active_capture_trace};bool enabled{hsmp_native_capture_profile_active()==1};
     std::chrono::steady_clock::time_point start{},boundary{};
-    CaptureTrace(){if(enabled){lookup_trace_begin();start=boundary=std::chrono::steady_clock::now();active_capture_trace=&row;}else lookup_trace_end(true);}
+    explicit CaptureTrace(bool allowed=true):enabled(allowed&&hsmp_native_capture_profile_active()==1){if(enabled){lookup_trace_begin();start=boundary=std::chrono::steady_clock::now();active_capture_trace=&row;}else if(allowed)lookup_trace_end(true);}
     void label(const HsmpViewComponent& c){row.component=c.id;row.kind=c.kind;}
     void mark(uint32_t stage){if(enabled){const auto now=std::chrono::steady_clock::now();row.us[stage]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(now-boundary).count());boundary=now;}}
     ~CaptureTrace(){if(enabled){row.us[0]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());active_capture_trace=previous;hsmp_native_capture_profile_row(&row);lookup_trace_end(row.complete==1);}}
@@ -75,7 +79,7 @@ void profile_phase(const char* stage,uint32_t edge){if(static_profile_trace)hsmp
 void profile_tick(uint32_t counter){if(active_capture_trace){if(counter==0)++active_capture_trace->guards;else if(counter==2)++active_capture_trace->finds;else if(counter==3)++active_capture_trace->events;}if(static_profile_trace)hsmp_native_profile_tick(counter);}
 std::atomic<HsmpPresentationCreateLog> create_logger{};
 struct LookupTraceCount {uint64_t raw{},us{};uint32_t cold{},hit{},bootstrap{},capacity{};};
-struct LookupTraceReport {bool attempted{},collecting{};uint32_t rows{},truncated{};LookupTraceCount total{};std::map<std::wstring,LookupTraceCount> paths;};
+struct LookupTraceReport {bool attempted{},collecting{};uint32_t rows{},truncated{},pending{};LookupTraceCount total{};std::map<std::wstring,LookupTraceCount> paths;};
 thread_local LookupTraceReport lookup_trace_report;
 void lookup_trace_begin(){auto& r=lookup_trace_report;if(!r.attempted&&create_logger.load()){r.attempted=true;r.collecting=true;}}
 LookupTraceCount* lookup_trace_path(const wchar_t* path)noexcept{auto& r=lookup_trace_report;if(!r.collecting)return nullptr;try{
@@ -97,11 +101,13 @@ void lookup_trace_emit(uint32_t status){auto report=std::move(lookup_trace_repor
     emit("__first_frame__",0,report.total);
     logger("capture_lookup_summary",status,report.rows,static_cast<uint32_t>(report.paths.size()),report.truncated,0,0,"__first_frame__");
 }
-void lookup_trace_end(bool complete){if(!lookup_trace_report.collecting)return;
-    if(!active_capture_trace){if(!complete){++lookup_trace_report.rows;lookup_trace_emit(2);}
-        else if(hsmp_native_capture_profile_active()==1){if(++lookup_trace_report.rows>=98)lookup_trace_emit(1);}
-        else lookup_trace_emit(3);}
+void lookup_trace_end(bool complete){if(!lookup_trace_report.collecting){lookup_trace_flush();return;}
+    if(!active_capture_trace){if(!complete){++lookup_trace_report.rows;lookup_trace_report.pending=2;}
+        else if(hsmp_native_capture_profile_active()==1){if(++lookup_trace_report.rows>=98)lookup_trace_report.pending=1;}
+        else lookup_trace_report.pending=3;
+        if(lookup_trace_report.pending){lookup_trace_report.collecting=false;lookup_trace_flush();}}
 }
+void lookup_trace_flush(){if(!active_lookup&&!active_capture_trace&&lookup_trace_report.pending)lookup_trace_emit(lookup_trace_report.pending);}
 std::atomic<uint64_t> create_operation{};
 struct CreateTrace;
 thread_local CreateTrace* active_create_trace{};
@@ -233,16 +239,17 @@ Obj object_property(Obj o, const wchar_t* key) {
 struct OperationScope {
     const HsmpViewGuard* previous{};Obj previous_world{},previous_gi{};
     LookupState lookup{};LookupState* previous_lookup{};
-    explicit OperationScope(const HsmpViewGuard* guard,Obj world):previous(active_guard),previous_world(active_world),previous_gi(active_game_instance),previous_lookup(active_lookup) {
+    const CaptureWatch* previous_capture_watch{};
+    explicit OperationScope(const HsmpViewGuard* guard,Obj world):previous(active_guard),previous_world(active_world),previous_gi(active_game_instance),previous_lookup(active_lookup),previous_capture_watch(active_capture_watch) {
         require(guard && guard->context && guard->check && guard->check(guard->context)==1,"native borrowed guard missing");
-        active_guard=guard;active_world={};active_game_instance={};active_lookup=nullptr;
+        active_guard=guard;active_world={};active_game_instance={};active_lookup=nullptr;active_capture_watch=nullptr;
         try {
             get(world);require(is(world,L"/Script/Engine.World"),"native guard world class");
             auto gi=object_property(world,L"OwningGameInstance");require(gi.weak&&is(gi,L"/Script/Engine.GameInstance"),"native owning game-instance missing");
             active_world=world;active_game_instance=gi;check_guard();lookup_start(lookup,world,gi);active_lookup=&lookup;
-        }catch(...) {active_guard=previous;active_world=previous_world;active_game_instance=previous_gi;active_lookup=previous_lookup;throw;}
+        }catch(...) {active_guard=previous;active_world=previous_world;active_game_instance=previous_gi;active_lookup=previous_lookup;active_capture_watch=previous_capture_watch;throw;}
     }
-    ~OperationScope(){active_guard=previous;active_world=previous_world;active_game_instance=previous_gi;active_lookup=previous_lookup;}
+    ~OperationScope(){active_guard=previous;active_world=previous_world;active_game_instance=previous_gi;active_lookup=previous_lookup;active_capture_watch=previous_capture_watch;}
 };
 bool bool_property(Obj o, const wchar_t* key) {
     auto p = property(o, key, L"BoolProperty", 1);
@@ -340,6 +347,7 @@ struct Function {
         vertex_call_guard(object,function,cls);
         scene_call_guard(object,function,cls);
         get(object); get(function); get(cls); if (result) ++result->operations;
+        capture_watch_finish();
     }
     Obj returned() const { auto p = value<void*>(L"ReturnValue", L"ObjectProperty"); return p ? keep(p) : Obj{}; }
 };
@@ -719,9 +727,8 @@ int32_t inspect(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,Hsm
     try{initialize_result(r);thread();OperationScope scope(guard,world);supported(world,owner,component,r);lookup_finish();r->complete=1;return 1;}
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
-int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,const HsmpViewGuard* guard,HsmpViewResult* r) {
-    CaptureTrace trace;
-    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");trace.label(*c);layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});VertexOperation vertex_scope(c->vertex_state==0||c->kind==8||c->kind==9?owner:Obj{},c->vertex_state==0||c->kind==8||c->kind==9?component:Obj{},c->kind==8||c->kind==9);SceneOperation scene_scope(c->kind==6||c->kind==7?owner:Obj{},c->kind==6||c->kind==7?component:Obj{},c->kind);supported(world,owner,component,r,c->kind==9);
+void capture_body(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,CaptureTrace& trace,HsmpViewResult* r) {
+    require(c&&out,"native capture arguments");trace.label(*c);layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});VertexOperation vertex_scope(c->vertex_state==0||c->kind==8||c->kind==9?owner:Obj{},c->vertex_state==0||c->kind==8||c->kind==9?component:Obj{},c->kind==8||c->kind==9);SceneOperation scene_scope(c->kind==6||c->kind==7?owner:Obj{},c->kind==6||c->kind==7?component:Obj{},c->kind);supported(world,owner,component,r,c->kind==9);
         if(c->kind==9)vertex_bind_source_materials(world,owner,component);
         if(c->kind==0) {require(same(mesh_asset(component,r),asset(c->asset,L"/Script/Engine.SkeletalMesh")),"source mesh recipe changed");}
         else if(c->kind>=4)require(same(keep(vt->class_of(get(component))),asset(c->asset,L"/Script/CoreUObject.Class")),"source scene anchor class changed");
@@ -736,7 +743,11 @@ int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,Hsm
         if(c->kind==7)*out->spring_arm=arm_observe(world,owner,component,c->spring_arm_socket,r);
         trace.mark(3);
         vertex_native_asset(world,owner,component,*c,r);
-        lookup_finish();trace.mark(4);trace.row.complete=1;r->complete=1;return 1;
+    lookup_finish();trace.mark(4);trace.row.complete=1;
+}
+int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,const HsmpViewGuard* guard,HsmpViewResult* r) {
+    CaptureTrace trace(active_capture_watch==nullptr);
+    try{initialize_result(r);thread();OperationScope scope(guard,world);capture_body(world,owner,component,c,out,trace,r);r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const HsmpViewGuard* guard,HsmpViewResult* r) {
@@ -1033,7 +1044,7 @@ void lookup_entry_final(const LookupEntry& entry){
         require(flags&&class_flags&&*flags==entry.flags[i]&&*class_flags==entry.class_flags[i],"native lookup original RF/class flags changed");
         lookup_node_get(node,entry.zero_item);require(*flags==entry.flags[i]&&*class_flags==entry.class_flags[i],"native lookup RF/class flags changed during final qualification");}
 }
-void lookup_finish(){if(!active_lookup)return;lookup_world_final(*active_lookup);for(const auto& [path,entry]:active_lookup->entries){(void)path;lookup_entry_final(entry);}lookup_world_final(*active_lookup);}
+void lookup_finish(){if(!active_lookup)return;lookup_world_final(*active_lookup);for(const auto& [path,entry]:active_lookup->entries){(void)path;lookup_entry_final(entry);}lookup_world_final(*active_lookup);capture_watch_finish();}
 void lookup_remember(const HsmpNativePathNode& node){
     const Identity value{node.address,node.name,node.class_weak,node.class_address};const auto found=identities.find(node.weak);
     if(found==identities.end()){require(identities.size()<65536,"native lookup identity bound");identities.emplace(node.weak,value);}
@@ -1354,7 +1365,8 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
         lookup_finish();r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
-const HsmpPresentation provider{11,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets};
+#include "native_capture_impl.h"
+const HsmpPresentation provider{12,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets,capture_frame};
 }
 void hsmp_presentation_set_create_log(HsmpPresentationCreateLog logger){create_logger.store(logger);}
 void hsmp_presentation_register(const HsmpReflect* reflection) {

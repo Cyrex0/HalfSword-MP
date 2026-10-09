@@ -1,5 +1,63 @@
 # Native full-scene encoding checkpoint
 
+## Reviewed: one synchronous complete-frame native capture
+
+Private provider ABI12 appends capture_frame; the wire/schema remain unchanged.
+Caller owns all prepared recipes, output storage and expected texture paths
+through one call. It pins original world/player/controller and descriptor Arc,
+directory/ref/revision/slot for every callback guard. CPP uses one temporary
+lookup map and full original receiver/owner/parent/Level paths with RF/class,
+weak/FName and hard attachment fields. All rows are checked after callbacks and
+at the final pure boundary; nested operations isolate and restore prior scopes.
+Original indexed/recipe preparation, scalar frame values and both existing
+encode/finish and separate prepublication proofs remain. Failure discards the
+whole frame. Texture validation stays inside the synchronous operation, before
+the final whole-set proof. No cross-frame cache or freshness relaxation.
+
+OwnerPrivate90 qualification reuses the pinned32-byte shipping GetOwner leaf
+at RVA3B54190 from the SourceScope evidence, before and after callbacks. Original
+SceneComponent AttachParentB0/AttachSocketNameB8 and Level OwningWorldC0 offsets
+are qualified before reads; original receiver paths/dispatch metadata remain
+pinned. CPP strict provider/fixture compilation and1667 checks pass; Rust
+presentation16/16 pass. Independent Rust review closed. The receiver witness
+ends at CPP return; the same Rust full generation/possession/world guard is
+checked again after external native finish, before pending assignment. Existing
+separate prepublication aggregate proof remains. CPP independent review closed
+with no blocker; fullG0/exact deploy and actual cadence pending.
+Provider total includes receiver admission; per-row timing/find counts exclude
+that preparation. Compare complete-frame totals, not only row find_us.
+
+## Actual ea02f223: repeated asset lookups dominate complete frames
+
+Exact fullG0/dev/all394 normal run20261009-235522-a0d66a-native-host,
+source9c640a76-97fe-4238-b690-1c9f9b5aa87f, authority28888, clients41900/7296.
+Both49-component/600-bone/38-slot recipes bind by46.561s. Complete first frame
+98rows takes5,359,885us; native finds5,231,196us/2564 calls. First diagnostic
+stores64 exact path keys with540 untracked events; totals include overflow.
+Repeated asset examples: Fabric24 raw finds/462321us, Flesh24/301558us,
+Invisible12/233226us, Sphere12/208980us; VertexPaint CDO36/315043us and
+StaticMeshComponentLODInfo104/275095us. Classes are generally much cheaper.
+Missing path costs must not be guessed. One synchronous frame scope is next,
+with ALL original receiver/owner/attachment witnesses and final pure closure.
+Independent sums: recorded64 paths4,311,495us, unrecorded919,701us. Recorded
+asset labels3,223,318us, classes410,746us, LODInfo schema275,095us, CDO315,043us,
+functions87,293us. Short labels remain shortened; no full paths reconstructed.
+These costs partition find time only, not inclusive provider/frame totals.
+Overflow540 combines98 raw-find/49 cold/393 hit events, not missing paths or
+540 finds. Source LIVE watchdog native_glue525–535 rejects publication gaps
+above2000ms; retain this and original250ms client receipt freshness unchanged.
+
+Source publications52.035/57.498/62.903s are5463/5405ms apart. Both clients
+receive coherent scenes and full MirrorReady59.918/61.898s. Stale frames then
+stoppedpublishing fail before stopfiles; later source descriptor-generation
+refusal is447ms after stopfiles and remains expected teardown. No active input
+or owned view proof. Normal pass=false. All original4 absent/save20 unchanged,
+no dumps/unobserved children; both physical windows secondary. Build156s then
+CMake115s; exact package selection alone does not close repeated compilation.
+Pinned cc/find-msvc-tools reads MSBuild's VSTEL_MSBuildProjectFullPath marker,
+recorded in ring's fingerprint but absent in direct build. Next CMake change
+unsets only this marker; actual warm verification remains pending.
+
 ## Reviewed first-frame lookup diagnostic
 
 First attempted capture reports up to64 distinct class/asset paths, original

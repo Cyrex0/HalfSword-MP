@@ -93,6 +93,12 @@ struct HsmpViewActorScope {
     uint32_t qualified; uint32_t pad; uint64_t weak; uint64_t address;
     HsmpViewLifecycle state; char reason[192];
 };
+struct HsmpViewCaptureTarget {
+    HsmpViewObject owner,component;
+    const HsmpViewComponent* recipe;
+    HsmpViewFrame* output;
+    const HsmpViewText* textures;uint32_t texture_count,pad;
+};
 struct HsmpPresentation {
     uint32_t abi; uint32_t pad;
     // Inspect kind/cloth/deformer state. Vertex colors still require the exact
@@ -126,6 +132,9 @@ struct HsmpPresentation {
     // After all callbacks, the final whole-scene census uses original identities
     // and hard fields only, without getters or ProcessEvent.
     int32_t (*finish_scene_sets)(HsmpViewObject world,const HsmpViewFinishTarget*,uint32_t target_count,const uint64_t* mirrors,uint32_t mirror_count,const HsmpViewGuard*,HsmpViewResult*);
+    // ABI12: one synchronous complete-frame scope. Every pointer is caller-owned
+    // and valid through return; a failed batch exposes no complete frame.
+    int32_t (*capture_frame)(HsmpViewObject world,const HsmpViewCaptureTarget*,uint32_t count,const HsmpViewGuard*,HsmpViewResult*);
 };
 void hsmp_native_set_presentation(const HsmpPresentation*);
 }
@@ -143,7 +152,8 @@ static_assert(sizeof(HsmpViewSplineProfile)==20);
 static_assert(sizeof(HsmpViewVertexState)==24);
 static_assert(sizeof(HsmpViewSpringArmFrame)==56);
 static_assert(sizeof(HsmpViewFinishTarget)==128);
-static_assert(sizeof(HsmpPresentation)==112);
+static_assert(sizeof(HsmpPresentation)==120);
+static_assert(sizeof(HsmpViewCaptureTarget)==64);
 static_assert(sizeof(HsmpViewSplineVectorPoint)==80);
 static_assert(sizeof(HsmpViewSplineQuatPoint)==104);
 static_assert(sizeof(HsmpViewSplineFloatPoint)==20);
@@ -157,7 +167,8 @@ static_assert(sizeof(HsmpViewFrame)==176);
 static_assert(sizeof(HsmpViewResult)==200);
 // All ops borrow recipe strings/arrays only for the duration of the call.
 // Caps: components64, bones512/component, morphs128/component, materials32,
-// scalar/vector/texture parameter dictionaries128/material; total wire frame64KiB.
+// scalar/vector/texture parameter dictionaries128/material. Complete lossless
+// scenes use bounded multipart records;64KiB is a transport-record bound.
 void hsmp_presentation_register(const HsmpReflect*);
 // Private startup diagnostics only; does not change the provider/wire ABI.
 // The callback must not call Unreal or throw. All names come from fixed code

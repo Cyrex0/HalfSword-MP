@@ -52,6 +52,7 @@ struct CaptureCollector {
     row_slot: Option<usize>,
     admissions: u64,
     admission_start: u64,
+    batch_rows: Vec<(w::EntityRef, u32)>,
 }
 impl CaptureCollector {
     fn new(world: &w::World) -> Self {
@@ -68,9 +69,11 @@ impl CaptureCollector {
             row_slot: None,
             admissions: 0,
             admission_start: 0,
+            batch_rows: Vec::new(),
         }
     }
     fn row(&mut self, row: CaptureRow) {
+        let row_index = self.frame.rows as usize;
         self.frame.rows = self.frame.rows.saturating_add(1);
         self.frame.counters[0] += row.guards;
         self.frame.counters[2] += row.finds;
@@ -84,8 +87,22 @@ impl CaptureCollector {
             return;
         }
         let mut trace = self.current;
+        if let Some((reference, component)) = self.batch_rows.get(row_index) {
+            if *component == row.component {
+                trace.entity = reference.id;
+                trace.incarnation = reference.incarnation;
+            } else {
+                trace.entity = 0;
+                trace.incarnation = 0;
+                trace.truncated = 1;
+            }
+            // Batch rows count admissions since the preceding row; the first
+            // includes scope/receiver preparation. CPP row times exclude it.
+            trace.counters[1] = self.admissions - self.admission_start;
+            self.admission_start = self.admissions;
+        }
         trace.us[..8].copy_from_slice(&row.us);
-        trace.counters = [row.guards, 0, row.finds, row.events];
+        trace.counters = [row.guards, trace.counters[1], row.finds, row.events];
         trace.component = row.component;
         trace.kind = row.kind;
         trace.complete = row.complete;
@@ -162,6 +179,7 @@ impl CaptureDiagnostic {
             });
         }
     }
+    #[cfg(test)]
     fn component(&self, reference: w::EntityRef) {
         if self.start.is_some() {
             CAPTURE_COLLECTOR.with(|collector| {
@@ -176,6 +194,17 @@ impl CaptureDiagnostic {
             });
         }
     }
+    fn batch(&self, rows: Vec<(w::EntityRef, u32)>) {
+        if self.start.is_some() {
+            CAPTURE_COLLECTOR.with(|collector| {
+                if let Some(c) = collector.borrow_mut().as_mut() {
+                    c.batch_rows = rows;
+                    c.admission_start = c.admissions;
+                }
+            });
+        }
+    }
+    #[cfg(test)]
     fn component_end(&self, pre_us: u64, post: Option<Instant>) {
         if self.start.is_some() {
             let elapsed = Self::elapsed(post);
@@ -580,6 +609,16 @@ unsafe fn push_lifecycle(L: *mut lua_State, state: &Lifecycle) {
     }
 }
 #[repr(C)]
+pub struct CaptureTarget {
+    pub owner: Object,
+    pub component: Object,
+    pub recipe: *const Component,
+    pub output: *mut Frame,
+    pub textures: *const Text,
+    pub texture_count: u32,
+    pub pad: u32,
+}
+#[repr(C)]
 pub struct Provider {
     pub abi: u32,
     pub pad: u32,
@@ -637,11 +676,18 @@ pub struct Provider {
         *const Guard,
         *mut ResultInfo,
     ) -> i32,
+    pub capture_frame: unsafe extern "C" fn(
+        Object,
+        *const CaptureTarget,
+        u32,
+        *const Guard,
+        *mut ResultInfo,
+    ) -> i32,
 }
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 11 {
+    if p.is_null() || unsafe { (*p).abi } == 12 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
     } else {
         PROVIDER.store(std::ptr::null_mut(), Ordering::Release);
@@ -1193,6 +1239,76 @@ impl FrameStorage {
                 .unwrap_or(std::ptr::null_mut()),
         }
     }
+}
+// All caller-owned allocations are complete before any Frame/target pointer is
+// exported. No pointers or guard context survive this synchronous invocation.
+unsafe fn capture_complete(
+    capture: unsafe extern "C" fn(
+        Object,
+        *const CaptureTarget,
+        u32,
+        *const Guard,
+        *mut ResultInfo,
+    ) -> i32,
+    world: Object,
+    guard: &Guard,
+    inputs: &[(Object, Object, *const Component)],
+    mut storage: Vec<FrameStorage>,
+    textures: Vec<Vec<Text>>,
+    _texture_arena: Arena,
+) -> Result<Vec<FrameStorage>, String> {
+    if inputs.is_empty()
+        || inputs.len() > w::MAX_ENTITIES * d::MAX_COMPONENTS
+        || inputs.len() != storage.len()
+        || inputs.len() != textures.len()
+        || textures.iter().any(|v| v.len() > 32 * 128)
+    {
+        return Err("source complete capture storage bounds".into());
+    }
+    let mut frames = storage
+        .iter_mut()
+        .map(FrameStorage::ffi)
+        .collect::<Vec<_>>();
+    let targets = inputs
+        .iter()
+        .zip(frames.iter_mut())
+        .zip(&textures)
+        .map(
+            |(((input, owner, recipe), output), textures)| CaptureTarget {
+                owner: *owner,
+                component: *input,
+                recipe: *recipe,
+                output,
+                textures: textures.as_ptr(),
+                texture_count: textures.len() as u32,
+                pad: 0,
+            },
+        )
+        .collect::<Vec<_>>();
+    unsafe {
+        if (guard.check)(guard.context) != 1 {
+            return Err("source complete frame generation changed".into());
+        }
+        let mut result = ResultInfo::default();
+        if capture(
+            world,
+            targets.as_ptr(),
+            targets.len() as u32,
+            guard,
+            &mut result,
+        ) != 1
+            || result.complete != 1
+        {
+            return Err(format!("source complete capture: {}", result.reason()));
+        }
+        if (guard.check)(guard.context) != 1 {
+            return Err("source complete frame generation changed after capture".into());
+        }
+    }
+    for (values, frame) in storage.iter_mut().zip(&frames) {
+        values.world = frame.world;
+    }
+    Ok(storage)
 }
 fn numbers(t: Transform) -> [f64; 10] {
     [
@@ -1892,12 +2008,46 @@ fn roster_admission(
 }
 // The callback borrows Native only within a synchronous provider invocation.
 // No Lua callbacks or global Native lock acquisition occur here.
+struct CaptureGeneration {
+    epoch: u64,
+    seq: u32,
+    recipes: Vec<std::sync::Arc<w::Descriptor>>,
+}
+impl CaptureGeneration {
+    fn directory_matches(&self, directory: &w::Directory) -> bool {
+        directory.epoch == self.epoch
+            && directory.seq == self.seq
+            && directory.entities.len() == self.recipes.len()
+            && self.recipes.iter().all(|original| {
+                directory
+                    .entities
+                    .iter()
+                    .any(|e| e.reference == original.reference && e.slot == original.slot)
+            })
+    }
+    fn valid(
+        &self,
+        directory: &w::Directory,
+        mut descriptor: impl FnMut(u32) -> Option<std::sync::Arc<w::Descriptor>>,
+    ) -> bool {
+        self.directory_matches(directory)
+            && self.recipes.iter().all(|original| {
+                descriptor(original.reference.id).is_some_and(|current| {
+                    std::sync::Arc::ptr_eq(&current, original)
+                        && current.reference == original.reference
+                        && current.revision == original.revision
+                        && current.directory_seq == self.seq
+                })
+            })
+    }
+}
 struct GuardContext {
     native: *const Native,
     vt: *const HsmpReflect,
     world: Object,
     key: Vec<u8>,
     source: Vec<(Object, Object, reflect::HsmpProp, reflect::HsmpProp)>,
+    recipes: Option<CaptureGeneration>,
 }
 impl GuardContext {
     fn new(
@@ -1915,6 +2065,7 @@ impl GuardContext {
             vt,
             world,
             key,
+            recipes: None,
             source: source
                 .map(|s| vec![(s.pawn, s.controller, s.pawn_controller, s.controller_pawn)])
                 .unwrap_or_default(),
@@ -1937,6 +2088,20 @@ impl GuardContext {
             {
                 return false;
             }
+            if let Some(original) = &self.recipes {
+                let Some(host) = native.native_host.host.as_ref() else {
+                    return false;
+                };
+                let Some(directory) = host.directory() else {
+                    return false;
+                };
+                if !native.native_host.is_host()
+                    || !native.sample.world_ok
+                    || !original.valid(&directory, |id| host.descriptor(id))
+                {
+                    return false;
+                }
+            }
             for &(pawn, controller, pc, cp) in &self.source {
                 if reflect::get(vt, pawn.weak) as u64 != pawn.address
                     || reflect::get(vt, controller.weak) as u64 != controller.address
@@ -1945,6 +2110,15 @@ impl GuardContext {
                 }
                 if read_object_property(vt, pawn, pc).ok() != Some(controller.address)
                     || read_object_property(vt, controller, cp).ok() != Some(pawn.address)
+                {
+                    return false;
+                }
+            }
+            if let Some(original) = &self.recipes {
+                if !native
+                    .native_host
+                    .directory()
+                    .is_some_and(|d| original.directory_matches(&d))
                 {
                     return false;
                 }
@@ -2677,11 +2851,10 @@ impl Native {
                 let mut capture_profile = CaptureDiagnostic::begin(profile_enabled, &world);
                 let metadata_started = capture_profile.timer();
                 let host = self.native_host.host.as_ref().ok_or("not a source host")?;
-                let mut entities = Vec::new();
                 let mut recipes = Vec::new();
-                capture_profile.add(1, metadata_started);
+                let mut originals = Vec::new();
+                let mut original_world = None;
                 for entity in &world.entities {
-                    let metadata_started = capture_profile.timer();
                     let desc = host
                         .descriptor(entity.reference.id)
                         .filter(|d| {
@@ -2694,53 +2867,92 @@ impl Native {
                         .sources
                         .get(&entity.reference)
                         .ok_or("no original source bindings")?;
-                    if reflect::get(vt, binding.pawn.weak) as u64 != binding.pawn.address
-                        || reflect::get(vt, binding.controller.weak) as u64
-                            != binding.controller.address
-                    {
-                        return Err("source pawn/controller changed".into());
+                    if original_world.is_some_and(|w: Object| {
+                        w.weak != binding.world.weak || w.address != binding.world.address
+                    }) {
+                        return Err("source mixed original worlds".into());
                     }
-                    if object_field(vt, binding.pawn, "Controller")? != binding.controller.address
-                        || object_field(vt, binding.controller, "Pawn")? != binding.pawn.address
-                    {
-                        return Err("source actor/controller binding changed".into());
-                    }
-                    let mut context = GuardContext::new(self, vt, binding.world, Some(binding))?;
-                    let guard = context.ffi();
-                    let mut components = Vec::new();
-                    capture_profile.add(1, metadata_started);
+                    original_world = Some(binding.world);
+                    originals.push((
+                        binding.pawn,
+                        binding.controller,
+                        binding.pawn_controller,
+                        binding.controller_pawn,
+                    ));
+                    recipes.push(desc);
+                }
+                let native_world = original_world.ok_or("source empty frame")?;
+                let mut context = GuardContext::new(self, vt, native_world, None)?;
+                context.source = originals;
+                context.recipes = Some(CaptureGeneration {
+                    epoch: world.epoch,
+                    seq: world.directory_seq,
+                    recipes: recipes.clone(),
+                });
+                if !context.valid() {
+                    return Err("source complete frame generation changed".into());
+                }
+                let mut storage = Vec::new();
+                let mut inputs = Vec::new();
+                let mut expected_textures = Vec::new();
+                let mut texture_arena = Arena::new();
+                let mut diagnostic_rows = Vec::new();
+                let mut ranges = Vec::new();
+                for desc in &recipes {
+                    let binding = self
+                        .presentation
+                        .sources
+                        .get(&desc.reference)
+                        .ok_or("source original bindings changed")?;
+                    let begin = storage.len();
                     for (index, c) in desc.recipe.components.iter().enumerate() {
-                        capture_profile.component(entity.reference);
-                        let pre_started = capture_profile.timer();
                         let (input, owner) = *binding
                             .components
                             .get(&c.id)
                             .ok_or("source component binding")?;
-                        let recipe = &binding.prepared.components[index];
-                        let mut values = FrameStorage::source(c);
-                        let mut frame = values.ffi();
-                        let mut r = ResultInfo::default();
-                        let pre_us = CaptureDiagnostic::elapsed(pre_started);
-                        let provider_started = capture_profile.timer();
-                        if !context.valid()
-                            || (p.capture)(
-                                binding.world,
-                                owner,
-                                input,
-                                recipe,
-                                &mut frame,
-                                &guard,
-                                &mut r,
-                            ) != 1
-                            || r.complete != 1
-                            || !context.valid()
-                        {
-                            capture_profile.add(2, provider_started);
-                            return Err(format!("source component {}: {}", c.id, r.reason()));
+                        let prepared = binding
+                            .prepared
+                            .components
+                            .get(index)
+                            .filter(|p| p.id == c.id)
+                            .ok_or("source prepared component dictionary")?;
+                        inputs.push((input, owner, prepared as *const Component));
+                        storage.push(FrameStorage::source(c));
+                        if capture_profile.start.is_some() {
+                            diagnostic_rows.push((desc.reference, c.id));
                         }
-                        capture_profile.add(2, provider_started);
-                        let post_started = capture_profile.timer();
-                        values.world = frame.world;
+                        expected_textures.push(
+                            c.materials
+                                .iter()
+                                .flat_map(|m| m.textures.iter())
+                                .map(|t| texture_arena.text(&t.value))
+                                .collect::<Vec<_>>(),
+                        );
+                    }
+                    ranges.push(begin..storage.len());
+                }
+                let guard = context.ffi();
+                capture_profile.add(1, metadata_started);
+                capture_profile.batch(diagnostic_rows);
+                let provider_started = capture_profile.timer();
+                let captured = capture_complete(
+                    p.capture_frame,
+                    native_world,
+                    &guard,
+                    &inputs,
+                    storage,
+                    expected_textures,
+                    texture_arena,
+                );
+                capture_profile.add(2, provider_started);
+                let storage = captured?;
+                let mut entities = Vec::new();
+                let mut values = storage.into_iter();
+                for (desc, range) in recipes.iter().zip(ranges) {
+                    let post_started = capture_profile.timer();
+                    let mut components = Vec::with_capacity(range.len());
+                    for c in &desc.recipe.components {
+                        let values = values.next().ok_or("source complete frame storage")?;
                         let (mut si, mut vi, mut ti) = (0, 0, 0);
                         let mut materials = Vec::new();
                         for m in &c.materials {
@@ -2751,32 +2963,22 @@ impl Native {
                                 .map(|v| [v[0], v[1], v[2], v[3]])
                                 .collect();
                             vi += m.vectors.len() * 4;
-                            let mut textures = Vec::new();
-                            for t in &m.textures {
-                                let actual = values.textures[ti];
-                                ti += 1;
-                                let expected = if t.value.is_empty() {
-                                    std::ptr::null_mut()
-                                } else {
-                                    (vt.find)(reflect::wide(&t.value).as_ptr())
-                                };
-                                if !expected.is_null() {
-                                    reflect::keep(vt, expected)
-                                        .ok_or("source texture weak identity")?;
-                                }
-                                if (expected as u64) != actual.address
-                                    || (actual.address != 0
-                                        && reflect::get(vt, actual.weak) as u64 != actual.address)
-                                {
-                                    return Err("source texture recipe changed".into());
-                                }
-                                textures.push(t.value.clone());
-                            }
+                            let textures = m
+                                .textures
+                                .iter()
+                                .map(|t| {
+                                    ti += 1;
+                                    t.value.clone()
+                                })
+                                .collect();
                             materials.push(w::RenderMaterial {
                                 scalars,
                                 vectors,
                                 textures,
                             });
+                        }
+                        if ti != values.textures.len() {
+                            return Err("source complete texture dictionary".into());
                         }
                         let spline = values
                             .spline
@@ -2797,14 +2999,16 @@ impl Native {
                                 }
                             }),
                         });
-                        capture_profile.component_end(pre_us, post_started);
                     }
+                    capture_profile.add(3, post_started);
                     entities.push(w::RenderEntity {
-                        reference: entity.reference,
+                        reference: desc.reference,
                         revision: desc.revision,
                         components,
                     });
-                    recipes.push(desc);
+                }
+                if !context.valid() {
+                    return Err("source complete frame generation changed after copy".into());
                 }
                 let render = w::RenderWorld { world, entities };
                 let encode_started = capture_profile.timer();
@@ -2813,6 +3017,9 @@ impl Native {
                 let finish_started = capture_profile.timer();
                 self.finish_native_vertices(&render)?;
                 capture_profile.add(5, finish_started);
+                if !context.valid() {
+                    return Err("source complete frame generation changed after finish".into());
+                }
                 self.presentation.pending = Some(render);
                 capture_profile.complete = true;
                 Ok(())
@@ -3394,7 +3601,7 @@ mod source_roster_native_tests {
         0
     }
     unsafe extern "C" fn call(_: *mut c_void, _: *mut c_void, _: *mut c_void) {}
-    fn vt() -> HsmpReflect {
+    pub(super) fn vt() -> HsmpReflect {
         HsmpReflect {
             abi: 1,
             _r: 0,
@@ -3705,6 +3912,389 @@ mod source_roster_native_tests {
 #[cfg(test)]
 mod presentation_binding_tests {
     use super::*;
+    #[repr(C, align(8))]
+    struct ProviderHeader {
+        abi: u32,
+        pad: u32,
+    }
+    #[test]
+    fn provider_installer_rejects_old_short_headers_without_reading_the_tail() {
+        struct Restore(*mut Provider);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                PROVIDER.store(self.0, Ordering::Release);
+            }
+        }
+        let _restore = Restore(PROVIDER.load(Ordering::Acquire));
+        for abi in [0, 11, 13, u32::MAX] {
+            let header = ProviderHeader { abi, pad: 0 };
+            unsafe {
+                hsmp_native_set_presentation((&header as *const ProviderHeader).cast());
+            }
+            assert!(PROVIDER.load(Ordering::Acquire).is_null());
+            assert!(provider().is_err());
+        }
+        unsafe {
+            hsmp_native_set_presentation(std::ptr::null());
+        }
+        assert!(provider().is_err());
+    }
+    struct BatchGuard {
+        valid: bool,
+        fail: u32,
+        calls: u32,
+    }
+    unsafe extern "C" fn batch_guard(context: *mut c_void) -> i32 {
+        i32::from(unsafe { (*context.cast::<BatchGuard>()).valid })
+    }
+    unsafe extern "C" fn batch_provider(
+        _: Object,
+        targets: *const CaptureTarget,
+        count: u32,
+        guard: *const Guard,
+        result: *mut ResultInfo,
+    ) -> i32 {
+        unsafe {
+            let guard = &*guard;
+            let context = &mut *guard.context.cast::<BatchGuard>();
+            context.calls += 1;
+            let targets = std::slice::from_raw_parts(targets, count as usize);
+            for (index, target) in targets.iter().enumerate() {
+                assert!(!target.recipe.is_null() && !target.output.is_null());
+                assert!(!targets[..index].iter().any(|t| t.output == target.output));
+                let recipe = &*target.recipe;
+                let frame = &mut *target.output;
+                assert_eq!(recipe.id, index as u32 + 1);
+                assert_eq!(frame.bone_count, recipe.bone_count);
+                assert_eq!(frame.texture_count, target.texture_count);
+                for texture in
+                    std::slice::from_raw_parts(target.textures, target.texture_count as usize)
+                {
+                    let name = String::from_utf16(std::slice::from_raw_parts(
+                        texture.data,
+                        texture.len as usize,
+                    ))
+                    .unwrap();
+                    assert_eq!(name, format!("/Texture/{}", recipe.id));
+                }
+                frame.world.p[0] = recipe.id as f64;
+                if frame.bone_count > 0 {
+                    (*frame.bones).p[0] = recipe.id as f64 + 0.25;
+                }
+                if !frame.spline.is_null() {
+                    (*(*frame.spline).position.points).out[0] = 17.5;
+                }
+                if !frame.spring_arm.is_null() {
+                    (*frame.spring_arm).translation[0] = 23.5;
+                }
+                if context.fail == 1 && index == targets.len() - 1 {
+                    (&mut (*result).reason)[..13].copy_from_slice(b"late callback");
+                    return -1;
+                }
+            }
+            if context.fail == 2 {
+                context.valid = false;
+            }
+            (*result).complete = u32::from(context.fail != 3);
+            1
+        }
+    }
+    fn batch_fixture(fail: u32, valid: bool) -> (Result<Vec<FrameStorage>, String>, u32) {
+        let recipe = serde_json::from_slice::<d::SourceRecipe>(include_bytes!(
+            "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
+        ))
+        .unwrap();
+        let mut components = Vec::new();
+        let mut storage = Vec::new();
+        let mut arena = Arena::new();
+        let mut texture_arena = Arena::new();
+        let mut textures = Vec::new();
+        for index in 0..70 {
+            let mut c = recipe.components[0].clone();
+            c.id = index + 1;
+            c.materials.push(d::Material {
+                slot: 0,
+                base: "/Material/Original".into(),
+                scalars: Vec::new(),
+                vectors: Vec::new(),
+                textures: vec![d::TextureParameter {
+                    info: d::ParameterInfo {
+                        name: "Original".into(),
+                        association: 0,
+                        index: -1,
+                    },
+                    value: format!("/Texture/{}", c.id),
+                }],
+            });
+            for material in &mut c.materials {
+                for texture in &mut material.textures {
+                    texture.value = format!("/Texture/{}", c.id);
+                }
+            }
+            if index == 68 {
+                c.kind = d::ComponentKind::Spline;
+                c.component_class = "/Script/Engine.SplineComponent".into();
+                c.geometry = d::Geometry::NativeSpline;
+                c.scene = d::SceneEvidence::Spline { draw_debug: false };
+                c.spline_profile = Some(d::SplineProfile {
+                    position_count: 1,
+                    rotation_count: 1,
+                    scale_count: 1,
+                    reparam_count: 1,
+                    metadata_null: true,
+                });
+            }
+            if index == 69 {
+                c.kind = d::ComponentKind::Scene;
+                c.component_class = "/Script/Engine.SpringArmComponent".into();
+                c.geometry = d::Geometry::NotApplicable;
+                c.scene = d::SceneEvidence::SpringArm {
+                    draw_debug_lag_markers: false,
+                    socket_name: "actual socket".into(),
+                };
+            }
+            if index >= 68 {
+                c.asset.clear();
+                c.skeleton.clear();
+                c.physics_asset.clear();
+                c.deformer.clear();
+                c.bones.clear();
+                c.morphs.clear();
+                c.hidden_bones.clear();
+                c.materials.clear();
+                c.vertex_colors.clear();
+                c.vertex_state = d::VertexState::NotApplicable;
+                c.collision = None;
+            }
+            components.push(arena.component(&c));
+            storage.push(FrameStorage::source(&c));
+            textures.push(
+                c.materials
+                    .iter()
+                    .flat_map(|m| &m.textures)
+                    .map(|t| texture_arena.text(&t.value))
+                    .collect::<Vec<_>>(),
+            );
+        }
+        let inputs = components
+            .iter()
+            .map(|c| (Object::default(), Object::default(), c as *const Component))
+            .collect::<Vec<_>>();
+        let mut context = BatchGuard {
+            fail,
+            valid,
+            calls: 0,
+        };
+        let guard = Guard {
+            context: (&mut context as *mut BatchGuard).cast(),
+            check: batch_guard,
+        };
+        let result = unsafe {
+            capture_complete(
+                batch_provider,
+                Object::default(),
+                &guard,
+                &inputs,
+                storage,
+                textures,
+                texture_arena,
+            )
+        };
+        (result, context.calls)
+    }
+    #[test]
+    fn complete_capture_keeps_owned_arrays_stable_until_the_provider_returns() {
+        let (result, calls) = batch_fixture(0, true);
+        let values = result.unwrap();
+        assert_eq!(calls, 1);
+        assert_eq!(values.len(), 70);
+        for (index, value) in values.iter().enumerate() {
+            assert_eq!(value.world.p[0], index as f64 + 1.0);
+            if !value.bones.is_empty() {
+                assert_eq!(value.bones[0].p[0], index as f64 + 1.25);
+            }
+        }
+        assert_eq!(values[68].spline.as_ref().unwrap().position[0].out[0], 17.5);
+        assert_eq!(values[69].spring_arm.as_ref().unwrap().translation[0], 23.5);
+    }
+    #[test]
+    fn complete_capture_discards_partial_incomplete_and_expired_outputs() {
+        let (result, calls) = batch_fixture(1, true);
+        assert_eq!(calls, 1);
+        assert_eq!(
+            result.err().unwrap(),
+            "source complete capture: late callback"
+        );
+        for failure in [2, 3] {
+            let (result, calls) = batch_fixture(failure, true);
+            assert_eq!(calls, 1);
+            assert!(result.is_err());
+        }
+        let (result, calls) = batch_fixture(0, false);
+        assert_eq!(calls, 0);
+        assert_eq!(
+            result.err().unwrap(),
+            "source complete frame generation changed"
+        );
+    }
+    #[test]
+    fn complete_capture_generation_pins_original_descriptor_arcs_and_roster() {
+        let recipe = serde_json::from_slice::<d::SourceRecipe>(include_bytes!(
+            "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
+        ))
+        .unwrap();
+        let descriptors = (1..=2)
+            .map(|id| {
+                std::sync::Arc::new(w::Descriptor {
+                    reference: w::EntityRef {
+                        epoch: 42,
+                        id,
+                        incarnation: 5,
+                    },
+                    slot: id as u16 - 1,
+                    directory_seq: 7,
+                    revision: 3,
+                    source_frame_seq: 1,
+                    recipe: recipe.clone(),
+                })
+            })
+            .collect::<Vec<_>>();
+        let original = CaptureGeneration {
+            epoch: 42,
+            seq: 7,
+            recipes: descriptors.clone(),
+        };
+        let directory = w::Directory {
+            epoch: 42,
+            seq: 7,
+            state: w::READY,
+            arena: "actual".into(),
+            error: String::new(),
+            entities: descriptors
+                .iter()
+                .map(|d| w::Entity {
+                    reference: d.reference,
+                    slot: d.slot,
+                    owner_peer: 0,
+                    kind: w::HUMAN,
+                    controller: d.slot as u8,
+                    team: Some(0),
+                })
+                .collect(),
+        };
+        assert!(original.valid(&directory, |id| descriptors.get(id as usize - 1).cloned()));
+        assert!(!original.valid(&directory, |id| descriptors
+            .get(id as usize - 1)
+            .map(|d| std::sync::Arc::new((**d).clone()))));
+        for changed in 0..5 {
+            let mut current = directory.clone();
+            match changed {
+                0 => current.epoch += 1,
+                1 => current.seq += 1,
+                2 => current.entities[0].reference.incarnation += 1,
+                3 => current.entities[0].slot += 1,
+                _ => {
+                    current.entities.pop();
+                }
+            }
+            assert!(!original.valid(&current, |id| descriptors.get(id as usize - 1).cloned()));
+        }
+        assert!(!original.valid(&directory, |_| None));
+    }
+    #[test]
+    fn batch_diagnostics_keep_original_entity_refs_and_admission_deltas() {
+        let world = w::World {
+            epoch: 42,
+            directory_seq: 7,
+            frame_seq: 9,
+            entities: Vec::new(),
+        };
+        let mut collector = CaptureCollector::new(&world);
+        collector.batch_rows = vec![
+            (
+                w::EntityRef {
+                    epoch: 42,
+                    id: 1,
+                    incarnation: 5,
+                },
+                11,
+            ),
+            (
+                w::EntityRef {
+                    epoch: 42,
+                    id: 2,
+                    incarnation: 6,
+                },
+                11,
+            ),
+        ];
+        collector.admissions = 7;
+        collector.row(CaptureRow {
+            component: 11,
+            complete: 1,
+            ..CaptureRow::default()
+        });
+        collector.admissions = 10;
+        collector.row(CaptureRow {
+            component: 11,
+            complete: 1,
+            ..CaptureRow::default()
+        });
+        assert_eq!(
+            (collector.rows[0].entity, collector.rows[0].incarnation),
+            (1, 5)
+        );
+        assert_eq!(
+            (collector.rows[1].entity, collector.rows[1].incarnation),
+            (2, 6)
+        );
+        assert_eq!(collector.rows[0].counters[1], 7);
+        assert_eq!(collector.rows[1].counters[1], 3);
+        assert_eq!(collector.rows[1].frame_seq, 9);
+    }
+    #[test]
+    fn complete_frame_guard_keeps_every_original_possession_and_world() {
+        let mut native = Native::new();
+        native.sample.world_ok = true;
+        native.world_key = Some(vec![1, 2, 3]);
+        let vt = source_roster_native_tests::vt();
+        let world = Box::new(0u64);
+        let object = |p: &u64| {
+            let address = p as *const u64 as u64;
+            Object {
+                weak: address,
+                address,
+            }
+        };
+        let mut pawn1 = Box::new(0u64);
+        let mut controller1 = Box::new(0u64);
+        let mut pawn2 = Box::new(0u64);
+        let mut controller2 = Box::new(0u64);
+        let p1 = object(&pawn1);
+        let c1 = object(&controller1);
+        let p2 = object(&pawn2);
+        let c2 = object(&controller2);
+        *pawn1 = c1.address;
+        *controller1 = p1.address;
+        *pawn2 = c2.address;
+        *controller2 = p2.address;
+        let field = reflect::HsmpProp {
+            size: 8,
+            offset: 0,
+            ..Default::default()
+        };
+        let mut context = GuardContext::new(&native, &vt, object(&world), None).unwrap();
+        context.source = vec![(p1, c1, field, field), (p2, c2, field, field)];
+        assert!(unsafe { context.valid() });
+        *pawn1 = c2.address;
+        assert!(!unsafe { context.valid() });
+        *pawn1 = c1.address;
+        *controller2 = p1.address;
+        assert!(!unsafe { context.valid() });
+        *controller2 = p2.address;
+        native.world_key = Some(vec![4]);
+        assert!(!unsafe { context.valid() });
+    }
     #[test]
     fn capture_diagnostic_layout_and_row_budget_do_not_bound_the_scene() {
         assert_eq!(std::mem::size_of::<CaptureRow>(), 104);
@@ -3908,7 +4498,8 @@ mod presentation_binding_tests {
         assert_eq!(std::mem::size_of::<VertexStateProof>(), 24);
         assert_eq!(std::mem::size_of::<SpringArmFrame>(), 56);
         assert_eq!(std::mem::size_of::<FinishTarget>(), 128);
-        assert_eq!(std::mem::size_of::<Provider>(), 112);
+        assert_eq!(std::mem::size_of::<Provider>(), 120);
+        assert_eq!(std::mem::size_of::<CaptureTarget>(), 64);
         assert_eq!(std::mem::size_of::<SplineSettings>(), 72);
         assert_eq!(std::mem::size_of::<SplineVectorPoint>(), 80);
         assert_eq!(std::mem::size_of::<SplineQuatPoint>(), 104);
