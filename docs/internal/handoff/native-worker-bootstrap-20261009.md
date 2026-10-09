@@ -1,6 +1,34 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build 02909df8
+## Current state: 2026-10-09, latest actual build db69d461
+
+The coherent Camera/SpringArm checkpoint passed full G0, was pushed to dev and
+cleanly deployed asdb69d461. Actual run
+`test-results/20261009-093753-61f9b3-native-host` passes source Shoulder eligibility
+with actual debugfalse and singleton `SpringEndpoint` at23.792s; FollowCamera
+metadata passes at24.453s. It reaches38 completed component-static rows.
+The next refusal is weapon owner1 component39 `Grip`, address2293453874816:
+the original wrapped StaticMesh read is nil/zero and the collector reports
+`native static asset unavailable` at27.218s. Complete recipes, canonical/mirror
+frames and active inputs remain zero; the new bulk native scene mapping has
+therefore not yet been exercised in the real game.
+
+Cooked evidence distinguishes inherited ModularWeaponBP `Grip_GEN_VARIABLE`
+(no serialized StaticMesh) from Axe `Grip_0_GEN_VARIABLE` (actual AxeShaft mesh).
+This suggests an unused inherited holder, but omitted cooked data and a missing
+wrapper do not prove an original native hard-null. Do not substitute AxeShaft,
+omit the component or invent geometry/defaults. Next work must establish exact
+current original hard-null/render/socket semantics before supporting a complete
+empty native StaticMesh component.
+
+The authority stopped normally47.403s; both clients closed/stopped after session
+end, and client1's held original handle reports exit0. All4 owned PIDs are absent,
+all20 original save SHA256 values match, crash/unobserved-child lists are empty.
+The menu-to-exit observation in this run is a bounded test shutdown after scene
+capture refusal, not a demonstrated early crash. The earlier separate travel
+exit remains unexplained.
+
+## Historical02909df8 checkpoint and Camera/SpringArm preparation
 
 The next coherent Camera/SpringArm implementation is now reviewed and focused
 checks pass: source schema4, render revision3/capability24 and private provider

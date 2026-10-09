@@ -113,3 +113,26 @@ Root independently rechecked the installed native tick getter's eight bytes.
 Combined full G0, clean deployment and the actual two-client/one-authority run
 remain pending. These checks do not establish scene publication, active input,
 native parity or release readiness.
+
+## Actual db69d461 result
+
+Full G0 passes74 Lua suites and1329 Rust checks in79 binaries; event violations0,
+clippy errors0/warnings12. Dev push02909df8→db69d461 and RequireG0 deployment
+complete. Deployed source/binary/G0 commits match exactly; all dirty flags false.
+
+Run `test-results/20261009-093753-61f9b3-native-host`, source UUID
+ad583620-89e6-4482-b6be-185f6ffd0866, authority34504/supervisor28300,
+clients35456/11548. Source native ready15.378s; Shoulder source eligibility
+23.792s (actual debugfalse/socketSpringEndpoint), FollowCamera metadata24.453s.
+It completes38 component-static rows and verifies original axe BaseMesh/Blade
+override-absence profiles. At27.218s the collector refuses Grip component39,
+owner1/address2293453874816, `native static asset unavailable` from an absent or
+zero-address wrapped original field. This is before any complete recipe or bulk
+CPP scene operation; canonical/mirror frames0 and active inputs[0,0].
+
+Authority stops cleanly47.403s, both clients close after normal session end,
+client1's held original process exit0. Independent cleanup confirms all4 owned
+PIDs absent/no shipping game, all20 protected save hashes unchanged,
+crash[]/unobservedchildren[]. Full native trace and exact authority-PID filter
+are preserved with `native_operator_summary.json`. This actual pass is narrow
+source eligibility evidence, not live cached-socket or mirror/render parity.

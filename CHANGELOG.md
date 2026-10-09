@@ -45,6 +45,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   ancestors. Negotiate a new scene revision for cached spring-arm socket output;
   require complete current source and inert mirror readbacks. Complete scene,
   local camera/HUD ownership and gameplay remain under native verification.
+- Retain empty inherited native StaticMesh holders as exact inert components
+  with guarded original null and vertex-override checks. Preserve their observed
+  collision/material/attachment state and invalidate recipes when modules
+  change. Complete native scene and gameplay verification remains pending.
 
 ## [0.1.0-beta.6] - 2026-10-08
 

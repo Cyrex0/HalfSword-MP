@@ -90,10 +90,12 @@ impl NativeCore {
                     | hsmp_net::net::caps::NATIVE_RENDER_V2
                     | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                     | hsmp_net::net::caps::NATIVE_RENDER_V3
+                    | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
             };
         let presentation_required = hsmp_net::net::caps::NATIVE_RENDER_V2
             | hsmp_net::net::caps::NATIVE_VERTEX_STATE
-            | hsmp_net::net::caps::NATIVE_RENDER_V3;
+            | hsmp_net::net::caps::NATIVE_RENDER_V3
+            | hsmp_net::net::caps::NATIVE_EMPTY_STATIC;
         caps & required == required
             && (caps & hsmp_net::net::caps::NATIVE_PRESENTATION == 0
                 || caps & presentation_required == presentation_required)
@@ -492,17 +494,21 @@ mod tests {
             | hsmp_net::net::caps::NATIVE_RENDER_V2
             | hsmp_net::net::caps::NATIVE_VERTEX_STATE;
         assert!(!pvp.admits_capabilities(legacy));
+        let prior_scene = legacy | hsmp_net::net::caps::NATIVE_RENDER_V3;
+        assert!(!pvp.admits_capabilities(prior_scene));
         assert!(!pvp.admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_RENDER_V2));
         assert!(!pvp.admits_capabilities(
             presentation
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
+                | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
         ));
         assert!(pvp.admits_capabilities(
             presentation
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
+                | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
         ));
         for entity in &mut pvp.directory.entities {
             entity.owner_peer = entity.reference.id;
@@ -513,6 +519,7 @@ mod tests {
         );
         let mut diagnostic = NativeCore::new(Arc::new(Bridge::default()), 19, "Map_Arena_Yard");
         assert!(!diagnostic.admits_capabilities(legacy));
+        assert!(!diagnostic.admits_capabilities(prior_scene));
         assert!(!diagnostic.admits_capabilities(0));
         assert!(diagnostic.admits_capabilities(caps));
         assert!(!diagnostic.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
@@ -523,12 +530,14 @@ mod tests {
             presentation
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
+                | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
         ));
         assert!(diagnostic.admits_capabilities(
             presentation
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
+                | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
         ));
         for entity in &mut diagnostic.directory.entities {
             if entity.kind == w::HUMAN {
