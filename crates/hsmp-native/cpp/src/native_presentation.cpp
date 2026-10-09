@@ -922,9 +922,11 @@ void* source_path_get(const HsmpNativePathNode& node) {
     auto object_name_value=object_name(object);auto class_name_value=object_name(cls);
     require(object_name_value&&*object_name_value==node.name&&class_name_value&&*class_name_value==node.class_name&&vt->class_of(object)==cls,"native path original FName/class changed");return object;
 }
-HsmpNativePathNode source_path_node(void* object) {
+struct LookupNodeEvidence {uint64_t address{},weak{};};
+HsmpNativePathNode source_path_node(void* object,LookupNodeEvidence* evidence=nullptr) {
     require(vt&&object_name&&retirement_flags&&source_outer,"native path metadata unavailable");
     require(object!=nullptr,"native path node missing");HsmpNativePathNode node{};node.weak=vt->weak(object);node.address=reinterpret_cast<uint64_t>(object);
+    if(evidence)*evidence={node.address,node.weak};
     require(node.weak&&vt->resolve(node.weak)==object,"native path node weak unavailable");auto flags=retirement_flags(object);require(flags&&(*flags&0x40000000u)==0,"native path node garbage");
     void* cls=vt->class_of(object);require(cls!=nullptr,"native path class missing");node.class_weak=vt->weak(cls);node.class_address=reinterpret_cast<uint64_t>(cls);
     require(node.class_weak&&vt->resolve(node.class_weak)==cls,"native path class weak unavailable");flags=retirement_flags(cls);require(flags&&(*flags&0x40000000u)==0,"native path class garbage");
@@ -971,6 +973,17 @@ void lookup_pin(LookupEntry& entry){
     for(const auto& node:proposed.pinned){lookup_remember(node);const auto class_node=source_path_node(vt->resolve(node.class_weak));require(class_node.name==node.class_name&&class_node.address==node.class_address,"native lookup retained class identity changed");lookup_remember(class_node);}
     lookup_entry_final(proposed);lookup_world_final(*active_lookup);entry.pinned=std::move(proposed.pinned);
 }
+[[noreturn]] void lookup_cold_failure(const Error& error,const char* stage,uint32_t depth,Obj root,const LookupNodeEvidence& node){
+    // Diagnostic-only slot access uses the admitted FUObjectItem getters. The
+    // returned slot object is compared as a scalar and is never dereferenced.
+    int available=-1,item_present=-1,slot_match=-1,serial_zero=-1;
+    if(node.weak==0&&node.address){available=retirement_index&&retirement_object&&retirement_serial?1:0;
+        if(available){void* item=retirement_index(0);item_present=item?1:0;if(item){const auto* object=retirement_object(item);const auto* serial=retirement_serial(item);
+            if(object)slot_match=reinterpret_cast<uint64_t>(*object)==node.address?1:0;if(serial)serial_zero=*serial==0?1:0;}}}
+    char reason[192]{};std::snprintf(reason,sizeof(reason),"%s; stage=%s n=%u w=%llx rw=%llx idx0=%d/%d/%d/%d a=%llx r=%llx",
+        error.what(),stage,depth,static_cast<unsigned long long>(node.weak),static_cast<unsigned long long>(root.weak),available,item_present,slot_match,serial_zero,
+        static_cast<unsigned long long>(node.address),static_cast<unsigned long long>(root.address));throw Error(reason);
+}
 Obj lookup_find(const wchar_t* path){
     check_guard();const std::wstring key(path);if(active_lookup){const auto hit=active_lookup->entries.find(key);
         if(hit!=active_lookup->entries.end()){lookup_pin(hit->second);check_guard();lookup_entry_final(hit->second);lookup_world_final(*active_lookup);const auto& root=hit->second.pinned.front();return {root.weak,root.address};}}
@@ -979,21 +992,25 @@ Obj lookup_find(const wchar_t* path){
     // Cache capacity limits reuse only; an admitted larger operation continues
     // through the unchanged native lookup path without a new scene bound.
     if(active_lookup->entries.size()>=512)return original;
+    const char* stage="package";uint32_t depth{};LookupNodeEvidence evidence{};
+    try{
     require(source_package_name!=nullptr,"native lookup package metadata unavailable");
-    LookupEntry entry;entry.package=*source_package_name;auto node=source_path_node(get(original));const auto first_observed=node;node.weak=original.weak;
+    stage="root_node";LookupEntry entry;entry.package=*source_package_name;auto node=source_path_node(get(original),&evidence);const auto first_observed=node;node.weak=original.weak;
     for(;;){require(entry.original.size()<64,"native lookup full path bound");for(const auto& prior:entry.original)require(prior.address!=node.address,"native lookup path cycle");entry.original.push_back(node);
         const auto* p=source_path_get(node);const auto* flags=retirement_flags(p);const auto* class_flags=retirement_flags(vt->resolve(node.class_weak));require(flags&&class_flags,"native lookup RF metadata unavailable");entry.flags.push_back(*flags);entry.class_flags.push_back(*class_flags);
-        const auto* outer=source_outer(p);require(outer,"native lookup Outer metadata unavailable");if(!*outer)break;node=source_path_node(const_cast<void*>(*outer));}
+        const auto* outer=source_outer(p);require(outer,"native lookup Outer metadata unavailable");if(!*outer)break;stage="outer_node";++depth;evidence={reinterpret_cast<uint64_t>(*outer),0};node=source_path_node(const_cast<void*>(*outer),&evidence);}
+    stage="path_close";
     entry.pinned=entry.original;entry.pinned.front()=first_observed;lookup_pin(entry);check_guard();lookup_entry_final(entry);
     // The first lookup may be followed by a callback before its witness is
     // complete. A second exact native lookup closes the requested-key binding.
-    profile_tick(2);void* second{};{CaptureTimer timer(6);second=vt->find(u16(path));}const auto exact=keep(second);
+    stage="exact_find";profile_tick(2);void* second{};{CaptureTimer timer(6);second=vt->find(u16(path));}const auto exact=keep(second);
     const Obj pinned{entry.pinned.front().weak,entry.pinned.front().address};
     require(same(pinned,exact)||mesh_serial_assignment(pinned,exact),"native lookup exact requested path changed");
     // Preserve the first positive serial observed by the second exact lookup
     // before another guard callback can assign a different positive serial.
-    lookup_pin(entry);require(same(Obj{entry.pinned.front().weak,entry.pinned.front().address},exact),"native lookup first observed serial changed");
+    stage="exact_pin";lookup_pin(entry);require(same(Obj{entry.pinned.front().weak,entry.pinned.front().address},exact),"native lookup first observed serial changed");
     check_guard();lookup_pin(entry);lookup_finish();const auto root=entry.pinned.front();active_lookup->entries.emplace(key,std::move(entry));return {root.weak,root.address};
+    }catch(const Error& error){lookup_cold_failure(error,stage,depth,original,evidence);}
 }
 int32_t source_path_reader(const HsmpNativePathNode* nodes,uint32_t count,uint32_t capture,HsmpNativePathNode* output,uint32_t capacity,uint32_t* output_count,uint64_t* package_name,char* reason,uint32_t reason_capacity) {
     try{require(vt&&vt->abi==HSMP_REFLECT_ABI,"native path reflection unavailable");const DWORD current=GetCurrentThreadId();if(!game_thread)game_thread=current;require(current==game_thread,"native path game-thread admission");

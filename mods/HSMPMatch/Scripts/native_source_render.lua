@@ -543,8 +543,8 @@ function M.capture(env,bindings)
                     if type(env.scope.profile)~="function"then fail("native spline profile capability unavailable")end
                     guard();component(row)
                     local profile,why=env.scope.profile(row.handle)
-                    guard();component(row)
                     if type(profile)~="table"then fail(why or "native spline profile incomplete")end
+                    guard();component(row)
                     local fields={position_count=64,rotation_count=64,scale_count=64,reparam_count=1024}
                     for key,value in pairs(profile)do
                         if key~="metadata_null"and fields[key]==nil then fail("native spline profile field unsupported")end

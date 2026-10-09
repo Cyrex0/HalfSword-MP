@@ -1,5 +1,18 @@
 # Native authority bootstrap checkpoint
 
+## Current actual: preserve cold lookup refusal; avoid old CDB helper
+
+Exact0bb472af/full G0/all394 run221837-e888fa refuses the first Vector path
+witness before recipes/frames. Lua postfailure scope lookup masks the original
+provider reason. The reviewed diagnostics retain it and add bounded copied
+stage/node/slot0 evidence;1215 native/321 Lua checks/syntax2 pass.
+Two preserved dumps from client43448/15364 are breakpoint80000003 at ucrtbase
+exit after the CDB helpers ended: runtimeCC versus disk45 proves leftover software
+breakpoints from forced debugger cleanup. Stop using native_operator_launch_cdb;
+next use gated non-CDB extended launch plus early qualified V2 secondary placement.
+All original processes/helpers gone, save20 unchanged. Cache speed unverified;
+exact refusal/slot0 evidence is next. Do not loosen original identity policy.
+
 ## Current actual: repeated native lookup is the measured bottleneck
 
 Exact4cf0c143/full G0/all394 hashes run215308-6ea88e preserves both completed

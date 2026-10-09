@@ -1214,6 +1214,37 @@ local profile_capture=Render.capture(render_env,native_bindings)
 T.check(profile_calls==2 and copied_spline(profile_capture,"StandaloneStepSpline").spline_profile.position_count==3,
     "rare spline profile entries persist before exactly one guarded native bulk call per rendered spline")
 render_env.scope.profile=native_profile_getter
+do
+    local original_resolve,original_guard=render_env.scope.resolve,render_env.guard
+    local function failed_profile(value,reason)
+        local dropped,post_resolves,post_guards=false,0,0
+        render_env.scope.resolve=function(...)
+            if dropped then post_resolves=post_resolves+1;return nil,"source scope unavailable"end
+            return original_resolve(...)
+        end
+        render_env.guard=function(...)
+            if dropped then post_guards=post_guards+1 end
+            return original_guard(...)
+        end
+        render_env.scope.profile=function()
+            -- Rust drops the taken scope when the native provider refuses.
+            dropped=true;scope_rows={};return value,reason
+        end
+        local ok,why=pcall(Render.capture,render_env,native_bindings)
+        render_env.scope.resolve,render_env.guard=original_resolve,original_guard
+        render_env.scope.profile=native_profile_getter
+        return ok,why,post_resolves,post_guards
+    end
+    local ok,why,resolves,guards=failed_profile(nil,"native spline cold vector witness changed")
+    T.check(not ok and why=="native spline cold vector witness changed",
+        "native spline provider refusal survives original scope invalidation")
+    T.check(resolves==0 and guards==0,"failed profile performs no post-provider guard or resolve")
+    ok,why,resolves,guards=failed_profile(false,"native spline profile malformed")
+    T.check(not ok and why=="native spline profile malformed"and resolves==0 and guards==0,
+        "non-table spline profile preserves provider refusal before postqualification")
+    ok,why=failed_profile(nil,nil)
+    T.check(not ok and why=="native spline profile incomplete","missing spline provider reason remains explicit refusal")
+end
 local mutations={
     {"metadata false",function(p)p.metadata_null=false end},
     {"metadata missing",function(p)p.metadata_null=nil end},

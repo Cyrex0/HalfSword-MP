@@ -1,5 +1,29 @@
 # Native full-scene encoding checkpoint
 
+## Actual 0bb472af: cold witness refuses; debugger shutdown needs correction
+
+Exact clean dev/full G0/all394 hashes run20261009-221837-e888fa-native-host,
+authority46656, fails first metadata harvest around19.697s before any complete
+recipe/frame. First Vector cold lookup stops in core_layout at21guards/3finds;
+the exact native predicate is hidden by Lua post-failure component resolution
+after the Rust profile scope was dropped. Do not claim speed from this run.
+The reviewed narrow diagnostic preserves that original reason before post-scope
+access and reports fixed cold-witness stage/depth/copied node/address plus
+explicit slot0 metadata evidence on weak0 only. No admission relaxation.
+Strict1215 native checks and321 Lua checks/syntax2 pass, independent reviews close.
+
+All four original processes and debugger helpers are gone; save20 unchanged.
+Two new client dumps are retained: .4765908 PID43448 SHA B4A381D4E6A263764BFB3272F317B2B8FEFDCF6202C6991C27F0065D83F843E3,
+.4951808 PID15364 SHA D6BD8F2F3FBF2A40008EF12B695DE6D32C9E984E9443ACFB3B03E9675FC88CA7.
+Both are exception80000003 at ucrtbase!exit RVA91700, runtime byteCC where the
+disk byte is45. CDB helpers ended22:20:16.76; dumps22:20:39.48. The old timed
+CDB Kill(false)/-pd cleanup left software breakpoints after detachment. This is
+a diagnostic-harness fault, distinct from the cold-witness refusal and older
+native cleanup AV. Do not reuse that software-breakpoint helper. Next exact
+native run uses the gated non-CDB extended operator with early V2 window
+placement; future debugging must remove breakpoints cleanly or use exception-only
+capture and positively verify unmodified target exit bytes before admitting it.
+
 ## Actual 4cf0c143: retirement holds; exact lookups dominate capture
 
 Exact clean dev/full G0/all394 hashes run20261009-215308-6ea88e-native-host,

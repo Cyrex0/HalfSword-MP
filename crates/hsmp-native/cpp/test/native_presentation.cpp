@@ -239,8 +239,9 @@ void path_checks(HsmpReflect& reflect){
 // Exact path reuse lasts only for one OperationScope. These real metadata
 // witnesses model callbacks and natural slot serial assignment, never allocation.
 LifetimeObject lookup_object{1400,&actor_class},lookup_replacement{1401,&actor_class};
-uint32_t lookup_serial{};int lookup_searches{},lookup_mutation{};bool lookup_pending{},lookup_second_positive{};
+uint32_t lookup_serial{};int lookup_searches{},lookup_mutation{};bool lookup_pending{},lookup_second_positive{},lookup_zero_package{};
 uint64_t lookup_weak(void* p){const auto value=lifetime_weak(p)|(p==&lookup_object?static_cast<uint64_t>(lookup_serial)<<32:0);
+    if(p==&path_package&&lookup_zero_package)return 0;
     if(p==&lookup_object&&lookup_serial==7&&lookup_second_positive&&lookup_mutation==3){lookup_pending=true;lookup_second_positive=false;}return value;}
 void* lookup_resolve(uint64_t value){auto* p=lifetime_resolve(value);if(p==&lookup_object&&(value>>32)&&value>>32!=lookup_serial)return nullptr;return p;}
 int32_t lookup_guard(void*){
@@ -258,7 +259,7 @@ void* lookup_native_find(const uint16_t* key){
 void lookup_reset(HsmpReflect& reflect){
     lifetime_reset(reflect);path_package={127,&meta};lookup_object={1400,&actor_class};lookup_replacement={1401,&actor_class};
     lookup_object.outer=&path_package;lifetime_objects.push_back(&path_package);lifetime_objects.push_back(&lookup_object);lifetime_objects.push_back(&lookup_replacement);
-    lookup_serial=0;lookup_searches=lookup_mutation=0;lookup_pending=lookup_second_positive=false;
+    lookup_serial=0;lookup_searches=lookup_mutation=0;lookup_pending=lookup_second_positive=lookup_zero_package=false;
     reflect.find=lookup_native_find;reflect.weak=lookup_weak;reflect.resolve=lookup_resolve;
 }
 void lookup_checks(HsmpReflect& reflect){
@@ -287,6 +288,18 @@ void lookup_checks(HsmpReflect& reflect){
         else if(mutation==5)old_world.property=&new_world;else path_package_name^=1;
         rejects([&]{lookup_finish();},"complete pure operation tail refuses garbage/name-number/Outer/classflags/slot/world/package mutation");}
     lookup_reset(reflect);{OperationScope scope(&guard,keep(&old_world));find(path);lookup_object.flags^=1;rejects([&]{find(path);},"non-garbage RF changes still refuse retained original profile");}
+    struct ZeroSlot {void* object{};int32_t serial{};};static ZeroSlot zero_slot;static int slot_reads;
+    for(int mode=0;mode<5;++mode){lookup_reset(reflect);OperationScope scope(&guard,keep(&old_world));lookup_zero_package=true;slot_reads=0;
+        zero_slot={mode==2?static_cast<void*>(&lookup_replacement):static_cast<void*>(&path_package),mode==3?7:0};
+        retirement_index=[](int32_t index)->void*{++slot_reads;return index==0?&zero_slot:nullptr;};
+        retirement_object=[](void* item)->void**{return &static_cast<ZeroSlot*>(item)->object;};
+        retirement_serial=[](void* item)->int32_t*{return &static_cast<ZeroSlot*>(item)->serial;};
+        if(mode==1)retirement_index=nullptr;if(mode==4)retirement_index=[](int32_t)->void*{++slot_reads;return nullptr;};
+        std::string reason;try{find(path);}catch(const Error& error){reason=error.what();}
+        const char* expected=mode==0?"idx0=1/1/1/1":mode==1?"idx0=0/-1/-1/-1":mode==2?"idx0=1/1/0/1":mode==3?"idx0=1/1/1/0":"idx0=1/0/-1/-1";
+        check(reason.find("native path node weak unavailable; stage=outer_node n=1 w=0")!=std::string::npos&&reason.find(expected)!=std::string::npos&&reason.size()<192,
+            "cold diagnostic retains original refusal and exact zero-slot scalar evidence within result bound");
+        check(active_lookup->entries.empty()&&slot_reads==(mode==1?0:1),"diagnostic neither admits weak-zero node nor repeats slot probe");}
     lifetime_reset(reflect);
 }
 // Original component memory and reflected array metadata exercise the actual
