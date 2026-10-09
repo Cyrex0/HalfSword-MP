@@ -154,3 +154,57 @@ delays with CallbackTarget=self; disabling tick alone cannot cancel these
 continuations or prevent direct spawn function calls. Lua UObject:IsValid
 does not supply an actor pending-destruction proof. Never admit a client based
 on an invented cancellation call or weakened same-world fighter census.
+
+## Actual qualified-object diagnostic run
+
+Exact clean c53a7f1e passed full G0 and was pushed to dev, then deployed with
+matching binaries/native modules. Real three-game evidence is in
+`test-results/20261009-011615-85bf8f-native-host`. The authority again reached
+native_ready at9.818s with two opposed humans, no AI, but zero samples/frames
+and active input [0,0]. The original scene failure is now identified precisely:
+Willie's StaticMeshComponent `Aim Spline Scene Sphere` attaches to the actual
+nonmesh `Aim Spline Scene`, whose parent is `Aim Spline`; their original pawn
+owner, CollisionCylinder root, class identities, socket and exact native
+transforms were qualified in the authority's own event file. The existing
+mesh-only dictionary could not honestly express this chain.
+
+Both clients refused the exact nonPersistent `BP_LevelManager_C_1` after
+K2_DestroyActor returned: native current-world/hidden/tick/collision facts
+remained true/true/false/false; Lua IsValid was true, and IsActorBeingDestroyed,
+RF_BeginDestroyed and RF_FinishDestroyed were false. These facts neither prove
+engine rejection nor exclude pending kill. The pinned Lua method dispatch uses
+the correct colon receiver and reaches ProcessEvent; no LevelManager override
+or tracked mod hook suppressing destruction was found. Native PendingKill is
+an internal object flag distinct from begin/finish destruction. Capture an
+original qualified weak identity before dispatch and resolve it afterward
+with the pinned native GUObjectItem::IsValid(false); do not dereference an
+invalidated actor, waive the test, or claim that changing call language proves
+removal. All four owned processes were absent after cleanup, saves unchanged,
+and crash/orphan lists empty.
+
+The next candidate adds explicitly typed nonrendering scene anchors and a
+guarded native driver-retirement proof. Exact native SceneComponent anchors,
+SplineComponent anchors with actual bDrawDebug=false, and currently hidden
+CapsuleComponent roots require their own qualified eligibility checks. Unknown
+or rendered geometry must still refuse. Copy every real parent/root and apply
+parents before children; later parent movement must not corrupt already-applied
+world transforms. Native scene/input/playability proof remains outstanding.
+
+Candidate commits 153db525/81a32749 now implement that bounded change. Recipe
+schema2 requires exact component classes and scene evidence, explicit
+not-applicable geometry/vertex state for anchors, and explicit null collision
+only for a proven nonprimitive SceneComponent. The complete actual ancestor
+graph is cycle/bound/owner/world checked. C++ source capture rechecks eligible
+anchor classes and visibility/debug facts, creates inert plain scene anchors,
+and rejects missing parents before applying transforms in parent-first order.
+
+Presentation ABI4 adds guarded native driver retirement using the originally
+live weak identity and GUObjectItem validity. Still-live, foreign, protected,
+changed-world and reused identities refuse. Scalar proof records are probed
+before any later engine call on a pending-garbage Lua wrapper; same-world
+reconnect retains these proofs and actual world drop clears them. Native
+invalidity does not mean UObject memory has been deallocated. Gear/AI removal
+keeps its prior strict path until corresponding native evidence justifies a
+qualified extension. Focused checks passed: source Lua46, DTO8/parser4;
+native C++82, two native Rust filters, client/suppression Lua82. None substitutes
+for the next exact three-game scene and control proof.
