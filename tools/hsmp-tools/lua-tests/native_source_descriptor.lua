@@ -7,6 +7,21 @@ local armor=fixture("tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.j
 -- Native ForEach passes GetParam wrappers for the actual hard enum/bool/struct
 -- inner properties. These fixtures reproduce that documented wrapper contract.
 local function wrapped(v,kind)return {type=function()return kind or "RemoteUnrealParam"end,get=function()return v end}end
+local Array=dofile("mods/HSMPMatch/Scripts/native_source_array.lua")
+local array_env={guard=function()end,context="Actor.K2_GetComponentsByClass(SceneComponent) collect owner=FixturePawn"}
+local function collect_return(value,max)return Array.collect(value,max or 2,"return",array_env,function(v)return v end)end
+T.eq(collect_return({wrapped(17),wrapped(23)})[2],23,"known return-table numeric keys copy typed inner values")
+local bad_keys={"outTable",0,1.5,3,setmetatable({},{__tostring=function()error("unsafe key formatter",0)end})}
+for _,key in ipairs(bad_keys)do
+    local ok,reason=pcall(collect_return,{[1]=wrapped(17),[key]=false})
+    T.check(not ok and reason:find('getter="Actor.K2_GetComponentsByClass(SceneComponent)',1,true)
+        and reason:find('key_type='..type(key),1,true) and reason:find('value_type=boolean',1,true),
+        "unexpected returned key refuses with producer/key/value context: "..type(key))
+end
+local _,bounded_reason=pcall(collect_return,{[string.rep("x",10000)]=false})
+T.check(#bounded_reason<450 and bounded_reason:find('[truncated]',1,true),"native array key evidence is bounded")
+local _,hole_reason=pcall(collect_return,{[2]=wrapped(23)})
+T.check(hole_reason:find('native returned array hole',1,true) and hole_reason:find('index=1',1,true),"native sparse array refusal identifies missing index")
 local function map(rows)
     return setmetatable({ForEach=function(_,fn)for _,r in ipairs(rows)do fn(wrapped(r.slot),wrapped(r.value))end end},
         {__len=function()return #rows end})
@@ -239,6 +254,21 @@ T.eq(rendered.bindings[3].owner,200,"ephemeral binding uses actual owner address
 T.eq(rendered.components[1].parent,2,"native body preserves actual capsule root rather than actor-root shortcut")
 T.eq(rendered.components[2].scene.type,"hidden_capsule","root eligibility follows actual native hidden flag")
 T.eq(rendered.topology.vertex_state,"captured","source vertex readiness follows actual complete getter data")
+host.K2_GetComponentsByClass=function()local out=source_scene_return();out.outTable=false;return out end
+local malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not malformed and malformed_reason:find('K2_GetComponentsByClass(SceneComponent) collect owner=Pawn',1,true)
+    and malformed_reason:find('key="outTable" key_type=string value_type=boolean',1,true),"actual scene getter refusal identifies unexpected native return key without filtering it")
+host.K2_GetComponentsByClass=source_scene_return
+local morph_getter=body_asset.GetMorphTargetsPtrConv
+body_asset.GetMorphTargetsPtrConv=function()local out=morph_getter();out.outTable=false;return out end
+malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not malformed and malformed_reason:find('SkeletalMesh.GetMorphTargetsPtrConv component=BodyMesh',1,true),"morph return refusal names exact native producer")
+body_asset.GetMorphTargetsPtrConv=morph_getter
+local color_getter=rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
+rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=function(self,c)local out=color_getter(self,c);out.outTable=false;return out end
+malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not malformed and malformed_reason:find('GetMeshComponentVertexColorsAtLOD_Wrapper component=BodyMesh lod=0',1,true),"vertex return refusal preserves exact component and LOD getter context")
+rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=color_getter
 local anchor=scene(object(101,"ActualSceneAnchor","/Game/Test/Runtime.ActualSceneAnchor",false),host,"/Script/Engine.SceneComponent")
 anchor.GetAttachParent=function()return root end;anchor.GetAttachSocketName=function()return fname("ExactAnchorSocket")end
 body.GetAttachParent=function()return anchor end

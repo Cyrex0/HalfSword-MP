@@ -16,7 +16,8 @@ function M.capture(env)
             if env.reserve then env.reserve(expected)end
             local colors=env.colors(lod);guard(env)
             local runs,seen={},0
-            local copied=Array.collect(colors,expected,env.array_kind or "return",{guard=function()guard(env)end},function(v)
+            local copied=Array.collect(colors,expected,env.array_kind or "return",{guard=function()guard(env)end,
+                context=(env.array_context or "VertexPaintFunctionLibrary.GetMeshComponentVertexColorsAtLOD_Wrapper").." lod="..tostring(lod)},function(v)
                 guard(env)
                 local c={v.R,v.G,v.B,v.A}
                 for index=1,4 do local channel=c[index]

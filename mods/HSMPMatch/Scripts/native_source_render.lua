@@ -25,8 +25,8 @@ local function fail(s)error(s,0)end
 function M.capture(env,bindings)
     local read,guard=env.read,env.guard
     local function checked(fn)guard();local v=fn();guard();return v end
-    local function array(a,max,convert,producer)
-        return Array.collect(a,max,producer or "property",{guard=guard},convert)
+    local function array(a,max,convert,producer,context)
+        return Array.collect(a,max,producer or "property",{guard=guard,context=context},convert)
     end
     local function path(o)
         if o==nil then return "",false end
@@ -76,7 +76,7 @@ function M.capture(env,bindings)
             catalog[#catalog+1]=id;by_address[id.address]=id
             if #catalog>512 then fail("native scene census bound")end
             return true
-        end,"return")
+        end,"return","Actor.K2_GetComponentsByClass(SceneComponent) collect owner="..actor_id.name)
     end
     collect(read(function(b)return b.pawn end),0)
     for _,w in ipairs(bindings.weapons)do collect(env.weapon(w.field,w),w.id)end
@@ -86,7 +86,7 @@ function M.capture(env,bindings)
             local identity=object_id(c)
             if identity and identity.address==row.address and identity.name==row.name then found=c end
             return true
-        end,"return")
+        end,"return","Actor.K2_GetComponentsByClass(SceneComponent) qualify component="..row.name.." owner="..tostring(row.owner))
         if not found then fail("native render component changed")end
         local actual=checked(function()return found:GetOwner()end)
         local current_owner=owner(row)
@@ -228,7 +228,7 @@ function M.capture(env,bindings)
                         target[key]={info=info,value=value}
                     end
                     return true
-                end)
+                end,"property","MaterialInstance."..field.." component="..row.name.." slot="..tostring(slot))
             end
             parameters("ScalarParameterValues",scalar,"num");parameters("VectorParameterValues",vector,"color");parameters("TextureParameterValues",texture,"texture")
             current=checked(function()return current.Parent end)
@@ -343,10 +343,10 @@ function M.capture(env,bindings)
                 if hidden then c.hidden_bones[#c.hidden_bones+1]=n end
             end
             array(asset_read(function(o)return o:GetMorphTargetsPtrConv()end),128,function(m)
-                current_asset();local n=name(checked(function()return m:GetFName()end));c.morphs[#c.morphs+1]={name=n,value=get(row,function(o)return o:GetMorphTarget(FName(n))end)};current_asset();return true end,"return")
+                current_asset();local n=name(checked(function()return m:GetFName()end));c.morphs[#c.morphs+1]={name=n,value=get(row,function(o)return o:GetMorphTarget(FName(n))end)};current_asset();return true end,"return","SkeletalMesh.GetMorphTargetsPtrConv component="..row.name)
         elseif kind=="groom"then
             local groups=array(get(row,function(o)return o.GroomGroupsDesc end),32,function(v)
-                local group={};for _,fd in ipairs(group_fields)do group[fd[2]]=checked(function()return v[fd[1]]end);if group[fd[2]]==nil then fail("native groom group incomplete")end end;return group end)
+                local group={};for _,fd in ipairs(group_fields)do group[fd[2]]=checked(function()return v[fd[1]]end);if group[fd[2]]==nil then fail("native groom group incomplete")end end;return group end,"property","GroomComponent.GroomGroupsDesc component="..row.name)
             c.groom={{binding_asset=path(get(row,function(o)return o.BindingAsset end)),source_mesh=path(get(row,function(o)return o.SourceSkeletalMesh end)),
                 cache=path(get(row,function(o)return o.GroomCache end)),physics_asset=path(get(row,function(o)return o.PhysicsAsset end)),
                 attachment_name=get(row,function(o)return o.AttachmentName:ToString()end),use_cards=get(row,function(o)return o.bUseCards end),
@@ -380,6 +380,7 @@ function M.capture(env,bindings)
                 end,
                 colors=function(lod)return get(row,function(o)return rvp:GetMeshComponentVertexColorsAtLOD_Wrapper(o,lod)end)end,
                 array_kind="return", -- known synchronous native TArray<FColor> return
+                array_context="VertexPaintFunctionLibrary.GetMeshComponentVertexColorsAtLOD_Wrapper component="..row.name,
             })
             if not colors then fail(why)end
             c.vertex_colors,c.vertex_state=colors,"captured"
