@@ -1,6 +1,6 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build 689f2913
+## Current state: 2026-10-09, latest actual build 02909df8
 
 The actual topology launches: one NullRHI game authority and two rendered native
 clients. The authority qualifies two human fighters on opposing native teams;
@@ -10,16 +10,13 @@ native parents).
 The production helper wiring and the client256-component resource assumption are
 fixed. No canonical scene frame or active client input has been proved yet.
 
-Current publication blocker: the paired real runs prove native Sphere.Sphere
-LOD count0 under NullRHI and1 under offscreen. Offscreen advances to
-`native vertex count unavailable` on StaticMeshComponent
-`Aim Spline Scene Sphere`. Actual689f records count0 and original asset
-bAllowCPUAccess=false at22.802s. Capture currently requires a CPU-paint getter
-even for this unreadable cooked mesh. A guarded native override-array census
-is being implemented; absence is never assumed from the CPU flag alone. Do not
-guess colors/counts, mutate that flag or omit geometry. No canonical scene frame
-or active input has been proved. The prior offscreen client2 travel exit remains
-unexplained but did not recur in689f.
+Current publication blocker: original Sphere.Sphere now passes the native
+all-null override census (native_asset/no_override=true/LODInfoCount0), without
+using the CPU-gated RVP getter. The next strict refusal is component6,
+`CameraBoom(Shoulder)`, exact `/Script/Engine.SpringArmComponent`, at23.766s.
+The original nonmesh attachment classes need complete evidenced source/mirror
+support. No canonical scene frame or active input has been proved. The prior
+offscreen client2 travel exit remains unexplained but did not recur in689f/0290.
 
 The reviewed direct native path witness and pure callback admission batching
 are committed, gated and deployed. Actual Aim Spline profile time falls from
@@ -1073,3 +1070,38 @@ layout/byte-signature and actual restriction evidence is recorded in
 three-game run must prove actual slot state, complete recipes, advancing frames,
 both mirror readbacks and legal owned inputs; no runtime gain or parity follows
 from these focused checks alone.
+
+## Actual guarded native-asset capture: 02909df8
+
+Full clean G0 passes74 Lua suites and1326 Rust workspace tests in79 binaries;
+dev push and deployment match02909df80698681c1e22be32bd7e6fd3c9103100. Actual
+evidence is retained in `test-results/20261009-084130-2f5bc9-native-host`, source
+UUIDabc9910b-2172-4d47-998a-bd7bd4ae6bcc, authority PID29952, supervisor44664,
+normal clients40560/21020. Existing45-second offscreen topology, legal input
+exercise, probes0 and secondary display parameters are unchanged.
+
+NativeReady occurs15.278s and complete original closure49 nodes at23.383s.
+First vertex_state seq92→93 at23.522→23.548s establishes actual
+native_asset/no_override=true/LODInfoCount0 on the original Aim Spline Scene
+Sphere. This proves the guarded cooked-static path resolves the prior CPU
+getter refusal for this component. It does not establish full scene/render parity.
+
+Source capture next refuses `native scene anchor class unsupported:
+/Script/Engine.SpringArmComponent` at23.766s: component6 CameraBoom(Shoulder),
+owner0, original address2047275197952. No debug flag value was recorded before
+the refusal. Complete recipes/canonical frames remain0 and active input[0,0].
+Both clients qualify suppression/isolation and remain wait_scene.
+
+The source cleanly stops50.714s, no fallback. Client2 records native session
+closed51.018s/stopped51.019s and held original-process exit0/0x00000000 at
+07:42:22.805UTC. This is the bounded authority-end exit; the prior travel exit
+does not reproduce. All four original owned PIDs are independently absent, no
+shipping game remains, all20 original save SHA256 values match, and crash and
+unobserved-child lists are empty. Full native log/authority29952-filtered trace
+and native_operator_summary.json are preserved.
+
+Next audit covers the complete relevant native nonmesh ancestor set together,
+including the pinned Willie's three SpringArms and three CameraComponents.
+SpringArm is a SceneComponent rather than PrimitiveComponent; its actual
+bDrawDebugLagMarkers flag must be checked, not defaulted or discarded. Native
+attachment/socket/current transforms and inert mirror behavior remain required.
