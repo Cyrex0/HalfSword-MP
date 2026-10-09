@@ -2,6 +2,16 @@
 
 ## Current state: 2026-10-09, latest actual build db69d461
 
+The next EmptyStatic checkpoint is now implemented and reviewed: schema5,
+private provider ABI10 (proof12 bytes/explicit asset_present), required
+capability25, unchanged render revision3. Exact native empty static holders
+retain real component/attachment/collision/material facts and require original
+hard-null/all-null override evidence at final scene boundaries. The Camera/Arm
+collision-helper creation defect is also closed. Focused checks pass source
+Lua213/syntax3, scopes30/parser7/presentation7/descriptor11, C++567 and provider
+/W4 /WX. Full G0/deploy/actual are pending. Detailed proof:
+`native-empty-grip-investigation-20261009.md`. Latest actual remainsdb69d461 below.
+
 The coherent Camera/SpringArm checkpoint passed full G0, was pushed to dev and
 cleanly deployed asdb69d461. Actual run
 `test-results/20261009-093753-61f9b3-native-host` passes source Shoulder eligibility

@@ -65,5 +65,19 @@ class proof and constructs an exact inert StaticMeshComponent with no mesh.
 Final scene checks retain original hard-null/census evidence after all callbacks.
 Capability25 is required by presenting peers; current render revision3 remains.
 
-Implementation and focused checks are in progress. No empty-native source/mirror
-or complete scene parity has been proved in a running game yet.
+Implementation and focused review are closed. Source Lua213 assertions/syntax3,
+Rust source_scope30/raw parser7/presentation7/descriptor11 and C++567 checks pass.
+The changed native provider object and fixture compile /W4 /WX. Cap25/server
+native filter47 passes, including older presenting peer refusal and authenticated
+V3 delivery. The private native implementation is18d6fb26, fixtureca24223f,
+source/schema73bc8bf5. No unsafe Send, bound or timeout relaxation.
+
+Integration review also caught an earlier Camera/SpringArm creation defect:
+collision_off's nonprimitive branch still required exact Scene. It now admits
+only the already-proved exact Camera/Arm profiles. Direct production-helper
+regressions catch that old refusal and verify the empty static's Primitive
+collision/physics path. The final native/compatibility/source reviews are closed.
+
+Combined full G0, clean deployment and actual native scenario remain pending.
+No empty-native source/mirror or complete scene parity has been proved in a
+running game yet.
