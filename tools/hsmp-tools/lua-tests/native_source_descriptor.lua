@@ -812,6 +812,83 @@ body.GetSkeletalMeshAsset=function()return body_asset end;body_asset.GetPhysicsA
 body_asset.GetPhysicsAsset=function()body.PhysicsAssetOverride=override_asset;return physical_asset end
 T.check(not pcall(Render.capture,render_env,native_bindings),"native override replacement during default physics getter refuses capture")
 body.PhysicsAssetOverride=nil;body_asset.GetPhysicsAsset=function()return physical_asset end
+;(function()
+    -- Exact offline native-class wrappers exercise the production collector.
+    -- The socket label is returned by the source; it is never a default name.
+    local arm=scene(object(8001,"ArmCameraBoom","/Game/Test/Runtime.ArmCameraBoom",false),host,"/Script/Engine.SpringArmComponent")
+    local camera=scene(object(8002,"CameraFollow","/Game/Test/Runtime.CameraFollow",false),host,"/Script/Engine.CameraComponent")
+    local socket="OfflineExactSocket"
+    local socket_reads=0
+    local function sockets()
+        socket_reads=socket_reads+1
+        return {wrapped(fname(socket))}
+    end
+    arm.bDrawDebugLagMarkers=false;arm.GetAllSocketNames=sockets
+    arm.GetAttachParent=function()return root end
+    camera.GetAttachParent=function()return arm end
+    camera.GetAttachSocketName=function()return fname(socket)end
+    body.GetAttachParent=function()return camera end
+    local function no_primitive()error("native Camera/SpringArm is not a PrimitiveComponent",0)end
+    for _,c in ipairs({arm,camera})do
+        c.GetCollisionResponseToChannel=no_primitive;c.GetCollisionEnabled=no_primitive
+        c.GetCollisionObjectType=no_primitive;c.GetCollisionProfileName=no_primitive;c.IsSimulatingPhysics=no_primitive
+    end
+    local capture=Render.capture(render_env,native_bindings)
+    local copied={};for _,c in ipairs(capture.components)do copied[c.name]=c end
+    local a,c=copied.ArmCameraBoom,copied.CameraFollow
+    T.check(a and c and a.kind=="scene"and c.kind=="scene"and a.scene.type=="spring_arm"and c.scene.type=="camera",
+        "exact native Camera and SpringArm ancestors have distinct required replay evidence")
+    T.check(a.scene.draw_debug_lag_markers==false and a.scene.socket_name==socket and socket_reads==2,
+        "native SpringArm singleton socket and debug flag are harvested freshly before and after metadata")
+    T.check(a.collision==false and c.collision==false and a.geometry=="not_applicable"and c.vertex_state=="not_applicable",
+        "nonprimitive native Camera and SpringArm never invoke or invent collision/geometry data")
+    T.check(c.parent==a.id and c.socket==socket and copied.BodyMesh.parent==c.id and a.parent==copied.CapsuleRoot.id,
+        "complete camera-arm-root hierarchy retains the actual named attachment socket")
+    T.check(T.eq(a.relative.translation,{0.125,-2.5,3})and T.eq(c.relative.scale,{0.5,1,2}),
+        "source Camera and SpringArm retain exact native transforms")
+    arm.IsVisible=function()return false end;camera.bHiddenInGame=true
+    capture=Render.capture(render_env,native_bindings)
+    copied={};for _,v in ipairs(capture.components)do copied[v.name]=v end
+    T.check(not copied.ArmCameraBoom.visible and copied.CameraFollow.hidden,
+        "Camera and SpringArm visibility flags are copied from the source")
+    arm.IsVisible=function()return true end;camera.bHiddenInGame=false
+    for _,draw in ipairs({true,"false",0})do
+        arm.bDrawDebugLagMarkers=draw
+        T.check(not pcall(Render.capture,render_env,native_bindings),"native SpringArm refuses unsupported debug type/value "..type(draw))
+    end
+    arm.bDrawDebugLagMarkers=nil
+    T.check(not pcall(Render.capture,render_env,native_bindings),"missing native SpringArm debug flag is unknown")
+    arm.bDrawDebugLagMarkers=false
+    for _,result in ipairs({{}, {wrapped(fname(socket)),wrapped(fname("OtherSocket"))}, {[2]=wrapped(fname(socket))}, {outTable=false}})do
+        arm.GetAllSocketNames=function()return result end
+        T.check(not pcall(Render.capture,render_env,native_bindings),"native SpringArm requires a complete strict singleton returned array")
+    end
+    arm.GetAllSocketNames=sockets
+    for _,value in ipairs({"","None",string.rep("x",129),"x\0y"})do
+        socket=value
+        T.check(not pcall(Render.capture,render_env,native_bindings),"native SpringArm socket name is observed and bounded")
+    end
+    socket="OfflineExactSocket"
+    arm.GetAllSocketNames=function()
+        return {wrapped({ToString=function()arm.bDrawDebugLagMarkers=true;return socket end})}
+    end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"socket name conversion changing native debug state refuses capture")
+    arm.bDrawDebugLagMarkers=false;arm.GetAllSocketNames=sockets
+    local bone_getter=body.GetNumBones
+    body.GetNumBones=function()socket="ChangedSocket";return bone_getter()end
+    local ok,reason=pcall(Render.capture,render_env,native_bindings)
+    T.check(not ok and reason:find("native spring arm evidence changed during harvest",1,true),
+        "later component metadata changing an earlier arm socket refuses ending evidence")
+    socket="OfflineExactSocket";body.GetNumBones=function()arm.bDrawDebugLagMarkers=true;return bone_getter()end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"later component metadata changing an earlier arm debug flag refuses ending evidence")
+    body.GetNumBones=bone_getter;arm.bDrawDebugLagMarkers=false
+    arm.GetAllSocketNames=function()scope=false;return {wrapped(fname(socket))}end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"world loss in native socket getter prevents stale source replay")
+    scope=true;arm.GetAllSocketNames=sockets
+    camera.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.UnknownCameraSubclass"end}end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"unproved Camera subclass cannot inherit absent-rendering evidence")
+    body.GetAttachParent=function()return root end
+end)()
 dynamic_mat.FontParameterValues=array({true})
 T.check(not pcall(Render.capture,render_env,native_bindings),"unsupported native material parameter refuses rather than drops data")
 dynamic_mat.FontParameterValues=array({})

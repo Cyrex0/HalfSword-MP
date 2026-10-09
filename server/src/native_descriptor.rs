@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-pub const SCHEMA: u16 = 3;
+pub const SCHEMA: u16 = 4;
 pub const MAX_RECIPE_BYTES: usize = 60 * 1024;
 pub const MAX_COMPONENTS: usize = 64;
 pub const MAX_BONES: usize = 512;
@@ -103,8 +103,15 @@ dto! {
 pub enum SceneEvidence {
     NotApplicable,
     Scene,
-    Spline { draw_debug: bool },
+    Spline {
+        draw_debug: bool,
+    },
     HiddenCapsule,
+    SpringArm {
+        draw_debug_lag_markers: bool,
+        socket_name: String,
+    },
+    Camera,
 }
 
 fn required_collision<'de, D: serde::Deserializer<'de>>(
@@ -452,6 +459,16 @@ impl RenderComponent {
                         if self.component_class == "/Script/Engine.CapsuleComponent"
                             && self.collision.is_some()
                             && (!self.visible || self.hidden) => {}
+                    SceneEvidence::SpringArm {
+                        draw_debug_lag_markers: false,
+                        socket_name,
+                    } if self.component_class == "/Script/Engine.SpringArmComponent"
+                        && self.collision.is_none()
+                        && text(socket_name, 128, false)
+                        && socket_name != "None" => {}
+                    SceneEvidence::Camera
+                        if self.component_class == "/Script/Engine.CameraComponent"
+                            && self.collision.is_none() => {}
                     _ => return Err("native anchor rendering not proved absent"),
                 }
             }
@@ -801,10 +818,15 @@ mod tests {
             SceneEvidence::Scene => "/Script/Engine.SceneComponent",
             SceneEvidence::Spline { .. } => "/Script/Engine.SplineComponent",
             SceneEvidence::HiddenCapsule => "/Script/Engine.CapsuleComponent",
+            SceneEvidence::SpringArm { .. } => "/Script/Engine.SpringArmComponent",
+            SceneEvidence::Camera => "/Script/Engine.CameraComponent",
             SceneEvidence::NotApplicable => unreachable!(),
         }
         .into();
-        if evidence == SceneEvidence::Scene {
+        if matches!(
+            evidence,
+            SceneEvidence::Scene | SceneEvidence::SpringArm { .. } | SceneEvidence::Camera
+        ) {
             c.collision = None;
         }
         c.scene = evidence;
@@ -872,6 +894,56 @@ mod tests {
                 "missing {missing}"
             );
         }
+    }
+    #[test]
+    fn exact_camera_and_spring_arm_evidence_is_required() {
+        let evidence = SceneEvidence::SpringArm {
+            draw_debug_lag_markers: false,
+            socket_name: "OfflineExactSocket".into(),
+        };
+        let mut recipe = fixture();
+        recipe.components[0].parent = 2;
+        recipe
+            .components
+            .extend([anchor(2, 3, SceneEvidence::Camera), anchor(3, 0, evidence)]);
+        recipe.validate_mirror_profile().unwrap();
+        assert_eq!(
+            SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap(),
+            recipe
+        );
+        assert!(recipe.components[1].collision.is_none());
+        assert!(recipe.components[2].collision.is_none());
+        for socket in ["", "None", "x\0y"] {
+            let arm = anchor(
+                2,
+                0,
+                SceneEvidence::SpringArm {
+                    draw_debug_lag_markers: false,
+                    socket_name: socket.into(),
+                },
+            );
+            assert!(arm.validate().is_err());
+        }
+        let mut arm = recipe.components[2].clone();
+        arm.scene = SceneEvidence::SpringArm {
+            draw_debug_lag_markers: true,
+            socket_name: "OfflineExactSocket".into(),
+        };
+        assert!(arm.validate().is_err());
+        arm.scene = recipe.components[2].scene.clone();
+        arm.component_class = "/Script/Engine.UnknownSpringArmSubclass".into();
+        assert!(arm.validate().is_err());
+        for missing in ["draw_debug_lag_markers", "socket_name"] {
+            let mut json = serde_json::to_value(&recipe).unwrap();
+            json["components"][2]["scene"]
+                .as_object_mut()
+                .unwrap()
+                .remove(missing);
+            assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err());
+        }
+        let mut json = serde_json::to_value(&recipe).unwrap();
+        json["schema"] = 3.into();
+        assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err());
     }
     #[test]
     fn spline_profile_is_explicit_exact_and_bounded() {
@@ -969,7 +1041,7 @@ mod tests {
             SourceRecipe::decode_recipe(&serde_json::to_vec(&absent_collision).unwrap()).is_err()
         );
         let mut old = serde_json::to_value(recipe).unwrap();
-        old["schema"] = 2.into();
+        old["schema"] = 3.into();
         assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&old).unwrap()).is_err());
     }
     #[test]

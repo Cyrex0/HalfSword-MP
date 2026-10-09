@@ -157,6 +157,22 @@ function M.capture(env,bindings)
         stats.component_reads=stats.component_reads+1
         guard();local c=component(row);local value=fn(c);c=nil;guard();component(row);return value
     end
+    local function spring_arm_evidence(row)
+        local draw=get(row,function(o)return o.bDrawDebugLagMarkers end)
+        if type(draw)~="boolean"or draw then
+            local value=type(draw)=="boolean"and tostring(draw)or "<unknown>"
+            fail("native spring arm debug rendering unsupported: draw_debug_lag_markers_type="..type(draw).." value="..value)
+        end
+        local sockets=array(get(row,function(o)return o:GetAllSocketNames()end),1,function(n)
+            local s=name(n)
+            if type(s)~="string"or #s==0 or #s>128 or s=="None"or s:find("\0",1,true)then fail("native spring arm socket name unavailable")end
+            return s
+        end,"return","SceneComponent.GetAllSocketNames component="..row.name)
+        if #sockets~=1 then fail("native spring arm complete socket singleton unavailable")end
+        if get(row,function(o)return o.bDrawDebugLagMarkers end)~=draw then fail("native spring arm debug flag changed during sockets")end
+        return {type="spring_arm",draw_debug_lag_markers=draw,socket_name=sockets[1]}
+    end
+    local spring_arms={}
     local function vec(v,keys)
         local out={};for i,k in ipairs(keys)do out[i]=checked(function()return v[k]end);if type(out[i])~="number"then fail("native render vector unavailable")end end
         return out
@@ -333,6 +349,13 @@ function M.capture(env,bindings)
         if type(c.visible)~="boolean" or type(c.hidden)~="boolean"then fail("native component visibility unavailable")end
         if kind=="scene"then
             if component_class=="/Script/Engine.SceneComponent"then c.scene={type="scene"};c.collision=false
+            elseif component_class=="/Script/Engine.CameraComponent"then c.scene={type="camera"};c.collision=false
+            elseif component_class=="/Script/Engine.SpringArmComponent"then
+                phase("scene_eligibility","enter",{getter="SpringArmComponent.bDrawDebugLagMarkers/SceneComponent.GetAllSocketNames",class=component_class},row)
+                c.scene=spring_arm_evidence(row);c.collision=false
+                spring_arms[#spring_arms+1]={row=row,evidence=c.scene}
+                phase("scene_eligibility","exit",{ok=true,class=component_class,
+                    reason="draw_debug_lag_markers=false socket_name="..string.format("%q",c.scene.socket_name)},row)
             elseif component_class=="/Script/Engine.SplineComponent"then
                 phase("scene_eligibility","enter",{getter="SplineComponent.bDrawDebug",class=component_class},row)
                 local draw_debug=get(row,function(o)return o.bDrawDebug end)
@@ -610,6 +633,12 @@ function M.capture(env,bindings)
         for address in pairs(set)do if not seen[address]then fail("native complete "..category.." census changed")end end
         phase(category.."_census","exit",{ok=true,count=#copied,getter=getter,owner_id=candidate.owner})
       end
+    end
+    for _,record in ipairs(spring_arms)do
+        local again=spring_arm_evidence(record.row)
+        if again.draw_debug_lag_markers~=record.evidence.draw_debug_lag_markers or again.socket_name~=record.evidence.socket_name then
+            fail("native spring arm evidence changed during harvest")
+        end
     end
     for _,row in ipairs(rows)do component(row)end
     local bound={};for _,r in ipairs(rows)do bound[#bound+1]={id=r.id,address=r.address,

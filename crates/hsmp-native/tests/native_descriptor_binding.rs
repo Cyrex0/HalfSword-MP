@@ -234,6 +234,38 @@ fn scene_collision_sentinel_is_explicit_required_and_class_qualified() {
 }
 
 #[test]
+fn exact_camera_and_spring_arm_raw_fields_do_not_default() {
+    for (class, evidence) in [
+        ("CameraComponent", "{type='camera'}"),
+        (
+            "SpringArmComponent",
+            "{type='spring_arm',draw_debug_lag_markers=false,socket_name='OfflineExactSocket'}",
+        ),
+    ] {
+        let lua = State::new();
+        lua.run(&format!("local c=recipe.components[1]; c.role='anchor'; c.component_class='/Script/Engine.{class}'; c.kind='scene'; c.geometry='not_applicable'; c.scene={evidence}; c.vertex_state='not_applicable'; c.asset=''; c.skeleton=''; c.physics_asset=''; c.bones={{}}; c.collision=false"));
+        let recipe = lua.read().unwrap();
+        recipe.validate_mirror_profile().unwrap();
+        assert!(recipe.components[0].collision.is_none());
+        if class == "SpringArmComponent" {
+            for mutation in [
+                "recipe.components[1].scene.draw_debug_lag_markers=nil",
+                "recipe.components[1].scene.draw_debug_lag_markers=true",
+                "recipe.components[1].scene.socket_name=nil",
+                "recipe.components[1].scene.socket_name=''",
+                "recipe.components[1].scene.socket_name='None'",
+                "recipe.components[1].scene.extra=0",
+            ] {
+                lua.run("recipe.components[1].scene={type='spring_arm',draw_debug_lag_markers=false,socket_name='OfflineExactSocket'}");
+                lua.read().unwrap();
+                lua.run(mutation);
+                assert!(lua.read().is_err(), "must refuse: {mutation}");
+            }
+        }
+    }
+}
+
+#[test]
 fn sparse_native_blocked_slots_preserve_observed_false() {
     let lua = State::new();
     unsafe {
