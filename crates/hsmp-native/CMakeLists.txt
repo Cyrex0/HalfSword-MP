@@ -50,15 +50,15 @@ endif()
 find_program(CARGO cargo HINTS "$ENV{USERPROFILE}/.cargo/bin" REQUIRED)
 
 # ------------------------------------------------------------- Rust parts
-set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo")
+set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/cargo" CACHE PATH "Cargo output directory shared with the release binary build")
 set(RUST_NATIVE_LIB "${RUST_TARGET_DIR}/release/hsmp_native.lib")
 set(FAKE_SIDECAR "${RUST_TARGET_DIR}/release/hsmp-fake-sidecar.exe")
 add_custom_target(rust_libs ALL
-    COMMAND "${CARGO}" build --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+    COMMAND "${CARGO}" build --release --locked --manifest-path "${REPO_ROOT}/Cargo.toml"
             --target-dir "${RUST_TARGET_DIR}" -p hsmp-native -p hsmp-fake-sidecar
     BYPRODUCTS "${RUST_NATIVE_LIB}" "${FAKE_SIDECAR}"
     WORKING_DIRECTORY "${REPO_ROOT}"
-    COMMENT "cargo build --release -p hsmp-native -p hsmp-fake-sidecar"
+    COMMENT "cargo build --release --locked -p hsmp-native -p hsmp-fake-sidecar (shared output)"
     USES_TERMINAL)
 # from `cargo rustc -p hsmp-native --crate-type staticlib -- --print native-static-libs`
 # (windows.0.52.0.lib = windows-sys import umbrella -> the system import libs below)

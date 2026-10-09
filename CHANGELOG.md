@@ -10,6 +10,11 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Retain one native identity scope across both complete source recipe reads,
+  reusing original component witnesses and checking the whole set before closing.
+  Add bounded first-scope timings; actual loading-time improvement is pending.
+- Share locked release build outputs with the native DLL build and build only
+  shipped DLL targets during deployment, preserving full gate and content checks.
 - Qualify the native slot-zero package ancestor explicitly within each lookup
   operation, preserving strict null-reference checks elsewhere.
 - Label loading counts as player assets, keep preparation animated after asset

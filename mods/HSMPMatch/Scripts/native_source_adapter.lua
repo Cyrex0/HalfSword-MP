@@ -20,7 +20,7 @@ end
 function M.new(opts)
     assert(type(opts)=="table" and type(opts.resolve)=="function" and opts.WG,"source adapter dependencies")
     local api={}
-    local function capture(index,phase,context)
+    local function capture(index,phase,context,lifetime)
         if not opts.WG.check() or not opts.WG.settled()then return nil,"source world settling"end
         local token=opts.WG.token();local expected=opts.resolve(index)
         if not expected or not opts.WG.same(token)then return nil,"source binding unavailable"end
@@ -111,10 +111,25 @@ function M.new(opts)
                 local scope=opts.source_scope
                 if not scope or not scope.begin or not scope.keep or not scope.resolve or not scope.finish or not scope.profile
                     or type(scope.vertex_state)~="function"then error("native source identity scope unavailable",0)end
-                local handle,scope_reason=scope.begin(context,bindings)
-                if not handle then error(scope_reason or "native source identity scope refused",0)end
-                local ok,result=pcall(Render.capture,{read=read,guard=function()current()end,weapon=weapon,vertex_state=opts.vertex_state,
-                scope={keep=function(row)return scope.keep(handle,row)end,resolve=function(id,...)return scope.resolve(handle,id,...)end,
+                if lifetime.scope and lifetime.scope~=scope then error("native source identity scope changed",0)end
+                if not lifetime.handle then
+                    local handle,scope_reason=scope.begin(context,bindings)
+                    if not handle then error(scope_reason or "native source identity scope refused",0)end
+                    lifetime.handle,lifetime.scope,lifetime.finish=handle,scope,scope.finish
+                end
+                local handle=lifetime.handle
+                captured=Render.capture({read=read,guard=function()current()end,weapon=weapon,vertex_state=opts.vertex_state,
+                scope={keep=function(row)
+                    local id,owner=scope.keep(handle,row)
+                    if id then
+                        local previous=lifetime.addresses[id]
+                        if previous and previous~=row.address then error("native source original handle changed",0)end
+                        if not previous then
+                            lifetime.addresses[id]=row.address;lifetime.components[#lifetime.components+1]=id
+                        end
+                    end
+                    return id,owner
+                end,resolve=function(id,...)return scope.resolve(handle,id,...)end,
                     profile=function(id)return scope.profile(handle,id)end,
                     vertex_state=function(id)return scope.vertex_state(handle,id)end},
                 phase=function(stage,edge,detail)detail=detail or {};detail.pass=env.pass;phase(stage,edge,detail)end,
@@ -122,10 +137,6 @@ function M.new(opts)
                 -- checks inside that loop avoid a controller search per vertex;
                 -- every native getter still resolves the original binding.
                 token_valid=function()return opts.WG.key==token.key and opts.WG.drops==token.drops and opts.WG.travel_from==nil end},bindings)
-                local ended,end_reason=scope.finish(handle)
-                if not ok then error(result,0)end
-                if ended~=true then error(end_reason or "native source identity scope end refused",0)end
-                captured=result
             end
             current();if not captured then error(why or "native render descriptor incomplete",0)end
             if type(captured.bindings)~="table"then error("native component bindings incomplete",0)end
@@ -145,6 +156,18 @@ function M.new(opts)
         local recipe,why=Descriptor.capture(env)
         if not recipe then return nil,why end
         if not pcall(current)then return nil,"source binding changed after descriptor capture"end
+        -- Both harvests and their topology/equality callbacks are finished.
+        -- Requalify every original handle, then the indexed binding, before
+        -- the scalar-only scope close; a refusal never touches another object.
+        if lifetime.handle then
+            for _,id in ipairs(lifetime.components)do
+                current()
+                local address,reason=lifetime.scope.resolve(lifetime.handle,id,true)
+                if address~=lifetime.addresses[id]then error(reason or "native source final component qualification refused",0)end
+                current()
+            end
+        end
+        if not pcall(current)then return nil,"source binding changed after final native qualification"end
         return recipe,bindings
     end
     function api.capture(index,context)
@@ -156,14 +179,26 @@ function M.new(opts)
                 opts.phase(context,stage,edge,detail or {})
             end
         end
+        local lifetime={components={},addresses={}}
         local ok,recipe,bindings=pcall(function()
             phase("adapter_capture","enter",{getter="SourceAdapter.capture"})
-            return capture(index,phase,context)
+            return capture(index,phase,context,lifetime)
         end)
+        if lifetime.handle then
+            local closed,ended,end_reason=pcall(function()
+                if ok and recipe~=nil then return lifetime.finish(lifetime.handle,true)end
+                return lifetime.finish(lifetime.handle) -- failure/world-drop cleanup is scalar-only
+            end)
+            lifetime.handle=nil -- cleanup is attempted once, including world drop/provider failure
+            if ok and recipe~=nil and(not closed or ended~=true)then
+                ok=false;recipe=not closed and ended or end_reason or "native source identity scope end refused"
+            end
+        end
         local completed,phase_reason=pcall(phase,"adapter_capture","exit",{ok=ok and recipe~=nil,
             reason=not ok and tostring(recipe) or recipe==nil and tostring(bindings) or nil})
-        if not completed then return nil,phase_reason end
         if not ok then return nil,recipe end
+        if recipe==nil then return nil,bindings end
+        if not completed then return nil,phase_reason end
         return recipe,bindings
     end
     return api

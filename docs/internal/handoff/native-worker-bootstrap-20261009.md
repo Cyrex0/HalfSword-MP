@@ -1,5 +1,29 @@
 # Native authority bootstrap checkpoint
 
+## Current actual: source recipe harvest exceeds standard readiness
+
+Exact314b40d6 full G0/dev/all394 normal run225731-b9c50f, authority39632,
+clients44832/15232, fixes slot-zero refusal. Entity1 capture25.184s plus632ms
+bind PASS49components/600bones/38slots. Entity2 first harvest11.793s; second
+still incomplete at65s standard deadline. No whole scene/frame/capture timing.
+Completed harvest6243 reads/12844 qualifications; diagnose measured guarded
+metadata cost. First generation refusal is15ms AFTER deadline stop files;
+unbind/dir/incarnation change is expected teardown. No guard relaxation justified.
+All original4 absent/save20 unchanged/no dumps/unobserved children; Steam user
+game7736 and qualified children untouched; both physical client windows secondary.
+Pixels verify opaque animated waiting UI, not assets-complete/error/readiness.
+Standard pass=false; owned controller/PCM view and active input unproved.
+
+Source-harvest optimization reviewed/48Rust+327Lua/syntax2 PASS, frozen. One
+originalScope through both full equal reads; strict retained-component witnesses
+skip only repeated coldfind/pathcapture. End(id,true) seals all original path/
+owner/parent/Actor-Level-World links after last callback, without native getters/
+lookup/schema callbacks. Defaultend scalar cleanup preserves firsterrors/drop.
+Pinned GetOwner32bytes/RVA3B54190 raw90 +reflected Level.OwningWorldC0 supply
+owner/world closure; schema82. FirstScope15 inclusive timing rows only after
+borrow release, failures clear once. Shared locked release target and shipped
+DLL-only deployment retain mandatoryG0/content/hash checks. Actual gain pending.
+
 ## Current actual: original slot-zero Outer witness localized
 
 Exactd9823407/full G0/all394 non-CDB run223840-80958f, authority33344,

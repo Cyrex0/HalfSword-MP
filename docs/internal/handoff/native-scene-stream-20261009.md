@@ -1,5 +1,69 @@
 # Native full-scene encoding checkpoint
 
+## Actual 314b40d6: slot-zero fixed; standard readiness misses metadata harvest
+
+Exact clean full G0/dev/all394 deployment, normal100s/65s readiness run
+20261009-225731-b9c50f-native-host, sourcefd61803b-508e-428c-ae40-556ae0ced6ec,
+authority39632, clients44832/15232. Original slot-zero failure is gone. Entity1
+complete capture21.381→46.565s=25.184s; bind46.567→47.199s=632ms PASS, with
+49components/600bones/38slots, compact35551/raw74701. Entity2 starts47.200s;
+first harvest47.442→59.235s=11.793s, second begins59.455s and remains incomplete
+at the65s deadline. No whole recipe/frame or NATIVE_CAPTURE_FRAME timing yet.
+Completed harvests retain6243 component reads/12844 qualifications/4mesh calls/
+49parent hops. Do not confuse per-entity completion with whole-scene readiness.
+
+First source generation refusal atwall1791583116555 occurs15ms AFTER stop files
+wall1791583116540. NativeGlue left/unbind increments own incarnation/directory;
+Scope correctly refuses olddir7. This is teardown after readiness timeout, not
+a predeadline identity bug. Keep every generation check. Next target is measured
+guarded metadata harvest cost, then bounded first controller/PCM observation and
+full owned view. Native exact-lookup frame speed remains unmeasured.
+
+Independent original4 absence/save20 unchanged/no new dump/unobserved child;
+user's separate Steam game7736 and its qualified children remained untouched.
+Both development windows physically contained on secondary. Read-only pixel
+inspection shows opaque waiting view with animated bar/elapsed time; actual
+asset-completion/error text pixels remain unproved. Standard pass=false.
+
+Actual entity1 nested timing: render24.717s; static component metadata12.513s
+over98 rows, mesh census8.604s/8 pairs, parent closure1.578s/2. Within static:
+vertex2.830s/60, bones2.529s/26, materials2.307s/78; nested totals are not additive.
+Initial mesh row admission8.418s versus final complete recensuses186ms. Both
+descriptor passes currently begin a fresh native Scope and repeat cold row
+admission. Existing Rust keep checks retained address only AFTER double exact
+find/path capture. Native schema/property/GetOwner caches already exist.
+Per-field ignored Lua current() guards also repeat indexed PC/world resolution;
+derived37458 GetPC/24972 GetWorld per harvest are structural estimates, not
+measured native counters. Native Scope.base alone lacks indexed remapping proof;
+do not replace these guards with token-only checks.
+
+In progress: one original Scope across both complete equal harvests with every
+Lua indexed/current guard and payload read retained; qualified original-witness
+fastkeep removes only repeated cold path capture/find, retaining strict fresh
+Identity/Parent/path/RF/owner/world/final closure. Same-path replacement refuses.
+Final component qualification must precede scalar-only scope_end after last
+callback. Add bounded first-Scope timings after borrow release. No speed claim.
+Build optimization shares explicit locked Cargo release output and requests the
+two shipped DLL targets; full G0/RequireG0/content/hashes remain. Independent
+review/tests and new actual timing are pending.
+
+Coherent optimization review CLOSED: Rust SourceScope48/48, Lua adapter327 and
+syntax2 pass; compiler/Cargo released, files frozen. Successful Adapter closes
+with explicit end(id,true) after final indexed/native callbacks; this takes the
+Scope outside RefCell and verifies ALL original paths, hard links, owners and
+original Actor→Level→OwningWorld without callbacks. Default end(id) remains
+scalar cleanup on error/world drop. Original failure is never masked.
+Retained keep preserves strict original fresh Identity/Parent/path/owner/world
+checks, refuses same-path different-address rebinding and skips only fresh cold
+find/path capture. Resolve CAPI final proof uses input handle, not returned address.
+GetOwner exact32-byte shipping RVA3B54190 leaf proves raw90, with original type/
+function/class/code identity; Level.OwningWorld reflectedObjectProperty8/C0.
+Schema82 includes the added world field. One first Scope emits15 inclusive cost
+rows after borrow release; begin/op/end failures clear/log once. No ABI/schema/
+wire change, no indexed guard removal, no tolerated freshness changes. Build
+patch uses combined locked server/native/fake output +normal CMake Cargo verify,
+targeting HSMPNative and hsmp_lua. Actual new-build speed/readiness/view pending.
+
 ## Actual d9823407: first original refusal proves the slot-zero case
 
 Exact clean dev/full G0/all394 hashes, non-CDB run20261009-223840-80958f-native-host,

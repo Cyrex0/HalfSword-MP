@@ -159,10 +159,120 @@ pub extern "C" fn hsmp_native_profile_tick(counter: u32) {
     }
 }
 
+// One first-scope aggregate only. Times are inclusive and overlap; calls are
+// carried in ProfileTrace.handle for the fixed scope_cost_* namespace.
+const COST_NAMES: [&std::ffi::CStr; 15] = [
+    c"scope_cost_total",
+    c"scope_cost_keep_cold",
+    c"scope_cost_keep_retained",
+    c"scope_cost_resolve_wrapper",
+    c"scope_cost_resolve_scalar",
+    c"scope_cost_base",
+    c"scope_cost_admit",
+    c"scope_cost_identity",
+    c"scope_cost_world_native",
+    c"scope_cost_owner_native",
+    c"scope_cost_find_native",
+    c"scope_cost_schema_native",
+    c"scope_cost_path",
+    c"scope_cost_factory",
+    c"scope_cost_setup",
+];
+#[derive(Clone, Copy, Default)]
+struct ScopeCostBucket {
+    nanos: u64,
+    calls: u64,
+}
+struct ScopeCosts {
+    trace: ProfileTrace,
+    start: Instant,
+    buckets: [ScopeCostBucket; 15],
+}
+#[derive(Default)]
+struct ScopeCostState {
+    attempted: bool,
+    current: Option<ScopeCosts>,
+}
+thread_local! {static SCOPE_COSTS: RefCell<ScopeCostState> = RefCell::new(ScopeCostState::default());}
+fn scope_cost_begin(reference: EntityRef, dir_seq: u32) {
+    if SCOPE_COSTS.with(|s| s.borrow().current.is_some()) {
+        scope_cost_finish(false);
+    }
+    if PROFILE_LOGGER.load(Ordering::Acquire).is_null() {
+        return;
+    }
+    SCOPE_COSTS.with(|s| {
+        let mut s = s.borrow_mut();
+        if !s.attempted {
+            s.attempted = true;
+            s.current = Some(ScopeCosts {
+                trace: ProfileTrace {
+                    epoch: reference.epoch,
+                    entity: reference.id,
+                    incarnation: reference.incarnation,
+                    dir_seq,
+                    ..Default::default()
+                },
+                start: Instant::now(),
+                buckets: [ScopeCostBucket::default(); 15],
+            });
+        }
+    });
+}
+struct ScopeCostTimer {
+    bucket: usize,
+    start: Option<Instant>,
+}
+impl ScopeCostTimer {
+    fn new(bucket: usize) -> Self {
+        Self {
+            bucket,
+            start: SCOPE_COSTS.with(|s| s.borrow().current.as_ref().map(|_| Instant::now())),
+        }
+    }
+}
+impl Drop for ScopeCostTimer {
+    fn drop(&mut self) {
+        if let Some(start) = self.start {
+            let nanos = start.elapsed().as_nanos().min(u64::MAX as u128) as u64;
+            SCOPE_COSTS.with(|s| {
+                if let Some(cost) = s.borrow_mut().current.as_mut() {
+                    let bucket = &mut cost.buckets[self.bucket];
+                    bucket.calls = bucket.calls.saturating_add(1);
+                    bucket.nanos = bucket.nanos.saturating_add(nanos);
+                }
+            });
+        }
+    }
+}
+fn scope_cost_finish(complete: bool) {
+    let snapshot = SCOPE_COSTS.with(|s| s.borrow_mut().current.take());
+    let logger = PROFILE_LOGGER.load(Ordering::Acquire);
+    if let Some(mut cost) = snapshot {
+        cost.buckets[0] = ScopeCostBucket {
+            nanos: cost.start.elapsed().as_nanos().min(u64::MAX as u128) as u64,
+            calls: 1,
+        };
+        if !logger.is_null() {
+            let logger: ProfileLogger = unsafe { std::mem::transmute(logger) };
+            for (i, bucket) in cost.buckets.iter().enumerate() {
+                let trace = ProfileTrace {
+                    seq: i as u32 + 1,
+                    handle: bucket.calls,
+                    elapsed_us: bucket.nanos / 1000,
+                    ..cost.trace
+                };
+                // No Scope/STATE/schema/collector borrow survives logging.
+                unsafe { logger(COST_NAMES[i].as_ptr(), u32::from(complete), &trace) };
+            }
+        }
+    }
+}
 const MAX_COMPONENTS: usize = 64;
 // Pawn: Controller, RootComponent, seven weapon fields; controller: Pawn;
-// seven weapon roots; at most 64 original component-class AttachParent fields.
-const MAX_SCHEMA_FIELDS: usize = MAX_COMPONENTS + 17;
+// seven weapon roots, original Level.OwningWorld; at most 64 original
+// component-class AttachParent fields.
+const MAX_SCHEMA_FIELDS: usize = MAX_COMPONENTS + 18;
 const GARBAGE: u32 = 0x40000000; // matched shipping Kismet validity / actor iterator
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
@@ -277,6 +387,48 @@ fn exports() -> Result<Exports, String> {
     Err("source native metadata exports unavailable".into())
 }
 
+const OWNER_CODE: [u8; 32] = [
+    0x48, 0x8b, 0x42, 0x20, 0x45, 0x33, 0xc9, 0x48, 0x85, 0xc0, 0x41, 0x0f, 0x95, 0xc1, 0x4c, 0x03,
+    0xc8, 0x4c, 0x89, 0x4a, 0x20, 0x48, 0x8b, 0x81, 0x90, 0x00, 0x00, 0x00, 0x49, 0x89, 0x00, 0xc3,
+];
+fn owner_code_verify(code: usize) -> Result<(), String> {
+    if code == 0
+        || unsafe { std::slice::from_raw_parts(code as *const u8, OWNER_CODE.len()) } != OWNER_CODE
+    {
+        return Err("source scope unsupported native GetOwner".into());
+    }
+    Ok(())
+}
+#[cfg(windows)]
+fn owner_code() -> Result<usize, String> {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> *mut c_void;
+    }
+    unsafe {
+        let image = GetModuleHandleW(std::ptr::null()).cast::<u8>();
+        if image.is_null() || std::ptr::read_unaligned(image.cast::<u16>()) != 0x5a4d {
+            return Err("source scope unsupported owner image".into());
+        }
+        let pe = std::ptr::read_unaligned(image.add(0x3c).cast::<u32>()) as usize;
+        if pe > 0x1000 || std::ptr::read_unaligned(image.add(pe).cast::<u32>()) != 0x4550 {
+            return Err("source scope unsupported owner image".into());
+        }
+        let size = std::ptr::read_unaligned(image.add(pe + 24 + 56).cast::<u32>()) as usize;
+        const RVA: usize = 0x3b54190;
+        if RVA + OWNER_CODE.len() > size {
+            return Err("source scope unsupported owner image".into());
+        }
+        let code = image.add(RVA) as usize;
+        owner_code_verify(code)?;
+        Ok(code)
+    }
+}
+#[cfg(not(windows))]
+fn owner_code() -> Result<usize, String> {
+    Err("source scope native owner image unavailable".into())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Identity {
     weak: u64,
@@ -296,6 +448,12 @@ trait Engine {
     fn world(&self, id: Identity) -> Result<u64, String>;
     fn field(&self, id: Identity, name: &str) -> Result<u64, String>;
     fn owner(&self, id: Identity) -> Result<u64, String>;
+    fn pure_owner(&self, _: Identity) -> Result<u64, String> {
+        Err("source scope pure owner witness unavailable".into())
+    }
+    fn pure_world(&self, _: Identity) -> Result<u64, String> {
+        Err("source scope pure world witness unavailable".into())
+    }
     fn find(&self, path: &str) -> Result<u64, String>;
     fn capture_path(&self, _: Identity) -> Result<Option<PathWitness>, String> {
         Ok(None)
@@ -335,7 +493,17 @@ struct FieldSchema {
 #[derive(Default)]
 struct SchemaCache {
     owner: Option<OwnerSchema>,
+    owner_code: Option<usize>,
+    owner_paths: Option<[PathWitness; 2]>,
+    owner_receivers: HashMap<u64, Identity>,
+    owner_worlds: HashMap<u64, OwnerWorld>,
     fields: Vec<FieldSchema>,
+}
+#[derive(Clone)]
+struct OwnerWorld {
+    object: Identity,
+    path: PathWitness,
+    level: Identity,
 }
 // Only copied identities/layouts live in the original scope. Cache borrows end
 // before identity checks or engine calls; callback reentry never holds one.
@@ -482,6 +650,44 @@ struct Scope {
     schema: Rc<RefCell<SchemaCache>>,
 }
 impl Scope {
+    fn finish_pure(&self, e: &impl Engine) -> Result<(), String> {
+        e.admit()?;
+        for id in [self.world, self.pawn, self.controller] {
+            e.verify(id)?;
+        }
+        if e.field(self.pawn, "Controller")? != self.controller.address
+            || e.field(self.controller, "Pawn")? != self.pawn.address
+        {
+            return Err("source scope final pawn/controller link changed".into());
+        }
+        for owner in self.owners.values() {
+            e.verify(owner.object)?;
+            e.verify(owner.root)?;
+            if e.pure_world(owner.object)? != self.world.address
+                || e.pure_world(owner.root)? != self.world.address
+            {
+                return Err("source scope final original owner world changed".into());
+            }
+            if e.field(owner.object, "RootComponent")? != owner.root.address
+                || e.pure_owner(owner.root)? != owner.object.address
+                || owner.field.as_ref().is_some_and(|field| {
+                    e.field(self.pawn, field).ok() != Some(owner.object.address)
+                })
+            {
+                return Err("source scope final owner/root/weapon link changed".into());
+            }
+        }
+        for (i, c) in self.components.iter().enumerate() {
+            if !e.path_matches(c.object, &c.path, c.path_witness.as_ref())? {
+                return Err("source scope final original path changed".into());
+            }
+            self.pure_hard_links(e, i as u64 + 1)?;
+            if !e.path_matches(c.object, &c.path, c.path_witness.as_ref())? {
+                return Err("source scope final original path changed".into());
+            }
+        }
+        e.admit()
+    }
     // This final read region must not call world/owner getters. It uses only
     // original identities and freshly read hard links from cached schemas.
     fn pure_hard_links(&self, e: &impl Engine, handle: u64) -> Result<(), String> {
@@ -516,13 +722,19 @@ impl Scope {
         };
         owner_check(c.owner)?;
         e.verify(c.object)?;
-        if e.field(c.object, "AttachParent")? != c.parent.map_or(0, |p| p.object.address) {
+        if e.pure_world(c.object)? != self.world.address
+            || e.pure_owner(c.object)? != c.owner
+            || e.field(c.object, "AttachParent")? != c.parent.map_or(0, |p| p.object.address)
+        {
             return Err("source static vertex original component parent link changed".into());
         }
         if let Some(parent) = c.parent {
             e.verify(parent.object)?;
             owner_check(parent.owner)?;
-            if e.field(parent.object, "AttachParent")? != parent.attach_parent {
+            if e.pure_world(parent.object)? != self.world.address
+                || e.pure_owner(parent.object)? != parent.owner
+                || e.field(parent.object, "AttachParent")? != parent.attach_parent
+            {
                 return Err("source static vertex original parent attachment link changed".into());
             }
         }
@@ -579,6 +791,7 @@ impl Scope {
         Ok(())
     }
     fn base(&self, e: &impl Engine) -> Result<(), String> {
+        let _cost = ScopeCostTimer::new(5);
         e.admit()?;
         for id in [self.world, self.pawn, self.controller] {
             e.verify(id)?;
@@ -628,7 +841,54 @@ impl Scope {
         path: String,
     ) -> Result<u64, String> {
         self.base(e)?;
-        if path.is_empty() || path.len() > 512 || path.contains('\0') || e.find(&path)? != address {
+        if path.is_empty() || path.len() > 512 || path.contains('\0') {
+            return Err("source scope exact runtime path changed".into());
+        }
+        if let Some(i) = self
+            .components
+            .iter()
+            .position(|c| c.object.address == address)
+        {
+            let _cost = ScopeCostTimer::new(2);
+            let c = &self.components[i];
+            if c.path != path || (owner != 0 && owner != c.owner) {
+                return Err("source scope original component key changed".into());
+            }
+            let handle = i as u64 + 1;
+            // Qualify the ORIGINAL object before a fresh capture can inspect it.
+            // A retained path is never searched again to discover a replacement.
+            self.resolve(e, handle)?;
+            if e.capture(address)? != c.object {
+                return Err("source scope original identity reused".into());
+            }
+            let parent_address = e.field(c.object, "AttachParent")?;
+            if parent_address != c.parent.map_or(0, |p| p.object.address) {
+                return Err("source scope hard parent link changed".into());
+            }
+            if let Some(p) = c.parent {
+                if e.capture(p.object.address)? != p.object
+                    || e.owner(p.object)? != p.owner
+                    || e.field(p.object, "AttachParent")? != p.attach_parent
+                {
+                    return Err("source scope original parent identity changed".into());
+                }
+            }
+            // Owner/world callbacks can change a prior identity or path. Finish
+            // them before repeating every original path and hard-link proof.
+            self.resolve(e, handle)?;
+            e.admit()?;
+            if !e.path_matches(c.object, &c.path, c.path_witness.as_ref())? {
+                return Err("source scope retained path changed".into());
+            }
+            self.pure_hard_links(e, handle)?;
+            e.admit()?;
+            return Ok(handle);
+        }
+        if self.components.iter().any(|c| c.path == path) {
+            return Err("source scope original path rebound".into());
+        }
+        let _cost = ScopeCostTimer::new(1);
+        if e.find(&path)? != address {
             return Err("source scope exact runtime path changed".into());
         }
         let object = e.capture(address)?;
@@ -754,6 +1014,7 @@ impl Scope {
         factory: impl FnOnce(u64) -> Result<(), String>,
         finish: impl FnOnce() -> Result<(), String>,
     ) -> Result<u64, String> {
+        let _cost = ScopeCostTimer::new(if address_only { 4 } else { 3 });
         let address = self.resolve(e, handle)?;
         if !address_only {
             factory(address)?;
@@ -788,6 +1049,9 @@ struct ProfileGuardEngine<'a, 'b> {
     runtime: &'a Runtime<'b>,
 }
 impl Engine for ProfileGuardEngine<'_, '_> {
+    fn admit(&self) -> Result<(), String> {
+        self.runtime.admit()
+    }
     fn capture(&self, _: u64) -> Result<Identity, String> {
         Err("source profile guard uncaptured schema identity".into())
     }
@@ -802,6 +1066,12 @@ impl Engine for ProfileGuardEngine<'_, '_> {
     }
     fn owner(&self, _: Identity) -> Result<u64, String> {
         Err("source profile guard GetOwner dispatch forbidden".into())
+    }
+    fn pure_owner(&self, id: Identity) -> Result<u64, String> {
+        self.runtime.pure_owner(id)
+    }
+    fn pure_world(&self, id: Identity) -> Result<u64, String> {
+        self.runtime.pure_world(id)
     }
     fn find(&self, _: &str) -> Result<u64, String> {
         Err("source profile guard global path lookup forbidden".into())
@@ -838,7 +1108,135 @@ impl SchemaEngine for ProfileGuardEngine<'_, '_> {
     }
 }
 impl Runtime<'_> {
+    fn bind_owner_world(&self, id: Identity) -> Result<(), String> {
+        self.admit()?;
+        let path = self
+            .capture_path(id)?
+            .ok_or("source scope owner world path missing")?;
+        let level_node = path
+            .nodes
+            .get(1)
+            .ok_or("source scope owner Level missing")?;
+        let level = self.capture(level_node.address)?;
+        if (
+            level.weak,
+            level.name,
+            level.class_weak,
+            level.class_address,
+        ) != (
+            level_node.weak,
+            level_node.name,
+            level_node.class_weak,
+            level_node.class_address,
+        ) {
+            return Err("source scope owner Level identity changed".into());
+        }
+        let class = self.capture(self.find("/Script/Engine.Level")?)?;
+        self.admit()?;
+        let matches = unsafe { (self.vt.is_a)(self.identity(level)?, self.identity(class)?) };
+        self.identity(level)?;
+        self.identity(class)?;
+        self.admit()?;
+        if matches != 1 {
+            return Err("source scope original owner Outer not Level".into());
+        }
+        let world = self.field(level, "OwningWorld")?;
+        let cache = self.schema.borrow();
+        let property = cache
+            .fields
+            .iter()
+            .find(|f| {
+                f.class.weak == level.class_weak
+                    && f.class.address == level.class_address
+                    && f.name == "OwningWorld"
+            })
+            .ok_or("source scope Level world layout missing")?
+            .property;
+        if property.offset != 0xc0 {
+            return Err("source scope Level world layout".into());
+        }
+        drop(cache);
+        if world
+            != self
+                .base
+                .first()
+                .ok_or("source scope original world missing")?
+                .address
+        {
+            return Err("source scope owner Level world changed".into());
+        }
+        self.verify_path(id, Some(&path))?;
+        self.identity(level)?;
+        self.admit()?;
+        self.schema.borrow_mut().owner_worlds.insert(
+            id.address,
+            OwnerWorld {
+                object: id,
+                path,
+                level,
+            },
+        );
+        Ok(())
+    }
+    fn pure_world(&self, id: Identity) -> Result<u64, String> {
+        self.identity(id)?;
+        let owner = if self.schema.borrow().owner_worlds.contains_key(&id.address) {
+            id.address
+        } else {
+            self.pure_owner(id)?
+        };
+        let witness = self
+            .schema
+            .borrow()
+            .owner_worlds
+            .get(&owner)
+            .cloned()
+            .ok_or("source scope original owner world missing")?;
+        self.identity(witness.object)?;
+        self.verify_path(witness.object, Some(&witness.path))?;
+        self.identity(witness.level)?;
+        let world = ProfileGuardEngine { runtime: self }.field(witness.level, "OwningWorld")?;
+        self.identity(witness.level)?;
+        self.verify_path(witness.object, Some(&witness.path))?;
+        self.identity(witness.object)?;
+        self.identity(id)?;
+        Ok(world)
+    }
+    fn pure_owner(&self, id: Identity) -> Result<u64, String> {
+        let (schema, code, paths) = {
+            let cache = self.schema.borrow();
+            if cache.owner_receivers.get(&id.address) != Some(&id) {
+                return Err("source scope original owner receiver missing".into());
+            }
+            (
+                cache.owner.ok_or("source scope owner schema missing")?,
+                cache
+                    .owner_code
+                    .ok_or("source scope owner native proof missing")?,
+                cache
+                    .owner_paths
+                    .clone()
+                    .ok_or("source scope owner path witness missing")?,
+            )
+        };
+        self.identity(schema.function)?;
+        self.identity(schema.class)?;
+        self.verify_path(schema.function, Some(&paths[0]))?;
+        self.verify_path(schema.class, Some(&paths[1]))?;
+        owner_code_verify(code)?;
+        let p = self.identity(id)?;
+        // The pinned nonvirtual GetOwner exec reads exactly this hard link.
+        let value = unsafe { std::ptr::read_unaligned((p as *const u8).add(0x90).cast::<u64>()) };
+        self.identity(id)?;
+        self.identity(schema.function)?;
+        self.identity(schema.class)?;
+        self.verify_path(schema.function, Some(&paths[0]))?;
+        self.verify_path(schema.class, Some(&paths[1]))?;
+        owner_code_verify(code)?;
+        Ok(value)
+    }
     fn verify_path(&self, id: Identity, witness: Option<&PathWitness>) -> Result<bool, String> {
+        let _cost = ScopeCostTimer::new(12);
         self.identity(id)?;
         let witness = witness.ok_or("source original path witness missing")?;
         let first = witness
@@ -885,6 +1283,7 @@ impl Runtime<'_> {
         Ok(true)
     }
     fn admit(&self) -> Result<(), String> {
+        let _cost = ScopeCostTimer::new(6);
         hsmp_native_profile_tick(1);
         if !self.n.native_host.is_host()
             || self.n.poisoned
@@ -933,6 +1332,7 @@ impl Runtime<'_> {
         }
     }
     fn identity(&self, id: Identity) -> Result<*mut c_void, String> {
+        let _cost = ScopeCostTimer::new(7);
         unsafe {
             let p = self.live(id.weak, id.address)?;
             let cls = self.live(id.class_weak, id.class_address)?;
@@ -945,6 +1345,12 @@ impl Runtime<'_> {
     }
 }
 impl Engine for Runtime<'_> {
+    fn pure_owner(&self, id: Identity) -> Result<u64, String> {
+        Runtime::pure_owner(self, id)
+    }
+    fn pure_world(&self, id: Identity) -> Result<u64, String> {
+        Runtime::pure_world(self, id)
+    }
     fn admit(&self) -> Result<(), String> {
         Runtime::admit(self)
     }
@@ -989,7 +1395,10 @@ impl Engine for Runtime<'_> {
         self.admit()?;
         let p = self.identity(id)?;
         profile_once(4, c"source_world", 0);
-        let result = unsafe { (self.x.world)(p) } as u64;
+        let result = {
+            let _cost = ScopeCostTimer::new(8);
+            (unsafe { (self.x.world)(p) }) as u64
+        };
         profile_once(8, c"source_world", 1);
         self.identity(id)?;
         self.admit()?;
@@ -1005,7 +1414,10 @@ impl Engine for Runtime<'_> {
         self.admit()?;
         hsmp_native_profile_tick(2);
         profile_once(16, c"source_find", 0);
-        let p = unsafe { (self.vt.find)(reflect::wide(path).as_ptr()) } as u64;
+        let p = {
+            let _cost = ScopeCostTimer::new(10);
+            (unsafe { (self.vt.find)(reflect::wide(path).as_ptr()) }) as u64
+        };
         profile_once(32, c"source_find", 1);
         self.admit()?;
         Ok(p)
@@ -1071,7 +1483,10 @@ impl Engine for Runtime<'_> {
 impl SchemaEngine for Runtime<'_> {
     fn schema_name(&self, name: &str) -> Result<u64, String> {
         self.admit()?;
-        let value = unsafe { (self.vt.fname)(reflect::wide(name).as_ptr(), 1) };
+        let value = {
+            let _cost = ScopeCostTimer::new(11);
+            unsafe { (self.vt.fname)(reflect::wide(name).as_ptr(), 1) }
+        };
         self.admit()?;
         Ok(value)
     }
@@ -1080,7 +1495,11 @@ impl SchemaEngine for Runtime<'_> {
         let p = self.identity(id)?;
         unsafe {
             let mut prop = reflect::HsmpProp::default();
-            if (self.vt.obj_prop)(p, reflect::wide(name).as_ptr(), &mut prop) != 1 {
+            let found = {
+                let _cost = ScopeCostTimer::new(11);
+                (self.vt.obj_prop)(p, reflect::wide(name).as_ptr(), &mut prop)
+            };
+            if found != 1 {
                 return Err(format!("source scope hard {name} property ABI"));
             }
             self.identity(id)?;
@@ -1090,7 +1509,10 @@ impl SchemaEngine for Runtime<'_> {
     }
     fn parameters(&self, function: Identity) -> Result<(Vec<reflect::HsmpProp>, i32), String> {
         self.admit()?;
-        let result = unsafe { crate::sample::props_of(self.vt, self.identity(function)?) };
+        let result = {
+            let _cost = ScopeCostTimer::new(11);
+            unsafe { crate::sample::props_of(self.vt, self.identity(function)?) }
+        };
         self.identity(function)?;
         self.admit()?;
         Ok(result)
@@ -1111,10 +1533,45 @@ impl SchemaEngine for Runtime<'_> {
         class: Identity,
     ) -> Result<u64, String> {
         self.admit()?;
+        let code = owner_code()?;
+        {
+            let mut cache = self.schema.borrow_mut();
+            if cache.owner_code.is_some_and(|old| old != code) {
+                return Err("source scope owner native image changed".into());
+            }
+            cache.owner_code = Some(code);
+        }
+        let existing_paths = self.schema.borrow().owner_paths.clone();
+        let paths = if let Some(paths) = existing_paths {
+            paths
+        } else {
+            [
+                self.capture_path(function)?
+                    .ok_or("source scope owner function path missing")?,
+                self.capture_path(class)?
+                    .ok_or("source scope owner class path missing")?,
+            ]
+        };
+        self.verify_path(function, Some(&paths[0]))?;
+        self.verify_path(class, Some(&paths[1]))?;
         unsafe {
             let p = self.identity(id)?;
             if (self.vt.is_a)(p, self.identity(class)?) != 1 {
                 return Err("source scope component class".into());
+            }
+            {
+                let mut cache = self.schema.borrow_mut();
+                if let Some(original) = cache.owner_receivers.get(&id.address) {
+                    if *original != id {
+                        return Err("source scope owner receiver rebound".into());
+                    }
+                } else {
+                    if cache.owner_receivers.len() >= MAX_COMPONENTS * 2 + 9 {
+                        return Err("source scope owner receiver bound".into());
+                    }
+                    cache.owner_receivers.insert(id.address, id);
+                }
+                cache.owner_paths = Some(paths.clone());
             }
             let mut result = 0u64;
             self.admit()?;
@@ -1123,11 +1580,16 @@ impl SchemaEngine for Runtime<'_> {
             let p = self.identity(id)?;
             hsmp_native_profile_tick(3);
             profile_checkpoint(c"scope_owner_pe", 0);
-            (self.vt.call)(p, function_pointer, (&mut result as *mut u64).cast());
+            {
+                let _cost = ScopeCostTimer::new(9);
+                (self.vt.call)(p, function_pointer, (&mut result as *mut u64).cast());
+            }
             profile_checkpoint(c"scope_owner_pe", 1);
             self.identity(id)?;
             self.identity(function)?;
             self.identity(class)?;
+            self.verify_path(function, Some(&paths[0]))?;
+            self.verify_path(class, Some(&paths[1]))?;
             self.admit()?;
             Ok(result)
         }
@@ -1139,6 +1601,19 @@ struct State {
     scope: Option<Scope>,
 }
 thread_local! { static STATE: RefCell<State> = RefCell::new(State::default()); }
+// This outer guard drops after working borrows, including during Rust unwind.
+#[derive(Default)]
+struct ScopeCallCost {
+    success: bool,
+}
+impl Drop for ScopeCallCost {
+    fn drop(&mut self) {
+        if !self.success {
+            STATE.with(|s| s.borrow_mut().scope = None);
+            scope_cost_finish(false);
+        }
+    }
+}
 unsafe fn integer(L: *mut lua_State, t: c_int, key: &str) -> Result<i64, String> {
     unsafe {
         rawget_str(L, t, key);
@@ -1277,9 +1752,28 @@ unsafe fn resolve_address_only(L: *mut lua_State) -> Result<bool, String> {
         }
     }
 }
+unsafe fn scope_end_validation(L: *mut lua_State) -> Result<bool, String> {
+    unsafe {
+        match lua_gettop(L) {
+            1 => Ok(false),
+            2 if lua_type(L, 2) == LUA_TBOOLEAN => Ok(lua_toboolean(L, 2) != 0),
+            _ => Err("source scope end validation flag".into()),
+        }
+    }
+}
+unsafe fn scope_op_handle(L: *mut lua_State, keep: bool, value: u64) -> Result<u64, String> {
+    if keep {
+        Ok(value)
+    } else {
+        unsafe { arg_int(L, 2) }
+            .map(|v| v as u64)
+            .ok_or_else(|| "source scope handle".into())
+    }
+}
 
 impl Native {
     pub unsafe fn source_scope_vertex_state(&mut self, L: *mut lua_State) -> c_int {
+        let mut call = ScopeCallCost::default();
         let result: Result<StaticVertexState, String> = (|| unsafe {
             let id = arg_int(L, 1).ok_or("source scope id")? as u64;
             let handle = arg_int(L, 2).ok_or("source scope handle")? as u64;
@@ -1368,6 +1862,7 @@ impl Native {
         unsafe {
             match result {
                 Ok(proof) => {
+                    call.success = true;
                     lua_createtable(L, 0, 7);
                     let t = lua_gettop(L);
                     set_str(L, t, "state", proof.state());
@@ -1388,11 +1883,16 @@ impl Native {
                     );
                     1
                 }
-                Err(reason) => nil_err(L, &reason),
+                Err(reason) => {
+                    STATE.with(|s| s.borrow_mut().scope = None);
+                    scope_cost_finish(false);
+                    nil_err(L, &reason)
+                }
             }
         }
     }
     pub unsafe fn source_scope_spline_profile(&mut self, L: *mut lua_State) -> c_int {
+        let mut call = ScopeCallCost::default();
         let result = (|| unsafe {
             let id = arg_int(L, 1).ok_or("source scope id")? as u64;
             let handle = arg_int(L, 2).ok_or("source scope handle")? as u64;
@@ -1476,6 +1976,7 @@ impl Native {
         unsafe {
             match result {
                 Ok(p) => {
+                    call.success = true;
                     lua_createtable(L, 0, 5);
                     let t = lua_gettop(L);
                     set_int(L, t, "position_count", p.position_count.into());
@@ -1485,11 +1986,16 @@ impl Native {
                     set_bool(L, t, "metadata_null", true);
                     1
                 }
-                Err(e) => nil_err(L, &e),
+                Err(e) => {
+                    STATE.with(|s| s.borrow_mut().scope = None);
+                    scope_cost_finish(false);
+                    nil_err(L, &e)
+                }
             }
         }
     }
     pub unsafe fn source_scope_begin(&mut self, L: *mut lua_State) -> c_int {
+        let mut call = ScopeCallCost::default();
         let result = (|| unsafe {
             if !is_table(L, 1) || !is_table(L, 2) {
                 return Err("source scope begin tables".into());
@@ -1502,9 +2008,12 @@ impl Native {
             let dir_seq = u32::try_from(integer(L, 1, "dir_seq")?)
                 .map_err(|_| "source scope directory seq")?;
             let index = u8::try_from(integer(L, 2, "index")?).map_err(|_| "source scope index")?;
+            scope_cost_begin(reference, dir_seq);
             let key = self.world_key.clone().ok_or("source scope world token")?;
-            let vt = reflect::vt().ok_or("source scope reflection")?;
-            let x = exports()?;
+            let (vt, x) = {
+                let _cost = ScopeCostTimer::new(14);
+                (reflect::vt().ok_or("source scope reflection")?, exports()?)
+            };
             let mut e = Runtime {
                 n: self,
                 vt,
@@ -1601,7 +2110,11 @@ impl Native {
                 }
             }
             pop(L, 1);
+            for owner in s.owners.values() {
+                e.bind_owner_world(owner.object)?;
+            }
             s.qualify_owners(&e)?;
+            s.finish_pure(&ProfileGuardEngine { runtime: &e })?;
             STATE.with(|state| {
                 let mut state = state.borrow_mut();
                 state.seq = state
@@ -1617,11 +2130,13 @@ impl Native {
         unsafe {
             match result {
                 Ok(id) => {
+                    call.success = true;
                     lua_pushinteger(L, id as i64);
                     1
                 }
                 Err(reason) => {
                     STATE.with(|s| s.borrow_mut().scope = None);
+                    scope_cost_finish(false);
                     nil_err(L, &reason)
                 }
             }
@@ -1631,6 +2146,7 @@ impl Native {
         unsafe { self.source_scope_op(L, true) }
     }
     pub unsafe fn source_scope_resolve(&mut self, L: *mut lua_State) -> c_int {
+        let mut call = ScopeCallCost::default();
         let top = unsafe { lua_gettop(L) };
         let result = (|| unsafe {
             let id = arg_int(L, 1).ok_or("source scope id")? as u64;
@@ -1645,8 +2161,11 @@ impl Native {
             if scope.id != id {
                 return Err("source scope id changed".into());
             }
-            let vt = reflect::vt().ok_or("source scope reflection")?;
-            let e = runtime(self, vt, exports()?, &scope);
+            let (vt, x) = {
+                let _cost = ScopeCostTimer::new(14);
+                (reflect::vt().ok_or("source scope reflection")?, exports()?)
+            };
+            let e = runtime(self, vt, x, &scope);
             e.admit()?;
             let address = scope.resolve_return(
                 &e,
@@ -1660,7 +2179,11 @@ impl Native {
                     let before = lua_gettop(L);
                     let mut reason = [0u8; 192];
                     e.admit()?;
-                    if factory(L, address, reason.as_mut_ptr().cast(), 192) != 1 {
+                    let constructed = {
+                        let _cost = ScopeCostTimer::new(13);
+                        factory(L, address, reason.as_mut_ptr().cast(), 192)
+                    };
+                    if constructed != 1 {
                         let n = reason.iter().position(|c| *c == 0).unwrap_or(reason.len());
                         return Err(format!(
                             "source wrapper: {}",
@@ -1707,20 +2230,27 @@ impl Native {
         })();
         unsafe {
             match result {
-                Ok(count) => count,
+                Ok(count) => {
+                    call.success = true;
+                    count
+                }
                 Err(reason) => {
                     STATE.with(|s| s.borrow_mut().scope = None);
                     lua_settop(L, top);
+                    scope_cost_finish(false);
                     nil_err(L, &reason)
                 }
             }
         }
     }
     unsafe fn source_scope_op(&mut self, L: *mut lua_State, keep: bool) -> c_int {
+        let mut call = ScopeCallCost::default();
         let result = (|| unsafe {
             let id = arg_int(L, 1).ok_or("source scope id")? as u64;
-            let vt = reflect::vt().ok_or("source scope reflection")?;
-            let x = exports()?;
+            let (vt, x) = {
+                let _cost = ScopeCostTimer::new(14);
+                (reflect::vt().ok_or("source scope reflection")?, exports()?)
+            };
             STATE.with(|state| {
                 let mut state = state.borrow_mut();
                 let mut s = state.scope.take().ok_or("source scope unavailable")?;
@@ -1755,13 +2285,25 @@ impl Native {
                 } else {
                     s.resolve(&e, arg_int(L, 2).ok_or("source scope handle")? as u64)
                 };
-                let result = result.map(|value| {
-                    let owner = if keep {
-                        Some(s.components[value as usize - 1].owner)
-                    } else {
-                        None
-                    };
-                    (value, owner)
+                let result = result.and_then(|value| {
+                    let handle = scope_op_handle(L, keep, value)?;
+                    let final_engine = runtime(self, vt, x, &s);
+                    let row = s
+                        .components
+                        .get(handle.checked_sub(1).ok_or("source scope handle")? as usize)
+                        .ok_or("source scope handle")?;
+                    final_engine.admit()?;
+                    final_engine.verify_path(row.object, row.path_witness.as_ref())?;
+                    s.pure_hard_links(
+                        &ProfileGuardEngine {
+                            runtime: &final_engine,
+                        },
+                        handle,
+                    )?;
+                    final_engine.verify_path(row.object, row.path_witness.as_ref())?;
+                    final_engine.admit()?;
+                    let owner = if keep { Some(row.owner) } else { None };
+                    Ok((value, owner))
                 });
                 if result.is_ok() {
                     state.scope = Some(s);
@@ -1772,6 +2314,7 @@ impl Native {
         unsafe {
             match result {
                 Ok((value, owner)) => {
+                    call.success = true;
                     lua_pushinteger(L, value as i64);
                     if let Some(owner) = owner {
                         lua_pushinteger(L, owner as i64);
@@ -1780,33 +2323,47 @@ impl Native {
                         1
                     }
                 }
-                Err(reason) => nil_err(L, &reason),
+                Err(reason) => {
+                    STATE.with(|s| s.borrow_mut().scope = None);
+                    scope_cost_finish(false);
+                    nil_err(L, &reason)
+                }
             }
         }
     }
     pub unsafe fn source_scope_end(&mut self, L: *mut lua_State) -> c_int {
+        let mut call = ScopeCallCost::default();
         if !self.native_host.is_host()
             || self.poisoned
             || self.game_thread != Some(std::thread::current().id())
         {
+            STATE.with(|s| s.borrow_mut().scope = None);
+            scope_cost_finish(false);
             return unsafe { nil_err(L, "source scope end role/thread admission") };
         }
         let id = unsafe { arg_int(L, 1) };
-        let ok = STATE.with(|s| {
-            let mut s = s.borrow_mut();
-            let ok = s
-                .scope
-                .as_ref()
-                .is_some_and(|scope| Some(scope.id as i64) == id);
-            s.scope = None;
-            ok
-        });
+        let scope = STATE.with(|s| s.borrow_mut().scope.take());
+        let result = (|| -> Result<bool, String> {
+            let validate = unsafe { scope_end_validation(L)? };
+            let scope = scope.ok_or("source scope id unavailable")?;
+            if Some(scope.id as i64) != id {
+                return Err("source scope id unavailable".into());
+            }
+            if validate {
+                let vt = reflect::vt().ok_or("source scope reflection")?;
+                let engine = runtime(self, vt, exports()?, &scope);
+                scope.finish_pure(&ProfileGuardEngine { runtime: &engine })?;
+            }
+            Ok(validate)
+        })();
+        scope_cost_finish(matches!(result, Ok(true)));
         unsafe {
-            if ok {
+            if result.is_ok() {
+                call.success = true;
                 lua_pushboolean(L, 1);
                 1
             } else {
-                nil_err(L, "source scope id unavailable")
+                nil_err(L, &result.unwrap_err())
             }
         }
     }
@@ -1826,6 +2383,18 @@ mod source_scope_tests {
             .into_owned();
         let trace = unsafe { *trace };
         TEST_PROFILE_LOG.with(|p| p.borrow_mut().push((stage, edge, trace)));
+        SCOPE_COSTS.with(|p| {
+            assert!(
+                p.try_borrow_mut().is_ok(),
+                "logger must not retain collector borrow"
+            )
+        });
+        STATE.with(|p| {
+            assert!(
+                p.try_borrow_mut().is_ok(),
+                "logger must not retain scope borrow"
+            )
+        });
         // A callback can read/update TLS after the snapshot borrow has ended.
         hsmp_native_profile_tick(0);
     }
@@ -1912,6 +2481,36 @@ mod source_scope_tests {
             assert_eq!(p[65].0, "profile_operation");
             assert_eq!(p[65].1, 1);
         });
+        TEST_PROFILE_LOG.with(|p| p.borrow_mut().clear());
+        SCOPE_COSTS.with(|p| *p.borrow_mut() = ScopeCostState::default());
+        unsafe {
+            let L: *mut lua_State = mlua::ffi::luaL_newstate().cast();
+            lua_createtable(L, 0, 4);
+            set_int(L, 1, "epoch", 1);
+            set_int(L, 1, "id", 2);
+            set_int(L, 1, "incarnation", 3);
+            set_int(L, 1, "dir_seq", 4);
+            lua_createtable(L, 0, 1);
+            set_int(L, 2, "index", 0);
+            let mut native = Native::new();
+            assert_eq!(native.source_scope_begin(L), 2);
+            assert_eq!(lua_type(L, -2), LUA_TNIL);
+            mlua::ffi::lua_close(L.cast());
+        }
+        scope_cost_finish(true);
+        scope_cost_begin(reference(1, 9, 9).unwrap(), 99);
+        assert!(
+            SCOPE_COSTS.with(|p| p.borrow().current.is_none()),
+            "failed first attempt is not folded into retries"
+        );
+        TEST_PROFILE_LOG.with(|p| {
+            let p = p.borrow();
+            assert_eq!(p.len(), 15);
+            assert!(p
+                .iter()
+                .all(|(_, edge, trace)| *edge == 0 && trace.entity == 2 && trace.dir_seq == 4));
+            assert_eq!(p[2].2.handle, 0);
+        });
         hsmp_native_set_profile_logger(None);
     }
     #[derive(Clone)]
@@ -1961,6 +2560,20 @@ mod source_scope_tests {
         }
     }
     impl Engine for Mock {
+        fn pure_owner(&self, id: Identity) -> Result<u64, String> {
+            Ok(self.row(id)?.owner)
+        }
+        fn pure_world(&self, id: Identity) -> Result<u64, String> {
+            Ok(self.row(id)?.world)
+        }
+        fn path_matches(
+            &self,
+            id: Identity,
+            path: &str,
+            _: Option<&PathWitness>,
+        ) -> Result<bool, String> {
+            Ok(self.row(id)?.path == path)
+        }
         fn admit(&self) -> Result<(), String> {
             self.admissions.set(self.admissions.get() + 1);
             if self.generation_changed.get() {
@@ -2127,6 +2740,127 @@ mod source_scope_tests {
         assert_eq!(s.components[0].parent.unwrap().object.address, 4);
     }
     #[test]
+    fn source_scope_retained_keep_uses_original_handle_without_cold_lookup() {
+        let (mut s, e) = fixture();
+        let path = e.rows.borrow()[&7].path.clone();
+        let h = s.keep(&e, 7, 5, path.clone()).unwrap();
+        let finds = e.find_calls.get();
+        for _ in 0..2 {
+            assert_eq!(s.keep(&e, 7, 5, path.clone()).unwrap(), h);
+        }
+        assert_eq!(e.find_calls.get(), finds);
+        assert_eq!(s.components.len(), 1);
+        assert!(s
+            .keep(&e, 6, 5, path.clone())
+            .unwrap_err()
+            .contains("path rebound"));
+        assert!(s.keep(&e, 7, 2, path.clone()).is_err());
+        assert!(s.keep(&e, 7, 5, format!("{path}_new")).is_err());
+        for mutation in 0..8 {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            s.keep(&e, 7, 5, path.clone()).unwrap();
+            match mutation {
+                0 => e.change(7, |r| r.id.weak |= 1 << 32),
+                1 => e.change(7, |r| r.id.name += 1),
+                2 => e.change(7, |r| r.id.class_weak += 1),
+                3 => e.change(7, |r| r.owner = 2),
+                4 => e.change(7, |r| r.parent = 6),
+                5 => e.change(7, |r| r.path.push_str("_renamed")),
+                6 => e.change(7, |r| r.world = 9),
+                _ => e.change(7, |r| r.flags = GARBAGE),
+            };
+            assert!(
+                s.keep(&e, 7, 5, path).is_err(),
+                "retained mutation{mutation}"
+            );
+            assert_eq!(s.components.len(), 1);
+        }
+    }
+    #[test]
+    fn source_scope_success_finish_closes_all_original_owner_paths_without_callbacks() {
+        let (mut s, e) = fixture();
+        let path = e.rows.borrow()[&7].path.clone();
+        s.keep(&e, 7, 5, path).unwrap();
+        let callbacks = (
+            e.find_calls.get(),
+            e.world_calls.get(),
+            *e.owner_calls.borrow(),
+        );
+        s.finish_pure(&e).unwrap();
+        assert_eq!(
+            callbacks,
+            (
+                e.find_calls.get(),
+                e.world_calls.get(),
+                *e.owner_calls.borrow()
+            )
+        );
+        for mutation in 0..10 {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            s.keep(&e, 7, 5, path).unwrap();
+            match mutation {
+                0 => e.change(7, |r| r.owner = 2),
+                1 => e.change(4, |r| r.owner = 5),
+                2 => e.change(6, |r| r.owner = 2),
+                3 => e.change(7, |r| r.path.push_str("_later")),
+                4 => e.change(7, |r| r.parent = 6),
+                5 => e.change(5, |r| r.root = 4),
+                6 => e.change(7, |r| r.world = 9),
+                7 => e.change(4, |r| r.world = 9),
+                8 => e.change(5, |r| r.world = 9),
+                _ => e.generation_changed.set(true),
+            };
+            assert!(s.finish_pure(&e).is_err(), "final mutation{mutation}");
+        }
+        e.generation_on_field.set(e.field_calls.get() + 1);
+        assert!(s.finish_pure(&e).is_err(), "pure tail directory mutation");
+    }
+    #[test]
+    fn source_scope_end_flag_is_strict_and_cleanup_does_not_validate_objects() {
+        unsafe {
+            let L: *mut lua_State = mlua::ffi::luaL_newstate().cast();
+            lua_pushinteger(L, 1);
+            assert!(!scope_end_validation(L).unwrap());
+            for mode in [false, true] {
+                lua_settop(L, 1);
+                lua_pushboolean(L, i32::from(mode));
+                assert_eq!(scope_end_validation(L).unwrap(), mode);
+            }
+            lua_settop(L, 1);
+            lua_pushnil(L);
+            assert!(scope_end_validation(L).is_err());
+            lua_settop(L, 1);
+            lua_pushinteger(L, 1);
+            assert!(scope_end_validation(L).is_err());
+            let (scope, e) = fixture();
+            e.change(1, |r| r.flags = GARBAGE);
+            STATE.with(|p| p.borrow_mut().scope = Some(scope));
+            let mut native = Native::new();
+            lua_settop(L, 1);
+            assert_eq!(native.source_scope_end(L), 2);
+            assert!(STATE.with(|p| p.borrow().scope.is_none()));
+            assert_eq!(e.admissions.get(), 0);
+            mlua::ffi::lua_close(L.cast());
+        }
+    }
+    #[test]
+    fn source_scope_capi_success_tail_uses_handle_for_keep_and_original_handle_for_resolve_address()
+    {
+        unsafe {
+            let L: *mut lua_State = mlua::ffi::luaL_newstate().cast();
+            lua_pushinteger(L, 1);
+            lua_pushinteger(L, 2);
+            assert_eq!(scope_op_handle(L, true, 3).unwrap(), 3);
+            assert_eq!(scope_op_handle(L, false, 0x12345678).unwrap(), 2);
+            lua_settop(L, 1);
+            lua_pushnil(L);
+            assert!(scope_op_handle(L, false, 0x12345678).is_err());
+            mlua::ffi::lua_close(L.cast());
+        }
+    }
+    #[test]
     fn source_scope_address_only_mode_is_explicit_and_does_not_change_lua_stack() {
         unsafe {
             let L: *mut lua_State = mlua::ffi::luaL_newstate().cast();
@@ -2211,16 +2945,15 @@ mod source_scope_tests {
                 9 => e.change(4, |r| r.id.name += 1),
                 _ => unreachable!(),
             }
-            assert!(
-                s.resolve_return(
+            assert!(s
+                .resolve_return(
                     &e,
                     h,
                     true,
                     |_| panic!("scalar factory"),
                     || panic!("invalid original tail")
                 )
-                .is_err()
-            );
+                .is_err());
         }
     }
     #[test]
@@ -2234,16 +2967,15 @@ mod source_scope_tests {
             } else {
                 e.generation_on_world.set(e.world_calls.get() + 1);
             }
-            assert!(
-                s.resolve_return(
+            assert!(s
+                .resolve_return(
                     &e,
                     h,
                     true,
                     |_| panic!("scalar factory"),
                     || panic!("changed generation tail")
                 )
-                .is_err()
-            );
+                .is_err());
         }
     }
     #[test]
@@ -2252,8 +2984,8 @@ mod source_scope_tests {
             let (mut s, e) = fixture();
             let path = e.rows.borrow()[&7].path.clone();
             let h = s.keep(&e, 7, 5, path).unwrap();
-            assert!(
-                s.resolve_return(
+            assert!(s
+                .resolve_return(
                     &e,
                     h,
                     true,
@@ -2269,8 +3001,7 @@ mod source_scope_tests {
                         e.admit()
                     }
                 )
-                .is_err()
-            );
+                .is_err());
         }
     }
     #[test]
@@ -2344,25 +3075,23 @@ mod source_scope_tests {
         let (mut s, e) = fixture();
         let path = e.rows.borrow()[&7].path.clone();
         let h = s.keep(&e, 7, 5, path).unwrap();
-        assert!(
-            s.resolve_object(
+        assert!(s
+            .resolve_object(
                 &e,
                 h,
                 |_| Err("factory refused".into()),
                 || panic!("failed factory cannot finish")
             )
-            .is_err()
-        );
+            .is_err());
         e.change(7, |r| r.flags |= GARBAGE);
-        assert!(
-            s.resolve_object(
+        assert!(s
+            .resolve_object(
                 &e,
                 h,
                 |_| panic!("retired original cannot construct"),
                 || panic!("retired original cannot finish")
             )
-            .is_err()
-        );
+            .is_err());
     }
     #[test]
     fn source_scope_fresh_factory_final_generation_admission_is_required() {
@@ -2370,8 +3099,8 @@ mod source_scope_tests {
         let path = e.rows.borrow()[&7].path.clone();
         let h = s.keep(&e, 7, 5, path).unwrap();
         let generation = std::cell::Cell::new(s.dir_seq);
-        assert!(
-            s.resolve_object(
+        assert!(s
+            .resolve_object(
                 &e,
                 h,
                 |_| {
@@ -2387,8 +3116,7 @@ mod source_scope_tests {
                     }
                 }
             )
-            .is_err()
-        );
+            .is_err());
     }
     #[test]
     fn source_scope_callback_generation_changes_refuse_before_next_callback_or_factory() {
@@ -2403,15 +3131,14 @@ mod source_scope_tests {
             } else {
                 e.generation_on_world.set(1);
             }
-            assert!(
-                s.resolve_object(
+            assert!(s
+                .resolve_object(
                     &e,
                     h,
                     |_| panic!("changed callback generation cannot construct"),
                     || panic!("changed callback generation cannot return")
                 )
-                .is_err()
-            );
+                .is_err());
             assert_eq!(
                 *e.owner_calls.borrow() - owner_before,
                 u32::from(owner_callback)
@@ -2424,8 +3151,8 @@ mod source_scope_tests {
         let path = e.rows.borrow()[&7].path.clone();
         let h = s.keep(&e, 7, 5, path).unwrap();
         let worlds = std::cell::Cell::new(0);
-        assert!(
-            s.resolve_object(
+        assert!(s
+            .resolve_object(
                 &e,
                 h,
                 |_| {
@@ -2435,8 +3162,7 @@ mod source_scope_tests {
                 },
                 || panic!("changed factory generation cannot return")
             )
-            .is_err()
-        );
+            .is_err());
         assert_eq!(
             e.world_calls.get(),
             worlds.get(),
@@ -2526,17 +3252,15 @@ mod source_scope_tests {
             .no_override
         );
         for (count, state) in [(0, 0), (17, 1), (17, 0), (1, 2), (0, u32::MAX)] {
-            assert!(
-                checked_vertex_state(VertexStateProof {
-                    material_count: 0,
-                    material_null_mask: 0,
-                    component_kind: 1,
-                    lod_info_count: count,
-                    no_override: state,
-                    asset_present: 1,
-                })
-                .is_err()
-            );
+            assert!(checked_vertex_state(VertexStateProof {
+                material_count: 0,
+                material_null_mask: 0,
+                component_kind: 1,
+                lod_info_count: count,
+                no_override: state,
+                asset_present: 1,
+            })
+            .is_err());
         }
     }
     #[test]
@@ -2617,17 +3341,15 @@ mod source_scope_tests {
             (0, 0, 0, 1, 1),
             (0, 0, 0, 0, 0),
         ] {
-            assert!(
-                checked_vertex_state(VertexStateProof {
-                    lod_info_count: 1,
-                    no_override,
-                    asset_present: present,
-                    material_count: count,
-                    material_null_mask: mask,
-                    component_kind: kind,
-                })
-                .is_err()
-            );
+            assert!(checked_vertex_state(VertexStateProof {
+                lod_info_count: 1,
+                no_override,
+                asset_present: present,
+                material_count: count,
+                material_null_mask: mask,
+                component_kind: kind,
+            })
+            .is_err());
         }
     }
     #[test]
@@ -3034,6 +3756,20 @@ mod source_scope_tests {
         }
     }
     impl Engine for SchemaFixture {
+        fn pure_owner(&self, id: Identity) -> Result<u64, String> {
+            self.engine.pure_owner(id)
+        }
+        fn pure_world(&self, id: Identity) -> Result<u64, String> {
+            self.engine.pure_world(id)
+        }
+        fn path_matches(
+            &self,
+            id: Identity,
+            path: &str,
+            witness: Option<&PathWitness>,
+        ) -> Result<bool, String> {
+            self.engine.path_matches(id, path, witness)
+        }
         fn capture(&self, address: u64) -> Result<Identity, String> {
             self.engine.capture(address)
         }
@@ -3213,14 +3949,14 @@ mod source_scope_tests {
         assert_eq!(*e.engine.owner_calls.borrow(), 0);
         assert!(e.cache.borrow().owner.is_none());
         e.bad_property.set(false);
-        assert_eq!(MAX_SCHEMA_FIELDS, 81);
+        assert_eq!(MAX_SCHEMA_FIELDS, 82);
         for i in 0..MAX_SCHEMA_FIELDS {
             e.field(id, &format!("fixture{i}")).unwrap();
         }
         let reads = e.inspections.borrow().3;
         assert!(e.field(id, "AttachParent").is_err());
         assert_eq!(e.inspections.borrow().3, reads);
-        assert_eq!(e.cache.borrow().fields.len(), 81);
+        assert_eq!(e.cache.borrow().fields.len(), 82);
     }
 
     #[repr(C)]
@@ -3230,6 +3966,8 @@ mod source_scope_tests {
         flags: u32,
         class: *mut c_void,
         link: u64,
+        owner_padding: [u8; 0x90 - 40],
+        owner: u64,
     }
     thread_local! {static OBJECTS:RefCell<HashMap<u32,usize>>=RefCell::new(HashMap::new());static NAME_READS:std::cell::Cell<u32>=const{std::cell::Cell::new(0)};}
     unsafe extern "C" fn resolve_object(weak: u64) -> *mut c_void {
@@ -3292,6 +4030,8 @@ mod source_scope_tests {
             flags: 0,
             class: std::ptr::null_mut(),
             link: 0,
+            owner_padding: [0; 0x90 - 40],
+            owner: 0,
         });
         class.class = (&mut *class as *mut NativeObject).cast();
         let mut object = Box::new(NativeObject {
@@ -3300,6 +4040,8 @@ mod source_scope_tests {
             flags: 0,
             class: (&mut *class as *mut NativeObject).cast(),
             link: 111,
+            owner_padding: [0; 0x90 - 40],
+            owner: 555,
         });
         OBJECTS.with(|m| {
             let mut m = m.borrow_mut();
@@ -3466,6 +4208,10 @@ mod source_scope_tests {
                 },
             });
             let pure = ProfileGuardEngine { runtime: e };
+            assert!(
+                pure.admit().is_err(),
+                "pure adapter forwards real role/generation admission"
+            );
             let _trace = ProfileOperation::begin(
                 EntityRef {
                     epoch: 1,
@@ -3513,6 +4259,7 @@ mod source_scope_tests {
     }
     thread_local! {
         static PATH_EXPECTED:RefCell<Option<PathWitness>>=const{RefCell::new(None)};
+        static PATH_EXTRA:RefCell<Vec<PathWitness>>=const{RefCell::new(Vec::new())};
         static PATH_CALLBACK_GARBAGE:std::cell::Cell<bool>=const{std::cell::Cell::new(false)};
         static PATH_CALLBACK_COUNT:std::cell::Cell<u32>=const{std::cell::Cell::new(0)};
     }
@@ -3547,6 +4294,13 @@ mod source_scope_tests {
             (unsafe { std::slice::from_raw_parts(nodes, count as usize) }) == expected.nodes
                 && unsafe { *package_name } == expected.package_name
         });
+        let valid = valid
+            || PATH_EXTRA.with(|expected| {
+                expected.borrow().iter().any(|expected| {
+                    (unsafe { std::slice::from_raw_parts(nodes, count as usize) }) == expected.nodes
+                        && unsafe { *package_name } == expected.package_name
+                })
+            });
         if !valid {
             return -1;
         }
@@ -3584,10 +4338,9 @@ mod source_scope_tests {
             PATH_CALLBACK_COUNT.with(|p| p.set(0));
             let _trace = ProfileOperation::begin(e.reference, e.dir_seq, 1);
             let pure = ProfileGuardEngine { runtime: e };
-            assert!(
-                pure.path_matches(id, "initial exact path", Some(&witness))
-                    .unwrap()
-            );
+            assert!(pure
+                .path_matches(id, "initial exact path", Some(&witness))
+                .unwrap());
             assert_eq!(
                 PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.finds),
                 0
@@ -3599,10 +4352,9 @@ mod source_scope_tests {
             let mut changed = witness.clone();
             changed.nodes[0].address += 1;
             let calls = PATH_CALLBACK_COUNT.with(|p| p.get());
-            assert!(
-                pure.path_matches(id, "ignored text", Some(&changed))
-                    .is_err()
-            );
+            assert!(pure
+                .path_matches(id, "ignored text", Some(&changed))
+                .is_err());
             assert_eq!(
                 PATH_CALLBACK_COUNT.with(|p| p.get()),
                 calls,
@@ -3610,10 +4362,9 @@ mod source_scope_tests {
             );
             changed = witness.clone();
             changed.package_name ^= 1;
-            assert!(
-                pure.path_matches(id, "ignored text", Some(&changed))
-                    .is_err()
-            );
+            assert!(pure
+                .path_matches(id, "ignored text", Some(&changed))
+                .is_err());
             assert!(pure.path_matches(id, "ignored text", None).is_err());
             PATH_CALLBACK_GARBAGE.with(|p| p.set(true));
             assert!(
@@ -3623,6 +4374,50 @@ mod source_scope_tests {
             );
             object.flags = 0;
             PATH_CALLBACK_GARBAGE.with(|p| p.set(false));
+            let class = unsafe { (*object.class.cast::<NativeObject>()).weak };
+            let class_id = Identity {
+                weak: class,
+                address: id.class_address,
+                name: 300,
+                class_weak: class,
+                class_address: id.class_address,
+            };
+            let class_path = PathWitness {
+                nodes: vec![PathNode {
+                    weak: class_id.weak,
+                    address: class_id.address,
+                    name: class_id.name,
+                    class_weak: class_id.class_weak,
+                    class_address: class_id.class_address,
+                    class_name: 300,
+                }],
+                package_name: witness.package_name,
+            };
+            PATH_EXTRA.with(|p| p.borrow_mut().push(class_path.clone()));
+            {
+                let mut cache = e.schema.borrow_mut();
+                cache.owner = Some(OwnerSchema {
+                    function: id,
+                    class: class_id,
+                    result: reflect::HsmpProp {
+                        size: 8,
+                        ..Default::default()
+                    },
+                });
+                cache.owner_code = Some(OWNER_CODE.as_ptr() as usize);
+                cache.owner_paths = Some([witness.clone(), class_path]);
+                cache.owner_receivers.insert(id.address, id);
+            }
+            assert_eq!(std::mem::offset_of!(NativeObject, owner), 0x90);
+            assert_eq!(pure.pure_owner(id).unwrap(), 555);
+            object.owner = 777;
+            assert_eq!(pure.pure_owner(id).unwrap(), 777);
+            e.schema.borrow_mut().owner_code = Some(0);
+            assert!(pure.pure_owner(id).is_err());
+            e.schema.borrow_mut().owner_code = Some(OWNER_CODE.as_ptr() as usize);
+            e.schema.borrow_mut().owner_receivers.remove(&id.address);
+            assert!(pure.pure_owner(id).is_err());
+            PATH_EXTRA.with(|p| p.borrow_mut().clear());
             PATH_READER.store(std::ptr::null_mut(), Ordering::Release);
             assert!(
                 pure.path_matches(id, "ignored text", Some(&witness))
@@ -3682,16 +4477,14 @@ mod source_scope_tests {
                 schema: engine.schema.clone(),
             };
             NAME_READS.with(|reads| reads.set(0));
-            assert!(
-                capture_static_vertex_state(
-                    &scope,
-                    engine,
-                    1,
-                    || { panic!("unadmitted client cannot receive a native asset proof") },
-                    || panic!("unadmitted client cannot finish a native asset proof")
-                )
-                .is_err()
-            );
+            assert!(capture_static_vertex_state(
+                &scope,
+                engine,
+                1,
+                || { panic!("unadmitted client cannot receive a native asset proof") },
+                || panic!("unadmitted client cannot finish a native asset proof")
+            )
+            .is_err());
             assert_eq!(NAME_READS.with(|reads| reads.get()), 0);
         });
     }

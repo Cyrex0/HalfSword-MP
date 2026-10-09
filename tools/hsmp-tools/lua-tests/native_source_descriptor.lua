@@ -1009,30 +1009,120 @@ body.GetNumLODs=original_body_lods;body_asset.GetNumLODs=nil
 for k,v in pairs(pawn)do host[k]=v end
 host.GetActorScale3D=pawn.GetActorScale3D
 local native_scope_begins,native_scope_ends,native_scope_keeps=0,0,0
+local adapter_scope_state={live=false,pass=0,final_resolves=0,final_qualified=0,binding_address=10}
 local adapter_scope={begin=function(meta,b)
     native_scope_begins=native_scope_begins+1;scope_rows={}
     if meta~=phase_context or b.pawn~=10 or b.world~=1 or b.controller~=9 or b.index~=0 then return nil,"exact scope metadata lost"end
+    adapter_scope_state.live=true;adapter_scope_state.after_equality=false;adapter_scope_state.final_resolves=0
     return 101
 end,keep=function(id,row)if id~=101 then return nil,"scope id changed"end;native_scope_keeps=native_scope_keeps+1;return render_env.scope.keep(row)end,
-    resolve=function(id,row,...)if id~=101 then return nil,"scope id changed"end;return render_env.scope.resolve(row,...)end,
+    resolve=function(id,row,...)
+        if id~=101 or not adapter_scope_state.live then return nil,"scope id changed"end
+        if adapter_scope_state.after_equality then
+            adapter_scope_state.final_resolves=adapter_scope_state.final_resolves+1
+            if adapter_scope_state.fail_final then
+                adapter_scope_state.live=false;return nil,"fixture final original component refused"
+            end
+        end
+        return render_env.scope.resolve(row,...)
+    end,
     profile=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.profile(row)end,
     vertex_state=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.vertex_state(row)end,
-    finish=function(id)native_scope_ends=native_scope_ends+1;return id==101 end}
+    finish=function(id,...)
+        native_scope_ends=native_scope_ends+1;adapter_scope_state.close_args=1+select("#",...)
+        local validate=(...);local rows=scope_rows;local live=adapter_scope_state.live
+        adapter_scope_state.live=false;scope_rows={}
+        if adapter_scope_state.throw_close then error("fixture cleanup failed",0)end
+        if id~=101 or not live then return nil,"scope id unavailable"end
+        if validate==true then
+            -- Offline model of the native callback-free ALL-original tail.
+            -- Native purity/field layouts are independently tested in Rust.
+            if not adapter_scope_state.after_equality then return nil,"scope closed before equality"end
+            for _,original in ipairs(rows)do
+                adapter_scope_state.final_qualified=adapter_scope_state.final_qualified+1
+                local o=runtime_objects[original.path]
+                if not o or not T.eq(snapshot(o),original)then return nil,"fixture final original identity changed"end
+            end
+            if adapter_scope_state.refuse_close then return nil,"fixture qualified close refused"end
+        end
+        return true
+    end}
 local real_adapter=Adapter.new({WG=WG,source_scope=adapter_scope,
-    resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Pawn",pawn=host,world=render_world}end})
+    phase=function(_,stage,edge,detail)
+        if stage=="harvest"and edge=="enter"then adapter_scope_state.pass=detail.pass end
+        if stage=="signature"and edge=="exit"then adapter_scope_state.after_equality=detail.ok end
+        if adapter_scope_state.hook then adapter_scope_state.hook(stage,edge,detail)end
+    end,
+    resolve=function(index)
+        if adapter_scope_state.on_current then adapter_scope_state.on_current()end
+        return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=adapter_scope_state.binding_address,pawn_name="Pawn",pawn=host,world=render_world}
+    end})
 wrapper_state.adapter_scalars=wrapper_state.scalar_count
 local captured_real,real_reason=real_adapter.capture(0,phase_context)
-T.check(captured_real~=nil and native_scope_begins==2 and native_scope_ends==2,
-    "production source adapter begins/ends original native scope for both equal full harvests: "..tostring(real_reason))
+T.check(captured_real~=nil and native_scope_begins==1 and native_scope_ends==1 and adapter_scope_state.close_args==2,
+    "production source adapter retains one original native scope across both equal full harvests: "..tostring(real_reason))
 T.check(captured_real and native_scope_keeps==2*#captured_real.components,
-    "both complete production adapter harvests initialize each native component exactly once despite repeated roots/parents")
+    "both complete production adapter harvests freshly keep each native component without skipping census or data")
+T.check(captured_real and adapter_scope_state.final_resolves==#captured_real.components
+    and adapter_scope_state.final_qualified==#captured_real.components,
+    "all original handles receive final qualification and whole-set close after both harvests and equality")
 T.check(captured_real and wrapper_state.scalar_count>wrapper_state.adapter_scalars,
     "production source adapter forwards the explicit scalar mode across both complete equal harvests")
 local native_count=body.GetNumBones
 body.GetNumBones=function()error("fixture source getter failed",0)end
-T.check(real_adapter.capture(0,phase_context)==nil and native_scope_begins==3 and native_scope_ends==3,
-    "failed production source getter always releases scalar-only native scope")
+adapter_scope_state.throw_close=true
+local failed_recipe,failed_reason=real_adapter.capture(0,phase_context)
+T.check(failed_recipe==nil and failed_reason=="fixture source getter failed"and native_scope_begins==2 and native_scope_ends==2
+    and adapter_scope_state.close_args==1 and not adapter_scope_state.live,
+    "failed source getter gets scalar cleanup once without masking its original reason even if cleanup throws")
+adapter_scope_state.throw_close=nil
 body.GetNumBones=native_count
+do
+    local begins,ends=native_scope_begins,native_scope_ends
+    local second_keeps
+    adapter_scope_state.hook=function(stage,edge,detail)
+        if stage=="harvest"and edge=="enter"and detail.pass==2 then
+            second_keeps=native_scope_keeps;adapter_scope_state.binding_address=11
+        end
+    end
+    failed_recipe=real_adapter.capture(0,phase_context)
+    adapter_scope_state.binding_address=10;adapter_scope_state.hook=nil
+    T.check(failed_recipe==nil and native_scope_begins==begins+1 and native_scope_ends==ends+1
+        and native_scope_keeps==second_keeps and adapter_scope_state.close_args==1,
+        "second-pass indexed pawn replacement refuses before any original component keep and cleans the one scope")
+    begins,ends=native_scope_begins,native_scope_ends
+    local qualified=adapter_scope_state.final_qualified
+    adapter_scope_state.hook=function(stage,edge,detail)
+        if stage=="harvest"and edge=="enter"and detail.pass==2 then scope=false end
+    end
+    failed_recipe=real_adapter.capture(0,phase_context)
+    scope=true;adapter_scope_state.hook=nil
+    T.check(failed_recipe==nil and native_scope_begins==begins+1 and native_scope_ends==ends+1
+        and adapter_scope_state.close_args==1 and adapter_scope_state.final_qualified==qualified,
+        "second-pass world drop uses scalar-only cleanup without final old-object qualification")
+    begins,ends=native_scope_begins,native_scope_ends;adapter_scope_state.fail_final=true
+    failed_recipe,failed_reason=real_adapter.capture(0,phase_context);adapter_scope_state.fail_final=nil
+    T.check(failed_recipe==nil and failed_reason=="fixture final original component refused"
+        and native_scope_begins==begins+1 and native_scope_ends==ends+1 and adapter_scope_state.close_args==1,
+        "final handle failure survives already-dropped native scope cleanup")
+    local renamed,original_name
+    adapter_scope_state.on_current=function()
+        if adapter_scope_state.after_equality and adapter_scope_state.final_resolves==#scope_rows and not renamed then
+            renamed=runtime_objects[scope_rows[1].path];original_name=renamed.GetFName
+            renamed.GetFName=function()return fname("FinalCurrentRename")end
+        end
+    end
+    failed_recipe,failed_reason=real_adapter.capture(0,phase_context)
+    adapter_scope_state.on_current=nil;if renamed then renamed.GetFName=original_name end
+    T.check(renamed and failed_recipe==nil and failed_reason=="fixture final original identity changed"
+        and adapter_scope_state.close_args==2 and not adapter_scope_state.live,
+        "last indexed callback mutating an earlier qualified component is caught by final whole-set close")
+    adapter_scope_state.refuse_close=true
+    failed_recipe,failed_reason=real_adapter.capture(0,phase_context);adapter_scope_state.refuse_close=nil
+    T.check(failed_recipe==nil and failed_reason=="fixture qualified close refused"and not adapter_scope_state.live,
+        "qualified scope-close refusal cannot publish an otherwise equal recipe")
+end
+do
 local before_begins,before_ends=native_scope_begins,native_scope_ends
 local adapter_static=mesh(204,"AdapterStaticMesh",host,"static",weapon_asset)
 local adapter_static_is_a=adapter_static.IsA
@@ -1043,7 +1133,7 @@ local captured_native_asset,native_asset_reason=real_adapter.capture(0,phase_con
 local adapter_native_component
 for _,c in ipairs(captured_native_asset and captured_native_asset.components or {})do if c.name=="AdapterStaticMesh"then adapter_native_component=c end end
 T.check(adapter_native_component and adapter_native_component.vertex_state=="native_asset"
-    and native_scope_begins==before_begins+2 and native_scope_ends==before_ends+2,
+    and native_scope_begins==before_begins+1 and native_scope_ends==before_ends+1,
     "production adapter delegates sixth API across two complete equal original-native harvests: "..tostring(native_asset_reason))
 weapon_asset.bAllowCPUAccess=true
 local vertex_proof_calls=0
@@ -1059,6 +1149,7 @@ T.check(real_adapter.capture(0,phase_context)==nil,"production adapter requires 
 adapter_scope.vertex_state=adapter_vertex_state
 local absent_scope_adapter=Adapter.new({WG=WG,resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Pawn",pawn=host,world=render_world}end})
 T.check(absent_scope_adapter.capture(0,phase_context)==nil,"production source collector refuses missing native identity capability")
+end
 host.K2_GetComponentsByClass=function(self,class)local out=source_mesh_return(self,class);out.outTable=false;return out end
 local malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not malformed and malformed_reason:find('K2_GetComponentsByClass(MeshComponent) collect owner=Pawn',1,true)

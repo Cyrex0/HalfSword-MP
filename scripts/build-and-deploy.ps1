@@ -4,7 +4,8 @@
     Build + deploy the HSMP stack into the game folder (developer tool; players use the launcher).
 
 .DESCRIPTION
-    1. Builds the Rust binaries (cargo build --release -p hsmp-server) unless -SkipBuild.
+    1. Builds the Rust binaries and native library together in one Cargo output directory
+       (release, locked) unless -SkipBuild.
     2. Deploys every mod under mods\HSMP* and mods\dev\HSMP*: copies every Scripts\*.lua,
        then copies mods\shared\*.lua into each mod's Scripts\
        Retired mods are not deployed.
@@ -81,6 +82,8 @@ $DevModsSrc = Join-Path $ModsSrc "dev"
 $SharedSrc = Join-Path $ModsSrc "shared"
 # one Cargo workspace: build output in $env:CARGO_TARGET_DIR, else <repo>\target
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $Repo "target" }
+if (-not [IO.Path]::IsPathRooted($TargetDir)) { $TargetDir = Join-Path $Repo $TargetDir }
+$TargetDir = [IO.Path]::GetFullPath($TargetDir)
 if (-not $Template) { $Template = Join-Path $Repo "mods\mods.release.txt" }
 $Retired = @("HSMPLobby", "HSMPAdmin", "HSMPCharacter", "HSMPSettings", "HSMPChat")
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
@@ -188,7 +191,8 @@ if ($RequireG0 -and -not $g0ok) {
 if (-not $g0ok) { Say "note: no G0 pass recorded for this exact tree (stamp says g0_ok=false)" Yellow }
 
 # ----- 1. Build Rust bins -------------------------------------------------
-# cargo honours CARGO_TARGET_DIR (per-worktree target dirs): the build output is there
+# Use the same explicit directory for the combined release build and CMake's
+# normal Cargo verification; Cargo retains its profile/feature fingerprints.
 $CargoOut = Join-Path $TargetDir "release"
 $ShipBins = @("hsmp-server.exe", "hsmp-sidecar.exe", "hsmp-master.exe", "hsmp-query.exe")
 if (-not $SkipBuild) {
@@ -196,12 +200,15 @@ if (-not $SkipBuild) {
     if (-not $cargo) { $cargo = Get-Item "$env:USERPROFILE\.cargo\bin\cargo.exe" -ErrorAction SilentlyContinue }
     if (-not $cargo) { Fail "cargo not found; install Rust via https://rustup.rs/ first" }
     $cargoPath = if ($cargo.Source) { $cargo.Source } else { $cargo.FullName }
-    Say "building rust bins (release)..."
+    $cargoArguments = @('build', '--release', '--locked', '--manifest-path', (Join-Path $Repo 'Cargo.toml'),
+        '--target-dir', $TargetDir, '-p', 'hsmp-server')
+    if (-not $SkipNative) { $cargoArguments += @('-p', 'hsmp-native', '-p', 'hsmp-fake-sidecar') }
+    Say "building release Rust packages into $TargetDir..."
     if (-not $DryRun) {
         Push-Location $Repo
         try {
             $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-            & $cargoPath build --release --locked -p hsmp-server 2>&1 | ForEach-Object { Write-Host "  $_" }
+            & $cargoPath @cargoArguments 2>&1 | ForEach-Object { Write-Host "  $_" }
             $code = $LASTEXITCODE
             $ErrorActionPreference = $prev
             if ($code -ne 0) { Fail "cargo build failed (exit $code)" }
@@ -334,10 +341,12 @@ if ($SkipNative) {
     else {
         Say "building HSMPNative (CMake, UE4SS_SRC=$ue)..."
         $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
-        & $cmake.Source -S $NativeSrc -B $NativeBuild -G "Visual Studio 17 2022" -A x64 "-DUE4SS_SRC=$ue" 2>&1 | ForEach-Object { Write-Host "  $_" }
+        & $cmake.Source -S $NativeSrc -B $NativeBuild -G "Visual Studio 17 2022" -A x64 "-DUE4SS_SRC=$ue" "-DRUST_TARGET_DIR:PATH=$TargetDir" 2>&1 | ForEach-Object { Write-Host "  $_" }
         $code = $LASTEXITCODE
         if ($code -eq 0) {
-            & $cmake.Source --build $NativeBuild --config Release 2>&1 | ForEach-Object { Write-Host "  $_" }
+            # Deployment builds the shipped DLLs and their checked dependencies.
+            # Offline provider/harness fixtures keep their independent targets.
+            & $cmake.Source --build $NativeBuild --config Release --target HSMPNative hsmp_lua 2>&1 | ForEach-Object { Write-Host "  $_" }
             $code = $LASTEXITCODE
         }
         $ErrorActionPreference = $prev
