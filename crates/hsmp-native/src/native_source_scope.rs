@@ -11,9 +11,13 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     ffi::{c_int, c_void},
+    rc::Rc,
 };
 
 const MAX_COMPONENTS: usize = 64;
+// Pawn: Controller, RootComponent, seven weapon fields; controller: Pawn;
+// seven weapon roots; at most 64 original component-class AttachParent fields.
+const MAX_SCHEMA_FIELDS: usize = MAX_COMPONENTS + 17;
 const GARBAGE: u32 = 0x40000000; // matched shipping Kismet validity / actor iterator
 type Name = unsafe extern "C" fn(*const c_void) -> *const u64;
 type Flags = unsafe extern "C" fn(*const c_void) -> *const u32;
@@ -80,6 +84,145 @@ trait Engine {
     fn owner(&self, id: Identity) -> Result<u64, String>;
     fn find(&self, path: &str) -> Result<u64, String>;
 }
+trait SchemaEngine: Engine {
+    fn schema_name(&self, name: &str) -> u64;
+    fn property(&self, id: Identity, name: &str) -> Result<reflect::HsmpProp, String>;
+    fn parameters(&self, function: Identity) -> Result<(Vec<reflect::HsmpProp>, i32), String>;
+    fn read_pointer(&self, id: Identity, property: reflect::HsmpProp) -> Result<u64, String>;
+    fn dispatch_owner(
+        &self,
+        id: Identity,
+        function: Identity,
+        class: Identity,
+    ) -> Result<u64, String>;
+}
+#[derive(Clone, Copy)]
+struct OwnerSchema {
+    function: Identity,
+    class: Identity,
+    result: reflect::HsmpProp,
+}
+struct FieldSchema {
+    class: Identity,
+    name: String,
+    property: reflect::HsmpProp,
+}
+#[derive(Default)]
+struct SchemaCache {
+    owner: Option<OwnerSchema>,
+    fields: Vec<FieldSchema>,
+}
+// Only copied identities/layouts live in the original scope. Cache borrows end
+// before identity checks or engine calls; callback reentry never holds one.
+fn cached_field(
+    cache: &RefCell<SchemaCache>,
+    e: &impl SchemaEngine,
+    id: Identity,
+    name: &str,
+) -> Result<u64, String> {
+    e.verify(id)?;
+    let original_class = {
+        let cache = cache.borrow();
+        cache
+            .fields
+            .iter()
+            .find(|f| f.class.weak == id.class_weak && f.class.address == id.class_address)
+            .map(|f| f.class)
+    };
+    let class = match original_class {
+        Some(class) => class,
+        None => e.capture(id.class_address)?,
+    };
+    if class.weak != id.class_weak || class.address != id.class_address {
+        return Err("source scope original property class changed".into());
+    }
+    e.verify(class)?;
+    let property = {
+        let cache = cache.borrow();
+        cache
+            .fields
+            .iter()
+            .find(|f| f.class == class && f.name == name)
+            .map(|f| f.property)
+    };
+    let property = match property {
+        Some(property) => property,
+        None => {
+            let property = e.property(id, name)?;
+            if property.name != e.schema_name(name)
+                || property.cls != e.schema_name("ObjectProperty")
+                || property.size != 8
+                || !(0..=65528).contains(&property.offset)
+            {
+                return Err(format!("source scope hard {name} property ABI"));
+            }
+            e.verify(class)?;
+            e.verify(id)?;
+            let mut cache = cache.borrow_mut();
+            if cache.fields.len() >= MAX_SCHEMA_FIELDS {
+                return Err("source scope property schema bound".into());
+            }
+            cache.fields.push(FieldSchema {
+                class,
+                name: name.to_owned(),
+                property,
+            });
+            property
+        }
+    };
+    // The pointer VALUE is never cached. Check the original class on both sides
+    // of every freshly read link, including serial-zero native class identities.
+    e.verify(class)?;
+    let result = e.read_pointer(id, property)?;
+    e.verify(id)?;
+    e.verify(class)?;
+    Ok(result)
+}
+fn cached_owner(
+    cache: &RefCell<SchemaCache>,
+    e: &impl SchemaEngine,
+    id: Identity,
+) -> Result<u64, String> {
+    e.verify(id)?;
+    let existing = cache.borrow().owner;
+    let schema = match existing {
+        Some(schema) => schema,
+        None => {
+            let function = e.capture(e.find("/Script/Engine.ActorComponent:GetOwner")?)?;
+            let class = e.capture(e.find("/Script/Engine.ActorComponent")?)?;
+            let (properties, size) = e.parameters(function)?;
+            if size != 8
+                || properties.len() != 1
+                || properties[0].name != e.schema_name("ReturnValue")
+                || properties[0].cls != e.schema_name("ObjectProperty")
+                || properties[0].offset != 0
+                || properties[0].size != 8
+            {
+                return Err("source scope GetOwner ABI".into());
+            }
+            e.verify(function)?;
+            e.verify(class)?;
+            let schema = OwnerSchema {
+                function,
+                class,
+                result: properties[0],
+            };
+            cache.borrow_mut().owner = Some(schema);
+            schema
+        }
+    };
+    // The checked native signature is immutable for this original class/function
+    // in the cooked scope. It is discarded with the scope, never with a new ref.
+    debug_assert_eq!(schema.result.offset, 0);
+    e.verify(schema.function)?;
+    e.verify(schema.class)?;
+    e.verify(id)?;
+    let result = e.dispatch_owner(id, schema.function, schema.class)?;
+    e.verify(id)?;
+    e.verify(schema.function)?;
+    e.verify(schema.class)?;
+    Ok(result)
+}
 #[derive(Clone)]
 struct Owner {
     object: Identity,
@@ -109,6 +252,7 @@ struct Scope {
     controller: Identity,
     owners: HashMap<u64, Owner>,
     components: Vec<Component>,
+    schema: Rc<RefCell<SchemaCache>>,
 }
 impl Scope {
     fn base(&self, e: &impl Engine) -> Result<(), String> {
@@ -250,6 +394,7 @@ struct Runtime<'a> {
     reference: EntityRef,
     dir_seq: u32,
     index: u8,
+    schema: Rc<RefCell<SchemaCache>>,
 }
 impl Runtime<'_> {
     fn admit(&self) -> Result<(), String> {
@@ -355,20 +500,46 @@ impl Engine for Runtime<'_> {
         Ok(result)
     }
     fn field(&self, id: Identity, name: &str) -> Result<u64, String> {
+        cached_field(&self.schema, self, id, name)
+    }
+    fn owner(&self, id: Identity) -> Result<u64, String> {
+        cached_owner(&self.schema, self, id)
+    }
+    fn find(&self, path: &str) -> Result<u64, String> {
+        self.admit()?;
+        let p = unsafe { (self.vt.find)(reflect::wide(path).as_ptr()) } as u64;
+        self.admit()?;
+        Ok(p)
+    }
+}
+impl SchemaEngine for Runtime<'_> {
+    fn schema_name(&self, name: &str) -> u64 {
+        unsafe { (self.vt.fname)(reflect::wide(name).as_ptr(), 1) }
+    }
+    fn property(&self, id: Identity, name: &str) -> Result<reflect::HsmpProp, String> {
         self.admit()?;
         let p = self.identity(id)?;
         unsafe {
             let mut prop = reflect::HsmpProp::default();
-            if (self.vt.obj_prop)(p, reflect::wide(name).as_ptr(), &mut prop) != 1
-                || prop.cls != (self.vt.fname)(reflect::wide("ObjectProperty").as_ptr(), 1)
-                || prop.size != 8
-                || prop.offset < 0
-                || prop.offset > 65528
-            {
+            if (self.vt.obj_prop)(p, reflect::wide(name).as_ptr(), &mut prop) != 1 {
                 return Err(format!("source scope hard {name} property ABI"));
             }
             self.identity(id)?;
             self.admit()?;
+            Ok(prop)
+        }
+    }
+    fn parameters(&self, function: Identity) -> Result<(Vec<reflect::HsmpProp>, i32), String> {
+        self.admit()?;
+        let result = unsafe { crate::sample::props_of(self.vt, self.identity(function)?) };
+        self.identity(function)?;
+        self.admit()?;
+        Ok(result)
+    }
+    fn read_pointer(&self, id: Identity, prop: reflect::HsmpProp) -> Result<u64, String> {
+        self.admit()?;
+        let p = self.identity(id)?;
+        unsafe {
             let value =
                 std::ptr::read_unaligned((p as *const u8).add(prop.offset as usize).cast::<u64>());
             self.identity(id)?;
@@ -376,44 +547,30 @@ impl Engine for Runtime<'_> {
             Ok(value)
         }
     }
-    fn owner(&self, id: Identity) -> Result<u64, String> {
+    fn dispatch_owner(
+        &self,
+        id: Identity,
+        function: Identity,
+        class: Identity,
+    ) -> Result<u64, String> {
         self.admit()?;
         unsafe {
-            let class = (self.vt.find)(reflect::wide("/Script/Engine.ActorComponent").as_ptr());
-            let function =
-                (self.vt.find)(reflect::wide("/Script/Engine.ActorComponent:GetOwner").as_ptr());
-            let f = self.capture(function as u64)?;
-            let cls = self.capture(class as u64)?;
-            let (props, size) = crate::sample::props_of(self.vt, self.identity(f)?);
-            if size != 8
-                || props.len() != 1
-                || props[0].name != (self.vt.fname)(reflect::wide("ReturnValue").as_ptr(), 1)
-                || props[0].cls != (self.vt.fname)(reflect::wide("ObjectProperty").as_ptr(), 1)
-                || props[0].offset != 0
-                || props[0].size != 8
-            {
-                return Err("source scope GetOwner ABI".into());
-            }
-            self.admit()?;
             let p = self.identity(id)?;
-            if (self.vt.is_a)(p, self.identity(cls)?) != 1 {
+            if (self.vt.is_a)(p, self.identity(class)?) != 1 {
                 return Err("source scope component class".into());
             }
             let mut result = 0u64;
             self.admit()?;
-            self.identity(f)?;
+            let function_pointer = self.identity(function)?;
+            self.identity(class)?;
+            let p = self.identity(id)?;
+            (self.vt.call)(p, function_pointer, (&mut result as *mut u64).cast());
             self.identity(id)?;
-            (self.vt.call)(p, function, (&mut result as *mut u64).cast());
-            self.identity(id)?;
+            self.identity(function)?;
+            self.identity(class)?;
             self.admit()?;
             Ok(result)
         }
-    }
-    fn find(&self, path: &str) -> Result<u64, String> {
-        self.admit()?;
-        let p = unsafe { (self.vt.find)(reflect::wide(path).as_ptr()) } as u64;
-        self.admit()?;
-        Ok(p)
     }
 }
 #[derive(Default)]
@@ -448,6 +605,7 @@ fn runtime<'a>(n: &'a Native, vt: &'a HsmpReflect, x: Exports, s: &'a Scope) -> 
         reference: s.reference,
         dir_seq: s.dir_seq,
         index: s.index,
+        schema: s.schema.clone(),
     }
 }
 fn reference(epoch: i64, id: i64, incarnation: i64) -> Result<EntityRef, String> {
@@ -488,6 +646,7 @@ impl Native {
                 reference,
                 dir_seq,
                 index,
+                schema: Rc::new(RefCell::new(SchemaCache::default())),
             };
             // Bindings were freshly resolved in Lua. Original identities are
             // captured before world/owner getters and admitted again afterward.
@@ -508,6 +667,7 @@ impl Native {
                 controller,
                 owners: HashMap::new(),
                 components: vec![],
+                schema: e.schema.clone(),
             };
             s.base(&e)?;
             let root = e.capture(e.field(pawn, "RootComponent")?)?;
@@ -639,6 +799,7 @@ impl Native {
                             reference: s.reference,
                             dir_seq: s.dir_seq,
                             index: s.index,
+                            schema: s.schema.clone(),
                         };
                         s.keep(&e, address, owner, path)
                     }
@@ -836,6 +997,7 @@ mod source_scope_tests {
                 ),
             ]),
             components: vec![],
+            schema: Rc::new(RefCell::new(SchemaCache::default())),
         };
         (s, mock)
     }
@@ -919,6 +1081,250 @@ mod source_scope_tests {
         assert!(s.keep(&e, 7, 0, path).is_err());
         assert!(s.resolve(&e, 0).is_err());
         assert!(s.resolve(&e, 65).is_err());
+    }
+
+    // Synthetic schema/callback fixture: exercises the production cache paths,
+    // not native rendering or engine physics parity.
+    struct SchemaFixture {
+        engine: Mock,
+        cache: Rc<RefCell<SchemaCache>>,
+        inspections: RefCell<(u32, u32, u32, u32)>, // find, params, property, pointer reads
+        callback: std::cell::Cell<u8>,
+        bad_property: std::cell::Cell<bool>,
+        bad_parameters: std::cell::Cell<bool>,
+        words: RefCell<HashMap<u64, [u64; 2]>>,
+    }
+    impl SchemaFixture {
+        fn new() -> (Scope, Self) {
+            let (mut scope, engine) = fixture();
+            for (address, path) in [
+                (8, "/Script/Engine.ActorComponent:GetOwner"),
+                (9, "/Script/Engine.ActorComponent"),
+                (30, "fixture original class"),
+                (31, "fixture other original class"),
+            ] {
+                engine.rows.borrow_mut().insert(
+                    address,
+                    Row {
+                        id: Identity {
+                            weak: address,
+                            address,
+                            name: 100 + address,
+                            class_weak: 30,
+                            class_address: 30,
+                        },
+                        world: 1,
+                        owner: 2,
+                        root: 4,
+                        parent: 0,
+                        path: path.into(),
+                        flags: 0,
+                    },
+                );
+            }
+            let cache = Rc::new(RefCell::new(SchemaCache::default()));
+            scope.schema = cache.clone();
+            (
+                scope,
+                Self {
+                    engine,
+                    cache,
+                    inspections: RefCell::new((0, 0, 0, 0)),
+                    callback: std::cell::Cell::new(0),
+                    bad_property: std::cell::Cell::new(false),
+                    bad_parameters: std::cell::Cell::new(false),
+                    words: RefCell::new(HashMap::from([(7, [4, 777]), (6, [0, 666])])),
+                },
+            )
+        }
+    }
+    impl Engine for SchemaFixture {
+        fn capture(&self, address: u64) -> Result<Identity, String> {
+            self.engine.capture(address)
+        }
+        fn verify(&self, id: Identity) -> Result<(), String> {
+            self.engine.verify(id)
+        }
+        fn world(&self, id: Identity) -> Result<u64, String> {
+            self.engine.world(id)
+        }
+        fn field(&self, id: Identity, name: &str) -> Result<u64, String> {
+            cached_field(&self.cache, self, id, name)
+        }
+        fn owner(&self, id: Identity) -> Result<u64, String> {
+            cached_owner(&self.cache, self, id)
+        }
+        fn find(&self, path: &str) -> Result<u64, String> {
+            self.inspections.borrow_mut().0 += 1;
+            self.engine.find(path)
+        }
+    }
+    impl SchemaEngine for SchemaFixture {
+        fn schema_name(&self, name: &str) -> u64 {
+            name.bytes()
+                .fold(1u64, |n, b| n.wrapping_mul(31).wrapping_add(b as u64))
+        }
+        fn property(&self, id: Identity, name: &str) -> Result<reflect::HsmpProp, String> {
+            self.verify(id)?;
+            self.inspections.borrow_mut().2 += 1;
+            Ok(reflect::HsmpProp {
+                name: self.schema_name(name),
+                cls: self.schema_name("ObjectProperty"),
+                size: 8,
+                offset: if self.bad_property.get() {
+                    65529
+                } else if id.class_address == 31 {
+                    8
+                } else {
+                    0
+                },
+                ..Default::default()
+            })
+        }
+        fn parameters(&self, function: Identity) -> Result<(Vec<reflect::HsmpProp>, i32), String> {
+            self.verify(function)?;
+            self.inspections.borrow_mut().1 += 1;
+            Ok((
+                vec![reflect::HsmpProp {
+                    name: self.schema_name("ReturnValue"),
+                    cls: self.schema_name("ObjectProperty"),
+                    size: 8,
+                    ..Default::default()
+                }],
+                if self.bad_parameters.get() { 16 } else { 8 },
+            ))
+        }
+        fn read_pointer(&self, id: Identity, property: reflect::HsmpProp) -> Result<u64, String> {
+            self.verify(id)?;
+            self.inspections.borrow_mut().3 += 1;
+            if property.name == self.schema_name("AttachParent") {
+                return Ok(self.words.borrow()[&id.address][property.offset as usize / 8]);
+            }
+            for name in ["Controller", "Pawn", "RootComponent", "Weapon R"] {
+                if property.name == self.schema_name(name) {
+                    return self.engine.field(id, name);
+                }
+            }
+            Ok(0)
+        }
+        fn dispatch_owner(
+            &self,
+            id: Identity,
+            function: Identity,
+            class: Identity,
+        ) -> Result<u64, String> {
+            self.verify(function)?;
+            self.verify(class)?;
+            let result = self.engine.owner(id)?;
+            match self.callback.get() {
+                1 => self.engine.change(8, |r| r.id.name += 1),
+                2 => self.engine.change(9, |r| r.flags = GARBAGE),
+                3 => self.engine.change(id.address, |r| r.flags = GARBAGE),
+                4 => self.engine.change(8, |r| r.flags = GARBAGE),
+                5 => self.engine.change(9, |r| r.id.name += 1),
+                6 => self.engine.change(2, |r| r.world = 99),
+                7 => self.engine.change(5, |r| r.root = 4),
+                8 => {
+                    self.words.borrow_mut().insert(7, [6, 777]);
+                }
+                _ => {}
+            }
+            Ok(result)
+        }
+    }
+    #[test]
+    fn source_scope_schema_reuses_inspection_but_reads_links_and_dispatches_each_time() {
+        let (_, e) = SchemaFixture::new();
+        let id = e.capture(7).unwrap();
+        assert_eq!(e.field(id, "AttachParent").unwrap(), 4);
+        e.words.borrow_mut().insert(7, [55, 777]);
+        assert_eq!(e.field(id, "AttachParent").unwrap(), 55);
+        assert_eq!(e.owner(id).unwrap(), 5);
+        assert_eq!(e.owner(id).unwrap(), 5);
+        assert_eq!(*e.inspections.borrow(), (2, 1, 1, 2));
+        assert_eq!(*e.engine.owner_calls.borrow(), 2);
+        let fresh = RefCell::new(SchemaCache::default());
+        assert_eq!(cached_owner(&fresh, &e, id).unwrap(), 5);
+        assert_eq!(*e.inspections.borrow(), (4, 2, 1, 2));
+        assert_eq!(*e.engine.owner_calls.borrow(), 3);
+    }
+    #[test]
+    fn source_scope_cached_properties_are_bound_to_original_exact_class() {
+        let (_, e) = SchemaFixture::new();
+        let first = e.capture(7).unwrap();
+        assert_eq!(e.field(first, "AttachParent").unwrap(), 4);
+        e.engine.change(6, |r| {
+            r.id.class_weak = 31;
+            r.id.class_address = 31;
+        });
+        let second = e.capture(6).unwrap();
+        assert_eq!(e.field(second, "AttachParent").unwrap(), 666);
+        assert_eq!(e.inspections.borrow().2, 2);
+        let reads = e.inspections.borrow().3;
+        e.engine.change(31, |r| r.id.name += 1);
+        assert!(e.field(second, "AttachParent").is_err());
+        assert_eq!(e.inspections.borrow().3, reads);
+        e.engine.change(30, |r| r.flags = GARBAGE);
+        assert!(e.field(first, "AttachParent").is_err());
+        assert_eq!(e.inspections.borrow().3, reads);
+    }
+    #[test]
+    fn source_scope_cached_function_class_and_component_mutation_prevent_dispatch() {
+        for mutation in 0..5 {
+            let (_, e) = SchemaFixture::new();
+            let id = e.capture(7).unwrap();
+            e.owner(id).unwrap();
+            let calls = *e.engine.owner_calls.borrow();
+            match mutation {
+                0 => e.engine.change(8, |r| r.id.name += 1),
+                1 => e.engine.change(9, |r| r.id.weak |= 91 << 32),
+                2 => e.engine.change(8, |r| r.flags = GARBAGE),
+                3 => e.engine.change(9, |r| r.flags = GARBAGE),
+                _ => e.engine.change(7, |r| r.id.name += 1),
+            }
+            assert!(e.owner(id).is_err(), "cached mutation {mutation}");
+            assert_eq!(*e.engine.owner_calls.borrow(), calls);
+        }
+    }
+    #[test]
+    fn source_scope_callback_function_class_component_and_links_are_requalified() {
+        for mutation in 1..=8 {
+            let (mut scope, e) = SchemaFixture::new();
+            let path = e.engine.rows.borrow()[&7].path.clone();
+            let h = scope.keep(&e, 7, 5, path).unwrap();
+            let calls = *e.engine.owner_calls.borrow();
+            e.callback.set(mutation);
+            assert!(
+                scope.resolve(&e, h).is_err(),
+                "callback mutation {mutation}"
+            );
+            assert!(
+                *e.engine.owner_calls.borrow() > calls,
+                "callback must actually run"
+            );
+        }
+    }
+    #[test]
+    fn source_scope_schema_abi_and_budget_are_bounded_before_reads_or_dispatch() {
+        let (_, e) = SchemaFixture::new();
+        let id = e.capture(7).unwrap();
+        e.bad_property.set(true);
+        assert!(e.field(id, "AttachParent").is_err());
+        assert_eq!(e.inspections.borrow().3, 0);
+        assert!(e.cache.borrow().fields.is_empty());
+        e.bad_parameters.set(true);
+        assert!(e.owner(id).is_err());
+        assert_eq!(*e.engine.owner_calls.borrow(), 0);
+        assert!(e.cache.borrow().owner.is_none());
+        e.bad_property.set(false);
+        assert_eq!(MAX_SCHEMA_FIELDS, 81);
+        for i in 0..MAX_SCHEMA_FIELDS {
+            e.field(id, &format!("fixture{i}")).unwrap();
+        }
+        let reads = e.inspections.borrow().3;
+        assert!(e.field(id, "AttachParent").is_err());
+        assert_eq!(e.inspections.borrow().3, reads);
+        assert_eq!(e.cache.borrow().fields.len(), 81);
     }
 
     #[repr(C)]
@@ -1030,6 +1436,7 @@ mod source_scope_tests {
             reference: reference(-1, 1, 1).unwrap(),
             dir_seq: 1,
             index: 0,
+            schema: Rc::new(RefCell::new(SchemaCache::default())),
         };
         let id = Identity {
             weak: 7,
