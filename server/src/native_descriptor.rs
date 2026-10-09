@@ -282,7 +282,11 @@ fn armor_map(v: &[ArmorInSlot], live: bool) -> Result<(), &'static str> {
     }
     for x in v {
         x.passport.validate()?;
-        if x.slot != x.passport.pslot || (live && x.passport.class.is_empty()) {
+        // Construction consumes Map_Values and skips null ArmorCore values.
+        // Its native map key and the passport's Slot are independent observations.
+        // Live entries use the spawned actor's Armor Slot and keep the stricter
+        // consistency gate until that separate native dataflow is established.
+        if live && (x.slot != x.passport.pslot || x.passport.class.is_empty()) {
             return Err("armor slot binding");
         }
     }
@@ -806,6 +810,11 @@ impl SourceRecipe {
     }
     pub fn encoding_stats(&self) -> Result<RecipeEncodingStats, &'static str> {
         self.validate()?;
+        self.encoding_stats_for_diagnostics()
+    }
+    /// Counts the bounded encoding of copied typed values before semantic
+    /// validation. These measurements never authorize an invalid recipe.
+    pub fn encoding_stats_for_diagnostics(&self) -> Result<RecipeEncodingStats, &'static str> {
         let value = serde_json::to_value(self).map_err(|_| "source recipe serialization")?;
         let plan = codec::Plan::new(&value)?;
         struct Counter(usize);
@@ -830,6 +839,41 @@ impl SourceRecipe {
             bones: self.components.iter().map(|c| c.bones.len()).sum(),
             material_slots: self.components.iter().map(|c| c.materials.len()).sum(),
         })
+    }
+    /// Describes the first rejected armor observation without reading native
+    /// objects or changing any copied field. All other errors keep their reason.
+    pub fn validation_diagnostic(&self, reason: &'static str) -> String {
+        for (table, rows, live) in [
+            (
+                "passport.equipment.armor",
+                &self.passport.equipment.armor,
+                false,
+            ),
+            ("equipment.armor", &self.equipment.armor, true),
+        ] {
+            if armor_map(rows, live).err() != Some(reason) {
+                continue;
+            }
+            let rejected = rows.iter().enumerate().find(|(index, row)| match reason {
+                "armor slots" => {
+                    *index >= 17
+                        || row.slot >= 17
+                        || (*index > 0 && rows[*index - 1].slot >= row.slot)
+                }
+                "armor passport" => row.passport.validate().is_err(),
+                "armor slot binding" => {
+                    live && (row.slot != row.passport.pslot || row.passport.class.is_empty())
+                }
+                _ => false,
+            });
+            if let Some((index, row)) = rejected {
+                return format!(
+                    "{reason} table={table} row={index} slot={} pslot={} class={:?}",
+                    row.slot, row.passport.pslot, row.passport.class
+                );
+            }
+        }
+        reason.to_owned()
     }
     pub fn decode_recipe(bytes: &[u8]) -> Result<Self, &'static str> {
         decode_recipe(bytes)
@@ -1448,6 +1492,88 @@ mod tests {
         let mut recipe = fixture();
         recipe.components[0].relative.scale[0] = f64::NAN;
         assert!(recipe.canonical_bytes().is_err());
+    }
+    #[test]
+    fn construction_armor_keys_and_passport_slots_are_independent_native_values() {
+        let mut recipe = fixture();
+        let armor: ArmorPassport = serde_json::from_str(include_str!(
+            "../../tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.json"
+        ))
+        .unwrap();
+        let mut empty = armor.clone();
+        empty.class.clear();
+        empty.pslot = 0;
+        // Offline copied observations: neither a null class nor a map key
+        // authorizes replacing any of the other native passport fields.
+        recipe.passport.equipment.armor = vec![
+            ArmorInSlot {
+                slot: 0,
+                passport: armor.clone(),
+            },
+            ArmorInSlot {
+                slot: 7,
+                passport: empty,
+            },
+        ];
+        assert_ne!(recipe.passport.equipment.armor[0].slot, armor.pslot);
+        let decoded = decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap();
+        assert_eq!(
+            decoded.passport.equipment.armor,
+            recipe.passport.equipment.armor
+        );
+        assert_eq!(decoded.passport.equipment.armor.len(), 2);
+        assert_eq!(decoded.passport.equipment.armor[1].passport.pslot, 0);
+        assert!(
+            decoded.passport.equipment.armor[1]
+                .passport
+                .class
+                .is_empty()
+        );
+
+        recipe.passport.equipment.armor[1].passport.pslot = 17;
+        assert_eq!(recipe.validate(), Err("armor passport"));
+        let detail = recipe.validation_diagnostic("armor passport");
+        assert!(detail.contains("table=passport.equipment.armor row=1 slot=7 pslot=17 class=\"\""));
+        recipe.passport.equipment.armor[1].passport.pslot = 0;
+        recipe.passport.equipment.armor[1].slot = 0;
+        assert_eq!(recipe.validate(), Err("armor slots"));
+        assert!(
+            recipe
+                .validation_diagnostic("armor slots")
+                .contains("row=1 slot=0 pslot=0")
+        );
+    }
+    #[test]
+    fn rejected_live_armor_keeps_copied_context_and_diagnostic_size_without_admission() {
+        let mut recipe = fixture();
+        let armor: ArmorPassport = serde_json::from_str(include_str!(
+            "../../tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.json"
+        ))
+        .unwrap();
+        recipe.equipment.armor.push(ArmorInSlot {
+            slot: 7,
+            passport: armor.clone(),
+        });
+        assert_ne!(armor.pslot, 7);
+        assert_eq!(recipe.validate(), Err("armor slot binding"));
+        assert_eq!(recipe.encoding_stats().unwrap_err(), "armor slot binding");
+        let stats = recipe.encoding_stats_for_diagnostics().unwrap();
+        assert!(stats.json_bytes > 0 && stats.encoded_bytes > 0);
+        assert_eq!(stats.components, recipe.components.len());
+        let detail = recipe.validation_diagnostic("armor slot binding");
+        assert!(detail.contains("table=equipment.armor row=0 slot=7"));
+        assert!(detail.contains(&format!("pslot={} class={:?}", armor.pslot, armor.class)));
+        assert!(recipe.canonical_bytes().is_err());
+        let copied = value_bytes(&serde_json::to_value(&recipe).unwrap());
+        assert_eq!(decode_recipe(&copied).unwrap_err(), "armor slot binding");
+        recipe.equipment.armor[0].slot = armor.pslot;
+        recipe.equipment.armor[0].passport.class.clear();
+        assert_eq!(recipe.validate(), Err("armor slot binding"));
+        assert!(
+            recipe
+                .validation_diagnostic("armor slot binding")
+                .ends_with("class=\"\"")
+        );
     }
     #[test]
     fn armor_sparse_false_and_double_precision_survive() {

@@ -1,6 +1,6 @@
 //! Raw-table parser fixtures only. This establishes no native scene evidence.
 use hsmp_native::native_descriptor_binding::read_recipe;
-use hsmp_server::native_descriptor::SourceRecipe;
+use hsmp_server::native_descriptor::{ArmorPassport, SourceRecipe};
 use mlua::ffi;
 use serde_json::Value;
 use std::ffi::{CStr, CString};
@@ -92,6 +92,53 @@ unsafe fn push_json(l: *mut ffi::lua_State, value: &Value) {
             }
         }
     }
+}
+
+#[test]
+fn construction_armor_independent_keys_survive_and_live_refusal_has_copied_sizes() {
+    let lua = State::new();
+    let armor: Value = serde_json::from_str(include_str!(
+        "../../../tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.json"
+    ))
+    .unwrap();
+    unsafe {
+        push_json(lua.0, &armor);
+        ffi::lua_setglobal(lua.0, c"armor".as_ptr());
+    }
+    lua.run("local function copy(v) if type(v)~='table' then return v end;local o={};for k,x in pairs(v)do o[k]=copy(x)end;return o end;local empty=copy(armor);empty.class='';empty.pslot=0;recipe.passport.equipment.armor={{slot=0,passport=copy(armor)},{slot=7,passport=empty}};");
+    let recipe = lua.read().unwrap();
+    assert_eq!(recipe.passport.equipment.armor.len(), 2);
+    assert_ne!(
+        recipe.passport.equipment.armor[0].slot,
+        recipe.passport.equipment.armor[0].passport.pslot
+    );
+    assert_eq!(recipe.passport.equipment.armor[1].slot, 7);
+    assert_eq!(recipe.passport.equipment.armor[1].passport.pslot, 0);
+    assert!(recipe.passport.equipment.armor[1].passport.class.is_empty());
+    assert_eq!(
+        recipe.passport.equipment.armor[0].passport,
+        serde_json::from_value::<ArmorPassport>(armor.clone()).unwrap()
+    );
+    assert_eq!(
+        SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap(),
+        recipe
+    );
+
+    lua.run("recipe.equipment.armor={{slot=7,passport=armor}}");
+    let reason = lua.read().unwrap_err();
+    assert!(reason.starts_with("armor slot binding table=equipment.armor row=0 slot=7 pslot="));
+    assert!(reason.contains(&format!("class={:?}", armor["class"].as_str().unwrap())));
+    assert!(
+        reason.contains("compact_bytes=")
+            && reason.contains("raw_json_bytes=")
+            && reason.contains("components=1")
+    );
+    lua.run("recipe.equipment.armor={};recipe.passport.equipment.armor[2].passport.pslot=17");
+    let reason = lua.read().unwrap_err();
+    assert!(reason.starts_with(
+        "armor passport table=passport.equipment.armor row=1 slot=7 pslot=17 class=\"\""
+    ));
+    assert!(reason.contains("compact_bytes="));
 }
 
 #[test]

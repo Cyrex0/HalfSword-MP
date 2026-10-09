@@ -67,6 +67,29 @@ T.check(T.eq(source.equipment.armor[1].passport.price,armor.price),"native armor
 T.check(T.eq(source.equipment.armor[1].passport.slots_blocked[1].value,false),"explicit false blocked slot preserved")
 T.check(T.eq(source.equipment.armor[1].passport.slots_blocked[2].slot,5),"sparse blocked-slot keys preserved")
 T.check(T.eq(#source.passport.equipment.armor,0),"consumed construction armor does not replace live armor")
+do
+local construction_passport=plain(recipe.passport)
+local empty_armor=plain(armor);empty_armor.class="";empty_armor.pslot=0
+construction_passport.equipment.armor={{slot=0,passport=plain(armor)},{slot=7,passport=empty_armor}}
+local original_character=env.character
+env.character=function()return raw("character",construction_passport)end
+local independent,independent_reason=D.capture(env)
+T.check(independent~=nil,"native construction map permits independent key and passport slot: "..tostring(independent_reason))
+T.check(T.eq(independent.passport.equipment.armor,construction_passport.equipment.armor),"all populated/empty armor occurrences and all24 copied fields remain exact")
+T.check(independent.passport.equipment.armor[1].slot~=independent.passport.equipment.armor[1].passport.pslot
+    and independent.passport.equipment.armor[2].slot==7 and independent.passport.equipment.armor[2].passport.pslot==0,
+    "construction map keys never overwrite either native passport Slot")
+T.check(T.eq(independent.equipment.armor,source.equipment.armor),"independent construction observations never replace actual live armor")
+-- Use the harvest boundary instead of guessing a field-read count.
+env.character=function()return raw("character",construction_passport)end
+env.phase=function(stage,edge,detail)
+    if stage=="harvest"and edge=="enter"and detail.pass==2 then
+        construction_passport.equipment.armor[2].passport.price=armor.price+1
+    end
+end
+T.check(D.capture(env)==nil,"mutation of an empty construction row still refuses unequal full harvests")
+env.character=original_character;env.phase=nil
+end
 local passport_phases={}
 env.phase=function(stage,edge,detail)passport_phases[#passport_phases+1]={stage=stage,edge=edge,detail=detail}end
 T.check(D.capture(env)~=nil,"coarse phases preserve exact two-pass source capture")
@@ -103,6 +126,40 @@ T.check(D.capture(env)==nil,"world drop refuses source reads")
 scope=true
 local exact_a={value=1.000000000000001};local exact_b={value=1.000000000000002}
 T.check(D.signature(exact_a)~=D.signature(exact_b),"descriptor equality preserves native double differences")
+do
+T.check(D.MAX_RECIPE_NODES==512*1024,"production plain/signature node budget derives from encoded512KiB tokens")
+local wide_components={}
+for i=1,64 do
+    local c=plain(recipe.components[1]);c.id=i;c.parent=i==1 and 0 or 1;c.name="Offline full dictionary component "..i
+    if i>1 then c.role="attachment"end
+    c.bones={}
+    for j=1,512 do c.bones[j]={name=string.format("offline_full_render_dictionary_bone_%03d",j-1),parent=j==1 and -1 or j-2}end
+    wide_components[i]=c
+end
+local original_render=env.render
+env.render=function()return {components=wide_components,topology=recipe.topology}end
+local wide_source,wide_reason=D.capture(env)
+T.check(wide_source~=nil,"production complete capture admits64x512 bones beyond old node ceiling: "..tostring(wide_reason))
+local wide_bones=0;for _,c in ipairs(wide_source.components)do wide_bones=wide_bones+#c.bones end
+T.check(wide_bones==32768 and T.eq(wide_source.components,wide_components),"all32768 bone occurrences and component fields survive production plain copies")
+local wide_signature=D.signature(wide_source)
+wide_components[64].bones[512].name="offline_changed_final_render_bone"
+T.check(D.signature({components=wide_components,topology=recipe.topology})~=D.signature({components=wide_source.components,topology=recipe.topology}),
+    "wide signature retains final-component final-bone mutation")
+T.check(wide_signature==D.signature(wide_source),"captured wide recipe stays detached from later native-shaped source mutation")
+env.phase=function(stage,edge,detail)
+    if stage=="harvest"and edge=="enter"and detail.pass==2 then wide_components[64].bones[512].parent=0 end
+end
+T.check(D.capture(env)==nil,"wide final-bone mutation refuses unequal two-harvest capture")
+env.render=original_render;env.phase=nil
+local too_deep={};local cursor=too_deep;for _=1,25 do cursor.child={};cursor=cursor.child end
+T.check(not pcall(D.signature,too_deep),"expanded production budget retains depth24 refusal")
+local cyclic={};cyclic.self=cyclic
+T.check(not pcall(D.signature,cyclic),"expanded production budget retains bounded cycle refusal")
+local too_many={};for i=1,D.MAX_RECIPE_NODES do too_many[i]=false end
+T.check(not pcall(D.signature,too_many),"one table plus512KiB values refuses token-derived node overflow")
+too_many=nil
+end
 T.check(D.signature({value=-0.0})~=D.signature({value=0.0}),"native signed zero preserved in source equality")
 
 -- Exercise the actual source adapter with fresh native-style bindings.

@@ -129,7 +129,18 @@ pub unsafe fn read_recipe(L: *mut lua_State, index: c_int) -> Result<SourceRecip
             let value = copied_value(L, index, 0, &mut 0, false)?;
             let recipe: SourceRecipe =
                 serde_json::from_value(value).map_err(|_| "source recipe schema")?;
-            let stats = recipe.encoding_stats().map_err(str::to_owned)?;
+            let stats = recipe.encoding_stats_for_diagnostics();
+            if let Err(reason) = recipe.validate() {
+                let counts = match &stats {
+                    Ok(stats) => stats.diagnostic(),
+                    Err(reason) => format!("encoding_stats_unavailable={reason}"),
+                };
+                return Err(format!(
+                    "{}: {counts}",
+                    recipe.validation_diagnostic(reason)
+                ));
+            }
+            let stats = stats.map_err(str::to_owned)?;
             recipe
                 .canonical_bytes()
                 .map_err(|reason| format!("{reason}: {}", stats.diagnostic()))?;

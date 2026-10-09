@@ -4,7 +4,9 @@
 local source=(debug.getinfo(1,"S").source or ""):gsub("^@","")
 local directory=source:match("^(.*)[/\\]") or "."
 local Fields=dofile(directory.."/native_source_fields.lua")
-local M={SCHEMA=6,FIELDS=Fields}
+-- The lossless encoded recipe allows 512KiB; each copied value/table requires
+-- at least one codec token byte. Keys retain their existing separate semantics.
+local M={SCHEMA=6,FIELDS=Fields,MAX_RECIPE_NODES=512*1024}
 local equipment_fields={armor="ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358",
     sheaths="WeaponsinSlots_11_B42349384F5EF74DE78A7F870D89656A",
     hands="WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"}
@@ -129,7 +131,7 @@ end
 -- Clone only plain scalars/tables. No userdata, closures or engine pointers
 -- reach descriptor publication. A bounded path rejects cycles and oversized data.
 local function plain(v,depth,budget)
-    budget.n=budget.n+1;if budget.n>16000 or depth>24 then fail("source table bound")end
+    budget.n=budget.n+1;if budget.n>M.MAX_RECIPE_NODES or depth>24 then fail("source table bound")end
     local t=type(v)
     if t=="boolean"then return v end
     if t=="number"then if not finite(v)then fail("source scalar unavailable")end;return v end
