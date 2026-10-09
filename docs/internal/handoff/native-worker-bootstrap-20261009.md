@@ -1,28 +1,28 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build55b2ed06
+## Current state: 2026-10-09, latest actual build5ea987fe
 
 The actual topology launches: one NullRHI game authority and two rendered native
 clients. The authority qualifies two human fighters on opposing native teams;
 both clients now complete local combat suppression. Original attachment closure
-also completes (47 nodes:26 pawn meshes,13 axe meshes plus native parents).
+also completes (49 nodes:26 pawn meshes,13 axe meshes,3 owned pawn splines plus
+native parents).
 The production helper wiring and the client256-component resource assumption are
 fixed. No canonical scene frame or active client input has been proved yet.
 
-Last live publication blocker: native Aim Spline has actual bDrawDebug=true,
-visible=true, hidden=false and owner_hidden=false. Existing scene-anchor support
-refuses it. Shipping non-rendering has not been proved, and faithful native spline
-curve/settings/dynamic-state replication is being implemented as ABI7, source
-schema3 and capability-negotiated render V2. This coupled change has not run in
-the game yet. Do not bypass this refusal or infer pixels from visibility alone.
+Current publication blocker: ABI7/source schema3/render V2 is deployed and the
+native Aim Spline eligibility now passes. Actual native profile capture enters
+at28.455s but never records a return; the authority misses graceful shutdown and
+its owned process is stopped. No deadlock or crash cause is established. Narrow
+native profile checkpoints are the next step; full curves and rendering remain
+unproved in the game. Do not bypass capture or infer pixels from visibility.
 
-Current performance blocker: first capture still spends roughly16 seconds before
-that refusal. Scope-local schema caching passed focused checks but the real run
-showed only small timing changes. Repeated Lua indexed-controller/current-world
-resolution now avoids duplicate qualification (six indexed controller queries
-become three per guarded source read); focused worker checks pass, but actual
-runtime improvement remains unmeasured. All source lifetime/world/player checks
-remain required.
+Current performance blocker: first capture spends roughly18 seconds reaching
+native profile entry. Parent closure alone takes10.362s. Scope-local schema
+caching and fewer duplicate controller queries have not established a useful
+actual speed gain. Static audit finds repeated full profile guards inside native
+metadata checks, but aggregate costs/location need measured native checkpoints.
+All source lifetime/world/player checks remain required.
 
 Next acceptance steps are (1) evidenced spline support, (2) complete recipes and
 advancing source/mirror frames for both clients, (3) positive legal native inputs
@@ -49,12 +49,14 @@ The combined server native filter passes45 tests, including complete profile
 readiness, raw nonunit quaternion/zero tangent and signed-zero transmission,
 all frame truncations, invalid flags/counts/values, unchanged64KiB message bounds
 and authenticated UDP scene delivery. The UDP test initially caught missing
-0x0A12 routing; adding the route made the same test pass. No full G0, deployed
-ABI7 build or native game run is claimed by these focused checks.
+0x0A12 routing; adding the route made the same test pass. These focused checks
+were followed by the full clean checkpoint and actual run recorded below; they
+do not themselves establish native gameplay.
 
 The observed menu-to-exit behaviour is the bounded harness ending initialization
-after no canonical scene becomes available. Last live builds recorded clean
-supervisor shutdown and no orphan/crash process. The spline integration still
+after no canonical scene becomes available. The latest authority misses graceful
+shutdown; all its owned processes are absent after verified termination and no
+new crash is observed. The spline integration still
 needs actual source capture, two mirror readbacks, advancing frames and positive
 owned input before the native branch can be considered playable.
 
@@ -799,3 +801,46 @@ accept debug=true by name, discard rendering or invent a static curve. In
 parallel, audit repeated Lua indexed-controller/world resolution while retaining
 actual GameInstance current-world and original player/possession checks around
 callbacks. No native playable state or parity is established by this run.
+
+## Actual ABI7 spline-profile run:5ea987fe
+
+Full clean G0 passed74 Lua suites,1326 Rust tests in79 binaries, events141 with
+zero violations, and clippy without errors. Native build and deployment match
+5ea987feb3bf0562b5b09a70599422476e068ae0 exactly (commit/binaries/G0, no dirty
+tree). The initial native build hit sandbox denial reading the installed Windows
+SDK; the authorized build with access succeeded before any game launch.
+
+`test-results/20261009-060338-679fea-native-host` ran two normal clients and one
+NullRHI authority for the existing45-second window, legal input exercise enabled,
+expensive probes off. Source UUID0f552115-68cf-4b30-99db-6afe3cc66b03 reached
+native_ready at9.771s. Exact original source reference at first profile entry:
+epoch_text-1103210006018443219/id1/inc5/dir6/rev1/frame1, component1 Aim Spline.
+
+Pawn census includes26 meshes and3 splines; axe census includes13 meshes and0
+splines. Full parent closure49 nodes takes17.067→27.429s (10.362s). Aim Spline
+eligibility now exits OK at28.455s with actual debug=true/visible=true/hidden=false.
+The next native profile call enters at28.455s (seq84) and never emits an exit,
+refusal or source stopped event. No canonical frames or active input are proved;
+active controller counts remain[0,0]. Both clients stay wait_scene, then stop at
+55.347/55.740s. Supervisor reports the authority missed graceful shutdown and its
+owned process was stopped. This proves a pending synchronous operation and failed
+graceful service, without identifying a deadlock/crash cause.
+
+All owned PIDs9012(supervisor),27312(authority),2200/27276(clients) are independently
+absent. All20 original save files rehash identically; new_crashes[] and
+unobserved_children[] remain empty. Static audit finds high multiplication of
+full profile guards inside metadata inspection. The next narrow change records
+rare internal operation phases and aggregate costs in the existing native log;
+no perframe caller probe, relaxed bound or guessed rendering is authorized by
+this failed run.
+
+The follow-up diagnostics use the existing HSMPNative.log with exact PID/TID,
+original epoch/entity/incarnation/directory/handle and aggregate elapsed/guard/
+admission/find/PE counts. Rust scope and C++ provider stages bracket initial
+resolution, layout inspection, qualification, raw copying and final resolution.
+Logging is limited to rare static profile operations, at most64 records with an
+explicit final diagnostic_budget_exhausted marker and at most8 progress records.
+Native-call markers bracket actual dispatch, after argument guards and before
+post-call guards. C++ gameplay capture/apply bypasses trace FFI through a TLS
+scope enabled only by describe_spline. Source-scope17 focused tests and C++228
+checks pass; no diagnostic runtime result is claimed before the next actual run.
