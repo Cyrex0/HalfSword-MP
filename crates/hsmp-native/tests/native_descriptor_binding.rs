@@ -80,7 +80,13 @@ unsafe fn push_json(l: *mut ffi::lua_State, value: &Value) {
                 let table = ffi::lua_absindex(l, -1);
                 for (key, item) in v {
                     ffi::lua_pushlstring(l, key.as_ptr().cast(), key.len());
-                    push_json(l, item);
+                    if item.is_null() && matches!(key.as_str(), "collision" | "spline_profile") {
+                        // Native source Lua explicitly sends false for these
+                        // required not-applicable fields; nil means missing.
+                        ffi::lua_pushboolean(l, 0);
+                    } else {
+                        push_json(l, item);
+                    }
                     ffi::lua_rawset(l, table);
                 }
             }
@@ -138,6 +144,8 @@ fn raw_access_refuses_missing_sparse_and_unsupported_values() {
         "recipe.components[1].scene=nil",
         "recipe.components[1].collision=nil",
         "recipe.components[1].collision=false",
+        "recipe.components[1].spline_profile=nil",
+        "recipe.components[1].spline_profile=true",
         "recipe.invented_default=true",
         "recipe.components[1].relative.scale[2]=nil",
         "recipe.components[1].relative.scale.extra=1",
@@ -160,6 +168,50 @@ fn raw_access_refuses_missing_sparse_and_unsupported_values() {
         lua.read().is_err(),
         "raw required field does not invoke __index"
     );
+}
+
+#[test]
+fn spline_profile_has_exact_counts_and_required_null_sentinel() {
+    let lua = State::new();
+    assert!(lua.read().unwrap().components[0].spline_profile.is_none());
+    lua.run("local c=recipe.components[1]; c.name='Offline live spline'; c.role='attachment'; c.component_class='/Script/Engine.SplineComponent'; c.kind='spline'; c.geometry='native_spline'; c.scene={type='not_applicable'}; c.vertex_state='not_applicable'; c.asset=''; c.skeleton=''; c.physics_asset=''; c.bones={}; c.spline_profile={position_count=3,rotation_count=2,scale_count=1,reparam_count=21,metadata_null=true}");
+    let recipe = lua.read().unwrap();
+    recipe.validate_mirror_profile().unwrap();
+    let profile = recipe.components[0].spline_profile.as_ref().unwrap();
+    assert_eq!(
+        (
+            profile.position_count,
+            profile.rotation_count,
+            profile.scale_count,
+            profile.reparam_count,
+            profile.metadata_null
+        ),
+        (3, 2, 1, 21, true)
+    );
+    for mutation in [
+        "recipe.components[1].spline_profile=false",
+        "recipe.components[1].spline_profile=nil",
+        "recipe.components[1].spline_profile.metadata_null=false",
+        "recipe.components[1].spline_profile.metadata_null=nil",
+        "recipe.components[1].spline_profile.position_count=nil",
+        "recipe.components[1].spline_profile.rotation_count=nil",
+        "recipe.components[1].spline_profile.scale_count=nil",
+        "recipe.components[1].spline_profile.reparam_count=nil",
+        "recipe.components[1].spline_profile.position_count=65",
+        "recipe.components[1].spline_profile.rotation_count=65",
+        "recipe.components[1].spline_profile.scale_count=65",
+        "recipe.components[1].spline_profile.reparam_count=1025",
+        "recipe.components[1].spline_profile.position_count=2.5",
+        "recipe.components[1].spline_profile.extra=0",
+        "recipe.components[1].collision=false",
+        "recipe.components[1].component_class='/Script/Engine.CustomSplineSubclass'",
+    ] {
+        let lua = State::new();
+        lua.run("local c=recipe.components[1]; c.component_class='/Script/Engine.SplineComponent'; c.kind='spline'; c.geometry='native_spline'; c.scene={type='not_applicable'}; c.vertex_state='not_applicable'; c.asset=''; c.skeleton=''; c.physics_asset=''; c.bones={}; c.spline_profile={position_count=3,rotation_count=2,scale_count=1,reparam_count=21,metadata_null=true}");
+        lua.read().unwrap();
+        lua.run(mutation);
+        assert!(lua.read().is_err(), "must refuse: {mutation}");
+    }
 }
 
 #[test]

@@ -58,9 +58,10 @@ function M.capture(env,bindings)
     local classes={}
     for kind,p in pairs(kinds)do classes[kind]=checked(function()return StaticFindObject(p)end)end
     local mesh_class=checked(function()return StaticFindObject("/Script/Engine.MeshComponent")end)
+    local spline_class=checked(function()return StaticFindObject("/Script/Engine.SplineComponent")end)
     local mi_class=checked(function()return StaticFindObject("/Script/Engine.MaterialInstance")end)
     local rvp=checked(function()return StaticFindObject("/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary")end)
-    if not mesh_class or not mi_class then fail("native render classes unavailable")end
+    if not mesh_class or not spline_class or not mi_class then fail("native render classes unavailable")end
     local world_address=read(function(b)return b.world:GetAddress()end)
     local root_ids={}
     local function owner(row)
@@ -75,7 +76,7 @@ function M.capture(env,bindings)
         end
         return actor
     end
-    local rows,by_address,mesh_sets,owner_ids={}, {}, {}, {}
+    local rows,by_address,mesh_sets,spline_sets,owner_ids={}, {}, {}, {}, {}
     local owners={{owner=0}};for _,w in ipairs(bindings.weapons)do owners[#owners+1]={owner=w.id}end
     local function runtime_path(c)
         -- GetFullName is direct metadata. Preserve the complete runtime outer
@@ -121,27 +122,34 @@ function M.capture(env,bindings)
         if #rows>64 then fail("native complete attachment component bound")end
         return row
     end
-    local function collect(actor,owner_id)
+    local function collect(actor,owner_id,class,category,sets)
         local actor_id=object_id(actor)
-        if not actor_id then fail("native mesh owner unavailable")end
+        if not actor_id then fail("native "..category.." owner unavailable")end
+        local original=owner_ids[owner_id]
+        if original and (original.address~=actor_id.address or original.name~=actor_id.name)then fail("native render owner changed")end
         owner_ids[owner_id]={address=actor_id.address,name=actor_id.name}
-        local set={};mesh_sets[owner_id]=set
-        phase("mesh_census","enter",{getter="Actor.K2_GetComponentsByClass(MeshComponent)",owner_id=owner_id,name=actor_id.name,address=actor_id.address})
-        stats.mesh_census_calls=stats.mesh_census_calls+1
-        local a=checked(function()return actor:K2_GetComponentsByClass(mesh_class)end)
+        local set={};sets[owner_id]=set
+        local getter="Actor.K2_GetComponentsByClass("..(category=="mesh"and "MeshComponent"or "SplineComponent")..")"
+        phase(category.."_census","enter",{getter=getter,owner_id=owner_id,name=actor_id.name,address=actor_id.address})
+        if category=="mesh"then stats.mesh_census_calls=stats.mesh_census_calls+1 end
+        local a=checked(function()return actor:K2_GetComponentsByClass(class)end)
         local copied=array(a,64,function(c)
             local id=object_id(c)
-            if not id or set[id.address]or by_address[id.address]then fail("native mesh component identity duplicate or unavailable")end
-            id.owner=owner_id;id.mesh=true
+            if not id or set[id.address]or by_address[id.address]then fail("native "..category.." component identity duplicate or unavailable")end
+            id.owner=owner_id;id[category]=true
             c=qualify(c,id)
-            if c:IsA(mesh_class)~=true then fail("native mesh return class changed")end
+            if c:IsA(class)~=true then fail("native "..category.." return class changed")end
             set[id.address]=id;include(id)
             return true
-        end,"return","Actor.K2_GetComponentsByClass(MeshComponent) collect owner="..actor_id.name)
-        phase("mesh_census","exit",{ok=true,count=#copied,owner_id=owner_id,name=actor_id.name,address=actor_id.address})
+        end,"return",getter.." collect owner="..actor_id.name)
+        phase(category.."_census","exit",{ok=true,count=#copied,owner_id=owner_id,name=actor_id.name,address=actor_id.address})
     end
-    collect(read(function(b)return b.pawn end),0)
-    for _,w in ipairs(bindings.weapons)do collect(env.weapon(w.field,w),w.id)end
+    for _,candidate in ipairs(owners)do
+        collect(owner(candidate),candidate.owner,mesh_class,"mesh",mesh_sets)
+        -- Splines can render independently of any mesh child. Keep every live
+        -- owned spline, including StepSplineL/R, before closing all hard links.
+        collect(owner(candidate),candidate.owner,spline_class,"spline",spline_sets)
+    end
     local function component(row)
         return qualify(nil,row)
     end
@@ -207,7 +215,7 @@ function M.capture(env,bindings)
             .." child_class="..bounded(child_class,160).." parent_class="..bounded(parent_class,160)
             .." parent_relative_p3q4s3="..relative.." parent_world_p3q4s3="..world
     end
-    -- Only mesh seeds are enumerated. Every real owner root and every actual
+    -- All mesh and spline seeds are enumerated. Every real owner root and actual
     -- parent is included through hard links and its original native identity.
     -- Complete mesh censuses occur at harvest boundaries, not every getter.
     local function include_root(actor,owner_id)
@@ -216,8 +224,11 @@ function M.capture(env,bindings)
         identity.owner=owner_id;qualify(checked(function()return actor.RootComponent end),identity)
         root_ids[owner_id]={address=identity.address,name=identity.name}
         identity.mesh=checked(function()return qualify(actor.RootComponent,identity):IsA(mesh_class)end)
+        identity.spline=checked(function()return qualify(nil,identity):IsA(spline_class)end)
         if type(identity.mesh)~="boolean"then fail("native source root kind unavailable")end
         if identity.mesh and not by_address[identity.address]then fail("native complete mesh census changed")end
+        if type(identity.spline)~="boolean"then fail("native source root spline kind unavailable")end
+        if identity.spline and not spline_sets[owner_id][identity.address]then fail("native complete spline census changed")end
         include(identity)
     end
     phase("parent_closure","enter",{getter="Actor.RootComponent/SceneComponent.GetAttachParent"})
@@ -232,8 +243,11 @@ function M.capture(env,bindings)
         if parent then
             retain(parent_object,parent) -- unknown owner is discovered in native scope
             parent.mesh=checked(function()return qualify(nil,parent):IsA(mesh_class)end)
+            parent.spline=checked(function()return qualify(nil,parent):IsA(spline_class)end)
             if type(parent.mesh)~="boolean"then fail("native source ancestor kind unavailable")end
             if parent.mesh and not by_address[parent.address]then fail("native complete mesh census changed")end
+            if type(parent.spline)~="boolean"then fail("native source ancestor spline kind unavailable")end
+            if parent.spline and not spline_sets[parent.owner][parent.address]then fail("native complete spline census changed")end
             include(parent)
         end
         cursor=cursor+1
@@ -309,7 +323,7 @@ function M.capture(env,bindings)
             relative={translation=vec(relative.Translation,{"X","Y","Z"}),rotation=vec(relative.Rotation,{"X","Y","Z","W"}),scale=vec(relative.Scale3D,{"X","Y","Z"})},
             visible=get(row,function(o)return o:IsVisible()end),hidden=get(row,function(o)return o.bHiddenInGame end),
             socket=name(get(row,function(o)return o:GetAttachSocketName()end)),bones={},materials={},morphs={},hidden_bones={},groom={},
-            vertex_state="unavailable",vertex_colors={},deformer="",cloth=false}
+            vertex_state="unavailable",vertex_colors={},deformer="",cloth=false,spline_profile=false}
         local parent=object_id(get(row,function(o)return o:GetAttachParent()end));c.parent=0
         if (parent and parent.address or 0)~=row.parent_address then fail("native attachment parent changed after closure")end
         if parent then
@@ -322,7 +336,7 @@ function M.capture(env,bindings)
             elseif component_class=="/Script/Engine.SplineComponent"then
                 phase("scene_eligibility","enter",{getter="SplineComponent.bDrawDebug",class=component_class},row)
                 local draw_debug=get(row,function(o)return o.bDrawDebug end)
-                if type(draw_debug)~="boolean" or draw_debug then
+                if type(draw_debug)~="boolean"then
                     -- Record actual source flags, never infer editor-only
                     -- absence or a hidden state from the NullRHI process.
                     -- HasAnyFlags and bHidden are direct native metadata;
@@ -354,20 +368,44 @@ function M.capture(env,bindings)
                     fail(reason)
                 end
                 phase("scene_eligibility","exit",{getter="SplineComponent.bDrawDebug",class=component_class,ok=true,
-                    reason="draw_debug_type=boolean draw_debug=false visible="..tostring(c.visible).." hidden="..tostring(c.hidden)},row)
-                c.scene={type="spline",draw_debug=draw_debug}
+                    reason="draw_debug_type=boolean draw_debug="..tostring(draw_debug).." visible="..tostring(c.visible).." hidden="..tostring(c.hidden)},row)
+                if draw_debug then
+                    phase("spline_profile","enter",{getter="Native.native_source_scope_spline_profile",class=component_class},row)
+                    if type(env.scope.profile)~="function"then fail("native spline profile capability unavailable")end
+                    guard();component(row)
+                    local profile,why=env.scope.profile(row.handle)
+                    guard();component(row)
+                    if type(profile)~="table"then fail(why or "native spline profile incomplete")end
+                    local fields={position_count=64,rotation_count=64,scale_count=64,reparam_count=1024}
+                    for key,value in pairs(profile)do
+                        if key~="metadata_null"and fields[key]==nil then fail("native spline profile field unsupported")end
+                        if key=="metadata_null"then
+                            if value~=true then fail("native spline metadata unsupported")end
+                        elseif type(value)~="number"or not math.tointeger(value)or value<0 or value>fields[key]then fail("native spline profile point bound")end
+                    end
+                    if profile.metadata_null~=true then fail("native spline metadata unsupported")end
+                    local copied={metadata_null=true}
+                    for key in pairs(fields)do
+                        if profile[key]==nil then fail("native spline profile count unavailable: "..key)end
+                        copied[key]=profile[key]
+                    end
+                    c.spline_profile=copied;c.kind="spline";kind="spline"
+                    phase("spline_profile","exit",{getter="Native.native_source_scope_spline_profile",class=component_class,ok=true,
+                        count=profile.position_count,reason="position="..profile.position_count.." rotation="..profile.rotation_count
+                            .." scale="..profile.scale_count.." reparam="..profile.reparam_count.." metadata_null=true"},row)
+                else c.scene={type="spline",draw_debug=false}end
             elseif component_class=="/Script/Engine.CapsuleComponent"then
                 if c.visible and not c.hidden then fail("native capsule anchor rendering not proved absent: "..row.name)end
                 c.scene={type="hidden_capsule"}
             else fail("native scene anchor class unsupported: "..component_class)end
-            c.asset="";c.skeleton="";c.physics_asset="";c.geometry="not_applicable";c.vertex_state="not_applicable"
+            c.asset="";c.skeleton="";c.physics_asset="";c.geometry=kind=="spline"and "native_spline"or "not_applicable";c.vertex_state="not_applicable"
         end
         if c.collision~=false then
         local responses={};for channel=0,31 do responses[channel+1]=get(row,function(o)return o:GetCollisionResponseToChannel(channel)end)end
         c.collision={enabled=get(row,function(o)return o:GetCollisionEnabled()end),object_type=get(row,function(o)return o:GetCollisionObjectType()end),
             profile=name(get(row,function(o)return o:GetCollisionProfileName()end)),responses=responses,simulating=get(row,function(o)return o:IsSimulatingPhysics(FName("None"))end)}
         end
-        if kind~="scene"then
+        if kind~="scene"and kind~="spline"then
         local asset_obj
         if kind=="skeletal"then asset_obj=get(row,function(o)return o:GetSkeletalMeshAsset()end)
         elseif kind=="static"then asset_obj=get(row,function(o)return o.StaticMesh end)
@@ -484,20 +522,24 @@ function M.capture(env,bindings)
         components[#components+1]=c
         phase("component_static","exit",{ok=true,class=component_class},row)
     end
-    -- Preserve completeness even when a getter adds/removes a native gear mesh.
+    -- Preserve completeness even when a getter adds/removes native gear/splines.
     -- This final exact set comparison and the descriptor's second equal harvest
     -- replace allocation-heavy whole-owner enumeration on each field read.
     for _,candidate in ipairs(owners)do
-        local actor=owner(candidate);local set=mesh_sets[candidate.owner];local seen={}
-        phase("mesh_census","enter",{getter="Actor.K2_GetComponentsByClass(MeshComponent) end",owner_id=candidate.owner})
-        stats.mesh_census_calls=stats.mesh_census_calls+1
-        local copied=array(checked(function()return actor:K2_GetComponentsByClass(mesh_class)end),64,function(c)
+      for _,category in ipairs({"mesh","spline"})do
+        local actor=owner(candidate);local set=(category=="mesh"and mesh_sets or spline_sets)[candidate.owner];local seen={}
+        local class=category=="mesh"and mesh_class or spline_class
+        local getter="Actor.K2_GetComponentsByClass("..(category=="mesh"and "MeshComponent"or "SplineComponent")..") end"
+        phase(category.."_census","enter",{getter=getter,owner_id=candidate.owner})
+        if category=="mesh"then stats.mesh_census_calls=stats.mesh_census_calls+1 end
+        local copied=array(checked(function()return actor:K2_GetComponentsByClass(class)end),64,function(c)
             local identity=object_id(c);local row=identity and set[identity.address]
-            if not row or row.name~=identity.name or seen[identity.address]then fail("native complete mesh census changed")end
+            if not row or row.name~=identity.name or seen[identity.address]then fail("native complete "..category.." census changed")end
             qualify(c,row);seen[identity.address]=true;return true
-        end,"return","Actor.K2_GetComponentsByClass(MeshComponent) end owner="..tostring(candidate.owner))
-        for address in pairs(set)do if not seen[address]then fail("native complete mesh census changed")end end
-        phase("mesh_census","exit",{ok=true,count=#copied,getter="Actor.K2_GetComponentsByClass(MeshComponent) end",owner_id=candidate.owner})
+        end,"return",getter.." owner="..tostring(candidate.owner))
+        for address in pairs(set)do if not seen[address]then fail("native complete "..category.." census changed")end end
+        phase(category.."_census","exit",{ok=true,count=#copied,getter=getter,owner_id=candidate.owner})
+      end
     end
     for _,row in ipairs(rows)do component(row)end
     local bound={};for _,r in ipairs(rows)do bound[#bound+1]={id=r.id,address=r.address,

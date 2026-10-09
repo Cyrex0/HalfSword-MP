@@ -4,13 +4,16 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-pub const SCHEMA: u16 = 2;
+pub const SCHEMA: u16 = 3;
 pub const MAX_RECIPE_BYTES: usize = 60 * 1024;
 pub const MAX_COMPONENTS: usize = 64;
 pub const MAX_BONES: usize = 512;
 pub const MAX_MATERIALS: usize = 32;
 pub const MAX_PARAMETERS: usize = 128;
 pub const MAX_WEAPONS: usize = 32;
+/// Resource caps, not inferred native spline point counts or settings.
+pub const MAX_SPLINE_POINTS: usize = 64;
+pub const MAX_SPLINE_REPARAM_POINTS: usize = 1024;
 /// Caps RLE expansion before native buffer allocation, independent of JSON size.
 pub const MAX_VERTEX_COLORS: usize = 1_000_000;
 
@@ -67,6 +70,10 @@ dto! {
     ColorRun { count: u32, color: [u8; 4] }
     VertexLod { lod: u16, vertex_count: u32, runs: Vec<ColorRun> }
     Collision { enabled: u8, object_type: u8, profile: String, responses: [u8; 32], simulating: bool }
+    SplineProfile {
+        position_count: u16, rotation_count: u16, scale_count: u16,
+        reparam_count: u16, metadata_null: bool
+    }
     GroomGroup {
         hair_length: f32, hair_width: f32, hair_width_override: bool,
         root_scale: f32, root_scale_override: bool, tip_scale: f32, tip_scale_override: bool,
@@ -105,6 +112,11 @@ fn required_collision<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Option<Collision>, D::Error> {
     Option::<Collision>::deserialize(deserializer)
 }
+fn required_spline_profile<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<SplineProfile>, D::Error> {
+    Option::<SplineProfile>::deserialize(deserializer)
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -128,6 +140,9 @@ pub struct RenderComponent {
     // This field must be present: null means proven nonprimitive SceneComponent.
     #[serde(deserialize_with = "required_collision")]
     pub collision: Option<Collision>,
+    // Presence is mandatory; null means spline replay is not applicable.
+    #[serde(deserialize_with = "required_spline_profile")]
+    pub spline_profile: Option<SplineProfile>,
     pub bones: Vec<Bone>,
     pub materials: Vec<Material>,
     pub morphs: Vec<Morph>,
@@ -147,6 +162,7 @@ pub enum ComponentKind {
     Groom,
     Procedural,
     Scene,
+    Spline,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -156,6 +172,7 @@ pub enum Geometry {
     RuntimeMerged,
     Procedural,
     NotApplicable,
+    NativeSpline,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -351,13 +368,18 @@ impl RenderComponent {
                 return Err("source collision");
             }
         }
-        if self.kind != ComponentKind::Scene
+        if !matches!(self.kind, ComponentKind::Scene | ComponentKind::Spline)
             && (self.collision.is_none()
                 || self.scene != SceneEvidence::NotApplicable
                 || self.geometry == Geometry::NotApplicable
                 || self.vertex_state == VertexState::NotApplicable)
         {
             return Err("render applicability");
+        }
+        if (self.kind == ComponentKind::Spline) != self.spline_profile.is_some()
+            || (self.kind != ComponentKind::Spline && self.geometry == Geometry::NativeSpline)
+        {
+            return Err("spline applicability");
         }
         if self.bones.len() > MAX_BONES
             || self.materials.len() > MAX_MATERIALS
@@ -433,6 +455,31 @@ impl RenderComponent {
                     _ => return Err("native anchor rendering not proved absent"),
                 }
             }
+            ComponentKind::Spline => {
+                if self.component_class != "/Script/Engine.SplineComponent"
+                    || self.geometry != Geometry::NativeSpline
+                    || self.scene != SceneEvidence::NotApplicable
+                    || self.vertex_state != VertexState::NotApplicable
+                    || self.collision.is_none()
+                    || !self.asset.is_empty()
+                    || !self.skeleton.is_empty()
+                    || !self.physics_asset.is_empty()
+                    || !self.deformer.is_empty()
+                    || self.cloth
+                    || !self.bones.is_empty()
+                    || !self.materials.is_empty()
+                    || !self.morphs.is_empty()
+                    || !self.hidden_bones.is_empty()
+                    || !self.groom.is_empty()
+                    || !self.vertex_colors.is_empty()
+                {
+                    return Err("native spline applicability");
+                }
+                self.spline_profile
+                    .as_ref()
+                    .ok_or("native spline profile")?
+                    .validate()?;
+            }
         }
         let mut names = HashSet::new();
         for (i, b) in self.bones.iter().enumerate() {
@@ -490,6 +537,21 @@ impl RenderComponent {
                     return Err("groom group");
                 }
             }
+        }
+        Ok(())
+    }
+}
+impl SplineProfile {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if !self.metadata_null {
+            return Err("native spline metadata unsupported");
+        }
+        if self.position_count as usize > MAX_SPLINE_POINTS
+            || self.rotation_count as usize > MAX_SPLINE_POINTS
+            || self.scale_count as usize > MAX_SPLINE_POINTS
+            || self.reparam_count as usize > MAX_SPLINE_REPARAM_POINTS
+        {
+            return Err("native spline point bound");
         }
         Ok(())
     }
@@ -630,7 +692,8 @@ impl SourceRecipe {
         }
         Ok(())
     }
-    /// The initial display profile only covers intact cooked components. Native
+    /// The display profile covers intact cooked meshes and exact native spline
+    /// replay profiles. Native
     /// host readiness remains independent; a refused profile is not a healthy
     /// body, an empty census, or successful mirror readback.
     pub fn validate_mirror_profile(&self) -> Result<(), &'static str> {
@@ -651,7 +714,7 @@ impl SourceRecipe {
             return Err("native vertex state incomplete");
         }
         for c in &self.components {
-            if c.kind == ComponentKind::Scene {
+            if matches!(c.kind, ComponentKind::Scene | ComponentKind::Spline) {
                 // Native capture must keep verifying these live class/flags.
                 continue;
             }
@@ -798,7 +861,7 @@ mod tests {
         recipe.components[0].collision = None;
         assert!(recipe.validate().is_err());
         let recipe = fixture();
-        for missing in ["component_class", "scene", "collision"] {
+        for missing in ["component_class", "scene", "collision", "spline_profile"] {
             let mut value = serde_json::to_value(&recipe).unwrap();
             value["components"][0]
                 .as_object_mut()
@@ -809,6 +872,105 @@ mod tests {
                 "missing {missing}"
             );
         }
+    }
+    #[test]
+    fn spline_profile_is_explicit_exact_and_bounded() {
+        let mut c = anchor(2, 0, SceneEvidence::Spline { draw_debug: false });
+        c.kind = ComponentKind::Spline;
+        c.geometry = Geometry::NativeSpline;
+        c.scene = SceneEvidence::NotApplicable;
+        c.visible = true;
+        c.hidden = false;
+        c.spline_profile = Some(SplineProfile {
+            position_count: 3,
+            rotation_count: 2,
+            scale_count: 1,
+            reparam_count: 21,
+            metadata_null: true,
+        });
+        let mut recipe = fixture();
+        recipe.components[0].parent = c.id;
+        recipe.components.push(c.clone());
+        recipe.validate_mirror_profile().unwrap();
+        assert_eq!(
+            SourceRecipe::decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap(),
+            recipe
+        );
+        for missing in [
+            "position_count",
+            "rotation_count",
+            "scale_count",
+            "reparam_count",
+            "metadata_null",
+        ] {
+            let mut json = serde_json::to_value(&recipe).unwrap();
+            json["components"][1]["spline_profile"]
+                .as_object_mut()
+                .unwrap()
+                .remove(missing);
+            assert!(
+                SourceRecipe::decode_recipe(&serde_json::to_vec(&json).unwrap()).is_err(),
+                "missing {missing}"
+            );
+        }
+        let mut absent = recipe.clone();
+        absent.components[1].spline_profile = None;
+        assert!(absent.validate().is_err());
+        let mut attached = recipe.clone();
+        attached.components[0].spline_profile = c.spline_profile.clone();
+        assert!(attached.validate().is_err());
+        let profile = c.spline_profile.as_mut().unwrap();
+        profile.metadata_null = false;
+        assert_eq!(
+            profile.validate(),
+            Err("native spline metadata unsupported")
+        );
+        profile.metadata_null = true;
+        for (position, rotation, scale, reparam) in
+            [(65, 0, 0, 0), (0, 65, 0, 0), (0, 0, 65, 0), (0, 0, 0, 1025)]
+        {
+            let invalid = SplineProfile {
+                position_count: position,
+                rotation_count: rotation,
+                scale_count: scale,
+                reparam_count: reparam,
+                metadata_null: true,
+            };
+            assert_eq!(invalid.validate(), Err("native spline point bound"));
+        }
+        // Empty raw arrays are actual counts, not guessed missing data.
+        SplineProfile {
+            position_count: 0,
+            rotation_count: 0,
+            scale_count: 0,
+            reparam_count: 0,
+            metadata_null: true,
+        }
+        .validate()
+        .unwrap();
+        c.component_class = "/Script/Engine.CustomSplineSubclass".into();
+        assert!(c.validate().is_err());
+        c.component_class = "/Script/Engine.SplineComponent".into();
+        c.bones.push(Bone {
+            name: "invented".into(),
+            parent: -1,
+        });
+        assert!(c.validate().is_err());
+        let mut scene_recipe = fixture();
+        scene_recipe
+            .components
+            .push(anchor(2, 0, SceneEvidence::Scene));
+        let mut absent_collision = serde_json::to_value(scene_recipe).unwrap();
+        absent_collision["components"][1]
+            .as_object_mut()
+            .unwrap()
+            .remove("collision");
+        assert!(
+            SourceRecipe::decode_recipe(&serde_json::to_vec(&absent_collision).unwrap()).is_err()
+        );
+        let mut old = serde_json::to_value(recipe).unwrap();
+        old["schema"] = 2.into();
+        assert!(SourceRecipe::decode_recipe(&serde_json::to_vec(&old).unwrap()).is_err());
     }
     #[test]
     fn topology_components_and_complete_bones_never_default() {

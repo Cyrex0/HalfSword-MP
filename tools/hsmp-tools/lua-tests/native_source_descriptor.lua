@@ -3,6 +3,9 @@ local Adapter=dofile("mods/HSMPMatch/Scripts/native_source_adapter.lua")
 local function plain(v)if type(v)~="table"then return v end;local out={};for k,x in pairs(v)do out[k]=plain(x)end;return out end
 local function fixture(path)local f=assert(io.open(path,"rb"));local s=f:read("*a");f:close();return plain(T.json_decode(s))end
 local recipe=fixture("tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json")
+-- The JSON fixture explicitly declares null. The harness maps JSON null to nil;
+-- actual source tables must retain this required not-applicable sentinel.
+recipe.components[1].spline_profile=false
 local armor=fixture("tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.json")
 -- Native ForEach passes GetParam wrappers for the actual hard enum/bool/struct
 -- inner properties. These fixtures reproduce that documented wrapper contract.
@@ -201,6 +204,7 @@ local root=object(100,"CapsuleRoot","/Game/Test/Root.Root",false)
 local host=object(10,"Pawn","/Game/Test/Pawn.Pawn",false);host.RootComponent=root
 local function scene(c,actor,cls)
     c.GetOwner=function()return actor end;c.GetClass=function()return {GetFullName=function()return "Class "..cls end}end
+    c.IsA=function(_,class)return class=="/Script/Engine.SplineComponent"and cls=="/Script/Engine.SplineComponent"end
     c.GetAttachParent=function()return nil end;c.GetAttachSocketName=function()return fname("None")end
     c.IsVisible=function()return true end;c.bHiddenInGame=false
     c.GetRelativeTransform=function()return {Translation={X=0.125,Y=-2.5,Z=3},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=0.5,Y=1,Z=2}}end
@@ -255,13 +259,15 @@ local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.Mesh
 local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
 live_weapon.RootComponent=weapon_mesh
 local source_scenes={body,root}
-local scene_census_calls,mesh_return_calls=0,0
+local scene_census_calls,mesh_return_calls,spline_return_calls=0,0,0
 local function source_mesh_return(_,class)
-    mesh_return_calls=mesh_return_calls+1
-    if class~="/Script/Engine.MeshComponent"then scene_census_calls=scene_census_calls+1;error("full helper Scene enumeration is forbidden",0)end
+    if class=="/Script/Engine.MeshComponent"then mesh_return_calls=mesh_return_calls+1
+    elseif class=="/Script/Engine.SplineComponent"then spline_return_calls=spline_return_calls+1
+    else scene_census_calls=scene_census_calls+1;error("full helper Scene enumeration is forbidden",0)end
     local out={};for _,c in ipairs(source_scenes)do if c:IsA(class)then out[#out+1]=wrapped(c)end end;return out
 end
 host.K2_GetComponentsByClass=source_mesh_return;live_weapon.K2_GetComponentsByClass=function(_,class)
+    if class=="/Script/Engine.SplineComponent"then spline_return_calls=spline_return_calls+1;return {}end
     mesh_return_calls=mesh_return_calls+1
     if class~="/Script/Engine.MeshComponent"then scene_census_calls=scene_census_calls+1;error("full weapon Scene enumeration is forbidden",0)end
     return {wrapped(weapon_mesh)}end
@@ -297,13 +303,19 @@ end,resolve=function(handle)
     local s=scope_rows[handle];local o=s and runtime_objects[s.path]
     if not s or not o or not T.eq(snapshot(o),s)then return nil,"original native identity/link changed"end
     return s.address
+end,profile=function(handle)
+    local address,reason=render_env.scope.resolve(handle)
+    if not address then return nil,reason end
+    local s=scope_rows[handle];local o=runtime_objects[s.path]
+    if o:GetClass():GetFullName()~="Class /Script/Engine.SplineComponent"then return nil,"native spline class changed"end
+    return plain(o.native_spline_profile)
 end}
 local render_phases={}
 render_env.phase=function(stage,edge,detail)
     if stage=="render_capture"and edge=="enter"then scope_rows={}end
     render_phases[#render_phases+1]={stage=stage,edge=edge,detail=detail}
 end
-mesh_return_calls=0
+mesh_return_calls=0;spline_return_calls=0
 local rendered=Render.capture(render_env,native_bindings)
 local render_stats=render_phases[#render_phases].detail
 T.check(render_phases[1].stage=="render_capture"and render_phases[1].edge=="enter"
@@ -311,6 +323,7 @@ T.check(render_phases[1].stage=="render_capture"and render_phases[1].edge=="ente
 T.check(render_stats.mesh_census_calls==mesh_return_calls and render_stats.mesh_census_calls==4
     and render_stats.component_reads>120 and render_stats.qualifications>render_stats.component_reads,
     "two owners use exactly begin/end full mesh censuses regardless of full bone getter count")
+T.check(spline_return_calls==4,"two owners also use exactly begin/end complete native spline censuses")
 local phase_scalars=true
 for _,event in ipairs(render_phases)do for _,value in pairs(event.detail)do
     local t=type(value);if t~="number"and t~="boolean"and t~="string"then phase_scalars=false end
@@ -338,6 +351,7 @@ local adapter_scope={begin=function(meta,b)
     return 101
 end,keep=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.keep(row)end,
     resolve=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.resolve(row)end,
+    profile=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.profile(row)end,
     finish=function(id)native_scope_ends=native_scope_ends+1;return id==101 end}
 local real_adapter=Adapter.new({WG=WG,source_scope=adapter_scope,
     resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Pawn",pawn=host,world=render_world}end})
@@ -462,21 +476,93 @@ bound_ok,bound_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not bound_ok and bound_reason:find('native complete attachment component bound',1,true),"full actual parent closure retains final64 component bound")
 body.GetAttachParent=function()return anchor end
 spline.bDrawDebug=true
+local exact_spline_profile={position_count=3,rotation_count=2,scale_count=1,reparam_count=21,metadata_null=true}
+spline.native_spline_profile=plain(exact_spline_profile)
+spline.GetSplinePointAt=function()error("converted rotator point replay is incomplete",0)end
+spline.SplineCurves=setmetatable({},{__index=function()error("raw spline point harvesting belongs to native bulk capture",0)end})
 local spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
-T.check(not spline_ok and spline_reason:find('draw_debug_type=boolean draw_debug=true',1,true)
-    and spline_reason:find('visible=true hidden=false',1,true) and spline_reason:find('class="/Script/Engine.SplineComponent"',1,true)
-    and spline_reason:find('owner_address=0xA owner_name="Pawn" root="CapsuleRoot"',1,true),
-    "native debug drawn spline refuses with exact source class/owner/root/visibility facts")
-T.check(render_phases[#render_phases].stage=="scene_eligibility"and render_phases[#render_phases].detail.ok==false
-    and render_phases[#render_phases].detail.reason==spline_reason,"rare spline flag refusal is emitted as bounded scalar phase evidence")
+local function copied_spline(capture,name)
+    for _,c in ipairs(capture.components)do if c.name==(name or "ActualSpline")then return c end end
+end
+local native_spline=spline_ok and copied_spline(spline_reason)
+T.check(native_spline and native_spline.kind=="spline" and native_spline.geometry=="native_spline"
+    and native_spline.vertex_state=="not_applicable"and native_spline.scene.type=="not_applicable"
+    and T.eq(native_spline.spline_profile,exact_spline_profile)and native_spline.visible and not native_spline.hidden,
+    "native visible debug spline records exact bulk profile without claiming absent rendering")
+T.check(native_spline and #native_spline.bones==0 and #native_spline.materials==0
+    and #native_spline.vertex_colors==0 and native_spline.asset=="" and native_spline.collision~=false,
+    "native spline replay uses raw native curves rather than inventing a mesh/material/vertex recipe")
 spline.bHiddenInGame=true
 spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
-T.check(not spline_ok and spline_reason:find('draw_debug=true visible=true hidden=true',1,true),
-    "hidden native debug spline remains refused pending actual profile/rendering proof")
+T.check(spline_ok and copied_spline(spline_reason).hidden and copied_spline(spline_reason).kind=="spline",
+    "hidden native debug spline still requires actual native replay profile")
 spline.bHiddenInGame=false;spline.IsVisible=function()return false end
 spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
-T.check(not spline_ok and spline_reason:find('draw_debug=true visible=false hidden=false',1,true),
-    "invisible native debug spline records source visibility without silently changing eligibility")
+T.check(spline_ok and not copied_spline(spline_reason).visible and copied_spline(spline_reason).kind=="spline",
+    "invisible native debug spline is retained with exact source profile and flags")
+local standalone=scene(object(103,"StandaloneStepSpline","/Game/Test/Runtime.StandaloneStepSpline",false),host,"/Script/Engine.SplineComponent")
+standalone.bDrawDebug=true;standalone.native_spline_profile=plain(exact_spline_profile)
+standalone.GetAttachParent=function()return root end
+source_scenes[#source_scenes+1]=standalone
+local standalone_capture=Render.capture(render_env,native_bindings)
+T.check(copied_spline(standalone_capture,"StandaloneStepSpline")~=nil and #standalone_capture.components==6,
+    "all native owned splines are kept even without mesh descendants")
+local profile_calls=0;local native_profile_getter=render_env.scope.profile
+render_env.scope.profile=function(handle)
+    local last=render_phases[#render_phases]
+    if not last or last.stage~="spline_profile"or last.edge~="enter"then error("spline profile entry missing",0)end
+    profile_calls=profile_calls+1;return native_profile_getter(handle)
+end
+local profile_capture=Render.capture(render_env,native_bindings)
+T.check(profile_calls==2 and copied_spline(profile_capture,"StandaloneStepSpline").spline_profile.position_count==3,
+    "rare spline profile entries persist before exactly one guarded native bulk call per rendered spline")
+render_env.scope.profile=native_profile_getter
+local mutations={
+    {"metadata false",function(p)p.metadata_null=false end},
+    {"metadata missing",function(p)p.metadata_null=nil end},
+    {"position count missing",function(p)p.position_count=nil end},
+    {"rotation count missing",function(p)p.rotation_count=nil end},
+    {"scale count missing",function(p)p.scale_count=nil end},
+    {"reparam count missing",function(p)p.reparam_count=nil end},
+    {"position overflow",function(p)p.position_count=65 end},
+    {"rotation overflow",function(p)p.rotation_count=65 end},
+    {"scale overflow",function(p)p.scale_count=65 end},
+    {"reparam overflow",function(p)p.reparam_count=1025 end},
+    {"noninteger count",function(p)p.position_count=1.5 end},
+    {"negative count",function(p)p.position_count=-1 end},
+    {"unknown field",function(p)p.extra=0 end},
+}
+for _,mutation in ipairs(mutations)do
+    spline.native_spline_profile=plain(exact_spline_profile);mutation[2](spline.native_spline_profile)
+    T.check(not pcall(Render.capture,render_env,native_bindings),"native spline profile refuses "..mutation[1])
+end
+spline.native_spline_profile=plain(exact_spline_profile)
+render_env.scope.profile=nil
+T.check(not pcall(Render.capture,render_env,native_bindings),"native debug spline refuses missing bulk profile capability")
+render_env.scope.profile=native_profile_getter
+render_env.scope.profile=function(handle)
+    local result=native_profile_getter(handle);spline.GetAttachParent=function()return anchor end;return result
+end
+T.check(not pcall(Render.capture,render_env,native_bindings),"parent mutation inside native profile call refuses original source scope")
+spline.GetAttachParent=function()return root end;render_env.scope.profile=native_profile_getter
+local original_spline_body_bones=body.GetNumBones
+body.GetNumBones=function()table.remove(source_scenes);return original_spline_body_bones()end
+T.check(not pcall(Render.capture,render_env,native_bindings),"native spline removal during metadata harvest refuses complete ending spline census")
+body.GetNumBones=original_spline_body_bones
+-- Previous mutation removed the standalone spline; do not retain it implicitly.
+for i=#source_scenes,1,-1 do if source_scenes[i]==standalone then table.remove(source_scenes,i)end end
+body.GetNumBones=function()source_scenes[#source_scenes+1]=standalone;return original_spline_body_bones()end
+T.check(not pcall(Render.capture,render_env,native_bindings),"native spline addition during metadata harvest refuses complete ending spline census")
+body.GetNumBones=original_spline_body_bones;table.remove(source_scenes)
+local native_profile_calls=0
+render_env.scope.profile=function(handle)
+    native_profile_calls=native_profile_calls+1
+    local result=native_profile_getter(handle);result.position_count=native_profile_calls;return result
+end
+local changing_recipe,changing_reason=real_adapter.capture(0,phase_context)
+T.check(changing_recipe==nil and changing_reason:find("source recipe changed",1,true),
+    "changed native raw spline counts require a new coherent descriptor instead of stale buffer sizing")
+render_env.scope.profile=native_profile_getter
 spline.IsVisible=function()return true end;spline.bDrawDebug=nil
 spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not spline_ok and spline_reason:find('draw_debug_type=nil draw_debug=unavailable(nil)',1,true),
@@ -489,10 +575,10 @@ local old_host_name,old_root_name,old_spline_name=host.GetFName,root.GetFName,sp
 host.GetFName=function()return fname(string.rep("NativeOwner",100))end
 root.GetFName=function()return fname(string.rep("NativeRoot",100))end
 spline.GetFName=function()return fname(string.rep("NativeSpline",100))end
-host.bHidden=true;spline.bDrawDebug=true
+host.bHidden=true;spline.bDrawDebug=nil
 spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
 local persisted_reason=spline_reason:sub(1,512)
-T.check(not spline_ok and #spline_reason>512 and persisted_reason:find('draw_debug_type=boolean draw_debug=true visible=true hidden=false owner_hidden=true',1,true)
+T.check(not spline_ok and #spline_reason>512 and persisted_reason:find('draw_debug_type=nil draw_debug=unavailable(nil) visible=true hidden=false owner_hidden=true',1,true)
     and persisted_reason:find('component_transient=false component_garbage=false owner_transient=false owner_garbage=false',1,true),
     "all decisive native spline flags survive actual512-byte worker phase limit even with long labels")
 host.GetFName,root.GetFName,spline.GetFName=old_host_name,old_root_name,old_spline_name
@@ -515,11 +601,12 @@ body.PhysicsAssetOverride=override_asset
 local override_render=Render.capture(render_env,native_bindings)
 T.check(T.eq(override_render.components[1].physics_asset,"/Game/Test/OverridePhysics.OverridePhysics"),"nonnull native component override preserves its distinct exact physics asset")
 body.PhysicsAssetOverride=nil
-host.K2_GetComponentsByClass=function()return {body}end;live_weapon.K2_GetComponentsByClass=function()return {weapon_mesh}end
+host.K2_GetComponentsByClass=function(_,class)return class=="/Script/Engine.MeshComponent"and {body}or {}end
+live_weapon.K2_GetComponentsByClass=function(_,class)return class=="/Script/Engine.MeshComponent"and {weapon_mesh}or {}end
 T.check(pcall(Render.capture,render_env,native_bindings),"direct returned UObject entries never receive parameter get")
 host.K2_GetComponentsByClass=function()return {[2]=wrapped(body)}end
 T.check(not pcall(Render.capture,render_env,native_bindings),"malformed native component return table refuses capture")
-host.K2_GetComponentsByClass=source_mesh_return;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
+host.K2_GetComponentsByClass=source_mesh_return;live_weapon.K2_GetComponentsByClass=function(_,class)return class=="/Script/Engine.MeshComponent"and {wrapped(weapon_mesh)}or {}end
 local bones_after_loss=0;body_asset.GetPhysicsAsset=function()scope=false;return physical_asset end
 body.GetNumBones=function()bones_after_loss=bones_after_loss+1;return #bone_names end
 T.check(not pcall(Render.capture,render_env,native_bindings) and bones_after_loss==0,"world loss inside render getter prevents next source operation")

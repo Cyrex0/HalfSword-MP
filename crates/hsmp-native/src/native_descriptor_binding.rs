@@ -29,7 +29,7 @@ unsafe fn encode(
     out: &mut String,
     depth: usize,
     nodes: &mut usize,
-    collision_field: bool,
+    nullable_field: bool,
 ) -> Result<(), String> {
     unsafe {
         *nodes += 1;
@@ -40,7 +40,7 @@ unsafe fn encode(
         match lua_type(L, index) {
             LUA_TBOOLEAN => {
                 let value = lua_toboolean(L, index) != 0;
-                out.push_str(if collision_field && !value {
+                out.push_str(if nullable_field && !value {
                     "null"
                 } else if value {
                     "true"
@@ -123,7 +123,14 @@ unsafe fn encode(
                         quoted(out, key)?;
                         out.push(':');
                         rawget_str(L, index, key);
-                        encode(L, -1, out, depth + 1, nodes, key == "collision")?;
+                        encode(
+                            L,
+                            -1,
+                            out,
+                            depth + 1,
+                            nodes,
+                            key == "collision" || key == "spline_profile",
+                        )?;
                         pop(L, 1);
                     }
                     out.push('}');
