@@ -461,8 +461,42 @@ body.GetAttachParent=function()return head end
 bound_ok,bound_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not bound_ok and bound_reason:find('native complete attachment component bound',1,true),"full actual parent closure retains final64 component bound")
 body.GetAttachParent=function()return anchor end
-spline.bDrawDebug=true;T.check(not pcall(Render.capture,render_env,native_bindings),"debug drawn spline refuses unharvested rendering")
-spline.bDrawDebug=nil;T.check(not pcall(Render.capture,render_env,native_bindings),"unknown spline debug state refuses capture")
+spline.bDrawDebug=true
+local spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not spline_ok and spline_reason:find('draw_debug_type=boolean draw_debug=true',1,true)
+    and spline_reason:find('visible=true hidden=false',1,true) and spline_reason:find('class="/Script/Engine.SplineComponent"',1,true)
+    and spline_reason:find('owner_address=0xA owner_name="Pawn" root="CapsuleRoot"',1,true),
+    "native debug drawn spline refuses with exact source class/owner/root/visibility facts")
+T.check(render_phases[#render_phases].stage=="scene_eligibility"and render_phases[#render_phases].detail.ok==false
+    and render_phases[#render_phases].detail.reason==spline_reason,"rare spline flag refusal is emitted as bounded scalar phase evidence")
+spline.bHiddenInGame=true
+spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not spline_ok and spline_reason:find('draw_debug=true visible=true hidden=true',1,true),
+    "hidden native debug spline remains refused pending actual profile/rendering proof")
+spline.bHiddenInGame=false;spline.IsVisible=function()return false end
+spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not spline_ok and spline_reason:find('draw_debug=true visible=false hidden=false',1,true),
+    "invisible native debug spline records source visibility without silently changing eligibility")
+spline.IsVisible=function()return true end;spline.bDrawDebug=nil
+spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not spline_ok and spline_reason:find('draw_debug_type=nil draw_debug=unavailable(nil)',1,true),
+    "missing native spline bool read is distinguished from actual true/false")
+T.check(spline_reason:find('component_transient=false component_garbage=false',1,true)
+    and spline_reason:find('owner_hidden=unavailable(nil)',1,true)
+    and spline_reason:find('owner_transient=false owner_garbage=false',1,true),
+    "native component/owner flags are actual booleans and missing actor hidden flag stays explicit")
+local old_host_name,old_root_name,old_spline_name=host.GetFName,root.GetFName,spline.GetFName
+host.GetFName=function()return fname(string.rep("NativeOwner",100))end
+root.GetFName=function()return fname(string.rep("NativeRoot",100))end
+spline.GetFName=function()return fname(string.rep("NativeSpline",100))end
+host.bHidden=true;spline.bDrawDebug=true
+spline_ok,spline_reason=pcall(Render.capture,render_env,native_bindings)
+local persisted_reason=spline_reason:sub(1,512)
+T.check(not spline_ok and #spline_reason>512 and persisted_reason:find('draw_debug_type=boolean draw_debug=true visible=true hidden=false owner_hidden=true',1,true)
+    and persisted_reason:find('component_transient=false component_garbage=false owner_transient=false owner_garbage=false',1,true),
+    "all decisive native spline flags survive actual512-byte worker phase limit even with long labels")
+host.GetFName,root.GetFName,spline.GetFName=old_host_name,old_root_name,old_spline_name
+host.bHidden=nil
 spline.bDrawDebug=false;root.bHiddenInGame=false
 T.check(not pcall(Render.capture,render_env,native_bindings),"visible capsule root never becomes nonrendering anchor by class")
 root.bHiddenInGame=true;spline.GetAttachParent=function()return anchor end

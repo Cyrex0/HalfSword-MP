@@ -75,7 +75,7 @@ function M.capture(env,bindings)
         end
         return actor
     end
-    local rows,by_address,mesh_sets={}, {}, {}
+    local rows,by_address,mesh_sets,owner_ids={}, {}, {}, {}
     local owners={{owner=0}};for _,w in ipairs(bindings.weapons)do owners[#owners+1]={owner=w.id}end
     local function runtime_path(c)
         -- GetFullName is direct metadata. Preserve the complete runtime outer
@@ -124,6 +124,7 @@ function M.capture(env,bindings)
     local function collect(actor,owner_id)
         local actor_id=object_id(actor)
         if not actor_id then fail("native mesh owner unavailable")end
+        owner_ids[owner_id]={address=actor_id.address,name=actor_id.name}
         local set={};mesh_sets[owner_id]=set
         phase("mesh_census","enter",{getter="Actor.K2_GetComponentsByClass(MeshComponent)",owner_id=owner_id,name=actor_id.name,address=actor_id.address})
         stats.mesh_census_calls=stats.mesh_census_calls+1
@@ -319,8 +320,41 @@ function M.capture(env,bindings)
         if kind=="scene"then
             if component_class=="/Script/Engine.SceneComponent"then c.scene={type="scene"};c.collision=false
             elseif component_class=="/Script/Engine.SplineComponent"then
+                phase("scene_eligibility","enter",{getter="SplineComponent.bDrawDebug",class=component_class},row)
                 local draw_debug=get(row,function(o)return o.bDrawDebug end)
-                if type(draw_debug)~="boolean" or draw_debug then fail("native spline anchor rendering not proved absent: "..row.name)end
+                if type(draw_debug)~="boolean" or draw_debug then
+                    -- Record actual source flags, never infer editor-only
+                    -- absence or a hidden state from the NullRHI process.
+                    -- HasAnyFlags and bHidden are direct native metadata;
+                    -- get/checked still qualify the original source around it.
+                    local component_transient=get(row,function(o)return o:HasAnyFlags(0x40)end)
+                    local component_garbage=get(row,function(o)return o:HasAnyFlags(0x40000000)end)
+                    local owner_transient=checked(function()return owner(row):HasAnyFlags(0x40)end)
+                    local owner_garbage=checked(function()return owner(row):HasAnyFlags(0x40000000)end)
+                    local owner_hidden=checked(function()return owner(row).bHidden end)
+                    local function scalar(value)
+                        return type(value)=="boolean"and tostring(value)or "unavailable("..type(value)..")"
+                    end
+                    local function label(value)
+                        local s=tostring(value or "");if #s>80 then s=s:sub(1,80).."[truncated]"end;return string.format("%q",s)
+                    end
+                    local actual_owner=owner_ids[row.owner];local actual_root=root_ids[row.owner]
+                    if not actual_owner or not actual_root then fail("native spline original owner/root evidence unavailable")end
+                    -- The worker persists only the first512 reason bytes.
+                    -- Decision-critical actual flags precede all long labels.
+                    local reason="native spline anchor rendering not proved absent: draw_debug_type="..type(draw_debug).." draw_debug="..scalar(draw_debug)
+                        .." visible="..scalar(c.visible).." hidden="..scalar(c.hidden)
+                        .." owner_hidden="..scalar(owner_hidden)
+                        .." component_transient="..scalar(component_transient).." component_garbage="..scalar(component_garbage)
+                        .." owner_transient="..scalar(owner_transient).." owner_garbage="..scalar(owner_garbage)
+                        .." name="..label(row.name).." class="..label(component_class).." address="..string.format("0x%X",row.address)
+                        .." owner_id="..tostring(row.owner).." owner_address="..string.format("0x%X",actual_owner.address)
+                        .." owner_name="..label(actual_owner.name).." root="..label(actual_root.name)
+                    phase("scene_eligibility","exit",{getter="SplineComponent.bDrawDebug",class=component_class,ok=false,reason=reason},row)
+                    fail(reason)
+                end
+                phase("scene_eligibility","exit",{getter="SplineComponent.bDrawDebug",class=component_class,ok=true,
+                    reason="draw_debug_type=boolean draw_debug=false visible="..tostring(c.visible).." hidden="..tostring(c.hidden)},row)
                 c.scene={type="spline",draw_debug=draw_debug}
             elseif component_class=="/Script/Engine.CapsuleComponent"then
                 if c.visible and not c.hidden then fail("native capsule anchor rendering not proved absent: "..row.name)end
