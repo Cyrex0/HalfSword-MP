@@ -1,6 +1,27 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build c87dda89
+## Current state: 2026-10-09, latest actual build0039aacd
+
+EmptySkeletal checkpoint passes full G0 (74 Lua/1333 Rust79 binaries;
+clippy0 errors/12 warnings), dev push and exact clean RequireG0 deployment.
+Actual `test-results/20261009-122114-c48890-native-host` completes all49 source
+rows twice and proves all four original empty skeletal holders, materials0,
+bones0. Native registration then refuses source recipe byte bound42.223s.
+Frames/inputs remain0. Authority needs its owned shutdown fallback; all4 PIDs
+absent,20/20 save hashes unchanged, crashes/children empty. Live secondary
+window placement remains unproved. Exact original JSON length was not logged.
+
+Current implementation adapts the old JSON/monolithic scene format: compact
+lossless dictionary recipe codec, direct bounded LuaValue staging, capability27,
+bounded atomic render parts and pinned startup scene preparation. All native
+fields/occurrences/precision remain intact. The user explicitly authorized larger
+lossless budgets: recipes allow512KiB, the node budget derives from encoded
+capacity, and complete scenes span bounded transport records. No full
+scene or playable acceptance is established. See `native-scene-stream-20261009.md`
+for exact actual evidence, ownership and remaining gates. Keep iterating; do not
+end with a status-only report while concrete implementation/test work remains.
+
+## Previous actual c87dda89
 
 EmptyStatic checkpoint passed full G0 (74 Lua/1331 Rust in79 binaries;
 clippy0 errors/12 warnings), dev push and exact clean RequireG0 deployment.

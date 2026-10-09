@@ -143,6 +143,8 @@ pub mod caps {
     pub const NATIVE_EMPTY_STATIC: u64 = 1 << 25;
     /// Exact empty native skeletal holders and complete nullable material slots.
     pub const NATIVE_EMPTY_SKELETAL: u64 = 1 << 26;
+    /// Compact exact recipes and bounded atomic native scene multipart delivery.
+    pub const NATIVE_SCENE_STREAM: u64 = 1 << 27;
     /// Application: server-served mods (`mod_manifest` / `mod_files` / `mod_chunk` down,
     /// `mod_chunk_req` / `mod_ready` up; docs/hosting/server-mods.md). The server offers it
     /// only when it has a `--mods-dir`, the sidecar always; a server with mods refuses a

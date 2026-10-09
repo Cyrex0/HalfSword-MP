@@ -914,8 +914,9 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 | 24 | NATIVE_RENDER_V3 | Native Camera/SpringArm ancestors and exact cached component-space spring-arm socket output |
 | 25 | NATIVE_EMPTY_STATIC | Exact empty native StaticMesh components with guarded original hard-null and override-absence checks |
 | 26 | NATIVE_EMPTY_SKELETAL | Exact empty native skeletal holders, absent native render objects and complete nullable material slots |
+| 27 | NATIVE_SCENE_STREAM | Compact exact source recipes and bounded, atomic native scene multipart delivery |
 
-Experimental native presentation peers require bits20–26. Diagnostic world-only
+Experimental native presentation peers require bits20–27. Diagnostic world-only
 observers may omit presentation. Render record `0x0A13` uses the same bounded
 world/component format as `0x0A12`, followed by an explicit spring-arm presence
 byte for each component and, when present, seven native f64 values (translation3,
@@ -940,6 +941,41 @@ static or skeletal. Final original identity and slot checks precede publication.
 Render revision3 stays unchanged; capability26 prevents earlier presenting peers
 from admitting this new source profile. These contracts do not establish actual
 scene or combat parity without the native scenario gates.
+
+The compact recipe codec retains the logical schema 6 fields and distinguishes
+every observed null, boolean, empty string, integer and floating value. A sorted
+UTF-8 dictionary stores repeated keys/strings once; every component, bone and
+material occurrence remains represented. The encoded recipe budget is 512 KiB,
+with depth 24 and strict typed validation. The value/table node budget derives
+from the 512 KiB encoded budget because every token requires at least one byte;
+object keys are dictionary references. Large recipes use
+bounded `0x0AC2` descriptor parts and become visible only after complete strict
+reconstruction. HSDR codec version 1 is negotiated through NATIVE_SCENE_STREAM.
+
+Native scene stream records use `0x0A14` for a manifest, `0x0A15` for bounded byte
+parts and `0x0A82` for assembly acknowledgments. They retain the V3 logical fields
+and raw native double bits while keeping each message within the 64 KiB transport
+cap. A manifest pins the epoch, directory/frame sequence and exact entity/revision
+set. The receiver first admits that manifest against its current complete source
+recipes and derived byte bounds. Only its ADMITTED acknowledgment permits part
+delivery. COMPLETE follows full reconstruction, validation and atomic scene
+publication; it releases the sender's pinned active batch. Each peer retains only
+one active batch and one replaceable pending frame, retrying queue backpressure.
+Assembly acknowledgments never grant native MirrorReady. Partial arrivals cannot
+refresh scene freshness or permit gameplay inputs.
+
+The 64 KiB transport limit applies to individual records. Complete logical scene
+capacity derives from its accepted recipes and can exceed 100 KiB or span many
+records. Native pose doubles remain unquantized in the render stream. Recipe
+dictionary encoding is lossless metadata work at capture, without generic
+per-frame compression. Processing and delivery costs require measured evidence.
+
+A generation-valid complete READY scene may remain pinned during native asset
+loading, mirror creation/apply/readback and readiness submission. LIVE inputs
+still require a fresh complete native-applied scene, rechecked immediately before
+send. A transient freshness gap retains inert mirrors and withholds input; actual
+world/directory/entity/revision changes invalidate the old scene. This preserves
+the existing 250 ms live freshness bound without repeated startup recreation.
 
 `caps::SUPPORTED = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY` are the transport bits
 `hsmp-net` implements itself; every client and server built from it offers them through

@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Adapt experimental native scene delivery to compact lossless recipes and
+  bounded complete-frame parts. Keep generation-valid startup scenes during
+  native preparation and require fresh applied scenes for live input. This
+  addresses actual full-gear recipe overflow; runtime verification is pending.
 - Preserve native empty skeletal weapon holders and their complete observed
   material slots in the experimental headless scene. Require fresh asset,
   render-cache and override absence checks before mirror readiness. Actual
