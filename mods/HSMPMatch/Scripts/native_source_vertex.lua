@@ -32,10 +32,18 @@ function M.capture(env)
         phase("vertex_lods","exit",{getter=getter,ok=true,count=lods,reason=context})
         local out={}
         for lod=0,lods-1 do
-            phase("vertex_count","enter",{getter="GetMeshComponentAmountOfVerticesOnLOD",lod=lod})
-            guard(env);local expected=env.count(lod);guard(env)
-            if type(expected)~="number" or not math.tointeger(expected) or expected<1 or expected>M.MAX_VERTICES then error("native vertex count unavailable",0)end
-            phase("vertex_count","exit",{ok=true,count=expected,lod=lod})
+            local count_getter="GetMeshComponentAmountOfVerticesOnLOD"
+            phase("vertex_count","enter",{getter=count_getter,lod=lod})
+            local count_context=env.count_context and env.count_context(lod)or ""
+            guard(env);local count_called,expected=pcall(env.count,lod);guard(env)
+            if not count_called or type(expected)~="number" or not math.tointeger(expected) or expected<1 or expected>M.MAX_VERTICES then
+                local reason="native vertex count unavailable: getter="..count_getter.." lod="..lod
+                    ..(count_called and " returned_type="or " error_type=")..type(expected)
+                    ..(count_called and " returned_value="or " error=")..scalar(expected)..count_context
+                phase("vertex_count","exit",{getter=count_getter,lod=lod,ok=false,reason=reason})
+                error(reason,0)
+            end
+            phase("vertex_count","exit",{getter=count_getter,ok=true,count=expected,lod=lod,reason=count_context})
             if env.reserve then env.reserve(expected)end
             phase("vertex_color_getter","enter",{getter="GetMeshComponentVertexColorsAtLOD_Wrapper",count=expected,lod=lod})
             local colors=env.colors(lod);guard(env)

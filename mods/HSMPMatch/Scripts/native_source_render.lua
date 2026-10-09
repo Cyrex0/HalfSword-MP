@@ -523,6 +523,15 @@ function M.capture(env,bindings)
                     -- Reacquire the original hard asset across the native call.
                     return asset_read(function(o)return o:GetNumLODs()end)
                 end,
+                count_context=function()
+                    if kind~="static"then return lod_context end
+                    local flag=asset_read(function(o)return o.bAllowCPUAccess end)
+                    local flag_type=type(flag)
+                    local value="<non-scalar>"
+                    if flag_type=="boolean"or flag_type=="nil"or flag_type=="number"then value=tostring(flag)
+                    elseif flag_type=="string"then value=label(string.format("%q",flag),80)end
+                    return " allow_cpu_access_type="..flag_type.." allow_cpu_access="..value..lod_context
+                end,
                 count=function(lod)
                     if kind=="skeletal"then
                         local usage=get(row,function(o)return o:GetVertexOffsetUsage(lod)end)

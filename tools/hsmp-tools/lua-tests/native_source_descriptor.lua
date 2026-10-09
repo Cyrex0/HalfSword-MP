@@ -258,6 +258,7 @@ end
 local body=mesh(11,"BodyMesh",host,"skeletal",body_asset);host.Mesh=body;body.GetAttachParent=function()return root end
 local weapon_asset=object(330,"WeaponMesh","/Game/Test/WeaponMesh.WeaponMesh",false);weapon_asset.GetNumLODs=function()return 1 end
 weapon_asset.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.StaticMesh"end}end
+weapon_asset.bAllowCPUAccess=true
 local weapon_mesh=mesh(201,"WeaponMesh",live_weapon,"static",weapon_asset);weapon_mesh.GetAttachParent=function()return body end
 local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or mesh_is_a(self,k)end
 local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
@@ -278,7 +279,12 @@ host.K2_GetComponentsByClass=source_mesh_return;live_weapon.K2_GetComponentsByCl
 local plain_component_getter_calls=0
 local function unavailable_component_alias()plain_component_getter_calls=plain_component_getter_calls+1;error("unreflected GetComponentsByClass alias",0)end
 host.GetComponentsByClass=unavailable_component_alias;live_weapon.GetComponentsByClass=unavailable_component_alias
-local rvp={IsValid=function()return true end,GetMeshComponentAmountOfVerticesOnLOD=function(_,c)return #c.native_colors end,
+local rvp={IsValid=function()return true end,GetMeshComponentAmountOfVerticesOnLOD=function(_,c)
+    -- Matched shipping StaticMesh branch returns0 at the CPU-access gate,
+    -- before inspecting either component override or asset vertex buffers.
+    if c==weapon_mesh and c.StaticMesh.bAllowCPUAccess==false then return 0 end
+    return #c.native_colors
+end,
     GetMeshComponentVertexColorsAtLOD_Wrapper=function(_,c)return color_return(c.native_colors)end}
 StaticFindObject=function(p)return runtime_objects[p]or(p=="/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary"and rvp or p)end
 local render_env={read=function(fn)if not scope then error("scope",0)end;local value=fn({pawn=host,world=render_world});if not scope then error("scope",0)end;return value end,
@@ -392,6 +398,39 @@ static_changed,static_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not static_changed and static_reason:find("native static asset changed",1,true)and old_static_lod_calls==0,
     "asset metadata callback replacement refuses before old asset GetNumLODs dispatch")
 weapon_mesh.StaticMesh=original_static_asset;weapon_asset.GetClass=original_static_class;weapon_asset.GetNumLODs=static_lod_getter
+local original_vertex_count=rvp.GetMeshComponentAmountOfVerticesOnLOD
+weapon_asset.bAllowCPUAccess=false;render_phases={}
+local count_ok,count_reason=pcall(Render.capture,render_env,native_bindings)
+local count_exit=render_phases[#render_phases]
+T.check(not count_ok and count_exit.stage=="vertex_count"and count_exit.edge=="exit"and count_exit.detail.ok==false
+    and count_exit.detail.lod==0 and count_reason:find("returned_type=number returned_value=0",1,true)
+    and count_reason:find("allow_cpu_access_type=boolean allow_cpu_access=false",1,true)
+    and count_reason:find('asset_path="/Game/Test/WeaponMesh.WeaponMesh"',1,true),
+    "resident staticLOD with native CPU-access false keeps exact zero count diagnostic and refuses")
+weapon_asset.bAllowCPUAccess=true
+for _,case in ipairs({
+    {label="nil",getter=function()return nil end,kind="nil",value="nil"},
+    {label="false",getter=function()return false end,kind="boolean",value="false"},
+    {label="error",getter=function()error("exact native count error",0)end,kind="string",value="exact native count error"},
+})do
+    rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)
+        if c==weapon_mesh then return case.getter()end
+        return original_vertex_count(self,c,lod)
+    end
+    render_phases={};count_ok,count_reason=pcall(Render.capture,render_env,native_bindings)
+    count_exit=render_phases[#render_phases]
+    T.check(not count_ok and count_exit.stage=="vertex_count"and count_exit.edge=="exit"and count_exit.detail.ok==false
+        and count_exit.detail.getter=="GetMeshComponentAmountOfVerticesOnLOD"and count_exit.detail.lod==0
+        and count_reason:find(case.kind,1,true)and count_reason:find(case.value,1,true)
+        and count_reason:find("allow_cpu_access_type=boolean allow_cpu_access=true",1,true),
+        "native vertex count "..case.label.." preserves typed facts without accepting a fallback")
+end
+weapon_asset.bAllowCPUAccess=nil
+rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)if c==weapon_mesh then return 0 end;return original_vertex_count(self,c,lod)end
+count_ok,count_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not count_ok and count_reason:find("allow_cpu_access_type=nil allow_cpu_access=nil",1,true),
+    "unknown native CPU-access flag remains explicit nil rather than false or true")
+weapon_asset.bAllowCPUAccess=true;rvp.GetMeshComponentAmountOfVerticesOnLOD=original_vertex_count
 local original_body_lods=body.GetNumLODs
 local asset_fallback_calls=0
 body_asset.GetNumLODs=function()asset_fallback_calls=asset_fallback_calls+1;return 1 end
