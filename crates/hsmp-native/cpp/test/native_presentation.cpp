@@ -435,7 +435,7 @@ void skeletal_mutate(SkeletalMutation change){
     case SkeletalMutation::Leader:skeletal_pointer(skeletal_first,0x568,lifetime_weak(&actor));break;
     case SkeletalMutation::Animation:skeletal_pointer(skeletal_first,0x8d0,reinterpret_cast<uint64_t>(&actor));break;
     case SkeletalMutation::ClothAllow:reinterpret_cast<uint8_t*>(&skeletal_first)[0xa42]|=2;break;
-    case SkeletalMutation::ClothResume:reinterpret_cast<uint8_t*>(&skeletal_first)[0xa42]&=static_cast<uint8_t>(~4u);break;
+    case SkeletalMutation::ClothResume:reinterpret_cast<uint8_t*>(&skeletal_first)[0xa52]&=static_cast<uint8_t>(~8u);break;
     case SkeletalMutation::PostProcess:reinterpret_cast<uint8_t*>(&skeletal_first)[0xa41]&=static_cast<uint8_t>(~1u);break;
     case SkeletalMutation::ClothingInteractor:skeletal_pointer(skeletal_first,0xc40,reinterpret_cast<uint64_t>(&actor));break;
     default:break;
@@ -605,8 +605,8 @@ void scene_call(void* object,void* fn,void* params){
         if(id==SkeletalFnId::Mesh){LifetimeObject* value{};std::memcpy(&value,bytes,8);check(value==nullptr,"empty skeletal mirror keeps both asset aliases absent");skeletal_pointer(skeletal_second,0x558,0);skeletal_pointer(skeletal_second,0x560,0);return;}
         if(id==SkeletalFnId::Anim){LifetimeObject* value{};std::memcpy(&value,bytes,8);check(value==nullptr,"empty skeletal mirror sets no animation class");skeletal_pointer(skeletal_second,0x8c8,0);return;}
         if(id==SkeletalFnId::Cloth){check(!(bytes[0]&1),"empty skeletal mirror disables cloth actors");reinterpret_cast<uint8_t*>(&skeletal_second)[0xa42]&=static_cast<uint8_t>(~2u);return;}
-        if(id==SkeletalFnId::Suspend){reinterpret_cast<uint8_t*>(&skeletal_second)[0xa42]|=4;return;}
-        if(id==SkeletalFnId::Suspended){bytes[0]=(reinterpret_cast<uint8_t*>(object)[0xa42]&4)?1:0;return;}
+        if(id==SkeletalFnId::Suspend){reinterpret_cast<uint8_t*>(&skeletal_second)[0xa52]|=8;return;}
+        if(id==SkeletalFnId::Suspended){bytes[0]=(reinterpret_cast<uint8_t*>(object)[0xa52]&8)?1:0;return;}
         if(id==SkeletalFnId::PostProcess){check((bytes[0]&1)!=0,"empty skeletal mirror disables postprocess animation");reinterpret_cast<uint8_t*>(&skeletal_second)[0xa41]|=1;return;}
         throw std::runtime_error("unexpected skeletal creation function");
     }
@@ -796,7 +796,7 @@ void skeletal_checks(HsmpReflect& reflect){
         Part second=first;second.render=keep(&skeletal_second);mirrors.emplace(84,Mirror{world,owner,{first,second}});const uint64_t mirror_handle=84;
         return finish_scene_sets(world,nullptr,0,&mirror_handle,1,&guard,&result);};
     auto bind=[&](bool owned=false){const std::vector<Obj> expected{{},keep(&observed_material),{}};
-        if(owned)for(auto object:{&skeletal_first,&skeletal_second}){auto* raw=reinterpret_cast<uint8_t*>(object);raw[0xa42]=4;raw[0xa41]=1;}
+        if(owned)for(auto object:{&skeletal_first,&skeletal_second}){auto* raw=reinterpret_cast<uint8_t*>(object);raw[0xa52]=8;raw[0xa41]=1;}
         vertex_bind_source_materials(keep(&old_world),keep(&actor),keep(&skeletal_first),owned?1u:0u,owned?&expected:nullptr);
         vertex_bind_source_materials(keep(&old_world),keep(&actor),keep(&skeletal_second),owned?1u:0u,owned?&expected:nullptr);scene_guards=0;};
     skeletal_reset(reflect);auto* raw=reinterpret_cast<uint8_t*>(&skeletal_first);raw[0x3b]=1;raw[0x8a]=8;raw[0xa42]=2;skeletal_pointer(skeletal_first,0x8d0,reinterpret_cast<uint64_t>(&actor));bind();
@@ -955,7 +955,7 @@ void pose_reset(HsmpReflect& reflect){
     pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=false;
     for(size_t i=0;i<2;++i){Transform value{{static_cast<double>(i)+1,2,3},{0,0,0,1},{1,1,1}};pose_input[i]=engine(value);}
     for(auto* object:{&skeletal_first,&skeletal_second}){skeletal_pointer(*object,0x558,reinterpret_cast<uint64_t>(&vertex_mesh));skeletal_pointer(*object,0x560,reinterpret_cast<uint64_t>(&vertex_mesh));
-        skeletal_pointer(*object,0x90,reinterpret_cast<uint64_t>(&actor));auto* p=reinterpret_cast<uint8_t*>(object);p[0x798]=0x20;p[0x88]=3;p[0xa41]=1;p[0xa42]=4;
+        skeletal_pointer(*object,0x90,reinterpret_cast<uint64_t>(&actor));auto* p=reinterpret_cast<uint8_t*>(object);p[0x798]=0x20;p[0x88]=3;p[0xa41]=1;p[0xa52]=8;
         const int32_t editable=0,read_index=1;std::memcpy(p+0x60c,&editable,4);std::memcpy(p+0x610,&read_index,4);}
     skeletal_array(skeletal_second,0x5c8,{pose_calc_a.data(),2,2});skeletal_array(skeletal_second,0x5d8,{pose_calc_b.data(),2,2});
     skeletal_array(skeletal_second,0x8b8,{pose_input.data(),2,2});
@@ -981,6 +981,13 @@ void pose_checks(HsmpReflect& reflect){
     rejects([&]{pose_final(b,output);},"later callback cannot activate the owned skeletal renderer");
     pose_reset(reflect);b=binding();output=pose_transfer(b,&result);skeletal_pointer(skeletal_first,0x568,UINT32_MAX);pose_final(b,output);
     check(pose_null_leader(0)&&pose_null_leader(UINT32_MAX)&&!pose_null_leader(uint64_t{1}<<32),"native ctor/reset NULL weak forms refuse a live leader serial");
+    check((reinterpret_cast<uint8_t*>(&skeletal_first)[0xa42]&4)==0,"native suspended pose is admitted with original DisableClothSimulation false");
+    reinterpret_cast<uint8_t*>(&skeletal_first)[0xa42]|=4;reinterpret_cast<uint8_t*>(&skeletal_first)[0xa52]&=static_cast<uint8_t>(~8u);
+    bool exact_reason{};try{pose_pure(b);}catch(const Error& e){exact_reason=std::string(e.what())=="native pose cloth not suspended";}
+    check(exact_reason,"DisableClothSimulation cannot substitute for suspension and refusal identifies the exact field");
+    VertexSnapshot empty{};empty.kind=0;empty.suspended=8;empty.postprocess=1;vertex_skeletal_mirror_state(empty);
+    check(empty.cloth==0,"native empty skeletal final guard accepts actual suspension without changing source DisableClothSimulation");
+    empty.suspended=0;empty.cloth=4;rejects([&]{vertex_skeletal_mirror_state(empty);},"empty skeletal unrelated DisableClothSimulation bit never proves suspension");
     pose_build_admit=pose_shipping_build;pose_native_call=pose_native;pose_image=0;scene_vtable_read=scene_vtable;lifetime_reset(reflect);
 }
 }

@@ -65,7 +65,9 @@ bool vertex_skeletal_shipping_build(){
        !match(0x3bba485,{0x41,0x3b,0xdc,0x7d,0x1f})||!match(0x3bba4c5,{0x41,0x89,0x46,0x08})||
        !match(0x3bd11dc,{0x4d,0x85,0xc0,0x74,0x09})||!match(0x3bd11f2,{0xff,0x90,0x38,0x06,0,0})||
        !match(0x3c1ac64,{0x83,0xb9,0xa0,0x05,0,0,0,0x7e,0x32})||!match(0x3c1ac79,{0x48,0x8b,0x99,0x98,0x05,0,0,0x48,0x8b,0x1b})||!match(0x3c1ac9f,{0x33,0xc0})||
-       !match(0x3c15d16,{0xb8,0xff,0xff,0xff,0xff})||!match(0x3b51630,{0x80,0x79,0x3b,0,0x0f,0x95,0xc0,0xc3}))return false;
+       !match(0x3c15d16,{0xb8,0xff,0xff,0xff,0xff})||!match(0x3b51630,{0x80,0x79,0x3b,0,0x0f,0x95,0xc0,0xc3})||
+       !match(0x3c0efa5,{0x80,0x89,0x52,0x0a,0,0,8})||
+       !match(0x3c0c325,{0x0f,0xb6,0x81,0x52,0x0a,0,0,0xc0,0xe8,3,0x24,1}))return false;
     const auto base=reinterpret_cast<uintptr_t>(image);uint64_t entry{};
     for(const auto [slot,target]:{std::pair<size_t,size_t>{0x4d0,0x3c1cbc0},{0x7d8,0x3c136b0},{0x7c0,0x3c1b6f0},{0x638,0x3c1a7b0},{0x668,0x3bba450},{0x688,0x3bd11c0},{0x3e8,0x3b51630}}){
         std::memcpy(&entry,image+0x7659cb0+slot,8);if(entry!=base+target)return false;}
@@ -203,7 +205,7 @@ void vertex_dispatch_guard(Obj object,Obj function,Obj cls){
     vertex_pure(object);vertex_pure(function);vertex_pure(cls);
 }
 struct VertexSnapshot {uint64_t asset{},deprecated{},mesh_object{},proxy{},proxy_copy{},leader{},clothing_interactor{};Array header{},materials{},deformers{};
-    std::array<uint64_t,4> animation{};std::array<uint8_t,16> deformer_tail{};uint8_t cloth{},postprocess{},deformer_byte{},deformer_mask{};
+    std::array<uint64_t,4> animation{};std::array<uint8_t,16> deformer_tail{};uint8_t cloth{},suspended{},postprocess{},deformer_byte{},deformer_mask{};
     std::array<uint64_t,16> overrides{};std::array<uint64_t,32> material_slots{};uint32_t kind{1};};
 VertexSnapshot vertex_copy(const void* component,int32_t offset){
     require(component&&(offset==0x588||offset==0x760),"native vertex copied component layout");VertexSnapshot copy{};copy.kind=offset==0x588?1u:0u;
@@ -216,6 +218,7 @@ VertexSnapshot vertex_copy(const void* component,int32_t offset){
         std::memcpy(&copy.leader,static_cast<const uint8_t*>(component)+0x568,8);
         std::memcpy(copy.animation.data(),static_cast<const uint8_t*>(component)+0x8c0,32);
         std::memcpy(&copy.cloth,static_cast<const uint8_t*>(component)+0xa42,1);
+        copy.suspended=static_cast<const uint8_t*>(component)[0xa52]&8;
         std::memcpy(&copy.postprocess,static_cast<const uint8_t*>(component)+0xa41,1);
         std::memcpy(&copy.clothing_interactor,static_cast<const uint8_t*>(component)+0xc40,8);
         require(!copy.asset&&!copy.deprecated&&!copy.mesh_object&&!copy.proxy&&!copy.proxy_copy,"native empty skeletal asset/render cache present");
@@ -235,7 +238,7 @@ VertexSnapshot vertex_copy(const void* component,int32_t offset){
     return copy;
 }
 bool vertex_equal(const VertexSnapshot& a,const VertexSnapshot& b){return a.kind==b.kind&&a.asset==b.asset&&a.deprecated==b.deprecated&&a.mesh_object==b.mesh_object&&a.proxy==b.proxy&&a.proxy_copy==b.proxy_copy&&a.leader==b.leader&&
-    a.animation==b.animation&&a.cloth==b.cloth&&a.postprocess==b.postprocess&&a.clothing_interactor==b.clothing_interactor&&
+    a.animation==b.animation&&a.cloth==b.cloth&&a.suspended==b.suspended&&a.postprocess==b.postprocess&&a.clothing_interactor==b.clothing_interactor&&
     a.deformer_byte==b.deformer_byte&&a.deformer_mask==b.deformer_mask&&a.deformer_tail==b.deformer_tail&&
     a.header.data==b.header.data&&a.header.count==b.header.count&&a.header.capacity==b.header.capacity&&a.overrides==b.overrides&&
     a.deformers.data==b.deformers.data&&a.deformers.count==b.deformers.count&&a.deformers.capacity==b.deformers.capacity&&
@@ -283,9 +286,13 @@ VertexSnapshot vertex_target_pure(const HsmpViewFinishTarget& target){
     require(copy.asset==target.asset.address&&vertex_state(copy).no_override==1,"native vertex aggregate asset/override changed");return copy;
 }
 void vertex_skeletal_mirror_state(const VertexSnapshot& snapshot){
-    require(!snapshot.kind&&std::all_of(snapshot.animation.begin(),snapshot.animation.end(),[](uint64_t p){return p==0;})&&
-        !vt->resolve(snapshot.leader)&&!(snapshot.cloth&2u)&&(snapshot.cloth&4u)&&(snapshot.postprocess&1u)&&!snapshot.clothing_interactor,
-        "native empty skeletal mirror animation/leader/cloth reactivated");
+    require(!snapshot.kind,"native empty skeletal mirror class changed");
+    require(std::all_of(snapshot.animation.begin(),snapshot.animation.end(),[](uint64_t p){return p==0;}),"native empty skeletal mirror animation class/instance active");
+    require(!vt->resolve(snapshot.leader),"native empty skeletal mirror leader present");
+    require(!(snapshot.cloth&2u),"native empty skeletal mirror cloth actors allowed");
+    require(snapshot.suspended==8,"native empty skeletal mirror cloth not suspended");
+    require(snapshot.postprocess&1u,"native empty skeletal mirror postprocess enabled");
+    require(!snapshot.clothing_interactor,"native empty skeletal mirror clothing interactor present");
 }
 struct VertexMaterialBinding {Obj world{},owner{},component{};VertexSnapshot snapshot{};std::vector<Obj> materials;uint32_t owned{};};
 std::map<uint64_t,VertexMaterialBinding> vertex_source_materials;

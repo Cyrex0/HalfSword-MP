@@ -67,15 +67,20 @@ void pose_pure(const PoseBinding& b){
     for(const auto [object,calculator]:{std::pair<Obj,bool>{b.calculator,true},{b.render,false}}){
         const auto* p=static_cast<const uint8_t*>(vertex_pure(object));uint64_t mesh{},asset_value{},leader{},owner_value{};
         std::memcpy(&mesh,p+0x558,8);std::memcpy(&asset_value,p+0x560,8);std::memcpy(&leader,p+0x568,8);std::memcpy(&owner_value,p+0x90,8);
-        require(scene_vtable_read(p)==pose_image+(calculator?0x7646b38:0x7659cb0)&&mesh==b.asset.address&&asset_value==b.asset.address&&
-            pose_null_leader(leader)&&owner_value==b.owner.address,"native pose original asset/owner/leader changed");
-        require(p[0x3b]==0&&!(p[0x8a]&8),"native pose mirror tick/activation enabled");
+        require(scene_vtable_read(p)==pose_image+(calculator?0x7646b38:0x7659cb0),"native pose original vtable changed");
+        require(mesh==b.asset.address,"native pose SkeletalMesh alias changed");require(asset_value==b.asset.address,"native pose SkinnedAsset changed");
+        require(pose_null_leader(leader),"native pose leader present");require(owner_value==b.owner.address,"native pose original owner changed");
+        require(p[0x3b]==0,"native pose mirror tick enabled");require(!(p[0x8a]&8),"native pose mirror active");
         if(!calculator){uint64_t anim{},post{},anim_class{},generated{},interactor{},deformer{},physics{};Array deformers{};
             std::memcpy(&anim,p+0x8d0,8);std::memcpy(&post,p+0x8d8,8);std::memcpy(&anim_class,p+0x8c8,8);std::memcpy(&generated,p+0x8c0,8);
             std::memcpy(&interactor,p+0xc40,8);std::memcpy(&deformer,p+0x588,8);std::memcpy(&physics,p+0x738,8);std::memcpy(&deformers,p+0x598,sizeof(Array));
-            require(!anim&&!post&&!anim_class&&!generated&&!interactor&&!deformer&&!physics&&vertex_deformer_mask&&!(p[0x580]&vertex_deformer_mask)&&
-                deformers.count==0&&deformers.capacity>=0&&(!deformers.capacity||deformers.data)&&(p[0xa41]&1)&&!(p[0xa42]&2)&&(p[0xa42]&4)&&(p[0x88]&3)==3,
-                "native pose render state/animation/cloth unsupported");}
+            require(!anim,"native pose animation instance active");require(!post,"native pose postprocess instance active");
+            require(!anim_class,"native pose animation class present");require(!generated,"native pose generated animation class present");
+            require(!interactor,"native pose clothing interactor present");require(!deformer,"native pose mesh deformer present");
+            require(!physics,"native pose physics override present");require(vertex_deformer_mask&&!(p[0x580]&vertex_deformer_mask),"native pose deformer enabled");
+            require(deformers.count==0&&deformers.capacity>=0&&(!deformers.capacity||deformers.data),"native pose deformer instances present/malformed");
+            require(p[0xa41]&1,"native pose postprocess blueprint enabled");require(!(p[0xa42]&2),"native pose cloth actors allowed");
+            require(p[0xa52]&8,"native pose cloth not suspended");require((p[0x88]&3)==3,"native pose render state not created");}
     }
 }
 void pose_native(Obj object,uint32_t stage){

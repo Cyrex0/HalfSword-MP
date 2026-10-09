@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Validate native cloth suspension separately from the game's disable-cloth flag,
+  and report exact pose preparation failures.
 - Replace the unsupported skeletal-to-poseable leader link with complete native
   pose-buffer publication; actual model and gameplay verification remains pending.
 - Skip discarded post-getter object wrappers while preserving the complete native

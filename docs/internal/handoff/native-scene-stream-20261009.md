@@ -1,5 +1,28 @@
 # Native full-scene encoding checkpoint
 
+## Actual e132: safe pose refusal; suspension proof corrected
+
+Exact clean dev/G0/all394 hashes run195159-f0d052/source0e63df57-0388-4b55-
+b15b-a40a76789f42 publishes66.617s. Captures21.502s/21.193s remain in prior
+19-22s range; no startup speed improvement is established. Full49-component/
+600-bone/38-material recipes, all four harvests6243 reads/12844 qualifications,
+49 parent hops/4 mesh censuses are retained. Runtime factory counters are absent.
+
+Both original-client CDB captures admitted. Client2PID46104 reaches component4
+pose_bind69.789s, then safely returns the combined render/animation/cloth refusal
+instead of the old SetLeader AV. Whole creation remains incomplete; no rendering,
+view, input or combat parity proof. All4 games/2 original CDBs gone, helpers0,
+save20same, no new dump. First window observation proves secondary containment;
+later observation occurs after owned teardown and does not erase the first.
+
+Native SuspendClothingSimulation143C0EFA5 ORsA52/08; its getter143C0C325 reads
+that same bit. Pose and prior empty-skeletal checks had instead required the
+separate reflected bDisableClothSimulationA42/04. Correct the private suspension
+snapshot/guards/fixtures while retaining original A42 source observations and
+all existing inert/whole-set checks. Split combined errors into exact bounded
+reasons. Strict provider object/958 focused assertions and independent review
+pass. The next actual run must distinguish any remaining guard failure.
+
 ## Replacement and startup checkpoint under verification
 
 The source scalar tail is implemented in four files and independently reviewed:
