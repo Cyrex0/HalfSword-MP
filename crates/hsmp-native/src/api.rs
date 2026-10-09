@@ -227,6 +227,7 @@ entry! {
     l_native_source_scope_resolve => Guard::GameThread, |n,L| n.source_scope_resolve(L);
     l_native_source_scope_end => Guard::GameThread, |n,L| n.source_scope_end(L);
     l_native_source_scope_spline_profile => Guard::GameThread, |n,L| n.source_scope_spline_profile(L);
+    l_native_source_scope_vertex_state => Guard::GameThread, |n,L| n.source_scope_vertex_state(L);
     l_native_capture_render => Guard::GameThread, |n,L| n.native_capture_render(L);
     l_native_scene => Guard::GameThread, |n,L| n.native_scene(L);
     l_native_present => Guard::GameThread, |n,L| n.native_present(L);
@@ -316,6 +317,7 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("native_source_scope_resolve",l_native_source_scope_resolve),
     ("native_source_scope_end",l_native_source_scope_end),
     ("native_source_scope_spline_profile",l_native_source_scope_spline_profile),
+    ("native_source_scope_vertex_state",l_native_source_scope_vertex_state),
     ("native_capture_render",l_native_capture_render),
     ("native_scene",l_native_scene),
     ("native_present",l_native_present),
@@ -448,5 +450,17 @@ pub fn reset_game_thread_for_tests() {
 pub fn register_test_schema(records: &'static [hsmp_ipc::schema::RecordInfo], slots: &'static [crate::records::TestSlot]) {
     if let Ok(mut n) = global().lock() {
         n.rec.set_test_schema(records, slots);
+    }
+}
+
+#[cfg(test)]
+mod source_vertex_api_tests {
+    use super::*;
+
+    #[test]
+    fn native_source_vertex_state_registers_exact_guarded_entry_once() {
+        let entries: Vec<_> = FUNCS.iter().filter(|(name, _)| *name == "native_source_scope_vertex_state").collect();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].1 as usize, l_native_source_scope_vertex_state as *const () as usize);
     }
 }

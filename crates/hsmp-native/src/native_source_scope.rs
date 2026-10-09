@@ -446,6 +446,7 @@ struct Component {
 struct Parent {
     object: Identity,
     owner: u64,
+    attach_parent: u64,
 }
 struct Scope {
     id: u64,
@@ -461,6 +462,52 @@ struct Scope {
     schema: Rc<RefCell<SchemaCache>>,
 }
 impl Scope {
+    // This final read region must not call world/owner getters. It uses only
+    // original identities and freshly read hard links from cached schemas.
+    fn pure_hard_links(&self, e: &impl Engine, handle: u64) -> Result<(), String> {
+        for id in [self.world, self.pawn, self.controller] {
+            e.verify(id)?;
+        }
+        if e.field(self.pawn, "Controller")? != self.controller.address
+            || e.field(self.controller, "Pawn")? != self.pawn.address
+        {
+            return Err("source static vertex pawn/controller link changed".into());
+        }
+        let c = self
+            .components
+            .get(handle.checked_sub(1).ok_or("source scope handle")? as usize)
+            .ok_or("source scope handle")?;
+        let owner_check = |address| -> Result<(), String> {
+            let owner = self
+                .owners
+                .get(&address)
+                .ok_or("source static vertex original owner")?;
+            e.verify(owner.object)?;
+            e.verify(owner.root)?;
+            if e.field(owner.object, "RootComponent")? != owner.root.address
+                || owner
+                    .field
+                    .as_ref()
+                    .is_some_and(|field| e.field(self.pawn, field).ok() != Some(address))
+            {
+                return Err("source static vertex original owner/root/weapon link changed".into());
+            }
+            Ok(())
+        };
+        owner_check(c.owner)?;
+        e.verify(c.object)?;
+        if e.field(c.object, "AttachParent")? != c.parent.map_or(0, |p| p.object.address) {
+            return Err("source static vertex original component parent link changed".into());
+        }
+        if let Some(parent) = c.parent {
+            e.verify(parent.object)?;
+            owner_check(parent.owner)?;
+            if e.field(parent.object, "AttachParent")? != parent.attach_parent {
+                return Err("source static vertex original parent attachment link changed".into());
+            }
+        }
+        Ok(())
+    }
     // Borrowed provider guards never dispatch GetOwner recursively. Complete
     // owner PE checks bracket the bulk operation; its guard checks original
     // identities and fresh hard links on each native callback boundary.
@@ -584,7 +631,13 @@ impl Scope {
             }
             let owner = e.owner(object)?;
             self.qualify_owner(e, owner)?;
-            Some(Parent { object, owner })
+            let attach_parent = e.field(object, "AttachParent")?;
+            e.verify(object)?;
+            Some(Parent {
+                object,
+                owner,
+                attach_parent,
+            })
         };
         if let Some(p) = parent {
             if e.world(p.object)? != self.world.address {
@@ -1085,7 +1138,154 @@ unsafe extern "C" fn spline_scope_guard(context: *mut c_void) -> i32 {
     let c = unsafe { &*(context as *const SplineScopeGuard<'_>) };
     i32::from(c.valid().is_ok())
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct StaticVertexState {
+    lod_info_count: u32,
+    no_override: bool,
+}
+fn checked_vertex_state(
+    proof: crate::native_presentation::VertexStateProof,
+) -> Result<StaticVertexState, String> {
+    if proof.lod_info_count > 16
+        || proof.no_override > 1
+        || (proof.no_override == 0 && proof.lod_info_count == 0)
+    {
+        return Err("source static vertex proof bounds/state incomplete".into());
+    }
+    Ok(StaticVertexState {
+        lod_info_count: proof.lod_info_count,
+        no_override: proof.no_override == 1,
+    })
+}
+fn capture_static_vertex_state(
+    scope: &Scope,
+    engine: &impl Engine,
+    handle: u64,
+    mut describe: impl FnMut() -> Result<crate::native_presentation::VertexStateProof, String>,
+    final_check: impl FnOnce() -> Result<(), String>,
+) -> Result<StaticVertexState, String> {
+    scope.resolve(engine, handle)?;
+    let first = checked_vertex_state(describe()?)?;
+    // GetOwner/GetWorld in the full original resolve can reenter native code.
+    // A second provider census must follow it; never reuse the earlier proof.
+    scope.resolve(engine, handle)?;
+    let last = checked_vertex_state(describe()?)?;
+    if last != first {
+        return Err("source static vertex state changed during native getters".into());
+    }
+    final_check()?;
+    Ok(last)
+}
 impl Native {
+    pub unsafe fn source_scope_vertex_state(&mut self, L: *mut lua_State) -> c_int {
+        let result: Result<StaticVertexState, String> = (|| unsafe {
+            let id = arg_int(L, 1).ok_or("source scope id")? as u64;
+            let handle = arg_int(L, 2).ok_or("source scope handle")? as u64;
+            let scope = STATE
+                .with(|s| s.borrow_mut().scope.take())
+                .ok_or("source scope unavailable")?;
+            if scope.id != id {
+                return Err("source scope id changed".into());
+            }
+            let row = scope
+                .components
+                .get(handle.checked_sub(1).ok_or("source scope handle")? as usize)
+                .ok_or("source scope handle")?;
+            let owner = scope
+                .owners
+                .get(&row.owner)
+                .ok_or("source scope owner")?
+                .object;
+            let object = |i: Identity| crate::native_presentation::Object {
+                weak: i.weak,
+                address: i.address,
+            };
+            let vt = reflect::vt().ok_or("source scope reflection")?;
+            let context = SplineScopeGuard {
+                scope: &scope,
+                engine: runtime(self, vt, exports()?, &scope),
+                handle,
+            };
+            let guard = crate::native_presentation::Guard {
+                context: (&context as *const SplineScopeGuard<'_>).cast_mut().cast(),
+                check: spline_scope_guard,
+            };
+            let provider = crate::native_presentation::provider()?;
+            let proof = capture_static_vertex_state(
+                &scope,
+                &context.engine,
+                handle,
+                || {
+                    context.valid()?;
+                    let mut proof = crate::native_presentation::VertexStateProof::default();
+                    let mut info = crate::native_presentation::ResultInfo::default();
+                    if (provider.describe_vertex_state)(
+                        object(scope.world),
+                        object(owner),
+                        object(row.object),
+                        &guard,
+                        &mut proof,
+                        &mut info,
+                    ) != 1
+                        || info.complete != 1
+                    {
+                        return Err(format!("source static vertex proof: {}", info.reason()));
+                    }
+                    Ok(proof)
+                },
+                || {
+                    // The final provider census follows every callback-capable
+                    // getter. No full resolve/guard runs after this pure region.
+                    context.engine.admit()?;
+                    context
+                        .engine
+                        .verify_path(row.object, row.path_witness.as_ref())?;
+                    scope.pure_hard_links(
+                        &ProfileGuardEngine {
+                            runtime: &context.engine,
+                        },
+                        handle,
+                    )?;
+                    context
+                        .engine
+                        .verify_path(row.object, row.path_witness.as_ref())?;
+                    context.engine.admit()
+                },
+            )?;
+            drop(context);
+            STATE.with(|s| {
+                let mut state = s.borrow_mut();
+                if state.scope.is_some() || state.seq != id {
+                    return Err("source scope reentry changed".into());
+                }
+                state.scope = Some(scope);
+                Ok::<_, String>(())
+            })?;
+            Ok(proof)
+        })();
+        unsafe {
+            match result {
+                Ok(proof) => {
+                    lua_createtable(L, 0, 3);
+                    let t = lua_gettop(L);
+                    set_str(
+                        L,
+                        t,
+                        "state",
+                        if proof.no_override {
+                            "native_asset"
+                        } else {
+                            "captured_required"
+                        },
+                    );
+                    set_int(L, t, "lod_info_count", proof.lod_info_count.into());
+                    set_bool(L, t, "no_override", proof.no_override);
+                    1
+                }
+                Err(reason) => nil_err(L, &reason),
+            }
+        }
+    }
     pub unsafe fn source_scope_spline_profile(&mut self, L: *mut lua_State) -> c_int {
         let result = (|| unsafe {
             let id = arg_int(L, 1).ok_or("source scope id")? as u64;
@@ -1544,6 +1744,8 @@ mod source_scope_tests {
         rename_on_find: std::cell::Cell<u32>,
         world_calls: std::cell::Cell<u32>,
         rename_on_world: std::cell::Cell<u32>,
+        vertex_override: std::cell::Cell<bool>,
+        override_on_owner: std::cell::Cell<u32>,
     }
     impl Mock {
         fn row(&self, id: Identity) -> Result<Row, String> {
@@ -1601,6 +1803,9 @@ mod source_scope_tests {
         fn owner(&self, id: Identity) -> Result<u64, String> {
             let r = self.row(id)?;
             *self.owner_calls.borrow_mut() += 1;
+            if *self.owner_calls.borrow() == self.override_on_owner.get() {
+                self.vertex_override.set(!self.vertex_override.get());
+            }
             Ok(r.owner)
         }
         fn find(&self, path: &str) -> Result<u64, String> {
@@ -1647,6 +1852,8 @@ mod source_scope_tests {
             rename_on_find: std::cell::Cell::new(0),
             world_calls: std::cell::Cell::new(0),
             rename_on_world: std::cell::Cell::new(0),
+            vertex_override: std::cell::Cell::new(false),
+            override_on_owner: std::cell::Cell::new(0),
         };
         let s = Scope {
             id: 1,
@@ -1730,6 +1937,188 @@ mod source_scope_tests {
                 result.is_err(),
                 "native getter mutation after early path check must fail"
             );
+        }
+    }
+    #[test]
+    fn source_scope_static_vertex_proof_never_defaults_unknown_to_native_asset() {
+        use crate::native_presentation::VertexStateProof;
+        for count in [0, 1, 16] {
+            let proof = checked_vertex_state(VertexStateProof {
+                lod_info_count: count,
+                no_override: 1,
+            })
+            .unwrap();
+            assert!(proof.no_override);
+            assert_eq!(proof.lod_info_count, count);
+        }
+        assert!(
+            !checked_vertex_state(VertexStateProof {
+                lod_info_count: 1,
+                no_override: 0,
+            })
+            .unwrap()
+            .no_override
+        );
+        for (count, state) in [(0, 0), (17, 1), (17, 0), (1, 2), (0, u32::MAX)] {
+            assert!(checked_vertex_state(VertexStateProof {
+                lod_info_count: count,
+                no_override: state,
+            })
+            .is_err());
+        }
+    }
+    #[test]
+    fn source_scope_static_vertex_reproof_follows_callback_capable_owner_resolution() {
+        for originally_present in [false, true] {
+            let (mut scope, engine) = fixture();
+            let path = engine.rows.borrow()[&7].path.clone();
+            let handle = scope.keep(&engine, 7, 5, path).unwrap();
+            engine.vertex_override.set(originally_present);
+            let calls = std::cell::Cell::new(0);
+            let result = capture_static_vertex_state(
+                &scope,
+                &engine,
+                handle,
+                || {
+                    calls.set(calls.get() + 1);
+                    if calls.get() == 1 {
+                        engine
+                            .override_on_owner
+                            .set(*engine.owner_calls.borrow() + 1);
+                    }
+                    Ok(crate::native_presentation::VertexStateProof {
+                        lod_info_count: 1,
+                        no_override: u32::from(!engine.vertex_override.get()),
+                    })
+                },
+                || scope.pure_hard_links(&engine, handle),
+            );
+            assert_eq!(
+                calls.get(),
+                2,
+                "late native owner callback needs a fresh census"
+            );
+            assert_ne!(engine.vertex_override.get(), originally_present);
+            assert_eq!(
+                result.unwrap_err(),
+                "source static vertex state changed during native getters"
+            );
+        }
+    }
+    #[test]
+    fn source_scope_static_vertex_lifetime_change_prevents_second_provider_call() {
+        for mutation in 0..5 {
+            let (mut scope, engine) = fixture();
+            let path = engine.rows.borrow()[&7].path.clone();
+            let handle = scope.keep(&engine, 7, 5, path).unwrap();
+            let calls = std::cell::Cell::new(0);
+            let result = capture_static_vertex_state(
+                &scope,
+                &engine,
+                handle,
+                || {
+                    calls.set(calls.get() + 1);
+                    engine.change(7, |row| match mutation {
+                        0 => row.flags = GARBAGE,
+                        1 => row.id.weak += 1,
+                        2 => row.path.push_str("_replaced"),
+                        3 => row.parent = 6,
+                        _ => row.world = 8,
+                    });
+                    Ok(crate::native_presentation::VertexStateProof {
+                        lod_info_count: 1,
+                        no_override: 1,
+                    })
+                },
+                || scope.pure_hard_links(&engine, handle),
+            );
+            assert!(result.is_err(), "original lifetime mutation {mutation}");
+            assert_eq!(calls.get(), 1, "no provider call on a replaced original");
+        }
+    }
+    #[test]
+    fn source_scope_static_vertex_original_sequence_finishes_with_native_reproof() {
+        let (mut scope, engine) = fixture();
+        let path = engine.rows.borrow()[&7].path.clone();
+        let handle = scope.keep(&engine, 7, 5, path).unwrap();
+        let calls = std::cell::Cell::new(0);
+        let last_owner_calls = std::cell::Cell::new(0);
+        let proof = capture_static_vertex_state(
+            &scope,
+            &engine,
+            handle,
+            || {
+                calls.set(calls.get() + 1);
+                last_owner_calls.set(*engine.owner_calls.borrow());
+                Ok(crate::native_presentation::VertexStateProof {
+                    lod_info_count: 0,
+                    no_override: 1,
+                })
+            },
+            || scope.pure_hard_links(&engine, handle),
+        )
+        .unwrap();
+        assert_eq!(calls.get(), 2);
+        assert_eq!(last_owner_calls.get(), *engine.owner_calls.borrow());
+        assert_eq!(
+            proof,
+            StaticVertexState {
+                lod_info_count: 0,
+                no_override: true
+            }
+        );
+        let refused = capture_static_vertex_state(
+            &scope,
+            &engine,
+            0,
+            || panic!("invalid original handle must not reach native provider"),
+            || panic!("invalid original handle must not reach final validation"),
+        );
+        assert!(refused.is_err());
+    }
+    #[test]
+    fn source_scope_static_vertex_late_provider_hard_link_change_refuses_without_callbacks() {
+        for mutation in 0..4 {
+            let (mut scope, engine) = fixture();
+            let path = engine.rows.borrow()[&7].path.clone();
+            let handle = scope.keep(&engine, 7, 5, path).unwrap();
+            let original_component = engine.capture(7).unwrap();
+            let calls = std::cell::Cell::new(0);
+            let final_owner_calls = std::cell::Cell::new(0);
+            let final_world_calls = std::cell::Cell::new(0);
+            let result = capture_static_vertex_state(
+                &scope,
+                &engine,
+                handle,
+                || {
+                    calls.set(calls.get() + 1);
+                    if calls.get() == 2 {
+                        // Simulate a final borrowed provider guard callback changing
+                        // a hard link while retaining every original object identity.
+                        match mutation {
+                            0 => engine.change(5, |r| r.root = 4),
+                            1 => engine.change(7, |r| r.parent = 6),
+                            2 => engine.change(4, |r| r.parent = 6),
+                            _ => engine.change(2, |r| r.root = 6),
+                        }
+                        final_owner_calls.set(*engine.owner_calls.borrow());
+                        final_world_calls.set(engine.world_calls.get());
+                    }
+                    Ok(crate::native_presentation::VertexStateProof {
+                        lod_info_count: 1,
+                        no_override: 1,
+                    })
+                },
+                || scope.pure_hard_links(&engine, handle),
+            );
+            assert_eq!(calls.get(), 2, "mutation occurs in final native guard");
+            assert!(
+                result.is_err(),
+                "late original hard-link mutation {mutation}"
+            );
+            assert_eq!(engine.capture(7).unwrap(), original_component);
+            assert_eq!(*engine.owner_calls.borrow(), final_owner_calls.get());
+            assert_eq!(engine.world_calls.get(), final_world_calls.get());
         }
     }
     #[test]
@@ -1878,7 +2267,11 @@ mod source_scope_tests {
                     callback: std::cell::Cell::new(0),
                     bad_property: std::cell::Cell::new(false),
                     bad_parameters: std::cell::Cell::new(false),
-                    words: RefCell::new(HashMap::from([(7, [4, 777]), (6, [0, 666])])),
+                    words: RefCell::new(HashMap::from([
+                        (7, [4, 777]),
+                        (6, [0, 666]),
+                        (4, [0, 444]),
+                    ])),
                 },
             )
         }
@@ -2441,6 +2834,34 @@ mod source_scope_tests {
                 0,
                 "outer admission fails before native identity reads"
             );
+        });
+    }
+    #[test]
+    fn source_scope_static_vertex_api_refuses_unadmitted_source_before_provider() {
+        with_native_identity(|engine, id, _| {
+            let scope = Scope {
+                id: 1,
+                reference: engine.reference,
+                dir_seq: engine.dir_seq,
+                index: engine.index,
+                key: engine.key.to_vec(),
+                world: id,
+                pawn: id,
+                controller: id,
+                owners: HashMap::new(),
+                components: vec![],
+                schema: engine.schema.clone(),
+            };
+            NAME_READS.with(|reads| reads.set(0));
+            assert!(capture_static_vertex_state(
+                &scope,
+                engine,
+                1,
+                || { panic!("unadmitted client cannot receive a native asset proof") },
+                || panic!("unadmitted client cannot finish a native asset proof")
+            )
+            .is_err());
+            assert_eq!(NAME_READS.with(|reads| reads.get()), 0);
         });
     }
 }
