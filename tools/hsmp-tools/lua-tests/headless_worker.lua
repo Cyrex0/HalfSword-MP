@@ -339,6 +339,7 @@ local clock, world, settings, forced, travel, statuses = 0, {ok=true,key="menu#1
 local players_ready, diagnostics = false, {}
 local env = { now=function()return clock end, world=function()return world end,
     native_settled=function()return true end, sg_force=function(value)forced=value end, sg_active=function()return forced end,
+    sg_seed=function()return true,"HSMP_native_test_GameProgress"end,
     gi_set=function(name,value)settings[name]=value;return true end, gi_get=function(name)return settings[name]end,
     open_level=function(arena)travel[#travel+1]=arena;return true end,
     native_players_ready=function()return players_ready,"PC1 missing"end,
@@ -379,6 +380,117 @@ do
     local travels = #travel
     T.check(unknown.state == "error" and not unknown:tick(), "unimplemented native Abyss mode refuses startup")
     T.eq(#travel, travels, "unsupported mode cannot alter the native world")
+end
+
+-- The actual source run verified Arena before travel, then BP_GameManager's
+-- BeginPlay Load Game restored career Hell=5. Exercise the real save guard
+-- with in-memory native save/load calls: the first arena load must read the
+-- verified redirected seed, never the original career slot.
+do
+    local SG = dofile("mods/shared/hsmp_saveguard.lua")
+    local hooks, slots, events, gi = {}, {GameProgress={ ["Current Game Mode Enum"]=5 }}, {}, {}
+    local current_world={ok=true,key="native_menu#1",short="Map_Menu_Alpha"}
+    local sequence, opens, loads = {}, 0, {}
+    local function copy(values)
+        local result={};for key,value in pairs(values)do result[key]=value end;return result
+    end
+    local function parameter(value)
+        return {get=function()return value end,set=function(_,next_value)value=next_value end}
+    end
+    local function slot_call(name)
+        local slot=parameter("GameProgress")
+        if name=="SaveGameToSlot"then hooks[name](nil,parameter(gi),slot,parameter(0))
+        else hooks[name](nil,slot,parameter(0))end
+        return slot:get()
+    end
+    gi.IsValid=function()return true end
+    gi["Save Game"]=function()
+        sequence[#sequence+1]="native Save Game"
+        slots[slot_call("SaveGameToSlot")]=copy(gi)
+    end
+    SG.install({inst="native_boot_fixture",save_dir="native-memory-only",fresh_per_session=false,reload_gi_on_exit=false,
+        get_gi=function()return gi end,print=function()end,clock=function()return 0 end,
+        register_hook=function(path,callback)hooks[path:match("([^:]+)$")]=callback end,
+        log={event=function(name,fields)events[#events+1]={name=name,fields=fields}end}})
+    local native_env={now=function()return 0 end,world=function()return current_world end,native_settled=function()return true end,
+        sg_force=SG.set_active,sg_active=SG.is_active,sg_seed=SG.seed_session_slot,
+        gi_set=function(key,value)gi[key]=value;return true end,gi_get=function(key)return gi[key]end,
+        native_players_ready=function()return gi["Current Game Mode Enum"]==1 and gi["FreeMode Multiplayer"]==true end,
+        open_level=function(arena)
+            opens=opens+1;sequence[#sequence+1]="native OpenLevel"
+            current_world={ok=true,key="native_arena#2",short=arena}
+            -- Pinned BP_GameManager ExecuteUbergraph2211 -> GI Load Game2528.
+            for _=1,2 do
+                local slot=slot_call("LoadGameFromSlot");loads[#loads+1]=slot
+                gi=copy(slots[slot])
+            end
+            return true
+        end}
+    local native_boot=Director.new_native_worker(native_env,{mode="pvp"})
+    native_boot:tick();native_boot:tick()
+    T.check(native_boot:tick(),"native BeginPlay reads the verified source profile and can reach native-ready")
+    T.check(sequence[1]=="native Save Game" and sequence[2]=="native OpenLevel" and opens==1,
+        "one redirected native seed is mandatory before one native travel")
+    T.eq(loads[1],"HSMP_native_boot_fixture_GameProgress","first arena Load Game reads the native session seed")
+    T.eq(loads[2],loads[1],"repeated native arena loads retain the same source profile")
+    T.check(gi["Current Game Mode Enum"]==1 and gi["FreeMode Multiplayer"]==true and gi["Free Mode Foes Amount"]==1,
+        "actual saved native PvP fields survive arena initialization")
+    T.eq(slots.GameProgress["Current Game Mode Enum"],5,"original career Hell profile is preserved")
+    local redirected=false
+    for _,event in ipairs(events)do if event.name=="save_redirected" and event.fields.op=="write" and event.fields.ok then redirected=true end end
+    T.check(redirected,"seed uses the actual save guard diverted-write proof")
+end
+
+-- Native reflected calls may reenter startup/world callbacks. Refusal must
+-- stop travel without repairing fields, reseeding, or touching an old world.
+do
+    local function fixture(failure)
+        local current={ok=true,key="menu#1",short="Map_Menu_Alpha"}
+        local settings,reads,writes,seeds,opens,active={},{},0,0,0,false
+        local native_env={now=function()return 0 end,world=function()return current end,native_settled=function()return true end,
+            sg_force=function(value)active=value end,sg_active=function()return active end,
+            gi_set=function(key,value)
+                settings[key]=value;writes=writes+1
+                if failure=="setter_world"then current={ok=false}end
+                return true
+            end,
+            gi_get=function(key)
+                reads[#reads+1]=key
+                local value=settings[key]
+                if failure=="seed_getter_world" and seeds>0 then current={ok=false}end
+                return value
+            end,
+            sg_seed=function()
+                seeds=seeds+1
+                if failure=="seed_world"then current={ok=false}
+                elseif failure=="seed_profile"then settings["Current Game Mode Enum"]=5
+                elseif failure=="seed_guard"then active=false
+                elseif failure=="seed_refused"then return false,"no redirected write"
+                elseif failure=="seed_nil"then return nil,"wrong thread"end
+                return true
+            end,
+            open_level=function()opens=opens+1;return true end,
+            travel_hold=function()
+                if failure=="hold_wait_world"then return true end
+                if failure=="hold_world"then current={ok=false}
+                elseif failure=="hold_profile"then settings["Current Game Mode Enum"]=5 end
+                return false
+            end}
+        if failure=="seed_missing"then native_env.sg_seed=nil end
+        local native_boot=Director.new_native_worker(native_env)
+        native_boot:tick()
+        if failure=="hold_wait_world"then current={ok=true,key="different_menu#2",short="Map_Menu_Alpha"}end
+        native_boot:tick()
+        return native_boot,reads,writes,seeds,opens
+    end
+    for _,failure in ipairs({"seed_missing","seed_refused","seed_nil","seed_world","seed_profile","seed_guard","seed_getter_world","setter_world","hold_world","hold_profile","hold_wait_world"})do
+        local native_boot,reads,writes,seeds,opens=fixture(failure)
+        T.check(native_boot.state=="error" and opens==0,"native "..failure.." refuses all arena travel")
+        T.check(seeds<=1 and writes<=#Director.NATIVE_WORKER_PROFILE,"native "..failure.." never retries or invents profile repairs")
+        if failure=="setter_world"then T.eq(#reads,0,"setter world reentry prevents the next original-world read")end
+        if failure=="seed_getter_world"then T.eq(#reads,#Director.NATIVE_WORKER_PROFILE+1,
+            "post-seed getter world reentry stops every later profile read")end
+    end
 end
 
 do

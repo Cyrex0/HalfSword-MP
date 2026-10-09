@@ -2497,6 +2497,15 @@ function D.new_native_worker(env, opts)
     end
     if not arena:match("^Map_Arena_[%w_]+$") then transition("error", "unsupported native bootstrap arena") end
     if not profile then transition("error", "unsupported native authority mode") end
+    local function same_world(key, short)
+        local fresh = env.world()
+        return fresh and fresh.ok and fresh.key == key and fresh.short == short
+    end
+    local function original_world(world)
+        if same_world(world.key, world.short) then return true end
+        transition("error", "native bootstrap world changed")
+        return false
+    end
     function self:stop()
         self.stopped = true
         transition("stopped", "worker stopped")
@@ -2507,19 +2516,50 @@ function D.new_native_worker(env, opts)
         if not world or not world.ok then return false end
         if self.state == "boot" then
             if env.native_settled and not env.native_settled() then return false end
+            if not original_world(world) then return false end
             if not env.sg_force or not env.sg_active then transition("error", "save guard unavailable"); return false end
             env.sg_force(true)
             if not env.sg_active() then transition("error", "save guard refused"); return false end
+            if not original_world(world) then return false end
             for _, row in ipairs(profile) do
-                if not env.gi_set(row[1], row[2]) or env.gi_get(row[1]) ~= row[2] then
+                if not original_world(world) then return false end
+                local applied = env.gi_set(row[1], row[2])
+                if not original_world(world) then return false end
+                local value = env.gi_get(row[1])
+                if not original_world(world) then return false end
+                if not applied or value ~= row[2] then
                     transition("error", "native GI profile: " .. row[1]); return false
                 end
             end
-            self.from_key = world.key
+            -- BP_GameManager BeginPlay loads GameProgress (bytecode 2211).
+            -- Seed the verified native profile through the active save guard
+            -- before travel, so that first load cannot restore career mode.
+            if not env.sg_seed then transition("error", "native save seed unavailable"); return false end
+            local seeded, why = env.sg_seed()
+            if not original_world(world) then return false end
+            if seeded ~= true then transition("error", "native save seed refused: " .. tostring(why)); return false end
+            if not env.sg_active() then transition("error", "save guard lost during native seed"); return false end
+            if not original_world(world) then return false end
+            -- Save Game is reflected native code. Requalify its original world
+            -- and every scalar profile value before admitting arena travel.
+            for _, row in ipairs(profile) do
+                local value = env.gi_get(row[1])
+                if not original_world(world) then return false end
+                if value ~= row[2] then transition("error", "native GI profile changed during seed: " .. row[1]); return false end
+            end
+            self.from_key, self.from_short = world.key, world.short
             transition("travel")
         end
         if self.state == "travel" then
+            local origin = { key = self.from_key, short = self.from_short }
+            if not original_world(origin) then return false end
             if env.travel_hold and env.travel_hold("native worker bootstrap") then return false end
+            if not original_world(origin) then return false end
+            for _, row in ipairs(profile) do
+                local value = env.gi_get(row[1])
+                if not original_world(origin) then return false end
+                if value ~= row[2] then transition("error", "native GI profile changed before travel: " .. row[1]); return false end
+            end
             self.issued_at = env.now()
             if not env.open_level(self.arena) then transition("error", "native arena travel refused"); return false end
             if env.travel_issued then env.travel_issued() end
