@@ -52,6 +52,7 @@ void spline_inner(Obj curve,const wchar_t* point_path,int bytes) {
 bool spline_layout_verified{};std::vector<Obj> spline_layout_objects;
 void spline_layouts() {
     spline_api_ok();if(spline_layout_verified){for(auto o:spline_layout_objects)spline_live(o);return;}
+    profile_phase("spline_layout",0);
     const size_t begin=layout_objects.size();
     layout(L"/Script/CoreUObject.InterpCurvePointVector",88,{{L"InVal",L"FloatProperty",0,4,nullptr},{L"OutVal",L"StructProperty",8,24,L"Vector"},{L"ArriveTangent",L"StructProperty",32,24,L"Vector"},{L"LeaveTangent",L"StructProperty",56,24,L"Vector"},{L"InterpMode",L"ByteProperty",80,1,nullptr}});
     layout(L"/Script/CoreUObject.InterpCurvePointQuat",128,{{L"InVal",L"FloatProperty",0,4,nullptr},{L"OutVal",L"StructProperty",16,32,L"Quat"},{L"ArriveTangent",L"StructProperty",48,32,L"Quat"},{L"LeaveTangent",L"StructProperty",80,32,L"Quat"},{L"InterpMode",L"ByteProperty",112,1,nullptr}});
@@ -63,6 +64,7 @@ void spline_layouts() {
     spline_inner(find(L"/Script/CoreUObject.InterpCurveQuat"),L"/Script/CoreUObject.InterpCurvePointQuat",128);
     spline_inner(find(L"/Script/CoreUObject.InterpCurveFloat"),L"/Script/CoreUObject.InterpCurvePointFloat",20);
     spline_layout_objects.assign(layout_objects.begin()+static_cast<ptrdiff_t>(begin),layout_objects.end());spline_layout_verified=true;
+    profile_phase("spline_layout",1);
 }
 void spline_class(Obj component) {spline_live(component);const auto cls=keep(vt->class_of(get(component)));spline_live(cls);require(same(cls,find(L"/Script/Engine.SplineComponent")),"native spline exact class changed");}
 thread_local Obj spline_owner{},spline_component{};
@@ -117,7 +119,12 @@ bool spline_equal(const SplineSnapshot& a,const SplineSnapshot& b) {
 }
 SplineSnapshot spline_coherent(Obj world,Obj owner,Obj component,HsmpViewResult* r) {
     SplineOperation spline_scope(owner,component);
-    spline_live(owner);spline_class(component);qualify(world,owner,component,r);auto first=spline_read(owner,component);spline_live(owner);spline_class(component);qualify(world,owner,component,r);auto second=spline_read(owner,component);spline_live(owner);spline_class(component);qualify(world,owner,component,r);require(spline_equal(first,second),"native spline changed during capture");return second;
+    profile_phase("qualify_first",0);spline_live(owner);spline_class(component);qualify(world,owner,component,r);profile_phase("qualify_first",1);
+    profile_phase("raw_first",0);auto first=spline_read(owner,component);profile_phase("raw_first",1);
+    profile_phase("qualify_second",0);spline_live(owner);spline_class(component);qualify(world,owner,component,r);profile_phase("qualify_second",1);
+    profile_phase("raw_second",0);auto second=spline_read(owner,component);profile_phase("raw_second",1);
+    profile_phase("qualify_final",0);spline_live(owner);spline_class(component);qualify(world,owner,component,r);profile_phase("qualify_final",1);
+    require(spline_equal(first,second),"native spline changed during capture");return second;
 }
 template<class Curve,class Points> void spline_copy(Curve& dst,const Curve& src,const Points& points) {
     require(dst.count==src.count&&(!dst.count||dst.points),"native spline caller array profile changed");auto* pointer=dst.points;dst=src;dst.points=pointer;if(dst.count)std::copy(points.begin(),points.end(),pointer);

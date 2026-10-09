@@ -12,7 +12,152 @@ use std::{
     collections::HashMap,
     ffi::{c_int, c_void},
     rc::Rc,
+    sync::atomic::{AtomicPtr, Ordering},
+    time::Instant,
 };
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct ProfileTrace {
+    epoch: u64,
+    handle: u64,
+    guards: u64,
+    admissions: u64,
+    finds: u64,
+    events: u64,
+    elapsed_us: u64,
+    entity: u32,
+    incarnation: u32,
+    dir_seq: u32,
+    seq: u32,
+}
+type ProfileLogger = unsafe extern "C" fn(*const std::ffi::c_char, u32, *const ProfileTrace);
+static PROFILE_LOGGER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+#[derive(Clone, Copy)]
+struct ProfileSession {
+    trace: ProfileTrace,
+    start: Instant,
+    progress: u32,
+    once: u32,
+}
+thread_local! {static PROFILE_TRACE:RefCell<Option<ProfileSession>>=const{RefCell::new(None)};}
+struct ProfileOperation {
+    previous: Option<ProfileSession>,
+}
+impl ProfileOperation {
+    fn begin(reference: EntityRef, dir_seq: u32, handle: u64) -> Self {
+        let session = ProfileSession {
+            trace: ProfileTrace {
+                epoch: reference.epoch,
+                entity: reference.id,
+                incarnation: reference.incarnation,
+                dir_seq,
+                handle,
+                ..Default::default()
+            },
+            start: Instant::now(),
+            progress: 0,
+            once: 0,
+        };
+        let previous = PROFILE_TRACE.with(|p| p.replace(Some(session)));
+        profile_checkpoint(c"profile_operation", 0);
+        Self { previous }
+    }
+}
+impl Drop for ProfileOperation {
+    fn drop(&mut self) {
+        profile_checkpoint(c"profile_operation", 1);
+        PROFILE_TRACE.with(|p| p.replace(self.previous));
+    }
+}
+#[no_mangle]
+pub extern "C" fn hsmp_native_set_profile_logger(logger: Option<ProfileLogger>) {
+    PROFILE_LOGGER.store(
+        logger.map_or(std::ptr::null_mut(), |p| p as *mut c_void),
+        Ordering::Release,
+    );
+}
+fn profile_checkpoint(stage: &std::ffi::CStr, edge: u32) {
+    if stage.to_bytes().len() > 64
+        || edge > 2
+        || !stage
+            .to_bytes()
+            .iter()
+            .all(|c| c.is_ascii_alphanumeric() || *c == b'_')
+    {
+        return;
+    }
+    let snapshot = PROFILE_TRACE.with(|p| {
+        let mut p = p.borrow_mut();
+        let s = p.as_mut()?;
+        if s.trace.seq >= 64 {
+            return None;
+        }
+        let limited = s.trace.seq == 63;
+        s.trace.seq += 1;
+        s.trace.elapsed_us = s.start.elapsed().as_micros().min(u64::MAX as u128) as u64;
+        Some((s.trace, limited))
+    });
+    // No RefCell borrow or Native/schema lock survives the logger callback.
+    let logger = PROFILE_LOGGER.load(Ordering::Acquire);
+    if let (Some((snapshot, limited)), false) = (snapshot, logger.is_null()) {
+        let logger: ProfileLogger = unsafe { std::mem::transmute(logger) };
+        let (stage, edge) = if limited {
+            (c"diagnostic_budget_exhausted", 2)
+        } else {
+            (stage, edge)
+        };
+        unsafe { logger(stage.as_ptr(), edge, &snapshot) }
+    }
+}
+fn profile_once(bit: u32, stage: &std::ffi::CStr, edge: u32) {
+    let enabled = PROFILE_TRACE.with(|p| {
+        let mut p = p.borrow_mut();
+        let Some(s) = p.as_mut() else {
+            return false;
+        };
+        if s.once & bit != 0 {
+            return false;
+        }
+        s.once |= bit;
+        true
+    });
+    if enabled {
+        profile_checkpoint(stage, edge);
+    }
+}
+#[no_mangle]
+pub unsafe extern "C" fn hsmp_native_profile_checkpoint(stage: *const std::ffi::c_char, edge: u32) {
+    if !stage.is_null() {
+        profile_checkpoint(unsafe { std::ffi::CStr::from_ptr(stage) }, edge);
+    }
+}
+#[no_mangle]
+pub extern "C" fn hsmp_native_profile_tick(counter: u32) {
+    let progress = PROFILE_TRACE.with(|p| {
+        let mut p = p.borrow_mut();
+        let Some(s) = p.as_mut() else {
+            return false;
+        };
+        let value = match counter {
+            0 => &mut s.trace.guards,
+            1 => &mut s.trace.admissions,
+            2 => &mut s.trace.finds,
+            3 => &mut s.trace.events,
+            _ => return false,
+        };
+        *value = value.saturating_add(1);
+        if counter == 1 && s.trace.admissions % 2048 == 0 && s.progress < 8 {
+            s.progress += 1;
+            true
+        } else {
+            false
+        }
+    });
+    if progress {
+        profile_checkpoint(c"guard_progress", 2);
+    }
+}
 
 const MAX_COMPONENTS: usize = 64;
 // Pawn: Controller, RootComponent, seven weapon fields; controller: Pawn;
@@ -442,6 +587,7 @@ struct Runtime<'a> {
 }
 impl Runtime<'_> {
     fn admit(&self) -> Result<(), String> {
+        hsmp_native_profile_tick(1);
         if !self.n.native_host.is_host()
             || self.n.poisoned
             || self.n.game_thread != Some(std::thread::current().id())
@@ -449,11 +595,13 @@ impl Runtime<'_> {
         {
             return Err("source scope role/thread/world admission".into());
         }
+        profile_once(1, c"source_directory", 0);
         let d = self
             .n
             .native_host
             .directory()
             .ok_or("source scope directory unavailable")?;
+        profile_once(2, c"source_directory", 1);
         if d.epoch != self.reference.epoch
             || d.seq != self.dir_seq
             || !d
@@ -538,7 +686,9 @@ impl Engine for Runtime<'_> {
     fn world(&self, id: Identity) -> Result<u64, String> {
         self.admit()?;
         let p = self.identity(id)?;
+        profile_once(4, c"source_world", 0);
         let result = unsafe { (self.x.world)(p) } as u64;
+        profile_once(8, c"source_world", 1);
         self.identity(id)?;
         self.admit()?;
         Ok(result)
@@ -551,7 +701,10 @@ impl Engine for Runtime<'_> {
     }
     fn find(&self, path: &str) -> Result<u64, String> {
         self.admit()?;
+        hsmp_native_profile_tick(2);
+        profile_once(16, c"source_find", 0);
         let p = unsafe { (self.vt.find)(reflect::wide(path).as_ptr()) } as u64;
+        profile_once(32, c"source_find", 1);
         self.admit()?;
         Ok(p)
     }
@@ -608,7 +761,10 @@ impl SchemaEngine for Runtime<'_> {
             let function_pointer = self.identity(function)?;
             self.identity(class)?;
             let p = self.identity(id)?;
+            hsmp_native_profile_tick(3);
+            profile_checkpoint(c"scope_owner_pe", 0);
             (self.vt.call)(p, function_pointer, (&mut result as *mut u64).cast());
+            profile_checkpoint(c"scope_owner_pe", 1);
             self.identity(id)?;
             self.identity(function)?;
             self.identity(class)?;
@@ -695,9 +851,12 @@ impl Native {
             if scope.id != id {
                 return Err("source scope id changed".into());
             }
+            let _profile = ProfileOperation::begin(scope.reference, scope.dir_seq, handle);
             let vt = reflect::vt().ok_or("source scope reflection")?;
             let engine = runtime(self, vt, exports()?, &scope);
+            profile_checkpoint(c"scope_initial_resolve", 0);
             scope.resolve(&engine, handle)?;
+            profile_checkpoint(c"scope_initial_resolve", 1);
             let row = scope
                 .components
                 .get(handle.checked_sub(1).ok_or("source scope handle")? as usize)
@@ -716,7 +875,9 @@ impl Native {
                 engine,
                 handle,
             };
+            profile_checkpoint(c"scope_guard", 0);
             context.valid()?;
+            profile_checkpoint(c"scope_guard", 1);
             let guard = crate::native_presentation::Guard {
                 context: (&mut context as *mut SplineScopeGuard<'_>).cast(),
                 check: spline_scope_guard,
@@ -724,6 +885,7 @@ impl Native {
             let mut profile = crate::native_presentation::SplineProfile::default();
             let mut info = crate::native_presentation::ResultInfo::default();
             let p = crate::native_presentation::provider()?;
+            profile_checkpoint(c"provider", 0);
             if (p.describe_spline)(
                 object(scope.world),
                 object(owner),
@@ -736,8 +898,11 @@ impl Native {
             {
                 return Err(format!("source spline profile: {}", info.reason()));
             }
+            profile_checkpoint(c"provider", 1);
             context.valid()?;
+            profile_checkpoint(c"scope_final_resolve", 0);
             scope.resolve(&context.engine, handle)?;
+            profile_checkpoint(c"scope_final_resolve", 1);
             if profile.metadata_null != 1
                 || profile.position_count > 64
                 || profile.rotation_count > 64
@@ -1018,6 +1183,105 @@ impl Native {
 #[cfg(test)]
 mod source_scope_tests {
     use super::*;
+    thread_local! {static TEST_PROFILE_LOG:RefCell<Vec<(String,u32,ProfileTrace)>>=const{RefCell::new(Vec::new())};}
+    unsafe extern "C" fn test_profile_logger(
+        stage: *const std::ffi::c_char,
+        edge: u32,
+        trace: *const ProfileTrace,
+    ) {
+        let stage = unsafe { std::ffi::CStr::from_ptr(stage) }
+            .to_string_lossy()
+            .into_owned();
+        let trace = unsafe { *trace };
+        TEST_PROFILE_LOG.with(|p| p.borrow_mut().push((stage, edge, trace)));
+        // A callback can read/update TLS after the snapshot borrow has ended.
+        hsmp_native_profile_tick(0);
+    }
+    #[test]
+    fn source_scope_profile_trace_is_bounded_rare_and_callback_safe() {
+        assert_eq!(std::mem::size_of::<ProfileTrace>(), 72);
+        TEST_PROFILE_LOG.with(|p| p.borrow_mut().clear());
+        hsmp_native_set_profile_logger(Some(test_profile_logger));
+        profile_checkpoint(c"inactive", 0);
+        hsmp_native_profile_tick(1);
+        assert_eq!(TEST_PROFILE_LOG.with(|p| p.borrow().len()), 0);
+        {
+            let _scope = ProfileOperation::begin(
+                EntityRef {
+                    epoch: 0x800000000000000b,
+                    id: 7,
+                    incarnation: 9,
+                },
+                11,
+                13,
+            );
+            for kind in 0..4 {
+                hsmp_native_profile_tick(kind);
+            }
+            profile_checkpoint(c"counts", 1);
+            let count = TEST_PROFILE_LOG.with(|p| p.borrow().len());
+            profile_checkpoint(c"bad\nstage", 0);
+            profile_checkpoint(c"bad_edge", 3);
+            assert_eq!(TEST_PROFILE_LOG.with(|p| p.borrow().len()), count);
+            for _ in 0..50000 {
+                hsmp_native_profile_tick(1);
+            }
+            for _ in 0..100 {
+                profile_checkpoint(c"checkpoint", 0);
+            }
+            TEST_PROFILE_LOG.with(|p| {
+                let p = p.borrow();
+                assert_eq!(p.len(), 64);
+                assert_eq!(p[63].0, "diagnostic_budget_exhausted");
+                assert_eq!(p[63].1, 2);
+                assert_eq!(
+                    p.iter()
+                        .filter(|(s, _, _)| s == "diagnostic_budget_exhausted")
+                        .count(),
+                    1
+                );
+                assert_eq!(
+                    p.iter().filter(|(s, _, _)| s == "guard_progress").count(),
+                    8
+                );
+                for (i, (_, _, t)) in p.iter().enumerate() {
+                    assert_eq!(t.seq, i as u32 + 1);
+                    assert_eq!(
+                        (t.epoch, t.entity, t.incarnation, t.dir_seq, t.handle),
+                        (0x800000000000000b, 7, 9, 11, 13)
+                    );
+                    if i > 0 {
+                        assert!(t.elapsed_us >= p[i - 1].2.elapsed_us);
+                    }
+                }
+                assert_eq!((p[1].2.admissions, p[1].2.finds, p[1].2.events), (1, 1, 1));
+            });
+        }
+        for _ in 0..100 {
+            hsmp_native_profile_tick(1);
+            profile_checkpoint(c"inactive_after", 0);
+        }
+        assert_eq!(TEST_PROFILE_LOG.with(|p| p.borrow().len()), 64);
+        {
+            let _scope = ProfileOperation::begin(
+                EntityRef {
+                    epoch: 1,
+                    id: 2,
+                    incarnation: 3,
+                },
+                4,
+                5,
+            );
+        }
+        TEST_PROFILE_LOG.with(|p| {
+            let p = p.borrow();
+            assert_eq!(p.len(), 66);
+            assert_eq!((p[64].2.seq, p[65].2.seq), (1, 2));
+            assert_eq!(p[65].0, "profile_operation");
+            assert_eq!(p[65].1, 1);
+        });
+        hsmp_native_set_profile_logger(None);
+    }
     #[derive(Clone)]
     struct Row {
         id: Identity,

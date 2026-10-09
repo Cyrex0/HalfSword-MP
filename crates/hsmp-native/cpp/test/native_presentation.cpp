@@ -6,6 +6,10 @@
 #include <cstdlib>
 static const HsmpPresentation* installed{};
 extern "C" void hsmp_native_set_presentation(const HsmpPresentation* p) {installed=p;}
+// Production profile tracing is Rust-owned and inactive for this engine fixture.
+int profile_ffi_calls{};
+extern "C" void hsmp_native_profile_checkpoint(const char*,uint32_t){++profile_ffi_calls;}
+extern "C" void hsmp_native_profile_tick(uint32_t){++profile_ffi_calls;}
 namespace {
 int checks{}, touches{};
 int spline_allocations{},spline_releases{},spline_fail_after{-1};
@@ -341,6 +345,10 @@ int main() {
         array={nullptr,1,1};std::memcpy(header.data(),&array,16);rejects([&]{spline_read_curve<NativeQuatPoint>(header.data(),curve,decoded,64);},"nonnull count with missing POD data refuses");
         HsmpViewSplineProfile empty{0,0,0,0,1};HsmpViewSplineFrame empty_frame{};spline_frame_valid(empty,empty_frame);check(true,"actual empty spline curves are preserved without invented points");
         SplineSnapshot a{},b{};a.value.version=b.value.version=7;check(spline_equal(a,b),"two identical empty raw copies agree");b.value.version=8;check(!spline_equal(a,b),"source curve version mutation invalidates coherent capture");b=a;b.value.settings.duration=2;check(!spline_equal(a,b),"source settings mutation invalidates coherent capture");
+        check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
+        {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
+        const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);
+        check(trace_calls==2&&profile_ffi_calls==trace_calls&&!static_profile_trace,"only static describe trace scope enables FFI then restores inactivity");
         std::cout<<checks<<" native presentation lifetime/rejection checks passed\n";return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }

@@ -1,5 +1,6 @@
 // C ABI of the Rust staticlib crates/hsmp-native (hsmp_native.lib).
 #pragma once
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +30,20 @@ int hsmp_native_caller_admission(void);
 
 // hsmp_luauser.c: how lua_lock is resolved ("host ..." or "private ...").
 const char* hsmp_lua_lock_mode(void);
+
+// Rare static spline/profile checkpoints only. This never calls Native's mutex
+// admission helpers and never dereferences an engine object.
+struct HsmpNativeProfileTrace {
+    uint64_t epoch,handle,guards,admissions,finds,events,elapsed_us;
+    uint32_t entity,incarnation,dir_seq,seq;
+};
+#ifdef __cplusplus
+static_assert(sizeof(HsmpNativeProfileTrace)==72);
+#endif
+typedef void (*HsmpNativeProfileLogger)(const char* stage,uint32_t edge,const struct HsmpNativeProfileTrace*);
+void hsmp_native_set_profile_logger(HsmpNativeProfileLogger logger);
+void hsmp_native_profile_checkpoint(const char* stage,uint32_t edge);
+void hsmp_native_profile_tick(uint32_t counter); // guard0, admission1, find2, PE3
 
 #ifdef __cplusplus
 }

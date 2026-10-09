@@ -81,6 +81,16 @@ namespace
             fclose(f);
         }
     }
+    void profile_log(const char* stage,uint32_t edge,const HsmpNativeProfileTrace* trace)
+    {
+        if(!stage||!trace)return;
+        logf("NATIVE_PROFILE seq=%u stage=%.64s edge=%s epoch=%016llx entity=%u incarnation=%u dir_seq=%u handle=%llu elapsed_us=%llu guards=%llu admissions=%llu finds=%llu pe=%llu diagnostic_only=true",
+            trace->seq,stage,edge==0?"enter":edge==1?"exit":"progress",
+            static_cast<unsigned long long>(trace->epoch),trace->entity,trace->incarnation,trace->dir_seq,
+            static_cast<unsigned long long>(trace->handle),static_cast<unsigned long long>(trace->elapsed_us),
+            static_cast<unsigned long long>(trace->guards),static_cast<unsigned long long>(trace->admissions),
+            static_cast<unsigned long long>(trace->finds),static_cast<unsigned long long>(trace->events));
+    }
 
     // Is the loaded UE4SS.dll the exact build abi/ue4ss_pins.h was generated from?
     bool ue4ss_pinned(const char** why)
@@ -237,6 +247,7 @@ extern "C" __declspec(dllexport) CppUserModBase* start_mod()
 {
     pin_self();
     logf("start_mod");
+    hsmp_native_set_profile_logger(profile_log);
     return new HSMPNativeMod();
 }
 

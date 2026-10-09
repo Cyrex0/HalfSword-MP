@@ -4,6 +4,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include "native_presentation.h"
+#include "hsmp_native.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -32,8 +33,13 @@ struct Error : std::runtime_error { using std::runtime_error::runtime_error; };
 void require(bool ok, const char* why) { if (!ok) throw Error(why); }
 thread_local const HsmpViewGuard* active_guard{};
 thread_local Obj active_world{},active_game_instance{};
+thread_local bool static_profile_trace{};
+struct StaticProfileTraceScope {bool previous;StaticProfileTraceScope():previous(static_profile_trace){static_profile_trace=true;}~StaticProfileTraceScope(){static_profile_trace=previous;}};
+void profile_phase(const char* stage,uint32_t edge){if(static_profile_trace)hsmp_native_profile_checkpoint(stage,edge);}
+void profile_tick(uint32_t counter){if(static_profile_trace)hsmp_native_profile_tick(counter);}
 void check_guard() {
     if(!active_guard)return;
+    profile_tick(0);
     require(active_guard->check && active_guard->context && active_guard->check(active_guard->context)==1,
             "native source/world operation guard changed");
     if(active_game_instance.weak) {
@@ -99,7 +105,7 @@ void* get(Obj o) {
     }
     return p;
 }
-Obj find(const wchar_t* path) {check_guard();return keep(vt->find(u16(path)));}
+Obj find(const wchar_t* path) {check_guard();profile_tick(2);return keep(vt->find(u16(path)));}
 bool is(Obj o, const wchar_t* cls) { const auto c = find(cls); return vt->is_a(get(o), get(c)) != 0; }
 Obj asset(HsmpViewText path, const wchar_t* cls) {
     const auto p = text(path);
@@ -208,7 +214,10 @@ struct Function {
     void call(Obj object, HsmpViewResult* result = nullptr) {
         spline_call_guard(object,function,cls);
         require(vt->is_a(get(object), get(cls)) != 0, "native function owner class mismatch");
-        vt->call(get(object), get(function), buf.data());
+        void* object_pointer=get(object);void* function_pointer=get(function);
+        profile_tick(3);profile_phase("cpp_pe",0);
+        vt->call(object_pointer,function_pointer,buf.data());
+        profile_phase("cpp_pe",1);
         check_guard();
         spline_call_guard(object,function,cls);
         get(object); get(function); get(cls); if (result) ++result->operations;
@@ -794,7 +803,10 @@ int32_t actor_scope(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewActor
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
 int32_t describe_spline(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,HsmpViewSplineProfile* out,HsmpViewResult* r) {
-    try{initialize_result(r);thread();OperationScope scope(guard,world);require(out!=nullptr,"native spline profile output missing");layouts();auto snapshot=spline_coherent(world,owner,component,r);*out=spline_profile(snapshot);spline_profile_valid(*out);r->complete=1;return 1;}
+    const StaticProfileTraceScope tracing;
+    try{profile_phase("cpp_admission",0);initialize_result(r);thread();OperationScope scope(guard,world);require(out!=nullptr,"native spline profile output missing");profile_phase("cpp_admission",1);
+        profile_phase("core_layout",0);layouts();profile_phase("core_layout",1);
+        auto snapshot=spline_coherent(world,owner,component,r);*out=spline_profile(snapshot);spline_profile_valid(*out);r->complete=1;return 1;}
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 const HsmpPresentation provider{7,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline};
