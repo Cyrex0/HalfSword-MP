@@ -446,7 +446,7 @@ function M.start()
         local token, actors = WG.token(), {}
         if native_mode ~= "diagnostic" then
             if not N.host_describe or not N.native_capture_render then return false, "native source/render APIs unavailable" end
-            for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end"})do
+            for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile"})do
                 if type(N[name])~="function"then return false,"native source identity API unavailable: "..name end
             end
             if not source_lifecycle then
@@ -454,7 +454,7 @@ function M.start()
                 if not Adapter or not Lifecycle then return false, "native source descriptor modules unavailable" end
                 local adapter = Adapter.new({ resolve=resolve, WG=WG, phase=source_phase,
                     source_scope={begin=N.native_source_scope_begin,keep=N.native_source_scope_keep,
-                        resolve=N.native_source_scope_resolve,finish=N.native_source_scope_end} })
+                        resolve=N.native_source_scope_resolve,finish=N.native_source_scope_end,profile=N.native_source_scope_spline_profile} })
                 source_lifecycle = Lifecycle.new({ resolve=resolve,same=WG.same,now_ms=function()return os.clock()*1000 end,
                     index=function(row)return row.kind==0 and row.controller or first_ai_name end,
                     capture=adapter.capture,describe=N.host_describe,phase=source_phase,

@@ -130,7 +130,7 @@ end
 -- this integration cannot hide missing wiring behind capture_render mocks.
 do
     local Adapter=dofile("mods/HSMPMatch/Scripts/native_source_adapter.lua")
-    for _,missing in ipairs({false,"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end"})do
+    for _,missing in ipairs({false,"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile"})do
         local callback,options,reason,frames,game_thread=nil,nil,nil,0,false
         local world={IsValid=function()return true end}
         local token={key="native#2",drops=0}
@@ -141,8 +141,16 @@ do
             host_directory=function()return {epoch=math.mininteger+123,seq=11,entities={}}end,host_inputs=function()return {}end,
             sample_config=function()return true end,host_describe=function()error("unqualified descriptor",0)end,
             native_capture_render=function()error("unqualified render",0)end,native_sample_world=function()error("unqualified core",0)end}
-        for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end"})do
+        for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile"})do
             N[name]=function()error("scope helper cannot run before qualified source capture",0)end
+        end
+        local profile={position_count=3,rotation_count=2,scale_count=2,reparam_count=11,metadata_null=true}
+        N.native_source_scope_spline_profile=function(scope_id,handle_id)
+            assert(game_thread and frames>0,"profile forwarding must retain game-thread admission")
+            assert(scope_id==71,"raw profile call must retain the original scalar scope")
+            if handle_id==72 then return profile end
+            assert(handle_id==73,"raw profile call must retain the original scalar handle")
+            return nil,"original spline handle changed"
         end
         if missing then N[missing]=nil end
         local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()return nil end},
@@ -173,8 +181,15 @@ do
                 "actual production adapter receives the guarded source resolver without a render override")
             local scope=options and options.source_scope
             T.check(scope and scope.begin==N.native_source_scope_begin and scope.keep==N.native_source_scope_keep
-                and scope.resolve==N.native_source_scope_resolve and scope.finish==N.native_source_scope_end,
-                "worker injects all four exact native scope functions as raw dot calls")
+                and scope.resolve==N.native_source_scope_resolve and scope.finish==N.native_source_scope_end
+                and scope.profile==N.native_source_scope_spline_profile,
+                "worker injects all five exact native scope functions as raw dot calls")
+            game_thread=true
+            local value,why=scope.profile(71,72)
+            T.check(value==profile and why==nil,"raw worker profile forwarding preserves the actual copied result")
+            value,why=scope.profile(71,73)
+            T.check(value==nil and why=="original spline handle changed","raw worker profile forwarding preserves the exact native refusal")
+            game_thread=false
             T.check(reason=="source binding intentionally unavailable","qualified source refusal cannot publish a guessed frame")
         end
     end
@@ -251,7 +266,7 @@ do
         host_directory=function()return {epoch=44,seq=1,entities={}}end,host_inputs=function()return {}end,
         sample_config=function()return true end,host_describe=function()error("unexpected publish",0)end,
         native_capture_render=function()error("unexpected render",0)end,native_sample_world=function()error("unexpected core",0)end}
-    for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end"})do N[name]=function()error("unexpected scope",0)end end
+    for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile"})do N[name]=function()error("unexpected scope",0)end end
     local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()return gs end},
         hsmp_wg={new=function()return wg end},hsmp_ipc={N=N,init=function()end,frame=function()end,world_ready=function()end},
         hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},hsmp_log={init=function()end,event=function()end},
