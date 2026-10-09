@@ -1,5 +1,41 @@
 # Native authority bootstrap checkpoint
 
+## Next combined checkpoint: loading and bounded preparation
+
+Native source-scope admission batching is independently reviewed;39 focused
+Rust tests pass, preserving all original scalar identities and fresh callback/
+return admissions. Loading41/client97 Lua assertions and syntax6 pass with
+independent UI/lifecycle review closed. Opaque loading uses real asset counts
+and unknown-work marquee; asset preparation yields one exact asset per tick
+without renewing original receipts. No positive owned-view proof means no
+uncovering the arena. Fatal UI failures stop inputs and retain bounded error
+display/owned once-only teardown. Native appearance is still unverified.
+
+Transport permits4 records per peer per flush with accepted-only original
+cursor advancement; pinned-stream,8-entity exact661499B/11part reconstruction
+and authenticated125362B UDP checks pass offline. The architecture review
+requires semantic control/recipe/LIVE lanes, bounded recovery and actual raw-bit
+delta replay before performance claims; no8-native-player scalability proof.
+Client isolation adds diagnostic ViewTarget facts without readiness changes.
+
+## Latest actual: 98e25c02, accepted recipes; no client scene yet
+
+Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/16 warnings; clean
+dev push/RequireG0/all393 hashes match98e25c02. Actual
+20261009-174612-e7926a-native-host/source2e9de2ac-c828-4f03-a769-18ddcd9fb9f2:
+both fresh-wrapper full49-component/600-bone/38-material recipes pass.
+Capture21.345s/20.635s, binds278ms/305ms. Native render6.304s succeeds65.126s;
+publication65.805s refuses after unchanged65s teardown. Source cleanstop66.723s.
+No published frame/client phases/mirrors/view/input or visible model proof;
+no capture speed improvement is established. Client pipes complete0B/no errors.
+
+Corrected V2 window helper positively qualifies both actual UnrealWindow
+handles,880x527 outer placement and DWM physical secondary containment in two
+immutable live observations. All4 originalPIDs gone/Shipping0,20save hashes
+unchanged/crashchildren absent. Exact692-line authority/fullNative/operator
+summary retained. Remaining capture/guard cost is measured next, not masked
+by a larger timeout, reduced data or relaxed original-identity proof.
+
 ## Latest actual: 0c085a97, source publication misses readiness
 
 Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings; clean

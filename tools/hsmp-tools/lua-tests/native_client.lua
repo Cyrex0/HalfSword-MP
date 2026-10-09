@@ -154,6 +154,11 @@ do
     v=fixture();v.core:tick();local report_count=#v.reports;v.time=.5;v.core:tick()
     check(#v.reports==report_count,"unchanged actual native readiness metrics are bounded to one update per second")
     v.time=1.1;v.core:tick();check(#v.reports==report_count+1 and v.reports[#v.reports].scene==v.applied,"periodic metrics use actual applied source frame")
+    v=fixture();v.on_present=function()return nil,"native scene assets loading"end
+    check(not v.core:tick()and not v.core.stopped and v.core.state=="wait_scene"and v.inputs==0 and v.closes==0,"only explicit incremental asset preparation waits without input or endpoint closure")
+    v.on_present=nil;check(v.core:tick()and v.core.state=="mirror_ready","completed assets recover into actual native presentation readiness")
+    v=fixture();v.on_present=function()return nil,"native scene assets loading failed"end
+    check(not v.core:tick()and v.core.stopped and v.closes==1,"arbitrary preparation errors retain existing fatal semantics")
 end
 local Isolation=dofile("mods/HSMPMatch/Scripts/native_client_isolation.lua")
 do
@@ -229,6 +234,7 @@ end
 -- Phase records are diagnostics, never readiness or receipt-age evidence.
 do
     local callback,drop,options,proxy,events,sends,closed=nil,nil,nil,nil,{},0,0
+    local loading,quits,stop_requested=nil,0,false
     local epoch=9223372036854775807
     local function source(generation,frame)
         return{epoch=epoch,dir_seq=4,frame_seq=frame,state=1,peer_id=9,generation=generation,fresh=true,
@@ -249,21 +255,30 @@ do
         native_input=function()sends=sends+1;return true end,host_stop=function()closed=closed+1 end}
     local ActualPresentation=dofile("mods/HSMPAvatars/Scripts/native_presentation.lua")
     local modules={hsmp_runtime_role={presentation=function()return true end},UEHelpers={},
-        hsmp_wg={new=function()return wg end},hsmp_ipc={N=native,init=function()end,frame=function()end,world_ready=function()end,world_leaving=function()end},
+        hsmp_wg={new=function()return wg end},hsmp_ipc={N=native,init=function()end,frame=function()end,world_ready=function()end,world_leaving=function()end,read=function()return stop_requested end},
         hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},
-        director={make_ue_env=function()return{quit_native_worker=function()end}end},
+        director={make_ue_env=function()return{quit_native_worker=function()quits=quits+1 end}end},
         native_client_core={new=function(env)options=env;return Core.new(env)end},
         native_client_input={ai=function()return{0,0,0,0,0,0,0,0},0 end},native_client_array=Arrays,
+        native_client_loading={new=function(env)
+            loading={ticks=0,env=env,drop_count=0}
+            function loading:set(stage,done,total)self.stage=stage;self.done=done;self.total=total end
+            function loading:tick()self.ticks=self.ticks+1;if self.refusal then return nil,self.refusal end;return true end
+            function loading:status(state)self.state=state;if state=="error"or state=="stopped"then self.failed=true end end
+            function loading:drop()self.drop_count=self.drop_count+1 end
+            return loading
+        end},
         native_client_isolation={inspect=function()return true,nil,{}end},
         native_client_suppression={new=function()return{run=function()return true,nil,{drivers=0,gear=0,ai=0}end,drop=function()end}end},
         native_presentation={new=function(env)proxy=env.native;return ActualPresentation.new(env)end},
         hsmp_log={init=function()end,event=function(ev,row)events[#events+1]={ev=ev,row=row}end}}
     local fake=setmetatable({require=function(name)assert(modules[name],name);return modules[name]end,
-        os={getenv=function(key)if key=="HSMP_NATIVE_CLIENT_AI"then return"1"end end},print=function()end,
+        os={getenv=function(key)if key=="HSMP_NATIVE_CLIENT_AI"then return"1"elseif key=="HSMP_NATIVE_STOP_FILE"then return"owned-stop"end end},print=function()end,
         LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 86 end},{__index=_G})
     check(assert(loadfile("mods/HSMPMatch/Scripts/native_client.lua","t",fake))().start()==true,"actual client starts with native phase diagnostics")
     local function phases()local rows={};for _,event in ipairs(events)do if event.ev=="x_native_client_phase"then rows[#rows+1]=event.row end end;return rows end
     callback();local rows=phases()
+    check(loading.ticks==2 and loading.state=="mirror_ready"and loading.env.view_ready==nil,"actual client mounts/updates loading around native preparation without inventing owned-view readiness")
     check(#rows==6 and rows[1].api=="presentation_apply"and rows[2].api=="native_scene_assets"and rows[4].api=="native_present"
         and rows[1].edge=="enter"and rows[3].edge=="exit"and rows[6].api=="presentation_apply"and rows[6].edge=="exit","actual native call order is bracketed by six diagnostic edges")
     check(rows[1].epoch==epoch and rows[1].epoch_text=="9223372036854775807"and rows[1].dir_seq==4 and rows[1].frame_seq==10
@@ -294,5 +309,15 @@ do
     check(closed==0,"trace wrappers never introduce endpoint teardown")
     drop();current=source("phase5",16);options.scene();present=nil;proxy.native_present(1234)
     check(#phases()==17,"world-drop clears only diagnostic generation state for the next original world")
+    check(loading.drop_count==1,"actual world-drop callback forgets native loading widgets")
+    loading.refusal="loading view unavailable: exact widget refusal"
+    check(callback()==false and closed==1 and quits==0 and loading.failed,"fatal loading refusal closes the endpoint while leaving the visible error loop alive")
+    check(events[#events].ev=="x_native_client"and events[#events].row.state=="stopped"and events[#events].row.reason==loading.refusal,"loading failure reaches the existing harness status with its exact reason")
+    local ticks,calls,input_count=loading.ticks,present_calls,sends
+    callback();callback()
+    check(loading.ticks==ticks+4 and present_calls==calls and sends==input_count and quits==0,"stopped client continues only loading/WG updates and cannot present or send further input")
+    stop_requested=true
+    check(callback()==true and quits==1 and closed==1,"owned stop file quits the retained error client exactly once without double closing its endpoint")
+    callback();check(quits==1,"repeated owned stop notification cannot repeat native quit")
 end
 print(string.format("native_client: %d checks passed",n))

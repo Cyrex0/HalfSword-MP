@@ -555,104 +555,119 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
 /// Explicit queue acceptance preserves the pinned cursor across backpressure.
 /// No generic broadcast drain can lose a scene part.
 pub(super) async fn flush_scene_stream(socket: &UdpSocket, state: &Arc<ServerState>) {
-    let work = {
-        let mut inner = state.inner.lock().await;
-        let peers = inner
-            .peers
-            .iter()
-            .map(|(a, p)| (*a, p.id))
-            .collect::<Vec<_>>();
-        let Some(n) = inner.native.as_mut() else {
-            return;
+    // Service every peer once per round. Four existing 60 KiB records per peer
+    // bound each flush burst, avoiding a separate flush for every scene part.
+    // A refused queue stops that peer immediately; its original cursor is intact.
+    let mut blocked = std::collections::HashSet::new();
+    for _ in 0..4 {
+        let work = {
+            let mut inner = state.inner.lock().await;
+            let peers = inner
+                .peers
+                .iter()
+                .map(|(a, p)| (*a, p.id))
+                .collect::<Vec<_>>();
+            let Some(n) = inner.native.as_mut() else {
+                return;
+            };
+            let mut work = Vec::new();
+            for (addr, peer) in peers {
+                if blocked.contains(&peer) {
+                    continue;
+                }
+                let Some(stream) = n.streams.get_mut(&peer) else {
+                    continue;
+                };
+                if stream.flushing {
+                    continue;
+                }
+                while stream
+                    .metadata
+                    .front()
+                    .is_some_and(|m| m.next().is_ok_and(|p| p.is_none()))
+                {
+                    stream.metadata.pop_front();
+                }
+                if let Some(metadata) = stream.metadata.front() {
+                    if let Ok(Some(payload)) = metadata.next() {
+                        work.push((
+                            addr,
+                            peer,
+                            Some(metadata.token()),
+                            w::K_DESCRIPTOR_PART,
+                            metadata.ordinal(),
+                            payload,
+                        ));
+                        stream.flushing = true;
+                    }
+                    continue;
+                }
+                if stream
+                    .active
+                    .as_ref()
+                    .is_some_and(|a| !n.bridge.manifest_current(&a.batch.manifest))
+                {
+                    stream.active = None;
+                    if let Some(pending) = stream
+                        .pending
+                        .take()
+                        .filter(|b| n.bridge.manifest_current(&b.manifest))
+                    {
+                        stream.active = Some(w::scene_stream::Sender::new(pending));
+                    }
+                }
+                if let Some(active) = &stream.active {
+                    if let Ok(Some((kind, index, payload))) = active.next() {
+                        work.push((
+                            addr,
+                            peer,
+                            Some(active.batch.manifest.token.clone()),
+                            kind,
+                            index,
+                            payload,
+                        ));
+                        stream.flushing = true;
+                    }
+                }
+            }
+            work
         };
-        let mut work = Vec::new();
-        for (addr, peer) in peers {
-            let Some(stream) = n.streams.get_mut(&peer) else {
+        if work.is_empty() {
+            break;
+        }
+        for (addr, peer, token, kind, index, payload) in work {
+            let Some(mode) = crate::proto::record_mode(kind, index) else {
                 continue;
             };
-            if stream.flushing {
-                continue;
-            }
-            while stream
-                .metadata
-                .front()
-                .is_some_and(|m| m.next().is_ok_and(|p| p.is_none()))
-            {
-                stream.metadata.pop_front();
-            }
-            if let Some(metadata) = stream.metadata.front() {
-                if let Ok(Some(payload)) = metadata.next() {
-                    work.push((
-                        addr,
-                        peer,
-                        Some(metadata.token()),
-                        w::K_DESCRIPTOR_PART,
-                        metadata.ordinal(),
-                        payload,
-                    ));
-                    stream.flushing = true;
-                }
-                continue;
-            }
-            if stream
-                .active
-                .as_ref()
-                .is_some_and(|a| !n.bridge.manifest_current(&a.batch.manifest))
-            {
-                stream.active = None;
-                if let Some(pending) = stream
-                    .pending
-                    .take()
-                    .filter(|b| n.bridge.manifest_current(&b.manifest))
-                {
-                    stream.active = Some(w::scene_stream::Sender::new(pending));
-                }
-            }
-            if let Some(active) = &stream.active {
-                if let Ok(Some((kind, index, payload))) = active.next() {
-                    work.push((
-                        addr,
-                        peer,
-                        Some(active.batch.manifest.token.clone()),
-                        kind,
-                        index,
-                        payload,
-                    ));
-                    stream.flushing = true;
-                }
-            }
-        }
-        work
-    };
-    for (addr, peer, token, kind, index, payload) in work {
-        let Some(mode) = crate::proto::record_mode(kind, index) else {
-            continue;
-        };
-        let accepted = state.net.queue_bytes(
-            addr,
-            mode,
-            hsmp_ipc::wire::message(kind, 0, index, &payload),
-        );
-        let mut inner = state.inner.lock().await;
-        if let Some(stream) = inner.native.as_mut().and_then(|n| n.streams.get_mut(&peer)) {
-            stream.flushing = false;
-            if accepted && kind == w::K_DESCRIPTOR_PART {
-                if let Some(metadata) = stream.metadata.front_mut() {
-                    if Some(&metadata.token()) == token.as_ref() && metadata.ordinal() == index {
-                        metadata.queued();
+            let accepted = state.net.queue_bytes(
+                addr,
+                mode,
+                hsmp_ipc::wire::message(kind, 0, index, &payload),
+            );
+            let mut inner = state.inner.lock().await;
+            if let Some(stream) = inner.native.as_mut().and_then(|n| n.streams.get_mut(&peer)) {
+                stream.flushing = false;
+                if accepted && kind == w::K_DESCRIPTOR_PART {
+                    if let Some(metadata) = stream.metadata.front_mut() {
+                        if Some(&metadata.token()) == token.as_ref() && metadata.ordinal() == index
+                        {
+                            metadata.queued();
+                        }
                     }
-                }
-            } else if accepted {
-                if let Some(active) = stream.active.as_mut() {
-                    if Some(&active.batch.manifest.token) == token.as_ref() {
-                        active.queued(kind, index);
+                } else if accepted {
+                    if let Some(active) = stream.active.as_mut() {
+                        if Some(&active.batch.manifest.token) == token.as_ref() {
+                            active.queued(kind, index);
+                        }
                     }
                 }
             }
-        }
-        drop(inner);
-        if accepted {
-            super::broadcast::send_out(socket, state, state.net.flush(addr)).await;
+            drop(inner);
+            if accepted {
+                super::broadcast::send_out(socket, state, state.net.flush(addr)).await;
+            } else {
+                blocked.insert(peer);
+            }
         }
     }
 }

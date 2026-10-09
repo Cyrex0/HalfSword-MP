@@ -75,6 +75,11 @@ function M.inspect(env)
         local pawn,pawn_why=object(function()return pc:K2_GetPawn()end)
         info.controller_pawn=pawn and name(pawn)or unknown(pawn_why)
         info.controller_pawn_class=pawn and class(pawn)or unknown(pawn_why)
+        local target,target_why=object(function()return pc:GetViewTarget()end)
+        info.view_target=target and name(target)or unknown(target_why)
+        info.view_target_class=target and class(target)or unknown(target_why)
+        info.view_target_full=target and read(function()return target:GetFullName()end,"string",target)or unknown(target_why)
+        info.view_target_hidden=target and read(function()return target.bHidden end,"boolean",target)or unknown(target_why)
     end
     local listed,pawns=pcall(env.find_all,"Willie_BP_C")
     if listed and type(pawns)=="table"and fresh()then

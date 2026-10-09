@@ -10,6 +10,17 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Keep experimental native clients behind an opaque loading screen with actual
+  preparation counts and indeterminate progress for unknown server work.
+  Prepare exact assets across bounded ticks and retain visible errors until
+  the test client is stopped. Owned-view readiness remains under verification.
+- Batch up to four existing scene records per peer per transport flush, keeping
+  original frame cursors, backpressure and complete-frame acknowledgments.
+  This increases delivery capacity without changing precision or record size;
+  real multi-player gameplay throughput remains under verification.
+- Remove repeated source admissions inside callback-free native identity and
+  pointer reads. Keep fresh object checks and full admission around engine
+  callbacks and before returning captured data.
 - Construct fresh native component wrappers from already qualified source
   identities, avoiding repeated global path searches during full model capture.
   Preserve both complete harvests, all fields and identity checks; actual

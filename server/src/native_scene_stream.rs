@@ -609,6 +609,61 @@ pub(crate) mod tests {
         assert_eq!(a.offer(manifest).unwrap().unwrap().stage, ACK_COMPLETE);
     }
     #[test]
+    fn native_scene_stream_preserves_eight_entities_without_reducing_bone_data() {
+        let (mut directory, original_recipes, original_frame) = fixture();
+        let original_entity = directory.entities[0].clone();
+        directory.entities.clear();
+        let mut recipes = Vec::new();
+        let mut frame = original_frame.clone();
+        frame.entities.clear();
+        for slot in 0..8u16 {
+            let mut entity = original_entity.clone();
+            entity.reference.id = u32::from(slot) + 1;
+            entity.owner_peer = 9001 + u32::from(slot);
+            entity.slot = slot;
+            entity.controller = slot as u8;
+            let mut descriptor = (*original_recipes[0]).clone();
+            descriptor.reference = entity.reference;
+            descriptor.slot = slot;
+            let mut rendered = original_frame.entities[0].clone();
+            rendered.reference = entity.reference;
+            // Different native scalar bits per player prevent a duplicated
+            // first-player payload from satisfying the full-scene comparison.
+            rendered.components[0].bones[17][0] = f64::from(slot) + 0.125;
+            directory.entities.push(entity);
+            recipes.push(Arc::new(descriptor));
+            frame.entities.push(rendered);
+        }
+        frame.world = crate::native_service::tests::fixture_world(&directory, 1, false);
+        let expected = encode_scene(&frame, &recipes).unwrap();
+        let batch = Batch::new(&frame, &recipes).unwrap();
+        assert!(expected.len() > 8 * 64 * 1024);
+        let mut assembly = Assembly::default();
+        assembly.offer(batch.manifest.clone()).unwrap();
+        assembly.admit(&directory, &recipes).unwrap();
+        let mut complete = None;
+        for index in (0..batch.manifest.token.parts()).rev() {
+            let part = batch.part(index).unwrap();
+            assert!(part.len() + hsmp_ipc::wire::HDR <= hsmp_net::net::frag::MAX_MESSAGE);
+            complete = assembly.part(&part).unwrap();
+        }
+        let (_, body) = complete.unwrap();
+        assert_eq!(
+            body, expected,
+            "all eight players retain the exact encoded bits"
+        );
+        let decoded = decode_scene(&body, &recipes).unwrap();
+        assert_eq!(decoded, frame);
+        assert!(decoded.entities.iter().all(|e| {
+            e.components.len() == 2 && e.components.iter().all(|c| c.bones.len() == 512)
+        }));
+        eprintln!(
+            "offline_eight_entity_scene_bytes={} parts={}",
+            body.len(),
+            batch.manifest.token.parts()
+        );
+    }
+    #[test]
     fn native_scene_stream_rejects_recipe_bound_revision_part_length_and_digest() {
         let (d, recipes, frame) = fixture();
         let batch = Batch::new(&frame, &recipes).unwrap();

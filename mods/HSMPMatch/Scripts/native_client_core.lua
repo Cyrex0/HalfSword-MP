@@ -85,7 +85,7 @@ function M.new(env)
         if scene.state==2 and scene.fresh~=true then return waiting("native applied scene is stale",scene,own)end
         local applied,why=env.present()
         if applied~=true and why=="client mirror generation"then clear_scope();return waiting(why)end
-        if applied~=true and (why=="no complete current source scene"or why=="no coherent native scene"or why=="native applied scene is stale")then return waiting(why)end
+        if applied~=true and (why=="no complete current source scene"or why=="no coherent native scene"or why=="native applied scene is stale"or why=="native scene assets loading")then return waiting(why)end
         if applied~=true then report("error",why or "source-complete mirror refused",scene,own);self:stop(why or "mirror refused");return false end
         if type(why)~="table"then self:stop("native applied scene unavailable");return false end
         scene=why

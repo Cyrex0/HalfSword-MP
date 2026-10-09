@@ -1,5 +1,104 @@
 # Native full-scene encoding checkpoint
 
+## Current follow-up: visible loading, capture admission and transport
+
+The user now explicitly requests an opaque loading screen with honest progress
+instead of a broken world, and an optimal transport review for8+players.
+Loading implementation runs alongside the narrow admission fix. Unknown server
+preparation uses an indeterminate bar; asset progress uses actual completed/
+total work. Travel/world changes reset scoped widgets/data. Complete models
+and a separate positive owned-view proof are required before exposing gameplay;
+current LIVE/mirror readiness does not prove a camera. Errors remain visible
+until the original operator stop request, with no post-stop inputs.
+
+Root transport flush now permits4 records/peer/INVOCATION in fair rounds,
+blocking each peer immediately on queue refusal and preserving accepted-only
+cursor advancement, original pinned token/ACK and all existing record bounds.
+This is per flush, not per60Hz tick: other dispatch paths also flush. Independent
+code review finds no stream correctness blocker. Focused pinned-stream and
+authenticated UDP delivery checks pass; the latter transfers125362B in265ms
+including cold metadata, offline only. One targeted8-entity full-data fixture
+preserves8192bones in661499B/11parts, exact encoded bits after reorder. This
+proves codec capacity, not8native players, latency bounds or gameplay scaling.
+Full transport architecture review remains separate from this bounded change.
+
+Loading implementation and independent review are closed: loading41/client97
+assertions and syntax6 pass. One exact cooked asset is prepared per tick under
+the original scene generation/world; only its specific pending reason waits.
+The fullscreen opaque viewport widget uses actual completed/total assets and
+marquee for unknown preparation. It remains opaque without positive owned-view
+proof. Widget errors stop Core/input after UI unwind, retain the error loop,
+back off1s/max3 failures per world and log only changed errors. Owned stop quits
+once. Removal failures retain their original widget and use the same fatal
+contract. World drop forgets old UObjects and resets ready/count/retry scalars.
+Actual widget appearance and player meshes remain pending the combined run.
+
+Transport audit is saved in ignored test-results/native-transport-design-20261009.md.
+Keep authenticated UDP/native authority, but separate reliable control/recipes,
+identified input edges/deltas and deadline-driven LIVE snapshots. Current LIVE
+Sender waits per-batch admission/completion ACKs; started ReliableLatest fragment
+work shares a256KiB in-flight window and can hold newer pending frames. These
+are code-proven risks, not this run's measured failure. Eight stress-fixture
+frames at60Hz imply39.7MB/s/client before headers versus16MiB/s congestion max;
+this is a capacity calculation, not an actual workload. Raw-bit delta/full
+recovery and bounded retirement need actual consecutive complete-frame replay
+before implementation choices are certified. Mouse axes2/3 are consumed
+deltas and seven actions are press/release pairs: do not blindly change all
+inputs to Latest or discard/double-apply edges. Native ownership, original
+sample times, full reconstruction and MirrorReady remain required.
+
+The next client isolation observation includes diagnostic-only actual ViewTarget
+name/class/full name/hidden flag, from pinned Engine.hpp GetViewTarget methods.
+Unknown results stay unknown; these copied facts do not establish a camera,
+identify pixels, change isolation acceptance or release the loading screen.
+
+Native batching implementation is frozen and independently reviewed. Source
+scope39 focused tests pass, including last pure owner-field directory mutation
+before Begin publication. Pure original identity/pointer/Outer-path reads keep
+all object checks without nested admission; callback GetWorld/GetOwner/find/
+name/schema/factory paths and operation return boundaries freshly admit.
+No admission ticket survives callbacks or operations. Actual performance is
+pending the combined loading-screen checkpoint and next exact-G0 deployment.
+
+## Latest actual: 98e25c02, fresh wrapper works; startup still too slow
+
+Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/16 warnings and142
+event emitters without violations. Dev push/RequireG0 and all393 deployed
+hashes match98e25c02234e6f60f3182cb3600fe0e401acee75. Actual
+20261009-174612-e7926a-native-host/source2e9de2ac-c828-4f03-a769-18ddcd9fb9f2
+uses supervisor24948/authority32788/clients43940,46776. NativeReady15.325s.
+
+Fresh native wrappers work through both complete recipes without a factory
+refusal. Entity1 capture16.174→37.519s/21.345s, bind37.797s/278ms; entity2
+capture37.798→58.433s/20.635s, bind58.738s/305ms. Both retain49components,
+600bones/38material slots; compact35551/35545 and rawJSON74625/74698 bytes.
+No actual capture speed improvement is established from this run. Native
+render58.822→65.126s/6.304s succeeds; publication refuses final generation
+65.805s after unchanged65s client teardown. Source cleanstop66.723s. No
+published scene, client phases, mirrors, owned view, input or pixel proof.
+Both clients stop cleanly; original pipe drains complete0B without errors.
+
+V2 operator observations16:46:32.346UTC and the later snapshot independently
+qualify both actual visible UnrealWindow handles by original process/class/
+thread, exact880x527 outer placement and positive DWM physical containment on
+the smaller secondary display. Console/debug handles are recorded separately.
+History and immutable snapshots are retained; no OS input or activation.
+Independent all4 originalPIDs absent/Shipping0,20/20 saves unchanged, no
+crashes/unobserved children. Exact692-line authority trace/fullNative and
+operator summary retained. Next optimization must follow measured remaining
+native guard/capture costs, preserving all identity proofs and full data.
+
+Measured nested stages: entity1 mesh6.738s/parent1.283s/static10.983s, including
+bones2.434s/material2.116s/vertexproof2.019s; entity2 mesh6.357s/parent1.314s/
+static10.814s including bones2.288s/material2.126s/vertexproof2.032s. Both
+harvests retain6243 field reads/12844 qualifications/49 hops/4 mesh censuses.
+Each fresh qualifier calls full Scope.resolve before and after allocation;
+native Runtime.verify separately admits before and after each pure identity,
+with repeated directory locks/clones and three base-identity/native-world
+checks. Next bounded batching shares admission only within proven callback-free
+scalar regions, retaining original per-object checks, full callback brackets
+and final generation closure. Net implements; Host independently reviews.
+
 ## Fresh-wrapper capture correction, implementation under review
 
 The Lua capture now consumes a fresh native UObject wrapper returned beside the

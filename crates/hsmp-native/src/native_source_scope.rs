@@ -288,6 +288,9 @@ struct Identity {
 // This trait also lets offline tests exercise the identity/link protocol without
 // pretending the fixture is an engine snapshot.
 trait Engine {
+    fn admit(&self) -> Result<(), String> {
+        Ok(())
+    }
     fn capture(&self, address: u64) -> Result<Identity, String>;
     fn verify(&self, id: Identity) -> Result<(), String>;
     fn world(&self, id: Identity) -> Result<u64, String>;
@@ -307,7 +310,7 @@ trait Engine {
     }
 }
 trait SchemaEngine: Engine {
-    fn schema_name(&self, name: &str) -> u64;
+    fn schema_name(&self, name: &str) -> Result<u64, String>;
     fn property(&self, id: Identity, name: &str) -> Result<reflect::HsmpProp, String>;
     fn parameters(&self, function: Identity) -> Result<(Vec<reflect::HsmpProp>, i32), String>;
     fn read_pointer(&self, id: Identity, property: reflect::HsmpProp) -> Result<u64, String>;
@@ -371,8 +374,8 @@ fn cached_field(
         Some(property) => property,
         None => {
             let property = e.property(id, name)?;
-            if property.name != e.schema_name(name)
-                || property.cls != e.schema_name("ObjectProperty")
+            if property.name != e.schema_name(name)?
+                || property.cls != e.schema_name("ObjectProperty")?
                 || property.size != 8
                 || !(0..=65528).contains(&property.offset)
             {
@@ -415,8 +418,8 @@ fn cached_owner(
             let (properties, size) = e.parameters(function)?;
             if size != 8
                 || properties.len() != 1
-                || properties[0].name != e.schema_name("ReturnValue")
-                || properties[0].cls != e.schema_name("ObjectProperty")
+                || properties[0].name != e.schema_name("ReturnValue")?
+                || properties[0].cls != e.schema_name("ObjectProperty")?
                 || properties[0].offset != 0
                 || properties[0].size != 8
             {
@@ -576,6 +579,7 @@ impl Scope {
         Ok(())
     }
     fn base(&self, e: &impl Engine) -> Result<(), String> {
+        e.admit()?;
         for id in [self.world, self.pawn, self.controller] {
             e.verify(id)?;
         }
@@ -586,7 +590,7 @@ impl Scope {
         {
             return Err("source scope pawn/controller/world changed".into());
         }
-        Ok(())
+        e.admit()
     }
     fn qualify_owner(&self, e: &impl Engine, address: u64) -> Result<(), String> {
         let owner = self
@@ -607,6 +611,14 @@ impl Scope {
             return Err("source scope original owner/root/weapon changed".into());
         }
         Ok(())
+    }
+    fn qualify_owners(&self, e: &impl Engine) -> Result<(), String> {
+        for address in self.owners.keys() {
+            self.qualify_owner(e, *address)?;
+        }
+        // The last owner's hard-link tail is pure. A directory change during
+        // those reads must still refuse before begin stores/returns the scope.
+        e.admit()
     }
     fn keep(
         &mut self,
@@ -721,6 +733,7 @@ impl Scope {
         if !e.path_matches(c.object, &c.path, c.path_witness.as_ref())? {
             return Err("source scope hierarchy changed during native getters".into());
         }
+        e.admit()?;
         Ok(c.object.address)
     }
     fn resolve_object(
@@ -753,9 +766,9 @@ struct Runtime<'a> {
     index: u8,
     schema: Rc<RefCell<SchemaCache>>,
 }
-// The provider callback is a pure read region. Admission is checked once on
-// each side by SplineScopeGuard; every original identity/link/path is still
-// read freshly. This adapter cannot dispatch GetOwner or inspect a new schema.
+// Scalar provider-guard reads stay pure; virtual world getters still use fresh
+// Runtime admission on both sides. Every original identity/link/path is read
+// freshly. This adapter cannot dispatch GetOwner or inspect a new schema.
 struct ProfileGuardEngine<'a, 'b> {
     runtime: &'a Runtime<'b>,
 }
@@ -767,10 +780,7 @@ impl Engine for ProfileGuardEngine<'_, '_> {
         self.runtime.identity(id).map(|_| ())
     }
     fn world(&self, id: Identity) -> Result<u64, String> {
-        let p = self.runtime.identity(id)?;
-        let value = unsafe { (self.runtime.x.world)(p) } as u64;
-        self.runtime.identity(id)?;
-        Ok(value)
+        self.runtime.world(id)
     }
     fn field(&self, id: Identity, name: &str) -> Result<u64, String> {
         cached_field(&self.runtime.schema, self, id, name)
@@ -791,8 +801,8 @@ impl Engine for ProfileGuardEngine<'_, '_> {
     }
 }
 impl SchemaEngine for ProfileGuardEngine<'_, '_> {
-    fn schema_name(&self, name: &str) -> u64 {
-        self.runtime.schema_name(name)
+    fn schema_name(&self, _: &str) -> Result<u64, String> {
+        Err("source profile guard schema-name conversion forbidden".into())
     }
     fn property(&self, _: Identity, _: &str) -> Result<reflect::HsmpProp, String> {
         Err("source profile guard uncached property schema".into())
@@ -920,6 +930,9 @@ impl Runtime<'_> {
     }
 }
 impl Engine for Runtime<'_> {
+    fn admit(&self) -> Result<(), String> {
+        Runtime::admit(self)
+    }
     fn capture(&self, address: u64) -> Result<Identity, String> {
         self.admit()?;
         unsafe {
@@ -952,9 +965,10 @@ impl Engine for Runtime<'_> {
         }
     }
     fn verify(&self, id: Identity) -> Result<(), String> {
-        self.admit()?;
-        self.identity(id)?;
-        self.admit()
+        // Pure original slot/serial/address/full-FName/class/flags reads. The
+        // surrounding operation and each callback still freshly admit; no
+        // admission result/ticket survives a callback or is cached here.
+        self.identity(id).map(|_| ())
     }
     fn world(&self, id: Identity) -> Result<u64, String> {
         self.admit()?;
@@ -1034,15 +1048,17 @@ impl Engine for Runtime<'_> {
         _: &str,
         witness: Option<&PathWitness>,
     ) -> Result<bool, String> {
-        self.admit()?;
-        let result = self.verify_path(id, witness)?;
-        self.admit()?;
-        Ok(result)
+        // The pinned reader copies/verifies the entire original Outer chain
+        // and GPackageName without PE/name conversion or engine callbacks.
+        self.verify_path(id, witness)
     }
 }
 impl SchemaEngine for Runtime<'_> {
-    fn schema_name(&self, name: &str) -> u64 {
-        unsafe { (self.vt.fname)(reflect::wide(name).as_ptr(), 1) }
+    fn schema_name(&self, name: &str) -> Result<u64, String> {
+        self.admit()?;
+        let value = unsafe { (self.vt.fname)(reflect::wide(name).as_ptr(), 1) };
+        self.admit()?;
+        Ok(value)
     }
     fn property(&self, id: Identity, name: &str) -> Result<reflect::HsmpProp, String> {
         self.admit()?;
@@ -1065,13 +1081,11 @@ impl SchemaEngine for Runtime<'_> {
         Ok(result)
     }
     fn read_pointer(&self, id: Identity, prop: reflect::HsmpProp) -> Result<u64, String> {
-        self.admit()?;
         let p = self.identity(id)?;
         unsafe {
             let value =
                 std::ptr::read_unaligned((p as *const u8).add(prop.offset as usize).cast::<u64>());
             self.identity(id)?;
-            self.admit()?;
             Ok(value)
         }
     }
@@ -1562,9 +1576,7 @@ impl Native {
                 }
             }
             pop(L, 1);
-            for address in s.owners.keys() {
-                s.qualify_owner(&e, *address)?;
-            }
+            s.qualify_owners(&e)?;
             STATE.with(|state| {
                 let mut state = state.borrow_mut();
                 state.seq = state
@@ -1620,6 +1632,7 @@ impl Native {
                     lua_pushinteger(L, address as i64);
                     let before = lua_gettop(L);
                     let mut reason = [0u8; 192];
+                    e.admit()?;
                     if factory(L, address, reason.as_mut_ptr().cast(), 192) != 1 {
                         let n = reason.iter().position(|c| *c == 0).unwrap_or(reason.len());
                         return Err(format!(
@@ -1627,6 +1640,7 @@ impl Native {
                             String::from_utf8_lossy(&reason[..n])
                         ));
                     }
+                    e.admit()?;
                     // LUA_TUSERDATA=7 in pinned Lua 5.4; table/light userdata
                     // must never stand in for a fresh UE4SS remote UObject.
                     if lua_gettop(L) != before + 1 || lua_type(L, -1) != 7 {
@@ -1889,6 +1903,12 @@ mod source_scope_tests {
         rename_on_world: std::cell::Cell<u32>,
         vertex_override: std::cell::Cell<bool>,
         override_on_owner: std::cell::Cell<u32>,
+        admissions: std::cell::Cell<u32>,
+        generation_changed: std::cell::Cell<bool>,
+        generation_on_world: std::cell::Cell<u32>,
+        generation_on_owner: std::cell::Cell<u32>,
+        field_calls: std::cell::Cell<u32>,
+        generation_on_field: std::cell::Cell<u32>,
     }
     impl Mock {
         fn row(&self, id: Identity) -> Result<Row, String> {
@@ -1911,6 +1931,14 @@ mod source_scope_tests {
         }
     }
     impl Engine for Mock {
+        fn admit(&self) -> Result<(), String> {
+            self.admissions.set(self.admissions.get() + 1);
+            if self.generation_changed.get() {
+                Err("fixture directory generation changed".into())
+            } else {
+                Ok(())
+            }
+        }
         fn capture(&self, address: u64) -> Result<Identity, String> {
             let id = self
                 .rows
@@ -1925,15 +1953,24 @@ mod source_scope_tests {
             self.row(id).map(|_| ())
         }
         fn world(&self, id: Identity) -> Result<u64, String> {
+            self.admit()?;
             let result = self.row(id)?.world;
             self.world_calls.set(self.world_calls.get() + 1);
             if self.rename_on_world.get() == self.world_calls.get() {
                 self.change(7, |r| r.path.push_str("_renamed_during_world_getter"));
             }
+            if self.generation_on_world.get() == self.world_calls.get() {
+                self.generation_changed.set(true);
+            }
+            self.admit()?;
             Ok(result)
         }
         fn field(&self, id: Identity, name: &str) -> Result<u64, String> {
             let r = self.row(id)?;
+            self.field_calls.set(self.field_calls.get() + 1);
+            if self.generation_on_field.get() == self.field_calls.get() {
+                self.generation_changed.set(true);
+            }
             match name {
                 "Controller" => Ok(3),
                 "Pawn" => Ok(2),
@@ -1944,11 +1981,16 @@ mod source_scope_tests {
             }
         }
         fn owner(&self, id: Identity) -> Result<u64, String> {
+            self.admit()?;
             let r = self.row(id)?;
             *self.owner_calls.borrow_mut() += 1;
             if *self.owner_calls.borrow() == self.override_on_owner.get() {
                 self.vertex_override.set(!self.vertex_override.get());
             }
+            if self.generation_on_owner.get() == *self.owner_calls.borrow() {
+                self.generation_changed.set(true);
+            }
+            self.admit()?;
             Ok(r.owner)
         }
         fn find(&self, path: &str) -> Result<u64, String> {
@@ -1997,6 +2039,12 @@ mod source_scope_tests {
             rename_on_world: std::cell::Cell::new(0),
             vertex_override: std::cell::Cell::new(false),
             override_on_owner: std::cell::Cell::new(0),
+            admissions: std::cell::Cell::new(0),
+            generation_changed: std::cell::Cell::new(false),
+            generation_on_world: std::cell::Cell::new(0),
+            generation_on_owner: std::cell::Cell::new(0),
+            field_calls: std::cell::Cell::new(0),
+            generation_on_field: std::cell::Cell::new(0),
         };
         let s = Scope {
             id: 1,
@@ -2161,6 +2209,75 @@ mod source_scope_tests {
                 }
             )
             .is_err());
+    }
+    #[test]
+    fn source_scope_callback_generation_changes_refuse_before_next_callback_or_factory() {
+        for owner_callback in [false, true] {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            let h = s.keep(&e, 7, 5, path).unwrap();
+            e.world_calls.set(0);
+            let owner_before = *e.owner_calls.borrow();
+            if owner_callback {
+                e.generation_on_owner.set(owner_before + 1);
+            } else {
+                e.generation_on_world.set(1);
+            }
+            assert!(s
+                .resolve_object(
+                    &e,
+                    h,
+                    |_| panic!("changed callback generation cannot construct"),
+                    || panic!("changed callback generation cannot return")
+                )
+                .is_err());
+            assert_eq!(
+                *e.owner_calls.borrow() - owner_before,
+                u32::from(owner_callback)
+            );
+            if !owner_callback {
+                assert_eq!(e.world_calls.get(), 1);
+            }
+        }
+        let (mut s, e) = fixture();
+        let path = e.rows.borrow()[&7].path.clone();
+        let h = s.keep(&e, 7, 5, path).unwrap();
+        let worlds = std::cell::Cell::new(0);
+        assert!(s
+            .resolve_object(
+                &e,
+                h,
+                |_| {
+                    worlds.set(e.world_calls.get());
+                    e.generation_changed.set(true);
+                    Ok(())
+                },
+                || panic!("changed factory generation cannot return")
+            )
+            .is_err());
+        assert_eq!(
+            e.world_calls.get(),
+            worlds.get(),
+            "fresh admission before any post-factory callback"
+        );
+    }
+    #[test]
+    fn source_scope_begin_owner_pure_tail_requires_final_admission() {
+        let (s, e) = fixture();
+        s.qualify_owners(&e).unwrap();
+        let fields = e.field_calls.get();
+        assert_eq!(fields, 3, "complete original owner/root/weapon links");
+        e.generation_on_field.set(fields * 2);
+        assert!(
+            s.qualify_owners(&e).is_err(),
+            "begin cannot publish after final pure-tail generation mutation"
+        );
+        assert_eq!(
+            e.field_calls.get(),
+            fields * 2,
+            "mutation occurs in the final field, after all callbacks"
+        );
+        assert!(e.generation_changed.get());
     }
     #[test]
     fn source_scope_initial_path_lookup_brackets_hierarchy_and_rejects_callback_rename() {
@@ -2752,16 +2869,17 @@ mod source_scope_tests {
         }
     }
     impl SchemaEngine for SchemaFixture {
-        fn schema_name(&self, name: &str) -> u64 {
-            name.bytes()
-                .fold(1u64, |n, b| n.wrapping_mul(31).wrapping_add(b as u64))
+        fn schema_name(&self, name: &str) -> Result<u64, String> {
+            Ok(name
+                .bytes()
+                .fold(1u64, |n, b| n.wrapping_mul(31).wrapping_add(b as u64)))
         }
         fn property(&self, id: Identity, name: &str) -> Result<reflect::HsmpProp, String> {
             self.verify(id)?;
             self.inspections.borrow_mut().2 += 1;
             Ok(reflect::HsmpProp {
-                name: self.schema_name(name),
-                cls: self.schema_name("ObjectProperty"),
+                name: self.schema_name(name)?,
+                cls: self.schema_name("ObjectProperty")?,
                 size: 8,
                 offset: if self.bad_property.get() {
                     65529
@@ -2778,8 +2896,8 @@ mod source_scope_tests {
             self.inspections.borrow_mut().1 += 1;
             Ok((
                 vec![reflect::HsmpProp {
-                    name: self.schema_name("ReturnValue"),
-                    cls: self.schema_name("ObjectProperty"),
+                    name: self.schema_name("ReturnValue")?,
+                    cls: self.schema_name("ObjectProperty")?,
                     size: 8,
                     ..Default::default()
                 }],
@@ -2789,11 +2907,11 @@ mod source_scope_tests {
         fn read_pointer(&self, id: Identity, property: reflect::HsmpProp) -> Result<u64, String> {
             self.verify(id)?;
             self.inspections.borrow_mut().3 += 1;
-            if property.name == self.schema_name("AttachParent") {
+            if property.name == self.schema_name("AttachParent")? {
                 return Ok(self.words.borrow()[&id.address][property.offset as usize / 8]);
             }
             for name in ["Controller", "Pawn", "RootComponent", "Weapon R"] {
-                if property.name == self.schema_name(name) {
+                if property.name == self.schema_name(name)? {
                     return self.engine.field(id, name);
                 }
             }
@@ -3071,6 +3189,74 @@ mod source_scope_tests {
             assert!(e.identity(id).is_ok());
             o.weak = 7 | (92 << 32);
             assert!(e.identity(id).is_err());
+        });
+    }
+    #[test]
+    fn source_scope_runtime_scalar_batch_reads_fresh_without_nested_admissions() {
+        with_native_identity(|e, id, o| {
+            let class_pointer = unsafe { (e.vt.resolve)(id.class_weak) };
+            let class = Identity {
+                weak: id.class_weak,
+                address: id.class_address,
+                name: unsafe { *(e.x.name)(class_pointer) },
+                class_weak: id.class_weak,
+                class_address: id.class_address,
+            };
+            e.schema.borrow_mut().fields.push(FieldSchema {
+                class,
+                name: "RootComponent".into(),
+                property: reflect::HsmpProp {
+                    size: 8,
+                    offset: std::mem::offset_of!(NativeObject, link) as i32,
+                    ..Default::default()
+                },
+            });
+            let _trace = ProfileOperation::begin(reference(1, 2, 3).unwrap(), 4, 5);
+            NAME_READS.with(|n| n.set(0));
+            for value in 1..=128 {
+                o.link = value;
+                e.verify(id).unwrap();
+                assert_eq!(e.field(id, "RootComponent").unwrap(), value);
+            }
+            assert_eq!(
+                PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.admissions),
+                0,
+                "original scalar identities/links do not clone directory repeatedly"
+            );
+            assert!(
+                NAME_READS.with(|n| n.get()) > 128,
+                "original FName/class identities still read freshly"
+            );
+            o.flags = GARBAGE;
+            assert!(e.field(id, "RootComponent").is_err());
+            o.flags = 0;
+            unsafe {
+                (*class_pointer.cast::<NativeObject>()).name += 1;
+            }
+            assert!(
+                e.field(id, "RootComponent").is_err(),
+                "original class layout cannot be reused"
+            );
+            // This Native is deliberately unadmitted. Every callback must
+            // freshly refuse before the panic/no-op native fixture functions.
+            assert!(e.world(id).is_err());
+            assert!(
+                e.schema_name("ReturnValue").is_err(),
+                "name failure propagates, never zero/default"
+            );
+            assert!(e.find("/Script/Engine.ActorComponent").is_err());
+            assert!(e.property(id, "Unknown").is_err());
+            assert!(e.parameters(id).is_err());
+            assert!(e.capture(id.address).is_err());
+            assert!(e.dispatch_owner(id, id, class).is_err());
+            assert_eq!(
+                PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.admissions),
+                7
+            );
+            assert_eq!(
+                PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.events),
+                0
+            );
         });
     }
     #[test]
