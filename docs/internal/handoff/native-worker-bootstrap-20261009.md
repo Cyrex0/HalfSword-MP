@@ -1,5 +1,34 @@
 # Native authority bootstrap checkpoint
 
+## Latest actual: 8b775c5d, complete source scene; client exit open
+
+G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings; dev push,
+RequireG0 and all393 deployed hashes match8b775c5d780f43ac87689351c9ae9e8fc446f79d.
+Actual20261009-164645-8fb437-native-host/source6ff89559-bdd2-4e8f-b12b-a160f9f2c227
+accepts BOTH49-component/600-bone/38-material recipes at34.498s/51.536s. Captures
+17.161s/16.803s; first parent closure1.064s versus5.593s prior. Both harvests
+and complete censuses remain. Total capture reduction includes run variation;
+attribute only the measured parent-stage difference to that mechanism.
+
+First complete source scene succeeds: core73ms, render5.344s, publish591ms,
+publication57.545s/sourceevidence sampled1/frame1. Client1 original23416 exits
+known code3 beforelive; last own event55.381s wait_scene, no attributed error/
+panic/stack. Both Native client traces have startup only; engine logs absent/
+empty. Net implements originalclient stdout/stderr async drains/backtraces;
+no guessed failure site. No mirrors/visible models/owned camera/input proof.
+
+Separate source latch confirmed: pre-capture wall interval becomes ~6s physics
+dt and fails native0..1000ms; only-success update then keeps rejecting. Reviewed
+Lua fix separates every-attempt33ms scheduling from actual capture ts_ms and
+uses existing explicitunknown physics step0 until native step is qualified.
+No age/tolerance changes. Worker370/source295/syntax2 PASS, independent review
+closed; both files frozen. Originalclient stdout/stderr/backtrace harness passes
+50 focused checks/syntax and independent review; both harness files frozen.
+Next step is combined clean dev G0/RequireG0 deployment and actual error trace.
+
+Windows qualified fully secondary; cleanstop58.844s. Independent all4PIDs gone,
+20/20 career saves unchanged, no new crash directories/unobserved children.
+
 ## Latest actual: 67175710, roster fixed; capture speed open
 
 Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings; dev push,

@@ -10,6 +10,14 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Separate experimental source sampling retries from capture timestamps and
+  represent an unqualified physics timestep as unknown. Preserve original
+  frame freshness while allowing sampling to resume after slow captures.
+- Preserve original native-client stdout/stderr and backtraces during tests,
+  draining both streams asynchronously so failures can be diagnosed without
+  blocking the client or changing its readiness limits.
+- Record bounded client startup phases around asset preparation and native
+  presentation, keeping diagnostic events separate from readiness and input.
 - Reuse already admitted attachment-parent identities during experimental
   model capture, avoiding duplicate setup while retaining fresh native
   identity checks and both complete harvests. Actual capture speed and model

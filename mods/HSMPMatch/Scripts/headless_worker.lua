@@ -45,7 +45,7 @@ function M.start()
     local stopped, hosted, last_key, last_state, last_report = false, false, nil, nil, -1e9
     local cancel_reason, cancel_fault, last_cancel_poll = nil, nil, -1e9
     local bootstrap, controller, loop_handle, source_lifecycle
-    local sample_configured, frame_seq, sample_at, first_ai_name = false, 0, -1e9, nil
+    local sample_configured, frame_seq, sample_attempt_at, first_ai_name = false, 0, -1e9, nil
     local entity_bindings = {}
     local metrics = { sample_ok=0, sample_refused=0, dispatch=0, active_dispatch=0, active_pc0=0, active_pc1=0, input_refused=0, sample_min_ms=nil, sample_max_ms=0, last_input_error=nil, last_sample_error=nil, roster_wait=nil }
     local function admitted()
@@ -532,12 +532,14 @@ function M.start()
             render=native_mode~="diagnostic" and N.native_capture_render or nil,allow_core_only=native_mode=="diagnostic",
             refresh=function()phase_cycle=phase_cycle+1;if source_lifecycle then source_lifecycle.refresh() end end,
             invalidate=function()if hosted and N.host_world_changed then N.host_world_changed() end;IPC.world_leaving()end},token,
-            {epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq,ts_ms=now_ms,dt_ms=sample_at > 0 and now_ms-sample_at or 0,actors=actors})
+            -- Pose step describes the sender's native physics timestep. No
+            -- qualified engine timestep is captured here; zero means unknown.
+            -- Keep the actual capture timestamp independent of scheduling.
+            {epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq,ts_ms=now_ms,dt_ms=0,actors=actors})
         local elapsed = os.clock()*1000-before
         if ok == true then
             metrics.sample_min_ms = math.min(metrics.sample_min_ms or elapsed,elapsed)
             metrics.sample_max_ms = math.max(metrics.sample_max_ms,elapsed)
-            sample_at = now_ms
         end
         return ok == true, why
     end
@@ -548,7 +550,7 @@ function M.start()
         first_ai_name, entity_bindings = nil, {}
         phase_seen, phase_count, phase_limited, phase_cycle = {}, 0, false, 0
         if source_lifecycle then source_lifecycle.drop() end
-        sample_at = -1e9
+        sample_attempt_at = -1e9
         controller:drop()
         if hosted and N.host_world_changed then N.host_world_changed() end
         IPC.world_leaving()
@@ -596,7 +598,11 @@ function M.start()
                     if cancel_reason then return end
                     for _, frame in ipairs(N.host_inputs(32) or {}) do controller:receive(frame) end
                     source_phase(context,"native_control","exit")
-                    if os.clock()*1000-sample_at >= 33 then
+                    local attempt_at=os.clock()*1000
+                    if attempt_at-sample_attempt_at >= 33 then
+                        -- Failed captures and pending roster ACKs are attempts
+                        -- too. Never schedule from the last successful publish.
+                        sample_attempt_at=attempt_at
                         local sampled, why = sample_world(directory)
                         if cancel_reason then return end
                         if sampled then metrics.sample_ok=metrics.sample_ok+1;metrics.last_sample_error=nil;metrics.roster_wait=nil

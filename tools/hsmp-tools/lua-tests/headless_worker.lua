@@ -760,7 +760,7 @@ end
 -- replacement lifecycle that returns the caller's stale directory.
 do
     local callback,clock,queued,captures,describes,samples,renders,publishes= nil,1,0,0,0,0,0,0
-    local events,logs={},{}
+    local events,logs,sample_args,directory_reads={},{},{},0
     local directory={epoch=44,seq=6,entities={
         {epoch=44,id=1,incarnation=5,slot=0,kind=0,controller=0,owner_peer=11,team_known=false},
         {epoch=44,id=2,incarnation=5,slot=1,kind=0,controller=1,owner_peer=12,team_known=false}}}
@@ -785,7 +785,7 @@ do
     local wg={key=token.key,drops=0,check=function()return true end,settled=function()return true end,
         token=function()return token end,same=function(t)return t==token end,world=function()return world end,on_drop=function()end}
     local N={worker_input=function()return true end,host_start=function()return true end,
-        host_directory=function()return directory end,host_inputs=function()return {}end,sample_config=function()return true end,
+        host_directory=function()directory_reads=directory_reads+1;return directory end,host_inputs=function()return {}end,sample_config=function()return true end,
         native_source_roster_facts=function(meta,bindings)
             queued=queued+1
             T.check(meta.dir_seq==6 and #bindings==2 and bindings[1].pawn==21 and bindings[2].pawn==22,
@@ -802,13 +802,16 @@ do
         end,
         native_sample_world=function(args)
             samples=samples+1
-            T.check(args.dir_seq==7 and args.frame_seq==1 and #args.actors==2
+            sample_args[#sample_args+1]=args
+            T.check(args.dir_seq==7 and args.frame_seq==samples and #args.actors==2
                 and args.actors[1].incarnation==5 and args.actors[2].controller==12,
                 "actual canonical sampler receives the ACK directory rather than stale caller generation")
+            T.check(args.dt_ms==0,"actual worker passes explicit unknown native physics step, never capture/publication elapsed time")
+            if samples==3 then return nil,"intermittent native sample refusal"end
             return true
         end,
-        native_capture_render=function()renders=renders+1;return true end,
-        native_commit_world=function()publishes=publishes+1;return true end}
+        native_capture_render=function()renders=renders+1;if renders==1 then clock=clock+5.344 end;return true end,
+        native_commit_world=function()publishes=publishes+1;if publishes==1 then clock=clock+0.591 end;return true end}
     for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve",
         "native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state"})do
         N[name]=function()error("fixture adapter never borrows a native component",0)end
@@ -832,7 +835,10 @@ do
         dofile=function()error("optional module absent")end,FindAllOf=function()return {}end,
         LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 85 end},{__index=_G})
     assert(loadfile("mods/HSMPMatch/Scripts/headless_worker.lua","t",fake))().start()
-    callback();clock=2;callback()
+    callback();local pending_reads=directory_reads;clock=1.016;callback()
+    T.check(queued==1 and captures==0 and directory_reads==pending_reads+1,
+        "pending roster attempts retain the33ms schedule without another lifecycle ACK probe on the16ms loop")
+    clock=2;callback()
     for _,line in ipairs(logs)do assert(not line:find("worker stopped:",1,true),line)end
     T.check(queued==1 and captures==0 and describes==0 and samples==0 and events[#events].refused==0
         and events[#events].sampled==0 and events[#events].reason=="",
@@ -843,6 +849,20 @@ do
     clock=3;callback()
     T.check(captures==2 and describes==2 and samples==1 and renders==1 and publishes==1
         and events[#events].sampled==1 and events[#events].refused==0,"actual worker publishes one coherent frame after both ACK-qualified recipes")
+    T.check(sample_args[1].ts_ms==3000 and clock==8.935,
+        "slow5.935s native rendering/publication leaves the original captured timestamp unchanged")
+    callback()
+    T.check(samples==2 and renders==2 and publishes==2 and sample_args[2].ts_ms>sample_args[1].ts_ms
+        and sample_args[2].dt_ms==0,"the next original source sample survives slow publication with monotonic timestamp and unknown physics step")
+    clock=clock+0.016;callback()
+    T.check(samples==2,"success attempt scheduling remains33ms and is independent of native step/timestamps")
+    clock=clock+0.018;callback()
+    T.check(samples==3 and renders==2 and publishes==2,"intermittent native failure cannot publish a partial frame")
+    clock=clock+0.016;callback()
+    T.check(samples==3,"a failed sample advances the attempt clock instead of busy retrying")
+    clock=clock+0.018;callback()
+    T.check(samples==4 and renders==3 and publishes==3 and sample_args[4].ts_ms>sample_args[3].ts_ms
+        and sample_args[4].dt_ms==0,"next scheduled sample after failure resumes without a timestep latch or invented clamp")
 end
 
 do

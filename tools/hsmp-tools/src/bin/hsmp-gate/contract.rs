@@ -93,6 +93,8 @@ pub const CONTRACT: &[Entry] = &[
         "component_reads", "parent_hops", "qualifications"]),
     e("x_native_client", L, &["state", "reason"],
       &["epoch", "dir_seq", "frame_seq", "own_entity", "own_incarnation"]),
+    e("x_native_client_phase", L, &["api", "edge"],
+        &["ok", "reason", "epoch", "epoch_text", "dir_seq", "frame_seq", "own_entity", "own_incarnation"]),
     e("x_native_client_isolation", L, &["ok", "reason"],
       &["world_valid", "census_complete", "willies", "world", "game_mode", "game_mode_class",
         "game_mode_options", "controller_valid", "controller", "controller_class", "controller_pawn",

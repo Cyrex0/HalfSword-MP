@@ -35,10 +35,29 @@ function M.start()
     local function now()return N.now_us()/1000000 end
     local each=Arrays.each
     local mapping,last_key,loop
-    local view=Presentation.new({native=N,world=function()if not WG.check()or not WG.settled()then return nil end;return WG.world(),WG.token()end,same=WG.same})
+    local phase_context,phase_generation,phase_seen=nil,nil,{}
+    local function phase(api,edge,context,ok,reason)
+        if not context then return end
+        if phase_generation~=context.generation then phase_generation=context.generation;phase_seen={}end
+        local key=api..":"..edge;if phase_seen[key]then return end;phase_seen[key]=true
+        if HL then HL.event("x_native_client_phase",{api=api,edge=edge,ok=ok,reason=reason or"",epoch=context.epoch,
+            epoch_text=math.type(context.epoch)=="integer"and tostring(context.epoch)or"unknown",dir_seq=context.dir_seq,
+            frame_seq=context.frame_seq,own_entity=context.own_entity,own_incarnation=context.own_incarnation})end
+    end
+    local function traced(api,fn,...)
+        local context=phase_context;phase(api,"enter",context)
+        local result=table.pack(fn(...))
+        phase(api,"exit",context,result[1]~=nil and result[1]~=false,type(result[2])=="string"and result[2]:sub(1,256)or"")
+        return table.unpack(result,1,result.n)
+    end
+    local native={native_clear_mirrors=N.native_clear_mirrors}
+    for _,api in ipairs({"native_scene_assets","native_present"})do
+        native[api]=function(...)return traced(api,N[api],...)end
+    end
+    local view=Presentation.new({native=native,world=function()if not WG.check()or not WG.settled()then return nil end;return WG.world(),WG.token()end,same=WG.same})
     local suppress=Suppression.new({role=Role,WG=WG,UEHelpers=UEH,find=StaticFindObject,find_all=FindAllOf,FName=FName,each=each,
         retire_native=N.native_retire_actor,probe_native=N.native_probe_retirement,clear_native=N.native_forget_retirements,scope_native=N.native_actor_scope})
-    WG.on_drop(function()mapping=nil;last_key=nil;suppress:drop();view:drop();IPC.world_leaving()end,"native_client")
+    WG.on_drop(function()mapping=nil;last_key=nil;phase_context=nil;phase_generation=nil;phase_seen={};suppress:drop();view:drop();IPC.world_leaving()end,"native_client")
     local env=D.make_ue_env({WG=WG,UEHelpers=UEH,log=log,SG=SG,state_dir=state_dir})
     local controller,isolation_token,isolation_at,isolation_report
     local function isolated()
@@ -67,7 +86,13 @@ function M.start()
         isolation_token=token;isolation_at=now()+1
         return true
     end
-    controller=Core.new({now=now,link=N.native_client_status,directory=N.host_directory,scene=N.native_scene,
+    controller=Core.new({now=now,link=N.native_client_status,directory=N.host_directory,scene=function()
+        local scene=N.native_scene();phase_context=nil
+        if scene then for _,own in ipairs(scene.entities or{})do if own.kind==0 and own.owner_peer==scene.peer_id then
+            phase_context={generation=scene.generation,epoch=scene.epoch,dir_seq=scene.dir_seq,frame_seq=scene.frame_seq,own_entity=own.id,own_incarnation=own.incarnation};break
+        end end end
+        return scene
+    end,
         world=function()if not WG.check()then return nil end;return{ready=WG.settled(),arena=WG.short(),key=WG.key}end,
         travel=function(arena)
             for _,row in ipairs({{"Free Mode Activated",false},{"FreeMode Multiplayer",false},{"Progression Multiplayer",false},{"Free Mode Foes Amount",0}})do
@@ -75,7 +100,7 @@ function M.start()
             end
             view:clear();return D.native_client_travel(env,arena)
         end,
-        isolated=isolated,present=function()return view:apply()end,clear=function()view:clear()end,
+        isolated=isolated,present=function()return traced("presentation_apply",view.apply,view)end,clear=function()view:clear()end,
         close=function()N.host_stop();env.quit_native_worker()end,send=N.native_input,
         input=function(scene,own)
             if brain then return Input.ai(scene,own,now())end

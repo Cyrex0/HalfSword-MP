@@ -82,6 +82,8 @@ function Native-ClientLaunch([int]$index, [int]$port) {
     $start.WorkingDirectory = $Win64
     $start.UseShellExecute = $false
     $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
     $x = if ($index -eq 1) { -1760 } else { -880 }
     $start.Arguments = "-nosound -unattended -windowed -ForceRes -ResX=880 -ResY=527 -WinX=$x -WinY=0"
     $values = @{
@@ -90,9 +92,72 @@ function Native-ClientLaunch([int]$index, [int]$port) {
         HSMP_NATIVE_NICK="native-client-$index"; HSMP_NATIVE_CLIENT_AI="1"
         HSMP_NATIVE_PARENT_PID="$PID"; HSMP_NATIVE_STOP_FILE=$stop
         HSMP_NATIVE_PROBE="0"; HSMP_NATIVE_CALLER_PROBE="0"; HSMP_DEV_CALLER_PROBE="0"
+        RUST_BACKTRACE="1"
     }
     foreach ($key in $values.Keys) { $start.EnvironmentVariables[$key] = $values[$key] }
     return @{ start=$start; state=$state; stop=$stop; index=$index }
+}
+function Start-NativeClientOutput($process, [int]$index) {
+    $capture = @{ stdout_path=(Join-Path $Run "client$index.stdout.log"); stderr_path=(Join-Path $Run "client$index.stderr.log") }
+    $capture.cancel = New-Object Threading.CancellationTokenSource
+    try {
+        $capture.stdout_file = New-Object IO.FileStream($capture.stdout_path, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::Read, 81920, [IO.FileOptions]::Asynchronous)
+        $capture.stderr_file = New-Object IO.FileStream($capture.stderr_path, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::Read, 81920, [IO.FileOptions]::Asynchronous)
+        $capture.stdout_source = $process.StandardOutput.BaseStream
+        $capture.stderr_source = $process.StandardError.BaseStream
+        # These are .NET tasks, not PowerShell callbacks/runspaces. Drain both
+        # immediately; neither a full stdout nor stderr pipe can block its peer.
+        $capture.stdout_task = $capture.stdout_source.CopyToAsync($capture.stdout_file, 81920, $capture.cancel.Token)
+        $capture.stderr_task = $capture.stderr_source.CopyToAsync($capture.stderr_file, 81920, $capture.cancel.Token)
+        return $capture
+    } catch {
+        $capture.cancel.Cancel()
+        foreach ($stream in @($capture.stdout_source,$capture.stderr_source,$capture.stdout_file,$capture.stderr_file)) {
+            if ($stream) { $stream.Dispose() }
+        }
+        $capture.cancel.Dispose()
+        throw
+    }
+}
+function Complete-NativeClientOutput($client, [int]$DrainMilliseconds = 2000, [switch]$Cleanup) {
+    if (-not $client.output) { return $null }
+    $capture = $client.output
+    if ($capture.completed_record) { return $capture.completed_record }
+    [void]$client.process.Refresh()
+    $exited = $client.process.HasExited -eq $true
+    # Keep streams/tasks alive for exactly the original process lifetime.
+    # Cleanup may cancel an incomplete capture, but cannot claim complete EOF.
+    if (-not $exited -and -not $Cleanup) { return $null }
+    $tasks = [Threading.Tasks.Task[]]@($capture.stdout_task,$capture.stderr_task)
+    $errors = @()
+    $drained = $false
+    try { $drained = [Threading.Tasks.Task]::WaitAll($tasks, $DrainMilliseconds) }
+    catch { $errors += $_.Exception.GetBaseException().Message }
+    $cancelled = -not $drained
+    if ($cancelled) {
+        $capture.cancel.Cancel()
+        foreach ($stream in @($capture.stdout_source,$capture.stderr_source)) { try { $stream.Dispose() } catch {} }
+        try { [void][Threading.Tasks.Task]::WaitAll($tasks, 250) } catch {}
+    }
+    foreach ($task in $tasks) {
+        if ($task.IsFaulted) { $errors += $task.Exception.GetBaseException().Message }
+        if ($task.IsCanceled) { $errors += "output copy cancelled" }
+    }
+    foreach ($stream in @($capture.stdout_file,$capture.stderr_file)) {
+        try { $stream.Flush() } catch { $errors += $_.Exception.GetBaseException().Message }
+        try { $stream.Dispose() } catch { $errors += $_.Exception.GetBaseException().Message }
+    }
+    foreach ($stream in @($capture.stdout_source,$capture.stderr_source)) { try { $stream.Dispose() } catch {} }
+    $capture.cancel.Dispose()
+    $capture.completed_record = [ordered]@{
+        pid=$client.record.pid; start_ticks=$client.record.start_ticks; observed_from="original_process_handle"
+        original_exited=$exited; complete=($exited -and $drained -and -not $errors.Count); cancelled=$cancelled
+        stdout_path=$capture.stdout_path; stderr_path=$capture.stderr_path
+        stdout_bytes=(Get-Item -LiteralPath $capture.stdout_path).Length; stderr_bytes=(Get-Item -LiteralPath $capture.stderr_path).Length
+        errors=$errors
+    }
+    Write-Json (Join-Path $Run "client$($client.index).output.json") $capture.completed_record
+    return $capture.completed_record
 }
 function Start-NativeClient([int]$index, [int]$port) {
     $launch = Native-ClientLaunch $index $port
@@ -100,7 +165,8 @@ function Start-NativeClient([int]$index, [int]$port) {
     $record = Native-Record $process "native_client$index" $GameExe
     [void]$tracked.Add($record)
     Write-Json (Join-Path $Run "processes.json") @($tracked)
-    return @{ process=$process; record=$record; state=$launch.state; stop=$launch.stop; index=$index }
+    $output = Start-NativeClientOutput $process $index
+    return @{ process=$process; record=$record; state=$launch.state; stop=$launch.stop; index=$index; output=$output }
 }
 function Native-ClientExit($client, [string]$phase) {
     if ($client.exit_record) { return $client.exit_record }
@@ -124,6 +190,12 @@ function Native-ClientExit($client, [string]$phase) {
         $exit.exit_code_hex = "0x{0:X8}" -f $bits
         $exit.exit_code_known = $true
     } catch { $exit.exit_code_error = $_.Exception.Message }
+    $output = Complete-NativeClientOutput $client
+    if ($output) {
+        $exit.stdout_path = $output.stdout_path
+        $exit.stderr_path = $output.stderr_path
+        $exit.output_complete = $output.complete
+    }
     $client.exit_record = $exit
     # Harness evidence lives outside HSMP_STATE_DIR's file allow-list.
     Write-Json (Join-Path $Run "client$($client.index).exit.json") $exit
@@ -279,6 +351,10 @@ finally {
         [void]$supervisor.WaitForExit(12000)
     }
     foreach ($entry in @($tracked)) { if (Native-SameProcess $entry) { [void](Hsmp-StopRecord $entry) } }
+    foreach ($client in $clients) {
+        try { [void](Complete-NativeClientOutput $client -Cleanup) }
+        catch { if (-not $failure) { $failure = "Native client $($client.index) output capture cleanup failed: $($_.Exception.Message)" } }
+    }
     if (Test-Path -LiteralPath $Run) {
         $after = Saves-Snapshot
         $savesMatch = $null -ne $baseline -and (($baseline | ConvertTo-Json -Compress) -ceq ($after | ConvertTo-Json -Compress))

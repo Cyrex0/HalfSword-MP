@@ -225,4 +225,74 @@ do
     check(Director.native_client_travel(env,"Map_Arena_Yard")==true and options=="game=/Script/Engine.GameModeBase"and console==1,"native OpenLevel receives the exact mandatory option")
     FName,FString=old_name,old_string
 end
+-- Exercise actual client startup, Core and Presentation with copied native DTOs.
+-- Phase records are diagnostics, never readiness or receipt-age evidence.
+do
+    local callback,drop,options,proxy,events,sends,closed=nil,nil,nil,nil,{},0,0
+    local epoch=9223372036854775807
+    local function source(generation,frame)
+        return{epoch=epoch,dir_seq=4,frame_seq=frame,state=1,peer_id=9,generation=generation,fresh=true,
+            entities={{epoch=epoch,id=1,incarnation=3,owner_peer=9,kind=0},{epoch=epoch,id=2,incarnation=2,owner_peer=10,kind=0}}}
+    end
+    local current=source("phase4",10)
+    local directory={epoch=epoch,seq=4,state=1,arena="Map_Arena_Yard"}
+    local world={GetAddress=function()return 1234 end}
+    local wg={key="world1",check=function()return true end,settled=function()return true end,
+        short=function()return directory.arena end,world=function()return world end,token=function()return 7 end,
+        same=function(token)return token==7 end,on_drop=function(fn)drop=fn end}
+    local present,assets_calls,present_calls=nil,0,0
+    local native={now_us=function()return 1000000 end,client_start=function()return true end,
+        native_client_status=function()return{connected=true}end,host_directory=function()return directory end,
+        native_scene=function()return current end,native_clear_mirrors=function()return true end,
+        native_scene_assets=function(...)assets_calls=assets_calls+1;return{},current.generation,... end,
+        native_present=function(...)present_calls=present_calls+1;if present then return present(...)end;return true,current end,
+        native_input=function()sends=sends+1;return true end,host_stop=function()closed=closed+1 end}
+    local ActualPresentation=dofile("mods/HSMPAvatars/Scripts/native_presentation.lua")
+    local modules={hsmp_runtime_role={presentation=function()return true end},UEHelpers={},
+        hsmp_wg={new=function()return wg end},hsmp_ipc={N=native,init=function()end,frame=function()end,world_ready=function()end,world_leaving=function()end},
+        hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},
+        director={make_ue_env=function()return{quit_native_worker=function()end}end},
+        native_client_core={new=function(env)options=env;return Core.new(env)end},
+        native_client_input={ai=function()return{0,0,0,0,0,0,0,0},0 end},native_client_array=Arrays,
+        native_client_isolation={inspect=function()return true,nil,{}end},
+        native_client_suppression={new=function()return{run=function()return true,nil,{drivers=0,gear=0,ai=0}end,drop=function()end}end},
+        native_presentation={new=function(env)proxy=env.native;return ActualPresentation.new(env)end},
+        hsmp_log={init=function()end,event=function(ev,row)events[#events+1]={ev=ev,row=row}end}}
+    local fake=setmetatable({require=function(name)assert(modules[name],name);return modules[name]end,
+        os={getenv=function(key)if key=="HSMP_NATIVE_CLIENT_AI"then return"1"end end},print=function()end,
+        LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 86 end},{__index=_G})
+    check(assert(loadfile("mods/HSMPMatch/Scripts/native_client.lua","t",fake))().start()==true,"actual client starts with native phase diagnostics")
+    local function phases()local rows={};for _,event in ipairs(events)do if event.ev=="x_native_client_phase"then rows[#rows+1]=event.row end end;return rows end
+    callback();local rows=phases()
+    check(#rows==6 and rows[1].api=="presentation_apply"and rows[2].api=="native_scene_assets"and rows[4].api=="native_present"
+        and rows[1].edge=="enter"and rows[3].edge=="exit"and rows[6].api=="presentation_apply"and rows[6].edge=="exit","actual native call order is bracketed by six diagnostic edges")
+    check(rows[1].epoch==epoch and rows[1].epoch_text=="9223372036854775807"and rows[1].dir_seq==4 and rows[1].frame_seq==10
+        and rows[1].own_entity==1 and rows[1].own_incarnation==3,"phase context preserves original integer epoch and owned reference without raw generation or pointers")
+    check(events[#events].ev=="x_native_client"and events[#events].row.state=="mirror_ready"and sends==0,"phase diagnostics cannot claim live input or replace actual native readiness")
+    current.frame_seq=11;for _=1,20 do callback()end
+    check(#phases()==6 and assets_calls==21 and present_calls==21,"same-generation frames/retries still call native operations without per-frame trace growth")
+    current=source("phase5",12)
+    local original=current
+    present=function(address)assert(address==1234);current=source("phase5",13);return true,original end
+    callback();rows=phases()
+    check(#rows==12 and rows[10].frame_seq==12 and rows[11].frame_seq==12 and rows[12].frame_seq==12,
+        "post-call trace preserves pre-call frame identity when a newer same-generation scene arrives")
+    check(original.frame_seq==12 and original.fresh==true,"diagnostics never rewrite original applied scene or freshness")
+    local tuple=table.pack(proxy.native_scene_assets(nil,false,"tail"))
+    check(tuple.n==5 and tuple[1]and tuple[2]=="phase5"and tuple[3]==nil and tuple[4]==false and tuple[5]=="tail","native asset wrapper preserves variadic arguments and nil return holes")
+    current=source("phase6",14);options.scene()
+    present=function(...)local args=table.pack(...);assert(args.n==3 and args[1]==1234 and args[2]==nil and args[3]==false);return nil,string.rep("refusal",60),nil,false end
+    tuple=table.pack(proxy.native_present(1234,nil,false));rows=phases()
+    check(tuple.n==4 and tuple[1]==nil and #tuple[2]==420 and tuple[3]==nil and tuple[4]==false,"native refusal tuple passes through unchanged")
+    check(rows[#rows].ok==false and #rows[#rows].reason==256 and #phases()==14,"only diagnostic refusal text is bounded while the original error remains lossless")
+    for _=1,20 do proxy.native_present(1234,nil,false)end
+    check(#phases()==14,"failed first present retries cannot grow diagnostics within one generation")
+    current=source("phase7",15);options.scene();present=function()error("original native exception",0)end
+    local ok,why=pcall(proxy.native_present,1234);rows=phases()
+    check(not ok and why=="original native exception"and rows[#rows].api=="native_present"and rows[#rows].edge=="enter",
+        "original exception remains uncaught and leaves its exact unmatched native entry")
+    check(closed==0,"trace wrappers never introduce endpoint teardown")
+    drop();current=source("phase5",16);options.scene();present=nil;proxy.native_present(1234)
+    check(#phases()==17,"world-drop clears only diagnostic generation state for the next original world")
+end
 print(string.format("native_client: %d checks passed",n))

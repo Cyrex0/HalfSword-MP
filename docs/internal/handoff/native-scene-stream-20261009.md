@@ -1,5 +1,73 @@
 # Native full-scene encoding checkpoint
 
+## Latest actual: 8b775c5d, first complete source scene
+
+Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings, dev push
+and clean RequireG0 deployment; all393 hashes match8b775c5d780f43ac87689351c9ae9e8fc446f79d.
+Run20261009-164645-8fb437-native-host uses supervisor6844/authority2656/clients
+23416,11364, source6ff89559-bdd2-4e8f-b12b-a160f9f2c227. First original
+PID/start/exe/HWND helper fits both880x527 windows
+fully secondary. NativeReady16.399s; roster2 facts17.016→17.051s, dir6→7.
+
+Entity1 captures17.079→34.240s (17.161s), NativeBind34.498s/258ms succeeds;
+entity2 captures34.499→51.302s (16.803s), NativeBind51.536s/234ms succeeds.
+Both keep49components/600bones/38materials in BOTH harvests, dir7/incarnation5.
+Compact35551/35545 bytes, rawJSON74730/74725. First parent closure1.064s versus
+5.593s previously, measured reduction4.529s. Total first capture improves8.436s;
+other stage changes include run variation and are not all attributed to reuse.
+Exact fewer-keep count is fixture evidence only; no runtime keep counter exists.
+
+Canonical core51.537→51.610s/73ms succeeds; native render51.610→56.954s/5.344s
+succeeds; complete canonical publish56.954→57.545s/591ms succeeds. Source
+evidence57.548s reports sampled1/refused0/frame1, active inputs[0,0]. This is the
+FIRST complete published source scene, not verified client delivery or meshes.
+
+Client1 original PID23416 exits with known code3, observed15:47:44.557UTC before
+live verification. Its own last event55.381s is wait_scene; client2 last55.525s
+also wait_scene. Native logs for both clients contain only startup registrations;
+shared UE4SS has no attributable fatal/assert/panic/stack. Engine logs are absent
+or empty. Exact exit cause remains unknown; next harness captures original client
+stdout/stderr with async drains and client-only backtraces. No fabricated crash
+site or native-create proof. No mirror/readiness/input/visible-model evidence.
+
+Original-client diagnostics implementation is independently reviewed and frozen.
+Both output pipes drain through .NET CopyToAsync immediately, retain original
+held-process identity, persist processes.json before setup, and complete only
+after true EOF/original exit; bounded incomplete cancellation is reported.
+Files are outside state directories, with client-only RUST_BACKTRACE=1.
+Focused harness50 checks/syntax pass, including saturated524288B pipes each,
+final error marker/known exit3, live lifetime and cancellation behavior.
+
+NativeClient startup diagnostics add six edges once per stable original scene
+generation: outer presentation_apply and exact native_scene_assets/native_present
+dot calls. The distinct x_native_client_phase contract carries only copied
+epoch/epoch_text/directory/frame/own reference, api/edge/optional result and
+reason bounded256. It does not log pointers/generation bytes, poll a new scene,
+change status/readiness/input or refresh receipts. Variadic native results,
+nil/false holes and exceptions retain original semantics; an exception leaves
+the matching entry as evidence. NativeClient87 assertions/syntax2 pass; independent
+review closes21 same-generation frames/retries, new generation and world reset.
+
+A separate confirmed sampling latch follows: worker records pre-Boundary wall
+time only on success; after5.935s render/publication its next dt_ms exceeds native
+sample.rs0..1000ms limit. Failed attempts never advance that clock, yielding39
+sample-step refusals by58.556s. Pose v2 documents this field as PHYSICS step,
+with0 explicitly unknown; capture spacing is not physics time. Next correction
+separates33ms attempt scheduling from real source timestamps and explicitly
+represents unqualified physics step as unknown, without age renewal or clamping.
+Native physics-step qualification remains a distinct open fidelity item.
+
+Clock separation is independently reviewed and frozen; worker370/source295
+assertions and syntax2 pass. The production-loop regression represents the
+actual5.935s render/publish followed by another successful sample, intermittent
+failure/retry and delayed roster ACK. No source receipt or scene age is renewed.
+
+Source cleanly stops58.844s; independent all4 original PIDs absent/Shipping0,
+20/20 saves unchanged, crash[]/unobservedchildren[]. Exact692-line authority
+trace,18-line client traces each, fullNative, original exit record/operator/
+window/cleanup evidence preserved. Both original identity guards and unchanged
+100/65/10/250ms bounds remain; expensive caller probe stays off.
+
 ## Latest actual: 67175710 roster preflight
 
 Full G0 passes74 Lua suites/1363 Rust checks in79 binaries; clippy0 errors/
