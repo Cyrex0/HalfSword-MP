@@ -39,6 +39,32 @@ Paths below are local primary exports/dumps, not invented source defaults.
 - `CXXHeaderDump/Willie_BP.hpp:1157` independently confirms the actual live
   `Currently Equipped Armor` property is the same enum-to-passport native TMap.
 
+## Actual live Doublet Arming proof
+
+Run `20261009-140709-303c3a-native-host`, exact build `0b9301bd`, source UUID
+`a9899fb6-d2db-434b-8acd-ce76714274fd`, captured both complete harvests at
+40.238 s. Native binding at40.244 s reported live row0 key12/passport slot2 and
+exact class `/Game/Assets/Armor/Blueprints/Modular_Armor/BP_Armor_Modular_Core_Body_Doublet_Arming.BP_Armor_Modular_Core_Body_Doublet_Arming_C`.
+
+- Cooked export `5d9aeee9db4e83ace9885e20-BP_Armor_Modular_Core_Body_Doublet_Arming.json`
+  under the same inventory export directory is complete8/8. Its CDO line111 has
+  actor `Armor Slot=NewEnumerator1`. Its25-statement UserConstructionScript
+  changes team colours, calls the exact core parent at offset1000, then returns;
+  it does not rewrite actor or passport slots.
+- Pinned `ArmorSlots_Enum_enums.hpp:5,15` and cooked enum export
+  `d290dad06c5f8d7454b71ee1-ArmorSlots_Enum.json` map **NewEnumerator1=12** and
+  **NewEnumerator0=2**. Symbolic suffixes are not native numeric values;
+  NewEnumerator2 is numeric16, so the previously audited pants16 path matches.
+- Exact base `BP_Armor_Master` cooked CDO contains passport Slot NewEnumerator0
+  (=2). Core BeginPlay ubergraph offset1882 preserves the existing passport Slot
+  in its rebuilt struct;2184 stores it. All serialized base/core functions contain
+  no actor-slot normalization. Native Map_Add13479 therefore preserves the
+  independent actor key12 and Current Armor Passport slot2 observed in this run.
+- Source `native_source_fields.lua:33` reads the exact native Slot field as byte.
+  Pinned UE4SS `LuaUObject.cpp:513-515` calls `push_integer<uint8_t>`;
+  `LuaUObject.hpp:975-987` returns the raw byte. It does not parse an enum name
+  or convert a symbolic suffix. The DTO/parser independently preserve both u8s.
+
 ## Corrected representation and remaining boundary
 
 Construction retains every native map occurrence, its exact key, and all copied
@@ -46,26 +72,35 @@ passport fields, including independent `pslot` and explicit null class. Ordered,
 unique, bounded native enum keys and every passport field remain validated.
 No row is dropped, populated from a default, or rewritten to match another field.
 
-The live validator retains its existing non-null class and key/pslot consistency
-gate pending complete native dataflow proof. A refusal now identifies the copied
-construction/live table, row, slot, pslot and class rather than guessing its cause.
-Source capture still performs two equal complete harvests and rejects mutation
-even when the mutated armour row has a null class.
+Live armour also preserves its independent map key and passport slot. The
+class-valid native spawn path still requires a populated valid class; ordered,
+unique, bounded keys and every passport field remain checked. No actor key is
+rewritten from pslot, and no pslot is rewritten from the actor key. Source
+component/actor mapping and complete native geometry validation remain separate
+requirements. Refusals retain copied table/row/slot/pslot/class context. Two equal
+complete harvests still reject changes to either observation or any other field.
 
-The follow-up live audit retains that gate. Willie offset9449 selects the exact
+The earlier pants-only live audit initially retained the equality gate. Willie offset9449 selects the exact
 Modular_Armor Panties class, and10064 creates its passport with numeric slot16.
 The complete8/8 child export has no functions and actor Armor Slot
 NewEnumerator2 (numeric16); its complete core/base function sets preserve the
 passport Slot without writing actor Armor Slot. The live Add therefore uses
 key16/passport16. Set Up Armor5524 clears the live map, and13479 adds only
 class-valid passports. No seeded empty live row or supported mismatch was
-established. Precise primary export/dataflow references are retained in the
-ignored `test-results/native-live-armor-proof-20261009.md`.
+established by that earlier, limited audit. Its primary references and historical
+conclusion remain in ignored `test-results/native-live-armor-proof-20261009.md`;
+the later actual Doublet proof above establishes independent live slot fields
+and supersedes that equality conclusion.
 
 Diagnostic encoding statistics operate only on copied typed values and the same
 bounded codec plan. They can report planned compact/JSON bytes before semantic
 validation, but do not authorize publication, decoding, native binding or client
 readiness for an invalid recipe. No native getter or recipe contents are emitted.
+The actual Doublet refusal measured35316 planned compact bytes,74310 JSON bytes,
+6556 nodes,8771 dictionary bytes,26545 token bytes,49 components,600 bones and38
+material slots for the first entity. These are measured copied-data sizes; native
+registration, canonical frames, visible client meshes and input acceptance were
+still unproved in that run.
 
 The production Lua copy/signature node bound now matches the 512KiB token-derived
 Rust bound; depth24 and string512 limits remain. A complete offline 64x512-bone

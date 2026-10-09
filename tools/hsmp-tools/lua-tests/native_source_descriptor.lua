@@ -90,6 +90,24 @@ end
 T.check(D.capture(env)==nil,"mutation of an empty construction row still refuses unequal full harvests")
 env.character=original_character;env.phase=nil
 end
+do
+local doublet=plain(armor)
+doublet.class="/Game/Assets/Armor/Blueprints/Modular_Armor/BP_Armor_Modular_Core_Body_Doublet_Arming.BP_Armor_Modular_Core_Body_Doublet_Arming_C"
+doublet.pslot=2
+local native_doublet=raw("armor",doublet)
+local original_live_armor=env.current_armor
+env.current_armor=function()return map({{slot=12,value=native_doublet}})end
+local observed,observed_reason=D.capture(env)
+T.check(observed~=nil,"actual-shaped native Doublet actor slot12/passport slot2 captures: "..tostring(observed_reason))
+T.check(observed.equipment.armor[1].slot==12 and observed.equipment.armor[1].passport.pslot==2,
+    "source preserves both independent raw live enum bytes")
+T.check(T.eq(observed.equipment.armor[1].passport,doublet),"all24 native Doublet passport fields survive independent live key capture")
+env.phase=function(stage,edge,detail)
+    if stage=="harvest"and edge=="enter"and detail.pass==2 then native_doublet["Slot_30_7561CB484566A4512003EA96ED44F88D"]=3 end
+end
+T.check(D.capture(env)==nil,"independent live passport-slot mutation still refuses unequal harvests")
+env.current_armor=original_live_armor;env.phase=nil
+end
 local passport_phases={}
 env.phase=function(stage,edge,detail)passport_phases[#passport_phases+1]={stage=stage,edge=edge,detail=detail}end
 T.check(D.capture(env)~=nil,"coarse phases preserve exact two-pass source capture")

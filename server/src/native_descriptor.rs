@@ -284,9 +284,10 @@ fn armor_map(v: &[ArmorInSlot], live: bool) -> Result<(), &'static str> {
         x.passport.validate()?;
         // Construction consumes Map_Values and skips null ArmorCore values.
         // Its native map key and the passport's Slot are independent observations.
-        // Live entries use the spawned actor's Armor Slot and keep the stricter
-        // consistency gate until that separate native dataflow is established.
-        if live && (x.slot != x.passport.pslot || x.passport.class.is_empty()) {
+        // Live entries independently key by the spawned actor's Armor Slot:
+        // native Doublet Arming has actor slot12 and preserved passport slot2.
+        // The class-valid native spawn path still requires a populated class.
+        if live && x.passport.class.is_empty() {
             return Err("armor slot binding");
         }
     }
@@ -861,9 +862,7 @@ impl SourceRecipe {
                         || (*index > 0 && rows[*index - 1].slot >= row.slot)
                 }
                 "armor passport" => row.passport.validate().is_err(),
-                "armor slot binding" => {
-                    live && (row.slot != row.passport.pslot || row.passport.class.is_empty())
-                }
+                "armor slot binding" => live && row.passport.class.is_empty(),
                 _ => false,
             });
             if let Some((index, row)) = rejected {
@@ -1544,31 +1543,46 @@ mod tests {
         );
     }
     #[test]
-    fn rejected_live_armor_keeps_copied_context_and_diagnostic_size_without_admission() {
+    fn live_actor_slot_and_passport_slot_preserve_native_doublet_observations() {
         let mut recipe = fixture();
-        let armor: ArmorPassport = serde_json::from_str(include_str!(
+        let mut armor: ArmorPassport = serde_json::from_str(include_str!(
             "../../tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.json"
         ))
         .unwrap();
+        armor.class = "/Game/Assets/Armor/Blueprints/Modular_Armor/BP_Armor_Modular_Core_Body_Doublet_Arming.BP_Armor_Modular_Core_Body_Doublet_Arming_C".into();
+        armor.pslot = 2;
         recipe.equipment.armor.push(ArmorInSlot {
-            slot: 7,
+            slot: 12,
             passport: armor.clone(),
         });
-        assert_ne!(armor.pslot, 7);
+        let decoded = decode_recipe(&recipe.canonical_bytes().unwrap()).unwrap();
+        assert_eq!(decoded.equipment.armor, recipe.equipment.armor);
+        assert_eq!(decoded.equipment.armor[0].slot, 12);
+        assert_eq!(decoded.equipment.armor[0].passport.pslot, 2);
+
+        recipe.equipment.armor[0].slot = 17;
+        assert_eq!(recipe.validate(), Err("armor slots"));
+        recipe.equipment.armor[0].slot = 12;
+        recipe.equipment.armor[0].passport.pslot = 17;
+        assert_eq!(recipe.validate(), Err("armor passport"));
+        recipe.equipment.armor[0].passport.pslot = 2;
+        recipe
+            .equipment
+            .armor
+            .push(recipe.equipment.armor[0].clone());
+        assert_eq!(recipe.validate(), Err("armor slots"));
+        recipe.equipment.armor.pop();
+        recipe.equipment.armor[0].passport.class.clear();
         assert_eq!(recipe.validate(), Err("armor slot binding"));
         assert_eq!(recipe.encoding_stats().unwrap_err(), "armor slot binding");
         let stats = recipe.encoding_stats_for_diagnostics().unwrap();
         assert!(stats.json_bytes > 0 && stats.encoded_bytes > 0);
         assert_eq!(stats.components, recipe.components.len());
         let detail = recipe.validation_diagnostic("armor slot binding");
-        assert!(detail.contains("table=equipment.armor row=0 slot=7"));
-        assert!(detail.contains(&format!("pslot={} class={:?}", armor.pslot, armor.class)));
+        assert!(detail.contains("table=equipment.armor row=0 slot=12 pslot=2 class=\"\""));
         assert!(recipe.canonical_bytes().is_err());
         let copied = value_bytes(&serde_json::to_value(&recipe).unwrap());
         assert_eq!(decode_recipe(&copied).unwrap_err(), "armor slot binding");
-        recipe.equipment.armor[0].slot = armor.pslot;
-        recipe.equipment.armor[0].passport.class.clear();
-        assert_eq!(recipe.validate(), Err("armor slot binding"));
         assert!(
             recipe
                 .validation_diagnostic("armor slot binding")

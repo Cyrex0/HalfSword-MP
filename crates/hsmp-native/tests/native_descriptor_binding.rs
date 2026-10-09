@@ -95,7 +95,7 @@ unsafe fn push_json(l: *mut ffi::lua_State, value: &Value) {
 }
 
 #[test]
-fn construction_armor_independent_keys_survive_and_live_refusal_has_copied_sizes() {
+fn all_armor_independent_keys_survive_and_null_live_refusal_has_copied_sizes() {
     let lua = State::new();
     let armor: Value = serde_json::from_str(include_str!(
         "../../../tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.json"
@@ -124,10 +124,27 @@ fn construction_armor_independent_keys_survive_and_live_refusal_has_copied_sizes
         recipe
     );
 
-    lua.run("recipe.equipment.armor={{slot=7,passport=armor}}");
+    lua.run("armor.class='/Game/Assets/Armor/Blueprints/Modular_Armor/BP_Armor_Modular_Core_Body_Doublet_Arming.BP_Armor_Modular_Core_Body_Doublet_Arming_C';armor.pslot=2;recipe.equipment.armor={{slot=12,passport=armor}}");
+    let doublet = lua.read().unwrap();
+    assert_eq!(doublet.equipment.armor[0].slot, 12);
+    assert_eq!(doublet.equipment.armor[0].passport.pslot, 2);
+    assert!(
+        doublet.equipment.armor[0]
+            .passport
+            .class
+            .ends_with("BP_Armor_Modular_Core_Body_Doublet_Arming_C")
+    );
+    assert_eq!(
+        SourceRecipe::decode_recipe(&doublet.canonical_bytes().unwrap()).unwrap(),
+        doublet
+    );
+    lua.run("recipe.equipment.armor[1].passport.class=''");
     let reason = lua.read().unwrap_err();
-    assert!(reason.starts_with("armor slot binding table=equipment.armor row=0 slot=7 pslot="));
-    assert!(reason.contains(&format!("class={:?}", armor["class"].as_str().unwrap())));
+    assert!(
+        reason.starts_with(
+            "armor slot binding table=equipment.armor row=0 slot=12 pslot=2 class=\"\""
+        )
+    );
     assert!(
         reason.contains("compact_bytes=")
             && reason.contains("raw_json_bytes=")
