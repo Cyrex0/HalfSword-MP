@@ -1262,7 +1262,35 @@ mod tests {
             });
             let directory = host.directory().unwrap();
             wait_for(|| client.directory().is_some_and(|d| d.seq == directory.seq));
-            let recipe = crate::native_descriptor::fixture_recipe();
+            let mut recipe = crate::native_descriptor::fixture_recipe();
+            let mut arm = recipe.components[0].clone();
+            arm.id = 2;
+            arm.name = "Offline UDP SpringArm".into();
+            arm.role = "anchor".into();
+            arm.component_class = "/Script/Engine.SpringArmComponent".into();
+            arm.kind = crate::native_descriptor::ComponentKind::Scene;
+            arm.geometry = crate::native_descriptor::Geometry::NotApplicable;
+            arm.scene = crate::native_descriptor::SceneEvidence::SpringArm {
+                draw_debug_lag_markers: false,
+                socket_name: "OfflineExactSocket".into(),
+            };
+            arm.vertex_state = crate::native_descriptor::VertexState::NotApplicable;
+            arm.collision = None;
+            arm.spline_profile = None;
+            arm.asset.clear();
+            arm.skeleton.clear();
+            arm.physics_asset.clear();
+            arm.bones.clear();
+            arm.materials.clear();
+            arm.morphs.clear();
+            arm.hidden_bones.clear();
+            arm.groom.clear();
+            arm.vertex_colors.clear();
+            arm.deformer.clear();
+            arm.cloth = false;
+            arm.parent = 0;
+            arm.socket.clear();
+            recipe.components.push(arm);
             for entity in &directory.entities {
                 host.publish_descriptor(w::Descriptor {
                     reference: entity.reference,
@@ -1305,7 +1333,16 @@ mod tests {
                                     })
                                     .collect(),
                                 spline: None,
-                                spring_arm: None,
+                                spring_arm: matches!(
+                                    c.scene,
+                                    crate::native_descriptor::SceneEvidence::SpringArm { .. }
+                                )
+                                .then_some(
+                                    w::NativeSpringArmFrame {
+                                        translation: [-0.0, -240.25, 20.125],
+                                        rotation: [-0.0, 0.25, -0.5, 0.75],
+                                    },
+                                ),
                             })
                             .collect(),
                     })
@@ -1314,6 +1351,11 @@ mod tests {
             host.publish_render(frame.clone()).unwrap();
             wait_for(|| client.bridge.lock().render.is_some());
             assert_eq!(**client.bridge.lock().render.as_ref().unwrap(), frame);
+            assert_eq!(
+                w::encode_render_world_v3(client.bridge.lock().render.as_ref().unwrap()).unwrap(),
+                w::encode_render_world_v3(&frame).unwrap(),
+                "native endpoint bits survive authenticated delivery"
+            );
             assert!(client.connected());
             assert!(client.error().is_empty());
         }

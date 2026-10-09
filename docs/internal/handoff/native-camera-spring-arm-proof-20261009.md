@@ -46,6 +46,12 @@ owner-relative path. The socket-name argument is unused by this matched body,
 but the source recipe still copies its actual complete singleton socket census.
 A plain Scene substitute loses this native endpoint behavior.
 
+Matched QuerySupportedSockets143CBB6A0 appends exactly one socket entry and reads
+the native FName64 from preferred VA148D70CE0 (image-relative8D70CE0), independent
+of the component. The final native census pins that query body and compares the
+original global FName bits with the guarded prepared recipe name. No name
+conversion/lookup, socket getter or ProcessEvent follows the final census.
+
 Camera constructor143AFB160 calls Scene143BEA040, installs vtable1476085C0 and
 has exact size9E0. Comparison of base Scene virtual slots below5F0 differs only
 at destruction,330 and528. Camera330/143AFD800 tail-jumps to Scene OnRegister
