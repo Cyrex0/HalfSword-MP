@@ -1,6 +1,25 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build0039aacd
+## Current state: 2026-10-09, latest actual build5339682b
+
+Lossless codec/complete-scene stream and mirror lifecycle checkpoint passes full
+G0 (74 Lua/1355 Rust in79 binaries; clippy0 errors/13 warnings), dev push and
+clean RequireG0 deployment with393 file hashes unchanged. Actual
+`20261009-133011-adbf6a-native-host` completes both49-component entity1 source
+harvests in22.758s, then NativeBind refuses `armor slot binding` at39.035s.
+No entity2/encoded stats/frames/active input is established. The old staging
+byte refusal is superseded; actual512KiB capacity and network timing remain
+unproved. Bothclients failunchanged65s readiness. Authority misses its stop
+deadline while recapturing; exactowned fallback closes it, all4PIDs independently
+absent,20save hashes unchanged, crash/childrenempty. Early original window
+placement is onlypartial: client2 outer border extends16px onto primary.
+
+Active next work corrects construction armor map semantics using native cooked
+evidence, emits precise copied binding/encoding diagnostics and makes long
+captures cooperatively cancellable before deferred teardown. See
+`native-scene-stream-20261009.md` for exact evidence and remaining gates.
+
+## Previous actual0039aacd
 
 EmptySkeletal checkpoint passes full G0 (74 Lua/1333 Rust79 binaries;
 clippy0 errors/12 warnings), dev push and exact clean RequireG0 deployment.

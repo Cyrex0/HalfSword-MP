@@ -1,5 +1,71 @@
 # Native full-scene encoding checkpoint
 
+## Latest actual: 5339682b
+
+The complete lossless codec/stream/lifecycle checkpoint passes full G0: 74 Lua
+suites, 1355 Rust checks in 79 binaries and clippy with 0 errors/13 warnings.
+It is pushed to dev and cleanly RequireG0 deployed; all 393 deployed hashes
+match HEAD/binaries/G0 `5339682ba8c33a0385666c575be3a613628ce04b`.
+The first gate's sole test-only Instant arithmetic lint was corrected with
+checked_sub and its existing stale-scene assertion; the required full retry passes.
+
+Actual `test-results/20261009-133011-adbf6a-native-host` uses source UUID
+96ce45e0-0c7b-464f-bdc9-991de1e44e01, supervisor 39560, authority 36552 and
+normal rendered clients 31508/44272. NativeReady is 15.668s. Entity1 original
+epoch 6164706162233355395/incarnation5/directory6/revision1/frame1 capture
+runs 16.273s to 39.031s (22.758s). Both complete 49-component harvests pass,
+including all four empty skeletal holders. NativeBind refuses `armor slot
+binding` at 39.035s. Encoding statistics validate first, so actual compact/raw
+bytes and the 512KiB encoded capacity remain unproved; the old Lua-to-JSON
+staging refusal is no longer first. Entity2 capture, canonical/mirror frames
+and active input [0,0] remain unverified. No scene reached delivery, so this
+run cannot establish network latency or justify changing the part scheduler.
+
+The unchanged 65s readiness gate fails. Both clients stop; the authority begins
+another capture after directory replacement and misses graceful shutdown. Its
+exact owned supervisor fallback stops it. Last own phase is seq1338 at75.108s,
+mesh_census/pass2/entity1/incarnation6/directory8. All four original PIDs are
+independently absent; Shipping games[], 20/20 original save hashes unchanged,
+crash[]/unobservedchildren[]. Full native log, exact 860-line authority36552
+trace and native_operator_summary.json are preserved.
+
+Both original windows were qualified and moved early, with initial evidence
+preserved. Their outer bounds were 896x566; client2's right edge remained16px
+on the primary. A later 880x527 fit occurred after exit and was unqualified,
+with no window action. Full secondary containment is still unproved. The
+ignored operator helper now performs the requested fit immediately next run.
+
+Next fixes: match construction armor map semantics from actual cooked
+Map_Values/independent passport Slot evidence, preserving every row and field;
+emit precise copied slot context and bounded prevalidation size diagnostics;
+cancel long captures at throttled admission boundaries and perform native
+teardown only after unwinding. Then focused tests/independent review, combined
+G0/dev checkpoint and another exact deployed actual scenario. No source
+performance or scene delivery gain is inferred from this run.
+
+The construction fix is implemented from the native evidence in
+`native-armor-slot-proof-20261009.md`: all construction map keys and passport
+slots remain independent copied values; strict live bindings remain unchanged.
+Refusals now report copied table/row/key/passport slot/class plus bounded planned
+encoding statistics before semantic admission. Invalid recipes cannot publish.
+The production Lua plain/signature path also now uses the 512KiB token-derived
+value/table budget, replacing its remaining old16000 ceiling. Focused descriptor
+23/raw parser11/Lua source257/syntax2 checks and independent Sol review pass.
+The wide Lua capture retains all32768 bone occurrences and detects tail mutation.
+The fixture changes retain native f32 colour widths. No new actual success is
+inferred from these offline results.
+
+Worker cancellation is also implemented and independently reviewed: stop-file
+and parent checks are throttled at250ms admission boundaries and only latch a
+reason/fault. Source capture unwinds and closes its original native scope before
+the outer loop performs the existing controller/host/Director shutdown once.
+Focused worker247 assertions/syntax2 pass, including stop and unavailable parent
+mid-capture, refusal of the next getter/registration and scope-end-before-teardown.
+Original world/lifetime/controller checks remain. Actual graceful stop remains
+pending; these checks do not establish playable registration or scene delivery.
+
+## Previous actual: 0039aacd
+
 Latest actual checkpoint0039aacde42c5b0a4c69c2de32aaf3f0df6a160f passed full
 G0 (74 Lua suites/1333 Rust checks in79 binaries, clippy0 errors/12 warnings),
 dev push and exact clean RequireG0 deployment. Native source/helper/FFI review

@@ -952,6 +952,12 @@ object keys are dictionary references. Large recipes use
 bounded `0x0AC2` descriptor parts and become visible only after complete strict
 reconstruction. HSDR codec version 1 is negotiated through NATIVE_SCENE_STREAM.
 
+Construction armour-map keys and each passport's slot remain independent copied
+values: native construction consumes the map values. Empty and populated rows
+retain every observed passport field. Live equipment retains its separately
+validated actor-slot binding. Neither representation infers a missing passport,
+rewrites a native slot, or discards an empty row.
+
 Native scene stream records use `0x0A14` for a manifest, `0x0A15` for bounded byte
 parts and `0x0A82` for assembly acknowledgments. They retain the V3 logical fields
 and raw native double bits while keeping each message within the 64 KiB transport
