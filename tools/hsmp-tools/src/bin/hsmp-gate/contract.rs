@@ -88,7 +88,7 @@ pub const CONTRACT: &[Entry] = &[
     e("x_career_recover", L, &["code", "ms"], &[]),   // HSMPMenu boot-time career-guard recovery
     e("x_native_worker", L, &["state", "reason", "arena"],
       &["frame_seq", "sampled", "refused", "active_pc0", "active_pc1", "dispatched", "input_refused", "census",
-        "stage", "edge", "epoch", "id", "incarnation", "dir_seq", "revision", "component_id", "address",
+        "stage", "edge", "epoch", "epoch_text", "id", "incarnation", "dir_seq", "revision", "component_id", "address",
         "name", "class", "getter", "count", "lod", "owner_id", "ok", "pass", "mesh_census_calls",
         "component_reads", "parent_hops", "qualifications"]),
     e("x_native_client", L, &["state", "reason"],

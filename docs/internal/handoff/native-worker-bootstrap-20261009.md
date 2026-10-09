@@ -513,3 +513,73 @@ read four reflected channels per vertex with repeated guards. These are
 algorithmic cost facts, not measured attribution of the actual stall. Use
 the next native stage evidence before claiming a specific blocking operation
 or weakening consistency checks.
+
+## Actual rare-stage run: parent closure and complete-body budget
+
+Exact clean 19b7e9b1 passed full G0 (74 Lua suites, 1314 Rust tests/79
+binaries; events141 emitters/zero violations, clippy zero errors/six warnings),
+pushed to dev and deployed with matching stamps. The shorter45s default real
+three-game test is `test-results/20261009-032525-978353-native-host`.
+Authority native_ready occurred at9.566s. First status/directory/config calls
+returned; first native_control took0.698s (9.567 to10.265).
+
+Capture entered at10.268s, passport returned10.413 and equipment10.603.
+Willie's complete native mesh census returned26 components in0.315s
+(10.608 to10.923); its axe returned13 in0.190s (10.925 to11.115). The last
+unmatched entry is parent_closure at11.115s, getter
+`Actor.RootComponent/SceneComponent.GetAttachParent`, entity1/incarnation4/
+directory4/revision1/frame1/pass1. No component-static/bone/morph/material/
+LOD/vertex/bind/core/render/publish entry followed before shutdown. This
+localizes the observed stall to attachment closure; it does not prove an
+infinite loop. Repeating the measured complete mesh census for each parent
+read is already a material computational cost and must be eliminated with
+equivalent original-handle, owner/world/root/path and complete-census guards.
+
+Both clients progressed past95 fresh qualified already-garbage external
+driver records, then refused the live Willie's ActorComponent census at
+count257 against per-actor256, at15.865/16.082s. This is another incorrect
+resource assumption for the native body, not evidence that a collider can be
+skipped. The next complete inert census must fit the established aggregate
+1024-component budget and retain every native owner/tick/physics/collision
+readback; no pose/fairness tolerance is changed.
+
+There were no canonical frames or active inputs ([0,0]). The authority again
+missed graceful shutdown and was stopped by verified owned fallback. All
+four original process identities (supervisor29164, source35100,
+clients15820/40688) were independently absent, original saves unchanged and
+crash/unobserved-child lists empty; source stayed exact clean19b7e9b1.
+The trace's large signed epoch was rendered as scientific numeric notation
+by shared logging, so its exact64 bits must not be invented. Ref/component
+identities are exact. The next narrow phase trace adds original integer
+epoch_text without changing native metadata or wire encoding.
+
+Client budget candidate 40717ae2 uses the existing1024 aggregate budget for
+per-actor iteration as well; the aggregate is not raised. Every component is
+still owner/native-garbage/tick/primitive-physics/collision/visibility checked,
+duplicates refuse and the actual root must remain included and unchanged.
+Focused client Lua121 registered checks and two syntax files passed, including
+all384 primitives and the final collider, exact1024 coverage, over-budget
+totals, missing/changed root and garbage components. Actual coverage awaits
+the next run.
+
+Phase-only epoch_text correction df897190 preserves original integer signed
+decimal text and explicitly reports unknown for missing/floating epochs.
+Native metadata/wire remains unchanged. The worker fixture also corrected41
+older standalone T.eq predicates into registered T.check assertions. Earlier
+historical suite counts did not prove those equalities; the current worker191
+registered checks and two syntax files passed, including the seeded original
+save and world/reentry touch-count assertions.
+
+The next source performance correction proposes complete native Mesh censuses
+at each harvest's start/end, retaining two equal harvests, and original native
+handle resolution for individual reads. Handles must pin original index/
+serial/address/FName/class and verify native garbage, original owner/world,
+root, exact runtime path and actual parent links. Serial-zero components use
+the existing checked original-name/class/address strategy without allocating
+serials. Each read must obtain a fresh Lua wrapper from the exact runtime path
+after resolving the original scalar identity, then requalify afterward; no
+unchecked UObject wrapper survives a native call/callback. Native source
+bind/capture guards, complete geometry, cycle/final64/wire bounds and all
+fairness tolerances remain required. This removes repeated whole-mesh work
+without treating a stale wrapper as lifetime proof. Implementation and actual
+verification remain pending.
