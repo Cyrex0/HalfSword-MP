@@ -619,7 +619,7 @@ void finish_component(Obj actor,Obj component,const Transform& relative,HsmpView
     Function f(L"/Script/Engine.Actor:FinishAddComponent");f.object(L"Component",component);f.boolean(L"bManualAttachment",true);
     f.put(L"RelativeTransform",L"StructProperty",engine(relative),L"Transform");f.call(actor,r);collision_off(component,r);
 }
-struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};std::wstring arm_socket;HsmpViewSpringArmFrame arm{};std::optional<PoseBinding> pose;std::optional<MeshBinding> mesh;};
+struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};std::wstring arm_socket;HsmpViewSpringArmFrame arm{};std::optional<PoseBinding> pose;std::optional<MeshBinding> mesh;std::optional<ArmPublication> arm_publication;};
 struct Mirror {Obj world{},actor{};std::vector<Part> parts;};
 struct MeshWatch;
 thread_local const MeshWatch* active_mesh_watch{};
@@ -820,6 +820,10 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         MeshWatch mesh_watch({&mirror});
         require(same(mirror.world,world)&&same(actor_world(mirror.actor,r),world)&&count==mirror.parts.size()&&pointers(recipes,count,64)&&pointers(frames,count,64),"mirror apply scope");
         const auto order=parent_order(recipes,count);
+        std::vector<ArmOwnedChild> arm_owned;arm_owned.reserve(mirror.parts.size()*2);
+        if(std::any_of(mirror.parts.begin(),mirror.parts.end(),[](const Part& part){return part.kind==7;}))for(size_t i=0;i<mirror.parts.size();++i){
+            Obj parent{};if(recipes[i].parent){const auto found=std::find_if(mirror.parts.begin(),mirror.parts.end(),[&](const Part& part){return part.id==recipes[i].parent;});require(found!=mirror.parts.end(),"native spring owned parent missing");parent=found->render;}
+            const auto socket=name(recipes[i].socket);arm_owned.push_back({mirror.parts[i].render,parent,socket});if(mirror.parts[i].leader.weak)arm_owned.push_back({mirror.parts[i].leader,parent,socket});}
         std::vector<std::pair<size_t,PosePublished>> published_poses;
         for(const auto i:order) {
             const auto& c=recipes[i];const auto& f=frames[i];auto& part=mirror.parts[i];frame(c,f);require(c.id==part.id&&c.kind==part.kind,"mirror recipe generation mismatch");
@@ -831,10 +835,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
             if(part.leader.weak)world_transform(part.leader,f.world,r);
             if(c.kind==5)spline_apply(world,mirror.actor,part.render,c.spline,*f.spline,r);
             if(c.kind==7){
-                scene_profile(part.render,7);arm_socket(c.spring_arm_socket);qualify(world,mirror.actor,part.render,r);check_guard();vertex_pure(mirror.actor);scene_pure_profile(part.render,7);
-                const auto expected_socket=name(c.spring_arm_socket);check_guard();vertex_pure(mirror.actor);scene_pure_profile(part.render,7);require(scene_socket_read()==expected_socket,"mirror spring socket changed");
-                auto* p=static_cast<uint8_t*>(vertex_pure(part.render));std::memcpy(p+0x2f0,f.spring_arm->translation,24);std::memcpy(p+0x310,f.spring_arm->rotation,32);
-                require(close(arm_transform(*f.spring_arm),arm_getter(part.render,c.spring_arm_socket,r)),"mirror native spring socket readback");part.arm=*f.spring_arm;
+                part.arm_publication=arm_apply(world,mirror.actor,part.render,c.spring_arm_socket,*f.spring_arm,arm_owned,r);part.arm=*f.spring_arm;
             }
             for(uint32_t j=0;j<c.bone_count;++j) {
                 Function b(L"/Script/Engine.PoseableMeshComponent:SetBoneTransformByName");b.put(L"BoneName",L"NameProperty",name(c.bones[j]));b.put(L"InTransform",L"StructProperty",engine(f.bones[j]),L"Transform");b.enumeration(L"BoneSpace",1);b.call(part.leader,r);
@@ -867,6 +868,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         finish_scene_set(world,targets,r);
         for(const auto& [index,published]:published_poses)pose_final(*mirror.parts[index].pose,published);
         for(const auto& part:mirror.parts)if(part.mesh)mesh_binding_final(*part.mesh);
+        for(const auto& part:mirror.parts)if(part.arm_publication)arm_publication_final(*part.arm_publication);
         r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
@@ -1116,6 +1118,7 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
         }
         MeshWatch mesh_watch(mesh_mirrors);finish_scene_set(world,targets,r);
         for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.mesh){mesh_binding_final(*part.mesh);if(part.pose)pose_pure(*part.pose);}
+        for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.arm_publication)arm_publication_final(*part.arm_publication);
         r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }

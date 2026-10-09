@@ -13,6 +13,8 @@ bool scene_shipping_profile(){
        !match(0x3cba5ed,{0x0f,0x10,0xa1,0x20,0x03,0,0})||
        !match(0x3cba5f7,{0xf2,0x0f,0x10,0x91,0,0x03,0,0})||
        !match(0x3cba625,{0x66,0x0f,0x10,0x89,0xf0,0x02,0,0})||
+       !match(0x3cbc3bd,{0xe8,0xae,0xaf,0xf3,0xff})||
+       !match(0x3bf7370,{0x40,0x57,0x41,0x56,0x48,0x83,0xec,0x28,0x83,0xb9,0xd0,0,0,0,0})||
        !match(0x3cbb6d6,{0x48,0x8b,0x05,0x03,0x56,0x0b,0x05,0x48,0x89,0x02,0xc6,0x42,0x08,0x02}))return false;
     const auto base=reinterpret_cast<uintptr_t>(image);uint64_t tick{};
     for(const auto table:{size_t{0x7412680},size_t{0x76085c0},size_t{0x76952b8}}){
@@ -72,6 +74,69 @@ Transform arm_getter(Obj component,HsmpViewText socket,HsmpViewResult* r){
     return wire(f.value<EngineTransform>(L"ReturnValue",L"StructProperty",L"Transform"));
 }
 void arm_socket(HsmpViewText socket){const auto s=text(socket);require(!s.empty()&&s.size()<=128&&s!=L"None"&&name(socket)==scene_socket_read(),"native spring arm original singleton socket changed");}
+struct ArmOwnedChild {Obj component{},parent{};uint64_t socket{};};
+struct ArmChildSnapshot {Array children{};std::vector<uint64_t> slots;};
+struct ArmPublication {Obj world{},owner{},component{},level{};int32_t world_offset{};uint64_t socket{};HsmpViewSpringArmFrame arm{};std::vector<ArmOwnedChild> owned;std::vector<ArmChildSnapshot> snapshots;};
+bool arm_array_equal(const Array& a,const Array& b){return a.data==b.data&&a.count==b.count&&a.capacity==b.capacity;}
+ArmChildSnapshot arm_children_copy(Obj owner,const ArmOwnedChild& target,const std::vector<ArmOwnedChild>& owned,const ArmChildSnapshot* original=nullptr){
+    const auto* p=static_cast<const uint8_t*>(vertex_pure(target.component));uint64_t actual_owner{},parent{},socket{};
+    std::memcpy(&actual_owner,p+0x90,8);std::memcpy(&parent,p+0xb0,8);std::memcpy(&socket,p+0xb8,8);
+    require(actual_owner==owner.address&&parent==target.parent.address&&socket==target.socket,"native spring original child owner/parent/socket changed");
+    ArmChildSnapshot out{};std::memcpy(&out.children,p+0xc8,sizeof(Array));
+    if(original)require(arm_array_equal(out.children,original->children),"native spring child allocation changed before slot read");
+    require(out.children.count>=0&&static_cast<size_t>(out.children.count)<=owned.size()&&out.children.capacity>=out.children.count&&
+        (!out.children.capacity||out.children.data),"native spring child array malformed");
+    const auto bytes=static_cast<size_t>(out.children.count)*8;const auto data=reinterpret_cast<uintptr_t>(out.children.data);
+    require(!bytes||(data&&data%alignof(void*)==0&&data<=UINTPTR_MAX-bytes),"native spring child array storage invalid");
+    out.slots.resize(static_cast<size_t>(out.children.count));if(bytes)std::memcpy(out.slots.data(),out.children.data,bytes);
+    size_t expected{};for(const auto& child:owned)if(same(child.parent,target.component))++expected;
+    require(expected==out.slots.size(),"native spring owned child census changed");
+    for(size_t i=0;i<out.slots.size();++i){const auto slot=out.slots[i];require(slot!=0&&std::find(out.slots.begin(),out.slots.begin()+static_cast<ptrdiff_t>(i),slot)==out.slots.begin()+static_cast<ptrdiff_t>(i),"native spring duplicate/null child");
+        const auto found=std::find_if(owned.begin(),owned.end(),[&](const ArmOwnedChild& child){return child.component.address==slot&&same(child.parent,target.component);});
+        require(found!=owned.end(),"native spring foreign child unsupported");vertex_pure(found->component);}
+    return out;
+}
+void arm_children_final(Obj world,Obj owner,Obj level,int32_t world_offset,const std::vector<ArmOwnedChild>& owned,const std::vector<ArmChildSnapshot>& snapshots){
+    vertex_pure(world);const auto* owner_pointer=vertex_pure(owner);require(source_outer&&source_outer(owner_pointer)&&*source_outer(owner_pointer)==reinterpret_cast<void*>(level.address),"native spring original owner level changed");
+    require(world_offset==0xc0,"native spring original level world layout");void* actual_world{};std::memcpy(&actual_world,static_cast<const uint8_t*>(vertex_pure(level))+world_offset,8);
+    require(actual_world==reinterpret_cast<void*>(world.address),"native spring original child world changed");
+    require(owned.size()==snapshots.size(),"native spring original child snapshot missing");
+    for(size_t i=0;i<owned.size();++i){const auto actual=arm_children_copy(owner,owned[i],owned,&snapshots[i]);
+        require(arm_array_equal(actual.children,snapshots[i].children)&&actual.slots==snapshots[i].slots,"native spring child allocation/slots changed");}
+}
+void arm_notify_native(Obj component){reinterpret_cast<void(*)(void*,uint32_t,uint8_t)>(scene_image+0x3bf7370)(vertex_pure(component),0,0);}
+void (*arm_notify_children)(Obj)=arm_notify_native;
+void arm_publication_final(const ArmPublication& original){
+    arm_children_final(original.world,original.owner,original.level,original.world_offset,original.owned,original.snapshots);scene_pure_profile(original.component,7);
+    require(scene_socket_read()==original.socket&&arm_equal(arm_copy(vertex_pure(original.component)),original.arm),"native spring final published output changed");
+}
+ArmPublication arm_apply(Obj world,Obj owner,Obj component,HsmpViewText socket,const HsmpViewSpringArmFrame& value,const std::vector<ArmOwnedChild>& owned,HsmpViewResult* r){
+    require(!owned.empty()&&owned.size()<=64*2,"native spring owned component bound");arm_valid(value);scene_profile(component,7);arm_socket(socket);
+    require(std::any_of(owned.begin(),owned.end(),[&](const ArmOwnedChild& target){return same(target.component,component);}),"native spring original component not owned");
+    const auto scene_class=find(L"/Script/Engine.SceneComponent");
+    require(spline_api.children&&spline_api.next&&spline_api.inner&&spline_api.size&&spline_api.offset&&spline_api.field_name&&spline_api.field_class&&spline_api.variant_name,"native spring child metadata unavailable");
+    vertex_object_array_layout(scene_class,L"AttachChildren",0xc8);
+    const auto level=returned(owner,L"/Script/Engine.Actor:GetLevel",r);const auto world_field=property(level,L"OwningWorld",L"ObjectProperty",8);
+    require(world_field.offset==0xc0,"native spring reflected level world layout");
+    const auto expected_socket=name(socket);
+    for(size_t i=0;i<owned.size();++i){require(owned[i].component.weak&&std::none_of(owned.begin(),owned.begin()+static_cast<ptrdiff_t>(i),[&](const ArmOwnedChild& prior){return prior.component.address==owned[i].component.address;}),"native spring owned component duplicate");
+        qualify(world,owner,owned[i].component,r);require(property(owned[i].component,L"AttachParent",L"ObjectProperty",8).offset==0xb0&&property(owned[i].component,L"AttachSocketName",L"NameProperty",8).offset==0xb8&&property(owned[i].component,L"AttachChildren",L"ArrayProperty",16).offset==0xc8,"native spring child reflected layout");}
+    qualify(world,owner,component,r);check_guard();vertex_pure(owner);scene_pure_profile(component,7);
+    std::vector<ArmChildSnapshot> snapshots;snapshots.reserve(owned.size());for(const auto& child:owned)snapshots.push_back(arm_children_copy(owner,child,owned));
+    arm_children_final(world,owner,level,world_field.offset,owned,snapshots);
+    require(scene_socket_read()==expected_socket,"native spring singleton changed before publication");
+    auto* p=static_cast<uint8_t*>(vertex_pure(component));std::memcpy(p+0x2f0,value.translation,24);std::memcpy(p+0x310,value.rotation,32);
+    // Exact shipping UpdateDesiredArmLocation publishes this cache through
+    // UpdateChildTransforms(this,0,0). It can update the complete owned subtree.
+    require(arm_notify_children!=nullptr,"native spring child publication unavailable");arm_notify_children(component);
+    check_guard();for(const auto& child:owned)qualify(world,owner,child.component,r);qualify(world,owner,component,r);check_guard();
+    arm_children_final(world,owner,level,world_field.offset,owned,snapshots);scene_pure_profile(component,7);
+    require(scene_socket_read()==expected_socket&&arm_equal(arm_copy(vertex_pure(component)),value),"native spring output changed during child publication");if(r)++r->operations;
+    require(close(arm_transform(value),arm_getter(component,socket,r)),"mirror native spring socket readback");
+    check_guard();arm_children_final(world,owner,level,world_field.offset,owned,snapshots);scene_pure_profile(component,7);
+    require(scene_socket_read()==expected_socket&&arm_equal(arm_copy(vertex_pure(component)),value),"native spring output changed after publication readback");
+    return {world,owner,component,level,world_field.offset,expected_socket,value,owned,std::move(snapshots)};
+}
 HsmpViewSpringArmFrame arm_observe(Obj world,Obj owner,Obj component,HsmpViewText socket,HsmpViewResult* r){
     SceneOperation operation(owner,component,7);qualify(world,owner,component,r);arm_socket(socket);
     const auto first=arm_copy(vertex_live(component));const auto native=arm_getter(component,socket,r);

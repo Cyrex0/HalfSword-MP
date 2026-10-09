@@ -1,5 +1,39 @@
 # Native full-scene encoding checkpoint
 
+## Actual 5ee665e6: FollowCamera fails immediately after world setter
+
+Exact clean dev/full G0/all394 hashes run20261009-210901-4a9dbb-native-host,
+source051d9608-9d90-4db8-98e8-e6127306a150, localizes BOTH first-entity failures
+to stage=world_set, component11 kind6 FollowCamera, parent6 Shoulder SpringArm,
+socket=None. Maximum position delta211.51344970236539, sign-aware quaternion
+component delta0.37686964143071849, scale delta0; existing sign-aware quaternion
+L1 error0.53150414919121891. Times70.935s/72.183s. No tolerance is changed.
+
+Current arm replay sets parent world transform before writing its cached endpoint
+at2F0/310 and does not publish that cache change to children. Matched native
+UpdateDesiredArmLocation143CBB780 writes those fields143CBC38E-3B6 and then
+calls UpdateChildTransforms143BF7370(this,0,0) at143CBC3BD. This omitted native
+step is restored with complete owned-child/world/slot guards. The proposed
+unchanged-relative setter early-out is not proved: preserve that uncertainty.
+Exact world-readback closure remains pending actual verification of the complete
+native publication sequence. Primary ASM is retained in this ignored run.
+Keep source parent/socket attachment and original transform bounds.
+
+The three-file correction retains complete owned parent/socket/child-array
+witnesses and OwnerOuter->Level->World proof around native publication. Check
+original array headers before reading retained slots; reject foreign, replaced,
+renamed, garbage or changed attachments. Retain publication evidence for later
+callbacks and whole-mirror finish. Strict provider/fixture1029 focused checks
+and independent production review pass. No ABI/wire/setter/tolerance changes.
+Actual corrected camera/complete-scene readback remains pending.
+
+Full G075 Lua/1364 Rust79 binaries, clippy0 errors/16 warnings pass;994 focused
+diagnostic checks and independent review close. Both first mirrors create49
+components, but complete scene/owned view/input remain unverified. All four
+original games/two CDBs independently absent, save20 hashes unchanged, no fresh
+dump; both initial game windows physically contained on secondary. Exact deltas,
+native logs and cleanup are retained in the ignored operator summary.
+
 ## Actual 9676db66: first full mirror creates; transform readback refuses
 
 Exact clean dev/full G0/all394 hashes run20261009-205648-6725b5-native-host,

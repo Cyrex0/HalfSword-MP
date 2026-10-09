@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Publish replayed camera-arm endpoints to their owned attached components using
+  the game's native child update, retaining full attachment and scene checks.
+  Actual complete scene verification remains pending.
 - Preserve the original gear mesh when the engine naturally assigns its first
   reference serial, retaining complete asset identity and later scene checks.
   Actual complete model and gameplay verification remains pending.

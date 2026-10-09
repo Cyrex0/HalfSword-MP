@@ -389,6 +389,9 @@ void vertex_checks(HsmpReflect& reflect){
 // copied layouts do not claim game rendering, camera ownership or live parity.
 struct SceneObject {LifetimeObject identity;std::array<uint8_t,0xa00-sizeof(LifetimeObject)> storage{};};
 SceneObject arm_first{},arm_second{},camera_fixture{};
+SceneObject arm_level{};bool arm_publication_fixture{};int arm_notifications{},arm_publication_mutation{};
+std::array<void*,1> arm_child_slots{};VertexField arm_children_field{},arm_child_inner{};void* arm_first_field{};
+void** arm_fixture_children(void* object){return object==&vertex_scene_class?&arm_first_field:vertex_children(object);}
 struct SkeletalObject {LifetimeObject identity;std::array<uint8_t,0x1100-sizeof(LifetimeObject)> storage{};};
 SkeletalObject skeletal_first{},skeletal_second{};
 LifetimeObject skeletal_class{920,&meta},skinned_class{921,&meta},material_class{922,&meta};
@@ -557,6 +560,7 @@ int32_t scene_props(void* object,HsmpProp* out,int32_t cap,int32_t* size){
 }
 int32_t scene_prop(void* object,const uint16_t* key,HsmpProp* out){
     const std::wstring field(reinterpret_cast<const wchar_t*>(key));
+    if(object==&arm_level&&field==L"OwningWorld"){*out=object_field(L"OwningWorld",0xc0);return 1;}
     if(object==&dynamic_material&&field==L"Parent"){*out=object_field(L"Parent",static_cast<int32_t>(offsetof(LifetimeObject,property)));return 1;}
     if(skeletal_object(object)){
         if(field==L"SkeletalMesh"||field==L"SkinnedAsset"){
@@ -574,6 +578,9 @@ int32_t scene_prop(void* object,const uint16_t* key,HsmpProp* out){
             *out=scene_field(field.c_str(),L"BoolProperty",1,field==L"bDisablePostProcessBlueprint"?0xa41:0xa42,field==L"bAllowClothActors"?2:field==L"bDisableClothSimulation"?4:1);return 1;}
     }
     if(scene_object(object)){
+        if(field==L"AttachParent"){*out=object_field(field.c_str(),0xb0);return 1;}
+        if(field==L"AttachSocketName"){*out=scene_field(field.c_str(),L"NameProperty",8,0xb8);return 1;}
+        if(field==L"AttachChildren"){*out=scene_field(field.c_str(),L"ArrayProperty",16,0xc8);return 1;}
         if(field==L"bVisible"){*out=scene_field(field.c_str(),L"BoolProperty",1,0x1d0,1);return 1;}
         if(field==L"bHiddenInGame"){*out=scene_field(field.c_str(),L"BoolProperty",1,0x1d1,1);return 1;}
         if(field==L"bDrawDebugLagMarkers"){*out=scene_field(field.c_str(),L"BoolProperty",1,scene_wrong_debug_layout?0x270:0x271,1);return 1;}
@@ -588,6 +595,7 @@ int32_t scene_prop(void* object,const uint16_t* key,HsmpProp* out){
 }
 void scene_call(void* object,void* fn,void* params){
     ++scene_events;
+    if(arm_publication_fixture&&object==&actor&&fn==&get_level_fn){auto* value=&arm_level;std::memcpy(params,&value,8);return;}
     for(size_t i=0;i<skeletal_functions.size();++i)if(fn==&skeletal_functions[i].object){
         const auto id=static_cast<SkeletalFnId>(i);auto* bytes=static_cast<uint8_t*>(params);
         if(id==SkeletalFnId::BeginSpawn){auto value=&actor;std::memcpy(bytes+128,&value,8);return;}
@@ -640,12 +648,13 @@ void scene_call(void* object,void* fn,void* params){
             slots[static_cast<size_t>(index)]=skeletal_bad_null_set&&!value?&other_material:value;
             skeletal_array(*static_cast<SkeletalObject*>(object),0x518,{slots.data(),std::max(materials.count,index+1),32});
             if(skeletal_make_active_after_material)p[0x3b]=1;return;}
-        if(fn==&component_world_fn){const auto value=engine(Transform{{1.25,-2.5,3},{0,0,0,1},{1,1,1}});std::memcpy(params,&value,sizeof(value));return;}
+        if(fn==&component_world_fn){const auto value=engine(Transform{{1.25,-2.5,3},{0,0,0,1},{1,1,1}});if(arm_publication_fixture&&object==&camera_fixture)std::memcpy(params,scene_bytes(camera_fixture)+0x400,sizeof(value));else std::memcpy(params,&value,sizeof(value));return;}
     }
     vertex_call(object,fn,params);
 }
 void scene_reset(HsmpReflect& reflect){
     vertex_reset(reflect);arm_first={};arm_second={};camera_fixture={};
+    arm_publication_fixture=false;arm_notify_children=arm_notify_native;arm_notifications=arm_publication_mutation=0;
     arm_first.identity.name=910;arm_first.identity.cls=&arm_class;arm_second.identity.name=911;arm_second.identity.cls=&arm_class;
     camera_fixture.identity.name=912;camera_fixture.identity.cls=&camera_class;arm_class.name=900;camera_class.name=901;
     for(auto object:{&arm_first.identity,&arm_second.identity,&camera_fixture.identity,&arm_class,&camera_class,&socket_fn,&deactivate_fn,&tick_fn,&active_fn,&tick_enabled_fn,&primitive_class,&physics_fn,&collision_fn,&collision_read_fn,&simulating_fn,&skeletal_class}){
@@ -864,6 +873,54 @@ void scene_checks(HsmpReflect& reflect){
     scene_reset(reflect);scene_wrong_tick_layout=true;check(finish(true)==-1&&result.complete==0,"unknown tick layout cannot prove owned mirror inertness");
     scene_build_admit=scene_shipping_profile;scene_vtable_read=scene_vtable;scene_socket_read=scene_socket_bits;scene_image=0;
     scene_owner={};scene_component={};active_scene_kind=0;vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
+}
+void arm_fixture_notify(Obj component){
+    ++arm_notifications;check(component.address==reinterpret_cast<uint64_t>(&arm_first),"endpoint publication dispatches only the original owned SpringArm");
+    const auto value=engine(arm_transform(arm_copy(&arm_first)));std::memcpy(scene_bytes(camera_fixture)+0x400,&value,sizeof(value));
+    uint64_t scalar{};
+    if(arm_publication_mutation==1){scalar=reinterpret_cast<uint64_t>(&arm_second);std::memcpy(scene_bytes(camera_fixture)+0xb0,&scalar,8);}
+    else if(arm_publication_mutation==2){scalar=name(L"ChangedSocket");std::memcpy(scene_bytes(camera_fixture)+0xb8,&scalar,8);}
+    else if(arm_publication_mutation==3)arm_child_slots[0]=&arm_second;
+    else if(arm_publication_mutation==4){const Array bad{reinterpret_cast<void*>(1),1,1};std::memcpy(scene_bytes(arm_first)+0xc8,&bad,sizeof(bad));}
+    else if(arm_publication_mutation==5)current_world=&new_world;
+    else if(arm_publication_mutation==6)actor.outer=&level;
+    else if(arm_publication_mutation==7)camera_fixture.identity.name^=1;
+    else if(arm_publication_mutation==8)camera_fixture.identity.flags|=mirrored_garbage;
+}
+void arm_publication_reset(HsmpReflect& reflect){
+    scene_reset(reflect);arm_publication_fixture=true;arm_level={};arm_level.identity={940,&level_class};lifetime_objects.push_back(&arm_level.identity);
+    component_world_fn.alive=true;component_world_fn.flags=0;lifetime_objects.push_back(&component_world_fn);
+    actor.outer=&arm_level.identity;source_outer=lifetime_outer;auto* world=&old_world;std::memcpy(scene_bytes(arm_level)+0xc0,&world,8);
+    arm_child_slots[0]=&camera_fixture;const Array children{arm_child_slots.data(),1,1};std::memcpy(scene_bytes(arm_first)+0xc8,&children,sizeof(children));
+    const auto socket=name(L"None");auto* owner=&actor;auto* parent=&arm_first;
+    for(auto* object:{&arm_first,&camera_fixture}){std::memcpy(scene_bytes(*object)+0x90,&owner,8);std::memcpy(scene_bytes(*object)+0xb8,&socket,8);}
+    std::memcpy(scene_bytes(camera_fixture)+0xb0,&parent,8);
+    arm_children_field={name(L"AttachChildren"),name(L"ArrayProperty"),16,0xc8,&arm_child_inner,nullptr,nullptr};
+    arm_child_inner={0,name(L"ObjectProperty"),8,0,nullptr,nullptr,nullptr};arm_first_field=&arm_children_field;spline_api.children=arm_fixture_children;
+    arm_notify_children=arm_fixture_notify;
+}
+void arm_publication_checks(HsmpReflect& reflect){
+    const wchar_t socket_text[]=L"OfflineExactSocket";const HsmpViewText socket{u16(socket_text),static_cast<uint32_t>(std::wcslen(socket_text)),0};
+    const HsmpViewSpringArmFrame next{{211.51344970236539,-22.75,7},{0,0,0,1}};HsmpViewResult result{};
+    auto publish=[&]{int context{};const HsmpViewGuard guard{&context,scene_guard_check};OperationScope operation(&guard,keep(&old_world));
+        const auto owner=keep(&actor),component=keep(&arm_first);SceneOperation scene(owner,component,7);
+        const std::vector<ArmOwnedChild> owned{{component,{},name(L"None")},{keep(&camera_fixture),component,name(L"None")}};
+        return arm_apply(keep(&old_world),owner,component,socket,next,owned,&result);};
+    arm_publication_reset(reflect);const auto published=publish();
+    check(arm_notifications==1&&arm_equal(arm_copy(&arm_first),next),"owned arm cache is followed by exactly one native child publication");
+    {int context{};const HsmpViewGuard guard{&context,scene_guard_check};OperationScope operation(&guard,keep(&old_world));
+        const auto actual=transform(keep(&camera_fixture),L"/Script/Engine.SceneComponent:K2_GetComponentToWorld",&result);
+        check(close(actual,arm_transform(next)),"attached native camera observes the endpoint notification before its own apply");}
+    arm_publication_final(published);check(true,"published original whole hierarchy remains valid through final pure closure");
+    for(int mutation=1;mutation<=8;++mutation){arm_publication_reset(reflect);arm_publication_mutation=mutation;
+        rejects([&]{publish();},"native child callback cannot replace original parent/socket/slot/storage/world/level/name or garbage identity");
+        check(arm_notifications==1,"callback mutation refuses after exactly one admitted publication");}
+    arm_publication_reset(reflect);arm_child_slots[0]=&arm_second;rejects([&]{publish();},"foreign child is refused before any native publication");check(arm_notifications==0,"foreign child receives no native update");
+    arm_publication_reset(reflect);const auto original=publish();const auto callbacks=scene_events;uint64_t changed=name(L"ChangedSocket");std::memcpy(scene_bytes(camera_fixture)+0xb8,&changed,8);
+    rejects([&]{arm_publication_final(original);},"later component callback cannot change an earlier published socket before complete frame");check(scene_events==callbacks,"final original child census is callback-free");
+    arm_notify_children=arm_notify_native;arm_publication_fixture=false;source_outer=nullptr;scene_reset(reflect);
+    scene_build_admit=scene_shipping_profile;scene_vtable_read=scene_vtable;scene_socket_read=scene_socket_bits;scene_image=0;
+    vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
 }
 void empty_checks(HsmpReflect& reflect){
     HsmpViewResult result{};HsmpViewVertexState proof{};
@@ -1249,6 +1306,7 @@ int main() {
         path_checks(reflect);
         vertex_checks(reflect);
         scene_checks(reflect);
+        arm_publication_checks(reflect);
         empty_checks(reflect);
         skeletal_checks(reflect);
         pose_checks(reflect);

@@ -1,5 +1,17 @@
 # Native authority bootstrap checkpoint
 
+## Current actual: camera-arm child transform localized
+
+Exact5ee665e6/full G0/all394 hashes run210901-4a9dbb localizes BOTH world_set
+failures to FollowCamera11 under Shoulder SpringArm6, socketNone. Position
+delta211.51344970236539, quaternion component delta0.37686964143071849,
+scale0 at70.935s/72.183s. Matched native cache-write->child-update ordering is
+proved; the guarded three-file correction compiles with1029 focused checks and
+production review closed. Keep native attachment and original bounds; actual
+corrected camera readback remains pending.
+All original games/debuggers gone, save20 unchanged, no fresh dump; first49-
+component mirrors create but complete scene/view/input remain unverified.
+
 ## Current actual: asset fix passes; first-mirror transform readback next
 
 Exact9676db66/full G0/all394 hashes run205648-6725b5 proves BOTH clients create
