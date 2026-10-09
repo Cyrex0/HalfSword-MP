@@ -30,6 +30,15 @@ pub struct Text {
     pub len: u32,
     pub pad: u32,
 }
+impl Default for Text {
+    fn default() -> Self {
+        Self {
+            data: std::ptr::null(),
+            len: 0,
+            pad: 0,
+        }
+    }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Transform {
@@ -83,10 +92,20 @@ pub struct VertexStateProof {
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-pub struct VertexTarget {
+pub struct FinishTarget {
     pub owner: Object,
     pub component: Object,
     pub asset: Object,
+    pub scene_kind: u32,
+    pub owned_mirror: u32,
+    pub socket: Text,
+    pub arm: SpringArmFrame,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct SpringArmFrame {
+    pub translation: [f64; 3],
+    pub rotation: [f64; 4],
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -194,6 +213,7 @@ pub struct Component {
     pub pad_lod: u32,
     pub spline: SplineProfile,
     pub pad_spline: u32,
+    pub spring_arm_socket: Text,
 }
 #[repr(C)]
 pub struct Frame {
@@ -214,6 +234,7 @@ pub struct Frame {
     pub texture_count: u32,
     pub pad_t: u32,
     pub spline: *mut SplineFrame,
+    pub spring_arm: *mut SpringArmFrame,
 }
 #[repr(C)]
 pub struct ResultInfo {
@@ -401,9 +422,9 @@ pub struct Provider {
         *mut VertexStateProof,
         *mut ResultInfo,
     ) -> i32,
-    pub finish_vertex_sets: unsafe extern "C" fn(
+    pub finish_scene_sets: unsafe extern "C" fn(
         Object,
-        *const VertexTarget,
+        *const FinishTarget,
         u32,
         *const u64,
         u32,
@@ -414,7 +435,7 @@ pub struct Provider {
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 8 {
+    if p.is_null() || unsafe { (*p).abi } == 9 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
     } else {
         PROVIDER.store(std::ptr::null_mut(), Ordering::Release);
@@ -427,6 +448,12 @@ pub(crate) fn provider() -> Result<&'static Provider, String> {
     } else {
         Ok(unsafe { &*p })
     }
+}
+#[derive(Clone, Copy)]
+struct VertexTarget {
+    owner: Object,
+    component: Object,
+    asset: Object,
 }
 struct Source {
     world: Object,
@@ -602,13 +629,15 @@ impl Arena {
         Component {
             id: c.id,
             parent: c.parent,
-            kind: match c.kind {
-                d::ComponentKind::Skeletal => 0,
-                d::ComponentKind::Static => 1,
-                d::ComponentKind::Groom => 2,
-                d::ComponentKind::Procedural => 3,
-                d::ComponentKind::Scene => 4,
-                d::ComponentKind::Spline => 5,
+            kind: match (&c.kind, &c.scene) {
+                (d::ComponentKind::Scene, d::SceneEvidence::Camera) => 6,
+                (d::ComponentKind::Scene, d::SceneEvidence::SpringArm { .. }) => 7,
+                (d::ComponentKind::Skeletal, _) => 0,
+                (d::ComponentKind::Static, _) => 1,
+                (d::ComponentKind::Groom, _) => 2,
+                (d::ComponentKind::Procedural, _) => 3,
+                (d::ComponentKind::Scene, _) => 4,
+                (d::ComponentKind::Spline, _) => 5,
             },
             visible: (c.visible && !c.hidden) as u32,
             asset: self.text(
@@ -660,6 +689,10 @@ impl Arena {
                 })
                 .unwrap_or_default(),
             pad_spline: 0,
+            spring_arm_socket: self.text(match &c.scene {
+                d::SceneEvidence::SpringArm { socket_name, .. } => socket_name,
+                _ => "",
+            }),
         }
     }
 }
@@ -902,6 +935,7 @@ struct FrameStorage {
     vectors: Vec<f32>,
     textures: Vec<Object>,
     spline: Option<SplineStorage>,
+    spring_arm: Option<Box<SpringArmFrame>>,
 }
 impl FrameStorage {
     fn source(c: &d::RenderComponent) -> Self {
@@ -913,6 +947,8 @@ impl FrameStorage {
             vectors: vec![0.0; c.materials.iter().map(|m| m.vectors.len() * 4).sum()],
             textures: vec![Object::default(); c.materials.iter().map(|m| m.textures.len()).sum()],
             spline: c.spline_profile.as_ref().map(SplineStorage::source),
+            spring_arm: matches!(c.scene, d::SceneEvidence::SpringArm { .. })
+                .then(|| Box::new(SpringArmFrame::default())),
         }
     }
     fn ffi(&mut self) -> Frame {
@@ -937,6 +973,11 @@ impl FrameStorage {
                 .spline
                 .as_mut()
                 .map(|s| s.ffi() as *mut SplineFrame)
+                .unwrap_or(std::ptr::null_mut()),
+            spring_arm: self
+                .spring_arm
+                .as_mut()
+                .map(|a| &mut **a as *mut SpringArmFrame)
                 .unwrap_or(std::ptr::null_mut()),
         }
     }
@@ -1256,7 +1297,49 @@ impl Native {
                     binding.pawn_controller,
                     binding.controller_pawn,
                 ));
-                targets.extend_from_slice(&binding.vertices);
+                targets.extend(binding.vertices.iter().map(|v| FinishTarget {
+                    owner: v.owner,
+                    component: v.component,
+                    asset: v.asset,
+                    ..FinishTarget::default()
+                }));
+                for (index, c) in descriptor.recipe.components.iter().enumerate() {
+                    let scene_kind = match &c.scene {
+                        d::SceneEvidence::Camera => 6,
+                        d::SceneEvidence::SpringArm { .. } => 7,
+                        _ => continue,
+                    };
+                    let (component, owner) = *binding
+                        .components
+                        .get(&c.id)
+                        .ok_or("scene finish component")?;
+                    let frame = entity
+                        .components
+                        .iter()
+                        .find(|f| f.id == c.id)
+                        .ok_or("scene finish frame")?;
+                    if (scene_kind == 7) != frame.spring_arm.is_some() {
+                        return Err("source spring arm frame presence".into());
+                    }
+                    let arm = match &frame.spring_arm {
+                        Some(a) => {
+                            a.validate().map_err(str::to_owned)?;
+                            SpringArmFrame {
+                                translation: a.translation,
+                                rotation: a.rotation,
+                            }
+                        }
+                        None => SpringArmFrame::default(),
+                    };
+                    targets.push(FinishTarget {
+                        owner,
+                        component,
+                        scene_kind,
+                        socket: binding.prepared.components[index].spring_arm_socket,
+                        arm,
+                        ..FinishTarget::default()
+                    });
+                }
             }
             if originals.len() > w::MAX_ENTITIES || targets.len() > w::MAX_ENTITIES * 64 {
                 return Err("source vertex complete-set bounds".into());
@@ -1267,7 +1350,7 @@ impl Native {
             let guard = context.ffi();
             let mut r = ResultInfo::default();
             if !context.valid()
-                || (p.finish_vertex_sets)(
+                || (p.finish_scene_sets)(
                     world,
                     targets.as_ptr(),
                     targets.len() as u32,
@@ -1650,6 +1733,12 @@ impl Native {
                             morphs: values.morphs,
                             materials,
                             spline,
+                            spring_arm: values.spring_arm.as_ref().map(|a| {
+                                w::NativeSpringArmFrame {
+                                    translation: a.translation,
+                                    rotation: a.rotation,
+                                }
+                            }),
                         });
                     }
                     entities.push(w::RenderEntity {
@@ -1659,7 +1748,7 @@ impl Native {
                     });
                 }
                 let render = w::RenderWorld { world, entities };
-                w::encode_render_world_v2(&render).map_err(str::to_owned)?;
+                w::encode_render_world_v3(&render).map_err(str::to_owned)?;
                 self.finish_native_vertices(&render)?;
                 self.presentation.pending = Some(render);
                 Ok(())
@@ -1790,6 +1879,22 @@ impl Native {
                             .as_ref()
                             .map(SplineStorage::from_wire)
                             .transpose()?;
+                        if matches!(recipe.scene, d::SceneEvidence::SpringArm { .. })
+                            != frame.spring_arm.is_some()
+                        {
+                            return Err("mirror spring arm frame presence".into());
+                        }
+                        values.spring_arm = frame
+                            .spring_arm
+                            .as_ref()
+                            .map(|a| {
+                                a.validate().map_err(str::to_owned)?;
+                                Ok::<_, String>(Box::new(SpringArmFrame {
+                                    translation: a.translation,
+                                    rotation: a.rotation,
+                                }))
+                            })
+                            .transpose()?;
                         values.world = transform(frame.transform);
                         values.bones = frame.bones.iter().copied().map(transform).collect();
                         values.morphs = frame.morphs.clone();
@@ -1854,7 +1959,7 @@ impl Native {
                     .collect::<Result<Vec<_>, _>>()?;
                 let mut r = ResultInfo::default();
                 if !context.valid()
-                    || (p.finish_vertex_sets)(
+                    || (p.finish_scene_sets)(
                         world,
                         std::ptr::null(),
                         0,
@@ -2216,17 +2321,68 @@ mod presentation_binding_tests {
         assert_eq!(std::mem::size_of::<Lifecycle>(), 88);
         assert_eq!(std::mem::size_of::<Retirement>(), 400);
         assert_eq!(std::mem::size_of::<ActorScope>(), 304);
-        assert_eq!(std::mem::size_of::<Component>(), 256);
-        assert_eq!(std::mem::size_of::<Frame>(), 168);
+        assert_eq!(std::mem::size_of::<Component>(), 272);
+        assert_eq!(std::mem::size_of::<Frame>(), 176);
         assert_eq!(std::mem::size_of::<SplineProfile>(), 20);
         assert_eq!(std::mem::size_of::<VertexStateProof>(), 8);
-        assert_eq!(std::mem::size_of::<VertexTarget>(), 48);
+        assert_eq!(std::mem::size_of::<SpringArmFrame>(), 56);
+        assert_eq!(std::mem::size_of::<FinishTarget>(), 128);
         assert_eq!(std::mem::size_of::<Provider>(), 112);
         assert_eq!(std::mem::size_of::<SplineSettings>(), 72);
         assert_eq!(std::mem::size_of::<SplineVectorPoint>(), 80);
         assert_eq!(std::mem::size_of::<SplineQuatPoint>(), 104);
         assert_eq!(std::mem::size_of::<SplineFloatPoint>(), 20);
         assert_eq!(std::mem::size_of::<SplineFrame>(), 184);
+    }
+    #[test]
+    fn native_camera_and_spring_arm_keep_exact_classes_and_owned_socket_output() {
+        let recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+            "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
+        ))
+        .unwrap();
+        let mut component = recipe.components[0].clone();
+        component.kind = d::ComponentKind::Scene;
+        component.component_class = "/Script/Engine.CameraComponent".into();
+        component.scene = d::SceneEvidence::Camera;
+        let mut arena = Arena::new();
+        let camera = arena.component(&component);
+        assert_eq!(camera.kind, 6);
+        assert_eq!(camera.spring_arm_socket.len, 0);
+        assert!(FrameStorage::source(&component).ffi().spring_arm.is_null());
+        component.component_class = "/Script/Engine.SpringArmComponent".into();
+        component.scene = d::SceneEvidence::SpringArm {
+            draw_debug_lag_markers: false,
+            socket_name: "Native actual socket".into(),
+        };
+        let arm = arena.component(&component);
+        assert_eq!(arm.kind, 7);
+        let class = unsafe { std::slice::from_raw_parts(arm.asset.data, arm.asset.len as usize) };
+        assert_eq!(
+            String::from_utf16(class).unwrap(),
+            component.component_class
+        );
+        let socket = unsafe {
+            std::slice::from_raw_parts(
+                arm.spring_arm_socket.data,
+                arm.spring_arm_socket.len as usize,
+            )
+        };
+        assert_eq!(String::from_utf16(socket).unwrap(), "Native actual socket");
+        let mut storage = FrameStorage::source(&component);
+        let actual = SpringArmFrame {
+            translation: [-0.0, 1.2345678901234567, -2.75],
+            rotation: [2.0, 3.0, 4.0, 5.0],
+        };
+        **storage.spring_arm.as_mut().unwrap() = actual;
+        let original_pointer = storage.ffi().spring_arm;
+        let mut moved = Vec::with_capacity(1);
+        moved.push(storage);
+        moved.push(FrameStorage::source(&component));
+        assert_eq!(moved[0].ffi().spring_arm, original_pointer);
+        let observed = unsafe { &*original_pointer };
+        assert_eq!(observed.translation[0].to_bits(), (-0.0f64).to_bits());
+        assert_eq!(observed.translation, actual.translation);
+        assert_eq!(observed.rotation, actual.rotation);
     }
     fn raw_spline_fixture() -> w::NativeSplineFrame {
         w::NativeSplineFrame {

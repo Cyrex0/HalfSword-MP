@@ -131,25 +131,9 @@ void vertex_native_asset(Obj world,Obj owner,Obj component,const HsmpViewCompone
     require(recipe.kind==1&&recipe.vertex_count==0,"native asset vertex proof supports cooked static mesh only");
     require(vertex_observe(world,owner,component,r).no_override==1,"native asset vertex override appeared");
 }
-VertexSnapshot vertex_target_pure(const HsmpViewVertexTarget& target){
+VertexSnapshot vertex_target_pure(const HsmpViewFinishTarget& target){
     vertex_pure(target.owner);void* asset_pointer=vertex_pure(target.asset);
     require((*vertex_flags(asset_pointer)&0x40u)==0,"native vertex aggregate runtime asset");
     const auto copy=vertex_copy(vertex_pure(target.component),0x588);
     require(copy.asset==target.asset.address&&vertex_state(copy).no_override==1,"native vertex aggregate asset/override changed");return copy;
-}
-void vertex_finish_set(Obj world,const std::vector<HsmpViewVertexTarget>& targets,HsmpViewResult* r){
-    require(targets.size()<=32*64,"native vertex aggregate bound");
-    std::vector<VertexSnapshot> originals;originals.reserve(targets.size());
-    for(const auto& target:targets){
-        VertexOperation operation(target.owner,target.component);vertex_live(target.asset);
-        require(same(vertex_asset,target.asset),"native vertex aggregate original asset replaced");
-        require(vertex_observe(world,target.owner,target.component,r).no_override==1,"native vertex aggregate override appeared");
-        originals.push_back(vertex_target_pure(target));
-    }
-    vertex_live(world);if(active_game_instance.weak)vertex_live(active_game_instance);
-    check_guard();
-    // A later target's callback must not mutate an earlier accepted target.
-    // No callback-capable operation is permitted after this final boundary.
-    vertex_pure(world);if(active_game_instance.weak)vertex_pure(active_game_instance);
-    for(size_t i=0;i<targets.size();++i)require(vertex_equal(originals[i],vertex_target_pure(targets[i])),"native vertex aggregate census changed");
 }

@@ -24,7 +24,11 @@ struct HsmpViewSplineProfile {
 // ABI8: complete original static-component census, not an asset color guess.
 // no_override0 means validated overrides exist; 1 means every actual slot null.
 struct HsmpViewVertexState { uint32_t lod_info_count,no_override; };
-struct HsmpViewVertexTarget {HsmpViewObject owner,component,asset;};
+struct HsmpViewSpringArmFrame {double translation[3],rotation[4];};
+struct HsmpViewFinishTarget {
+    HsmpViewObject owner,component,asset;uint32_t scene_kind,owned_mirror;
+    HsmpViewText socket;HsmpViewSpringArmFrame arm;
+};
 struct HsmpViewSplineVectorPoint { float key; uint32_t interp; double out[3],arrive[3],leave[3]; };
 struct HsmpViewSplineQuatPoint { float key; uint32_t interp; double out[4],arrive[4],leave[4]; };
 struct HsmpViewSplineFloatPoint { float key,out,arrive,leave; uint32_t interp; };
@@ -53,6 +57,7 @@ struct HsmpViewComponent {
     uint32_t vertex_state; uint32_t pad_vertex; // native_asset0/captured1/runtime2/unavailable3/scene_not_applicable4
     const HsmpViewVertexLod* vertex_lods; uint32_t vertex_count; uint32_t pad_lod;
     HsmpViewSplineProfile spline; uint32_t pad_spline;
+    HsmpViewText spring_arm_socket;
 };
 struct HsmpViewFrame {
     HsmpViewTransform world;
@@ -62,6 +67,7 @@ struct HsmpViewFrame {
     float* vectors; uint32_t vector_count; uint32_t pad_v; // four floats per vector
     HsmpViewObject* textures; uint32_t texture_count; uint32_t pad_t;
     HsmpViewSplineFrame* spline;
+    HsmpViewSpringArmFrame* spring_arm;
 };
 struct HsmpViewResult { uint32_t complete; uint32_t operations; char reason[192]; };
 // ABI5 engine retirement requires positive original world membership, then
@@ -116,7 +122,7 @@ struct HsmpPresentation {
     int32_t (*describe_vertex_state)(HsmpViewObject world,HsmpViewObject owner,HsmpViewObject component,const HsmpViewGuard*,HsmpViewVertexState*,HsmpViewResult*);
     // After all callbacks, the final whole-scene census uses original identities
     // and hard fields only, without getters or ProcessEvent.
-    int32_t (*finish_vertex_sets)(HsmpViewObject world,const HsmpViewVertexTarget*,uint32_t target_count,const uint64_t* mirrors,uint32_t mirror_count,const HsmpViewGuard*,HsmpViewResult*);
+    int32_t (*finish_scene_sets)(HsmpViewObject world,const HsmpViewFinishTarget*,uint32_t target_count,const uint64_t* mirrors,uint32_t mirror_count,const HsmpViewGuard*,HsmpViewResult*);
 };
 void hsmp_native_set_presentation(const HsmpPresentation*);
 }
@@ -132,7 +138,8 @@ static_assert(sizeof(HsmpViewMaterial)==72);
 static_assert(sizeof(HsmpViewVertexLod)==24);
 static_assert(sizeof(HsmpViewSplineProfile)==20);
 static_assert(sizeof(HsmpViewVertexState)==8);
-static_assert(sizeof(HsmpViewVertexTarget)==48);
+static_assert(sizeof(HsmpViewSpringArmFrame)==56);
+static_assert(sizeof(HsmpViewFinishTarget)==128);
 static_assert(sizeof(HsmpPresentation)==112);
 static_assert(sizeof(HsmpViewSplineVectorPoint)==80);
 static_assert(sizeof(HsmpViewSplineQuatPoint)==104);
@@ -142,8 +149,8 @@ static_assert(sizeof(HsmpViewSplineVectorCurve)==24);
 static_assert(sizeof(HsmpViewSplineQuatCurve)==24);
 static_assert(sizeof(HsmpViewSplineFloatCurve)==24);
 static_assert(sizeof(HsmpViewSplineFrame)==184);
-static_assert(sizeof(HsmpViewComponent)==256);
-static_assert(sizeof(HsmpViewFrame)==168);
+static_assert(sizeof(HsmpViewComponent)==272);
+static_assert(sizeof(HsmpViewFrame)==176);
 static_assert(sizeof(HsmpViewResult)==200);
 // All ops borrow recipe strings/arrays only for the duration of the call.
 // Caps: components64, bones512/component, morphs128/component, materials32,
