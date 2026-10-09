@@ -933,8 +933,10 @@ invalid-input return1 must not be treated as a native count. The current source
 refusal does not yet record the actual returned value, so absent NullRHI render
 data remains a hypothesis. The next diagnostic retains the strict1..16 bound,
 records typed zero/nil/error and original asset address/class/path, and freshly
-rechecks the hard static asset around the call. Focused Lua141 assertions and
-syntax3 pass; actual getter/backend evidence is still required.
+rechecks the hard static asset around the call. Final focused Lua142 assertions
+and syntax3 pass; independent review closed after the last metadata-callback
+fixture confirmed the old asset getter is never called after replacement.
+Code is committed as1cea3493. Actual getter/backend evidence is still required.
 
 Existing offscreen authority mode selects `-RenderOffscreen` instead of
 `-nullrhi`, retaining the normal rendering configuration without a software
