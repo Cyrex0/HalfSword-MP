@@ -19,7 +19,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 - Make native loading visibly active with real elapsed time and immediate asset
   counts; distinguish asset preparation from player-model creation.
 - Add bounded native model-creation checkpoints to identify engine-call failures
-  without per-frame logging or changes to validation and network data.
+  without per-frame logging or changes to validation and network data. Identify
+  the exact render or pose-calculator mesh assignment when asset identity differs.
 - Include UE4SS minidumps in native crash detection and reject clients that
   stop before readiness, retaining their exact failure reason and owned cleanup.
 - Keep experimental native clients behind an opaque loading screen with actual

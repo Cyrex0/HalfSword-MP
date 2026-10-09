@@ -967,13 +967,13 @@ void pose_reset(HsmpReflect& reflect){
 void pose_checks(HsmpReflect& reflect){
     HsmpViewResult result{};const auto binding=[&](){return pose_bind(keep(&old_world),keep(&actor),keep(&skeletal_second),keep(&skeletal_first),keep(&vertex_mesh),2,&result);};
     const wchar_t requested[]=L"/Game/ObservedClothing.ObservedClothing";const HsmpViewText requested_path{u16(requested),static_cast<uint32_t>(std::wcslen(requested)),0};
-    pose_reset(reflect);mesh_assignment(keep(&skeletal_first),keep(&vertex_mesh),requested_path,false,&result);
-    mesh_assignment(keep(&skeletal_second),keep(&vertex_mesh),requested_path,true,&result);check(pose_asset_reads==2,"both exact assigned mesh identities still pass their native getters");
+    pose_reset(reflect);mesh_assignment(keep(&skeletal_first),keep(&vertex_mesh),requested_path,false,"mesh_set",&result);
+    mesh_assignment(keep(&skeletal_second),keep(&vertex_mesh),requested_path,true,"verified",&result);check(pose_asset_reads==2,"both exact assigned mesh identities still pass their native getters");
     for(bool calculator:{false,true})for(bool absent:{false,true}){pose_reset(reflect);auto& target=calculator?skeletal_second:skeletal_first;
         const auto actual=absent?0:reinterpret_cast<uint64_t>(&vertex_mesh_other);skeletal_pointer(target,0x558,actual);skeletal_pointer(target,0x560,actual);bool exact{};
-        try{mesh_assignment(keep(&target),keep(&vertex_mesh),requested_path,calculator,&result);}catch(const Error& e){const std::string reason=e.what();
+        try{mesh_assignment(keep(&target),keep(&vertex_mesh),requested_path,calculator,"mesh_set",&result);}catch(const Error& e){const std::string reason=e.what();
             exact=reason.find(calculator?"mirror pose calculator mesh assignment failed":"mirror render mesh assignment failed")==0&&
-                reason.find(absent?"actual=absent":"actual=different")!=std::string::npos&&reason.find("expected_asset=/Game/ObservedClothing.ObservedClothing")!=std::string::npos&&reason.size()<sizeof(result.reason);}
+                reason.find("stage=mesh_set")!=std::string::npos&&reason.find(absent?"actual=absent":"actual=different")!=std::string::npos&&reason.find("asset=/Game/ObservedClothing.ObservedClothing")!=std::string::npos&&reason.size()<sizeof(result.reason);}
         check(exact,"mesh assignment refusal names the exact target and observed missing/different identity without native metadata queries");
         check(pose_asset_reads==1,"failed assignment performs one original native getter without checking the other target");}
     pose_reset(reflect);auto b=binding();auto output=pose_transfer(b,&result);pose_final(b,output);

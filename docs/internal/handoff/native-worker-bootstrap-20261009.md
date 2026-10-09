@@ -1,5 +1,17 @@
 # Native authority bootstrap checkpoint
 
+## Current actual: pose binding advances; clothing mesh identity refuses
+
+Exact3c670480/full G0/all394 deployed hashes run202218-e92cdb passes native
+pose binding for components4,7,8,10 on both clients. Component15's Hosen_Standard_003
+render mesh then returns a different asset identity at69.762s/69.879s. This is
+a safe creation refusal; no fresh dump or completed mirror/view/input proof.
+Both original game windows qualified on the smallest secondary display; all
+four games/two CDBs independently absent and all20 save hashes unchanged.
+See native-scene-stream-20261009.md for current failure, bounds and evidence.
+Next localize the exact setter or later callback that changes this admitted
+mesh identity. Preserve exact gear/pose/material identity; no substitute mesh.
+
 ## Native creation cause now proved
 
 Actual9b2721d9 diagnostic191021-69d625 admits original-client CDB captures on

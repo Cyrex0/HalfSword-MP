@@ -1,5 +1,41 @@
 # Native full-scene encoding checkpoint
 
+## Actual 3c670480: render mesh mismatch isolated to clothing
+
+Exact clean dev/full G0/all394 hashes run20261009-202218-e92cdb-native-host,
+source207d594e-852e-4ae1-8325-d5bc882ea297, reproduces the same safe refusal
+on both clients. Components4,7,8,10 pass native pose binding. Component15,
+NODE_AddSkeletalMeshComponent-13, has67 source bones and requests the full
+SkeletalMesh path /Game/Assets/Clothing/Hosen/SkeletalMeshes/
+SK_Clothing_Hosen_Standard_003.SK_Clothing_Hosen_Standard_003.
+The render component's GetSkinnedAsset returns a different admitted identity;
+the calculator check is not reached. Refusals occur69.762s/69.879s.
+Both fail while creating the first entity1 mirror. Entity2's corresponding
+component uses Standard_002. Qualified source captures and native bulk checks
+agree with each exact recipe; cooked Hosen blueprint sets SkeletalMesh and
+SkinnedAsset to the same package export. No source path collision is found.
+
+The preceding e0b80 run200724-463c15 proved the corrected suspension check
+passes those first four populated components, then reached this same component
+with an undifferentiated mesh refusal. The narrow 3c670480 diagnostics preserve
+the original getter and exact identity requirement. Strict provider compilation,
+967 focused assertions and independent review pass. Full G0 passes75 Lua and
+1364 Rust tests in79 binaries, clippy0 errors/16 warnings. Runtime cause of the
+different clothing mesh is still unproved; do not accept substitutes or report
+completed mirrors, owned views, input, gameplay parity or release readiness.
+
+Both original CDB captures admitted and completed; original four games and two
+debuggers independently absent, save20 hashes unchanged, no fresh dump. First
+owned-window observations prove both clients physically contained on the
+smallest secondary display. Evidence and native_operator_summary.json are
+retained in the ignored run directories. Extended diagnostic verdict staysfalse.
+
+The initial e0b80 pre-push G0 encountered parallel-test interference in
+mode_records_go_to_capable_peers_on_change_and_periodically: process-wide
+capability retention can remove another independent test's peer entries.
+The unchanged exact test and complete serial G0 pass. RUST_TEST_THREADS=1 is
+used for these full gate executions; no assertions or product bounds changed.
+
 ## Actual e132: safe pose refusal; suspension proof corrected
 
 Exact clean dev/G0/all394 hashes run195159-f0d052/source0e63df57-0388-4b55-
