@@ -281,3 +281,41 @@ lifetime/retirement/scene checks, two native Rust binding checks and one API
 check, Lua83 checks and two-file syntax. These
 results establish the guarded bridge behavior only; actual game acceptance
 remains outstanding and must use two normal clients and one headless game.
+
+## Actual ABI5 three-game run
+
+Exact clean cfe9afe4 passed full G0 (74 Lua suites, 1314 Rust tests in 79
+binaries; clippy zero errors/six warnings) and build/deploy exited zero. The
+deployment's commit, binary commit and nested G0 commit matched; source was
+clean and native modules deployed. The default actual topology ran in
+`test-results/20261009-022009-ea57ee-native-host`, with two normal AI-input
+clients, one NullRHI engine authority and its supervisor. Source again
+reached native_ready with two opposed human pawns and no AI.
+
+Both clients advanced beyond the old LevelManager retirement refusal. Each
+suppression summary recorded two retired native drivers, then refused
+`suppression_component_census_empty` at 14.456/14.494s before any fighter,
+gear or AI retirement completed. The failing component owner is not yet
+identified in that summary. No successful client isolation or active input
+has been demonstrated. Driver retirement advanced in the real engine; this
+does not prove complete local combat suppression.
+
+Successful retirement's raw ABI5 before/after fields were cleared before
+logging, so this run persists only the strict provider-gated `drivers=2`
+summary. Periodic retirement probes were not reached. The next diagnostic
+must retain bounded original-driver identity and before/after proof fields,
+as well as the exact owner of the empty component census.
+
+The source's new diagnostic identifies its refusal exactly:
+`Actor.K2_GetComponentsByClass(SceneComponent) collect owner=Willie_BP_C_2147482026`,
+numeric key257, userdata value, max256. This is a real native component-count
+bound, not an undocumented array annotation. Do not silently raise limits or
+skip native clothing/gear; capture the exact census and required ancestor
+closure before changing the representation or resource budgets.
+
+Authority-owned evidence remained zero samples/frames, 116 refusals and
+active input [0,0]; the 232 dispatches were neutral. All four owned process
+identities (supervisor24916, source44720, clients4324/42052) were independently
+absent after cleanup. Original save hashes remained unchanged, with no new
+crash or unobserved-child records. The tracked tree stayed at exact clean
+cfe9afe4 throughout the run. Native playability remains unverified.
