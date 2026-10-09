@@ -36,6 +36,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 - Require a separate native vertex-state capability before admitting experimental
   presentation peers. Native override-absence implementation and actual scene
   readiness remain under verification.
+- Preserve cooked static asset colors only after a complete guarded native
+  override-array census. Recheck original source and mirror state before whole
+  scene publication/readiness; present paint overrides retain exact capture,
+  and unknown state remains an explicit refusal. Actual scene verification is pending.
 
 ## [0.1.0-beta.6] - 2026-10-08
 

@@ -1052,3 +1052,24 @@ their limited mode. Focused server native45 checks pass, including old-peer
 refusal and authenticated UDP scene delivery. Worker sixth raw-function wiring
 is committed asda4de4f7 and passes220 focused Lua assertions/syntax2. Native
 proof, recipe integration and source/mirror ongoing checks remain in development.
+
+The guarded static override correction is now committed as13b859fd, with Rust
+source API70b52548 and Lua recipe integratione317addf. Private providerABI8 is
+112 bytes; original vertex targets are48 bytes. The provider validates matched
+code signatures and reflected LODData layout, returns native_asset only for a
+complete all-null original override census, and keeps verified present overrides
+on exact capture. Source capture, mirror create/apply and final whole-scene
+readiness/publication repeat the proof. All callback-capable work precedes the
+final pure complete-set census; source publication rechecks after the Lua
+boundary getters. Original assets and scalar identities are retained, never
+refreshed to accept replacement. Final source scope checks also reread cached
+original owner/root/pawn/controller/weapon/attachment hard links without PE.
+
+Focused checks pass: C++ provider compile /W4 /WX and340 lifetime/rejection
+checks, Rust presentation5, source scope28/API1, Lua source169/syntax3 and
+worker220/syntax2. Independent native/source/whole-set review closed. Primary
+layout/byte-signature and actual restriction evidence is recorded in
+`native-static-vertex-proof-20261009.md`. The next exact full G0 deployment and
+three-game run must prove actual slot state, complete recipes, advancing frames,
+both mirror readbacks and legal owned inputs; no runtime gain or parity follows
+from these focused checks alone.
