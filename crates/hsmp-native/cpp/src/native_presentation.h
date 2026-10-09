@@ -21,6 +21,10 @@ struct HsmpViewVertexLod { uint32_t lod; uint32_t count; const uint8_t* rgba; ui
 struct HsmpViewSplineProfile {
     uint32_t position_count,rotation_count,scale_count,reparam_count,metadata_null;
 };
+// ABI8: complete original static-component census, not an asset color guess.
+// no_override0 means validated overrides exist; 1 means every actual slot null.
+struct HsmpViewVertexState { uint32_t lod_info_count,no_override; };
+struct HsmpViewVertexTarget {HsmpViewObject owner,component,asset;};
 struct HsmpViewSplineVectorPoint { float key; uint32_t interp; double out[3],arrive[3],leave[3]; };
 struct HsmpViewSplineQuatPoint { float key; uint32_t interp; double out[4],arrive[4],leave[4]; };
 struct HsmpViewSplineFloatPoint { float key,out,arrive,leave; uint32_t interp; };
@@ -109,6 +113,10 @@ struct HsmpPresentation {
     // Original source scope/handle must be qualified by Rust before/after this
     // operation. No arbitrary-address admission or rendering-ready assertion.
     int32_t (*describe_spline)(HsmpViewObject world,HsmpViewObject owner,HsmpViewObject component,const HsmpViewGuard*,HsmpViewSplineProfile*,HsmpViewResult*);
+    int32_t (*describe_vertex_state)(HsmpViewObject world,HsmpViewObject owner,HsmpViewObject component,const HsmpViewGuard*,HsmpViewVertexState*,HsmpViewResult*);
+    // After all callbacks, the final whole-scene census uses original identities
+    // and hard fields only, without getters or ProcessEvent.
+    int32_t (*finish_vertex_sets)(HsmpViewObject world,const HsmpViewVertexTarget*,uint32_t target_count,const uint64_t* mirrors,uint32_t mirror_count,const HsmpViewGuard*,HsmpViewResult*);
 };
 void hsmp_native_set_presentation(const HsmpPresentation*);
 }
@@ -123,6 +131,9 @@ static_assert(sizeof(HsmpViewParameter)==24);
 static_assert(sizeof(HsmpViewMaterial)==72);
 static_assert(sizeof(HsmpViewVertexLod)==24);
 static_assert(sizeof(HsmpViewSplineProfile)==20);
+static_assert(sizeof(HsmpViewVertexState)==8);
+static_assert(sizeof(HsmpViewVertexTarget)==48);
+static_assert(sizeof(HsmpPresentation)==112);
 static_assert(sizeof(HsmpViewSplineVectorPoint)==80);
 static_assert(sizeof(HsmpViewSplineQuatPoint)==104);
 static_assert(sizeof(HsmpViewSplineFloatPoint)==20);

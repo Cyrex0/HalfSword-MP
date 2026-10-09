@@ -12,6 +12,7 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <tuple>
@@ -152,6 +153,8 @@ static_assert(sizeof(Array) == 16);
 struct Signature {Obj function{},cls{};std::vector<HsmpProp> fields;};
 std::map<std::wstring,Signature> signatures;
 void spline_call_guard(Obj object,Obj function,Obj cls);
+void vertex_call_guard(Obj object,Obj function,Obj cls);
+void vertex_dispatch_guard(Obj object,Obj function,Obj cls);
 
 struct Function {
     Obj function{}, cls{};
@@ -213,13 +216,16 @@ struct Function {
     }
     void call(Obj object, HsmpViewResult* result = nullptr) {
         spline_call_guard(object,function,cls);
+        vertex_call_guard(object,function,cls);
         require(vt->is_a(get(object), get(cls)) != 0, "native function owner class mismatch");
         void* object_pointer=get(object);void* function_pointer=get(function);
+        vertex_dispatch_guard(object,function,cls);
         profile_tick(3);profile_phase("cpp_pe",0);
         vt->call(object_pointer,function_pointer,buf.data());
         profile_phase("cpp_pe",1);
         check_guard();
         spline_call_guard(object,function,cls);
+        vertex_call_guard(object,function,cls);
         get(object); get(function); get(cls); if (result) ++result->operations;
     }
     Obj returned() const { auto p = value<void*>(L"ReturnValue", L"ObjectProperty"); return p ? keep(p) : Obj{}; }
@@ -281,6 +287,7 @@ bool effective_visible(Obj component) {return bool_property(component,L"bVisible
 void visibility(Obj component,bool visible,HsmpViewResult* r);
 void collision_off(Obj component,HsmpViewResult* r);
 #include "native_spline_impl.h"
+#include "native_vertex_state_impl.h"
 void scene_anchor(Obj component) {
     const auto cls=keep(vt->class_of(get(component)));
     if(same(cls,find(L"/Script/Engine.SceneComponent")))return;
@@ -518,7 +525,7 @@ void finish_component(Obj actor,Obj component,const Transform& relative,HsmpView
     Function f(L"/Script/Engine.Actor:FinishAddComponent");f.object(L"Component",component);f.boolean(L"bManualAttachment",true);
     f.put(L"RelativeTransform",L"StructProperty",engine(relative),L"Transform");f.call(actor,r);collision_off(component,r);
 }
-struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;};
+struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};};
 struct Mirror {Obj world{},actor{};std::vector<Part> parts;};
 std::map<uint64_t,Mirror> mirrors;
 std::mutex mirror_mutex;
@@ -539,14 +546,16 @@ int32_t inspect(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,Hsm
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,const HsmpViewGuard* guard,HsmpViewResult* r) {
-    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});supported(world,owner,component,r);
+    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});VertexOperation vertex_scope(c->vertex_state==0?owner:Obj{},c->vertex_state==0?component:Obj{});supported(world,owner,component,r);
         if(c->kind==0) {require(same(mesh_asset(component,r),asset(c->asset,L"/Script/Engine.SkeletalMesh")),"source mesh recipe changed");}
         else if(c->kind==4||c->kind==5)require(same(keep(vt->class_of(get(component))),asset(c->asset,L"/Script/CoreUObject.Class")),"source scene anchor class changed");
         else require(same(object_property(component,L"StaticMesh"),asset(c->asset,L"/Script/Engine.StaticMesh")),"source static mesh recipe changed");
         if(c->kind!=5)source_static(component,*c,r);if(c->kind<=1)verify_colors(component,*c,r);
+        vertex_native_asset(world,owner,component,*c,r);
         capture_values(component,*c,*out,r);qualify(world,owner,component,r);
         if(c->kind==5)spline_capture(world,owner,component,c->spline,*out->spline,r);
         if(c->kind==4){scene_anchor(component);source_static(component,*c,r);}
+        vertex_native_asset(world,owner,component,*c,r);
         r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
@@ -595,8 +604,12 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
             }else {
                 part.render=add_component(actor,L"/Script/Engine.StaticMeshComponent",c.relative,r);
                 auto mesh=asset(c.asset,L"/Script/Engine.StaticMesh");Function set_mesh(L"/Script/Engine.StaticMeshComponent:SetStaticMesh");set_mesh.object(L"NewMesh",mesh);set_mesh.call(part.render,r);
-                finish_component(actor,part.render,c.relative,r);require(same(object_property(part.render,L"StaticMesh"),mesh),"mirror static asset readback failed");
+                if(c.vertex_state==0){part.native_asset=mesh;VertexOperation vertex_scope(actor,part.render);finish_component(actor,part.render,c.relative,r);}
+                else finish_component(actor,part.render,c.relative,r);
+                require(same(object_property(part.render,L"StaticMesh"),mesh),"mirror static asset readback failed");
             }
+            std::optional<VertexOperation> vertex_scope;
+            if(c.vertex_state==0)vertex_scope.emplace(actor,part.render);
             for(uint32_t j=0;j<c.material_count;++j) {
                 const auto& m=c.materials[j];Function mid(L"/Script/Engine.PrimitiveComponent:CreateDynamicMaterialInstance");mid.put(L"ElementIndex",L"IntProperty",static_cast<int32_t>(m.slot));mid.object(L"SourceMaterial",asset(m.base,L"/Script/Engine.MaterialInterface"));mid.put(L"OptionalName",L"NameProperty",uint64_t{});mid.call(part.render,r);
                 auto instance=mid.returned();require(instance.weak&&is(instance,L"/Script/Engine.MaterialInstanceDynamic")&&same(material(part.render,m.slot,r),instance),"mirror material creation failed");part.materials.push_back(instance);
@@ -616,6 +629,8 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
                 attach.enumeration(L"LocationRule",0);attach.enumeration(L"RotationRule",0);attach.enumeration(L"ScaleRule",0);attach.boolean(L"bWeldSimulatedBodies",false);attach.call(target,r);
             }
         }
+        std::vector<HsmpViewVertexTarget> targets;for(const auto& part:mirror.parts)if(part.native_asset.weak)targets.push_back({actor,part.render,part.native_asset});
+        vertex_finish_set(world,targets,r);
         require(next_mirror!=0,"mirror handle exhausted");const auto id=next_mirror++;mirrors.emplace(id,std::move(mirror));r->complete=1;return id;
     }catch(const std::exception& e){failure(r,e.what());if(actor.weak){try{OperationScope scope(guard,world);destroy_actor(world,actor);}catch(const std::exception&){}}return 0;}
 }
@@ -638,6 +653,8 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         for(const auto i:order) {
             const auto& c=recipes[i];const auto& f=frames[i];auto& part=mirror.parts[i];frame(c,f);require(c.id==part.id&&c.kind==part.kind,"mirror recipe generation mismatch");
             SplineOperation spline_scope(c.kind==5?mirror.actor:Obj{},c.kind==5?part.render:Obj{});
+            VertexOperation vertex_scope(c.vertex_state==0?mirror.actor:Obj{},c.vertex_state==0?part.render:Obj{});
+            vertex_native_asset(world,mirror.actor,part.render,c,r);
             qualify(world,mirror.actor,part.render,r);world_transform(part.render,f.world,r);if(part.leader.weak)world_transform(part.leader,f.world,r);
             if(c.kind==5)spline_apply(world,mirror.actor,part.render,c.spline,*f.spline,r);
             for(uint32_t j=0;j<c.bone_count;++j) {
@@ -663,7 +680,10 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
             }
             for(uint32_t j=0;j<c.morph_count;++j){Function m(L"/Script/Engine.SkeletalMeshComponent:GetMorphTarget");m.put(L"MorphTargetName",L"NameProperty",name(c.morphs[j]));m.call(part.render,r);require(m.value<float>(L"ReturnValue",L"FloatProperty")==f.morphs[j],"mirror morph readback failed");}
             qualify(world,mirror.actor,part.render,r);if(part.leader.weak)qualify(world,mirror.actor,part.leader,r);
-        }r->complete=1;return 1;
+            vertex_native_asset(world,mirror.actor,part.render,c,r);
+        }
+        std::vector<HsmpViewVertexTarget> targets;for(const auto& part:mirror.parts)if(part.native_asset.weak)targets.push_back({mirror.actor,part.render,part.native_asset});
+        vertex_finish_set(world,targets,r);r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
@@ -850,7 +870,25 @@ int32_t describe_spline(Obj world,Obj owner,Obj component,const HsmpViewGuard* g
         auto snapshot=spline_coherent(world,owner,component,r);*out=spline_profile(snapshot);spline_profile_valid(*out);r->complete=1;return 1;}
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
-const HsmpPresentation provider{7,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline};
+int32_t describe_vertex_state(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,HsmpViewVertexState* out,HsmpViewResult* r){
+    try{initialize_result(r);thread();OperationScope scope(guard,world);require(out!=nullptr,"native vertex state output missing");
+        *out=vertex_observe(world,owner,component,r);r->complete=1;return 1;
+    }catch(const std::exception& e){failure(r,e.what());return -1;}
+}
+int32_t finish_vertex_sets(Obj world,const HsmpViewVertexTarget* source,uint32_t source_count,const uint64_t* handles,uint32_t mirror_count,const HsmpViewGuard* guard,HsmpViewResult* r){
+    const std::lock_guard lock(mirror_mutex);
+    try{initialize_result(r);thread();OperationScope scope(guard,world);
+        require(pointers(source,source_count,32*64)&&pointers(handles,mirror_count,32)&&(!source_count||!mirror_count),"native vertex complete set arguments");
+        std::vector<HsmpViewVertexTarget> targets;if(source_count)targets.assign(source,source+source_count);
+        for(uint32_t i=0;i<mirror_count;++i){
+            require(std::find(handles,handles+i,handles[i])==handles+i,"native vertex duplicate mirror handle");
+            const auto found=mirrors.find(handles[i]);require(found!=mirrors.end()&&same(found->second.world,world),"native vertex mirror generation");
+            for(const auto& part:found->second.parts)if(part.native_asset.weak)targets.push_back({found->second.actor,part.render,part.native_asset});
+        }
+        vertex_finish_set(world,targets,r);r->complete=1;return 1;
+    }catch(const std::exception& e){failure(r,e.what());return -1;}
+}
+const HsmpPresentation provider{8,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_vertex_sets};
 }
 void hsmp_presentation_register(const HsmpReflect* reflection) {
     const auto module=GetModuleHandleW(L"UE4SS.dll");
@@ -858,6 +896,7 @@ void hsmp_presentation_register(const HsmpReflect* reflection) {
     object_world=reinterpret_cast<GetWorld>(module?GetProcAddress(module,"?GetWorld@UObject@Unreal@RC@@QEBAPEAVUWorld@23@XZ"):nullptr);
     retirement_flags=reinterpret_cast<ObjectFlags>(module?GetProcAddress(module,"?GetObjectFlags@UObjectBase@Unreal@RC@@QEBAAEBW4EObjectFlags@23@XZ"):nullptr);
     spline_flags=retirement_flags;
+    vertex_flags=retirement_flags;
     retirement_free=reinterpret_cast<Free>(module?GetProcAddress(module,"?Free@FMemory@Unreal@RC@@SAXPEAX@Z"):nullptr);
     retirement_index=reinterpret_cast<RetirementIndex>(module?GetProcAddress(module,"?IndexToObject@FUObjectArray@Unreal@RC@@SAPEAUFUObjectItem@23@H@Z"):nullptr);
     retirement_object=reinterpret_cast<RetirementSlotObject>(module?GetProcAddress(module,"?GetObject@FUObjectItem@Unreal@RC@@AEAAAEAPEAVUObjectBase@23@XZ"):nullptr);

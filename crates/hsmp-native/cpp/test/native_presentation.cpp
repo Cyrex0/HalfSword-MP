@@ -192,6 +192,153 @@ void path_checks(HsmpReflect& reflect){
     source_outer=lifetime_outer;source_package_name=nullptr;check(source_path_reader(witness.data(),count,0,nullptr,0,nullptr,&package,reason,sizeof(reason))==-1,"missing native package discriminator refuses");
     source_outer=nullptr;lifetime_reset(reflect);
 }
+// Original component memory and reflected array metadata exercise the actual
+// bounded census. Non-null override values are deliberately invalid pointers:
+// the provider must classify presence without following a color buffer.
+struct VertexObject {LifetimeObject identity;std::array<uint8_t,0x600-sizeof(LifetimeObject)> storage{};};
+static_assert(sizeof(VertexObject)==0x600);
+VertexObject vertex_component_fixture{},vertex_second_fixture{};
+LifetimeObject vertex_component_class{810,&meta},vertex_scene_class{811,&meta},vertex_actor_component_class{812,&meta};
+LifetimeObject vertex_mesh_class{813,&meta},vertex_mesh{814,&vertex_mesh_class},vertex_mesh_other{815,&vertex_mesh_class};
+LifetimeObject vertex_lod_struct{816,&meta},vertex_owner_function{817,&function_class};
+struct VertexField {uint64_t key{},type{};int32_t bytes{},offset{};void* inner{},*structure{},*next{};};
+VertexField vertex_array_field{},vertex_inner_field{};void* vertex_first_field{};
+std::array<uint8_t,16*0x90> vertex_lod_bytes{};
+std::array<uint8_t,16*0x90> vertex_second_lods{};
+int vertex_guard_calls{},vertex_mutation_at{},vertex_events{};
+bool vertex_mutate_earlier_on_second{};
+enum class VertexMutation {None,Override,Asset,Garbage,ClassName,Travel};
+VertexMutation vertex_mutation{};
+void vertex_write_header(Array header){std::memcpy(reinterpret_cast<uint8_t*>(&vertex_component_fixture)+0x588,&header,sizeof(header));}
+void vertex_write_asset(LifetimeObject* value){std::memcpy(reinterpret_cast<uint8_t*>(&vertex_component_fixture)+0x560,&value,8);}
+void vertex_write_override(size_t slot,uint64_t value){std::memcpy(vertex_lod_bytes.data()+slot*0x90+0x30,&value,8);}
+int32_t vertex_guard_check(void*){
+    ++vertex_guard_calls;
+    if(vertex_mutation_at&&vertex_guard_calls==vertex_mutation_at){
+        switch(vertex_mutation){
+        case VertexMutation::Override:vertex_write_override(1,1);break;
+        case VertexMutation::Asset:vertex_write_asset(&vertex_mesh_other);break;
+        case VertexMutation::Garbage:vertex_component_fixture.identity.flags|=mirrored_garbage;break;
+        case VertexMutation::ClassName:vertex_component_class.name^=1;break;
+        case VertexMutation::Travel:current_world=&new_world;break;
+        default:break;
+        }
+    }
+    return 1;
+}
+void** vertex_children(void*){return &vertex_first_field;}
+void* vertex_next(void* p){return static_cast<VertexField*>(p)->next;}
+void** vertex_inner(void* p){return &static_cast<VertexField*>(p)->inner;}
+void** vertex_struct(void* p){return &static_cast<VertexField*>(p)->structure;}
+int32_t* vertex_size(void* p){return &static_cast<VertexField*>(p)->bytes;}
+int32_t* vertex_offset(void* p){return &static_cast<VertexField*>(p)->offset;}
+SplineName* vertex_field_name(const void* p,SplineName* out){const auto v=static_cast<const VertexField*>(p)->key;std::memcpy(out,&v,8);return out;}
+SplineVariant* vertex_field_class(void* p,SplineVariant* out){out->pointer=p;return out;}
+SplineName* vertex_variant_name(const SplineVariant* p,SplineName* out){const auto v=static_cast<const VertexField*>(p->pointer)->type;std::memcpy(out,&v,8);return out;}
+void* vertex_find(const uint16_t* key){
+    const std::wstring path(reinterpret_cast<const wchar_t*>(key));
+    if(path==L"/Script/Engine.StaticMeshComponent")return &vertex_component_class;
+    if(path==L"/Script/Engine.SceneComponent")return &vertex_scene_class;
+    if(path==L"/Script/Engine.ActorComponent")return &vertex_actor_component_class;
+    if(path==L"/Script/Engine.StaticMesh")return &vertex_mesh_class;
+    if(path==L"/Script/Engine.StaticMeshComponentLODInfo")return &vertex_lod_struct;
+    if(path==L"/Script/Engine.ActorComponent:GetOwner")return &vertex_owner_function;
+    return lifetime_find(key);
+}
+int32_t vertex_is_a(void* object,void* type){
+    if(object==&vertex_component_fixture||object==&vertex_second_fixture)return type==&vertex_component_class||type==&vertex_scene_class||type==&vertex_actor_component_class;
+    return lifetime_is_a(object,type);
+}
+int32_t vertex_props(void* object,HsmpProp* out,int32_t cap,int32_t* size){
+    if(object==&vertex_lod_struct){*size=vertex_inner_field.bytes;return 0;}
+    if(object==&vertex_owner_function&&cap>0){*size=8;out[0]=object_field(L"ReturnValue",0);return 1;}
+    return lifetime_props(object,out,cap,size);
+}
+int32_t vertex_prop(void* object,const uint16_t* key,HsmpProp* out){
+    const std::wstring field(reinterpret_cast<const wchar_t*>(key));
+    if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&field==L"StaticMesh"){*out=object_field(L"StaticMesh",0x560);return 1;}
+    if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&field==L"LODData"){*out=object_field(L"LODData",0x588);out->cls=name(L"ArrayProperty");out->size=16;return 1;}
+    return lifetime_prop(object,key,out);
+}
+void vertex_call(void* object,void* fn,void* params){
+    ++vertex_events;
+    if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&fn==&vertex_owner_function){
+        if(object==&vertex_second_fixture&&vertex_mutate_earlier_on_second)vertex_write_override(0,1);
+        auto owner=&actor;std::memcpy(params,&owner,8);return;
+    }
+    lifetime_call(object,fn,params);
+}
+void vertex_reset(HsmpReflect& reflect){
+    lifetime_reset(reflect);vertex_component_fixture={};vertex_component_fixture.identity.name=809;vertex_component_fixture.identity.cls=&vertex_component_class;
+    vertex_second_fixture={};vertex_second_fixture.identity.name=808;vertex_second_fixture.identity.cls=&vertex_component_class;
+    vertex_component_class.name=810;
+    for(auto o:{&vertex_component_fixture.identity,&vertex_second_fixture.identity,&vertex_component_class,&vertex_scene_class,&vertex_actor_component_class,&vertex_mesh_class,&vertex_mesh,&vertex_mesh_other,&vertex_lod_struct,&vertex_owner_function}){
+        o->flags=0;o->alive=true;lifetime_objects.push_back(o);
+    }
+    vertex_lod_bytes.fill(0);vertex_write_asset(&vertex_mesh);vertex_write_header({vertex_lod_bytes.data(),2,2});
+    vertex_second_lods.fill(0);auto mesh=&vertex_mesh;Array second_header{vertex_second_lods.data(),2,2};
+    std::memcpy(reinterpret_cast<uint8_t*>(&vertex_second_fixture)+0x560,&mesh,8);
+    std::memcpy(reinterpret_cast<uint8_t*>(&vertex_second_fixture)+0x588,&second_header,sizeof(second_header));
+    vertex_array_field={name(L"LODData"),name(L"ArrayProperty"),16,0x588,&vertex_inner_field,nullptr,nullptr};
+    vertex_inner_field={0,name(L"StructProperty"),0x90,0,nullptr,&vertex_lod_struct,nullptr};vertex_first_field=&vertex_array_field;
+    reflect.find=vertex_find;reflect.is_a=vertex_is_a;reflect.props=vertex_props;reflect.obj_prop=vertex_prop;reflect.call=vertex_call;
+    spline_api.children=vertex_children;spline_api.next=vertex_next;spline_api.inner=vertex_inner;spline_api.structure=vertex_struct;
+    spline_api.size=vertex_size;spline_api.offset=vertex_offset;spline_api.field_name=vertex_field_name;spline_api.field_class=vertex_field_class;spline_api.variant_name=vertex_variant_name;
+    vertex_flags=lifetime_flags;vertex_build_admit=[](){return true;};vertex_owner={};vertex_component={};vertex_asset={};
+    vertex_guard_calls=vertex_mutation_at=vertex_events=0;vertex_mutation=VertexMutation::None;
+    vertex_mutate_earlier_on_second=false;
+}
+void vertex_checks(HsmpReflect& reflect){
+    check(vertex_code_ranges(vertex_count_code,sizeof(vertex_count_code),vertex_colors_code,sizeof(vertex_colors_code)),"both exact matched native code ranges admit");
+    auto code=std::array<uint8_t,sizeof(vertex_colors_code)>{};std::copy_n(vertex_colors_code,code.size(),code.data());code.back()^=1;
+    check(!vertex_code_ranges(vertex_count_code,sizeof(vertex_count_code),code.data(),code.size()),"changed override slot instruction refuses the shipping layout");
+    check(!vertex_code_ranges(vertex_count_code,sizeof(vertex_count_code)-1,vertex_colors_code,sizeof(vertex_colors_code))&&!vertex_code_match(nullptr,0),"truncated or unavailable matched image refuses");
+    auto observe=[&](HsmpViewVertexState& proof,HsmpViewResult& result){int context{};const HsmpViewGuard guard{&context,vertex_guard_check};return describe_vertex_state(keep(&old_world),keep(&actor),keep(&vertex_component_fixture),&guard,&proof,&result);};
+    HsmpViewVertexState proof{};HsmpViewResult result{};
+    vertex_reset(reflect);check(observe(proof,result)==1&&result.complete==1&&proof.lod_info_count==2&&proof.no_override==1,"complete actual two-LOD null census proves native asset colors");
+    const int final_guard=vertex_guard_calls;check(vertex_events==4,"census retains both native owner and world qualification rounds");
+    vertex_reset(reflect);vertex_write_override(1,1);check(observe(proof,result)==1&&proof.no_override==0&&proof.lod_info_count==2,"nonnull last original slot requires captured colors without buffer dereference");
+    vertex_reset(reflect);vertex_write_header({nullptr,0,0});check(observe(proof,result)==1&&proof.lod_info_count==0&&proof.no_override==1,"complete empty native override array preserves actual asset color state");
+    for(auto malformed:{Array{vertex_lod_bytes.data(),17,17},Array{vertex_lod_bytes.data(),-1,2},Array{vertex_lod_bytes.data(),2,1},Array{nullptr,2,2}}){
+        vertex_reset(reflect);vertex_write_header(malformed);check(observe(proof,result)==-1&&result.complete==0,"malformed or overbound original array cannot prove vertex state");
+    }
+    vertex_reset(reflect);vertex_inner_field.bytes=0x80;check(observe(proof,result)==-1&&result.complete==0,"wrong reflected native inner stride refuses before slot interpretation");
+    vertex_reset(reflect);vertex_array_field.offset=0x580;check(observe(proof,result)==-1,"wrong reflected component offset refuses");
+    vertex_reset(reflect);vertex_build_admit=[](){return false;};check(observe(proof,result)==-1,"unsupported shipping code signature refuses");
+    vertex_reset(reflect);vertex_mesh.flags=0x40;check(observe(proof,result)==-1&&vertex_events==0,"runtime transient asset cannot enter native asset proof");
+    vertex_reset(reflect);vertex_component_fixture.identity.flags=mirrored_garbage;check(observe(proof,result)==-1&&vertex_events==0,"garbage original component receives no native qualifier dispatch");
+    vertex_reset(reflect);vertex_component_class.flags=mirrored_garbage;check(observe(proof,result)==-1&&vertex_events==0,"garbage exact component class refuses before dispatch");
+    for(auto mutation:{VertexMutation::Override,VertexMutation::Asset,VertexMutation::Garbage,VertexMutation::ClassName,VertexMutation::Travel}){
+        vertex_reset(reflect);vertex_mutation=mutation;vertex_mutation_at=final_guard;
+        check(observe(proof,result)==-1&&result.complete==0,"last callback mutation cannot pass a stale earlier slot census");
+        check(vertex_guard_calls==final_guard,"final callback rejection performs no further guarded getter");
+    }
+    vertex_reset(reflect);auto world=keep(&old_world),owner=keep(&actor),component=keep(&vertex_component_fixture);HsmpViewComponent recipe_value{};recipe_value.kind=1;
+    vertex_native_asset(world,owner,component,recipe_value,&result);check(true,"source and mirror native asset gate accepts complete null census");
+    vertex_write_override(0,1);rejects([&]{vertex_native_asset(world,owner,component,recipe_value,&result);},"ongoing native asset frame gate rejects a newly introduced override");
+    recipe_value.kind=0;rejects([&]{vertex_native_asset(world,owner,component,recipe_value,&result);},"unproven skeletal native asset slot layout is not inferred from static proof");
+    vertex_reset(reflect);world=keep(&old_world);owner=keep(&actor);component=keep(&vertex_component_fixture);
+    {VertexOperation operation(owner,component);Function call(L"/Script/Engine.ActorComponent:GetOwner");vertex_owner_function.flags=mirrored_garbage;
+        rejects([&]{call.call(component);},"original native garbage function cannot dispatch through vertex operation");check(vertex_events==0,"garbage function produces zero ProcessEvent calls");}
+    check(!vertex_owner.weak&&!vertex_component.weak&&!vertex_asset.weak,"borrowed vertex operation restores only scalar identities");
+    auto finish_sources=[&](){int context{};const HsmpViewGuard guard{&context,vertex_guard_check};
+        const auto owner=keep(&actor),mesh=keep(&vertex_mesh);
+        const std::array<HsmpViewVertexTarget,2> targets{{{owner,keep(&vertex_component_fixture),mesh},{owner,keep(&vertex_second_fixture),mesh}}};
+        return finish_vertex_sets(keep(&old_world),targets.data(),2,nullptr,0,&guard,&result);};
+    vertex_reset(reflect);check(finish_sources()==1&&result.complete==1,"complete source set accepts both original null component arrays");
+    vertex_reset(reflect);vertex_mutate_earlier_on_second=true;
+    check(finish_sources()==-1&&result.complete==0,"later source component callback cannot add an earlier override before whole-frame publication");
+    auto finish_mirrors=[&](){int context{};const HsmpViewGuard guard{&context,vertex_guard_check};
+        const auto world=keep(&old_world),owner=keep(&actor),mesh=keep(&vertex_mesh);
+        Part first{};first.render=keep(&vertex_component_fixture);first.native_asset=mesh;
+        Part second{};second.render=keep(&vertex_second_fixture);second.native_asset=mesh;
+        mirrors.emplace(71,Mirror{world,owner,{first}});mirrors.emplace(72,Mirror{world,owner,{second}});
+        const std::array<uint64_t,2> handles{71,72};return finish_vertex_sets(world,nullptr,0,handles.data(),2,&guard,&result);};
+    vertex_reset(reflect);check(finish_mirrors()==1&&result.complete==1,"all current mirrors pass whole-scene original native asset proof");
+    vertex_reset(reflect);vertex_mutate_earlier_on_second=true;
+    check(finish_mirrors()==-1&&result.complete==0,"later mirror callback cannot mutate an earlier native asset before scene readiness");
+    vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
+}
 }
 int main() {
     try {
@@ -254,7 +401,7 @@ int main() {
         check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
         check(post_destroy_actor_touches==0&&invalid_actor_resolves==0,"destroyed mirror actor is never resolved or read after K2_DestroyActor");
         destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
-        check(provider.abi==7,"raw native spline path requires presentation ABI7");
+        check(provider.abi==8&&sizeof(provider)==112,"original vertex completion requires presentation ABI8");
         HsmpViewActorScope actor_scope_result{};
         lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=1;
         check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.qualified==1
@@ -388,6 +535,7 @@ int main() {
         HsmpViewSplineProfile empty{0,0,0,0,1};HsmpViewSplineFrame empty_frame{};spline_frame_valid(empty,empty_frame);check(true,"actual empty spline curves are preserved without invented points");
         SplineSnapshot a{},b{};a.value.version=b.value.version=7;check(spline_equal(a,b),"two identical empty raw copies agree");b.value.version=8;check(!spline_equal(a,b),"source curve version mutation invalidates coherent capture");b=a;b.value.settings.duration=2;check(!spline_equal(a,b),"source settings mutation invalidates coherent capture");
         path_checks(reflect);
+        vertex_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);

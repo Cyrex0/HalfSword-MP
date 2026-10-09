@@ -77,6 +77,19 @@ pub struct SplineProfile {
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
+pub struct VertexStateProof {
+    pub lod_info_count: u32,
+    pub no_override: u32,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct VertexTarget {
+    pub owner: Object,
+    pub component: Object,
+    pub asset: Object,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
 pub struct SplineVectorPoint {
     pub key: f32,
     pub interp: u32,
@@ -380,12 +393,31 @@ pub struct Provider {
         *mut SplineProfile,
         *mut ResultInfo,
     ) -> i32,
+    pub describe_vertex_state: unsafe extern "C" fn(
+        Object,
+        Object,
+        Object,
+        *const Guard,
+        *mut VertexStateProof,
+        *mut ResultInfo,
+    ) -> i32,
+    pub finish_vertex_sets: unsafe extern "C" fn(
+        Object,
+        *const VertexTarget,
+        u32,
+        *const u64,
+        u32,
+        *const Guard,
+        *mut ResultInfo,
+    ) -> i32,
 }
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 7 {
+    if p.is_null() || unsafe { (*p).abi } == 8 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
+    } else {
+        PROVIDER.store(std::ptr::null_mut(), Ordering::Release);
     }
 }
 pub(crate) fn provider() -> Result<&'static Provider, String> {
@@ -403,6 +435,7 @@ struct Source {
     pawn_controller: reflect::HsmpProp,
     controller_pawn: reflect::HsmpProp,
     components: HashMap<u32, (Object, Object)>,
+    vertices: Vec<VertexTarget>,
     prepared: Prepared,
 }
 struct Mirror {
@@ -1011,7 +1044,7 @@ struct GuardContext {
     vt: *const HsmpReflect,
     world: Object,
     key: Vec<u8>,
-    source: Option<(Object, Object, reflect::HsmpProp, reflect::HsmpProp)>,
+    source: Vec<(Object, Object, reflect::HsmpProp, reflect::HsmpProp)>,
 }
 impl GuardContext {
     fn new(
@@ -1029,7 +1062,9 @@ impl GuardContext {
             vt,
             world,
             key,
-            source: source.map(|s| (s.pawn, s.controller, s.pawn_controller, s.controller_pawn)),
+            source: source
+                .map(|s| vec![(s.pawn, s.controller, s.pawn_controller, s.controller_pawn)])
+                .unwrap_or_default(),
         })
     }
     fn ffi(&mut self) -> Guard {
@@ -1048,7 +1083,7 @@ impl GuardContext {
             {
                 return false;
             }
-            if let Some((pawn, controller, pc, cp)) = self.source {
+            for &(pawn, controller, pc, cp) in &self.source {
                 if reflect::get(vt, pawn.weak) as u64 != pawn.address
                     || reflect::get(vt, controller.weak) as u64 != controller.address
                 {
@@ -1159,6 +1194,107 @@ unsafe fn push_scene(L: *mut lua_State, scene: &hsmp_server::native_service::Sce
     }
 }
 impl Native {
+    /// Complete native-asset proof after all component/native/Lua callbacks.
+    /// The provider's final whole-set census and this final guard are pure;
+    /// publication must perform no engine getter after successful return.
+    pub(crate) unsafe fn finish_native_vertices(
+        &self,
+        render: &w::RenderWorld,
+    ) -> Result<(), String> {
+        unsafe {
+            if !self.native_host.is_host() || !self.sample.world_ok {
+                return Err("source vertex role/world".into());
+            }
+            let directory = self
+                .native_host
+                .directory()
+                .ok_or("source vertex directory")?;
+            if directory.epoch != render.world.epoch || directory.seq != render.world.directory_seq
+            {
+                return Err("source vertex directory changed".into());
+            }
+            let p = provider()?;
+            let vt = reflect::vt().ok_or("reflection unavailable")?;
+            let mut targets = Vec::new();
+            let mut original_world: Option<Object> = None;
+            let mut originals = Vec::new();
+            for entity in &render.entities {
+                if !directory
+                    .entities
+                    .iter()
+                    .any(|e| e.reference == entity.reference)
+                {
+                    return Err("source vertex entity generation".into());
+                }
+                let binding = self
+                    .presentation
+                    .sources
+                    .get(&entity.reference)
+                    .ok_or("source vertex binding")?;
+                let descriptor = self
+                    .native_host
+                    .host
+                    .as_ref()
+                    .ok_or("source vertex host")?
+                    .descriptor(entity.reference.id)
+                    .ok_or("source vertex descriptor")?;
+                if descriptor.reference != entity.reference
+                    || descriptor.revision != entity.revision
+                    || descriptor.directory_seq != render.world.directory_seq
+                {
+                    return Err("source vertex descriptor generation".into());
+                }
+                if original_world.is_some_and(|w| {
+                    w.weak != binding.world.weak || w.address != binding.world.address
+                }) {
+                    return Err("source vertex mixed worlds".into());
+                }
+                original_world = Some(binding.world);
+                originals.push((
+                    binding.pawn,
+                    binding.controller,
+                    binding.pawn_controller,
+                    binding.controller_pawn,
+                ));
+                targets.extend_from_slice(&binding.vertices);
+            }
+            if originals.len() > w::MAX_ENTITIES || targets.len() > w::MAX_ENTITIES * 64 {
+                return Err("source vertex complete-set bounds".into());
+            }
+            let world = original_world.ok_or("source vertex empty world")?;
+            let mut context = GuardContext::new(self, vt, world, None)?;
+            context.source = originals;
+            let guard = context.ffi();
+            let mut r = ResultInfo::default();
+            if !context.valid()
+                || (p.finish_vertex_sets)(
+                    world,
+                    targets.as_ptr(),
+                    targets.len() as u32,
+                    std::ptr::null(),
+                    0,
+                    &guard,
+                    &mut r,
+                ) != 1
+                || r.complete != 1
+                || !context.valid()
+            {
+                return Err(format!("source whole-set vertex proof: {}", r.reason()));
+            }
+            let latest = self
+                .native_host
+                .directory()
+                .ok_or("source vertex final directory")?;
+            if latest.epoch != render.world.epoch
+                || latest.seq != render.world.directory_seq
+                || !self.native_host.is_host()
+                || !self.sample.world_ok
+            {
+                return Err("source vertex final generation".into());
+            }
+            Ok(())
+        }
+    }
     pub unsafe fn native_scene_assets(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
             let result = (|| -> Result<(), String> {
@@ -1341,6 +1477,26 @@ impl Native {
                 }
                 pop(L, 1);
                 let prepared = Prepared::new(&descriptor.recipe);
+                let mut vertices = Vec::new();
+                for c in &descriptor.recipe.components {
+                    if c.vertex_state != d::VertexState::NativeAsset {
+                        continue;
+                    }
+                    if c.kind != d::ComponentKind::Static {
+                        return Err("native asset proof requires cooked static component".into());
+                    }
+                    let (component, owner) = *components.get(&c.id).ok_or("vertex component")?;
+                    let expected = (vt.find)(reflect::wide(&c.asset).as_ptr());
+                    let asset = object(vt, expected as i64)?;
+                    if object_field(vt, component, "StaticMesh")? != asset.address {
+                        return Err("source original vertex asset binding".into());
+                    }
+                    vertices.push(VertexTarget {
+                        owner,
+                        component,
+                        asset,
+                    });
+                }
                 let pawn_controller = object_property(vt, pawn, "Controller")?;
                 let controller_pawn = object_property(vt, controller, "Pawn")?;
                 if read_object_property(vt, pawn, pawn_controller)? != controller.address
@@ -1361,6 +1517,7 @@ impl Native {
                         pawn_controller,
                         controller_pawn,
                         components,
+                        vertices,
                         prepared,
                     },
                 );
@@ -1503,6 +1660,7 @@ impl Native {
                 }
                 let render = w::RenderWorld { world, entities };
                 w::encode_render_world_v2(&render).map_err(str::to_owned)?;
+                self.finish_native_vertices(&render)?;
                 self.presentation.pending = Some(render);
                 Ok(())
             })();
@@ -1682,6 +1840,33 @@ impl Native {
                     {
                         return Err(format!("mirror complete readback: {}", r.reason()));
                     }
+                }
+                let handles = scene
+                    .descriptors
+                    .iter()
+                    .map(|d| {
+                        self.presentation
+                            .mirrors
+                            .get(&d.reference.id)
+                            .map(|m| m.handle)
+                            .ok_or("complete native mirror set")
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let mut r = ResultInfo::default();
+                if !context.valid()
+                    || (p.finish_vertex_sets)(
+                        world,
+                        std::ptr::null(),
+                        0,
+                        handles.as_ptr(),
+                        handles.len() as u32,
+                        &guard,
+                        &mut r,
+                    ) != 1
+                    || r.complete != 1
+                    || !context.valid()
+                {
+                    return Err(format!("mirror whole-set vertex proof: {}", r.reason()));
                 }
                 let ready = (scene.directory.epoch, scene.directory.seq, valid.clone());
                 if self.presentation.ready.as_ref() != Some(&ready) {
@@ -2034,6 +2219,9 @@ mod presentation_binding_tests {
         assert_eq!(std::mem::size_of::<Component>(), 256);
         assert_eq!(std::mem::size_of::<Frame>(), 168);
         assert_eq!(std::mem::size_of::<SplineProfile>(), 20);
+        assert_eq!(std::mem::size_of::<VertexStateProof>(), 8);
+        assert_eq!(std::mem::size_of::<VertexTarget>(), 48);
+        assert_eq!(std::mem::size_of::<Provider>(), 112);
         assert_eq!(std::mem::size_of::<SplineSettings>(), 72);
         assert_eq!(std::mem::size_of::<SplineVectorPoint>(), 80);
         assert_eq!(std::mem::size_of::<SplineQuatPoint>(), 104);

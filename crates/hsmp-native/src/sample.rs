@@ -1226,8 +1226,8 @@ impl Native {
         }
     }
 
-    /// Publish the staged immutable DTO only after the Lua worker requalifies
-    /// its original world token. This boundary performs no engine getter.
+    /// Publish only after the Lua worker requalifies its original world token
+    /// and the complete native-asset set passes its final pure census.
     pub unsafe fn native_commit_world(&mut self,L:*mut lua_State)->c_int {
         unsafe {
             if std::env::var("HSMP_RUNTIME_ROLE").as_deref()!=Ok("native_worker"){return nil_err(L,"role");}
@@ -1235,6 +1235,10 @@ impl Native {
             if !self.sample.world_ok || self.world_key.as_deref()!=Some(key.as_slice()){return nil_err(L,"world");}
             let render=self.presentation.pending.take();
             let generation=(world.epoch,world.directory_seq,world.frame_seq);
+            if let Some(render)=render.as_ref(){
+                if (render.world.epoch,render.world.directory_seq,render.world.frame_seq)!=generation{return nil_err(L,"render/core staging generation");}
+                if let Err(error)=self.finish_native_vertices(render){return nil_err(L,&error);}
+            }
             match self.native_host.publish_world(world){Ok(())=>{
                 if let Some(render)=render {
                     if (render.world.epoch,render.world.directory_seq,render.world.frame_seq)!=generation{return nil_err(L,"render/core staging generation");}
