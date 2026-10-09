@@ -10,8 +10,11 @@ local DRIVER_PATHS={
 }
 local GEAR={"ModularWeaponBP_C","Modular_Weapon_Part_Master_C","Modular_Weapon_Module_C"}
 function M.new(env)
-    local self={retired={},key=nil}
-    function self:drop()self.retired={};self.key=nil end
+    local self={retired={},removed_drivers={},key=nil}
+    function self:drop()
+        self.retired={};self.removed_drivers={};self.key=nil
+        if type(env.clear_native)=="function"then env.clear_native()end -- scalar-only; never touches old UObjects
+    end
     function self:retirement(address,name)return self.retired[address]==name end
     function self:run()
         if not env.role.presentation()then return false,"suppression_native_client_role_required"end
@@ -107,6 +110,9 @@ function M.new(env)
                         -- Actor:IsActorBeingDestroyed result above.
                         state.begin_destroyed=fact(function()return call(actor,"HasAnyFlags",0x00008000)end,"boolean")
                         state.finish_destroyed=fact(function()return call(actor,"HasAnyFlags",0x00010000)end,"boolean")
+                        state.authority=fact(function()return call(actor,"HasAuthority")end,"boolean")
+                        state.local_role=fact(function()return call(actor,"GetLocalRole")end,"number")
+                        state.remote_role=fact(function()return call(actor,"GetRemoteRole")end,"number")
                         state.hidden=fact(function()local value=actor.bHidden;fresh();return value end,"boolean")
                         state.collision=fact(function()return call(actor,"GetActorEnableCollision")end,"boolean")
                         state.tick=fact(function()return call(actor,"IsActorTickEnabled")end,"boolean")
@@ -119,6 +125,25 @@ function M.new(env)
                     class=fact(function()return call(call(actor,"GetClass"),"GetFullName"):sub(1,512)end,"string"),
                     persistent=fact(function()return protected(actor)end,"boolean"),before=actor_state(true)}
                 summary.refusal=evidence
+                if kind=="driver"then
+                    if type(env.retire_native)~="function"then error("suppression_native_retirement_unavailable",0)end
+                    local original=address(actor);fresh()
+                    local proof,why=env.retire_native(world_address,original,0);fresh()
+                    evidence.phase="after_native_retire";evidence.native=proof or{ok=false,reason=tostring(why):sub(1,192)}
+                    -- The native provider captures the original live weak
+                    -- identity before ProcessEvent, then checks its object-array
+                    -- slot without reading a pending-garbage actor. A stale Lua
+                    -- wrapper neither proves removal nor blocks native proof.
+                    if type(proof)~="table"or proof.ok~=true or proof.qualified~=true or proof.dispatched~=true
+                        or proof.alive_after~=0 or type(proof.weak)~="number"or proof.weak==0 or proof.address~=original then
+                        error("suppression_native_retirement_refused",0)
+                    end
+                    if not evidence.name.known or not evidence.class.known then error("suppression_native_retirement_identity_unavailable",0)end
+                    local count=0;for _ in pairs(self.removed_drivers)do count=count+1 end
+                    if count>=512 then error("suppression_native_retirement_bound",0)end
+                    self.removed_drivers[original]={weak=proof.weak,address=original,name=evidence.name.value,class=evidence.class.value,world=self.key}
+                    summary.refusal=nil;return
+                end
                 actor:K2_DestroyActor() -- unsafe: ok only qualified nonPersistent native spawn drivers, owned gear or AI; never a Willie/player controller
                 fresh()
                 evidence.phase="after_destroy";evidence.call_returned=true
@@ -131,8 +156,24 @@ function M.new(env)
             end
             -- Cancel native map-owned latent spawn callbacks by destroying their
             -- qualified owners, rather than merely disabling ReceiveTick.
+            local confirmed={}
+            for a,record in pairs(self.removed_drivers)do
+                if type(env.probe_native)~="function"or record.world~=self.key then error("suppression_native_retirement_probe_unavailable",0)end
+                fresh();local proof,why=env.probe_native(world_address,record.weak,record.address);fresh()
+                if type(proof)~="table"or proof.ok~=true or proof.qualified~=true or proof.dispatched~=false or proof.alive_after~=0
+                    or proof.weak~=record.weak or proof.address~=record.address then
+                    summary.refusal={kind="driver",phase="native_probe",name={known=true,value=record.name},class={known=true,value=record.class},native=proof or{ok=false,reason=tostring(why):sub(1,192)}}
+                    error("suppression_native_retirement_probe_refused",0)
+                end
+                confirmed[a]=true
+            end
             for _,class in ipairs(DRIVERS)do
-                for _,driver in pairs(objects(class))do if current(driver)then
+                for _,driver in pairs(objects(class))do
+                    -- Pinned LuaUObject.hpp172 GetAddress copies the wrapper's
+                    -- pointer value; it does not dereference the expired actor.
+                    fresh();local raw=driver:GetAddress();fresh()
+                    if type(raw)~="number"then error("suppression_driver_address",0)end
+                    if not confirmed[raw]and current(driver)then
                     if call(driver,"IsA",cls(DRIVER_PATHS[class]))~=true then error("suppression_driver_class",0)end
                     inert(driver);destroy(driver,"driver");summary.drivers=summary.drivers+1
                 end end

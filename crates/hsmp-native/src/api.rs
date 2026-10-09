@@ -226,6 +226,9 @@ entry! {
     l_native_scene => Guard::GameThread, |n,L| n.native_scene(L);
     l_native_present => Guard::GameThread, |n,L| n.native_present(L);
     l_native_clear_mirrors => Guard::GameThread, |n,L| n.native_clear_mirrors(L);
+    l_native_retire_actor => Guard::GameThread, |n,L| n.native_retire_actor(L);
+    l_native_probe_retirement => Guard::GameThread, |n,L| n.native_probe_retirement(L);
+    l_native_forget_retirements => Guard::GameThread, |n,L| n.native_forget_retirements(L);
     l_native_client_status => Guard::GameThread, |n,L| n.native_client_status(L);
     l_native_key_state => Guard::GameThread, |n,L| n.native_key_state(L);
     l_native_scene_assets => Guard::GameThread, |n,L| n.native_scene_assets(L);
@@ -306,6 +309,9 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("native_scene",l_native_scene),
     ("native_present",l_native_present),
     ("native_clear_mirrors",l_native_clear_mirrors),
+    ("native_retire_actor",l_native_retire_actor),
+    ("native_probe_retirement",l_native_probe_retirement),
+    ("native_forget_retirements",l_native_forget_retirements),
     ("native_client_status",l_native_client_status),
     ("native_key_state",l_native_key_state),
     ("native_scene_assets",l_native_scene_assets),

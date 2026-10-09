@@ -259,11 +259,23 @@ Obj actor_world(Obj actor, HsmpViewResult* r = nullptr) {
     auto world = object_property(level,L"OwningWorld"); require(world.weak && is(world,L"/Script/Engine.World"),"native owning world missing"); return world;
 }
 void qualify(Obj world, Obj owner, Obj component, HsmpViewResult* r = nullptr) {
-    get(world); require(is(component,L"/Script/Engine.PrimitiveComponent"),"native component class");
+    get(world); require(is(component,L"/Script/Engine.SceneComponent"),"native component class");
     const auto actual_owner=returned(component,L"/Script/Engine.ActorComponent:GetOwner",r);
     require(same(actual_owner,owner) && same(actor_world(owner,r),world),"native component owner/world mismatch");
 }
 Obj mesh_asset(Obj component, HsmpViewResult* r) { return returned(component,L"/Script/Engine.SkinnedMeshComponent:GetSkinnedAsset",r); }
+bool effective_visible(Obj component) {return bool_property(component,L"bVisible")&&!bool_property(component,L"bHiddenInGame");}
+void scene_anchor(Obj component) {
+    const auto cls=keep(vt->class_of(get(component)));
+    if(same(cls,find(L"/Script/Engine.SceneComponent")))return;
+    if(same(cls,find(L"/Script/Engine.SplineComponent"))) {
+        require(!bool_property(component,L"bDrawDebug"),"native spline own rendering unsupported");return;
+    }
+    if(same(cls,find(L"/Script/Engine.CapsuleComponent"))) {
+        require(!effective_visible(component),"native visible capsule own rendering unsupported");return;
+    }
+    throw Error("native scene anchor class unsupported");
+}
 void supported(Obj world,Obj owner,Obj component,HsmpViewResult* r) {
     qualify(world,owner,component,r);
     if (is(component,L"/Script/Engine.SkinnedMeshComponent")) {
@@ -275,15 +287,23 @@ void supported(Obj world,Obj owner,Obj component,HsmpViewResult* r) {
         require(!bool_property(component,L"bSetMeshDeformer"),"native deformer override unsupported");
         auto deformer=returned(component,L"/Script/Engine.SkinnedMeshComponent:GetMeshDeformerInstance",r);
         require(!deformer.weak,"native deformer instance unsupported");
-    } else require(is(component,L"/Script/Engine.StaticMeshComponent"),"native groom/procedural render unsupported");
+    } else if(!is(component,L"/Script/Engine.StaticMeshComponent"))scene_anchor(component);
     qualify(world,owner,component,r);
 }
 bool pointers(const void* p,uint32_t n,uint32_t cap) { return n<=cap && (!n||p); }
 void recipe(const HsmpViewComponent& c) {
-    require(c.kind<=1 && c.visible<=1 && pointers(c.bones,c.bone_count,512) && pointers(c.morphs,c.morph_count,128) &&
+    require((c.kind<=1||c.kind==4) && c.visible<=1 && pointers(c.bones,c.bone_count,512) && pointers(c.morphs,c.morph_count,128) &&
         pointers(c.hidden_bones,c.hidden_count,512) && pointers(c.materials,c.material_count,32) &&
         pointers(c.vertex_lods,c.vertex_count,16),"native component recipe bounds");
-    require(c.vertex_state==0 || c.vertex_state==1,"native vertex recipe incomplete");
+    if(c.kind==4) {
+        require(c.vertex_state==4&&!c.bone_count&&!c.morph_count&&!c.hidden_count&&!c.material_count&&!c.vertex_count,
+                "native scene anchor render dictionary");
+        const auto cls=text(c.asset);
+        require(cls==L"/Script/Engine.SceneComponent"||cls==L"/Script/Engine.SplineComponent"||cls==L"/Script/Engine.CapsuleComponent",
+                "native scene anchor recipe class");
+        require(cls!=L"/Script/Engine.CapsuleComponent"||c.visible==0,"native scene anchor capsule visibility");
+        require(text(c.skeleton).empty(),"native scene anchor skeletal asset");
+    }else require(c.vertex_state==0 || c.vertex_state==1,"native vertex recipe incomplete");
     require(c.vertex_state!=1 || c.vertex_count>0,"native vertex colors missing");
     require(c.kind==0 || (!c.bone_count&&!c.morph_count&&!c.hidden_count),"static component skeletal dictionary");
     engine(c.relative); for(uint32_t i=0;i<c.material_count;++i) {
@@ -294,6 +314,24 @@ void recipe(const HsmpViewComponent& c) {
         const auto& l=c.vertex_lods[i]; require(l.lod<16 && l.count>0 && l.count<=1000000 && l.bytes==l.count*4 && l.rgba,
             "native vertex color bounds");
     }
+}
+// Preserve direct parent links and apply parents before children. Setting a
+// parent later would move already-applied children away from their source pose.
+std::vector<uint32_t> parent_order(const HsmpViewComponent* components,uint32_t count) {
+    require(pointers(components,count,64)&&count>0,"native parent graph bounds");
+    std::map<uint32_t,uint32_t> indices;
+    for(uint32_t i=0;i<count;++i)require(components[i].id!=0&&indices.emplace(components[i].id,i).second,"native parent graph duplicate id");
+    std::vector<uint8_t> state(count);std::vector<uint32_t> order;order.reserve(count);
+    const auto visit=[&](const auto& self,uint32_t i)->void {
+        require(state[i]!=1,"native parent graph cycle");if(state[i]==2)return;state[i]=1;
+        if(components[i].parent) {
+            const auto parent=indices.find(components[i].parent);require(parent!=indices.end(),"native parent graph missing node");
+            self(self,parent->second);
+        }
+        state[i]=2;order.push_back(i);
+    };
+    for(uint32_t i=0;i<count;++i)visit(visit,i);
+    return order;
 }
 void frame(const HsmpViewComponent& c,const HsmpViewFrame& f) {
     recipe(c); uint32_t ns{},nv{},nt{};
@@ -314,7 +352,7 @@ Obj material(Obj component,uint32_t slot,HsmpViewResult* r) {
     f.call(component,r); auto out=f.returned(); require(out.weak,"native material slot unavailable"); return out;
 }
 void source_static(Obj component,const HsmpViewComponent& c,HsmpViewResult* r) {
-    const bool visible=bool_property(component,L"bVisible")&&!bool_property(component,L"bHiddenInGame");
+    const bool visible=effective_visible(component);
     require(visible==(c.visible!=0),"source visibility recipe changed");
     for(uint32_t i=0;i<c.material_count;++i) {
         auto current=material(component,c.materials[i].slot,r);const auto expected=asset(c.materials[i].base,L"/Script/Engine.MaterialInterface");
@@ -432,6 +470,13 @@ void colors(Obj component,const HsmpViewComponent& c,HsmpViewResult* r) {
     }verify_colors(component,c,r);
 }
 void collision_off(Obj component,HsmpViewResult* r) {
+    if(!is(component,L"/Script/Engine.PrimitiveComponent")) {
+        require(same(keep(vt->class_of(get(component))),find(L"/Script/Engine.SceneComponent")),"mirror nonprimitive class unsupported");
+        Function tick(L"/Script/Engine.ActorComponent:SetComponentTickEnabled");tick.boolean(L"bEnabled",false);tick.call(component,r);
+        Function read_tick(L"/Script/Engine.ActorComponent:IsComponentTickEnabled");read_tick.call(component,r);
+        const auto tp=read_tick.field(L"ReturnValue",L"BoolProperty",1);
+        require((read_tick.buf[static_cast<size_t>(tp.offset+tp.bool_offset)]&tp.bool_mask)==0,"mirror scene anchor tick still enabled");return;
+    }
     Function physics(L"/Script/Engine.PrimitiveComponent:SetSimulatePhysics");physics.boolean(L"bSimulate",false);physics.call(component,r);
     Function collision(L"/Script/Engine.PrimitiveComponent:SetCollisionEnabled");collision.enumeration(L"NewType",0);collision.call(component,r);
     Function read_collision(L"/Script/Engine.PrimitiveComponent:GetCollisionEnabled");read_collision.call(component,r);
@@ -476,16 +521,19 @@ int32_t inspect(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,Hsm
 int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,const HsmpViewGuard* guard,HsmpViewResult* r) {
     try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");layouts();frame(*c,*out);supported(world,owner,component,r);
         if(c->kind==0) {require(same(mesh_asset(component,r),asset(c->asset,L"/Script/Engine.SkeletalMesh")),"source mesh recipe changed");}
+        else if(c->kind==4)require(same(keep(vt->class_of(get(component))),asset(c->asset,L"/Script/CoreUObject.Class")),"source scene anchor class changed");
         else require(same(object_property(component,L"StaticMesh"),asset(c->asset,L"/Script/Engine.StaticMesh")),"source static mesh recipe changed");
-        source_static(component,*c,r);verify_colors(component,*c,r);
-        capture_values(component,*c,*out,r);qualify(world,owner,component,r);r->complete=1;return 1;
+        source_static(component,*c,r);if(c->kind!=4)verify_colors(component,*c,r);
+        capture_values(component,*c,*out,r);qualify(world,owner,component,r);
+        if(c->kind==4){scene_anchor(component);source_static(component,*c,r);}
+        r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const HsmpViewGuard* guard,HsmpViewResult* r) {
     const std::lock_guard lock(mirror_mutex);
     Obj actor{};
     try{initialize_result(r);thread();OperationScope scope(guard,world);layouts();get(world);require(is(world,L"/Script/Engine.World")&&pointers(recipes,count,64)&&count>0,"mirror create bounds");
-        require(mirrors.size()<256,"mirror registry capacity");for(uint32_t i=0;i<count;++i)recipe(recipes[i]);
+        require(mirrors.size()<256,"mirror registry capacity");for(uint32_t i=0;i<count;++i)recipe(recipes[i]);const auto order=parent_order(recipes,count);
         Transform identity{{0,0,0},{0,0,0,1},{1,1,1}};auto library=find(L"/Script/Engine.Default__GameplayStatics");
         Function begin(L"/Script/Engine.GameplayStatics:BeginDeferredActorSpawnFromClass");begin.object(L"WorldContextObject",world);begin.object(L"ActorClass",find(L"/Script/Engine.Actor"),true);
         begin.put(L"SpawnTransform",L"StructProperty",engine(identity),L"Transform");begin.enumeration(L"CollisionHandlingOverride",1);begin.object(L"Owner",{});
@@ -516,6 +564,9 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
                     Function check(L"/Script/Engine.SkinnedMeshComponent:IsBoneHiddenByName");check.put(L"BoneName",L"NameProperty",name(c.hidden_bones[b]));check.call(target,r);
                     auto p=check.field(L"ReturnValue",L"BoolProperty",1);require((check.buf[static_cast<size_t>(p.offset+p.bool_offset)]&p.bool_mask)!=0,"mirror hidden bone readback failed");
                 }
+            }else if(c.kind==4) {
+                part.render=add_component(actor,L"/Script/Engine.SceneComponent",c.relative,r);
+                finish_component(actor,part.render,c.relative,r);
             }else {
                 part.render=add_component(actor,L"/Script/Engine.StaticMeshComponent",c.relative,r);
                 auto mesh=asset(c.asset,L"/Script/Engine.StaticMesh");Function set_mesh(L"/Script/Engine.StaticMeshComponent:SetStaticMesh");set_mesh.object(L"NewMesh",mesh);set_mesh.call(part.render,r);
@@ -525,14 +576,15 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
                 const auto& m=c.materials[j];Function mid(L"/Script/Engine.PrimitiveComponent:CreateDynamicMaterialInstance");mid.put(L"ElementIndex",L"IntProperty",static_cast<int32_t>(m.slot));mid.object(L"SourceMaterial",asset(m.base,L"/Script/Engine.MaterialInterface"));mid.put(L"OptionalName",L"NameProperty",uint64_t{});mid.call(part.render,r);
                 auto instance=mid.returned();require(instance.weak&&is(instance,L"/Script/Engine.MaterialInstanceDynamic")&&same(material(part.render,m.slot,r),instance),"mirror material creation failed");part.materials.push_back(instance);
             }
-            colors(part.render,c,r);visibility(part.render,c.visible!=0,r);qualify(world,actor,part.render,r);
+            if(c.kind!=4)colors(part.render,c,r);visibility(part.render,c.visible!=0,r);qualify(world,actor,part.render,r);
             if(part.leader.weak)qualify(world,actor,part.leader,r);mirror.parts.push_back(std::move(part));
         }
-        // A component parent outside the render dictionary is the inert actor space. In-dictionary
-        // parents and sockets are preserved; dynamic world transforms are applied independently.
-        for(uint32_t i=0;i<count;++i) {
-            const auto& c=recipes[i];auto it=std::find_if(mirror.parts.begin(),mirror.parts.end(),[&](const Part& p){return p.id==c.parent;});
-            if(it==mirror.parts.end()) continue;
+        // Source roots have no parent; every other direct parent must be in the
+        // complete dictionary. Scene anchors preserve their native sockets.
+        for(const auto i:order) {
+            const auto& c=recipes[i];if(c.parent==0)continue;
+            auto it=std::find_if(mirror.parts.begin(),mirror.parts.end(),[&](const Part& p){return p.id==c.parent;});
+            require(it!=mirror.parts.end(),"mirror attachment parent missing");
             require(c.parent!=c.id,"mirror self attachment");
             for(auto target:{mirror.parts[i].render,mirror.parts[i].leader})if(target.weak) {
                 Function attach(L"/Script/Engine.SceneComponent:K2_AttachToComponent");attach.object(L"Parent",it->render);attach.put(L"SocketName",L"NameProperty",name(c.socket));
@@ -557,7 +609,8 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
     const std::lock_guard lock(mirror_mutex);
     try{initialize_result(r);thread();OperationScope scope(guard,world);get(world);auto it=mirrors.find(id);require(it!=mirrors.end(),"mirror handle missing");auto& mirror=it->second;
         require(same(mirror.world,world)&&same(actor_world(mirror.actor,r),world)&&count==mirror.parts.size()&&pointers(recipes,count,64)&&pointers(frames,count,64),"mirror apply scope");
-        for(uint32_t i=0;i<count;++i) {
+        const auto order=parent_order(recipes,count);
+        for(const auto i:order) {
             const auto& c=recipes[i];const auto& f=frames[i];auto& part=mirror.parts[i];frame(c,f);require(c.id==part.id&&c.kind==part.kind,"mirror recipe generation mismatch");
             qualify(world,mirror.actor,part.render,r);world_transform(part.render,f.world,r);if(part.leader.weak)world_transform(part.leader,f.world,r);
             for(uint32_t j=0;j<c.bone_count;++j) {
@@ -588,12 +641,70 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
 }
 void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
 void discard(uint64_t id) {const std::lock_guard lock(mirror_mutex);mirrors.erase(id);}
-const HsmpPresentation provider{3,0,inspect,capture,create,apply,destroy,discard};
+struct RetiredDriver {Obj world{},actor{};Identity identity{};};
+std::map<uint64_t,RetiredDriver> retired_drivers;
+void forget_retirements(){retired_drivers.clear();}
+int32_t retire(Obj world,Obj actor,uint32_t kind,Obj target,const HsmpViewGuard* guard,HsmpViewRetirement* result) {
+    try {
+        require(result!=nullptr,"native retirement result missing");*result={};result->alive_after=2;
+        thread();OperationScope scope(guard,world);
+        require(kind==0&&!target.weak&&!target.address,"native retirement kind unsupported");
+        require(retired_drivers.size()<512&&!retired_drivers.contains(actor.weak),"native retirement proof bound or reused identity");
+        get(actor);result->weak=actor.weak;result->address=actor.address;
+        require(is(actor,L"/Script/Engine.Actor"),"native retirement actor class");
+        bool driver{};
+        for(const auto* path:{L"/Game/Blueprints/Managers/BP_LevelManager.BP_LevelManager_C",
+            L"/Game/Blueprints/Spawner/BP_SpawnerPoint_Willies.BP_SpawnerPoint_Willies_C",
+            L"/Game/Blueprints/Generators/BP_Generator_Weapons_Random.BP_Generator_Weapons_Random_C"}) {
+            check_guard();void* class_object=vt->find(u16(path));check_guard();
+            if(class_object&&vt->class_of(get(actor))==get(keep(class_object)))driver=true;
+        }
+        require(driver,"native retirement driver class unsupported");
+        require(same(actor_world(actor),world),"native retirement actor world mismatch");
+        Function tag(L"/Script/Engine.Actor:ActorHasTag");tag.put(L"Tag",L"NameProperty",name(L"Persistent"));tag.call(actor);
+        const auto tag_property=tag.field(L"ReturnValue",L"BoolProperty",1);
+        require(tag_property.bool_mask!=0&&tag_property.bool_offset==0,"native retirement tag layout");
+        require((tag.buf[static_cast<size_t>(tag_property.offset+tag_property.bool_offset)]&tag_property.bool_mask)==0,
+            "native retirement Persistent actor forbidden");
+        const auto owner=returned(actor,L"/Script/Engine.Actor:GetOwner");
+        require(!owner.weak||(!same(owner,actor)&&same(actor_world(owner),world)),"native retirement owner world mismatch");
+        Function f(L"/Script/Engine.Actor:K2_DestroyActor");require(f.fields.empty(),"native retirement destroy signature changed");
+        require(vt->is_a(get(actor),get(f.cls))!=0,"native retirement destroy owner class");
+        void* object=get(actor);void* function=get(f.function);check_guard();const auto identity=identities.at(actor.weak);result->qualified=1;
+        result->dispatched=1;vt->call(object,function,f.buf.data());
+        // Check only the original world and object-array slot after the native
+        // call. The actor may be pending garbage while its Lua wrapper is valid.
+        check_guard();void* resolved=vt->resolve(actor.weak);check_guard();
+        require(!resolved||reinterpret_cast<uint64_t>(resolved)==actor.address,"native retirement weak identity changed");
+        if(resolved){get(actor);result->alive_after=1;throw Error("native retirement actor remains live");}
+        retired_drivers.emplace(actor.weak,RetiredDriver{world,actor,identity});result->alive_after=0;return 1;
+    }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
+}
+int32_t probe_retirement(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewRetirement* result){
+    try {
+        require(result!=nullptr,"native retirement probe result missing");*result={};result->alive_after=2;
+        thread();OperationScope scope(guard,world);
+        const auto record=retired_drivers.find(actor.weak);
+        require(record!=retired_drivers.end()&&same(record->second.world,world)&&same(record->second.actor,actor),"native original retirement proof unavailable");
+        result->qualified=1;result->weak=actor.weak;result->address=actor.address;
+        check_guard();void* resolved=vt->resolve(actor.weak);check_guard();
+        require(!resolved||reinterpret_cast<uint64_t>(resolved)==actor.address,"native retired weak identity reused");
+        if(resolved){
+            const auto& old=record->second.identity;void* cls=vt->resolve(old.class_weak);check_guard();
+            const auto n=object_name(resolved);check_guard();
+            require(cls&&reinterpret_cast<uint64_t>(cls)==old.class_address&&vt->class_of(resolved)==cls&&n&&*n==old.name,
+                "native retired name/class identity reused");
+            result->alive_after=1;throw Error("native retired driver weak identity became live");
+        }
+        result->alive_after=0;return 1;
+    }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
+}
+const HsmpPresentation provider{4,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements};
 }
 void hsmp_presentation_register(const HsmpReflect* reflection) {
     const auto module=GetModuleHandleW(L"UE4SS.dll");
     object_name=reinterpret_cast<NamePrivate>(module?GetProcAddress(module,"?GetNamePrivate@UObjectBase@Unreal@RC@@QEBAAEBVFName@23@XZ"):nullptr);
     object_world=reinterpret_cast<GetWorld>(module?GetProcAddress(module,"?GetWorld@UObject@Unreal@RC@@QEBAPEAVUWorld@23@XZ"):nullptr);
-    vt=reflection;game_thread=0;names.clear();signatures.clear();identities.clear();mirrors.clear();
+    vt=reflection;game_thread=0;names.clear();signatures.clear();identities.clear();mirrors.clear();retired_drivers.clear();
     layouts_verified=false;layout_objects.clear();hsmp_native_set_presentation(vt?&provider:nullptr);
 }

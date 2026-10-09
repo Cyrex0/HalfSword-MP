@@ -50,6 +50,13 @@ local function fixture()
         find=function(path)return{path=path,IsValid=function()return true end}end,
         find_all=function(class)local out={};for _,a in ipairs(f.actors[class]or{})do if a.valid then out[#out+1]=a end end;return #out>0 and out or nil end,
         FName=function(s)return s end,each=Arrays.each}
+    f.env.retire_native=function(world,original,kind)
+        assert(world==f.world.address and original==f.driver.address and kind==0)
+        f.driver:K2_DestroyActor()
+        return{ok=not f.driver.valid,qualified=true,dispatched=true,alive_after=f.driver.valid and 1 or 0,weak=1001,address=original,reason=f.driver.valid and"native retirement actor remains live"or""}
+    end
+    f.env.probe_native=function(_,weak,original)return{ok=true,qualified=true,dispatched=false,alive_after=0,weak=weak,address=original}end
+    f.env.clear_native=function()f.cleared=(f.cleared or 0)+1 end
     return f,S.new(f.env)
 end
 do
@@ -89,13 +96,13 @@ end
 do
     local f,s=fixture();f.driver.K2_DestroyActor=function()end
     local ok,why,counts=s:run();local evidence=counts.refusal
-    check(not ok and why=="suppression_destroy_readback"and counts.drivers==0,"valid non-destroying driver continues to refuse scene readiness")
-    check(evidence.kind=="driver"and evidence.phase=="after_destroy"and evidence.call_returned==true,"refusal records the completed void destroy call without claiming acceptance")
+    check(not ok and why=="suppression_native_retirement_refused"and counts.drivers==0,"native still-live driver continues to refuse scene readiness")
+    check(evidence.kind=="driver"and evidence.phase=="after_native_retire"and evidence.native.dispatched==true,"refusal records native dispatch without claiming removal")
     check(evidence.name.value==f.driver.name and evidence.class.value=="Class /Test/"..f.driver.name,"refusal identifies the actual native actor and class")
     check(evidence.persistent.known and evidence.persistent.value==false and evidence.before.current_world.value==true,"known false Persistent and original-world proof survive the diagnostic")
-    check(evidence.after.valid.value==true and evidence.after.destroying.known and evidence.after.destroying.value==false,"UObject validity and actual actor destroy flag remain distinct")
-    check(evidence.after.begin_destroyed.known and evidence.after.begin_destroyed.value==false and evidence.after.finish_destroyed.value==false,"native UObject teardown flags retain their distinct known false values")
-    check(evidence.after.hidden.value==true and evidence.after.collision.value==false and evidence.after.tick.value==false,"inert actor flags do not waive failed native driver destruction")
+    check(evidence.native.alive_after==1 and evidence.before.destroying.value==false,"native weak validity and actual actor destroy flag remain distinct")
+    check(evidence.before.begin_destroyed.known and evidence.before.begin_destroyed.value==false and evidence.before.finish_destroyed.value==false,"native UObject teardown flags retain their distinct known false values")
+    check(evidence.before.hidden.value==true and evidence.before.collision.value==false and evidence.before.tick.value==false,"inert actor flags do not waive failed native driver destruction")
     check(f.pc.Pawn==f.pawn and not s:retirement(f.pawn.address,f.pawn.name),"failed driver retirement cannot proceed to fighter retirement")
 end
 do
@@ -108,11 +115,38 @@ do
     f.driver.K2_DestroyActor=function(self)self.pending=true end
     f.driver.IsActorBeingDestroyed=function(self)return self.pending==true end
     f.driver.GetActorEnableCollision=function(self)if self.pending then reads=reads+1 end;return collision(self)end
-    local ok=s:run();check(ok and reads==0,"an actual destroying flag prevents additional diagnostic actor-state reads")
+    local ok=s:run();check(not ok and reads==0,"an actor destroy flag cannot waive native still-live driver proof")
 end
 do
     local f,s=fixture();f.driver.K2_DestroyActor=function()end;f.driver.IsActorBeingDestroyed=function()return 0 end
-    local ok,why,counts=s:run();check(not ok and why=="suppression_destroy_readback"and counts.refusal.after.destroying.known==false,"non-boolean native destroy flag is explicit unavailable evidence and still refuses")
+    local ok,why,counts=s:run();check(not ok and why=="suppression_native_retirement_refused"and counts.refusal.before.destroying.known==false,"non-boolean actor flag stays unavailable while native live proof refuses")
+end
+do
+    local f,s=fixture();f.env.retire_native=nil
+    local ok,why=s:run();check(not ok and why=="suppression_native_retirement_unavailable"and f.driver.valid,"missing native retirement API refuses without Lua destroy fallback")
+end
+do
+    local f,s=fixture();local native=f.env.retire_native
+    f.env.retire_native=function(...)local proof=native(...);proof.address=proof.address+1;return proof end
+    local ok,why=s:run();check(not ok and why=="suppression_native_retirement_refused","native retirement proof must refer to the original actor address")
+end
+do
+    local f,s=fixture();local actor_reads=0
+    f.env.retire_native=function(_,original)
+        f.driver.native_gone=true
+        return{ok=true,qualified=true,dispatched=true,alive_after=0,weak=1001,address=original}
+    end
+    local old=f.driver.IsActorBeingDestroyed
+    f.driver.IsActorBeingDestroyed=function(self)if self.native_gone then actor_reads=actor_reads+1 end;return old(self)end
+    local ok,_,counts=s:run();check(ok and counts.drivers==1 and f.driver.valid and actor_reads==0,"qualified native invalidity succeeds despite a live Lua wrapper without post-call actor reads")
+    local calls=0
+    for _,method in ipairs({"IsValid","GetWorld","GetFName","GetClass","SetActorHiddenInGame","SetActorTickEnabled","SetActorEnableCollision","K2_DestroyActor"})do
+        f.driver[method]=function()calls=calls+1;error("pending driver must not be touched")end
+    end
+    local again,why=s:run();check(again and calls==0,why or"repeated census uses only original scalar native proof before pending driver methods")
+    f.env.probe_native=function(_,weak,original)return{ok=false,qualified=true,dispatched=false,alive_after=1,weak=weak,address=original,reason="native identity became live"}end
+    local live,refusal=s:run();check(not live and refusal=="suppression_native_retirement_probe_refused"and calls==0,"native-live/reused original proof fails before pending actor methods")
+    s:drop();check(next(s.removed_drivers)==nil and f.cleared>=2,"world drop forgets Lua and provider scalar retirement records")
 end
 do
     local f,s=fixture();f.valid=false

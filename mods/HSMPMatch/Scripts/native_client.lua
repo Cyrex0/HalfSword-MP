@@ -36,7 +36,8 @@ function M.start()
     local each=Arrays.each
     local mapping,last_key,loop
     local view=Presentation.new({native=N,world=function()if not WG.check()or not WG.settled()then return nil end;return WG.world(),WG.token()end,same=WG.same})
-    local suppress=Suppression.new({role=Role,WG=WG,UEHelpers=UEH,find=StaticFindObject,find_all=FindAllOf,FName=FName,each=each})
+    local suppress=Suppression.new({role=Role,WG=WG,UEHelpers=UEH,find=StaticFindObject,find_all=FindAllOf,FName=FName,each=each,
+        retire_native=N.native_retire_actor,probe_native=N.native_probe_retirement,clear_native=N.native_forget_retirements})
     WG.on_drop(function()mapping=nil;last_key=nil;suppress:drop();view:drop();IPC.world_leaving()end,"native_client")
     local env=D.make_ue_env({WG=WG,UEHelpers=UEH,log=log,SG=SG,state_dir=state_dir})
     local controller,isolation_token,isolation_at,isolation_report

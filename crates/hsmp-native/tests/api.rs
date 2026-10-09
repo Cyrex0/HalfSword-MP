@@ -157,6 +157,13 @@ fn lua_api_end_to_end() {
         local cleared, why = N.native_clear_mirrors(0)
         assert(cleared == nil and why == "client presentation role required",
             "legacy game role cannot enter native mirror destruction")
+        local retired, refusal = N.native_retire_actor(0, 0, 0)
+        assert(retired == nil and refusal == "client retirement role required",
+            "legacy game role cannot retire native map drivers")
+        local probe, reason = N.native_probe_retirement(0, 0, 0)
+        assert(probe == nil and reason == "client retirement role required")
+        assert(N.native_forget_retirements() == nil,
+            "legacy role cannot manipulate native client lifetime proofs")
     "#);
     let name = eval_str(a, "HSMPNative.ipc_open()");
     assert!(name.starts_with(&format!("Local\\HSMP.ipc.{}.", hsmp_ipc::ABI_MAJOR)), "{}", name);

@@ -135,6 +135,29 @@ impl ResultInfo {
     }
 }
 #[repr(C)]
+pub struct Retirement {
+    pub qualified: u32,
+    pub dispatched: u32,
+    pub alive_after: u32,
+    pub pad: u32,
+    pub weak: u64,
+    pub address: u64,
+    pub reason: [u8; 192],
+}
+impl Default for Retirement {
+    fn default() -> Self {
+        Self {
+            qualified: 0,
+            dispatched: 0,
+            alive_after: 2,
+            pad: 0,
+            weak: 0,
+            address: 0,
+            reason: [0; 192],
+        }
+    }
+}
+#[repr(C)]
 pub struct Provider {
     pub abi: u32,
     pub pad: u32,
@@ -161,11 +184,16 @@ pub struct Provider {
     ) -> i32,
     pub destroy: unsafe extern "C" fn(Object, u64, *const Guard),
     pub discard: unsafe extern "C" fn(u64),
+    pub retire:
+        unsafe extern "C" fn(Object, Object, u32, Object, *const Guard, *mut Retirement) -> i32,
+    pub probe_retirement:
+        unsafe extern "C" fn(Object, Object, *const Guard, *mut Retirement) -> i32,
+    pub forget_retirements: unsafe extern "C" fn(),
 }
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 3 {
+    if p.is_null() || unsafe { (*p).abi } == 4 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
     }
 }
@@ -202,7 +230,7 @@ pub struct State {
     ready: Option<(u64, u32, Vec<(w::EntityRef, u32)>)>,
 }
 impl State {
-    pub fn drop_world(&mut self) {
+    fn drop_visuals(&mut self) {
         if let Ok(p) = provider() {
             for m in self.mirrors.values() {
                 unsafe { (p.discard)(m.handle) }
@@ -213,6 +241,12 @@ impl State {
         self.pending = None;
         self.input = None;
         self.ready = None;
+    }
+    pub fn drop_world(&mut self) {
+        self.drop_visuals();
+        if let Ok(p) = provider() {
+            unsafe { (p.forget_retirements)() }
+        }
     }
 }
 struct Arena {
@@ -349,9 +383,14 @@ impl Arena {
                 d::ComponentKind::Static => 1,
                 d::ComponentKind::Groom => 2,
                 d::ComponentKind::Procedural => 3,
+                d::ComponentKind::Scene => 4,
             },
             visible: (c.visible && !c.hidden) as u32,
-            asset: self.text(&c.asset),
+            asset: self.text(if c.kind == d::ComponentKind::Scene {
+                &c.component_class
+            } else {
+                &c.asset
+            }),
             skeleton: self.text(&c.skeleton),
             socket: self.text(&c.socket),
             relative: Transform {
@@ -376,6 +415,7 @@ impl Arena {
                 d::VertexState::Captured => 1,
                 d::VertexState::RuntimeOverride => 2,
                 d::VertexState::Unavailable => 3,
+                d::VertexState::NotApplicable => 4,
             },
             pad_vertex: 0,
             vertex_lods,
@@ -691,6 +731,9 @@ impl Native {
                         .validate_mirror_profile()
                         .map_err(str::to_owned)?;
                     for c in &descriptor.recipe.components {
+                        if c.kind == d::ComponentKind::Scene {
+                            assets.insert(c.component_class.clone());
+                        }
                         for s in [&c.asset, &c.skeleton] {
                             if !s.is_empty() {
                                 assets.insert(s.clone());
@@ -1209,6 +1252,139 @@ impl Native {
             }
         }
     }
+    pub unsafe fn native_retire_actor(&mut self, L: *mut lua_State) -> c_int {
+        unsafe {
+            if !self.native_host.is_client() {
+                return nil_err(L, "client retirement role required");
+            }
+            let result = (|| -> Result<(i32, Retirement), String> {
+                let p = provider()?;
+                let vt = reflect::vt().ok_or("native reflection unavailable")?;
+                if !self.native_guard_ok(vt) {
+                    return Err("native retirement world guard unavailable".into());
+                }
+                let world = object(vt, arg_int(L, 1).ok_or("native retirement world")?)?;
+                let actor = object(vt, arg_int(L, 2).ok_or("native retirement actor")?)?;
+                let kind = arg_int(L, 3).ok_or("native retirement kind")?;
+                if kind != 0 {
+                    return Err("native retirement kind unsupported".into());
+                }
+                let mut context = GuardContext::new(self, vt, world, None)?;
+                let guard = context.ffi();
+                if !context.valid() {
+                    return Err("native retirement world changed".into());
+                }
+                let mut out = Retirement::default();
+                let status = (p.retire)(world, actor, 0, Object::default(), &guard, &mut out);
+                // The provider owns original actor qualification. Never look up
+                // or dereference that actor again after its native dispatch.
+                Ok((status, out))
+            })();
+            match result {
+                Ok((status, out)) => {
+                    lua_createtable(L, 0, 7);
+                    let t = lua_gettop(L);
+                    set_bool(
+                        L,
+                        t,
+                        "ok",
+                        status == 1
+                            && out.qualified == 1
+                            && out.dispatched == 1
+                            && out.alive_after == 0,
+                    );
+                    set_bool(L, t, "qualified", out.qualified == 1);
+                    set_bool(L, t, "dispatched", out.dispatched == 1);
+                    set_int(L, t, "alive_after", out.alive_after as i64);
+                    set_int(L, t, "weak", out.weak as i64);
+                    set_int(L, t, "address", out.address as i64);
+                    let n = out
+                        .reason
+                        .iter()
+                        .position(|b| *b == 0)
+                        .unwrap_or(out.reason.len());
+                    set_str(L, t, "reason", &String::from_utf8_lossy(&out.reason[..n]));
+                    1
+                }
+                Err(e) => nil_err(L, &e),
+            }
+        }
+    }
+    pub unsafe fn native_probe_retirement(&mut self, L: *mut lua_State) -> c_int {
+        unsafe {
+            if !self.native_host.is_client() {
+                return nil_err(L, "client retirement role required");
+            }
+            let result = (|| -> Result<(i32, Retirement), String> {
+                let p = provider()?;
+                let vt = reflect::vt().ok_or("native reflection unavailable")?;
+                if !self.native_guard_ok(vt) {
+                    return Err("native retirement world guard unavailable".into());
+                }
+                let world = object(vt, arg_int(L, 1).ok_or("native retirement world")?)?;
+                // Original scalar proof only: do not reconstruct an expired
+                // actor from its address or ask it for a fresh weak handle.
+                let original = Object {
+                    weak: arg_int(L, 2).ok_or("native original retirement weak")? as u64,
+                    address: arg_int(L, 3).ok_or("native original retirement address")? as u64,
+                };
+                if original.weak == 0 || original.address == 0 {
+                    return Err("native original retirement identity missing".into());
+                }
+                let mut context = GuardContext::new(self, vt, world, None)?;
+                let guard = context.ffi();
+                if !context.valid() {
+                    return Err("native retirement world changed".into());
+                }
+                let mut out = Retirement::default();
+                let status = (p.probe_retirement)(world, original, &guard, &mut out);
+                Ok((status, out))
+            })();
+            match result {
+                Ok((status, out)) => {
+                    lua_createtable(L, 0, 7);
+                    let t = lua_gettop(L);
+                    set_bool(
+                        L,
+                        t,
+                        "ok",
+                        status == 1
+                            && out.qualified == 1
+                            && out.dispatched == 0
+                            && out.alive_after == 0,
+                    );
+                    set_bool(L, t, "qualified", out.qualified == 1);
+                    set_bool(L, t, "dispatched", out.dispatched == 1);
+                    set_int(L, t, "alive_after", out.alive_after as i64);
+                    set_int(L, t, "weak", out.weak as i64);
+                    set_int(L, t, "address", out.address as i64);
+                    let n = out
+                        .reason
+                        .iter()
+                        .position(|b| *b == 0)
+                        .unwrap_or(out.reason.len());
+                    set_str(L, t, "reason", &String::from_utf8_lossy(&out.reason[..n]));
+                    1
+                }
+                Err(e) => nil_err(L, &e),
+            }
+        }
+    }
+    pub unsafe fn native_forget_retirements(&mut self, L: *mut lua_State) -> c_int {
+        unsafe {
+            if !self.native_host.is_client() {
+                return nil_err(L, "client retirement role required");
+            }
+            match provider() {
+                Ok(p) => {
+                    (p.forget_retirements)();
+                    lua_pushboolean(L, 1);
+                    1
+                }
+                Err(e) => nil_err(L, &e),
+            }
+        }
+    }
     pub unsafe fn native_clear_mirrors(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
             if !self.native_host.is_client() {
@@ -1235,9 +1411,75 @@ impl Native {
                     self.presentation.mirrors.clear();
                 }
             }
-            self.presentation.drop_world();
+            // Reconnect/scene clear in the same engine world must retain driver
+            // retirement proofs. Actual world-leaving clears them separately.
+            self.presentation.drop_visuals();
             lua_pushboolean(L, 1);
             1
         }
+    }
+}
+
+#[cfg(test)]
+mod presentation_binding_tests {
+    use super::*;
+    #[test]
+    fn scene_anchor_binding_preserves_class_transform_and_empty_render_dictionary() {
+        let mut recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+            "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
+        ))
+        .unwrap();
+        let mut anchor = recipe.components[0].clone();
+        anchor.id = 77;
+        anchor.parent = recipe.components[0].id;
+        anchor.role = "anchor".into();
+        anchor.component_class = "/Script/Engine.SceneComponent".into();
+        anchor.kind = d::ComponentKind::Scene;
+        anchor.geometry = d::Geometry::NotApplicable;
+        anchor.scene = d::SceneEvidence::Scene;
+        anchor.asset.clear();
+        anchor.skeleton.clear();
+        anchor.physics_asset.clear();
+        anchor.collision = None;
+        anchor.bones.clear();
+        anchor.materials.clear();
+        anchor.morphs.clear();
+        anchor.hidden_bones.clear();
+        anchor.groom.clear();
+        anchor.vertex_state = d::VertexState::NotApplicable;
+        anchor.vertex_colors.clear();
+        anchor.deformer.clear();
+        anchor.cloth = false;
+        anchor.relative.translation = [1.2345678901234567, -2.75, 7.0];
+        recipe.components.insert(0, anchor.clone());
+        recipe.validate_mirror_profile().unwrap();
+        let prepared = Prepared::new(&recipe);
+        let bound = &prepared.components[0];
+        assert_eq!(
+            (bound.kind, bound.vertex_state, bound.id, bound.parent),
+            (4, 4, 77, anchor.parent)
+        );
+        assert_eq!(bound.relative.p, anchor.relative.translation);
+        let asset =
+            unsafe { std::slice::from_raw_parts(bound.asset.data, bound.asset.len as usize) };
+        assert_eq!(String::from_utf16(asset).unwrap(), anchor.component_class);
+        assert_eq!(
+            (
+                bound.bone_count,
+                bound.morph_count,
+                bound.material_count,
+                bound.vertex_count
+            ),
+            (0, 0, 0, 0)
+        );
+        let frame = FrameStorage::source(&anchor);
+        assert!(
+            frame.bones.is_empty()
+                && frame.morphs.is_empty()
+                && frame.scalars.is_empty()
+                && frame.vectors.is_empty()
+                && frame.textures.is_empty()
+        );
+        assert_eq!(std::mem::size_of::<Retirement>(), 224);
     }
 }

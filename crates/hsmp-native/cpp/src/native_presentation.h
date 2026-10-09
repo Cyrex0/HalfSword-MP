@@ -25,7 +25,7 @@ struct HsmpViewComponent {
     const HsmpViewText* morphs; uint32_t morph_count; uint32_t pad_m;
     const HsmpViewText* hidden_bones; uint32_t hidden_count; uint32_t pad_h;
     const HsmpViewMaterial* materials; uint32_t material_count; uint32_t pad_mat;
-    uint32_t vertex_state; uint32_t pad_vertex; // native_asset0/captured1/runtime2/unavailable3
+    uint32_t vertex_state; uint32_t pad_vertex; // native_asset0/captured1/runtime2/unavailable3/scene_not_applicable4
     const HsmpViewVertexLod* vertex_lods; uint32_t vertex_count; uint32_t pad_lod;
 };
 struct HsmpViewFrame {
@@ -37,6 +37,12 @@ struct HsmpViewFrame {
     HsmpViewObject* textures; uint32_t texture_count; uint32_t pad_t;
 };
 struct HsmpViewResult { uint32_t complete; uint32_t operations; char reason[192]; };
+// ABI4 retirement proof is local to one originally live native actor. A weak
+// object-array rejection proves native invalidity, not UObject deallocation.
+struct HsmpViewRetirement {
+    uint32_t qualified; uint32_t dispatched; uint32_t alive_after; uint32_t pad;
+    uint64_t weak; uint64_t address; char reason[192]; // alive_after: 0 invalid,1 live,2 unknown
+};
 struct HsmpPresentation {
     uint32_t abi; uint32_t pad;
     // Inspect kind/cloth/deformer state. Vertex colors still require the exact
@@ -53,12 +59,20 @@ struct HsmpPresentation {
     // discards the handle; discard itself touches no UObject.
     void (*destroy)(HsmpViewObject world,uint64_t mirror,const HsmpViewGuard*);
     void (*discard)(uint64_t mirror);
+    // kind0 only: exact map spawn drivers, target must be zero. Other kinds
+    // refuse. Never destroys an unqualified/foreign/protected/reused actor.
+    int32_t (*retire)(HsmpViewObject world,HsmpViewObject actor,uint32_t kind,HsmpViewObject target,const HsmpViewGuard*,HsmpViewRetirement*);
+    // Rechecks only a previously qualified successful retirement. Never touches
+    // the expired actor; native-live or reused identities fail closed.
+    int32_t (*probe_retirement)(HsmpViewObject world,HsmpViewObject original,const HsmpViewGuard*,HsmpViewRetirement*);
+    void (*forget_retirements)(); // scalar-only world-drop cleanup, no UObject access
 };
 void hsmp_native_set_presentation(const HsmpPresentation*);
 }
 static_assert(sizeof(HsmpViewText)==16);
 static_assert(sizeof(HsmpViewObject)==16);
 static_assert(sizeof(HsmpViewGuard)==16);
+static_assert(sizeof(HsmpViewRetirement)==224);
 static_assert(sizeof(HsmpViewTransform)==80);
 static_assert(sizeof(HsmpViewParameter)==24);
 static_assert(sizeof(HsmpViewMaterial)==72);
