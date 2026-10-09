@@ -6,15 +6,24 @@ local Array=dofile((src:match("^(.*)[/\\]") or ".").."/native_source_array.lua")
 local M={MAX_LODS=16,MAX_VERTICES=1000000,MAX_RUNS=4096}
 local function guard(env)if env.guard()~=true then error("native vertex scope changed",0)end end
 function M.capture(env)
+    local function phase(stage,edge,detail)if env.phase then env.phase(stage,edge,detail or {})end end
     local ok,result=pcall(function()
+        phase("vertex","enter",{getter="VertexPaintFunctionLibrary.GetMeshComponentVertexColorsAtLOD_Wrapper"})
+        phase("vertex_lods","enter",{getter="GetNumLODs"})
         guard(env);local lods=env.lods();guard(env)
         if type(lods)~="number" or not math.tointeger(lods) or lods<1 or lods>M.MAX_LODS then error("native vertex LOD count unavailable",0)end
+        phase("vertex_lods","exit",{ok=true,count=lods})
         local out={}
         for lod=0,lods-1 do
+            phase("vertex_count","enter",{getter="GetMeshComponentAmountOfVerticesOnLOD",lod=lod})
             guard(env);local expected=env.count(lod);guard(env)
             if type(expected)~="number" or not math.tointeger(expected) or expected<1 or expected>M.MAX_VERTICES then error("native vertex count unavailable",0)end
+            phase("vertex_count","exit",{ok=true,count=expected,lod=lod})
             if env.reserve then env.reserve(expected)end
+            phase("vertex_color_getter","enter",{getter="GetMeshComponentVertexColorsAtLOD_Wrapper",count=expected,lod=lod})
             local colors=env.colors(lod);guard(env)
+            phase("vertex_color_getter","exit",{ok=true,count=expected,lod=lod})
+            phase("vertex_copy","enter",{getter="FColor typed copy/RLE",count=expected,lod=lod})
             local runs,seen={},0
             local copied=Array.collect(colors,expected,env.array_kind or "return",{guard=function()guard(env)end,
                 context=(env.array_context or "VertexPaintFunctionLibrary.GetMeshComponentVertexColorsAtLOD_Wrapper").." lod="..tostring(lod)},function(v)
@@ -34,8 +43,10 @@ function M.capture(env)
             guard(env)
             if seen~=expected or #copied~=expected or env.count(lod)~=expected then error("native vertex capture changed",0)end
             out[#out+1]={lod=lod,vertex_count=expected,runs=runs}
+            phase("vertex_copy","exit",{ok=true,count=seen,lod=lod})
         end
         guard(env);if env.lods()~=lods then error("native vertex LOD count changed",0)end
+        phase("vertex","exit",{ok=true,count=lods})
         return out
     end)
     if not ok then return nil,result end;return result

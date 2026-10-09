@@ -20,7 +20,7 @@ end
 function M.new(opts)
     assert(type(opts)=="table" and type(opts.resolve)=="function" and opts.WG,"source adapter dependencies")
     local api={}
-    local function capture(index)
+    local function capture(index,phase)
         if not opts.WG.check() or not opts.WG.settled()then return nil,"source world settling"end
         local token=opts.WG.token();local expected=opts.resolve(index)
         if not expected or not opts.WG.same(token)then return nil,"source binding unavailable"end
@@ -47,7 +47,7 @@ function M.new(opts)
             if not path or #path>512 or path:find("\0",1,true)then error("source asset path unavailable",0)end
             return path -- exact full identity; no shortening, _C removal or hashing
         end
-        local env={guard=function()return pcall(current)end,
+        local env={guard=function()return pcall(current)end,phase=phase,
             unwrap=function(v)
                 if type(v)=="number" or type(v)=="boolean" or type(v)=="string"then return v end
                 return v:get() -- only SDK-proven hard map/array inner types
@@ -108,6 +108,7 @@ function M.new(opts)
             local captured,why
             if opts.capture_render then captured,why=opts.capture_render(fresh,bindings)
             else captured=Render.capture({read=read,guard=function()current()end,weapon=weapon,vertex_state=opts.vertex_state,
+                phase=function(stage,edge,detail)detail=detail or {};detail.pass=env.pass;phase(stage,edge,detail)end,
                 -- Pure copied FColor reads invoke no engine function. Fast token
                 -- checks inside that loop avoid a controller search per vertex;
                 -- every native getter still resolves the original binding.
@@ -132,8 +133,22 @@ function M.new(opts)
         if not pcall(current)then return nil,"source binding changed after descriptor capture"end
         return recipe,bindings
     end
-    function api.capture(index)
-        local ok,recipe,bindings=pcall(capture,index)
+    function api.capture(index,context)
+        local token=opts.WG.token()
+        local function phase(stage,edge,detail)
+            -- Logging reads only the original token's cached scalar state.
+            -- WG.same performs native lookups; never add one just for a phase.
+            if opts.phase and context and opts.WG.key==token.key and opts.WG.drops==token.drops and opts.WG.travel_from==nil then
+                opts.phase(context,stage,edge,detail or {})
+            end
+        end
+        local ok,recipe,bindings=pcall(function()
+            phase("adapter_capture","enter",{getter="SourceAdapter.capture"})
+            return capture(index,phase)
+        end)
+        local completed,phase_reason=pcall(phase,"adapter_capture","exit",{ok=ok and recipe~=nil,
+            reason=not ok and tostring(recipe) or recipe==nil and tostring(bindings) or nil})
+        if not completed then return nil,phase_reason end
         if not ok then return nil,recipe end
         return recipe,bindings
     end

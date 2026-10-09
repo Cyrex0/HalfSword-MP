@@ -64,6 +64,21 @@ T.eq(source.equipment.armor[1].passport.price,armor.price,"native armor price do
 T.eq(source.equipment.armor[1].passport.slots_blocked[1].value,false,"explicit false blocked slot preserved")
 T.eq(source.equipment.armor[1].passport.slots_blocked[2].slot,5,"sparse blocked-slot keys preserved")
 T.eq(#source.passport.equipment.armor,0,"consumed construction armor does not replace live armor")
+local passport_phases={}
+env.phase=function(stage,edge,detail)passport_phases[#passport_phases+1]={stage=stage,edge=edge,detail=detail}end
+T.check(D.capture(env)~=nil,"coarse phases preserve exact two-pass source capture")
+local passport_passes={}
+for _,event in ipairs(passport_phases)do if event.stage=="passport"and event.edge=="enter"then passport_passes[#passport_passes+1]=event.detail.pass end end
+T.check(#passport_passes==2 and passport_passes[1]==1 and passport_passes[2]==2,"rare passport diagnostics identify both exact harvest passes")
+local character_getter=env.character
+env.character=function()
+    local last=passport_phases[#passport_phases]
+    if not last or last.stage~="passport"or last.edge~="enter"then error("passport entry missing before native getter",0)end
+    error("synthetic passport getter refused",0)
+end
+T.check(D.capture(env)==nil and passport_phases[#passport_phases].stage=="harvest"
+    and passport_phases[#passport_phases].detail.ok==false,"native passport failure retains prior phase entry and capture refusal")
+env.character=character_getter;env.phase=nil
 native_armor[D.FIELDS.armor[2][1]]=123
 T.eq(source.equipment.armor[1].passport.id,armor.id,"captured passport is detached from native storage")
 native_armor[D.FIELDS.armor[2][1]]=armor.id
@@ -104,15 +119,21 @@ local condition_names={"HeadHealth_2_61859BB444171EF8952E0FA5DD8628EE","NeckHeal
     "LegRHealth_13_D50D4E174859A541DBEA66963D162E12","LegLHealth_15_41C766B5460596C0804EA5B4B8F8EB36"}
 pawn["Start Body Condition"]={};for _,n in ipairs(condition_names)do pawn["Start Body Condition"][n]=100 end
 local WG={check=function()return scope end,settled=function()return true end,token=function()return {}end,same=function()return scope end}
-local adapter=Adapter.new({WG=WG,resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=current_address,pawn_name="Fixture",pawn=pawn,world={GetAddress=function()return 1 end}}end,
+local adapter_phases={}
+local adapter=Adapter.new({WG=WG,phase=function(context,stage,edge,detail)adapter_phases[#adapter_phases+1]={context=context,stage=stage,edge=edge,detail=detail}end,
+    resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=current_address,pawn_name="Fixture",pawn=pawn,world={GetAddress=function()return 1 end}}end,
     capture_render=function(_,bindings)return {components=recipe.components,bindings={{id=1,address=11,owner=0}},
         topology={detached={},gore={},vertex_state="unavailable"}}end})
-local actual,bindings=adapter.capture(0)
+local phase_context={epoch=7,id=9,incarnation=11,dir_seq=13,revision=17,frame_seq=19}
+local actual,bindings=adapter.capture(0,phase_context)
 T.check(actual~=nil,"actual source adapter entry captures typed native-style fields")
 T.eq(actual.team,2,"actual source Team Int copied without assumed team")
 T.eq(actual.topology.vertex_state,"unavailable","unverified vertex state remains incomplete")
 T.eq(bindings.pawn,10,"engine addresses remain in separate local binding table")
 T.check(actual.pawn==nil,"engine address never enters source recipe")
+T.check(adapter_phases[1].context==phase_context and adapter_phases[1].stage=="adapter_capture"and adapter_phases[1].edge=="enter"
+    and adapter_phases[#adapter_phases].stage=="adapter_capture"and adapter_phases[#adapter_phases].detail.ok==true,
+    "actual adapter phase callback preserves original immutable entity/revision context")
 local prior=pawn.GetActorScale3D
 pawn.GetActorScale3D=function()current_address=12;return {X=1,Y=1,Z=1}end
 T.check(adapter.capture(0)==nil,"same-world source incarnation replacement during getter refuses capture")
@@ -231,12 +252,14 @@ local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.Mesh
 local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
 live_weapon.RootComponent=weapon_mesh
 local source_scenes={body,root}
-local scene_census_calls=0
+local scene_census_calls,mesh_return_calls=0,0
 local function source_mesh_return(_,class)
+    mesh_return_calls=mesh_return_calls+1
     if class~="/Script/Engine.MeshComponent"then scene_census_calls=scene_census_calls+1;error("full helper Scene enumeration is forbidden",0)end
     local out={};for _,c in ipairs(source_scenes)do if c:IsA(class)then out[#out+1]=wrapped(c)end end;return out
 end
 host.K2_GetComponentsByClass=source_mesh_return;live_weapon.K2_GetComponentsByClass=function(_,class)
+    mesh_return_calls=mesh_return_calls+1
     if class~="/Script/Engine.MeshComponent"then scene_census_calls=scene_census_calls+1;error("full weapon Scene enumeration is forbidden",0)end
     return {wrapped(weapon_mesh)}end
 local plain_component_getter_calls=0
@@ -248,7 +271,21 @@ StaticFindObject=function(p)return p=="/Script/VertexPaintDetectionPlugin.Defaul
 local render_env={read=function(fn)if not scope then error("scope",0)end;local value=fn({pawn=host,world=render_world});if not scope then error("scope",0)end;return value end,
     guard=function()if not scope then error("scope",0)end end,token_valid=function()return scope end,weapon=function()return live_weapon end}
 local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapon R"}}}
+local render_phases={}
+render_env.phase=function(stage,edge,detail)render_phases[#render_phases+1]={stage=stage,edge=edge,detail=detail}end
+mesh_return_calls=0
 local rendered=Render.capture(render_env,native_bindings)
+local render_stats=render_phases[#render_phases].detail
+T.check(render_phases[1].stage=="render_capture"and render_phases[1].edge=="enter"
+    and render_phases[#render_phases].stage=="render_capture"and render_stats.ok==true,"rare render scope has entry before native class lookup and exit after complete binding harvest")
+T.check(render_stats.mesh_census_calls==mesh_return_calls and render_stats.mesh_census_calls>240
+    and render_stats.component_reads>120 and render_stats.qualifications>render_stats.component_reads,
+    "aggregate diagnostics exactly count repeated native mesh returns without perbone events")
+local phase_scalars=true
+for _,event in ipairs(render_phases)do for _,value in pairs(event.detail)do
+    local t=type(value);if t~="number"and t~="boolean"and t~="string"then phase_scalars=false end
+end end
+T.check(phase_scalars and #render_phases<80,"capture phase details remain bounded copied scalars with no UObject or perbone spam")
 T.eq(plain_component_getter_calls,0,"source census uses exact reflected K2 component getter")
 T.check(#rendered.components==3 and #rendered.components[1].bones==40,"source collector retains full render dictionary and actual owner root")
 T.eq(rendered.components[1].materials[1].scalars[1].value,0.3125,"native scalar material override captured exactly")
@@ -271,6 +308,17 @@ malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not malformed and malformed_reason:find('SkeletalMesh.GetMorphTargetsPtrConv component=BodyMesh',1,true),"morph return refusal names exact native producer")
 body_asset.GetMorphTargetsPtrConv=morph_getter
 local color_getter=rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
+render_phases={}
+rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=function()
+    local last=render_phases[#render_phases]
+    if not last or last.stage~="vertex_color_getter"or last.edge~="enter"or last.detail.lod~=0 then error("vertex entry missing before native getter",0)end
+    error("synthetic vertex native getter refused",0)
+end
+malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not malformed and malformed_reason:find("synthetic vertex native getter refused",1,true)
+    and render_phases[#render_phases].stage=="vertex_color_getter"and render_phases[#render_phases].edge=="enter",
+    "blocking native color getter receives persisted entry before call and no fabricated exit")
+rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=color_getter
 rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=function(self,c)local out=color_getter(self,c);out.outTable=false;return out end
 malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not malformed and malformed_reason:find('GetMeshComponentVertexColorsAtLOD_Wrapper component=BodyMesh lod=0',1,true),"vertex return refusal preserves exact component and LOD getter context")

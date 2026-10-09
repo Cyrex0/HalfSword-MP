@@ -156,33 +156,48 @@ function M.signature(value)
     end
     return pack(plain(value,0,{n=0}))
 end
+local function phase(env,stage,edge,detail)
+    if env.phase then detail=detail or {};detail.pass=env.pass;env.phase(stage,edge,detail)end
+end
 local function harvest(env)
+    phase(env,"harvest","enter")
+    phase(env,"passport","enter",{getter="Willie.Character Passport"})
     local passport=read_struct("character",env.character,env)
     local actor_class=access(env,env.actor_class)
     if not text(actor_class,512,false)then fail("source actor class unavailable")end
     local team=access(env,env.team)
     if not finite(team) or not math.tointeger(team) or team< -0x80000000 or team>0x7fffffff then fail("native team unavailable")end
+    phase(env,"passport","exit",{ok=true})
+    phase(env,"equipment","enter",{getter="Willie.Currently Equipped Armor/Weapon Passport"})
     local armor,why=M.read_armor_map(env.current_armor,env);if not armor then fail(why)end
     local construction=plain(access(env,env.construction),0,{n=0})
     local gear=access(env,env.live_weapons)
     if not gear then fail("source live weapons unavailable")end
     gear=plain(gear,0,{n=0});gear.armor=armor
+    phase(env,"equipment","exit",{ok=true,count=#gear.weapons})
+    phase(env,"render","enter",{getter="SourceRender.capture"})
     local render=plain(access(env,env.render),0,{n=0})
     if type(render.components)~="table" or type(render.topology)~="table"then fail("source render capture incomplete")end
+    phase(env,"render","exit",{ok=true,count=#render.components})
     for _,w in ipairs(gear.weapons)do
         w.components={}
         for _,c in ipairs(render.components)do if c.owner==w.id then w.components[#w.components+1]=c.id end end
         if #w.components==0 then fail("source weapon render components incomplete")end
     end
     guard(env)
+    phase(env,"harvest","exit",{ok=true,count=#render.components})
     return {schema=M.SCHEMA,actor_class=actor_class,team=team,passport=passport,construction=construction,
         equipment=gear,components=render.components,topology=render.topology}
 end
 function M.capture(env)
     if type(env)~="table"then return nil,"source adapter unavailable"end
-    local ok,first=pcall(harvest,env);if not ok then return nil,first end
-    local again,second=pcall(harvest,env);if not again then return nil,second end
+    env.pass=1
+    local ok,first=pcall(harvest,env);if not ok then phase(env,"harvest","exit",{ok=false,reason=tostring(first)});return nil,first end
+    env.pass=2
+    local again,second=pcall(harvest,env);if not again then phase(env,"harvest","exit",{ok=false,reason=tostring(second)});return nil,second end
+    phase(env,"signature","enter",{getter="SourceDescriptor.signature"})
     local compared,a,b=pcall(function()return M.signature(first),M.signature(second)end)
+    phase(env,"signature","exit",{ok=compared and a==b})
     if not compared or a~=b then return nil,"source recipe changed during capture"end
     local same=pcall(guard,env);if not same then return nil,"source scope changed"end
     return first

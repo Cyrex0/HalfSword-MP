@@ -24,6 +24,14 @@ local group_fields={
 local function fail(s)error(s,0)end
 function M.capture(env,bindings)
     local read,guard=env.read,env.guard
+    local stats={mesh_census_calls=0,component_reads=0,parent_hops=0,qualifications=0}
+    local function phase(stage,edge,detail,row)
+        if not env.phase then return end
+        detail=detail or {}
+        if row then detail.address=row.address;detail.name=row.name;detail.owner_id=row.owner;detail.component_id=row.id end
+        env.phase(stage,edge,detail)
+    end
+    phase("render_capture","enter",{getter="StaticFindObject(render classes)"})
     local function checked(fn)guard();local v=fn();guard();return v end
     local function array(a,max,convert,producer,context)
         return Array.collect(a,max,producer or "property",{guard=guard,context=context},convert)
@@ -69,6 +77,7 @@ function M.capture(env,bindings)
     local rows,by_address,mesh_sets={}, {}, {}
     local owners={{owner=0}};for _,w in ipairs(bindings.weapons)do owners[#owners+1]={owner=w.id}end
     local function qualify(c,row)
+        stats.qualifications=stats.qualifications+1
         local identity=object_id(c)
         if not identity or identity.address~=row.address or identity.name~=row.name then fail("native render component identity changed")end
         local actual=object_id(checked(function()return c:GetOwner()end))
@@ -92,8 +101,10 @@ function M.capture(env,bindings)
         local actor_id=object_id(actor)
         if not actor_id then fail("native mesh owner unavailable")end
         local set={};mesh_sets[owner_id]=set
+        phase("mesh_census","enter",{getter="Actor.K2_GetComponentsByClass(MeshComponent)",owner_id=owner_id,name=actor_id.name,address=actor_id.address})
+        stats.mesh_census_calls=stats.mesh_census_calls+1
         local a=checked(function()return actor:K2_GetComponentsByClass(mesh_class)end)
-        array(a,64,function(c)
+        local copied=array(a,64,function(c)
             local id=object_id(c)
             if not id or set[id.address]or by_address[id.address]then fail("native mesh component identity duplicate or unavailable")end
             id.owner=owner_id;id.mesh=true
@@ -103,6 +114,7 @@ function M.capture(env,bindings)
             set[id.address]=id;include(id)
             return true
         end,"return","Actor.K2_GetComponentsByClass(MeshComponent) collect owner="..actor_id.name)
+        phase("mesh_census","exit",{ok=true,count=#copied,owner_id=owner_id,name=actor_id.name,address=actor_id.address})
     end
     collect(read(function(b)return b.pawn end),0)
     for _,w in ipairs(bindings.weapons)do collect(env.weapon(w.field,w),w.id)end
@@ -111,6 +123,7 @@ function M.capture(env,bindings)
         if not seed.mesh then return qualify(checked(function()return actor.RootComponent end),seed)end
         local found,seen
         local set=mesh_sets[seed.owner];seen={}
+        stats.mesh_census_calls=stats.mesh_census_calls+1
         array(checked(function()return actor:K2_GetComponentsByClass(mesh_class)end),64,function(c)
             local identity=object_id(c)
             local expected=identity and set[identity.address]
@@ -127,11 +140,13 @@ function M.capture(env,bindings)
     local function component(row)
         local current=seed_component(row.route.seed)
         for _,step in ipairs(row.route.steps)do
+            stats.parent_hops=stats.parent_hops+1
             current=qualify(checked(function()return current:GetAttachParent()end),step)
         end
         return qualify(current,row)
     end
     local function get(row,fn)
+        stats.component_reads=stats.component_reads+1
         guard();local c=component(row);local value=fn(c);guard();component(row);return value
     end
     local function vec(v,keys)
@@ -206,12 +221,13 @@ function M.capture(env,bindings)
         identity.route={seed={address=identity.address,name=identity.name,owner=owner_id,mesh=false},steps={}}
         include(identity)
     end
+    phase("parent_closure","enter",{getter="Actor.RootComponent/SceneComponent.GetAttachParent"})
     include_root(read(function(b)return b.pawn end),0)
     for _,weapon in ipairs(bindings.weapons)do include_root(env.weapon(weapon.field,weapon),weapon.id)end
     local cursor=1
     while cursor<=#rows do
         local row=rows[cursor]
-        local parent_object=get(row,function(o)return o:GetAttachParent()end)
+        local parent_object=get(row,function(o)stats.parent_hops=stats.parent_hops+1;return o:GetAttachParent()end)
         local parent=object_id(parent_object)
         row.parent_address=parent and parent.address or 0
         if parent then
@@ -247,6 +263,7 @@ function M.capture(env,bindings)
     end
     table.sort(rows,function(a,b)if a.owner~=b.owner then return a.owner<b.owner end;return a.name<b.name end)
     for i,row in ipairs(rows)do row.id=i end
+    phase("parent_closure","exit",{ok=true,count=#rows})
     local function material(row,slot)
         local scalar,vector,texture={},{},{}
         local current=get(row,function(c)return c:GetMaterial(slot)end)
@@ -291,6 +308,7 @@ function M.capture(env,bindings)
     local vertex_total=0
     local main_address=read(function(b)return b.pawn.Mesh:GetAddress()end)
     for _,row in ipairs(rows)do
+        phase("component_static","enter",{getter="SourceRender.component metadata"},row)
         local kind;if not row.mesh then kind="scene"end
         for _,k in ipairs({"skeletal","static","groom","procedural"})do
             if classes[k] and get(row,function(c)return c:IsA(classes[k])end)==true then kind=k;break end
@@ -375,6 +393,7 @@ function M.capture(env,bindings)
             local clothing=asset_read(function(o)return o.MeshClothingAssets end)
             if type(disable_cloth)~="boolean" or not clothing then fail("native cloth state unavailable")end
             c.cloth=not disable_cloth and checked(function()return clothing:GetArrayNum()end)>0
+            phase("bone_dictionary","enter",{getter="GetNumBones/GetBoneName/GetParentBone/IsBoneHiddenByName",class=component_class},row)
             local count=get(row,function(o)return o:GetNumBones()end)
             if type(count)~="number" or not math.tointeger(count) or count<1 or count>512 then fail("native complete bone count unavailable")end
             local names={};for i=0,count-1 do names[i+1]=name(get(row,function(o)return o:GetBoneName(i)end))end
@@ -388,8 +407,11 @@ function M.capture(env,bindings)
                 if type(hidden)~="boolean"then fail("native bone visibility unavailable")end
                 if hidden then c.hidden_bones[#c.hidden_bones+1]=n end
             end
+            phase("bone_dictionary","exit",{ok=true,count=count,class=component_class},row)
+            phase("morph_dictionary","enter",{getter="SkeletalMesh.GetMorphTargetsPtrConv/GetMorphTarget",class=component_class},row)
             array(asset_read(function(o)return o:GetMorphTargetsPtrConv()end),128,function(m)
                 current_asset();local n=name(checked(function()return m:GetFName()end));c.morphs[#c.morphs+1]={name=n,value=get(row,function(o)return o:GetMorphTarget(FName(n))end)};current_asset();return true end,"return","SkeletalMesh.GetMorphTargetsPtrConv component="..row.name)
+            phase("morph_dictionary","exit",{ok=true,count=#c.morphs,class=component_class},row)
         elseif kind=="groom"then
             local groups=array(get(row,function(o)return o.GroomGroupsDesc end),32,function(v)
                 local group={};for _,fd in ipairs(group_fields)do group[fd[2]]=checked(function()return v[fd[1]]end);if group[fd[2]]==nil then fail("native groom group incomplete")end end;return group end,"property","GroomComponent.GroomGroupsDesc component="..row.name)
@@ -401,11 +423,14 @@ function M.capture(env,bindings)
         if path(get(row,function(o)return o:GetOverlayMaterial()end))~="" then fail("native component overlay material unsupported")end
         local count=get(row,function(o)return o:GetNumMaterials()end)
         if type(count)~="number" or not math.tointeger(count) or count<0 or count>32 then fail("native material slots incomplete")end
+        phase("material","enter",{getter="MeshComponent.GetMaterial/MaterialInstance parameters",count=count,class=component_class},row)
         for slot=0,count-1 do c.materials[#c.materials+1]=material(row,slot)end
+        phase("material","exit",{ok=true,count=count,class=component_class},row)
         if kind=="skeletal" or kind=="static"then
             if not rvp or checked(function()return rvp:IsValid()end)~=true then fail("native vertex getter unavailable")end
             local colors,why=Vertex.capture({
                 guard=env.token_valid or function()guard();return true end,
+                phase=function(stage,edge,detail)detail=detail or {};detail.class=component_class;phase(stage,edge,detail,row)end,
                 lods=function()return get(row,function(o)return kind=="skeletal" and o:GetNumLODs() or asset_obj:GetNumLODs()end)end,
                 count=function(lod)
                     if kind=="skeletal"then
@@ -438,10 +463,13 @@ function M.capture(env,bindings)
         if detached_tag then detached[#detached+1]=row.id end
         if gore_tag then gore[#gore+1]=row.id end
         components[#components+1]=c
+        phase("component_static","exit",{ok=true,class=component_class},row)
     end
     local bound={};for _,r in ipairs(rows)do bound[#bound+1]={id=r.id,address=r.address,
         owner=checked(function()return owner(r):GetAddress()end),name=r.name}end
     local complete=true;for _,c in ipairs(components)do if c.vertex_state~="captured" and c.vertex_state~="native_asset" and c.vertex_state~="not_applicable"then complete=false end end
+    stats.count=#components;stats.ok=true
+    phase("render_capture","exit",stats)
     return {components=components,bindings=bound,topology={detached=detached,gore=gore,vertex_state=complete and "captured" or "unavailable"}}
 end
 return M
