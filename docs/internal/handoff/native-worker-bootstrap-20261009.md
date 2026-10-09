@@ -1,5 +1,18 @@
 # Native authority bootstrap checkpoint
 
+## Current creation refusal cause: natural asset serial assignment
+
+Exact584792a7/full G0/all394 hashes run203529-352d72 proves both Hosen003
+mesh_set refusals retain the original address and index while the engine assigns
+serial0 to a positive value. Strict weak equality incorrectly treats that native
+transition as an asset replacement. The private fully qualified original-asset
+admission fix is implemented/reviewed; strict provider/fixture compilation and992
+focused checks pass. No serial allocation or writes from HSMP. Preserve exact
+identity and positive mismatch rejection. Latest native run still
+has no completed mirror/owned view/input proof. All original games/debuggers gone,
+save20 hashes unchanged, no fresh dump, both windows contained on secondary.
+See native-scene-stream-20261009.md for current evidence and required closures.
+
 ## Current actual: pose binding advances; clothing mesh identity refuses
 
 Exact3c670480/full G0/all394 deployed hashes run202218-e92cdb passes native

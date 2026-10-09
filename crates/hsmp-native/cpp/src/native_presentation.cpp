@@ -38,6 +38,7 @@ struct Error : std::runtime_error { using std::runtime_error::runtime_error; };
 void require(bool ok, const char* why) { if (!ok) throw Error(why); }
 thread_local const HsmpViewGuard* active_guard{};
 thread_local Obj active_world{},active_game_instance{};
+void mesh_call_guard();
 thread_local bool static_profile_trace{};
 struct StaticProfileTraceScope {bool previous;StaticProfileTraceScope():previous(static_profile_trace){static_profile_trace=true;}~StaticProfileTraceScope(){static_profile_trace=previous;}};
 void profile_phase(const char* stage,uint32_t edge){if(static_profile_trace)hsmp_native_profile_checkpoint(stage,edge);}
@@ -79,7 +80,7 @@ void create_function_name(const wchar_t* path,char* out,size_t capacity){
     if(start[i]){std::memcpy(out,"other",6);return;}out[i]='\0';
 }
 void check_guard() {
-    if(!active_guard)return;
+    if(!active_guard){mesh_call_guard();return;}
     profile_tick(0);
     require(active_guard->check && active_guard->context && active_guard->check(active_guard->context)==1,
             "native source/world operation guard changed");
@@ -94,6 +95,7 @@ void check_guard() {
             "native game-instance identity changed");
         require(object_world && object_world(gi)==world,"native game-instance world changed");
     }
+    mesh_call_guard();
 }
 void thread() {
     require(vt && vt->abi == HSMP_REFLECT_ABI, "reflection unavailable");
@@ -107,7 +109,7 @@ std::map<std::wstring,uint64_t> names;
 uint64_t name(const wchar_t* s) {
     const auto it=names.find(s);if(it!=names.end())return it->second;
     require(names.size()<65536,"presentation FName cache bounds");
-    check_guard();const auto value=vt->fname(u16(s),1);names.emplace(s,value);return value;
+    check_guard();const auto value=vt->fname(u16(s),1);check_guard();names.emplace(s,value);return value;
 }
 std::wstring text(HsmpViewText s) {
     require(s.len <= 1024 && (s.len == 0 || s.data), "presentation text bounds");
@@ -333,8 +335,7 @@ void qualify(Obj world, Obj owner, Obj component, HsmpViewResult* r = nullptr) {
     require(same(actual_owner,owner) && same(actor_world(owner,r),world),"native component owner/world mismatch");
 }
 Obj mesh_asset(Obj component, HsmpViewResult* r) { return returned(component,L"/Script/Engine.SkinnedMeshComponent:GetSkinnedAsset",r); }
-void mesh_assignment(Obj component,Obj expected,HsmpViewText expected_path,bool calculator,const char* stage,HsmpViewResult* r){
-    const auto actual=mesh_asset(component,r);if(same(actual,expected))return;
+void mesh_assignment_error(Obj actual,Obj expected,HsmpViewText expected_path,bool calculator,const char* stage){
     // The path is copied from the already validated recipe. No UObject name or
     // class conversion, pointer formatting or new native query is needed here.
     const auto path=text(expected_path);const auto separator=path.find_last_of(L"./");const auto begin=separator==std::wstring::npos?0:separator+1;
@@ -345,6 +346,17 @@ void mesh_assignment(Obj component,Obj expected,HsmpViewText expected_path,bool 
     char reason[192]{};std::snprintf(reason,sizeof(reason),"mirror %s mesh assignment failed; stage=%s; actual=%s; class=SkeletalMesh; address_equal=%u; index_equal=%u; zero_to_nonzero=%u; asset=%s",
         calculator?"pose calculator":"render",stage,actual.weak?"different":"absent",address_equal?1u:0u,index_equal?1u:0u,zero_to_nonzero?1u:0u,label);throw Error(reason);
 }
+void mesh_assignment(Obj component,Obj expected,HsmpViewText expected_path,bool calculator,const char* stage,HsmpViewResult* r){
+    const auto actual=mesh_asset(component,r);if(!same(actual,expected))mesh_assignment_error(actual,expected,expected_path,calculator,stage);
+}
+struct MeshBinding {
+    Obj original{},pinned{},world{},owner{};
+    HsmpNativePathNode world_node{},owner_node{},level_node{};
+    std::array<HsmpNativePathNode,64> path{};uint32_t count{},flags{};uint64_t package{};
+};
+MeshBinding mesh_binding(Obj world,Obj owner,HsmpViewText path,HsmpViewResult* r);
+void mesh_binding_final(const MeshBinding& binding);
+Obj mesh_admit(MeshBinding& binding,Obj component,HsmpViewText path,bool calculator,const char* stage,HsmpViewResult* r);
 bool effective_visible(Obj component) {return bool_property(component,L"bVisible")&&!bool_property(component,L"bHiddenInGame");}
 void visibility(Obj component,bool visible,HsmpViewResult* r);
 void collision_off(Obj component,HsmpViewResult* r);
@@ -607,8 +619,19 @@ void finish_component(Obj actor,Obj component,const Transform& relative,HsmpView
     Function f(L"/Script/Engine.Actor:FinishAddComponent");f.object(L"Component",component);f.boolean(L"bManualAttachment",true);
     f.put(L"RelativeTransform",L"StructProperty",engine(relative),L"Transform");f.call(actor,r);collision_off(component,r);
 }
-struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};std::wstring arm_socket;HsmpViewSpringArmFrame arm{};std::optional<PoseBinding> pose;};
+struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};std::wstring arm_socket;HsmpViewSpringArmFrame arm{};std::optional<PoseBinding> pose;std::optional<MeshBinding> mesh;};
 struct Mirror {Obj world{},actor{};std::vector<Part> parts;};
+struct MeshWatch;
+thread_local const MeshWatch* active_mesh_watch{};
+struct MeshWatch {
+    const MeshWatch* previous{active_mesh_watch};std::vector<const Mirror*> mirrors;const Part* current{};
+    MeshWatch(std::vector<const Mirror*> value,const Part* part=nullptr):mirrors(std::move(value)),current(part){active_mesh_watch=this;}
+    ~MeshWatch(){active_mesh_watch=previous;}
+};
+void mesh_call_guard(){for(auto* watch=active_mesh_watch;watch;watch=watch->previous){
+    for(const auto* mirror:watch->mirrors)for(const auto& part:mirror->parts)if(part.mesh)mesh_binding_final(*part.mesh);
+    if(watch->current&&watch->current->mesh)mesh_binding_final(*watch->current->mesh);
+}}
 void forget_owned_materials(Obj actor){
     for(auto it=vertex_source_materials.begin();it!=vertex_source_materials.end();){
         if(it->second.owned==1&&same(it->second.owner,actor))it=vertex_source_materials.erase(it);else ++it;}
@@ -666,29 +689,34 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
         Function actor_collision(L"/Script/Engine.Actor:SetActorEnableCollision");actor_collision.boolean(L"bNewActorEnableCollision",false);actor_collision.call(actor,r);
         Function actor_tick(L"/Script/Engine.Actor:SetActorTickEnabled");actor_tick.boolean(L"bEnabled",false);actor_tick.call(actor,r);
         Mirror mirror{world,actor,{}};
+        MeshWatch mesh_watch({&mirror});
         for(uint32_t i=0;i<count;++i) {
             const auto& c=recipes[i];Part part{c.id,c.kind,{},{},{}};
+            MeshWatch part_mesh_watch({},&part);
             trace.part(c.id,c.kind);
             require(std::none_of(mirror.parts.begin(),mirror.parts.end(),[&](const Part& p){return p.id==c.id;}),"duplicate mirror component id");
             if(c.kind==0) {
-                auto mesh=asset(c.asset,L"/Script/Engine.SkeletalMesh");
+                part.mesh=mesh_binding(world,actor,c.asset,r);auto mesh=part.mesh->pinned;
                 part.leader=add_component(actor,L"/Script/Engine.PoseableMeshComponent",c.relative,r);
+                pose_profile(part.leader,true);
                 Function leader_mesh(L"/Script/Engine.SkinnedMeshComponent:SetSkinnedAssetAndUpdate");leader_mesh.object(L"NewMesh",mesh);leader_mesh.boolean(L"bReinitPose",true);leader_mesh.call(part.leader,r);
+                mesh=mesh_admit(*part.mesh,part.leader,c.asset,true,"calc_set",r);
                 finish_component(actor,part.leader,c.relative,r);visibility(part.leader,false,r);
                 part.render=add_component(actor,L"/Script/Engine.SkeletalMeshComponent",c.relative,r);
+                pose_profile(part.render,false);
                 Function disable_pp(L"/Script/Engine.SkeletalMeshComponent:SetDisablePostProcessBlueprint");disable_pp.boolean(L"bInDisablePostProcess",true);disable_pp.call(part.render,r);
                 Function anim(L"/Script/Engine.SkeletalMeshComponent:SetAnimClass");anim.object(L"NewClass",{},true);anim.call(part.render,r);
                 Function set_mesh(L"/Script/Engine.SkeletalMeshComponent:SetSkeletalMeshAsset");set_mesh.object(L"NewMesh",mesh);set_mesh.call(part.render,r);
-                mesh_assignment(part.render,mesh,c.asset,false,"mesh_set",r);
+                mesh=mesh_admit(*part.mesh,part.render,c.asset,false,"mesh_set",r);
                 Function allow_cloth(L"/Script/Engine.SkeletalMeshComponent:SetAllowClothActors");allow_cloth.boolean(L"bInAllow",false);allow_cloth.call(part.render,r);
-                mesh_assignment(part.render,mesh,c.asset,false,"cloth_allow",r);
+                mesh=mesh_admit(*part.mesh,part.render,c.asset,false,"cloth_allow",r);
                 Function suspend(L"/Script/Engine.SkeletalMeshComponent:SuspendClothingSimulation");suspend.call(part.render,r);
-                mesh_assignment(part.render,mesh,c.asset,false,"cloth_suspend",r);
-                finish_component(actor,part.render,c.relative,r);mesh_assignment(part.render,mesh,c.asset,false,"finish",r);
+                mesh=mesh_admit(*part.mesh,part.render,c.asset,false,"cloth_suspend",r);
+                finish_component(actor,part.render,c.relative,r);mesh=mesh_admit(*part.mesh,part.render,c.asset,false,"finish",r);
                 require(!object_property(part.render,L"AnimScriptInstance").weak&&!object_property(part.render,L"PostProcessAnimInstance").weak,"mirror animation instance active");
-                scene_inert(part.leader,r);mesh_assignment(part.render,mesh,c.asset,false,"calc_inert",r);
-                scene_inert(part.render,r);mesh_assignment(part.render,mesh,c.asset,false,"render_inert",r);
-                mesh_assignment(part.leader,mesh,c.asset,true,"verified",r);
+                scene_inert(part.leader,r);mesh=mesh_admit(*part.mesh,part.render,c.asset,false,"calc_inert",r);
+                scene_inert(part.render,r);mesh=mesh_admit(*part.mesh,part.render,c.asset,false,"render_inert",r);
+                mesh=mesh_admit(*part.mesh,part.leader,c.asset,true,"verified",r);
                 for(uint32_t b=0;b<c.hidden_count;++b)for(auto target:{part.leader,part.render}) {
                     Function hide(L"/Script/Engine.SkinnedMeshComponent:HideBoneByName");hide.put(L"BoneName",L"NameProperty",name(c.hidden_bones[b]));hide.enumeration(L"PhysBodyOption",0);hide.call(target,r);
                     Function check(L"/Script/Engine.SkinnedMeshComponent:IsBoneHiddenByName");check.put(L"BoneName",L"NameProperty",name(c.hidden_bones[b]));check.call(target,r);
@@ -759,6 +787,7 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
             else if(part.kind>=6)targets.push_back({actor,part.render,{},part.kind,1,{u16(part.arm_socket.c_str()),static_cast<uint32_t>(part.arm_socket.size()),0},part.arm});}
         trace.emit("finish_set",0);finish_scene_set(world,targets,r);trace.emit("finish_set",1);
         for(const auto& part:mirror.parts)if(part.pose){pose_pure(*part.pose);pose_buffers(vertex_pure(part.render),part.pose->count);}
+        for(const auto& part:mirror.parts)if(part.mesh)mesh_binding_final(*part.mesh);
         require(next_mirror!=0,"mirror handle exhausted");const auto id=next_mirror++;mirrors.emplace(id,std::move(mirror));r->complete=1;trace.terminal(1);return id;
     }catch(const std::exception& e){trace.terminal(2);failure(r,e.what());if(actor.weak){forget_owned_materials(actor);try{OperationScope scope(guard,world);destroy_actor(world,actor);}catch(const std::exception&){}}return 0;}
 }
@@ -776,6 +805,7 @@ template<class T> void material_set(Obj mat,const HsmpViewParameter& p,const T& 
 int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpViewFrame* frames,uint32_t count,const HsmpViewGuard* guard,HsmpViewResult* r) {
     const std::lock_guard lock(mirror_mutex);
     try{initialize_result(r);thread();OperationScope scope(guard,world);get(world);auto it=mirrors.find(id);require(it!=mirrors.end(),"mirror handle missing");auto& mirror=it->second;
+        MeshWatch mesh_watch({&mirror});
         require(same(mirror.world,world)&&same(actor_world(mirror.actor,r),world)&&count==mirror.parts.size()&&pointers(recipes,count,64)&&pointers(frames,count,64),"mirror apply scope");
         const auto order=parent_order(recipes,count);
         std::vector<std::pair<size_t,PosePublished>> published_poses;
@@ -823,6 +853,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
             else if(part.kind>=6)targets.push_back({mirror.actor,part.render,{},part.kind,1,{u16(part.arm_socket.c_str()),static_cast<uint32_t>(part.arm_socket.size()),0},part.arm});}
         finish_scene_set(world,targets,r);
         for(const auto& [index,published]:published_poses)pose_final(*mirror.parts[index].pose,published);
+        for(const auto& part:mirror.parts)if(part.mesh)mesh_binding_final(*part.mesh);
         r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
@@ -873,6 +904,51 @@ int32_t source_path_reader(const HsmpNativePathNode* nodes,uint32_t count,uint32
         }else source_path_verify(nodes,count,*package_name);
         return 1;
     }catch(const std::exception& e){if(reason&&reason_capacity)std::snprintf(reason,reason_capacity,"%s",e.what());return -1;}
+}
+// Never acquire a fresh asset by path here. This pure closure verifies the
+// original witness and, once assigned naturally, the retained positive serial.
+void mesh_binding_final(const MeshBinding& b){
+    source_path_get(b.world_node);const auto* owner=source_path_get(b.owner_node);const auto* level=source_path_get(b.level_node);
+    require(source_outer(owner)&&*source_outer(owner)==level,"native mesh original owner level changed");
+    void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+0xc0,8);
+    require(reinterpret_cast<uint64_t>(world)==b.world.address,"native mesh original world changed");
+    source_path_verify(b.path.data(),b.count,b.package);
+    auto pinned=b.path[0];pinned.weak=b.pinned.weak;pinned.address=b.pinned.address;
+    const auto* p=source_path_get(pinned);const auto* flags=retirement_flags(p);
+    require(flags&&*flags==b.flags&&(*flags&0x40u)==0,"native mesh original flags/runtime profile changed");
+}
+bool mesh_serial_assignment(Obj original,Obj current){
+    return original.weak&&current.weak&&(original.weak>>32)==0&&static_cast<int32_t>(current.weak>>32)>0&&
+        original.address==current.address&&static_cast<uint32_t>(original.weak)==static_cast<uint32_t>(current.weak);
+}
+MeshBinding mesh_binding(Obj world,Obj owner,HsmpViewText path,HsmpViewResult* r){
+    MeshBinding b;b.world=world;b.owner=owner;
+    b.world_node=source_path_node(get(world));b.world_node.weak=world.weak;
+    b.owner_node=source_path_node(get(owner));b.owner_node.weak=owner.weak;
+    const auto level=returned(owner,L"/Script/Engine.Actor:GetLevel",r);
+    require(level.weak&&property(level,L"OwningWorld",L"ObjectProperty",8).offset==0xc0,"native mesh owner level layout");
+    b.level_node=source_path_node(get(level));b.level_node.weak=level.weak;
+    b.original=asset(path,L"/Script/Engine.SkeletalMesh");b.pinned=b.original;
+    auto root=source_path_node(get(b.original));root.weak=b.original.weak;
+    const auto* flags=retirement_flags(source_path_get(root));require(flags!=nullptr,"native mesh original flags unavailable");b.flags=*flags;
+    char reason[192]{};require(source_path_reader(&root,1,1,b.path.data(),64,&b.count,&b.package,reason,sizeof(reason))==1,reason);
+    const auto exact=find(text(path).c_str());
+    require(same(b.original,exact)||mesh_serial_assignment(b.original,exact),"native mesh exact recipe binding changed");
+    vertex_live(b.original);vertex_live(exact);require(same(actor_world(owner,r),world),"native mesh owner world changed");
+    check_guard();
+    mesh_binding_final(b);auto current=b.path[0];current.weak=exact.weak;current.address=exact.address;source_path_get(current);b.pinned=exact;return b;
+}
+Obj mesh_admit(MeshBinding& b,Obj component,HsmpViewText path,bool calculator,const char* stage,HsmpViewResult* r){
+    qualify(b.world,b.owner,component,r);auto receiver=source_path_node(vertex_live(component));receiver.weak=component.weak;
+    const auto actual=mesh_asset(component,r);
+    if(!same(actual,b.pinned)&&!mesh_serial_assignment(b.pinned,actual))mesh_assignment_error(actual,b.pinned,path,calculator,stage);
+    vertex_live(b.original);vertex_live(b.pinned);vertex_live(actual);qualify(b.world,b.owner,component,r);check_guard();
+    auto candidate=b.path[0];candidate.weak=actual.weak;candidate.address=actual.address;
+    source_path_get(candidate);mesh_binding_final(b);
+    const auto* p=static_cast<const uint8_t*>(source_path_get(receiver));uint64_t owner{},mesh{},skinned{};
+    std::memcpy(&owner,p+0x90,8);std::memcpy(&mesh,p+0x558,8);std::memcpy(&skinned,p+0x560,8);
+    require(owner==b.owner.address&&mesh==b.original.address&&skinned==b.original.address,"native mesh original receiver owner/aliases changed");
+    source_path_get(candidate);b.pinned=actual;return b.pinned;
 }
 constexpr uint32_t mirrored_garbage=0x40000000; // matched shipping actor iterator/Kismet:IsValid, evidence-20261005
 struct RetirementLayout {HsmpProp root{},destroying{},role{},remote{};uint32_t known{};};
@@ -1017,14 +1093,17 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
     const std::lock_guard lock(mirror_mutex);
     try{initialize_result(r);thread();OperationScope scope(guard,world);
         require(pointers(source,source_count,32*64)&&pointers(handles,mirror_count,32)&&(!source_count||!mirror_count),"native vertex complete set arguments");
-        std::vector<HsmpViewFinishTarget> targets;if(source_count)targets.assign(source,source+source_count);
+        std::vector<HsmpViewFinishTarget> targets;std::vector<const Mirror*> mesh_mirrors;if(source_count)targets.assign(source,source+source_count);
         for(uint32_t i=0;i<mirror_count;++i){
             require(std::find(handles,handles+i,handles[i])==handles+i,"native vertex duplicate mirror handle");
             const auto found=mirrors.find(handles[i]);require(found!=mirrors.end()&&same(found->second.world,world),"native vertex mirror generation");
+            mesh_mirrors.push_back(&found->second);
             for(const auto& part:found->second.parts){if(part.native_asset.weak)targets.push_back({found->second.actor,part.render,part.native_asset});
                 else if(part.kind>=6)targets.push_back({found->second.actor,part.render,{},part.kind,1,{u16(part.arm_socket.c_str()),static_cast<uint32_t>(part.arm_socket.size()),0},part.arm});}
         }
-        finish_scene_set(world,targets,r);r->complete=1;return 1;
+        MeshWatch mesh_watch(mesh_mirrors);finish_scene_set(world,targets,r);
+        for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.mesh){mesh_binding_final(*part.mesh);if(part.pose)pose_pure(*part.pose);}
+        r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 const HsmpPresentation provider{11,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets};

@@ -923,11 +923,14 @@ LifetimeObject pose_class{1200,&meta},pose_count_fn{1201,&function_class},pose_a
 SkeletalObject pose_level{};
 alignas(16) std::array<EngineTransform,2> pose_calc_a{},pose_calc_b{},pose_render_a{},pose_render_b{},pose_input{};
 std::vector<uint32_t> pose_stages;bool pose_callback_replace{},pose_callback_dirty{},pose_allocate_mesh_serial{};uint32_t pose_asset_reads{},pose_mesh_serial{};
+uint32_t mesh_mutation{},mesh_path_finds{};bool mesh_mutation_done{},mesh_lookup_serial{};
 uint64_t pose_weak(void* p){return lifetime_weak(p)|(p==&vertex_mesh?static_cast<uint64_t>(pose_mesh_serial)<<32:0);}
 void* pose_resolve(uint64_t id){const auto index=static_cast<uint32_t>(id),serial=static_cast<uint32_t>(id>>32);auto* p=lifetime_resolve(index);
     return serial&&(p!=&vertex_mesh||serial!=pose_mesh_serial)?nullptr:p;}
 void* pose_find(const uint16_t* key){const std::wstring path(reinterpret_cast<const wchar_t*>(key));
     if(path==L"/Script/Engine.PoseableMeshComponent")return &pose_class;
+    if(path==L"/Script/Engine.SkeletalMesh")return &vertex_mesh_class;
+    if(path==L"/Game/ObservedClothing.ObservedClothing"){++mesh_path_finds;if(mesh_lookup_serial&&mesh_path_finds==2)pose_mesh_serial=7;return &vertex_mesh;}
     if(path==L"/Script/Engine.SkinnedMeshComponent:GetSkinnedAsset")return &pose_asset_fn;
     if(path==L"/Script/Engine.SkinnedMeshComponent:GetNumBones")return &pose_count_fn;return scene_find(key);}
 int32_t pose_props(void* object,HsmpProp* out,int32_t cap,int32_t* bytes){
@@ -941,7 +944,15 @@ uint64_t pose_vtable(const void* p){if(p==&skeletal_second)return pose_image+0x7
 int32_t pose_is_a(void* object,void* type){if(object==&skeletal_second&&type==&skinned_class)return 1;return scene_is_a(object,type);}
 void pose_event(void* object,void* fn,void* params){
     if(fn==&get_level_fn){auto value=&pose_level;std::memcpy(params,&value,8);return;}
-    if(fn==&pose_asset_fn){++pose_asset_reads;if(pose_allocate_mesh_serial)pose_mesh_serial=9;uint64_t value{};std::memcpy(&value,static_cast<uint8_t*>(object)+0x558,8);if(!value)std::memcpy(&value,static_cast<uint8_t*>(object)+0x560,8);std::memcpy(params,&value,8);return;}
+    if(fn==&pose_asset_fn){++pose_asset_reads;if(pose_allocate_mesh_serial)pose_mesh_serial=9;uint64_t value{};std::memcpy(&value,static_cast<uint8_t*>(object)+0x558,8);if(!value)std::memcpy(&value,static_cast<uint8_t*>(object)+0x560,8);std::memcpy(params,&value,8);
+        if(mesh_mutation&&!mesh_mutation_done){mesh_mutation_done=true;
+            if(mesh_mutation==1)vertex_mesh.name^=1;else if(mesh_mutation==2)vertex_mesh.cls=&material_class;
+            else if(mesh_mutation==3)vertex_mesh.flags=mirrored_garbage;else if(mesh_mutation==4)vertex_mesh.outer=&actor;
+            else if(mesh_mutation==5)skeletal_pointer(pose_level,0xc0,reinterpret_cast<uint64_t>(&new_world));
+            else if(mesh_mutation==6){const auto index=static_cast<uint32_t>(lifetime_weak(&vertex_mesh));lifetime_objects[index-1]=&vertex_mesh_other;}
+            else if(mesh_mutation==7)skeletal_pointer(*static_cast<SkeletalObject*>(object),0x560,reinterpret_cast<uint64_t>(&vertex_mesh_other));
+            else if(mesh_mutation==8)vertex_mesh.flags=0x40;}
+        return;}
     if(fn==&pose_count_fn){const int32_t value=2;std::memcpy(params,&value,4);return;}scene_call(object,fn,params);}
 void pose_action(Obj component,uint32_t stage){
     pose_stages.push_back(stage);auto* object=reinterpret_cast<SkeletalObject*>(component.address);auto* raw=reinterpret_cast<uint8_t*>(object);
@@ -958,7 +969,9 @@ void pose_reset(HsmpReflect& reflect){
     skeletal_pointer(pose_level,0xc0,reinterpret_cast<uint64_t>(&old_world));skeletal_second.identity.cls=&pose_class;
     reflect.find=pose_find;reflect.is_a=pose_is_a;reflect.props=pose_props;reflect.obj_prop=pose_prop;reflect.call=pose_event;reflect.weak=pose_weak;reflect.resolve=pose_resolve;source_outer=lifetime_outer;
     pose_image=scene_image;pose_build_admit=[](){return true;};scene_vtable_read=pose_vtable;pose_native_call=pose_action;
-    pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=pose_allocate_mesh_serial=false;pose_asset_reads=pose_mesh_serial=0;
+    pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=pose_allocate_mesh_serial=mesh_lookup_serial=false;pose_asset_reads=pose_mesh_serial=mesh_mutation=mesh_path_finds=0;mesh_mutation_done=false;
+    vertex_mesh.name=814;vertex_mesh.cls=&vertex_mesh_class;vertex_mesh.outer=&path_package;source_package_name=&path_package_name;path_package_name=700;
+    path_package={127,&meta};lifetime_objects.push_back(&path_package);
     for(size_t i=0;i<2;++i){Transform value{{static_cast<double>(i)+1,2,3},{0,0,0,1},{1,1,1}};pose_input[i]=engine(value);}
     for(auto* object:{&skeletal_first,&skeletal_second}){skeletal_pointer(*object,0x558,reinterpret_cast<uint64_t>(&vertex_mesh));skeletal_pointer(*object,0x560,reinterpret_cast<uint64_t>(&vertex_mesh));
         skeletal_pointer(*object,0x90,reinterpret_cast<uint64_t>(&actor));auto* p=reinterpret_cast<uint8_t*>(object);p[0x798]=0x20;p[0x88]=3;p[0xa41]=1;p[0xa52]=8;
@@ -983,6 +996,27 @@ void pose_checks(HsmpReflect& reflect){
     try{mesh_assignment(keep(&skeletal_first),original_mesh,requested_path,false,"mesh_set",&result);}catch(const Error& e){serial_detail=std::string(e.what()).find("address_equal=1; index_equal=1; zero_to_nonzero=1")!=std::string::npos;}
     check(serial_detail,"same original address/index with newly allocated native serial is distinguished without accepting the changed weak identity");
     check(pose_asset_reads==1,"serial mismatch diagnostic uses only the already-qualified getter result and original copied identity");
+    pose_reset(reflect);auto admitted=mesh_binding(keep(&old_world),keep(&actor),requested_path,&result);const auto original_zero=admitted.original;
+    pose_allocate_mesh_serial=true;const auto promoted=mesh_admit(admitted,keep(&skeletal_first),requested_path,false,"mesh_set",&result);
+    check((promoted.weak>>32)==9&&admitted.pinned.weak==promoted.weak&&admitted.original.weak==original_zero.weak&&!same(promoted,original_zero),
+        "qualified natural serial allocation pins positive identity while retaining original zero identity and strict global equality");
+    auto positive_pose=binding();check(positive_pose.asset.weak==promoted.weak,"the actual positive asset pin propagates into later native pose binding");mesh_binding_final(admitted);
+    pose_mesh_serial=10;rejects([&]{mesh_binding_final(admitted);},"retained positive asset serial can never be re-pinned after another serial change");
+    pose_reset(reflect);mesh_lookup_serial=true;admitted=mesh_binding(keep(&old_world),keep(&actor),requested_path,&result);
+    check((admitted.original.weak>>32)==0&&(admitted.pinned.weak>>32)==7,"binding pins the first positive serial observed by its bracketed exact lookup");
+    pose_mesh_serial=9;rejects([&]{mesh_admit(admitted,keep(&skeletal_first),requested_path,false,"mesh_set",&result);},
+        "a later positive serial cannot replace one already observed and pinned during original recipe binding");
+    for(uint32_t mutation=1;mutation<=8;++mutation){pose_reset(reflect);admitted=mesh_binding(keep(&old_world),keep(&actor),requested_path,&result);
+        pose_allocate_mesh_serial=true;mesh_mutation=mutation;rejects([&]{mesh_admit(admitted,keep(&skeletal_first),requested_path,false,"mesh_set",&result);},
+            "original rename/class/garbage/path/world/slot reuse/alias/transient callback changes refuse before positive pin");
+        check((admitted.pinned.weak>>32)==0,"failed callback closure never promotes the original asset ticket");}
+    pose_reset(reflect);admitted=mesh_binding(keep(&old_world),keep(&actor),requested_path,&result);pose_allocate_mesh_serial=true;
+    mesh_admit(admitted,keep(&skeletal_first),requested_path,false,"mesh_set",&result);Mirror witnessed{keep(&old_world),keep(&actor),{}};Part retained{};retained.mesh=admitted;witnessed.parts.push_back(retained);
+    {MeshWatch watch({&witnessed});vertex_mesh.name^=1;rejects([&]{check_guard();},"later component callback rechecks the earlier retained mesh path before continuing");vertex_mesh.name^=1;}
+    mirror_mutex.lock();mirrors.emplace(88,std::move(witnessed));mirror_mutex.unlock();vertex_mesh.outer=&actor;
+    const uint64_t retained_handle=88;int context=1;const HsmpViewGuard retained_guard{&context,guard_check};
+    check(finish_scene_sets(keep(&old_world),nullptr,0,&retained_handle,1,&retained_guard,&result)==-1,
+        "all-owned complete-scene finish includes the original nonempty skeletal asset witness");
     pose_reset(reflect);auto b=binding();auto output=pose_transfer(b,&result);pose_final(b,output);
     check(pose_stages==std::vector<uint32_t>({0,1,2,3,4,5}),"native calculator refresh precedes complete transfer/finalize/children/bounds/dirty notifications");
     check(std::memcmp(output.values.data(),pose_input.data(),sizeof(pose_input))==0&&std::memcmp(pose_render_a.data(),pose_input.data(),sizeof(pose_input))==0,

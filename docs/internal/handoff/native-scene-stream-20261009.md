@@ -1,5 +1,36 @@
 # Native full-scene encoding checkpoint
 
+## Actual 584792a7: native serial assignment mistaken for asset replacement
+
+Exact clean dev/full G0/all394 hashes run20261009-203529-352d72-native-host,
+sourcec81c581a-2696-4f43-913b-396407d29198, proves BOTH Hosen003 refusals happen
+immediately after SetSkeletalMeshAsset: address_equal=1, index_equal=1,
+zero_to_nonzero=1. Times71.026s/70.974s. The expected zero-serial handle and
+returned positive-serial handle refer to the same object and original slot;
+this is not evidence of a different mesh asset. The earlier actual=different
+diagnostic represented strict weak-handle inequality as well as pointer inequality.
+
+Pinned native assignment1414DE830 uses original UObject index+0C and allocator
+1414B6B90. The allocator assigns the previously zero serial in the unchanged
+24-byte original slot; an existing positive serial is returned unchanged.
+Primary proof/ASM is retained in run202218-e92cdb. Never invoke the unverified
+UE4SS weak constructor/allocator or write engine serial fields.
+
+The private qualified asset correction is implemented and independently reviewed.
+Retain original slot/address/full name/class/outer/path/RF and world/owner-level
+witnesses. Pin the first naturally observed positive serial after original pure
+closure, propagate it into PoseBinding, and retain the original witness through
+all later callbacks and owned create/apply/complete-scene finishes. Global same()
+stays strict. No engine serial allocation or writes are introduced. Strict provider
+and fixture compilation passes992 focused checks, including real replacement,
+positive mismatch, rename, class, garbage, Outer, world, slot reuse, dual-alias and
+later-callback refusals. The exact deployed correction still needs an actual run;
+this diagnostic does not establish a completed mirror or gameplay parity.
+All four original games/two CDBs independently absent, save20 hashes unchanged,
+no new dump; both initial windows prove secondary containment. Full G075 Lua/
+1364 Rust79 binaries and clippy0 errors/16 warnings pass. The diagnostic969
+focused checks and independent review pass; extended verdict remainsfalse.
+
 ## Actual 3c670480: render mesh mismatch isolated to clothing
 
 Exact clean dev/full G0/all394 hashes run20261009-202218-e92cdb-native-host,
