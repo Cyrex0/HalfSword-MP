@@ -431,7 +431,9 @@ function M.capture(env,bindings)
                     fail("native "..kind.." asset changed")
                 end
                 if kind=="static"then
-                    if path(actual)~=original_asset_path or checked(function()return actual:GetClass():GetFullName()end)~=asset_class then
+                    local actual_path,actual_transient=path(actual)
+                    if actual_path~=original_asset_path or actual_transient~=transient
+                        or checked(function()return actual:GetClass():GetFullName()end)~=asset_class then
                         fail("native static asset changed")
                     end
                     -- FName conversion above can enter a native PE fallback.
@@ -507,6 +509,30 @@ function M.capture(env,bindings)
         for slot=0,count-1 do c.materials[#c.materials+1]=material(row,slot)end
         phase("material","exit",{ok=true,count=count,class=component_class},row)
         if kind=="skeletal" or kind=="static"then
+            local native_asset=false
+            if kind=="static"then
+                if c.geometry~="cooked"then fail("native static runtime geometry unsupported")end
+                phase("vertex_state","enter",{getter="Native.native_source_scope_vertex_state",class=component_class},row)
+                if type(env.scope.vertex_state)~="function"then fail("native static vertex proof capability unavailable")end
+                guard();component(row);current_asset()
+                local proof,proof_reason=env.scope.vertex_state(row.handle)
+                guard();component(row);current_asset()
+                if type(proof)~="table"then fail(type(proof_reason)=="string"and proof_reason or "native static vertex proof unavailable")end
+                for key in pairs(proof)do
+                    if key~="state"and key~="lod_info_count"and key~="no_override"then fail("native static vertex proof field unsupported")end
+                end
+                local lod_count=proof.lod_info_count
+                if type(lod_count)~="number"or not math.tointeger(lod_count)or lod_count<0 or lod_count>16 then fail("native static vertex proof LOD bound")end
+                if proof.state=="native_asset"and proof.no_override==true then native_asset=true
+                elseif proof.state~="captured_required"or proof.no_override~=false or lod_count<1 then fail("native static vertex proof incomplete")end
+                phase("vertex_state","exit",{getter="Native.native_source_scope_vertex_state",class=component_class,ok=true,
+                    count=lod_count,reason="state="..proof.state.." no_override="..tostring(proof.no_override)},row)
+            end
+            if native_asset then
+                -- Complete original native LODData proof establishes absence of
+                -- overrides. Native cooked asset colors remain owned by the game.
+                c.vertex_state="native_asset"
+            else
             if not rvp or checked(function()return rvp:IsValid()end)~=true then fail("native vertex getter unavailable")end
             local function label(value,max)return #value<=max and value or value:sub(1,max).."[truncated]"end
             local lod_getter=kind=="skeletal"and "SkeletalMeshComponent.GetNumLODs"or "StaticMesh.GetNumLODs"
@@ -555,6 +581,7 @@ function M.capture(env,bindings)
             })
             if not colors then fail(why)end
             c.vertex_colors,c.vertex_state=colors,"captured"
+            end
         elseif env.vertex_state then c.vertex_state=env.vertex_state(row)end
         end
         local detached_tag=get(row,function(o)return o:ComponentHasTag(FName("Dismembered"))end)

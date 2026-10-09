@@ -109,12 +109,14 @@ function M.new(opts)
             if opts.capture_render then captured,why=opts.capture_render(fresh,bindings)
             else
                 local scope=opts.source_scope
-                if not scope or not scope.begin or not scope.keep or not scope.resolve or not scope.finish or not scope.profile then error("native source identity scope unavailable",0)end
+                if not scope or not scope.begin or not scope.keep or not scope.resolve or not scope.finish or not scope.profile
+                    or type(scope.vertex_state)~="function"then error("native source identity scope unavailable",0)end
                 local handle,scope_reason=scope.begin(context,bindings)
                 if not handle then error(scope_reason or "native source identity scope refused",0)end
                 local ok,result=pcall(Render.capture,{read=read,guard=function()current()end,weapon=weapon,vertex_state=opts.vertex_state,
                 scope={keep=function(row)return scope.keep(handle,row)end,resolve=function(id)return scope.resolve(handle,id)end,
-                    profile=function(id)return scope.profile(handle,id)end},
+                    profile=function(id)return scope.profile(handle,id)end,
+                    vertex_state=function(id)return scope.vertex_state(handle,id)end},
                 phase=function(stage,edge,detail)detail=detail or {};detail.pass=env.pass;phase(stage,edge,detail)end,
                 -- Pure copied FColor reads invoke no engine function. Fast token
                 -- checks inside that loop avoid a controller search per vertex;

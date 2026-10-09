@@ -260,6 +260,7 @@ local weapon_asset=object(330,"WeaponMesh","/Game/Test/WeaponMesh.WeaponMesh",fa
 weapon_asset.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.StaticMesh"end}end
 weapon_asset.bAllowCPUAccess=true
 local weapon_mesh=mesh(201,"WeaponMesh",live_weapon,"static",weapon_asset);weapon_mesh.GetAttachParent=function()return body end
+weapon_mesh.native_vertex_proof={state="captured_required",lod_info_count=1,no_override=false}
 local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or mesh_is_a(self,k)end
 local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
 live_weapon.RootComponent=weapon_mesh
@@ -319,6 +320,12 @@ end,profile=function(handle)
     local s=scope_rows[handle];local o=runtime_objects[s.path]
     if o:GetClass():GetFullName()~="Class /Script/Engine.SplineComponent"then return nil,"native spline class changed"end
     return plain(o.native_spline_profile)
+end,vertex_state=function(handle)
+    local address,reason=render_env.scope.resolve(handle)
+    if not address then return nil,reason end
+    local o=runtime_objects[scope_rows[handle].path]
+    if o:GetClass():GetFullName()~="Class /Script/Engine.StaticMeshComponent"then return nil,"native static class changed"end
+    return plain(o.native_vertex_proof),"fixture native override proof unavailable"
 end}
 local render_phases={}
 render_env.phase=function(stage,edge,detail)
@@ -350,6 +357,69 @@ T.check(T.eq(rendered.bindings[3].owner,200),"ephemeral binding uses actual owne
 T.check(T.eq(rendered.components[1].parent,2),"native body preserves actual capsule root rather than actor-root shortcut")
 T.check(T.eq(rendered.components[2].scene.type,"hidden_capsule"),"root eligibility follows actual native hidden flag")
 T.check(T.eq(rendered.topology.vertex_state,"captured"),"source vertex readiness follows actual complete getter data")
+local actual_vertex_proof=render_env.scope.vertex_state
+local native_present_proof=plain(weapon_mesh.native_vertex_proof)
+local no_override_proof={state="native_asset",lod_info_count=0,no_override=true}
+weapon_mesh.native_vertex_proof=plain(no_override_proof);weapon_asset.bAllowCPUAccess=false
+local saved_static_count,saved_static_colors=rvp.GetMeshComponentAmountOfVerticesOnLOD,rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
+local static_paint_calls=0
+rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)
+    if c==weapon_mesh then static_paint_calls=static_paint_calls+1;error("CPU-gated native getter must not establish absence",0)end
+    return saved_static_count(self,c,lod)
+end
+rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=function(self,c,lod)
+    if c==weapon_mesh then static_paint_calls=static_paint_calls+1;error("no synthesized static override colors",0)end
+    return saved_static_colors(self,c,lod)
+end
+local native_asset_capture=Render.capture(render_env,native_bindings)
+local native_asset_component=native_asset_capture.components[3]
+T.check(native_asset_component.vertex_state=="native_asset"and #native_asset_component.vertex_colors==0 and static_paint_calls==0
+    and native_asset_component.asset=="/Game/Test/WeaponMesh.WeaponMesh"and #native_asset_component.materials==1,
+    "guarded all-null static override proof retains actual cooked geometry/materials without RVP or fabricated colors")
+rvp.GetMeshComponentAmountOfVerticesOnLOD=saved_static_count;rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=saved_static_colors
+weapon_mesh.native_vertex_proof=plain(native_present_proof);weapon_asset.bAllowCPUAccess=true
+local present_capture=Render.capture(render_env,native_bindings)
+T.check(present_capture.components[3].vertex_state=="captured"and #present_capture.components[3].vertex_colors==1,
+    "present native override proof requires the existing exact full RVP color capture")
+for _,bad in ipairs({
+    {state="native_asset",lod_info_count=0},
+    {state="native_asset",lod_info_count=0,no_override=false},
+    {state="captured_required",lod_info_count=1,no_override=true},
+    {state="captured_required",lod_info_count=0,no_override=false},
+    {state="unknown",lod_info_count=1,no_override=true},
+    {state="native_asset",no_override=true},
+    {state="native_asset",lod_info_count=-1,no_override=true},
+    {state="native_asset",lod_info_count=17,no_override=true},
+    {state="native_asset",lod_info_count=1.5,no_override=true},
+    {state="native_asset",lod_info_count=1,no_override="true"},
+    {state="native_asset",lod_info_count=1,no_override=true,guessed=true},
+})do
+    weapon_mesh.native_vertex_proof=bad
+    T.check(not pcall(Render.capture,render_env,native_bindings),"malformed native static override proof refuses")
+end
+weapon_mesh.native_vertex_proof=nil
+local proof_ok,proof_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not proof_ok and proof_reason:find("fixture native override proof unavailable",1,true),"unknown native override proof never falls back to asset colors")
+render_env.scope.vertex_state=nil
+proof_ok,proof_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not proof_ok and proof_reason:find("native static vertex proof capability unavailable",1,true),"absent sixth native capability refuses static source capture")
+render_env.scope.vertex_state=actual_vertex_proof;weapon_mesh.native_vertex_proof=plain(no_override_proof)
+local static_flags=weapon_asset.HasAnyFlags;weapon_asset.HasAnyFlags=function(_,flag)return flag==0x40 end
+local proof_calls=0
+render_env.scope.vertex_state=function(handle)proof_calls=proof_calls+1;return actual_vertex_proof(handle)end
+proof_ok,proof_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not proof_ok and proof_calls==0 and proof_reason:find("native static runtime geometry unsupported",1,true),
+    "runtime transient static geometry never acquires a cooked native-asset proof")
+weapon_asset.HasAnyFlags=static_flags
+render_env.scope.vertex_state=function(handle)local result=actual_vertex_proof(handle);weapon_mesh.StaticMesh=body_asset;return result end
+T.check(not pcall(Render.capture,render_env,native_bindings),"static asset mutation during native override proof refuses source recipe")
+weapon_mesh.StaticMesh=weapon_asset
+render_env.scope.vertex_state=function(handle)local result=actual_vertex_proof(handle);weapon_mesh.GetAttachParent=function()return root end;return result end
+T.check(not pcall(Render.capture,render_env,native_bindings),"original attachment mutation during native override proof refuses source recipe")
+weapon_mesh.GetAttachParent=function()return body end
+render_env.scope.vertex_state=function(handle)local result=actual_vertex_proof(handle);scope=false;return result end
+T.check(not pcall(Render.capture,render_env,native_bindings),"world loss during native override proof refuses source recipe")
+scope=true;render_env.scope.vertex_state=actual_vertex_proof;weapon_mesh.native_vertex_proof=plain(native_present_proof)
 local static_lod_getter=weapon_asset.GetNumLODs
 for _,case in ipairs({
     {label="zero",getter=function()return 0 end,kind="number",value="0"},
@@ -451,6 +521,7 @@ local adapter_scope={begin=function(meta,b)
 end,keep=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.keep(row)end,
     resolve=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.resolve(row)end,
     profile=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.profile(row)end,
+    vertex_state=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.vertex_state(row)end,
     finish=function(id)native_scope_ends=native_scope_ends+1;return id==101 end}
 local real_adapter=Adapter.new({WG=WG,source_scope=adapter_scope,
     resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Pawn",pawn=host,world=render_world}end})
@@ -462,6 +533,30 @@ body.GetNumBones=function()error("fixture source getter failed",0)end
 T.check(real_adapter.capture(0,phase_context)==nil and native_scope_begins==3 and native_scope_ends==3,
     "failed production source getter always releases scalar-only native scope")
 body.GetNumBones=native_count
+local before_begins,before_ends=native_scope_begins,native_scope_ends
+local adapter_static=mesh(204,"AdapterStaticMesh",host,"static",weapon_asset)
+local adapter_static_is_a=adapter_static.IsA
+adapter_static.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or adapter_static_is_a(self,k)end
+adapter_static.GetAttachParent=function()return root end;adapter_static.native_vertex_proof=plain(no_override_proof)
+source_scenes[#source_scenes+1]=adapter_static;weapon_asset.bAllowCPUAccess=false
+local captured_native_asset,native_asset_reason=real_adapter.capture(0,phase_context)
+local adapter_native_component
+for _,c in ipairs(captured_native_asset and captured_native_asset.components or {})do if c.name=="AdapterStaticMesh"then adapter_native_component=c end end
+T.check(adapter_native_component and adapter_native_component.vertex_state=="native_asset"
+    and native_scope_begins==before_begins+2 and native_scope_ends==before_ends+2,
+    "production adapter delegates sixth API across two complete equal original-native harvests: "..tostring(native_asset_reason))
+weapon_asset.bAllowCPUAccess=true
+local vertex_proof_calls=0
+render_env.scope.vertex_state=function(handle)
+    vertex_proof_calls=vertex_proof_calls+1
+    return vertex_proof_calls==1 and plain(no_override_proof)or plain(native_present_proof)
+end
+T.check(real_adapter.capture(0,phase_context)==nil and vertex_proof_calls==2,
+    "override-state change between two complete native harvests refuses the recipe")
+render_env.scope.vertex_state=actual_vertex_proof;table.remove(source_scenes)
+local adapter_vertex_state=adapter_scope.vertex_state;adapter_scope.vertex_state=nil
+T.check(real_adapter.capture(0,phase_context)==nil,"production adapter requires sixth native capability instead of delegating a fallback")
+adapter_scope.vertex_state=adapter_vertex_state
 local absent_scope_adapter=Adapter.new({WG=WG,resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Pawn",pawn=host,world=render_world}end})
 T.check(absent_scope_adapter.capture(0,phase_context)==nil,"production source collector refuses missing native identity capability")
 host.K2_GetComponentsByClass=function(self,class)local out=source_mesh_return(self,class);out.outTable=false;return out end
@@ -527,6 +622,7 @@ local helper_closed=Render.capture(render_env,native_bindings)
 T.check(#source_scenes>256 and #helper_closed.components==5 and scene_census_calls==0,
     "more than256 nonmesh helpers do not truncate complete mesh/root/hard ancestor closure")
 local extra_gear=mesh(202,"NativeExtraGear",host,"static",weapon_asset)
+extra_gear.native_vertex_proof=plain(native_present_proof)
 local extra_is_a=extra_gear.IsA;extra_gear.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or extra_is_a(self,k)end
 extra_gear.bHiddenInGame=true;extra_gear.GetAttachParent=function()return root end
 source_scenes[#source_scenes+1]=extra_gear
