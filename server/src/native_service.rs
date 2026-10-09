@@ -362,7 +362,8 @@ impl HostHandle {
             Some(crate::build_id::content_hash()),
             hsmp_net::net::caps::NATIVE_WORLD
                 | hsmp_net::net::caps::NATIVE_PRESENTATION
-                | hsmp_net::net::caps::NATIVE_RENDER_V2,
+                | hsmp_net::net::caps::NATIVE_RENDER_V2
+                | hsmp_net::net::caps::NATIVE_VERTEX_STATE,
         );
         let state = Arc::new(crate::server::ServerState::with_native_mode(
             2,
@@ -494,8 +495,9 @@ impl ClientHandle {
         cfg.content_hash = crate::build_id::content_hash();
         cfg.caps |= hsmp_net::net::caps::NATIVE_WORLD | hsmp_net::net::caps::MODES;
         if presentation {
-            cfg.caps |=
-                hsmp_net::net::caps::NATIVE_PRESENTATION | hsmp_net::net::caps::NATIVE_RENDER_V2;
+            cfg.caps |= hsmp_net::net::caps::NATIVE_PRESENTATION
+                | hsmp_net::net::caps::NATIVE_RENDER_V2
+                | hsmp_net::net::caps::NATIVE_VERTEX_STATE;
         }
         let bridge = Arc::new(Bridge::default());
         let network_bridge = bridge.clone();
@@ -707,6 +709,12 @@ async fn client_loop(
                     {
                         bridge.lock().error =
                             "server does not support the required native scene protocol".into();
+                        return;
+                    }
+                    if cfg.caps & hsmp_net::net::caps::NATIVE_VERTEX_STATE != 0
+                        && caps & hsmp_net::net::caps::NATIVE_VERTEX_STATE == 0
+                    {
+                        bridge.lock().error = "server does not verify native vertex state".into();
                         return;
                     }
                     cfg.pinned_server_key = Some(server_key);

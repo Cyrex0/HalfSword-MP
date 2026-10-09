@@ -86,11 +86,15 @@ impl NativeCore {
             | if self.diagnostic {
                 0
             } else {
-                hsmp_net::net::caps::NATIVE_PRESENTATION | hsmp_net::net::caps::NATIVE_RENDER_V2
+                hsmp_net::net::caps::NATIVE_PRESENTATION
+                    | hsmp_net::net::caps::NATIVE_RENDER_V2
+                    | hsmp_net::net::caps::NATIVE_VERTEX_STATE
             };
+        let presentation_required =
+            hsmp_net::net::caps::NATIVE_RENDER_V2 | hsmp_net::net::caps::NATIVE_VERTEX_STATE;
         caps & required == required
             && (caps & hsmp_net::net::caps::NATIVE_PRESENTATION == 0
-                || caps & hsmp_net::net::caps::NATIVE_RENDER_V2 != 0)
+                || caps & presentation_required == presentation_required)
     }
     fn changed(&mut self) {
         if let Some(seq) = self.directory.seq.checked_add(1) {
@@ -481,8 +485,13 @@ mod tests {
         assert!(!pvp.admits_capabilities(0));
         assert!(!pvp.admits_capabilities(caps));
         assert!(!pvp.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
+        let presentation = caps | hsmp_net::net::caps::NATIVE_PRESENTATION;
+        assert!(!pvp.admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_RENDER_V2));
+        assert!(!pvp.admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_VERTEX_STATE));
         assert!(pvp.admits_capabilities(
-            caps | hsmp_net::net::caps::NATIVE_PRESENTATION | hsmp_net::net::caps::NATIVE_RENDER_V2
+            presentation
+                | hsmp_net::net::caps::NATIVE_RENDER_V2
+                | hsmp_net::net::caps::NATIVE_VERTEX_STATE
         ));
         for entity in &mut pvp.directory.entities {
             entity.owner_peer = entity.reference.id;
@@ -495,8 +504,15 @@ mod tests {
         assert!(!diagnostic.admits_capabilities(0));
         assert!(diagnostic.admits_capabilities(caps));
         assert!(!diagnostic.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
+        assert!(
+            !diagnostic.admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_RENDER_V2)
+        );
+        assert!(!diagnostic
+            .admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_VERTEX_STATE));
         assert!(diagnostic.admits_capabilities(
-            caps | hsmp_net::net::caps::NATIVE_PRESENTATION | hsmp_net::net::caps::NATIVE_RENDER_V2
+            presentation
+                | hsmp_net::net::caps::NATIVE_RENDER_V2
+                | hsmp_net::net::caps::NATIVE_VERTEX_STATE
         ));
         for entity in &mut diagnostic.directory.entities {
             if entity.kind == w::HUMAN {
