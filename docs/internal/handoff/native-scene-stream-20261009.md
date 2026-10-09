@@ -64,6 +64,24 @@ mid-capture, refusal of the next getter/registration and scope-end-before-teardo
 Original world/lifetime/controller checks remain. Actual graceful stop remains
 pending; these checks do not establish playable registration or scene delivery.
 
+Combined checkpoint5ba23d3c first full G0 passes74 Lua suites and all lints,
+but cargo stops at1145 passed/1 failed in47 binaries after the sidecar
+`deaths_are_scoped_by_match_and_epoch` test. Clippy has0 errors/13 warnings.
+That test and two other death-dedup tests omitted the shared test-global lock,
+allowing reset_session to erase another test's dedup/vitals state. The next
+correction adds the existing shared lock to those three tests only; no gameplay,
+transport or timing tolerance changes. Focused normal-parallel sidecar checks
+pass106/0 failures/1 ignored in1.61s; the required complete gate retry is next.
+No5ba23d3c deploy or actual run.
+
+The live clothing audit found no supported mismatch: ArmorSlots enum labels are
+reordered, NewEnumerator2=numeric16 and NewEnumerator0=numeric2. The exact native
+Modular Panties branch contributes live key16/passport16. Live strict validation
+therefore remains. See native-armor-slot-proof and its primary references; label
+suffixes are never used as native values. Actual source census from5339682b has
+49 components: Camera1/Capsule1/Scene4/Skeletal13/Spline3/SpringArm1/Static26,
+with no Groom component. This is the observed entity1 only, not complete gear parity.
+
 ## Previous actual: 0039aacd
 
 Latest actual checkpoint0039aacde42c5b0a4c69c2de32aaf3f0df6a160f passed full

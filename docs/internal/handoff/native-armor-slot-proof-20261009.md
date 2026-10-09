@@ -23,6 +23,11 @@ Paths below are local primary exports/dumps, not invented source defaults.
   `Slot=ArmorSlots_Enum::NewEnumerator0`. An empty value does not acquire a slot
   from an enclosing map key. These cooked values are evidence, not substitutes
   for a missing live observation.
+- `CXXHeaderDump/ArmorSlots_Enum_enums.hpp:5,17` and the matching cooked enum
+  export establish reordered labels: NewEnumerator0 is numeric2 and
+  NewEnumerator2 is numeric16. Label suffixes must not be parsed as slot numbers.
+  The null-class default above has native slot2; fixture slot0 is explicitly
+  synthetic and never substituted into an actual source passport.
 - `test-results/dev-feature-checks/willie-armour-initialization-functions.txt:443-454`
   records native Blueprint offsets `10311 Map_Values(construction Armour map)`
   and `10650-10688 IsValidClass(ArmorCore)/skip`. Construction uses the values;
@@ -46,6 +51,16 @@ gate pending complete native dataflow proof. A refusal now identifies the copied
 construction/live table, row, slot, pslot and class rather than guessing its cause.
 Source capture still performs two equal complete harvests and rejects mutation
 even when the mutated armour row has a null class.
+
+The follow-up live audit retains that gate. Willie offset9449 selects the exact
+Modular_Armor Panties class, and10064 creates its passport with numeric slot16.
+The complete8/8 child export has no functions and actor Armor Slot
+NewEnumerator2 (numeric16); its complete core/base function sets preserve the
+passport Slot without writing actor Armor Slot. The live Add therefore uses
+key16/passport16. Set Up Armor5524 clears the live map, and13479 adds only
+class-valid passports. No seeded empty live row or supported mismatch was
+established. Precise primary export/dataflow references are retained in the
+ignored `test-results/native-live-armor-proof-20261009.md`.
 
 Diagnostic encoding statistics operate only on copied typed values and the same
 bounded codec plan. They can report planned compact/JSON bytes before semantic
