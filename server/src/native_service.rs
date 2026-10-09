@@ -1283,7 +1283,9 @@ pub(crate) mod tests {
             !bridge.mirror_ready(9001),
             "decoded body is not native apply proof"
         );
-        let received = Instant::now() - Duration::from_millis(300);
+        let received = Instant::now()
+            .checked_sub(Duration::from_millis(300))
+            .expect("stale scene fixture clock supports 300ms history");
         {
             let mut s = bridge.lock();
             s.connected = true;
