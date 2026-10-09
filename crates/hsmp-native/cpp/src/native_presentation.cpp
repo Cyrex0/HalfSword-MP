@@ -799,6 +799,18 @@ bool close(const Transform& a,const Transform& b) {
     double direct{},opposite{};for(size_t i=0;i<4;++i){direct+=std::abs(a.q[i]-b.q[i]);opposite+=std::abs(a.q[i]+b.q[i]);}
     return std::min(direct,opposite)<=0.00001;
 }
+void world_readback(Obj component,const HsmpViewComponent& recipe,const Transform& expected,const char* stage,HsmpViewResult* r){
+    const auto actual=transform(component,L"/Script/Engine.SceneComponent:K2_GetComponentToWorld",r);
+    if(close(actual,expected))return;
+    double position{},rotation{},opposite_rotation{},scale{},direct{},opposite{};
+    for(size_t i=0;i<3;++i){position=std::max(position,std::abs(actual.p[i]-expected.p[i]));scale=std::max(scale,std::abs(actual.scale[i]-expected.scale[i]));}
+    for(size_t i=0;i<4;++i){const auto difference=std::abs(actual.q[i]-expected.q[i]),opposite_difference=std::abs(actual.q[i]+expected.q[i]);
+        rotation=std::max(rotation,difference);opposite_rotation=std::max(opposite_rotation,opposite_difference);direct+=difference;opposite+=opposite_difference;}
+    const auto socket=text(recipe.socket);char label[25]{};const auto count=std::min(socket.size(),sizeof(label)-1);
+    for(size_t i=0;i<count;++i){const auto ch=socket[i];label[i]=ch>=32&&ch<127&&ch!='"'&&ch!='\\'?static_cast<char>(ch):'?';}
+    char reason[192]{};std::snprintf(reason,sizeof(reason),"mirror world transform readback failed; stage=%s id=%u kind=%u parent=%u dp=%.17g dq=%.17g ds=%.17g qe=%.17g socket=%s",
+        stage,recipe.id,recipe.kind,recipe.parent,position,std::min(rotation,opposite_rotation),scale,std::min(direct,opposite),label);throw Error(reason);
+}
 template<class T> void material_set(Obj mat,const HsmpViewParameter& p,const T& value,const wchar_t* path,const wchar_t* type,const wchar_t* sub,HsmpViewResult* r) {
     Function f(path);f.put(L"ParameterInfo",L"StructProperty",parameter(p),L"MaterialParameterInfo");f.put(L"Value",type,value,sub);f.call(mat,r);
 }
@@ -815,7 +827,8 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
             VertexOperation vertex_scope(c.vertex_state==0||c.kind==8||c.kind==9?mirror.actor:Obj{},c.vertex_state==0||c.kind==8||c.kind==9?part.render:Obj{},c.kind==8||c.kind==9);
             SceneOperation scene_scope(c.kind==6||c.kind==7?mirror.actor:Obj{},c.kind==6||c.kind==7?part.render:Obj{},c.kind);
             vertex_native_asset(world,mirror.actor,part.render,c,r);
-            qualify(world,mirror.actor,part.render,r);world_transform(part.render,f.world,r);if(part.leader.weak)world_transform(part.leader,f.world,r);
+            qualify(world,mirror.actor,part.render,r);world_transform(part.render,f.world,r);world_readback(part.render,c,f.world,"world_set",r);
+            if(part.leader.weak)world_transform(part.leader,f.world,r);
             if(c.kind==5)spline_apply(world,mirror.actor,part.render,c.spline,*f.spline,r);
             if(c.kind==7){
                 scene_profile(part.render,7);arm_socket(c.spring_arm_socket);qualify(world,mirror.actor,part.render,r);check_guard();vertex_pure(mirror.actor);scene_pure_profile(part.render,7);
@@ -840,7 +853,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
                 for(uint32_t k=0;k<m.texture_count;++k) {auto texture=f.textures[ti++];void* ptr=texture.weak?get(texture):nullptr;material_set(mat,m.textures[k],ptr,L"/Script/Engine.MaterialInstanceDynamic:SetTextureParameterValueByInfo",L"ObjectProperty",nullptr,r);
                     require(material_get<void*>(mat,m.textures[k],L"/Script/Engine.MaterialInstanceDynamic:K2_GetTextureParameterValueByInfo",L"ObjectProperty",nullptr,r)==ptr,"mirror texture readback failed");}
             }
-            require(close(transform(part.render,L"/Script/Engine.SceneComponent:K2_GetComponentToWorld",r),f.world),"mirror world transform readback failed");
+            world_readback(part.render,c,f.world,"complete",r);
             for(uint32_t j=0;j<c.bone_count;++j) {
                 require(close(bone(part.leader,c.bones[j],r),f.bones[j]),"mirror leader transform readback failed");
                 require(close(bone(part.render,c.bones[j],r),f.bones[j]),"mirror rendered bone transform readback failed");

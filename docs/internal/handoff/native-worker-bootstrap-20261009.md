@@ -1,5 +1,15 @@
 # Native authority bootstrap checkpoint
 
+## Current actual: asset fix passes; first-mirror transform readback next
+
+Exact9676db66/full G0/all394 hashes run205648-6725b5 proves BOTH clients create
+all49 components of the first entity1 mirror, including Hosen. Both then refuse
+first apply's world transform readback74.208s/74.184s. The second entity mirror
+and complete scene remain unverified. Parent-first apply is already implemented;
+keep original transform bounds and localize component/actual deltas before fixes.
+All original games/debuggers gone, save20 hashes unchanged, no fresh dump; both
+windows physically contained on secondary. No owned view/input/parity claim.
+
 ## Current creation refusal cause: natural asset serial assignment
 
 Exact584792a7/full G0/all394 hashes run203529-352d72 proves both Hosen003

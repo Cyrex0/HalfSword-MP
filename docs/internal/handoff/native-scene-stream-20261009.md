@@ -1,5 +1,34 @@
 # Native full-scene encoding checkpoint
 
+## Actual 9676db66: first full mirror creates; transform readback refuses
+
+Exact clean dev/full G0/all394 hashes run20261009-205648-6725b5-native-host,
+source87d24c9f-2157-447a-ae7a-b33038661fdb, verifies the qualified asset-serial
+fix advances past Hosen and all49 components of the first entity1 mirror on BOTH
+clients. NATIVE_CREATE operation1 terminal marker128 reports create edge=exit,
+component49. Rust creates/applies one entity at a time, so the second entity
+mirror is not certified by that first completion.
+
+Both then refuse first-entity apply with mirror complete readback: mirror world
+transform readback failed at74.208s/74.184s. Component ID and actual deltas are
+not yet recorded. Apply already uses parent_order and publishes parent skeletal
+poses before children; no naive ordering correction is justified. Matched native
+setter/getter Transform96 layout is confirmed. Preserve original position0.001,
+quaternion0.00001 and scale0.00001 comparison bounds while localizing the fault.
+No all-mirror readiness, visible owned view, input or gameplay parity proof.
+
+The reviewed next diagnostic preserves close()/parent_order and adds an immediate
+world_set checkpoint plus the original complete checkpoint. It reports copied
+component ID/kind/parent/socket and raw f64 position, sign-aware quaternion and
+scale deltas; no new query follows fault detection. Strict provider/fixture994
+checks and independent review pass. Cause remains pending the next actual run.
+
+Full G075 Lua/1364 Rust79 binaries and clippy0 errors/16 warnings pass. The
+asset fix992 focused checks and independent review close. Both original CDB
+captures admitted/completed; all four games/two CDBs independently absent,
+save20 hashes unchanged, no fresh dump. Both initial windows prove physical
+secondary containment. Operator summary/logs are retained in the ignored run.
+
 ## Actual 584792a7: native serial assignment mistaken for asset replacement
 
 Exact clean dev/full G0/all394 hashes run20261009-203529-352d72-native-host,

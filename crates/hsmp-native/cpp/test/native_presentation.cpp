@@ -982,6 +982,13 @@ void pose_reset(HsmpReflect& reflect){
 }
 void pose_checks(HsmpReflect& reflect){
     HsmpViewResult result{};const auto binding=[&](){return pose_bind(keep(&old_world),keep(&actor),keep(&skeletal_second),keep(&skeletal_first),keep(&vertex_mesh),2,&result);};
+    pose_reset(reflect);HsmpViewComponent readback_recipe{};readback_recipe.id=6;readback_recipe.kind=0;readback_recipe.parent=10;
+    const wchar_t socket[]=L"ObservedSocket";readback_recipe.socket={u16(socket),static_cast<uint32_t>(std::wcslen(socket)),0};
+    Transform expected_world{{1.25,-2.5,3},{0,0,0,1},{1,1,1}};world_readback(keep(&skeletal_first),readback_recipe,expected_world,"world_set",&result);
+    check(result.operations==1,"matching world readback retains one original guarded native getter");expected_world.p[1]+=2;expected_world.q[0]=0.5;expected_world.scale[2]+=0.125;
+    bool precise_world{};try{world_readback(keep(&skeletal_first),readback_recipe,expected_world,"complete",&result);}catch(const Error& e){const std::string reason=e.what();
+        precise_world=reason.find("stage=complete id=6 kind=0 parent=10")!=std::string::npos&&reason.find("dp=2 dq=0.5 ds=0.125 qe=0.5 socket=ObservedSocket")!=std::string::npos&&reason.size()<sizeof(result.reason);}
+    check(precise_world&&result.operations==2,"world refusal reports original component/parent/socket and raw double deltas without changing tolerance or adding getters");
     const wchar_t requested[]=L"/Game/ObservedClothing.ObservedClothing";const HsmpViewText requested_path{u16(requested),static_cast<uint32_t>(std::wcslen(requested)),0};
     pose_reset(reflect);mesh_assignment(keep(&skeletal_first),keep(&vertex_mesh),requested_path,false,"mesh_set",&result);
     mesh_assignment(keep(&skeletal_second),keep(&vertex_mesh),requested_path,true,"verified",&result);check(pose_asset_reads==2,"both exact assigned mesh identities still pass their native getters");
