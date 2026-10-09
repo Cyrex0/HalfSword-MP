@@ -60,8 +60,9 @@ function M.capture(env,bindings)
     local mesh_class=checked(function()return StaticFindObject("/Script/Engine.MeshComponent")end)
     local spline_class=checked(function()return StaticFindObject("/Script/Engine.SplineComponent")end)
     local mi_class=checked(function()return StaticFindObject("/Script/Engine.MaterialInstance")end)
+    local mid_class=checked(function()return StaticFindObject("/Script/Engine.MaterialInstanceDynamic")end)
     local rvp=checked(function()return StaticFindObject("/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary")end)
-    if not mesh_class or not spline_class or not mi_class then fail("native render classes unavailable")end
+    if not mesh_class or not spline_class or not mi_class or not mid_class then fail("native render classes unavailable")end
     local world_address=read(function(b)return b.world:GetAddress()end)
     local root_ids={}
     local function owner(row)
@@ -319,37 +320,117 @@ function M.capture(env,bindings)
             if absent~=expected_null then fail("native material null-mask disagreement")end
             if absent then return {slot=slot,base="",scalars={},vectors={},textures={}}end
         end
-        local base,transient=path(current);local depth=0
-        while transient do
-            depth=depth+1;if depth>16 or checked(function()return current:IsA(mi_class)end)~=true then fail("native dynamic material parent incomplete")end
+        -- Reacquire the actual original slot and hard parent links after every
+        -- callback. Retain scalar witnesses, never a material wrapper for the
+        -- next native/metadata getter. IsA, not RF_Transient, identifies a MID.
+        local identities,seen={},{}
+        local layer,depth=1,0
+        local active_array
+        local function header(a)
+            local h={address=a:GetArrayAddress(),data=a:GetArrayDataAddress(),num=a:GetArrayNum(),max=a:GetArrayMax()}
+            for _,value in pairs(h)do if type(value)~="number"or not math.tointeger(value)then fail("native material array header unavailable")end end
+            if not h.address or h.address==0 or not h.data or not h.num or not h.max or h.num<0 or h.num>128 or h.max<h.num
+                or h.max>2147483647 or(h.num>0 and h.data==0)then fail("native material array header bounds")end
+            return h
+        end
+        local function fresh()
+            local o=get(row,function(c)return c:GetMaterial(slot)end)
+            for i=1,layer do
+                if not o or o:GetAddress()==0 or o:IsValid()~=true or o:HasAnyFlags(0x40000000)~=false then fail("native material identity unavailable")end
+                -- GetFName copies the complete native FName. Pinned Lua __eq
+                -- uses the eight-byte operator==, including its Number.
+                local cls=o:GetClass();local id={address=o:GetAddress(),class=cls and cls:GetAddress(),name=o:GetFName()}
+                if not id.class or id.class==0 then fail("native material class unavailable")end
+                local old=identities[i]
+                if old then
+                    if old.address~=id.address or old.class~=id.class or old.name~=id.name then fail("native material slot/parent identity changed")end
+                else
+                    if seen[id.address]then fail("native dynamic material parent cycle")end
+                    identities[i]=id;seen[id.address]=true
+                end
+                local parent=o:IsA(mi_class)and o.Parent or nil
+                local parent_address=parent and parent:GetAddress()or 0
+                if old and old.parent~=parent_address then fail("native material parent link changed")end
+                id.parent=parent_address;identities[i].parent=parent_address
+                if i<layer then o=parent end
+            end
+            return o
+        end
+        local function material_guard()
+            guard();local o=fresh()
+            -- ForEach caches its data pointer. After every callback-capable
+            -- guard/GetMaterial, re-read the original field's PURE header before
+            -- any borrowed row, struct or color channel is touched again.
+            if active_array then
+                local a=o[active_array.field];local actual=header(a);local original=active_array.header
+                if actual.address~=original.address or actual.data~=original.data or actual.num~=original.num or actual.max~=original.max then
+                    fail("native material parameter array changed")
+                end
+            end
+            return o
+        end
+        local function material_read(fn)
+            local o=material_guard();local value=fn(o);o=nil;material_guard();return value
+        end
+        local function material_checked(fn)
+            material_guard();local value=fn();material_guard();return value
+        end
+        local function layer_path()
+            local full=material_read(function(o)return o:GetFullName()end)
+            local p=type(full)=="string"and full:match("^%S+%s+(.+)$")
+            if not p or #p>512 or p:find("\0",1,true)then fail("native material path unavailable")end
+            local transient=material_read(function(o)return o:HasAnyFlags(0x40)end)
+            if type(transient)~="boolean"then fail("native material transient flag unavailable")end
+            return p,transient
+        end
+        local base,transient=layer_path()
+        while true do
+            local dynamic=material_read(function(o)return o:IsA(mid_class)end)
+            if type(dynamic)~="boolean"then fail("native material dynamic type unavailable")end
+            if not dynamic and not transient then break end
+            depth=depth+1;if depth>16 or material_read(function(o)return o:IsA(mi_class)end)~=true then fail("native dynamic material parent incomplete")end
+            local class=material_read(function(o)return o:GetClass():GetFullName()end)
+            phase("material_layer","enter",{getter="MaterialInstance.Parent/parameter arrays",count=depth,
+                reason="slot="..slot.." dynamic="..tostring(dynamic).." rf_transient="..tostring(transient).." class="..tostring(class):sub(1,192)},row)
             for _,flag in ipairs(material_flags)do
-                local value=checked(function()return current.BasePropertyOverrides[flag]end)
+                local value=material_read(function(o)return o.BasePropertyOverrides[flag]end)
                 if type(value)~="boolean"then fail("native material base override unavailable")end
                 if value then fail("native material base override unsupported")end
             end
             for _,field in ipairs({"DoubleVectorParameterValues","FontParameterValues","RuntimeVirtualTextureParameterValues","SparseVolumeTextureParameterValues"})do
-                local values=checked(function()return current[field]end)
-                if not values or checked(function()return values:GetArrayNum()end)~=0 then fail("native material parameter type unsupported")end
+                local values=material_read(function(o)return o[field]end)
+                if not values or material_checked(function()return values:GetArrayNum()end)~=0 then fail("native material parameter type unsupported")end
             end
             local function parameters(field,target,kind)
-                array(checked(function()return current[field]end),128,function(v)
-                    local p=checked(function()return v.ParameterInfo end)
-                    local info={name=name(checked(function()return p.Name end)),association=checked(function()return p.Association end),index=checked(function()return p.Index end)}
+                local o=material_guard();local a=o[field];o=nil
+                active_array={field=field,header=header(a)}
+                Array.collect(a,128,"property",{
+                    guard=material_guard,
+                    context="MaterialInstance."..field.." component="..row.name.." slot="..tostring(slot)},function(v)
+                    local p=material_checked(function()return v.ParameterInfo end)
+                    local info={name=name(material_checked(function()return p.Name end)),association=material_checked(function()return p.Association end),index=material_checked(function()return p.Index end)}
                     local key=info.name..":"..tostring(info.association)..":"..tostring(info.index)
-                    local value=checked(function()return v.ParameterValue end)
+                    local value=material_checked(function()return v.ParameterValue end)
                     if target[key]==nil then
-                        if kind=="color"then value=vec(value,{"R","G","B","A"})
-                        elseif kind=="texture"then value=path(value)end
+                        if kind=="color"then
+                            local copied={};for _,key in ipairs({"R","G","B","A"})do
+                                local channel=material_checked(function()return value[key]end)
+                                if type(channel)~="number"or channel~=channel or channel==math.huge or channel==-math.huge then fail("native material vector unavailable")end
+                                copied[#copied+1]=channel
+                            end;value=copied
+                        elseif kind=="texture"then value=path(value);material_read(function()return true end)end
                         target[key]={info=info,value=value}
                     end
                     return true
-                end,"property","MaterialInstance."..field.." component="..row.name.." slot="..tostring(slot))
+                end)
+                active_array=nil
             end
             parameters("ScalarParameterValues",scalar,"num");parameters("VectorParameterValues",vector,"color");parameters("TextureParameterValues",texture,"texture")
-            current=checked(function()return current.Parent end)
-            base,transient=path(current)
+            phase("material_layer","exit",{ok=true,count=depth,reason="slot="..slot.." dynamic="..tostring(dynamic).." rf_transient="..tostring(transient)},row)
+            layer=layer+1;base,transient=layer_path()
         end
-        if base==""then fail("native material base missing")end
+        if base==""or transient or base:find(":",1,true)or base:find("Transient",1,true)
+            or not(base:sub(1,6)=="/Game/"or base:sub(1,8)=="/Engine/")then fail("native immutable material base unavailable")end
         local function ordered(t)local out={};for _,v in pairs(t)do out[#out+1]=v end;table.sort(out,function(a,b)
             if a.info.name~=b.info.name then return a.info.name<b.info.name end
             if a.info.association~=b.info.association then return a.info.association<b.info.association end

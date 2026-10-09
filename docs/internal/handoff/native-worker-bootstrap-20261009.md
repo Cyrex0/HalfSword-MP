@@ -1,6 +1,26 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual buildf13e9233
+## Current state: 2026-10-09, latest actual buildddccc175
+
+Precise material diagnostics pass full G074 Lua/1361 Rust79 binaries, clippy0
+errors/13 warnings, dev push and clean RequireG0 deployment/all393 hashes.
+Actual `20261009-150349-520cf5-native-host` NativeReady15.407s and entity1
+49-component capture16.079s to40.190s. NativeBind40.194s identifies body
+CharacterMesh0/component7/material0/slot0, base path in the map's runtime
+Willie: MID_M_Body_Inst_Frank_21. Parent traversal currently depends only on
+RF_Transient; the next correction qualifies dynamic-material type and captures
+all layers before resolving the immutable base. No colon admission/material
+substitution. Native type/create proof and focused fix remain in progress.
+
+Both original880x527 windows are qualified/fully secondary. Both clients fail
+unchanged65s readiness; accepted recipes/frames/mirrors/active inputs remain0.
+Source cleanly cancels67.551s with no fallback; all4original PIDs independently
+absent/Shipping0,20save hashes unchanged/no crashes/children. Full Native and
+authority15264 trace/operator summary preserve the exact refusal. Player models
+and owned camera remain open; do not claim playable acceptance. Root is sole
+actual operator; Sol agents handle material implementation/native camera proof.
+
+## Previous actual buildf13e9233
 
 Independent live armour checkpoint passes full G074 Lua/1358 Rust79 binaries,
 clippy0 errors/13 warnings, dev push and clean RequireG0 deployment with393

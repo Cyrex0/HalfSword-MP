@@ -259,14 +259,22 @@ T.check(Vertex.capture(vertex_env)==nil and requests==0,"vertex expansion bound 
 -- Exercise the default rare render collector, not an injected recipe. These
 -- are typed offline wrappers, never evidence that a real client rendered them.
 local Render=dofile("mods/HSMPMatch/Scripts/native_source_render.lua")
-local function fname(value)return {ToString=function()return value end}end
-local function array(values)return {GetArrayNum=function()return #values end,ForEach=function(_,fn)for i,v in ipairs(values)do fn(i,wrapped(v))end end}end
+local fname_mt={__eq=function(a,b)return a.value==b.value and a.number==b.number end}
+local function fname(value,number)return setmetatable({value=value,number=number or 0,ToString=function()return value end},fname_mt)end
+local next_array=1000
+local function array(values)
+    next_array=next_array+1;local a={header_address=next_array,data_address=next_array*64}
+    a.GetArrayAddress=function()return a.header_address end;a.GetArrayDataAddress=function()return a.data_address end
+    a.GetArrayNum=function()return #values end;a.GetArrayMax=function()return #values end
+    a.ForEach=function(_,fn)for i,v in ipairs(values)do fn(i,wrapped(v))end end
+    return a
+end
 local render_world={GetAddress=function()return 1 end,IsValid=function()return true end}
 local runtime_objects={}
 local function object(address,n,path,transient)
     local value={GetAddress=function()return address end,IsValid=function()return true end,GetFName=function()return fname(n)end,
-        GetFullName=function()return "FixtureClass "..path end,HasAnyFlags=function()return transient end,
-        GetWorld=function()return render_world end,GetClass=function()return {GetFullName=function()return "Class /Script/Engine.SceneComponent"end}end,
+        GetFullName=function()return "FixtureClass "..path end,HasAnyFlags=function(_,mask)return mask&0x40~=0 and transient or false end,
+        GetWorld=function()return render_world end,GetClass=function()return {GetAddress=function()return 400 end,GetFullName=function()return "Class /Script/Engine.SceneComponent"end}end,
         IsA=function()return false end,ComponentHasTag=function()return false end,
         type=function()return "UObject"end,get=function()error("direct UObject is not a parameter",0)end}
     runtime_objects[path]=value
@@ -296,8 +304,10 @@ body_asset.Skeleton=object(301,"Skeleton","/Game/Test/Skeleton.Skeleton",false)
 body_asset.GetOverlayMaterial=function()return nil end;body_asset.GetDefaultMeshDeformer=function()return nil end
 body_asset.MeshClothingAssets=array({});body_asset.GetMorphTargetsPtrConv=function()return {wrapped(object(302,"ExactMorph","/Game/Test/Morph.Morph",false))}end
 local cooked_mat=object(310,"Material","/Game/Test/Material.Material",false)
-local dynamic_mat=object(311,"MID","/Engine/Transient.MaterialInstanceDynamic_1",true)
-dynamic_mat.IsA=function(_,c)return c=="/Script/Engine.MaterialInstance"end
+-- Actual level-owned MID shape: RF_Transient is clear independently of class.
+local dynamic_mat=object(311,"MID","/Game/Maps/Arenas/Map_Arena_Yard.Map_Arena_Yard:PersistentLevel.Willie.CharacterMesh0.MID_Actual",false)
+dynamic_mat.IsA=function(_,c)return c=="/Script/Engine.MaterialInstance"or c=="/Script/Engine.MaterialInstanceDynamic"end
+dynamic_mat.GetClass=function()return {GetAddress=function()return 401 end,GetFullName=function()return "Class /Script/Engine.MaterialInstanceDynamic"end}end
 dynamic_mat.Parent=cooked_mat
 dynamic_mat.BasePropertyOverrides=setmetatable({},{__index=function()return false end})
 for _,field in ipairs({"DoubleVectorParameterValues","FontParameterValues","RuntimeVirtualTextureParameterValues","SparseVolumeTextureParameterValues"})do dynamic_mat[field]=array({})end
@@ -370,7 +380,7 @@ local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapo
 -- tested independently in Rust; this validates the production Lua call shape.
 local scope_rows={}
 local function snapshot(o)
-    if not scope or o.GetWorld():GetAddress()~=1 or o.HasAnyFlags(0x40000000)then error("original native world/garbage changed",0)end
+    if not scope or o.GetWorld():GetAddress()~=1 or o:HasAnyFlags(0x40000000)then error("original native world/garbage changed",0)end
     return {address=o.GetAddress(),name=o.GetFName():ToString(),class=o.GetClass():GetFullName(),
         path=o.GetFullName():match("^%S+%s+(.+)$"),owner=o.GetOwner():GetAddress(),
         root=o.GetOwner().RootComponent:GetAddress(),root_name=o.GetOwner().RootComponent:GetFName():ToString(),
@@ -426,6 +436,100 @@ T.check(#rendered.components==3 and #rendered.components[1].bones==40,"source co
 T.check(T.eq(rendered.components[1].materials[1].scalars[1].value,0.3125),"native scalar material override captured exactly")
 T.check(T.eq(rendered.components[1].materials[1].vectors[1].value[4],0.0),"native vector alpha zero captured exactly")
 T.check(T.eq(rendered.components[1].materials[1].textures[1].value,"/Game/Test/Texture.Texture"),"native texture exact full identity preserved")
+T.check(rendered.components[1].materials[1].base=="/Game/Test/Material.Material",
+    "level-owned RF-nontransient native MID resolves actual cooked parent rather than admitting its runtime colon path")
+local typed_mid_phase=false
+for _,event in ipairs(render_phases)do if event.stage=="material_layer"and event.edge=="enter"
+    and event.detail.reason:find("dynamic=true rf_transient=false",1,true)
+    and event.detail.reason:find("/Script/Engine.MaterialInstanceDynamic",1,true)then typed_mid_phase=true end end
+T.check(typed_mid_phase,"rare material phase distinguishes actual native class from RF_Transient and string path predicates")
+;(function()
+    local parent=object(313,"ParentMID","/Engine/Transient.ParentMID",true)
+    parent.IsA=dynamic_mat.IsA;parent.GetClass=dynamic_mat.GetClass;parent.Parent=cooked_mat
+    parent.BasePropertyOverrides=dynamic_mat.BasePropertyOverrides
+    for _,field in ipairs({"DoubleVectorParameterValues","FontParameterValues","RuntimeVirtualTextureParameterValues","SparseVolumeTextureParameterValues"})do parent[field]=array({})end
+    parent.ScalarParameterValues=array({parameter("ExactBlood",0.9375),parameter("ExactInherited",-0.0)})
+    parent.VectorParameterValues=array({parameter("ExactTint",{R=1,G=1,B=1,A=1}),parameter("InheritedTint",{R=0.1,G=0.2,B=0.3,A=0})})
+    parent.TextureParameterValues=array({parameter("InheritedTexture",nil)})
+    local original_parent=dynamic_mat.Parent;dynamic_mat.Parent=parent
+    local inherited=Render.capture(render_env,native_bindings).components[1].materials[1]
+    local values={};for _,p in ipairs(inherited.scalars)do values[p.info.name]=p.value end
+    T.check(#inherited.scalars==2 and values.ExactBlood==0.3125 and values.ExactInherited==0,
+        "all native MID layers retain child-first overrides and inherited parameters without dropping occurrences")
+    T.check(D.signature({value=values.ExactInherited})==D.signature({value=-0.0}),"inherited native scalar signed zero is preserved")
+    T.check(#inherited.vectors==2 and #inherited.textures==2 and inherited.base=="/Game/Test/Material.Material",
+        "dynamic parent chain preserves every vector/texture dictionary including explicit null texture")
+    dynamic_mat.Parent=dynamic_mat
+    T.check(not pcall(Render.capture,render_env,native_bindings),"native MID parent cycle refuses without flattening")
+    dynamic_mat.Parent=nil
+    T.check(not pcall(Render.capture,render_env,native_bindings),"native MID without an actual cooked parent refuses")
+    dynamic_mat.Parent=original_parent
+    local dynamic_is_a=dynamic_mat.IsA
+    dynamic_mat.IsA=function(_,c)return c=="/Script/Engine.MaterialInstance"end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"unproved runtime non-MID base remains refused rather than accepting a colon path")
+    dynamic_mat.IsA=dynamic_is_a
+    local count=0;local scalar_array=dynamic_mat.ScalarParameterValues
+    local scalar_count=scalar_array.GetArrayNum
+    scalar_array.GetArrayNum=function(...)count=count+1;return scalar_count(...)end
+    local original_class,original_get_material=dynamic_mat.GetClass,body.GetMaterial
+    dynamic_mat.GetClass=function()return {GetAddress=function()return 401 end,GetFullName=function()
+        body.GetMaterial=function()return parent end
+        return "Class /Script/Engine.MaterialInstanceDynamic"
+    end}end
+    T.check(not pcall(Render.capture,render_env,native_bindings)and count==0,
+        "class-name callback replacing original material slot refuses before reading old override arrays")
+    dynamic_mat.GetClass=original_class;body.GetMaterial=original_get_material;scalar_array.GetArrayNum=scalar_count
+    local original_each,original_name=scalar_array.ForEach,dynamic_mat.GetFName
+    scalar_array.ForEach=function(self,fn)
+        dynamic_mat.GetFName=function()return fname("MID",1)end
+        return original_each(self,fn)
+    end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"same-address material FName Number replacement refuses full native identity")
+    scalar_array.ForEach=original_each;dynamic_mat.GetFName=original_name
+    local texture=dynamic_mat.TextureParameterValues
+    local original_texture=object(314,"TextureMutation","/Game/Test/TextureMutation.TextureMutation",false)
+    original_texture.GetFullName=function()dynamic_mat.Parent=parent;return "Texture2D /Game/Test/TextureMutation.TextureMutation"end
+    dynamic_mat.TextureParameterValues=array({parameter("MutationTexture",original_texture)})
+    T.check(not pcall(Render.capture,render_env,native_bindings),"texture path callback replacing original parent refuses before subsequent parameter use")
+    dynamic_mat.TextureParameterValues=texture;dynamic_mat.Parent=original_parent
+    local original_scalars=dynamic_mat.ScalarParameterValues
+    for _,change in ipairs({"data","address","num","max"})do
+        local old_reads,poisoned=0,false
+        local poisoned_array
+        local callback_name={ToString=function()
+            poisoned=true
+            if change=="data"then poisoned_array.data_address=poisoned_array.data_address+64
+            elseif change=="address"then poisoned_array.header_address=poisoned_array.header_address+1
+            elseif change=="num"then poisoned_array.GetArrayNum=function()return 0 end
+            else poisoned_array.GetArrayMax=function()return 2 end end
+            return "ReallocatedParameter"
+        end}
+        local info=setmetatable({},{__index=function(_,key)
+            if poisoned then old_reads=old_reads+1;error("old parameter-info storage was dereferenced",0)end
+            return ({Name=callback_name,Association=2,Index=-1})[key]
+        end})
+        local row=setmetatable({},{__index=function(_,key)
+            if poisoned then old_reads=old_reads+1;error("old parameter-row storage was dereferenced",0)end
+            return ({ParameterInfo=info,ParameterValue=0.5})[key]
+        end})
+        poisoned_array=array({row});dynamic_mat.ScalarParameterValues=poisoned_array
+        local ok,reason=pcall(Render.capture,render_env,native_bindings)
+        T.check(not ok and tostring(reason):find("native material parameter array changed",1,true)and old_reads==0,
+            "same-material "..change.." header replacement refuses before stale row/info reads after FName callback")
+    end
+    dynamic_mat.ScalarParameterValues=original_scalars
+    local previous=dynamic_mat.Parent
+    local chain=cooked_mat
+    for i=1,17 do
+        local link=object(4000+i,"BoundMID"..i,"/Game/Test/Level.Level:BoundMID"..i,false)
+        link.IsA=dynamic_mat.IsA;link.GetClass=dynamic_mat.GetClass;link.BasePropertyOverrides=dynamic_mat.BasePropertyOverrides;link.Parent=chain
+        for _,field in ipairs({"ScalarParameterValues","VectorParameterValues","TextureParameterValues","DoubleVectorParameterValues","FontParameterValues","RuntimeVirtualTextureParameterValues","SparseVolumeTextureParameterValues"})do link[field]=array({})end
+        chain=link
+    end
+    dynamic_mat.Parent=chain
+    T.check(not pcall(Render.capture,render_env,native_bindings),"native material chain retains strict16-layer bound without dropping parent data")
+    dynamic_mat.Parent=previous
+end)()
 T.check(T.eq(rendered.components[1].hidden_bones[1],bone_names[40]),"native hidden render bone retained")
 T.check(T.eq(rendered.components[3].parent,1),"native weapon attachment binds captured source body")
 T.check(T.eq(rendered.bindings[3].owner,200),"ephemeral binding uses actual owner address rather than logical wire id")

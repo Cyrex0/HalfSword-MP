@@ -1,6 +1,51 @@
 # Native full-scene encoding checkpoint
 
-## Latest actual: f13e9233
+## Latest actual: ddccc175
+
+Precise material diagnostics checkpoint passes full G0 (74 Lua suites,
+1361 Rust checks in79 binaries; clippy0 errors/13 warnings), dev push and
+clean RequireG0 deployment. All393 deployed hashes match
+ddccc17506d0ea971d92b5118ffed413a8637e95 before launch.
+
+Actual `test-results/20261009-150349-520cf5-native-host` uses source UUID
+bf4912c5-2109-41d3-9cd3-7f3c2e6278eb, supervisor14908/authority15264 and
+clients32796/15500. Original process identities and both880x527 windows are
+qualified and fit/read back fully secondary. NativeReady15.407s; entity1
+epoch text-4884128863321254425/incarnation5/directory6/revision1/frame1
+captures16.079s to40.190s. NativeBind40.194s refuses body CharacterMesh0,
+component7/material0/slot0, field=base. Exact copied base:
+`/Game/Maps/Arenas/Map_Arena_Yard.Map_Arena_Yard:PersistentLevel.Willie_BP_C_2147482004.CharacterMesh0.MID_M_Body_Inst_Frank_21`.
+It has134 bytes and a colon; copied scalar/vector/texture counts are0.
+Plan compact35316/rawJSON74312/nodes6556/dictionary8771/tokens26545,
+49components/600bones/38material slots. Full registration reason is retained
+in native evidence/operator summary beyond the512-byte phase trace.
+
+The material collector traverses parents only while RF_Transient is true;
+a runtime-owned material remaining at the end of that traversal is not a
+cooked asset. Next correction qualifies the native dynamic-material type
+independently of that flag, captures every override layer and resolves the
+original immutable base. Native class/create/dataflow proof is required;
+do not admit a map-owned path or substitute a material. The diagnostic
+asset_transient=false reports substring absence, not the native RF flag.
+
+The type-driven correction is implemented from pinned native/cooked evidence
+in native-material-instance-proof. Every supported dynamic layer retains its
+exact parameters and child-first precedence; original slot/parent/full FName
+and complete parameter-array headers are rechecked after callbacks before
+borrowed reads. Native empty skeletal null slots remain unchanged. Focused Lua
+source277/syntax2 and independent Sol review pass, including same-material
+reallocation with zero stale reads. Source timing, class/RF/layer observations,
+accepted descriptors and native mesh creation still require the next actual run.
+
+Both clients fail unchanged65s readiness/wait_scene. Accepted recipes,
+canonical/mirror frames and active inputs remain0; no player meshes were
+created. Owned camera/view integration remains separately open. Source
+cooperatively stops67.551s/seq929 without fallback; supervisor confirms clean
+stop. Independent original4PIDs absent/Shipping0, all20 career-save hashes
+unchanged, crash[]/unobservedchildren[]. Full Native and692-line authority15264
+trace, complete copied refusal, window evidence and cleanup are preserved.
+
+## Previous actual: f13e9233
 
 Independent live armour semantics checkpoint passes full G0 (74 Lua suites,
 1358 Rust checks in79 binaries; clippy0 errors/13 warnings), dev push and

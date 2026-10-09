@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Capture native dynamic body/armour material instances independently of their
+  transient flag, preserving parent overrides and guarding original parameter
+  arrays across callbacks. Actual body meshes remain under native verification.
 - Identify the exact copied component/material field when experimental native
   scene registration fails, retaining native values and existing validation.
   Actual player meshes and owned client views remain under verification.
