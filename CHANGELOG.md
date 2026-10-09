@@ -24,8 +24,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   pending.
 - Verify admitted native source paths through their complete original object
   hierarchy, retaining exact initial lookups and lifetime/world checks while
-  avoiding repeated full object searches. Runtime improvement remains under
-  live verification.
+  avoiding repeated full object searches. The actual headless test reduced one
+  spline profile from24.406s to0.059s; complete scene capture still refuses a
+  static-mesh LOD getter, so playable mirroring remains unverified.
 
 ## [0.1.0-beta.6] - 2026-10-08
 

@@ -1,6 +1,6 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build3b2b009c
+## Current state: 2026-10-09, latest actual build b2fc9ac7
 
 The actual topology launches: one NullRHI game authority and two rendered native
 clients. The authority qualifies two human fighters on opposing native teams;
@@ -10,21 +10,17 @@ native parents).
 The production helper wiring and the client256-component resource assumption are
 fixed. No canonical scene frame or active client input has been proved yet.
 
-Current publication blocker: ABI7/source schema3/render V2 is deployed and the
-native Aim Spline eligibility now passes. Actual native profile capture returns
-after24.406s with exact2/2/2/11 counts and null metadata. Complete source harvest
-still misses the shutdown window before any canonical frame: the authority is
-stopped through its verified owned-process fallback. Profile traces show638
-guards,84678 admissions and696 finds; an isolated path lookup costs45.889ms.
-Native direct path validation and redundant admission batching are under review.
-Full scene frames/rendering remain unproved; do not bypass capture.
+Current publication blocker: complete source harvest refuses
+`native vertex LOD count unavailable` on StaticMeshComponent
+`Aim Spline Scene Sphere` at16.869s. The current static asset GetNumLODs call
+needs primary native API verification. Do not guess a count or omit this component.
+No canonical scene frame or active input has been proved.
 
-Current performance blocker: first capture spends roughly16 seconds reaching
-native profile entry, then24.406s on that one profile. Parent closure takes9.821s.
-Scope-local schema caching and fewer duplicate controller queries have not
-established a useful actual speed gain. Repeated exact-path GUObject searches and
-nested full admission checks are now measured. All original path, source
-lifetime/world/player and callback boundary checks remain required.
+The reviewed direct native path witness and pure callback admission batching
+are committed, gated and deployed. Actual Aim Spline profile time falls from
+24.406s to0.059s; complete49-node parent closure falls from9.821s to3.052s.
+This is a measured setup improvement, not playable scene/combat parity. All
+original path, source lifetime/world/player and callback boundary checks remain.
 
 Next acceptance steps are (1) evidenced spline support, (2) complete recipes and
 advancing source/mirror frames for both clients, (3) positive legal native inputs
@@ -890,5 +886,42 @@ the pure callback, whose engine refuses GetOwner/PE, schema inspection and full
 finds. Live Runtime and outer owner-dispatch checks remain active; full path
 verification repeats after the final native getters/base guard so a mutation
 after the early check cannot pass. Source-scope22 focused tests and C++260
-checks pass; independent review and the next exact
-deployed native run remain required before claiming a speed gain.
+checks pass; independent review closed before the exact deployment and actual
+run recorded below.
+
+## Actual direct-path optimization run: b2fc9ac7
+
+Full clean G0 passed74 Lua suites and1326 Rust tests in79 binaries; clippy had
+no errors. Dev push and deployment match
+b2fc9ac75b1f1f59d2395056cf1d433ca794d631 exactly. The existing45-second test
+uses two normal rendered clients and one NullRHI authority, legal input exercise
+enabled, expensive probes0. Evidence is retained in
+`test-results/20261009-070751-accdde-native-host`, source UUID
+87ba2d2b-d6a0-4b86-8576-17f596a5714c, authority PID44692.
+
+First original Aim Spline profile enters16.750s and exits16.809s:59ms versus
+24.406s previously. The actual curve counts remain2/2/2/11 with null metadata.
+First cold native provider exit takes57.433ms with638 guards,1480 admissions,
+55 finds and10 PEs, versus24.234s/638/84678/696/10. The whole first native
+operation exits58.296ms with1682 admissions/14 PEs. Five retries complete in
+16.115–20.841ms; no diagnostic budget marker occurs. Complete original parent
+closure49 nodes takes13.691→16.743s=3.052s versus9.821s previously. These
+measurements establish a setup improvement while retaining the original checks.
+
+Source harvest next refuses `native vertex LOD count unavailable` at16.869s,
+seq94 after GetNumLODs, on component3 `Aim Spline Scene Sphere`, class
+`/Script/Engine.StaticMeshComponent`, original address2565076102560. Complete
+recipes/canonical frames remain0 and both active input counters remain[0,0].
+The12 total dispatches are neutral and do not demonstrate legal active input.
+Both clients qualify isolation/suppression, remain wait_scene, then record
+native_session_closed on server end. The static mesh LOD getter needs native
+API evidence; do not invent a LOD count or omit the component.
+
+The worker cleanly stops at49.299s; the supervisor explicitly confirms clean
+authority shutdown without fallback termination. Original owned PIDs14660
+(supervisor),44692(authority),35312/11492(clients) are independently absent;
+no shipping game remains. All20 original save SHA256 values match and
+new_crashes[]/unobserved_children[] are empty. Full HSMPNative.log, the
+authority44692-filtered trace and native_operator_summary.json are preserved.
+Native presentation, camera/HUD, attacks, forces, gear/body parity and co-op
+remain unverified; this run does not establish a playable headless release.
