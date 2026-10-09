@@ -125,6 +125,61 @@ for _, parent_result in ipairs({"alive","refused","dead"}) do
     end
 end
 
+-- Exercise actual worker construction of the production source adapter. The
+-- full native helper semantics are covered by native_source_descriptor/Rust;
+-- this integration cannot hide missing wiring behind capture_render mocks.
+do
+    local Adapter=dofile("mods/HSMPMatch/Scripts/native_source_adapter.lua")
+    for _,missing in ipairs({false,"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end"})do
+        local callback,options,reason,frames,game_thread=nil,nil,nil,0,false
+        local world={IsValid=function()return true end}
+        local token={key="native#2",drops=0}
+        local wg={key=token.key,drops=0,check=function()return true end,settled=function()return true end,
+            world=function()return world end,token=function()return token end,same=function(t)return t==token end,on_drop=function()end}
+        local N={worker_input=function()return true end,host_start=function()
+            assert(game_thread and frames>0,"endpoint must retain game-thread admission");return true end,
+            host_directory=function()return {epoch=math.mininteger+123,seq=11,entities={}}end,host_inputs=function()return {}end,
+            sample_config=function()return true end,host_describe=function()error("unqualified descriptor",0)end,
+            native_capture_render=function()error("unqualified render",0)end,native_sample_world=function()error("unqualified core",0)end}
+        for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end"})do
+            N[name]=function()error("scope helper cannot run before qualified source capture",0)end
+        end
+        if missing then N[missing]=nil end
+        local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()return nil end},
+            hsmp_wg={new=function()return wg end},hsmp_ipc={N=N,init=function()end,frame=function()frames=frames+1 end,world_ready=function()end},
+            hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},
+            hsmp_log={init=function()end,event=function(name,event)
+                if name=="x_native_worker" and event.state=="native_evidence"then reason=event.reason end
+            end},director={make_ue_env=function()return {apply_cvars=function()end}end,
+                new_native_worker=function()return {state="native_ready",tick=function()return true end}end},
+            headless_control={new=function()return {set_directory=function()return true end,tick=function()end}end},
+            headless_prepare=Prepare,hsmp_pose_config={},headless_sample_boundary=Boundary,headless_spawn_diagnostics=SpawnDiagnostics,
+            native_source_adapter={new=function(opts)options=opts;return Adapter.new(opts)end},
+            headless_source_lifecycle={new=function(opts)
+                assert(type(opts.capture)=="function" and opts.describe==N.host_describe,"production adapter must reach the normal lifecycle")
+                return {ensure=function()return false,"source binding intentionally unavailable"end}
+            end}}
+        local fake=setmetatable({debug=debug,os={getenv=function()return nil end,clock=function()return 1 end},
+            require=function(name)if modules[name]then return modules[name]end;error("optional module absent")end,
+            dofile=function()error("optional module absent")end,print=function()end,
+            LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 82 end},{__index=_G})
+        assert(loadfile("mods/HSMPMatch/Scripts/headless_worker.lua","t",fake))().start()
+        game_thread=true;callback();game_thread=false
+        if missing then
+            T.check(options==nil and reason=="native source identity API unavailable: "..missing,
+                "worker explicitly refuses missing production helper "..missing)
+        else
+            T.check(options and options.capture_render==nil and options.WG==wg and type(options.resolve)=="function",
+                "actual production adapter receives the guarded source resolver without a render override")
+            local scope=options and options.source_scope
+            T.check(scope and scope.begin==N.native_source_scope_begin and scope.keep==N.native_source_scope_keep
+                and scope.resolve==N.native_source_scope_resolve and scope.finish==N.native_source_scope_end,
+                "worker injects all four exact native scope functions as raw dot calls")
+            T.check(reason=="source binding intentionally unavailable","qualified source refusal cannot publish a guessed frame")
+        end
+    end
+end
+
 -- The actual worker loop emits the latest sampling refusal to its own stream.
 -- A later successful sample clears the reason without clearing refusal counts.
 do
