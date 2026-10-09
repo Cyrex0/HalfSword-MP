@@ -201,8 +201,11 @@ VertexObject vertex_component_fixture{},vertex_second_fixture{};
 LifetimeObject vertex_component_class{810,&meta},vertex_scene_class{811,&meta},vertex_actor_component_class{812,&meta};
 LifetimeObject vertex_mesh_class{813,&meta},vertex_mesh{814,&vertex_mesh_class},vertex_mesh_other{815,&vertex_mesh_class};
 LifetimeObject vertex_lod_struct{816,&meta},vertex_owner_function{817,&function_class};
+LifetimeObject vertex_material_component_class{818,&meta};
+LifetimeObject vertex_skeletal_probe_class{819,&meta};
 struct VertexField {uint64_t key{},type{};int32_t bytes{},offset{};void* inner{},*structure{},*next{};};
 VertexField vertex_array_field{},vertex_inner_field{};void* vertex_first_field{};
+VertexField vertex_material_array_field{},vertex_material_inner_field{};void* vertex_material_first_field{};
 std::array<uint8_t,16*0x90> vertex_lod_bytes{};
 std::array<uint8_t,16*0x90> vertex_second_lods{};
 int vertex_guard_calls{},vertex_mutation_at{},vertex_events{};
@@ -227,7 +230,7 @@ int32_t vertex_guard_check(void*){
     }
     return 1;
 }
-void** vertex_children(void*){return &vertex_first_field;}
+void** vertex_children(void* object){return object==&vertex_material_component_class?&vertex_material_first_field:&vertex_first_field;}
 void* vertex_next(void* p){return static_cast<VertexField*>(p)->next;}
 void** vertex_inner(void* p){return &static_cast<VertexField*>(p)->inner;}
 void** vertex_struct(void* p){return &static_cast<VertexField*>(p)->structure;}
@@ -243,6 +246,8 @@ void* vertex_find(const uint16_t* key){
     if(path==L"/Script/Engine.ActorComponent")return &vertex_actor_component_class;
     if(path==L"/Script/Engine.StaticMesh")return &vertex_mesh_class;
     if(path==L"/Script/Engine.StaticMeshComponentLODInfo")return &vertex_lod_struct;
+    if(path==L"/Script/Engine.MeshComponent")return &vertex_material_component_class;
+    if(path==L"/Script/Engine.SkeletalMeshComponent")return &vertex_skeletal_probe_class;
     if(path==L"/Script/Engine.ActorComponent:GetOwner")return &vertex_owner_function;
     return lifetime_find(key);
 }
@@ -260,6 +265,7 @@ int32_t vertex_prop(void* object,const uint16_t* key,HsmpProp* out){
     if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&field==L"StaticMesh"){
         if(vertex_missing_asset_property)return 0;*out=object_field(L"StaticMesh",0x560);return 1;}
     if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&field==L"LODData"){*out=object_field(L"LODData",0x588);out->cls=name(L"ArrayProperty");out->size=16;return 1;}
+    if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&field==L"OverrideMaterials"){*out=object_field(L"OverrideMaterials",0x518);out->cls=name(L"ArrayProperty");out->size=16;return 1;}
     return lifetime_prop(object,key,out);
 }
 void vertex_call(void* object,void* fn,void* params){
@@ -274,7 +280,7 @@ void vertex_reset(HsmpReflect& reflect){
     lifetime_reset(reflect);vertex_component_fixture={};vertex_component_fixture.identity.name=809;vertex_component_fixture.identity.cls=&vertex_component_class;
     vertex_second_fixture={};vertex_second_fixture.identity.name=808;vertex_second_fixture.identity.cls=&vertex_component_class;
     vertex_component_class.name=810;
-    for(auto o:{&vertex_component_fixture.identity,&vertex_second_fixture.identity,&vertex_component_class,&vertex_scene_class,&vertex_actor_component_class,&vertex_mesh_class,&vertex_mesh,&vertex_mesh_other,&vertex_lod_struct,&vertex_owner_function}){
+    for(auto o:{&vertex_component_fixture.identity,&vertex_second_fixture.identity,&vertex_component_class,&vertex_scene_class,&vertex_actor_component_class,&vertex_mesh_class,&vertex_mesh,&vertex_mesh_other,&vertex_lod_struct,&vertex_owner_function,&vertex_material_component_class,&vertex_skeletal_probe_class}){
         o->flags=0;o->alive=true;lifetime_objects.push_back(o);
     }
     vertex_lod_bytes.fill(0);vertex_write_asset(&vertex_mesh);vertex_write_header({vertex_lod_bytes.data(),2,2});
@@ -283,6 +289,8 @@ void vertex_reset(HsmpReflect& reflect){
     std::memcpy(reinterpret_cast<uint8_t*>(&vertex_second_fixture)+0x588,&second_header,sizeof(second_header));
     vertex_array_field={name(L"LODData"),name(L"ArrayProperty"),16,0x588,&vertex_inner_field,nullptr,nullptr};
     vertex_inner_field={0,name(L"StructProperty"),0x90,0,nullptr,&vertex_lod_struct,nullptr};vertex_first_field=&vertex_array_field;
+    vertex_material_array_field={name(L"OverrideMaterials"),name(L"ArrayProperty"),16,0x518,&vertex_material_inner_field,nullptr,nullptr};
+    vertex_material_inner_field={0,name(L"ObjectProperty"),8,0,nullptr,nullptr,nullptr};vertex_material_first_field=&vertex_material_array_field;
     reflect.find=vertex_find;reflect.is_a=vertex_is_a;reflect.props=vertex_props;reflect.obj_prop=vertex_prop;reflect.call=vertex_call;
     spline_api.children=vertex_children;spline_api.next=vertex_next;spline_api.inner=vertex_inner;spline_api.structure=vertex_struct;
     spline_api.size=vertex_size;spline_api.offset=vertex_offset;spline_api.field_name=vertex_field_name;spline_api.field_class=vertex_field_class;spline_api.variant_name=vertex_variant_name;
@@ -298,7 +306,8 @@ void vertex_checks(HsmpReflect& reflect){
     check(!vertex_code_ranges(vertex_count_code,sizeof(vertex_count_code)-1,vertex_colors_code,sizeof(vertex_colors_code))&&!vertex_code_match(nullptr,0),"truncated or unavailable matched image refuses");
     auto observe=[&](HsmpViewVertexState& proof,HsmpViewResult& result){int context{};const HsmpViewGuard guard{&context,vertex_guard_check};return describe_vertex_state(keep(&old_world),keep(&actor),keep(&vertex_component_fixture),&guard,&proof,&result);};
     HsmpViewVertexState proof{};HsmpViewResult result{};
-    vertex_reset(reflect);check(observe(proof,result)==1&&result.complete==1&&proof.lod_info_count==2&&proof.no_override==1&&proof.asset_present==1,"complete actual two-LOD null census proves native asset colors and observed presence");
+    vertex_reset(reflect);const auto baseline=observe(proof,result);if(baseline!=1)throw std::runtime_error(result.reason);
+    check(baseline==1&&result.complete==1&&proof.lod_info_count==2&&proof.no_override==1&&proof.asset_present==1,"complete actual two-LOD null census proves native asset colors and observed presence");
     const int final_guard=vertex_guard_calls;check(vertex_events==4,"census retains both native owner and world qualification rounds");
     vertex_reset(reflect);vertex_write_override(1,1);check(observe(proof,result)==1&&proof.no_override==0&&proof.lod_info_count==2,"nonnull last original slot requires captured colors without buffer dereference");
     vertex_reset(reflect);vertex_write_header({nullptr,0,0});check(observe(proof,result)==1&&proof.lod_info_count==0&&proof.no_override==1,"complete empty native override array preserves actual asset color state");
@@ -346,6 +355,59 @@ void vertex_checks(HsmpReflect& reflect){
 // copied layouts do not claim game rendering, camera ownership or live parity.
 struct SceneObject {LifetimeObject identity;std::array<uint8_t,0xa00-sizeof(LifetimeObject)> storage{};};
 SceneObject arm_first{},arm_second{},camera_fixture{};
+struct SkeletalObject {LifetimeObject identity;std::array<uint8_t,0x1100-sizeof(LifetimeObject)> storage{};};
+SkeletalObject skeletal_first{},skeletal_second{};
+LifetimeObject skeletal_class{920,&meta},skinned_class{921,&meta},material_class{922,&meta};
+LifetimeObject observed_material{923,&material_class},other_material{924,&material_class};
+LifetimeObject material_get_fn{925,&function_class},material_set_fn{926,&function_class},component_world_fn{927,&function_class};
+LifetimeObject skeletal_lod_struct{928,&meta};
+LifetimeObject skeletal_deformer_struct{934,&meta};
+VertexField skeletal_array_field{},skeletal_inner_field{};void* skeletal_first_field{};
+VertexField skeletal_deformer_array{},skeletal_deformer_inner{};void* skeletal_deformer_first{};
+std::array<uint8_t,16*0x28> skeletal_lods{},skeletal_second_lods{};
+std::array<LifetimeObject*,32> skeletal_materials{},skeletal_second_materials{};
+int skeletal_size{};
+bool skeletal_asset_missing{},skeletal_wrong_owner{};
+int skeletal_material_gets{},skeletal_material_sets{};
+enum class SkeletalFnId {Add,Finish,BeginSpawn,FinishSpawn,ActorCollision,ActorTick,PostProcess,Anim,Cloth,Suspend,Suspended,Mesh,Leader,Deformer,Visibility,Mid,NumMaterials,Vector,Quat,Transform,Linear,Color,ParameterInfo,Count};
+struct SkeletalFn {LifetimeObject object{};int32_t bytes{};std::vector<HsmpProp> fields;};
+std::array<SkeletalFn,static_cast<size_t>(SkeletalFnId::Count)> skeletal_functions{};
+std::map<std::wstring,LifetimeObject*> skeletal_function_paths;
+LifetimeObject dynamic_material_class{929,&meta},dynamic_material{932,&dynamic_material_class},instance_material_class{933,&meta};
+int skeletal_adds{},skeletal_finishes{},skeletal_mids{},skeletal_num_material_calls{},skeletal_leaders{};
+bool skeletal_bad_null_set{},skeletal_make_active_after_material{};
+enum class SkeletalMutation {None,Asset,Deprecated,MeshObject,Proxy,ProxyCopy,Override,Material,MaterialHeader,MaterialName,Name,ClassName,Garbage,Travel,Tick,Active,Leader,Animation,ClothAllow,ClothResume,PostProcess,ClothingInteractor};
+SkeletalMutation skeletal_later_mutation{},skeletal_final_mutation{};int skeletal_mutation_at{};bool skeletal_mutation_applied{};
+bool skeletal_object(const void* p){return p==&skeletal_first||p==&skeletal_second;}
+void skeletal_pointer(SkeletalObject& object,size_t offset,uint64_t value){std::memcpy(reinterpret_cast<uint8_t*>(&object)+offset,&value,8);}
+void skeletal_array(SkeletalObject& object,size_t offset,Array value){std::memcpy(reinterpret_cast<uint8_t*>(&object)+offset,&value,sizeof(value));}
+void skeletal_mutate(SkeletalMutation change){
+    switch(change){
+    case SkeletalMutation::Asset:skeletal_pointer(skeletal_first,0x560,reinterpret_cast<uint64_t>(&vertex_mesh));break;
+    case SkeletalMutation::Deprecated:skeletal_pointer(skeletal_first,0x558,reinterpret_cast<uint64_t>(&vertex_mesh));break;
+    case SkeletalMutation::MeshObject:skeletal_pointer(skeletal_first,0x7a0,1);break;
+    case SkeletalMutation::Proxy:skeletal_pointer(skeletal_first,0x2f0,1);break;
+    case SkeletalMutation::ProxyCopy:skeletal_pointer(skeletal_first,0x4f8,1);break;
+    case SkeletalMutation::Override:{uint64_t value=1;std::memcpy(skeletal_lods.data()+0x28+0x10,&value,8);break;}
+    case SkeletalMutation::Material:skeletal_materials[1]=&other_material;break;
+    case SkeletalMutation::MaterialHeader:skeletal_array(skeletal_first,0x518,{skeletal_materials.data(),1,2});break;
+    case SkeletalMutation::MaterialName:observed_material.name^=1;break;
+    case SkeletalMutation::Name:skeletal_first.identity.name^=1;break;
+    case SkeletalMutation::ClassName:skeletal_class.name^=1;break;
+    case SkeletalMutation::Garbage:skeletal_first.identity.flags|=mirrored_garbage;break;
+    case SkeletalMutation::Travel:current_world=&new_world;break;
+    case SkeletalMutation::Tick:reinterpret_cast<uint8_t*>(&skeletal_first)[0x3b]=1;break;
+    case SkeletalMutation::Active:reinterpret_cast<uint8_t*>(&skeletal_first)[0x8a]|=8;break;
+    case SkeletalMutation::Leader:skeletal_pointer(skeletal_first,0x568,lifetime_weak(&actor));break;
+    case SkeletalMutation::Animation:skeletal_pointer(skeletal_first,0x8d0,reinterpret_cast<uint64_t>(&actor));break;
+    case SkeletalMutation::ClothAllow:reinterpret_cast<uint8_t*>(&skeletal_first)[0xa42]|=2;break;
+    case SkeletalMutation::ClothResume:reinterpret_cast<uint8_t*>(&skeletal_first)[0xa42]&=static_cast<uint8_t>(~4u);break;
+    case SkeletalMutation::PostProcess:reinterpret_cast<uint8_t*>(&skeletal_first)[0xa41]&=static_cast<uint8_t>(~1u);break;
+    case SkeletalMutation::ClothingInteractor:skeletal_pointer(skeletal_first,0xc40,reinterpret_cast<uint64_t>(&actor));break;
+    default:break;
+    }
+}
+void** skeletal_children(void* object){return object==&skinned_class?&skeletal_first_field:object==&skeletal_deformer_struct?&skeletal_deformer_first:vertex_children(object);}
 LifetimeObject arm_class{900,&meta},camera_class{901,&meta};
 LifetimeObject socket_fn{902,&function_class},deactivate_fn{903,&function_class};
 LifetimeObject tick_fn{904,&function_class},active_fn{905,&function_class},tick_enabled_fn{906,&function_class};
@@ -370,7 +432,7 @@ void empty_mutate(EmptyMutation change){
     default:break;
     }
 }
-bool scene_object(const void* p){return p==&arm_first||p==&arm_second||p==&camera_fixture||p==&vertex_component_fixture||p==&vertex_second_fixture;}
+bool scene_object(const void* p){return p==&arm_first||p==&arm_second||p==&camera_fixture||p==&vertex_component_fixture||p==&vertex_second_fixture||skeletal_object(p);}
 uint8_t* scene_bytes(SceneObject& object){return reinterpret_cast<uint8_t*>(&object);}
 void scene_write_arm(SceneObject& object,const HsmpViewSpringArmFrame& value){
     std::memcpy(scene_bytes(object)+0x2f0,value.translation,24);std::memcpy(scene_bytes(object)+0x310,value.rotation,32);
@@ -390,14 +452,17 @@ void scene_mutate(SceneMutation change){
 }
 int32_t scene_guard_check(void*){
     ++scene_guards;if(scene_mutation_at&&scene_guards==scene_mutation_at)scene_mutate(scene_mutation);
-    if(empty_mutation_at&&scene_guards==empty_mutation_at)empty_mutate(empty_final_mutation);return 1;
+    if(empty_mutation_at&&scene_guards==empty_mutation_at)empty_mutate(empty_final_mutation);
+    if(skeletal_mutation_at&&scene_guards==skeletal_mutation_at)skeletal_mutate(skeletal_final_mutation);return 1;
 }
 uint64_t scene_fixture_vtable(const void* p){
     const auto* object=static_cast<const LifetimeObject*>(p);
+    if(object->cls==&skeletal_class)return vertex_skeletal_image+0x7659cb0+(scene_wrong_vtable?8:0);
     return scene_image+(object->cls==&vertex_component_class?0x766fc60:object->cls==&camera_class?0x76085c0:0x76952b8)+(scene_wrong_vtable?8:0);
 }
 void* scene_find(const uint16_t* key){
     const std::wstring path(reinterpret_cast<const wchar_t*>(key));
+    if(path==L"/Script/CoreUObject.Class")return &meta;
     if(path==L"/Script/Engine.CameraComponent")return &camera_class;
     if(path==L"/Script/Engine.SpringArmComponent")return &arm_class;
     if(path==L"/Script/Engine.SceneComponent:GetSocketTransform")return &socket_fn;
@@ -410,18 +475,39 @@ void* scene_find(const uint16_t* key){
     if(path==L"/Script/Engine.PrimitiveComponent:SetCollisionEnabled")return &collision_fn;
     if(path==L"/Script/Engine.PrimitiveComponent:GetCollisionEnabled")return &collision_read_fn;
     if(path==L"/Script/Engine.SceneComponent:IsSimulatingPhysics")return &simulating_fn;
+    if(path==L"/Script/Engine.SkeletalMeshComponent")return &skeletal_class;
+    if(path==L"/Script/Engine.SkinnedMeshComponent")return &skinned_class;
+    if(path==L"/Script/Engine.SkelMeshComponentLODInfo")return &skeletal_lod_struct;
+    if(path==L"/Script/Engine.MeshDeformerInstanceSet")return &skeletal_deformer_struct;
+    if(path==L"/Script/Engine.MaterialInterface")return &material_class;
+    if(path==L"/Script/Engine.MaterialInstanceDynamic")return &dynamic_material_class;
+    if(path==L"/Script/Engine.MaterialInstance")return &instance_material_class;
+    if(path==L"/Game/Test/ObservedMaterial.ObservedMaterial")return &observed_material;
+    if(path==L"/Script/Engine.PrimitiveComponent:GetMaterial")return &material_get_fn;
+    if(path==L"/Script/Engine.PrimitiveComponent:SetMaterial")return &material_set_fn;
+    if(path==L"/Script/Engine.SceneComponent:K2_GetComponentToWorld")return &component_world_fn;
+    const auto function=skeletal_function_paths.find(path);if(function!=skeletal_function_paths.end())return function->second;
     return vertex_find(key);
 }
 int32_t scene_is_a(void* object,void* type){
+    if(object==&dynamic_material)return type==&dynamic_material_class||type==&instance_material_class||type==&material_class;
     if(scene_object(object)){auto original_class=static_cast<LifetimeObject*>(object)->cls;
         return type==original_class||type==&vertex_scene_class||type==&vertex_actor_component_class||
-            (type==&primitive_class&&original_class==&vertex_component_class);}
+            (type==&primitive_class&&(original_class==&vertex_component_class||original_class==&skeletal_class))||
+            (type==&skinned_class&&original_class==&skeletal_class);}
     return vertex_is_a(object,type);
 }
 HsmpProp scene_field(const wchar_t* key,const wchar_t* type,int32_t bytes,int32_t offset,uint8_t mask=0,const wchar_t* sub=nullptr){
     auto p=object_field(key,offset);p.cls=name(type);p.size=bytes;p.bool_mask=mask;if(sub)p.sub=name(sub);return p;
 }
 int32_t scene_props(void* object,HsmpProp* out,int32_t cap,int32_t* size){
+    for(const auto& fn:skeletal_functions)if(object==&fn.object){*size=fn.bytes;if(cap<static_cast<int32_t>(fn.fields.size()))return -1;std::copy(fn.fields.begin(),fn.fields.end(),out);return static_cast<int32_t>(fn.fields.size());}
+    if(object==&skeletal_class){*size=skeletal_size;return 0;}
+    if(object==&skeletal_lod_struct){*size=skeletal_inner_field.bytes;if(cap>0){out[0]=object_field(L"OverrideVertexColors",0x10);return 1;}return 1;}
+    if(object==&skeletal_deformer_struct){*size=0x20;if(cap>0){out[0]=scene_field(L"DeformerInstances",L"ArrayProperty",16,0);return 1;}return 1;}
+    if((object==&material_get_fn||object==&material_set_fn)&&cap>=2){*size=16;out[0]=scene_field(L"ElementIndex",L"IntProperty",4,0);
+        out[1]=scene_field(object==&material_get_fn?L"ReturnValue":L"Material",L"ObjectProperty",8,8);return 2;}
+    if(object==&component_world_fn&&cap>0){*size=96;out[0]=scene_field(L"ReturnValue",L"StructProperty",96,0,0,L"Transform");return 1;}
     if(object==&vertex_component_class){*size=scene_wrong_size?0x5d0:0x5e0;return 0;}
     if(object==&camera_class||object==&arm_class){*size=scene_wrong_size?0x320:object==&camera_class?0x9e0:0x330;return 0;}
     if(object==&deactivate_fn){*size=0;return 0;}
@@ -437,7 +523,25 @@ int32_t scene_props(void* object,HsmpProp* out,int32_t cap,int32_t* size){
 }
 int32_t scene_prop(void* object,const uint16_t* key,HsmpProp* out){
     const std::wstring field(reinterpret_cast<const wchar_t*>(key));
+    if(object==&dynamic_material&&field==L"Parent"){*out=object_field(L"Parent",static_cast<int32_t>(offsetof(LifetimeObject,property)));return 1;}
+    if(skeletal_object(object)){
+        if(field==L"SkeletalMesh"||field==L"SkinnedAsset"){
+            if(skeletal_asset_missing)return 0;*out=object_field(field.c_str(),field==L"SkeletalMesh"?0x558:0x560);return 1;}
+        if(field==L"LODInfo"||field==L"OverrideMaterials"){
+            *out=scene_field(field.c_str(),L"ArrayProperty",16,field==L"LODInfo"?0x760:0x518);return 1;}
+        if(field==L"PhysicsAssetOverride"){*out=object_field(field.c_str(),0x738);return 1;}
+        if(field==L"LeaderPoseComponent"){*out=scene_field(field.c_str(),L"WeakObjectProperty",8,0x568);return 1;}
+        if(field==L"AnimBlueprintGeneratedClass"||field==L"AnimClass"){*out=scene_field(field.c_str(),L"ClassProperty",8,field==L"AnimClass"?0x8c8:0x8c0);return 1;}
+        if(field==L"AnimScriptInstance"||field==L"PostProcessAnimInstance"||field==L"MeshDeformer"||field==L"ClothingInteractor"){
+            *out=object_field(field.c_str(),field==L"AnimScriptInstance"?0x8d0:field==L"PostProcessAnimInstance"?0x8d8:field==L"MeshDeformer"?0x588:0xc40);return 1;}
+        if(field==L"MeshDeformerInstances"){*out=scene_field(field.c_str(),L"StructProperty",0x20,0x598);return 1;}
+        if(field==L"bSetMeshDeformer"){*out=scene_field(field.c_str(),L"BoolProperty",1,0x580,1);return 1;}
+        if(field==L"bAllowClothActors"||field==L"bDisableClothSimulation"||field==L"bDisablePostProcessBlueprint"){
+            *out=scene_field(field.c_str(),L"BoolProperty",1,field==L"bDisablePostProcessBlueprint"?0xa41:0xa42,field==L"bAllowClothActors"?2:field==L"bDisableClothSimulation"?4:1);return 1;}
+    }
     if(scene_object(object)){
+        if(field==L"bVisible"){*out=scene_field(field.c_str(),L"BoolProperty",1,0x1d0,1);return 1;}
+        if(field==L"bHiddenInGame"){*out=scene_field(field.c_str(),L"BoolProperty",1,0x1d1,1);return 1;}
         if(field==L"bDrawDebugLagMarkers"){*out=scene_field(field.c_str(),L"BoolProperty",1,scene_wrong_debug_layout?0x270:0x271,1);return 1;}
         if(field==L"bIsActive"){*out=scene_field(field.c_str(),L"BoolProperty",1,0x8a,8);return 1;}
         if(field==L"PrimaryComponentTick"){
@@ -450,12 +554,35 @@ int32_t scene_prop(void* object,const uint16_t* key,HsmpProp* out){
 }
 void scene_call(void* object,void* fn,void* params){
     ++scene_events;
+    for(size_t i=0;i<skeletal_functions.size();++i)if(fn==&skeletal_functions[i].object){
+        const auto id=static_cast<SkeletalFnId>(i);auto* bytes=static_cast<uint8_t*>(params);
+        if(id==SkeletalFnId::BeginSpawn){auto value=&actor;std::memcpy(bytes+128,&value,8);return;}
+        if(id==SkeletalFnId::FinishSpawn){auto value=&actor;std::memcpy(bytes+112,&value,8);return;}
+        if(id==SkeletalFnId::Add){++skeletal_adds;LifetimeObject* original_class{};std::memcpy(&original_class,bytes,8);check(original_class==&skeletal_class,"production create requests exact SkeletalMeshComponent without a pose leader");
+            auto value=&skeletal_second;std::memcpy(bytes+112,&value,8);return;}
+        if(id==SkeletalFnId::Finish){++skeletal_finishes;LifetimeObject* value{};std::memcpy(&value,bytes,8);check(value==&skeletal_second.identity,"production FinishAddComponent retains original created component");return;}
+        if(id==SkeletalFnId::ActorCollision||id==SkeletalFnId::ActorTick){check(object==&actor&&!(bytes[0]&1),"owned mirror actor collision and tick are disabled");return;}
+        if(id==SkeletalFnId::Deformer){LifetimeObject* value=nullptr;std::memcpy(bytes,&value,8);return;}
+        if(id==SkeletalFnId::NumMaterials){++skeletal_num_material_calls;int32_t value=0;std::memcpy(bytes,&value,4);return;}
+        if(id==SkeletalFnId::Visibility){static_cast<uint8_t*>(object)[0x1d0]=bytes[0]&1;return;}
+        if(id==SkeletalFnId::Mid){++skeletal_mids;LifetimeObject* source{};int32_t slot{};std::memcpy(&slot,bytes,4);std::memcpy(&source,bytes+8,8);check(source==&observed_material&&slot==1,"nonnull material creation uses the observed source base and exact slot");
+            dynamic_material.property=source;skeletal_second_materials[1]=&dynamic_material;skeletal_array(skeletal_second,0x518,{skeletal_second_materials.data(),2,32});auto value=&dynamic_material;std::memcpy(bytes+24,&value,8);return;}
+        if(id==SkeletalFnId::Leader){++skeletal_leaders;LifetimeObject* value{};std::memcpy(&value,bytes,8);check(value==nullptr,"empty skeletal mirror receives no leader or replacement animation source");skeletal_pointer(skeletal_second,0x568,0);return;}
+        if(id==SkeletalFnId::Mesh){LifetimeObject* value{};std::memcpy(&value,bytes,8);check(value==nullptr,"empty skeletal mirror keeps both asset aliases absent");skeletal_pointer(skeletal_second,0x558,0);skeletal_pointer(skeletal_second,0x560,0);return;}
+        if(id==SkeletalFnId::Anim){LifetimeObject* value{};std::memcpy(&value,bytes,8);check(value==nullptr,"empty skeletal mirror sets no animation class");skeletal_pointer(skeletal_second,0x8c8,0);return;}
+        if(id==SkeletalFnId::Cloth){check(!(bytes[0]&1),"empty skeletal mirror disables cloth actors");reinterpret_cast<uint8_t*>(&skeletal_second)[0xa42]&=static_cast<uint8_t>(~2u);return;}
+        if(id==SkeletalFnId::Suspend){reinterpret_cast<uint8_t*>(&skeletal_second)[0xa42]|=4;return;}
+        if(id==SkeletalFnId::Suspended){bytes[0]=(reinterpret_cast<uint8_t*>(object)[0xa42]&4)?1:0;return;}
+        if(id==SkeletalFnId::PostProcess){check((bytes[0]&1)!=0,"empty skeletal mirror disables postprocess animation");reinterpret_cast<uint8_t*>(&skeletal_second)[0xa41]|=1;return;}
+        throw std::runtime_error("unexpected skeletal creation function");
+    }
     if(scene_object(object)){
         auto* p=static_cast<uint8_t*>(object);
         if(fn==&vertex_owner_function){
             if(object==&arm_second&&scene_later_target_mutation!=SceneMutation::None&&!scene_mutation_applied){scene_mutation_applied=true;scene_mutate(scene_later_target_mutation);}
             if(object==&vertex_second_fixture&&empty_later_mutation!=EmptyMutation::None&&!empty_mutation_applied){empty_mutation_applied=true;empty_mutate(empty_later_mutation);}
-            auto owner=&actor;std::memcpy(params,&owner,8);return;
+            if(object==&skeletal_second&&skeletal_later_mutation!=SkeletalMutation::None&&!skeletal_mutation_applied){skeletal_mutation_applied=true;skeletal_mutate(skeletal_later_mutation);}
+            auto owner=skeletal_object(object)&&skeletal_wrong_owner?&foreign_owner:&actor;std::memcpy(params,&owner,8);return;
         }
         if(fn==&socket_fn){uint64_t socket{};std::memcpy(&socket,params,8);
             check(socket==scene_socket_value&&static_cast<uint8_t*>(params)[8]==2,"native socket read uses observed singleton and component space2");
@@ -470,6 +597,16 @@ void scene_call(void* object,void* fn,void* params){
         if(fn==&collision_fn){++scene_primitive_events;p[0x90]=static_cast<uint8_t*>(params)[0];return;}
         if(fn==&collision_read_fn){++scene_primitive_events;static_cast<uint8_t*>(params)[0]=p[0x90];return;}
         if(fn==&simulating_fn){++scene_primitive_events;static_cast<uint8_t*>(params)[8]=p[0x91]?1:0;return;}
+        if(skeletal_object(object)&&fn==&material_get_fn){int32_t index{};std::memcpy(&index,params,4);Array materials{};std::memcpy(&materials,p+0x518,sizeof(materials));
+            ++skeletal_material_gets;
+            check(index>=0&&index<32,"native material getter reads a bounded observed slot");auto value=index<materials.count?static_cast<LifetimeObject**>(materials.data)[index]:nullptr;std::memcpy(static_cast<uint8_t*>(params)+8,&value,8);return;}
+        if(skeletal_object(object)&&fn==&material_set_fn){int32_t index{};LifetimeObject* value{};std::memcpy(&index,params,4);std::memcpy(&value,static_cast<uint8_t*>(params)+8,8);Array materials{};std::memcpy(&materials,p+0x518,sizeof(materials));
+            ++skeletal_material_sets;
+            check(index>=0&&index<32,"native material setter writes an observed slot");auto& slots=object==&skeletal_first?skeletal_materials:skeletal_second_materials;
+            slots[static_cast<size_t>(index)]=skeletal_bad_null_set&&!value?&other_material:value;
+            skeletal_array(*static_cast<SkeletalObject*>(object),0x518,{slots.data(),std::max(materials.count,index+1),32});
+            if(skeletal_make_active_after_material)p[0x3b]=1;return;}
+        if(fn==&component_world_fn){const auto value=engine(Transform{{1.25,-2.5,3},{0,0,0,1},{1,1,1}});std::memcpy(params,&value,sizeof(value));return;}
     }
     vertex_call(object,fn,params);
 }
@@ -477,7 +614,7 @@ void scene_reset(HsmpReflect& reflect){
     vertex_reset(reflect);arm_first={};arm_second={};camera_fixture={};
     arm_first.identity.name=910;arm_first.identity.cls=&arm_class;arm_second.identity.name=911;arm_second.identity.cls=&arm_class;
     camera_fixture.identity.name=912;camera_fixture.identity.cls=&camera_class;arm_class.name=900;camera_class.name=901;
-    for(auto object:{&arm_first.identity,&arm_second.identity,&camera_fixture.identity,&arm_class,&camera_class,&socket_fn,&deactivate_fn,&tick_fn,&active_fn,&tick_enabled_fn,&primitive_class,&physics_fn,&collision_fn,&collision_read_fn,&simulating_fn}){
+    for(auto object:{&arm_first.identity,&arm_second.identity,&camera_fixture.identity,&arm_class,&camera_class,&socket_fn,&deactivate_fn,&tick_fn,&active_fn,&tick_enabled_fn,&primitive_class,&physics_fn,&collision_fn,&collision_read_fn,&simulating_fn,&skeletal_class}){
         object->alive=true;object->flags=0;lifetime_objects.push_back(object);
     }
     const HsmpViewSpringArmFrame endpoint{{-0.0,3.125,-800.25},{0.0,-0.0,0.75,0.75}};
@@ -490,6 +627,158 @@ void scene_reset(HsmpReflect& reflect){
     scene_image=0x10000000;scene_build_admit=[](){return scene_profile_supported;};scene_vtable_read=scene_fixture_vtable;
     vertex_empty_image=scene_image;vertex_empty_build_admit=[](){return scene_profile_supported;};vertex_empty_vtable_read=scene_fixture_vtable;vertex_empty=false;
     scene_socket_read=[](){return scene_socket_value;};scene_socket_value=name(L"OfflineExactSocket");scene_owner={};scene_component={};active_scene_kind=0;
+}
+void skeletal_reset(HsmpReflect& reflect){
+    scene_reset(reflect);skeletal_first={};skeletal_second={};skeletal_size=0xf70;
+    skeletal_first.identity={930,&skeletal_class};skeletal_second.identity={931,&skeletal_class};
+    skeletal_class.name=920;skinned_class.name=921;material_class.name=922;observed_material.name=923;other_material.name=924;
+    for(auto object:{&skeletal_first.identity,&skeletal_second.identity,&skinned_class,&material_class,&observed_material,&other_material,&material_get_fn,&material_set_fn,&component_world_fn,&skeletal_lod_struct,&skeletal_deformer_struct,&dynamic_material_class,&dynamic_material,&instance_material_class}){
+        object->alive=true;object->flags=0;lifetime_objects.push_back(object);}
+    skeletal_lods.fill(0);skeletal_second_lods.fill(0);skeletal_materials.fill(nullptr);skeletal_second_materials.fill(nullptr);
+    skeletal_materials[1]=&observed_material;skeletal_second_materials[1]=&observed_material;
+    skeletal_array(skeletal_first,0x760,{skeletal_lods.data(),2,2});skeletal_array(skeletal_second,0x760,{skeletal_second_lods.data(),2,2});
+    skeletal_array(skeletal_first,0x518,{skeletal_materials.data(),3,32});skeletal_array(skeletal_second,0x518,{skeletal_second_materials.data(),3,32});
+    skeletal_array_field={name(L"LODInfo"),name(L"ArrayProperty"),16,0x760,&skeletal_inner_field,nullptr,nullptr};
+    skeletal_inner_field={0,name(L"StructProperty"),0x28,0,nullptr,&skeletal_lod_struct,nullptr};skeletal_first_field=&skeletal_array_field;
+    skeletal_deformer_array={name(L"DeformerInstances"),name(L"ArrayProperty"),16,0,&skeletal_deformer_inner,nullptr,nullptr};
+    skeletal_deformer_inner={0,name(L"ObjectProperty"),8,0,nullptr,nullptr,nullptr};skeletal_deformer_first=&skeletal_deformer_array;
+    spline_api.children=skeletal_children;vertex_skeletal_image=scene_image;vertex_skeletal_build_admit=[](){return scene_profile_supported;};
+    vertex_empty=false;vertex_kind=1;vertex_source_materials.clear();vertex_material_world={};
+    skeletal_asset_missing=skeletal_wrong_owner=false;skeletal_material_gets=skeletal_material_sets=0;
+    skeletal_later_mutation=skeletal_final_mutation=SkeletalMutation::None;skeletal_mutation_at=0;skeletal_mutation_applied=false;
+    skeletal_adds=skeletal_finishes=skeletal_mids=skeletal_num_material_calls=skeletal_leaders=0;skeletal_bad_null_set=skeletal_make_active_after_material=false;
+    skeletal_function_paths.clear();
+    const auto function=[&](SkeletalFnId id,const wchar_t* path,int32_t bytes,std::initializer_list<HsmpProp> fields){
+        const auto index=static_cast<size_t>(id);auto& fn=skeletal_functions[index];fn.object={10000+index,&function_class};fn.bytes=bytes;fn.fields=fields;
+        lifetime_objects.push_back(&fn.object);skeletal_function_paths.emplace(path,&fn.object);};
+    function(SkeletalFnId::Add,L"/Script/Engine.Actor:AddComponentByClass",120,{scene_field(L"Class",L"ClassProperty",8,0),scene_field(L"bManualAttachment",L"BoolProperty",1,8,1),scene_field(L"RelativeTransform",L"StructProperty",96,16,0,L"Transform"),scene_field(L"bDeferredFinish",L"BoolProperty",1,9,1),scene_field(L"ReturnValue",L"ObjectProperty",8,112)});
+    function(SkeletalFnId::Finish,L"/Script/Engine.Actor:FinishAddComponent",112,{object_field(L"Component",0),scene_field(L"bManualAttachment",L"BoolProperty",1,8,1),scene_field(L"RelativeTransform",L"StructProperty",96,16,0,L"Transform")});
+    function(SkeletalFnId::BeginSpawn,L"/Script/Engine.GameplayStatics:BeginDeferredActorSpawnFromClass",136,{object_field(L"WorldContextObject",0),scene_field(L"ActorClass",L"ClassProperty",8,8),scene_field(L"SpawnTransform",L"StructProperty",96,16,0,L"Transform"),scene_field(L"CollisionHandlingOverride",L"ByteProperty",1,112),object_field(L"Owner",120),scene_field(L"TransformScaleMethod",L"ByteProperty",1,113),object_field(L"ReturnValue",128)});
+    function(SkeletalFnId::FinishSpawn,L"/Script/Engine.GameplayStatics:FinishSpawningActor",120,{object_field(L"Actor",0),scene_field(L"SpawnTransform",L"StructProperty",96,16,0,L"Transform"),scene_field(L"TransformScaleMethod",L"ByteProperty",1,8),object_field(L"ReturnValue",112)});
+    function(SkeletalFnId::ActorCollision,L"/Script/Engine.Actor:SetActorEnableCollision",1,{scene_field(L"bNewActorEnableCollision",L"BoolProperty",1,0,1)});
+    function(SkeletalFnId::ActorTick,L"/Script/Engine.Actor:SetActorTickEnabled",1,{scene_field(L"bEnabled",L"BoolProperty",1,0,1)});
+    function(SkeletalFnId::PostProcess,L"/Script/Engine.SkeletalMeshComponent:SetDisablePostProcessBlueprint",1,{scene_field(L"bInDisablePostProcess",L"BoolProperty",1,0,1)});
+    function(SkeletalFnId::Anim,L"/Script/Engine.SkeletalMeshComponent:SetAnimClass",8,{scene_field(L"NewClass",L"ClassProperty",8,0)});
+    function(SkeletalFnId::Cloth,L"/Script/Engine.SkeletalMeshComponent:SetAllowClothActors",1,{scene_field(L"bInAllow",L"BoolProperty",1,0,1)});
+    function(SkeletalFnId::Suspend,L"/Script/Engine.SkeletalMeshComponent:SuspendClothingSimulation",0,{});
+    function(SkeletalFnId::Suspended,L"/Script/Engine.SkeletalMeshComponent:IsClothingSimulationSuspended",1,{scene_field(L"ReturnValue",L"BoolProperty",1,0,1)});
+    function(SkeletalFnId::Mesh,L"/Script/Engine.SkeletalMeshComponent:SetSkeletalMeshAsset",8,{object_field(L"NewMesh",0)});
+    function(SkeletalFnId::Leader,L"/Script/Engine.SkinnedMeshComponent:SetLeaderPoseComponent",16,{object_field(L"NewLeaderBoneComponent",0),scene_field(L"bForceUpdate",L"BoolProperty",1,8,1),scene_field(L"bInFollowerShouldTickPose",L"BoolProperty",1,9,1)});
+    function(SkeletalFnId::Deformer,L"/Script/Engine.SkinnedMeshComponent:GetMeshDeformerInstance",8,{object_field(L"ReturnValue",0)});
+    function(SkeletalFnId::Visibility,L"/Script/Engine.SceneComponent:SetVisibility",2,{scene_field(L"bNewVisibility",L"BoolProperty",1,0,1),scene_field(L"bPropagateToChildren",L"BoolProperty",1,1,1)});
+    function(SkeletalFnId::Mid,L"/Script/Engine.PrimitiveComponent:CreateDynamicMaterialInstance",32,{scene_field(L"ElementIndex",L"IntProperty",4,0),object_field(L"SourceMaterial",8),scene_field(L"OptionalName",L"NameProperty",8,16),object_field(L"ReturnValue",24)});
+    function(SkeletalFnId::NumMaterials,L"/Script/Engine.PrimitiveComponent:GetNumMaterials",4,{scene_field(L"ReturnValue",L"IntProperty",4,0)});
+    const auto structure=[&](SkeletalFnId id,const wchar_t* path,int32_t bytes,std::initializer_list<HsmpProp> fields){function(id,path,bytes,fields);skeletal_functions[static_cast<size_t>(id)].object.cls=&meta;};
+    structure(SkeletalFnId::Vector,L"/Script/CoreUObject.Vector",24,{scene_field(L"X",L"DoubleProperty",8,0),scene_field(L"Y",L"DoubleProperty",8,8),scene_field(L"Z",L"DoubleProperty",8,16)});
+    structure(SkeletalFnId::Quat,L"/Script/CoreUObject.Quat",32,{scene_field(L"X",L"DoubleProperty",8,0),scene_field(L"Y",L"DoubleProperty",8,8),scene_field(L"Z",L"DoubleProperty",8,16),scene_field(L"W",L"DoubleProperty",8,24)});
+    structure(SkeletalFnId::Transform,L"/Script/CoreUObject.Transform",96,{scene_field(L"Rotation",L"StructProperty",32,0,0,L"Quat"),scene_field(L"Translation",L"StructProperty",24,32,0,L"Vector"),scene_field(L"Scale3D",L"StructProperty",24,64,0,L"Vector")});
+    structure(SkeletalFnId::Linear,L"/Script/CoreUObject.LinearColor",16,{scene_field(L"R",L"FloatProperty",4,0),scene_field(L"G",L"FloatProperty",4,4),scene_field(L"B",L"FloatProperty",4,8),scene_field(L"A",L"FloatProperty",4,12)});
+    structure(SkeletalFnId::Color,L"/Script/CoreUObject.Color",4,{scene_field(L"B",L"ByteProperty",1,0),scene_field(L"G",L"ByteProperty",1,1),scene_field(L"R",L"ByteProperty",1,2),scene_field(L"A",L"ByteProperty",1,3)});
+    structure(SkeletalFnId::ParameterInfo,L"/Script/Engine.MaterialParameterInfo",16,{scene_field(L"Name",L"NameProperty",8,0),scene_field(L"Association",L"ByteProperty",1,8),scene_field(L"Index",L"IntProperty",4,12)});
+    layouts_verified=false;layout_objects.clear();
+}
+void skeletal_checks(HsmpReflect& reflect){
+    HsmpViewResult result{};HsmpViewVertexState proof{};
+    auto observe=[&]{int context{};const HsmpViewGuard guard{&context,scene_guard_check};
+        return describe_vertex_state(keep(&old_world),keep(&actor),keep(&skeletal_first),&guard,&proof,&result);};
+    skeletal_reset(reflect);
+    check(observe()==1&&result.complete==1&&proof.component_kind==0&&proof.asset_present==0&&proof.no_override==1&&proof.lod_info_count==2&&proof.material_count==3&&proof.material_null_mask==5,
+        "both hard-null native skeletal assets and complete mixed nullable material slots produce exact ABI11 proof");
+    const int last_observe_guard=scene_guards;
+    check(skeletal_material_gets==0,"raw complete material census does not depend on asset-derived GetNumMaterials or GetMaterial");
+    skeletal_reset(reflect);skeletal_array(skeletal_first,0x518,{skeletal_materials.data(),32,32});
+    check(observe()==1&&proof.material_count==32&&proof.material_null_mask==0xfffffffdu,"complete 32-slot material null mask retains high bit and actual nonnull slot");
+    skeletal_reset(reflect);skeletal_array(skeletal_first,0x518,{nullptr,0,0});skeletal_array(skeletal_first,0x760,{nullptr,0,0});
+    check(observe()==1&&proof.material_count==0&&proof.material_null_mask==0&&proof.lod_info_count==0,"observed empty native arrays remain empty rather than fabricated slots");
+    skeletal_reset(reflect);skeletal_materials[1]=&actor;
+    check(observe()==-1&&result.complete==0,"nonnull raw material slot requires an actual live MaterialInterface identity");
+    skeletal_reset(reflect);observed_material.alive=false;
+    check(observe()==-1&&result.complete==0,"unavailable original nonnull material cannot become a null slot");
+    for(const auto offset:{size_t{0x558},size_t{0x560},size_t{0x7a0},size_t{0x2f0},size_t{0x4f8},size_t{0x738}}){skeletal_reset(reflect);skeletal_pointer(skeletal_first,offset,1);
+        check(observe()==-1&&result.complete==0,"either asset alias, stale native render object/proxy or unsupported physics object refuses absence proof");}
+    for(const auto header:{Array{skeletal_materials.data(),33,33},Array{skeletal_materials.data(),-1,32},Array{skeletal_materials.data(),3,2},Array{nullptr,3,3}}){skeletal_reset(reflect);skeletal_array(skeletal_first,0x518,header);
+        check(observe()==-1&&result.complete==0,"malformed complete original material header cannot produce a null mask");}
+    for(const auto header:{Array{skeletal_lods.data(),17,17},Array{skeletal_lods.data(),-1,2},Array{skeletal_lods.data(),2,1},Array{nullptr,2,2}}){skeletal_reset(reflect);skeletal_array(skeletal_first,0x760,header);
+        check(observe()==-1&&result.complete==0,"skeletal absence never bypasses original LODInfo bounds");}
+    skeletal_reset(reflect);uint64_t override_pointer=1;std::memcpy(skeletal_lods.data()+0x28+0x10,&override_pointer,8);
+    check(observe()==1&&proof.component_kind==0&&proof.asset_present==0&&proof.no_override==0,"observed last skeletal LOD override is preserved without dereferencing an opaque buffer");
+    HsmpViewComponent empty_gate{};empty_gate.kind=9;empty_gate.vertex_state=4;
+    rejects([&]{vertex_native_asset(keep(&old_world),keep(&actor),keep(&skeletal_first),empty_gate,&result);},"empty skeletal geometry cannot admit a nonnull vertex override");
+    for(int wrong=0;wrong<6;++wrong){skeletal_reset(reflect);
+        if(wrong==0)skeletal_asset_missing=true;else if(wrong==1)skeletal_size=0xf60;else if(wrong==2)scene_wrong_vtable=true;
+        else if(wrong==3)scene_profile_supported=false;else if(wrong==4)skeletal_inner_field.bytes=0x30;else skeletal_array_field.offset=0x768;
+        check(observe()==-1&&result.complete==0,"missing asset schema, class/layout/vtable/code or inner metadata refuses explicit empty skeletal proof");}
+    skeletal_reset(reflect);skeletal_first.identity.cls=&vertex_scene_class;
+    check(observe()==-1&&result.complete==0,"plain Scene cannot substitute for native empty SkeletalMeshComponent");
+    skeletal_reset(reflect);skeletal_wrong_owner=true;
+    check(observe()==-1&&result.complete==0,"empty skeletal original owner/world must remain qualified");
+    skeletal_reset(reflect);skeletal_deformer_inner.bytes=4;
+    check(observe()==-1&&result.complete==0,"unproved inner deformer pointer stride cannot be treated as an empty instance set");
+    skeletal_reset(reflect);skeletal_array(skeletal_first,0x598,{skeletal_materials.data(),1,1});
+    check(observe()==-1&&result.complete==0,"nonempty native deformer instance set refuses empty skeletal rendering proof");
+    skeletal_reset(reflect);reinterpret_cast<uint8_t*>(&skeletal_first)[0x580]=1;
+    check(observe()==-1&&result.complete==0,"enabled reflected mesh-deformer bit refuses original absent surface proof");
+    skeletal_reset(reflect);reinterpret_cast<uint8_t*>(&skeletal_first)[0x580]=0x80;
+    check(observe()==1&&result.complete==1&&reinterpret_cast<uint8_t*>(&skeletal_first)[0x580]==0x80,"original unrelated boolean bits are preserved while the admitted deformer mask remains clear");
+    for(auto mutation:{SkeletalMutation::Asset,SkeletalMutation::Deprecated,SkeletalMutation::MeshObject,SkeletalMutation::Proxy,SkeletalMutation::ProxyCopy,SkeletalMutation::Override,SkeletalMutation::Material,SkeletalMutation::MaterialHeader,SkeletalMutation::Name,SkeletalMutation::ClassName,SkeletalMutation::Garbage,SkeletalMutation::Travel}){
+        skeletal_reset(reflect);skeletal_final_mutation=mutation;skeletal_mutation_at=last_observe_guard;
+        check(observe()==-1&&result.complete==0,"final native callback cannot bless changed skeletal absence, material slots or original identity");
+        check(scene_guards==last_observe_guard,"failed last skeletal proof performs no later callback");}
+    const auto txt=[](const wchar_t* value)->HsmpViewText{return {u16(value),static_cast<uint32_t>(std::wcslen(value)),0};};
+    const wchar_t component_path[]=L"/Script/Engine.SkeletalMeshComponent",material_path[]=L"/Game/Test/ObservedMaterial.ObservedMaterial";
+    std::array<HsmpViewMaterial,3> materials{};for(uint32_t i=0;i<3;++i)materials[i].slot=i;materials[1].base=txt(material_path);
+    HsmpViewComponent c{};c.id=1;c.kind=9;c.vertex_state=4;c.asset=txt(component_path);c.materials=materials.data();c.material_count=3;c.relative={{0,0,0},{0,0,0,1},{1,1,1}};
+    recipe(c);check(true,"only exact empty skeletal recipe can explicitly retain mixed null and nonnull material slots");
+    HsmpViewParameter invalid_null_parameter{};
+    for(int wrong=0;wrong<4;++wrong){auto invalid=c;if(wrong==0)invalid.kind=8;else if(wrong==1)invalid.bone_count=1;
+        else if(wrong==2)invalid.asset={};else{materials[0].scalars=&invalid_null_parameter;materials[0].scalar_count=1;}
+        rejects([&]{recipe(invalid);},"empty skeletal recipe refuses wrong class, invented bones or parameters on explicit null material");materials[0].scalars=nullptr;materials[0].scalar_count=0;}
+    skeletal_reset(reflect);Function num_materials(L"/Script/Engine.PrimitiveComponent:GetNumMaterials");num_materials.call(keep(&skeletal_first));
+    check(num_materials.value<int32_t>(L"ReturnValue",L"IntProperty")==0&&observe()==1&&proof.material_count==3&&proof.material_null_mask==5,"asset-derived getter zero never erases raw observed nullable material slots");
+    source_static(keep(&skeletal_first),c,&result);check(skeletal_material_gets==3,"source_static reads all original null and nonnull slots in order");
+    HsmpViewFrame output{};output.world=c.relative;capture_values(keep(&skeletal_first),c,output,&result);
+    check(skeletal_material_gets==6&&output.world.p[0]==1.25&&output.world.p[1]==-2.5&&output.bone_count==0,"actual value capture preserves native transform and empty geometry while rechecking every material slot");
+    skeletal_materials[0]=&other_material;rejects([&]{source_static(keep(&skeletal_first),c,&result);},"explicit null source slot cannot hide a newly present material");
+    skeletal_materials[0]=nullptr;skeletal_materials[1]=nullptr;rejects([&]{capture_values(keep(&skeletal_first),c,output,&result);},"missing observed nonnull source material refuses capture rather than becoming null");
+    skeletal_reset(reflect);output={};output.world=c.relative;int context{};const HsmpViewGuard capture_guard{&context,scene_guard_check};
+    check(capture(keep(&old_world),keep(&actor),keep(&skeletal_first),&c,&output,&capture_guard,&result)==1&&result.complete==1&&output.world.p[0]==1.25,"full production capture admits exact empty skeletal with complete mixed materials");
+    skeletal_reset(reflect);auto* primitive=reinterpret_cast<uint8_t*>(&skeletal_first);primitive[0x90]=2;primitive[0x91]=1;collision_off(keep(&skeletal_first),&result);
+    check(scene_primitive_events==4&&primitive[0x90]==0&&primitive[0x91]==0,"actual empty skeletal creation helper uses native Primitive collision and physics readback");
+    const auto create_mirror=[&]{skeletal_second_materials.fill(nullptr);skeletal_array(skeletal_second,0x518,{nullptr,0,0});
+        return create(keep(&old_world),&c,1,&capture_guard,&result);};
+    skeletal_reset(reflect);const auto source_before=vertex_copy(&skeletal_first,0x760);const auto handle=create_mirror();
+    check(handle!=0&&result.complete==1&&skeletal_adds==1&&skeletal_finishes==1&&skeletal_leaders==1,"production kind9 create builds one exact inert SkeletalMeshComponent without a pose leader");
+    const auto created=vertex_copy(&skeletal_second,0x760);
+    check(skeletal_material_sets==2&&skeletal_mids==1&&created.materials.count==3&&created.material_slots[0]==0&&created.material_slots[1]==reinterpret_cast<uint64_t>(&dynamic_material)&&created.material_slots[2]==0,"production null setters grow trailing raw slots and retain observed nonnull MID in order");
+    check(vertex_equal(source_before,vertex_copy(&skeletal_first,0x760)),"owned kind9 creation never modifies the original authoritative skeletal holder");
+    check(mirrors.at(handle).parts.size()==1&&!mirrors.at(handle).parts[0].leader.weak&&reinterpret_cast<uint8_t*>(&skeletal_second)[0x3b]==0&&(reinterpret_cast<uint8_t*>(&skeletal_second)[0x8a]&8)==0,"owned native empty mirror has no substitute render leader and remains inactive");
+    const auto callback_count=scene_events;discard(handle);
+    check(!vertex_source_materials.contains(lifetime_weak(&skeletal_second))&&scene_events==callback_count,"discard expires owned material original snapshots without invoking callbacks or touching the source");
+    skeletal_reset(reflect);skeletal_bad_null_set=true;check(create_mirror()==0&&result.complete==0,"production create refuses a null setter whose actual GetMaterial result is nonnull");
+    auto finish=[&](bool owned){int context{};const HsmpViewGuard guard{&context,scene_guard_check};const auto owner=keep(&actor),world=keep(&old_world);
+        if(!owned){const std::array<HsmpViewFinishTarget,2> targets{{{owner,keep(&skeletal_first),{},9},{owner,keep(&skeletal_second),{},9}}};
+            return finish_scene_sets(world,targets.data(),2,nullptr,0,&guard,&result);}
+        Part first{};first.kind=9;first.render=keep(&skeletal_first);first.materials={{},keep(&observed_material),{}};
+        Part second=first;second.render=keep(&skeletal_second);mirrors.emplace(84,Mirror{world,owner,{first,second}});const uint64_t mirror_handle=84;
+        return finish_scene_sets(world,nullptr,0,&mirror_handle,1,&guard,&result);};
+    auto bind=[&](bool owned=false){const std::vector<Obj> expected{{},keep(&observed_material),{}};
+        if(owned)for(auto object:{&skeletal_first,&skeletal_second}){auto* raw=reinterpret_cast<uint8_t*>(object);raw[0xa42]=4;raw[0xa41]=1;}
+        vertex_bind_source_materials(keep(&old_world),keep(&actor),keep(&skeletal_first),owned?1u:0u,owned?&expected:nullptr);
+        vertex_bind_source_materials(keep(&old_world),keep(&actor),keep(&skeletal_second),owned?1u:0u,owned?&expected:nullptr);scene_guards=0;};
+    skeletal_reset(reflect);auto* raw=reinterpret_cast<uint8_t*>(&skeletal_first);raw[0x3b]=1;raw[0x8a]=8;raw[0xa42]=2;skeletal_pointer(skeletal_first,0x8d0,reinterpret_cast<uint64_t>(&actor));bind();
+    check(finish(false)==1&&result.complete==1&&raw[0x3b]==1&&raw[0x8a]==8&&raw[0xa42]==2&&vertex_copy(&skeletal_first,0x760).animation[2]==reinterpret_cast<uint64_t>(&actor),"source original empty skeletal holder retains native activation, animation and cloth flags while material identity is verified");
+    skeletal_reset(reflect);bind(true);raw=reinterpret_cast<uint8_t*>(&skeletal_first);raw[0x3b]=1;raw[0x8a]=8;
+    check(finish(true)==1&&result.complete==1&&raw[0x3b]==0&&(raw[0x8a]&8)==0,"owned exact empty skeletal mirror is inert and retains complete nullable material slots");const int last_finish_guard=scene_guards;
+    for(auto mutation:{SkeletalMutation::Asset,SkeletalMutation::Deprecated,SkeletalMutation::MeshObject,SkeletalMutation::Proxy,SkeletalMutation::ProxyCopy,SkeletalMutation::Override,SkeletalMutation::Material,SkeletalMutation::MaterialHeader,SkeletalMutation::MaterialName,SkeletalMutation::Name,SkeletalMutation::ClassName,SkeletalMutation::Travel}){
+        skeletal_reset(reflect);bind();skeletal_later_mutation=mutation;
+        check(finish(false)==-1&&result.complete==0&&skeletal_mutation_applied,"later component callback cannot refresh an earlier original material or absence snapshot");}
+    for(auto mutation:{SkeletalMutation::Asset,SkeletalMutation::Deprecated,SkeletalMutation::Override,SkeletalMutation::Material,SkeletalMutation::MaterialHeader,SkeletalMutation::MaterialName,SkeletalMutation::Name,SkeletalMutation::ClassName,SkeletalMutation::Travel,SkeletalMutation::Tick,SkeletalMutation::Active,SkeletalMutation::Leader,SkeletalMutation::Animation,SkeletalMutation::ClothAllow,SkeletalMutation::ClothResume,SkeletalMutation::PostProcess,SkeletalMutation::ClothingInteractor}){
+        skeletal_reset(reflect);bind(true);skeletal_final_mutation=mutation;skeletal_mutation_at=last_finish_guard;
+        check(finish(true)==-1&&result.complete==0,"final callback mutation of earlier owned skeletal material, asset or inert state refuses complete scene");
+        check(scene_guards==last_finish_guard,"skeletal complete-set rejection has no subsequent callback");}
+    vertex_skeletal_build_admit=vertex_skeletal_shipping_build;vertex_skeletal_image=0;vertex_empty=false;vertex_kind=1;
+    vertex_source_materials.clear();vertex_material_world={};scene_build_admit=scene_shipping_profile;scene_vtable_read=scene_vtable;scene_socket_read=scene_socket_bits;
+    vertex_empty_build_admit=vertex_empty_shipping_build;vertex_empty_vtable_read=vertex_empty_vtable;vertex_empty_image=0;scene_image=0;vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
 }
 void scene_checks(HsmpReflect& reflect){
     const wchar_t socket_text[]=L"OfflineExactSocket";const HsmpViewText socket{u16(socket_text),static_cast<uint32_t>(std::wcslen(socket_text)),0};
@@ -568,7 +857,8 @@ void empty_checks(HsmpReflect& reflect){
     check(scene_primitive_events==4&&primitive[0x90]==0&&primitive[0x91]==0,"native empty static keeps the actual Primitive collision/physics inert path");
     HsmpViewComponent c{};c.kind=8;c.vertex_state=4;c.visible=1;const wchar_t path[]=L"/Script/Engine.StaticMeshComponent";
     c.asset={u16(path),static_cast<uint32_t>(std::wcslen(path)),0};c.relative={{0,0,0},{0,0,0,1},{1,1,1}};
-    HsmpViewMaterial material_value{};material_value.slot=2;c.materials=&material_value;c.material_count=1;recipe(c);
+    HsmpViewMaterial material_value{};material_value.slot=2;const wchar_t material_path[]=L"/Game/Test/ObservedMaterial.ObservedMaterial";
+    material_value.base={u16(material_path),static_cast<uint32_t>(std::wcslen(material_path)),0};c.materials=&material_value;c.material_count=1;recipe(c);
     check(true,"native empty primitive retains the actual material dictionary without a Scene substitution");
     HsmpViewFrame frame_value{};frame_value.world=c.relative;frame(c,frame_value);check(true,"native empty frame needs no guessed geometry or dynamic attachment payload");
     c.asset={};rejects([&]{recipe(c);},"logical empty asset cannot omit the private exact native class");
@@ -657,7 +947,7 @@ int main() {
         check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
         check(post_destroy_actor_touches==0&&invalid_actor_resolves==0,"destroyed mirror actor is never resolved or read after K2_DestroyActor");
         destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
-        check(provider.abi==10&&sizeof(provider)==112&&sizeof(HsmpViewFinishTarget)==128&&sizeof(HsmpViewVertexState)==12,"complete native empty-static proof requires presentation ABI10");
+        check(provider.abi==11&&sizeof(provider)==112&&sizeof(HsmpViewFinishTarget)==128&&sizeof(HsmpViewVertexState)==24,"complete native empty-skeletal proof requires presentation ABI11");
         HsmpViewActorScope actor_scope_result{};
         lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=1;
         check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.qualified==1
@@ -794,6 +1084,7 @@ int main() {
         vertex_checks(reflect);
         scene_checks(reflect);
         empty_checks(reflect);
+        skeletal_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);
