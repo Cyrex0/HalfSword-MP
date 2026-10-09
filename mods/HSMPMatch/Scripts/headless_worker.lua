@@ -52,6 +52,10 @@ function M.start()
         if not HL or stopped or type(stage)~="string" or #stage>64 or (edge~="enter" and edge~="exit") then return end
         context,detail=type(context)=="table" and context or {},type(detail)=="table" and detail or {}
         local event={state="native_capture_phase",reason="",arena=arena,stage=stage,edge=edge}
+        local epoch=rawget(context,"epoch")
+        -- The shared JSON number encoder uses floating formatting. Preserve
+        -- the original Lua integer separately; a float cannot supply its bits.
+        event.epoch_text=type(epoch)=="number" and math.type(epoch)=="integer" and tostring(epoch) or "unknown"
         for _,key in ipairs({"epoch","id","incarnation","dir_seq","revision","frame_seq"})do
             local value=rawget(context,key)
             if type(value)=="number" and value==value and value~=math.huge and value~=-math.huge then event[key]=value end

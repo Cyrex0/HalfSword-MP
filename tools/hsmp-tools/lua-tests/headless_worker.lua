@@ -5,9 +5,9 @@ local Prepare = dofile("mods/HSMPMatch/Scripts/headless_prepare.lua")
 local Boundary = dofile("mods/HSMPMatch/Scripts/headless_sample_boundary.lua")
 local SpawnDiagnostics = dofile("mods/HSMPMatch/Scripts/headless_spawn_diagnostics.lua")
 local SourceLifecycle = dofile("mods/HSMPMatch/Scripts/headless_source_lifecycle.lua")
-T.eq(Role.parse(nil), "client", "existing launches stay clients")
-T.eq(Role.parse("native_worker"), "native_worker", "explicit worker role")
-T.eq(Role.parse("native-workr"), "invalid", "unknown role refuses execution")
+T.check(T.eq(Role.parse(nil), "client"), "existing launches stay clients")
+T.check(T.eq(Role.parse("native_worker"), "native_worker"), "explicit worker role")
+T.check(T.eq(Role.parse("native-workr"), "invalid"), "unknown role refuses execution")
 
 local now, running, scope, calls = 1000, true, "world1:pc0:pawn0", {}
 local controls = Control.new({ now_ms = function() return now end, running = function() return running end,
@@ -45,7 +45,7 @@ do
     T.check(Control.binding_matches(binding,env),"fresh current possession qualifies its own scalar binding")
     pawn=12
     if Control.binding_matches(binding,env)then dispatched[#dispatched+1]=binding.pawn_address end
-    T.eq(#dispatched,0,"a subsequent possession change prevents all old-pawn input touches")
+    T.check(T.eq(#dispatched,0),"a subsequent possession change prevents all old-pawn input touches")
     env.prepare=function()return false end
     local before=resolves
     T.check(not Control.fresh_binding(row,env) and resolves==before,"failed preparation stops the next controller lookup")
@@ -128,9 +128,9 @@ end
 -- The actual worker loop emits the latest sampling refusal to its own stream.
 -- A later successful sample clears the reason without clearing refusal counts.
 do
-    local callback, clock, refusal, events, phases, sample_calls = nil, 1, "source vertex colours unavailable", {}, {}, 0
+    local callback, clock, refusal, events, phases, sample_calls, epoch = nil, 1, "source vertex colours unavailable", {}, {}, 0, 44
     local N={worker_input=function()return true end,host_start=function()return true end,
-        host_directory=function()return {epoch=44,seq=1,entities={}}end,host_inputs=function()return {}end,
+        host_directory=function()return {epoch=epoch,seq=1,entities={}}end,host_inputs=function()return {}end,
         sample_config=function()
             T.check(phases[#phases].stage=="sample_config" and phases[#phases].edge=="enter",
                 "worker persists configuration entry before invoking native setup")
@@ -184,6 +184,12 @@ do
     T.check(phases[#phases].stage=="canonical_publish" and phases[#phases].edge=="exit" and phases[#phases].ok==true
         and phases[#phases].epoch==44 and phases[#phases].dir_seq==1 and phases[#phases].frame_seq==3,
         "worker phase exits contain copied exact source metadata and the returned native result")
+    T.check(phases[#phases].epoch_text=="44","phase preserves the original integer epoch as exact signed decimal text")
+    clock=5;epoch=math.mininteger+123;callback()
+    T.check(phases[#phases].epoch_text=="-9223372036854775685","phase retains all original 64-bit integer bits beyond JSON floating precision")
+    T.check(phases[#phases].epoch==epoch,"phase text never changes the native epoch scalar")
+    clock=6;epoch=44.0;callback()
+    T.check(phases[#phases].epoch_text=="unknown","a floating epoch is explicitly unknown rather than invented integer bits")
 end
 T.check(controls:receive(frame(1, 1, nil, 5)), "owned human input accepted")
 T.check(not controls:receive(frame(3, 1)), "AI cannot receive a player input")
@@ -215,9 +221,9 @@ T.check(held.axes[1] == 0 and held.buttons == 0, "possession change cannot reuse
 T.check(controls:receive(frame(1, 3, nil, 1)), "fresh input after binding change accepted")
 controls:tick()
 running = false; local before = #calls; controls:tick()
-T.eq(#calls, before, "stopped runtime makes no native calls")
+T.check(T.eq(#calls, before), "stopped runtime makes no native calls")
 controls:drop(); running = true; controls:tick()
-T.eq(#calls, before, "world drop forgets old objects without releasing through them")
+T.check(T.eq(#calls, before), "world drop forgets old objects without releasing through them")
 controls:stop()
 T.check(not controls:set_directory(directory), "stop refuses new directory")
 
@@ -254,22 +260,22 @@ do
         invalidate=function()invalidations=invalidations+1 end}
     env.sample=function()current=false;return true end
     T.check(not Boundary.sample(env,token,{}),"world loss inside native sample refuses publication")
-    T.eq(commits,0,"staged old-world DTO never commits after reflected world reentry")
-    T.eq(invalidations,1,"world invalidation retries after the native call releases its lock")
+    T.check(T.eq(commits,0),"staged old-world DTO never commits after reflected world reentry")
+    T.check(T.eq(invalidations,1),"world invalidation retries after the native call releases its lock")
     current=true;env.sample=function()return false,"Health unavailable"end
     T.check(not Boundary.sample(env,token,{}),"native sample refusal never commits")
-    T.eq(commits,0,"failed sampling cannot publish previous staged data")
+    T.check(T.eq(commits,0),"failed sampling cannot publish previous staged data")
     env.sample=function()return true end
     T.check(not Boundary.sample(env,token,{}),"normal native publication requires the complete render stage")
     env.render=function()return nil,"source cloth unsupported"end
     T.check(not Boundary.sample(env,token,{}),"unsupported source rendering cannot publish a core-only frame")
-    T.eq(commits,0,"render refusal cannot expose a partial source scene")
+    T.check(T.eq(commits,0),"render refusal cannot expose a partial source scene")
     env.render=function()current=false;return true end
     T.check(not Boundary.sample(env,token,{}),"world loss inside render capture refuses publication")
-    T.eq(invalidations,2,"render reentry retries invalidation after its native lock releases")
+    T.check(T.eq(invalidations,2),"render reentry retries invalidation after its native lock releases")
     current=true;env.render=function()return true end
     T.check(Boundary.sample(env,token,{}),"unchanged qualified world commits its staged sample")
-    T.eq(commits,1,"canonical publication occurs only after post-call world qualification")
+    T.check(T.eq(commits,1),"canonical publication occurs only after post-call world qualification")
     env.render=nil;env.allow_core_only=true
     T.check(Boundary.sample(env,token,{}),"explicit diagnostic mode can publish the bootstrap core without client readiness")
 end
@@ -383,18 +389,18 @@ do
     end
     local prep,touches=fixture("pawn")
     T.check(not prep:prepare(0), "DisableInput possession reentry refuses later preparation")
-    T.eq(#touches,1,"old pawn receives no later reset or mesh touch after possession replacement")
+    T.check(T.eq(#touches,1),"old pawn receives no later reset or mesh touch after possession replacement")
     prep,touches=fixture("mesh_getter")
     T.check(not prep:prepare(0), "mesh replacement inside getter refuses old mesh setters")
-    T.eq(#touches,3,"replacement mesh is detected before the first physical setter")
+    T.check(T.eq(#touches,3),"replacement mesh is detected before the first physical setter")
     prep,touches=fixture("owner_getter")
     T.check(not prep:prepare(0), "owner getter possession reentry refuses old actor setters")
-    T.eq(#touches,3,"no later old-actor access after owner getter changes possession")
+    T.check(T.eq(#touches,3),"no later old-actor access after owner getter changes possession")
     prep,touches=fixture(nil)
     T.check(prep:prepare(0), "exact current native player and mesh prepare")
-    T.eq(#touches,6,"one native input isolation and animation setup per binding")
+    T.check(T.eq(#touches,6),"one native input isolation and animation setup per binding")
     T.check(prep:prepare(0), "same qualified binding reuses prepared scalar identity")
-    T.eq(#touches,6,"prepared binding does not repeat physical setters")
+    T.check(T.eq(#touches,6),"prepared binding does not repeat physical setters")
 end
 
 -- A native bootstrap writes the real GI local-multiplayer profile before the
@@ -412,38 +418,38 @@ local env = { now=function()return clock end, world=function()return world end,
 }
 local boot = Director.new_native_worker(env, { mode = "diagnostic" })
 T.check(not boot:tick(), "travel has no premature readiness")
-T.eq(settings["FreeMode Multiplayer"], true, "native local-player-two path enabled")
-T.eq(settings["Free Mode Foes Amount"], 2, "native spawner supplies two humans plus one AI")
-T.eq(settings["Free Mode Activated"], true, "free mode branch selected before travel")
-T.eq(#travel, 1, "only one bootstrap travel issued")
-T.eq(boot.state, "wait_world", "await fresh native world")
+T.check(T.eq(settings["FreeMode Multiplayer"], true), "native local-player-two path enabled")
+T.check(T.eq(settings["Free Mode Foes Amount"], 2), "native spawner supplies two humans plus one AI")
+T.check(T.eq(settings["Free Mode Activated"], true), "free mode branch selected before travel")
+T.check(T.eq(#travel, 1), "only one bootstrap travel issued")
+T.check(T.eq(boot.state, "wait_world"), "await fresh native world")
 world = {ok=true,key="arena#2",short="Map_Arena_Yard"}; clock=3; boot:tick()
-T.eq(boot.state, "native_spawn", "fresh correct arena enters native spawn")
-boot:tick(); T.eq(boot.state, "native_spawn", "missing second player cannot qualify")
-T.eq(#diagnostics, 1, "missing native player records one actual fault census")
-boot:tick(); T.eq(#diagnostics, 1, "unchanged fault census is bounded between polls")
-clock=8;boot:tick();T.eq(#diagnostics, 2, "native fault census refreshes after five seconds without spawning")
+T.check(T.eq(boot.state, "native_spawn"), "fresh correct arena enters native spawn")
+boot:tick(); T.check(T.eq(boot.state, "native_spawn"), "missing second player cannot qualify")
+T.check(T.eq(#diagnostics, 1), "missing native player records one actual fault census")
+boot:tick(); T.check(T.eq(#diagnostics, 1), "unchanged fault census is bounded between polls")
+clock=8;boot:tick();T.check(T.eq(#diagnostics, 2), "native fault census refreshes after five seconds without spawning")
 players_ready=true; T.check(boot:tick(), "two current native players and AI qualify")
-T.eq(#travel, 1, "readiness never spawns or reopens the native world")
+T.check(T.eq(#travel, 1), "readiness never spawns or reopens the native world")
 world.key="arena#3"; T.check(not boot:tick(), "native world change invalidates authority")
-T.eq(boot.state, "error", "native world loss is explicit")
-boot:stop(); before=#travel; boot:tick(); T.eq(#travel,before,"stopped worker never travels")
+T.check(T.eq(boot.state, "error"), "native world loss is explicit")
+boot:stop(); before=#travel; boot:tick(); T.check(T.eq(#travel,before),"stopped worker never travels")
 
 do
     local pvp = Director.native_worker_profile("pvp")
     local values = {}
     for _, row in ipairs(pvp) do values[row[1]] = row[2] end
-    T.eq(values["Free Mode Foes Amount"], 1, "default PvP requests exactly two native fighters")
+    T.check(T.eq(values["Free Mode Foes Amount"], 1), "default PvP requests exactly two native fighters")
     -- Pinned CXXHeaderDump Enum_GameMode_enums.hpp: Arena(NewEnumerator1)=1;
     -- Enum_PlayMode_enums.hpp: Free Mode(NewEnumerator2)=1. Yard's cooked
     -- spawn_points support Arena on multiple native spawners, Tavern on C_0.
-    T.eq(values["Current Game Mode Enum"],1,"native authority selects actual Arena mode rather than Tavern")
-    T.eq(values["Current Play Mode"],1,"native authority selects actual Free Mode rather than Progression")
-    T.eq(values["FreeMode Multiplayer"], true, "PvP retains the native second-player path")
+    T.check(T.eq(values["Current Game Mode Enum"],1),"native authority selects actual Arena mode rather than Tavern")
+    T.check(T.eq(values["Current Play Mode"],1),"native authority selects actual Free Mode rather than Progression")
+    T.check(T.eq(values["FreeMode Multiplayer"], true), "PvP retains the native second-player path")
     local unknown = Director.new_native_worker(env, { mode = "coop_abyss" })
     local travels = #travel
     T.check(unknown.state == "error" and not unknown:tick(), "unimplemented native Abyss mode refuses startup")
-    T.eq(#travel, travels, "unsupported mode cannot alter the native world")
+    T.check(T.eq(#travel, travels), "unsupported mode cannot alter the native world")
 end
 
 -- The actual source run verified Arena before travel, then BP_GameManager's
@@ -495,11 +501,11 @@ do
     T.check(native_boot:tick(),"native BeginPlay reads the verified source profile and can reach native-ready")
     T.check(sequence[1]=="native Save Game" and sequence[2]=="native OpenLevel" and opens==1,
         "one redirected native seed is mandatory before one native travel")
-    T.eq(loads[1],"HSMP_native_boot_fixture_GameProgress","first arena Load Game reads the native session seed")
-    T.eq(loads[2],loads[1],"repeated native arena loads retain the same source profile")
+    T.check(T.eq(loads[1],"HSMP_native_boot_fixture_GameProgress"),"first arena Load Game reads the native session seed")
+    T.check(T.eq(loads[2],loads[1]),"repeated native arena loads retain the same source profile")
     T.check(gi["Current Game Mode Enum"]==1 and gi["FreeMode Multiplayer"]==true and gi["Free Mode Foes Amount"]==1,
         "actual saved native PvP fields survive arena initialization")
-    T.eq(slots.GameProgress["Current Game Mode Enum"],5,"original career Hell profile is preserved")
+    T.check(T.eq(slots.GameProgress["Current Game Mode Enum"],5),"original career Hell profile is preserved")
     local redirected=false
     for _,event in ipairs(events)do if event.name=="save_redirected" and event.fields.op=="write" and event.fields.ok then redirected=true end end
     T.check(redirected,"seed uses the actual save guard diverted-write proof")
@@ -551,8 +557,8 @@ do
         local native_boot,reads,writes,seeds,opens=fixture(failure)
         T.check(native_boot.state=="error" and opens==0,"native "..failure.." refuses all arena travel")
         T.check(seeds<=1 and writes<=#Director.NATIVE_WORKER_PROFILE,"native "..failure.." never retries or invents profile repairs")
-        if failure=="setter_world"then T.eq(#reads,0,"setter world reentry prevents the next original-world read")end
-        if failure=="seed_getter_world"then T.eq(#reads,#Director.NATIVE_WORKER_PROFILE+1,
+        if failure=="setter_world"then T.check(T.eq(#reads,0),"setter world reentry prevents the next original-world read")end
+        if failure=="seed_getter_world"then T.check(T.eq(#reads,#Director.NATIVE_WORKER_PROFILE+1),
             "post-seed getter world reentry stops every later profile read")end
     end
 end
@@ -598,7 +604,7 @@ do
     T.check(SpawnDiagnostics.format(rows):find("native[level][p2]=false",1,true),"persisted fault census never turns actual false into unavailable")
     reads={};readers.profile=function()reads[#reads+1]="profile";current=false;return {}end
     T.check(not SpawnDiagnostics.capture(readers,{},"PC1 missing"),"world replacement inside profile refuses the census")
-    T.eq(#reads,1,"no old controller, game mode or Willie reader runs after world replacement")
+    T.check(T.eq(#reads,1),"no old controller, game mode or Willie reader runs after world replacement")
     current=true;readers.profile=function()error("property unavailable")end
     local ok, value, why=pcall(SpawnDiagnostics.capture,readers,{},"PC1 missing")
     T.check(ok and not value and why:find("property unavailable",1,true),"diagnostic getter refusal cannot replace the bootstrap fault")
