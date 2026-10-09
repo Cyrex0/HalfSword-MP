@@ -99,6 +99,14 @@ namespace
             static_cast<unsigned long long>(operation),marker,stage,
             edge==0?"enter":edge==1?"exit":edge==2?"error":"limit",component,kind,function_id,function_name);
     }
+    void capture_log(uint32_t frame,const HsmpNativeCaptureTrace* trace)
+    {
+        if(!trace)return;const auto& t=*trace;
+        if(frame)logf("NATIVE_CAPTURE_FRAME epoch=%016llx dir_seq=%u frame_seq=%u complete=%u rows=%u truncated=%u total_us=%llu rust_pre_us=%llu provider_us=%llu rust_post_us=%llu encode_us=%llu finish_us=%llu cpp_total_us=%llu guard_inclusive_us=%llu find_us=%llu pe_us=%llu guards=%llu admissions=%llu finds=%llu pe=%llu diagnostic_only=true",
+            t.epoch,t.dir_seq,t.frame_seq,t.complete,t.rows,t.truncated,t.us[0],t.us[1],t.us[2],t.us[3],t.us[4],t.us[5],t.us[9],t.us[6],t.us[7],t.us[8],t.counters[0],t.counters[1],t.counters[2],t.counters[3]);
+        else logf("NATIVE_CAPTURE_COMPONENT epoch=%016llx dir_seq=%u frame_seq=%u entity=%u incarnation=%u component=%u kind=%u complete=%u total_us=%llu admission_us=%llu static_us=%llu dynamic_us=%llu final_us=%llu guard_inclusive_us=%llu find_us=%llu pe_us=%llu rust_pre_us=%llu rust_post_us=%llu guards=%llu admissions=%llu finds=%llu pe=%llu diagnostic_only=true",
+            t.epoch,t.dir_seq,t.frame_seq,t.entity,t.incarnation,t.component,t.kind,t.complete,t.us[0],t.us[1],t.us[2],t.us[3],t.us[4],t.us[5],t.us[6],t.us[7],t.us[8],t.us[9],t.counters[0],t.counters[1],t.counters[2],t.counters[3]);
+    }
 
     // Is the loaded UE4SS.dll the exact build abi/ue4ss_pins.h was generated from?
     bool ue4ss_pinned(const char** why)
@@ -281,6 +289,7 @@ extern "C" __declspec(dllexport) CppUserModBase* start_mod()
     pin_self();
     logf("start_mod");
     hsmp_native_set_profile_logger(profile_log);
+    hsmp_native_set_capture_logger(capture_log);
     return new HSMPNativeMod();
 }
 

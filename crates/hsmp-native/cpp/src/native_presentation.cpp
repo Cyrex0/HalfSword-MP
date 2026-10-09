@@ -9,6 +9,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <cwchar>
@@ -40,9 +41,23 @@ thread_local const HsmpViewGuard* active_guard{};
 thread_local Obj active_world{},active_game_instance{};
 void mesh_call_guard();
 thread_local bool static_profile_trace{};
+thread_local HsmpNativeCaptureRow* active_capture_trace{};
+struct CaptureTimer {
+    uint64_t* target{};std::chrono::steady_clock::time_point start{};
+    explicit CaptureTimer(uint32_t index){if(active_capture_trace){target=&active_capture_trace->us[index];start=std::chrono::steady_clock::now();}}
+    ~CaptureTimer(){if(target)*target+=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());}
+};
+struct CaptureTrace {
+    HsmpNativeCaptureRow row{};HsmpNativeCaptureRow* previous{active_capture_trace};bool enabled{hsmp_native_capture_profile_active()==1};
+    std::chrono::steady_clock::time_point start{},boundary{};
+    CaptureTrace(){if(enabled){start=boundary=std::chrono::steady_clock::now();active_capture_trace=&row;}}
+    void label(const HsmpViewComponent& c){row.component=c.id;row.kind=c.kind;}
+    void mark(uint32_t stage){if(enabled){const auto now=std::chrono::steady_clock::now();row.us[stage]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(now-boundary).count());boundary=now;}}
+    ~CaptureTrace(){if(enabled){row.us[0]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());active_capture_trace=previous;hsmp_native_capture_profile_row(&row);}}
+};
 struct StaticProfileTraceScope {bool previous;StaticProfileTraceScope():previous(static_profile_trace){static_profile_trace=true;}~StaticProfileTraceScope(){static_profile_trace=previous;}};
 void profile_phase(const char* stage,uint32_t edge){if(static_profile_trace)hsmp_native_profile_checkpoint(stage,edge);}
-void profile_tick(uint32_t counter){if(static_profile_trace)hsmp_native_profile_tick(counter);}
+void profile_tick(uint32_t counter){if(active_capture_trace){if(counter==0)++active_capture_trace->guards;else if(counter==2)++active_capture_trace->finds;else if(counter==3)++active_capture_trace->events;}if(static_profile_trace)hsmp_native_profile_tick(counter);}
 std::atomic<HsmpPresentationCreateLog> create_logger{};
 std::atomic<uint64_t> create_operation{};
 struct CreateTrace;
@@ -80,6 +95,7 @@ void create_function_name(const wchar_t* path,char* out,size_t capacity){
     if(start[i]){std::memcpy(out,"other",6);return;}out[i]='\0';
 }
 void check_guard() {
+    CaptureTimer capture_guard_time(5);
     if(!active_guard){mesh_call_guard();return;}
     profile_tick(0);
     require(active_guard->check && active_guard->context && active_guard->check(active_guard->context)==1,
@@ -148,7 +164,7 @@ void* get(Obj o) {
     }
     return p;
 }
-Obj find(const wchar_t* path) {check_guard();profile_tick(2);return keep(vt->find(u16(path)));}
+Obj find(const wchar_t* path) {check_guard();profile_tick(2);void* object{};{CaptureTimer capture_find_time(6);object=vt->find(u16(path));}return keep(object);}
 bool is(Obj o, const wchar_t* cls) { const auto c = find(cls); return vt->is_a(get(o), get(c)) != 0; }
 Obj asset(HsmpViewText path, const wchar_t* cls) {
     const auto p = text(path);
@@ -271,7 +287,7 @@ struct Function {
         profile_tick(3);profile_phase("cpp_pe",0);
         auto* trace=active_create_trace;
         const bool traced=trace&&trace->pe_enter(create_id,create_name);
-        vt->call(object_pointer,function_pointer,buf.data());
+        {CaptureTimer capture_pe_time(7);vt->call(object_pointer,function_pointer,buf.data());}
         if(traced)trace->emit("pe",1,create_id,create_name);
         profile_phase("cpp_pe",1);
         check_guard();
@@ -659,19 +675,23 @@ int32_t inspect(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,Hsm
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,const HsmpViewGuard* guard,HsmpViewResult* r) {
-    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});VertexOperation vertex_scope(c->vertex_state==0||c->kind==8||c->kind==9?owner:Obj{},c->vertex_state==0||c->kind==8||c->kind==9?component:Obj{},c->kind==8||c->kind==9);SceneOperation scene_scope(c->kind==6||c->kind==7?owner:Obj{},c->kind==6||c->kind==7?component:Obj{},c->kind);supported(world,owner,component,r,c->kind==9);
+    CaptureTrace trace;
+    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");trace.label(*c);layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});VertexOperation vertex_scope(c->vertex_state==0||c->kind==8||c->kind==9?owner:Obj{},c->vertex_state==0||c->kind==8||c->kind==9?component:Obj{},c->kind==8||c->kind==9);SceneOperation scene_scope(c->kind==6||c->kind==7?owner:Obj{},c->kind==6||c->kind==7?component:Obj{},c->kind);supported(world,owner,component,r,c->kind==9);
         if(c->kind==9)vertex_bind_source_materials(world,owner,component);
         if(c->kind==0) {require(same(mesh_asset(component,r),asset(c->asset,L"/Script/Engine.SkeletalMesh")),"source mesh recipe changed");}
         else if(c->kind>=4)require(same(keep(vt->class_of(get(component))),asset(c->asset,L"/Script/CoreUObject.Class")),"source scene anchor class changed");
         else require(same(object_property(component,L"StaticMesh"),asset(c->asset,L"/Script/Engine.StaticMesh")),"source static mesh recipe changed");
+        trace.mark(1);
         if(c->kind!=5)source_static(component,*c,r);if(c->kind<=1)verify_colors(component,*c,r);
         vertex_native_asset(world,owner,component,*c,r);
+        trace.mark(2);
         capture_values(component,*c,*out,r);qualify(world,owner,component,r);
         if(c->kind==5)spline_capture(world,owner,component,c->spline,*out->spline,r);
         if(c->kind==4){scene_anchor(component);source_static(component,*c,r);}
         if(c->kind==7)*out->spring_arm=arm_observe(world,owner,component,c->spring_arm_socket,r);
+        trace.mark(3);
         vertex_native_asset(world,owner,component,*c,r);
-        r->complete=1;return 1;
+        trace.mark(4);trace.row.complete=1;r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const HsmpViewGuard* guard,HsmpViewResult* r) {
@@ -1026,6 +1046,53 @@ bool retirement_after(Obj world,Obj actor,const Identity& identity,const Retirem
     const bool retired=!result->after.listed&&(!p||(result->after.flags&mirrored_garbage)!=0);
     result->alive_after=retired?0:1;return retired;
 }
+struct RetirementSlot {void* item{};uint64_t object{};int32_t serial{};};
+RetirementSlot retirement_slot_copy(Obj actor){
+    require(retirement_index&&retirement_object&&retirement_serial,"native object-array slot API unavailable");
+    RetirementSlot out{};out.item=retirement_index(static_cast<int32_t>(actor.weak));if(!out.item)return out;
+    const auto object=retirement_object(out.item);const auto serial=retirement_serial(out.item);
+    require(object&&serial,"native object-array slot metadata unavailable");
+    out.object=reinterpret_cast<uint64_t>(*object);out.serial=*serial;return out;
+}
+void retirement_scope_pure(Obj object){
+    require(vt&&retirement_flags&&object_name,"native retirement pure metadata unavailable");
+    const auto found=identities.find(object.weak);require(found!=identities.end(),"native retirement scope identity missing");const auto& id=found->second;
+    void* p=vt->resolve(object.weak);require(p&&reinterpret_cast<uint64_t>(p)==object.address&&id.address==object.address,"native retirement original scope expired");
+    void* cls=vt->resolve(id.class_weak);require(cls&&reinterpret_cast<uint64_t>(cls)==id.class_address,"native retirement original scope class expired");
+    const auto class_identity=identities.find(id.class_weak);require(class_identity!=identities.end(),"native retirement original class identity missing");
+    const auto flags=retirement_flags(p),class_flags=retirement_flags(cls);const auto n=object_name(p),cn=object_name(cls);
+    require(flags&&class_flags&&!((*flags|*class_flags)&mirrored_garbage)&&n&&*n==id.name&&cn&&*cn==class_identity->second.name&&vt->class_of(p)==cls,
+        "native retirement original scope name/class/flags changed");
+}
+bool retirement_probe_after(const RetiredDriver& record,HsmpViewRetirement* result){
+    const auto world=record.world,actor=record.actor;
+    const bool listed=world_contains(world,record.identity,actor.address);
+    const auto original_serial=static_cast<int32_t>(actor.weak>>32);
+    const Obj cls{record.identity.class_weak,record.identity.class_address};
+    // A prior successful retirement may outlive its positive weak serial. The
+    // native resolver rejects that expired handle before loading the slot object.
+    // Keep live qualification and initial retirement strict; never read a replacement.
+    get(world);get(cls);check_guard();const auto slot=retirement_slot_copy(actor);
+    if(original_serial>0&&slot.item&&slot.serial!=original_serial){
+        require(!listed,"native expired retirement address still in world census");
+        require(vt->resolve(actor.weak)==nullptr,"native expired retirement handle still resolves");
+        require((flags_of(get(world))&mirrored_garbage)==0&&(flags_of(get(cls))&mirrored_garbage)==0,
+            "native expired retirement world/class garbage");
+        // Every callback-capable qualification precedes this final scalar closure.
+        get(world);get(cls);check_guard();retirement_scope_pure(world);retirement_scope_pure(cls);const auto final_slot=retirement_slot_copy(actor);
+        require(final_slot.item==slot.item&&final_slot.object==slot.object&&final_slot.serial==slot.serial&&
+            vt->resolve(actor.weak)==nullptr,"native expired retirement slot changed during proof");
+        retirement_scope_pure(world);retirement_scope_pure(cls);const auto tail=retirement_slot_copy(actor);
+        require(tail.item==slot.item&&tail.object==slot.object&&tail.serial==slot.serial,
+            "native expired retirement slot changed after resolution");
+        result->weak_present=0;result->after.listed=0;result->after.known=4;result->alive_after=0;return true;
+    }
+    void* p=original_slot(actor,record.identity);result->weak_present=p?1:0;
+    if(p)result->after=lifecycle(p,record.identity,record.layout);
+    result->after.listed=listed;result->after.known|=4;
+    const bool retired=!listed&&(!p||(result->after.flags&mirrored_garbage)!=0);
+    result->alive_after=retired?0:1;return retired;
+}
 int32_t retire(Obj world,Obj actor,uint32_t kind,Obj target,const HsmpViewGuard* guard,HsmpViewRetirement* result) {
     try {
         require(result!=nullptr,"native retirement result missing");*result={};result->alive_after=2;result->weak_present=2;
@@ -1043,6 +1110,9 @@ int32_t retire(Obj world,Obj actor,uint32_t kind,Obj target,const HsmpViewGuard*
         }
         require(driver,"native retirement driver class unsupported");
         const auto identity=identities.at(actor.weak);const auto layout=retirement_layout(actor);
+        // Retain scope class identities while the original driver is still live.
+        get(keep(vt->class_of(get(world))));
+        get(keep(vt->class_of(get({identity.class_weak,identity.class_address}))));
         result->before=lifecycle(get(actor),identity,layout);
         require((result->before.flags&mirrored_garbage)==0,"native retirement original actor is garbage");
         result->before.listed=world_contains(world,identity,actor.address);result->before.known|=4;
@@ -1074,7 +1144,7 @@ int32_t probe_retirement(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpView
         require(record!=retired_drivers.end()&&same(record->second.world,world)&&same(record->second.actor,actor),"native original retirement proof unavailable");
         result->qualified=1;result->weak=actor.weak;result->address=actor.address;
         result->before=record->second.before;
-        require(retirement_after(world,actor,record->second.identity,record->second.layout,result),"native original actor retirement no longer proved");return 1;
+        require(retirement_probe_after(record->second,result),"native original actor retirement no longer proved");return 1;
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
 int32_t actor_scope(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewActorScope* result){

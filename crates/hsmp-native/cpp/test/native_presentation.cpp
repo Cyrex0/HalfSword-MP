@@ -10,6 +10,9 @@ extern "C" void hsmp_native_set_presentation(const HsmpPresentation* p) {install
 int profile_ffi_calls{};
 extern "C" void hsmp_native_profile_checkpoint(const char*,uint32_t){++profile_ffi_calls;}
 extern "C" void hsmp_native_profile_tick(uint32_t){++profile_ffi_calls;}
+bool capture_trace_test_active{};std::vector<HsmpNativeCaptureRow> capture_trace_test_rows;
+extern "C" int32_t hsmp_native_capture_profile_active(){return capture_trace_test_active?1:0;}
+extern "C" void hsmp_native_capture_profile_row(const HsmpNativeCaptureRow* row){if(row)capture_trace_test_rows.push_back(*row);}
 extern "C" void hsmp_native_set_source_path_reader(HsmpNativePathReader){}
 namespace {
 int checks{}, touches{};
@@ -50,15 +53,18 @@ bool travel_on_get_level{};
 bool actor_persistent{},destroy_invalidates{true},reuse_after_destroy{},travel_on_destroy{};
 bool destroy_garbage{},omit_world{},omit_after_destroy{},reuse_during_post_census{},travel_during_post_census{};
 bool actor_memory_unqualified{};
+int32_t retirement_actor_serial{};int expiry_slot_reads{},expiry_mutation_at{},replacement_touches{};
+bool count_expiry_slots{},expiry_same_address{},expiry_class_reuse{};
 bool scope_reuse_during_census{},scope_travel_during_census{},scope_garbage_during_census{},scope_disappear_during_census{};
 bool spline_garbage_after_call{};
 int post_destroy_actor_events{},array_frees{};
 int level_calls{},destroy_calls{},post_destroy_actor_touches{},invalid_actor_resolves{};
-void lifetime_touch(LifetimeObject* o) {if(o==&actor&&!actor.alive)++post_destroy_actor_touches;}
-uint64_t lifetime_weak(void* p) {for(size_t i=0;i<lifetime_objects.size();++i)if(lifetime_objects[i]==p)return i+1;return 0;}
+void lifetime_touch(LifetimeObject* o) {if(o==&actor&&!actor.alive)++post_destroy_actor_touches;if(o==&replacement)++replacement_touches;}
+uint64_t lifetime_weak(void* p) {for(size_t i=0;i<lifetime_objects.size();++i)if(lifetime_objects[i]==p)return (i+1)|(p==&actor?static_cast<uint64_t>(static_cast<uint32_t>(retirement_actor_serial))<<32:0);return 0;}
 void* lifetime_resolve(uint64_t id) {
-    if(id==0||id>lifetime_objects.size())return nullptr;
-    auto o=lifetime_objects[static_cast<size_t>(id-1)];
+    const auto index=static_cast<uint32_t>(id);if(index==0||index>lifetime_objects.size())return nullptr;
+    auto o=lifetime_objects[static_cast<size_t>(index-1)];
+    if(o==&actor&&(id>>32)&&static_cast<uint32_t>(id>>32)!=static_cast<uint32_t>(retirement_actor_serial))return nullptr;
     if(o==&actor&&destroy_calls&&reuse_after_destroy)return &replacement;
     if(o==&actor&&actor_memory_unqualified)return nullptr;
     if(o==&actor&&!actor.alive)++invalid_actor_resolves;return o->alive?o:nullptr;
@@ -68,8 +74,8 @@ const uint64_t* lifetime_name(const void* p) {auto o=const_cast<LifetimeObject*>
 const uint32_t* lifetime_flags(const void* p){auto o=static_cast<const LifetimeObject*>(p);return &o->flags;}
 void lifetime_free(void* p){++array_frees;std::free(p);}
 void* lifetime_index(int32_t index){return index>0&&static_cast<size_t>(index)<=lifetime_objects.size()?lifetime_objects[static_cast<size_t>(index-1)]:nullptr;}
-void** lifetime_slot_object(void* item){static void* raw;auto o=static_cast<LifetimeObject*>(item);raw=o->alive?o:nullptr;if(o==&actor&&destroy_calls&&reuse_after_destroy)raw=&replacement;return &raw;}
-int32_t* lifetime_slot_serial(void*){static int32_t serial=0;return &serial;}
+void** lifetime_slot_object(void* item){static void* raw;auto o=static_cast<LifetimeObject*>(item);raw=o->alive?o:nullptr;if(o==&actor&&destroy_calls&&reuse_after_destroy)raw=expiry_same_address?static_cast<void*>(&actor):static_cast<void*>(&replacement);return &raw;}
+int32_t* lifetime_slot_serial(void* item){static int32_t serial{};if(item==&actor){if(count_expiry_slots&&++expiry_slot_reads==expiry_mutation_at)++retirement_actor_serial;serial=retirement_actor_serial;}else serial=0;return &serial;}
 uint64_t lifetime_fname(const uint16_t* key,int32_t) {
     auto text=std::wstring(reinterpret_cast<const wchar_t*>(key));auto [it,_]=lifetime_names.emplace(text,lifetime_names.size()+1);return it->second;
 }
@@ -132,6 +138,7 @@ void lifetime_call(void* object,void* fn,void* params) {
         if(scope_travel_during_census)current_world=&new_world;
         if(scope_garbage_during_census)actor.flags|=mirrored_garbage;
         if(scope_disappear_during_census)actor.alive=false;
+        if(expiry_class_reuse)driver_class.name^=1;
     }
     else throw std::runtime_error("unexpected lifetime function");
 }
@@ -147,6 +154,8 @@ void lifetime_reset(HsmpReflect& reflect) {
     actor_persistent=false;destroy_invalidates=true;reuse_after_destroy=false;travel_on_destroy=false;
     destroy_garbage=false;omit_world=false;omit_after_destroy=false;reuse_during_post_census=false;travel_during_post_census=false;post_destroy_actor_events=0;array_frees=0;
     actor_memory_unqualified=false;
+    retirement_actor_serial=0;expiry_slot_reads=0;expiry_mutation_at=0;replacement_touches=0;
+    count_expiry_slots=false;expiry_same_address=false;expiry_class_reuse=false;driver_class.name=117;
     scope_reuse_during_census=false;scope_travel_during_census=false;scope_garbage_during_census=false;scope_disappear_during_census=false;
     identities.clear();names.clear();signatures.clear();lifetime_names.clear();mirrors.clear();
     retired_drivers.clear();
@@ -784,7 +793,12 @@ void skeletal_checks(HsmpReflect& reflect){
     skeletal_materials[0]=&other_material;rejects([&]{source_static(keep(&skeletal_first),c,&result);},"explicit null source slot cannot hide a newly present material");
     skeletal_materials[0]=nullptr;skeletal_materials[1]=nullptr;rejects([&]{capture_values(keep(&skeletal_first),c,output,&result);},"missing observed nonnull source material refuses capture rather than becoming null");
     skeletal_reset(reflect);output={};output.world=c.relative;int context{};const HsmpViewGuard capture_guard{&context,scene_guard_check};
+    capture_trace_test_rows.clear();capture_trace_test_active=true;
     check(capture(keep(&old_world),keep(&actor),keep(&skeletal_first),&c,&output,&capture_guard,&result)==1&&result.complete==1&&output.world.p[0]==1.25,"full production capture admits exact empty skeletal with complete mixed materials");
+    capture_trace_test_active=false;check(capture_trace_test_rows.size()==1,"bounded capture diagnostic returns one copied scalar row without per-PE output");
+    const auto& measured=capture_trace_test_rows.front();check(measured.component==c.id&&measured.kind==9&&measured.complete==1,"capture diagnostic identifies the exact unchanged accepted component");
+    check(measured.guards>0&&measured.finds>0&&measured.events==result.operations,"capture diagnostic counts existing guard/find/PE paths rather than adding probes");
+    check(measured.us[0]>=measured.us[1]+measured.us[2]+measured.us[3]+measured.us[4],"capture boundary durations fit inside the complete native call");
     skeletal_reset(reflect);auto* primitive=reinterpret_cast<uint8_t*>(&skeletal_first);primitive[0x90]=2;primitive[0x91]=1;collision_off(keep(&skeletal_first),&result);
     check(scene_primitive_events==4&&primitive[0x90]==0&&primitive[0x91]==0,"actual empty skeletal creation helper uses native Primitive collision and physics readback");
     const auto create_mirror=[&]{skeletal_second_materials.fill(nullptr);skeletal_array(skeletal_second,0x518,{nullptr,0,0});
@@ -1260,6 +1274,49 @@ int main() {
         lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);destroy_invalidates=false;destroy_garbage=true;
         check(retire(world,mirror_actor,0,{},&guard,&retired)==1,"fixture obtains original garbage retirement proof");actor_memory_unqualified=true;
         check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2,"weak-invalid but globally present object cannot masquerade as global disappearance");
+        const auto expired_driver=[&]{
+            lifetime_reset(reflect);actor.cls=&driver_class;retirement_actor_serial=7;world=keep(&old_world);mirror_actor=keep(&actor);
+            check(retire(world,mirror_actor,0,{},&guard,&retired)==1,"positive original obtains a successful retirement before slot expiry");
+            retirement_actor_serial=8;reuse_after_destroy=true;count_expiry_slots=true;
+        };
+        expired_driver();
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==1&&retired.weak_present==0&&retired.after.known==4&&retired.after.listed==0&&retired.alive_after==0&&retired.dispatched==0,
+            "prior successful positive retirement survives native weak serial expiry without replacement qualification");
+        check(replacement_touches==0&&post_destroy_actor_touches==0&&post_destroy_actor_events==0&&destroy_calls==1,
+            "expired positive probe never reads old or replacement actor and never destroys twice");
+        expired_driver();expiry_same_address=true;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==1&&replacement_touches==0&&post_destroy_actor_touches==0,
+            "same-address new positive serial can expire the original only with world census absence");
+        expired_driver();actor.alive=true;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2&&replacement_touches==0,
+            "expired original address still listed in the world cannot be silently confirmed");
+        expired_driver();retirement_actor_serial=7;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&replacement_touches==0,
+            "unchanged positive serial with different pointer remains a strict reuse refusal");
+        expired_driver();expiry_mutation_at=2;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2&&replacement_touches==0,
+            "slot mutation between expiry observation and final closure refuses");
+        expired_driver();expiry_mutation_at=3;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2&&replacement_touches==0,
+            "slot mutation after final weak resolution refuses");
+        expired_driver();travel_during_post_census=true;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2&&replacement_touches==0,
+            "world change during original-class census cannot pass expiry proof");
+        expired_driver();expiry_class_reuse=true;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2&&replacement_touches==0,
+            "original driver class name change during census refuses positive expiry");
+        expired_driver();retirement_serial=nullptr;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2&&replacement_touches==0,
+            "missing native slot serial API cannot manufacture expiry proof");
+        expired_driver();
+        check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==-1&&actor_scope_result.qualified==0&&replacement_touches==0,
+            "positive expiry does not weaken live actor scope qualification");
+        expired_driver();forget_retirements();
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.qualified==0&&replacement_touches==0,
+            "positive expiry without a prior successful retirement remains unavailable");
+        lifetime_reset(reflect);actor.cls=&driver_class;retirement_actor_serial=7;world=keep(&old_world);mirror_actor=keep(&actor);reuse_after_destroy=true;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.alive_after==2&&destroy_calls==1&&replacement_touches==0,
+            "first retirement still refuses slot reuse even with a positive original serial");
         lifetime_reset(reflect);actor.cls=&driver_class;spline_flags=lifetime_flags;
         reflect.find=[](const uint16_t* key)->void*{if(std::wstring(reinterpret_cast<const wchar_t*>(key))==L"/Script/Engine.SplineComponent")return &driver_class;return lifetime_find(key);};
         const auto spline_owner_fixture=keep(&foreign_owner),spline_component_fixture=keep(&actor);

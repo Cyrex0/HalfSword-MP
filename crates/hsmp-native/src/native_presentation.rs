@@ -8,10 +8,212 @@ use crate::{
 };
 use hsmp_server::{native_descriptor as d, native_wire as w};
 use std::{
+    cell::{Cell, RefCell},
     collections::HashMap,
     ffi::{c_int, c_void},
     sync::atomic::{AtomicPtr, Ordering},
+    time::Instant,
 };
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct CaptureRow {
+    us: [u64; 8],
+    guards: u64,
+    finds: u64,
+    events: u64,
+    component: u32,
+    kind: u32,
+    complete: u32,
+    pad: u32,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+struct CaptureTrace {
+    epoch: u64,
+    us: [u64; 10],
+    counters: [u64; 4],
+    frame_seq: u32,
+    entity: u32,
+    incarnation: u32,
+    dir_seq: u32,
+    component: u32,
+    kind: u32,
+    complete: u32,
+    rows: u32,
+    truncated: u32,
+    pad: u32,
+}
+type CaptureLogger = unsafe extern "C" fn(u32, *const CaptureTrace);
+static CAPTURE_LOGGER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+struct CaptureCollector {
+    frame: CaptureTrace,
+    current: CaptureTrace,
+    rows: Vec<CaptureTrace>,
+    row_slot: Option<usize>,
+    admissions: u64,
+    admission_start: u64,
+}
+impl CaptureCollector {
+    fn new(world: &w::World) -> Self {
+        let frame = CaptureTrace {
+            epoch: world.epoch,
+            frame_seq: world.frame_seq,
+            dir_seq: world.directory_seq,
+            ..CaptureTrace::default()
+        };
+        Self {
+            frame,
+            current: frame,
+            rows: Vec::with_capacity(98),
+            row_slot: None,
+            admissions: 0,
+            admission_start: 0,
+        }
+    }
+    fn row(&mut self, row: CaptureRow) {
+        self.frame.rows = self.frame.rows.saturating_add(1);
+        self.frame.counters[0] += row.guards;
+        self.frame.counters[2] += row.finds;
+        self.frame.counters[3] += row.events;
+        self.frame.us[6] += row.us[5];
+        self.frame.us[7] += row.us[6];
+        self.frame.us[8] += row.us[7];
+        self.frame.us[9] += row.us[0];
+        if self.rows.len() == 98 {
+            self.frame.truncated = self.frame.truncated.saturating_add(1);
+            return;
+        }
+        let mut trace = self.current;
+        trace.us[..8].copy_from_slice(&row.us);
+        trace.counters = [row.guards, 0, row.finds, row.events];
+        trace.component = row.component;
+        trace.kind = row.kind;
+        trace.complete = row.complete;
+        self.row_slot = Some(self.rows.len());
+        self.rows.push(trace);
+    }
+}
+thread_local! { static CAPTURE_ACTIVE:Cell<bool>=const{Cell::new(false)};static CAPTURE_COLLECTOR:RefCell<Option<CaptureCollector>>=const{RefCell::new(None)}; }
+#[no_mangle]
+extern "C" fn hsmp_native_set_capture_logger(logger: Option<CaptureLogger>) {
+    CAPTURE_LOGGER.store(
+        logger.map_or(std::ptr::null_mut(), |f| f as *mut c_void),
+        Ordering::Release,
+    );
+}
+#[no_mangle]
+pub extern "C" fn hsmp_native_capture_profile_active() -> i32 {
+    CAPTURE_ACTIVE.with(|active| i32::from(active.get()))
+}
+#[no_mangle]
+unsafe extern "C" fn hsmp_native_capture_profile_row(row: *const CaptureRow) {
+    if !row.is_null() && hsmp_native_capture_profile_active() == 1 {
+        let row = unsafe { *row };
+        CAPTURE_COLLECTOR.with(|collector| {
+            if let Some(c) = collector.borrow_mut().as_mut() {
+                c.row(row);
+            }
+        });
+    }
+}
+fn capture_admission_tick() {
+    if hsmp_native_capture_profile_active() == 1 {
+        CAPTURE_COLLECTOR.with(|collector| {
+            if let Some(c) = collector.borrow_mut().as_mut() {
+                c.admissions = c.admissions.saturating_add(1);
+            }
+        });
+    }
+}
+struct CaptureDiagnostic {
+    start: Option<Instant>,
+    complete: bool,
+}
+impl CaptureDiagnostic {
+    fn begin(enabled: bool, world: &w::World) -> Self {
+        let enabled = enabled
+            && !CAPTURE_LOGGER.load(Ordering::Acquire).is_null()
+            && hsmp_native_capture_profile_active() == 0;
+        if enabled {
+            CAPTURE_COLLECTOR
+                .with(|collector| *collector.borrow_mut() = Some(CaptureCollector::new(world)));
+            CAPTURE_ACTIVE.with(|active| active.set(true));
+        }
+        Self {
+            start: enabled.then(Instant::now),
+            complete: false,
+        }
+    }
+    fn timer(&self) -> Option<Instant> {
+        self.start.map(|_| Instant::now())
+    }
+    fn elapsed(start: Option<Instant>) -> u64 {
+        start.map_or(0, |start| {
+            start.elapsed().as_micros().min(u64::MAX as u128) as u64
+        })
+    }
+    fn add(&self, index: usize, start: Option<Instant>) {
+        if self.start.is_some() {
+            let elapsed = Self::elapsed(start);
+            CAPTURE_COLLECTOR.with(|collector| {
+                if let Some(c) = collector.borrow_mut().as_mut() {
+                    c.frame.us[index] += elapsed;
+                }
+            });
+        }
+    }
+    fn component(&self, reference: w::EntityRef) {
+        if self.start.is_some() {
+            CAPTURE_COLLECTOR.with(|collector| {
+                if let Some(c) = collector.borrow_mut().as_mut() {
+                    c.current = c.frame;
+                    c.current.us = [0; 10];
+                    c.current.entity = reference.id;
+                    c.current.incarnation = reference.incarnation;
+                    c.row_slot = None;
+                    c.admission_start = c.admissions;
+                }
+            });
+        }
+    }
+    fn component_end(&self, pre_us: u64, post: Option<Instant>) {
+        if self.start.is_some() {
+            let elapsed = Self::elapsed(post);
+            CAPTURE_COLLECTOR.with(|collector| {
+                if let Some(c) = collector.borrow_mut().as_mut() {
+                    c.frame.us[1] += pre_us;
+                    c.frame.us[3] += elapsed;
+                    if let Some(index) = c.row_slot {
+                        c.rows[index].us[8] = pre_us;
+                        c.rows[index].us[9] = elapsed;
+                        c.rows[index].counters[1] = c.admissions - c.admission_start;
+                    }
+                }
+            });
+        }
+    }
+}
+impl Drop for CaptureDiagnostic {
+    fn drop(&mut self) {
+        let Some(start) = self.start else {
+            return;
+        };
+        CAPTURE_ACTIVE.with(|active| active.set(false));
+        let collector = CAPTURE_COLLECTOR.with(|collector| collector.borrow_mut().take());
+        let logger = CAPTURE_LOGGER.load(Ordering::Acquire);
+        if let Some(mut collector) = collector.filter(|_| !logger.is_null()) {
+            collector.frame.complete = u32::from(self.complete);
+            collector.frame.us[0] = start.elapsed().as_micros().min(u64::MAX as u128) as u64;
+            collector.frame.counters[1] = collector.admissions;
+            // No RefCell borrow, UObject/context or Native/schema lock acquisition in the logger.
+            let logger: CaptureLogger = unsafe { std::mem::transmute(logger) };
+            for row in &collector.rows {
+                unsafe { logger(0, row) };
+            }
+            unsafe { logger(1, &collector.frame) };
+        }
+    }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Object {
@@ -484,6 +686,7 @@ pub struct State {
     pub(crate) pending: Option<w::RenderWorld>,
     pub(crate) input: Option<crate::native_input_capture::Reader>,
     ready: Option<(u64, u32, Vec<(w::EntityRef, u32)>)>,
+    capture_profile_attempted: bool,
 }
 impl State {
     fn drop_visuals(&mut self) {
@@ -1724,6 +1927,7 @@ impl GuardContext {
         }
     }
     unsafe fn valid(&self) -> bool {
+        capture_admission_tick();
         unsafe {
             let native = &*self.native;
             let vt = &*self.vt;
@@ -2468,10 +2672,16 @@ impl Native {
                     .as_ref()
                     .ok_or("no staged native world")?;
                 let world = world.clone();
+                let profile_enabled = !self.presentation.capture_profile_attempted;
+                self.presentation.capture_profile_attempted = true;
+                let mut capture_profile = CaptureDiagnostic::begin(profile_enabled, &world);
+                let metadata_started = capture_profile.timer();
                 let host = self.native_host.host.as_ref().ok_or("not a source host")?;
                 let mut entities = Vec::new();
                 let mut recipes = Vec::new();
+                capture_profile.add(1, metadata_started);
                 for entity in &world.entities {
+                    let metadata_started = capture_profile.timer();
                     let desc = host
                         .descriptor(entity.reference.id)
                         .filter(|d| {
@@ -2498,7 +2708,10 @@ impl Native {
                     let mut context = GuardContext::new(self, vt, binding.world, Some(binding))?;
                     let guard = context.ffi();
                     let mut components = Vec::new();
+                    capture_profile.add(1, metadata_started);
                     for (index, c) in desc.recipe.components.iter().enumerate() {
+                        capture_profile.component(entity.reference);
+                        let pre_started = capture_profile.timer();
                         let (input, owner) = *binding
                             .components
                             .get(&c.id)
@@ -2507,6 +2720,8 @@ impl Native {
                         let mut values = FrameStorage::source(c);
                         let mut frame = values.ffi();
                         let mut r = ResultInfo::default();
+                        let pre_us = CaptureDiagnostic::elapsed(pre_started);
+                        let provider_started = capture_profile.timer();
                         if !context.valid()
                             || (p.capture)(
                                 binding.world,
@@ -2520,8 +2735,11 @@ impl Native {
                             || r.complete != 1
                             || !context.valid()
                         {
+                            capture_profile.add(2, provider_started);
                             return Err(format!("source component {}: {}", c.id, r.reason()));
                         }
+                        capture_profile.add(2, provider_started);
+                        let post_started = capture_profile.timer();
                         values.world = frame.world;
                         let (mut si, mut vi, mut ti) = (0, 0, 0);
                         let mut materials = Vec::new();
@@ -2579,6 +2797,7 @@ impl Native {
                                 }
                             }),
                         });
+                        capture_profile.component_end(pre_us, post_started);
                     }
                     entities.push(w::RenderEntity {
                         reference: entity.reference,
@@ -2588,9 +2807,14 @@ impl Native {
                     recipes.push(desc);
                 }
                 let render = w::RenderWorld { world, entities };
+                let encode_started = capture_profile.timer();
                 w::scene_stream::encode_scene(&render, &recipes).map_err(str::to_owned)?;
+                capture_profile.add(4, encode_started);
+                let finish_started = capture_profile.timer();
                 self.finish_native_vertices(&render)?;
+                capture_profile.add(5, finish_started);
                 self.presentation.pending = Some(render);
+                capture_profile.complete = true;
                 Ok(())
             })();
             match result {
@@ -3481,6 +3705,121 @@ mod source_roster_native_tests {
 #[cfg(test)]
 mod presentation_binding_tests {
     use super::*;
+    #[test]
+    fn capture_diagnostic_layout_and_row_budget_do_not_bound_the_scene() {
+        assert_eq!(std::mem::size_of::<CaptureRow>(), 104);
+        assert_eq!(std::mem::size_of::<CaptureTrace>(), 160);
+        let world = w::World {
+            epoch: 9007199254740993,
+            directory_seq: 7,
+            frame_seq: 4,
+            entities: Vec::new(),
+        };
+        let mut collector = CaptureCollector::new(&world);
+        collector.current.entity = 2;
+        collector.current.incarnation = 5;
+        for component in 1..=100 {
+            collector.row(CaptureRow {
+                us: [80, 10, 20, 30, 5, 7, 8, 9],
+                guards: 3,
+                finds: 4,
+                events: 5,
+                component,
+                kind: 0,
+                complete: 1,
+                pad: 0,
+            });
+        }
+        assert_eq!(collector.rows.len(), 98);
+        assert_eq!(collector.frame.rows, 100);
+        assert_eq!(collector.frame.truncated, 2);
+        assert_eq!(collector.frame.counters, [300, 0, 400, 500]);
+        assert_eq!(collector.frame.us[6..], [700, 800, 900, 8000]);
+        assert_eq!(collector.rows[97].epoch, world.epoch);
+        assert_eq!(collector.rows[97].component, 98);
+        assert_eq!(collector.rows[97].entity, 2);
+        assert!(world.entities.is_empty()); // diagnostics never alter the original DTO
+    }
+    static CAPTURE_TEST_LOG: std::sync::Mutex<Vec<(u32, CaptureTrace, i32)>> =
+        std::sync::Mutex::new(Vec::new());
+    unsafe extern "C" fn capture_test_logger(frame: u32, trace: *const CaptureTrace) {
+        let inactive = hsmp_native_capture_profile_active();
+        if let Ok(mut log) = CAPTURE_TEST_LOG.lock() {
+            log.push((frame, unsafe { *trace }, inactive));
+        }
+    }
+    #[test]
+    fn capture_diagnostic_is_one_scalar_session_and_releases_tls_before_logging() {
+        CAPTURE_TEST_LOG.lock().unwrap().clear();
+        hsmp_native_set_capture_logger(Some(capture_test_logger));
+        let world = w::World {
+            epoch: 42,
+            directory_seq: 7,
+            frame_seq: 1,
+            entities: Vec::new(),
+        };
+        let row = CaptureRow {
+            component: 11,
+            kind: 6,
+            complete: 1,
+            guards: 3,
+            finds: 2,
+            events: 1,
+            ..CaptureRow::default()
+        };
+        assert_eq!(hsmp_native_capture_profile_active(), 0);
+        unsafe { hsmp_native_capture_profile_row(&row) };
+        {
+            let mut trace = CaptureDiagnostic::begin(true, &world);
+            assert_eq!(hsmp_native_capture_profile_active(), 1);
+            trace.component(w::EntityRef {
+                epoch: 42,
+                id: 2,
+                incarnation: 5,
+            });
+            capture_admission_tick();
+            capture_admission_tick();
+            unsafe { hsmp_native_capture_profile_row(&row) };
+            trace.component_end(42, None);
+            {
+                let nested = CaptureDiagnostic::begin(true, &world);
+                assert!(nested.start.is_none());
+            }
+            assert_eq!(hsmp_native_capture_profile_active(), 1);
+            trace.complete = true;
+        }
+        assert_eq!(hsmp_native_capture_profile_active(), 0);
+        assert!(CAPTURE_COLLECTOR.with(|c| c.borrow().is_none()));
+        {
+            let log = CAPTURE_TEST_LOG.lock().unwrap();
+            assert_eq!(log.len(), 2);
+            assert_eq!(log[0].0, 0);
+            assert_eq!(log[0].1.entity, 2);
+            assert_eq!(log[0].1.component, 11);
+            assert_eq!(log[0].1.us[8], 42);
+            assert_eq!(log[0].1.counters[1], 2);
+            assert_eq!(log[1].0, 1);
+            assert_eq!(log[1].1.complete, 1);
+            assert_eq!(log[1].1.rows, 1);
+            assert!(log.iter().all(|row| row.2 == 0));
+        }
+        {
+            let disabled = CaptureDiagnostic::begin(false, &world);
+            assert!(disabled.timer().is_none());
+            unsafe { hsmp_native_capture_profile_row(&row) };
+        }
+        assert_eq!(CAPTURE_TEST_LOG.lock().unwrap().len(), 2);
+        {
+            let _failed = CaptureDiagnostic::begin(true, &world);
+        }
+        {
+            let log = CAPTURE_TEST_LOG.lock().unwrap();
+            assert_eq!(log.len(), 3);
+            assert_eq!(log[2].1.complete, 0);
+            assert_eq!(log[2].1.rows, 0);
+        }
+        hsmp_native_set_capture_logger(None);
+    }
     #[test]
     fn lifecycle_marshaling_preserves_false_and_unknown_facts() {
         unsafe {

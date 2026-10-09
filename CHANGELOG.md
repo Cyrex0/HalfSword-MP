@@ -10,9 +10,13 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Preserve confirmed removal of native map managers after their original positive
+  references expire, without reading or deleting replacement objects. Add bounded
+  scene capture timings to locate the current slow native update stage.
 - Publish replayed camera-arm endpoints to their owned attached components using
   the game's native child update, retaining full attachment and scene checks.
-  Actual complete scene verification remains pending.
+  Both actual clients now pass complete model readback; LIVE publication cadence
+  and an owned player view remain under development.
 - Preserve the original gear mesh when the engine naturally assigns its first
   reference serial, retaining complete asset identity and later scene checks.
   Actual complete model and gameplay verification remains pending.

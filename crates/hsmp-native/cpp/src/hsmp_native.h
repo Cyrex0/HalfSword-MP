@@ -45,6 +45,23 @@ void hsmp_native_set_profile_logger(HsmpNativeProfileLogger logger);
 void hsmp_native_profile_checkpoint(const char* stage,uint32_t edge);
 void hsmp_native_profile_tick(uint32_t counter); // guard0, admission1, find2, PE3
 
+// One bounded source-capture diagnostic. All arguments are copied scalars;
+// the logger must not reenter Native, reflection or a presentation callback.
+// Row us: total/admission/static/dynamic/final/inclusive-guard/find/PE.
+// Trace component us appends Rust pre/post; frame us: total/Rust pre/provider/
+// Rust post/encode/finish/inclusive-guard/find/PE/CPP total. Nested timing overlaps.
+// Counters: CPP guard/Rust GuardContext validation/CPP find/reflected PE.
+struct HsmpNativeCaptureRow {uint64_t us[8],guards,finds,events;uint32_t component,kind,complete,pad;};
+struct HsmpNativeCaptureTrace {uint64_t epoch,us[10],counters[4];uint32_t frame_seq,entity,incarnation,dir_seq,component,kind,complete,rows,truncated,pad;};
+#ifdef __cplusplus
+static_assert(sizeof(HsmpNativeCaptureRow)==104);
+static_assert(sizeof(HsmpNativeCaptureTrace)==160);
+#endif
+typedef void (*HsmpNativeCaptureLogger)(uint32_t frame,const struct HsmpNativeCaptureTrace*);
+void hsmp_native_set_capture_logger(HsmpNativeCaptureLogger logger);
+int32_t hsmp_native_capture_profile_active(void);
+void hsmp_native_capture_profile_row(const struct HsmpNativeCaptureRow* row);
+
 // Copied full Outer hierarchy, never stored UObject pointers. Capture is tied
 // to Rust's exact initial path lookup; verification uses original nodes only.
 struct HsmpNativePathNode {uint64_t weak,address,name,class_weak,class_address,class_name;};

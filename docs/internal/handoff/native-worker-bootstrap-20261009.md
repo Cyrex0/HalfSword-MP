@@ -1,5 +1,28 @@
 # Native authority bootstrap checkpoint
 
+## Current actual: model readback passes; LIVE publication is too slow
+
+Exacte7321504/full G0/all394 hashes run213011-14ba4f verifies both49-component
+entity mirrors and whole-scene readback on BOTH clients. FollowCamera11 passes
+the original bounds. MirrorReady around80s is model proof only: owned view,
+visible player pixels and active input remain unverified.
+Authority publications are6.156-6.803s apart, exceeding the unchanged LIVE2s
+watchdog; both clients fault around86.7s after stale applied frames. First render
+capture6.588s/publish0.693s; measure recurring stage cost and fix cadence without
+freshness or watchdog changes. A separate retirement-probe refusal triggers
+client travel/reloading after MirrorReady and needs evidence-based diagnosis.
+All original games/debuggers/helpers are gone, save20 hashes unchanged, no fresh
+dump; both initial game windows are physically contained on secondary.
+
+Next checkpoint preserves all sampling/freshness checks while measuring the
+first capture attempt with at most98 component records and a frame summary.
+The retirement probe now distinguishes a previously removed original positive
+weak handle's native serial expiry from a replacement object, requiring original
+world/class census absence and pure final scope/slot closure. No replacement
+dereference or repeat destroy; initial/live/serial-zero paths remain strict.
+Strict1163 provider/fixture and10 Rust presentation checks pass; independent
+reviews close. Actual corrected retirement and capture attribution are pending.
+
 ## Current actual: camera-arm child transform localized
 
 Exact5ee665e6/full G0/all394 hashes run210901-4a9dbb localizes BOTH world_set

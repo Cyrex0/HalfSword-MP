@@ -1,5 +1,47 @@
 # Native full-scene encoding checkpoint
 
+## Actual e7321504: both full mirrors pass; publication cadence fails LIVE
+
+Exact clean dev/full G0/all394 hashes run20261009-213011-14ba4f-native-host,
+source715eee6b-ab72-4e4b-b15d-498d662be1a1, verifies both49-component entity
+mirrors create and complete model/whole-scene readback on BOTH clients. The
+original FollowCamera11 bounds now pass. MirrorReady is observed around80s;
+this does not prove an owned player view, visible pixels, input or gameplay.
+
+Authority accepted frame2/3/4 publication times71.932/78.088/84.891s leave
+6.763/6.156/6.803s gaps. The existing LIVE2s publication watchdog faults around
+86.7s with `native simulation stopped publishing`; clients also reject stale
+applied frames. First native_render is6.588s, first publish0.693s. Measure the
+recurring capture stages before optimizing; retain the2s watchdog and250ms LIVE
+freshness. Client retirement-probe refusal also causes post-MirrorReady travel
+and asset reload; investigate independently rather than assuming one cause.
+
+Full G075 Lua/1364 Rust79 binaries, clippy0 errors/16 warnings, strict1029
+focused checks and independent review pass. All four original game processes,
+two original CDBs and helpers are gone, all20 save hashes unchanged, no fresh
+dump. Both initial game windows are physically contained on the secondary
+display. Exact actual events, native logs, capture and cleanup are preserved in
+the ignored run and native_operator_summary.json. No release acceptance claim.
+
+The next reviewed checkpoint adds one bounded first-attempt capture diagnostic:
+at most98 component rows plus a frame summary, with original admission/static/
+dynamic/final stages and nested guard/find/PE timings. Rust preparation/copy,
+scene encoding and aggregate proof have separate timings. No native caller
+probe, production roster bound, getter, proof or timeout changes. Counters only
+observe the existing calls; nested measurements are not additive to stages.
+
+The separate retirement-only fix retains prior-success/same-world/original-class
+census absence and admits expiration of an ORIGINAL positive weak serial only
+after native slot serial mismatch plus NULL original resolution. Repeated pure
+original world/class/slot closure follows every callback. Never read the expired
+or replacement actor; serial-zero reuse, unchanged-serial pointer change, listed
+address, unknown APIs and changed world/class remain refused. Immediate retire
+and live actor_scope remain strict. The matched weak getters prove mismatch
+returns NULL before object access; no serial allocation is used.
+Strict provider/fixture1163 focused checks and Rust presentation10 checks pass;
+both independent production reviews close. Actual expiry and stage timings are
+pending the exact gated next run; neither is a gameplay or speed claim.
+
 ## Actual 5ee665e6: FollowCamera fails immediately after world setter
 
 Exact clean dev/full G0/all394 hashes run20261009-210901-4a9dbb-native-host,
