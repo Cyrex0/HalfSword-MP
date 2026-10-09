@@ -22,6 +22,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   through a negotiated experimental scene format; require source profiles and
   native readbacks before accepting a mirrored scene. Live verification remains
   pending.
+- Verify admitted native source paths through their complete original object
+  hierarchy, retaining exact initial lookups and lifetime/world checks while
+  avoiding repeated full object searches. Runtime improvement remains under
+  live verification.
 
 ## [0.1.0-beta.6] - 2026-10-08
 

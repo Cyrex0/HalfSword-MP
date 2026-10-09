@@ -1,6 +1,6 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build5ea987fe
+## Current state: 2026-10-09, latest actual build3b2b009c
 
 The actual topology launches: one NullRHI game authority and two rendered native
 clients. The authority qualifies two human fighters on opposing native teams;
@@ -11,18 +11,20 @@ The production helper wiring and the client256-component resource assumption are
 fixed. No canonical scene frame or active client input has been proved yet.
 
 Current publication blocker: ABI7/source schema3/render V2 is deployed and the
-native Aim Spline eligibility now passes. Actual native profile capture enters
-at28.455s but never records a return; the authority misses graceful shutdown and
-its owned process is stopped. No deadlock or crash cause is established. Narrow
-native profile checkpoints are the next step; full curves and rendering remain
-unproved in the game. Do not bypass capture or infer pixels from visibility.
+native Aim Spline eligibility now passes. Actual native profile capture returns
+after24.406s with exact2/2/2/11 counts and null metadata. Complete source harvest
+still misses the shutdown window before any canonical frame: the authority is
+stopped through its verified owned-process fallback. Profile traces show638
+guards,84678 admissions and696 finds; an isolated path lookup costs45.889ms.
+Native direct path validation and redundant admission batching are under review.
+Full scene frames/rendering remain unproved; do not bypass capture.
 
-Current performance blocker: first capture spends roughly18 seconds reaching
-native profile entry. Parent closure alone takes10.362s. Scope-local schema
-caching and fewer duplicate controller queries have not established a useful
-actual speed gain. Static audit finds repeated full profile guards inside native
-metadata checks, but aggregate costs/location need measured native checkpoints.
-All source lifetime/world/player checks remain required.
+Current performance blocker: first capture spends roughly16 seconds reaching
+native profile entry, then24.406s on that one profile. Parent closure takes9.821s.
+Scope-local schema caching and fewer duplicate controller queries have not
+established a useful actual speed gain. Repeated exact-path GUObject searches and
+nested full admission checks are now measured. All original path, source
+lifetime/world/player and callback boundary checks remain required.
 
 Next acceptance steps are (1) evidenced spline support, (2) complete recipes and
 advancing source/mirror frames for both clients, (3) positive legal native inputs
@@ -844,3 +846,49 @@ Native-call markers bracket actual dispatch, after argument guards and before
 post-call guards. C++ gameplay capture/apply bypasses trace FFI through a TLS
 scope enabled only by describe_spline. Source-scope17 focused tests and C++228
 checks pass; no diagnostic runtime result is claimed before the next actual run.
+
+## Actual instrumented profile run:3b2b009c
+
+Full clean G0 and native deployment match3b2b009cab26433e8cbc84545091bd278d50482a.
+`test-results/20261009-062648-a6fc6c-native-host` uses the same real2 rendered
+clients plus1 NullRHI authority,45-second window, legal input exercise and
+probes0. Source UUID31121fb0-144b-49b8-bb7f-91ea5b2c6b06 is authority PID5456.
+Full HSMPNative.log and its exact-PID filtered log are preserved with the
+operator summary in that run folder.
+
+Native spline profile enters at26.374s and exits OK at50.780s (24.406s): actual
+position2/rotation2/scale2/reparam11/metadata_null=true. Native provider exit is
+recorded at24.234s elapsed with638 guards,84678 admissions,696 finds and10 PEs.
+An isolated source_find seq9→10 takes45.889ms (1255→47144us) while admission
+count stays74. Thus direct path lookup has separately measured cost; batching
+admission alone must not be assumed to solve the elapsed time. Trace record64
+explicitly says diagnostic_budget_exhausted at24.315s, rather than manufacturing
+an unmatched-call conclusion. This run proves slow progressing work and a
+successful actual profile return; the first run's missing return does not prove
+a deadlock.
+
+Pawn26 mesh census takes3.648s, axe13 takes1.658s, complete closure49 takes9.821s.
+Source completes component1 at53.729s, component2 at54.662s and enters component3
+Aim Spline Scene Sphere (seq89). No canonical frame or active input is proved;
+controller counts stay[0,0] and clients wait_scene. The authority misses graceful
+shutdown and its verified owned process is stopped. PIDs19668(supervisor),5456
+(authority),23420/23584(clients) are independently absent. All20 original save
+SHA256 values match; new_crashes[]/unobserved_children[] remain empty.
+
+Next: prove and use a bounded native exact-path read for previously admitted
+original identities, preserving initial find-before-capture, all original
+flags/slot/name/class/owner/world/links, and callback guards. Separately batch
+redundant nested admission only inside pure guard callbacks. Any runtime benefit
+and later complete-scene acceptance still require actual game evidence.
+
+The saved optimization retains two exact initial lookups around original path
+witness capture. Later reads verify the complete original hierarchy through
+NULL, every weak/slot/address/FName/class/class-FName identity, fresh Outer links
+and the original GPackageName discriminator; no string conversion or full-array
+find is used by the hot verifier. Role/thread/world/directory admission brackets
+the pure callback, whose engine refuses GetOwner/PE, schema inspection and full
+finds. Live Runtime and outer owner-dispatch checks remain active; full path
+verification repeats after the final native getters/base guard so a mutation
+after the early check cannot pass. Source-scope22 focused tests and C++260
+checks pass; independent review and the next exact
+deployed native run remain required before claiming a speed gain.
