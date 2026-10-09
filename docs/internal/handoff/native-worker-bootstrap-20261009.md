@@ -319,3 +319,38 @@ identities (supervisor24916, source44720, clients4324/42052) were independently
 absent after cleanup. Original save hashes remained unchanged, with no new
 crash or unobserved-child records. The tracked tree stayed at exact clean
 cfe9afe4 throughout the run. Native playability remains unverified.
+
+## Mesh-seeded closure and client-census diagnostic candidate
+
+Pinned Willie CXX metadata declares 233 SphereComponent references, and the
+cooked Willie template has 384 component exports (including 242 spheres,
+50 constraints, 42 scenes, nine skeletal and eight static meshes). These are
+template counts, not observed live counts. Together with the actual source
+return at key257, they establish that a full SceneComponent census capped at
+256 is inappropriate for this actor; raising that cap would also worsen its
+repeated per-getter allocation cost.
+
+The replacement enumerates every native MeshComponent for each original pawn
+and owned weapon, then includes every actual hard owner root and follows each
+actual GetAttachParent link. Scalar witnesses replay the fresh mesh/root seed
+and complete native parent path before/after reads. Complete mesh-set,
+address/FName, original owner/world, root, parent, cycle and supported-anchor
+checks remain strict. No native mesh is filtered by visibility or gear type,
+and the final64-component and wire bounds remain unchanged. Full physics-helper
+censuses are unnecessary for this render graph; their native combat behavior
+continues to belong to the engine authority. This is a representation/capture
+correction, not evidence of armour or body parity.
+
+Focused source checks: Lua66 and two syntax files passed, including 300 nonmesh
+helpers with complete mesh/root/parent closure and refusal of any full Scene
+enumeration. Native mesh addition/removal, identities, roots, links, owners,
+world changes, unsupported render kinds and graph bounds remain covered.
+
+The client candidate retains bounded successful driver retirement/probe
+identities and raw before/after proofs. Inert entry records its exact target,
+native mirrored-garbage flag, original world/protection, hard RootComponent
+and optional Blueprint DefaultSceneRoot facts, exact component getter/count
+and actor inert readbacks. Empty census still refuses. Unknown/garbage flags
+stop new actor calls/root reads; earlier cohort GetWorld checks remain an
+explicit limitation. Focused client Lua97 checks and two syntax files passed.
+Neither candidate has yet passed a fresh actual three-game run.
