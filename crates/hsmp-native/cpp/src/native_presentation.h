@@ -23,9 +23,10 @@ struct HsmpViewSplineProfile {
 };
 // ABI8: complete original static-component census, not an asset color guess.
 // no_override0 means validated overrides exist; 1 means every actual slot null.
-// ABI10: asset_present is the admitted original hard-link fact, never a Lua
-// wrapper availability guess. Empty static needs asset_present0/no_override1.
-struct HsmpViewVertexState { uint32_t lod_info_count,no_override,asset_present; };
+// ABI11: asset_present is the admitted original hard-link fact, never a Lua
+// wrapper guess. component_kind0 skeletal/1 static; complete material count<=32,
+// null-mask bits name actual null override slots. Skeletal is absence-only.
+struct HsmpViewVertexState { uint32_t lod_info_count,no_override,asset_present,material_count,material_null_mask,component_kind; };
 struct HsmpViewSpringArmFrame {double translation[3],rotation[4];};
 struct HsmpViewFinishTarget {
     HsmpViewObject owner,component,asset;uint32_t scene_kind,owned_mirror;
@@ -139,7 +140,7 @@ static_assert(sizeof(HsmpViewParameter)==24);
 static_assert(sizeof(HsmpViewMaterial)==72);
 static_assert(sizeof(HsmpViewVertexLod)==24);
 static_assert(sizeof(HsmpViewSplineProfile)==20);
-static_assert(sizeof(HsmpViewVertexState)==12);
+static_assert(sizeof(HsmpViewVertexState)==24);
 static_assert(sizeof(HsmpViewSpringArmFrame)==56);
 static_assert(sizeof(HsmpViewFinishTarget)==128);
 static_assert(sizeof(HsmpPresentation)==112);

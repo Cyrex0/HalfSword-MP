@@ -90,6 +90,9 @@ pub struct VertexStateProof {
     pub lod_info_count: u32,
     pub no_override: u32,
     pub asset_present: u32,
+    pub material_count: u32,
+    pub material_null_mask: u32,
+    pub component_kind: u32,
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -436,7 +439,7 @@ pub struct Provider {
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 10 {
+    if p.is_null() || unsafe { (*p).abi } == 11 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
     } else {
         PROVIDER.store(std::ptr::null_mut(), Ordering::Release);
@@ -634,6 +637,7 @@ impl Arena {
             kind: match (&c.kind, &c.scene) {
                 (d::ComponentKind::Scene, d::SceneEvidence::Camera) => 6,
                 (d::ComponentKind::Scene, d::SceneEvidence::SpringArm { .. }) => 7,
+                (d::ComponentKind::Skeletal, _) if c.geometry == d::Geometry::NativeEmpty => 9,
                 (d::ComponentKind::Skeletal, _) => 0,
                 (d::ComponentKind::Static, _) if c.geometry == d::Geometry::NativeEmpty => 8,
                 (d::ComponentKind::Static, _) => 1,
@@ -1572,7 +1576,9 @@ impl Native {
                     if c.vertex_state != d::VertexState::NativeAsset && !empty {
                         continue;
                     }
-                    if c.kind != d::ComponentKind::Static {
+                    if c.kind != d::ComponentKind::Static
+                        && !(empty && c.kind == d::ComponentKind::Skeletal)
+                    {
                         return Err("native asset proof requires cooked static component".into());
                     }
                     let (component, owner) = *components.get(&c.id).ok_or("vertex component")?;
@@ -1585,14 +1591,33 @@ impl Native {
                         let expected = (vt.find)(reflect::wide(&c.asset).as_ptr());
                         object(vt, expected as i64)?
                     };
-                    if object_field(vt, component, "StaticMesh")? != asset.address {
+                    let skeletal = c.kind == d::ComponentKind::Skeletal;
+                    if object_field(
+                        vt,
+                        component,
+                        if skeletal {
+                            "SkinnedAsset"
+                        } else {
+                            "StaticMesh"
+                        },
+                    )? != asset.address
+                        || (skeletal && object_field(vt, component, "SkeletalMesh")? != 0)
+                    {
                         return Err("source original vertex asset binding".into());
                     }
                     vertices.push(VertexTarget {
                         owner,
                         component,
                         asset,
-                        scene_kind: if empty { 8 } else { 0 },
+                        scene_kind: if empty {
+                            if skeletal {
+                                9
+                            } else {
+                                8
+                            }
+                        } else {
+                            0
+                        },
                     });
                 }
                 let pawn_controller = object_property(vt, pawn, "Controller")?;
@@ -2339,7 +2364,7 @@ mod presentation_binding_tests {
         assert_eq!(std::mem::size_of::<Component>(), 272);
         assert_eq!(std::mem::size_of::<Frame>(), 176);
         assert_eq!(std::mem::size_of::<SplineProfile>(), 20);
-        assert_eq!(std::mem::size_of::<VertexStateProof>(), 12);
+        assert_eq!(std::mem::size_of::<VertexStateProof>(), 24);
         assert_eq!(std::mem::size_of::<SpringArmFrame>(), 56);
         assert_eq!(std::mem::size_of::<FinishTarget>(), 128);
         assert_eq!(std::mem::size_of::<Provider>(), 112);
@@ -2447,9 +2472,115 @@ mod presentation_binding_tests {
         };
         assert_eq!(original.asset.address, 0);
         assert_eq!(std::mem::size_of::<VertexTarget>(), 56);
-        assert_eq!(std::mem::size_of::<VertexStateProof>(), 12);
+        assert_eq!(std::mem::size_of::<VertexStateProof>(), 24);
         fn requires_send<T: Send>() {}
         requires_send::<VertexTarget>();
+    }
+    #[test]
+    fn empty_skeletal_binding_preserves_null_material_positions_and_kind() {
+        let recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+            "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
+        ))
+        .unwrap();
+        let mut component = recipe.components[0].clone();
+        component.kind = d::ComponentKind::Skeletal;
+        component.component_class = "/Script/Engine.SkeletalMeshComponent".into();
+        component.geometry = d::Geometry::NativeEmpty;
+        component.asset.clear();
+        component.skeleton.clear();
+        component.physics_asset.clear();
+        component.bones.clear();
+        component.morphs.clear();
+        component.hidden_bones.clear();
+        component.vertex_colors.clear();
+        component.vertex_state = d::VertexState::NotApplicable;
+        component.scene = d::SceneEvidence::NotApplicable;
+        component.spline_profile = None;
+        component.collision = Some(d::Collision {
+            enabled: 3,
+            object_type: 1,
+            profile: "Actual source profile".into(),
+            responses: [0; 32],
+            simulating: false,
+        });
+        component.materials = vec![
+            d::Material {
+                slot: 0,
+                base: "/Game/Test/Actual.Material".into(),
+                scalars: vec![],
+                vectors: vec![],
+                textures: vec![],
+            },
+            d::Material {
+                slot: 1,
+                base: String::new(),
+                scalars: vec![],
+                vectors: vec![],
+                textures: vec![],
+            },
+            d::Material {
+                slot: 2,
+                base: String::new(),
+                scalars: vec![],
+                vectors: vec![],
+                textures: vec![],
+            },
+        ];
+        component.validate().unwrap();
+        let mut arena = Arena::new();
+        let bound = arena.component(&component);
+        assert_eq!(
+            (bound.kind, bound.vertex_state, bound.material_count),
+            (9, 4, 3)
+        );
+        let class =
+            unsafe { std::slice::from_raw_parts(bound.asset.data, bound.asset.len as usize) };
+        assert_eq!(
+            String::from_utf16(class).unwrap(),
+            component.component_class
+        );
+        let slots = unsafe { std::slice::from_raw_parts(bound.materials, 3) };
+        assert_eq!((slots[0].slot, slots[1].slot, slots[2].slot), (0, 1, 2));
+        assert!(slots[0].base.len > 0);
+        assert_eq!((slots[1].base.len, slots[2].base.len), (0, 0));
+        assert_eq!(
+            (
+                slots[1].scalar_count,
+                slots[1].vector_count,
+                slots[1].texture_count
+            ),
+            (0, 0, 0)
+        );
+        let mut storage = FrameStorage::source(&component);
+        let frame = storage.ffi();
+        assert_eq!(
+            (
+                frame.bone_count,
+                frame.morph_count,
+                frame.scalar_count,
+                frame.vector_count,
+                frame.texture_count
+            ),
+            (0, 0, 0, 0, 0)
+        );
+        assert!(frame.spline.is_null() && frame.spring_arm.is_null());
+        let proof = VertexStateProof {
+            lod_info_count: 0,
+            no_override: 1,
+            asset_present: 0,
+            material_count: 3,
+            material_null_mask: 6,
+            component_kind: 0,
+        };
+        assert_eq!(
+            (
+                proof.material_count,
+                proof.material_null_mask,
+                proof.component_kind
+            ),
+            (3, 6, 0)
+        );
+        assert_eq!(std::mem::size_of::<VertexStateProof>(), 24);
     }
     fn raw_spline_fixture() -> w::NativeSplineFrame {
         w::NativeSplineFrame {

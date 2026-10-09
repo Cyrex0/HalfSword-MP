@@ -98,12 +98,12 @@ void scene_pure_inert(const void* object,const SceneSnapshot& snapshot){
     require(!(active&snapshot.active.bool_mask)&&tick_enabled==0,"native aggregate mirror activation/tick changed");
 }
 SceneSnapshot scene_target_prepare(Obj world,const HsmpViewFinishTarget& target,HsmpViewResult* r){
-    SceneSnapshot out{};if(target.scene_kind==0||target.scene_kind==8){VertexOperation operation(target.owner,target.component,target.scene_kind==8);
+    SceneSnapshot out{};if(target.scene_kind==0||target.scene_kind==8||target.scene_kind==9){VertexOperation operation(target.owner,target.component,target.scene_kind==8||target.scene_kind==9);
         require(target.owned_mirror<=1&&same(vertex_asset,target.asset),"native aggregate original asset replaced");
-        if(target.asset.weak)vertex_live(target.asset);else require(target.scene_kind==8,"native aggregate original asset missing");
+        if(target.asset.weak)vertex_live(target.asset);else require(target.scene_kind==8||target.scene_kind==9,"native aggregate original asset missing");
         const auto proof=vertex_observe(world,target.owner,target.component,r);
-        require(proof.no_override==1&&proof.asset_present==(target.scene_kind==8?0u:1u),"native aggregate asset/override appeared");
-        if(target.scene_kind==8&&target.owned_mirror){scene_inert(target.component,r);
+        require(proof.no_override==1&&proof.asset_present==(target.scene_kind==8||target.scene_kind==9?0u:1u),"native aggregate asset/override appeared");
+        if((target.scene_kind==8||target.scene_kind==9)&&target.owned_mirror){scene_inert(target.component,r);
             out.active=property(target.component,L"bIsActive",L"BoolProperty",1);out.tick=property(target.component,L"PrimaryComponentTick",L"StructProperty",0x30);
             scene_pure_inert(vertex_pure(target.component),out);}
         out.vertex=vertex_target_pure(target);return out;}
@@ -115,9 +115,10 @@ SceneSnapshot scene_target_prepare(Obj world,const HsmpViewFinishTarget& target,
         scene_pure_inert(vertex_pure(target.component),out);}
     return out;
 }
-void scene_target_final(const HsmpViewFinishTarget& target,const SceneSnapshot& snapshot){
-    if(target.scene_kind==0||target.scene_kind==8){require(vertex_equal(snapshot.vertex,vertex_target_pure(target)),"native aggregate vertex census changed");
-        if(target.scene_kind==8&&target.owned_mirror)scene_pure_inert(vertex_pure(target.component),snapshot);return;}
+void scene_target_final(const HsmpViewFinishTarget& target,const SceneSnapshot& snapshot,Obj world={}){
+    if(target.scene_kind==0||target.scene_kind==8||target.scene_kind==9){const auto final=vertex_target_pure(target);require(vertex_equal(snapshot.vertex,final),"native aggregate vertex census changed");
+        if(target.scene_kind==9)vertex_source_materials_final(world,target,final);
+        if((target.scene_kind==8||target.scene_kind==9)&&target.owned_mirror)scene_pure_inert(vertex_pure(target.component),snapshot);return;}
     vertex_pure(target.owner);scene_pure_profile(target.component,target.scene_kind);const auto* p=static_cast<const uint8_t*>(vertex_pure(target.component));
     if(target.scene_kind==7)require(scene_socket_read()==snapshot.socket&&arm_equal(arm_copy(p),snapshot.arm),"native aggregate socket/cache changed");
     if(target.owned_mirror)scene_pure_inert(p,snapshot);
@@ -127,5 +128,5 @@ void finish_scene_set(Obj world,const std::vector<HsmpViewFinishTarget>& targets
     for(const auto& target:targets)originals.push_back(scene_target_prepare(world,target,r));
     vertex_live(world);if(active_game_instance.weak)vertex_live(active_game_instance);check_guard();
     vertex_pure(world);if(active_game_instance.weak)vertex_pure(active_game_instance);
-    for(size_t i=0;i<targets.size();++i)scene_target_final(targets[i],originals[i]);
+    for(size_t i=0;i<targets.size();++i)scene_target_final(targets[i],originals[i],world);
 }

@@ -308,9 +308,14 @@ void scene_anchor(Obj component) {
     }
     throw Error("native scene anchor class unsupported");
 }
-void supported(Obj world,Obj owner,Obj component,HsmpViewResult* r) {
+void supported(Obj world,Obj owner,Obj component,HsmpViewResult* r,bool empty_skeletal=false) {
     qualify(world,owner,component,r);
     if (is(component,L"/Script/Engine.SkinnedMeshComponent")) {
+        if(empty_skeletal){vertex_empty_profile(component,0);const auto proof=vertex_observe(world,owner,component,r);
+            require(proof.component_kind==0&&proof.asset_present==0&&proof.no_override==1,"native empty skeletal state unsupported");
+            require(!object_property(component,L"MeshDeformer").weak&&!object_property(component,L"PhysicsAssetOverride").weak&&!bool_property(component,L"bSetMeshDeformer"),"native empty skeletal deformer/physics override unsupported");
+            require(!returned(component,L"/Script/Engine.SkinnedMeshComponent:GetMeshDeformerInstance",r).weak,"native empty skeletal deformer instance unsupported");
+            qualify(world,owner,component,r);return;}
         auto mesh=mesh_asset(component,r); require(mesh.weak && is(mesh,L"/Script/Engine.SkeletalMesh"),"native skeletal asset missing");
         const auto clothing=read<Array>(mesh,L"MeshClothingAssets",L"ArrayProperty");
         require(clothing.count==0 && clothing.capacity>=0,"native cloth requires source surface replication");
@@ -325,7 +330,7 @@ void supported(Obj world,Obj owner,Obj component,HsmpViewResult* r) {
 }
 bool pointers(const void* p,uint32_t n,uint32_t cap) { return n<=cap && (!n||p); }
 void recipe(const HsmpViewComponent& c) {
-    require((c.kind<=1||(c.kind>=4&&c.kind<=8)) && c.visible<=1 && pointers(c.bones,c.bone_count,512) && pointers(c.morphs,c.morph_count,128) &&
+    require((c.kind<=1||(c.kind>=4&&c.kind<=9)) && c.visible<=1 && pointers(c.bones,c.bone_count,512) && pointers(c.morphs,c.morph_count,128) &&
         pointers(c.hidden_bones,c.hidden_count,512) && pointers(c.materials,c.material_count,32) &&
         pointers(c.vertex_lods,c.vertex_count,16),"native component recipe bounds");
     if(c.kind>=4&&c.kind<=7) {
@@ -338,7 +343,7 @@ void recipe(const HsmpViewComponent& c) {
         require(cls!=L"/Script/Engine.CapsuleComponent"||c.visible==0,"native scene anchor capsule visibility");
         require(text(c.skeleton).empty(),"native scene anchor skeletal asset");
         if(c.kind==5){require(cls==L"/Script/Engine.SplineComponent","native spline recipe exact class");spline_profile_valid(c.spline);}
-    }else if(c.kind==8){require(text(c.asset)==L"/Script/Engine.StaticMeshComponent"&&text(c.skeleton).empty()&&c.vertex_state==4&&!c.vertex_count,"native empty static recipe");}
+    }else if(c.kind==8||c.kind==9){require(text(c.asset)==(c.kind==9?L"/Script/Engine.SkeletalMeshComponent":L"/Script/Engine.StaticMeshComponent")&&text(c.skeleton).empty()&&c.vertex_state==4&&!c.vertex_count,"native empty mesh recipe");}
     else require(c.vertex_state==0 || c.vertex_state==1,"native vertex recipe incomplete");
     if(c.kind!=5)require(c.spline.position_count==0&&c.spline.rotation_count==0&&c.spline.scale_count==0&&c.spline.reparam_count==0&&c.spline.metadata_null==0,"native non-spline profile present");
     require((c.kind==7)==(c.spring_arm_socket.len>0),"native spring arm singleton recipe presence");
@@ -348,6 +353,8 @@ void recipe(const HsmpViewComponent& c) {
     engine(c.relative); for(uint32_t i=0;i<c.material_count;++i) {
         const auto& m=c.materials[i]; require(m.slot<32 && pointers(m.scalars,m.scalar_count,128) &&
             pointers(m.vectors,m.vector_count,128) && pointers(m.textures,m.texture_count,128),"native material dictionary bounds");
+        if(text(m.base).empty())require(c.kind==9&&!m.scalar_count&&!m.vector_count&&!m.texture_count,"native null material unsupported outside empty skeletal");
+        if(c.kind==9)require(m.slot==i,"native empty skeletal complete material slots");
     }
     for(uint32_t i=0;i<c.vertex_count;++i) {
         const auto& l=c.vertex_lods[i]; require(l.lod<16 && l.count>0 && l.count<=1000000 && l.bytes==l.count*4 && l.rgba,
@@ -388,14 +395,15 @@ Transform bone(Obj component,HsmpViewText b,HsmpViewResult* r) {
     Function f(L"/Script/Engine.SceneComponent:GetSocketTransform"); f.put(L"InSocketName",L"NameProperty",name(b));
     f.enumeration(L"TransformSpace",2); f.call(component,r); return wire(f.value<EngineTransform>(L"ReturnValue",L"StructProperty",L"Transform"));
 }
-Obj material(Obj component,uint32_t slot,HsmpViewResult* r) {
+Obj material(Obj component,uint32_t slot,HsmpViewResult* r,bool nullable=false) {
     Function f(L"/Script/Engine.PrimitiveComponent:GetMaterial"); f.put(L"ElementIndex",L"IntProperty",static_cast<int32_t>(slot));
-    f.call(component,r); auto out=f.returned(); require(out.weak,"native material slot unavailable"); return out;
+    f.call(component,r); auto out=f.returned(); require(nullable||out.weak,"native material slot unavailable"); return out;
 }
 void source_static(Obj component,const HsmpViewComponent& c,HsmpViewResult* r) {
     const bool visible=effective_visible(component);
     require(visible==(c.visible!=0),"source visibility recipe changed");
     for(uint32_t i=0;i<c.material_count;++i) {
+        if(c.kind==9&&text(c.materials[i].base).empty()){require(!material(component,c.materials[i].slot,r,true).weak,"native original null material replaced");continue;}
         auto current=material(component,c.materials[i].slot,r);const auto expected=asset(c.materials[i].base,L"/Script/Engine.MaterialInterface");
         bool matched{};for(unsigned depth=0;depth<32;++depth) {
             if(same(current,expected)){matched=true;break;}
@@ -444,6 +452,7 @@ void capture_values(Obj component,const HsmpViewComponent& c,HsmpViewFrame& out,
     }
     uint32_t si{},vi{},ti{};
     for(uint32_t i=0;i<c.material_count;++i) {
+        if(c.kind==9&&text(c.materials[i].base).empty()){require(!material(component,c.materials[i].slot,r,true).weak,"native source null material changed");continue;}
         const auto& m=c.materials[i]; auto mat=material(component,m.slot,r);
         for(uint32_t j=0;j<m.scalar_count;++j) out.scalars[si++]=material_get<float>(mat,m.scalars[j],L"/Script/Engine.MaterialInstanceDynamic:K2_GetScalarParameterValueByInfo",L"FloatProperty",nullptr,r);
         for(uint32_t j=0;j<m.vector_count;++j) {
@@ -542,6 +551,14 @@ void finish_component(Obj actor,Obj component,const Transform& relative,HsmpView
 }
 struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};std::wstring arm_socket;HsmpViewSpringArmFrame arm{};};
 struct Mirror {Obj world{},actor{};std::vector<Part> parts;};
+void forget_owned_materials(Obj actor){
+    for(auto it=vertex_source_materials.begin();it!=vertex_source_materials.end();){
+        if(it->second.owned==1&&same(it->second.owner,actor))it=vertex_source_materials.erase(it);else ++it;}
+}
+void forget_mirror_materials(const Mirror& mirror){
+    for(const auto& part:mirror.parts){const auto found=vertex_source_materials.find(part.render.weak);
+        if(found!=vertex_source_materials.end()&&found->second.owned==1&&same(found->second.owner,mirror.actor)&&same(found->second.component,part.render))vertex_source_materials.erase(found);}
+}
 std::map<uint64_t,Mirror> mirrors;
 std::mutex mirror_mutex;
 uint64_t next_mirror{1};
@@ -561,7 +578,8 @@ int32_t inspect(Obj world,Obj owner,Obj component,const HsmpViewGuard* guard,Hsm
     catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,HsmpViewFrame* out,const HsmpViewGuard* guard,HsmpViewResult* r) {
-    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});VertexOperation vertex_scope(c->vertex_state==0||c->kind==8?owner:Obj{},c->vertex_state==0||c->kind==8?component:Obj{},c->kind==8);SceneOperation scene_scope(c->kind==6||c->kind==7?owner:Obj{},c->kind==6||c->kind==7?component:Obj{},c->kind);supported(world,owner,component,r);
+    try{initialize_result(r);thread();OperationScope scope(guard,world);require(c&&out,"native capture arguments");layouts();frame(*c,*out);SplineOperation spline_scope(c->kind==5?owner:Obj{},c->kind==5?component:Obj{});VertexOperation vertex_scope(c->vertex_state==0||c->kind==8||c->kind==9?owner:Obj{},c->vertex_state==0||c->kind==8||c->kind==9?component:Obj{},c->kind==8||c->kind==9);SceneOperation scene_scope(c->kind==6||c->kind==7?owner:Obj{},c->kind==6||c->kind==7?component:Obj{},c->kind);supported(world,owner,component,r,c->kind==9);
+        if(c->kind==9)vertex_bind_source_materials(world,owner,component);
         if(c->kind==0) {require(same(mesh_asset(component,r),asset(c->asset,L"/Script/Engine.SkeletalMesh")),"source mesh recipe changed");}
         else if(c->kind>=4)require(same(keep(vt->class_of(get(component))),asset(c->asset,L"/Script/CoreUObject.Class")),"source scene anchor class changed");
         else require(same(object_property(component,L"StaticMesh"),asset(c->asset,L"/Script/Engine.StaticMesh")),"source static mesh recipe changed");
@@ -621,11 +639,21 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
                 part.render=add_component(actor,c.kind==6?L"/Script/Engine.CameraComponent":L"/Script/Engine.SpringArmComponent",c.relative,r);
                 SceneOperation operation(actor,part.render,c.kind);finish_component(actor,part.render,c.relative,r);scene_inert(part.render,r);
                 if(c.kind==7){part.arm_socket=text(c.spring_arm_socket);part.arm=arm_observe(world,actor,part.render,c.spring_arm_socket,r);}
-            }else if(c.kind==8){
-                part.render=add_component(actor,L"/Script/Engine.StaticMeshComponent",c.relative,r);
+            }else if(c.kind==8||c.kind==9){
+                part.render=add_component(actor,c.kind==9?L"/Script/Engine.SkeletalMeshComponent":L"/Script/Engine.StaticMeshComponent",c.relative,r);
                 VertexOperation operation(actor,part.render,true);require(vertex_empty,"native empty mirror constructor asset present");
-                Function mesh(L"/Script/Engine.StaticMeshComponent:SetStaticMesh");mesh.object(L"NewMesh",{});mesh.call(part.render,r);
-                finish_component(actor,part.render,c.relative,r);scene_inert(part.render,r);vertex_native_asset(world,actor,part.render,c,r);
+                if(c.kind==9){
+                    Function disable_pp(L"/Script/Engine.SkeletalMeshComponent:SetDisablePostProcessBlueprint");disable_pp.boolean(L"bInDisablePostProcess",true);disable_pp.call(part.render,r);
+                    Function anim(L"/Script/Engine.SkeletalMeshComponent:SetAnimClass");anim.object(L"NewClass",{},true);anim.call(part.render,r);
+                    Function cloth(L"/Script/Engine.SkeletalMeshComponent:SetAllowClothActors");cloth.boolean(L"bInAllow",false);cloth.call(part.render,r);
+                    Function suspend(L"/Script/Engine.SkeletalMeshComponent:SuspendClothingSimulation");suspend.call(part.render,r);
+                    Function suspended(L"/Script/Engine.SkeletalMeshComponent:IsClothingSimulationSuspended");suspended.call(part.render,r);const auto flag=suspended.field(L"ReturnValue",L"BoolProperty",1);
+                    require((suspended.buf[static_cast<size_t>(flag.offset+flag.bool_offset)]&flag.bool_mask)!=0,"native empty mirror cloth not suspended");
+                    Function mesh(L"/Script/Engine.SkeletalMeshComponent:SetSkeletalMeshAsset");mesh.object(L"NewMesh",{});mesh.call(part.render,r);
+                    Function follow(L"/Script/Engine.SkinnedMeshComponent:SetLeaderPoseComponent");follow.object(L"NewLeaderBoneComponent",{});follow.boolean(L"bForceUpdate",true);follow.boolean(L"bInFollowerShouldTickPose",false);follow.call(part.render,r);
+                    require(!object_property(part.render,L"AnimScriptInstance").weak&&!object_property(part.render,L"PostProcessAnimInstance").weak,"native empty mirror animation instance active");
+                }else{Function mesh(L"/Script/Engine.StaticMeshComponent:SetStaticMesh");mesh.object(L"NewMesh",{});mesh.call(part.render,r);}
+                finish_component(actor,part.render,c.relative,r);scene_inert(part.render,r);
             }else {
                 part.render=add_component(actor,L"/Script/Engine.StaticMeshComponent",c.relative,r);
                 auto mesh=asset(c.asset,L"/Script/Engine.StaticMesh");Function set_mesh(L"/Script/Engine.StaticMeshComponent:SetStaticMesh");set_mesh.object(L"NewMesh",mesh);set_mesh.call(part.render,r);
@@ -634,13 +662,17 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
                 require(same(object_property(part.render,L"StaticMesh"),mesh),"mirror static asset readback failed");
             }
             std::optional<VertexOperation> vertex_scope;
-            if(c.vertex_state==0||c.kind==8)vertex_scope.emplace(actor,part.render,c.kind==8);
+            if(c.vertex_state==0||c.kind==8||c.kind==9)vertex_scope.emplace(actor,part.render,c.kind==8||c.kind==9);
             std::optional<SceneOperation> scene_scope;if(c.kind==6||c.kind==7)scene_scope.emplace(actor,part.render,c.kind);
             for(uint32_t j=0;j<c.material_count;++j) {
+                if(c.kind==9&&text(c.materials[j].base).empty()){
+                    Function clear(L"/Script/Engine.PrimitiveComponent:SetMaterial");clear.put(L"ElementIndex",L"IntProperty",static_cast<int32_t>(c.materials[j].slot));clear.object(L"Material",{});clear.call(part.render,r);
+                    require(!material(part.render,c.materials[j].slot,r,true).weak,"native mirror null material assignment failed");part.materials.push_back({});continue;}
                 const auto& m=c.materials[j];Function mid(L"/Script/Engine.PrimitiveComponent:CreateDynamicMaterialInstance");mid.put(L"ElementIndex",L"IntProperty",static_cast<int32_t>(m.slot));mid.object(L"SourceMaterial",asset(m.base,L"/Script/Engine.MaterialInterface"));mid.put(L"OptionalName",L"NameProperty",uint64_t{});mid.call(part.render,r);
                 auto instance=mid.returned();require(instance.weak&&is(instance,L"/Script/Engine.MaterialInstanceDynamic")&&same(material(part.render,m.slot,r),instance),"mirror material creation failed");part.materials.push_back(instance);
             }
-            if(c.kind<=1)colors(part.render,c,r);visibility(part.render,c.visible!=0,r);qualify(world,actor,part.render,r);
+            if(c.kind<=1)colors(part.render,c,r);visibility(part.render,c.visible!=0,r);qualify(world,actor,part.render,r);vertex_native_asset(world,actor,part.render,c,r);
+            if(c.kind==9)vertex_bind_source_materials(world,actor,part.render,1,&part.materials);
             if(part.leader.weak)qualify(world,actor,part.leader,r);mirror.parts.push_back(std::move(part));
         }
         // Source roots have no parent; every other direct parent must be in the
@@ -659,7 +691,7 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
             else if(part.kind>=6)targets.push_back({actor,part.render,{},part.kind,1,{u16(part.arm_socket.c_str()),static_cast<uint32_t>(part.arm_socket.size()),0},part.arm});}
         finish_scene_set(world,targets,r);
         require(next_mirror!=0,"mirror handle exhausted");const auto id=next_mirror++;mirrors.emplace(id,std::move(mirror));r->complete=1;return id;
-    }catch(const std::exception& e){failure(r,e.what());if(actor.weak){try{OperationScope scope(guard,world);destroy_actor(world,actor);}catch(const std::exception&){}}return 0;}
+    }catch(const std::exception& e){failure(r,e.what());if(actor.weak){forget_owned_materials(actor);try{OperationScope scope(guard,world);destroy_actor(world,actor);}catch(const std::exception&){}}return 0;}
 }
 void world_transform(Obj component,const Transform& t,HsmpViewResult* r) {
     Function f(L"/Script/Engine.SceneComponent:K2_SetWorldTransform");f.put(L"NewTransform",L"StructProperty",engine(t),L"Transform");f.boolean(L"bSweep",false);f.boolean(L"bTeleport",true);f.call(component,r);
@@ -680,7 +712,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         for(const auto i:order) {
             const auto& c=recipes[i];const auto& f=frames[i];auto& part=mirror.parts[i];frame(c,f);require(c.id==part.id&&c.kind==part.kind,"mirror recipe generation mismatch");
             SplineOperation spline_scope(c.kind==5?mirror.actor:Obj{},c.kind==5?part.render:Obj{});
-            VertexOperation vertex_scope(c.vertex_state==0||c.kind==8?mirror.actor:Obj{},c.vertex_state==0||c.kind==8?part.render:Obj{},c.kind==8);
+            VertexOperation vertex_scope(c.vertex_state==0||c.kind==8||c.kind==9?mirror.actor:Obj{},c.vertex_state==0||c.kind==8||c.kind==9?part.render:Obj{},c.kind==8||c.kind==9);
             SceneOperation scene_scope(c.kind==6||c.kind==7?mirror.actor:Obj{},c.kind==6||c.kind==7?part.render:Obj{},c.kind);
             vertex_native_asset(world,mirror.actor,part.render,c,r);
             qualify(world,mirror.actor,part.render,r);world_transform(part.render,f.world,r);if(part.leader.weak)world_transform(part.leader,f.world,r);
@@ -699,7 +731,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
             }
             uint32_t si{},vi{},ti{};
             for(uint32_t j=0;j<c.material_count;++j) {
-                const auto& m=c.materials[j];auto mat=part.materials[j];require(same(material(part.render,m.slot,r),mat),"mirror material replaced");
+                const auto& m=c.materials[j];auto mat=part.materials[j];require(same(material(part.render,m.slot,r,c.kind==9),mat),"mirror material replaced");
                 for(uint32_t k=0;k<m.scalar_count;++k) {float value=f.scalars[si++];require(std::isfinite(value),"mirror material scalar invalid");material_set(mat,m.scalars[k],value,L"/Script/Engine.MaterialInstanceDynamic:SetScalarParameterValueByInfo",L"FloatProperty",nullptr,r);
                     require(material_get<float>(mat,m.scalars[k],L"/Script/Engine.MaterialInstanceDynamic:K2_GetScalarParameterValueByInfo",L"FloatProperty",nullptr,r)==value,"mirror scalar readback failed");}
                 for(uint32_t k=0;k<m.vector_count;++k) {std::array<float,4> value{};std::copy_n(f.vectors+4*vi++,4,value.data());for(float x:value)require(std::isfinite(x),"mirror material vector invalid");material_set(mat,m.vectors[k],value,L"/Script/Engine.MaterialInstanceDynamic:SetVectorParameterValueByInfo",L"StructProperty",L"LinearColor",r);
@@ -721,8 +753,8 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         finish_scene_set(world,targets,r);r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
-void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
-void discard(uint64_t id) {const std::lock_guard lock(mirror_mutex);mirrors.erase(id);}
+void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;forget_mirror_materials(mirror);mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
+void discard(uint64_t id) {const std::lock_guard lock(mirror_mutex);const auto found=mirrors.find(id);if(found!=mirrors.end()){forget_mirror_materials(found->second);mirrors.erase(found);}}
 using ObjectFlags=const uint32_t*(*)(const void*);
 ObjectFlags retirement_flags{};
 Free retirement_free{};
@@ -924,7 +956,7 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
         finish_scene_set(world,targets,r);r->complete=1;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
-const HsmpPresentation provider{10,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets};
+const HsmpPresentation provider{11,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets};
 }
 void hsmp_presentation_register(const HsmpReflect* reflection) {
     const auto module=GetModuleHandleW(L"UE4SS.dll");
