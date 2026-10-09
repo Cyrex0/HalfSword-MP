@@ -4,7 +4,8 @@ local I=dofile("mods/HSMPMatch/Scripts/native_client_isolation.lua")
 local Arrays=dofile("mods/HSMPMatch/Scripts/native_client_array.lua")
 local n=0;local function check(ok,why)n=n+1;T.check(ok,why);assert(ok,why)end
 local function fixture()
-    local f={valid=true,role=true,actors={},destroyed={},mutations=0,next=10}
+    local f={valid=true,role=true,actors={},destroyed={},mutations=0,next=10,classes={}}
+    f.class_address=function(path)if not f.classes[path]then f.next=f.next+1;f.classes[path]=f.next end;return f.classes[path]end
     local function actor(name,types)
         f.next=f.next+1
         local a={name=name,address=f.next,valid=true,types=types or{},hidden=false,bHidden=false,collision=true,tick=true,components={}}
@@ -47,12 +48,13 @@ local function fixture()
     f.actors.ModularWeaponBP_C={f.weapon};f.actors.Modular_Weapon_Part_Master_C={f.part}
     f.env={role={presentation=function()return f.role end},WG={key="world1",token=function()return 1 end,same=function()return f.valid end,world=function()return f.world end},
         UEHelpers={GetGameplayStatics=function()return{IsValid=function()return true end,GetGameMode=function()return f.gm end}end},
-        find=function(path)return{path=path,IsValid=function()return true end}end,
+        find=function(path)return{path=path,IsValid=function()return true end,GetAddress=function()return f.class_address(path)end}end,
         find_all=function(class)local out={};for _,a in ipairs(f.actors[class]or{})do if a.valid then out[#out+1]=a end end;return #out>0 and out or nil end,
         FName=function(s)return s end,each=Arrays.each}
     f.env.scope_native=function(world,original)
         assert(world==f.world.address)
-        return{ok=true,qualified=true,weak=1001,address=original,state={object_flags={known=true,value=f.driver.flags or 0},world_listed={known=true,value=true}}}
+        return{ok=true,qualified=true,weak=1001,address=original,state={object_flags={known=true,value=f.driver.flags or 0},world_listed={known=true,value=true},
+            name=original+100,class_address=f.class_address("/Game/Blueprints/Managers/BP_LevelManager.BP_LevelManager_C"),class_weak=555}}
     end
     f.env.retire_native=function(world,original,kind,scope_weak)
         assert(world==f.world.address and original==f.driver.address and kind==0)
@@ -183,12 +185,13 @@ do
     generator.RootComponent=null;generator.DefaultSceneRoot=null;f.actors.BP_Generator_Weapons_Random_C={generator}
     local scope=f.env.scope_native
     f.env.scope_native=function(world,original)if original==generator.address then return{ok=true,qualified=true,weak=1002,address=original,
-        state={object_flags={known=true,value=0},world_listed={known=true,value=false}}}end;return scope(world,original)end
+        state={object_flags={known=true,value=0},world_listed={known=true,value=false},name=original+100,class_weak=556,
+            class_address=f.class_address("/Game/Blueprints/Generators/BP_Generator_Weapons_Random.BP_Generator_Weapons_Random_C")}}end;return scope(world,original)end
     local calls=0;generator.ActorHasTag=function()calls=calls+1;error("unlisted actor PE")end
     local ok,why,counts=s:run();local evidence=counts.refusal
     check(not ok and why=="suppression_driver_world_unlisted"and counts.drivers==1 and calls==0,"unlisted global driver refuses before actor PE rather than guessing inactive/removal")
-    check(evidence.kind=="driver"and evidence.name.value==generator.name and evidence.class.value=="Class /Test/"..generator.name
-        and evidence.address.value==generator.address,"native scope refusal retains exact global actor identity")
+    check(evidence.kind=="driver"and evidence.expected_class=="/Game/Blueprints/Generators/BP_Generator_Weapons_Random.BP_Generator_Weapons_Random_C"
+        and evidence.address.value==generator.address and evidence.native.state.name==generator.address+100,"native scope refusal retains original scalar actor identity without wrapper calls")
     check(evidence.native.state.world_listed.known and evidence.native.state.world_listed.value==false
         and evidence.native.state.object_flags.value==0,"original native garbage=false/world absence remains a scoped fact without a guessed lifecycle")
     check(#counts.driver_proofs==1 and counts.driver_proofs[1].native.dispatched==true and f.pc.Pawn==f.pawn,
@@ -211,9 +214,9 @@ do
     end
     f.driver.RootComponent=nil;setmetatable(f.driver,{__index=function(_,key)if key=="RootComponent"or key=="DefaultSceneRoot"then root_reads=root_reads+1;error("garbage root field")end end})
     local ok,why,counts=s:run()
-    check(not ok and why=="suppression_driver_native_garbage"and counts.refusal.native.state.object_flags.value==0x40000000
+    check(not ok and why=="suppression_driver_scope_contradiction"and counts.refusal.native.state.object_flags.value==0x40000000
         and events==0 and root_reads==0,"native garbage driver scope refuses before actor PE or Lua root fields")
-    check(counts.refusal.name.value==f.driver.name and f.driver.valid==true,
+    check(counts.refusal.native.state.name==f.driver.address+100 and f.driver.valid==true,
         "Lua wrapper validity does not label an engine-garbage actor alive")
 end
 do
@@ -239,6 +242,47 @@ do
         "missing native driver scope fails closed without actor removal")
 end
 do
+    local f,s=fixture();local scopes,dispatches,probes,actor_calls=0,0,0,0
+    local original=f.env.scope_native
+    f.env.scope_native=function(...)
+        scopes=scopes+1;local row=original(...);row.state.world_listed.value=false;row.state.object_flags.value=0x40280008;return row
+    end
+    f.env.retire_native=function()dispatches=dispatches+1;error("external actor cannot be our retirement")end
+    f.env.probe_native=function()probes=probes+1;error("external actor has no native own-retirement proof")end
+    for _,method in ipairs({"IsValid","GetWorld","GetFName","GetClass","ActorHasTag","IsA","IsActorBeingDestroyed","SetActorTickEnabled","SetActorHiddenInGame","K2_GetComponentsByClass","K2_DestroyActor"})do
+        f.driver[method]=function()actor_calls=actor_calls+1;error("external garbage actor must not receive wrapper/PE calls")end
+    end
+    local ok,why,counts=s:run()
+    check(ok and scopes==1 and dispatches==0 and probes==0 and actor_calls==0,why or"qualified absent native-garbage driver receives no actor lookup or destruction")
+    check(counts.drivers==0 and #counts.driver_proofs==0 and #counts.external_drivers==1
+        and counts.external_drivers[1].native.state.object_flags.value==0x40280008,
+        "external actor scope is recorded separately from original native retirement proofs")
+    check(next(s.removed_drivers)==nil and next(s.external_identities)~=nil,
+        "external scope stores only distinct scalar reuse identity and never enrolls own/native retirement proof")
+    local again,again_why,again_counts=s:run()
+    check(again and scopes==2 and probes==0 and actor_calls==0 and #again_counts.external_drivers==1,
+        again_why or"each repeated global wrapper census requires a fresh native external scope without actor calls")
+    f.env.scope_native=function(...)local row=original(...);row.state.object_flags.value=0x40280008;row.state.world_listed.value=false;row.weak=1002;return row end
+    local changed,reason=s:run()
+    check(not changed and reason=="suppression_external_driver_identity_changed"and dispatches==0 and actor_calls==0,
+        "external address reused by a new original weak generation fails closed before actor calls")
+    s:drop();check(next(s.external_identities)==nil and next(s.removed_drivers)==nil,"world drop clears separate external scalar identities")
+end
+do
+    local f,s=fixture();local original=f.env.scope_native
+    f.env.scope_native=function(...)local row=original(...);row.state.class_address=row.state.class_address+1;return row end
+    local ok,why=s:run();check(not ok and why=="suppression_driver_scope_class"and #f.destroyed==0,
+        "native driver scope must match the exact full class identity before external skip or retirement")
+end
+do
+    local f,s=fixture();local original=f.env.scope_native;local ready=false
+    f.env.scope_native=function(...)local row=original(...);if not ready then row.state.world_listed.value=false;row.state.object_flags.value=0x40280008 end;return row end
+    check(s:run(),"fixture observes original qualified externally retired driver")
+    ready=true;local ok,why=s:run()
+    check(not ok and why=="suppression_external_driver_became_live"and f.driver.valid,
+        "same externally retired identity becoming world-live contradicts cached scalar scope and cannot authorize removal")
+end
+do
     local f,s=fixture();f.env.scope_native=function(_,original)return{ok=true,qualified=true,weak=1001,address=original,
         state={object_flags={known=true,value=0},world_listed={known=false}}}end
     local ok,why=s:run();check(not ok and why=="suppression_native_actor_scope_refused"and f.driver.valid,
@@ -255,7 +299,9 @@ do
 end
 do
     local f,s=fixture();f.driver.GetWorld=function()return{IsValid=function()return true end,GetAddress=function()return-1 end}end
-    local ok=s:run();check(ok and f.driver.valid and f.driver.tick,"foreign world spawn drivers are preserved")
+    local scope=f.env.scope_native;f.env.scope_native=function(...)local row=scope(...);row.state.world_listed.value=false;return row end
+    local ok,why=s:run();check(not ok and why=="suppression_driver_world_unlisted"and f.driver.valid and f.driver.tick,
+        "native world-absent non-garbage driver stays refused without mutation or a guessed foreign/inactive skip")
 end
 do
     local f,s=fixture();f.pawn.Mesh.SetAllBodiesSimulatePhysics=function()end;f.pawn.Mesh.SetSimulatePhysics=function()end

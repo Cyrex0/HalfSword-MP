@@ -19,9 +19,9 @@ local function engine_retired(proof)
             and type(after.object_flags.value)=="number"and(after.object_flags.value&0x40000000)~=0))
 end
 function M.new(env)
-    local self={retired={},removed_drivers={},key=nil}
+    local self={retired={},removed_drivers={},external_identities={},key=nil}
     function self:drop()
-        self.retired={};self.removed_drivers={};self.key=nil
+        self.retired={};self.removed_drivers={};self.external_identities={};self.key=nil
         if type(env.clear_native)=="function"then env.clear_native()end -- scalar-only; never touches old UObjects
     end
     function self:retirement(address,name)return self.retired[address]==name end
@@ -30,7 +30,7 @@ function M.new(env)
         local WG=env.WG;local token=WG.token();local world=WG.world()
         if not world or not WG.same(token)then return false,"suppression_world_unavailable"end
         if self.key~=WG.key then self:drop();self.key=WG.key end
-        local summary={drivers=0,retired=0,gear=0,ai=0,driver_proofs={}}
+        local summary={drivers=0,retired=0,gear=0,ai=0,driver_proofs={},external_drivers={}}
         local result,reason=pcall(function()
             local function fresh()if not WG.same(token)then error("suppression_world_changed",0)end end
             local function live(o)
@@ -163,13 +163,9 @@ function M.new(env)
                 if call(actor,"GetActorEnableCollision")~=false or call(actor,"IsActorTickEnabled")~=false or actor.bHidden~=true then error("suppression_actor_readback",0)end
                 fresh();summary.refusal=nil
             end
-            local function destroy(actor,kind)
-                local driver_scope
-                if kind=="driver"then
-                    local original=address(actor)
-                    local evidence={kind=kind,phase="native_scope",address={known=true,value=original},
-                        name=fact(function()return name(actor):sub(1,256)end,"string"),
-                        class=fact(function()return call(call(actor,"GetClass"),"GetFullName"):sub(1,512)end,"string")}
+            local function driver_scope(actor,original,path)
+                    local evidence={kind="driver",phase="native_scope",address={known=true,value=original},
+                        expected_class=path,name={known=false,error="native scope not qualified"},class={known=false,error="native scope not qualified"}}
                     summary.refusal=evidence
                     if type(env.scope_native)~="function"then error("suppression_native_actor_scope_unavailable",0)end
                     fresh();local scope,why=env.scope_native(world_address,original);fresh()
@@ -181,12 +177,38 @@ function M.new(env)
                         or not state.world_listed or state.world_listed.known~=true or type(state.world_listed.value)~="boolean"then
                         error("suppression_native_actor_scope_refused",0)
                     end
-                    if(state.object_flags.value&0x40000000)~=0 then error("suppression_driver_native_garbage",0)end
+                    local expected=cls(path)
+                    if type(state.class_address)~="number"or state.class_address~=call(expected,"GetAddress")
+                        or type(state.class_weak)~="number"or state.class_weak==0 or type(state.name)~="number"then
+                        error("suppression_driver_scope_class",0)
+                    end
+                    local old=self.external_identities[original]
+                    if old and(old.world~=self.key or old.weak~=scope.weak or old.name~=state.name
+                        or old.class_address~=state.class_address or old.class_weak~=state.class_weak)then
+                        error("suppression_external_driver_identity_changed",0)
+                    end
+                    local garbage=(state.object_flags.value&0x40000000)~=0
+                    if state.world_listed.value==false and garbage then
+                        local count=0;for _ in pairs(self.external_identities)do count=count+1 end
+                        if(not old and count>=512)or #summary.external_drivers>=512 then error("suppression_external_driver_bound",0)end
+                        self.external_identities[original]={weak=scope.weak,name=state.name,class_address=state.class_address,class_weak=state.class_weak,world=self.key}
+                        -- No positive pre-removal observation exists here. This
+                        -- is a freshly qualified non-live wrapper, never our
+                        -- retirement or native-probe proof. No actor lookup/PE.
+                        summary.external_drivers[#summary.external_drivers+1]={address=original,weak=scope.weak,expected_class=path,native=scope}
+                        summary.refusal=nil;return nil
+                    end
+                    if garbage then error("suppression_driver_scope_contradiction",0)end
+                    if old then error("suppression_external_driver_became_live",0)end
                     -- World absence alone does not prove inactivity or removal.
                     -- Report it, and never call actor PE for that scope.
                     if state.world_listed.value~=true then error("suppression_driver_world_unlisted",0)end
-                    driver_scope=scope
-                end
+                    evidence.name=fact(function()return name(actor):sub(1,256)end,"string")
+                    evidence.class=fact(function()return call(call(actor,"GetClass"),"GetFullName"):sub(1,512)end,"string")
+                    return scope
+            end
+            local function destroy(actor,kind,original_scope)
+                local driver_scope=original_scope
                 if not current(actor)or protected(actor)then error("suppression_destroy_qualification",0)end
                 local function actor_state(valid)
                     local state={valid={known=true,value=valid}}
@@ -269,13 +291,14 @@ function M.new(env)
                     -- pointer value; it does not dereference the expired actor.
                     fresh();local raw=driver:GetAddress();fresh()
                     if type(raw)~="number"then error("suppression_driver_address",0)end
-                    if not confirmed[raw]and current(driver)then
-                    if call(driver,"IsA",cls(DRIVER_PATHS[class]))~=true then error("suppression_driver_class",0)end
+                    if not confirmed[raw]then
+                    local scope=driver_scope(driver,raw,DRIVER_PATHS[class])
+                    if scope then
                     -- Complete native world removal replaces the generic inert
                     -- component prerequisite only for these exact spawn drivers.
                     -- Zero components never becomes a body/physics proof.
-                    destroy(driver,"driver");summary.drivers=summary.drivers+1
-                end end
+                    destroy(driver,"driver",scope);summary.drivers=summary.drivers+1
+                end end end
             end
             local willies={};local targets={}
             for _,pawn in pairs(objects("Willie_BP_C"))do if current(pawn)and not protected(pawn)then
