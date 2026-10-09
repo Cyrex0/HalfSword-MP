@@ -147,9 +147,11 @@ T.check(Vertex.capture(vertex_env)==nil and requests==0,"vertex expansion bound 
 local Render=dofile("mods/HSMPMatch/Scripts/native_source_render.lua")
 local function fname(value)return {ToString=function()return value end}end
 local function array(values)return {GetArrayNum=function()return #values end,ForEach=function(_,fn)for i,v in ipairs(values)do fn(i,wrapped(v))end end}end
+local render_world={GetAddress=function()return 1 end,IsValid=function()return true end}
 local function object(address,n,path,transient)
     return {GetAddress=function()return address end,IsValid=function()return true end,GetFName=function()return fname(n)end,
         GetFullName=function()return "FixtureClass "..path end,HasAnyFlags=function()return transient end,
+        GetWorld=function()return render_world end,GetClass=function()return {GetFullName=function()return "Class /Script/Engine.SceneComponent"end}end,
         type=function()return "UObject"end,get=function()error("direct UObject is not a parameter",0)end}
 end
 local saved_find,saved_fname=StaticFindObject,FName
@@ -204,7 +206,7 @@ host.GetComponentsByClass=unavailable_component_alias;live_weapon.GetComponentsB
 local rvp={IsValid=function()return true end,GetMeshComponentAmountOfVerticesOnLOD=function(_,c)return #c.native_colors end,
     GetMeshComponentVertexColorsAtLOD_Wrapper=function(_,c)return color_return(c.native_colors)end}
 StaticFindObject=function(p)return p=="/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary"and rvp or p end
-local render_env={read=function(fn)if not scope then error("scope",0)end;local value=fn({pawn=host});if not scope then error("scope",0)end;return value end,
+local render_env={read=function(fn)if not scope then error("scope",0)end;local value=fn({pawn=host,world=render_world});if not scope then error("scope",0)end;return value end,
     guard=function()if not scope then error("scope",0)end end,token_valid=function()return scope end,weapon=function()return live_weapon end}
 local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapon R"}}}
 local rendered=Render.capture(render_env,native_bindings)
@@ -217,6 +219,20 @@ T.eq(rendered.components[1].hidden_bones[1],bone_names[40],"native hidden render
 T.eq(rendered.components[2].parent,1,"native weapon attachment binds captured source body")
 T.eq(rendered.bindings[2].owner,200,"ephemeral binding uses actual owner address rather than logical wire id")
 T.eq(rendered.topology.vertex_state,"captured","source vertex readiness follows actual complete getter data")
+local anchor=object(101,"ActualSceneAnchor","/Game/Test/Runtime.ActualSceneAnchor",false)
+anchor.GetOwner=function()return host end;anchor.GetAttachParent=function()return root end;anchor.GetAttachSocketName=function()return fname("ExactAnchorSocket")end
+anchor.GetRelativeTransform=function()return {Translation={X=0.125,Y=-2.5,Z=3},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=0.5,Y=1,Z=2}}end
+anchor.K2_GetComponentToWorld=function()return {Translation={X=10.125,Y=20,Z=-30},Rotation={X=0,Y=0,Z=0,W=1},Scale3D={X=0.5,Y=1,Z=2}}end
+body.GetAttachParent=function()return anchor end
+local anchored,anchor_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not anchored and anchor_reason:find('child=0xB:"BodyMesh"',1,true) and anchor_reason:find('parent=0x65:"ActualSceneAnchor"',1,true)
+    and anchor_reason:find('owner=0xA:"Pawn"',1,true) and anchor_reason:find('root=0x64:"CapsuleRoot"',1,true),"unseen native parent refusal includes exact child parent owner and root identities")
+T.check(anchor_reason:find('parent_relative_p3q4s3=0.125,-2.5,3,0,0,0,1,0.5,1,2',1,true)
+    and anchor_reason:find('parent_world_p3q4s3=10.125,20,-30,0,0,0,1,0.5,1,2',1,true),"unseen parent evidence preserves actual complete transforms")
+local parent_ops=0;anchor.GetWorld=function()scope=false;return render_world end
+anchor.GetRelativeTransform=function()parent_ops=parent_ops+1;return {}end
+T.check(not pcall(Render.capture,render_env,native_bindings) and parent_ops==0,"world change during attachment evidence prevents later parent getters")
+scope=true;body.GetAttachParent=function()return root end
 T.eq(rendered.components[1].physics_asset,"/Game/Test/Physics.Physics","null native component override selects actual skeletal asset physics")
 local override_asset=object(321,"OverridePhysics","/Game/Test/OverridePhysics.OverridePhysics",false)
 body.PhysicsAssetOverride=override_asset

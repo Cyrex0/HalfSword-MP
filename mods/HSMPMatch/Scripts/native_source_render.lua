@@ -90,6 +90,60 @@ function M.capture(env,bindings)
         local out={};for i,k in ipairs(keys)do out[i]=checked(function()return v[k]end);if type(out[i])~="number"then fail("native render vector unavailable")end end
         return out
     end
+    local function attachment_refusal(row,parent,root)
+        -- Evidence only: an unseen native parent never becomes a guessed root.
+        -- Resolve the original child and its parent again before each getter.
+        local function fresh_parent()
+            local p=get(row,function(o)return o:GetAttachParent()end)
+            local identity=object_id(p)
+            if not identity or identity.address~=parent.address or identity.name~=parent.name then fail("native attachment parent changed during evidence")end
+            return p
+        end
+        local function parent_read(fn)
+            guard();local value=fn(fresh_parent());guard();fresh_parent();return value
+        end
+        local function bounded(value,max)
+            local s=tostring(value);return #s<=max and s or s:sub(1,max).."[truncated]"
+        end
+        local function identity_text(identity)
+            if not identity then return "null"end
+            return string.format("0x%X",identity.address)..":"..string.format("%q",bounded(identity.name,96))
+        end
+        local function class_name(o)return o:GetClass():GetFullName()end
+        local world_address=read(function(b)return b.world:GetAddress()end)
+        local parent_world=parent_read(function(o)return o:GetWorld()end)
+        if not parent_world or checked(function()return parent_world:IsValid()end)~=true
+            or checked(function()return parent_world:GetAddress()end)~=world_address then fail("native attachment parent world changed during evidence")end
+        local child_owner=object_id(get(row,function(o)return o:GetOwner()end))
+        local parent_owner=object_id(parent_read(function(o)return o:GetOwner()end))
+        local child_class=get(row,class_name)
+        local parent_class=parent_read(class_name)
+        local parent_root=object_id(parent_read(function(o)return o:GetOwner().RootComponent end))
+        local ancestor=object_id(parent_read(function(o)return o:GetAttachParent()end))
+        local socket=name(parent_read(function(o)return o:GetAttachSocketName()end))
+        local function transform_text(v)
+            local values={}
+            for _,part in ipairs({{"Translation",{"X","Y","Z"}},{"Rotation",{"X","Y","Z","W"}},{"Scale3D",{"X","Y","Z"}}})do
+                for _,key in ipairs(part[2])do
+                    local n=checked(function()return v[part[1]][key]end)
+                    if type(n)~="number" or n~=n or math.abs(n)==math.huge then fail("native attachment transform unavailable")end
+                    values[#values+1]=string.format("%.17g",n)
+                end
+            end
+            return table.concat(values,",")
+        end
+        local relative=transform_text(parent_read(function(o)return o:GetRelativeTransform()end))
+        local world=transform_text(parent_read(function(o)return o:K2_GetComponentToWorld()end))
+        fresh_parent()
+        return "native render attachment parent not captured"
+            .." child="..identity_text(row).." parent="..identity_text(parent)
+            .." owner="..identity_text(child_owner).." root="..identity_text(root)
+            .." parent_owner="..identity_text(parent_owner).." parent_root="..identity_text(parent_root)
+            .." ancestor="..identity_text(ancestor).." socket="..string.format("%q",bounded(socket,96))
+            .." world="..string.format("0x%X",world_address)
+            .." child_class="..bounded(child_class,160).." parent_class="..bounded(parent_class,160)
+            .." parent_relative_p3q4s3="..relative.." parent_world_p3q4s3="..world
+    end
     local function material(row,slot)
         local scalar,vector,texture={},{},{}
         local current=get(row,function(c)return c:GetMaterial(slot)end)
@@ -150,7 +204,7 @@ function M.capture(env,bindings)
             for _,p in ipairs(rows)do if p.address==parent.address and p.name==parent.name then c.parent=p.id;break end end
             if c.parent==0 then
                 local root=object_id(checked(function()return owner(row).RootComponent end))
-                if not root or root.address~=parent.address or root.name~=parent.name then fail("native render attachment parent not captured")end
+                if not root or root.address~=parent.address or root.name~=parent.name then fail(attachment_refusal(row,parent,root))end
             end
         end
         local responses={};for channel=0,31 do responses[channel+1]=get(row,function(o)return o:GetCollisionResponseToChannel(channel)end)end
