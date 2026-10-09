@@ -128,11 +128,24 @@ end
 -- The actual worker loop emits the latest sampling refusal to its own stream.
 -- A later successful sample clears the reason without clearing refusal counts.
 do
-    local callback, clock, refusal, events = nil, 1, "source vertex colours unavailable", {}
+    local callback, clock, refusal, events, phases, sample_calls = nil, 1, "source vertex colours unavailable", {}, {}, 0
     local N={worker_input=function()return true end,host_start=function()return true end,
         host_directory=function()return {epoch=44,seq=1,entities={}}end,host_inputs=function()return {}end,
-        sample_config=function()return true end,native_sample_world=function()return refusal==nil,refusal end,
-        native_commit_world=function()return true end}
+        sample_config=function()
+            T.check(phases[#phases].stage=="sample_config" and phases[#phases].edge=="enter",
+                "worker persists configuration entry before invoking native setup")
+            return true
+        end,native_sample_world=function()
+            sample_calls=sample_calls+1
+            if sample_calls==1 then T.check(phases[#phases].stage=="canonical_core" and phases[#phases].edge=="enter",
+                "actual worker persists canonical entry before invoking native sample")end
+            return refusal==nil,refusal
+        end,
+        native_commit_world=function()
+            T.check(phases[#phases].stage=="canonical_publish" and phases[#phases].edge=="enter",
+                "actual worker persists publication entry before invoking native commit")
+            return true
+        end}
     local world={IsValid=function()return true end}
     local wg={key="native#2",check=function()return true end,settled=function()return true end,
         world=function()return world end,token=function()return 1 end,same=function(token)return token==1 end,
@@ -142,6 +155,7 @@ do
         hsmp_ipc={N=N,init=function()end,frame=function()end,world_ready=function()end},
         hsmp_log={init=function()end,event=function(name,fields)
             if name=="x_native_worker" and fields.state=="native_evidence" then events[#events+1]=fields end
+            if name=="x_native_worker" and fields.state=="native_capture_phase" then phases[#phases+1]=fields end
         end},hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},
         director={make_ue_env=function()return {apply_cvars=function()end}end,
             new_native_worker=function()return {state="native_ready",tick=function()return true end}end},
@@ -164,6 +178,12 @@ do
     clock=4;refusal="native render changed";callback()
     T.check(#events==4 and events[4].reason==refusal and events[4].refused==3 and events[4].sampled==1,
         "a later canonical refusal replaces the old cause in the authority stream")
+    local core_entries=0
+    for _,phase in ipairs(phases)do if phase.stage=="canonical_core" and phase.edge=="enter"then core_entries=core_entries+1 end end
+    T.check(core_entries==1 and sample_calls==4,"advancing source frames do not emit per-frame capture diagnostics")
+    T.check(phases[#phases].stage=="canonical_publish" and phases[#phases].edge=="exit" and phases[#phases].ok==true
+        and phases[#phases].epoch==44 and phases[#phases].dir_seq==1 and phases[#phases].frame_seq==3,
+        "worker phase exits contain copied exact source metadata and the returned native result")
 end
 T.check(controls:receive(frame(1, 1, nil, 5)), "owned human input accepted")
 T.check(not controls:receive(frame(3, 1)), "AI cannot receive a player input")
@@ -255,19 +275,63 @@ do
 end
 
 do
+    local phases={}
+    local function phase(context,stage,edge,detail)
+        phases[#phases+1]={context=context,stage=stage,edge=edge,detail=detail}
+    end
+    local token={}
+    local env={phase=phase,same=function(value)return value==token end,invalidate=function()end,
+        sample=function()
+            T.check(phases[#phases].stage=="canonical_core" and phases[#phases].edge=="enter",
+                "core entry persists before native sampling starts")
+            return true
+        end,
+        render=function()error("simulated blocked native render",0)end,
+        commit=function()error("partial source must not publish",0)end}
+    local ok=pcall(Boundary.sample,env,token,{epoch=44,dir_seq=7,frame_seq=8})
+    T.check(not ok and phases[#phases].stage=="native_render" and phases[#phases].edge=="enter",
+        "a nonreturning native stage leaves its exact entry without an invented exit")
+    T.check(phases[#phases].context.epoch==44 and phases[#phases].context.dir_seq==7 and phases[#phases].context.frame_seq==8,
+        "native phase identity carries the exact source publication generation")
+    env.render=function()return true end
+    env.commit=function()
+        T.check(phases[#phases].stage=="canonical_publish" and phases[#phases].edge=="enter",
+            "publish entry persists before invoking native commit")
+        return true
+    end
+    T.check(Boundary.sample(env,token,{epoch=44,dir_seq=7,frame_seq=9}),"phase diagnostics preserve coherent publication")
+    T.check(phases[#phases].stage=="canonical_publish" and phases[#phases].edge=="exit" and phases[#phases].detail.ok==true,
+        "native publish exit is recorded only after commit returns")
+end
+
+do
     local clock,world,pawn,captures,registrations,invalidations=0,true,10,0,{},0
     local token={}
     local source={epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,controller=0,kind=0}}}
+    local phases={}
     local function binding(index)return {index=index,world_key="world1",pc_address=1,pc_name="PC0",pawn_address=pawn,pawn_name="Willie"..pawn}end
     local env={now_ms=function()return clock end,same=function(t)return world and t==token end,resolve=binding,
-        index=function(row)return row.controller end,capture=function()captures=captures+1;return {team=7},{pawn=pawn}end,
-        describe=function(meta,recipe,addresses)registrations[#registrations+1]={meta=meta,recipe=recipe,addresses=addresses};return true end,
+        phase=function(context,stage,edge,detail)phases[#phases+1]={context=context,stage=stage,edge=edge,detail=detail}end,
+        index=function(row)return row.controller end,capture=function(index,context)
+            captures=captures+1
+            T.check(phases[#phases].stage=="source_capture" and phases[#phases].edge=="enter" and context.id==1
+                and context.epoch==44 and context.incarnation==source.entities[1].incarnation and context.dir_seq==source.seq,
+                "static capture receives its exact copied ref after entry has persisted")
+            return {team=7},{pawn=pawn}
+        end,
+        describe=function(meta,recipe,addresses)
+            T.check(phases[#phases].stage=="native_bind" and phases[#phases].edge=="enter" and phases[#phases].context.revision==meta.revision,
+                "native source registration entry persists before the API call")
+            registrations[#registrations+1]={meta=meta,recipe=recipe,addresses=addresses};return true
+        end,
         invalidate=function()invalidations=invalidations+1 end}
     local lifecycle=SourceLifecycle.new(env)
     T.check(lifecycle.ensure(source,token,1),"exact static source recipe is registered before its first source frame")
     T.check(lifecycle.ensure(source,token,2) and captures==1,"unchanged native recipe is not recaptured in the bone loop")
     T.check(registrations[1].meta.frame_seq==1 and registrations[1].meta.dir_seq==1 and registrations[1].meta.revision==1,
         "descriptor carries its exact ref/directory/source frame generation")
+    T.check(#phases==4 and phases[4].stage=="native_bind" and phases[4].edge=="exit" and phases[4].detail.ok==true,
+        "cached static recipes add no phase spam to the bone loop")
     source.seq=2
     T.check(lifecycle.ensure(source,token,3) and captures==2 and registrations[2].meta.revision==2,
         "directory rotation recaptures source with a monotonic recipe revision")

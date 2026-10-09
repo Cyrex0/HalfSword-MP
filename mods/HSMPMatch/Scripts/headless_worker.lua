@@ -47,6 +47,47 @@ function M.start()
     local sample_configured, frame_seq, sample_at, first_ai_name = false, 0, -1e9, nil
     local entity_bindings = {}
     local metrics = { sample_ok=0, sample_refused=0, dispatch=0, active_dispatch=0, active_pc0=0, active_pc1=0, input_refused=0, sample_min_ms=nil, sample_max_ms=0, last_input_error=nil, last_sample_error=nil }
+    local phase_seen, phase_count, phase_limited, phase_cycle = {}, 0, false, 0
+    local function source_phase(context, stage, edge, detail)
+        if not HL or stopped or type(stage)~="string" or #stage>64 or (edge~="enter" and edge~="exit") then return end
+        context,detail=type(context)=="table" and context or {},type(detail)=="table" and detail or {}
+        local event={state="native_capture_phase",reason="",arena=arena,stage=stage,edge=edge}
+        for _,key in ipairs({"epoch","id","incarnation","dir_seq","revision","frame_seq"})do
+            local value=rawget(context,key)
+            if type(value)=="number" and value==value and value~=math.huge and value~=-math.huge then event[key]=value end
+        end
+        for _,key in ipairs({"component_id","address","count","owner_id","pass","lod","mesh_census_calls","component_reads","parent_hops","qualifications"})do
+            local value=rawget(detail,key)
+            if type(value)=="number" and value==value and value~=math.huge and value~=-math.huge then event[key]=value end
+        end
+        for _,key in ipairs({"reason","name","class","getter"})do
+            local value=rawget(detail,key)
+            if type(value)=="string" then event[key]=value:sub(1,512) end
+        end
+        local accepted=rawget(detail,"ok")
+        if type(accepted)=="boolean"then event.ok=accepted end
+        -- Frame sequence is evidence, never a trace key. The bone loop can
+        -- execute every frame while each exact generation/stage emits once.
+        -- Only already-copied scalars may be stringified: no UObject methods.
+        local parts={stage,edge}
+        for _,key in ipairs({"epoch","id","incarnation","dir_seq","revision","component_id","address","name","pass","lod","owner_id"})do
+            parts[#parts+1]=tostring(event[key] or "")
+        end
+        if stage=="canonical_core" or stage=="native_render" or stage=="canonical_publish"then parts[#parts+1]=tostring(phase_cycle)end
+        local identity=table.concat(parts,"|")
+        if phase_seen[identity]then return end
+        if phase_count>=4096 then
+            if not phase_limited then
+                phase_limited=true
+                HL.event("x_native_worker",{state="native_capture_phase",reason="capture trace record limit reached",arena=arena,stage="trace_limit",edge="exit"})
+            end
+            return
+        end
+        phase_seen[identity],phase_count=true,phase_count+1
+        -- hsmp_log closes the append handle before returning: the entry is
+        -- persisted before the following reflected/native operation starts.
+        HL.event("x_native_worker",event)
+    end
     local function same_world(world, actor)
         if stopped or not WG.check() or not WG.settled() then return false end
         local token = WG.token()
@@ -360,7 +401,11 @@ function M.start()
         last_state = state
         log("state=%s reason=%s", state, reason or "")
         if HL then HL.event("x_native_worker", { state = state, reason = reason or "", arena = arena }) end
-        if hosted and N.host_status then N.host_status(state, reason or "") end
+        if hosted and N.host_status then
+            source_phase({},"host_status_"..state,"enter")
+            N.host_status(state, reason or "")
+            source_phase({},"host_status_"..state,"exit")
+        end
     end
     local control_bindings = {resolve=resolve,prepare=function(index)return preparation:prepare(index)end}
     controller = Control.new({ now_ms = function() return os.clock() * 1000 end,
@@ -393,7 +438,10 @@ function M.start()
     local function sample_world(directory)
         if not N.native_sample_world or not N.sample_config then return false, "canonical sampler unavailable" end
         if not sample_configured then
+            local context={epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq+1}
+            source_phase(context,"sample_config","enter")
             local ready, why = N.sample_config(PoseConfig)
+            source_phase(context,"sample_config","exit",{ok=ready==true,reason=tostring(why or "")})
             if ready ~= true then return false, "sample config: " .. tostring(why) end
             sample_configured = true
         end
@@ -403,10 +451,10 @@ function M.start()
             if not source_lifecycle then
                 local Adapter, Lifecycle = load_module("native_source_adapter"), load_module("headless_source_lifecycle")
                 if not Adapter or not Lifecycle then return false, "native source descriptor modules unavailable" end
-                local adapter = Adapter.new({ resolve=resolve, WG=WG })
+                local adapter = Adapter.new({ resolve=resolve, WG=WG, phase=source_phase })
                 source_lifecycle = Lifecycle.new({ resolve=resolve,same=WG.same,now_ms=function()return os.clock()*1000 end,
                     index=function(row)return row.kind==0 and row.controller or first_ai_name end,
-                    capture=adapter.capture,describe=N.host_describe,
+                    capture=adapter.capture,describe=N.host_describe,phase=source_phase,
                     invalidate=function()if hosted and N.host_world_changed then N.host_world_changed() end;IPC.world_leaving()end })
             end
             local described, reason = source_lifecycle.ensure(directory,token,frame_seq+1)
@@ -448,8 +496,9 @@ function M.start()
         local now_ms = os.clock()*1000
         local before = os.clock()*1000
         local ok, why = Boundary.sample({sample=N.native_sample_world,commit=N.native_commit_world,same=WG.same,
+            phase=source_phase,
             render=native_mode~="diagnostic" and N.native_capture_render or nil,allow_core_only=native_mode=="diagnostic",
-            refresh=function()if source_lifecycle then source_lifecycle.refresh() end end,
+            refresh=function()phase_cycle=phase_cycle+1;if source_lifecycle then source_lifecycle.refresh() end end,
             invalidate=function()if hosted and N.host_world_changed then N.host_world_changed() end;IPC.world_leaving()end},token,
             {epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq,ts_ms=now_ms,dt_ms=sample_at > 0 and now_ms-sample_at or 0,actors=actors})
         local elapsed = os.clock()*1000-before
@@ -465,6 +514,7 @@ function M.start()
         preparation:drop()
         last_key = nil
         first_ai_name, entity_bindings = nil, {}
+        phase_seen, phase_count, phase_limited, phase_cycle = {}, 0, false, 0
         if source_lifecycle then source_lifecycle.drop() end
         sample_at = -1e9
         controller:drop()
@@ -512,10 +562,15 @@ function M.start()
                 return
             end
             if hosted and N.host_directory then
+                source_phase({},"native_directory","enter")
                 local directory = N.host_directory()
+                source_phase({},"native_directory","exit",{ok=type(directory)=="table"})
                 if controller:set_directory(directory) then
+                    local context={epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq+1}
+                    source_phase(context,"native_control","enter")
                     controller:tick() -- identify the pawn before accepting its first input
                     for _, frame in ipairs(N.host_inputs(32) or {}) do controller:receive(frame) end
+                    source_phase(context,"native_control","exit")
                     if os.clock()*1000-sample_at >= 33 then
                         local sampled, why = sample_world(directory)
                         if sampled then metrics.sample_ok=metrics.sample_ok+1;metrics.last_sample_error=nil

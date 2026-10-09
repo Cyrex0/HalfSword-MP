@@ -27,13 +27,22 @@ function M.new(env)
             if not old or old.dir_seq ~= directory.seq then
                 if env.now_ms() < (retry_at[reference] or -math.huge) then return false, "source descriptor retry pending" end
                 retry_at[reference] = env.now_ms() + 1000
-                local recipe, bindings = env.capture(index)
+                local revision = (revisions[reference] or 0) + 1
+                local meta = {epoch=row.epoch,id=row.id,incarnation=row.incarnation,
+                    slot=row.slot,dir_seq=directory.seq,revision=revision,frame_seq=frame_seq}
+                if env.phase then env.phase(meta,"source_capture","enter") end
+                local recipe, bindings = env.capture(index,meta)
+                if env.phase then env.phase(meta,"source_capture","exit",{ok=recipe~=nil,reason=not recipe and tostring(bindings) or ""}) end
                 if not env.same(token) then env.invalidate(); return false, "world changed during source descriptor" end
                 if not valid(token, binding, index) then return false, "canonical incarnation changed" end
                 if not recipe then return false, "source descriptor " .. reference .. ": " .. tostring(bindings) end
-                local revision = (revisions[reference] or 0) + 1
-                local accepted, reason = env.describe({epoch=row.epoch,id=row.id,incarnation=row.incarnation,
-                    slot=row.slot,dir_seq=directory.seq,revision=revision,frame_seq=frame_seq},recipe,bindings)
+                -- Rebuild authority metadata from the directory; the adapter's
+                -- diagnostic context cannot mutate native descriptor identity.
+                meta = {epoch=row.epoch,id=row.id,incarnation=row.incarnation,
+                    slot=row.slot,dir_seq=directory.seq,revision=revision,frame_seq=frame_seq}
+                if env.phase then env.phase(meta,"native_bind","enter") end
+                local accepted, reason = env.describe(meta,recipe,bindings)
+                if env.phase then env.phase(meta,"native_bind","exit",{ok=accepted==true,reason=tostring(reason or "")}) end
                 if not env.same(token) then env.invalidate(); return false, "world changed while registering source descriptor" end
                 if not valid(token, binding, index) then return false, "canonical incarnation changed" end
                 if accepted ~= true then return false, "source descriptor registration: " .. tostring(reason) end
