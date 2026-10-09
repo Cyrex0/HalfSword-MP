@@ -685,3 +685,27 @@ with original identity/flags admission before and after callbacks and all actual
 link values freshly read. A pure-token-only Lua guard is not yet equivalent:
 actual GI current-world and indexed-player mapping must remain checked. Keep the
 present Lua current() checks until equivalent native admission is demonstrated.
+
+Candidate fd5a9690 implements only the scope-local scalar schema cache.
+GetOwner function/class identities and its verified8-byte return layout are
+captured once per original scope; hard-pointer layouts are keyed by original
+class identity/literal field and bounded81. Every pointer value is still read
+fresh, original identities/native flags/world/generation are still admitted and
+the function/class/component are now requalified after every owner callback.
+No borrowed object/property pointer or cross-scope cache is retained. Focused
+native15 tests passed (ten retained/five new), covering schema inspection counts
+while actual dispatch/read counts continue, class-specific offsets/serial-zero
+class FName reuse, garbage/reuse before dispatch and callback identity/world/
+root/parent changes, invalid ABI and the exact bound. Native timing is pending.
+
+Candidate f1517b53 keeps spline eligibility strict and adds rare scalar
+scene_eligibility evidence to the existing phase contract. It records actual
+bDrawDebug type/value, copied component visibility/hidden state, actor hidden
+state and existing direct HasAnyFlags transient/garbage reads before copied
+class/address/owner/root labels. Critical facts survive the512-byte phase reason
+limit even with long names. Source Lua112 registered assertions and two syntax
+checks passed; no API/DTO/CPP/profile change. Matched SDK/header/ObjectDump prove
+USplineComponent is a UPrimitiveComponent with a hard bDrawDebug bool at0x5F8;
+pinned LuaUObject BoolProperty Get pushes an actual Lua boolean. Cooked/live
+debug/visibility values and shipping rendering absence remain unproved. The next
+ordinary actual capture must supply these facts before changing support.
