@@ -1,5 +1,29 @@
 # Native authority bootstrap checkpoint
 
+## Qualified hash-path reflection checkpoint
+
+Pinned current reflection always scans ForEachUObject through InternalSlow.
+Available exported StaticFindObjectByPath supports current canonical slash and
+colon paths, guarded by IsAvailable(configured+self-test1). Resolve exact exports
+only for matching DLL PE pin; unavailable optional API/hash and unproved name
+grammar retain original lookup. Qualified null stays null. Existing guards,
+recipe/frame data and private/wire ABIs unchanged. Strict provider/route32 pass;
+real static export23/23+2/2, oldmock23/23+0/2 accepted. Independent final review
+closed with no blocker; actual per-call qualification/latency remain pending.
+
+## Actual 6f8dd46c: complete frame2.517s, native find remains dominant
+
+Normal run003619-0f4d03/fullG0/dev/all394, authority11844 clients43904/32164:
+complete98-row frame2.517s/provider2.477s vs prior7.186s. Rowfind2.263s/160,
+finish40.113ms; prebatchfind excluded. Still too slow for LIVE bounds. Audit
+actual reflection/native exactpath lookup API next; no guessed native entry or
+weaker original checks. Normal pass=false: bothrecipes52.442s/firstpublish55.087s;
+client1MirrorReady65.992s occurs792ms afterstop, client2generationrefusal883ms
+afterstop, no client2MirrorReady. Fivecompleteframes gaps2581/2590/2449/2329ms,
+no pre-stop error or LIVE/activeinput; sourceguardrefusal873ms afterstop.
+CleanupPASS4absent20savehashsame/nodumps/bothsecondary. CMake Cargoverification
+now0.23s/0.21s warm vs prior107s: measured deployment improvement.
+
 ## Next checkpoint: dedup pure metadata checks, preserve every boundary
 
 Operation-owned agreeing original node/class/flags/path expectations are interned;

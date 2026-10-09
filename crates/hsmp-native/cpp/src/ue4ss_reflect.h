@@ -46,6 +46,9 @@ void hsmp_native_set_reflect(const HsmpReflect* vt);
 const char* hsmp_reflect_register();
 // Optional native observers borrow the registered provider; no reflection ABI change.
 const HsmpReflect* hsmp_reflect_table();
+// One first-use observation, copied scalars only; no reflection ABI change.
+using HsmpFindRouteLog = void (*)(uint32_t exports,uint32_t available,uint32_t canonical,uint32_t hash_route);
+void hsmp_reflect_set_find_log(HsmpFindRouteLog sink);
 
 // Opt-in observational journal. Every pointer is borrowed only inside a live
 // script-hook callback; the sink receives scalar observations synchronously.

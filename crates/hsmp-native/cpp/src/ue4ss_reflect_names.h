@@ -30,4 +30,9 @@ namespace hsmp_reflect
         "?IsValid@FUObjectItem@Unreal@RC@@QEBA_N_N@Z",
     };
     inline constexpr unsigned kCount = sizeof(kNames) / sizeof(kNames[0]);
+    // Optional: unavailable exports leave the original slow exact lookup usable.
+    inline const char* const kFindNames[] = {
+        "?StaticFindObjectByPath@FUObjectHashTables@Unreal@RC@@SAPEAVUObject@23@PEAVUClass@23@PEB_W_N2@Z",
+        "?IsAvailable@FUObjectHashTables@Unreal@RC@@SA_NXZ",
+    };
 } // namespace hsmp_reflect

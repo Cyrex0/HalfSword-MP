@@ -1,5 +1,49 @@
 # Native full-scene encoding checkpoint
 
+## Native lookup route checkpoint
+
+Primary pinned DLL/source proof: reflection r_find always calls
+StaticFindObject_InternalSlow, whose RVA3FB310 enters ForEachUObject at3FB35C.
+The DLL also exports StaticFindObjectByPath at4ACEA0 with signature
+UObject*(UClass*,const wchar_t*,bool exact,bool useHash). It recursively resolves
+canonical slash Package.Object and colon function/subobject paths and calls the
+hash wrapper4ACD70. IsAvailable4ABDE0 requires configured+self-test state1;
+otherwise the wrapper falls back to an object scan. Three successful hash
+self-tests exist in preserved UE4SS logs, but per-call runtime availability
+must still be checked. New route resolves exact exports, never guessed RVAs;
+canonical slash paths use exact=false/useHash=true only when qualified. Missing
+optional APIs/unavailable hash or unproved unqualified names retain old lookup.
+Qualified null remains null. Original identity/path/flags/callback proofs stay.
+No new wire/provider ABI or cache lifetime. Strict provider and route fixture
+compile pass,32 focused checks pass. Static export mapping: pinned real DLL
+mandatory23/23 optional2/2; old mock mandatory23/23 optional0/2 still accepted.
+PE timestamp/image-size pin is mandatory for this optional route and never uses
+the offline unpinned override. First-use logging copies four scalars after the
+lookup; no object/string/state access or per-frame log. Independent final review
+closed with no blocker; actual route/cadence/readiness remain pending.
+
+## Actual 6f8dd46c: dedup lowers complete frame to2.517s
+
+Exact fullG0/dev/all394 normal run20261010-003619-0f4d03-native-host,
+source4b81b085-0414-4daa-a795-0fed1defae60, authority11844, clients43904/32164.
+First complete98-row frame2,517,188us/provider2,476,586us/CPP rows2,453,469us;
+row find2,262,503us/160calls, externalfinish40,113us. This actual full-frame
+improvement from7.186s is still far above original250ms LIVE receipt and2000ms
+source watchdog. Separate runs are not a normalized hardware benchmark. Native
+find dominates again; verify the actual reflection lookup implementation and
+already available native hashed exact-path API, retaining all original proofs.
+No speculative native address or new persistent lookup-cache bypass.
+Both49/600/38 recipes bind36.147/52.442s; first scene publishes55.087s. Client2
+receives completeScene atwall1791589034892, client1 at1791589037000. Client1
+nativePresent60.444→65.991s and MirrorReady65.992s are792ms AFTERstopfiles;
+client2generation refusal66.025s is883ms afterstop, no client2MirrorReady. Neither
+LIVE nor activeinput beforestop. Sourcefive completeframes55.115/57.696/60.286/
+62.735/65.063s, gaps2581/2590/2449/2329ms. Firstsource guardchanged873ms after
+stop; no pre-stop provider/transport/error/LIVEwatchdog. Normal pass=false. Independent
+cleanupPASS4absent/save20same/no dumps/unobserved children/bothsecondary.
+Cargo child env normalization is verified: direct release108s, CMake warm
+verification0.23s and0.21s, versus107s duplicated verification previously.
+
 ## Reviewed dedup of original native witness checks
 
 Each OperationScope interns agreeing original object/class expectations, full

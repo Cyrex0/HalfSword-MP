@@ -29,6 +29,7 @@
 #include "hsmp_native.h"
 #include "ue4ss_reflect.h"
 #include "ue4ss_reflect_names.h"
+#include "ue4ss_find_route.hpp"
 #include "caller_frame_walk.hpp"
 #include "ue4ss_pins.h"
 
@@ -99,6 +100,7 @@ namespace
         PItemValid item_valid;
     };
     Api g_api{};
+    hsmp_reflect::FindRoute g_find_route;
 
     using hsmp_reflect::kNames;
     static_assert(sizeof(kNames) / sizeof(kNames[0]) == sizeof(Api) / sizeof(void*), "kNames <-> Api");
@@ -152,7 +154,7 @@ namespace
     }
     void* r_find(const uint16_t* path)
     {
-        return g_api.static_find(nullptr, nullptr, reinterpret_cast<const wchar_t*>(path), false);
+        return g_find_route.find(reinterpret_cast<const wchar_t*>(path));
     }
     int32_t r_is_a(void* obj, void* cls)
     {
@@ -412,9 +414,22 @@ const char* hsmp_reflect_register()
         if (!got[i]) return kNames[i];
     }
     std::memcpy(&g_api, got, sizeof g_api);
+    g_find_route.slow=g_api.static_find;
+    // The optional path API never honors the offline unpinned override. Resolve
+    // actual exports, not an inferred Shipping or UE4SS function address.
+    const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(ue);
+    const auto* pe=dos->e_magic==IMAGE_DOS_SIGNATURE&&dos->e_lfanew>=0&&dos->e_lfanew<=65536?
+        reinterpret_cast<const IMAGE_NT_HEADERS64*>(reinterpret_cast<const uint8_t*>(ue)+dos->e_lfanew):nullptr;
+    g_find_route.path=nullptr;g_find_route.available=nullptr;
+    if(pe&&pe->Signature==IMAGE_NT_SIGNATURE&&pe->FileHeader.TimeDateStamp==HSMP_UE4SS_TIMESTAMP&&pe->OptionalHeader.SizeOfImage==HSMP_UE4SS_SIZE_OF_IMAGE){
+        g_find_route.path=reinterpret_cast<hsmp_reflect::PathFind>(GetProcAddress(ue,hsmp_reflect::kFindNames[0]));
+        g_find_route.available=reinterpret_cast<hsmp_reflect::HashAvailable>(GetProcAddress(ue,hsmp_reflect::kFindNames[1]));
+    }
     hsmp_native_set_reflect(&g_vt);
     return nullptr;
 }
+
+void hsmp_reflect_set_find_log(HsmpFindRouteLog sink){g_find_route.logger.store(sink);}
 
 const HsmpReflect* hsmp_reflect_table()
 {

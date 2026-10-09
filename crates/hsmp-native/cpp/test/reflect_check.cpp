@@ -32,5 +32,7 @@ int wmain(int argc, wchar_t** argv)
         }
     }
     std::printf("reflect_check %ls: %u exports, %d missing\n", argv[1], hsmp_reflect::kCount, missing);
+    unsigned optional{};for(const auto* name:hsmp_reflect::kFindNames)if(GetProcAddress(m,name))++optional;
+    std::printf("optional exact-path/hash exports: %u/2 (absence retains original lookup)\n",optional);
     return missing == 0 ? 0 : 1;
 }

@@ -93,6 +93,9 @@ namespace
             static_cast<unsigned long long>(trace->guards),static_cast<unsigned long long>(trace->admissions),
             static_cast<unsigned long long>(trace->finds),static_cast<unsigned long long>(trace->events));
     }
+    void find_route_log(uint32_t exports,uint32_t available,uint32_t canonical,uint32_t hash_route){
+        logf("NATIVE_FIND_ROUTE exports=%u available=%u canonical=%u route=%s diagnostic_only=true",exports,available,canonical,hash_route?"qualified_hash":"original_slow");
+    }
     void create_log(const char* stage,uint32_t edge,uint64_t operation,uint32_t marker,
                     uint32_t component,uint32_t kind,uint32_t function_id,const char* function_name)
     {
@@ -294,6 +297,7 @@ extern "C" __declspec(dllexport) CppUserModBase* start_mod()
     logf("start_mod");
     hsmp_native_set_profile_logger(profile_log);
     hsmp_native_set_capture_logger(capture_log);
+    hsmp_reflect_set_find_log(find_route_log);
     return new HSMPNativeMod();
 }
 

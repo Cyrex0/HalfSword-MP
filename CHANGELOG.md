@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Use UE4SS's qualified native hash path lookup for canonical object paths,
+  retaining legacy lookup when its optional API or runtime hash is unavailable.
+  Existing object and callback verification remains unchanged; actual timing
+  and live gameplay validation are pending.
 - Verify shared original native object and class witnesses once per complete
   boundary, preserving every path, ownership and attachment constraint across
   callbacks. Actual complete-frame timing remains pending.
