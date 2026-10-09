@@ -6,11 +6,11 @@ local n=0
 local function check(ok,why)n=n+1;T.check(ok,why);assert(ok,why)end
 local time,state,closed,cleared,applied,sent=0,"",0,0,0,{}
 local directory={epoch=77,seq=4,state=1,arena="Map_Arena_Yard"}
-local scene={epoch=77,dir_seq=4,frame_seq=10,state=1,peer_id=9001,entities={{epoch=77,id=1,incarnation=3,owner_peer=9001,kind=0,position={0,0,0}},{epoch=77,id=2,incarnation=2,owner_peer=9002,kind=0,position={100,0,0}}}}
+local scene={epoch=77,dir_seq=4,frame_seq=10,state=1,peer_id=9001,generation="generation4",fresh=true,entities={{epoch=77,id=1,incarnation=3,owner_peer=9001,kind=0,position={0,0,0}},{epoch=77,id=2,incarnation=2,owner_peer=9002,kind=0,position={100,0,0}}}}
 local connected,available,isolated,render_ok=true,true,true,true
 local core=Core.new({now=function()return time end,link=function()return{connected=connected,error=""}end,directory=function()return directory end,
     world=function()return{ready=true,arena="Map_Arena_Yard",key="world1"}end,isolated=function()return isolated end,scene=function()return available and scene or nil end,
-    present=function()applied=applied+1;return render_ok,not render_ok and"provider refused"or nil end,
+    present=function()applied=applied+1;return render_ok,render_ok and scene or"provider refused"end,
     clear=function()cleared=cleared+1 end,close=function()closed=closed+1 end,travel=function()error("unexpected travel")end,
     report=function(s)state=s end,input=function()return{1,0,0,0,0,0,0,0},0 end,send=function(f)sent[#sent+1]=f;return true end})
 check(core:tick()and state=="mirror_ready","source scene must apply before readiness")
@@ -20,7 +20,7 @@ check(sent[1].epoch==77 and sent[1].id==1 and sent[1].incarnation==3,"original e
 scene.dir_seq=3;check(not core:tick()and#sent==1,"old directory frame cannot drive input")
 scene.dir_seq=4;time=1.2;core:tick();check(sent[2].seq==2,"input sequence advances")
 connected=false;check(not core:tick()and cleared>=2,"disconnect drops visual scope")
-connected=true;scene.entities[1].incarnation=4;directory.seq=5;scene.dir_seq=5;core:tick();check(sent[3].incarnation==4 and sent[3].seq==3,"reconnect uses newref without replaying sequence")
+connected=true;scene.entities[1].incarnation=4;directory.seq=5;scene.dir_seq=5;scene.generation="generation5";core:tick();check(sent[3].incarnation==4 and sent[3].seq==3,"reconnect uses newref without replaying sequence")
 available=false;check(not core:tick()and state=="wait_scene","missing complete scene cannot remain live")
 available=true;render_ok=false;check(not core:tick()and closed==1 and core.stopped,"provider failure closes and never fabricates readiness")
 local bad=Core.new({now=function()return 0 end,link=function()return{connected=true}end,directory=function()return directory end,world=function()return{ready=true,arena=directory.arena,key="world"}end,
@@ -56,7 +56,7 @@ do
     check(property and table.concat(property.keys,",")==table.concat(copied.keys,","),"actual property mapping arrays preserve the same controls")
 end
 local observed,reported,frame
-local applied_scene={epoch=77,dir_seq=5,frame_seq=12,state=2,peer_id=9001,entities=scene.entities}
+local applied_scene={epoch=77,dir_seq=5,frame_seq=12,state=2,peer_id=9001,generation="generation5",fresh=true,entities=scene.entities}
 local race=Core.new({now=function()return 0 end,link=function()return{connected=true}end,directory=function()return directory end,world=function()return{ready=true,arena=directory.arena,key="world"}end,
     isolated=function()return true end,scene=function()return scene end,present=function()return true,applied_scene end,
     report=function(_,_,s)reported=s end,input=function(s)observed=s;return{0,0,0,0,0,0,0,0},0 end,
@@ -68,12 +68,93 @@ local refused=Core.new({now=function()return 0 end,link=function()return{connect
 check(not refused:tick()and not refused.stopped and state=="wait_scene","a directory race clears incomplete mirrors and waits")
 local key,clean,travels="old",false,0
 local travel=Core.new({now=function()return 0 end,link=function()return{connected=true}end,directory=function()return directory end,world=function()return{ready=true,arena=directory.arena,key=key}end,
-    isolated=function()return clean end,scene=function()return scene end,present=function()return true end,
+    isolated=function()return clean end,scene=function()return scene end,present=function()return true,scene end,
     travel=function()travels=travels+1;return true end,report=function()end,clear=function()end,close=function()error("isolated travel should converge")end,
     input=function()return{0,0,0,0,0,0,0,0},0 end,send=function()return true end})
 check(not travel:tick()and travels==1,"same arena still travels to the isolated game mode")
 check(not travel:tick()and travels==1,"pending travel cannot repeat against the old world")
 key="new";clean=true;check(travel:tick()and travels==1,"new isolated world can create mirrors")
+do
+    local function fixture()
+        local v={time=0,world="world1",epoch=77,dir_seq=4,dir_state=1,clears=0,closes=0,presents=0,inputs=0,sends=0,reports={}}
+        v.scene={epoch=77,dir_seq=4,frame_seq=10,state=1,peer_id=9001,generation="recipe4",fresh=true,
+            entities={{epoch=77,id=1,incarnation=3,owner_peer=9001,kind=0},{epoch=77,id=2,incarnation=2,owner_peer=9002,kind=0}}}
+        v.applied=v.scene
+        v.core=Core.new({now=function()return v.time end,link=function()return{connected=true}end,
+            directory=function()return{epoch=v.epoch,seq=v.dir_seq,state=v.dir_state,arena="Map_Arena_Yard"}end,
+            world=function()return{ready=true,arena="Map_Arena_Yard",key=v.world}end,isolated=function()return true end,
+            scene=function()return v.scene end,present=function()
+                v.presents=v.presents+1;if v.on_present then return v.on_present()end;return true,v.applied
+            end,clear=function()v.clears=v.clears+1 end,close=function()v.closes=v.closes+1 end,
+            report=function(s,why,current,own)v.reports[#v.reports+1]={state=s,reason=why,scene=current,own=own}end,
+            input=function(current)v.inputs=v.inputs+1;v.input_scene=current;if v.input_refusal then return nil,v.input_refusal end;return{1,0,0,0,0,0,0,0},0 end,
+            send=function(f)v.sends=v.sends+1;v.frame=f;if v.send_refusal then return nil,v.send_refusal end;return true end})
+        return v
+    end
+    local v=fixture();v.scene.fresh=false
+    check(v.core:tick()and v.core.state=="mirror_ready"and v.presents==1 and v.inputs==0,"generation-valid stale READY scene may complete native readback without live input")
+    local clear_count=v.clears;v.scene=nil
+    check(not v.core:tick()and v.core.state=="wait_scene"and v.clears==clear_count and v.core.scope~=nil,"transient missing complete scene retains inert mirrors without claiming live")
+    v.scene=v.applied;v.scene.state=2;v.dir_state=2
+    check(not v.core:tick()and v.inputs==0 and v.sends==0 and v.closes==0 and v.clears==clear_count,"stale LIVE scene neither samples nor sends input and keeps current inert mirrors")
+    check(v.presents==1,"stale LIVE peek withholds provider work while stale READY readback remains eligible")
+    v.scene.fresh=true
+    check(v.core:tick()and v.core.state=="live"and v.inputs==1 and v.sends==1 and v.clears==clear_count,"fresh same-generation recovery reuses native mirrors and sends ordinary controls")
+    for _,change in ipairs({"world","epoch","directory"})do
+        v=fixture();v.core:tick();clear_count=v.clears;v.scene=nil
+        if change=="world"then v.world="world2"elseif change=="epoch"then v.epoch=78 else v.dir_seq=5 end
+        check(not v.core:tick()and v.clears==clear_count+1 and v.core.scope==nil,"known "..change.." change drops old mirror generation even during a complete-scene gap")
+        v.core:tick();check(v.clears==clear_count+1,"missing new generation does not repeatedly clear already-retired mirrors")
+    end
+    for _,change in ipairs({"recipe","reference"})do
+        v=fixture();v.core:tick();clear_count=v.clears
+        if change=="recipe"then v.scene.generation="recipe5"else v.scene.entities[1].incarnation=4 end
+        check(v.core:tick()and v.clears==clear_count+1 and v.presents==2,"complete "..change.." generation replacement clears old mirrors before native reapplication")
+    end
+    v=fixture();v.scene=nil
+    check(not v.core:tick()and v.presents==0 and v.core.state=="wait_scene"and v.inputs==0,"received partials or assembly ACK alone cannot produce native MirrorReady")
+    v=fixture();v.on_present=function()return true end
+    check(not v.core:tick()and v.core.stopped and v.inputs==0,"successful boolean without actual applied scene cannot fabricate readiness")
+    for _,field in ipairs({"generation","fresh"})do
+        v=fixture();v.scene[field]=nil
+        check(not v.core:tick()and v.core.stopped and v.presents==0,"missing complete native "..field.." provenance is refused explicitly")
+    end
+    v=fixture();v.scene.state=2;v.dir_state=2;local original=v.scene
+    v.on_present=function()
+        v.time=.300
+        v.scene={epoch=77,dir_seq=4,frame_seq=11,state=2,peer_id=9001,generation="recipe4",fresh=true,entities=original.entities}
+        original.fresh=false;return true,original
+    end
+    check(not v.core:tick()and not v.core.stopped and v.inputs==0 and v.sends==0,"newer complete receipt never refreshes age of the older native-applied frame")
+    check(v.reports[#v.reports].scene==original and v.reports[#v.reports].reason=="native applied scene is stale","stale metrics identify actual applied frame rather than newly received frame")
+    v=fixture();v.scene.state=2;v.dir_state=2;original=v.scene
+    v.on_present=function()
+        v.scene={epoch=77,dir_seq=4,frame_seq=11,state=2,peer_id=9001,generation="recipe4",fresh=true,entities=original.entities}
+        return true,original
+    end
+    check(v.core:tick()and v.sends==1 and v.input_scene==original,"still-fresh applied frame remains usable when newer same-generation frame arrived")
+    v=fixture();v.scene.state=2;v.dir_state=2;v.send_refusal="native applied scene is stale"
+    check(not v.core:tick()and not v.core.stopped and v.core.state=="wait_scene"and v.sends==1 and v.closes==0,"age expiry during legal input sampling is a freshness wait rather than fatal exit")
+    clear_count=v.clears;v.send_refusal=nil
+    check(v.core:tick()and v.frame.seq==2 and v.clears==clear_count,"fresh recovery never resends the expired input sequence or recreates current mirrors")
+    v=fixture();v.scene.state=2;v.dir_state=2;v.input_refusal="native applied scene is stale"
+    check(not v.core:tick()and not v.core.stopped and v.core.state=="wait_scene"and v.inputs==1 and v.sends==0 and v.closes==0,"freshness expiring at the input boundary keeps inert mirrors and withholds controls without fatal exit")
+    v=fixture();v.core:tick();clear_count=v.clears;v.scene.state=2;v.dir_state=2
+    v.on_present=function()return nil,"native applied scene is stale"end
+    check(not v.core:tick()and not v.core.stopped and v.clears==clear_count and v.inputs==0 and v.sends==0 and v.closes==0,"production present freshness refusal after preflight retains inert mirrors and withholds live input")
+    v=fixture();v.on_present=function()v.world="world2";return true,v.applied end
+    check(not v.core:tick()and not v.core.stopped and v.inputs==0 and v.core.scope==nil,"world replacement during apply cannot drive input through the old mirror generation")
+    v=fixture();v.on_present=function()v.dir_seq=5;return true,v.applied end
+    check(not v.core:tick()and not v.core.stopped and v.inputs==0 and v.core.scope==nil,"directory replacement during native callbacks drops old mirrors before any input")
+    v=fixture();v.scene.state=2;v.dir_state=2
+    v.on_present=function()v.dir_state=1;return true,v.applied end
+    check(not v.core:tick()and v.inputs==0 and not v.core.stopped,"source no longer LIVE after application cannot receive old live controls")
+    v=fixture();v.core:tick();clear_count=v.clears;v.on_present=function()return nil,"no coherent native scene"end
+    check(not v.core:tick()and v.clears==clear_count and not v.core.stopped,"transient incomplete scene during asset preflight retains existing inert mirrors")
+    v=fixture();v.core:tick();local report_count=#v.reports;v.time=.5;v.core:tick()
+    check(#v.reports==report_count,"unchanged actual native readiness metrics are bounded to one update per second")
+    v.time=1.1;v.core:tick();check(#v.reports==report_count+1 and v.reports[#v.reports].scene==v.applied,"periodic metrics use actual applied source frame")
+end
 local Isolation=dofile("mods/HSMPMatch/Scripts/native_client_isolation.lua")
 do
     local valid=true
