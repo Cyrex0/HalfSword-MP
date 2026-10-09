@@ -907,6 +907,21 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 | 17 | BODY | Offered by server and sidecar: `body` up and down (relayed only between peers that have it) |
 | 18 | SERVER_MODS | Offered by the sidecar always and by a server with `--mods-dir`: the `0x09` records (§12). A server with mods refuses a client without it (`MODS_REQUIRED`) |
 | 19 | BODY2 | Offered by server and sidecar: generation-bound native body snapshots, relayed only between peers that have it |
+| 20 | NATIVE_WORLD | Embedded game authority owns the entity directory and snapshots; clients own only assigned input |
+| 21 | NATIVE_PRESENTATION | Exact source recipes and current verified mirror readiness |
+| 22 | NATIVE_RENDER_V2 | Complete raw dynamic spline state |
+| 23 | NATIVE_VERTEX_STATE | Guarded original static vertex-override census and final scene checks |
+| 24 | NATIVE_RENDER_V3 | Native Camera/SpringArm ancestors and exact cached component-space spring-arm socket output |
+
+Experimental native presentation peers require bits20–24. Diagnostic world-only
+observers may omit presentation. Render record `0x0A13` uses the same bounded
+world/component format as `0x0A12`, followed by an explicit spring-arm presence
+byte for each component and, when present, seven native f64 values (translation3,
+rotation4). These are raw cached endpoint values; the codec preserves their bits
+and refuses nonfinite values. The current exact descriptor requires the endpoint
+only for native SpringArm components. Older scene records cannot release mirror
+readiness or gameplay inputs. The transport remains protocol12 and IPC ABI2;
+native source schema4 and private provider ABI9 must be deployed together.
 
 `caps::SUPPORTED = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY` are the transport bits
 `hsmp-net` implements itself; every client and server built from it offers them through

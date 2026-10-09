@@ -237,6 +237,22 @@ impl Bridge {
                                         (None, None) => true,
                                         _ => false,
                                     }
+                                    && match (&r.scene, &c.spring_arm) {
+                                        (
+                                            crate::native_descriptor::SceneEvidence::SpringArm {
+                                                ..
+                                            },
+                                            Some(arm),
+                                        ) => arm.validate().is_ok(),
+                                        (
+                                            crate::native_descriptor::SceneEvidence::SpringArm {
+                                                ..
+                                            },
+                                            None,
+                                        ) => false,
+                                        (_, None) => true,
+                                        (_, Some(_)) => false,
+                                    }
                                     && r.materials.iter().zip(&c.materials).all(|(a, b)| {
                                         a.scalars.len() == b.scalars.len()
                                             && a.vectors.len() == b.vectors.len()
@@ -248,7 +264,7 @@ impl Bridge {
             })
     }
     pub(crate) fn publish_render(&self, frame: w::RenderWorld) -> Result<(), &'static str> {
-        w::encode_render_world_v2(&frame)?;
+        w::encode_render_world_v3(&frame)?;
         let mut s = self.lock();
         if s.world_reset || !Self::render_matches(&s, &frame) {
             return Err("render descriptor generation");
@@ -363,7 +379,8 @@ impl HostHandle {
             hsmp_net::net::caps::NATIVE_WORLD
                 | hsmp_net::net::caps::NATIVE_PRESENTATION
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
-                | hsmp_net::net::caps::NATIVE_VERTEX_STATE,
+                | hsmp_net::net::caps::NATIVE_VERTEX_STATE
+                | hsmp_net::net::caps::NATIVE_RENDER_V3,
         );
         let state = Arc::new(crate::server::ServerState::with_native_mode(
             2,
@@ -497,7 +514,8 @@ impl ClientHandle {
         if presentation {
             cfg.caps |= hsmp_net::net::caps::NATIVE_PRESENTATION
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
-                | hsmp_net::net::caps::NATIVE_VERTEX_STATE;
+                | hsmp_net::net::caps::NATIVE_VERTEX_STATE
+                | hsmp_net::net::caps::NATIVE_RENDER_V3;
         }
         let bridge = Arc::new(Bridge::default());
         let network_bridge = bridge.clone();
@@ -717,6 +735,13 @@ async fn client_loop(
                         bridge.lock().error = "server does not verify native vertex state".into();
                         return;
                     }
+                    if cfg.caps & hsmp_net::net::caps::NATIVE_RENDER_V3 != 0
+                        && caps & hsmp_net::net::caps::NATIVE_RENDER_V3 == 0
+                    {
+                        bridge.lock().error =
+                            "server does not preserve native spring arm state".into();
+                        return;
+                    }
                     cfg.pinned_server_key = Some(server_key);
                     let mut s = bridge.lock();
                     s.connected = true;
@@ -774,7 +799,7 @@ async fn client_loop(
                                     }
                                 }
                             }
-                            w::K_RENDER_WORLD => {
+                            w::K_RENDER_WORLD | w::K_RENDER_WORLD_V2 => {
                                 let mut s = bridge.lock();
                                 s.error = "server sent an incompatible native scene frame".into();
                                 s.connected = false;
@@ -782,8 +807,8 @@ async fn client_loop(
                                 s.render_received = None;
                                 return;
                             }
-                            w::K_RENDER_WORLD_V2 => {
-                                if let Ok(frame) = w::decode_render_world_v2(payload) {
+                            w::K_RENDER_WORLD_V3 => {
+                                if let Ok(frame) = w::decode_render_world_v3(payload) {
                                     let _ = bridge.publish_render(frame);
                                 }
                             }
@@ -926,7 +951,7 @@ mod tests {
         }
     }
     #[test]
-    fn native_spline_readiness_requires_the_complete_current_descriptor_profile() {
+    fn native_attachment_readiness_requires_the_complete_current_descriptor_profile() {
         use crate::native_descriptor::{
             ComponentKind, Geometry, SceneEvidence, SplineProfile, VertexState,
         };
@@ -982,6 +1007,20 @@ mod tests {
             metadata_null: true,
         });
         recipe.components.push(component);
+        let mut arm = recipe.components[1].clone();
+        arm.id = 3;
+        arm.name = "CameraBoom(Shoulder)".into();
+        arm.role = "anchor".into();
+        arm.component_class = "/Script/Engine.SpringArmComponent".into();
+        arm.kind = ComponentKind::Scene;
+        arm.geometry = Geometry::NotApplicable;
+        arm.scene = SceneEvidence::SpringArm {
+            draw_debug_lag_markers: false,
+            socket_name: "SpringEndpoint".into(),
+        };
+        arm.collision = None;
+        arm.spline_profile = None;
+        recipe.components.push(arm);
         let descriptor = w::Descriptor {
             reference,
             slot: 0,
@@ -1019,6 +1058,12 @@ mod tests {
                             .spline_profile
                             .as_ref()
                             .map(|_| w::tests::spline_fixture()),
+                        spring_arm: matches!(c.scene, SceneEvidence::SpringArm { .. }).then_some(
+                            w::NativeSpringArmFrame {
+                                translation: [-20.0, 0.0, 0.0],
+                                rotation: [0.0, 0.0, 0.0, 1.0],
+                            },
+                        ),
                     })
                     .collect(),
             }],
@@ -1029,7 +1074,7 @@ mod tests {
             frame_seq: 1,
             entities: vec![(reference, 4)],
         };
-        for change in 0..7 {
+        for change in 0..10 {
             let mut bad = frame.clone();
             match change {
                 0 => bad.entities[0].components[1].spline = None,
@@ -1062,7 +1107,19 @@ mod tests {
                     .reparam
                     .points
                     .clear(),
-                _ => bad.entities[0].reference.incarnation += 1,
+                6 => bad.entities[0].reference.incarnation += 1,
+                7 => bad.entities[0].components[2].spring_arm = None,
+                8 => {
+                    bad.entities[0].components[0].spring_arm =
+                        frame.entities[0].components[2].spring_arm.clone()
+                }
+                _ => {
+                    bad.entities[0].components[2]
+                        .spring_arm
+                        .as_mut()
+                        .unwrap()
+                        .translation[0] = f64::NAN
+                }
             }
             assert!(
                 bridge.publish_render(bad).is_err(),
@@ -1140,6 +1197,7 @@ mod tests {
                     })
                     .collect(),
                 spline: None,
+                spring_arm: None,
             })
             .collect();
         let mut frame = w::RenderWorld {
@@ -1177,7 +1235,7 @@ mod tests {
         assert!(bridge.publish_descriptor(descriptor).is_err());
     }
     #[test]
-    fn native_render_v2_reaches_a_presentation_client_over_authenticated_udp() {
+    fn native_render_v3_reaches_a_presentation_client_over_authenticated_udp() {
         let dir = std::env::temp_dir().join(format!(
             "hsmp-native-scene-{}-{}",
             std::process::id(),
@@ -1247,6 +1305,7 @@ mod tests {
                                     })
                                     .collect(),
                                 spline: None,
+                                spring_arm: None,
                             })
                             .collect(),
                     })

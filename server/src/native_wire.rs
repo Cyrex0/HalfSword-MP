@@ -11,6 +11,7 @@ pub const K_INPUT: u16 = 0x0A80;
 pub const K_DESCRIPTOR: u16 = 0x0AC1;
 pub const K_RENDER_WORLD: u16 = 0x0A11;
 pub const K_RENDER_WORLD_V2: u16 = 0x0A12;
+pub const K_RENDER_WORLD_V3: u16 = 0x0A13;
 pub const K_MIRROR_READY: u16 = 0x0A81;
 pub const MAX_ENTITIES: usize = 32;
 pub const MAX_WORLD_BYTES: usize = 17
@@ -127,6 +128,28 @@ pub struct RenderComponent {
     pub materials: Vec<RenderMaterial>,
     /// Present only for a descriptor-qualified native spline component.
     pub spline: Option<NativeSplineFrame>,
+    /// Exact cached component-space endpoint of a native SpringArm.
+    pub spring_arm: Option<NativeSpringArmFrame>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeSpringArmFrame {
+    pub translation: [f64; 3],
+    pub rotation: [f64; 4],
+}
+impl NativeSpringArmFrame {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self
+            .translation
+            .iter()
+            .chain(&self.rotation)
+            .all(|v| v.is_finite())
+        {
+            Ok(())
+        } else {
+            Err("render spring arm values")
+        }
+    }
 }
 
 pub const MAX_SPLINE_POINTS: usize = 64;
@@ -497,12 +520,15 @@ fn transform_ok(v: &[f64; 10]) -> bool {
         && v[7..].iter().all(|x| x.abs() < 1000.0)
 }
 pub fn encode_render_world(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
-    encode_render_world_revision(v, false)
+    encode_render_world_revision(v, 1)
 }
 pub fn encode_render_world_v2(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
-    encode_render_world_revision(v, true)
+    encode_render_world_revision(v, 2)
 }
-fn encode_render_world_revision(v: &RenderWorld, v2: bool) -> Result<Vec<u8>, &'static str> {
+pub fn encode_render_world_v3(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
+    encode_render_world_revision(v, 3)
+}
+fn encode_render_world_revision(v: &RenderWorld, revision: u8) -> Result<Vec<u8>, &'static str> {
     let core = encode_world(&v.world)?;
     if v.entities.len() != v.world.entities.len() {
         return Err("render entity count");
@@ -522,8 +548,11 @@ fn encode_render_world_revision(v: &RenderWorld, v2: bool) -> Result<Vec<u8>, &'
         b.put_u8(e.components.len() as u8);
         let mut ids = std::collections::HashSet::new();
         for c in &e.components {
-            if !v2 && c.spline.is_some() {
+            if revision < 2 && c.spline.is_some() {
                 return Err("render revision 1 has no spline support");
+            }
+            if revision < 3 && c.spring_arm.is_some() {
+                return Err("render revision has no spring arm support");
             }
             if c.id == 0
                 || !ids.insert(c.id)
@@ -581,10 +610,19 @@ fn encode_render_world_revision(v: &RenderWorld, v2: bool) -> Result<Vec<u8>, &'
                     b.put(t.as_bytes());
                 }
             }
-            if v2 {
+            if revision >= 2 {
                 b.put_u8(u8::from(c.spline.is_some()));
                 if let Some(spline) = &c.spline {
                     encode_spline(&mut b, spline)?;
+                }
+            }
+            if revision >= 3 {
+                b.put_u8(u8::from(c.spring_arm.is_some()));
+                if let Some(arm) = &c.spring_arm {
+                    arm.validate()?;
+                    for x in arm.translation.iter().chain(&arm.rotation) {
+                        b.put_u64(x.to_bits());
+                    }
                 }
             }
             if b.len() + hsmp_ipc::wire::HDR > hsmp_net::net::frag::MAX_MESSAGE {
@@ -595,12 +633,18 @@ fn encode_render_world_revision(v: &RenderWorld, v2: bool) -> Result<Vec<u8>, &'
     Ok(b)
 }
 pub fn decode_render_world(b: &[u8]) -> Result<RenderWorld, &'static str> {
-    decode_render_world_revision(b, false)
+    decode_render_world_revision(b, 1)
 }
 pub fn decode_render_world_v2(b: &[u8]) -> Result<RenderWorld, &'static str> {
-    decode_render_world_revision(b, true)
+    decode_render_world_revision(b, 2)
 }
-fn decode_render_world_revision(b: &[u8], v2: bool) -> Result<RenderWorld, &'static str> {
+pub fn decode_render_world_v3(b: &[u8]) -> Result<RenderWorld, &'static str> {
+    decode_render_world_revision(b, 3)
+}
+fn decode_render_world_revision(
+    b: &[u8],
+    revision_version: u8,
+) -> Result<RenderWorld, &'static str> {
     if b.len() + hsmp_ipc::wire::HDR > hsmp_net::net::frag::MAX_MESSAGE {
         return Err("render world bound");
     }
@@ -695,8 +739,21 @@ fn decode_render_world_revision(b: &[u8], v2: bool) -> Result<RenderWorld, &'sta
                 bones,
                 morphs,
                 materials,
-                spline: if v2 && read_bool(&mut r)? {
+                spline: if revision_version >= 2 && read_bool(&mut r)? {
                     Some(decode_spline(&mut r)?)
+                } else {
+                    None
+                },
+                spring_arm: if revision_version >= 3 && read_bool(&mut r)? {
+                    let mut arm = NativeSpringArmFrame {
+                        translation: [0.0; 3],
+                        rotation: [0.0; 4],
+                    };
+                    for x in arm.translation.iter_mut().chain(&mut arm.rotation) {
+                        *x = f64::from_bits(r.u64().or_else(fail)?);
+                    }
+                    arm.validate()?;
+                    Some(arm)
                 } else {
                     None
                 },
@@ -712,7 +769,7 @@ fn decode_render_world_revision(b: &[u8], v2: bool) -> Result<RenderWorld, &'sta
         return Err("trailing render bytes");
     }
     let v = RenderWorld { world, entities };
-    encode_render_world_revision(&v, v2)?;
+    encode_render_world_revision(&v, revision_version)?;
     Ok(v)
 }
 pub fn encode_mirror_ready(v: &MirrorReady) -> Result<Vec<u8>, &'static str> {
@@ -1153,9 +1210,53 @@ pub(crate) mod tests {
                     morphs: vec![],
                     materials: vec![],
                     spline: Some(spline_fixture()),
+                    spring_arm: None,
                 }],
             }],
         }
+    }
+    #[test]
+    fn native_spring_arm_v3_preserves_endpoint_bits_and_rejects_bad_records() {
+        let mut frame = spline_world();
+        let component = &mut frame.entities[0].components[0];
+        component.spline = None;
+        // Cached endpoint rotations are native output, not normalized here.
+        component.spring_arm = Some(NativeSpringArmFrame {
+            translation: [-0.0, 3.125, -800.25],
+            rotation: [0.0, -0.0, 0.75, 0.75],
+        });
+        let bytes = encode_render_world_v3(&frame).unwrap();
+        let decoded = decode_render_world_v3(&bytes).unwrap();
+        assert_eq!(encode_render_world_v3(&decoded).unwrap(), bytes);
+        assert!(encode_render_world_v2(&frame).is_err());
+        assert!(decode_render_world_v2(&bytes).is_err());
+        for n in 0..bytes.len() {
+            assert!(decode_render_world_v3(&bytes[..n]).is_err());
+        }
+        let mut extra = bytes.clone();
+        extra.push(0);
+        assert!(decode_render_world_v3(&extra).is_err());
+        let mut invalid_flag = bytes.clone();
+        let presence = bytes.len() - 57;
+        invalid_flag[presence] = 2;
+        assert!(decode_render_world_v3(&invalid_flag).is_err());
+        for index in 0..7 {
+            let mut bad = bytes.clone();
+            let offset = presence + 1 + index * 8;
+            bad[offset..offset + 8].copy_from_slice(&f64::NAN.to_bits().to_le_bytes());
+            assert!(decode_render_world_v3(&bad).is_err());
+        }
+        frame.entities[0].components[0]
+            .spring_arm
+            .as_mut()
+            .unwrap()
+            .rotation[0] = f64::INFINITY;
+        assert!(encode_render_world_v3(&frame).is_err());
+        frame.entities[0].components[0].spring_arm = None;
+        let no_arm = encode_render_world_v3(&frame).unwrap();
+        assert_eq!(decode_render_world_v3(&no_arm).unwrap(), frame);
+        let old = encode_render_world_v2(&frame).unwrap();
+        assert!(decode_render_world_v3(&old).is_err());
     }
     #[test]
     fn native_spline_v2_preserves_raw_curves_and_rejects_all_truncations() {
@@ -1434,6 +1535,7 @@ pub(crate) mod tests {
                         textures: vec!["/Game/Test.Tex".into()],
                     }],
                     spline: None,
+                    spring_arm: None,
                 }],
             }],
         };

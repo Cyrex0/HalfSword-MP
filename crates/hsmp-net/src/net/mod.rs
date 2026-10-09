@@ -137,6 +137,8 @@ pub mod caps {
     /// Native static vertex state is proved on source capture and mirror readback.
     /// Presentation peers without these override checks cannot admit native-asset colors.
     pub const NATIVE_VERTEX_STATE: u64 = 1 << 23;
+    /// Native render revision 3 preserves native SpringArm socket endpoints.
+    pub const NATIVE_RENDER_V3: u64 = 1 << 24;
     /// Application: server-served mods (`mod_manifest` / `mod_files` / `mod_chunk` down,
     /// `mod_chunk_req` / `mod_ready` up; docs/hosting/server-mods.md). The server offers it
     /// only when it has a `--mods-dir`, the sidecar always; a server with mods refuses a

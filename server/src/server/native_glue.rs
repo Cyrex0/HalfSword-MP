@@ -89,9 +89,11 @@ impl NativeCore {
                 hsmp_net::net::caps::NATIVE_PRESENTATION
                     | hsmp_net::net::caps::NATIVE_RENDER_V2
                     | hsmp_net::net::caps::NATIVE_VERTEX_STATE
+                    | hsmp_net::net::caps::NATIVE_RENDER_V3
             };
-        let presentation_required =
-            hsmp_net::net::caps::NATIVE_RENDER_V2 | hsmp_net::net::caps::NATIVE_VERTEX_STATE;
+        let presentation_required = hsmp_net::net::caps::NATIVE_RENDER_V2
+            | hsmp_net::net::caps::NATIVE_VERTEX_STATE
+            | hsmp_net::net::caps::NATIVE_RENDER_V3;
         caps & required == required
             && (caps & hsmp_net::net::caps::NATIVE_PRESENTATION == 0
                 || caps & presentation_required == presentation_required)
@@ -394,10 +396,10 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
     }
     if let Some(frame) = n.bridge.take_render() {
         if w::matches_directory(&frame.world, &n.directory) {
-            if let Ok(payload) = w::encode_render_world_v2(&frame) {
+            if let Ok(payload) = w::encode_render_world_v3(&frame) {
                 inner.out_msgs.push((
                     None,
-                    hsmp_ipc::wire::message(w::K_RENDER_WORLD_V2, 0, 0, &payload),
+                    hsmp_ipc::wire::message(w::K_RENDER_WORLD_V3, 0, 0, &payload),
                 ));
             }
         }
@@ -486,12 +488,21 @@ mod tests {
         assert!(!pvp.admits_capabilities(caps));
         assert!(!pvp.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
         let presentation = caps | hsmp_net::net::caps::NATIVE_PRESENTATION;
+        let legacy = presentation
+            | hsmp_net::net::caps::NATIVE_RENDER_V2
+            | hsmp_net::net::caps::NATIVE_VERTEX_STATE;
+        assert!(!pvp.admits_capabilities(legacy));
         assert!(!pvp.admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_RENDER_V2));
-        assert!(!pvp.admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_VERTEX_STATE));
+        assert!(!pvp.admits_capabilities(
+            presentation
+                | hsmp_net::net::caps::NATIVE_VERTEX_STATE
+                | hsmp_net::net::caps::NATIVE_RENDER_V3
+        ));
         assert!(pvp.admits_capabilities(
             presentation
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
+                | hsmp_net::net::caps::NATIVE_RENDER_V3
         ));
         for entity in &mut pvp.directory.entities {
             entity.owner_peer = entity.reference.id;
@@ -501,18 +512,23 @@ mod tests {
             "two connected observers cannot release production inputs"
         );
         let mut diagnostic = NativeCore::new(Arc::new(Bridge::default()), 19, "Map_Arena_Yard");
+        assert!(!diagnostic.admits_capabilities(legacy));
         assert!(!diagnostic.admits_capabilities(0));
         assert!(diagnostic.admits_capabilities(caps));
         assert!(!diagnostic.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
         assert!(
             !diagnostic.admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_RENDER_V2)
         );
-        assert!(!diagnostic
-            .admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_VERTEX_STATE));
+        assert!(!diagnostic.admits_capabilities(
+            presentation
+                | hsmp_net::net::caps::NATIVE_VERTEX_STATE
+                | hsmp_net::net::caps::NATIVE_RENDER_V3
+        ));
         assert!(diagnostic.admits_capabilities(
             presentation
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
+                | hsmp_net::net::caps::NATIVE_RENDER_V3
         ));
         for entity in &mut diagnostic.directory.entities {
             if entity.kind == w::HUMAN {

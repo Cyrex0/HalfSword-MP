@@ -38,7 +38,7 @@ pub fn record_mode(kind: u16, peer: PeerId) -> Option<hsmp_net::net::SendMode> {
         0x0A10 => return Some(SendMode::ReliableLatest { key: key(0x92, 0) }),
         0x0AC0 => return Some(SendMode::ReliableLatest { key: key(0x93, 0) }),
         0x0AC1 => return Some(SendMode::Reliable),
-        0x0A11 | 0x0A12 => return Some(SendMode::Latest { key: key(0x94, 0) }),
+        0x0A11 | 0x0A12 | 0x0A13 => return Some(SendMode::Latest { key: key(0x94, 0) }),
         0x0A81 => return Some(SendMode::Ordered),
         _ => {}
     }
@@ -65,6 +65,7 @@ mod route_tests {
     fn native_render_revisions_route_to_the_same_scene_stream() {
         assert_eq!(record_mode(0x0A11, 0), Some(SendMode::Latest { key: key(0x94, 0) }));
         assert_eq!(record_mode(0x0A12, 0), record_mode(0x0A11, 0));
+        assert_eq!(record_mode(0x0A13, 0), record_mode(0x0A11, 0));
     }
 
     #[test]

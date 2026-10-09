@@ -40,6 +40,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   override-array census. Recheck original source and mirror state before whole
   scene publication/readiness; present paint overrides retain exact capture,
   and unknown state remains an explicit refusal. Actual scene verification is pending.
+- Extend the experimental source scene with exact native Camera and SpringArm
+  ancestors. Negotiate a new scene revision for cached spring-arm socket output;
+  require complete current source and inert mirror readbacks. Complete scene,
+  local camera/HUD ownership and gameplay remain under native verification.
 
 ## [0.1.0-beta.6] - 2026-10-08
 
