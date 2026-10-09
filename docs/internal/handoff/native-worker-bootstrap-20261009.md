@@ -1,5 +1,28 @@
 # Native authority bootstrap checkpoint
 
+## Latest actual: 67175710, roster fixed; capture speed open
+
+Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings; dev push,
+RequireG0 deployment and all393 hashes match671757100c4a0c96dc589644178e655ed85de858.
+Actual20261009-162404-9c6e68-native-host/source0716f305-1fc3-446d-bb75-427262ec0197:
+roster facts15.818→15.859s acknowledge dir6→7 before both captures. Entity1
+captures15.887→41.484s, NativeBind41.797s PASS after312ms,49components/600bones/
+38material slots. Entity2 continues both harvests under same incarnation5/dir7.
+No team-publication generation fault remains before the deadline.
+
+Capture is still too slow: first complete double harvest25.551s, nested initial
+mesh census6.995s/parent closure5.593s/component static10.641s. Repeated parent
+retain initializes the already-admitted original object repeatedly through
+Scope.keep. Next smallest correction reuses its original recorded handle with
+fresh original resolve/qualify and incoming-parent match, preserving all fields,
+censuses, hierarchy, double-harvest and cancellation/age/readiness bounds.
+
+65s readiness teardown writes stop requests wall1791559510605; first generation
+refusal follows13ms later. Client endpoint close/unbind explains incarnation6/
+directory8,9. No complete frame/mirror/input, no visible body/owned-camera proof.
+Both880x527 windows qualified fully secondary; source cleanstop66.597s,
+all4PIDs independently absent/Shipping0,20save hashes unchanged/no crashes/children.
+
 ## Next checkpoint: complete-roster team preflight
 
 The first accepted native recipe's team publication invalidated the second

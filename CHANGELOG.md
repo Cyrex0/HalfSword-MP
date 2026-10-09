@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Reuse already admitted attachment-parent identities during experimental
+  model capture, avoiding duplicate setup while retaining fresh native
+  identity checks and both complete harvests. Actual capture speed and model
+  presentation remain under verification.
 - Publish native team facts for the complete original roster before capturing
   player models. Wait for the exact roster acknowledgment and verify teams
   during descriptor registration, so admitting one model cannot invalidate

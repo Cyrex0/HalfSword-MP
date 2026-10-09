@@ -80,9 +80,10 @@ function M.capture(env,bindings)
     local rows,by_address,mesh_sets,spline_sets,owner_ids={}, {}, {}, {}, {}
     local owners={{owner=0}};for _,w in ipairs(bindings.weapons)do owners[#owners+1]={owner=w.id}end
     local function runtime_path(c)
-        -- GetFullName is direct metadata. Preserve the complete runtime outer
-        -- path, including the level/actor ':' separator, for StaticFindObject.
-        local full=c:GetFullName() -- direct metadata, no ProcessEvent/callback
+        -- Preserve the complete runtime outer path, including the level/actor
+        -- ':' separator. Native name conversion can use a PE fallback; a
+        -- reused original handle is requalified after this metadata read.
+        local full=c:GetFullName()
         local p=type(full)=="string" and full:match("^%S+%s+(.+)$")
         if not p or #p>512 or p:find("\0",1,true)then fail("native source runtime path unavailable")end
         return p
@@ -153,6 +154,22 @@ function M.capture(env,bindings)
     end
     local function component(row)
         return qualify(nil,row)
+    end
+    local function original_row(c,identity)
+        local recorded=by_address[identity.address]
+        if not recorded then qualify(c,identity);return identity end
+        if recorded.name~=identity.name or (identity.owner~=nil and recorded.owner~=identity.owner)then
+            fail("native source repeated component binding changed")
+        end
+        -- Reuse only this harvest's original admitted handle. A fresh returned
+        -- parent/root must still match its original full path, and resolution
+        -- rechecks weak/name/class/world/owner/root/parent before that read.
+        local address,reason=env.scope.resolve(recorded.handle)
+        if address~=recorded.address then fail(reason or "native source repeated component changed")end
+        local actual_path=runtime_path(c);c=nil
+        if actual_path~=recorded.path then fail("native source repeated component runtime path changed")end
+        guard();component(recorded) -- requalify after callback-capable name conversion
+        return recorded
     end
     local function get(row,fn)
         stats.component_reads=stats.component_reads+1
@@ -267,9 +284,10 @@ function M.capture(env,bindings)
     -- parent is included through hard links and its original native identity.
     -- Complete mesh censuses occur at harvest boundaries, not every getter.
     local function include_root(actor,owner_id)
-        local identity=object_id(checked(function()return actor.RootComponent end))
+        local root_object=checked(function()return actor.RootComponent end)
+        local identity=object_id(root_object)
         if not identity then fail("native actor root unavailable")end
-        identity.owner=owner_id;qualify(checked(function()return actor.RootComponent end),identity)
+        identity.owner=owner_id;identity=original_row(root_object,identity);root_object=nil
         root_ids[owner_id]={address=identity.address,name=identity.name}
         identity.mesh=checked(function()return qualify(actor.RootComponent,identity):IsA(mesh_class)end)
         identity.spline=checked(function()return qualify(nil,identity):IsA(spline_class)end)
@@ -289,7 +307,7 @@ function M.capture(env,bindings)
         local parent=object_id(parent_object)
         row.parent_address=parent and parent.address or 0
         if parent then
-            retain(parent_object,parent) -- unknown owner is discovered in native scope
+            parent=original_row(parent_object,parent);parent_object=nil -- only new ancestors initialize a native handle
             parent.mesh=checked(function()return qualify(nil,parent):IsA(mesh_class)end)
             parent.spline=checked(function()return qualify(nil,parent):IsA(spline_class)end)
             if type(parent.mesh)~="boolean"then fail("native source ancestor kind unavailable")end

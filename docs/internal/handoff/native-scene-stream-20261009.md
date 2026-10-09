@@ -1,5 +1,61 @@
 # Native full-scene encoding checkpoint
 
+## Latest actual: 67175710 roster preflight
+
+Full G0 passes74 Lua suites/1363 Rust checks in79 binaries; clippy0 errors/
+15 warnings. Dev push and clean RequireG0 deployment succeed; root verifies
+all393 deployed hashes against671757100c4a0c96dc589644178e655ed85de858.
+Run20261009-162404-9c6e68-native-host uses source0716f305-1fc3-446d-bb75-
+427262ec0197, supervisor11288/authority13128/clients13764,6436. First original
+PID/start/exe/HWND-qualified helper fits both880x527 windows fully secondary.
+
+NativeReady15.082s. Roster2 facts15.818→15.859s (41ms) acknowledge directory6→7
+before all captures. Entity1/incarnation5 captures15.887→41.484s (25.597s),
+then NativeBind41.797s succeeds after312ms: compact35551/rawJSON74706/nodes6604/
+dictionary8713/tokens26838/components49/bones600/material_slots38. Entity2 starts
+41.798s and continues both harvests in the SAME incarnation5/directory7.
+No descriptor team publication invalidates it; the roster ordering blocker is
+closed in this actual run.
+
+The unchanged65s readiness deadline expires before entity2 finishes. Client
+stop.request files are written wall1791559510605; generation refusal occurs
+at65.144s/wall1791559510618,13ms later during pass2 SK_Skeleton bone_dictionary
+component34. Core.stop closes native host before its later stopped event;
+NativeCore::unbind advances incarnation and directory, explaining subsequent
+incarnation6/directory8,9. This is teardown after slow startup capture, not a
+spontaneous pre-timeout roster change. Native complete frames/mirrors/input
+remain0, and visible player meshes/owned camera remain unverified.
+
+Source cooperatively stops66.597s without fallback. Independent original4PIDs
+absent/Shipping0,20/20 career-save hashes unchanged, crash[]/children[]. Root
+retains exact580-line authority13128 trace/fullNative/operator/window/cleanup
+evidence. Next task is evidence-driven capture speed, preserving all model
+data, double-harvest stability, original identity and unchanged timing bounds.
+
+Measured nested capture costs (do not add parent totals to child totals):
+entity1 render harvests12.377+13.174s; initial mesh census6.995s/final census0.168s,
+parent closure5.593s, component static10.641s including bone dictionary2.221s,
+materials2.052s and native vertex proofs2.120s. Source signature45ms; native bind
+312ms. Entity2 first harvest12.907s/second interrupted10.439s. The first small
+speed correction avoids repeated Scope.keep initializations for an already
+admitted attachment parent, with fresh incoming identity/path match and fresh
+original scope resolution. No dictionary/field loss, fewer harvests or relaxed
+guards. Actual performance must be measured before claiming a speedup.
+
+Parent/root reuse implementation is frozen in native_source_render and its
+source descriptor fixture. Focused source295/worker356 assertions and syntax2
+pass; repeated parent and mesh-root path, FName, class, owner, attachment,
+world and garbage mutations refuse. Counterfeit returned path also refuses.
+Both adapter harvests retain each component exactly once, with all original
+begin/end mesh/spline censuses and bounded phase trace checks unchanged.
+
+The attempted focused development run359e1e0c/20261009-164130-7045d0 verifies
+all393 deployed hashes but the native supervisor refuses before starting a
+game: native hosting requires a clean deployment with full G0 for its exact
+build. No native process/client is launched. This prerequisite remains intact;
+root returns to full G0 and RequireG0 deployment before all actual native runs.
+Do not bypass the supervisor or falsify its deployment stamp.
+
 ## Roster preflight correction under verification
 
 The user reports seeing a sphere with the default grey/dark-grey texture during

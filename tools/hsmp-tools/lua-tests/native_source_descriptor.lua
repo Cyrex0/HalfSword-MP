@@ -378,7 +378,7 @@ local render_env={read=function(fn)if not scope then error("scope",0)end;local v
 local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapon R"}}}
 -- Offline original-identity protocol mock. Native slot/flag/class semantics are
 -- tested independently in Rust; this validates the production Lua call shape.
-local scope_rows={}
+local scope_rows,scope_keeps,scope_duplicate_keeps={},0,0
 local function snapshot(o)
     if not scope or o.GetWorld():GetAddress()~=1 or o:HasAnyFlags(0x40000000)then error("original native world/garbage changed",0)end
     return {address=o.GetAddress(),name=o.GetFName():ToString(),class=o.GetClass():GetFullName(),
@@ -387,10 +387,12 @@ local function snapshot(o)
         root_path=o.GetOwner().RootComponent:GetFullName(),parent=o.GetAttachParent()and o.GetAttachParent():GetAddress()or 0}
 end
 render_env.scope={keep=function(row)
+    scope_keeps=scope_keeps+1
     local o=runtime_objects[row.path];if not o or o:GetAddress()~=row.address then return nil,"original runtime path changed"end
     local s=snapshot(o)
     if (s.owner~=10 and s.owner~=200)or(row.owner~=0 and row.owner~=s.owner)then return nil,"original native owner changed"end
     for i,old in ipairs(scope_rows)do if old.address==s.address then
+        scope_duplicate_keeps=scope_duplicate_keeps+1
         if not T.eq(old,s)then return nil,"original native identity/link changed"end
         return i,s.owner
     end end
@@ -414,7 +416,7 @@ end,vertex_state=function(handle)
 end}
 local render_phases={}
 render_env.phase=function(stage,edge,detail)
-    if stage=="render_capture"and edge=="enter"then scope_rows={}end
+    if stage=="render_capture"and edge=="enter"then scope_rows={};scope_keeps,scope_duplicate_keeps=0,0 end
     render_phases[#render_phases+1]={stage=stage,edge=edge,detail=detail}
 end
 mesh_return_calls=0;spline_return_calls=0
@@ -426,6 +428,43 @@ T.check(render_stats.mesh_census_calls==mesh_return_calls and render_stats.mesh_
     and render_stats.component_reads>120 and render_stats.qualifications>render_stats.component_reads,
     "two owners use exactly begin/end full mesh censuses regardless of full bone getter count")
 T.check(spline_return_calls==4,"two owners also use exactly begin/end complete native spline censuses")
+T.check(scope_keeps==#rendered.components and scope_duplicate_keeps==0,
+    "repeated source parent and mesh-root links resolve original handles instead of repeating native keep initialization")
+;(function()
+    local saved_phase,saved_phases=render_env.phase,render_phases
+    render_phases={}
+    for _,target in ipairs({body,weapon_mesh})do
+        for _,field in ipairs({"GetFullName","GetFName","GetClass","GetOwner","GetAttachParent","GetWorld","HasAnyFlags"})do
+            local original=target[field]
+            render_env.phase=function(stage,edge,detail)
+                saved_phase(stage,edge,detail)
+                if stage=="parent_closure"and edge=="enter"then
+                    if field=="GetFullName"then target[field]=function()return "FixtureClass /Game/Test/ChangedRuntimePath.ChangedRuntimePath"end
+                    elseif field=="GetFName"then target[field]=function()return fname("RenamedSameAddress")end
+                    elseif field=="GetClass"then target[field]=function()return {GetFullName=function()return "Class /Script/Engine.UnknownComponent"end}end
+                    elseif field=="GetOwner"then target[field]=function()return target==body and live_weapon or host end
+                    elseif field=="GetAttachParent"then target[field]=function()return nil end
+                    elseif field=="GetWorld"then target[field]=function()return {GetAddress=function()return 2 end}end
+                    else target[field]=function(_,mask)return mask==0x40000000 end end
+                end
+            end
+            local ok=pcall(Render.capture,render_env,native_bindings)
+            T.check(not ok and scope_duplicate_keeps==0,
+                "reused original "..(target==body and "parent"or "mesh root").." refuses same-address "..field.." mutation without reinitializing its handle")
+            target[field]=original
+        end
+    end
+    render_env.phase=saved_phase
+    local original_parent=weapon_mesh.GetAttachParent
+    local counterfeit={GetAddress=body.GetAddress,GetFName=body.GetFName,IsValid=body.IsValid,
+        GetFullName=function()return "FixtureClass /Game/Test/CounterfeitParent.CounterfeitParent"end}
+    weapon_mesh.GetAttachParent=function()return counterfeit end
+    local ok,reason=pcall(Render.capture,render_env,native_bindings)
+    T.check(not ok and tostring(reason):find("native source repeated component runtime path changed",1,true),
+        "fresh returned parent path must match the original handle even when address and name match")
+    weapon_mesh.GetAttachParent=original_parent
+    render_phases=saved_phases
+end)()
 local phase_scalars=true
 for _,event in ipairs(render_phases)do for _,value in pairs(event.detail)do
     local t=type(value);if t~="number"and t~="boolean"and t~="string"then phase_scalars=false end
@@ -854,12 +893,12 @@ body.GetNumLODs=original_body_lods;body_asset.GetNumLODs=nil
 -- lifecycle, including two complete equal harvests and failure cleanup.
 for k,v in pairs(pawn)do host[k]=v end
 host.GetActorScale3D=pawn.GetActorScale3D
-local native_scope_begins,native_scope_ends=0,0
+local native_scope_begins,native_scope_ends,native_scope_keeps=0,0,0
 local adapter_scope={begin=function(meta,b)
     native_scope_begins=native_scope_begins+1;scope_rows={}
     if meta~=phase_context or b.pawn~=10 or b.world~=1 or b.controller~=9 or b.index~=0 then return nil,"exact scope metadata lost"end
     return 101
-end,keep=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.keep(row)end,
+end,keep=function(id,row)if id~=101 then return nil,"scope id changed"end;native_scope_keeps=native_scope_keeps+1;return render_env.scope.keep(row)end,
     resolve=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.resolve(row)end,
     profile=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.profile(row)end,
     vertex_state=function(id,row)if id~=101 then return nil,"scope id changed"end;return render_env.scope.vertex_state(row)end,
@@ -869,6 +908,8 @@ local real_adapter=Adapter.new({WG=WG,source_scope=adapter_scope,
 local captured_real,real_reason=real_adapter.capture(0,phase_context)
 T.check(captured_real~=nil and native_scope_begins==2 and native_scope_ends==2,
     "production source adapter begins/ends original native scope for both equal full harvests: "..tostring(real_reason))
+T.check(captured_real and native_scope_keeps==2*#captured_real.components,
+    "both complete production adapter harvests initialize each native component exactly once despite repeated roots/parents")
 local native_count=body.GetNumBones
 body.GetNumBones=function()error("fixture source getter failed",0)end
 T.check(real_adapter.capture(0,phase_context)==nil and native_scope_begins==3 and native_scope_ends==3,
@@ -970,6 +1011,8 @@ source_scenes[#source_scenes+1]=extra_gear
 local all_gear=Render.capture(render_env,native_bindings);local copied_gear
 for _,c in ipairs(all_gear.components)do if c.name=="NativeExtraGear"then copied_gear=c end end
 T.check(#all_gear.components==6 and copied_gear and copied_gear.hidden and copied_gear.parent~=0,"every native gear mesh is kept even when source hidden")
+T.check(scope_keeps==6 and scope_duplicate_keeps==0 and render_phases[#render_phases].detail.mesh_census_calls==4,
+    "shared root/ancestor reuse retains every gear component and both full owner mesh censuses with no duplicate initialization")
 table.remove(source_scenes)
 local unknown_mesh=object(203,"UnknownNativeRender","/Game/Test/Runtime.UnknownNativeRender",false)
 unknown_mesh.IsA=function(_,k)return k=="/Script/Engine.MeshComponent"end;unknown_mesh.GetOwner=function()return host end
