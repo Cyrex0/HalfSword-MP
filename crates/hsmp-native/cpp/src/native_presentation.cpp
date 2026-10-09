@@ -641,12 +641,77 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
 }
 void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);}catch(const std::exception&) {}}
 void discard(uint64_t id) {const std::lock_guard lock(mirror_mutex);mirrors.erase(id);}
-struct RetiredDriver {Obj world{},actor{};Identity identity{};};
+using ObjectFlags=const uint32_t*(*)(const void*);
+ObjectFlags retirement_flags{};
+Free retirement_free{};
+using RetirementIndex=void*(*)(int32_t);
+using RetirementSlotObject=void**(*)(void*);
+using RetirementSlotSerial=int32_t*(*)(void*);
+RetirementIndex retirement_index{};RetirementSlotObject retirement_object{};RetirementSlotSerial retirement_serial{};
+constexpr uint32_t mirrored_garbage=0x40000000; // matched shipping actor iterator/Kismet:IsValid, evidence-20261005
+struct RetirementLayout {HsmpProp root{},destroying{},role{},remote{};uint32_t known{};};
+struct RetiredDriver {Obj world{},actor{};Identity identity{};HsmpViewLifecycle before{};RetirementLayout layout{};};
 std::map<uint64_t,RetiredDriver> retired_drivers;
 void forget_retirements(){retired_drivers.clear();}
+void* original_slot(Obj actor,const Identity& original) {
+    check_guard();require(retirement_index&&retirement_object&&retirement_serial,"native object-array slot API unavailable");
+    void* item=retirement_index(static_cast<int32_t>(actor.weak));check_guard();if(!item)return nullptr;
+    const auto object=retirement_object(item);const auto serial=retirement_serial(item);check_guard();
+    require(object&&serial,"native object-array slot metadata unavailable");if(!*object)return nullptr;
+    require(reinterpret_cast<uint64_t>(*object)==actor.address&&(!(actor.weak>>32)||static_cast<uint32_t>(*serial)==static_cast<uint32_t>(actor.weak>>32)),"native retired object-array identity reused");
+    void* p=vt->resolve(actor.weak);check_guard();require(p!=nullptr,"native original UObject memory qualification unavailable");
+    require(reinterpret_cast<uint64_t>(p)==actor.address,"native retired weak identity reused");
+    void* cls=vt->resolve(original.class_weak);check_guard();const auto n=object_name(p);check_guard();
+    require(cls&&reinterpret_cast<uint64_t>(cls)==original.class_address&&vt->class_of(p)==cls&&n&&*n==original.name,
+        "native retired name/class identity reused");check_guard();return p;
+}
+uint32_t flags_of(void* object){check_guard();require(retirement_flags!=nullptr,"native object flags API unavailable");const auto p=retirement_flags(object);check_guard();require(p!=nullptr,"native object flags unavailable");return *p;}
+bool world_contains(Obj world,const Identity& original,uint64_t address){
+    require(retirement_free!=nullptr,"native actor-array allocator unavailable");
+    const Obj cls{original.class_weak,original.class_address};get(cls);
+    Function f(L"/Script/Engine.GameplayStatics:GetAllActorsOfClass");
+    f.object(L"WorldContextObject",world);f.object(L"ActorClass",cls,true);
+    const auto field=f.field(L"OutActors",L"ArrayProperty",16);OwnedColorArray owned{retirement_free,f.buf.data()+field.offset};
+    f.call(find(L"/Script/Engine.Default__GameplayStatics"));
+    const auto a=f.value<Array>(L"OutActors",L"ArrayProperty");
+    require(a.count>=0&&a.count<=512&&a.capacity>=a.count&&(!a.count||a.data),"native driver world census bounds");
+    bool listed{};const auto* rows=static_cast<void*const*>(a.data);
+    for(int32_t i=0;i<a.count;++i)if(reinterpret_cast<uint64_t>(rows[i])==address)listed=true;
+    check_guard();return listed;
+}
+RetirementLayout retirement_layout(Obj actor){
+    RetirementLayout out;
+    const auto read_field=[&](HsmpProp& field,const wchar_t* key,const wchar_t* type,int size,uint32_t bit){
+        try{field=property(actor,key,type,size);out.known|=bit;}catch(const Error&){check_guard();}
+    };
+    read_field(out.root,L"RootComponent",L"ObjectProperty",8,16);
+    read_field(out.destroying,L"bActorIsBeingDestroyed",L"BoolProperty",1,2);
+    if((out.known&2)&&(!out.destroying.bool_mask||out.destroying.bool_offset!=0))out.known&=~2u;
+    read_field(out.role,L"Role",L"ByteProperty",1,8);read_field(out.remote,L"RemoteRole",L"ByteProperty",1,128);
+    if(!(out.known&128))out.known&=~8u;out.known&=~128u;return out;
+}
+HsmpViewLifecycle lifecycle(void* p,const Identity& original,const RetirementLayout& layout){
+    HsmpViewLifecycle out{};out.flags=flags_of(p);out.known=65;out.name=original.name;out.class_weak=original.class_weak;out.class_address=original.class_address;
+    // Reflected field layouts were verified while the original actor was live.
+    // These diagnostic reads make no actor ProcessEvent call after destruction.
+    const auto* bytes=static_cast<const uint8_t*>(p);
+    if(layout.known&2){out.destroying=(bytes[layout.destroying.offset]&layout.destroying.bool_mask)!=0;out.known|=2;}
+    if(layout.known&8){out.local_role=bytes[layout.role.offset];out.remote_role=bytes[layout.remote.offset];out.authority=out.local_role==3;out.known|=8;}
+    if(layout.known&16){void* root{};std::memcpy(&root,bytes+layout.root.offset,8);out.root_address=reinterpret_cast<uint64_t>(root);out.known|=16;
+        if(root){out.root_weak=vt->weak(root);check_guard();if(out.root_weak&&vt->resolve(out.root_weak)==root)out.root_live=(flags_of(root)&mirrored_garbage)==0;}}
+    check_guard();return out;
+}
+bool retirement_after(Obj world,Obj actor,const Identity& identity,const RetirementLayout& layout,HsmpViewRetirement* result){
+    const bool listed=world_contains(world,identity,actor.address);
+    void* p=original_slot(actor,identity);result->weak_present=p?1:0;
+    if(p)result->after=lifecycle(p,identity,layout);
+    result->after.listed=listed;result->after.known|=4;
+    const bool retired=!result->after.listed&&(!p||(result->after.flags&mirrored_garbage)!=0);
+    result->alive_after=retired?0:1;return retired;
+}
 int32_t retire(Obj world,Obj actor,uint32_t kind,Obj target,const HsmpViewGuard* guard,HsmpViewRetirement* result) {
     try {
-        require(result!=nullptr,"native retirement result missing");*result={};result->alive_after=2;
+        require(result!=nullptr,"native retirement result missing");*result={};result->alive_after=2;result->weak_present=2;
         thread();OperationScope scope(guard,world);
         require(kind==0&&!target.weak&&!target.address,"native retirement kind unsupported");
         require(retired_drivers.size()<512&&!retired_drivers.contains(actor.weak),"native retirement proof bound or reused identity");
@@ -660,6 +725,13 @@ int32_t retire(Obj world,Obj actor,uint32_t kind,Obj target,const HsmpViewGuard*
             if(class_object&&vt->class_of(get(actor))==get(keep(class_object)))driver=true;
         }
         require(driver,"native retirement driver class unsupported");
+        const auto identity=identities.at(actor.weak);const auto layout=retirement_layout(actor);
+        result->before=lifecycle(get(actor),identity,layout);
+        require((result->before.flags&mirrored_garbage)==0,"native retirement original actor is garbage");
+        result->before.listed=world_contains(world,identity,actor.address);result->before.known|=4;
+        require(result->before.listed!=0,"native retirement original actor not in world census");
+        const auto original_level=returned(actor,L"/Script/Engine.Actor:GetLevel");
+        result->before.level_weak=original_level.weak;result->before.level_address=original_level.address;result->before.known|=32;
         require(same(actor_world(actor),world),"native retirement actor world mismatch");
         Function tag(L"/Script/Engine.Actor:ActorHasTag");tag.put(L"Tag",L"NameProperty",name(L"Persistent"));tag.call(actor);
         const auto tag_property=tag.field(L"ReturnValue",L"BoolProperty",1);
@@ -670,41 +742,35 @@ int32_t retire(Obj world,Obj actor,uint32_t kind,Obj target,const HsmpViewGuard*
         require(!owner.weak||(!same(owner,actor)&&same(actor_world(owner),world)),"native retirement owner world mismatch");
         Function f(L"/Script/Engine.Actor:K2_DestroyActor");require(f.fields.empty(),"native retirement destroy signature changed");
         require(vt->is_a(get(actor),get(f.cls))!=0,"native retirement destroy owner class");
-        void* object=get(actor);void* function=get(f.function);check_guard();const auto identity=identities.at(actor.weak);result->qualified=1;
+        void* object=get(actor);void* function=get(f.function);check_guard();require((flags_of(object)&mirrored_garbage)==0,"native actor changed before retirement dispatch");result->qualified=1;
         result->dispatched=1;vt->call(object,function,f.buf.data());
-        // Check only the original world and object-array slot after the native
-        // call. The actor may be pending garbage while its Lua wrapper is valid.
-        check_guard();void* resolved=vt->resolve(actor.weak);check_guard();
-        require(!resolved||reinterpret_cast<uint64_t>(resolved)==actor.address,"native retirement weak identity changed");
-        if(resolved){get(actor);result->alive_after=1;throw Error("native retirement actor remains live");}
-        retired_drivers.emplace(actor.weak,RetiredDriver{world,actor,identity});result->alive_after=0;return 1;
+        // Never invoke actor GetWorld/GetLevel/ProcessEvent after dispatch.
+        check_guard();require(retirement_after(world,actor,identity,layout,result),"native actor retirement not proved");
+        retired_drivers.emplace(actor.weak,RetiredDriver{world,actor,identity,result->before,layout});return 1;
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
 int32_t probe_retirement(Obj world,Obj actor,const HsmpViewGuard* guard,HsmpViewRetirement* result){
     try {
-        require(result!=nullptr,"native retirement probe result missing");*result={};result->alive_after=2;
+        require(result!=nullptr,"native retirement probe result missing");*result={};result->alive_after=2;result->weak_present=2;
         thread();OperationScope scope(guard,world);
         const auto record=retired_drivers.find(actor.weak);
         require(record!=retired_drivers.end()&&same(record->second.world,world)&&same(record->second.actor,actor),"native original retirement proof unavailable");
         result->qualified=1;result->weak=actor.weak;result->address=actor.address;
-        check_guard();void* resolved=vt->resolve(actor.weak);check_guard();
-        require(!resolved||reinterpret_cast<uint64_t>(resolved)==actor.address,"native retired weak identity reused");
-        if(resolved){
-            const auto& old=record->second.identity;void* cls=vt->resolve(old.class_weak);check_guard();
-            const auto n=object_name(resolved);check_guard();
-            require(cls&&reinterpret_cast<uint64_t>(cls)==old.class_address&&vt->class_of(resolved)==cls&&n&&*n==old.name,
-                "native retired name/class identity reused");
-            result->alive_after=1;throw Error("native retired driver weak identity became live");
-        }
-        result->alive_after=0;return 1;
+        result->before=record->second.before;
+        require(retirement_after(world,actor,record->second.identity,record->second.layout,result),"native original actor retirement no longer proved");return 1;
     }catch(const std::exception& e){if(result)std::snprintf(result->reason,sizeof(result->reason),"%s",e.what());return -1;}
 }
-const HsmpPresentation provider{4,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements};
+const HsmpPresentation provider{5,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements};
 }
 void hsmp_presentation_register(const HsmpReflect* reflection) {
     const auto module=GetModuleHandleW(L"UE4SS.dll");
     object_name=reinterpret_cast<NamePrivate>(module?GetProcAddress(module,"?GetNamePrivate@UObjectBase@Unreal@RC@@QEBAAEBVFName@23@XZ"):nullptr);
     object_world=reinterpret_cast<GetWorld>(module?GetProcAddress(module,"?GetWorld@UObject@Unreal@RC@@QEBAPEAVUWorld@23@XZ"):nullptr);
+    retirement_flags=reinterpret_cast<ObjectFlags>(module?GetProcAddress(module,"?GetObjectFlags@UObjectBase@Unreal@RC@@QEBAAEBW4EObjectFlags@23@XZ"):nullptr);
+    retirement_free=reinterpret_cast<Free>(module?GetProcAddress(module,"?Free@FMemory@Unreal@RC@@SAXPEAX@Z"):nullptr);
+    retirement_index=reinterpret_cast<RetirementIndex>(module?GetProcAddress(module,"?IndexToObject@FUObjectArray@Unreal@RC@@SAPEAUFUObjectItem@23@H@Z"):nullptr);
+    retirement_object=reinterpret_cast<RetirementSlotObject>(module?GetProcAddress(module,"?GetObject@FUObjectItem@Unreal@RC@@AEAAAEAPEAVUObjectBase@23@XZ"):nullptr);
+    retirement_serial=reinterpret_cast<RetirementSlotSerial>(module?GetProcAddress(module,"?GetSerialNumber@FUObjectItem@Unreal@RC@@QEAAAEAHXZ"):nullptr);
     vt=reflection;game_thread=0;names.clear();signatures.clear();identities.clear();mirrors.clear();retired_drivers.clear();
     layouts_verified=false;layout_objects.clear();hsmp_native_set_presentation(vt?&provider:nullptr);
 }

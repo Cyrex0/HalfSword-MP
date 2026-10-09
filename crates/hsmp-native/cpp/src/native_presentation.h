@@ -37,11 +37,19 @@ struct HsmpViewFrame {
     HsmpViewObject* textures; uint32_t texture_count; uint32_t pad_t;
 };
 struct HsmpViewResult { uint32_t complete; uint32_t operations; char reason[192]; };
-// ABI4 retirement proof is local to one originally live native actor. A weak
-// object-array rejection proves native invalidity, not UObject deallocation.
+// ABI5 engine retirement requires positive original world membership, then
+// world absence AND mirrored garbage/global disappearance. UE4SS weak validity
+// is only a memory/identity qualifier, not this engine's actor liveness rule.
+struct HsmpViewLifecycle {
+    uint32_t known; uint32_t flags; uint32_t destroying; uint32_t listed;
+    uint32_t authority; uint32_t local_role; uint32_t remote_role; uint32_t root_live;
+    uint64_t name; uint64_t class_weak; uint64_t class_address;
+    uint64_t level_weak; uint64_t level_address; uint64_t root_weak; uint64_t root_address;
+}; // known bits: flags1,destroying2,membership4,roles8,root16,level32,identity64
 struct HsmpViewRetirement {
-    uint32_t qualified; uint32_t dispatched; uint32_t alive_after; uint32_t pad;
-    uint64_t weak; uint64_t address; char reason[192]; // alive_after: 0 invalid,1 live,2 unknown
+    uint32_t qualified; uint32_t dispatched; uint32_t alive_after; uint32_t weak_present;
+    uint64_t weak; uint64_t address; HsmpViewLifecycle before; HsmpViewLifecycle after;
+    char reason[192]; // alive_after:0 engine-retired,1 unresolved/present,2 unknown; weak_present:0 absent,1 present,2 unknown
 };
 struct HsmpPresentation {
     uint32_t abi; uint32_t pad;
@@ -72,7 +80,8 @@ void hsmp_native_set_presentation(const HsmpPresentation*);
 static_assert(sizeof(HsmpViewText)==16);
 static_assert(sizeof(HsmpViewObject)==16);
 static_assert(sizeof(HsmpViewGuard)==16);
-static_assert(sizeof(HsmpViewRetirement)==224);
+static_assert(sizeof(HsmpViewLifecycle)==88);
+static_assert(sizeof(HsmpViewRetirement)==400);
 static_assert(sizeof(HsmpViewTransform)==80);
 static_assert(sizeof(HsmpViewParameter)==24);
 static_assert(sizeof(HsmpViewMaterial)==72);

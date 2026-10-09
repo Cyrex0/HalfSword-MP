@@ -53,9 +53,10 @@ local function fixture()
     f.env.retire_native=function(world,original,kind)
         assert(world==f.world.address and original==f.driver.address and kind==0)
         f.driver:K2_DestroyActor()
-        return{ok=not f.driver.valid,qualified=true,dispatched=true,alive_after=f.driver.valid and 1 or 0,weak=1001,address=original,reason=f.driver.valid and"native retirement actor remains live"or""}
+        return{ok=not f.driver.valid,qualified=true,dispatched=true,alive_after=f.driver.valid and 1 or 0,weak_present=f.driver.valid and 1 or 0,weak=1001,address=original,reason=f.driver.valid and"native retirement actor remains live"or"",
+            before={world_listed={known=true,value=true}},after={world_listed={known=true,value=f.driver.valid},object_flags={known=f.driver.valid,value=0}}}
     end
-    f.env.probe_native=function(_,weak,original)return{ok=true,qualified=true,dispatched=false,alive_after=0,weak=weak,address=original}end
+    f.env.probe_native=function(_,weak,original)return{ok=true,qualified=true,dispatched=false,alive_after=0,weak_present=0,weak=weak,address=original,before={world_listed={known=true,value=true}},after={world_listed={known=true,value=false}}}end
     f.env.clear_native=function()f.cleared=(f.cleared or 0)+1 end
     return f,S.new(f.env)
 end
@@ -134,11 +135,12 @@ do
     local f,s=fixture();local actor_reads=0
     f.env.retire_native=function(_,original)
         f.driver.native_gone=true
-        return{ok=true,qualified=true,dispatched=true,alive_after=0,weak=1001,address=original}
+        return{ok=true,qualified=true,dispatched=true,alive_after=0,weak_present=1,weak=1001,address=original,
+            before={world_listed={known=true,value=true}},after={world_listed={known=true,value=false},object_flags={known=true,value=0x40000000}}}
     end
     local old=f.driver.IsActorBeingDestroyed
     f.driver.IsActorBeingDestroyed=function(self)if self.native_gone then actor_reads=actor_reads+1 end;return old(self)end
-    local ok,_,counts=s:run();check(ok and counts.drivers==1 and f.driver.valid and actor_reads==0,"qualified native invalidity succeeds despite a live Lua wrapper without post-call actor reads")
+    local ok,_,counts=s:run();check(ok and counts.drivers==1 and f.driver.valid and actor_reads==0,"native world absence plus mirrored garbage succeeds despite live weak/Lua qualifiers without actor events")
     local calls=0
     for _,method in ipairs({"IsValid","GetWorld","GetFName","GetClass","SetActorHiddenInGame","SetActorTickEnabled","SetActorEnableCollision","K2_DestroyActor"})do
         f.driver[method]=function()calls=calls+1;error("pending driver must not be touched")end
@@ -147,6 +149,11 @@ do
     f.env.probe_native=function(_,weak,original)return{ok=false,qualified=true,dispatched=false,alive_after=1,weak=weak,address=original,reason="native identity became live"}end
     local live,refusal=s:run();check(not live and refusal=="suppression_native_retirement_probe_refused"and calls==0,"native-live/reused original proof fails before pending actor methods")
     s:drop();check(next(s.removed_drivers)==nil and f.cleared>=2,"world drop forgets Lua and provider scalar retirement records")
+end
+do
+    local f,s=fixture();f.env.retire_native=function(_,original)return{ok=true,qualified=true,dispatched=true,alive_after=0,weak_present=1,weak=1001,address=original,
+        before={world_listed={known=true,value=true}},after={world_listed={known=true,value=false},object_flags={known=true,value=0}}}end
+    local ok,why=s:run();check(not ok and why=="suppression_native_retirement_refused","world absence and live weak without native garbage cannot be disguised as a successful native proof")
 end
 do
     local f,s=fixture();f.valid=false

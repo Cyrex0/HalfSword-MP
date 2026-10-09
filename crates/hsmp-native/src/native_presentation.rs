@@ -135,13 +135,34 @@ impl ResultInfo {
     }
 }
 #[repr(C)]
+#[derive(Default)]
+pub struct Lifecycle {
+    pub known: u32,
+    pub flags: u32,
+    pub destroying: u32,
+    pub listed: u32,
+    pub authority: u32,
+    pub local_role: u32,
+    pub remote_role: u32,
+    pub root_live: u32,
+    pub name: u64,
+    pub class_weak: u64,
+    pub class_address: u64,
+    pub level_weak: u64,
+    pub level_address: u64,
+    pub root_weak: u64,
+    pub root_address: u64,
+}
+#[repr(C)]
 pub struct Retirement {
     pub qualified: u32,
     pub dispatched: u32,
     pub alive_after: u32,
-    pub pad: u32,
+    pub weak_present: u32,
     pub weak: u64,
     pub address: u64,
+    pub before: Lifecycle,
+    pub after: Lifecycle,
     pub reason: [u8; 192],
 }
 impl Default for Retirement {
@@ -150,11 +171,62 @@ impl Default for Retirement {
             qualified: 0,
             dispatched: 0,
             alive_after: 2,
-            pad: 0,
+            weak_present: 2,
             weak: 0,
             address: 0,
+            before: Lifecycle::default(),
+            after: Lifecycle::default(),
             reason: [0; 192],
         }
+    }
+}
+unsafe fn push_lifecycle(L: *mut lua_State, state: &Lifecycle) {
+    unsafe {
+        lua_createtable(L, 0, 14);
+        let t = lua_gettop(L);
+        set_int(L, t, "known", state.known as i64);
+        for (key, bit, value) in [
+            ("object_flags", 1, state.flags),
+            ("actor_destroying", 2, state.destroying),
+            ("world_listed", 4, state.listed),
+            ("authority_from_role", 8, state.authority),
+            ("local_role", 8, state.local_role),
+            ("remote_role", 8, state.remote_role),
+            ("root_live", 16, state.root_live),
+        ] {
+            lua_createtable(L, 0, 2);
+            let fact = lua_gettop(L);
+            set_bool(L, fact, "known", state.known & bit != 0);
+            if state.known & bit != 0 {
+                if matches!(
+                    key,
+                    "actor_destroying" | "world_listed" | "authority_from_role" | "root_live"
+                ) {
+                    set_bool(L, fact, "value", value != 0);
+                } else {
+                    set_int(L, fact, "value", value as i64);
+                }
+            }
+            rawset_str(L, t, key);
+        }
+        for (key, bit, value) in [
+            ("name", 64, state.name),
+            ("class_weak", 64, state.class_weak),
+            ("class_address", 64, state.class_address),
+            ("level_weak", 32, state.level_weak),
+            ("level_address", 32, state.level_address),
+            ("root_weak", 16, state.root_weak),
+            ("root_address", 16, state.root_address),
+        ] {
+            if state.known & bit != 0 {
+                set_int(L, t, key, value as i64);
+            }
+        }
+        lua_createtable(L, 0, 2);
+        let end = lua_gettop(L);
+        set_bool(L, end, "known", false);
+        set_str(L, end, "reason", "native EndPlay event not observed");
+        rawset_str(L, t, "end_play");
     }
 }
 #[repr(C)]
@@ -193,7 +265,7 @@ pub struct Provider {
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_presentation(p: *const Provider) {
-    if p.is_null() || unsafe { (*p).abi } == 4 {
+    if p.is_null() || unsafe { (*p).abi } == 5 {
         PROVIDER.store(p as *mut Provider, Ordering::Release);
     }
 }
@@ -1298,6 +1370,11 @@ impl Native {
                     set_int(L, t, "alive_after", out.alive_after as i64);
                     set_int(L, t, "weak", out.weak as i64);
                     set_int(L, t, "address", out.address as i64);
+                    set_int(L, t, "weak_present", out.weak_present as i64);
+                    push_lifecycle(L, &out.before);
+                    rawset_str(L, t, "before");
+                    push_lifecycle(L, &out.after);
+                    rawset_str(L, t, "after");
                     let n = out
                         .reason
                         .iter()
@@ -1358,6 +1435,11 @@ impl Native {
                     set_int(L, t, "alive_after", out.alive_after as i64);
                     set_int(L, t, "weak", out.weak as i64);
                     set_int(L, t, "address", out.address as i64);
+                    set_int(L, t, "weak_present", out.weak_present as i64);
+                    push_lifecycle(L, &out.before);
+                    rawset_str(L, t, "before");
+                    push_lifecycle(L, &out.after);
+                    rawset_str(L, t, "after");
                     let n = out
                         .reason
                         .iter()
@@ -1424,6 +1506,28 @@ impl Native {
 mod presentation_binding_tests {
     use super::*;
     #[test]
+    fn lifecycle_marshaling_preserves_false_and_unknown_facts() {
+        unsafe {
+            let L = mlua::ffi::luaL_newstate();
+            assert!(!L.is_null());
+            mlua::ffi::luaL_openlibs(L);
+            let state = Lifecycle {
+                known: 1 | 4 | 64,
+                flags: 0x40000000,
+                listed: 0,
+                name: 9007199254740993,
+                ..Lifecycle::default()
+            };
+            push_lifecycle(L.cast(), &state);
+            let name = std::ffi::CString::new("sample").unwrap();
+            mlua::ffi::lua_setglobal(L, name.as_ptr());
+            let code=std::ffi::CString::new("assert(sample.world_listed.known and sample.world_listed.value==false); assert(sample.object_flags.value==0x40000000); assert(sample.local_role.known==false and sample.local_role.value==nil); assert(sample.end_play.known==false); assert(sample.name==9007199254740993)").unwrap();
+            assert_eq!(mlua::ffi::luaL_loadstring(L, code.as_ptr()), 0);
+            assert_eq!(mlua::ffi::lua_pcall(L, 0, 0, 0), 0);
+            mlua::ffi::lua_close(L);
+        }
+    }
+    #[test]
     fn scene_anchor_binding_preserves_class_transform_and_empty_render_dictionary() {
         let mut recipe = d::SourceRecipe::decode_recipe(include_bytes!(
             "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
@@ -1480,6 +1584,7 @@ mod presentation_binding_tests {
                 && frame.vectors.is_empty()
                 && frame.textures.is_empty()
         );
-        assert_eq!(std::mem::size_of::<Retirement>(), 224);
+        assert_eq!(std::mem::size_of::<Lifecycle>(), 88);
+        assert_eq!(std::mem::size_of::<Retirement>(), 400);
     }
 }

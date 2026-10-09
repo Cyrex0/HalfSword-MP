@@ -9,6 +9,15 @@ local DRIVER_PATHS={
     BP_Generator_Weapons_Random_C="/Game/Blueprints/Generators/BP_Generator_Weapons_Random.BP_Generator_Weapons_Random_C",
 }
 local GEAR={"ModularWeaponBP_C","Modular_Weapon_Part_Master_C","Modular_Weapon_Module_C"}
+local function engine_retired(proof)
+    local before=type(proof)=="table"and proof.before
+    local after=type(proof)=="table"and proof.after
+    return type(before)=="table"and type(after)=="table"
+        and before.world_listed and before.world_listed.known==true and before.world_listed.value==true
+        and after.world_listed and after.world_listed.known==true and after.world_listed.value==false
+        and(proof.weak_present==0 or(after.object_flags and after.object_flags.known==true
+            and type(after.object_flags.value)=="number"and(after.object_flags.value&0x40000000)~=0))
+end
 function M.new(env)
     local self={retired={},removed_drivers={},key=nil}
     function self:drop()
@@ -130,12 +139,13 @@ function M.new(env)
                     local original=address(actor);fresh()
                     local proof,why=env.retire_native(world_address,original,0);fresh()
                     evidence.phase="after_native_retire";evidence.native=proof or{ok=false,reason=tostring(why):sub(1,192)}
-                    -- The native provider captures the original live weak
-                    -- identity before ProcessEvent, then checks its object-array
-                    -- slot without reading a pending-garbage actor. A stale Lua
-                    -- wrapper neither proves removal nor blocks native proof.
+                    -- Native actor liveness differs from UE4SS's legacy weak
+                    -- validity rule on this engine. The provider requires live
+                    -- exact-world/class presence before dispatch, then world
+                    -- absence AND fresh original mirrored garbage/global absence.
+                    -- It makes no actor ProcessEvent call after dispatch.
                     if type(proof)~="table"or proof.ok~=true or proof.qualified~=true or proof.dispatched~=true
-                        or proof.alive_after~=0 or type(proof.weak)~="number"or proof.weak==0 or proof.address~=original then
+                        or proof.alive_after~=0 or not engine_retired(proof)or type(proof.weak)~="number"or proof.weak==0 or proof.address~=original then
                         error("suppression_native_retirement_refused",0)
                     end
                     if not evidence.name.known or not evidence.class.known then error("suppression_native_retirement_identity_unavailable",0)end
@@ -161,7 +171,7 @@ function M.new(env)
                 if type(env.probe_native)~="function"or record.world~=self.key then error("suppression_native_retirement_probe_unavailable",0)end
                 fresh();local proof,why=env.probe_native(world_address,record.weak,record.address);fresh()
                 if type(proof)~="table"or proof.ok~=true or proof.qualified~=true or proof.dispatched~=false or proof.alive_after~=0
-                    or proof.weak~=record.weak or proof.address~=record.address then
+                    or not engine_retired(proof)or proof.weak~=record.weak or proof.address~=record.address then
                     summary.refusal={kind="driver",phase="native_probe",name={known=true,value=record.name},class={known=true,value=record.class},native=proof or{ok=false,reason=tostring(why):sub(1,192)}}
                     error("suppression_native_retirement_probe_refused",0)
                 end

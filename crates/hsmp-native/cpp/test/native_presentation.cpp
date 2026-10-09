@@ -3,6 +3,7 @@
 #include <iostream>
 #include <limits>
 #include <thread>
+#include <cstdlib>
 static const HsmpPresentation* installed{};
 extern "C" void hsmp_native_set_presentation(const HsmpPresentation* p) {installed=p;}
 namespace {
@@ -19,19 +20,23 @@ int32_t guard_check(void* context) {return *static_cast<int32_t*>(context);}
 // A small reflected Actor:GetLevel/K2_DestroyActor path exercises the production
 // destroy entry, including a world change inside ProcessEvent while Lua's world
 // token still reports valid. These are lifetime tests, not rendering proof.
-struct LifetimeObject {uint64_t name{};LifetimeObject* cls{};LifetimeObject* property{};bool alive{true};};
+struct LifetimeObject {uint64_t name{};LifetimeObject* cls{};LifetimeObject* property{};bool alive{true};uint32_t flags{};uint8_t destroying{},role{3},remote{};};
 LifetimeObject meta{100},world_class{101},gi_class{102},actor_class{103},level_class{104},function_class{105};
 LifetimeObject old_world{110,&world_class},new_world{111,&world_class},gi{112,&gi_class};
 LifetimeObject actor{113,&actor_class},level{114,&level_class};
 LifetimeObject get_level_fn{115,&function_class},destroy_fn{116,&function_class};
 LifetimeObject driver_class{117,&meta},tag_fn{118,&function_class},owner_fn{119,&function_class},replacement{120,&driver_class};
 LifetimeObject foreign_owner{121,&actor_class},foreign_level{122,&level_class};
+LifetimeObject statics_class{123,&meta},statics{124,&statics_class},census_fn{125,&function_class};
 LifetimeObject* retirement_owner{};
 std::vector<LifetimeObject*> lifetime_objects;
 std::map<std::wstring,uint64_t> lifetime_names;
 LifetimeObject* current_world{};
 bool travel_on_get_level{};
 bool actor_persistent{},destroy_invalidates{true},reuse_after_destroy{},travel_on_destroy{};
+bool destroy_garbage{},omit_world{},omit_after_destroy{},reuse_during_post_census{},travel_during_post_census{};
+bool actor_memory_unqualified{};
+int post_destroy_actor_events{},array_frees{};
 int level_calls{},destroy_calls{},post_destroy_actor_touches{},invalid_actor_resolves{};
 void lifetime_touch(LifetimeObject* o) {if(o==&actor&&!actor.alive)++post_destroy_actor_touches;}
 uint64_t lifetime_weak(void* p) {for(size_t i=0;i<lifetime_objects.size();++i)if(lifetime_objects[i]==p)return i+1;return 0;}
@@ -39,10 +44,16 @@ void* lifetime_resolve(uint64_t id) {
     if(id==0||id>lifetime_objects.size())return nullptr;
     auto o=lifetime_objects[static_cast<size_t>(id-1)];
     if(o==&actor&&destroy_calls&&reuse_after_destroy)return &replacement;
+    if(o==&actor&&actor_memory_unqualified)return nullptr;
     if(o==&actor&&!actor.alive)++invalid_actor_resolves;return o->alive?o:nullptr;
 }
 void* lifetime_class(void* p) {auto o=static_cast<LifetimeObject*>(p);lifetime_touch(o);return o->cls;}
 const uint64_t* lifetime_name(const void* p) {auto o=const_cast<LifetimeObject*>(static_cast<const LifetimeObject*>(p));lifetime_touch(o);return &o->name;}
+const uint32_t* lifetime_flags(const void* p){auto o=static_cast<const LifetimeObject*>(p);return &o->flags;}
+void lifetime_free(void* p){++array_frees;std::free(p);}
+void* lifetime_index(int32_t index){return index>0&&static_cast<size_t>(index)<=lifetime_objects.size()?lifetime_objects[static_cast<size_t>(index-1)]:nullptr;}
+void** lifetime_slot_object(void* item){static void* raw;auto o=static_cast<LifetimeObject*>(item);raw=o->alive?o:nullptr;if(o==&actor&&destroy_calls&&reuse_after_destroy)raw=&replacement;return &raw;}
+int32_t* lifetime_slot_serial(void*){static int32_t serial=0;return &serial;}
 uint64_t lifetime_fname(const uint16_t* key,int32_t) {
     auto text=std::wstring(reinterpret_cast<const wchar_t*>(key));auto [it,_]=lifetime_names.emplace(text,lifetime_names.size()+1);return it->second;
 }
@@ -56,6 +67,9 @@ void* lifetime_find(const uint16_t* key) {
     if(path==L"/Script/Engine.Actor:K2_DestroyActor")return &destroy_fn;
     if(path==L"/Script/Engine.Actor:ActorHasTag")return &tag_fn;
     if(path==L"/Script/Engine.Actor:GetOwner")return &owner_fn;
+    if(path==L"/Script/Engine.GameplayStatics")return &statics_class;
+    if(path==L"/Script/Engine.Default__GameplayStatics")return &statics;
+    if(path==L"/Script/Engine.GameplayStatics:GetAllActorsOfClass")return &census_fn;
     if(path==L"/Game/Blueprints/Managers/BP_LevelManager.BP_LevelManager_C")return &driver_class;
     return nullptr;
 }
@@ -70,38 +84,57 @@ int32_t lifetime_props(void* fn,HsmpProp* out,int32_t cap,int32_t* size) {
         *size=16;out[0]=object_field(L"Tag",0);out[0].cls=lifetime_fname(u16(L"NameProperty"),1);
         out[1]=object_field(L"ReturnValue",8);out[1].cls=lifetime_fname(u16(L"BoolProperty"),1);out[1].size=1;out[1].bool_mask=1;return 2;
     }
+    if(fn==&census_fn&&cap>=3){
+        *size=32;out[0]=object_field(L"WorldContextObject",0);out[1]=object_field(L"ActorClass",8);out[1].cls=lifetime_fname(u16(L"ClassProperty"),1);
+        out[2]=object_field(L"OutActors",16);out[2].cls=lifetime_fname(u16(L"ArrayProperty"),1);out[2].size=16;return 3;
+    }
     return -1;
 }
 int32_t lifetime_prop(void* object,const uint16_t* key,HsmpProp* out) {
     const std::wstring field(reinterpret_cast<const wchar_t*>(key));
     if((object==&old_world||object==&new_world)&&field==L"OwningGameInstance") {*out=object_field(L"OwningGameInstance",static_cast<int32_t>(offsetof(LifetimeObject,property)));return 1;}
     if(object==&level&&field==L"OwningWorld") {*out=object_field(L"OwningWorld",static_cast<int32_t>(offsetof(LifetimeObject,property)));return 1;}
+    if(object==&actor&&field==L"RootComponent"){*out=object_field(L"RootComponent",static_cast<int32_t>(offsetof(LifetimeObject,property)));return 1;}
+    if(object==&actor&&(field==L"Role"||field==L"RemoteRole")){*out=object_field(field.c_str(),static_cast<int32_t>(field==L"Role"?offsetof(LifetimeObject,role):offsetof(LifetimeObject,remote)));out->cls=lifetime_fname(u16(L"ByteProperty"),1);out->size=1;return 1;}
+    if(object==&actor&&field==L"bActorIsBeingDestroyed"){*out=object_field(field.c_str(),static_cast<int32_t>(offsetof(LifetimeObject,destroying)));out->cls=lifetime_fname(u16(L"BoolProperty"),1);out->size=1;out->bool_mask=1;return 1;}
     return 0;
 }
 void lifetime_call(void* object,void* fn,void* params) {
-    check(object==&actor||(object==&foreign_owner&&fn==&get_level_fn),"destroy path invokes only its original actor or qualifies its owner");
+    if(object==&actor&&destroy_calls)++post_destroy_actor_events;
+    check(object==&actor||(object==&foreign_owner&&fn==&get_level_fn)||(object==&statics&&fn==&census_fn),"retirement calls only qualified actor/owner or static world census");
     if(fn==&get_level_fn){++level_calls;auto result=object==&foreign_owner?&foreign_level:&level;std::memcpy(params,&result,sizeof(result));if(travel_on_get_level)current_world=&new_world;}
-    else if(fn==&destroy_fn){++destroy_calls;if(destroy_invalidates)actor.alive=false;if(travel_on_destroy)current_world=&new_world;}
+    else if(fn==&destroy_fn){++destroy_calls;if(destroy_invalidates)actor.alive=false;if(destroy_garbage)actor.flags|=mirrored_garbage;if(travel_on_destroy)current_world=&new_world;}
     else if(fn==&tag_fn){static_cast<uint8_t*>(params)[8]=actor_persistent?1:0;}
     else if(fn==&owner_fn){std::memcpy(params,&retirement_owner,sizeof(retirement_owner));}
+    else if(fn==&census_fn){
+        const bool contains=actor.alive&&!(actor.flags&mirrored_garbage)&&!omit_world&&!(destroy_calls&&omit_after_destroy);
+        Array a{};if(contains){a.data=std::malloc(sizeof(void*));check(a.data!=nullptr,"mock census allocation");a.count=1;a.capacity=1;auto pointer=&actor;std::memcpy(a.data,&pointer,sizeof(pointer));}
+        std::memcpy(static_cast<uint8_t*>(params)+16,&a,sizeof(a));
+        if(destroy_calls&&reuse_during_post_census)reuse_after_destroy=true;
+        if(destroy_calls&&travel_during_post_census)current_world=&new_world;
+    }
     else throw std::runtime_error("unexpected lifetime function");
 }
 void* lifetime_world(const void* object) {return object==&gi?current_world:nullptr;}
 void lifetime_reset(HsmpReflect& reflect) {
     for(auto c:{&meta,&world_class,&gi_class,&actor_class,&level_class,&function_class})c->cls=&meta;
-    lifetime_objects={&meta,&world_class,&gi_class,&actor_class,&level_class,&function_class,&old_world,&new_world,&gi,&actor,&level,&get_level_fn,&destroy_fn,&driver_class,&tag_fn,&owner_fn,&replacement,&foreign_owner,&foreign_level};
-    for(auto o:lifetime_objects)o->alive=true;
+    lifetime_objects={&meta,&world_class,&gi_class,&actor_class,&level_class,&function_class,&old_world,&new_world,&gi,&actor,&level,&get_level_fn,&destroy_fn,&driver_class,&tag_fn,&owner_fn,&replacement,&foreign_owner,&foreign_level,&statics_class,&statics,&census_fn};
+    for(auto o:lifetime_objects){o->alive=true;o->flags=0;}
     old_world.property=&gi;new_world.property=&gi;level.property=&old_world;current_world=&old_world;
     foreign_level.property=&new_world;retirement_owner=nullptr;
     actor.cls=&actor_class;actor.name=113;
     travel_on_get_level=false;level_calls=0;destroy_calls=0;post_destroy_actor_touches=0;invalid_actor_resolves=0;
     actor_persistent=false;destroy_invalidates=true;reuse_after_destroy=false;travel_on_destroy=false;
+    destroy_garbage=false;omit_world=false;omit_after_destroy=false;reuse_during_post_census=false;travel_during_post_census=false;post_destroy_actor_events=0;array_frees=0;
+    actor_memory_unqualified=false;
     identities.clear();names.clear();signatures.clear();lifetime_names.clear();mirrors.clear();
     retired_drivers.clear();
     active_guard=nullptr;active_world={};active_game_instance={};
     reflect.fname=lifetime_fname;reflect.find=lifetime_find;reflect.is_a=lifetime_is_a;reflect.class_of=lifetime_class;
     reflect.props=lifetime_props;reflect.obj_prop=lifetime_prop;reflect.call=lifetime_call;
     reflect.weak=lifetime_weak;reflect.resolve=lifetime_resolve;object_name=lifetime_name;object_world=lifetime_world;
+    retirement_flags=lifetime_flags;retirement_free=lifetime_free;
+    retirement_index=lifetime_index;retirement_object=lifetime_slot_object;retirement_serial=lifetime_slot_serial;
 }
 }
 int main() {
@@ -165,7 +198,7 @@ int main() {
         check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
         check(post_destroy_actor_touches==0&&invalid_actor_resolves==0,"destroyed mirror actor is never resolved or read after K2_DestroyActor");
         destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
-        check(provider.abi==4,"guarded native retirement requires presentation ABI4");
+        check(provider.abi==5,"engine actor retirement requires presentation ABI5");
         HsmpViewRetirement retired{};
         lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);actor.alive=false;
         check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.qualified==0&&destroy_calls==0,"initially invalid weak actor cannot manufacture retirement proof");
@@ -180,8 +213,8 @@ int main() {
         lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);destroy_invalidates=false;
         check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.qualified==1&&retired.dispatched==1&&retired.alive_after==1,"native dispatch with still-live weak identity refuses retirement");
         lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);
-        check(retire(world,mirror_actor,0,{},&guard,&retired)==1&&retired.qualified==1&&retired.dispatched==1&&retired.alive_after==0&&destroy_calls==1,"only originally qualified native weak invalidity proves retirement");
-        check(invalid_actor_resolves==1&&post_destroy_actor_touches==0,"post-retirement proof reads the object-array slot without touching invalid actor memory");
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==1&&retired.qualified==1&&retired.dispatched==1&&retired.alive_after==0&&destroy_calls==1,"original live-world presence then world/global absence proves retirement");
+        check(invalid_actor_resolves==0&&post_destroy_actor_touches==0,"post-retirement absence uses raw empty object-array slot without touching invalid actor memory");
         const auto retired_weak=retired.weak;
         check(probe_retirement(world,mirror_actor,&guard,&retired)==1&&retired.dispatched==0&&retired.alive_after==0&&destroy_calls==1,"fresh native probe confirms original retirement without another destroy");
         check(post_destroy_actor_touches==0,"native probe never dereferences a pending-garbage actor");
@@ -196,6 +229,25 @@ int main() {
         check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.alive_after==2&&destroy_calls==1,"reused weak slot refuses and never destroys the replacement");
         lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);travel_on_destroy=true;
         check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.alive_after==2&&invalid_actor_resolves==0,"travel inside native destroy abandons post-call actor proof");
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);destroy_invalidates=false;destroy_garbage=true;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==1&&retired.weak_present==1&&retired.before.listed==1&&retired.after.listed==0&&(retired.after.flags&mirrored_garbage),"UE4SS weak-valid plus native world absence and mirrored garbage proves engine retirement");
+        check(post_destroy_actor_events==0,"garbage-but-allocated actor receives no post-dispatch ProcessEvent");
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==1&&destroy_calls==1&&post_destroy_actor_events==0,"fresh repeated probe preserves native garbage proof without actor events");
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);destroy_invalidates=false;omit_after_destroy=true;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.after.listed==0&&retired.weak_present==1,"active-level-like absence without original garbage/global absence refuses");
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);actor.flags=mirrored_garbage;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&destroy_calls==0,"already-garbage actor cannot manufacture prior live observation");
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);omit_world=true;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&destroy_calls==0,"missing original live world observation refuses before destroy");
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);retirement_flags=nullptr;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&destroy_calls==0,"missing native object flags API refuses");
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);reuse_during_post_census=true;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.alive_after==2&&destroy_calls==1,"slot reused inside post-census ProcessEvent cannot pass a stale flags snapshot");
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);destroy_invalidates=false;travel_during_post_census=true;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==-1&&retired.alive_after==2&&array_frees==2,"world change during post census refuses and frees both native arrays");
+        lifetime_reset(reflect);actor.cls=&driver_class;world=keep(&old_world);mirror_actor=keep(&actor);destroy_invalidates=false;destroy_garbage=true;
+        check(retire(world,mirror_actor,0,{},&guard,&retired)==1,"fixture obtains original garbage retirement proof");actor_memory_unqualified=true;
+        check(probe_retirement(world,mirror_actor,&guard,&retired)==-1&&retired.alive_after==2,"weak-invalid but globally present object cannot masquerade as global disappearance");
         std::cout<<checks<<" native presentation lifetime/rejection checks passed\n";return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }
