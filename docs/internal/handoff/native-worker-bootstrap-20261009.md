@@ -38,9 +38,12 @@ instructions are superseded by this current state and the final recorded run.
 
 Source schema3 changes are committed as2a5905bb; the worker requires and forwards
 all five native scope APIs as80f23cac. Source Lua133 assertions and syntax3 pass;
-worker216 assertions and syntax checks pass. Native Rust presentation4,
-source scope16, table parser5 and API1 checks pass. C++216 checks cover bounded
-raw curve copying and allocation cleanup, without claiming rendered parity.
+worker216 assertions and syntax checks pass. Native Rust presentation5,
+source scope16, table parser5 and API1 checks pass. C++226 checks cover bounded
+raw curve copying, allocation cleanup and callback lifetime admission, without
+claiming rendered parity. Independent Sol6.1 review found and closed invalid
+pointer arithmetic across separate float members and late garbage checks before
+spline callbacks; no further concrete review blocker was found.
 
 The combined server native filter passes45 tests, including complete profile
 readiness, raw nonunit quaternion/zero tangent and signed-zero transmission,

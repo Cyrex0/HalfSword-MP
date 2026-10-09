@@ -1132,3 +1132,32 @@ relay. A generation change clears collision histories and cuts playback; the
 receiver also checks cached samples against its current authoritative life.
 `SpawnStatus` stores the context of the original verified placement, including
 its actual pawn identity, and never adopts a newer generation at receipt time.
+
+### Experimental embedded native scene format
+
+The development headless authority uses separate network DTOs; these do not
+change protocol12 or the shared-memory ABI. A presentation peer must advertise
+`NATIVE_WORLD` (bit20), `NATIVE_PRESENTATION` (bit21) and `NATIVE_RENDER_V2`
+(bit22). Native PvP rejects peers missing any of these. An explicitly selected
+diagnostic observer may use world snapshots alone.
+
+Source recipe schema3 requires `spline_profile` on every component: explicit
+null for other components, or actual position/rotation/scale/reparameterization
+counts and positively proved null metadata for a native spline. A profile or
+attachment change requires a new recipe revision. Missing fields never imply
+defaults.
+
+Render V2 (`0x0A12`) adds an explicit spline-presence byte after each component's
+materials. A present spline carries visibility, version, all interpolation
+settings, and four raw curves with loop flags/offsets, point counts, keys,
+values, arrive/leave tangents and native interpolation modes. Native double
+values remain doubles; quaternion tangents are not normalized. Each ordinary
+curve is bounded to64 points and the reparameterization curve to1024. The full
+message retains the64KiB bound. Decode rejects invalid flags, nonfinite values,
+unsupported modes, truncation and trailing bytes before scene admission.
+
+V2 uses the existing scene latest stream (`0x94`). The native V2 client refuses
+the old `0x0A11` scene format. Directory, actor incarnation, recipe revision and
+all spline counts must match before a client can acknowledge mirror readiness.
+This format is development work; transport checks do not establish native
+rendering, combat or playable acceptance.
