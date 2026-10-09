@@ -32,6 +32,7 @@
 #include "box_snapshot_probe.h"
 #include "ue4ss_abi.hpp"
 #include "ue4ss_pins.h"
+#include "native_source_object_bridge.h"
 
 // The generated header must agree with the Rust crate the DLL links.
 static_assert(HSMP_IPC_ABI_MAJOR == 2, "hsmp_ipc.h ABI major");
@@ -131,6 +132,21 @@ namespace
         return s;
     }
 
+    bool source_object_exports()
+    {
+        // These signatures and the dispatcher current-state lookup are pinned
+        // to e3ba1016. No LuaMadeSimple object layout is copied or instantiated.
+        HMODULE host = GetModuleHandleW(L"UE4SS.dll");
+        if (!host) return false;
+        hsmp_source_object::register_function = reinterpret_cast<hsmp_source_object::Register>(GetProcAddress(host,
+            "?register_function@Lua@LuaMadeSimple@RC@@QEBAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AEBQ6AHAEBV123@@Z@Z"));
+        hsmp_source_object::get_state = reinterpret_cast<hsmp_source_object::GetState>(GetProcAddress(host,
+            "?get_lua_state@Lua@LuaMadeSimple@RC@@QEBAPEAUlua_State@@XZ"));
+        hsmp_source_object::construct = reinterpret_cast<hsmp_source_object::Construct>(GetProcAddress(host,
+            "?auto_construct_object@LuaType@RC@@YAXAEBVLua@LuaMadeSimple@2@PEAVUObject@Unreal@2@@Z"));
+        return hsmp_source_object::register_function && hsmp_source_object::get_state && hsmp_source_object::construct;
+    }
+
     void pin_self()
     {
         HMODULE h = nullptr;
@@ -210,6 +226,10 @@ class HSMPNativeMod final : public CppUserModBase
         if (!m_enabled || !wants_api(mod_name)) return;
         lua_State* L = lua.get_lua_state();
         if (!L) return;
+        if (source_object_exports() && hsmp_source_object::install(&lua))
+            hsmp_native_set_source_object_factory(hsmp_source_object::push);
+        else
+            logf("source wrapper factory unavailable for HSMP Lua state");
         int top = lua_gettop(L);
         std::string name = narrow(mod_name);
         if (hsmp_native_open(L, name.c_str()) != 1)
@@ -229,6 +249,12 @@ class HSMPNativeMod final : public CppUserModBase
         lua_settop(L, top);
         hsmp_box_probe_install(L); // Default OFF; explicit bounded developer enrollment only.
         logf("registered HSMPNative into Lua mod '%s' (L=%p, lock=%s)", name.c_str(), (void*)L, hsmp_lua_lock_mode());
+    }
+
+    auto on_lua_stop(StringViewType mod_name, LuaMadeSimple::Lua& lua, LuaMadeSimple::Lua&, LuaMadeSimple::Lua&, LuaMadeSimple::Lua*)
+            -> void override
+    {
+        if (m_enabled && wants_api(mod_name)) hsmp_source_object::remove(lua.get_lua_state());
     }
 };
 

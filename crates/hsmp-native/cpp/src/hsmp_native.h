@@ -55,6 +55,12 @@ typedef int32_t (*HsmpNativePathReader)(const struct HsmpNativePathNode*,uint32_
     struct HsmpNativePathNode* output,uint32_t capacity,uint32_t* output_count,uint64_t* package_name,char* reason,uint32_t reason_capacity);
 void hsmp_native_set_source_path_reader(HsmpNativePathReader reader);
 
+// Source-only fresh UE4SS wrapper. Success leaves exactly one real UObject
+// userdata; failure restores the stack. The original scoped identity is checked
+// by Rust before and after this protected current-coroutine factory invocation.
+typedef int32_t (*HsmpNativeSourceObjectFactory)(struct lua_State*,uint64_t address,char* reason,uint32_t reason_capacity);
+void hsmp_native_set_source_object_factory(HsmpNativeSourceObjectFactory factory);
+
 #ifdef __cplusplus
 }
 #endif

@@ -105,13 +105,16 @@ function M.capture(env,bindings)
     local function qualify(c,row)
         stats.qualifications=stats.qualifications+1
         if not row.handle then retain(c,row)end
-        local address,reason=env.scope.resolve(row.handle)
-        if address~=row.address then fail(reason or "native source original component changed")end
-        -- Acquire a new wrapper only after original native identity admission.
-        -- No wrapper from an earlier ProcessEvent is used for a field getter.
-        c=StaticFindObject(row.path)
-        if not c or c:GetAddress()~=row.address or c:IsValid()~=true or c:GetFName():ToString()~=row.name then fail("native render component identity changed")end
-        if runtime_path(c)~=row.path then fail("native source original component runtime path changed")end
+        local address,wrapper=env.scope.resolve(row.handle)
+        if address~=row.address then fail(type(wrapper)=="string"and wrapper or "native source original component changed")end
+        -- The native endpoint constructs a fresh wrapper and then finishes its
+        -- original weak/full-FName/class/path/owner/world/link/generation guards.
+        -- Consume it immediately, with no search/name conversion or callback
+        -- between that admission and the actual component field getter.
+        c=wrapper
+        if not c or (type(c)~="userdata"and type(c)~="table")or c:GetAddress()~=row.address then
+            fail("native source fresh component wrapper unavailable")
+        end
         return c
     end
     local function include(row)

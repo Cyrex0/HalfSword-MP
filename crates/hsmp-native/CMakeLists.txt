@@ -141,6 +141,11 @@ set_target_properties(harness PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${HARNESS}" RUNTIME_OUTPUT_DIRECTORY_RELEASE "${HARNESS}")
 
 enable_testing()
+add_executable(native_source_object_bridge_check cpp/test/native_source_object_bridge.cpp)
+target_include_directories(native_source_object_bridge_check PRIVATE cpp/src)
+target_link_libraries(native_source_object_bridge_check PRIVATE lua_vm_host)
+target_compile_options(native_source_object_bridge_check PRIVATE /W4 /WX /permissive- /EHsc /utf-8)
+add_test(NAME native_source_object_bridge_check COMMAND native_source_object_bridge_check)
 add_executable(native_presentation_check cpp/test/native_presentation.cpp)
 target_include_directories(native_presentation_check PRIVATE cpp/src)
 target_compile_options(native_presentation_check PRIVATE /W4 /WX /permissive- /EHsc /utf-8)

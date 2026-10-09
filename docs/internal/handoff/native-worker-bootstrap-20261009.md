@@ -1,5 +1,37 @@
 # Native authority bootstrap checkpoint
 
+## Latest actual: 0c085a97, source publication misses readiness
+
+Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings; clean
+dev push/RequireG0 and all393 deployed hashes match0c085a97. Actual
+20261009-171718-59e0be-native-host/source70890f4b-3d7b-4664-9a03-ad9123332c82:
+NativeReady14.917s, roster ACK15.889s/dir7. Both49-component/600-bone/38-material
+recipes pass after22.063s/20.916s captures. Core71ms/render5.425s pass;
+publication65.683s refuses final generation after unchanged65s client teardown.
+No complete frame, mirror, visible model, owned view or input proof. Both
+clients stop cleanly; original stdout/stderr complete0B with no copy errors.
+Prior client exit3 and sampling recovery remain unverified beyond publication.
+
+Independent original4PIDs absent/Shipping0,20/20 saves unchanged, no crash
+children. Previous MainWindowHandle placement evidence was insufficient:
+client1 selected a tiny console/minimized handle and later observations were
+overwritten. Ignored operator helper V2 now selects the unique original visible
+UnrealWindow by PID/start/executable/HWND/class/thread, forces880x527 without
+activation and preserves immutable snapshots/history and DWM bounds. Offline
+parse/compile/root review pass; actual placement proof is pending the next run.
+
+The next implementation removes per-field global object searches through a
+fresh UE4SS wrapper constructed from the already qualified original native
+scope. It preserves both harvests, full fields/censuses and original identity
+checks before and after protected current-coroutine allocation. No cached
+wrapper, guessed Lua context, generation renewal or relaxed timing bound.
+The user's grey checker sphere/no-player-model report remains open.
+
+Focused fresh-wrapper validation: source-scope36 Rust tests, protected Lua VM
+bridge137 checks, Lua source312/worker370 assertions and syntax2 pass. Actual
+provider/dllmain and standalone bridge compile /W4 /WX. Lua and native independent
+reviews are closed; clean G0/deploy and actual model proof remain the next gates.
+
 ## Latest actual: 8b775c5d, complete source scene; client exit open
 
 G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings; dev push,

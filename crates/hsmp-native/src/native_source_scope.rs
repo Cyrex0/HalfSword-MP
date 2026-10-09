@@ -191,6 +191,23 @@ type PathReader = unsafe extern "C" fn(
     u32,
 ) -> i32;
 static PATH_READER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+type ObjectFactory = unsafe extern "C" fn(*mut lua_State, u64, *mut std::ffi::c_char, u32) -> i32;
+static OBJECT_FACTORY: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+#[no_mangle]
+pub extern "C" fn hsmp_native_set_source_object_factory(factory: Option<ObjectFactory>) {
+    OBJECT_FACTORY.store(
+        factory.map_or(std::ptr::null_mut(), |p| p as *mut c_void),
+        Ordering::Release,
+    );
+}
+fn object_factory() -> Result<ObjectFactory, String> {
+    let p = OBJECT_FACTORY.load(Ordering::Acquire);
+    if p.is_null() {
+        Err("source wrapper factory unavailable".into())
+    } else {
+        Ok(unsafe { std::mem::transmute(p) })
+    }
+}
 #[no_mangle]
 pub extern "C" fn hsmp_native_set_source_path_reader(reader: Option<PathReader>) {
     PATH_READER.store(
@@ -705,6 +722,23 @@ impl Scope {
             return Err("source scope hierarchy changed during native getters".into());
         }
         Ok(c.object.address)
+    }
+    fn resolve_object(
+        &self,
+        e: &impl Engine,
+        handle: u64,
+        factory: impl FnOnce(u64) -> Result<(), String>,
+        finish: impl FnOnce() -> Result<(), String>,
+    ) -> Result<u64, String> {
+        let address = self.resolve(e, handle)?;
+        factory(address)?;
+        // Factory allocation, UE4SS dispatch postcallbacks and any Lua GC have
+        // completed. Never bless a freshly rebound object after these callbacks.
+        if self.resolve(e, handle)? != address {
+            return Err("source wrapper original object changed".into());
+        }
+        finish()?;
+        Ok(address)
     }
 }
 
@@ -1560,7 +1594,83 @@ impl Native {
         unsafe { self.source_scope_op(L, true) }
     }
     pub unsafe fn source_scope_resolve(&mut self, L: *mut lua_State) -> c_int {
-        unsafe { self.source_scope_op(L, false) }
+        let top = unsafe { lua_gettop(L) };
+        let result = (|| unsafe {
+            let id = arg_int(L, 1).ok_or("source scope id")? as u64;
+            let handle = arg_int(L, 2).ok_or("source scope handle")? as u64;
+            // Release STATE before any engine getter or protected Lua call.
+            // A reentrant begin/end cannot borrow through this operation or
+            // overwrite its original scope; the sequence is checked at restore.
+            let scope = STATE
+                .with(|s| s.borrow_mut().scope.take())
+                .ok_or("source scope unavailable")?;
+            if scope.id != id {
+                return Err("source scope id changed".into());
+            }
+            let vt = reflect::vt().ok_or("source scope reflection")?;
+            let e = runtime(self, vt, exports()?, &scope);
+            e.admit()?;
+            let factory = object_factory()?;
+            scope.resolve_object(
+                &e,
+                handle,
+                |address| {
+                    // Scalar push is nonallocating. The C++ protected factory
+                    // adds the fresh userdata after it, preserving return order.
+                    lua_pushinteger(L, address as i64);
+                    let before = lua_gettop(L);
+                    let mut reason = [0u8; 192];
+                    if factory(L, address, reason.as_mut_ptr().cast(), 192) != 1 {
+                        let n = reason.iter().position(|c| *c == 0).unwrap_or(reason.len());
+                        return Err(format!(
+                            "source wrapper: {}",
+                            String::from_utf8_lossy(&reason[..n])
+                        ));
+                    }
+                    // LUA_TUSERDATA=7 in pinned Lua 5.4; table/light userdata
+                    // must never stand in for a fresh UE4SS remote UObject.
+                    if lua_gettop(L) != before + 1 || lua_type(L, -1) != 7 {
+                        return Err("source wrapper userdata/stack contract".into());
+                    }
+                    Ok(())
+                },
+                || {
+                    let row = scope
+                        .components
+                        .get(handle.checked_sub(1).ok_or("source scope handle")? as usize)
+                        .ok_or("source scope handle")?;
+                    // Callback-free closure after the last world/owner getter.
+                    // It retains role/ref/dir, original slot/name/class/flags,
+                    // complete native path and every original cached hard link.
+                    e.admit()?;
+                    e.verify_path(row.object, row.path_witness.as_ref())?;
+                    scope.pure_hard_links(&ProfileGuardEngine { runtime: &e }, handle)?;
+                    e.verify_path(row.object, row.path_witness.as_ref())?;
+                    e.admit()
+                },
+            )?;
+            drop(e);
+            STATE.with(|s| {
+                let mut state = s.borrow_mut();
+                if state.scope.is_some() || state.seq != id {
+                    state.scope = None;
+                    return Err("source scope reentry changed".into());
+                }
+                state.scope = Some(scope);
+                Ok::<_, String>(())
+            })?;
+            Ok::<_, String>(())
+        })();
+        unsafe {
+            match result {
+                Ok(()) => 2,
+                Err(reason) => {
+                    STATE.with(|s| s.borrow_mut().scope = None);
+                    lua_settop(L, top);
+                    nil_err(L, &reason)
+                }
+            }
+        }
     }
     unsafe fn source_scope_op(&mut self, L: *mut lua_State, keep: bool) -> c_int {
         let result = (|| unsafe {
@@ -1939,6 +2049,120 @@ mod source_scope_tests {
         assert_eq!(s.components[0].parent.unwrap().object.address, 4);
     }
     #[test]
+    fn source_scope_fresh_factory_preserves_original_address_and_rechecks_after_callbacks() {
+        let (mut s, e) = fixture();
+        let path = e.rows.borrow()[&7].path.clone();
+        let h = s.keep(&e, 7, 5, path).unwrap();
+        let before_owner = *e.owner_calls.borrow();
+        let factory_calls = std::cell::Cell::new(0);
+        let finished = std::cell::Cell::new(false);
+        assert_eq!(
+            s.resolve_object(
+                &e,
+                h,
+                |address| {
+                    assert_eq!(address, 7);
+                    factory_calls.set(factory_calls.get() + 1);
+                    Ok(())
+                },
+                || {
+                    assert!(
+                        *e.owner_calls.borrow() > before_owner,
+                        "full native owner checks retained"
+                    );
+                    s.pure_hard_links(&e, h)?;
+                    finished.set(true);
+                    Ok(())
+                }
+            )
+            .unwrap(),
+            7
+        );
+        assert_eq!(factory_calls.get(), 1);
+        assert!(finished.get());
+    }
+    #[test]
+    fn source_scope_fresh_factory_refuses_constructor_identity_path_world_and_link_mutations() {
+        for mutation in 0..10 {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            let h = s.keep(&e, 7, 5, path).unwrap();
+            let result = s.resolve_object(
+                &e,
+                h,
+                |_| {
+                    match mutation {
+                        0 => e.change(7, |r| r.id.weak += 1),
+                        1 => e.change(7, |r| r.id.name += 1),
+                        2 => e.change(7, |r| r.id.class_address += 1),
+                        3 => e.change(7, |r| r.flags |= GARBAGE),
+                        4 => e.change(7, |r| r.path.push_str("_new")),
+                        5 => e.change(7, |r| r.world = 99),
+                        6 => e.change(7, |r| r.owner = 2),
+                        7 => e.change(7, |r| r.parent = 6),
+                        8 => e.change(5, |r| r.root = 4),
+                        9 => e.change(4, |r| r.parent = 6),
+                        _ => unreachable!(),
+                    }
+                    Ok(())
+                },
+                || s.pure_hard_links(&e, h),
+            );
+            assert!(
+                result.is_err(),
+                "constructor callback mutation {mutation} cannot bless the wrapper"
+            );
+        }
+    }
+    #[test]
+    fn source_scope_fresh_factory_never_runs_for_invalid_original_or_after_factory_failure() {
+        let (mut s, e) = fixture();
+        let path = e.rows.borrow()[&7].path.clone();
+        let h = s.keep(&e, 7, 5, path).unwrap();
+        assert!(s
+            .resolve_object(
+                &e,
+                h,
+                |_| Err("factory refused".into()),
+                || panic!("failed factory cannot finish")
+            )
+            .is_err());
+        e.change(7, |r| r.flags |= GARBAGE);
+        assert!(s
+            .resolve_object(
+                &e,
+                h,
+                |_| panic!("retired original cannot construct"),
+                || panic!("retired original cannot finish")
+            )
+            .is_err());
+    }
+    #[test]
+    fn source_scope_fresh_factory_final_generation_admission_is_required() {
+        let (mut s, e) = fixture();
+        let path = e.rows.borrow()[&7].path.clone();
+        let h = s.keep(&e, 7, 5, path).unwrap();
+        let generation = std::cell::Cell::new(s.dir_seq);
+        assert!(s
+            .resolve_object(
+                &e,
+                h,
+                |_| {
+                    generation.set(s.dir_seq + 1);
+                    Ok(())
+                },
+                || {
+                    s.pure_hard_links(&e, h)?;
+                    if generation.get() == s.dir_seq {
+                        Ok(())
+                    } else {
+                        Err("fixture original directory changed".into())
+                    }
+                }
+            )
+            .is_err());
+    }
+    #[test]
     fn source_scope_initial_path_lookup_brackets_hierarchy_and_rejects_callback_rename() {
         for callback in [1, 2] {
             let (mut s, e) = fixture();
@@ -2003,17 +2227,15 @@ mod source_scope_tests {
             .no_override
         );
         for (count, state) in [(0, 0), (17, 1), (17, 0), (1, 2), (0, u32::MAX)] {
-            assert!(
-                checked_vertex_state(VertexStateProof {
-                    material_count: 0,
-                    material_null_mask: 0,
-                    component_kind: 1,
-                    lod_info_count: count,
-                    no_override: state,
-                    asset_present: 1,
-                })
-                .is_err()
-            );
+            assert!(checked_vertex_state(VertexStateProof {
+                material_count: 0,
+                material_null_mask: 0,
+                component_kind: 1,
+                lod_info_count: count,
+                no_override: state,
+                asset_present: 1,
+            })
+            .is_err());
         }
     }
     #[test]
@@ -2094,17 +2316,15 @@ mod source_scope_tests {
             (0, 0, 0, 1, 1),
             (0, 0, 0, 0, 0),
         ] {
-            assert!(
-                checked_vertex_state(VertexStateProof {
-                    lod_info_count: 1,
-                    no_override,
-                    asset_present: present,
-                    material_count: count,
-                    material_null_mask: mask,
-                    component_kind: kind,
-                })
-                .is_err()
-            );
+            assert!(checked_vertex_state(VertexStateProof {
+                lod_info_count: 1,
+                no_override,
+                asset_present: present,
+                material_count: count,
+                material_null_mask: mask,
+                component_kind: kind,
+            })
+            .is_err());
         }
     }
     #[test]
@@ -2992,10 +3212,9 @@ mod source_scope_tests {
             PATH_CALLBACK_COUNT.with(|p| p.set(0));
             let _trace = ProfileOperation::begin(e.reference, e.dir_seq, 1);
             let pure = ProfileGuardEngine { runtime: e };
-            assert!(
-                pure.path_matches(id, "initial exact path", Some(&witness))
-                    .unwrap()
-            );
+            assert!(pure
+                .path_matches(id, "initial exact path", Some(&witness))
+                .unwrap());
             assert_eq!(
                 PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.finds),
                 0
@@ -3007,10 +3226,9 @@ mod source_scope_tests {
             let mut changed = witness.clone();
             changed.nodes[0].address += 1;
             let calls = PATH_CALLBACK_COUNT.with(|p| p.get());
-            assert!(
-                pure.path_matches(id, "ignored text", Some(&changed))
-                    .is_err()
-            );
+            assert!(pure
+                .path_matches(id, "ignored text", Some(&changed))
+                .is_err());
             assert_eq!(
                 PATH_CALLBACK_COUNT.with(|p| p.get()),
                 calls,
@@ -3018,10 +3236,9 @@ mod source_scope_tests {
             );
             changed = witness.clone();
             changed.package_name ^= 1;
-            assert!(
-                pure.path_matches(id, "ignored text", Some(&changed))
-                    .is_err()
-            );
+            assert!(pure
+                .path_matches(id, "ignored text", Some(&changed))
+                .is_err());
             assert!(pure.path_matches(id, "ignored text", None).is_err());
             PATH_CALLBACK_GARBAGE.with(|p| p.set(true));
             assert!(
@@ -3090,16 +3307,14 @@ mod source_scope_tests {
                 schema: engine.schema.clone(),
             };
             NAME_READS.with(|reads| reads.set(0));
-            assert!(
-                capture_static_vertex_state(
-                    &scope,
-                    engine,
-                    1,
-                    || { panic!("unadmitted client cannot receive a native asset proof") },
-                    || panic!("unadmitted client cannot finish a native asset proof")
-                )
-                .is_err()
-            );
+            assert!(capture_static_vertex_state(
+                &scope,
+                engine,
+                1,
+                || { panic!("unadmitted client cannot receive a native asset proof") },
+                || panic!("unadmitted client cannot finish a native asset proof")
+            )
+            .is_err());
             assert_eq!(NAME_READS.with(|reads| reads.get()), 0);
         });
     }

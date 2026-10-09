@@ -1,5 +1,70 @@
 # Native full-scene encoding checkpoint
 
+## Fresh-wrapper capture correction, implementation under review
+
+The Lua capture now consumes a fresh native UObject wrapper returned beside the
+already qualified original address. It removes per-field StaticFindObject and
+name conversions without caching wrappers across callbacks or omitting data.
+The native bridge registers through the pinned UE4SS dispatcher, which supplies
+the calling coroutine's actual Lua context; allocation/postcallbacks stay inside
+a protected call. Rust releases its scoped-state borrow across that call and
+rechecks the original object, path, links, roster and generation afterward.
+Native source-scope36 tests and protected bridge137 checks pass; standalone
+bridge and actual provider/dllmain compile with /W4 /WX. Independent native
+review is closed, including nested reentry fault propagation and protected
+postcallbacks. Source files are frozen; build ownership is released.
+
+Lua source312/worker370 assertions and syntax2 pass; independent Lua review is
+closed. Fixtures require distinct fresh wrappers, trap old-wrapper reads and
+hot path searches, preserve the complete data/binding signature and refuse
+identity/name/class/path/owner/link/flags/world/generation/constructor changes.
+No ABI/schema/wire/capacity/timing changes. Actual speed and visible models
+remain unproved until the next exact-G0 deployment and two-client run.
+
+The ignored window helper V2 is parsed/compiled and root-reviewed: it selects
+only the unique original visible UnrealWindow, records console candidates
+separately, forces880x527 without activation, checks DWM physical bounds and
+preserves every observation. Earlier MainWindowHandle readbacks prove only
+placement of that selected handle; historical claims of both actual game
+windows being fully secondary are not established by those older records.
+
+## Latest actual: 0c085a97, deadline before source publication
+
+Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings,142 event
+emitters without violations, dev push/RequireG0 and all393 deployed hashes match
+0c085a970a6bca4b2a5f7ae3745e9c555a70a215. Actual20261009-171718-59e0be-native-host
+uses source70890f4b-3d7b-4664-9a03-ad9123332c82, supervisor5128/authority33208/
+clients17292,24916. NativeReady14.917s; roster15.851→15.889s acknowledges dir7.
+
+Both full49-component/600-bone/38-material recipes pass again. Entity1 captures
+15.916→37.979s/22.063s, NativeBind38.300s/320ms. Entity2 captures38.301→59.217s/
+20.916s, NativeBind59.501s/283ms. Core71ms succeeds, render59.573→64.998s/5.425s
+succeeds, then publication65.683s refuses source vertex final generation after
+unchanged65s client teardown. No complete source scene; sourcecleanstop66.752s.
+Source capture remains too slow/variable for robust readiness. The previous
+17s capture result must not be treated as a guaranteed startup bound.
+
+Neither client unexpectedly exits or enters presentation; both own streams
+remain wait_scene then clean stopped. All original stdout/stderr drains report
+complete true,0B, no copy errors. Thus the prior exit3 is not reproduced and its
+cause remains unproved. Startup traces and clock recovery have not run past a
+successful publication yet; no model/owned camera/input proof.
+
+Window evidence also exposes an operator-helper defect: first client1
+MainWindowHandle was160x39 at minimized coordinates; moving that handle does
+not prove the actual game window was moved. Client2 initially880x527 then
+changed to1133x597 on main and was moved again. The helper's later post-exit
+observation overwrote prior JSON. Next helper must qualify exact original
+game HWND by class/owner, distinguish console windows, force880x527 and preserve
+every observation. Do not claim both visible game windows were fully secondary
+for this run. No OS input is introduced.
+
+Independent all4 original PIDs absent/Shipping0,20/20 save hashes unchanged,
+crash[]/unobservedchildren[]. Exact692-line authority trace/fullNative/pipe
+records/operator summary retained. Next work targets the repeated per-field
+global object searches with a positively qualified fresh native wrapper,
+retaining both complete harvests and every identity/timing/data guard.
+
 ## Latest actual: 8b775c5d, first complete source scene
 
 Full G0 passes74 Lua/1363 Rust79 binaries, clippy0 errors/15 warnings, dev push

@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Construct fresh native component wrappers from already qualified source
+  identities, avoiding repeated global path searches during full model capture.
+  Preserve both complete harvests, all fields and identity checks; actual
+  startup performance and visible client models remain under verification.
 - Separate experimental source sampling retries from capture timestamps and
   represent an unqualified physics timestep as unknown. Preserve original
   frame freshness while allowing sampling to resume after slow captures.

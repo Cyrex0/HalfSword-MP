@@ -368,7 +368,7 @@ host.GetComponentsByClass=unavailable_component_alias;live_weapon.GetComponentsB
 local rvp={IsValid=function()return true end,GetMeshComponentAmountOfVerticesOnLOD=function(_,c)
     -- Matched shipping StaticMesh branch returns0 at the CPU-access gate,
     -- before inspecting either component override or asset vertex buffers.
-    if c==weapon_mesh and c.StaticMesh.bAllowCPUAccess==false then return 0 end
+    if c:GetAddress()==weapon_mesh:GetAddress()and c.StaticMesh.bAllowCPUAccess==false then return 0 end
     return #c.native_colors
 end,
     GetMeshComponentVertexColorsAtLOD_Wrapper=function(_,c)return color_return(c.native_colors)end}
@@ -379,9 +379,25 @@ local native_bindings={weapons={{id=1,address=200,name="LiveWeapon",field="Weapo
 -- Offline original-identity protocol mock. Native slot/flag/class semantics are
 -- tested independently in Rust; this validates the production Lua call shape.
 local scope_rows,scope_keeps,scope_duplicate_keeps={},0,0
+local wrapper_state={revision=0,stale_reads=0,count=0,generation=1}
+local function fresh_wrapper(o)
+    wrapper_state.revision=wrapper_state.revision+1;wrapper_state.count=wrapper_state.count+1
+    local revision=wrapper_state.revision
+    local function live()
+        if revision~=wrapper_state.revision then wrapper_state.stale_reads=wrapper_state.stale_reads+1;error("retained old component wrapper was touched",0)end
+    end
+    return setmetatable({},{__index=function(_,field)
+        live();local value=o[field]
+        if type(value)=="function"then return function(_,...)live();return value(o,...)end end
+        return value
+    end})
+end
 local function snapshot(o)
-    if not scope or o.GetWorld():GetAddress()~=1 or o:HasAnyFlags(0x40000000)then error("original native world/garbage changed",0)end
-    return {address=o.GetAddress(),name=o.GetFName():ToString(),class=o.GetClass():GetFullName(),
+    if not scope or o:IsValid()~=true or o:HasAnyFlags(0x40000000)or o.GetWorld():GetAddress()~=1 then
+        error("original native lifetime/world/garbage changed",0)
+    end
+    local native_name=o.GetFName()
+    return {address=o.GetAddress(),name=native_name:ToString(),name_number=native_name.number,class=o.GetClass():GetFullName(),generation=wrapper_state.generation,
         path=o.GetFullName():match("^%S+%s+(.+)$"),owner=o.GetOwner():GetAddress(),
         root=o.GetOwner().RootComponent:GetAddress(),root_name=o.GetOwner().RootComponent:GetFName():ToString(),
         root_path=o.GetOwner().RootComponent:GetFullName(),parent=o.GetAttachParent()and o.GetAttachParent():GetAddress()or 0}
@@ -400,7 +416,10 @@ render_env.scope={keep=function(row)
 end,resolve=function(handle)
     local s=scope_rows[handle];local o=s and runtime_objects[s.path]
     if not s or not o or not T.eq(snapshot(o),s)then return nil,"original native identity/link changed"end
-    return s.address
+    local wrapper=fresh_wrapper(o)
+    if wrapper_state.factory then wrapper=wrapper_state.factory(wrapper,o,handle)end
+    if not scope or not T.eq(snapshot(o),s)then return nil,"original native identity changed during wrapper construction"end
+    return s.address,wrapper
 end,profile=function(handle)
     local address,reason=render_env.scope.resolve(handle)
     if not address then return nil,reason end
@@ -430,6 +449,66 @@ T.check(render_stats.mesh_census_calls==mesh_return_calls and render_stats.mesh_
 T.check(spline_return_calls==4,"two owners also use exactly begin/end complete native spline censuses")
 T.check(scope_keeps==#rendered.components and scope_duplicate_keeps==0,
     "repeated source parent and mesh-root links resolve original handles instead of repeating native keep initialization")
+;(function()
+    local saved_find,saved_phase,saved_phases=StaticFindObject,render_env.phase,render_phases
+    local kept,searches={},0
+    local saved_keep=render_env.scope.keep
+    render_env.scope.keep=function(row)
+        local handle,owner= saved_keep(row)
+        if handle then kept[row.path]=true end
+        return handle,owner
+    end
+    StaticFindObject=function(p)
+        if kept[p]then searches=searches+1;error("hot original component full-path search",0)end
+        return saved_find(p)
+    end
+    render_phases={}
+    local copied=Render.capture(render_env,native_bindings)
+    T.check(searches==0 and D.signature(copied)==D.signature(rendered),
+        "fresh native wrappers remove hot original-component searches while preserving every captured field/binding byte")
+    T.check(wrapper_state.stale_reads==0 and wrapper_state.count>render_stats.qualifications,
+        "each resolution supplies another wrapper and the complete production collector never touches one after another resolution")
+    StaticFindObject=saved_find;render_env.scope.keep=saved_keep;render_env.phase=saved_phase;render_phases=saved_phases
+    local handle=1
+    local _,first=render_env.scope.resolve(handle)
+    local _,second=render_env.scope.resolve(handle)
+    T.check(first~=second and not pcall(function()return first:GetAddress()end),
+        "offline wrapper trap detects retained-wrapper reads rather than disguising cached objects")
+    wrapper_state.stale_reads=0
+    local saved_resolve=render_env.scope.resolve
+    for _,value in ipairs({false,true,17,{GetAddress=function()return 999 end}})do
+        render_env.scope.resolve=function(id)local address=saved_resolve(id);return address,value end
+        T.check(not pcall(Render.capture,render_env,native_bindings),"missing/wrong native wrapper cannot fall back to a runtime search")
+    end
+    render_env.scope.resolve=function(id)local address=saved_resolve(id);return address end
+    T.check(not pcall(Render.capture,render_env,native_bindings),"legacy scalar-only resolve explicitly refuses unsupported wrapper construction")
+    render_env.scope.resolve=saved_resolve
+    for _,change in ipairs({"name_number","class","path","owner","parent","garbage","world","generation","gc"})do
+        local changed,old={},{}
+        local original_generation=wrapper_state.generation
+        render_phases={}
+        wrapper_state.factory=function(wrapper,o)
+            if not changed.object then
+                changed.object=o
+                if change=="name_number"then old.field="GetFName";old.value=o[old.field];local before=o:GetFName();o[old.field]=function()return fname(before.value,before.number+1)end
+                elseif change=="class"then old.field="GetClass";old.value=o[old.field];o[old.field]=function()return {GetFullName=function()return "Class /Script/Engine.ChangedClass"end}end
+                elseif change=="path"then old.field="GetFullName";old.value=o[old.field];o[old.field]=function()return "FixtureClass /Game/Test/ChangedPath.ChangedPath"end
+                elseif change=="owner"then old.field="GetOwner";old.value=o[old.field];o[old.field]=function()return o==body and live_weapon or host end
+                elseif change=="parent"then old.field="GetAttachParent";old.value=o[old.field];o[old.field]=function()return nil end
+                elseif change=="garbage"then old.field="HasAnyFlags";old.value=o[old.field];o[old.field]=function(_,mask)return mask==0x40000000 end
+                elseif change=="world"then old.field="GetWorld";old.value=o[old.field];o[old.field]=function()return {GetAddress=function()return 2 end}end
+                elseif change=="gc"then old.field="IsValid";old.value=o[old.field];o[old.field]=function()return false end
+                else wrapper_state.generation=wrapper_state.generation+1 end
+            end
+            return wrapper
+        end
+        T.check(not pcall(Render.capture,render_env,native_bindings)and wrapper_state.stale_reads==0,
+            "native wrapper constructor callback "..change.." refuses before exposing an old field wrapper")
+        if old.field then changed.object[old.field]=old.value end
+        wrapper_state.factory=nil;wrapper_state.generation=original_generation
+    end
+    render_phases=saved_phases
+end)()
 ;(function()
     local saved_phase,saved_phases=render_env.phase,render_phases
     render_phases={}
@@ -582,11 +661,11 @@ weapon_mesh.native_vertex_proof=plain(no_override_proof);weapon_asset.bAllowCPUA
 local saved_static_count,saved_static_colors=rvp.GetMeshComponentAmountOfVerticesOnLOD,rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
 local static_paint_calls=0
 rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)
-    if c==weapon_mesh then static_paint_calls=static_paint_calls+1;error("CPU-gated native getter must not establish absence",0)end
+    if c:GetAddress()==weapon_mesh:GetAddress()then static_paint_calls=static_paint_calls+1;error("CPU-gated native getter must not establish absence",0)end
     return saved_static_count(self,c,lod)
 end
 rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=function(self,c,lod)
-    if c==weapon_mesh then static_paint_calls=static_paint_calls+1;error("no synthesized static override colors",0)end
+    if c:GetAddress()==weapon_mesh:GetAddress()then static_paint_calls=static_paint_calls+1;error("no synthesized static override colors",0)end
     return saved_static_colors(self,c,lod)
 end
 local native_asset_capture=Render.capture(render_env,native_bindings)
@@ -649,11 +728,11 @@ scope=true;render_env.scope.vertex_state=actual_vertex_proof;weapon_mesh.native_
     local paint_calls=0
     local count_getter,colors_getter=rvp.GetMeshComponentAmountOfVerticesOnLOD,rvp.GetMeshComponentVertexColorsAtLOD_Wrapper
     rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)
-        if c==weapon_mesh then paint_calls=paint_calls+1;error("hard-null mesh has no invented vertex count",0)end
+        if c:GetAddress()==weapon_mesh:GetAddress()then paint_calls=paint_calls+1;error("hard-null mesh has no invented vertex count",0)end
         return count_getter(self,c,lod)
     end
     rvp.GetMeshComponentVertexColorsAtLOD_Wrapper=function(self,c,lod)
-        if c==weapon_mesh then paint_calls=paint_calls+1;error("hard-null mesh has no synthesized colors",0)end
+        if c:GetAddress()==weapon_mesh:GetAddress()then paint_calls=paint_calls+1;error("hard-null mesh has no synthesized colors",0)end
         return colors_getter(self,c,lod)
     end
     weapon_mesh.StaticMesh=nil;weapon_mesh.native_vertex_proof=plain(empty_proof)
@@ -864,7 +943,7 @@ for _,case in ipairs({
     {label="error",getter=function()error("exact native count error",0)end,kind="string",value="exact native count error"},
 })do
     rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)
-        if c==weapon_mesh then return case.getter()end
+        if c:GetAddress()==weapon_mesh:GetAddress()then return case.getter()end
         return original_vertex_count(self,c,lod)
     end
     render_phases={};count_ok,count_reason=pcall(Render.capture,render_env,native_bindings)
@@ -876,7 +955,7 @@ for _,case in ipairs({
         "native vertex count "..case.label.." preserves typed facts without accepting a fallback")
 end
 weapon_asset.bAllowCPUAccess=nil
-rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)if c==weapon_mesh then return 0 end;return original_vertex_count(self,c,lod)end
+rvp.GetMeshComponentAmountOfVerticesOnLOD=function(self,c,lod)if c:GetAddress()==weapon_mesh:GetAddress()then return 0 end;return original_vertex_count(self,c,lod)end
 count_ok,count_reason=pcall(Render.capture,render_env,native_bindings)
 T.check(not count_ok and count_reason:find("allow_cpu_access_type=nil allow_cpu_access=nil",1,true),
     "unknown native CPU-access flag remains explicit nil rather than false or true")
