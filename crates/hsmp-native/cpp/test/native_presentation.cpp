@@ -207,6 +207,7 @@ std::array<uint8_t,16*0x90> vertex_lod_bytes{};
 std::array<uint8_t,16*0x90> vertex_second_lods{};
 int vertex_guard_calls{},vertex_mutation_at{},vertex_events{};
 bool vertex_mutate_earlier_on_second{};
+bool vertex_missing_asset_property{};
 enum class VertexMutation {None,Override,Asset,Garbage,ClassName,Travel};
 VertexMutation vertex_mutation{};
 void vertex_write_header(Array header){std::memcpy(reinterpret_cast<uint8_t*>(&vertex_component_fixture)+0x588,&header,sizeof(header));}
@@ -256,7 +257,8 @@ int32_t vertex_props(void* object,HsmpProp* out,int32_t cap,int32_t* size){
 }
 int32_t vertex_prop(void* object,const uint16_t* key,HsmpProp* out){
     const std::wstring field(reinterpret_cast<const wchar_t*>(key));
-    if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&field==L"StaticMesh"){*out=object_field(L"StaticMesh",0x560);return 1;}
+    if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&field==L"StaticMesh"){
+        if(vertex_missing_asset_property)return 0;*out=object_field(L"StaticMesh",0x560);return 1;}
     if((object==&vertex_component_fixture||object==&vertex_second_fixture)&&field==L"LODData"){*out=object_field(L"LODData",0x588);out->cls=name(L"ArrayProperty");out->size=16;return 1;}
     return lifetime_prop(object,key,out);
 }
@@ -287,6 +289,7 @@ void vertex_reset(HsmpReflect& reflect){
     vertex_flags=lifetime_flags;vertex_build_admit=[](){return true;};vertex_owner={};vertex_component={};vertex_asset={};
     vertex_guard_calls=vertex_mutation_at=vertex_events=0;vertex_mutation=VertexMutation::None;
     vertex_mutate_earlier_on_second=false;
+    vertex_missing_asset_property=false;
 }
 void vertex_checks(HsmpReflect& reflect){
     check(vertex_code_ranges(vertex_count_code,sizeof(vertex_count_code),vertex_colors_code,sizeof(vertex_colors_code)),"both exact matched native code ranges admit");
@@ -295,7 +298,7 @@ void vertex_checks(HsmpReflect& reflect){
     check(!vertex_code_ranges(vertex_count_code,sizeof(vertex_count_code)-1,vertex_colors_code,sizeof(vertex_colors_code))&&!vertex_code_match(nullptr,0),"truncated or unavailable matched image refuses");
     auto observe=[&](HsmpViewVertexState& proof,HsmpViewResult& result){int context{};const HsmpViewGuard guard{&context,vertex_guard_check};return describe_vertex_state(keep(&old_world),keep(&actor),keep(&vertex_component_fixture),&guard,&proof,&result);};
     HsmpViewVertexState proof{};HsmpViewResult result{};
-    vertex_reset(reflect);check(observe(proof,result)==1&&result.complete==1&&proof.lod_info_count==2&&proof.no_override==1,"complete actual two-LOD null census proves native asset colors");
+    vertex_reset(reflect);check(observe(proof,result)==1&&result.complete==1&&proof.lod_info_count==2&&proof.no_override==1&&proof.asset_present==1,"complete actual two-LOD null census proves native asset colors and observed presence");
     const int final_guard=vertex_guard_calls;check(vertex_events==4,"census retains both native owner and world qualification rounds");
     vertex_reset(reflect);vertex_write_override(1,1);check(observe(proof,result)==1&&proof.no_override==0&&proof.lod_info_count==2,"nonnull last original slot requires captured colors without buffer dereference");
     vertex_reset(reflect);vertex_write_header({nullptr,0,0});check(observe(proof,result)==1&&proof.lod_info_count==0&&proof.no_override==1,"complete empty native override array preserves actual asset color state");
@@ -346,13 +349,28 @@ SceneObject arm_first{},arm_second{},camera_fixture{};
 LifetimeObject arm_class{900,&meta},camera_class{901,&meta};
 LifetimeObject socket_fn{902,&function_class},deactivate_fn{903,&function_class};
 LifetimeObject tick_fn{904,&function_class},active_fn{905,&function_class},tick_enabled_fn{906,&function_class};
+LifetimeObject primitive_class{907,&meta},physics_fn{908,&function_class},collision_fn{909,&function_class};
+LifetimeObject collision_read_fn{913,&function_class},simulating_fn{914,&function_class};
 uint64_t scene_socket_value{};
 bool scene_profile_supported{true},scene_wrong_vtable{},scene_wrong_size{},scene_wrong_debug_layout{},scene_wrong_tick_layout{},scene_wrong_getter{};
 int scene_guards{},scene_events{},scene_mutation_at{};
+int scene_primitive_events{};
 enum class SceneMutation {None,Endpoint,Socket,Debug,Tick,Active,Garbage,ClassName,Travel};
 SceneMutation scene_mutation{},scene_later_target_mutation{},scene_metadata_mutation{};
 bool scene_mutation_applied{};
-bool scene_object(const void* p){return p==&arm_first||p==&arm_second||p==&camera_fixture;}
+enum class EmptyMutation {None,Asset,Override,Name,Tick,Active};
+EmptyMutation empty_later_mutation{},empty_final_mutation{};int empty_mutation_at{};bool empty_mutation_applied{};
+void empty_mutate(EmptyMutation change){
+    switch(change){
+    case EmptyMutation::Asset:vertex_write_asset(&vertex_mesh);break;
+    case EmptyMutation::Override:vertex_write_override(1,1);break;
+    case EmptyMutation::Name:vertex_component_fixture.identity.name^=1;break;
+    case EmptyMutation::Tick:reinterpret_cast<uint8_t*>(&vertex_component_fixture)[0x3b]=1;break;
+    case EmptyMutation::Active:reinterpret_cast<uint8_t*>(&vertex_component_fixture)[0x8a]|=8;break;
+    default:break;
+    }
+}
+bool scene_object(const void* p){return p==&arm_first||p==&arm_second||p==&camera_fixture||p==&vertex_component_fixture||p==&vertex_second_fixture;}
 uint8_t* scene_bytes(SceneObject& object){return reinterpret_cast<uint8_t*>(&object);}
 void scene_write_arm(SceneObject& object,const HsmpViewSpringArmFrame& value){
     std::memcpy(scene_bytes(object)+0x2f0,value.translation,24);std::memcpy(scene_bytes(object)+0x310,value.rotation,32);
@@ -371,11 +389,12 @@ void scene_mutate(SceneMutation change){
     }
 }
 int32_t scene_guard_check(void*){
-    ++scene_guards;if(scene_mutation_at&&scene_guards==scene_mutation_at)scene_mutate(scene_mutation);return 1;
+    ++scene_guards;if(scene_mutation_at&&scene_guards==scene_mutation_at)scene_mutate(scene_mutation);
+    if(empty_mutation_at&&scene_guards==empty_mutation_at)empty_mutate(empty_final_mutation);return 1;
 }
 uint64_t scene_fixture_vtable(const void* p){
     const auto* object=static_cast<const LifetimeObject*>(p);
-    return scene_image+(object->cls==&camera_class?0x76085c0:0x76952b8)+(scene_wrong_vtable?8:0);
+    return scene_image+(object->cls==&vertex_component_class?0x766fc60:object->cls==&camera_class?0x76085c0:0x76952b8)+(scene_wrong_vtable?8:0);
 }
 void* scene_find(const uint16_t* key){
     const std::wstring path(reinterpret_cast<const wchar_t*>(key));
@@ -386,19 +405,31 @@ void* scene_find(const uint16_t* key){
     if(path==L"/Script/Engine.ActorComponent:SetComponentTickEnabled")return &tick_fn;
     if(path==L"/Script/Engine.ActorComponent:IsActive")return &active_fn;
     if(path==L"/Script/Engine.ActorComponent:IsComponentTickEnabled")return &tick_enabled_fn;
+    if(path==L"/Script/Engine.PrimitiveComponent")return &primitive_class;
+    if(path==L"/Script/Engine.PrimitiveComponent:SetSimulatePhysics")return &physics_fn;
+    if(path==L"/Script/Engine.PrimitiveComponent:SetCollisionEnabled")return &collision_fn;
+    if(path==L"/Script/Engine.PrimitiveComponent:GetCollisionEnabled")return &collision_read_fn;
+    if(path==L"/Script/Engine.SceneComponent:IsSimulatingPhysics")return &simulating_fn;
     return vertex_find(key);
 }
 int32_t scene_is_a(void* object,void* type){
-    if(scene_object(object)){auto original_class=static_cast<LifetimeObject*>(object)->cls;return type==original_class||type==&vertex_scene_class||type==&vertex_actor_component_class;}
+    if(scene_object(object)){auto original_class=static_cast<LifetimeObject*>(object)->cls;
+        return type==original_class||type==&vertex_scene_class||type==&vertex_actor_component_class||
+            (type==&primitive_class&&original_class==&vertex_component_class);}
     return vertex_is_a(object,type);
 }
 HsmpProp scene_field(const wchar_t* key,const wchar_t* type,int32_t bytes,int32_t offset,uint8_t mask=0,const wchar_t* sub=nullptr){
     auto p=object_field(key,offset);p.cls=name(type);p.size=bytes;p.bool_mask=mask;if(sub)p.sub=name(sub);return p;
 }
 int32_t scene_props(void* object,HsmpProp* out,int32_t cap,int32_t* size){
+    if(object==&vertex_component_class){*size=scene_wrong_size?0x5d0:0x5e0;return 0;}
     if(object==&camera_class||object==&arm_class){*size=scene_wrong_size?0x320:object==&camera_class?0x9e0:0x330;return 0;}
     if(object==&deactivate_fn){*size=0;return 0;}
     if(object==&tick_fn&&cap>0){*size=1;out[0]=scene_field(L"bEnabled",L"BoolProperty",1,0,1);return 1;}
+    if(object==&physics_fn&&cap>0){*size=1;out[0]=scene_field(L"bSimulate",L"BoolProperty",1,0,1);return 1;}
+    if(object==&collision_fn&&cap>0){*size=1;out[0]=scene_field(L"NewType",L"ByteProperty",1,0);return 1;}
+    if(object==&collision_read_fn&&cap>0){*size=1;out[0]=scene_field(L"ReturnValue",L"ByteProperty",1,0);return 1;}
+    if(object==&simulating_fn&&cap>=2){*size=16;out[0]=scene_field(L"BoneName",L"NameProperty",8,0);out[1]=scene_field(L"ReturnValue",L"BoolProperty",1,8,1);return 2;}
     if((object==&active_fn||object==&tick_enabled_fn)&&cap>0){*size=1;out[0]=scene_field(L"ReturnValue",L"BoolProperty",1,0,1);return 1;}
     if(object==&socket_fn&&cap>=3){*size=112;out[0]=scene_field(L"InSocketName",L"NameProperty",8,0);
         out[1]=scene_field(L"TransformSpace",L"ByteProperty",1,8);out[2]=scene_field(L"ReturnValue",L"StructProperty",96,16,0,L"Transform");return 3;}
@@ -423,6 +454,7 @@ void scene_call(void* object,void* fn,void* params){
         auto* p=static_cast<uint8_t*>(object);
         if(fn==&vertex_owner_function){
             if(object==&arm_second&&scene_later_target_mutation!=SceneMutation::None&&!scene_mutation_applied){scene_mutation_applied=true;scene_mutate(scene_later_target_mutation);}
+            if(object==&vertex_second_fixture&&empty_later_mutation!=EmptyMutation::None&&!empty_mutation_applied){empty_mutation_applied=true;empty_mutate(empty_later_mutation);}
             auto owner=&actor;std::memcpy(params,&owner,8);return;
         }
         if(fn==&socket_fn){uint64_t socket{};std::memcpy(&socket,params,8);
@@ -434,6 +466,10 @@ void scene_call(void* object,void* fn,void* params){
         if(fn==&tick_fn){p[0x3b]=static_cast<uint8_t*>(params)[0]&1;return;}
         if(fn==&active_fn){static_cast<uint8_t*>(params)[0]=(p[0x8a]&8)?1:0;return;}
         if(fn==&tick_enabled_fn){static_cast<uint8_t*>(params)[0]=p[0x3b]?1:0;return;}
+        if(fn==&physics_fn){++scene_primitive_events;p[0x91]=static_cast<uint8_t*>(params)[0]&1;return;}
+        if(fn==&collision_fn){++scene_primitive_events;p[0x90]=static_cast<uint8_t*>(params)[0];return;}
+        if(fn==&collision_read_fn){++scene_primitive_events;static_cast<uint8_t*>(params)[0]=p[0x90];return;}
+        if(fn==&simulating_fn){++scene_primitive_events;static_cast<uint8_t*>(params)[8]=p[0x91]?1:0;return;}
     }
     vertex_call(object,fn,params);
 }
@@ -441,15 +477,18 @@ void scene_reset(HsmpReflect& reflect){
     vertex_reset(reflect);arm_first={};arm_second={};camera_fixture={};
     arm_first.identity.name=910;arm_first.identity.cls=&arm_class;arm_second.identity.name=911;arm_second.identity.cls=&arm_class;
     camera_fixture.identity.name=912;camera_fixture.identity.cls=&camera_class;arm_class.name=900;camera_class.name=901;
-    for(auto object:{&arm_first.identity,&arm_second.identity,&camera_fixture.identity,&arm_class,&camera_class,&socket_fn,&deactivate_fn,&tick_fn,&active_fn,&tick_enabled_fn}){
+    for(auto object:{&arm_first.identity,&arm_second.identity,&camera_fixture.identity,&arm_class,&camera_class,&socket_fn,&deactivate_fn,&tick_fn,&active_fn,&tick_enabled_fn,&primitive_class,&physics_fn,&collision_fn,&collision_read_fn,&simulating_fn}){
         object->alive=true;object->flags=0;lifetime_objects.push_back(object);
     }
     const HsmpViewSpringArmFrame endpoint{{-0.0,3.125,-800.25},{0.0,-0.0,0.75,0.75}};
     scene_write_arm(arm_first,endpoint);scene_write_arm(arm_second,endpoint);
     scene_profile_supported=true;scene_wrong_vtable=scene_wrong_size=scene_wrong_debug_layout=scene_wrong_tick_layout=scene_wrong_getter=false;
     scene_guards=scene_events=scene_mutation_at=0;scene_mutation=scene_later_target_mutation=scene_metadata_mutation=SceneMutation::None;scene_mutation_applied=false;
+    scene_primitive_events=0;
+    empty_mutation_at=0;empty_later_mutation=empty_final_mutation=EmptyMutation::None;empty_mutation_applied=false;
     reflect.find=scene_find;reflect.is_a=scene_is_a;reflect.props=scene_props;reflect.obj_prop=scene_prop;reflect.call=scene_call;
     scene_image=0x10000000;scene_build_admit=[](){return scene_profile_supported;};scene_vtable_read=scene_fixture_vtable;
+    vertex_empty_image=scene_image;vertex_empty_build_admit=[](){return scene_profile_supported;};vertex_empty_vtable_read=scene_fixture_vtable;vertex_empty=false;
     scene_socket_read=[](){return scene_socket_value;};scene_socket_value=name(L"OfflineExactSocket");scene_owner={};scene_component={};active_scene_kind=0;
 }
 void scene_checks(HsmpReflect& reflect){
@@ -466,6 +505,9 @@ void scene_checks(HsmpReflect& reflect){
         else if(invalid==3)scene_wrong_debug_layout=true;else scene_bytes(arm_first)[0x271]=1;
         rejects([&]{observe();},"unverified image/vtable/layout/debug profile refuses native arm capture");}
     scene_reset(reflect);scene_wrong_getter=true;rejects([&]{observe();},"original cache and native socket output mismatch refuses");
+    for(auto component:{&arm_first,&camera_fixture}){scene_reset(reflect);scene_bytes(*component)[0x3b]=1;scene_bytes(*component)[0x8a]=8;
+        collision_off(keep(component),&result);
+        check(scene_bytes(*component)[0x3b]==0&&scene_primitive_events==0,"create collision helper admits exact native Camera/Arm without primitive calls or Scene substitution");}
     scene_reset(reflect);arm_first.identity.flags=mirrored_garbage;rejects([&]{observe();},"original garbage arm refuses before getter");check(scene_events==0,"garbage original arm receives no native dispatch");
     scene_reset(reflect);arm_first.identity.cls=&camera_class;rejects([&]{observe();},"camera cannot impersonate exact native spring arm");
     for(int invalid=0;invalid<7;++invalid){auto bad=raw;if(invalid<3)bad.translation[invalid]=std::numeric_limits<double>::quiet_NaN();else bad.rotation[invalid-3]=std::numeric_limits<double>::infinity();
@@ -498,6 +540,59 @@ void scene_checks(HsmpReflect& reflect){
         check(finish(true)==-1&&result.complete==0&&scene_mutation_applied,"metadata after native disabled getter cannot bless enabled mirror snapshot");}
     scene_reset(reflect);scene_wrong_tick_layout=true;check(finish(true)==-1&&result.complete==0,"unknown tick layout cannot prove owned mirror inertness");
     scene_build_admit=scene_shipping_profile;scene_vtable_read=scene_vtable;scene_socket_read=scene_socket_bits;scene_image=0;
+    scene_owner={};scene_component={};active_scene_kind=0;vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
+}
+void empty_checks(HsmpReflect& reflect){
+    HsmpViewResult result{};HsmpViewVertexState proof{};
+    auto observe=[&]{int context{};const HsmpViewGuard guard{&context,scene_guard_check};
+        return describe_vertex_state(keep(&old_world),keep(&actor),keep(&vertex_component_fixture),&guard,&proof,&result);};
+    scene_reset(reflect);vertex_write_asset(nullptr);
+    check(observe()==1&&result.complete==1&&proof.asset_present==0&&proof.no_override==1&&proof.lod_info_count==2,
+        "original hard-null static asset plus complete all-null override census is explicit empty proof");
+    scene_reset(reflect);vertex_write_asset(nullptr);vertex_write_header({nullptr,0,0});
+    check(observe()==1&&proof.asset_present==0&&proof.no_override==1&&proof.lod_info_count==0,"actual empty override array is complete without fabricated LOD data");
+    scene_reset(reflect);vertex_write_asset(nullptr);vertex_missing_asset_property=true;
+    check(observe()==-1&&result.complete==0,"unavailable asset property never becomes observed null presence");
+    scene_reset(reflect);vertex_write_asset(reinterpret_cast<LifetimeObject*>(1));
+    check(observe()==-1&&result.complete==0,"unqualified non-null asset cannot masquerade as native empty");
+    scene_reset(reflect);vertex_write_asset(nullptr);vertex_write_override(1,1);
+    check(observe()==1&&proof.asset_present==0&&proof.no_override==0,"complete provider preserves observed override presence even when original asset is null");
+    HsmpViewComponent empty_gate{};empty_gate.kind=8;empty_gate.vertex_state=4;
+    rejects([&]{vertex_native_asset(keep(&old_world),keep(&actor),keep(&vertex_component_fixture),empty_gate,&result);},"null asset with existing override cannot pass native empty admission");
+    scene_reset(reflect);vertex_write_asset(nullptr);vertex_write_header({vertex_lod_bytes.data(),17,17});
+    check(observe()==-1&&result.complete==0,"null asset cannot waive complete LODData bounds");
+    scene_reset(reflect);vertex_write_asset(nullptr);vertex_component_fixture.identity.cls=&vertex_scene_class;
+    check(observe()==-1&&result.complete==0,"plain Scene cannot impersonate exact native empty StaticMeshComponent");
+    scene_reset(reflect);vertex_write_asset(nullptr);auto* primitive=reinterpret_cast<uint8_t*>(&vertex_component_fixture);primitive[0x90]=2;primitive[0x91]=1;
+    collision_off(keep(&vertex_component_fixture),&result);
+    check(scene_primitive_events==4&&primitive[0x90]==0&&primitive[0x91]==0,"native empty static keeps the actual Primitive collision/physics inert path");
+    HsmpViewComponent c{};c.kind=8;c.vertex_state=4;c.visible=1;const wchar_t path[]=L"/Script/Engine.StaticMeshComponent";
+    c.asset={u16(path),static_cast<uint32_t>(std::wcslen(path)),0};c.relative={{0,0,0},{0,0,0,1},{1,1,1}};
+    HsmpViewMaterial material_value{};material_value.slot=2;c.materials=&material_value;c.material_count=1;recipe(c);
+    check(true,"native empty primitive retains the actual material dictionary without a Scene substitution");
+    HsmpViewFrame frame_value{};frame_value.world=c.relative;frame(c,frame_value);check(true,"native empty frame needs no guessed geometry or dynamic attachment payload");
+    c.asset={};rejects([&]{recipe(c);},"logical empty asset cannot omit the private exact native class");
+    c.asset={u16(path),static_cast<uint32_t>(std::wcslen(path)),0};c.kind=4;rejects([&]{recipe(c);},"empty StaticMeshComponent is not plain Scene evidence");c.kind=8;
+    HsmpViewSpringArmFrame arm{};frame_value.spring_arm=&arm;rejects([&]{frame(c,frame_value);},"native empty component cannot carry a guessed arm endpoint");
+    auto finish=[&](bool owned){int context{};const HsmpViewGuard guard{&context,scene_guard_check};const auto owner=keep(&actor),world=keep(&old_world);
+        if(!owned){const std::array<HsmpViewFinishTarget,2> targets{{{owner,keep(&vertex_component_fixture),{},8},{owner,keep(&vertex_second_fixture),keep(&vertex_mesh)}}};
+            return finish_scene_sets(world,targets.data(),2,nullptr,0,&guard,&result);}
+        Part empty{};empty.kind=8;empty.render=keep(&vertex_component_fixture);Part populated{};populated.kind=1;populated.render=keep(&vertex_second_fixture);populated.native_asset=keep(&vertex_mesh);
+        mirrors.emplace(83,Mirror{world,owner,{empty,populated}});const uint64_t handle=83;
+        return finish_scene_sets(world,nullptr,0,&handle,1,&guard,&result);};
+    scene_reset(reflect);vertex_write_asset(nullptr);auto* raw=reinterpret_cast<uint8_t*>(&vertex_component_fixture);raw[0x3b]=1;raw[0x8a]=8;
+    check(finish(false)==1&&result.complete==1&&raw[0x3b]==1&&raw[0x8a]==8,"source empty primitive remains native active while its absence is proven");
+    scene_reset(reflect);vertex_write_asset(nullptr);raw=reinterpret_cast<uint8_t*>(&vertex_component_fixture);raw[0x3b]=1;raw[0x8a]=8;
+    check(finish(true)==1&&result.complete==1&&raw[0x3b]==0&&(raw[0x8a]&8)==0,"owned native empty mirror retains exact class with disabled activation and tick");const int final_guard=scene_guards;
+    for(auto mutation:{EmptyMutation::Asset,EmptyMutation::Override,EmptyMutation::Name}){
+        scene_reset(reflect);vertex_write_asset(nullptr);empty_later_mutation=mutation;
+        check(finish(false)==-1&&result.complete==0&&empty_mutation_applied,"later target cannot replace an earlier empty source asset/override/original identity");}
+    for(auto mutation:{EmptyMutation::Asset,EmptyMutation::Override,EmptyMutation::Name,EmptyMutation::Tick,EmptyMutation::Active}){
+        scene_reset(reflect);vertex_write_asset(nullptr);empty_final_mutation=mutation;empty_mutation_at=final_guard;
+        check(finish(true)==-1&&result.complete==0,"final callback cannot change native empty mirror binding/census/inert state");
+        check(scene_guards==final_guard,"failed final empty census has no subsequent callback");}
+    scene_build_admit=scene_shipping_profile;scene_vtable_read=scene_vtable;scene_socket_read=scene_socket_bits;scene_image=0;
+    vertex_empty_build_admit=vertex_empty_shipping_build;vertex_empty_vtable_read=vertex_empty_vtable;vertex_empty_image=0;vertex_empty=false;
     scene_owner={};scene_component={};active_scene_kind=0;vertex_flags=nullptr;vertex_build_admit=vertex_shipping_build;spline_api={};lifetime_reset(reflect);
 }
 }
@@ -562,7 +657,7 @@ int main() {
         check(level_calls==1&&destroy_calls==1&&mirrors.empty(),"current original world destroys its mirror exactly once");
         check(post_destroy_actor_touches==0&&invalid_actor_resolves==0,"destroyed mirror actor is never resolved or read after K2_DestroyActor");
         destroy(world,92,&guard);check(level_calls==1&&destroy_calls==1,"discarded mirror handle cannot destroy twice");
-        check(provider.abi==9&&sizeof(provider)==112&&sizeof(HsmpViewFinishTarget)==128,"complete native scene requires presentation ABI9");
+        check(provider.abi==10&&sizeof(provider)==112&&sizeof(HsmpViewFinishTarget)==128&&sizeof(HsmpViewVertexState)==12,"complete native empty-static proof requires presentation ABI10");
         HsmpViewActorScope actor_scope_result{};
         lifetime_reset(reflect);world=keep(&old_world);mirror_actor=keep(&actor);valid=1;
         check(actor_scope(world,mirror_actor,&guard,&actor_scope_result)==1&&actor_scope_result.qualified==1
@@ -698,6 +793,7 @@ int main() {
         path_checks(reflect);
         vertex_checks(reflect);
         scene_checks(reflect);
+        empty_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);
