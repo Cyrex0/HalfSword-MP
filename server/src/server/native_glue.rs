@@ -425,22 +425,26 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
             n.bridge.set_directory(n.directory.clone());
         }
     }
-    let mut teams_changed = false;
-    for (reference, team) in n.bridge.take_source_teams() {
-        if let Some(e) = n
-            .directory
-            .entities
-            .iter_mut()
-            .find(|e| e.reference == reference)
-        {
-            if e.team != Some(team) {
-                e.team = Some(team);
-                teams_changed = true;
+    if let Some(facts) = n.bridge.take_source_roster() {
+        // The whole original roster must still match. Never partially apply a
+        // stale transaction to an actor/controller replacement.
+        if facts.matches(&n.directory) {
+            let mut teams_changed = false;
+            for e in &mut n.directory.entities {
+                let fact = facts
+                    .entities
+                    .iter()
+                    .find(|f| f.reference == e.reference)
+                    .unwrap();
+                if e.team != fact.team {
+                    e.team = fact.team;
+                    teams_changed = true;
+                }
+            }
+            if teams_changed {
+                n.changed();
             }
         }
-    }
-    if teams_changed {
-        n.changed();
     }
     // A vanished game-thread producer stops all held inputs; it cannot leave a fighting world live.
     let expired: Vec<u32> = n
@@ -655,6 +659,127 @@ pub(super) async fn flush_scene_stream(socket: &UdpSocket, state: &Arc<ServerSta
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn complete_native_roster_teams_rotate_once_before_descriptors() {
+        let bridge = Arc::new(Bridge::default());
+        let state = Arc::new(ServerState::with_native(
+            2,
+            crate::net::Net::ephemeral(),
+            bridge.clone(),
+            "Map_Arena_Yard",
+        ));
+        let mut inner = state.inner.lock().await;
+        let original = inner.native.as_ref().unwrap().directory.clone();
+        let mut facts = crate::native_service::SourceRosterFacts {
+            epoch: original.epoch,
+            directory_seq: original.seq,
+            entities: original.entities.clone(),
+        };
+        for (i, e) in facts.entities.iter_mut().enumerate() {
+            e.team = Some(if i == 0 { -7 } else { 12 });
+        }
+        assert_eq!(
+            bridge.source_roster(facts.clone()).unwrap(),
+            original.seq + 1
+        );
+        assert!(inner
+            .native
+            .as_ref()
+            .unwrap()
+            .directory
+            .entities
+            .iter()
+            .all(|e| e.team.is_none()));
+        tick(&mut inner, state.net.now_ms());
+        let acknowledged = inner.native.as_ref().unwrap().directory.clone();
+        assert_eq!(acknowledged.seq, original.seq + 1);
+        assert_eq!(acknowledged.entities, facts.entities);
+        let mut acknowledged_facts = facts.clone();
+        acknowledged_facts.directory_seq = acknowledged.seq;
+        assert_eq!(
+            bridge.source_roster(acknowledged_facts).unwrap(),
+            acknowledged.seq
+        );
+        tick(&mut inner, state.net.now_ms());
+        assert_eq!(
+            inner.native.as_ref().unwrap().directory.seq,
+            acknowledged.seq
+        );
+        let recipe =
+            serde_json::from_slice::<crate::native_descriptor::SourceRecipe>(include_bytes!(
+                "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
+            ))
+            .unwrap();
+        for e in &acknowledged.entities {
+            let mut recipe = recipe.clone();
+            recipe.team = e.team.unwrap();
+            bridge
+                .publish_descriptor(w::Descriptor {
+                    reference: e.reference,
+                    slot: e.slot,
+                    directory_seq: acknowledged.seq,
+                    revision: 1,
+                    source_frame_seq: 1,
+                    recipe,
+                })
+                .unwrap();
+            tick(&mut inner, state.net.now_ms());
+            assert_eq!(
+                inner.native.as_ref().unwrap().directory.seq,
+                acknowledged.seq
+            );
+        }
+        assert!(acknowledged
+            .entities
+            .iter()
+            .all(|e| bridge.descriptor(e.reference.id).is_some()));
+    }
+    #[tokio::test]
+    async fn native_roster_transactions_refuse_incomplete_duplicate_or_changed_original_roster() {
+        let bridge = Arc::new(Bridge::default());
+        let state = Arc::new(ServerState::with_native(
+            2,
+            crate::net::Net::ephemeral(),
+            bridge.clone(),
+            "Map_Arena_Yard",
+        ));
+        let mut inner = state.inner.lock().await;
+        let original = inner.native.as_ref().unwrap().directory.clone();
+        let mut facts = crate::native_service::SourceRosterFacts {
+            epoch: original.epoch,
+            directory_seq: original.seq,
+            entities: original.entities.clone(),
+        };
+        for e in &mut facts.entities {
+            e.team = Some(0);
+        }
+        for invalid in 0..7 {
+            let mut bad = facts.clone();
+            match invalid {
+                0 => {
+                    bad.entities.pop();
+                }
+                1 => bad.entities[1] = bad.entities[0].clone(),
+                2 => bad.entities[0].team = None,
+                3 => bad.epoch = bad.epoch.wrapping_add(1),
+                4 => bad.directory_seq += 1,
+                5 => bad.entities[0].reference.incarnation += 1,
+                _ => bad.entities[0].controller = 1,
+            }
+            assert!(bridge.source_roster(bad).is_err());
+            assert!(bridge.take_source_roster().is_none());
+        }
+        bridge.source_roster(facts).unwrap();
+        // A replacement occurring after enqueue but before the network tick
+        // invalidates the ENTIRE transaction, including unchanged rows.
+        inner.native.as_mut().unwrap().directory.entities[0]
+            .reference
+            .incarnation += 1;
+        tick(&mut inner, state.net.now_ms());
+        let directory = &inner.native.as_ref().unwrap().directory;
+        assert_eq!(directory.seq, original.seq);
+        assert!(directory.entities.iter().all(|e| e.team.is_none()));
+    }
     use super::*;
     #[test]
     fn native_scene_delivery_pins_active_and_coalesces_pending_without_readiness() {

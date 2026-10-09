@@ -1,6 +1,103 @@
 # Native full-scene encoding checkpoint
 
-## Latest actual: ddccc175
+## Roster preflight correction under verification
+
+The user reports seeing a sphere with the default grey/dark-grey texture during
+these tests, without player models. The latest actual run has no complete scene
+or client mirror creation, so this observation is not a verified player spawn.
+The sphere's exact native actor/component has not been identified. Model,
+material and owned-camera presentation must be observed in the actual clients;
+recipe acceptance or network readiness alone cannot close this report.
+
+The source-only native_source_roster_facts API qualifies all original roster
+bindings and their native Team Int values before either static recipe capture.
+One complete batch is queued against its original epoch/directory sequence;
+the network tick applies all facts atomically only while that exact roster
+still matches. Native returns the expected acknowledgment sequence under the
+queue lock: the base sequence if unchanged, otherwise exactly base+1.
+
+Lua waits for that exact sequence, complete original references, slots,
+controllers, ownership and known native teams, then rechecks original scalar
+world/pawn/controller bindings. Unrelated newer generations restart preflight;
+pending acknowledgment publishes no partial scene. Team zero is valid only
+when positively observed. Registration verifies native/recipe/directory teams
+before and after copying and has no roster metadata side effect. Existing
+capture cancellation, readiness and receipt-age limits remain unchanged.
+
+Independent native review found that checking pawn/controller possession alone
+cannot prove the original indexed player assignment after another actor's
+callback. Pinned executable evidence closes the lookup semantics:
+GameplayStatics exec1435EDFB0 calls1435E1B00; World.OwningGameInstance at1D8
+must have native GetWorld1435CF760 equal to that world, then LocalPlayers at38
+(getter1411A1310) is scanned for NONNULL LocalPlayer.PlayerController at30.
+Indices count nonnull controllers, not raw array positions. GI GetWorld reads
+its native context at30 and context World at2C0 (SDK WorldContext size2C8).
+The final callback-free census must retain that original native branch, whole
+array header/all slots and original local-player/controller links before any
+fact enqueue. Exact proof is preserved in native-roster-*.asm under test-results.
+
+Focused Lua worker356/source277 assertions and syntax3 pass. Independent review
+of the three Lua files closes the exact ACK/binding/downstream generation
+contract. Focused server roster2/native roster5/existing presentation binding8
+Rust tests pass; independent native production review closes the original
+player-map witness. All seven implementation files are frozen.
+Actual accepted recipes, complete frames, mirror meshes and owned views require
+the next normal run.
+
+Independent native saved-code review closes the final roster boundary: the
+original whole local-player header/slots, dense nonnull controller prefix,
+local-player/controller links and original world/game-instance native context
+are checked without callbacks after all callback-capable qualifications. The
+native lookup/GetWorld pins match the primary disassembly. Sparse/fallback
+lookup profiles explicitly refuse; current two-local-player support still needs
+the actual run. Later-row regressions replace an earlier LocalPlayer controller
+while retaining the old PC/pawn possession links; the final pure census refuses.
+
+## Latest actual: 9d465f79
+
+Native material-type correction passes full G0 (74 Lua suites/1361 Rust checks
+in79 binaries; clippy0 errors/13 warnings), dev push and clean RequireG0
+deployment. All393 deployed hashes match
+9d465f79acbd847eec71e7ff1c44c1a8092c4924. Content identity
+007d6d900851cec8cd7d011089816b70f1540755884358e101d0103e41b7f502.
+
+Actual `test-results/20261009-154130-0b06d0-native-host` uses source UUID
+72b63a2c-3662-43de-83b3-eba9cb8f8308, supervisor31040/authority33668 and
+clients9460/42776. First original-qualified window helper fits/readbacks both
+880x527 windows fully secondary. Entity1 epoch5503944532568704591/incarnation5/
+directory6/revision1/frame1 capture16.215s to41.911s (25.696s). NativeBind
+42.353s/seq913 succeeds after0.441s with compact35551/rawJSON74731/nodes6604/
+dictionary8713/tokens26838/components49/bones600/material_slots38. This is the
+first accepted complete native recipe, not a published complete scene.
+
+Actual material layers close the prior type/flag blocker: Body component7 slot0
+22.944s–23.035s and Head component8 slot2 23.281s–23.328s both report exact
+MaterialInstanceDynamic/dynamic=true/RF_Transient=false. Armour components15,
+16,17 have dynamic=true/RF_Transient=true. All five depth1 layers complete in
+both harvests. Eight new copied scalar observations account for nodes6556→6604.
+
+Entity2 starts42.354s and refuses42.510s with `source scope entity generation
+changed`. Exact producer is Rust Runtime::admit, before native original-object
+checks. host_describe queues recipe.team, which is the separately read live
+pawn Team Int. native_glue tick changes unknown team to known and publishes
+directory6→7; Bridge clears descriptors tied to6. Lua continues its original
+directory6 snapshot for entity2, correctly refusing. Next loop recaptures
+entity1/revision2. Do not relax the scope guard or retag old native bindings.
+
+The next coherent correction qualifies and publishes ALL original-roster team
+facts atomically before expensive recipe capture, waits for exact known-team/
+reference acknowledgment, then captures/binds/samples one fixed generation.
+Descriptor admission becomes team verification, without roster side effects.
+Sol implementation/review is in progress. No complete canonical frame, native
+mirror or active input; both clients still fail unchanged65s readiness.
+
+Source cooperatively stops66.532s/seq1676 without fallback; supervisor confirms
+clean stop. Independent all4 original PIDs absent/Shipping0, all20 career-save
+hashes unchanged, crash[]/unobservedchildren[]. Full Native and exact580-line
+authority33668 trace plus original-window/cleanup evidence are preserved.
+Owned client view integration remains open; visible bodies/gear still unproved.
+
+## Previous actual: ddccc175
 
 Precise material diagnostics checkpoint passes full G0 (74 Lua suites,
 1361 Rust checks in79 binaries; clippy0 errors/13 warnings), dev push and

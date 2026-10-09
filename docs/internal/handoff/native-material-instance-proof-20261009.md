@@ -1,5 +1,18 @@
 # Native dynamic-material source proof
 
+## Corrected actual observation: 9d465f79
+
+Full G0/dev/exact393-file deployment passes. Actual run
+`test-results/20261009-154130-0b06d0-native-host`, authority33668/source UUID
+72b63a2c-3662-43de-83b3-eba9cb8f8308, proves Body component7 slot0 and Head
+component8 slot2 are native MaterialInstanceDynamic with RF_Transient=false.
+Armour components15,16,17 are native MID with RF_Transient=true. All five
+depth1 material layers complete in both source harvests. Entity1 full49-component/
+600-bone/38-slot recipe is accepted42.353s (35551compact/74731rawJSON/6604nodes).
+This closes the type/flag/cooked-base capture blocker. Complete scene/mirror
+rendering remains unproved because the subsequent directory/team seam fails;
+see native-scene-stream for that separate actual lifecycle finding.
+
 ## Actual blocking observation
 
 Exact deployed ddccc175 run `test-results/20261009-150349-520cf5-native-host`

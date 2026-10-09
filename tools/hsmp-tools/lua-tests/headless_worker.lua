@@ -5,6 +5,24 @@ local Prepare = dofile("mods/HSMPMatch/Scripts/headless_prepare.lua")
 local Boundary = dofile("mods/HSMPMatch/Scripts/headless_sample_boundary.lua")
 local SpawnDiagnostics = dofile("mods/HSMPMatch/Scripts/headless_spawn_diagnostics.lua")
 local SourceLifecycle = dofile("mods/HSMPMatch/Scripts/headless_source_lifecycle.lua")
+-- Offline native-facts stand-in: each fixture supplies its observed team and
+-- scalar world address explicitly; this does not derive game defaults.
+local function roster_fixture(env,directory,world_address)
+    env.directory=function()return directory end
+    env.addresses=function(binding)return {world=world_address,pawn=binding.pawn_address,controller=binding.pc_address}end
+    env.roster_facts=function(meta,bindings)
+        assert(meta.epoch==directory.epoch and meta.dir_seq==directory.seq and #bindings==#directory.entities)
+        local facts={epoch=meta.epoch,base_dir_seq=meta.dir_seq,ack_dir_seq=meta.dir_seq,entities={}}
+        for i,row in ipairs(directory.entities)do
+            assert(row.team_known==true and row.team~=nil)
+            local copied={team=row.team}
+            for _,field in ipairs({"epoch","id","incarnation","slot","kind","controller"})do copied[field]=row[field]end
+            facts.entities[i]=copied
+        end
+        return true,facts
+    end
+    return env
+end
 T.check(T.eq(Role.parse(nil), "client"), "existing launches stay clients")
 T.check(T.eq(Role.parse("native_worker"), "native_worker"), "explicit worker role")
 T.check(T.eq(Role.parse("native-workr"), "invalid"), "unknown role refuses execution")
@@ -130,7 +148,7 @@ end
 -- this integration cannot hide missing wiring behind capture_render mocks.
 do
     local Adapter=dofile("mods/HSMPMatch/Scripts/native_source_adapter.lua")
-    for _,missing in ipairs({false,"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state"})do
+    for _,missing in ipairs({false,"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state","native_source_roster_facts"})do
         local callback,options,reason,frames,game_thread=nil,nil,nil,0,false
         local world={IsValid=function()return true end}
         local token={key="native#2",drops=0}
@@ -141,7 +159,7 @@ do
             host_directory=function()return {epoch=math.mininteger+123,seq=11,entities={}}end,host_inputs=function()return {}end,
             sample_config=function()return true end,host_describe=function()error("unqualified descriptor",0)end,
             native_capture_render=function()error("unqualified render",0)end,native_sample_world=function()error("unqualified core",0)end}
-        for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state"})do
+        for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state","native_source_roster_facts"})do
             N[name]=function()error("scope helper cannot run before qualified source capture",0)end
         end
         local profile={position_count=3,rotation_count=2,scale_count=2,reparam_count=11,metadata_null=true}
@@ -175,6 +193,8 @@ do
             native_source_adapter={new=function(opts)options=opts;return Adapter.new(opts)end},
             headless_source_lifecycle={new=function(opts)
                 assert(type(opts.capture)=="function" and opts.describe==N.host_describe,"production adapter must reach the normal lifecycle")
+                T.check(opts.roster_facts==N.native_source_roster_facts and opts.directory==N.host_directory
+                    and type(opts.addresses)=="function","actual worker injects raw native facts, directory ACK and scalar bindings")
                 return {ensure=function()return false,"source binding intentionally unavailable"end}
             end}}
         local fake=setmetatable({debug=debug,os={getenv=function()return nil end,clock=function()return 1 end},
@@ -282,7 +302,7 @@ do
         host_directory=function()return {epoch=44,seq=1,entities={}}end,host_inputs=function()return {}end,
         sample_config=function()return true end,host_describe=function()error("unexpected publish",0)end,
         native_capture_render=function()error("unexpected render",0)end,native_sample_world=function()error("unexpected core",0)end}
-    for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state"})do N[name]=function()error("unexpected scope",0)end end
+    for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state","native_source_roster_facts"})do N[name]=function()error("unexpected scope",0)end end
     local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()return gs end},
         hsmp_wg={new=function()return wg end},hsmp_ipc={N=N,init=function()end,frame=function()end,world_ready=function()end},
         hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},hsmp_log={init=function()end,event=function()end},
@@ -311,11 +331,11 @@ do
     end
     reset()
     local described,captured=0,0
-    local lifecycle=SourceLifecycle.new({resolve=options.resolve,same=wg.same,now_ms=function()return 1000 end,
+    local directory={epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,controller=1,kind=0,team_known=true,team=7}}}
+    local lifecycle=SourceLifecycle.new(roster_fixture({resolve=options.resolve,same=wg.same,now_ms=function()return 1000 end,
         index=function(row)return row.controller end,capture=function()
             captured=captured+1;replace("pawn");return {team=7},{pawn=21}
-        end,describe=function()described=described+1;return true end,invalidate=function()end})
-    local directory={epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,controller=1,kind=0}}}
+        end,describe=function()described=described+1;return true end,invalidate=function()end},directory,100))
     T.check(not lifecycle.ensure(directory,token,1) and captured==1 and described==0,
         "actual indexed worker resolver brackets source capture and refuses same-world possession mutation before publish")
     T.check(#old_reads==0,"source post-callback qualification obtains fresh wrappers without touching the old pawn")
@@ -336,7 +356,7 @@ for _,cancel_kind in ipairs({"stop","dead","refused","ordinary"})do
     end
     local world=identity(100,"World","World");world.GetFullName=function()return "World /Game/Map_Arena_Yard"end
     local pc,pawn=identity(11,"PC1","PlayerController"),identity(21,"Willie","Willie_BP_C")
-    pc.Pawn=pawn;pawn.Controller=pc;pawn["Dismemberment In Process"]=false
+    pc.Pawn=pawn;pawn.Controller=pc;pawn["Dismemberment In Process"]=false;pawn["Team Int"]=7
     pc.GetWorld=function()return world end;pawn.GetWorld=function()return world end
     local token={key="native_cancel#1",drops=0}
     local wg={key=token.key,drops=0,check=function()return true end,settled=function()return true end,
@@ -345,7 +365,13 @@ for _,cancel_kind in ipairs({"stop","dead","refused","ordinary"})do
         assert(w==world);return index==1 and pc or nil
     end}
     local N={worker_input=function()return true end,host_start=function()return true end,
-        host_directory=function()return {epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,kind=0,controller=1}}}end,
+        host_directory=function()return {epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,kind=0,controller=1,team_known=true,team=7}}}end,
+        native_source_roster_facts=function(meta,bindings)
+            T.check(meta.epoch==44 and meta.dir_seq==1 and #bindings==1 and bindings[1].world==100
+                and bindings[1].pawn==21 and bindings[1].controller==11 and bindings[1].controller_index==1,
+                "production lifecycle submits the complete qualified original native binding before capture")
+            return true,{epoch=44,base_dir_seq=1,ack_dir_seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,kind=0,controller=1,team=7}}}
+        end,
         host_inputs=function()return {}end,sample_config=function()return true end,
         host_parent_alive=function()
             assert(not getter_active,"cancellation polling must not reenter an active source getter")
@@ -378,9 +404,9 @@ for _,cancel_kind in ipairs({"stop","dead","refused","ordinary"})do
         getter_active=false
         env.guard() -- actual Adapter.current -> actual worker resolver
         getters=getters+1 -- must never run after cancellation admission refuses
-        return {components={},bindings={},topology={detached={},gore={},vertex_state="complete"}}
+        return {team=7,components={},bindings={},topology={detached={},gore={},vertex_state="complete"}}
     end}
-    local descriptor={capture=function(env)env.pass=1;return env.render()end,
+    local descriptor={capture=function(env)env.pass=1;local recipe=env.render();recipe.team=env.team();return recipe end,
         read_flags=function()return {}end,read_names=function()return {}end}
     local adapter_env=setmetatable({dofile=function(path)
         if path:match("/native_source_descriptor%.lua$")then return descriptor end
@@ -608,10 +634,221 @@ do
         "native publish exit is recorded only after commit returns")
 end
 
+-- Two native teams are queued as one roster transaction before any recipe.
+-- No unacknowledged directory may be refreshed into an older capture.
+do
+    local function fixture()
+        local f={token={},world=true,pawns={21,22},teams={1,2},queued=0,captured=0,described=0,invalidated=0,clock=0}
+        f.directory={epoch=math.mininteger+123,seq=6,entities={
+            {epoch=math.mininteger+123,id=1,incarnation=5,slot=0,kind=0,controller=0,owner_peer=11,team_known=false},
+            {epoch=math.mininteger+123,id=2,incarnation=5,slot=1,kind=0,controller=1,owner_peer=12,team_known=false}}}
+        f.env={same=function(t)return f.world and t==f.token end,now_ms=function()return f.clock end,
+            index=function(row)return row.controller end,directory=function()return f.directory end,
+            resolve=function(index)if not f.pawns[index+1]then return nil end;return {index=index,world_key="world100",pc_address=11+index,pc_name="PC"..index,
+                pawn_address=f.pawns[index+1],pawn_name="Willie"..f.pawns[index+1]}end,
+            addresses=function(binding)return {world=100,pawn=binding.pawn_address,controller=binding.pc_address}end,
+            invalidate=function()f.invalidated=f.invalidated+1 end,
+            roster_facts=function(meta,bindings)
+                f.queued=f.queued+1
+                T.check(meta.epoch==math.mininteger+123 and math.type(meta.epoch)=="integer" and meta.dir_seq==6,
+                    "preflight preserves every signed high-bit epoch bit and the exact base generation")
+                T.check(#bindings==2 and bindings[1].controller_index==0 and bindings[2].controller_index==1
+                    and bindings[1].world==100 and bindings[1].pawn==21 and bindings[2].pawn==22
+                    and bindings[1].controller==11 and bindings[2].controller==12,
+                    "preflight submits all original roster bindings as scalar native addresses")
+                local facts={epoch=meta.epoch,base_dir_seq=meta.dir_seq,ack_dir_seq=7,entities={}}
+                for i,row in ipairs(f.directory.entities)do
+                    facts.entities[i]={epoch=row.epoch,id=row.id,incarnation=row.incarnation,slot=row.slot,
+                        kind=row.kind,controller=row.controller,team=f.teams[i]}
+                end
+                if f.on_facts then return f.on_facts(facts)end
+                return true,facts
+            end,
+            capture=function(index,context)
+                f.captured=f.captured+1
+                T.check(context.dir_seq==7 and f.directory.seq==7 and f.directory.entities[1].team_known
+                    and f.directory.entities[2].team_known,"both recipes capture only after the full exact team ACK")
+                if f.on_capture then f.on_capture(index,context)end
+                return {team=f.teams[index+1]},{pawn=f.pawns[index+1]}
+            end,
+            describe=function(meta)
+                f.described=f.described+1
+                T.check(meta.dir_seq==7 and f.directory.seq==7,"neutral registration retains the acknowledged generation")
+                if f.on_describe then f.on_describe(meta)end
+                return true
+            end}
+        f.lifecycle=SourceLifecycle.new(f.env)
+        function f:ack()
+            self.directory.seq=7
+            for i,row in ipairs(self.directory.entities)do row.team_known=true;row.team=self.teams[i]end
+        end
+        function f:ensure()return self.lifecycle.ensure(self.directory,self.token,1)end
+        return f
+    end
+    local f=fixture()
+    local ok,reason=f:ensure()
+    T.check(ok==nil and reason=="source roster ACK pending" and f.queued==1 and f.captured==0 and f.described==0,
+        "unknown native teams wait without any partial capture or registration")
+    T.check(f:ensure()==nil and f.queued==1,"pending native batch is not requeued each worker tick")
+    f:ack()
+    local accepted,ack=f:ensure()
+    T.check(accepted==true and ack~=f.directory and ack.seq==7 and f.captured==2 and f.described==2,
+        "one immutable exact ACK snapshot admits both original source recipes")
+    T.check(f:ensure()==true and f.queued==1 and f.captured==2,"unchanged acknowledged roster and recipes remain cached")
+    f.directory.entities[1].team=9
+    T.check(ack.entities[1].team==1,"copied ACK facts cannot be mutated through the returned directory table")
+    T.check(f:ensure()==nil and f.captured==2,"same-sequence changed team cannot reuse an accepted recipe")
+
+    for _,change in ipairs({"sequence","incarnation","slot","controller","owner","pawn","team","partial"})do
+        f=fixture();f:ensure();f:ack()
+        if change=="sequence"then f.directory.seq=8
+        elseif change=="incarnation"then f.directory.entities[2].incarnation=6
+        elseif change=="slot"then f.directory.entities[2].slot=2
+        elseif change=="controller"then f.directory.entities[2].controller=2
+        elseif change=="owner"then f.directory.entities[2].owner_peer=13
+        elseif change=="pawn"then f.pawns[2]=23
+        elseif change=="team"then f.directory.entities[2].team=3
+        else f.directory.entities[2].team_known=false;f.directory.entities[2].team=nil end
+        -- An unrelated sequence/ref restart may invoke a fresh batch. Return a
+        -- concrete refusal there so this check cannot accidentally manufacture an ACK.
+        f.env.roster_facts=function()return nil,"changed original roster"end
+        T.check(f:ensure()~=true and f.captured==0 and f.described==0,"changed "..change.." cannot adopt the pending ACK")
+    end
+    for _,change in ipairs({"epoch","base","ack","team","sparse","partial","row","failure","world","binding"})do
+        f=fixture()
+        f.on_facts=function(facts)
+            if change=="epoch"then facts.epoch=44
+            elseif change=="base"then facts.base_dir_seq=5
+            elseif change=="ack"then facts.ack_dir_seq=8
+            elseif change=="team"then facts.entities[2].team=1.5
+            elseif change=="sparse"then facts.entities[3]=facts.entities[2];facts.entities[2]=nil
+            elseif change=="partial"then facts.entities[2]=nil
+            elseif change=="row"then facts.entities[2].controller=0
+            elseif change=="failure"then return nil,"actual native property unavailable"
+            elseif change=="world"then f.world=false
+            else f.pawns[2]=23 end
+            return true,facts
+        end
+        local result,why=f:ensure()
+        T.check(result~=true and f.captured==0 and f.described==0,"malformed/refused "..change.." native facts never permit capture")
+        if change=="failure"then T.check(result==false and why:find("actual native property unavailable",1,true),
+            "native refusal stays a fault rather than an ACK wait")end
+        if change=="world"then T.check(result==false and f.invalidated==1,"world loss during preflight invalidates without old object access")end
+    end
+    for _,where in ipairs({"capture","registration"})do
+        f=fixture();f:ensure();f:ack()
+        if where=="capture"then f.on_capture=function()f.directory.seq=8 end
+        else f.on_describe=function()f.directory.seq=8 end end
+        local result,why=f:ensure()
+        T.check(result==nil and why:find("source roster changed",1,true) and f.captured==1
+            and f.described==(where=="capture"and 0 or 1),"directory change during "..where.." stops before the second recipe without retagging")
+    end
+    f=fixture();f:ensure();f:ack();f.on_capture=function()f.teams[1]=3 end
+    T.check(f:ensure()==nil and f.described==0,"fresh recipe team must equal the acknowledged native fact")
+    f=fixture();f.teams={0,-3};f:ensure();f:ack()
+    local zero,zero_ack=f:ensure()
+    T.check(zero==true and zero_ack.entities[1].team==0 and zero_ack.entities[2].team==-3,
+        "native zero and negative teams remain actual known facts without false/default coercion")
+    f=fixture();f:ensure();f.pawns[2]=23
+    T.check(f:ensure()==nil and f.queued==1 and f.captured==0,"possession change while waiting drops the pending batch before capture")
+    f=fixture();f:ensure();f:ack();f.on_capture=function()f.pawns[2]=23 end
+    T.check(f:ensure()==nil and f.described==0,"mutation of another original roster binding during capture blocks registration")
+end
+
+-- Exercise the actual worker and actual lifecycle, including the downstream
+-- core/render/publish boundary. The acknowledged snapshot is not hidden by a
+-- replacement lifecycle that returns the caller's stale directory.
+do
+    local callback,clock,queued,captures,describes,samples,renders,publishes= nil,1,0,0,0,0,0,0
+    local events,logs={},{}
+    local directory={epoch=44,seq=6,entities={
+        {epoch=44,id=1,incarnation=5,slot=0,kind=0,controller=0,owner_peer=11,team_known=false},
+        {epoch=44,id=2,incarnation=5,slot=1,kind=0,controller=1,owner_peer=12,team_known=false}}}
+    local function object(address,name,class)
+        return {IsValid=function()return true end,GetAddress=function()return address end,
+            GetFName=function()return {ToString=function()return name end}end,
+            GetClass=function()return {GetFName=function()return {ToString=function()return class end}end}end}
+    end
+    local world=object(100,"World","World")
+    world.GetFullName=function()return "World /Game/Map_Arena_Yard"end
+    local pcs,pawns={},{}
+    for index=0,1 do
+        local pc,pawn=object(11+index,"PC"..index,"PlayerController"),object(21+index,"Willie"..index,"Willie_BP_C")
+        pc.Pawn=pawn;pawn.Controller=pc;pawn.Mesh=object(31+index,"Mesh"..index,"SkeletalMeshComponent")
+        pawn.DisableInput=function()end;pc.ResetIgnoreMoveInput=function()end;pc.ResetIgnoreLookInput=function()end
+        pawn.Mesh.GetOwner=function()return pawn end;pawn.Mesh.SetComponentTickEnabled=function()end
+        pawn["Team Int"]=index==0 and 0 or -3;pawn.Health=100;pawn.DED=false
+        pc.GetWorld=function()return world end;pawn.GetWorld=function()return world end
+        pcs[index],pawns[index]=pc,pawn
+    end
+    local token={key="roster-worker#1",drops=0}
+    local wg={key=token.key,drops=0,check=function()return true end,settled=function()return true end,
+        token=function()return token end,same=function(t)return t==token end,world=function()return world end,on_drop=function()end}
+    local N={worker_input=function()return true end,host_start=function()return true end,
+        host_directory=function()return directory end,host_inputs=function()return {}end,sample_config=function()return true end,
+        native_source_roster_facts=function(meta,bindings)
+            queued=queued+1
+            T.check(meta.dir_seq==6 and #bindings==2 and bindings[1].pawn==21 and bindings[2].pawn==22,
+                "actual worker queues one complete original two-player native fact batch")
+            return true,{epoch=44,base_dir_seq=6,ack_dir_seq=7,entities={
+                {epoch=44,id=1,incarnation=5,slot=0,kind=0,controller=0,team=0},
+                {epoch=44,id=2,incarnation=5,slot=1,kind=0,controller=1,team=-3}}}
+        end,
+        host_describe=function(meta,recipe)
+            describes=describes+1
+            T.check(meta.dir_seq==7 and recipe.team==directory.entities[meta.id].team,
+                "actual worker describes only source recipes matching the exact ACK native teams")
+            return true
+        end,
+        native_sample_world=function(args)
+            samples=samples+1
+            T.check(args.dir_seq==7 and args.frame_seq==1 and #args.actors==2
+                and args.actors[1].incarnation==5 and args.actors[2].controller==12,
+                "actual canonical sampler receives the ACK directory rather than stale caller generation")
+            return true
+        end,
+        native_capture_render=function()renders=renders+1;return true end,
+        native_commit_world=function()publishes=publishes+1;return true end}
+    for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve",
+        "native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state"})do
+        N[name]=function()error("fixture adapter never borrows a native component",0)end
+    end
+    local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()
+        return {IsValid=function()return true end,GetPlayerController=function(_,w,index)assert(w==world);return pcs[index]end}
+        end},hsmp_wg={new=function()return wg end},hsmp_ipc={N=N,init=function()end,frame=function()end,world_ready=function()end},
+        hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},
+        hsmp_log={init=function()end,event=function(name,fields)
+            if name=="x_native_worker"and fields.state=="native_evidence"then events[#events+1]=fields end
+        end},director={make_ue_env=function()return {apply_cvars=function()end}end,
+            new_native_worker=function()return {state="native_ready",tick=function()return true end}end},
+        headless_control={new=function()return {set_directory=function()return true end,tick=function()end,stop=function()return true end}end},
+        headless_prepare=Prepare,hsmp_pose_config={},headless_sample_boundary=Boundary,headless_spawn_diagnostics=SpawnDiagnostics,
+        native_source_adapter={new=function()return {capture=function(index,meta)
+            captures=captures+1;T.check(meta.dir_seq==7,"actual lifecycle capture keeps the acknowledged immutable generation")
+            return {team=directory.entities[index+1].team},{pawn=pawns[index]:GetAddress()}
+        end}end},headless_source_lifecycle=SourceLifecycle}
+    local fake=setmetatable({debug=debug,os={getenv=function()return nil end,clock=function()return clock end},print=function(s)logs[#logs+1]=s end,
+        require=function(name)if modules[name]then return modules[name]end;error("optional module absent")end,
+        dofile=function()error("optional module absent")end,FindAllOf=function()return {}end,
+        LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 85 end},{__index=_G})
+    assert(loadfile("mods/HSMPMatch/Scripts/headless_worker.lua","t",fake))().start()
+    callback();clock=2;callback()
+    for _,line in ipairs(logs)do assert(not line:find("worker stopped:",1,true),line)end
+    T.check(queued==1 and captures==0 and describes==0 and samples==0 and events[#events].refused==0
+        and events[#events].sampled==0 and events[#events].reason=="",
+        "actual worker waiting for ACK publishes nothing and does not record a capture fault")
+    directory.seq=7
+    directory.entities[1].team_known=true;directory.entities[1].team=0
+    directory.entities[2].team_known=true;directory.entities[2].team=-3
+    clock=3;callback()
+    T.check(captures==2 and describes==2 and samples==1 and renders==1 and publishes==1
+        and events[#events].sampled==1 and events[#events].refused==0,"actual worker publishes one coherent frame after both ACK-qualified recipes")
+end
+
 do
     local clock,world,pawn,captures,registrations,invalidations=0,true,10,0,{},0
     local token={}
-    local source={epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,controller=0,kind=0}}}
+    local source={epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,controller=0,kind=0,team_known=true,team=7}}}
     local phases={}
     local function binding(index)return {index=index,world_key="world1",pc_address=1,pc_name="PC0",pawn_address=pawn,pawn_name="Willie"..pawn}end
     local env={now_ms=function()return clock end,same=function(t)return world and t==token end,resolve=binding,
@@ -629,12 +866,12 @@ do
             registrations[#registrations+1]={meta=meta,recipe=recipe,addresses=addresses};return true
         end,
         invalidate=function()invalidations=invalidations+1 end}
-    local lifecycle=SourceLifecycle.new(env)
+    local lifecycle=SourceLifecycle.new(roster_fixture(env,source,100))
     T.check(lifecycle.ensure(source,token,1),"exact static source recipe is registered before its first source frame")
     T.check(lifecycle.ensure(source,token,2) and captures==1,"unchanged native recipe is not recaptured in the bone loop")
     T.check(registrations[1].meta.frame_seq==1 and registrations[1].meta.dir_seq==1 and registrations[1].meta.revision==1,
         "descriptor carries its exact ref/directory/source frame generation")
-    T.check(#phases==4 and phases[4].stage=="native_bind" and phases[4].edge=="exit" and phases[4].detail.ok==true,
+    T.check(#phases==6 and phases[6].stage=="native_bind" and phases[6].edge=="exit" and phases[6].detail.ok==true,
         "cached static recipes add no phase spam to the bone loop")
     source.seq=2
     T.check(lifecycle.ensure(source,token,3) and captures==2 and registrations[2].meta.revision==2,

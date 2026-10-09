@@ -222,6 +222,7 @@ entry! {
     l_native_snapshot => Guard::GameThread, |n, L| n.native_snapshot(L);
     l_native_inspect_component => Guard::GameThread, |n,L| n.native_inspect_component(L);
     l_host_describe => Guard::GameThread, |n,L| n.host_describe(L);
+    l_native_source_roster_facts => Guard::GameThread, |n,L| n.native_source_roster_facts(L);
     l_native_source_scope_begin => Guard::GameThread, |n,L| n.source_scope_begin(L);
     l_native_source_scope_keep => Guard::GameThread, |n,L| n.source_scope_keep(L);
     l_native_source_scope_resolve => Guard::GameThread, |n,L| n.source_scope_resolve(L);
@@ -312,6 +313,7 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("native_snapshot", l_native_snapshot),
     ("native_inspect_component",l_native_inspect_component),
     ("host_describe",l_host_describe),
+    ("native_source_roster_facts",l_native_source_roster_facts),
     ("native_source_scope_begin",l_native_source_scope_begin),
     ("native_source_scope_keep",l_native_source_scope_keep),
     ("native_source_scope_resolve",l_native_source_scope_resolve),
@@ -462,5 +464,15 @@ mod source_vertex_api_tests {
         let entries: Vec<_> = FUNCS.iter().filter(|(name, _)| *name == "native_source_scope_vertex_state").collect();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].1 as usize, l_native_source_scope_vertex_state as *const () as usize);
+    }
+}
+#[cfg(test)]
+mod source_roster_api_tests {
+    use super::*;
+    #[test]
+    fn source_roster_facts_registers_exact_guarded_entry_once() {
+        let entries:Vec<_>=FUNCS.iter().filter(|(name,_)|*name=="native_source_roster_facts").collect();
+        assert_eq!(entries.len(),1);
+        assert_eq!(entries[0].1 as usize,l_native_source_roster_facts as *const () as usize);
     }
 }

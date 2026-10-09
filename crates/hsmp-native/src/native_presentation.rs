@@ -1087,6 +1087,606 @@ unsafe fn read_object_property(
         ))
     }
 }
+type RosterName = unsafe extern "C" fn(*const c_void) -> *const u64;
+type RosterFlags = unsafe extern "C" fn(*const c_void) -> *const u32;
+type RosterWorld = unsafe extern "C" fn(*const c_void) -> *mut c_void;
+type RosterOuter = unsafe extern "C" fn(*const c_void) -> *const *const c_void;
+#[derive(Clone, Copy)]
+struct RosterExports {
+    name: RosterName,
+    flags: RosterFlags,
+    world: RosterWorld,
+    outer: RosterOuter,
+}
+#[cfg(windows)]
+fn roster_exports() -> Result<RosterExports, String> {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> *mut c_void;
+        fn GetProcAddress(module: *mut c_void, name: *const i8) -> *mut c_void;
+    }
+    unsafe {
+        let module = GetModuleHandleW(reflect::wide("UE4SS.dll").as_ptr());
+        if module.is_null() {
+            return Err("source roster native metadata unavailable".into());
+        }
+        let get = |name: &std::ffi::CStr| -> Result<*mut c_void, String> {
+            let p = GetProcAddress(module, name.as_ptr());
+            if p.is_null() {
+                Err("source roster native exports unavailable".into())
+            } else {
+                Ok(p)
+            }
+        };
+        Ok(RosterExports {
+            name: std::mem::transmute::<*mut c_void, RosterName>(get(
+                c"?GetNamePrivate@UObjectBase@Unreal@RC@@QEBAAEBVFName@23@XZ",
+            )?),
+            flags: std::mem::transmute::<*mut c_void, RosterFlags>(get(
+                c"?GetObjectFlags@UObjectBase@Unreal@RC@@QEBAAEBW4EObjectFlags@23@XZ",
+            )?),
+            world: std::mem::transmute::<*mut c_void, RosterWorld>(get(
+                c"?GetWorld@UObject@Unreal@RC@@QEBAPEAVUWorld@23@XZ",
+            )?),
+            outer: std::mem::transmute::<*mut c_void, RosterOuter>(get(
+                c"?GetOuterPrivate@UObjectBase@Unreal@RC@@QEBAAEAPEBVUObject@23@XZ",
+            )?),
+        })
+    }
+}
+struct RosterPath(Vec<RosterIdentity>);
+impl RosterPath {
+    unsafe fn capture(
+        vt: &HsmpReflect,
+        x: RosterExports,
+        root: RosterIdentity,
+    ) -> Result<Self, String> {
+        unsafe {
+            let mut nodes = vec![root];
+            loop {
+                let last = *nodes.last().ok_or("source roster hierarchy empty")?;
+                let field = (x.outer)(last.verify(vt, x)?);
+                if field.is_null() {
+                    return Err("source roster hierarchy getter unavailable".into());
+                }
+                let next = *field;
+                last.verify(vt, x)?;
+                if next.is_null() {
+                    break;
+                }
+                if nodes.len() >= 64 || nodes.iter().any(|n| n.object.address == next as u64) {
+                    return Err("source roster hierarchy bound/cycle".into());
+                }
+                nodes.push(RosterIdentity::capture(vt, x, object(vt, next as i64)?)?);
+            }
+            let path = Self(nodes);
+            path.verify(vt, x)?;
+            Ok(path)
+        }
+    }
+    unsafe fn verify(&self, vt: &HsmpReflect, x: RosterExports) -> Result<(), String> {
+        unsafe {
+            for (i, node) in self.0.iter().enumerate() {
+                let field = (x.outer)(node.verify(vt, x)?);
+                if field.is_null()
+                    || *field as u64 != self.0.get(i + 1).map_or(0, |n| n.object.address)
+                {
+                    return Err("source roster original hierarchy changed".into());
+                }
+                node.verify(vt, x)?;
+            }
+            Ok(())
+        }
+    }
+}
+#[cfg(not(windows))]
+fn roster_exports() -> Result<RosterExports, String> {
+    Err("source roster native exports unavailable".into())
+}
+#[derive(Clone, Copy)]
+struct RosterIdentity {
+    object: Object,
+    class: Object,
+    name: u64,
+    class_name: u64,
+}
+impl RosterIdentity {
+    unsafe fn live(vt: &HsmpReflect, x: RosterExports, o: Object) -> Result<*mut c_void, String> {
+        unsafe {
+            let p = reflect::get(vt, o.weak);
+            if o.weak == 0 || p.is_null() || p as u64 != o.address {
+                return Err("source roster original slot/address changed".into());
+            }
+            let flags = (x.flags)(p);
+            if flags.is_null() || *flags & 0x4000_0000 != 0 {
+                return Err("source roster original object garbage".into());
+            }
+            Ok(p)
+        }
+    }
+    unsafe fn capture(vt: &HsmpReflect, x: RosterExports, o: Object) -> Result<Self, String> {
+        unsafe {
+            let p = Self::live(vt, x, o)?;
+            let class = object(vt, (vt.class_of)(p) as i64)?;
+            let cp = Self::live(vt, x, class)?;
+            let name = (x.name)(p);
+            let class_name = (x.name)(cp);
+            if name.is_null() || class_name.is_null() {
+                return Err("source roster FName unavailable".into());
+            }
+            let out = Self {
+                object: o,
+                class,
+                name: *name,
+                class_name: *class_name,
+            };
+            out.verify(vt, x)?;
+            Ok(out)
+        }
+    }
+    unsafe fn verify(self, vt: &HsmpReflect, x: RosterExports) -> Result<*mut c_void, String> {
+        unsafe {
+            let p = Self::live(vt, x, self.object)?;
+            let cp = Self::live(vt, x, self.class)?;
+            let name = (x.name)(p);
+            let class_name = (x.name)(cp);
+            if name.is_null()
+                || class_name.is_null()
+                || *name != self.name
+                || *class_name != self.class_name
+                || (vt.class_of)(p) != cp
+            {
+                return Err("source roster original FName/class changed".into());
+            }
+            Ok(p)
+        }
+    }
+}
+unsafe fn roster_property(
+    vt: &HsmpReflect,
+    x: RosterExports,
+    o: RosterIdentity,
+    name: &str,
+    kind: &str,
+    width: i32,
+) -> Result<reflect::HsmpProp, String> {
+    unsafe {
+        let pointer = o.verify(vt, x)?;
+        let mut p = reflect::HsmpProp::default();
+        let mut size = 0;
+        let mut scratch = reflect::HsmpProp::default();
+        let count = (vt.props)(o.class.address as *mut c_void, &mut scratch, 1, &mut size);
+        if count < 0
+            || count > 4096
+            || (vt.obj_prop)(pointer, reflect::wide(name).as_ptr(), &mut p) != 1
+            || p.name != (vt.fname)(reflect::wide(name).as_ptr(), 1)
+            || p.cls != (vt.fname)(reflect::wide(kind).as_ptr(), 1)
+            || p.size != width
+            || p.offset < 0
+            || p.offset.checked_add(width).is_none_or(|end| end > size)
+        {
+            return Err(format!("source roster {name} property ABI"));
+        }
+        o.verify(vt, x)?;
+        Ok(p)
+    }
+}
+unsafe fn roster_read_i32(
+    vt: &HsmpReflect,
+    x: RosterExports,
+    o: RosterIdentity,
+    p: reflect::HsmpProp,
+) -> Result<i32, String> {
+    unsafe {
+        let pointer = o.verify(vt, x)?;
+        let value =
+            std::ptr::read_unaligned((pointer as *const u8).add(p.offset as usize).cast::<i32>());
+        o.verify(vt, x)?;
+        Ok(value)
+    }
+}
+unsafe fn roster_read_pointer(
+    vt: &HsmpReflect,
+    x: RosterExports,
+    o: RosterIdentity,
+    p: reflect::HsmpProp,
+) -> Result<u64, String> {
+    unsafe {
+        let pointer = o.verify(vt, x)?;
+        let value =
+            std::ptr::read_unaligned((pointer as *const u8).add(p.offset as usize).cast::<u64>());
+        o.verify(vt, x)?;
+        Ok(value)
+    }
+}
+struct RosterBinding {
+    entity: w::Entity,
+    world: RosterIdentity,
+    pawn: RosterIdentity,
+    controller: RosterIdentity,
+    pawn_controller: reflect::HsmpProp,
+    controller_pawn: reflect::HsmpProp,
+    team: reflect::HsmpProp,
+    paths: [RosterPath; 3],
+    indexed: Option<RosterSlots>,
+}
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct RosterArray {
+    data: u64,
+    count: i32,
+    capacity: i32,
+}
+struct RosterSlots {
+    instance: RosterIdentity,
+    instance_path: RosterPath,
+    world_instance: reflect::HsmpProp,
+    players: reflect::HsmpProp,
+    header: RosterArray,
+    slots: Vec<(
+        RosterIdentity,
+        RosterPath,
+        reflect::HsmpProp,
+        RosterIdentity,
+    )>,
+    index: usize,
+    controller_player: reflect::HsmpProp,
+    world_context: u64,
+}
+#[cfg(windows)]
+fn roster_mapping_build() -> Result<(), String> {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> *mut c_void;
+    }
+    unsafe {
+        let image = GetModuleHandleW(std::ptr::null()).cast::<u8>();
+        if image.is_null() || std::ptr::read_unaligned(image.cast::<u16>()) != 0x5a4d {
+            return Err("source roster unsupported native image".into());
+        }
+        let pe = std::ptr::read_unaligned(image.add(0x3c).cast::<u32>()) as usize;
+        if pe > 0x1000 || std::ptr::read_unaligned(image.add(pe).cast::<u32>()) != 0x4550 {
+            return Err("source roster unsupported native image".into());
+        }
+        let size = std::ptr::read_unaligned(image.add(pe + 24 + 56).cast::<u32>()) as usize;
+        for (rva, bytes) in [
+            (
+                0x35cf760,
+                &[
+                    0x48, 0x8b, 0x41, 0x30, 0x48, 0x85, 0xc0, 0x74, 0x08, 0x48, 0x8b, 0x80, 0xc0,
+                    0x02, 0x00, 0x00, 0xc3, 0xc3,
+                ][..],
+            ),
+            (
+                0x35e1b80,
+                &[
+                    0x48, 0x8b, 0x01, 0x48, 0x8b, 0x40, 0x30, 0x48, 0x85, 0xc0, 0x74, 0x0a, 0x3b,
+                    0xdd, 0x0f, 0x84, 0xc2, 0x00, 0x00, 0x00, 0xff, 0xc3, 0x48, 0x83, 0xc1, 0x08,
+                    0x48, 0x3b, 0xca, 0x75, 0xe1,
+                ][..],
+            ),
+        ] {
+            if rva + bytes.len() > size
+                || std::slice::from_raw_parts(image.add(rva), bytes.len()) != bytes
+            {
+                return Err("source roster unsupported native player mapping".into());
+            }
+        }
+        Ok(())
+    }
+}
+#[cfg(not(windows))]
+fn roster_mapping_build() -> Result<(), String> {
+    Err("source roster unsupported native player mapping".into())
+}
+unsafe fn roster_array(
+    vt: &HsmpReflect,
+    x: RosterExports,
+    o: RosterIdentity,
+    p: reflect::HsmpProp,
+) -> Result<RosterArray, String> {
+    unsafe {
+        let pointer = o.verify(vt, x)?;
+        let header = std::ptr::read_unaligned(
+            (pointer as *const u8)
+                .add(p.offset as usize)
+                .cast::<RosterArray>(),
+        );
+        if header.count <= 0
+            || header.count as usize > w::MAX_ENTITIES
+            || header.capacity < header.count
+            || header.capacity as usize > w::MAX_ENTITIES
+            || header.data == 0
+        {
+            return Err("source roster local-player array bounds".into());
+        }
+        o.verify(vt, x)?;
+        Ok(header)
+    }
+}
+impl RosterSlots {
+    unsafe fn capture(
+        vt: &HsmpReflect,
+        x: RosterExports,
+        world: RosterIdentity,
+        controller: RosterIdentity,
+        index: u8,
+    ) -> Result<Self, String> {
+        unsafe {
+            roster_mapping_build()?;
+            let world_instance =
+                roster_property(vt, x, world, "OwningGameInstance", "ObjectProperty", 8)?;
+            let instance = RosterIdentity::capture(
+                vt,
+                x,
+                object(
+                    vt,
+                    roster_read_pointer(vt, x, world, world_instance)? as i64,
+                )?,
+            )?;
+            let players = roster_property(vt, x, instance, "LocalPlayers", "ArrayProperty", 16)?;
+            if world_instance.offset != 0x1d8 || players.offset != 0x38 {
+                return Err("source roster local-player layout".into());
+            }
+            let header = roster_array(vt, x, instance, players)?;
+            if usize::from(index) >= header.count as usize {
+                return Err("source roster original indexed slot unavailable".into());
+            }
+            let mut slots = Vec::with_capacity(header.count as usize);
+            for i in 0..header.count as usize {
+                let address = std::ptr::read_unaligned((header.data as *const u64).add(i));
+                let player = RosterIdentity::capture(vt, x, object(vt, address as i64)?)?;
+                let pc = roster_property(vt, x, player, "PlayerController", "ObjectProperty", 8)?;
+                if pc.offset != 0x30 {
+                    return Err("source roster local-player controller layout".into());
+                }
+                let original_pc = RosterIdentity::capture(
+                    vt,
+                    x,
+                    object(vt, roster_read_pointer(vt, x, player, pc)? as i64)?,
+                )?;
+                // GetPlayerController counts only nonnull local controllers.
+                // This profile admits a complete dense array, never fallback.
+                slots.push((player, RosterPath::capture(vt, x, player)?, pc, original_pc));
+            }
+            let controller_player =
+                roster_property(vt, x, controller, "Player", "ObjectProperty", 8)?;
+            if controller_player.offset != 0x330 {
+                return Err("source roster controller player layout".into());
+            }
+            let instance_pointer = instance.verify(vt, x)?;
+            let world_context =
+                std::ptr::read_unaligned((instance_pointer as *const u8).add(0x30).cast::<u64>());
+            if world_context == 0
+                || std::ptr::read_unaligned((world_context as *const u8).add(0x2c0).cast::<u64>())
+                    != world.object.address
+            {
+                return Err("source roster original game-instance world context".into());
+            }
+            let out = Self {
+                instance,
+                instance_path: RosterPath::capture(vt, x, instance)?,
+                world_instance,
+                players,
+                header,
+                slots,
+                index: usize::from(index),
+                controller_player,
+                world_context,
+            };
+            out.verify(vt, x, world, controller)?;
+            Ok(out)
+        }
+    }
+    unsafe fn verify(
+        &self,
+        vt: &HsmpReflect,
+        x: RosterExports,
+        world: RosterIdentity,
+        controller: RosterIdentity,
+    ) -> Result<(), String> {
+        unsafe {
+            self.instance_path.verify(vt, x)?;
+            let pointer = self.instance.verify(vt, x)?;
+            if std::ptr::read_unaligned((pointer as *const u8).add(0x30).cast::<u64>())
+                != self.world_context
+                || std::ptr::read_unaligned(
+                    (self.world_context as *const u8).add(0x2c0).cast::<u64>(),
+                ) != world.object.address
+            {
+                return Err("source roster original game-instance world context changed".into());
+            }
+            if roster_read_pointer(vt, x, world, self.world_instance)?
+                != self.instance.object.address
+                || roster_array(vt, x, self.instance, self.players)? != self.header
+            {
+                return Err("source roster original local-player array changed".into());
+            }
+            for (i, (player, path, pc, original_pc)) in self.slots.iter().enumerate() {
+                path.verify(vt, x)?;
+                original_pc.verify(vt, x)?;
+                if std::ptr::read_unaligned((self.header.data as *const u64).add(i))
+                    != player.object.address
+                {
+                    return Err("source roster original indexed player changed".into());
+                }
+                if roster_read_pointer(vt, x, *player, *pc)? != original_pc.object.address {
+                    return Err("source roster original local controller prefix changed".into());
+                }
+            }
+            let (player, _, pc, _) = &self.slots[self.index];
+            if roster_read_pointer(vt, x, *player, *pc)? != controller.object.address
+                || roster_read_pointer(vt, x, controller, self.controller_player)?
+                    != player.object.address
+            {
+                return Err("source roster original indexed controller changed".into());
+            }
+            Ok(())
+        }
+    }
+}
+impl RosterBinding {
+    unsafe fn pure_team(&self, vt: &HsmpReflect, x: RosterExports) -> Result<i32, String> {
+        unsafe {
+            for path in &self.paths {
+                path.verify(vt, x)?;
+            }
+            if let Some(indexed) = &self.indexed {
+                indexed.verify(vt, x, self.world, self.controller)?;
+            }
+            self.world.verify(vt, x)?;
+            if roster_read_pointer(vt, x, self.pawn, self.pawn_controller)?
+                != self.controller.object.address
+                || roster_read_pointer(vt, x, self.controller, self.controller_pawn)?
+                    != self.pawn.object.address
+            {
+                return Err("source roster original possession changed".into());
+            }
+            roster_read_i32(vt, x, self.pawn, self.team)
+        }
+    }
+    unsafe fn qualify(
+        &self,
+        vt: &HsmpReflect,
+        x: RosterExports,
+        mut admit: impl FnMut() -> Result<(), String>,
+    ) -> Result<i32, String> {
+        unsafe {
+            self.pure_team(vt, x)?;
+            for o in [self.pawn, self.controller] {
+                admit()?;
+                let p = o.verify(vt, x)?;
+                let world = (x.world)(p) as u64;
+                o.verify(vt, x)?;
+                admit()?;
+                if world != self.world.object.address {
+                    return Err("source roster native world changed".into());
+                }
+            }
+            if self.entity.kind == w::HUMAN
+                && roster_assigned_controller(
+                    vt,
+                    x,
+                    self.world,
+                    self.entity.controller,
+                    &mut admit,
+                )? != self.controller.object.address
+            {
+                return Err("source roster native indexed controller changed".into());
+            }
+            self.pure_team(vt, x)
+        }
+    }
+}
+unsafe fn roster_assigned_controller(
+    vt: &HsmpReflect,
+    x: RosterExports,
+    world: RosterIdentity,
+    index: u8,
+    mut admit: impl FnMut() -> Result<(), String>,
+) -> Result<u64, String> {
+    unsafe {
+        admit()?;
+        let function = RosterIdentity::capture(
+            vt,
+            x,
+            object(
+                vt,
+                (vt.find)(
+                    reflect::wide("/Script/Engine.GameplayStatics:GetPlayerController").as_ptr(),
+                ) as i64,
+            )?,
+        )?;
+        admit()?;
+        let target = RosterIdentity::capture(
+            vt,
+            x,
+            object(
+                vt,
+                (vt.find)(reflect::wide("/Script/Engine.Default__GameplayStatics").as_ptr()) as i64,
+            )?,
+        )?;
+        admit()?;
+        let (props, size) = crate::sample::props_of(vt, function.verify(vt, x)?);
+        if size != 24 || props.len() != 3 {
+            return Err("source roster indexed controller ABI".into());
+        }
+        for (name, kind, offset, width) in [
+            ("WorldContextObject", "ObjectProperty", 0, 8),
+            ("PlayerIndex", "IntProperty", 8, 4),
+            ("ReturnValue", "ObjectProperty", 16, 8),
+        ] {
+            if !props.iter().any(|p| {
+                p.name == (vt.fname)(reflect::wide(name).as_ptr(), 1)
+                    && p.cls == (vt.fname)(reflect::wide(kind).as_ptr(), 1)
+                    && p.offset == offset
+                    && p.size == width
+            }) {
+                return Err("source roster indexed controller fields".into());
+            }
+        }
+        let mut params = crate::sample::Params([0; crate::sample::PARAMS_BYTES]);
+        params.0[..8].copy_from_slice(&world.object.address.to_le_bytes());
+        params.0[8..12].copy_from_slice(&(index as i32).to_le_bytes());
+        admit()?;
+        world.verify(vt, x)?;
+        let target_pointer = target.verify(vt, x)?;
+        let function_pointer = function.verify(vt, x)?;
+        (vt.call)(
+            target_pointer,
+            function_pointer,
+            params.0.as_mut_ptr().cast(),
+        );
+        world.verify(vt, x)?;
+        target.verify(vt, x)?;
+        function.verify(vt, x)?;
+        admit()?;
+        Ok(u64::from_le_bytes(
+            params.0[16..24]
+                .try_into()
+                .map_err(|_| "source roster indexed controller result")?,
+        ))
+    }
+}
+fn check_roster_teams(
+    expected: &[i32],
+    mut read: impl FnMut(usize) -> Result<i32, String>,
+) -> Result<(), String> {
+    for (i, team) in expected.iter().enumerate() {
+        if read(i)? != *team {
+            return Err("source roster native team changed".into());
+        }
+    }
+    Ok(())
+}
+fn require_acknowledged_team(known: Option<i32>, recipe: i32, native: i32) -> Result<(), String> {
+    if known != Some(recipe) || native != recipe {
+        return Err("source descriptor native team is not acknowledged".into());
+    }
+    Ok(())
+}
+fn roster_admission(
+    n: &Native,
+    vt: &HsmpReflect,
+    d: &w::Directory,
+    key: &[u8],
+) -> Result<(), String> {
+    if n.poisoned
+        || !n.native_host.is_host()
+        || !n.sample.world_ok
+        || n.game_thread != Some(std::thread::current().id())
+        || n.world_key.as_deref() != Some(key)
+        || !n.native_guard_ok(vt)
+    {
+        return Err("source roster role/thread/world admission".into());
+    }
+    if !n.native_host.directory().is_some_and(|current| {
+        current.epoch == d.epoch && current.seq == d.seq && current.entities == d.entities
+    }) {
+        return Err("source roster directory generation changed".into());
+    }
+    Ok(())
+}
 // The callback borrows Native only within a synchronous provider invocation.
 // No Lua callbacks or global Native lock acquisition occur here.
 struct GuardContext {
@@ -1477,6 +2077,186 @@ impl Native {
             }
         }
     }
+    pub unsafe fn native_source_roster_facts(&mut self, L: *mut lua_State) -> c_int {
+        unsafe {
+            let result =
+                (|| -> Result<(hsmp_server::native_service::SourceRosterFacts, u32), String> {
+                    if !is_table(L, 1) || !is_table(L, 2) {
+                        return Err("source roster metadata/bindings".into());
+                    }
+                    if self.poisoned
+                        || !self.native_host.is_host()
+                        || !self.sample.world_ok
+                        || self.game_thread != Some(std::thread::current().id())
+                    {
+                        return Err("source roster role/thread/world admission".into());
+                    }
+                    let directory = self
+                        .native_host
+                        .directory()
+                        .ok_or("source roster directory unavailable")?;
+                    if integer(L, 1, "epoch").map(|v| v as u64) != Some(directory.epoch)
+                        || integer(L, 1, "dir_seq").and_then(|v| u32::try_from(v).ok())
+                            != Some(directory.seq)
+                    {
+                        return Err("source roster original directory".into());
+                    }
+                    let vt = reflect::vt().ok_or("source roster reflection unavailable")?;
+                    let key = self
+                        .world_key
+                        .clone()
+                        .ok_or("source roster world token unavailable")?;
+                    roster_admission(self, vt, &directory, &key)?;
+                    let x = roster_exports()?;
+                    let count = lua_rawlen(L, 2) as usize;
+                    if count != directory.entities.len() || count == 0 || count > w::MAX_ENTITIES {
+                        return Err("source roster complete binding count".into());
+                    }
+                    let mut bindings = Vec::with_capacity(count);
+                    for i in 1..=count {
+                        lua_rawgeti(L, 2, i as i64);
+                        let row = lua_absindex(L, -1);
+                        let uint = |name| {
+                            integer(L, row, name)
+                                .and_then(|v| u32::try_from(v).ok())
+                                .ok_or_else(|| format!("source roster {name}"))
+                        };
+                        let reference = w::EntityRef {
+                            epoch: integer(L, row, "epoch").ok_or("source roster epoch")? as u64,
+                            id: uint("id")?,
+                            incarnation: uint("incarnation")?,
+                        };
+                        let entity = directory
+                            .entities
+                            .iter()
+                            .find(|e| {
+                                e.reference == reference
+                                    && u32::from(e.slot) == uint("slot").unwrap_or(u32::MAX)
+                                    && u32::from(e.kind) == uint("kind").unwrap_or(u32::MAX)
+                                    && u32::from(e.controller)
+                                        == uint("controller_index").unwrap_or(u32::MAX)
+                            })
+                            .ok_or("source roster original entity binding")?
+                            .clone();
+                        if bindings
+                            .iter()
+                            .any(|b: &RosterBinding| b.entity.reference == reference)
+                        {
+                            return Err("source roster duplicate entity".into());
+                        }
+                        roster_admission(self, vt, &directory, &key)?;
+                        let world =
+                            RosterIdentity::capture(vt, x, field_object(vt, L, row, "world")?)?;
+                        let pawn =
+                            RosterIdentity::capture(vt, x, field_object(vt, L, row, "pawn")?)?;
+                        let controller = RosterIdentity::capture(
+                            vt,
+                            x,
+                            field_object(vt, L, row, "controller")?,
+                        )?;
+                        if bindings.first().is_some_and(|b: &RosterBinding| {
+                            b.world.object.address != world.object.address
+                                || b.world.object.weak != world.object.weak
+                        }) {
+                            return Err("source roster mixed native worlds".into());
+                        }
+                        let pawn_controller =
+                            roster_property(vt, x, pawn, "Controller", "ObjectProperty", 8)?;
+                        let controller_pawn =
+                            roster_property(vt, x, controller, "Pawn", "ObjectProperty", 8)?;
+                        let team = roster_property(vt, x, pawn, "Team Int", "IntProperty", 4)?;
+                        let paths = [
+                            RosterPath::capture(vt, x, world)?,
+                            RosterPath::capture(vt, x, pawn)?,
+                            RosterPath::capture(vt, x, controller)?,
+                        ];
+                        let indexed = if entity.kind == w::HUMAN {
+                            Some(RosterSlots::capture(
+                                vt,
+                                x,
+                                world,
+                                controller,
+                                entity.controller,
+                            )?)
+                        } else {
+                            None
+                        };
+                        bindings.push(RosterBinding {
+                            entity,
+                            world,
+                            pawn,
+                            controller,
+                            pawn_controller,
+                            controller_pawn,
+                            team,
+                            paths,
+                            indexed,
+                        });
+                        pop(L, 1);
+                    }
+                    let teams = bindings
+                        .iter()
+                        .map(|b| b.qualify(vt, x, || roster_admission(self, vt, &directory, &key)))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    // GetWorld and indexed-controller callbacks for later actors may
+                    // mutate an earlier actor. Finish with fresh, callback-free
+                    // original identities, possession and every observed team.
+                    roster_admission(self, vt, &directory, &key)?;
+                    check_roster_teams(&teams, |i| bindings[i].pure_team(vt, x))?;
+                    let facts = hsmp_server::native_service::SourceRosterFacts {
+                        epoch: directory.epoch,
+                        directory_seq: directory.seq,
+                        entities: bindings
+                            .iter()
+                            .zip(teams)
+                            .map(|(b, team)| {
+                                let mut e = b.entity.clone();
+                                e.team = Some(team);
+                                e
+                            })
+                            .collect(),
+                    };
+                    let ack_seq = self
+                        .native_host
+                        .host
+                        .as_ref()
+                        .ok_or("not a native source host")?
+                        .source_roster(facts.clone())
+                        .map_err(str::to_owned)?;
+                    Ok((facts, ack_seq))
+                })();
+            match result {
+                Err(e) => nil_err(L, &e),
+                Ok((facts, ack_seq)) => {
+                    lua_pushboolean(L, 1);
+                    lua_createtable(L, 0, 4);
+                    let t = lua_gettop(L);
+                    set_int(L, t, "epoch", facts.epoch as i64);
+                    set_int(L, t, "base_dir_seq", facts.directory_seq as i64);
+                    set_int(L, t, "ack_dir_seq", i64::from(ack_seq));
+                    lua_createtable(L, facts.entities.len() as c_int, 0);
+                    let rows = lua_gettop(L);
+                    for (i, e) in facts.entities.iter().enumerate() {
+                        lua_createtable(L, 0, 7);
+                        let row = lua_gettop(L);
+                        set_int(L, row, "epoch", e.reference.epoch as i64);
+                        set_int(L, row, "id", e.reference.id as i64);
+                        set_int(L, row, "incarnation", e.reference.incarnation as i64);
+                        set_int(L, row, "slot", i64::from(e.slot));
+                        set_int(L, row, "kind", i64::from(e.kind));
+                        set_int(L, row, "controller", i64::from(e.controller));
+                        let Some(team) = e.team else {
+                            return nil_err(L, "source roster native team unavailable");
+                        };
+                        set_int(L, row, "team", i64::from(team));
+                        lua_rawseti(L, rows, i as i64 + 1);
+                    }
+                    rawset_str(L, t, "entities");
+                    2
+                }
+            }
+        }
+    }
     pub unsafe fn host_describe(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
             let result = (|| -> Result<String, String> {
@@ -1510,6 +2290,10 @@ impl Native {
                 let world = field_object(vt, L, 3, "world")?;
                 let pawn = field_object(vt, L, 3, "pawn")?;
                 let controller = field_object(vt, L, 3, "controller")?;
+                let team_exports = roster_exports()?;
+                let team_pawn = RosterIdentity::capture(vt, team_exports, pawn)?;
+                let team_property =
+                    roster_property(vt, team_exports, team_pawn, "Team Int", "IntProperty", 4)?;
                 let directory = self
                     .native_host
                     .directory()
@@ -1525,6 +2309,11 @@ impl Native {
                 {
                     return Err("source actor/controller binding changed".into());
                 }
+                require_acknowledged_team(
+                    entity.team,
+                    descriptor.recipe.team,
+                    roster_read_i32(vt, team_exports, team_pawn, team_property)?,
+                )?;
                 if entity.kind == w::HUMAN
                     && assigned_controller(vt, world, entity.controller)? != controller.address
                 {
@@ -1627,8 +2416,17 @@ impl Native {
                     return Err("source possession changed during descriptor copy".into());
                 }
                 let host = self.native_host.host.as_ref().ok_or("not a source host")?;
-                host.source_team(reference, descriptor.recipe.team)
-                    .map_err(str::to_owned)?;
+                if !host.directory().is_some_and(|d| {
+                    d.epoch == directory.epoch
+                        && d.seq == directory.seq
+                        && d.entities.iter().any(|e| {
+                            e.reference == reference && e.team == Some(descriptor.recipe.team)
+                        })
+                }) || roster_read_i32(vt, team_exports, team_pawn, team_property)?
+                    != descriptor.recipe.team
+                {
+                    return Err("source descriptor native team changed during copy".into());
+                }
                 host.publish_descriptor(descriptor).map_err(str::to_owned)?;
                 self.presentation.sources.insert(
                     reference,
@@ -2282,6 +3080,404 @@ impl Native {
     }
 }
 
+#[cfg(test)]
+mod source_roster_native_tests {
+    use super::*;
+    #[repr(C)]
+    #[derive(Default)]
+    struct Fake {
+        flags: u32,
+        pad: u32,
+        name: u64,
+        class: u64,
+        outer: u64,
+        world: u64,
+        controller: u64,
+        context: u64,
+        players: RosterArray,
+        instance: u64,
+        player: u64,
+        pawn: u64,
+        team: i32,
+        action: u32,
+        callback: u64,
+        calls: u32,
+    }
+    impl Default for RosterArray {
+        fn default() -> Self {
+            Self {
+                data: 0,
+                count: 0,
+                capacity: 0,
+            }
+        }
+    }
+    unsafe extern "C" fn name(p: *const c_void) -> *const u64 {
+        unsafe { &(*p.cast::<Fake>()).name }
+    }
+    unsafe extern "C" fn flags(p: *const c_void) -> *const u32 {
+        unsafe { &(*p.cast::<Fake>()).flags }
+    }
+    unsafe extern "C" fn outer(p: *const c_void) -> *const *const c_void {
+        unsafe { (&(*p.cast::<Fake>()).outer as *const u64).cast() }
+    }
+    unsafe extern "C" fn world(p: *const c_void) -> *mut c_void {
+        unsafe {
+            let f = &mut *p.cast_mut().cast::<Fake>();
+            f.calls += 1;
+            if f.callback != 0 {
+                let earlier = &mut *(f.callback as *mut Fake);
+                match f.action {
+                    1 => earlier.team += 1,
+                    2 => earlier.flags |= 0x40000000,
+                    3 => earlier.name += 1,
+                    4 => earlier.class = 0,
+                    5 => earlier.outer = f.world,
+                    6 => earlier.controller = 0,
+                    _ => {}
+                }
+            }
+            f.world as *mut c_void
+        }
+    }
+    unsafe extern "C" fn resolve(w: u64) -> *mut c_void {
+        w as *mut c_void
+    }
+    unsafe extern "C" fn weak(p: *mut c_void) -> u64 {
+        p as u64
+    }
+    unsafe extern "C" fn class(p: *mut c_void) -> *mut c_void {
+        unsafe { (*p.cast::<Fake>()).class as *mut c_void }
+    }
+    unsafe extern "C" fn fname(_: *const u16, _: i32) -> u64 {
+        0
+    }
+    unsafe extern "C" fn find(_: *const u16) -> *mut c_void {
+        std::ptr::null_mut()
+    }
+    unsafe extern "C" fn isa(_: *mut c_void, _: *mut c_void) -> i32 {
+        0
+    }
+    unsafe extern "C" fn props(
+        _: *mut c_void,
+        _: *mut reflect::HsmpProp,
+        _: i32,
+        _: *mut i32,
+    ) -> i32 {
+        0
+    }
+    unsafe extern "C" fn prop(_: *mut c_void, _: *const u16, _: *mut reflect::HsmpProp) -> i32 {
+        0
+    }
+    unsafe extern "C" fn call(_: *mut c_void, _: *mut c_void, _: *mut c_void) {}
+    fn vt() -> HsmpReflect {
+        HsmpReflect {
+            abi: 1,
+            _r: 0,
+            fname,
+            find,
+            is_a: isa,
+            class_of: class,
+            props,
+            obj_prop: prop,
+            call,
+            weak,
+            resolve,
+        }
+    }
+    fn exports() -> RosterExports {
+        RosterExports {
+            name,
+            flags,
+            outer,
+            world,
+        }
+    }
+    fn obj(f: &Fake) -> Object {
+        let address = f as *const Fake as u64;
+        Object {
+            weak: address,
+            address,
+        }
+    }
+    fn field(offset: usize) -> reflect::HsmpProp {
+        reflect::HsmpProp {
+            offset: offset as i32,
+            size: 8,
+            ..Default::default()
+        }
+    }
+    fn id(f: &Fake, c: &Fake) -> RosterIdentity {
+        RosterIdentity {
+            object: obj(f),
+            class: obj(c),
+            name: f.name,
+            class_name: c.name,
+        }
+    }
+    fn path(i: RosterIdentity) -> RosterPath {
+        RosterPath(vec![i])
+    }
+    fn binding(w: &Fake, p: &Fake, c: &Fake, cls: &Fake) -> RosterBinding {
+        let world = id(w, cls);
+        let pawn = id(p, cls);
+        let controller = id(c, cls);
+        RosterBinding {
+            entity: w::Entity {
+                reference: w::EntityRef {
+                    epoch: 1,
+                    id: 1,
+                    incarnation: 1,
+                },
+                slot: 0,
+                kind: w::AI,
+                controller: 255,
+                owner_peer: 0,
+                team: None,
+            },
+            world,
+            pawn,
+            controller,
+            pawn_controller: field(std::mem::offset_of!(Fake, controller)),
+            controller_pawn: field(std::mem::offset_of!(Fake, pawn)),
+            team: field(std::mem::offset_of!(Fake, team)),
+            paths: [path(world), path(pawn), path(controller)],
+            indexed: None,
+        }
+    }
+    #[test]
+    fn source_roster_final_census_rejects_later_getter_mutation_of_earlier_original() {
+        for action in 1..=6 {
+            let mut cls = Box::new(Fake {
+                name: 99,
+                ..Default::default()
+            });
+            let cp = &mut *cls as *mut Fake as u64;
+            let w = Box::new(Fake {
+                name: 1,
+                class: cp,
+                ..Default::default()
+            });
+            let wp = obj(&w).address;
+            let mut a = Box::new(Fake {
+                name: 2,
+                class: cp,
+                world: wp,
+                team: -7,
+                ..Default::default()
+            });
+            let ac = Box::new(Fake {
+                name: 3,
+                class: cp,
+                world: wp,
+                pawn: obj(&a).address,
+                ..Default::default()
+            });
+            a.controller = obj(&ac).address;
+            let mut b = Box::new(Fake {
+                name: 4,
+                class: cp,
+                world: wp,
+                team: 12,
+                ..Default::default()
+            });
+            let bc = Box::new(Fake {
+                name: 5,
+                class: cp,
+                world: wp,
+                pawn: obj(&b).address,
+                action,
+                callback: obj(&a).address,
+                ..Default::default()
+            });
+            b.controller = obj(&bc).address;
+            let earlier = binding(&w, &a, &ac, &cls);
+            let later = binding(&w, &b, &bc, &cls);
+            let vt = vt();
+            let x = exports();
+            let first = unsafe { earlier.pure_team(&vt, x).unwrap() };
+            let second = unsafe { later.qualify(&vt, x, || Ok(())).unwrap() };
+            assert!(
+                check_roster_teams(&[first, second], |i| unsafe {
+                    if i == 0 {
+                        earlier.pure_team(&vt, x)
+                    } else {
+                        later.pure_team(&vt, x)
+                    }
+                })
+                .is_err(),
+                "mutation {action}"
+            );
+            // The old PC and its possession link remain allocated throughout.
+            assert_eq!(ac.pawn, obj(&a).address);
+        }
+    }
+    #[test]
+    fn source_roster_native_admission_failure_stops_before_the_next_getter() {
+        let cls = Box::new(Fake {
+            name: 99,
+            ..Default::default()
+        });
+        let cp = obj(&cls).address;
+        let w = Box::new(Fake {
+            name: 1,
+            class: cp,
+            ..Default::default()
+        });
+        let wp = obj(&w).address;
+        let mut p = Box::new(Fake {
+            name: 2,
+            class: cp,
+            world: wp,
+            ..Default::default()
+        });
+        let c = Box::new(Fake {
+            name: 3,
+            class: cp,
+            world: wp,
+            pawn: obj(&p).address,
+            ..Default::default()
+        });
+        p.controller = obj(&c).address;
+        let row = binding(&w, &p, &c, &cls);
+        let mut admissions = 0;
+        assert!(unsafe {
+            row.qualify(&vt(), exports(), || {
+                admissions += 1;
+                if admissions == 2 {
+                    Err("original world changed".into())
+                } else {
+                    Ok(())
+                }
+            })
+        }
+        .is_err());
+        assert_eq!(p.calls, 1);
+        assert_eq!(c.calls, 0);
+    }
+    #[test]
+    fn source_roster_pure_slot_witness_rejects_mapping_and_world_context_changes() {
+        let cls = Box::new(Fake {
+            name: 99,
+            ..Default::default()
+        });
+        let cp = obj(&cls).address;
+        let mut w = Box::new(Fake {
+            name: 1,
+            class: cp,
+            ..Default::default()
+        });
+        let wp = obj(&w).address;
+        let mut gi = Box::new(Fake {
+            name: 2,
+            class: cp,
+            ..Default::default()
+        });
+        w.instance = obj(&gi).address;
+        let mut context = Box::new([0u64; 89]);
+        context[0x2c0 / 8] = wp;
+        gi.context = context.as_ptr() as u64;
+        let mut pc = Box::new(Fake {
+            name: 3,
+            class: cp,
+            ..Default::default()
+        });
+        let original_pawn = Box::new(Fake {
+            name: 6,
+            class: cp,
+            world: wp,
+            controller: obj(&pc).address,
+            ..Default::default()
+        });
+        pc.pawn = obj(&original_pawn).address;
+        let mut player = Box::new(Fake {
+            name: 4,
+            class: cp,
+            controller: obj(&pc).address,
+            ..Default::default()
+        });
+        pc.player = obj(&player).address;
+        let mut slots = Box::new([obj(&player).address]);
+        gi.players = RosterArray {
+            data: slots.as_ptr() as u64,
+            count: 1,
+            capacity: 1,
+        };
+        let wi = id(&w, &cls);
+        let instance = id(&gi, &cls);
+        let ci = id(&pc, &cls);
+        let pi = id(&player, &cls);
+        let witness = RosterSlots {
+            instance,
+            instance_path: path(instance),
+            world_instance: field(std::mem::offset_of!(Fake, instance)),
+            players: field(std::mem::offset_of!(Fake, players)),
+            header: gi.players,
+            slots: vec![(
+                pi,
+                path(pi),
+                field(std::mem::offset_of!(Fake, controller)),
+                ci,
+            )],
+            index: 0,
+            controller_player: field(std::mem::offset_of!(Fake, player)),
+            world_context: gi.context,
+        };
+        let vt = vt();
+        let x = exports();
+        unsafe {
+            witness.verify(&vt, x, wi, ci).unwrap();
+        }
+        for mutation in 0..5 {
+            match mutation {
+                0 => slots[0] = 0,
+                1 => player.controller = 0,
+                2 => context[0x2c0 / 8] = 0,
+                3 => gi.context = 0,
+                _ => gi.players.count = 0,
+            }
+            assert!(unsafe { witness.verify(&vt, x, wi, ci) }.is_err());
+            slots[0] = pi.object.address;
+            player.controller = ci.object.address;
+            context[0x2c0 / 8] = wp;
+            gi.context = witness.world_context;
+            gi.players = witness.header;
+        }
+        // This models the later actor's callback replacing the first index
+        // while the original PC and Pawn are still live and unchanged.
+        let mut later_pawn = Box::new(Fake {
+            name: 7,
+            class: cp,
+            world: wp,
+            ..Default::default()
+        });
+        let later_controller = Box::new(Fake {
+            name: 8,
+            class: cp,
+            world: wp,
+            pawn: obj(&later_pawn).address,
+            callback: pi.object.address,
+            action: 6,
+            ..Default::default()
+        });
+        later_pawn.controller = obj(&later_controller).address;
+        let later = binding(&w, &later_pawn, &later_controller, &cls);
+        unsafe {
+            later.qualify(&vt, x, || Ok(())).unwrap();
+        }
+        assert!(unsafe { witness.verify(&vt, x, wi, ci) }.is_err());
+        assert_eq!(pc.name, 3);
+        assert_eq!(pc.pawn, obj(&original_pawn).address);
+        assert_eq!(original_pawn.controller, ci.object.address);
+    }
+    #[test]
+    fn source_roster_acknowledged_team_never_defaults_unknown_to_zero() {
+        assert!(require_acknowledged_team(None, 0, 0).is_err());
+        assert!(require_acknowledged_team(Some(12), 12, 2).is_err());
+        require_acknowledged_team(Some(-7), -7, -7).unwrap();
+        require_acknowledged_team(Some(0), 0, 0).unwrap();
+    }
+}
 #[cfg(test)]
 mod presentation_binding_tests {
     use super::*;

@@ -1,6 +1,48 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual buildddccc175
+## Next checkpoint: complete-roster team preflight
+
+The first accepted native recipe's team publication invalidated the second
+capture. Rust now queues one full original-roster team transaction before
+capturing either recipe; Lua waits for the exact acknowledged generation and
+checks all original bindings. host_describe only verifies native/recipe/known
+directory teams, without changing directory metadata. Independent Rust/Lua
+review closes original indexed local-player/controller mapping across later
+callbacks using pinned native lookup evidence. Lua worker356/source277 and
+syntax3 pass; focused server roster2/native roster5/existing presentation binding8
+Rust tests pass before clean dev G0/deploy. Implementation and review are closed.
+Root is sole actual operator. No timeout/age tolerance changes or default teams.
+
+The user's grey checker sphere/no-player-model report remains open. Actual
+complete scene, model/material creation and owned camera must be verified in
+both normal clients before playable acceptance.
+
+## Current state: 2026-10-09, latest actual build9d465f79
+
+Material-type checkpoint passes full G074 Lua/1361 Rust79 binaries, clippy0
+errors/13 warnings, dev push and RequireG0 deployment/all393 hashes. Actual
+`20261009-154130-0b06d0-native-host` accepts the FIRST complete native recipe:
+entity1 capture16.215s→41.911s, NativeBind42.353s after0.441s,49components/
+600bones/38material slots,35551compact/74731rawJSON/6604nodes. Body and Head
+actual native MID classes have RF_Transient=false; armour MIDs true. Type-driven
+capture succeeds for all five layers in both harvests.
+
+Entity2 then refuses42.510s at the strict original directory admission. First
+descriptor queues its live native Team Int; network tick publishes directory6→7
+and clears dir6 descriptors while Lua still uses6. Next step atomically admits
+the exact full roster's guarded native team facts BEFORE captures, waits for
+positive known-team/reference acknowledgment, then uses one fixed generation.
+Descriptor registration must verify teams without metadata side effects.
+No guard relaxation, old-binding retag or guessed default team. Sol agents own
+Rust/Lua implementation and independent review; root remains sole game operator.
+
+Both original880x527 windows are fully secondary. Both clients fail unchanged
+65s readiness; complete frames/mirrors/active inputs remain0. Source cleanly
+cancels66.532s without fallback; original4PIDs independently absent/Shipping0,
+20save hashes unchanged/no crashes/children. Native material blocker is closed;
+complete scene and owned client camera/visible body acceptance remain open.
+
+## Previous actual buildddccc175
 
 Precise material diagnostics pass full G074 Lua/1361 Rust79 binaries, clippy0
 errors/13 warnings, dev push and clean RequireG0 deployment/all393 hashes.

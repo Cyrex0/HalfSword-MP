@@ -47,7 +47,7 @@ function M.start()
     local bootstrap, controller, loop_handle, source_lifecycle
     local sample_configured, frame_seq, sample_at, first_ai_name = false, 0, -1e9, nil
     local entity_bindings = {}
-    local metrics = { sample_ok=0, sample_refused=0, dispatch=0, active_dispatch=0, active_pc0=0, active_pc1=0, input_refused=0, sample_min_ms=nil, sample_max_ms=0, last_input_error=nil, last_sample_error=nil }
+    local metrics = { sample_ok=0, sample_refused=0, dispatch=0, active_dispatch=0, active_pc0=0, active_pc1=0, input_refused=0, sample_min_ms=nil, sample_max_ms=0, last_input_error=nil, last_sample_error=nil, roster_wait=nil }
     local function admitted()
         if stopped or cancel_reason then return false end
         local now = os.clock()
@@ -471,7 +471,7 @@ function M.start()
         local token, actors = WG.token(), {}
         if native_mode ~= "diagnostic" then
             if not N.host_describe or not N.native_capture_render then return false, "native source/render APIs unavailable" end
-            for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state"})do
+            for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state","native_source_roster_facts"})do
                 if type(N[name])~="function"then return false,"native source identity API unavailable: "..name end
             end
             if not source_lifecycle then
@@ -484,10 +484,13 @@ function M.start()
                 source_lifecycle = Lifecycle.new({ resolve=resolve,same=WG.same,now_ms=function()return os.clock()*1000 end,
                     index=function(row)return row.kind==0 and row.controller or first_ai_name end,
                     capture=adapter.capture,describe=N.host_describe,phase=source_phase,
+                    directory=N.host_directory,roster_facts=N.native_source_roster_facts,
+                    addresses=function(binding)return {world=binding.world:GetAddress(),pawn=binding.pawn_address,controller=binding.pc_address}end,
                     invalidate=function()if hosted and N.host_world_changed then N.host_world_changed() end;IPC.world_leaving()end })
             end
-            local described, reason = source_lifecycle.ensure(directory,token,frame_seq+1)
-            if described ~= true then return false, reason end
+            local described, acknowledged = source_lifecycle.ensure(directory,token,frame_seq+1)
+            if described ~= true then return described, acknowledged end
+            directory=acknowledged -- only the exact team-ACK snapshot may reach core/render publication
         end
         for _, row in ipairs(directory.entities or {}) do
             if not WG.same(token) then return false, "world changed during actor lookup" end
@@ -596,8 +599,13 @@ function M.start()
                     if os.clock()*1000-sample_at >= 33 then
                         local sampled, why = sample_world(directory)
                         if cancel_reason then return end
-                        if sampled then metrics.sample_ok=metrics.sample_ok+1;metrics.last_sample_error=nil
+                        if sampled then metrics.sample_ok=metrics.sample_ok+1;metrics.last_sample_error=nil;metrics.roster_wait=nil
+                        elseif sampled==nil then
+                            -- An in-flight native roster ACK is a transient wait;
+                            -- it cannot publish a partial recipe or count as a capture fault.
+                            if metrics.roster_wait~=why then log("canonical sample waiting: %s",tostring(why));metrics.roster_wait=why end
                         else
+                            metrics.roster_wait=nil
                             metrics.sample_refused=metrics.sample_refused+1
                             -- A bounded descriptor retry keeps the actual capture
                             -- refusal available instead of replacing it with a wait.

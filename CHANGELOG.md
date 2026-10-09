@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Publish native team facts for the complete original roster before capturing
+  player models. Wait for the exact roster acknowledgment and verify teams
+  during descriptor registration, so admitting one model cannot invalidate
+  another player's capture. Actual two-client presentation remains unverified.
 - Capture native dynamic body/armour material instances independently of their
   transient flag, preserving parent overrides and guarding original parameter
   arrays across callbacks. Actual body meshes remain under native verification.

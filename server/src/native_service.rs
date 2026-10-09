@@ -31,11 +31,41 @@ struct Shared {
     control_out: VecDeque<w::MirrorReady>,
     mirror_receipts: HashMap<u32, w::MirrorReady>,
     render_received: Option<Instant>,
-    source_teams: HashMap<w::EntityRef, i32>,
+    source_roster: Option<SourceRosterFacts>,
     stream: w::scene_stream::Assembly,
     stream_ack: Option<w::scene_stream::Ack>,
     applied: Option<(w::MirrorReady, Instant)>,
     descriptor_stream: w::descriptor_stream::Assembly,
+}
+/// A complete, game-thread observed roster. Native pointers never cross into
+/// the network thread; its original directory identity is checked again there.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SourceRosterFacts {
+    pub epoch: u64,
+    pub directory_seq: u32,
+    pub entities: Vec<w::Entity>,
+}
+impl SourceRosterFacts {
+    pub fn matches(&self, directory: &Directory) -> bool {
+        self.epoch == directory.epoch
+            && self.directory_seq == directory.seq
+            && self.entities.len() == directory.entities.len()
+            && !self.entities.is_empty()
+            && self.entities.len() <= w::MAX_ENTITIES
+            && self.entities.iter().enumerate().all(|(i, fact)| {
+                fact.team.is_some()
+                    && !self.entities[..i]
+                        .iter()
+                        .any(|old| old.reference.id == fact.reference.id)
+                    && directory.entities.iter().any(|original| {
+                        fact.reference == original.reference
+                            && fact.owner_peer == original.owner_peer
+                            && fact.slot == original.slot
+                            && fact.kind == original.kind
+                            && fact.controller == original.controller
+                    })
+            })
+    }
 }
 #[derive(Clone)]
 pub struct Scene {
@@ -83,6 +113,7 @@ impl Bridge {
             s.mirror_receipts.clear();
             s.applied = None;
             s.stream_ack = None;
+            s.source_roster = None;
             if !s
                 .stream
                 .manifest()
@@ -160,6 +191,7 @@ impl Bridge {
         s.descriptor_stream = Default::default();
         s.stream_ack = None;
         s.applied = None;
+        s.source_roster = None;
     }
     pub(crate) fn take_world_reset(&self) -> bool {
         std::mem::take(&mut self.lock().world_reset)
@@ -242,8 +274,35 @@ impl Bridge {
     pub(crate) fn take_descriptors(&self) -> Vec<w::Descriptor> {
         self.lock().descriptor_out.drain(..).collect()
     }
-    pub(crate) fn take_source_teams(&self) -> HashMap<w::EntityRef, i32> {
-        std::mem::take(&mut self.lock().source_teams)
+    pub(crate) fn take_source_roster(&self) -> Option<SourceRosterFacts> {
+        self.lock().source_roster.take()
+    }
+    pub(crate) fn source_roster(&self, facts: SourceRosterFacts) -> Result<u32, &'static str> {
+        let mut s = self.lock();
+        if s.world_reset || !s.directory.as_ref().is_some_and(|d| facts.matches(d)) {
+            return Err("source roster directory generation");
+        }
+        if s.source_roster.as_ref().is_some_and(|old| old != &facts) {
+            return Err("source roster facts already pending");
+        }
+        let d = s
+            .directory
+            .as_ref()
+            .ok_or("source roster directory unavailable")?;
+        let changed = facts.entities.iter().any(|f| {
+            d.entities
+                .iter()
+                .any(|e| e.reference == f.reference && e.team != f.team)
+        });
+        let ack_seq = if changed {
+            d.seq
+                .checked_add(1)
+                .ok_or("source roster directory counter exhausted")?
+        } else {
+            d.seq
+        };
+        s.source_roster = Some(facts);
+        Ok(ack_seq)
     }
     pub(crate) fn descriptor(&self, id: u32) -> Option<Arc<w::Descriptor>> {
         self.lock().descriptors.get(&id).cloned()
@@ -608,17 +667,8 @@ impl HostHandle {
     pub fn publish_descriptor(&self, d: w::Descriptor) -> Result<(), &'static str> {
         self.bridge.publish_descriptor(d)
     }
-    pub fn source_team(&self, reference: w::EntityRef, team: i32) -> Result<(), &'static str> {
-        let mut s = self.bridge.lock();
-        if !s
-            .directory
-            .as_ref()
-            .is_some_and(|d| d.entities.iter().any(|e| e.reference == reference))
-        {
-            return Err("source team generation");
-        }
-        s.source_teams.insert(reference, team);
-        Ok(())
+    pub fn source_roster(&self, facts: SourceRosterFacts) -> Result<u32, &'static str> {
+        self.bridge.source_roster(facts)
     }
     pub fn publish_render(&self, frame: w::RenderWorld) -> Result<(), &'static str> {
         self.bridge.publish_render(frame)
