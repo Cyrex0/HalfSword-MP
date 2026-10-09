@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Preserve native empty skeletal weapon holders and their complete observed
+  material slots in the experimental headless scene. Require fresh asset,
+  render-cache and override absence checks before mirror readiness. Actual
+  scene and gameplay verification remain pending.
 - Add an experimental native authority host: embed the network service inside
   HSMPNative, isolate its worker role from client policies, and supervise the
   licensed headless game through `hsmp-server native`. Native gameplay and

@@ -141,6 +141,8 @@ pub mod caps {
     pub const NATIVE_RENDER_V3: u64 = 1 << 24;
     /// Exact native empty StaticMesh components retain their scene and null proofs.
     pub const NATIVE_EMPTY_STATIC: u64 = 1 << 25;
+    /// Exact empty native skeletal holders and complete nullable material slots.
+    pub const NATIVE_EMPTY_SKELETAL: u64 = 1 << 26;
     /// Application: server-served mods (`mod_manifest` / `mod_files` / `mod_chunk` down,
     /// `mod_chunk_req` / `mod_ready` up; docs/hosting/server-mods.md). The server offers it
     /// only when it has a `--mods-dir`, the sidecar always; a server with mods refuses a

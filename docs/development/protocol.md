@@ -913,8 +913,9 @@ it was negotiated. Receivers ignore unknown bits. New bits are append-only.
 | 23 | NATIVE_VERTEX_STATE | Guarded original static vertex-override census and final scene checks |
 | 24 | NATIVE_RENDER_V3 | Native Camera/SpringArm ancestors and exact cached component-space spring-arm socket output |
 | 25 | NATIVE_EMPTY_STATIC | Exact empty native StaticMesh components with guarded original hard-null and override-absence checks |
+| 26 | NATIVE_EMPTY_SKELETAL | Exact empty native skeletal holders, absent native render objects and complete nullable material slots |
 
-Experimental native presentation peers require bits20–25. Diagnostic world-only
+Experimental native presentation peers require bits20–26. Diagnostic world-only
 observers may omit presentation. Render record `0x0A13` uses the same bounded
 world/component format as `0x0A12`, followed by an explicit spring-arm presence
 byte for each component and, when present, seven native f64 values (translation3,
@@ -922,14 +923,23 @@ rotation4). These are raw cached endpoint values; the codec preserves their bits
 and refuses nonfinite values. The current exact descriptor requires the endpoint
 only for native SpringArm components. Older scene records cannot release mirror
 readiness or gameplay inputs. The transport remains protocol12 and IPC ABI2;
-native source schema5 and private provider ABI10 must be deployed together.
-Schema5 retains empty native StaticMesh components as exact primitives with
+native source schema6 and private provider ABI11 must be deployed together.
+Schema6 retains empty native StaticMesh and SkeletalMesh components as exact primitives with
 observed collision/material/attachment data. Their logical mesh asset is empty,
 their geometry is `native_empty`, and vertex state is `not_applicable`. This
 requires fresh original native hard-null and complete override-absence evidence;
 a missing Lua wrapper or omitted cooked field cannot establish it. Module changes
-invalidate the old recipe. Render revision3 stays unchanged; capability25 prevents
-earlier presenting peers from admitting this new source profile.
+invalidate the old recipe. Empty skeletal holders additionally require both native
+asset links, MeshObject and both proxy links to be null, zero native bones, and a
+complete raw material-slot census independent of GetNumMaterials. An empty material
+base with no parameters represents an observed null slot only for this profile.
+The private proof is six u32 values (24 bytes): lod_info_count, no_override,
+asset_present, material_count, material_null_mask, component_kind. The Lua source
+proof has seven required keys, adding state and expressing component_kind as
+static or skeletal. Final original identity and slot checks precede publication.
+Render revision3 stays unchanged; capability26 prevents earlier presenting peers
+from admitting this new source profile. These contracts do not establish actual
+scene or combat parity without the native scenario gates.
 
 `caps::SUPPORTED = ACK_DELAY | RESET | PATH_CHALLENGE | REL_KEY` are the transport bits
 `hsmp-net` implements itself; every client and server built from it offers them through

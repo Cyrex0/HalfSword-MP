@@ -1,6 +1,40 @@
 # Native authority bootstrap checkpoint
 
-## Current state: 2026-10-09, latest actual build db69d461
+## Current state: 2026-10-09, latest actual build c87dda89
+
+EmptyStatic checkpoint passed full G0 (74 Lua/1331 Rust in79 binaries;
+clippy0 errors/12 warnings), dev push and exact clean RequireG0 deployment.
+Actual run `test-results/20261009-102258-f482bd-native-host` proves original
+Grip39 hard-null at27.087s: state=native_empty, asset_present=false,
+no_override=true, LODInfoCount0. The holder remains in the recipe with observed
+material count0 and completes at27.091s. The source reaches39 completed
+component metadata rows, then refuses weapon owner1 `GripSk` component40,
+address3090641211568, at27.137s: `native skeletal asset unavailable`.
+GripSk's exact native class/hard-null/render state is not established by that
+message. Complete recipes/canonical/mirror frames and active inputs remain zero.
+
+The authority stops normally48.127s; both clients close after session end and
+client1 held exit0 is recorded. All4 owned PIDs absent/no shipping game,
+20/20 protected save hashes match, crash[]/unobservedchildren[]. No repeated
+travel crash in this run. The observed menu→exit is again the bounded test ending
+after incomplete source capture. Latest source/manifest stayed frozen in game.
+
+The remaining-holder audit is complete for the current native/cooked roster:
+four BaseModularWeapon skeletal holders and generic armor holders need the
+qualified exact SkeletalMeshComponent profile. No nullable Groom is required.
+Implementation is in progress as schema6/private ABI11/capability26. Native
+asset aliases, MeshObject, both proxy links and all LOD override rows must be
+null; the complete raw material array must be retained, including explicit
+null slots. See `native-empty-skeletal-proof-20261009.md` for matched semantics.
+Focused server native filter48 passes, including old-capability refusal and
+authenticated V3 delivery. Full combined checks/deployment/native scenario wait
+for the coherent source/provider/mirror implementation and independent review.
+
+Do not accept missing wrappers as native null, substitute geometry or drop
+components. Need current original native null/proxy/socket/pose/cloth/material
+proof where applicable, preserving actual attachments/collision observations.
+The exact-class mirrored bulk scene path remains unexercised because no full
+recipe exists. Following sections preserve earlier checkpoints.
 
 The next EmptyStatic checkpoint is now implemented and reviewed: schema5,
 private provider ABI10 (proof12 bytes/explicit asset_present), required

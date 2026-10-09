@@ -381,7 +381,8 @@ impl HostHandle {
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
-                | hsmp_net::net::caps::NATIVE_EMPTY_STATIC,
+                | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
+                | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL,
         );
         let state = Arc::new(crate::server::ServerState::with_native_mode(
             2,
@@ -517,7 +518,8 @@ impl ClientHandle {
                 | hsmp_net::net::caps::NATIVE_RENDER_V2
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
-                | hsmp_net::net::caps::NATIVE_EMPTY_STATIC;
+                | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
+                | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL;
         }
         let bridge = Arc::new(Bridge::default());
         let network_bridge = bridge.clone();
@@ -749,6 +751,13 @@ async fn client_loop(
                     {
                         bridge.lock().error =
                             "server does not verify empty native static components".into();
+                        return;
+                    }
+                    if cfg.caps & hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL != 0
+                        && caps & hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL == 0
+                    {
+                        bridge.lock().error =
+                            "server does not verify empty native skeletal components".into();
                         return;
                     }
                     cfg.pinned_server_key = Some(server_key);

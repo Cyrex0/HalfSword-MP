@@ -81,3 +81,25 @@ collision/physics path. The final native/compatibility/source reviews are closed
 Combined full G0, clean deployment and actual native scenario remain pending.
 No empty-native source/mirror or complete scene parity has been proved in a
 running game yet.
+
+## Actual c87dda89 result
+
+Full G0 passes74 Lua suites/1331 Rust checks in79 binaries, clippy0 errors and12
+warnings. Dev pushdb69d461→c87dda89 and exact clean RequireG0 deployment pass.
+Actual run `test-results/20261009-102258-f482bd-native-host`, source UUID
+8af2dd23-3423-493e-8f52-75f3a2f861de, authority42828/supervisor2128,
+normal clients32796/44164. NativeReady15.029s.
+
+Original Grip component39/address3090283243328/owner1 passes native proof27.087s:
+state=native_empty, no_override=true, asset_present=false, count0. The complete
+ordinary collector preserves material count0 and completes that row27.091s.
+It then begins GripSk component40/address3090641211568/owner1 and refuses
+`native skeletal asset unavailable`27.137s. Exact class/current hard-null for
+GripSk remain unproved; it cannot reuse static-component evidence.
+
+Complete recipes/canonical/mirror frames0 and active inputs[0,0]. The real
+empty-static source proof passed; native bulk capture/creation/readback remain
+unexercised. Source stops normally48.127s, clients stop after session end,
+client1 held exit0/0x0 at09:23:47.481UTC. All4 owned processes absent,20/20
+original save hashes unchanged, crash[]/unobservedchildren[]. Full native trace,
+authority-only filter and native_operator_summary.json are retained.
