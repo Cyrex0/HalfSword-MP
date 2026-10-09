@@ -49,51 +49,87 @@ function M.capture(env,bindings)
     local classes={}
     for kind,p in pairs(kinds)do classes[kind]=checked(function()return StaticFindObject(p)end)end
     local mesh_class=checked(function()return StaticFindObject("/Script/Engine.MeshComponent")end)
-    local scene_class=checked(function()return StaticFindObject("/Script/Engine.SceneComponent")end)
     local mi_class=checked(function()return StaticFindObject("/Script/Engine.MaterialInstance")end)
     local rvp=checked(function()return StaticFindObject("/Script/VertexPaintDetectionPlugin.Default__VertexPaintFunctionLibrary")end)
-    if not mesh_class or not scene_class or not mi_class then fail("native render classes unavailable")end
+    if not mesh_class or not mi_class then fail("native render classes unavailable")end
     local world_address=read(function(b)return b.world:GetAddress()end)
+    local root_ids={}
     local function owner(row)
-        if row.owner==0 then return read(function(b)return b.pawn end)end
-        for _,w in ipairs(bindings.weapons)do if w.id==row.owner then return env.weapon(w.field,w)end end
-        fail("native render owner unavailable")
+        local actor
+        if row.owner==0 then actor=read(function(b)return b.pawn end)
+        else for _,w in ipairs(bindings.weapons)do if w.id==row.owner then actor=env.weapon(w.field,w);break end end end
+        if not actor then fail("native render owner unavailable")end
+        local root=root_ids[row.owner]
+        if root then
+            local actual=object_id(checked(function()return actor.RootComponent end))
+            if not actual or actual.address~=root.address or actual.name~=root.name then fail("native source owner root changed")end
+        end
+        return actor
     end
-    local rows,catalog,by_address={}, {}, {}
+    local rows,by_address,mesh_sets={}, {}, {}
+    local owners={{owner=0}};for _,w in ipairs(bindings.weapons)do owners[#owners+1]={owner=w.id}end
+    local function qualify(c,row)
+        local identity=object_id(c)
+        if not identity or identity.address~=row.address or identity.name~=row.name then fail("native render component identity changed")end
+        local actual=object_id(checked(function()return c:GetOwner()end))
+        local expected=object_id(owner(row))
+        if not actual or not expected or actual.address~=expected.address or actual.name~=expected.name then fail("native render component owner changed")end
+        local world=checked(function()return c:GetWorld()end)
+        if not world or checked(function()return world:IsValid()end)~=true or checked(function()return world:GetAddress()end)~=world_address then fail("native scene component world changed")end
+        return c
+    end
+    local function include(row)
+        local previous=by_address[row.address]
+        if previous then
+            if previous.name~=row.name or previous.owner~=row.owner then fail("native source component binding changed")end
+            return previous
+        end
+        by_address[row.address]=row;rows[#rows+1]=row
+        if #rows>64 then fail("native complete attachment component bound")end
+        return row
+    end
     local function collect(actor,owner_id)
         local actor_id=object_id(actor)
-        if not actor_id then fail("native scene owner unavailable")end
-        local a=checked(function()return actor:K2_GetComponentsByClass(scene_class)end)
-        array(a,256,function(c)
+        if not actor_id then fail("native mesh owner unavailable")end
+        local set={};mesh_sets[owner_id]=set
+        local a=checked(function()return actor:K2_GetComponentsByClass(mesh_class)end)
+        array(a,64,function(c)
             local id=object_id(c)
-            if not id or by_address[id.address]then fail("native scene component identity duplicate or unavailable")end
-            local actual_owner=object_id(checked(function()return c:GetOwner()end))
-            if not actual_owner or actual_owner.address~=actor_id.address or actual_owner.name~=actor_id.name then fail("native scene component owner changed")end
-            local world=checked(function()return c:GetWorld()end)
-            if not world or checked(function()return world:IsValid()end)~=true or checked(function()return world:GetAddress()end)~=world_address then fail("native scene component world changed")end
-            id.owner=owner_id;id.mesh=checked(function()return c:IsA(mesh_class)end)
-            if type(id.mesh)~="boolean"then fail("native scene component kind unavailable")end
-            catalog[#catalog+1]=id;by_address[id.address]=id
-            if #catalog>512 then fail("native scene census bound")end
+            if not id or set[id.address]or by_address[id.address]then fail("native mesh component identity duplicate or unavailable")end
+            id.owner=owner_id;id.mesh=true
+            qualify(c,id)
+            if checked(function()return c:IsA(mesh_class)end)~=true then fail("native mesh return class changed")end
+            id.route={seed={address=id.address,name=id.name,owner=id.owner,mesh=true},steps={}}
+            set[id.address]=id;include(id)
             return true
-        end,"return","Actor.K2_GetComponentsByClass(SceneComponent) collect owner="..actor_id.name)
+        end,"return","Actor.K2_GetComponentsByClass(MeshComponent) collect owner="..actor_id.name)
     end
     collect(read(function(b)return b.pawn end),0)
     for _,w in ipairs(bindings.weapons)do collect(env.weapon(w.field,w),w.id)end
-    local function component(row)
-        local actor=owner(row);local found
-        array(checked(function()return actor:K2_GetComponentsByClass(scene_class)end),256,function(c)
+    local function seed_component(seed)
+        local actor=owner(seed)
+        if not seed.mesh then return qualify(checked(function()return actor.RootComponent end),seed)end
+        local found,seen
+        local set=mesh_sets[seed.owner];seen={}
+        array(checked(function()return actor:K2_GetComponentsByClass(mesh_class)end),64,function(c)
             local identity=object_id(c)
-            if identity and identity.address==row.address and identity.name==row.name then found=c end
+            local expected=identity and set[identity.address]
+            if not expected or expected.name~=identity.name or seen[identity.address]then fail("native complete mesh census changed")end
+            seen[identity.address]=true
+            qualify(c,expected)
+            if identity.address==seed.address and identity.name==seed.name then found=c end
             return true
-        end,"return","Actor.K2_GetComponentsByClass(SceneComponent) qualify component="..row.name.." owner="..tostring(row.owner))
+        end,"return","Actor.K2_GetComponentsByClass(MeshComponent) qualify component="..seed.name.." owner="..tostring(seed.owner))
+        for address in pairs(set)do if not seen[address]then fail("native complete mesh census changed")end end
         if not found then fail("native render component changed")end
-        local actual=checked(function()return found:GetOwner()end)
-        local current_owner=owner(row)
-        if not actual or checked(function()return actual:GetAddress()end)~=checked(function()return current_owner:GetAddress()end)then fail("native render component owner changed")end
-        local world=checked(function()return found:GetWorld()end)
-        if not world or checked(function()return world:IsValid()end)~=true or checked(function()return world:GetAddress()end)~=world_address then fail("native scene component world changed")end
-        return found
+        return qualify(found,seed)
+    end
+    local function component(row)
+        local current=seed_component(row.route.seed)
+        for _,step in ipairs(row.route.steps)do
+            current=qualify(checked(function()return current:GetAttachParent()end),step)
+        end
+        return qualify(current,row)
     end
     local function get(row,fn)
         guard();local c=component(row);local value=fn(c);guard();component(row);return value
@@ -156,37 +192,47 @@ function M.capture(env,bindings)
             .." child_class="..bounded(child_class,160).." parent_class="..bounded(parent_class,160)
             .." parent_relative_p3q4s3="..relative.." parent_world_p3q4s3="..world
     end
-    -- Include the real source roots and every direct ancestor of every mesh.
-    -- Keep only scalar identities; each subsequent getter resolves the exact
-    -- current owner/world-qualified component through the native scene census.
-    local included={}
-    local function include(row)
-        if not included[row.address]then
-            included[row.address]=true;rows[#rows+1]=row
-            if #rows>64 then fail("native complete attachment component bound")end
-        end
-    end
-    for _,row in ipairs(catalog)do if row.mesh then include(row)end end
-    local function include_root(actor)
+    -- Only mesh seeds are enumerated. Every real owner root and every actual
+    -- parent is included through hard links, with a scalar replayable witness.
+    -- Collision/helper components do not inflate a full Scene census per read.
+    local function include_root(actor,owner_id)
         local identity=object_id(checked(function()return actor.RootComponent end))
-        local row=identity and by_address[identity.address]
-        if not row or row.name~=identity.name then fail("native actor root missing from qualified scene census")end
-        include(row)
+        if not identity then fail("native actor root unavailable")end
+        identity.owner=owner_id;qualify(checked(function()return actor.RootComponent end),identity)
+        root_ids[owner_id]={address=identity.address,name=identity.name}
+        identity.mesh=checked(function()return qualify(actor.RootComponent,identity):IsA(mesh_class)end)
+        if type(identity.mesh)~="boolean"then fail("native source root kind unavailable")end
+        if identity.mesh and not by_address[identity.address]then fail("native complete mesh census changed")end
+        identity.route={seed={address=identity.address,name=identity.name,owner=owner_id,mesh=false},steps={}}
+        include(identity)
     end
-    include_root(read(function(b)return b.pawn end))
-    for _,weapon in ipairs(bindings.weapons)do include_root(env.weapon(weapon.field,weapon))end
+    include_root(read(function(b)return b.pawn end),0)
+    for _,weapon in ipairs(bindings.weapons)do include_root(env.weapon(weapon.field,weapon),weapon.id)end
     local cursor=1
     while cursor<=#rows do
         local row=rows[cursor]
-        local parent=object_id(get(row,function(o)return o:GetAttachParent()end))
+        local parent_object=get(row,function(o)return o:GetAttachParent()end)
+        local parent=object_id(parent_object)
         row.parent_address=parent and parent.address or 0
         if parent then
-            local ancestor=by_address[parent.address]
-            if not ancestor or ancestor.name~=parent.name then
+            local actual_owner=object_id(checked(function()return parent_object:GetOwner()end))
+            for _,candidate in ipairs(owners)do
+                local expected=object_id(owner(candidate))
+                if actual_owner and expected and actual_owner.address==expected.address and actual_owner.name==expected.name then parent.owner=candidate.owner;break end
+            end
+            if parent.owner==nil then
                 local root=object_id(checked(function()return owner(row).RootComponent end))
                 fail(attachment_refusal(row,parent,root))
             end
-            include(ancestor)
+            qualify(parent_object,parent)
+            parent.mesh=checked(function()return parent_object:IsA(mesh_class)end)
+            if type(parent.mesh)~="boolean"then fail("native source ancestor kind unavailable")end
+            if parent.mesh and not by_address[parent.address]then fail("native complete mesh census changed")end
+            local steps={};for i,step in ipairs(row.route.steps)do steps[i]=step end
+            steps[#steps+1]={address=parent.address,name=parent.name,owner=parent.owner}
+            if #steps>64 then fail("native attachment path bound")end
+            parent.route={seed=row.route.seed,steps=steps}
+            include(parent)
         end
         cursor=cursor+1
     end
@@ -195,7 +241,7 @@ function M.capture(env,bindings)
         while address~=0 do
             if seen[address]then fail("native attachment cycle")end;seen[address]=true
             local ancestor=by_address[address]
-            if not ancestor or not included[address]then fail("native attachment closure changed")end
+            if not ancestor then fail("native attachment closure changed")end
             address=ancestor.parent_address
         end
     end
@@ -249,10 +295,10 @@ function M.capture(env,bindings)
         for _,k in ipairs({"skeletal","static","groom","procedural"})do
             if classes[k] and get(row,function(c)return c:IsA(classes[k])end)==true then kind=k;break end
         end
-        if not kind then fail("native render component kind unsupported")end
         local class_full=get(row,function(o)return o:GetClass():GetFullName()end)
         local component_class=type(class_full)=="string" and class_full:match("^%S+%s+(.+)$")
         if not component_class then fail("native component class unavailable")end
+        if not kind then fail("native render component kind unsupported class="..component_class:sub(1,192).." component="..row.name:sub(1,96))end
         local relative=get(row,function(c)return c:GetRelativeTransform()end)
         local c={id=row.id,owner=row.owner,name=row.name,component_class=component_class,kind=kind,scene={type="not_applicable"},
             role=kind=="scene" and "anchor" or row.address==main_address and "body" or row.owner~=0 and "weapon" or "attachment",

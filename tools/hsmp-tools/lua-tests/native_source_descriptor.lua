@@ -8,13 +8,13 @@ local armor=fixture("tools/hsmp-tools/lua-tests/fixtures/native_armor_passport.j
 -- inner properties. These fixtures reproduce that documented wrapper contract.
 local function wrapped(v,kind)return {type=function()return kind or "RemoteUnrealParam"end,get=function()return v end}end
 local Array=dofile("mods/HSMPMatch/Scripts/native_source_array.lua")
-local array_env={guard=function()end,context="Actor.K2_GetComponentsByClass(SceneComponent) collect owner=FixturePawn"}
+local array_env={guard=function()end,context="Actor.K2_GetComponentsByClass(MeshComponent) collect owner=FixturePawn"}
 local function collect_return(value,max)return Array.collect(value,max or 2,"return",array_env,function(v)return v end)end
 T.eq(collect_return({wrapped(17),wrapped(23)})[2],23,"known return-table numeric keys copy typed inner values")
 local bad_keys={"outTable",0,1.5,3,setmetatable({},{__tostring=function()error("unsafe key formatter",0)end})}
 for _,key in ipairs(bad_keys)do
     local ok,reason=pcall(collect_return,{[1]=wrapped(17),[key]=false})
-    T.check(not ok and reason:find('getter="Actor.K2_GetComponentsByClass(SceneComponent)',1,true)
+    T.check(not ok and reason:find('getter="Actor.K2_GetComponentsByClass(MeshComponent)',1,true)
         and reason:find('key_type='..type(key),1,true) and reason:find('value_type=boolean',1,true),
         "unexpected returned key refuses with producer/key/value context: "..type(key))
 end
@@ -231,8 +231,14 @@ local mesh_is_a=body.IsA;body.IsA=function(self,k)return k=="/Script/Engine.Mesh
 local weapon_is_a=weapon_mesh.IsA;weapon_mesh.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or weapon_is_a(self,k)end
 live_weapon.RootComponent=weapon_mesh
 local source_scenes={body,root}
-local function source_scene_return()local out={};for i,c in ipairs(source_scenes)do out[i]=wrapped(c)end;return out end
-host.K2_GetComponentsByClass=source_scene_return;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
+local scene_census_calls=0
+local function source_mesh_return(_,class)
+    if class~="/Script/Engine.MeshComponent"then scene_census_calls=scene_census_calls+1;error("full helper Scene enumeration is forbidden",0)end
+    local out={};for _,c in ipairs(source_scenes)do if c:IsA(class)then out[#out+1]=wrapped(c)end end;return out
+end
+host.K2_GetComponentsByClass=source_mesh_return;live_weapon.K2_GetComponentsByClass=function(_,class)
+    if class~="/Script/Engine.MeshComponent"then scene_census_calls=scene_census_calls+1;error("full weapon Scene enumeration is forbidden",0)end
+    return {wrapped(weapon_mesh)}end
 local plain_component_getter_calls=0
 local function unavailable_component_alias()plain_component_getter_calls=plain_component_getter_calls+1;error("unreflected GetComponentsByClass alias",0)end
 host.GetComponentsByClass=unavailable_component_alias;live_weapon.GetComponentsByClass=unavailable_component_alias
@@ -254,11 +260,11 @@ T.eq(rendered.bindings[3].owner,200,"ephemeral binding uses actual owner address
 T.eq(rendered.components[1].parent,2,"native body preserves actual capsule root rather than actor-root shortcut")
 T.eq(rendered.components[2].scene.type,"hidden_capsule","root eligibility follows actual native hidden flag")
 T.eq(rendered.topology.vertex_state,"captured","source vertex readiness follows actual complete getter data")
-host.K2_GetComponentsByClass=function()local out=source_scene_return();out.outTable=false;return out end
+host.K2_GetComponentsByClass=function(self,class)local out=source_mesh_return(self,class);out.outTable=false;return out end
 local malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
-T.check(not malformed and malformed_reason:find('K2_GetComponentsByClass(SceneComponent) collect owner=Pawn',1,true)
+T.check(not malformed and malformed_reason:find('K2_GetComponentsByClass(MeshComponent) collect owner=Pawn',1,true)
     and malformed_reason:find('key="outTable" key_type=string value_type=boolean',1,true),"actual scene getter refusal identifies unexpected native return key without filtering it")
-host.K2_GetComponentsByClass=source_scene_return
+host.K2_GetComponentsByClass=source_mesh_return
 local morph_getter=body_asset.GetMorphTargetsPtrConv
 body_asset.GetMorphTargetsPtrConv=function()local out=morph_getter();out.outTable=false;return out end
 malformed,malformed_reason=pcall(Render.capture,render_env,native_bindings)
@@ -273,10 +279,11 @@ local anchor=scene(object(101,"ActualSceneAnchor","/Game/Test/Runtime.ActualScen
 anchor.GetAttachParent=function()return root end;anchor.GetAttachSocketName=function()return fname("ExactAnchorSocket")end
 body.GetAttachParent=function()return anchor end
 local anchored,anchor_reason=pcall(Render.capture,render_env,native_bindings)
-T.check(not anchored and anchor_reason:find('child=0xB:"BodyMesh"',1,true) and anchor_reason:find('parent=0x65:"ActualSceneAnchor"',1,true)
-    and anchor_reason:find('owner=0xA:"Pawn"',1,true) and anchor_reason:find('root=0x64:"CapsuleRoot"',1,true),"unseen native parent refusal includes exact child parent owner and root identities")
-T.check(anchor_reason:find('parent_relative_p3q4s3=0.125,-2.5,3,0,0,0,1,0.5,1,2',1,true)
-    and anchor_reason:find('parent_world_p3q4s3=10.125,20,-30,0,0,0,1,0.5,1,2',1,true),"unseen parent evidence preserves actual complete transforms")
+T.check(anchored and #anchor_reason.components==4,"actual hard parent outside mesh census is fully included")
+local captured_anchor=anchor_reason.components[1]
+T.check(captured_anchor.name=="ActualSceneAnchor" and captured_anchor.relative.translation[1]==0.125
+    and captured_anchor.relative.translation[2]==-2.5 and captured_anchor.relative.scale[3]==2
+    and anchor_reason.components[2].parent==captured_anchor.id,"hard parent closure preserves complete actual relative transform and native link")
 local parent_ops=0;anchor.GetWorld=function()scope=false;return render_world end
 anchor.GetRelativeTransform=function()parent_ops=parent_ops+1;return {}end
 T.check(not pcall(Render.capture,render_env,native_bindings) and parent_ops==0,"world change during attachment evidence prevents later parent getters")
@@ -295,6 +302,63 @@ T.check(closed_by_name.ActualSceneAnchor.collision==false and closed_by_name.Act
     and closed_by_name.ActualSceneAnchor.vertex_state=="not_applicable" and closed_by_name.ActualSpline.scene.draw_debug==false,
     "anchor collision and geometry applicability reflect exact native classes")
 T.eq(closed_by_name.ActualSceneAnchor.relative.translation[1],0.125,"native anchor transform is copied without flattening")
+for i=1,300 do
+    local helper=object(1000+i,"NativeCollisionHelper_"..i,"/Game/Test/Runtime.Helper_"..i,false)
+    helper.GetOwner=function()error("nonmesh helper was enumerated",0)end
+    helper.GetAttachParent=function()error("nonancestor helper was traversed",0)end
+    source_scenes[#source_scenes+1]=helper
+end
+local helper_closed=Render.capture(render_env,native_bindings)
+T.check(#source_scenes>256 and #helper_closed.components==5 and scene_census_calls==0,
+    "more than256 nonmesh helpers do not truncate complete mesh/root/hard ancestor closure")
+local extra_gear=mesh(202,"NativeExtraGear",host,"static",weapon_asset)
+local extra_is_a=extra_gear.IsA;extra_gear.IsA=function(self,k)return k=="/Script/Engine.MeshComponent"or extra_is_a(self,k)end
+extra_gear.bHiddenInGame=true;extra_gear.GetAttachParent=function()return root end
+source_scenes[#source_scenes+1]=extra_gear
+local all_gear=Render.capture(render_env,native_bindings);local copied_gear
+for _,c in ipairs(all_gear.components)do if c.name=="NativeExtraGear"then copied_gear=c end end
+T.check(#all_gear.components==6 and copied_gear and copied_gear.hidden and copied_gear.parent~=0,"every native gear mesh is kept even when source hidden")
+table.remove(source_scenes)
+local unknown_mesh=object(203,"UnknownNativeRender","/Game/Test/Runtime.UnknownNativeRender",false)
+unknown_mesh.IsA=function(_,k)return k=="/Script/Engine.MeshComponent"end;unknown_mesh.GetOwner=function()return host end
+unknown_mesh.GetAttachParent=function()return root end
+source_scenes[#source_scenes+1]=unknown_mesh
+local unknown_ok,unknown_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not unknown_ok and unknown_reason:find("native render component kind unsupported",1,true),"unknown native mesh rendering refuses instead of being filtered")
+table.remove(source_scenes)
+local original_relative=anchor.GetRelativeTransform
+anchor.GetRelativeTransform=function()body.GetAttachParent=function()return root end;return original_relative()end
+T.check(not pcall(Render.capture,render_env,native_bindings),"hard parent path mutation during getter refuses source capture")
+anchor.GetRelativeTransform=original_relative;body.GetAttachParent=function()return anchor end
+local original_name=anchor.GetFName
+anchor.GetRelativeTransform=function()anchor.GetFName=function()return fname("ChangedAnchor")end;return original_relative()end
+T.check(not pcall(Render.capture,render_env,native_bindings),"native ancestor FName mutation refuses replayed identity")
+anchor.GetRelativeTransform=original_relative;anchor.GetFName=original_name
+local foreign_actor=object(500,"ForeignActor","/Game/Test/Runtime.ForeignActor",false);foreign_actor.RootComponent=root
+anchor.GetRelativeTransform=function()anchor.GetOwner=function()return foreign_actor end;return original_relative()end
+T.check(not pcall(Render.capture,render_env,native_bindings),"native ancestor owner mutation refuses replayed binding")
+anchor.GetRelativeTransform=original_relative;anchor.GetOwner=function()return host end
+local original_bone_count=body.GetNumBones
+body.GetNumBones=function()host.RootComponent=anchor;return original_bone_count()end
+T.check(not pcall(Render.capture,render_env,native_bindings),"actual owner root mutation during getter refuses source capture")
+body.GetNumBones=original_bone_count;host.RootComponent=root
+body.GetNumBones=function()source_scenes[#source_scenes+1]=unknown_mesh;return original_bone_count()end
+T.check(not pcall(Render.capture,render_env,native_bindings),"new native mesh during source harvest refuses incomplete source census")
+body.GetNumBones=original_bone_count;table.remove(source_scenes)
+local many_meshes={};for i=1,65 do many_meshes[i]=wrapped(body)end
+host.K2_GetComponentsByClass=function()return many_meshes end
+local bound_ok,bound_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not bound_ok and bound_reason:find('max=64',1,true),"native complete mesh seed bound stays64 rather than taking a subset")
+host.K2_GetComponentsByClass=source_mesh_return
+local head=root
+for i=1,63 do
+    local parent=head;head=scene(object(2000+i,"DeepAncestor_"..i,"/Game/Test/Runtime.DeepAncestor_"..i,false),host,"/Script/Engine.SceneComponent")
+    head.GetAttachParent=function()return parent end
+end
+body.GetAttachParent=function()return head end
+bound_ok,bound_reason=pcall(Render.capture,render_env,native_bindings)
+T.check(not bound_ok and bound_reason:find('native complete attachment component bound',1,true),"full actual parent closure retains final64 component bound")
+body.GetAttachParent=function()return anchor end
 spline.bDrawDebug=true;T.check(not pcall(Render.capture,render_env,native_bindings),"debug drawn spline refuses unharvested rendering")
 spline.bDrawDebug=nil;T.check(not pcall(Render.capture,render_env,native_bindings),"unknown spline debug state refuses capture")
 spline.bDrawDebug=false;root.bHiddenInGame=false
@@ -306,8 +370,8 @@ T.check(not pcall(Render.capture,render_env,native_bindings),"unknown scene subc
 anchor.GetClass=function()return {GetFullName=function()return "Class /Script/Engine.SceneComponent"end}end
 anchor.GetWorld=function()return {IsValid=function()return true end,GetAddress=function()return 99 end}end
 T.check(not pcall(Render.capture,render_env,native_bindings),"foreign world native ancestor refuses source capture")
-anchor.GetWorld=function()return render_world end;anchor.GetOwner=function()return live_weapon end
-T.check(not pcall(Render.capture,render_env,native_bindings),"foreign owner component cannot enter pawn scene census")
+anchor.GetWorld=function()return render_world end;anchor.GetOwner=function()return foreign_actor end
+T.check(not pcall(Render.capture,render_env,native_bindings),"parent owned outside original source pawn/weapon set refuses capture")
 anchor.GetOwner=function()return host end;source_scenes={body,root};body.GetAttachParent=function()return root end
 T.eq(rendered.components[1].physics_asset,"/Game/Test/Physics.Physics","null native component override selects actual skeletal asset physics")
 local override_asset=object(321,"OverridePhysics","/Game/Test/OverridePhysics.OverridePhysics",false)
@@ -315,11 +379,11 @@ body.PhysicsAssetOverride=override_asset
 local override_render=Render.capture(render_env,native_bindings)
 T.eq(override_render.components[1].physics_asset,"/Game/Test/OverridePhysics.OverridePhysics","nonnull native component override preserves its distinct exact physics asset")
 body.PhysicsAssetOverride=nil
-host.K2_GetComponentsByClass=function()return {body,root}end;live_weapon.K2_GetComponentsByClass=function()return {weapon_mesh}end
+host.K2_GetComponentsByClass=function()return {body}end;live_weapon.K2_GetComponentsByClass=function()return {weapon_mesh}end
 T.check(pcall(Render.capture,render_env,native_bindings),"direct returned UObject entries never receive parameter get")
 host.K2_GetComponentsByClass=function()return {[2]=wrapped(body)}end
 T.check(not pcall(Render.capture,render_env,native_bindings),"malformed native component return table refuses capture")
-host.K2_GetComponentsByClass=source_scene_return;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
+host.K2_GetComponentsByClass=source_mesh_return;live_weapon.K2_GetComponentsByClass=function()return {wrapped(weapon_mesh)}end
 local bones_after_loss=0;body_asset.GetPhysicsAsset=function()scope=false;return physical_asset end
 body.GetNumBones=function()bones_after_loss=bones_after_loss+1;return #bone_names end
 T.check(not pcall(Render.capture,render_env,native_bindings) and bones_after_loss==0,"world loss inside render getter prevents next source operation")
