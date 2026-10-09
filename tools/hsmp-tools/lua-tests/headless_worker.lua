@@ -180,6 +180,116 @@ do
     end
 end
 
+-- Reach the real numeric resolver through the worker's production adapter
+-- options. The UObject mock records every old-wrapper touch after callbacks;
+-- no mocked resolve() can conceal another indexed lookup or stale read.
+do
+    local callback,options,lookups,same_calls,change,changed,old_reads=nil,nil,0,0,nil,false,{}
+    local token={key="native_resolve#2",drops=0}
+    local world,pc,pawn,retired,fields={},{},{},{},{}
+    local function touched(object,field)
+        if retired[object]then old_reads[#old_reads+1]=field;error("old wrapper read: "..field,0)end
+    end
+    local function identity(object,address,name,class)
+        fields[object]={}
+        setmetatable(object,{__index=function(_,field)
+            if field=="Pawn"or field=="Controller"then touched(object,field);return fields[object][field]end
+        end,__newindex=function(_,field,value)
+            if field=="Pawn"or field=="Controller"then fields[object][field]=value else rawset(object,field,value)end
+        end})
+        object.IsValid=function()touched(object,"IsValid");return true end
+        object.GetAddress=function()touched(object,"GetAddress");return address end
+        object.GetFName=function()touched(object,"GetFName");return {ToString=function()return name end}end
+        object.GetClass=function()touched(object,"GetClass");return {GetFName=function()return {ToString=function()return class end}end}end
+    end
+    identity(world,100,"World","World")
+    world.GetFullName=function()return "World /Game/Map_Arena_Yard"end
+    local function replace(which)
+        if changed then return end
+        changed=true
+        if which=="pc"then
+            retired[pc]=true;pc={};identity(pc,12,"PC1_new","PlayerController")
+            local object=pc;pc.GetWorld=function()touched(object,"PC.GetWorld");return world end
+            pc.Pawn=pawn;pawn.Controller=pc
+        elseif which=="pawn"then
+            retired[pawn]=true;pawn={};identity(pawn,22,"Willie_new","Willie_BP_C")
+            local object=pawn;pawn.GetWorld=function()touched(object,"Pawn.GetWorld");return world end
+            pc.Pawn=pawn;pawn.Controller=pc
+        else token={key="native_resolve#3",drops=1}end
+    end
+    local function reset(which)
+        change,changed,lookups,same_calls,old_reads=which,false,0,0,{}
+        token={key="native_resolve#2",drops=0};retired={};pc={};pawn={}
+        identity(pc,11,"PC1","PlayerController");identity(pawn,21,"Willie","Willie_BP_C")
+        pc.Pawn=pawn;pawn.Controller=pc
+        local original_pc,original_pawn=pc,pawn
+        pc.GetWorld=function()
+            touched(original_pc,"PC.GetWorld")
+            if change=="pc_world"then replace("pc")elseif change=="pc_world_drop"then replace("world")end
+            return world
+        end
+        pawn.GetWorld=function()
+            touched(original_pawn,"Pawn.GetWorld")
+            if change=="pawn_world"then replace("pawn")elseif change=="pawn_world_drop"then replace("world")end
+            return world
+        end
+    end
+    reset()
+    local wg={key=token.key,drops=0,check=function()return token.key=="native_resolve#2"end,settled=function()return true end,
+        world=function()return world end,token=function()return token end,on_drop=function()end,
+        same=function(value)
+            same_calls=same_calls+1
+            if change=="world_guard_pc"and same_calls==2 then replace("pc")end
+            return value==token
+        end}
+    local gs={IsValid=function()return true end,GetPlayerController=function(_,actual_world,index)
+        if index==0 then return nil end -- startup's unrelated diagnostic census
+        assert(actual_world==world and index==1,"resolver must retain the requested native world and controller index")
+        lookups=lookups+1;return pc
+    end}
+    local N={worker_input=function()return true end,host_start=function()return true end,
+        host_directory=function()return {epoch=44,seq=1,entities={}}end,host_inputs=function()return {}end,
+        sample_config=function()return true end,host_describe=function()error("unexpected publish",0)end,
+        native_capture_render=function()error("unexpected render",0)end,native_sample_world=function()error("unexpected core",0)end}
+    for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end"})do N[name]=function()error("unexpected scope",0)end end
+    local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()return gs end},
+        hsmp_wg={new=function()return wg end},hsmp_ipc={N=N,init=function()end,frame=function()end,world_ready=function()end},
+        hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},hsmp_log={init=function()end,event=function()end},
+        director={make_ue_env=function()return {apply_cvars=function()end}end,new_native_worker=function()return {state="native_ready",tick=function()return true end}end},
+        headless_control={new=function()return {set_directory=function()return true end,tick=function()end}end},headless_prepare=Prepare,
+        hsmp_pose_config={},headless_sample_boundary=Boundary,headless_spawn_diagnostics=SpawnDiagnostics,
+        native_source_adapter={new=function(opts)options=opts;return {capture=function()end}end},
+        headless_source_lifecycle={new=function()return {ensure=function()return false,"fixture source not ready"end}end}}
+    local fake=setmetatable({debug=debug,os={getenv=function()return nil end,clock=function()return 1 end},print=function()end,
+        require=function(name)if modules[name]then return modules[name]end;error("optional module absent")end,
+        dofile=function()error("optional module absent")end,FindAllOf=function()return {}end,
+        LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 83 end},{__index=_G})
+    assert(loadfile("mods/HSMPMatch/Scripts/headless_worker.lua","t",fake))().start();callback()
+    assert(options and type(options.resolve)=="function","actual worker must provide its resolver")
+    reset()
+    local binding=options.resolve(1)
+    T.check(binding and binding.pc==pc and binding.pawn==pawn and binding.world==world and binding.world_key==token.key
+        and binding.index==1 and binding.pc_address==11 and binding.pc_name=="PC1" and binding.pawn_address==21 and binding.pawn_name=="Willie",
+        "real worker resolver returns the exact freshly qualified scalar binding and wrappers")
+    T.check(lookups==3,"unchanged real worker resolver performs exactly three indexed controller lookups")
+    T.check(same_calls==5 and #old_reads==0,"resolver retains both actor-world checks and their post-callback world guards")
+    for _,which in ipairs({"pc_world","pawn_world","pc_world_drop","pawn_world_drop","world_guard_pc"})do
+        reset(which)
+        T.check(options.resolve(1)==nil,"actual resolver refuses replacement at "..which)
+        T.check(changed and #old_reads==0,"actual resolver makes no old-wrapper/property read after "..which)
+    end
+    reset()
+    local described,captured=0,0
+    local lifecycle=SourceLifecycle.new({resolve=options.resolve,same=wg.same,now_ms=function()return 1000 end,
+        index=function(row)return row.controller end,capture=function()
+            captured=captured+1;replace("pawn");return {team=7},{pawn=21}
+        end,describe=function()described=described+1;return true end,invalidate=function()end})
+    local directory={epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,controller=1,kind=0}}}
+    T.check(not lifecycle.ensure(directory,token,1) and captured==1 and described==0,
+        "actual indexed worker resolver brackets source capture and refuses same-world possession mutation before publish")
+    T.check(#old_reads==0,"source post-callback qualification obtains fresh wrappers without touching the old pawn")
+end
+
 -- The actual worker loop emits the latest sampling refusal to its own stream.
 -- A later successful sample clears the reason without clearing refusal counts.
 do

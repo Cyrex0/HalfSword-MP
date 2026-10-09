@@ -128,7 +128,11 @@ function M.start()
         if not pawn or not pawn:IsValid() or pawn:GetAddress() ~= pawn_address or pawn:GetFName():ToString() ~= pawn_name then return nil end
         if pawn:GetClass():GetFName():ToString() ~= "Willie_BP_C"
             or not pawn.Controller or not pawn.Controller:IsValid() or pawn.Controller:GetAddress() ~= pc:GetAddress() then return nil end
-        return pc, pawn, world
+        -- All callback-capable world checks have finished. These copied scalar
+        -- identities belong to the freshly re-resolved controller and pawn;
+        -- returning them needs no second qualification or engine call.
+        return pc, pawn, world, { index = index, world_key = token.key, pc_address = pc_address, pc_name = pc_name,
+            pawn_address = pawn_address, pawn_name = pawn_name, pc = pc, pawn = pawn, world = world }
     end
     local function resolve(index)
         if type(index) == "string" then
@@ -150,17 +154,7 @@ function M.start()
             return { index=index, world_key=WG.key, pc_address=owner:GetAddress(), pc_name=owner:GetFName():ToString(),
                 pawn_address=address, pawn_name=index, pc=owner, pawn=pawn, world=WG.world() }
         end
-        local pc, pawn, world = player(index)
-        if not pc then return nil end
-        local token = WG.token()
-        local binding = { index = index, world_key = WG.key, pc_address = pc:GetAddress(), pc_name = pc:GetFName():ToString(),
-            pawn_address = pawn:GetAddress(), pawn_name = pawn:GetFName():ToString(), pc = pc, pawn = pawn, world = world }
-        if not WG.same(token) then return nil end
-        local current_pc, current_pawn = player(index)
-        if not current_pc or not WG.same(token) or current_pc:GetAddress() ~= binding.pc_address
-            or current_pc:GetFName():ToString() ~= binding.pc_name or current_pawn:GetAddress() ~= binding.pawn_address
-            or current_pawn:GetFName():ToString() ~= binding.pawn_name then return nil end
-        binding.pc, binding.pawn = current_pc, current_pawn
+        local _, _, _, binding = player(index)
         return binding
     end
     local function current(binding)
