@@ -635,3 +635,14 @@ source remained exact clean767110e3 throughout. The immediate correction is
 explicit injection/type checks for all four native scope APIs, with a worker
 fixture exercising actual production adapter options instead of bypassing this
 dependency via a capture_render substitute. Real native acceptance remains open.
+
+The correction now passes all four exact native functions directly into the
+production Adapter.new source_scope table, preserving dot-call arguments and
+both keep return scalars. Any absent/nonfunction endpoint refuses before adapter
+construction. Worker198 genuine registered assertions, production source107
+assertions, two syntax checks and whitespace validation passed. The regression
+constructs the actual production Adapter with no capture_render override and
+checks each missing API independently. A read-only second-agent audit confirmed
+all endpoint argument/return shapes against lifecycle integer metadata and native
+source-role/game-thread admission. This candidate still requires an exact clean
+deployment and the actual three-game run; no frame or input progress is claimed.
