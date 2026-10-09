@@ -164,6 +164,55 @@ const MAX_COMPONENTS: usize = 64;
 // seven weapon roots; at most 64 original component-class AttachParent fields.
 const MAX_SCHEMA_FIELDS: usize = MAX_COMPONENTS + 17;
 const GARBAGE: u32 = 0x40000000; // matched shipping Kismet validity / actor iterator
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct PathNode {
+    weak: u64,
+    address: u64,
+    name: u64,
+    class_weak: u64,
+    class_address: u64,
+    class_name: u64,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PathWitness {
+    nodes: Vec<PathNode>,
+    package_name: u64,
+}
+type PathReader = unsafe extern "C" fn(
+    *const PathNode,
+    u32,
+    u32,
+    *mut PathNode,
+    u32,
+    *mut u32,
+    *mut u64,
+    *mut std::ffi::c_char,
+    u32,
+) -> i32;
+static PATH_READER: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+#[no_mangle]
+pub extern "C" fn hsmp_native_set_source_path_reader(reader: Option<PathReader>) {
+    PATH_READER.store(
+        reader.map_or(std::ptr::null_mut(), |p| p as *mut c_void),
+        Ordering::Release,
+    );
+}
+fn path_reader() -> Result<PathReader, String> {
+    let p = PATH_READER.load(Ordering::Acquire);
+    if p.is_null() {
+        Err("source original path reader unavailable".into())
+    } else {
+        Ok(unsafe { std::mem::transmute(p) })
+    }
+}
+fn path_error(reason: &[u8; 192]) -> String {
+    let n = reason.iter().position(|c| *c == 0).unwrap_or(reason.len());
+    format!(
+        "source original path: {}",
+        String::from_utf8_lossy(&reason[..n])
+    )
+}
 type Name = unsafe extern "C" fn(*const c_void) -> *const u64;
 type Flags = unsafe extern "C" fn(*const c_void) -> *const u32;
 type World = unsafe extern "C" fn(*const c_void) -> *mut c_void;
@@ -228,6 +277,17 @@ trait Engine {
     fn field(&self, id: Identity, name: &str) -> Result<u64, String>;
     fn owner(&self, id: Identity) -> Result<u64, String>;
     fn find(&self, path: &str) -> Result<u64, String>;
+    fn capture_path(&self, _: Identity) -> Result<Option<PathWitness>, String> {
+        Ok(None)
+    }
+    fn path_matches(
+        &self,
+        id: Identity,
+        path: &str,
+        _: Option<&PathWitness>,
+    ) -> Result<bool, String> {
+        Ok(self.find(path)? == id.address)
+    }
 }
 trait SchemaEngine: Engine {
     fn schema_name(&self, name: &str) -> u64;
@@ -380,6 +440,7 @@ struct Component {
     owner: u64,
     parent: Option<Parent>,
     path: String,
+    path_witness: Option<PathWitness>,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Parent {
@@ -410,7 +471,9 @@ impl Scope {
             .get(handle.checked_sub(1).ok_or("source scope handle")? as usize)
             .ok_or("source scope handle")?;
         e.verify(c.object)?;
-        if e.find(&c.path)? != c.object.address || e.world(c.object)? != self.world.address {
+        if !e.path_matches(c.object, &c.path, c.path_witness.as_ref())?
+            || e.world(c.object)? != self.world.address
+        {
             return Err("source spline original path/world changed".into());
         }
         let owner_check = |address| -> Result<(), String> {
@@ -442,7 +505,11 @@ impl Scope {
         if e.field(c.object, "AttachParent")? != c.parent.map_or(0, |p| p.object.address) {
             return Err("source spline original parent changed".into());
         }
-        self.base(e)
+        self.base(e)?;
+        if !e.path_matches(c.object, &c.path, c.path_witness.as_ref())? {
+            return Err("source spline hierarchy changed during native getters".into());
+        }
+        Ok(())
     }
     fn base(&self, e: &impl Engine) -> Result<(), String> {
         for id in [self.world, self.pawn, self.controller] {
@@ -489,6 +556,15 @@ impl Scope {
             return Err("source scope exact runtime path changed".into());
         }
         let object = e.capture(address)?;
+        let path_witness = e.capture_path(object)?;
+        // The lookup may invoke native name conversion. Tie the complete
+        // captured hierarchy to the exact path again, then requalify it so a
+        // rename/reparent during either lookup cannot bind a different path.
+        if e.find(&path)? != address || !e.path_matches(object, &path, path_witness.as_ref())? {
+            return Err("source scope initial path hierarchy changed".into());
+        }
+        e.verify(object)?;
+        self.base(e)?;
         if e.world(object)? != self.world.address {
             return Err("source scope component world changed before owner getter".into());
         }
@@ -520,6 +596,7 @@ impl Scope {
             owner,
             parent,
             path,
+            path_witness,
         };
         if let Some(i) = self
             .components
@@ -531,6 +608,7 @@ impl Scope {
                 || c.owner != next.owner
                 || c.parent != next.parent
                 || c.path != next.path
+                || c.path_witness != next.path_witness
             {
                 return Err("source scope original identity reused".into());
             }
@@ -553,7 +631,7 @@ impl Scope {
             .ok_or("source scope handle")?;
         self.qualify_owner(e, c.owner)?;
         e.verify(c.object)?;
-        if e.find(&c.path)? != c.object.address
+        if !e.path_matches(c.object, &c.path, c.path_witness.as_ref())?
             || e.world(c.object)? != self.world.address
             || e.owner(c.object)? != c.owner
         {
@@ -570,6 +648,9 @@ impl Scope {
             return Err("source scope hard parent link changed".into());
         }
         self.base(e)?;
+        if !e.path_matches(c.object, &c.path, c.path_witness.as_ref())? {
+            return Err("source scope hierarchy changed during native getters".into());
+        }
         Ok(c.object.address)
     }
 }
@@ -585,7 +666,112 @@ struct Runtime<'a> {
     index: u8,
     schema: Rc<RefCell<SchemaCache>>,
 }
+// The provider callback is a pure read region. Admission is checked once on
+// each side by SplineScopeGuard; every original identity/link/path is still
+// read freshly. This adapter cannot dispatch GetOwner or inspect a new schema.
+struct ProfileGuardEngine<'a, 'b> {
+    runtime: &'a Runtime<'b>,
+}
+impl Engine for ProfileGuardEngine<'_, '_> {
+    fn capture(&self, _: u64) -> Result<Identity, String> {
+        Err("source profile guard uncaptured schema identity".into())
+    }
+    fn verify(&self, id: Identity) -> Result<(), String> {
+        self.runtime.identity(id).map(|_| ())
+    }
+    fn world(&self, id: Identity) -> Result<u64, String> {
+        let p = self.runtime.identity(id)?;
+        let value = unsafe { (self.runtime.x.world)(p) } as u64;
+        self.runtime.identity(id)?;
+        Ok(value)
+    }
+    fn field(&self, id: Identity, name: &str) -> Result<u64, String> {
+        cached_field(&self.runtime.schema, self, id, name)
+    }
+    fn owner(&self, _: Identity) -> Result<u64, String> {
+        Err("source profile guard GetOwner dispatch forbidden".into())
+    }
+    fn find(&self, _: &str) -> Result<u64, String> {
+        Err("source profile guard global path lookup forbidden".into())
+    }
+    fn path_matches(
+        &self,
+        id: Identity,
+        _: &str,
+        witness: Option<&PathWitness>,
+    ) -> Result<bool, String> {
+        self.runtime.verify_path(id, witness)
+    }
+}
+impl SchemaEngine for ProfileGuardEngine<'_, '_> {
+    fn schema_name(&self, name: &str) -> u64 {
+        self.runtime.schema_name(name)
+    }
+    fn property(&self, _: Identity, _: &str) -> Result<reflect::HsmpProp, String> {
+        Err("source profile guard uncached property schema".into())
+    }
+    fn parameters(&self, _: Identity) -> Result<(Vec<reflect::HsmpProp>, i32), String> {
+        Err("source profile guard function inspection forbidden".into())
+    }
+    fn read_pointer(&self, id: Identity, property: reflect::HsmpProp) -> Result<u64, String> {
+        let p = self.runtime.identity(id)?;
+        let value = unsafe {
+            std::ptr::read_unaligned((p as *const u8).add(property.offset as usize).cast::<u64>())
+        };
+        self.runtime.identity(id)?;
+        Ok(value)
+    }
+    fn dispatch_owner(&self, _: Identity, _: Identity, _: Identity) -> Result<u64, String> {
+        Err("source profile guard ProcessEvent forbidden".into())
+    }
+}
 impl Runtime<'_> {
+    fn verify_path(&self, id: Identity, witness: Option<&PathWitness>) -> Result<bool, String> {
+        self.identity(id)?;
+        let witness = witness.ok_or("source original path witness missing")?;
+        let first = witness
+            .nodes
+            .first()
+            .ok_or("source original path witness empty")?;
+        if witness.nodes.len() > 64
+            || (
+                first.weak,
+                first.address,
+                first.name,
+                first.class_weak,
+                first.class_address,
+            ) != (
+                id.weak,
+                id.address,
+                id.name,
+                id.class_weak,
+                id.class_address,
+            )
+        {
+            return Err("source original path root identity changed".into());
+        }
+        let reader = path_reader()?;
+        let mut reason = [0u8; 192];
+        let mut package_name = witness.package_name;
+        if unsafe {
+            reader(
+                witness.nodes.as_ptr(),
+                witness.nodes.len() as u32,
+                0,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                &mut package_name,
+                reason.as_mut_ptr().cast(),
+                192,
+            )
+        } != 1
+        {
+            return Err(path_error(&reason));
+        }
+        self.identity(id)?;
+        Ok(true)
+    }
     fn admit(&self) -> Result<(), String> {
         hsmp_native_profile_tick(1);
         if !self.n.native_host.is_host()
@@ -708,6 +894,64 @@ impl Engine for Runtime<'_> {
         self.admit()?;
         Ok(p)
     }
+    fn capture_path(&self, id: Identity) -> Result<Option<PathWitness>, String> {
+        self.admit()?;
+        self.identity(id)?;
+        let class = self.live(id.class_weak, id.class_address)?;
+        let class_name = unsafe { (self.x.name)(class) };
+        if class_name.is_null() {
+            return Err("source path original class FName unavailable".into());
+        }
+        let root = PathNode {
+            weak: id.weak,
+            address: id.address,
+            name: id.name,
+            class_weak: id.class_weak,
+            class_address: id.class_address,
+            class_name: unsafe { *class_name },
+        };
+        let mut output = [PathNode::default(); 64];
+        let mut count = 0;
+        let mut package_name = 0;
+        let mut reason = [0u8; 192];
+        let reader = path_reader()?;
+        if unsafe {
+            reader(
+                &root,
+                1,
+                1,
+                output.as_mut_ptr(),
+                64,
+                &mut count,
+                &mut package_name,
+                reason.as_mut_ptr().cast(),
+                192,
+            )
+        } != 1
+        {
+            return Err(path_error(&reason));
+        }
+        if count == 0 || count > 64 || output[0] != root {
+            return Err("source original path witness bounds/root".into());
+        }
+        self.identity(id)?;
+        self.admit()?;
+        Ok(Some(PathWitness {
+            nodes: output[..count as usize].to_vec(),
+            package_name,
+        }))
+    }
+    fn path_matches(
+        &self,
+        id: Identity,
+        _: &str,
+        witness: Option<&PathWitness>,
+    ) -> Result<bool, String> {
+        self.admit()?;
+        let result = self.verify_path(id, witness)?;
+        self.admit()?;
+        Ok(result)
+    }
 }
 impl SchemaEngine for Runtime<'_> {
     fn schema_name(&self, name: &str) -> u64 {
@@ -829,7 +1073,8 @@ impl SplineScopeGuard<'_> {
     fn valid(&self) -> Result<(), String> {
         let e = &self.engine;
         e.admit()?;
-        self.scope.profile_guard(e, self.handle)?;
+        self.scope
+            .profile_guard(&ProfileGuardEngine { runtime: e }, self.handle)?;
         e.admit()
     }
 }
@@ -1295,6 +1540,10 @@ mod source_scope_tests {
     struct Mock {
         rows: RefCell<HashMap<u64, Row>>,
         owner_calls: RefCell<u32>,
+        find_calls: std::cell::Cell<u32>,
+        rename_on_find: std::cell::Cell<u32>,
+        world_calls: std::cell::Cell<u32>,
+        rename_on_world: std::cell::Cell<u32>,
     }
     impl Mock {
         fn row(&self, id: Identity) -> Result<Row, String> {
@@ -1331,7 +1580,12 @@ mod source_scope_tests {
             self.row(id).map(|_| ())
         }
         fn world(&self, id: Identity) -> Result<u64, String> {
-            Ok(self.row(id)?.world)
+            let result = self.row(id)?.world;
+            self.world_calls.set(self.world_calls.get() + 1);
+            if self.rename_on_world.get() == self.world_calls.get() {
+                self.change(7, |r| r.path.push_str("_renamed_during_world_getter"));
+            }
+            Ok(result)
         }
         fn field(&self, id: Identity, name: &str) -> Result<u64, String> {
             let r = self.row(id)?;
@@ -1350,12 +1604,17 @@ mod source_scope_tests {
             Ok(r.owner)
         }
         fn find(&self, path: &str) -> Result<u64, String> {
-            Ok(self
+            let result = self
                 .rows
                 .borrow()
                 .values()
                 .find(|r| r.path == path)
-                .map_or(0, |r| r.id.address))
+                .map_or(0, |r| r.id.address);
+            self.find_calls.set(self.find_calls.get() + 1);
+            if self.rename_on_find.get() == self.find_calls.get() {
+                self.change(7, |r| r.path.push_str("_renamed_during_lookup"));
+            }
+            Ok(result)
         }
     }
     fn fixture() -> (Scope, Mock) {
@@ -1384,6 +1643,10 @@ mod source_scope_tests {
         let mock = Mock {
             rows: RefCell::new(rows),
             owner_calls: RefCell::new(0),
+            find_calls: std::cell::Cell::new(0),
+            rename_on_find: std::cell::Cell::new(0),
+            world_calls: std::cell::Cell::new(0),
+            rename_on_world: std::cell::Cell::new(0),
         };
         let s = Scope {
             id: 1,
@@ -1434,6 +1697,40 @@ mod source_scope_tests {
         assert_eq!(s.components[h as usize - 1].owner, 5);
         assert_eq!(s.resolve(&e, h).unwrap(), 7);
         assert_eq!(s.components[0].parent.unwrap().object.address, 4);
+    }
+    #[test]
+    fn source_scope_initial_path_lookup_brackets_hierarchy_and_rejects_callback_rename() {
+        for callback in [1, 2] {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            e.rename_on_find.set(callback);
+            assert!(s.keep(&e, 7, 5, path).is_err());
+            assert!(s.components.is_empty());
+            assert_eq!(
+                *e.owner_calls.borrow(),
+                0,
+                "lookup mutation refuses before GetOwner"
+            );
+        }
+    }
+    #[test]
+    fn source_scope_final_path_witness_rejects_later_native_getter_mutation() {
+        for (profile, callback) in [(true, 3), (false, 5)] {
+            let (mut s, e) = fixture();
+            let path = e.rows.borrow()[&7].path.clone();
+            let handle = s.keep(&e, 7, 5, path).unwrap();
+            e.world_calls.set(0);
+            e.rename_on_world.set(callback);
+            let result = if profile {
+                s.profile_guard(&e, handle).map(|()| 7)
+            } else {
+                s.resolve(&e, handle)
+            };
+            assert!(
+                result.is_err(),
+                "native getter mutation after early path check must fail"
+            );
+        }
     }
     #[test]
     fn source_scope_serial_zero_reuse_name_class_and_address_refuse() {
@@ -1781,6 +2078,7 @@ mod source_scope_tests {
         name: u64,
         flags: u32,
         class: *mut c_void,
+        link: u64,
     }
     thread_local! {static OBJECTS:RefCell<HashMap<u32,usize>>=RefCell::new(HashMap::new());static NAME_READS:std::cell::Cell<u32>=const{std::cell::Cell::new(0)};}
     unsafe extern "C" fn resolve_object(weak: u64) -> *mut c_void {
@@ -1842,6 +2140,7 @@ mod source_scope_tests {
             name: 300,
             flags: 0,
             class: std::ptr::null_mut(),
+            link: 0,
         });
         class.class = (&mut *class as *mut NativeObject).cast();
         let mut object = Box::new(NativeObject {
@@ -1849,6 +2148,7 @@ mod source_scope_tests {
             name: 700,
             flags: 0,
             class: (&mut *class as *mut NativeObject).cast(),
+            link: 111,
         });
         OBJECTS.with(|m| {
             let mut m = m.borrow_mut();
@@ -1924,6 +2224,223 @@ mod source_scope_tests {
             assert!(e.identity(id).is_ok());
             o.weak = 7 | (92 << 32);
             assert!(e.identity(id).is_err());
+        });
+    }
+    #[test]
+    fn source_scope_pure_profile_reads_cached_schema_fresh_and_forbids_dispatch() {
+        with_native_identity(|e, id, o| {
+            let class_pointer = unsafe { (e.vt.resolve)(id.class_weak) };
+            let class = Identity {
+                weak: id.class_weak,
+                address: id.class_address,
+                name: unsafe { *(e.x.name)(class_pointer) },
+                class_weak: id.class_weak,
+                class_address: id.class_address,
+            };
+            e.schema.borrow_mut().fields.push(FieldSchema {
+                class,
+                name: "RootComponent".into(),
+                property: reflect::HsmpProp {
+                    size: 8,
+                    offset: std::mem::offset_of!(NativeObject, link) as i32,
+                    ..Default::default()
+                },
+            });
+            let pure = ProfileGuardEngine { runtime: e };
+            let _trace = ProfileOperation::begin(
+                EntityRef {
+                    epoch: 1,
+                    id: 2,
+                    incarnation: 3,
+                },
+                4,
+                5,
+            );
+            assert!(pure.verify(id).is_ok());
+            assert_eq!(pure.field(id, "RootComponent").unwrap(), 111);
+            o.link = 222;
+            assert_eq!(pure.field(id, "RootComponent").unwrap(), 222);
+            assert_eq!(
+                PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.admissions),
+                0,
+                "pure reads do not repeat Runtime admission"
+            );
+            assert!(pure.capture(id.class_address).is_err());
+            assert!(pure.field(id, "AttachParent").is_err());
+            assert!(pure.owner(id).is_err());
+            assert!(pure.find("fixture").is_err());
+            assert!(pure.path_matches(id, "fixture", None).is_err());
+            assert!(pure.parameters(id).is_err());
+            assert!(pure.dispatch_owner(id, id, class).is_err());
+            assert_eq!(
+                PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.events),
+                0,
+                "pure engine cannot dispatch PE"
+            );
+            o.flags = GARBAGE;
+            assert!(pure.field(id, "RootComponent").is_err());
+            o.flags = 0;
+            o.name += 1;
+            assert!(pure.field(id, "RootComponent").is_err());
+            o.name -= 1;
+            unsafe {
+                (*class_pointer.cast::<NativeObject>()).name += 1;
+            }
+            assert!(
+                pure.field(id, "RootComponent").is_err(),
+                "cached class FName reuse rejects original offset"
+            );
+        });
+    }
+    thread_local! {
+        static PATH_EXPECTED:RefCell<Option<PathWitness>>=const{RefCell::new(None)};
+        static PATH_CALLBACK_GARBAGE:std::cell::Cell<bool>=const{std::cell::Cell::new(false)};
+        static PATH_CALLBACK_COUNT:std::cell::Cell<u32>=const{std::cell::Cell::new(0)};
+    }
+    // This fixture checks the Rust/C argument contract only. The C++ tests
+    // exercise the real hard Outer walk and every original hierarchy node.
+    unsafe extern "C" fn path_fixture_reader(
+        nodes: *const PathNode,
+        count: u32,
+        capture: u32,
+        output: *mut PathNode,
+        capacity: u32,
+        output_count: *mut u32,
+        package_name: *mut u64,
+        _: *mut std::ffi::c_char,
+        _: u32,
+    ) -> i32 {
+        PATH_CALLBACK_COUNT.with(|c| c.set(c.get() + 1));
+        if capture != 0
+            || nodes.is_null()
+            || package_name.is_null()
+            || !output.is_null()
+            || capacity != 0
+            || !output_count.is_null()
+        {
+            return -1;
+        }
+        let valid = PATH_EXPECTED.with(|expected| {
+            let expected = expected.borrow();
+            let Some(expected) = expected.as_ref() else {
+                return false;
+            };
+            (unsafe { std::slice::from_raw_parts(nodes, count as usize) }) == expected.nodes
+                && unsafe { *package_name } == expected.package_name
+        });
+        if !valid {
+            return -1;
+        }
+        if PATH_CALLBACK_GARBAGE.with(|c| c.get()) {
+            unsafe {
+                (*((*nodes).address as *mut NativeObject)).flags = GARBAGE;
+            }
+        }
+        1
+    }
+    #[test]
+    fn source_scope_native_path_witness_marshaling_and_post_callback_qualification() {
+        struct Restore(*mut c_void);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                PATH_READER.store(self.0, Ordering::Release);
+            }
+        }
+        let _restore =
+            Restore(PATH_READER.swap(path_fixture_reader as *mut c_void, Ordering::AcqRel));
+        with_native_identity(|e, id, object| {
+            let witness = PathWitness {
+                nodes: vec![PathNode {
+                    weak: id.weak,
+                    address: id.address,
+                    name: id.name,
+                    class_weak: id.class_weak,
+                    class_address: id.class_address,
+                    class_name: 300,
+                }],
+                package_name: 0x100000077,
+            };
+            PATH_EXPECTED.with(|p| *p.borrow_mut() = Some(witness.clone()));
+            PATH_CALLBACK_GARBAGE.with(|p| p.set(false));
+            PATH_CALLBACK_COUNT.with(|p| p.set(0));
+            let _trace = ProfileOperation::begin(e.reference, e.dir_seq, 1);
+            let pure = ProfileGuardEngine { runtime: e };
+            assert!(pure
+                .path_matches(id, "initial exact path", Some(&witness))
+                .unwrap());
+            assert_eq!(
+                PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.finds),
+                0
+            );
+            assert_eq!(
+                PROFILE_TRACE.with(|p| p.borrow().as_ref().unwrap().trace.admissions),
+                0
+            );
+            let mut changed = witness.clone();
+            changed.nodes[0].address += 1;
+            let calls = PATH_CALLBACK_COUNT.with(|p| p.get());
+            assert!(pure
+                .path_matches(id, "ignored text", Some(&changed))
+                .is_err());
+            assert_eq!(
+                PATH_CALLBACK_COUNT.with(|p| p.get()),
+                calls,
+                "root mismatch refuses before reader"
+            );
+            changed = witness.clone();
+            changed.package_name ^= 1;
+            assert!(pure
+                .path_matches(id, "ignored text", Some(&changed))
+                .is_err());
+            assert!(pure.path_matches(id, "ignored text", None).is_err());
+            PATH_CALLBACK_GARBAGE.with(|p| p.set(true));
+            assert!(
+                pure.path_matches(id, "ignored text", Some(&witness))
+                    .is_err(),
+                "post-reader original garbage refuses"
+            );
+            object.flags = 0;
+            PATH_CALLBACK_GARBAGE.with(|p| p.set(false));
+            PATH_READER.store(std::ptr::null_mut(), Ordering::Release);
+            assert!(
+                pure.path_matches(id, "ignored text", Some(&witness))
+                    .is_err(),
+                "missing native reader never falls back to global lookup"
+            );
+        });
+    }
+    #[test]
+    fn source_scope_profile_batch_keeps_outer_role_admission_before_native_reads() {
+        with_native_identity(|e, id, _| {
+            let scope = Scope {
+                id: 1,
+                reference: e.reference,
+                dir_seq: e.dir_seq,
+                index: e.index,
+                key: e.key.to_vec(),
+                world: id,
+                pawn: id,
+                controller: id,
+                owners: HashMap::new(),
+                components: vec![],
+                schema: e.schema.clone(),
+            };
+            let engine = runtime(e.n, e.vt, e.x, &scope);
+            let context = SplineScopeGuard {
+                scope: &scope,
+                engine,
+                handle: 1,
+            };
+            NAME_READS.with(|n| n.set(0));
+            assert!(
+                context.valid().is_err(),
+                "fixture has no admitted source role/thread"
+            );
+            assert_eq!(
+                NAME_READS.with(|n| n.get()),
+                0,
+                "outer admission fails before native identity reads"
+            );
         });
     }
 }

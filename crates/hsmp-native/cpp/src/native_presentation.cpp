@@ -675,6 +675,47 @@ using RetirementIndex=void*(*)(int32_t);
 using RetirementSlotObject=void**(*)(void*);
 using RetirementSlotSerial=int32_t*(*)(void*);
 RetirementIndex retirement_index{};RetirementSlotObject retirement_object{};RetirementSlotSerial retirement_serial{};
+using SourceOuter=const void* const*(*)(const void*);
+SourceOuter source_outer{};
+const uint64_t* source_package_name{};
+// This is called from the borrowed provider guard itself. Never use get/keep,
+// check_guard, Function or string conversion here: those would reenter it.
+void* source_path_get(const HsmpNativePathNode& node) {
+    require(vt&&object_name&&retirement_flags&&source_outer,"native path metadata unavailable");
+    void* object=vt->resolve(node.weak);require(node.weak&&object&&reinterpret_cast<uint64_t>(object)==node.address,"native path original slot/address changed");
+    auto flags=retirement_flags(object);require(flags&&(*flags&0x40000000u)==0,"native path original object garbage");
+    void* cls=vt->resolve(node.class_weak);require(node.class_weak&&cls&&reinterpret_cast<uint64_t>(cls)==node.class_address,"native path original class slot changed");
+    flags=retirement_flags(cls);require(flags&&(*flags&0x40000000u)==0,"native path original class garbage");
+    auto object_name_value=object_name(object);auto class_name_value=object_name(cls);
+    require(object_name_value&&*object_name_value==node.name&&class_name_value&&*class_name_value==node.class_name&&vt->class_of(object)==cls,"native path original FName/class changed");return object;
+}
+HsmpNativePathNode source_path_node(void* object) {
+    require(object!=nullptr,"native path node missing");HsmpNativePathNode node{};node.weak=vt->weak(object);node.address=reinterpret_cast<uint64_t>(object);
+    require(node.weak&&vt->resolve(node.weak)==object,"native path node weak unavailable");auto flags=retirement_flags(object);require(flags&&(*flags&0x40000000u)==0,"native path node garbage");
+    void* cls=vt->class_of(object);require(cls!=nullptr,"native path class missing");node.class_weak=vt->weak(cls);node.class_address=reinterpret_cast<uint64_t>(cls);
+    require(node.class_weak&&vt->resolve(node.class_weak)==cls,"native path class weak unavailable");flags=retirement_flags(cls);require(flags&&(*flags&0x40000000u)==0,"native path class garbage");
+    const auto own=object_name(object),class_name_value=object_name(cls);require(own&&class_name_value,"native path FName unavailable");node.name=*own;node.class_name=*class_name_value;source_path_get(node);return node;
+}
+void source_path_verify(const HsmpNativePathNode* nodes,uint32_t count,uint64_t package_name) {
+    require(source_package_name&&*source_package_name==package_name,"native path package discriminator changed");
+    require(nodes&&count>0&&count<=64,"native path hierarchy bounds");
+    for(uint32_t i=0;i<count;++i){for(uint32_t j=0;j<i;++j)require(nodes[i].address!=nodes[j].address,"native path hierarchy cycle");
+        void* object=source_path_get(nodes[i]);const void* const* field=source_outer(object);require(field!=nullptr,"native path Outer field unavailable");
+        const void* outer{};std::memcpy(&outer,field,sizeof(outer));require(reinterpret_cast<uint64_t>(outer)==(i+1<count?nodes[i+1].address:0),"native path original Outer link changed");source_path_get(nodes[i]);}
+    require(*source_package_name==package_name,"native path package discriminator changed during walk");
+}
+int32_t source_path_reader(const HsmpNativePathNode* nodes,uint32_t count,uint32_t capture,HsmpNativePathNode* output,uint32_t capacity,uint32_t* output_count,uint64_t* package_name,char* reason,uint32_t reason_capacity) {
+    try{require(vt&&vt->abi==HSMP_REFLECT_ABI,"native path reflection unavailable");const DWORD current=GetCurrentThreadId();if(!game_thread)game_thread=current;require(current==game_thread,"native path game-thread admission");
+        require(object_name&&retirement_flags&&source_outer&&source_package_name&&package_name,"native path provider unavailable");
+        if(capture){require(capture==1&&nodes&&count==1&&output&&capacity==64&&output_count,"native path capture bounds");*output_count=0;
+            const auto package=*source_package_name;auto node=nodes[0];uint32_t length{};
+            while(true){require(length<64,"native path hierarchy exceeds64");for(uint32_t i=0;i<length;++i)require(output[i].address!=node.address,"native path hierarchy cycle");output[length++]=node;
+                void* object=source_path_get(node);const auto* field=source_outer(object);require(field!=nullptr,"native path Outer field unavailable");const void* outer{};std::memcpy(&outer,field,sizeof(outer));source_path_get(node);if(!outer)break;node=source_path_node(const_cast<void*>(outer));}
+            source_path_verify(output,length,package);*package_name=package;*output_count=length;
+        }else source_path_verify(nodes,count,*package_name);
+        return 1;
+    }catch(const std::exception& e){if(reason&&reason_capacity)std::snprintf(reason,reason_capacity,"%s",e.what());return -1;}
+}
 constexpr uint32_t mirrored_garbage=0x40000000; // matched shipping actor iterator/Kismet:IsValid, evidence-20261005
 struct RetirementLayout {HsmpProp root{},destroying{},role{},remote{};uint32_t known{};};
 struct RetiredDriver {Obj world{},actor{};Identity identity{};HsmpViewLifecycle before{};RetirementLayout layout{};};
@@ -821,6 +862,8 @@ void hsmp_presentation_register(const HsmpReflect* reflection) {
     retirement_index=reinterpret_cast<RetirementIndex>(module?GetProcAddress(module,"?IndexToObject@FUObjectArray@Unreal@RC@@SAPEAUFUObjectItem@23@H@Z"):nullptr);
     retirement_object=reinterpret_cast<RetirementSlotObject>(module?GetProcAddress(module,"?GetObject@FUObjectItem@Unreal@RC@@AEAAAEAPEAVUObjectBase@23@XZ"):nullptr);
     retirement_serial=reinterpret_cast<RetirementSlotSerial>(module?GetProcAddress(module,"?GetSerialNumber@FUObjectItem@Unreal@RC@@QEAAAEAHXZ"):nullptr);
+    source_outer=reinterpret_cast<SourceOuter>(module?GetProcAddress(module,"?GetOuterPrivate@UObjectBase@Unreal@RC@@QEBAAEAPEBVUObject@23@XZ"):nullptr);
+    source_package_name=reinterpret_cast<const uint64_t*>(module?GetProcAddress(module,"?GPackageName@Unreal@RC@@3VFName@12@A"):nullptr);
     spline_api.allocate=reinterpret_cast<SplineMalloc>(module?GetProcAddress(module,"?Malloc@FMemory@Unreal@RC@@SAPEAX_KI@Z"):nullptr);
     spline_api.release=retirement_free;
     spline_api.children=reinterpret_cast<SplineChildren>(module?GetProcAddress(module,"?GetChildProperties@UStruct@Unreal@RC@@QEAAAEAPEAVFField@23@XZ"):nullptr);
@@ -834,4 +877,5 @@ void hsmp_presentation_register(const HsmpReflect* reflection) {
     spline_api.variant_name=reinterpret_cast<SplineVariantName>(module?GetProcAddress(module,"?GetFName@FFieldClassVariant@Unreal@RC@@QEBA?AVFName@23@XZ"):nullptr);
     vt=reflection;game_thread=0;names.clear();signatures.clear();identities.clear();mirrors.clear();retired_drivers.clear();
     layouts_verified=false;layout_objects.clear();spline_layout_verified=false;spline_layout_objects.clear();hsmp_native_set_presentation(vt?&provider:nullptr);
+    hsmp_native_set_source_path_reader(vt&&source_outer&&source_package_name&&object_name&&retirement_flags?source_path_reader:nullptr);
 }

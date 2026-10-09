@@ -45,6 +45,16 @@ void hsmp_native_set_profile_logger(HsmpNativeProfileLogger logger);
 void hsmp_native_profile_checkpoint(const char* stage,uint32_t edge);
 void hsmp_native_profile_tick(uint32_t counter); // guard0, admission1, find2, PE3
 
+// Copied full Outer hierarchy, never stored UObject pointers. Capture is tied
+// to Rust's exact initial path lookup; verification uses original nodes only.
+struct HsmpNativePathNode {uint64_t weak,address,name,class_weak,class_address,class_name;};
+#ifdef __cplusplus
+static_assert(sizeof(HsmpNativePathNode)==48);
+#endif
+typedef int32_t (*HsmpNativePathReader)(const struct HsmpNativePathNode*,uint32_t count,uint32_t capture,
+    struct HsmpNativePathNode* output,uint32_t capacity,uint32_t* output_count,uint64_t* package_name,char* reason,uint32_t reason_capacity);
+void hsmp_native_set_source_path_reader(HsmpNativePathReader reader);
+
 #ifdef __cplusplus
 }
 #endif

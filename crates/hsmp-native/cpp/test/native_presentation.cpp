@@ -10,6 +10,7 @@ extern "C" void hsmp_native_set_presentation(const HsmpPresentation* p) {install
 int profile_ffi_calls{};
 extern "C" void hsmp_native_profile_checkpoint(const char*,uint32_t){++profile_ffi_calls;}
 extern "C" void hsmp_native_profile_tick(uint32_t){++profile_ffi_calls;}
+extern "C" void hsmp_native_set_source_path_reader(HsmpNativePathReader){}
 namespace {
 int checks{}, touches{};
 int spline_allocations{},spline_releases{},spline_fail_after{-1};
@@ -27,7 +28,7 @@ int32_t guard_check(void* context) {return *static_cast<int32_t*>(context);}
 // A small reflected Actor:GetLevel/K2_DestroyActor path exercises the production
 // destroy entry, including a world change inside ProcessEvent while Lua's world
 // token still reports valid. These are lifetime tests, not rendering proof.
-struct LifetimeObject {uint64_t name{};LifetimeObject* cls{};LifetimeObject* property{};bool alive{true};uint32_t flags{};uint8_t destroying{},role{3},remote{};};
+struct LifetimeObject {uint64_t name{};LifetimeObject* cls{};LifetimeObject* property{};bool alive{true};uint32_t flags{};uint8_t destroying{},role{3},remote{};LifetimeObject* outer{};};
 LifetimeObject meta{100},world_class{101},gi_class{102},actor_class{103},level_class{104},function_class{105};
 LifetimeObject old_world{110,&world_class},new_world{111,&world_class},gi{112,&gi_class};
 LifetimeObject actor{113,&actor_class},level{114,&level_class};
@@ -35,6 +36,12 @@ LifetimeObject get_level_fn{115,&function_class},destroy_fn{116,&function_class}
 LifetimeObject driver_class{117,&meta},tag_fn{118,&function_class},owner_fn{119,&function_class},replacement{120,&driver_class};
 LifetimeObject foreign_owner{121,&actor_class},foreign_level{122,&level_class};
 LifetimeObject statics_class{123,&meta},statics{124,&statics_class},census_fn{125,&function_class};
+LifetimeObject path_component{126,&actor_class},path_package{127,&meta};
+uint64_t path_package_name{700};
+bool path_mutate_name{},path_mutate_class{},path_mutate_package{};
+const void* const* lifetime_outer(const void* p){auto o=const_cast<LifetimeObject*>(static_cast<const LifetimeObject*>(p));
+    if(path_mutate_name)o->name^=1;if(path_mutate_class)o->cls->name^=1;if(path_mutate_package)path_package_name^=1;
+    return reinterpret_cast<const void* const*>(&o->outer);}
 LifetimeObject* retirement_owner{};
 std::vector<LifetimeObject*> lifetime_objects;
 std::map<std::wstring,uint64_t> lifetime_names;
@@ -149,6 +156,41 @@ void lifetime_reset(HsmpReflect& reflect) {
     reflect.weak=lifetime_weak;reflect.resolve=lifetime_resolve;object_name=lifetime_name;object_world=lifetime_world;
     retirement_flags=lifetime_flags;retirement_free=lifetime_free;
     retirement_index=lifetime_index;retirement_object=lifetime_slot_object;retirement_serial=lifetime_slot_serial;
+}
+void path_checks(HsmpReflect& reflect){
+    lifetime_reset(reflect);lifetime_objects.push_back(&path_component);lifetime_objects.push_back(&path_package);
+    path_component.name=126;path_component.alive=true;path_component.flags=0;path_component.cls=&actor_class;
+    path_package.name=127;path_package.alive=true;path_package.flags=0;path_package.cls=&meta;
+    path_component.outer=&actor;actor.outer=&level;level.outer=&old_world;old_world.outer=&path_package;path_package.outer=nullptr;
+    source_outer=lifetime_outer;source_package_name=&path_package_name;path_package_name=700;path_mutate_name=path_mutate_class=path_mutate_package=false;
+    const auto root=source_path_node(&path_component);std::array<HsmpNativePathNode,64> witness{};uint32_t count{};uint64_t package{};char reason[192]{};
+    reflect.find=[](const uint16_t*)->void*{throw std::runtime_error("path witness must not search global objects");};
+    reflect.call=[](void*,void*,void*){throw std::runtime_error("path witness must not dispatch ProcessEvent");};
+    check(source_path_reader(&root,1,1,witness.data(),64,&count,&package,reason,sizeof(reason))==1&&count==5&&package==700,"complete original Outer chain captures through null without find or PE");
+    auto verify=[&]{return source_path_reader(witness.data(),count,0,nullptr,0,nullptr,&package,reason,sizeof(reason));};
+    check(verify()==1,"original hierarchy retains exact path witness");
+    for(auto object:{&path_component,&actor,&level,&old_world,&path_package}){
+        object->name^=1;check(verify()==-1,"every original Outer FName mutation refuses");object->name^=1;
+        object->flags=mirrored_garbage;check(verify()==-1,"every original Outer native garbage state refuses");object->flags=0;
+        object->alive=false;check(verify()==-1,"every original Outer weak disappearance refuses");object->alive=true;
+    }
+    actor_class.name^=1;check(verify()==-1,"original class FName discriminator mutation refuses");actor_class.name^=1;
+    actor_class.flags=mirrored_garbage;check(verify()==-1,"original class native garbage refuses");actor_class.flags=0;
+    path_component.cls=&level_class;check(verify()==-1,"original class address reuse refuses");path_component.cls=&actor_class;
+    const auto saved_slot=lifetime_objects[root.weak-1];lifetime_objects[root.weak-1]=&replacement;check(verify()==-1,"original slot resolving to replacement address refuses");lifetime_objects[root.weak-1]=saved_slot;
+    actor.outer=&path_package;check(verify()==-1,"intermediate reparent refuses");actor.outer=&level;
+    path_package.outer=&meta;check(verify()==-1,"original null package boundary mutation refuses");path_package.outer=nullptr;
+    path_package_name^=1;check(verify()==-1,"GPackageName formatter discriminator mutation refuses");path_package_name^=1;
+    path_mutate_name=true;check(verify()==-1,"name change inside hard Outer getter refuses on post-read qualification");path_mutate_name=false;path_component.name=126;
+    path_mutate_class=true;check(verify()==-1,"class name change inside hard Outer getter refuses on post-read qualification");path_mutate_class=false;actor_class.name^=1;
+    path_mutate_package=true;check(verify()==-1,"formatter discriminator change during walk refuses");path_mutate_package=false;path_package_name=700;
+    path_package.outer=&actor;check(source_path_reader(&root,1,1,witness.data(),64,&count,&package,reason,sizeof(reason))==-1&&count==0,"cycle refuses incomplete witness");path_package.outer=nullptr;
+    std::array<LifetimeObject,65> bounded{};for(size_t i=0;i<bounded.size();++i){bounded[i].name=1000+i;bounded[i].cls=&meta;bounded[i].outer=i+1<bounded.size()?&bounded[i+1]:nullptr;lifetime_objects.push_back(&bounded[i]);}
+    auto long_root=source_path_node(&bounded[0]);check(source_path_reader(&long_root,1,1,witness.data(),64,&count,&package,reason,sizeof(reason))==-1&&count==0,"65-node original hierarchy refuses instead of truncating");
+    bounded[63].outer=nullptr;check(source_path_reader(&long_root,1,1,witness.data(),64,&count,&package,reason,sizeof(reason))==1&&count==64,"64-node original hierarchy captures complete within unchanged bound");
+    source_outer=nullptr;check(source_path_reader(witness.data(),count,0,nullptr,0,nullptr,&package,reason,sizeof(reason))==-1,"missing original Outer export refuses");
+    source_outer=lifetime_outer;source_package_name=nullptr;check(source_path_reader(witness.data(),count,0,nullptr,0,nullptr,&package,reason,sizeof(reason))==-1,"missing native package discriminator refuses");
+    source_outer=nullptr;lifetime_reset(reflect);
 }
 }
 int main() {
@@ -345,6 +387,7 @@ int main() {
         array={nullptr,1,1};std::memcpy(header.data(),&array,16);rejects([&]{spline_read_curve<NativeQuatPoint>(header.data(),curve,decoded,64);},"nonnull count with missing POD data refuses");
         HsmpViewSplineProfile empty{0,0,0,0,1};HsmpViewSplineFrame empty_frame{};spline_frame_valid(empty,empty_frame);check(true,"actual empty spline curves are preserved without invented points");
         SplineSnapshot a{},b{};a.value.version=b.value.version=7;check(spline_equal(a,b),"two identical empty raw copies agree");b.value.version=8;check(!spline_equal(a,b),"source curve version mutation invalidates coherent capture");b=a;b.value.settings.duration=2;check(!spline_equal(a,b),"source settings mutation invalidates coherent capture");
+        path_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);
