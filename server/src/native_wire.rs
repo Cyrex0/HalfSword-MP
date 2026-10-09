@@ -13,6 +13,14 @@ pub const K_RENDER_WORLD: u16 = 0x0A11;
 pub const K_RENDER_WORLD_V2: u16 = 0x0A12;
 pub const K_RENDER_WORLD_V3: u16 = 0x0A13;
 pub const K_MIRROR_READY: u16 = 0x0A81;
+pub const K_SCENE_MANIFEST: u16 = 0x0A14;
+pub const K_SCENE_PART: u16 = 0x0A15;
+pub const K_SCENE_ACK: u16 = 0x0A82;
+pub const K_DESCRIPTOR_PART: u16 = 0x0AC2;
+#[path = "native_descriptor_stream.rs"]
+pub mod descriptor_stream;
+#[path = "native_scene_stream.rs"]
+pub mod scene_stream;
 pub const MAX_ENTITIES: usize = 32;
 pub const MAX_WORLD_BYTES: usize = 17
     + MAX_ENTITIES
@@ -479,7 +487,7 @@ pub fn encode_descriptor(d: &Descriptor) -> Result<Vec<u8>, &'static str> {
         .recipe
         .canonical_bytes()
         .map_err(|_| "descriptor recipe")?;
-    if recipe.len() > 60 * 1024 {
+    if recipe.len() > crate::native_descriptor::MAX_RECIPE_BYTES {
         return Err("descriptor bound");
     }
     let mut b = Vec::with_capacity(30 + recipe.len());
@@ -492,7 +500,7 @@ pub fn encode_descriptor(d: &Descriptor) -> Result<Vec<u8>, &'static str> {
     Ok(b)
 }
 pub fn decode_descriptor(b: &[u8]) -> Result<Descriptor, &'static str> {
-    if b.len() > 60 * 1024 + 30 {
+    if b.len() > crate::native_descriptor::MAX_RECIPE_BYTES + 30 {
         return Err("descriptor bound");
     }
     let mut r = Reader::new(b);
@@ -520,15 +528,19 @@ fn transform_ok(v: &[f64; 10]) -> bool {
         && v[7..].iter().all(|x| x.abs() < 1000.0)
 }
 pub fn encode_render_world(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
-    encode_render_world_revision(v, 1)
+    encode_render_world_revision(v, 1, hsmp_net::net::frag::MAX_MESSAGE - hsmp_ipc::wire::HDR)
 }
 pub fn encode_render_world_v2(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
-    encode_render_world_revision(v, 2)
+    encode_render_world_revision(v, 2, hsmp_net::net::frag::MAX_MESSAGE - hsmp_ipc::wire::HDR)
 }
 pub fn encode_render_world_v3(v: &RenderWorld) -> Result<Vec<u8>, &'static str> {
-    encode_render_world_revision(v, 3)
+    encode_render_world_revision(v, 3, hsmp_net::net::frag::MAX_MESSAGE - hsmp_ipc::wire::HDR)
 }
-fn encode_render_world_revision(v: &RenderWorld, revision: u8) -> Result<Vec<u8>, &'static str> {
+fn encode_render_world_revision(
+    v: &RenderWorld,
+    revision: u8,
+    limit: usize,
+) -> Result<Vec<u8>, &'static str> {
     let core = encode_world(&v.world)?;
     if v.entities.len() != v.world.entities.len() {
         return Err("render entity count");
@@ -625,7 +637,7 @@ fn encode_render_world_revision(v: &RenderWorld, revision: u8) -> Result<Vec<u8>
                     }
                 }
             }
-            if b.len() + hsmp_ipc::wire::HDR > hsmp_net::net::frag::MAX_MESSAGE {
+            if b.len() > limit {
                 return Err("render world bound");
             }
         }
@@ -633,19 +645,20 @@ fn encode_render_world_revision(v: &RenderWorld, revision: u8) -> Result<Vec<u8>
     Ok(b)
 }
 pub fn decode_render_world(b: &[u8]) -> Result<RenderWorld, &'static str> {
-    decode_render_world_revision(b, 1)
+    decode_render_world_revision(b, 1, hsmp_net::net::frag::MAX_MESSAGE - hsmp_ipc::wire::HDR)
 }
 pub fn decode_render_world_v2(b: &[u8]) -> Result<RenderWorld, &'static str> {
-    decode_render_world_revision(b, 2)
+    decode_render_world_revision(b, 2, hsmp_net::net::frag::MAX_MESSAGE - hsmp_ipc::wire::HDR)
 }
 pub fn decode_render_world_v3(b: &[u8]) -> Result<RenderWorld, &'static str> {
-    decode_render_world_revision(b, 3)
+    decode_render_world_revision(b, 3, hsmp_net::net::frag::MAX_MESSAGE - hsmp_ipc::wire::HDR)
 }
 fn decode_render_world_revision(
     b: &[u8],
     revision_version: u8,
+    limit: usize,
 ) -> Result<RenderWorld, &'static str> {
-    if b.len() + hsmp_ipc::wire::HDR > hsmp_net::net::frag::MAX_MESSAGE {
+    if b.len() > limit {
         return Err("render world bound");
     }
     let mut r = Reader::new(b);
@@ -769,7 +782,7 @@ fn decode_render_world_revision(
         return Err("trailing render bytes");
     }
     let v = RenderWorld { world, entities };
-    encode_render_world_revision(&v, revision_version)?;
+    encode_render_world_revision(&v, revision_version, limit)?;
     Ok(v)
 }
 pub fn encode_mirror_ready(v: &MirrorReady) -> Result<Vec<u8>, &'static str> {

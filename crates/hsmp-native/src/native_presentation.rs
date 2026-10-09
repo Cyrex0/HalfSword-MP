@@ -1210,6 +1210,11 @@ unsafe fn push_scene(L: *mut lua_State, scene: &hsmp_server::native_service::Sce
         set_int(L, t, "frame_seq", scene.frame.world.frame_seq as i64);
         set_int(L, t, "state", scene.directory.state as i64);
         set_int(L, t, "peer_id", scene.peer_id as i64);
+        lua_pushboolean(L, scene.fresh() as c_int);
+        rawset_str(L, t, "fresh");
+        let generation = scene.generation();
+        lua_pushlstring(L, generation.as_ptr().cast(), generation.len());
+        rawset_str(L, t, "generation");
         lua_createtable(L, scene.directory.entities.len() as c_int, 0);
         let rows = lua_gettop(L);
         for (i, e) in scene.directory.entities.iter().enumerate() {
@@ -1413,7 +1418,9 @@ impl Native {
                             }
                         }
                         for m in &c.materials {
-                            assets.insert(m.base.clone());
+                            if !m.base.is_empty() {
+                                assets.insert(m.base.clone());
+                            }
                             for t in &m.textures {
                                 if !t.value.is_empty() {
                                     assets.insert(t.value.clone());
@@ -1428,16 +1435,7 @@ impl Native {
                     lua_pushlstring(L, path.as_ptr().cast(), path.len());
                     lua_rawseti(L, rows, i as i64 + 1);
                 }
-                let scope = format!(
-                    "{}:{}:{:?}",
-                    scene.directory.epoch,
-                    scene.directory.seq,
-                    scene
-                        .descriptors
-                        .iter()
-                        .map(|d| (d.reference.id, d.reference.incarnation, d.revision))
-                        .collect::<Vec<_>>()
-                );
+                let scope = scene.generation();
                 lua_pushlstring(L, scope.as_ptr().cast(), scope.len());
                 Ok(())
             })();
@@ -1481,7 +1479,7 @@ impl Native {
     }
     pub unsafe fn host_describe(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
-            let result = (|| -> Result<(), String> {
+            let result = (|| -> Result<String, String> {
                 if !self.native_host.is_host() || !self.sample.world_ok {
                     return Err("source role/world".into());
                 }
@@ -1489,6 +1487,7 @@ impl Native {
                     return Err("descriptor metadata/bindings".into());
                 }
                 let recipe = read_recipe(L, 2)?;
+                let encoding = recipe.encoding_stats().map_err(str::to_owned)?.diagnostic();
                 let vt = reflect::vt().ok_or("reflection unavailable")?;
                 let uint = |name| {
                     integer(L, 1, name)
@@ -1644,12 +1643,13 @@ impl Native {
                         prepared,
                     },
                 );
-                Ok(())
+                Ok(encoding)
             })();
             match result {
-                Ok(()) => {
+                Ok(encoding) => {
                     lua_pushboolean(L, 1);
-                    1
+                    lua_pushlstring(L, encoding.as_ptr().cast(), encoding.len());
+                    2
                 }
                 Err(e) => nil_err(L, &e),
             }
@@ -1672,6 +1672,7 @@ impl Native {
                 let world = world.clone();
                 let host = self.native_host.host.as_ref().ok_or("not a source host")?;
                 let mut entities = Vec::new();
+                let mut recipes = Vec::new();
                 for entity in &world.entities {
                     let desc = host
                         .descriptor(entity.reference.id)
@@ -1786,9 +1787,10 @@ impl Native {
                         revision: desc.revision,
                         components,
                     });
+                    recipes.push(desc);
                 }
                 let render = w::RenderWorld { world, entities };
-                w::encode_render_world_v3(&render).map_err(str::to_owned)?;
+                w::scene_stream::encode_scene(&render, &recipes).map_err(str::to_owned)?;
                 self.finish_native_vertices(&render)?;
                 self.presentation.pending = Some(render);
                 Ok(())
@@ -1832,6 +1834,9 @@ impl Native {
                     .as_ref()
                     .ok_or("not a native client")?;
                 let scene = client.scene().ok_or("no complete current source scene")?;
+                if scene.directory.state == w::LIVE && !scene.fresh() {
+                    return Err("native applied scene is stale".into());
+                }
                 for desc in &scene.descriptors {
                     desc.recipe
                         .validate_mirror_profile()
@@ -2014,6 +2019,7 @@ impl Native {
                     return Err(format!("mirror whole-set vertex proof: {}", r.reason()));
                 }
                 let ready = (scene.directory.epoch, scene.directory.seq, valid.clone());
+                client.native_applied(&scene).map_err(str::to_owned)?;
                 if self.presentation.ready.as_ref() != Some(&ready) {
                     client
                         .mirror_ready(w::MirrorReady {
@@ -2303,7 +2309,7 @@ mod presentation_binding_tests {
     }
     #[test]
     fn scene_anchor_binding_preserves_class_transform_and_empty_render_dictionary() {
-        let mut recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+        let mut recipe = serde_json::from_slice::<d::SourceRecipe>(include_bytes!(
             "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
         ))
         .unwrap();
@@ -2376,7 +2382,7 @@ mod presentation_binding_tests {
     }
     #[test]
     fn native_camera_and_spring_arm_keep_exact_classes_and_owned_socket_output() {
-        let recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+        let recipe = serde_json::from_slice::<d::SourceRecipe>(include_bytes!(
             "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
         ))
         .unwrap();
@@ -2426,7 +2432,7 @@ mod presentation_binding_tests {
     }
     #[test]
     fn empty_static_binding_keeps_original_material_parent_and_class_evidence() {
-        let recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+        let recipe = serde_json::from_slice::<d::SourceRecipe>(include_bytes!(
             "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
         ))
         .unwrap();
@@ -2478,7 +2484,7 @@ mod presentation_binding_tests {
     }
     #[test]
     fn empty_skeletal_binding_preserves_null_material_positions_and_kind() {
-        let recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+        let recipe = serde_json::from_slice::<d::SourceRecipe>(include_bytes!(
             "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
         ))
         .unwrap();
@@ -2679,7 +2685,7 @@ mod presentation_binding_tests {
     }
     #[test]
     fn native_spline_binding_uses_exact_class_profile_and_owned_caller_arrays() {
-        let recipe = d::SourceRecipe::decode_recipe(include_bytes!(
+        let recipe = serde_json::from_slice::<d::SourceRecipe>(include_bytes!(
             "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
         ))
         .unwrap();

@@ -21,6 +21,7 @@ struct Shared {
     peer_id: u32,
     server_clock: Option<(u64, Instant)>,
     connected: bool,
+    presentation: bool,
     error: String,
     world_reset: bool,
     descriptors: HashMap<u32, Arc<w::Descriptor>>,
@@ -31,6 +32,10 @@ struct Shared {
     mirror_receipts: HashMap<u32, w::MirrorReady>,
     render_received: Option<Instant>,
     source_teams: HashMap<w::EntityRef, i32>,
+    stream: w::scene_stream::Assembly,
+    stream_ack: Option<w::scene_stream::Ack>,
+    applied: Option<(w::MirrorReady, Instant)>,
+    descriptor_stream: w::descriptor_stream::Assembly,
 }
 #[derive(Clone)]
 pub struct Scene {
@@ -38,6 +43,23 @@ pub struct Scene {
     pub descriptors: Vec<Arc<w::Descriptor>>,
     pub frame: Arc<w::RenderWorld>,
     pub peer_id: u32,
+    pub received: Instant,
+}
+impl Scene {
+    pub fn fresh(&self) -> bool {
+        self.received.elapsed().as_millis() < w::INPUT_TIMEOUT_MS as u128
+    }
+    pub fn generation(&self) -> String {
+        format!(
+            "{}:{}:{:?}",
+            self.directory.epoch,
+            self.directory.seq,
+            self.descriptors
+                .iter()
+                .map(|d| (d.reference.id, d.reference.incarnation, d.revision))
+                .collect::<Vec<_>>()
+        )
+    }
 }
 #[derive(Default)]
 pub(crate) struct Bridge {
@@ -59,6 +81,15 @@ impl Bridge {
             s.render_out = None;
             s.control_out.clear();
             s.mirror_receipts.clear();
+            s.applied = None;
+            s.stream_ack = None;
+            if !s
+                .stream
+                .manifest()
+                .is_some_and(|m| m.token.epoch == d.epoch && m.token.directory_seq == d.seq)
+            {
+                s.stream = Default::default();
+            }
             s.descriptor_out.clear();
             s.descriptors.retain(|_, r| {
                 r.directory_seq == d.seq
@@ -125,6 +156,10 @@ impl Bridge {
         s.descriptor_out.clear();
         s.mirror_receipts.clear();
         s.control_out.clear();
+        s.stream = Default::default();
+        s.descriptor_stream = Default::default();
+        s.stream_ack = None;
+        s.applied = None;
     }
     pub(crate) fn take_world_reset(&self) -> bool {
         std::mem::take(&mut self.lock().world_reset)
@@ -179,6 +214,15 @@ impl Bridge {
         s.render = None;
         s.render_out = None;
         s.mirror_receipts.clear();
+        s.applied = None;
+        if s.stream.manifest().is_some_and(|m| {
+            m.entities
+                .iter()
+                .any(|(r, v)| r.id == d.reference.id && (*r != d.reference || *v < d.revision))
+        }) {
+            s.stream.retire();
+            s.stream_ack = None;
+        }
         s.descriptor_out
             .retain(|old| old.reference.id != d.reference.id);
         s.descriptor_out.push_back(d.clone());
@@ -264,11 +308,12 @@ impl Bridge {
             })
     }
     pub(crate) fn publish_render(&self, frame: w::RenderWorld) -> Result<(), &'static str> {
-        w::encode_render_world_v3(&frame)?;
         let mut s = self.lock();
         if s.world_reset || !Self::render_matches(&s, &frame) {
             return Err("render descriptor generation");
         }
+        let recipes = Self::recipes(&s).ok_or("render recipe vector")?;
+        w::scene_stream::encode_scene(&frame, &recipes)?;
         if s.render
             .as_ref()
             .is_some_and(|old| old.world.frame_seq >= frame.world.frame_seq)
@@ -283,6 +328,102 @@ impl Bridge {
     }
     pub(crate) fn take_render(&self) -> Option<w::RenderWorld> {
         self.lock().render_out.take()
+    }
+    fn recipes(s: &Shared) -> Option<Vec<Arc<w::Descriptor>>> {
+        s.directory
+            .as_ref()?
+            .entities
+            .iter()
+            .map(|e| s.descriptors.get(&e.reference.id).cloned())
+            .collect()
+    }
+    pub(crate) fn scene_batch(
+        &self,
+        frame: &w::RenderWorld,
+    ) -> Result<w::scene_stream::Batch, &'static str> {
+        let s = self.lock();
+        if !Self::render_matches(&s, frame) {
+            return Err("scene batch generation");
+        }
+        w::scene_stream::Batch::new(frame, &Self::recipes(&s).ok_or("scene batch recipes")?)
+    }
+    pub(crate) fn manifest_current(&self, m: &w::scene_stream::Manifest) -> bool {
+        let s = self.lock();
+        s.directory
+            .as_ref()
+            .zip(Self::recipes(&s))
+            .is_some_and(|(d, r)| w::scene_stream::manifest_recipes(m, d, &r).is_ok())
+    }
+    fn admit_stream(&self) -> Result<(), &'static str> {
+        let mut s = self.lock();
+        let Some(d) = s.directory.clone() else {
+            return Ok(());
+        };
+        let Some(m) = s.stream.manifest() else {
+            return Ok(());
+        };
+        if m.token.epoch != d.epoch || m.token.directory_seq != d.seq {
+            return Ok(());
+        }
+        let Some(recipes) = Self::recipes(&s) else {
+            return Ok(());
+        };
+        if !m
+            .entities
+            .iter()
+            .zip(&recipes)
+            .all(|((r, v), d)| *r == d.reference && *v == d.revision)
+        {
+            return Ok(());
+        }
+        if let Some(ack) = s.stream.admit(&d, &recipes)? {
+            s.stream_ack = Some(ack);
+        }
+        Ok(())
+    }
+    fn finish_descriptors(&self) -> Result<(), &'static str> {
+        let ready = {
+            let mut s = self.lock();
+            let Some(d) = s.directory.clone() else {
+                return Ok(());
+            };
+            s.descriptor_stream.ready(&d)?
+        };
+        for d in ready {
+            self.publish_descriptor(d)?;
+        }
+        Ok(())
+    }
+    fn receive_scene_part(&self, payload: &[u8]) -> Result<(), &'static str> {
+        let token = w::scene_stream::part_token(payload)?;
+        if self
+            .lock()
+            .directory
+            .as_ref()
+            .is_some_and(|d| d.epoch == token.epoch && d.seq > token.directory_seq)
+        {
+            return Ok(());
+        }
+        let completed = self.lock().stream.part(payload)?;
+        let Some((m, body)) = completed else {
+            return Ok(());
+        };
+        let recipes = Self::recipes(&self.lock()).ok_or("scene recipes vanished")?;
+        let frame = w::scene_stream::decode_scene(&body, &recipes)?;
+        if frame.world.epoch != m.token.epoch
+            || frame.world.directory_seq != m.token.directory_seq
+            || frame.world.frame_seq != m.token.frame_seq
+        {
+            return Err("scene body manifest generation");
+        }
+        self.publish_render(frame)?;
+        let mut s = self.lock();
+        s.stream.finish(m.token.clone());
+        s.stream_ack = Some(w::scene_stream::Ack {
+            token: m.token,
+            stage: w::scene_stream::ACK_COMPLETE,
+        });
+        Ok(())
     }
     pub(crate) fn accept_mirror(
         &self,
@@ -321,6 +462,32 @@ impl Bridge {
                 .as_ref()
                 .is_some_and(|d| r.epoch == d.epoch && r.directory_seq == d.seq)
         })
+    }
+    fn send_receipt(&self, send: impl FnOnce(&w::MirrorReady) -> bool) {
+        let receipt = {
+            let mut s = self.lock();
+            while s.control_out.front().is_some_and(|r| {
+                !s.directory
+                    .as_ref()
+                    .is_some_and(|d| d.epoch == r.epoch && d.seq == r.directory_seq)
+                    || !r.entities.iter().all(|(r, v)| {
+                        s.descriptors
+                            .get(&r.id)
+                            .is_some_and(|d| d.reference == *r && d.revision == *v)
+                    })
+            }) {
+                s.control_out.pop_front();
+            }
+            s.control_out.front().cloned()
+        };
+        if let Some(receipt) = receipt {
+            if send(&receipt) {
+                let mut s = self.lock();
+                if s.control_out.front() == Some(&receipt) {
+                    s.control_out.pop_front();
+                }
+            }
+        }
     }
 }
 struct ThreadService {
@@ -382,7 +549,8 @@ impl HostHandle {
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
                 | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
-                | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL,
+                | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL
+                | hsmp_net::net::caps::NATIVE_SCENE_STREAM,
         );
         let state = Arc::new(crate::server::ServerState::with_native_mode(
             2,
@@ -519,10 +687,12 @@ impl ClientHandle {
                 | hsmp_net::net::caps::NATIVE_VERTEX_STATE
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
                 | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
-                | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL;
+                | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL
+                | hsmp_net::net::caps::NATIVE_SCENE_STREAM;
         }
         let bridge = Arc::new(Bridge::default());
         let network_bridge = bridge.clone();
+        bridge.lock().presentation = presentation;
         let stop = Arc::new(AtomicBool::new(false));
         let thread_stop = stop.clone();
         let thread = std::thread::Builder::new()
@@ -563,7 +733,7 @@ impl ClientHandle {
     /// One immutable read; the consumer never mixes independent generation reads.
     pub fn scene(&self) -> Option<Scene> {
         let s = self.bridge.lock();
-        if !s.connected || s.render_received?.elapsed().as_millis() >= w::INPUT_TIMEOUT_MS as u128 {
+        if !s.connected {
             return None;
         }
         let frame = s.render.as_ref()?;
@@ -581,6 +751,7 @@ impl ClientHandle {
             descriptors,
             frame: frame.clone(),
             peer_id: s.peer_id,
+            received: s.render_received?,
         })
     }
     pub fn mirror_ready(&self, receipt: w::MirrorReady) -> Result<(), &'static str> {
@@ -609,6 +780,33 @@ impl ClientHandle {
         s.control_out.push_back(receipt);
         Ok(())
     }
+    /// Records only a complete native apply/readback. Assembly ACK cannot call this path.
+    pub fn native_applied(&self, scene: &Scene) -> Result<(), &'static str> {
+        let mut s = self.bridge.lock();
+        if !s.connected
+            || !Bridge::render_matches(&s, &scene.frame)
+            || !s
+                .directory
+                .as_ref()
+                .is_some_and(|d| d.epoch == scene.directory.epoch && d.seq == scene.directory.seq)
+        {
+            return Err("client mirror generation");
+        }
+        s.applied = Some((
+            w::MirrorReady {
+                epoch: scene.directory.epoch,
+                directory_seq: scene.directory.seq,
+                frame_seq: scene.frame.world.frame_seq,
+                entities: scene
+                    .descriptors
+                    .iter()
+                    .map(|d| (d.reference, d.revision))
+                    .collect(),
+            },
+            scene.received,
+        ));
+        Ok(())
+    }
     pub fn input(&self, mut frame: InputFrame) -> Result<(), &'static str> {
         frame.validate()?;
         if frame.flags != 0 || frame.delivery_seq != 0 {
@@ -626,6 +824,21 @@ impl ClientHandle {
             })
         {
             return Err("input ownership");
+        }
+        if s.presentation
+            && !s.applied.as_ref().is_some_and(|(r, received)| {
+                received.elapsed().as_millis() < w::INPUT_TIMEOUT_MS as u128
+                    && s.directory.as_ref().is_some_and(|d| {
+                        d.state == w::LIVE && r.epoch == d.epoch && r.directory_seq == d.seq
+                    })
+                    && r.entities.iter().all(|(r, v)| {
+                        s.descriptors
+                            .get(&r.id)
+                            .is_some_and(|d| d.reference == *r && d.revision == *v)
+                    })
+            })
+        {
+            return Err("native applied scene is stale");
         }
         let (clock, captured) = s.server_clock.ok_or("no server clock")?;
         frame.sample_ms = clock.saturating_add(captured.elapsed().as_millis() as u64);
@@ -696,16 +909,43 @@ async fn client_loop(
                 }
             }
         }
-        let receipts = {
-            let mut s = bridge.lock();
-            s.control_out.drain(..).collect::<Vec<_>>()
-        };
-        for receipt in receipts {
+        bridge.send_receipt(|receipt| {
             if let Ok(payload) = w::encode_mirror_ready(&receipt) {
-                let _ = client.send(
-                    SendMode::Ordered,
-                    hsmp_ipc::wire::message(w::K_MIRROR_READY, 0, 0, &payload),
-                );
+                return client
+                    .send(
+                        SendMode::Ordered,
+                        hsmp_ipc::wire::message(w::K_MIRROR_READY, 0, 0, &payload),
+                    )
+                    .is_ok();
+            }
+            false
+        });
+        if let Err(e) = bridge
+            .finish_descriptors()
+            .and_then(|()| bridge.admit_stream())
+        {
+            let mut s = bridge.lock();
+            s.error = e.into();
+            s.connected = false;
+            return;
+        }
+        let ack = bridge.lock().stream_ack.clone();
+        if let Some(a) = ack {
+            if let Ok(payload) = w::scene_stream::encode_ack(&a) {
+                if client
+                    .send(
+                        SendMode::ReliableLatest {
+                            key: hsmp_net::proto_v5::keys::key(0x97, 0),
+                        },
+                        hsmp_ipc::wire::message(w::K_SCENE_ACK, 0, 0, &payload),
+                    )
+                    .is_ok()
+                {
+                    let mut s = bridge.lock();
+                    if s.stream_ack.as_ref() == Some(&a) {
+                        s.stream_ack = None;
+                    }
+                }
             }
         }
         while let Some(dg) = client.poll_transmit(now()) {
@@ -761,6 +1001,13 @@ async fn client_loop(
                         return;
                     }
                     cfg.pinned_server_key = Some(server_key);
+                    if cfg.caps & hsmp_net::net::caps::NATIVE_PRESENTATION != 0
+                        && caps & hsmp_net::net::caps::NATIVE_SCENE_STREAM == 0
+                    {
+                        bridge.lock().error =
+                            "server does not support bounded native scene streams".into();
+                        return;
+                    }
                     let mut s = bridge.lock();
                     s.connected = true;
                     s.error.clear();
@@ -811,13 +1058,20 @@ async fn client_loop(
                                 }
                             }
                             w::K_DESCRIPTOR => {
-                                if let Ok(d) = w::decode_descriptor(payload) {
-                                    if let Err(e) = bridge.publish_descriptor(d) {
-                                        bridge.lock().error = e.into();
-                                    }
+                                bridge.lock().error =
+                                    "server sent an incompatible native recipe record".into();
+                                return;
+                            }
+                            w::K_DESCRIPTOR_PART => {
+                                let result = { bridge.lock().descriptor_stream.part(payload) };
+                                if let Err(e) = result {
+                                    let mut s = bridge.lock();
+                                    s.error = e.into();
+                                    s.connected = false;
+                                    return;
                                 }
                             }
-                            w::K_RENDER_WORLD | w::K_RENDER_WORLD_V2 => {
+                            w::K_RENDER_WORLD | w::K_RENDER_WORLD_V2 | w::K_RENDER_WORLD_V3 => {
                                 let mut s = bridge.lock();
                                 s.error = "server sent an incompatible native scene frame".into();
                                 s.connected = false;
@@ -825,9 +1079,26 @@ async fn client_loop(
                                 s.render_received = None;
                                 return;
                             }
-                            w::K_RENDER_WORLD_V3 => {
-                                if let Ok(frame) = w::decode_render_world_v3(payload) {
-                                    let _ = bridge.publish_render(frame);
+                            w::K_SCENE_MANIFEST => {
+                                let result = w::scene_stream::decode_manifest(payload)
+                                    .and_then(|m| bridge.lock().stream.offer(m));
+                                match result {
+                                    Ok(Some(a)) => bridge.lock().stream_ack = Some(a),
+                                    Ok(None) => {}
+                                    Err(e) => {
+                                        let mut s = bridge.lock();
+                                        s.error = e.into();
+                                        s.connected = false;
+                                        return;
+                                    }
+                                }
+                            }
+                            w::K_SCENE_PART => {
+                                if let Err(e) = bridge.receive_scene_part(payload) {
+                                    let mut s = bridge.lock();
+                                    s.error = e.into();
+                                    s.connected = false;
+                                    return;
                                 }
                             }
                             _ => {}
@@ -844,6 +1115,11 @@ async fn client_loop(
                     s.descriptors.clear();
                     s.render = None;
                     s.control_out.clear();
+                    s.stream = Default::default();
+                    s.stream_ack = None;
+                    s.applied = None;
+                    s.render_received = None;
+                    s.descriptor_stream = Default::default();
                     s.server_clock = None;
                     if matches!(
                         code,
@@ -871,6 +1147,11 @@ async fn client_loop(
                     s.descriptors.clear();
                     s.render = None;
                     s.control_out.clear();
+                    s.stream = Default::default();
+                    s.stream_ack = None;
+                    s.applied = None;
+                    s.render_received = None;
+                    s.descriptor_stream = Default::default();
                     s.peer_id = 0;
                     s.server_clock = None;
                     s.error = reason.into();
@@ -905,7 +1186,7 @@ fn copy_client_config(cfg: &ClientConfig) -> ClientConfig {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     fn wait_for(mut f: impl FnMut() -> bool) {
         let started = Instant::now();
@@ -917,7 +1198,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
     }
-    fn fixture_world(d: &Directory, seq: u32, ai_dead: bool) -> World {
+    pub(crate) fn fixture_world(d: &Directory, seq: u32, ai_dead: bool) -> World {
         let entities = d
             .entities
             .iter()
@@ -967,6 +1248,131 @@ mod tests {
             frame_seq: seq,
             entities,
         }
+    }
+    #[test]
+    fn native_scene_stream_complete_ack_is_not_mirror_ready_and_stale_prepare_cannot_input() {
+        let (directory, recipes, frame) = w::scene_stream::tests::fixture();
+        let bridge = Arc::new(Bridge::default());
+        bridge.set_directory(directory.clone());
+        let batch = w::scene_stream::Batch::new(&frame, &recipes).unwrap();
+        bridge.lock().stream.offer(batch.manifest.clone()).unwrap();
+        bridge.admit_stream().unwrap();
+        assert!(
+            bridge.lock().stream_ack.is_none(),
+            "wait for reliable recipes before allocating"
+        );
+        assert!(bridge.lock().render.is_none());
+        for d in &recipes {
+            bridge.publish_descriptor((**d).clone()).unwrap()
+        }
+        bridge.admit_stream().unwrap();
+        assert_eq!(
+            bridge.lock().stream_ack.as_ref().unwrap().stage,
+            w::scene_stream::ACK_ADMITTED
+        );
+        assert!(!bridge.mirror_ready(9001));
+        for i in 0..batch.manifest.token.parts() {
+            bridge.receive_scene_part(&batch.part(i).unwrap()).unwrap()
+        }
+        assert_eq!(**bridge.lock().render.as_ref().unwrap(), frame);
+        assert_eq!(
+            bridge.lock().stream_ack.as_ref().unwrap().stage,
+            w::scene_stream::ACK_COMPLETE
+        );
+        assert!(
+            !bridge.mirror_ready(9001),
+            "decoded body is not native apply proof"
+        );
+        let received = Instant::now() - Duration::from_millis(300);
+        {
+            let mut s = bridge.lock();
+            s.connected = true;
+            s.peer_id = 9001;
+            s.presentation = true;
+            s.render_received = Some(received);
+        }
+        let client = ClientHandle {
+            bridge: bridge.clone(),
+            _service: ThreadService {
+                stop: Arc::new(AtomicBool::new(false)),
+                thread: None,
+            },
+        };
+        let scene = client.scene().unwrap();
+        assert!(
+            !scene.fresh(),
+            "generation-valid READY scene survives preparation latency"
+        );
+        client.native_applied(&scene).unwrap();
+        let receipt = w::MirrorReady {
+            epoch: directory.epoch,
+            directory_seq: directory.seq,
+            frame_seq: 1,
+            entities: batch.manifest.entities.clone(),
+        };
+        client.mirror_ready(receipt.clone()).unwrap();
+        bridge.send_receipt(|_| false);
+        assert_eq!(
+            bridge.lock().control_out.front(),
+            Some(&receipt),
+            "unsent native readiness survives backpressure"
+        );
+        let mut attempts = 0;
+        bridge.send_receipt(|r| {
+            attempts += 1;
+            assert_eq!(r, &receipt);
+            true
+        });
+        assert_eq!(attempts, 1);
+        assert!(bridge.lock().control_out.is_empty());
+        bridge.accept_mirror(9001, receipt).unwrap();
+        assert!(bridge.mirror_ready(9001));
+        let mut live = directory;
+        live.state = w::LIVE;
+        bridge.set_directory(live);
+        assert_eq!(
+            client.input(InputFrame {
+                reference: frame.entities[0].reference,
+                seq: 1,
+                ..Default::default()
+            }),
+            Err("native applied scene is stale")
+        );
+        assert_eq!(bridge.lock().render_received, Some(received));
+        let mut revised = (*recipes[0]).clone();
+        revised.revision += 1;
+        bridge.publish_descriptor(revised).unwrap();
+        assert!(client.scene().is_none());
+        assert!(bridge.lock().applied.is_none());
+        assert!(!bridge.mirror_ready(9001));
+    }
+    #[test]
+    fn native_scene_retired_same_directory_parts_cannot_disconnect_new_revision() {
+        let (directory, recipes, frame) = w::scene_stream::tests::fixture();
+        let bridge = Bridge::default();
+        bridge.set_directory(directory);
+        bridge.publish_descriptor((*recipes[0]).clone()).unwrap();
+        let old = w::scene_stream::Batch::new(&frame, &recipes).unwrap();
+        bridge.lock().stream.offer(old.manifest.clone()).unwrap();
+        bridge.admit_stream().unwrap();
+        bridge.receive_scene_part(&old.part(0).unwrap()).unwrap();
+        assert!(bridge.lock().render.is_none());
+        let mut revised = (*recipes[0]).clone();
+        revised.revision += 1;
+        bridge.publish_descriptor(revised.clone()).unwrap();
+        bridge.receive_scene_part(&old.part(1).unwrap()).unwrap();
+        assert!(bridge.lock().render.is_none());
+        let mut next = frame;
+        next.world.frame_seq += 1;
+        next.entities[0].revision = revised.revision;
+        let batch = w::scene_stream::Batch::new(&next, &[Arc::new(revised)]).unwrap();
+        bridge.lock().stream.offer(batch.manifest.clone()).unwrap();
+        bridge.admit_stream().unwrap();
+        for i in 0..batch.manifest.token.parts() {
+            bridge.receive_scene_part(&batch.part(i).unwrap()).unwrap()
+        }
+        assert_eq!(**bridge.lock().render.as_ref().unwrap(), next);
+        assert!(!bridge.mirror_ready(9001));
     }
     #[test]
     fn native_attachment_readiness_requires_the_complete_current_descriptor_profile() {
@@ -1253,7 +1659,7 @@ mod tests {
         assert!(bridge.publish_descriptor(descriptor).is_err());
     }
     #[test]
-    fn native_render_v3_reaches_a_presentation_client_over_authenticated_udp() {
+    fn native_render_multipart_reaches_a_presentation_client_over_authenticated_udp() {
         let dir = std::env::temp_dir().join(format!(
             "hsmp-native-scene-{}-{}",
             std::process::id(),
@@ -1281,6 +1687,12 @@ mod tests {
             let directory = host.directory().unwrap();
             wait_for(|| client.directory().is_some_and(|d| d.seq == directory.seq));
             let mut recipe = crate::native_descriptor::fixture_recipe();
+            recipe.components[0].bones = (0..512)
+                .map(|i| crate::native_descriptor::Bone {
+                    name: format!("Bone{i}"),
+                    parent: if i == 0 { -1 } else { 0 },
+                })
+                .collect();
             let mut arm = recipe.components[0].clone();
             arm.id = 2;
             arm.name = "Offline UDP SpringArm".into();
@@ -1366,13 +1778,27 @@ mod tests {
                     })
                     .collect(),
             };
+            assert_eq!(w::encode_render_world_v3(&frame), Err("render world bound"));
+            let started = Instant::now();
             host.publish_render(frame.clone()).unwrap();
             wait_for(|| client.bridge.lock().render.is_some());
             assert_eq!(**client.bridge.lock().render.as_ref().unwrap(), frame);
+            let recipes = Bridge::recipes(&client.bridge.lock()).unwrap();
+            let encoded = w::scene_stream::encode_scene(&frame, &recipes).unwrap();
+            assert!(encoded.len() > 100 * 1024);
             assert_eq!(
-                w::encode_render_world_v3(client.bridge.lock().render.as_ref().unwrap()).unwrap(),
-                w::encode_render_world_v3(&frame).unwrap(),
+                w::scene_stream::encode_scene(
+                    client.bridge.lock().render.as_ref().unwrap(),
+                    &recipes
+                )
+                .unwrap(),
+                encoded,
                 "native endpoint bits survive authenticated delivery"
+            );
+            eprintln!(
+                "offline_udp_scene_bytes={} assembly_ms={}",
+                encoded.len(),
+                started.elapsed().as_millis()
             );
             assert!(client.connected());
             assert!(client.error().is_empty());

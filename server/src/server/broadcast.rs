@@ -11,6 +11,7 @@ use hsmp_net::net::close_code;
 
 /// Send everything queued in `Inner::out_msgs` (lock released first).
 pub(super) async fn flush_out(socket: &UdpSocket, state: &Arc<ServerState>) {
+    super::native_glue::flush_scene_stream(socket,state).await;
     let (recs, addrs) = {
         let mut inner = state.inner.lock().await;
         if inner.out_msgs.is_empty() { return; }

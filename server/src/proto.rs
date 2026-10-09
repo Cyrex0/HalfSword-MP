@@ -38,7 +38,15 @@ pub fn record_mode(kind: u16, peer: PeerId) -> Option<hsmp_net::net::SendMode> {
         0x0A10 => return Some(SendMode::ReliableLatest { key: key(0x92, 0) }),
         0x0AC0 => return Some(SendMode::ReliableLatest { key: key(0x93, 0) }),
         0x0AC1 => return Some(SendMode::Reliable),
+        0x0AC2 => return Some(SendMode::Reliable),
         0x0A11 | 0x0A12 | 0x0A13 => return Some(SendMode::Latest { key: key(0x94, 0) }),
+        0x0A14 => return Some(SendMode::ReliableLatest { key: key(0x95, 0) }),
+        0x0A15 => {
+            return Some(SendMode::ReliableLatest {
+                key: key(0x96, peer),
+            })
+        }
+        0x0A82 => return Some(SendMode::ReliableLatest { key: key(0x97, 0) }),
         0x0A81 => return Some(SendMode::Ordered),
         _ => {}
     }
@@ -63,9 +71,23 @@ mod route_tests {
 
     #[test]
     fn native_render_revisions_route_to_the_same_scene_stream() {
-        assert_eq!(record_mode(0x0A11, 0), Some(SendMode::Latest { key: key(0x94, 0) }));
+        assert_eq!(
+            record_mode(0x0A11, 0),
+            Some(SendMode::Latest { key: key(0x94, 0) })
+        );
         assert_eq!(record_mode(0x0A12, 0), record_mode(0x0A11, 0));
         assert_eq!(record_mode(0x0A13, 0), record_mode(0x0A11, 0));
+    }
+    #[test]
+    fn native_scene_parts_use_distinct_stable_reliable_keys() {
+        let manifest = record_mode(0x0A14, 0).unwrap();
+        let first = record_mode(0x0A15, 0).unwrap();
+        let next = record_mode(0x0A15, 1).unwrap();
+        let ack = record_mode(0x0A82, 0).unwrap();
+        assert!(matches!(first, SendMode::ReliableLatest { .. }));
+        assert_ne!(first, next);
+        assert_ne!(manifest, first);
+        assert_ne!(ack, manifest);
     }
 
     #[test]
@@ -73,18 +95,56 @@ mod route_tests {
         use hsmp_ipc::schema::interact::*;
         // Grab updates supersede per grabbing hand (C2S, peer 0) and per (initiator, hand)
         // (S2C, peer = initiator); every other interaction is reliable.
-        assert_eq!(record_mode(K_INTERACT_GRAB_R, 0), Some(SendMode::ReliableLatest { key: key(STREAM_GRAB_R, 0) }));
-        assert_eq!(record_mode(K_INTERACT_GRAB_L, 0), Some(SendMode::ReliableLatest { key: key(STREAM_GRAB_L, 0) }));
-        assert_eq!(record_mode(K_INTERACT_GRAB_L, 3), Some(SendMode::ReliableLatest { key: key(STREAM_GRAB_L, 3) }));
-        assert_ne!(record_mode(K_INTERACT_GRAB_R, 3), record_mode(K_INTERACT_GRAB_L, 3));
+        assert_eq!(
+            record_mode(K_INTERACT_GRAB_R, 0),
+            Some(SendMode::ReliableLatest {
+                key: key(STREAM_GRAB_R, 0)
+            })
+        );
+        assert_eq!(
+            record_mode(K_INTERACT_GRAB_L, 0),
+            Some(SendMode::ReliableLatest {
+                key: key(STREAM_GRAB_L, 0)
+            })
+        );
+        assert_eq!(
+            record_mode(K_INTERACT_GRAB_L, 3),
+            Some(SendMode::ReliableLatest {
+                key: key(STREAM_GRAB_L, 3)
+            })
+        );
+        assert_ne!(
+            record_mode(K_INTERACT_GRAB_R, 3),
+            record_mode(K_INTERACT_GRAB_L, 3)
+        );
         assert_eq!(record_mode(K_INTERACT, 3), Some(SendMode::Reliable));
-        assert_eq!(record_mode(K_POSE_YIELD, 0), None, "a bus record never goes on the wire");
+        assert_eq!(
+            record_mode(K_POSE_YIELD, 0),
+            None,
+            "a bus record never goes on the wire"
+        );
         // No v5 / v4 stream uses the grab streams.
-        for s in [keys::ROOT, keys::SKEL, keys::WEAPON, keys::VITALS, keys::WORLD, keys::PING, keys::VOICE,
-                  keys::KIT, keys::LOADOUT, hsmp_ipc::schema::combat::STREAM_VITALS] {
+        for s in [
+            keys::ROOT,
+            keys::SKEL,
+            keys::WEAPON,
+            keys::VITALS,
+            keys::WORLD,
+            keys::PING,
+            keys::VOICE,
+            keys::KIT,
+            keys::LOADOUT,
+            hsmp_ipc::schema::combat::STREAM_VITALS,
+        ] {
             assert!(s != STREAM_GRAB_R && s != STREAM_GRAB_L, "stream {s:#x}");
         }
-        for k in [keys::SESSION, keys::GAME_STATUS, keys::PINGS, keys::MATCH_STATE, keys::KIT_RULES] {
+        for k in [
+            keys::SESSION,
+            keys::GAME_STATUS,
+            keys::PINGS,
+            keys::MATCH_STATE,
+            keys::KIT_RULES,
+        ] {
             assert!(keys::stream_of(k) != STREAM_GRAB_R && keys::stream_of(k) != STREAM_GRAB_L);
         }
     }
@@ -107,17 +167,24 @@ pub use hsmp_ipc::schema::combat::{Damage, DamageDelta};
 
 impl core::ops::Deref for DamageEvent {
     type Target = Damage;
-    fn deref(&self) -> &Damage { &self.h }
+    fn deref(&self) -> &Damage {
+        &self.h
+    }
 }
 impl core::ops::DerefMut for DamageEvent {
-    fn deref_mut(&mut self) -> &mut Damage { &mut self.h }
+    fn deref_mut(&mut self) -> &mut Damage {
+        &mut self.h
+    }
 }
 
 #[allow(dead_code)]
 impl DamageEvent {
     /// A claim from a record head and its delta rows (rows beyond the capacity dropped).
     pub fn new(h: Damage, deltas: &[DamageDelta]) -> Self {
-        let mut e = DamageEvent { h, ..Default::default() };
+        let mut e = DamageEvent {
+            h,
+            ..Default::default()
+        };
         e.set_deltas(deltas);
         e
     }
@@ -126,8 +193,12 @@ impl DamageEvent {
         Self::new(v.head(), &v.rows)
     }
     /// The delta rows.
-    pub fn deltas(&self) -> &[DamageDelta] { &self.deltas_buf[..self.n] }
-    pub fn deltas_mut(&mut self) -> &mut [DamageDelta] { &mut self.deltas_buf[..self.n] }
+    pub fn deltas(&self) -> &[DamageDelta] {
+        &self.deltas_buf[..self.n]
+    }
+    pub fn deltas_mut(&mut self) -> &mut [DamageDelta] {
+        &mut self.deltas_buf[..self.n]
+    }
     /// Replace the delta rows (truncated to the capacity).
     pub fn set_deltas(&mut self, d: &[DamageDelta]) {
         let n = d.len().min(self.deltas_buf.len());
@@ -141,7 +212,9 @@ impl DamageEvent {
         self.set_deltas(&kept);
     }
     /// The bone name.
-    pub fn bone_str(&self) -> &str { self.h.bone_str() }
+    pub fn bone_str(&self) -> &str {
+        self.h.bone_str()
+    }
     /// This claim as a v6 message of `kind` (`damage_in` / `hitfx_in` to receivers,
     /// `damage` from a client) with `WireHdr.peer` = `peer`.
     pub fn msg(&self, kind: u16, peer: PeerId) -> Vec<u8> {

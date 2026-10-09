@@ -11,6 +11,38 @@ struct InputState {
     window_ms: u64,
     count: u32,
 }
+#[derive(Default)]
+struct PeerStream {
+    active: Option<w::scene_stream::Sender>,
+    pending: Option<Arc<w::scene_stream::Batch>>,
+    metadata: VecDeque<w::descriptor_stream::Sender>,
+    flushing: bool,
+}
+impl PeerStream {
+    fn metadata(&mut self, batch: Arc<w::descriptor_stream::Batch>) {
+        self.metadata
+            .retain(|old| old.started() || old.batch.reference().id != batch.reference().id);
+        self.metadata
+            .push_back(w::descriptor_stream::Sender::new(batch));
+        debug_assert!(self.metadata.len() <= w::MAX_ENTITIES + 1);
+    }
+    fn offer(&mut self, batch: Arc<w::scene_stream::Batch>) {
+        if self.active.is_none() {
+            self.active = Some(w::scene_stream::Sender::new(batch));
+        } else {
+            self.pending = Some(batch);
+        }
+    }
+    fn ack(&mut self, ack: &w::scene_stream::Ack) -> Result<(), &'static str> {
+        let Some(active) = self.active.as_mut() else {
+            return Err("scene ack has no active batch");
+        };
+        if active.ack(ack)? {
+            self.active = self.pending.take().map(w::scene_stream::Sender::new);
+        }
+        Ok(())
+    }
+}
 pub(super) struct NativeCore {
     bridge: Arc<Bridge>,
     directory: Directory,
@@ -20,6 +52,8 @@ pub(super) struct NativeCore {
     last_world_ms: u64,
     presentation: HashMap<u32, bool>,
     diagnostic: bool,
+    streams: HashMap<u32, PeerStream>,
+    latest_scene: Option<Arc<w::scene_stream::Batch>>,
 }
 impl NativeCore {
     pub fn new(bridge: Arc<Bridge>, epoch: u64, arena: &str) -> Self {
@@ -63,6 +97,8 @@ impl NativeCore {
             last_world_ms: 0,
             presentation: HashMap::new(),
             diagnostic: mode == crate::native_mode::Mode::Diagnostic,
+            streams: HashMap::new(),
+            latest_scene: None,
         }
     }
     pub(super) fn all_mirrors_ready(&self) -> bool {
@@ -92,12 +128,14 @@ impl NativeCore {
                     | hsmp_net::net::caps::NATIVE_RENDER_V3
                     | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
                     | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL
+                    | hsmp_net::net::caps::NATIVE_SCENE_STREAM
             };
         let presentation_required = hsmp_net::net::caps::NATIVE_RENDER_V2
             | hsmp_net::net::caps::NATIVE_VERTEX_STATE
             | hsmp_net::net::caps::NATIVE_RENDER_V3
             | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
-            | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL;
+            | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL
+            | hsmp_net::net::caps::NATIVE_SCENE_STREAM;
         caps & required == required
             && (caps & hsmp_net::net::caps::NATIVE_PRESENTATION == 0
                 || caps & presentation_required == presentation_required)
@@ -111,6 +149,8 @@ impl NativeCore {
         }
         self.dirty = true;
         self.frame_seq = 0;
+        self.streams.clear();
+        self.latest_scene = None;
         self.bridge.set_directory(self.directory.clone());
     }
     fn release(&mut self, id: u32) {
@@ -176,6 +216,7 @@ impl NativeCore {
         self.changed();
     }
     fn unbind(&mut self, peer: u32) {
+        self.streams.remove(&peer);
         self.presentation.remove(&peer);
         let Some(slot) = self
             .directory
@@ -210,6 +251,11 @@ pub(super) fn joined(inner: &mut Inner, peer: u32, resume: bool, caps: u64) {
             .insert(peer, caps & hsmp_net::net::caps::NATIVE_PRESENTATION != 0);
         n.bind(peer, resume);
         n.bridge.replay_descriptors();
+        if n.presentation.get(&peer) == Some(&true) {
+            if let Some(batch) = n.latest_scene.clone() {
+                n.streams.entry(peer).or_default().offer(batch);
+            }
+        }
     }
 }
 pub(super) fn left(inner: &mut Inner, peer: u32) {
@@ -224,6 +270,28 @@ pub(super) async fn handle(
     kind: u16,
     payload: &[u8],
 ) -> anyhow::Result<()> {
+    if kind == w::K_SCENE_ACK {
+        let ack = w::scene_stream::decode_ack(payload).map_err(anyhow::Error::msg)?;
+        let mut inner = state.inner.lock().await;
+        let peer = inner
+            .peers
+            .get(&from)
+            .ok_or_else(|| anyhow::anyhow!("scene ACK unauthenticated"))?
+            .id;
+        let n = inner
+            .native
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("scene ACK outside native session"))?;
+        if n.presentation.get(&peer) != Some(&true) {
+            anyhow::bail!("observer cannot acknowledge scene stream");
+        }
+        n.streams
+            .get_mut(&peer)
+            .ok_or_else(|| anyhow::anyhow!("scene ACK unknown batch"))?
+            .ack(&ack)
+            .map_err(anyhow::Error::msg)?;
+        return Ok(());
+    }
     if kind == w::K_MIRROR_READY {
         let receipt = w::decode_mirror_ready(payload).map_err(anyhow::Error::msg)?;
         let inner = state.inner.lock().await;
@@ -391,20 +459,25 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
         }
     }
     for descriptor in n.bridge.take_descriptors() {
-        if let Ok(payload) = w::encode_descriptor(&descriptor) {
-            inner.out_msgs.push((
-                None,
-                hsmp_ipc::wire::message(w::K_DESCRIPTOR, 0, 0, &payload),
-            ));
+        if let Ok(batch) = w::descriptor_stream::Batch::new(&descriptor) {
+            let batch = Arc::new(batch);
+            for (&peer, &presenting) in &n.presentation {
+                if presenting {
+                    n.streams.entry(peer).or_default().metadata(batch.clone());
+                }
+            }
         }
     }
     if let Some(frame) = n.bridge.take_render() {
         if w::matches_directory(&frame.world, &n.directory) {
-            if let Ok(payload) = w::encode_render_world_v3(&frame) {
-                inner.out_msgs.push((
-                    None,
-                    hsmp_ipc::wire::message(w::K_RENDER_WORLD_V3, 0, 0, &payload),
-                ));
+            if let Ok(batch) = n.bridge.scene_batch(&frame) {
+                let batch = Arc::new(batch);
+                n.latest_scene = Some(batch.clone());
+                for (&peer, &presenting) in &n.presentation {
+                    if presenting {
+                        n.streams.entry(peer).or_default().offer(batch.clone());
+                    }
+                }
             }
         }
     }
@@ -475,10 +548,171 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
     .into();
     inner.native = Some(n);
 }
+/// Explicit queue acceptance preserves the pinned cursor across backpressure.
+/// No generic broadcast drain can lose a scene part.
+pub(super) async fn flush_scene_stream(socket: &UdpSocket, state: &Arc<ServerState>) {
+    let work = {
+        let mut inner = state.inner.lock().await;
+        let peers = inner
+            .peers
+            .iter()
+            .map(|(a, p)| (*a, p.id))
+            .collect::<Vec<_>>();
+        let Some(n) = inner.native.as_mut() else {
+            return;
+        };
+        let mut work = Vec::new();
+        for (addr, peer) in peers {
+            let Some(stream) = n.streams.get_mut(&peer) else {
+                continue;
+            };
+            if stream.flushing {
+                continue;
+            }
+            while stream
+                .metadata
+                .front()
+                .is_some_and(|m| m.next().is_ok_and(|p| p.is_none()))
+            {
+                stream.metadata.pop_front();
+            }
+            if let Some(metadata) = stream.metadata.front() {
+                if let Ok(Some(payload)) = metadata.next() {
+                    work.push((
+                        addr,
+                        peer,
+                        Some(metadata.token()),
+                        w::K_DESCRIPTOR_PART,
+                        metadata.ordinal(),
+                        payload,
+                    ));
+                    stream.flushing = true;
+                }
+                continue;
+            }
+            if stream
+                .active
+                .as_ref()
+                .is_some_and(|a| !n.bridge.manifest_current(&a.batch.manifest))
+            {
+                stream.active = None;
+                if let Some(pending) = stream
+                    .pending
+                    .take()
+                    .filter(|b| n.bridge.manifest_current(&b.manifest))
+                {
+                    stream.active = Some(w::scene_stream::Sender::new(pending));
+                }
+            }
+            if let Some(active) = &stream.active {
+                if let Ok(Some((kind, index, payload))) = active.next() {
+                    work.push((
+                        addr,
+                        peer,
+                        Some(active.batch.manifest.token.clone()),
+                        kind,
+                        index,
+                        payload,
+                    ));
+                    stream.flushing = true;
+                }
+            }
+        }
+        work
+    };
+    for (addr, peer, token, kind, index, payload) in work {
+        let Some(mode) = crate::proto::record_mode(kind, index) else {
+            continue;
+        };
+        let accepted = state.net.queue_bytes(
+            addr,
+            mode,
+            hsmp_ipc::wire::message(kind, 0, index, &payload),
+        );
+        let mut inner = state.inner.lock().await;
+        if let Some(stream) = inner.native.as_mut().and_then(|n| n.streams.get_mut(&peer)) {
+            stream.flushing = false;
+            if accepted && kind == w::K_DESCRIPTOR_PART {
+                if let Some(metadata) = stream.metadata.front_mut() {
+                    if Some(&metadata.token()) == token.as_ref() && metadata.ordinal() == index {
+                        metadata.queued();
+                    }
+                }
+            } else if accepted {
+                if let Some(active) = stream.active.as_mut() {
+                    if Some(&active.batch.manifest.token) == token.as_ref() {
+                        active.queued(kind, index);
+                    }
+                }
+            }
+        }
+        drop(inner);
+        if accepted {
+            super::broadcast::send_out(socket, state, state.net.flush(addr)).await;
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_scene_delivery_pins_active_and_coalesces_pending_without_readiness() {
+        let (_, recipes, mut frame) = w::scene_stream::tests::fixture();
+        let mut stream = PeerStream::default();
+        let first = Arc::new(w::scene_stream::Batch::new(&frame, &recipes).unwrap());
+        stream.offer(first.clone());
+        for seq in 2..=50 {
+            frame.world.frame_seq = seq;
+            stream.offer(Arc::new(
+                w::scene_stream::Batch::new(&frame, &recipes).unwrap(),
+            ));
+        }
+        assert_eq!(
+            stream
+                .active
+                .as_ref()
+                .unwrap()
+                .batch
+                .manifest
+                .token
+                .frame_seq,
+            1
+        );
+        assert_eq!(
+            stream.pending.as_ref().unwrap().manifest.token.frame_seq,
+            50
+        );
+        let active = stream.active.as_mut().unwrap();
+        active.queued(w::K_SCENE_MANIFEST, 0);
+        active
+            .ack(&w::scene_stream::Ack {
+                token: first.manifest.token.clone(),
+                stage: w::scene_stream::ACK_ADMITTED,
+            })
+            .unwrap();
+        while let Some((kind, index, _)) = active.next().unwrap() {
+            active.queued(kind, index)
+        }
+        stream
+            .ack(&w::scene_stream::Ack {
+                token: first.manifest.token.clone(),
+                stage: w::scene_stream::ACK_COMPLETE,
+            })
+            .unwrap();
+        assert_eq!(
+            stream
+                .active
+                .as_ref()
+                .unwrap()
+                .batch
+                .manifest
+                .token
+                .frame_seq,
+            50
+        );
+        assert!(stream.pending.is_none());
+    }
     #[test]
     fn native_pvp_cannot_admit_observers_or_bypass_mirror_readiness() {
         let caps = hsmp_net::net::caps::NATIVE_WORLD;
@@ -499,6 +733,11 @@ mod tests {
         let prior_scene = legacy | hsmp_net::net::caps::NATIVE_RENDER_V3;
         assert!(!pvp.admits_capabilities(prior_scene));
         let prior_empty = prior_scene | hsmp_net::net::caps::NATIVE_EMPTY_STATIC;
+        let prior_skeletal = prior_empty | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL;
+        assert!(
+            !pvp.admits_capabilities(prior_skeletal),
+            "complete prior26 presenter lacks scene stream capability27"
+        );
         assert!(!pvp.admits_capabilities(prior_empty));
         assert!(!pvp.admits_capabilities(presentation | hsmp_net::net::caps::NATIVE_RENDER_V2));
         assert!(!pvp.admits_capabilities(
@@ -515,6 +754,7 @@ mod tests {
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
                 | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
                 | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL
+                | hsmp_net::net::caps::NATIVE_SCENE_STREAM
         ));
         for entity in &mut pvp.directory.entities {
             entity.owner_peer = entity.reference.id;
@@ -527,6 +767,10 @@ mod tests {
         assert!(!diagnostic.admits_capabilities(legacy));
         assert!(!diagnostic.admits_capabilities(prior_scene));
         assert!(!diagnostic.admits_capabilities(prior_empty));
+        assert!(
+            !diagnostic.admits_capabilities(prior_skeletal),
+            "diagnostic presenters also require capability27"
+        );
         assert!(!diagnostic.admits_capabilities(0));
         assert!(diagnostic.admits_capabilities(caps));
         assert!(!diagnostic.admits_capabilities(caps | hsmp_net::net::caps::NATIVE_PRESENTATION));
@@ -547,6 +791,7 @@ mod tests {
                 | hsmp_net::net::caps::NATIVE_RENDER_V3
                 | hsmp_net::net::caps::NATIVE_EMPTY_STATIC
                 | hsmp_net::net::caps::NATIVE_EMPTY_SKELETAL
+                | hsmp_net::net::caps::NATIVE_SCENE_STREAM
         ));
         for entity in &mut diagnostic.directory.entities {
             if entity.kind == w::HUMAN {
