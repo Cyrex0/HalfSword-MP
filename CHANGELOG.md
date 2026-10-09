@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Add bounded native model-creation checkpoints to identify engine-call failures
+  without per-frame logging or changes to validation and network data.
+- Include UE4SS minidumps in native crash detection and reject clients that
+  stop before readiness, retaining their exact failure reason and owned cleanup.
 - Keep experimental native clients behind an opaque loading screen with actual
   preparation counts and indeterminate progress for unknown server work.
   Prepare exact assets across bounded ticks and retain visible errors until

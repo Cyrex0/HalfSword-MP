@@ -249,10 +249,18 @@ function Native-AllStopped($records, $unobserved) {
     # the originally observed PID/start-time process has exited.
     return @($records | Where-Object { -not $_.start_ticks -or (Hsmp-SameProcess $_) }).Count -eq 0 -and $unobserved.Count -eq 0
 }
-function Crashes-Snapshot {
-    $root = Join-Path $env:LOCALAPPDATA "HalfswordUE5\Saved\Crashes"
-    if (Test-Path -LiteralPath $root) { return @(Get-ChildItem -LiteralPath $root -Directory | ForEach-Object Name) }
-    return @()
+function Crashes-Snapshot(
+    [string]$EngineRoot = (Join-Path $env:LOCALAPPDATA "HalfswordUE5\Saved\Crashes"),
+    [string]$NativeRoot = (Join-Path $Win64 "ue4ss")
+) {
+    $found = @()
+    if (Test-Path -LiteralPath $EngineRoot) {
+        $found += @(Get-ChildItem -LiteralPath $EngineRoot -Directory | ForEach-Object FullName)
+    }
+    if (Test-Path -LiteralPath $NativeRoot) {
+        $found += @(Get-ChildItem -LiteralPath $NativeRoot -Filter "crash_*.dmp" -File | ForEach-Object FullName)
+    }
+    return $found
 }
 try {
     New-Item -ItemType Directory -Path $Run | Out-Null
@@ -308,7 +316,7 @@ try {
             foreach ($client in $clients) {
                 Assert-NativeClientRunning $client "before live verification"
                 $status = Native-ClientStatus $client
-                if ($status -and $status.state -eq "error") { throw "Native client $($client.index) refused presentation: $($status.reason)" }
+                if ($status -and $status.state -in @("error", "stopped")) { throw "Native client $($client.index) refused presentation: $($status.reason)" }
                 $clientEvidence += $status
             }
             $ready = @($clientEvidence | Where-Object { $_ -and $_.state -eq "live" -and $_.frame_seq -gt 0 -and $_.own_entity -gt 0 }).Count -eq 2

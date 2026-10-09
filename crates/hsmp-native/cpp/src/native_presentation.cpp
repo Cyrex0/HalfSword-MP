@@ -7,9 +7,11 @@
 #include "hsmp_native.h"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cwchar>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -38,6 +40,42 @@ thread_local bool static_profile_trace{};
 struct StaticProfileTraceScope {bool previous;StaticProfileTraceScope():previous(static_profile_trace){static_profile_trace=true;}~StaticProfileTraceScope(){static_profile_trace=previous;}};
 void profile_phase(const char* stage,uint32_t edge){if(static_profile_trace)hsmp_native_profile_checkpoint(stage,edge);}
 void profile_tick(uint32_t counter){if(static_profile_trace)hsmp_native_profile_tick(counter);}
+std::atomic<HsmpPresentationCreateLog> create_logger{};
+std::atomic<uint64_t> create_operation{};
+struct CreateTrace;
+thread_local CreateTrace* active_create_trace{};
+struct CreateTrace {
+    HsmpPresentationCreateLog logger{create_logger.load()};
+    CreateTrace* previous{active_create_trace};
+    uint64_t operation{};uint32_t markers{},component{},kind{UINT32_MAX},pe_calls{},last_function{};
+    char last_name[64]{"none"};bool limited{},pe_limited{},finished{};
+    explicit CreateTrace(){active_create_trace=logger?this:nullptr;if(logger){operation=create_operation.fetch_add(1)+1;emit("create",0);}}
+    ~CreateTrace(){active_create_trace=previous;}
+    void emit(const char* stage,uint32_t edge,uint32_t function_id=0,const char* function_name="none") {
+        if(!logger||finished||limited)return;
+        // Reserve one explicit exhaustion marker and one terminal marker.
+        if(markers>=126){limited=true;logger("trace_limit",3,operation,++markers,component,kind,function_id,function_name);return;}
+        logger(stage,edge,operation,++markers,component,kind,function_id,function_name);
+    }
+    void part(uint32_t id,uint32_t value){component=id;kind=value;last_function=0;std::memcpy(last_name,"none",5);emit("component",0);}
+    bool pe_enter(uint32_t function_id,const char* function_name){
+        last_function=function_id;const auto length=std::min(std::strlen(function_name),sizeof(last_name)-1);
+        std::memcpy(last_name,function_name,length);last_name[length]='\0';
+        if(!logger||finished||limited)return false;
+        if(pe_calls>=32){if(!pe_limited){pe_limited=true;emit("pe_limit",3);}return false;}
+        if(markers>124){emit("trace_limit",3,function_id,function_name);limited=true;return false;}
+        ++pe_calls;emit("pe",0,function_id,function_name);return true;
+    }
+    void terminal(uint32_t edge){if(logger&&!finished){logger("create",edge,operation,++markers,component,kind,last_function,last_name);finished=true;}}
+};
+// Hash and printable identifier use only the fixed reflected function path,
+// never a UObject name, address, recipe value or FName conversion.
+uint32_t create_function_id(const wchar_t* path){uint32_t id=2166136261u;for(;*path;++path){id^=static_cast<uint16_t>(*path);id*=16777619u;}return id;}
+void create_function_name(const wchar_t* path,char* out,size_t capacity){
+    const auto colon=std::wcsrchr(path,L':');const auto start=colon?colon+1:path;size_t i{};
+    for(;start[i]&&i+1<capacity;++i){const auto c=start[i];if(!((c>=L'A'&&c<=L'Z')||(c>=L'a'&&c<=L'z')||(c>=L'0'&&c<=L'9')||c==L'_'))break;out[i]=static_cast<char>(c);}
+    if(start[i]){std::memcpy(out,"other",6);return;}out[i]='\0';
+}
 void check_guard() {
     if(!active_guard)return;
     profile_tick(0);
@@ -163,7 +201,9 @@ struct Function {
     std::vector<HsmpProp> fields;
     uint64_t alignment_pad{};
     alignas(16) std::array<uint8_t,4096> buf{};
+    uint32_t create_id{};char create_name[64]{};
     Function(const wchar_t* path) {
+        if(active_create_trace){create_id=create_function_id(path);create_function_name(path,create_name,sizeof(create_name));}
         auto existing=signatures.find(path);
         if(existing!=signatures.end()) {
             get(existing->second.function);get(existing->second.cls);
@@ -225,7 +265,10 @@ struct Function {
         vertex_dispatch_guard(object,function,cls);
         scene_dispatch_guard(object,function,cls);
         profile_tick(3);profile_phase("cpp_pe",0);
+        auto* trace=active_create_trace;
+        const bool traced=trace&&trace->pe_enter(create_id,create_name);
         vt->call(object_pointer,function_pointer,buf.data());
+        if(traced)trace->emit("pe",1,create_id,create_name);
         profile_phase("cpp_pe",1);
         check_guard();
         spline_call_guard(object,function,cls);
@@ -594,6 +637,7 @@ int32_t capture(Obj world,Obj owner,Obj component,const HsmpViewComponent* c,Hsm
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const HsmpViewGuard* guard,HsmpViewResult* r) {
+    CreateTrace trace;
     const std::lock_guard lock(mirror_mutex);
     Obj actor{};
     try{initialize_result(r);thread();OperationScope scope(guard,world);layouts();get(world);require(is(world,L"/Script/Engine.World")&&pointers(recipes,count,64)&&count>0,"mirror create bounds");
@@ -609,6 +653,7 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
         Mirror mirror{world,actor,{}};
         for(uint32_t i=0;i<count;++i) {
             const auto& c=recipes[i];Part part{c.id,c.kind,{},{},{}};
+            trace.part(c.id,c.kind);
             require(std::none_of(mirror.parts.begin(),mirror.parts.end(),[&](const Part& p){return p.id==c.id;}),"duplicate mirror component id");
             if(c.kind==0) {
                 auto mesh=asset(c.asset,L"/Script/Engine.SkeletalMesh");
@@ -679,6 +724,7 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
         // complete dictionary. Scene anchors preserve their native sockets.
         for(const auto i:order) {
             const auto& c=recipes[i];if(c.parent==0)continue;
+            trace.component=c.id;trace.kind=c.kind;trace.emit("attach",0);
             auto it=std::find_if(mirror.parts.begin(),mirror.parts.end(),[&](const Part& p){return p.id==c.parent;});
             require(it!=mirror.parts.end(),"mirror attachment parent missing");
             require(c.parent!=c.id,"mirror self attachment");
@@ -689,9 +735,9 @@ uint64_t create(Obj world,const HsmpViewComponent* recipes,uint32_t count,const 
         }
         std::vector<HsmpViewFinishTarget> targets;for(const auto& part:mirror.parts){if(part.native_asset.weak)targets.push_back({actor,part.render,part.native_asset});
             else if(part.kind>=6)targets.push_back({actor,part.render,{},part.kind,1,{u16(part.arm_socket.c_str()),static_cast<uint32_t>(part.arm_socket.size()),0},part.arm});}
-        finish_scene_set(world,targets,r);
-        require(next_mirror!=0,"mirror handle exhausted");const auto id=next_mirror++;mirrors.emplace(id,std::move(mirror));r->complete=1;return id;
-    }catch(const std::exception& e){failure(r,e.what());if(actor.weak){forget_owned_materials(actor);try{OperationScope scope(guard,world);destroy_actor(world,actor);}catch(const std::exception&){}}return 0;}
+        trace.emit("finish_set",0);finish_scene_set(world,targets,r);trace.emit("finish_set",1);
+        require(next_mirror!=0,"mirror handle exhausted");const auto id=next_mirror++;mirrors.emplace(id,std::move(mirror));r->complete=1;trace.terminal(1);return id;
+    }catch(const std::exception& e){trace.terminal(2);failure(r,e.what());if(actor.weak){forget_owned_materials(actor);try{OperationScope scope(guard,world);destroy_actor(world,actor);}catch(const std::exception&){}}return 0;}
 }
 void world_transform(Obj component,const Transform& t,HsmpViewResult* r) {
     Function f(L"/Script/Engine.SceneComponent:K2_SetWorldTransform");f.put(L"NewTransform",L"StructProperty",engine(t),L"Transform");f.boolean(L"bSweep",false);f.boolean(L"bTeleport",true);f.call(component,r);
@@ -958,6 +1004,7 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
 }
 const HsmpPresentation provider{11,0,inspect,capture,create,apply,destroy,discard,retire,probe_retirement,forget_retirements,actor_scope,describe_spline,describe_vertex_state,finish_scene_sets};
 }
+void hsmp_presentation_set_create_log(HsmpPresentationCreateLog logger){create_logger.store(logger);}
 void hsmp_presentation_register(const HsmpReflect* reflection) {
     const auto module=GetModuleHandleW(L"UE4SS.dll");
     object_name=reinterpret_cast<NamePrivate>(module?GetProcAddress(module,"?GetNamePrivate@UObjectBase@Unreal@RC@@QEBAAEBVFName@23@XZ"):nullptr);

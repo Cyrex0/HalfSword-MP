@@ -92,6 +92,13 @@ namespace
             static_cast<unsigned long long>(trace->guards),static_cast<unsigned long long>(trace->admissions),
             static_cast<unsigned long long>(trace->finds),static_cast<unsigned long long>(trace->events));
     }
+    void create_log(const char* stage,uint32_t edge,uint64_t operation,uint32_t marker,
+                    uint32_t component,uint32_t kind,uint32_t function_id,const char* function_name)
+    {
+        logf("NATIVE_CREATE operation=%llu marker=%u stage=%.32s edge=%s component=%u kind=%u function_id=%u function=%.64s diagnostic_only=true",
+            static_cast<unsigned long long>(operation),marker,stage,
+            edge==0?"enter":edge==1?"exit":edge==2?"error":"limit",component,kind,function_id,function_name);
+    }
 
     // Is the loaded UE4SS.dll the exact build abi/ue4ss_pins.h was generated from?
     bool ue4ss_pinned(const char** why)
@@ -199,7 +206,7 @@ class HSMPNativeMod final : public CppUserModBase
         if (m_enabled)
         {
             const char* missing = hsmp_reflect_register();
-            if(!missing) hsmp_presentation_register(hsmp_reflect_table());
+            if(!missing) {hsmp_presentation_set_create_log(create_log);hsmp_presentation_register(hsmp_reflect_table());}
             logf("native sampling: %s%s", missing ? "unavailable, missing UE4SS export " : "engine reflection registered", missing ? missing : "");
         }
     }

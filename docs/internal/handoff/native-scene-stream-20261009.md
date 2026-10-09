@@ -1,5 +1,63 @@
 # Native full-scene encoding checkpoint
 
+## Creation fault localization checkpoint
+
+Create-only native diagnostics now emit at most128 markers per operation,
+including explicit exhaustion and a reserved terminal marker. Fixed code labels
+identify component/kind and the first32 ProcessEvent call boundaries; exit is
+logged immediately after the engine call and before post-call guards. No
+pointers, recipe data, ABI changes or frame logging. The terminal label owns
+its64-byte storage, avoiding a reviewed stack-label lifetime defect. Strict
+provider object compilation and936 focused native assertions pass; independent
+review closes both this change and the52-check crash-detection harness.
+Actual failing client1 call remains unknown until the next exact deployment/run.
+
+## Actual7f2e02dd: startup still slow; separate presentation and shutdown failures
+
+Full G0 passes75 Lua/1364 Rust79 binaries, clippy0 errors/16 warnings. Dev push/
+RequireG0 and all394 deployed hashes match7f2e02ddfcccff4713bddadcf7091d37cc38bacf.
+Normal20261009-182210-f8587b-native-host/sourcec421b0cd-d8df-4c28-85c9-35475167a5cf
+captures21.937s/20.592s and accepts both49-component/600-bone/38-material recipes
+39.087s/60.094s. Render starts60.164s and refuses65.642s after original65s
+teardown. No complete scene. Loading.tick accepted its native widget operations
+before Core travel; no widget error, but pixels were not captured. Both actual
+ViewTargets identify hidden PlayerControllers, not owned mirror actors. Both
+UnrealWindow observations are physically secondary. All4PIDs gone/save20same.
+
+Root then uses independently reviewed IGNORED extended diagnostic scripts,
+keeping the original65s target separately and unconditionally forcing pass=false.
+Readiness observation may continue120s/authority180s; live observation stays10s.
+No product, freshness, physics or source guard changes. Extended
+20261009-182736-4d7e7f-native-host/source0d830e19-f87b-4191-b031-e1e18d100224
+publishes a complete scene68.584s/sample1/frame1. Client1 originalPID41220
+prepares assets across ticks, enters native_present70.838s/wall17:28:47.744UTC
+with ownEntity2/incarnation5/dir7, then exits known3 observed17:28:48.439UTC.
+There is no provider-exit marker or attributed error/stack yet; exact failing
+engine call remains unproved. Client2 PID6596 never enters native_present and
+stops by request17:28:48.632UTC. Source cleanstop82.017s; active inputs0.
+
+The user supplies a Fatal Error screenshot naming
+crash_2026_10_09_18_28_48.9013862.dmp. The34,565,637B dump is preserved with SHA256
+DCE5CBF731D182FC1B7AF415E235F67B5B42369B7F1B242EDFC3660170A3D207. Positive
+MINIDUMP_MISC_INFO flags0x3f7 identifyPID6596/CLIENT2; header17:28:49UTC agrees.
+C0000005 NULL write at shippingRVA119C415 occurs on thread45652 through CRT
+exit/onexit callbacks. It does NOT explain client1's native_present exit3.
+The bottom shipping return12CBF84 follows exit(777003) through the positively
+resolved ucrtbase IAT, so this is an engine error-exit cleanup stack, not proof
+of an ordinary graceful-quit failure. Code identifies getter1177FC0/global
+8ADCCC0 and an onexit clear-writer6B03CD4, but that global is absent from the
+partial dump: the clear-writer execution and original error remain unproved.
+Matching local/deployedDLL/PDB and bounded CDB evidence are retained under
+run/dump-attribution-analysis.md. Do not attribute this dump to client1.
+
+Independent all4 originalPIDs absent/Shipping0/save20same. Legacy new_crashes[]
+checked only Saved/Crashes and MISSED the UE4SS dump, so it cannot establish
+crash-free teardown. Root now checks both directories and UE4SS crash_*.dmp;
+focused harness52 checks pass, including new-dump detection without an engine
+crash directory. Normal harness also fails immediately on stopped/error clients.
+Next bounded creation/PE checkpoints localize client1; native teardown analysis
+independently traces client2's cleared global. No mirror/view/input parity proof.
+
 ## Current follow-up: visible loading, capture admission and transport
 
 The user now explicitly requests an opaque loading screen with honest progress

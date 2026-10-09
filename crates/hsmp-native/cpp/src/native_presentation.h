@@ -159,3 +159,9 @@ static_assert(sizeof(HsmpViewResult)==200);
 // Caps: components64, bones512/component, morphs128/component, materials32,
 // scalar/vector/texture parameter dictionaries128/material; total wire frame64KiB.
 void hsmp_presentation_register(const HsmpReflect*);
+// Private startup diagnostics only; does not change the provider/wire ABI.
+// The callback must not call Unreal or throw. All names come from fixed code
+// paths; each create operation emits at most 128 markers, never frame updates.
+using HsmpPresentationCreateLog = void(*)(const char* stage,uint32_t edge,uint64_t operation,
+    uint32_t marker,uint32_t component,uint32_t kind,uint32_t function_id,const char* function_name);
+void hsmp_presentation_set_create_log(HsmpPresentationCreateLog);

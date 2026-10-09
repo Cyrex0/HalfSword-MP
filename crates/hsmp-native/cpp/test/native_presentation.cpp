@@ -157,6 +157,40 @@ void lifetime_reset(HsmpReflect& reflect) {
     retirement_flags=lifetime_flags;retirement_free=lifetime_free;
     retirement_index=lifetime_index;retirement_object=lifetime_slot_object;retirement_serial=lifetime_slot_serial;
 }
+struct CreateMarker {std::string stage,name;uint32_t edge,marker,component,kind,function;uint64_t operation;};
+std::vector<CreateMarker> create_markers;
+void record_create(const char* stage,uint32_t edge,uint64_t operation,uint32_t marker,uint32_t component,
+                   uint32_t kind,uint32_t function,const char* name){create_markers.push_back({stage,name,edge,marker,component,kind,function,operation});}
+void create_trace_checks(HsmpReflect& reflect){
+    create_markers.reserve(128);hsmp_presentation_set_create_log(nullptr);
+    {CreateTrace disabled;disabled.part(1,0);disabled.emit("fixture",0);disabled.terminal(1);}
+    check(create_markers.empty()&&!active_create_trace,"optional disabled create logger emits nothing and leaves no active scope");
+    hsmp_presentation_set_create_log(record_create);create_markers.clear();const auto old_touches=touches;
+    {CreateTrace trace;for(uint32_t i=1;i<=200;++i)trace.part(i,0);trace.terminal(1);}
+    check(create_markers.size()==128&&create_markers[126].stage=="trace_limit"&&create_markers[127].stage=="create"&&create_markers[127].edge==1,
+        "create trace explicitly exhausts before its reserved terminal and never exceeds128 markers");
+    check(create_markers.back().component==200&&touches==old_touches,"suppressed transitions still retain terminal scalar context without engine metadata reads");
+    create_markers.clear();
+    {CreateTrace trace;for(uint32_t i=0;i<100;++i)if(trace.pe_enter(123,"GetLevel"))trace.emit("pe",1,123,"GetLevel");
+        for(uint32_t i=1;i<=49;++i)trace.part(i,4);trace.terminal(1);}
+    check(std::count_if(create_markers.begin(),create_markers.end(),[](const CreateMarker& m){return m.stage=="pe";})==64
+        &&std::count_if(create_markers.begin(),create_markers.end(),[](const CreateMarker& m){return m.stage=="pe_limit";})==1
+        &&std::count_if(create_markers.begin(),create_markers.end(),[](const CreateMarker& m){return m.stage=="component";})==49&&create_markers.size()<=128,
+        "first32 engine call pairs are explicitly limited while all49 component transitions still fit the create budget");
+    create_markers.clear();
+    {CreateTrace trace;trace.part(7,9);char temporary[]="GetLevel";check(trace.pe_enter(123,temporary),"bounded PE entry starts an exact pair");
+        trace.emit("pe",1,123,temporary);temporary[0]='X';trace.terminal(2);}
+    check(create_markers.back().name=="GetLevel"&&create_markers.back().function==123&&create_markers.back().edge==2,
+        "terminal owns a bounded function label rather than a destroyed Function or changed caller array");
+    create_markers.clear();
+    {CreateTrace outer;{CreateTrace inner;inner.terminal(1);}check(active_create_trace==&outer,"nested diagnostic scope restores original TLS context");outer.terminal(1);}
+    lifetime_reset(reflect);create_markers.clear();int context=1;const HsmpViewGuard guard{&context,guard_check};
+    {OperationScope scope(&guard,keep(&old_world));CreateTrace trace;trace.part(39,9);travel_on_get_level=true;
+        rejects([&]{Function f(L"/Script/Engine.Actor:GetLevel");f.call(keep(&actor));},"post-PE world mutation still rejects under create diagnostics");trace.terminal(2);}
+    check(create_markers.size()==5&&create_markers[2].stage=="pe"&&create_markers[2].edge==0&&create_markers[3].stage=="pe"&&create_markers[3].edge==1
+        &&create_markers[3].name=="GetLevel"&&create_markers.back().edge==2,"PE exit is recorded immediately after dispatch before failing post-call world qualification");
+    hsmp_presentation_set_create_log(nullptr);check(!active_create_trace,"finished create diagnostics do not leak into capture/apply frames");
+}
 void path_checks(HsmpReflect& reflect){
     lifetime_reset(reflect);lifetime_objects.push_back(&path_component);lifetime_objects.push_back(&path_package);
     path_component.name=126;path_component.alive=true;path_component.flags=0;path_component.cls=&actor_class;
@@ -1085,6 +1119,7 @@ int main() {
         scene_checks(reflect);
         empty_checks(reflect);
         skeletal_checks(reflect);
+        create_trace_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);

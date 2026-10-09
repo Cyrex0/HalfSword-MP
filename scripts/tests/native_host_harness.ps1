@@ -5,7 +5,7 @@ $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $errors = $null
 $tree = [Management.Automation.Language.Parser]::ParseFile((Join-Path $Repo "scripts/native_host_test.ps1"), [ref]$null, [ref]$errors)
 if ($errors.Count) { throw $errors[0].Message }
-$names = @("Write-Json", "Process-Path", "Native-Record", "Native-SameProcess", "Native-ClientLaunch", "Start-NativeClientOutput", "Complete-NativeClientOutput", "Native-ClientExit", "Assert-NativeClientRunning", "Native-ClientStatus", "Native-AuthorityEvidence", "Native-AllStopped")
+$names = @("Write-Json", "Process-Path", "Native-Record", "Native-SameProcess", "Native-ClientLaunch", "Start-NativeClientOutput", "Complete-NativeClientOutput", "Native-ClientExit", "Assert-NativeClientRunning", "Native-ClientStatus", "Native-AuthorityEvidence", "Native-AllStopped", "Crashes-Snapshot")
 foreach ($name in $names) {
     $function = $tree.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if (-not $function) { throw "Harness function missing: $name" }
@@ -18,6 +18,15 @@ $GameExe = Join-Path $Repo "game/HalfswordUE5/Binaries/Win64/HalfswordUE5-Win64-
 $Win64 = Split-Path -Parent $GameExe
 $utf8 = New-Object Text.UTF8Encoding $false
 New-Item -ItemType Directory -Path $Run | Out-Null
+$fixtureEngineCrashes = Join-Path $Run "engine-crashes"
+$fixtureNativeCrashes = Join-Path $Run "native-crashes"
+New-Item -ItemType Directory -Path (Join-Path $fixtureEngineCrashes "old-engine-crash"), $fixtureNativeCrashes | Out-Null
+[IO.File]::WriteAllText((Join-Path $fixtureNativeCrashes "crash_old.dmp"), "offline marker", $utf8)
+$fixtureCrashBaseline = @(Crashes-Snapshot $fixtureEngineCrashes $fixtureNativeCrashes)
+Check ($fixtureCrashBaseline.Count -eq 2) "Both engine reports and UE4SS dump paths enter the baseline."
+[IO.File]::WriteAllText((Join-Path $fixtureNativeCrashes "crash_new.dmp"), "offline marker", $utf8)
+$fixtureNewCrashes = @(Crashes-Snapshot $fixtureEngineCrashes $fixtureNativeCrashes | Where-Object { $fixtureCrashBaseline -notcontains $_ })
+Check ($fixtureNewCrashes.Count -eq 1 -and $fixtureNewCrashes[0] -eq (Join-Path $fixtureNativeCrashes "crash_new.dmp")) "A new UE4SS dump is a crash even without a new engine crash directory."
 # These doubles provide only recorded identity. No native process API is called.
 $script:fixtureProcess = @{ Path=$GameExe }
 $script:identityLookupForbidden = $false
@@ -66,7 +75,7 @@ $exit = Get-Content -Raw -LiteralPath (Join-Path $Run "client1.exit.json") | Con
 Check ($exit.exit_code_known -and $exit.exit_code -eq -1073741819 -and $exit.exit_code_hex -eq "0xC0000005") "A signed original exit code preserves its exact unsigned hex bits."
 Check ($exit.pid -eq 123 -and $exit.start_ticks -eq 456 -and $exit.exe -eq $GameExe -and $exit.observed_from -eq "original_process_handle") "The exit record retains original ownership rather than a current PID lookup."
 Check ($exit.phase -eq "before live verification" -and ([DateTime]::Parse($exit.observed_utc)).ToUniversalTime() -le [DateTime]::UtcNow) "The exit record includes its real observation time and verification phase."
-$firstObserved = $exit.observed_utc
+$firstObserved = $owned.exit_record.observed_utc
 Check ((Native-ClientExit $owned "during observation").observed_utc -eq $firstObserved) "Repeated checks retain one original exit observation."
 $unreadable = [pscustomobject]@{ HasExited=$true }
 $unreadable | Add-Member ScriptMethod Refresh {}

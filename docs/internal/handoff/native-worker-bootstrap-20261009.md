@@ -1,5 +1,40 @@
 # Native authority bootstrap checkpoint
 
+## Bounded creation diagnostics ready
+
+Create-only checkpoints preserve all provider/wire/validation contracts and
+cap each operation at128 markers, including explicit limits and terminal status.
+First32 engine-call boundaries and component transitions localize the client1
+exit without per-frame logging. Strict provider compilation/936 native assertions
+and independent review pass; harness52 checks/review also pass. Exact deployment
+and actual fault localization remain next. Client2's dump is separately an
+engine error-exit cleanup stack and does not establish client1's cause.
+
+## Actual7f2: client presentation reached; faults remain separate
+
+Full G0 passes75 Lua/1364 Rust79 binaries, clippy0/16, exact clean dev deployment
+394hashes. Normal65s readiness stillFAIL: captures21.937s/20.592s, both full
+recipes accepted60.094s, render interrupted65.642s by original client teardown.
+No source speedup or playable proof. Loading operations accepted before travel,
+no widget failure, pixels unrecorded; ViewTargets are hidden PlayerControllers.
+
+The independently reviewed ignored extended observer keeps65s verdict separate
+and forcespassfalse;120s readiness/180s authority only diagnose later creation.
+Run20261009-182736-4d7e7f-native-host/source0d830e19-f87b-4191-b031-e1e18d100224
+publishes complete scene68.584s. Client1PID41220 entersnative_present70.838s,
+thenexit3 observed17:28:48.439UTC without an exit marker/provider stack. Client2
+PID6596 never presents and stops17:28:48.632UTC; its reportedFatal minidump is
+positively attributed byMiscInfo/header to6596. NULLwriteShipping119C415 sits
+insideCRT cleanup reachedbyengineexit(777003), not a client1 creation stack or
+proof of ordinarygracefulquit. Dump/codeidentify global8ADCCC0/clearwriter but
+globalmemorymissing; originalerror and clearwriterexecution unproved.
+
+All4originalPIDs gone/save20same. ActualUE4SSdump is preserved; oldnew_crashes[]
+missed it because onlySaved/Crashes was checked. HarnessnowchecksUE4SSdumps and
+earlystopped clients, focused52PASS/independentreviewclosed. Bounded creation/
+PE markers are being implemented tolocalizeclient1; shutdownanalysis separate.
+No mirrors/ownedview/input/combat parity claim and no releasegate pass.
+
 ## Next combined checkpoint: loading and bounded preparation
 
 Native source-scope admission batching is independently reviewed;39 focused
