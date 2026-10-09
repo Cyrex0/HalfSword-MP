@@ -323,6 +323,108 @@ end
 
 -- The actual worker loop emits the latest sampling refusal to its own stream.
 -- A later successful sample clears the reason without clearing refusal counts.
+-- Cancellation reaches the production resolver and Adapter's render pcall;
+-- only the component collector itself is replaced with a two-getter fixture.
+for _,cancel_kind in ipairs({"stop","dead","refused","ordinary"})do
+    local callback,clock,requested,collecting,getter_active=nil,1,false,false,false
+    local reads,parent_checks,getters,ends,describes,stops,quits,cancels=0,0,0,0,0,0,0,0
+    local terminal
+    local function identity(address,name,class)
+        return {IsValid=function()return true end,GetAddress=function()return address end,
+            GetFName=function()return {ToString=function()return name end}end,
+            GetClass=function()return {GetFName=function()return {ToString=function()return class end}end}end}
+    end
+    local world=identity(100,"World","World");world.GetFullName=function()return "World /Game/Map_Arena_Yard"end
+    local pc,pawn=identity(11,"PC1","PlayerController"),identity(21,"Willie","Willie_BP_C")
+    pc.Pawn=pawn;pawn.Controller=pc;pawn["Dismemberment In Process"]=false
+    pc.GetWorld=function()return world end;pawn.GetWorld=function()return world end
+    local token={key="native_cancel#1",drops=0}
+    local wg={key=token.key,drops=0,check=function()return true end,settled=function()return true end,
+        token=function()return token end,same=function(t)return t==token end,world=function()return world end,on_drop=function()end}
+    local gs={IsValid=function()return true end,GetPlayerController=function(_,w,index)
+        assert(w==world);return index==1 and pc or nil
+    end}
+    local N={worker_input=function()return true end,host_start=function()return true end,
+        host_directory=function()return {epoch=44,seq=1,entities={{epoch=44,id=1,incarnation=1,slot=0,kind=0,controller=1}}}end,
+        host_inputs=function()return {}end,sample_config=function()return true end,
+        host_parent_alive=function()
+            assert(not getter_active,"cancellation polling must not reenter an active source getter")
+            parent_checks=parent_checks+1
+            if requested and cancel_kind=="refused"then return nil,"wrong thread"end
+            return not(requested and cancel_kind=="dead")
+        end,
+        host_stop=function()
+            T.check(not collecting and not getter_active and ends==1,"endpoint teardown follows collector unwind and original native scope end")
+            stops=stops+1;return true
+        end,
+        host_describe=function()describes=describes+1;return true end,
+        native_capture_render=function()error("no complete core is staged",0)end,
+        native_sample_world=function()error("no complete core is staged",0)end,
+        native_source_scope_begin=function()return 71 end,
+        native_source_scope_keep=function()error("fixture retains no component",0)end,
+        native_source_scope_resolve=function()error("fixture retains no component",0)end,
+        native_source_scope_spline_profile=function()error("fixture contains no spline",0)end,
+        native_source_scope_vertex_state=function()error("fixture contains no static mesh",0)end,
+        native_source_scope_end=function(handle)
+            T.check(handle==71 and collecting and not getter_active,"production Adapter ends its original scope after the collector getter has unwound")
+            ends=ends+1;return true
+        end}
+    local render={capture=function(env)
+        env.guard()
+        for _=1,20 do env.guard()end
+        T.check(reads==1 and parent_checks==1,"frequent source guards share one throttled startup stop/parent poll")
+        getter_active=true;getters=getters+1
+        clock=1.26;requested=true -- external request appears during this completed getter
+        getter_active=false
+        env.guard() -- actual Adapter.current -> actual worker resolver
+        getters=getters+1 -- must never run after cancellation admission refuses
+        return {components={},bindings={},topology={detached={},gore={},vertex_state="complete"}}
+    end}
+    local descriptor={capture=function(env)env.pass=1;return env.render()end,
+        read_flags=function()return {}end,read_names=function()return {}end}
+    local adapter_env=setmetatable({dofile=function(path)
+        if path:match("/native_source_descriptor%.lua$")then return descriptor end
+        if path:match("/native_source_render%.lua$")then return render end
+        error("unexpected adapter dependency: "..path,0)
+    end},{__index=_G})
+    local Adapter=assert(loadfile("mods/HSMPMatch/Scripts/native_source_adapter.lua","t",adapter_env))()
+    local modules={hsmp_runtime_role={worker=function()return true end},UEHelpers={GetGameplayStatics=function()return gs end},
+        hsmp_wg={new=function()return wg end},hsmp_ipc={N=N,init=function()end,frame=function()end,world_ready=function()end,
+            read=function(path)
+                assert(path=="owned.stop" and not getter_active,"only the owned stop file is polled outside the source getter")
+                reads=reads+1;return requested and cancel_kind=="stop"and "stop"or false
+            end},hsmp_saveguard={install=function()end,set_active=function()end,tick=function()end},
+        hsmp_log={init=function()end,event=function(_,fields)if fields.state=="stopped"or fields.state=="error"then terminal=fields end end},
+        director={make_ue_env=function()return {apply_cvars=function()end,quit_native_worker=function()
+            T.check(not collecting and not getter_active and ends==1,"Director quit follows full source collector unwind")
+            quits=quits+1;return true
+        end}end,new_native_worker=function()return {state="native_ready",tick=function()return true end}end},
+        headless_control={new=function()return {set_directory=function()return true end,tick=function()end,
+            stop=function()T.check(not collecting,"controller cleanup cannot run inside the collector");return true end}end},
+        headless_prepare=Prepare,hsmp_pose_config={},headless_sample_boundary=Boundary,headless_spawn_diagnostics=SpawnDiagnostics,
+        native_source_adapter={new=function(opts)
+            local actual=Adapter.new(opts)
+            return {capture=function(...)
+                collecting=true;local recipe,why=actual.capture(...);collecting=false;return recipe,why
+            end}
+        end},headless_source_lifecycle=SourceLifecycle}
+    local fake=setmetatable({debug=debug,os={getenv=function(key)if key=="HSMP_NATIVE_STOP_FILE"then return "owned.stop"end end,
+        clock=function()return clock end},print=function()end,require=function(name)if modules[name]then return modules[name]end;error("optional module absent")end,
+        dofile=function()error("optional module absent")end,FindAllOf=function()return {}end,
+        LoopInGameThreadWithDelay=function(_,fn)callback=fn;return 84 end,
+        CancelDelayedAction=function(handle)assert(handle==84);cancels=cancels+1;callback()end},{__index=_G})
+    assert(loadfile("mods/HSMPMatch/Scripts/headless_worker.lua","t",fake))().start()
+    callback();callback()
+    if cancel_kind=="ordinary"then
+        T.check(getters==2 and ends==1 and describes==1 and stops==0 and quits==0 and cancels==0,"unchanged admission completes ordinary source capture and registration without cleanup")
+        T.check(reads==2 and parent_checks==2,"ordinary capture polls once per elapsed250ms while preserving native getter guards")
+    else
+        T.check(getters==1 and ends==1 and describes==0,"midcapture "..cancel_kind.." admission prevents the very next getter and all descriptor registration")
+        T.check(stops==1 and quits==1 and cancels==1,"midcapture "..cancel_kind.." cancellation performs normal cleanup exactly once after unwind")
+        local reason=cancel_kind=="stop"and "stop requested"or cancel_kind=="dead"and "native supervisor exited"or "native supervisor check refused: wrong thread"
+        T.check(terminal and terminal.reason==reason and terminal.state==(cancel_kind=="refused"and "error"or "stopped"),"midcapture cancellation preserves its original normal/fault reason")
+    end
+end
 do
     local callback, clock, refusal, events, phases, sample_calls, epoch = nil, 1, "source vertex colours unavailable", {}, {}, 0, 44
     local N={worker_input=function()return true end,host_start=function()return true end,

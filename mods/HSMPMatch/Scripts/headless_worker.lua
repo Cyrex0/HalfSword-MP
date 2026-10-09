@@ -42,13 +42,38 @@ function M.start()
     local RVPModule = load_module("hsmp_rvp")
     local RVP = RVPModule and RVPModule.new({ log = log, ev = function(name, fields) if HL then HL.event(name, fields) end end })
     if RVP then pcall(function() RegisterLoadMapPreHook(function() RVP.on_loadmap() end) end) end
-    local stopped, hosted, last_key, last_state, last_report, last_stop_poll = false, false, nil, nil, -1e9, -1e9
+    local stopped, hosted, last_key, last_state, last_report = false, false, nil, nil, -1e9
+    local cancel_reason, cancel_fault, last_cancel_poll = nil, nil, -1e9
     local bootstrap, controller, loop_handle, source_lifecycle
     local sample_configured, frame_seq, sample_at, first_ai_name = false, 0, -1e9, nil
     local entity_bindings = {}
     local metrics = { sample_ok=0, sample_refused=0, dispatch=0, active_dispatch=0, active_pc0=0, active_pc1=0, input_refused=0, sample_min_ms=nil, sample_max_ms=0, last_input_error=nil, last_sample_error=nil }
+    local function admitted()
+        if stopped or cancel_reason then return false end
+        local now = os.clock()
+        if now - last_cancel_poll < 0.25 then return true end
+        last_cancel_poll = now
+        -- Only latch refusal here. A collector's pcall and native scope end
+        -- must unwind before endpoint teardown or Director engine callbacks.
+        local ok, reason, fault = pcall(function()
+            if stop_file and IPC.read(stop_file) then return "stop requested" end
+            if N.host_parent_alive then
+                local alive, why = N.host_parent_alive()
+                if alive == false then return "native supervisor exited" end
+                if alive ~= true then
+                    local message = "native supervisor check refused: " .. tostring(why)
+                    return message, message
+                end
+            end
+        end)
+        if not ok then reason, fault = "native cancellation check refused: " .. tostring(reason), "native cancellation check refused: " .. tostring(reason) end
+        if reason then cancel_reason, cancel_fault = reason, fault; return false end
+        return true
+    end
     local phase_seen, phase_count, phase_limited, phase_cycle = {}, 0, false, 0
     local function source_phase(context, stage, edge, detail)
+        if stopped then return end
+        if not admitted() then error(cancel_reason,0) end
         if not HL or stopped or type(stage)~="string" or #stage>64 or (edge~="enter" and edge~="exit") then return end
         context,detail=type(context)=="table" and context or {},type(detail)=="table" and detail or {}
         local event={state="native_capture_phase",reason="",arena=arena,stage=stage,edge=edge}
@@ -93,7 +118,7 @@ function M.start()
         HL.event("x_native_worker",event)
     end
     local function same_world(world, actor)
-        if stopped or not WG.check() or not WG.settled() then return false end
+        if not admitted() or not WG.check() or not WG.settled() then return false end
         local token = WG.token()
         local current = WG.world()
         if not current or not current:IsValid() or not world or not world:IsValid()
@@ -103,7 +128,7 @@ function M.start()
         return own and own:IsValid() and own:GetAddress() == current:GetAddress() and own:GetFullName() == current:GetFullName()
     end
     local function player(index)
-        if stopped or not WG.check() or not WG.settled() then return nil end
+        if not admitted() or not WG.check() or not WG.settled() then return nil end
         local world = WG.world()
         local gs = UEH.GetGameplayStatics()
         if not world or not world:IsValid() or not gs or not gs:IsValid() then return nil end
@@ -136,7 +161,7 @@ function M.start()
     end
     local function resolve(index)
         if type(index) == "string" then
-            if stopped or not WG.check() or not WG.settled() then return nil end
+            if not admitted() or not WG.check() or not WG.settled() then return nil end
             local token, pawn = WG.token(), nil
             for _, candidate in pairs(FindAllOf("Willie_BP_C") or {}) do
                 if candidate and candidate:IsValid() and candidate:GetFName():ToString() == index then pawn=candidate;break end
@@ -541,15 +566,7 @@ function M.start()
     loop_handle = LoopInGameThreadWithDelay(16, function()
         if stopped then return true end
         local ok, err = pcall(function()
-            if N.host_parent_alive then
-                local alive, why = N.host_parent_alive()
-                if alive == false then M.stop("native supervisor exited");return end
-                if alive ~= true then error("native supervisor check refused: " .. tostring(why)) end
-            end
-            if stop_file and os.clock() - last_stop_poll >= 0.25 then
-                last_stop_poll = os.clock()
-                if IPC.read(stop_file) then M.stop("stop requested"); return end
-            end
+            if not admitted() then return end
             if not hosted and not boot_only then
                 if not N.host_start then error("embedded native endpoint unavailable") end
                 local started, why = N.host_start(bind, identity_dir, arena, native_mode)
@@ -573,10 +590,12 @@ function M.start()
                     local context={epoch=directory.epoch,dir_seq=directory.seq,frame_seq=frame_seq+1}
                     source_phase(context,"native_control","enter")
                     controller:tick() -- identify the pawn before accepting its first input
+                    if cancel_reason then return end
                     for _, frame in ipairs(N.host_inputs(32) or {}) do controller:receive(frame) end
                     source_phase(context,"native_control","exit")
                     if os.clock()*1000-sample_at >= 33 then
                         local sampled, why = sample_world(directory)
+                        if cancel_reason then return end
                         if sampled then metrics.sample_ok=metrics.sample_ok+1;metrics.last_sample_error=nil
                         else
                             metrics.sample_refused=metrics.sample_refused+1
@@ -608,6 +627,7 @@ function M.start()
                     dispatched=metrics.dispatch,input_refused=metrics.input_refused}) end
             end
         end)
+        if cancel_reason then M.stop(cancel_reason,cancel_fault); return true end
         if not ok then log("worker stopped: %s", tostring(err)); M.stop(nil,tostring(err)); return true end
         if stopped then return true end
         return false
