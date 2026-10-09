@@ -262,3 +262,22 @@ protection guards and uses the matched compound retirement predicate. It
 must not call actor ProcessEvent or GetWorld after destruction, force garbage
 collection, waive missing evidence, or assume deallocation. Native scene
 replication and controls still require a fresh exact three-game proof.
+
+The ABI5 candidate replaces the weak-invalidity-only predicate with that
+compound proof. Its 400-byte result records separate original weak presence
+and engine retirement, plus before/after lifecycle facts with explicit known
+masks. Native same-world/class enumeration owns and frees its returned array;
+post-enumeration identity and garbage state are freshly checked. The global
+absence path checks the actual native object-array slot; a weak-invalid but
+still globally present object refuses, rather than masquerading as absence.
+Retained
+garbage actors receive no post-dispatch actor ProcessEvent. Missing initial
+world membership, ordinary world omission, unavailable APIs, identity reuse
+and reentrant travel all refuse. Scalar proofs remain bound to their original
+world and are forgotten on world drop.
+
+Focused candidate checks passed: strict native C++ compile plus 165
+lifetime/retirement/scene checks, two native Rust binding checks and one API
+check, Lua83 checks and two-file syntax. These
+results establish the guarded bridge behavior only; actual game acceptance
+remains outstanding and must use two normal clients and one headless game.

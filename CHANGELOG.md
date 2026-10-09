@@ -14,6 +14,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
   HSMPNative, isolate its worker role from client policies, and supervise the
   licensed headless game through `hsmp-server native`. Native gameplay and
   complete co-op presentation remain under live verification.
+- Test that host with two normal AI-input game clients and one headless
+  authority; qualify native scene attachment anchors and client actor
+  retirement against the installed game's world and garbage-state evidence.
+  Scene replication and live input remain unverified.
 
 ## [0.1.0-beta.6] - 2026-10-08
 
