@@ -2,6 +2,34 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actualdcaf35dc full G0 PASS (Lua77/Rust1378/79 binaries), pushed dev, RequireG0
+deployed all396 exact hashes. Standard Gameplay134638-94b06d still fails readiness:
+native individual rows now complete full apply on several attempts, but whole
+roster remains stale before LIVE; source inputs0/0. First client row141647us,
+image381/101809us; next row72867us expires. Client2 complete row152879us,
+image424/105843us. These are different amounts of completed work, not a normalized
+speedup claim. Combined native image qualification remains dominant; split
+module/PE/query/compare costs are not measured. No field mismatch or crash was
+reported. Both original windows physically contained on secondary; actual pixels
+show the new opaque synchronization message, not models/healthbars. Independent
+cleanup PASS/four absent/all20 career hashes unchanged/no dumps or children.
+Full18 bounded cost rows, phases/states/cleanup in native_operator_summary.json.
+Next isolate remaining code-profile cost/multiplicity without reducing fresh
+validation, renewing receipt or guessing cause. No blind rerun or parity claim.
+
+Next diagnostic candidate frozen: one copied image-detail row per existing
+reported attempt, hot/cold counts, module/header/query/compare/copy timings and
+compared/copied bytes. Header includes its queries; all detail buckets are
+inside parent image time, never added to parent/inclusive buckets. Cold time
+covers reserve/allocation/copy/hash/push only. Existing query/read/order/refusal
+semantics remain; no extra native call or code query. Max117 copied lines/9
+attempts, saturated image label289 fits319; logger after operation/watch/mutex
+unwind. Strict production/fixture compilation and2087 assertions PASS. Actual
+dcaf costs cover mostly hot validation; three cold binds fit bind3919us. Complete
+uses separate later cold qualifications, outside this apply timer. Do not extend
+current's GameplayBoundary into apply: its early return bypasses native guard.
+Independent review CLOSED; full G0/exact deployment/ONE split-cost run required.
+
 Actual59a2db57 passed full G0 (Lua77/Rust1378/79 binaries), pushed dev and
 RequireG0 deployed all396 hashes. Standard Gameplay132428-2b646f fails readiness:
 both native pawn construction/finish succeed, but neither client reaches LIVE;

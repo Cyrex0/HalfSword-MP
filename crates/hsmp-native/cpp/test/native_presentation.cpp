@@ -1470,10 +1470,16 @@ void gameplay_absolute_checks(){
     rejects([]{gameplay_native_image();},"standalone fixture image cannot qualify shipping native code by address alone");
 }
 uint32_t code_queries{},code_flip_query{};uint8_t* code_fixture{};
+struct GameplayCostFixture {
+    GameplayApplyCosts costs;GameplayApplyCosts* previous{gameplay_apply_costs};
+    GameplayCostFixture(){gameplay_apply_costs=&costs;}
+    ~GameplayCostFixture(){gameplay_apply_costs=previous;}
+};
 SIZE_T WINAPI gameplay_code_query(LPCVOID pointer,PMEMORY_BASIC_INFORMATION out,SIZE_T size){
     ++code_queries;if(code_flip_query&&code_queries==code_flip_query){DWORD old{};VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READWRITE,&old);code_fixture[4096]^=1;DWORD ignored{};VirtualProtect(code_fixture+4096,4096,old,&ignored);}
     return VirtualQuery(pointer,out,size);
 }
+SIZE_T WINAPI gameplay_code_query_refused(LPCVOID,PMEMORY_BASIC_INFORMATION,SIZE_T){return 0;}
 void gameplay_code_checks(){
     uint32_t bytes{};for(const auto& pin:gameplay_code_pins)bytes+=pin.bytes;
     check(gameplay_code_pins.size()==11&&bytes==11310,"all eleven primary code pins remain in every immutable native plan");
@@ -1484,10 +1490,20 @@ void gameplay_code_checks(){
     const std::array<GameplayCodePin,2> pins{{{4096,256,gameplay_quat_hash(code_fixture+4096,256)},{8128,128,gameplay_quat_hash(code_fixture+8128,128)}}};
     DWORD previous{};check(VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READ,&previous)!=0&&VirtualProtect(code_fixture+8192,4096,PAGE_EXECUTE_READWRITE,&previous)!=0,"fixture has a real split executable region");
     const auto image=reinterpret_cast<uintptr_t>(code_fixture);code_queries=0;
-    const auto profile=gameplay_code_copy(image,pins,gameplay_code_query);check(code_queries==6,"cold copied hashes are followed by a separate fresh full permission/byte comparison");
+    const auto profile=[&](){GameplayCostFixture measured;auto copied=gameplay_code_copy(image,pins,gameplay_code_query);
+        check(measured.costs.image.cold==1&&measured.costs.image.hot==0&&measured.costs.image.count[1]==2&&measured.costs.image.count[2]==6&&
+            measured.costs.image.count[3]==2&&measured.costs.image.bytes==std::array<uint64_t,2>{384,384},"cold detail counts only original header/query/compare and copied-hash work");return copied;}();
+    check(code_queries==6,"cold copied hashes are followed by a separate fresh full permission/byte comparison");
     const auto verify=[&](){gameplay_code_validate_at(profile,image,gameplay_code_query);};
     code_queries=0;verify();check(code_queries==3,"one boundary reuses header/code regions and traverses an executable split window");
     code_queries=0;verify();check(code_queries==3,"next boundary repeats every region query instead of retaining a validation ticket");
+    {GameplayCostFixture measured;code_queries=0;gameplay_code_validate_at(profile,image,gameplay_code_query);
+        check(code_queries==3&&measured.costs.image.count[1]==1&&measured.costs.image.count[2]==3&&measured.costs.image.count[3]==2&&
+            measured.costs.image.bytes[0]==384&&!measured.costs.image.cold,"fresh compare detail adds no native permission queries or byte comparisons");
+        rejects([&]{gameplay_native_image(&profile);},"instrumented hot image still refuses the original module mismatch");
+        check(measured.costs.image.hot==1&&measured.costs.image.count[0]==1&&measured.costs.image.count[2]==3,"hot module refusal records only its existing module call before any memory query");}
+    {GameplayCostFixture measured;rejects([&]{gameplay_code_validate_at(profile,image,gameplay_code_query_refused);},"failed native region query keeps original refusal");
+        check(measured.costs.image.count[1]==1&&measured.costs.image.count[2]==1&&!measured.costs.image.count[3],"failed query contributes timing/count without any later comparison");}
     code_queries=0;rejects([&]{gameplay_code_validate_at(profile,image+4096,gameplay_code_query);},"replacement module cannot adopt an earlier qualified byte plan");check(code_queries==0,"module identity refuses before replacement memory reads");
     dos.e_magic=0;std::memcpy(code_fixture,&dos,sizeof(dos));rejects(verify,"changed DOS identity is freshly refused");dos.e_magic=IMAGE_DOS_SIGNATURE;std::memcpy(code_fixture,&dos,sizeof(dos));
     pe.OptionalHeader.SizeOfImage=12287;std::memcpy(code_fixture+128,&pe,sizeof(pe));rejects(verify,"changed PE image size is freshly refused");pe.OptionalHeader.SizeOfImage=12288;std::memcpy(code_fixture+128,&pe,sizeof(pe));
@@ -1608,13 +1624,14 @@ void gameplay_current_checks(HsmpReflect& reflect){
     hsmp_presentation_set_create_log(nullptr);gameplay_current_attempts.store(0);
     lifetime_reset(reflect);
 }
-std::vector<uint32_t> gameplay_quat_records;bool gameplay_quat_outside{};bool gameplay_quat_bits{};std::vector<std::string> gameplay_cost_records;
+std::vector<uint32_t> gameplay_quat_records;bool gameplay_quat_outside{};bool gameplay_quat_bits{};std::vector<std::string> gameplay_cost_records,gameplay_image_records;
 void record_gameplay_quat(const char* stage,uint32_t edge,uint64_t,uint32_t attempt,uint32_t,uint32_t,uint32_t,const char* label){
     bool unlocked=gameplay_mutex.try_lock();if(unlocked)gameplay_mutex.unlock();
     gameplay_quat_outside=gameplay_quat_outside&&unlocked&&!active_guard&&!active_lookup&&!gameplay_active&&!gameplay_native_active&&!gameplay_apply_costs;
     check(std::strcmp(stage,"gameplay_quat")==0&&std::strlen(label)<320,"quaternion diagnostic has a distinct bounded copied label");
     gameplay_quat_bits=gameplay_quat_bits||std::strstr(label,"8000000000000000")!=nullptr;gameplay_quat_records.push_back(attempt);
     if(edge==3)gameplay_cost_records.emplace_back(label);
+    if(edge==4)gameplay_image_records.emplace_back(label);
 }
 void gameplay_quat_checks(HsmpReflect& reflect){
     alignas(16) std::array<uint8_t,0x200> root{};alignas(16) std::array<double,8> cache{};
@@ -1635,21 +1652,24 @@ void gameplay_quat_checks(HsmpReflect& reflect){
     pointer=cache.data();std::memcpy(root.data()+0x1c0,&pointer,8);cache[2]=std::nextafter(-0.,1.);GameplayQuatSnapshot after;
     check(gameplay_quat_copy(root.data(),after)&&after.cached[2]!=before.cached[2],"each snapshot rereads native cache values rather than reusing a prior observation");
     before.available=after.available=1;hsmp_presentation_set_create_log(nullptr);gameplay_quat_attempts.store(0);gameplay_quat_failure.store(false);
-    {GameplayQuatTrace disabled;GameplayApplyTimer timer(0);check(!disabled.active&&gameplay_quat_attempts.load()==0&&!gameplay_apply_costs,"disabled quaternion logger consumes no attempt, timing or snapshot");}
-    gameplay_quat_records.clear();gameplay_cost_records.clear();gameplay_quat_outside=true;gameplay_quat_bits=false;hsmp_presentation_set_create_log(record_gameplay_quat);
+    {GameplayQuatTrace disabled;GameplayApplyTimer timer(0);GameplayImageTimer detail(2);check(!disabled.active&&gameplay_quat_attempts.load()==0&&!gameplay_apply_costs,"disabled quaternion logger consumes no attempt, timing or snapshot");}
+    gameplay_quat_records.clear();gameplay_cost_records.clear();gameplay_image_records.clear();gameplay_quat_outside=true;gameplay_quat_bits=false;hsmp_presentation_set_create_log(record_gameplay_quat);
     for(int i=0;i<12;++i){{GameplayQuatTrace trace;const std::lock_guard lock(gameplay_mutex);int admission=1;const HsmpViewGuard guard{&admission,guard_check};OperationScope scope(&guard,keep(&old_world));
         trace.before=before;trace.after=after;trace.requested=q;trace.complete=i!=2&&i<10?1u:0u;
         {GameplayApplyTimer native_guard(0),native_pure(2);rejects([]{gameplay_native_image();},"failed native image pin still contributes copied inclusive cost without native queries");}
         if(trace.active){check(trace.costs.count==std::array<uint64_t,3>{1,1,1},"guard, pure and image counts remain separate inclusive buckets");
-            trace.costs.ns[0]=400000;trace.phase(4);
+            trace.costs.ns[0]=400000;trace.phase(4);trace.costs.image.hot=378;trace.costs.image.cold=3;trace.costs.image.count[2]=42;trace.costs.image.ns[2]=400000;trace.costs.image.bytes[0]=11310;
             auto* outer_cost=gameplay_apply_costs;hsmp_presentation_set_create_log(nullptr);
             {GameplayQuatTrace disabled;check(!gameplay_apply_costs,"nested disabled operation cannot add timing to its outer row");}
             hsmp_presentation_set_create_log(record_gameplay_quat);check(gameplay_apply_costs==outer_cost,"nested diagnostic restores the original operation collector");}
     }if(i==2)check(!gameplay_quat_failure.load(),"failure within first8 preserves the first later-failure reporter slot");
     }
-    check(gameplay_quat_records.size()==108&&std::count(gameplay_quat_records.begin(),gameplay_quat_records.end(),9u)==12,"quaternion reporter is bounded to first8 plus first laterfailure, twelve copied lines each");
+    check(gameplay_quat_records.size()==117&&std::count(gameplay_quat_records.begin(),gameplay_quat_records.end(),9u)==13,"quaternion reporter is bounded to first8 plus first laterfailure, thirteen copied lines each");
     check(gameplay_cost_records.size()==9&&std::all_of(gameplay_cost_records.begin(),gameplay_cost_records.end(),[](const std::string& row){return row.find("phase=4")!=std::string::npos&&row.find("guard_n=1 guard_us=400 image_n=1")!=std::string::npos&&row.ends_with("inclusive=true");}),
         "one copied cost row retains final phase and nanosecond totals without summing inclusive durations");
+    check(gameplay_image_records.size()==9&&std::all_of(gameplay_image_records.begin(),gameplay_image_records.end(),[](const std::string& row){return row.find("hot_n=378 cold_n=3")!=std::string::npos&&
+        row.find("query_n=42 query_us=400")!=std::string::npos&&row.find("cmp_bytes=11310")!=std::string::npos&&row.ends_with("pe_includes_query=true");}),
+        "one copied image-detail row preserves route/count/byte units and labels header query inclusion");
     check(gameplay_quat_outside&&gameplay_quat_bits,"quaternion raw signed-zero bits emit after native scope/watch/mutex unwind");
     hsmp_presentation_set_create_log(nullptr);gameplay_quat_attempts.store(0);gameplay_quat_failure.store(false);lifetime_reset(reflect);
 }

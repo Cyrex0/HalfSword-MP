@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Split bounded native image timing into module, header, permission-query,
+  byte-compare and cold-copy costs to identify remaining readiness delays.
 - Compare freshly checked native code against qualified operation-owned bytes,
   preserving every guard while reducing repeated code-profile work. Show actual
   pawn, equipment and synchronization stages during gameplay loading.

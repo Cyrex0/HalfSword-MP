@@ -21,12 +21,21 @@ struct GameplayCurrent {
 enum GameplayCurrentReason:uint32_t {GP_CURRENT_UNENTERED,GP_CURRENT_WORLD,GP_CURRENT_ABSENT,GP_CURRENT_SCHEMA,GP_CURRENT_CODE,GP_CURRENT_VTABLE,GP_CURRENT_TARGET,GP_CURRENT_ZERO,GP_CURRENT_HOT,GP_CURRENT_LEVEL};
 struct GameplayCurrentObservation {uint32_t reason{GP_CURRENT_UNENTERED},code{},cold_code{},found{},type{},stage{},operations{},complete{};HsmpProp schema{};bool hot{};};
 std::atomic<uint32_t> gameplay_current_attempts{};
-struct GameplayApplyCosts {std::array<uint64_t,3> ns{},count{};std::array<uint64_t,5> phases{};uint64_t total{};uint32_t phase{1};};
+struct GameplayImageCosts {std::array<uint64_t,5> ns{},count{};std::array<uint64_t,2> bytes{};uint64_t hot{},cold{};};
+struct GameplayApplyCosts {std::array<uint64_t,3> ns{},count{};std::array<uint64_t,5> phases{};GameplayImageCosts image;uint64_t total{};uint32_t phase{1};};
 thread_local GameplayApplyCosts* gameplay_apply_costs{};
 struct GameplayApplyTimer {
     GameplayApplyCosts* costs{gameplay_apply_costs};uint32_t bucket{};std::chrono::steady_clock::time_point started{};
     explicit GameplayApplyTimer(uint32_t index):bucket(index){if(costs){++costs->count[bucket];started=std::chrono::steady_clock::now();}}
     ~GameplayApplyTimer(){if(costs)timer_accumulate(costs->ns[bucket],static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-started).count()),true);}
+};
+// Header time includes its existing region queries. All detail buckets are
+// inside the parent image span; they are not additive to that parent span.
+struct GameplayImageTimer {
+    GameplayApplyCosts* costs{gameplay_apply_costs};uint32_t bucket{};std::chrono::steady_clock::time_point started{};
+    explicit GameplayImageTimer(uint32_t index,size_t bytes=0):bucket(index){if(costs){timer_accumulate(costs->image.count[bucket],1,true);
+        if(bucket==3||bucket==4)timer_accumulate(costs->image.bytes[bucket-3],static_cast<uint64_t>(bytes),true);started=std::chrono::steady_clock::now();}}
+    ~GameplayImageTimer(){if(costs)timer_accumulate(costs->image.ns[bucket],static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-started).count()),true);}
 };
 struct GameplayQuatSnapshot {uint32_t available{},reason{},cache{};uint64_t class_name{},slot{};std::array<double,4> world{},cached{};std::array<double,3> relative{},euler{};};
 bool gameplay_quat_readable(const void* pointer,size_t bytes){
@@ -78,6 +87,14 @@ struct GameplayQuatTrace {
             total,costs.phase,phases[0],phases[1],phases[2],phases[3],phases[4],count[0],ns[0],count[1],ns[1],count[2],ns[2],capped?1u:0u);
         logger("gameplay_quat",3,0,attempt,complete,0,0,text);
     }
+    void image_row()const{
+        bool capped{};const auto scalar=[&capped](uint64_t value){if(value>UINT32_MAX){capped=true;return UINT32_MAX;}return static_cast<uint32_t>(value);};
+        std::array<uint32_t,5> ns{},count{};for(size_t i=0;i<5;++i){ns[i]=scalar(costs.image.ns[i]/1000);count[i]=scalar(costs.image.count[i]);}
+        const auto hot=scalar(costs.image.hot),cold=scalar(costs.image.cold),compared=scalar(costs.image.bytes[0]),copied=scalar(costs.image.bytes[1]);
+        char text[320]{};std::snprintf(text,sizeof(text),"image_detail hot_n=%u cold_n=%u module_n=%u module_us=%u pe_n=%u pe_us=%u query_n=%u query_us=%u cmp_n=%u cmp_bytes=%u cmp_us=%u cold_bytes=%u cold_us=%u capped=%u pe_includes_query=true",
+            hot,cold,count[0],ns[0],count[1],ns[1],count[2],ns[2],count[3],compared,ns[3],copied,ns[4],capped?1u:0u);
+        logger("gameplay_quat",4,0,attempt,complete,0,0,text);
+    }
     void values(const char* label,const double* data,size_t count,uint32_t edge)const{
         char text[320]{};size_t at{};for(size_t i=0;i<count;++i){uint64_t bits{};std::memcpy(&bits,data+i,8);const auto n=std::snprintf(text+at,sizeof(text)-at,"%s%zu=%.17g/%016llx ",label,i,data[i],static_cast<unsigned long long>(bits));if(n<0||static_cast<size_t>(n)>=sizeof(text)-at)break;at+=static_cast<size_t>(n);}
         logger("gameplay_quat",edge,0,attempt,complete,0,0,text);
@@ -86,7 +103,7 @@ struct GameplayQuatTrace {
         timer_accumulate(costs.phases[costs.phase-1],static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(ended-boundary).count()),true);
         costs.total=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(ended-started).count());
         if(!attempt&&!complete){if(!gameplay_quat_failure.exchange(true))attempt=9;}if(!attempt)return;
-        cost_row();
+        cost_row();image_row();
         values("requested_q",requested.data(),4,0);
         for(const auto& [edge,row]:{std::pair<uint32_t,const GameplayQuatSnapshot*>{1,&before},{2,&after}}){char label[192]{};
             std::snprintf(label,sizeof(label),"available=%u reason=%u cache=%u class_fname=%016llx move_rva=%llx cached_equals_requested=%u evidence_only=true",row->available,row->reason,row->cache,static_cast<unsigned long long>(row->class_name),static_cast<unsigned long long>(row->slot),row->cache&&std::memcmp(row->cached.data(),requested.data(),32)==0?1u:0u);
@@ -393,7 +410,8 @@ struct GameplayCodeRegions {
         auto at=reinterpret_cast<uintptr_t>(pointer);if(!at||!bytes||bytes>UINTPTR_MAX-at||!query)return false;const auto end=at+bytes;
         while(at<end){const Region* covered{};for(size_t i=0;i<count;++i)if(regions[i].begin<=at&&at<regions[i].end){covered=&regions[i];break;}
             if(!covered){MEMORY_BASIC_INFORMATION observed{};
-                if(query(reinterpret_cast<const void*>(at),&observed,sizeof(observed))!=sizeof(observed)||observed.State!=MEM_COMMIT||(observed.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return false;
+                const auto queried=[&](){GameplayImageTimer query_time(2);return query(reinterpret_cast<const void*>(at),&observed,sizeof(observed));}();
+                if(queried!=sizeof(observed)||observed.State!=MEM_COMMIT||(observed.Protect&(PAGE_GUARD|PAGE_NOACCESS)))return false;
                 const auto protection=observed.Protect&0xff;const bool read=protection==PAGE_READONLY||protection==PAGE_READWRITE||protection==PAGE_WRITECOPY||protection==PAGE_EXECUTE_READ||protection==PAGE_EXECUTE_READWRITE||protection==PAGE_EXECUTE_WRITECOPY;
                 const bool execute=protection==PAGE_EXECUTE_READ||protection==PAGE_EXECUTE_READWRITE||protection==PAGE_EXECUTE_WRITECOPY;
                 const auto begin=reinterpret_cast<uintptr_t>(observed.BaseAddress);
@@ -404,6 +422,7 @@ struct GameplayCodeRegions {
     }
 };
 bool gameplay_code_pe(GameplayCodeRegions& regions,uintptr_t image,uint32_t& size,uint32_t& header){
+    GameplayImageTimer header_time(1);
     if(!regions.covers(reinterpret_cast<const void*>(image),sizeof(IMAGE_DOS_HEADER),false))return false;
     IMAGE_DOS_HEADER dos{};std::memcpy(&dos,reinterpret_cast<const void*>(image),sizeof(dos));
     if(dos.e_magic!=IMAGE_DOS_SIGNATURE||dos.e_lfanew<=0||dos.e_lfanew>=65536||static_cast<uintptr_t>(dos.e_lfanew)>UINTPTR_MAX-image)return false;
@@ -411,33 +430,37 @@ bool gameplay_code_pe(GameplayCodeRegions& regions,uintptr_t image,uint32_t& siz
     IMAGE_NT_HEADERS64 pe{};std::memcpy(&pe,reinterpret_cast<const void*>(image+header),sizeof(pe));size=pe.OptionalHeader.SizeOfImage;
     return pe.Signature==IMAGE_NT_SIGNATURE&&pe.FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64&&pe.OptionalHeader.Magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC&&size&&size<=UINTPTR_MAX-image;
 }
+int gameplay_code_compare(const void* live,const void* expected,size_t bytes){GameplayImageTimer compare_time(3,bytes);return std::memcmp(live,expected,bytes);}
 void gameplay_code_validate_at(const GameplayCodeProfile& expected,uintptr_t image,GameplayCodeQuery query=VirtualQuery){
     require(image&&image==expected.image,"native gameplay original absolute image changed");GameplayCodeRegions regions(query);uint32_t size{},header{};
     require(gameplay_code_pe(regions,image,size,header)&&size==expected.size&&header==expected.header,"native gameplay original absolute PE changed");
     for(const auto& window:expected.windows)require(window.rva<=size&&window.bytes.size()<=size-window.rva&&
         regions.covers(reinterpret_cast<const void*>(image+window.rva),window.bytes.size(),true)&&
-        std::memcmp(reinterpret_cast<const void*>(image+window.rva),window.bytes.data(),window.bytes.size())==0,"native gameplay absolute code changed");
+        gameplay_code_compare(reinterpret_cast<const void*>(image+window.rva),window.bytes.data(),window.bytes.size())==0,"native gameplay absolute code changed");
 }
 template<size_t N>GameplayCodeProfile gameplay_code_copy(uintptr_t image,const std::array<GameplayCodePin,N>& pins,GameplayCodeQuery query=VirtualQuery){
+    if(gameplay_apply_costs)timer_accumulate(gameplay_apply_costs->image.cold,1,true);
     GameplayCodeProfile profile;profile.image=image;GameplayCodeRegions regions(query);
     require(gameplay_code_pe(regions,image,profile.size,profile.header),"native gameplay absolute image/code unavailable");
-    profile.windows.reserve(N);
+    {GameplayImageTimer allocate_time(4);profile.windows.reserve(N);}
     for(const auto& pin:pins){require(pin.rva<=profile.size&&pin.bytes<=profile.size-pin.rva&&regions.covers(reinterpret_cast<const void*>(image+pin.rva),pin.bytes,true),"native gameplay absolute code unreadable");
-        GameplayCodeWindow copied;copied.rva=pin.rva;copied.bytes.resize(pin.bytes);std::memcpy(copied.bytes.data(),reinterpret_cast<const void*>(image+pin.rva),pin.bytes);
+        GameplayImageTimer copy_time(4,pin.bytes);GameplayCodeWindow copied;copied.rva=pin.rva;copied.bytes.resize(pin.bytes);std::memcpy(copied.bytes.data(),reinterpret_cast<const void*>(image+pin.rva),pin.bytes);
         require(gameplay_quat_hash(copied.bytes.data(),copied.bytes.size())==pin.hash,"native gameplay absolute code changed");profile.windows.push_back(std::move(copied));}
     // Hashes qualify the owned copies, then a distinct fresh boundary compares
     // every live window before the plan can be exposed to its NativeWatch.
     gameplay_code_validate_at(profile,image,query);return profile;
 }
+uintptr_t gameplay_code_module(){GameplayImageTimer module_time(0);return reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));}
 GameplayCodeProfile gameplay_code_bind(){
-    GameplayApplyTimer image_time(1);const auto image=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+    GameplayApplyTimer image_time(1);const auto image=gameplay_code_module();
     auto profile=gameplay_code_copy(image,gameplay_code_pins);
-    require(reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr))==profile.image,"native gameplay original absolute image changed");return profile;
+    require(gameplay_code_module()==profile.image,"native gameplay original absolute image changed");return profile;
 }
 uintptr_t gameplay_native_image(const GameplayCodeProfile* supplied=nullptr){
     const auto* expected=supplied?supplied:gameplay_native_profile();
     if(!expected)return gameplay_code_bind().image;
-    GameplayApplyTimer image_time(1);const auto image=reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));gameplay_code_validate_at(*expected,image);return image;
+    GameplayApplyTimer image_time(1);if(gameplay_apply_costs)timer_accumulate(gameplay_apply_costs->image.hot,1,true);
+    const auto image=gameplay_code_module();gameplay_code_validate_at(*expected,image);return image;
 }
 GameplayCachePair gameplay_cache_pair(const void* root){
     const void* cache{};std::memcpy(&cache,static_cast<const uint8_t*>(root)+0x1c0,8);
