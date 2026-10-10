@@ -2,6 +2,57 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual5ace4b76 full G0 PASS (Lua77/Rust1378/79), dev pushed, RequireG0/all396
+deployed. Standard Gameplay140015-c40761 still refuses whole-roster readiness
+as stale, inputs0/0, while individual native rows complete. The split-cost
+diagnostic proves fresh permission queries dominate: client1 first row126571us,
+image381/92742us, query768/92116us, module384/16us, header384/222us,
+compare4191/4309110bytes/350us, cold33930bytes/41us (hot378/cold3).
+Header includes header queries; do not add nested buckets. Actual code-region
+length is not emitted; Microsoft's VirtualQuery documentation describes scanning
+subsequent matching pages, but that specific region length is still unmeasured.
+Next consider fresh bounded per-page permission qualification from documented
+QueryWorkingSetEx, retaining original PE/header queries and all code bytes.
+Every boundary must freshly cover all pages, reject bad/guard/nonexecuting
+permissions, and use original fresh VirtualQuery for invalid/unavailable pages;
+real protection-change/decommit fixtures must prove current semantics first.
+No cached page admission or successful guard, no expiry/tolerance change.
+Early secondary placement PASS; no pixels observed in this diagnostic run.
+Independent cleanup PASS/four absent/save20 unchanged/no dumps or children.
+All18 cost/detail rows, phases/states/cleanup in native_operator_summary.json.
+
+Documented page-query candidate is under implementation/review. Current actual
+4KiB system pages place all11 windows in9 unique code pages. Immutable expected
+page addresses may be reused; actual page attributes never are. Each boundary
+uses fresh zeroed QueryWorkingSetEx rows for all pages before any code read,
+accepting only Valid/nonbad ordinary executable-readable pages. Invalid,
+unavailable, failed or unsupported observations use the original fresh complete
+VirtualQuery window walk; known forbidden permissions refuse. Original fresh
+PE/header queries and all11 byte comparisons remain. Commit-state equivalence
+is an explicit inference from documented valid accessible-page protection,
+not a returned MEM_COMMIT field. Actual guard/noaccess/read-only/decommit/
+recommit fixtures must close before production approval. No forced residency,
+memory locking, or cached successful admission.
+Primary API sources: [QueryWorkingSetEx](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-queryworkingsetex),
+[page attributes](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-psapi_working_set_ex_block),
+[protection semantics](https://learn.microsoft.com/en-us/windows/win32/memory/memory-protection-constants),
+[page state](https://learn.microsoft.com/en-us/windows/win32/memory/page-state),
+[VirtualQuery scanning](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualquery).
+
+Candidate frozen: three CPP files, same provider ABI and all original actor/root/
+receipt checks. Per-operation immutable geometry is derived from actual system
+page size; optional K32QueryWorkingSetEx pointer resolves from kernel32. Each
+boundary zeroes and queries all covering pages anew before code reads; no page
+attribute is retained. Fresh PE/header region queries and all11 exact byte
+comparisons remain. Actual Windows fixtures PASS for resident private and
+independent SEC_IMAGE code: read-only/noaccess/guard mutations, private decommit/
+recommit and image unmap refuse before comparison; failed/invalid/large-page
+observations preserve the old complete fresh region path. Unsupported/overflow/
+incomplete geometry also uses that path. Strict production+fixture build PASS,
+2128 lifetime/rejection assertions PASS. Copied ws_n/ws_legacy route counters
+retain bounded117 lines/9 attempts; saturated label310 fits319. Independent
+review CLOSED; full G0/exact deployment/ONE actual run remain required.
+
 Actualdcaf35dc full G0 PASS (Lua77/Rust1378/79 binaries), pushed dev, RequireG0
 deployed all396 exact hashes. Standard Gameplay134638-94b06d still fails readiness:
 native individual rows now complete full apply on several attempts, but whole

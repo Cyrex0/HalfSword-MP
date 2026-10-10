@@ -1480,6 +1480,15 @@ SIZE_T WINAPI gameplay_code_query(LPCVOID pointer,PMEMORY_BASIC_INFORMATION out,
     return VirtualQuery(pointer,out,size);
 }
 SIZE_T WINAPI gameplay_code_query_refused(LPCVOID,PMEMORY_BASIC_INFORMATION,SIZE_T){return 0;}
+GameplayWorkingSetQuery code_ws_native{};uint32_t code_ws_calls{},code_ws_mode{};
+BOOL WINAPI gameplay_code_working_set(HANDLE process,PVOID buffer,DWORD bytes){
+    ++code_ws_calls;if(code_ws_mode==1)return FALSE;const auto result=code_ws_native(process,buffer,bytes);if(!result)return result;
+    auto* rows=static_cast<PSAPI_WORKING_SET_EX_INFORMATION*>(buffer);const auto count=bytes/sizeof(*rows);
+    if(code_ws_mode==2)for(size_t i=0;i<count;++i)rows[i].VirtualAttributes.Flags=UINT64_MAX-1;
+    if(code_ws_mode==3)for(size_t i=0;i<count;++i)if(rows[i].VirtualAttributes.Valid)rows[i].VirtualAttributes.LargePage=1;
+    if(code_ws_mode==4){rows[0].VirtualAttributes.Valid=1;rows[0].VirtualAttributes.Bad=1;}
+    return result;
+}
 void gameplay_code_checks(){
     uint32_t bytes{};for(const auto& pin:gameplay_code_pins)bytes+=pin.bytes;
     check(gameplay_code_pins.size()==11&&bytes==11310,"all eleven primary code pins remain in every immutable native plan");
@@ -1517,6 +1526,48 @@ void gameplay_code_checks(){
     code_queries=0;code_flip_query=4;rejects([&]{gameplay_code_copy(image,pins,gameplay_code_query);},"code change after copied hashes is caught by the fresh comparison before plan exposure");
     code_flip_query=0;check(VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READWRITE,&previous)!=0,"fixture restores final changed code page");code_fixture[4096]^=1;
     check(VirtualProtect(code_fixture+4096,4096,PAGE_EXECUTE_READ,&previous)!=0,"fixture restores final permissions");verify();
+    SYSTEM_INFO system{};GetSystemInfo(&system);const auto kernel=GetModuleHandleW(L"kernel32.dll");
+    code_ws_native=kernel?reinterpret_cast<GameplayWorkingSetQuery>(GetProcAddress(kernel,"K32QueryWorkingSetEx")):nullptr;
+    check(code_ws_native&&system.dwPageSize==4096,"actual supported OS exposes the documented page query and fixture geometry");
+    auto batch=profile;gameplay_code_pages(batch,system.dwPageSize,gameplay_code_working_set);
+    check(batch.pages==std::vector<uintptr_t>{image+4096,image+8192},"immutable code geometry includes every page of a crossing window");
+    const auto batch_verify=[&](){gameplay_code_validate_at(batch,image,gameplay_code_query);};
+    {GameplayCostFixture measured;code_queries=code_ws_calls=0;batch_verify();check(code_queries==1&&code_ws_calls==1&&measured.costs.image.working_set==1&&!measured.costs.image.legacy&&
+        measured.costs.image.count[2]==2&&measured.costs.image.bytes[0]==384,"actual resident page batch keeps fresh header query and all bytes while replacing only code-region scans");}
+    code_queries=code_ws_calls=0;batch_verify();check(code_queries==1&&code_ws_calls==1,"next boundary requeries every code page without carrying prior permissions");
+    for(const auto protection:{PAGE_READONLY,PAGE_NOACCESS,PAGE_EXECUTE_READ|PAGE_GUARD}){check(VirtualProtect(code_fixture+8192,4096,protection,&previous)!=0,"actual OS changes crossing-page protection");
+        rejects(batch_verify,"fresh page query refuses readonly/noaccess/guard before comparing the crossing code window");
+        check(VirtualProtect(code_fixture+8192,4096,PAGE_EXECUTE_READWRITE,&previous)!=0,"fixture restores actual execution permission");batch_verify();}
+    check(VirtualFree(code_fixture+8192,4096,MEM_DECOMMIT)!=0,"actual OS decommits a previously resident code page");rejects(batch_verify,"decommitted page cannot inherit a prior valid/protection result");
+    check(VirtualAlloc(code_fixture+8192,4096,MEM_COMMIT,PAGE_EXECUTE_READWRITE)==code_fixture+8192,"fixture recommits only its original page");
+    for(size_t i=8192;i<12288;++i)code_fixture[i]=static_cast<uint8_t>((i*17+3)&255);batch_verify();
+    for(const auto mode:{1u,2u,3u}){code_ws_mode=mode;code_queries=code_ws_calls=0;batch_verify();check(code_queries==3&&code_ws_calls==1,"failed/invalid/large-page observation takes original fresh MEM_COMMIT region walk");}
+    code_ws_mode=4;rejects(batch_verify,"valid bad-page observation refuses without comparing native code");code_ws_mode=0;
+    auto incomplete=batch;incomplete.pages.pop_back();code_queries=code_ws_calls=0;gameplay_code_validate_at(incomplete,image,gameplay_code_query);
+    check(code_queries==3&&!code_ws_calls,"unsupported incomplete geometry falls back rather than omitting a covered page");
+    auto unsupported=profile;gameplay_code_pages(unsupported,3,gameplay_code_working_set);check(!unsupported.working_set&&unsupported.pages.empty(),"unsupported page geometry retains original permission route");
+    auto overflow=profile;overflow.image=UINTPTR_MAX-32;gameplay_code_pages(overflow,4096,gameplay_code_working_set);
+    check(!overflow.working_set&&overflow.pages.empty(),"overflowing code-page address cannot produce an incomplete working-set batch");
+    std::array<wchar_t,MAX_PATH> own_path{};const auto path_count=GetModuleFileNameW(nullptr,own_path.data(),static_cast<DWORD>(own_path.size()));
+    check(path_count&&path_count<own_path.size(),"fixture identifies its own executable for an independent image mapping");
+    const auto file=CreateFileW(own_path.data(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    check(file!=INVALID_HANDLE_VALUE,"fixture opens only its own executable");const auto mapping=CreateFileMappingW(file,nullptr,PAGE_READONLY|SEC_IMAGE,0,0,nullptr);
+    check(mapping!=nullptr,"fixture creates an actual MEM_IMAGE view without loading or executing it");const auto mapped=static_cast<uint8_t*>(MapViewOfFile(mapping,FILE_MAP_READ,0,0,0));
+    check(mapped!=nullptr,"fixture owns its independent executable image mapping");
+    const auto* mapped_dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(mapped);const auto* mapped_pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(mapped+mapped_dos->e_lfanew);
+    const auto* sections=IMAGE_FIRST_SECTION(mapped_pe);const IMAGE_SECTION_HEADER* executable{};
+    for(size_t i=0;i<mapped_pe->FileHeader.NumberOfSections;++i)if((sections[i].Characteristics&IMAGE_SCN_MEM_EXECUTE)&&sections[i].Misc.VirtualSize>=128){executable=sections+i;break;}
+    check(executable!=nullptr,"mapped fixture contains original executable code");auto* mapped_code=mapped+executable->VirtualAddress;MEMORY_BASIC_INFORMATION mapped_info{};
+    check(VirtualQuery(mapped_code,&mapped_info,sizeof(mapped_info))==sizeof(mapped_info)&&mapped_info.Type==MEM_IMAGE,"permission fixture exercises actual image pages as well as private pages");
+    const std::array<GameplayCodePin,1> mapped_pins{{{executable->VirtualAddress,128,gameplay_quat_hash(mapped_code,128)}}};
+    const auto mapped_image=reinterpret_cast<uintptr_t>(mapped);const auto mapped_profile=gameplay_code_copy(mapped_image,mapped_pins,gameplay_code_query,gameplay_code_working_set,system.dwPageSize);
+    const auto mapped_verify=[&](){gameplay_code_validate_at(mapped_profile,mapped_image,gameplay_code_query);};mapped_verify();
+    for(const auto protection:{PAGE_READONLY,PAGE_NOACCESS,PAGE_EXECUTE_READ|PAGE_GUARD}){DWORD original_protection{};
+        check(VirtualProtect(mapped_code,system.dwPageSize,protection,&original_protection)!=0,"actual OS changes mapped-image code-page protection");
+        rejects(mapped_verify,"fresh page attributes refuse protected MEM_IMAGE bytes before native comparison");DWORD discarded{};
+        check(VirtualProtect(mapped_code,system.dwPageSize,original_protection,&discarded)!=0,"fixture restores original mapped-image protection");mapped_verify();}
+    check(UnmapViewOfFile(mapped)!=0,"fixture unmaps only its independent image");rejects(mapped_verify,"unmapped image cannot retain a prior resident page admission");
+    CloseHandle(mapping);CloseHandle(file);
     check(VirtualFree(code_fixture,0,MEM_RELEASE)!=0,"code fixture releases only its owned allocation");code_fixture=nullptr;code_queries=0;
 }
 struct GameplayCurrentRecord {uint32_t attempt{},complete{},operations{},stage{},reason{};std::string label;};
@@ -1658,7 +1709,7 @@ void gameplay_quat_checks(HsmpReflect& reflect){
         trace.before=before;trace.after=after;trace.requested=q;trace.complete=i!=2&&i<10?1u:0u;
         {GameplayApplyTimer native_guard(0),native_pure(2);rejects([]{gameplay_native_image();},"failed native image pin still contributes copied inclusive cost without native queries");}
         if(trace.active){check(trace.costs.count==std::array<uint64_t,3>{1,1,1},"guard, pure and image counts remain separate inclusive buckets");
-            trace.costs.ns[0]=400000;trace.phase(4);trace.costs.image.hot=378;trace.costs.image.cold=3;trace.costs.image.count[2]=42;trace.costs.image.ns[2]=400000;trace.costs.image.bytes[0]=11310;
+            trace.costs.ns[0]=400000;trace.phase(4);trace.costs.image.hot=378;trace.costs.image.cold=3;trace.costs.image.count[2]=42;trace.costs.image.ns[2]=400000;trace.costs.image.bytes[0]=11310;trace.costs.image.working_set=37;trace.costs.image.legacy=5;
             auto* outer_cost=gameplay_apply_costs;hsmp_presentation_set_create_log(nullptr);
             {GameplayQuatTrace disabled;check(!gameplay_apply_costs,"nested disabled operation cannot add timing to its outer row");}
             hsmp_presentation_set_create_log(record_gameplay_quat);check(gameplay_apply_costs==outer_cost,"nested diagnostic restores the original operation collector");}
@@ -1670,6 +1721,7 @@ void gameplay_quat_checks(HsmpReflect& reflect){
     check(gameplay_image_records.size()==9&&std::all_of(gameplay_image_records.begin(),gameplay_image_records.end(),[](const std::string& row){return row.find("hot_n=378 cold_n=3")!=std::string::npos&&
         row.find("query_n=42 query_us=400")!=std::string::npos&&row.find("cmp_bytes=11310")!=std::string::npos&&row.ends_with("pe_includes_query=true");}),
         "one copied image-detail row preserves route/count/byte units and labels header query inclusion");
+    check(std::all_of(gameplay_image_records.begin(),gameplay_image_records.end(),[](const std::string& row){return row.find("ws_n=37 ws_legacy=5")!=std::string::npos;}),"bounded copied row proves batched-page attempts and legacy permission fallback separately");
     check(gameplay_quat_outside&&gameplay_quat_bits,"quaternion raw signed-zero bits emit after native scope/watch/mutex unwind");
     hsmp_presentation_set_create_log(nullptr);gameplay_quat_attempts.store(0);gameplay_quat_failure.store(false);lifetime_reset(reflect);
 }

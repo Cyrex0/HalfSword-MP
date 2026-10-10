@@ -2,7 +2,9 @@
 // Willie construction is separate from the inert visual-mirror provider.
 struct GameplayNativeProof {LookupEntry root_path;uintptr_t image{};uint64_t table{};uint8_t body_flags{},notification_flags{};};
 struct GameplayCodeWindow {uint32_t rva{};std::vector<uint8_t> bytes;};
-struct GameplayCodeProfile {uintptr_t image{};uint32_t size{},header{};std::vector<GameplayCodeWindow> windows;};
+using GameplayWorkingSetQuery=BOOL(WINAPI*)(HANDLE,PVOID,DWORD);
+struct GameplayCodeProfile {uintptr_t image{};uint32_t size{},header{},page_size{};std::vector<GameplayCodeWindow> windows;
+    GameplayWorkingSetQuery working_set{};std::vector<uintptr_t> pages;};
 const GameplayCodeProfile* gameplay_native_profile();
 void gameplay_native_guard();
 struct GameplayApplied {
@@ -21,7 +23,7 @@ struct GameplayCurrent {
 enum GameplayCurrentReason:uint32_t {GP_CURRENT_UNENTERED,GP_CURRENT_WORLD,GP_CURRENT_ABSENT,GP_CURRENT_SCHEMA,GP_CURRENT_CODE,GP_CURRENT_VTABLE,GP_CURRENT_TARGET,GP_CURRENT_ZERO,GP_CURRENT_HOT,GP_CURRENT_LEVEL};
 struct GameplayCurrentObservation {uint32_t reason{GP_CURRENT_UNENTERED},code{},cold_code{},found{},type{},stage{},operations{},complete{};HsmpProp schema{};bool hot{};};
 std::atomic<uint32_t> gameplay_current_attempts{};
-struct GameplayImageCosts {std::array<uint64_t,5> ns{},count{};std::array<uint64_t,2> bytes{};uint64_t hot{},cold{};};
+struct GameplayImageCosts {std::array<uint64_t,5> ns{},count{};std::array<uint64_t,2> bytes{};uint64_t hot{},cold{},working_set{},legacy{};};
 struct GameplayApplyCosts {std::array<uint64_t,3> ns{},count{};std::array<uint64_t,5> phases{};GameplayImageCosts image;uint64_t total{};uint32_t phase{1};};
 thread_local GameplayApplyCosts* gameplay_apply_costs{};
 struct GameplayApplyTimer {
@@ -90,9 +92,9 @@ struct GameplayQuatTrace {
     void image_row()const{
         bool capped{};const auto scalar=[&capped](uint64_t value){if(value>UINT32_MAX){capped=true;return UINT32_MAX;}return static_cast<uint32_t>(value);};
         std::array<uint32_t,5> ns{},count{};for(size_t i=0;i<5;++i){ns[i]=scalar(costs.image.ns[i]/1000);count[i]=scalar(costs.image.count[i]);}
-        const auto hot=scalar(costs.image.hot),cold=scalar(costs.image.cold),compared=scalar(costs.image.bytes[0]),copied=scalar(costs.image.bytes[1]);
-        char text[320]{};std::snprintf(text,sizeof(text),"image_detail hot_n=%u cold_n=%u module_n=%u module_us=%u pe_n=%u pe_us=%u query_n=%u query_us=%u cmp_n=%u cmp_bytes=%u cmp_us=%u cold_bytes=%u cold_us=%u capped=%u pe_includes_query=true",
-            hot,cold,count[0],ns[0],count[1],ns[1],count[2],ns[2],count[3],compared,ns[3],copied,ns[4],capped?1u:0u);
+        const auto hot=scalar(costs.image.hot),cold=scalar(costs.image.cold),compared=scalar(costs.image.bytes[0]),copied=scalar(costs.image.bytes[1]),working_set=scalar(costs.image.working_set),legacy=scalar(costs.image.legacy);
+        char text[320]{};std::snprintf(text,sizeof(text),"image_detail hot_n=%u cold_n=%u module_n=%u module_us=%u pe_us=%u query_n=%u query_us=%u ws_n=%u ws_legacy=%u cmp_n=%u cmp_bytes=%u cmp_us=%u cold_bytes=%u cold_us=%u capped=%u pe_includes_query=true",
+            hot,cold,count[0],ns[0],ns[1],count[2],ns[2],working_set,legacy,count[3],compared,ns[3],copied,ns[4],capped?1u:0u);
         logger("gameplay_quat",4,0,attempt,complete,0,0,text);
     }
     void values(const char* label,const double* data,size_t count,uint32_t edge)const{
@@ -431,14 +433,51 @@ bool gameplay_code_pe(GameplayCodeRegions& regions,uintptr_t image,uint32_t& siz
     return pe.Signature==IMAGE_NT_SIGNATURE&&pe.FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64&&pe.OptionalHeader.Magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC&&size&&size<=UINTPTR_MAX-image;
 }
 int gameplay_code_compare(const void* live,const void* expected,size_t bytes){GameplayImageTimer compare_time(3,bytes);return std::memcmp(live,expected,bytes);}
+constexpr size_t gameplay_code_page_limit=64;
+void gameplay_code_pages(GameplayCodeProfile& profile,uint32_t page_size,GameplayWorkingSetQuery query){
+    profile.page_size=0;profile.working_set=nullptr;profile.pages.clear();
+    if(!query||!page_size||(page_size&(page_size-1)))return;std::vector<uintptr_t> pages;
+    for(const auto& window:profile.windows){if(window.rva>profile.size||window.bytes.empty()||window.bytes.size()>profile.size-window.rva||window.rva>UINTPTR_MAX-profile.image)return;
+        const auto begin=profile.image+window.rva;if(window.bytes.size()-1>UINTPTR_MAX-begin)return;const auto last=begin+window.bytes.size()-1;
+        for(auto page=begin-begin%page_size;;){if(std::find(pages.begin(),pages.end(),page)==pages.end()){if(pages.size()==gameplay_code_page_limit)return;pages.push_back(page);}
+            if(last-page<page_size)break;if(page>UINTPTR_MAX-page_size)return;page+=page_size;}}
+    std::sort(pages.begin(),pages.end());profile.page_size=page_size;profile.working_set=query;profile.pages=std::move(pages);
+}
+bool gameplay_code_page_geometry(const GameplayCodeProfile& profile){
+    if(!profile.working_set||!profile.page_size||(profile.page_size&(profile.page_size-1))||profile.pages.empty()||profile.pages.size()>gameplay_code_page_limit)return false;
+    uintptr_t previous{};for(const auto page:profile.pages){if(!page||page%profile.page_size||page>UINTPTR_MAX-(profile.page_size-1)||page<=previous)return false;previous=page;}
+    for(const auto& window:profile.windows){if(window.rva>profile.size||window.bytes.empty()||window.bytes.size()>profile.size-window.rva||window.rva>UINTPTR_MAX-profile.image)return false;
+        const auto begin=profile.image+window.rva;if(window.bytes.size()-1>UINTPTR_MAX-begin)return false;const auto last=begin+window.bytes.size()-1;
+        for(auto page=begin-begin%profile.page_size;;){if(!std::binary_search(profile.pages.begin(),profile.pages.end(),page))return false;
+            if(last-page<profile.page_size)break;if(page>UINTPTR_MAX-profile.page_size)return false;page+=profile.page_size;}}
+    return true;
+}
+bool gameplay_code_page_permissions(const GameplayCodeProfile& profile){
+    const auto legacy=[](){if(gameplay_apply_costs)timer_accumulate(gameplay_apply_costs->image.legacy,1,true);return false;};
+    if(!gameplay_code_page_geometry(profile))return legacy();std::array<PSAPI_WORKING_SET_EX_INFORMATION,gameplay_code_page_limit> pages{};
+    for(size_t i=0;i<profile.pages.size();++i)pages[i].VirtualAddress=reinterpret_cast<void*>(profile.pages[i]);
+    if(gameplay_apply_costs)timer_accumulate(gameplay_apply_costs->image.working_set,1,true);
+    const auto admitted=[&](){GameplayImageTimer query_time(2);return profile.working_set(GetCurrentProcess(),pages.data(),static_cast<DWORD>(profile.pages.size()*sizeof(pages[0])));}();
+    if(!admitted)return legacy();bool fallback{};
+    for(size_t i=0;i<profile.pages.size();++i){require(pages[i].VirtualAddress==reinterpret_cast<void*>(profile.pages[i]),"native gameplay code page query changed");const auto& page=pages[i].VirtualAttributes;
+        if(!page.Valid){fallback=true;continue;}require(!page.Bad,"native gameplay code page unavailable");if(page.LargePage){fallback=true;continue;}
+        const auto protection=static_cast<DWORD>(page.Win32Protection);const auto base=protection&0xff;
+        require(!(protection&(PAGE_GUARD|PAGE_NOACCESS))&&(base==PAGE_EXECUTE_READ||base==PAGE_EXECUTE_READWRITE||base==PAGE_EXECUTE_WRITECOPY),"native gameplay code page protection changed");}
+    // QSX does not return MEMORY_BASIC_INFORMATION.State. A fresh valid,
+    // nonlarge readable/executable resident page is accessible/backed; free or
+    // reserved pages are not. Invalid/unsupported observations retain the
+    // original fresh VirtualQuery MEM_COMMIT path. No attributes survive here.
+    return fallback?legacy():true;
+}
 void gameplay_code_validate_at(const GameplayCodeProfile& expected,uintptr_t image,GameplayCodeQuery query=VirtualQuery){
     require(image&&image==expected.image,"native gameplay original absolute image changed");GameplayCodeRegions regions(query);uint32_t size{},header{};
     require(gameplay_code_pe(regions,image,size,header)&&size==expected.size&&header==expected.header,"native gameplay original absolute PE changed");
+    const bool pages=gameplay_code_page_permissions(expected);
     for(const auto& window:expected.windows)require(window.rva<=size&&window.bytes.size()<=size-window.rva&&
-        regions.covers(reinterpret_cast<const void*>(image+window.rva),window.bytes.size(),true)&&
+        (pages||regions.covers(reinterpret_cast<const void*>(image+window.rva),window.bytes.size(),true))&&
         gameplay_code_compare(reinterpret_cast<const void*>(image+window.rva),window.bytes.data(),window.bytes.size())==0,"native gameplay absolute code changed");
 }
-template<size_t N>GameplayCodeProfile gameplay_code_copy(uintptr_t image,const std::array<GameplayCodePin,N>& pins,GameplayCodeQuery query=VirtualQuery){
+template<size_t N>GameplayCodeProfile gameplay_code_copy(uintptr_t image,const std::array<GameplayCodePin,N>& pins,GameplayCodeQuery query=VirtualQuery,GameplayWorkingSetQuery working_set=nullptr,uint32_t page_size=0){
     if(gameplay_apply_costs)timer_accumulate(gameplay_apply_costs->image.cold,1,true);
     GameplayCodeProfile profile;profile.image=image;GameplayCodeRegions regions(query);
     require(gameplay_code_pe(regions,image,profile.size,profile.header),"native gameplay absolute image/code unavailable");
@@ -448,12 +487,14 @@ template<size_t N>GameplayCodeProfile gameplay_code_copy(uintptr_t image,const s
         require(gameplay_quat_hash(copied.bytes.data(),copied.bytes.size())==pin.hash,"native gameplay absolute code changed");profile.windows.push_back(std::move(copied));}
     // Hashes qualify the owned copies, then a distinct fresh boundary compares
     // every live window before the plan can be exposed to its NativeWatch.
-    gameplay_code_validate_at(profile,image,query);return profile;
+    gameplay_code_pages(profile,page_size,working_set);gameplay_code_validate_at(profile,image,query);return profile;
 }
 uintptr_t gameplay_code_module(){GameplayImageTimer module_time(0);return reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));}
 GameplayCodeProfile gameplay_code_bind(){
     GameplayApplyTimer image_time(1);const auto image=gameplay_code_module();
-    auto profile=gameplay_code_copy(image,gameplay_code_pins);
+    SYSTEM_INFO system{};GetSystemInfo(&system);const auto kernel=GetModuleHandleW(L"kernel32.dll");
+    const auto working_set=kernel?reinterpret_cast<GameplayWorkingSetQuery>(GetProcAddress(kernel,"K32QueryWorkingSetEx")):nullptr;
+    auto profile=gameplay_code_copy(image,gameplay_code_pins,VirtualQuery,working_set,system.dwPageSize);
     require(gameplay_code_module()==profile.image,"native gameplay original absolute image changed");return profile;
 }
 uintptr_t gameplay_native_image(const GameplayCodeProfile* supplied=nullptr){
