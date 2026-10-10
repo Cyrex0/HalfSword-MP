@@ -1,5 +1,20 @@
 # Native authority bootstrap checkpoint
 
+## Actualb21c6c25: mesh-proof construction measured
+
+Normal013151-58dedd/auth46628/c12672/35632/fullG0/dev/all394:185143guards permirror
+apply3462PEs/finish74215guards354PEs. Meshproof293–432ms/apply224–257ms/finish
+dominates actual; inclusive buckets overlap. Wholewarm983–1529ms/allpostapplystale,
+standardfalse/activeboth0. CleanupPASS4absent20savehashsame/nodumps/secondary.
+Next operation-owned copied immutable MeshWatch plan; every originalguard still
+freshly reads2passes+alllinks/pins/RF, mutablewatches rebuild, nestedconflictsfail.
+No successfulvalidation reuse/serialrefresh/crossoperation. Actual gain pending.
+Candidate owns copied warm binding metadata; only the merge/table construction
+is operation-scoped. All native validation still fresh eachguard; mutable creation
+rebuilds. TwoCPPfiles/noABI; ownership/mutation/nesting/conflict fixture covers it.
+Strict provider/fixture1,753 pass; reviewclosed. Creation/currentPart mutable,
+apply/aggregatefinish immutable copied plan; actual timing pending.
+
 ## Actual027f48e9: warm apply remains stale
 
 Normal012036-e89ef9/fullG0/dev/all394/auth34216/c20476/31100: all16warm attempts

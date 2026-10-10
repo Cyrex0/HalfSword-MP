@@ -14,6 +14,7 @@
 #include <cstring>
 #include <cwchar>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -461,6 +462,10 @@ struct MeshBinding {
 MeshBinding mesh_binding(Obj world,Obj owner,HsmpViewText path,HsmpViewResult* r);
 void mesh_binding_final(const MeshBinding& binding);
 void mesh_bindings_final(const std::vector<const MeshBinding*>& bindings);
+struct MeshPlan;
+struct MeshWatch;
+std::shared_ptr<const MeshPlan> mesh_watch_plan(const MeshWatch* watch);
+void mesh_plan_final(const MeshPlan& plan);
 Obj mesh_admit(MeshBinding& binding,Obj component,HsmpViewText path,bool calculator,const char* stage,HsmpViewResult* r);
 bool effective_visible(Obj component) {return bool_property(component,L"bVisible")&&!bool_property(component,L"bHiddenInGame");}
 void visibility(Obj component,bool visible,HsmpViewResult* r);
@@ -730,12 +735,16 @@ struct MeshWatch;
 thread_local const MeshWatch* active_mesh_watch{};
 struct MeshWatch {
     const MeshWatch* previous{active_mesh_watch};std::vector<const Mirror*> mirrors;const Part* current{};
-    MeshWatch(std::vector<const Mirror*> value,const Part* part=nullptr):mirrors(std::move(value)),current(part){active_mesh_watch=this;}
+    bool immutable{};std::shared_ptr<const MeshPlan> plan;
+    MeshWatch(std::vector<const Mirror*> value,const Part* part=nullptr,bool stable=false):mirrors(std::move(value)),current(part),immutable(stable){
+        if(immutable)plan=mesh_watch_plan(this);active_mesh_watch=this;
+    }
     ~MeshWatch(){active_mesh_watch=previous;}
 };
 void mesh_call_guard(){
     CaptureTimer present_mesh_time(1,present_provider_active);
     if(!active_mesh_watch)return;
+    if(active_mesh_watch->plan){mesh_plan_final(*active_mesh_watch->plan);return;}
     std::vector<const MeshBinding*> bindings;
     for(auto* watch=active_mesh_watch;watch;watch=watch->previous){
         for(const auto* mirror:watch->mirrors)for(const auto& part:mirror->parts)if(part.mesh)bindings.push_back(&*part.mesh);
@@ -937,7 +946,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
     const std::lock_guard lock(mirror_mutex);
     try{initialize_result(r);thread();OperationScope scope(guard,world);get(world);auto it=mirrors.find(id);require(it!=mirrors.end(),"mirror handle missing");auto& mirror=it->second;
         diagnostic.begin(mirror.diagnostic_applied);
-        MeshWatch mesh_watch({&mirror});
+        MeshWatch mesh_watch({&mirror},nullptr,true);
         require(same(mirror.world,world)&&same(actor_world(mirror.actor,r),world)&&count==mirror.parts.size()&&pointers(recipes,count,64)&&pointers(frames,count,64),"mirror apply scope");
         const auto order=parent_order(recipes,count);
         std::vector<ArmOwnedChild> arm_owned;arm_owned.reserve(mirror.parts.size()*2);
@@ -1256,7 +1265,7 @@ struct MeshBoundary {
         require(!package||*source_package_name==*package,"native mesh original package discriminator changed during walk");
     }
 };
-void mesh_bindings_final(const std::vector<const MeshBinding*>& bindings){
+MeshBoundary mesh_boundary_build(const std::vector<const MeshBinding*>& bindings){
     require(bindings.size()<=32*64,"native mesh shared binding bound");MeshBoundary boundary;
     for(const auto* b:bindings){require(b&&b->count>0&&b->count<=b->path.size(),"native mesh original path bounds");
         require(!boundary.package||*boundary.package==b->package,"native mesh shared package disagreement");boundary.package=b->package;
@@ -1265,6 +1274,9 @@ void mesh_bindings_final(const std::vector<const MeshBinding*>& bindings){
             boundary.add(b->path[i],i+1<b->count?b->path[i+1].address:0);}
         auto pinned=b->path[0];require(b->pinned.address==pinned.address,"native mesh original pinned address changed");pinned.weak=b->pinned.weak;boundary.add(pinned);
     }
+    return boundary;
+}
+void mesh_boundary_final(const MeshBoundary& boundary,const std::vector<const MeshBinding*>& bindings){
     boundary.validate();
     for(const auto* b:bindings){
         const auto* owner=vt->resolve(b->owner_node.weak);const auto* level=vt->resolve(b->level_node.weak);
@@ -1277,6 +1289,29 @@ void mesh_bindings_final(const std::vector<const MeshBinding*>& bindings){
     }
     boundary.validate();
 }
+void mesh_bindings_final(const std::vector<const MeshBinding*>& bindings){
+    const auto boundary=mesh_boundary_build(bindings);mesh_boundary_final(boundary,bindings);
+}
+struct MeshPlan {
+    std::vector<MeshBinding> bindings;
+    std::vector<const MeshBinding*> pointers;
+    MeshBoundary boundary;
+    explicit MeshPlan(const std::vector<const MeshBinding*>& originals){
+        bindings.reserve(originals.size());for(const auto* b:originals){require(b!=nullptr,"native mesh plan original missing");bindings.push_back(*b);}
+        pointers.reserve(bindings.size());for(const auto& b:bindings)pointers.push_back(&b);
+        boundary=mesh_boundary_build(pointers);
+    }
+    MeshPlan(const MeshPlan&)=delete;
+    MeshPlan& operator=(const MeshPlan&)=delete;
+};
+std::shared_ptr<const MeshPlan> mesh_watch_plan(const MeshWatch* watch){
+    std::vector<const MeshBinding*> originals;
+    for(auto* w=watch;w;w=w->previous){if(!w->immutable||w->current)return {};
+        for(const auto* mirror:w->mirrors)for(const auto& part:mirror->parts)if(part.mesh)originals.push_back(&*part.mesh);}
+    if(originals.empty())return {};
+    return std::make_shared<MeshPlan>(originals);
+}
+void mesh_plan_final(const MeshPlan& plan){mesh_boundary_final(plan.boundary,plan.pointers);}
 bool mesh_serial_assignment(Obj original,Obj current){
     return original.weak&&current.weak&&(original.weak>>32)==0&&static_cast<int32_t>(current.weak>>32)>0&&
         original.address==current.address&&static_cast<uint32_t>(original.weak)==static_cast<uint32_t>(current.weak);
@@ -1513,7 +1548,7 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
             for(const auto& part:found->second.parts){if(part.native_asset.weak)targets.push_back({found->second.actor,part.render,part.native_asset});
                 else if(part.kind>=6)targets.push_back({found->second.actor,part.render,{},part.kind,1,{u16(part.arm_socket.c_str()),static_cast<uint32_t>(part.arm_socket.size()),0},part.arm});}
         }
-        MeshWatch mesh_watch(mesh_mirrors);finish_scene_set(world,targets,r);
+        MeshWatch mesh_watch(mesh_mirrors,nullptr,true);finish_scene_set(world,targets,r);
         for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.mesh){mesh_binding_final(*part.mesh);if(part.pose)pose_pure(*part.pose);}
         for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.arm_publication)arm_publication_final(*part.arm_publication);
         lookup_finish();r->complete=1;diagnostic.complete=true;return 1;

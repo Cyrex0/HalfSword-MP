@@ -1,5 +1,32 @@
 # Native full-scene encoding checkpoint
 
+## Actualb21c6c25: per-call mesh proof/table construction dominates
+
+Normal013151-58dedd/fullG0/dev/all394, sourcebbfe61b2-76e8-45fe-94fd-
+d02574dcc64e/auth46628/c12672/35632. Each instrumented mirror apply makes185,143
+guards for3,462 PEs; aggregate finish74,215 guards for354 PEs. Apply totals493–
+561ms permirror; meshproof293–432ms, guardinclusive334–440ms. Finish289–297ms,
+meshproof224–257ms. Find31–75us and PE628–827us inapply. Inclusive buckets
+overlap, never add them. Sixteen whole-frame warm totals983–1529ms, all entryfresh
+and exitstale postapply. Standardfalse/activeboth0; no playable/view claim.
+IndependentcleanupPASS4absent/save20same/nodumps/unobservedchildren/bothsecondary.
+Next candidate compiles copied immutable expectation plans once per warm apply/
+finish MeshWatch operation, then runs SAME fresh two-pass metadata and every
+original per-binding link/pin/RF check at EVERY existing guard. Mutable create/
+current-Part watches keep original rebuilding path. Nested plans combine strictly;
+no successful validation ticket, refresh or cross-operation lifetime. Measure
+actual whole-frame result before claiming gain.
+
+Candidate owns COPIES of binding expectations in warm apply/finish MeshWatch
+scopes, compiles agreeing merges once and reuses only that immutable plan. Every
+guard runs unchanged fresh metadata and raw links/RF/pin checks. Mutable creation
+chains rebuild; nested immutable watches compile combined original plans with
+conflict refusal. Exact two CPP files only, no headers/API/ABI. Fixture includes
+ownership, next-boundary mutation and nested/conflicting originals. Actual pending.
+Strict provider/fixture and1,753 checks pass (nine ownership/freshness/mutation/
+nesting/conflict assertions). Independent review closed after explicitly retaining
+mutable create/current-Part callsites and immutable apply/aggregate-finish only.
+
 ## Actual027f48e9: mesh witness dedup does not resolve warm delay
 
 Exact fullG0/dev/all394 normal012036-e89ef9, source8fc797cb-0968-4767-9b79-

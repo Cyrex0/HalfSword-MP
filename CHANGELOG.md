@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Compile copied original mesh expectations once per warm operation, retaining
+  fresh validation on every guard and the original rebuilding path for mutable
+  model creation. Actual presentation speed remains under verification.
 - Attribute the first two warm native apply and finish operations to guard,
   lookup, engine-call and proof time using bounded copied diagnostics after
   operation scopes and locks unwind. Actual bottleneck measurements pending.

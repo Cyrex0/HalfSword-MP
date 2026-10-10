@@ -1319,6 +1319,19 @@ void pose_checks(HsmpReflect& reflect){
         rejects([&]{mesh_bindings_final({&admitted});},"shared class/object garbage refuses before metadata access");
         check(mesh_boundary_garbage_names==0,"garbage class/object FName is never read before refusal");garbage->flags=0;}
     object_name=lifetime_name;
+    {MeshWatch immutable({&witnessed},nullptr,true);const auto plan=immutable.plan;
+        check(plan&&plan->pointers.size()==1&&plan->pointers[0]!=&*witnessed.parts[0].mesh,"immutable operation plan owns copied original binding metadata");
+        mesh_boundary_counting=true;mesh_boundary_resolves=0;check_guard();const auto first_reads=mesh_boundary_resolves;
+        mesh_boundary_resolves=0;check_guard();check(mesh_boundary_resolves==first_reads&&immutable.plan==plan,"compiled expectations are reused while every guard freshly rereads all witnesses");mesh_boundary_counting=false;
+        vertex_mesh.name^=1;rejects([&]{check_guard();},"native metadata mutation after a successful compiled-plan check is refused on the next guard");vertex_mesh.name^=1;
+        {MeshWatch nested({&witnessed},nullptr,true);check(nested.plan&&nested.plan!=plan&&nested.plan->pointers.size()==2,"nested immutable operation compiles agreeing original plans together");check_guard();}
+        check(active_mesh_watch==&immutable&&immutable.plan==plan,"nested plan restores the original immutable operation lifetime");
+        {MeshWatch mutable_watch({&witnessed});check(!mutable_watch.plan,"mutable creation watch retains the original rebuilding path");
+            {MeshWatch nested({&witnessed},nullptr,true);check(!nested.plan,"immutable nested work cannot cache mutable outer construction expectations");check_guard();}}
+        auto conflicted=witnessed;conflicted.parts[0].mesh->pinned.weak=(uint64_t{10}<<32)|static_cast<uint32_t>(admitted.pinned.weak);
+        rejects([&]{MeshWatch nested({&conflicted},nullptr,true);},"nested immutable conflicting original positive pins refuse without replacing the outer plan");
+        check(active_mesh_watch==&immutable,"failed plan compilation never leaves a dangling active watch");
+    }
     mirror_mutex.lock();mirrors.emplace(88,std::move(witnessed));mirror_mutex.unlock();vertex_mesh.outer=&actor;
     const uint64_t retained_handle=88;int context=1;const HsmpViewGuard retained_guard{&context,guard_check};
     check(finish_scene_sets(keep(&old_world),nullptr,0,&retained_handle,1,&retained_guard,&result)==-1,
