@@ -159,6 +159,22 @@ void gameplay_value_readback(Obj pawn,const wchar_t* field,const HsmpGameplayVal
 }
 using GameplayVector=std::array<double,3>;
 void gameplay_finite(const double* values){for(uint32_t i=0;i<3;++i)require(std::isfinite(values[i]),"native gameplay state nonfinite");}
+void gameplay_root_readback(const HsmpGameplayState& expected,const GameplayVector& position,const GameplayVector& rotation,const GameplayVector& velocity){
+    const std::array<const double*,3> requested{expected.position,expected.rotation,expected.velocity};
+    const std::array<const double*,3> actual{position.data(),rotation.data(),velocity.data()};
+    constexpr std::array<const char*,3> fields{"position","rotation","velocity"};
+    uint32_t mask{};
+    for(uint32_t field=0;field<3;++field)for(uint32_t axis=0;axis<3;++axis)
+        if(std::memcmp(requested[field]+axis,actual[field]+axis,8)!=0)mask|=1u<<(field*3+axis);
+    if(!mask)return;
+    uint32_t first{};while((mask&(1u<<first))==0)++first;
+    const auto field=first/3,axis=first%3;uint64_t requested_bits{},actual_bits{};
+    std::memcpy(&requested_bits,requested[field]+axis,8);std::memcpy(&actual_bits,actual[field]+axis,8);
+    char reason[192]{};std::snprintf(reason,sizeof(reason),
+        "native gameplay exact root/velocity readback failed; field=%s axis=%u req=%.17g got=%.17g bits=%016llx/%016llx mask=%03x",
+        fields[field],axis,requested[field][axis],actual[field][axis],static_cast<unsigned long long>(requested_bits),static_cast<unsigned long long>(actual_bits),mask);
+    throw Error(reason);
+}
 void gameplay_enum_disabled(Obj pawn,const wchar_t* field){
     HsmpProp prop{};require(vt->obj_prop(get(pawn),u16(field),&prop)==1&&prop.size==1&&prop.offset>=0&&prop.offset<65536&&
         (prop.cls==name(L"ByteProperty")||prop.cls==name(L"EnumProperty")),"native gameplay auto possession schema");
@@ -267,7 +283,7 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
         Function p(L"/Script/Engine.Actor:K2_GetActorLocation");p.call(entry.pawn,result);const auto actual_position=p.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Vector");
         Function q(L"/Script/Engine.Actor:K2_GetActorRotation");q.call(entry.pawn,result);const auto actual_rotation=q.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Rotator");
         Function v(L"/Script/Engine.Actor:GetVelocity");v.call(entry.pawn,result);const auto actual_velocity=v.value<GameplayVector>(L"ReturnValue",L"StructProperty",L"Vector");
-        require(std::memcmp(actual_position.data(),state->position,24)==0&&std::memcmp(actual_rotation.data(),state->rotation,24)==0&&std::memcmp(actual_velocity.data(),state->velocity,24)==0,"native gameplay exact root/velocity readback failed");
+        gameplay_root_readback(*state,actual_position,actual_rotation,actual_velocity);
         gameplay_value_readback(entry.pawn,L"Health",state->health);gameplay_value_readback(entry.pawn,L"Stamina",state->stamina);
         gameplay_local(entry,result);proof->flags|=HSMP_GAMEPLAY_STATE;
         auto applied=gameplay_applied_snapshot(entry,*state,*proof,movement);

@@ -2,6 +2,30 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actualec9c60c4 fullG0 Lua77/Rust1377/79, pusheddev/RequireG0/all396:
+standardGameplay045316-c0c96b client1 offered-result acquisition succeeds and
+provider apply frame198/dir7 executes, then refuses `native gameplay exact
+root/velocity readback failed` after7ms; receipt40.0785ms. Client2's original-stage
+guard refusal follows the primary apply error. Readiness/input0/0; no tolerance
+change or gameplay parity. Early original windows secondaryPASS; later Sky capture
+misses exited windows, no pixels/model proof. CleanupPASS/four absent/save20/nodumps.
+Evidence native_operator_summary. Next exact requested/readback field diagnostics
+and native root/rotation/velocity semantics; do not relax memcmp to hide mismatch.
+
+Bounded native audit: GetVelocity exec RVA34A5A00 dispatches vtable+358 rather
+than directly reading Movement.Velocity; derived Pawn/physics branch remains
+unpinned. GetActorRotation exec34A7C00 reads root world quaternion and derives
+cached Euler through1227A60; setter34A8290→349F490→3BF2EA0 takes Rotator.
+Raw requested/getter Euler identity is not a proved native contract. Next copied
+readback diagnostic identifies first field/axis/bits and all-nine mismatch mask
+without changing setters, comparisons or guards. No inferred physics fix.
+Copied failure diagnostic now implemented: first field/axis, requested/actual
+17-digit doubles and raw64 bits, all-nine mask, bounded192-character reason;
+success performs no formatting/logging/engine callback. Six focused diagnostic
+cases cover exact match/ULP/signed-zero/velocity/extreme formatting. Strict C++
+box_provider_compile + native_presentation_check PASS1770; independent two-file
+review CLOSED. FullG0/deploy and native diagnostic retry pending.
+
 Actuala66662ed fullG0 Lua77/Rust1377/79, pusheddev/RequireG0/all396:
 standardGameplay044025-3f1f8d passes native begin/construct/finish on both clients.
 Armor and held weapon restoration, full pre-possession gear checks, possession

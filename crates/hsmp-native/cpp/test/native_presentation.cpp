@@ -6,6 +6,7 @@
 #include <cstdlib>
 static const HsmpPresentation* installed{};
 extern "C" void hsmp_native_set_presentation(const HsmpPresentation* p) {installed=p;}
+extern "C" void hsmp_native_set_gameplay(const HsmpGameplay*) {}
 // Production profile tracing is Rust-owned and inactive for this engine fixture.
 int profile_ffi_calls{};
 extern "C" void hsmp_native_profile_checkpoint(const char*,uint32_t){++profile_ffi_calls;}
@@ -1379,6 +1380,29 @@ void pose_checks(HsmpReflect& reflect){
     empty.suspended=0;empty.cloth=4;rejects([&]{vertex_skeletal_mirror_state(empty);},"empty skeletal unrelated DisableClothSimulation bit never proves suspension");
     pose_build_admit=pose_shipping_build;pose_native_call=pose_native;pose_image=0;scene_vtable_read=scene_vtable;lifetime_reset(reflect);
 }
+void gameplay_readback_checks(){
+    HsmpGameplayState expected{{1,2,3},{4,5,-0.0},{7,8,9},{},{}};
+    const GameplayVector position{1,2,3},rotation{4,5,-0.0},velocity{7,8,9};
+    const auto calls=profile_ffi_calls;
+    gameplay_root_readback(expected,position,rotation,velocity);check(true,"exact gameplay root and velocity still pass bit-identical readback");
+    const auto reason=[&](const GameplayVector& p,const GameplayVector& q,const GameplayVector& v){
+        try{gameplay_root_readback(expected,p,q,v);}catch(const Error& e){return std::string(e.what());}
+        throw std::runtime_error("gameplay mismatch unexpectedly admitted");};
+    auto changed=position;changed[1]=std::nextafter(2.,3.);
+    auto text=reason(changed,rotation,velocity);
+    check(text.find("field=position axis=1 req=2 got=2.0000000000000004")!=std::string::npos&&
+        text.find("bits=4000000000000000/4000000000000001 mask=002")!=std::string::npos,"gameplay position diagnostic preserves one-ULP requested/readback values and raw bits");
+    auto q=rotation;q[2]=0.;text=reason(position,q,velocity);
+    check(text.find("field=rotation axis=2 req=-0 got=0 bits=8000000000000000/0000000000000000 mask=020")!=std::string::npos,
+        "gameplay rotation signed-zero difference remains a strict refusal");
+    auto v=velocity;v[1]=10.;text=reason(position,rotation,v);
+    check(text.find("field=velocity axis=1 req=8 got=10")!=std::string::npos&&text.find("mask=080")!=std::string::npos,"gameplay velocity diagnostic identifies exact failing channel");
+    expected={{-std::numeric_limits<double>::max(),2,3},{4,5,6},{7,8,9},{},{}};
+    text=reason({std::numeric_limits<double>::max(),20,30},{40,50,60},{70,80,90});
+    check(text.size()<192&&text.ends_with("mask=1ff")&&text.find("req=-1.7976931348623157e+308 got=1.7976931348623157e+308")!=std::string::npos,
+        "gameplay failure fits the fixed result buffer with exact extreme doubles and complete nine-channel mask");
+    check(profile_ffi_calls==calls,"gameplay copied readback diagnostics make no native or logger callback");
+}
 }
 int main() {
     try {
@@ -1627,6 +1651,7 @@ int main() {
         pose_checks(reflect);
         present_profile_checks(reflect);
         create_trace_checks(reflect);
+        gameplay_readback_checks();
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);
