@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Share agreeing original mesh path and class witnesses within each native
+  verification boundary, retaining fresh reads around all mesh ownership,
+  world, flags and reference checks. Actual presentation timing is pending.
 - Measure the first eight warm native presentation attempts, recording original
   receipt age and preparation, apply and finish time without changing gameplay
   data, freshness limits or object verification.

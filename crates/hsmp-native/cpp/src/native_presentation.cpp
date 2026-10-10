@@ -430,6 +430,7 @@ struct MeshBinding {
 };
 MeshBinding mesh_binding(Obj world,Obj owner,HsmpViewText path,HsmpViewResult* r);
 void mesh_binding_final(const MeshBinding& binding);
+void mesh_bindings_final(const std::vector<const MeshBinding*>& bindings);
 Obj mesh_admit(MeshBinding& binding,Obj component,HsmpViewText path,bool calculator,const char* stage,HsmpViewResult* r);
 bool effective_visible(Obj component) {return bool_property(component,L"bVisible")&&!bool_property(component,L"bHiddenInGame");}
 void visibility(Obj component,bool visible,HsmpViewResult* r);
@@ -702,10 +703,15 @@ struct MeshWatch {
     MeshWatch(std::vector<const Mirror*> value,const Part* part=nullptr):mirrors(std::move(value)),current(part){active_mesh_watch=this;}
     ~MeshWatch(){active_mesh_watch=previous;}
 };
-void mesh_call_guard(){for(auto* watch=active_mesh_watch;watch;watch=watch->previous){
-    for(const auto* mirror:watch->mirrors)for(const auto& part:mirror->parts)if(part.mesh)mesh_binding_final(*part.mesh);
-    if(watch->current&&watch->current->mesh)mesh_binding_final(*watch->current->mesh);
-}}
+void mesh_call_guard(){
+    if(!active_mesh_watch)return;
+    std::vector<const MeshBinding*> bindings;
+    for(auto* watch=active_mesh_watch;watch;watch=watch->previous){
+        for(const auto* mirror:watch->mirrors)for(const auto& part:mirror->parts)if(part.mesh)bindings.push_back(&*part.mesh);
+        if(watch->current&&watch->current->mesh)bindings.push_back(&*watch->current->mesh);
+    }
+    if(!bindings.empty())mesh_bindings_final(bindings);
+}
 void forget_owned_materials(Obj actor){
     for(auto it=vertex_source_materials.begin();it!=vertex_source_materials.end();){
         if(it->second.owned==1&&same(it->second.owner,actor))it=vertex_source_materials.erase(it);else ++it;}
@@ -1179,6 +1185,64 @@ void mesh_binding_final(const MeshBinding& b){
     auto pinned=b.path[0];pinned.weak=b.pinned.weak;pinned.address=b.pinned.address;
     const auto* p=source_path_get(pinned);const auto* flags=retirement_flags(p);
     require(flags&&*flags==b.flags&&(*flags&0x40u)==0,"native mesh original flags/runtime profile changed");
+}
+// Expectations and successful reads live for this one callback-free guard only.
+// Each original path is represented; shared nodes/classes are read once per pass.
+struct MeshBoundaryNode {HsmpNativePathNode node{};std::optional<uint64_t> outer;};
+struct MeshBoundary {
+    std::map<uint64_t,MeshBoundaryNode> nodes;
+    std::map<uint64_t,std::pair<Obj,uint64_t>> classes;
+    std::optional<uint64_t> package;
+    void add(const HsmpNativePathNode& node,std::optional<uint64_t> outer=std::nullopt){
+        require(node.weak&&node.address&&node.class_weak&&node.class_address,"native mesh shared witness missing");
+        auto [saved,inserted]=nodes.emplace(node.address,MeshBoundaryNode{node,outer});
+        if(!inserted){auto& old=saved->second;
+            require(old.node.name==node.name&&old.node.class_address==node.class_address&&old.node.class_name==node.class_name&&
+                (!old.outer||!outer||*old.outer==*outer),"native mesh shared original witness disagreement");
+            old.node.weak=lookup_merge_weak(old.node.weak,node.weak,node.address);
+            old.node.class_weak=lookup_merge_weak(old.node.class_weak,node.class_weak,node.class_address);
+            if(outer)old.outer=outer;
+        }
+        auto [cls,class_inserted]=classes.emplace(node.class_address,std::make_pair(Obj{node.class_weak,node.class_address},node.class_name));
+        if(!class_inserted){require(cls->second.second==node.class_name,"native mesh shared original class disagreement");
+            cls->second.first.weak=lookup_merge_weak(cls->second.first.weak,node.class_weak,node.class_address);}
+    }
+    void validate()const{
+        require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native mesh shared metadata unavailable");
+        require(!package||*source_package_name==*package,"native mesh original package discriminator changed");
+        for(const auto& [address,saved]:classes){void* p=vt->resolve(saved.first.weak);
+            require(reinterpret_cast<uint64_t>(p)==address,"native mesh shared original class slot changed");
+            const auto* flags=retirement_flags(p);require(flags&&(*flags&0x40000000u)==0,"native mesh shared original class garbage");
+            const auto* n=object_name(p);require(n&&*n==saved.second,"native mesh shared original class changed");}
+        for(const auto& [address,saved]:nodes){const auto& node=saved.node;void* p=vt->resolve(node.weak);
+            require(reinterpret_cast<uint64_t>(p)==address,"native mesh shared original object slot changed");
+            const auto* flags=retirement_flags(p);require(flags&&(*flags&0x40000000u)==0,"native mesh shared original object garbage");
+            const auto* n=object_name(p);require(n&&*n==node.name&&vt->class_of(p)==reinterpret_cast<void*>(node.class_address),"native mesh shared original FName/class changed");
+            if(saved.outer){const auto* field=source_outer(p);require(field&&reinterpret_cast<uint64_t>(*field)==*saved.outer,"native mesh shared original Outer changed");}
+        }
+        require(!package||*source_package_name==*package,"native mesh original package discriminator changed during walk");
+    }
+};
+void mesh_bindings_final(const std::vector<const MeshBinding*>& bindings){
+    require(bindings.size()<=32*64,"native mesh shared binding bound");MeshBoundary boundary;
+    for(const auto* b:bindings){require(b&&b->count>0&&b->count<=b->path.size(),"native mesh original path bounds");
+        require(!boundary.package||*boundary.package==b->package,"native mesh shared package disagreement");boundary.package=b->package;
+        boundary.add(b->world_node);boundary.add(b->owner_node,b->level_node.address);boundary.add(b->level_node);
+        for(uint32_t i=0;i<b->count;++i){for(uint32_t j=0;j<i;++j)require(b->path[i].address!=b->path[j].address,"native mesh original path cycle");
+            boundary.add(b->path[i],i+1<b->count?b->path[i+1].address:0);}
+        auto pinned=b->path[0];require(b->pinned.address==pinned.address,"native mesh original pinned address changed");pinned.weak=b->pinned.weak;boundary.add(pinned);
+    }
+    boundary.validate();
+    for(const auto* b:bindings){
+        const auto* owner=vt->resolve(b->owner_node.weak);const auto* level=vt->resolve(b->level_node.weak);
+        require(reinterpret_cast<uint64_t>(owner)==b->owner_node.address&&reinterpret_cast<uint64_t>(level)==b->level_node.address,"native mesh original owner/level slot changed");
+        const auto* outer=source_outer(owner);require(outer&&*outer==level,"native mesh original owner level changed");
+        void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+0xc0,8);
+        require(reinterpret_cast<uint64_t>(world)==b->world.address,"native mesh original world changed");
+        const auto* p=vt->resolve(b->pinned.weak);require(reinterpret_cast<uint64_t>(p)==b->pinned.address,"native mesh original pinned slot changed");
+        const auto* flags=retirement_flags(p);require(flags&&*flags==b->flags&&(*flags&0x40u)==0,"native mesh original flags/runtime profile changed");
+    }
+    boundary.validate();
 }
 bool mesh_serial_assignment(Obj original,Obj current){
     return original.weak&&current.weak&&(original.weak>>32)==0&&static_cast<int32_t>(current.weak>>32)>0&&

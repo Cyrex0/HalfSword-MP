@@ -1,5 +1,36 @@
 # Native full-scene encoding checkpoint
 
+## Actual ce46189f: input bindings recovered; warm apply is the live blocker
+
+Exact clean fullG0/dev/all394 normal run20261010-010930-fe6500-native-host,
+source88ef8f66-7062-42bc-ab65-38a870dabcad, authority44716 clients30896/47056.
+The recorded axis binding refusal is gone: input_refused0, neutral dispatched170,
+active_pc0/1 both0. Active gameplay is not proved. First98-row capture273,289us,
+provider255,232us/CPP220,663us, rowfind561us/160 and finish17,512us.
+Of170 neutral dispatches,150 precede stop. Source83 complete frames overall,
+74 confirmed beforestop with zero capture refusals; frame1-to74 mean238ms.
+Both MirrorReady50.667/50.908s, more than14s beforestop. No client LIVE.
+All16 bounded warm attempts enter fresh and finish stale at postapply. Total
+997,758–1,128,286us, apply718,184–815,736us, finish275,298–333,229us;
+prepare129–262us. Original receipt is not renewed. This proves local apply/
+verification consumes the freshness budget; it does not establish wire latency.
+Normal pass=false. Cleanup independently PASS4absent/save20unchanged/no dumps/
+unobservedchildren; both windows physically contained on secondary display.
+Next minimal performance change deduplicates agreeing original shared path and
+class witnesses within EACH mesh_call_guard boundary, preserving all mesh pins,
+flags, owner/Level/world links, every guard call and fresh final verification.
+No validation may survive a callback or boundary; conflicts refuse the whole.
+
+Candidate changes native_presentation.cpp and its existing CPP fixture only.
+Each guard creates copied agreeing expectations, validates fresh unique nodes/
+classes before and after every original per-binding owner/Level/world/pin/RF
+check. Standalone mesh_binding_final and all guard calls remain. Fixture covers
+shared reads and fresh repeat, mutation between passes and original name,
+positive pin, class and package conflicts. Actual performance pending.
+Strict provider/fixture compilation and1,729 existing presentation checks pass
+(11 new boundary/conflict/garbage-access checks). Independent review closed
+after preserving RF rejection before metadata access. No performance claim yet.
+
 ## Exact input-path regression fixed; warm-present delay measurement next
 
 The a54aa9e9 repeat logs one detailed controller1/entity2 refusal for

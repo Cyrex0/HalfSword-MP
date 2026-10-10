@@ -1169,8 +1169,12 @@ SkeletalObject pose_level{};
 alignas(16) std::array<EngineTransform,2> pose_calc_a{},pose_calc_b{},pose_render_a{},pose_render_b{},pose_input{};
 std::vector<uint32_t> pose_stages;bool pose_callback_replace{},pose_callback_dirty{},pose_allocate_mesh_serial{};uint32_t pose_asset_reads{},pose_mesh_serial{};
 uint32_t mesh_mutation{},mesh_path_finds{};bool mesh_mutation_done{},mesh_lookup_serial{};
+bool mesh_boundary_counting{};uint32_t mesh_boundary_resolves{},mesh_boundary_mutate_at{};
+uint32_t mesh_boundary_garbage_names{};
+const uint64_t* mesh_boundary_name(const void* p){if((*lifetime_flags(p)&0x40000000u)!=0)++mesh_boundary_garbage_names;return lifetime_name(p);}
 uint64_t pose_weak(void* p){return lifetime_weak(p)|(p==&vertex_mesh?static_cast<uint64_t>(pose_mesh_serial)<<32:0);}
 void* pose_resolve(uint64_t id){const auto index=static_cast<uint32_t>(id),serial=static_cast<uint32_t>(id>>32);auto* p=lifetime_resolve(index);
+    if(mesh_boundary_counting&&++mesh_boundary_resolves==mesh_boundary_mutate_at)path_package.name^=1;
     return serial&&(p!=&vertex_mesh||serial!=pose_mesh_serial)?nullptr:p;}
 void* pose_find(const uint16_t* key){const std::wstring path(reinterpret_cast<const wchar_t*>(key));
     if(path==L"/Script/Engine.PoseableMeshComponent")return &pose_class;
@@ -1215,6 +1219,7 @@ void pose_reset(HsmpReflect& reflect){
     reflect.find=pose_find;reflect.is_a=pose_is_a;reflect.props=pose_props;reflect.obj_prop=pose_prop;reflect.call=pose_event;reflect.weak=pose_weak;reflect.resolve=pose_resolve;source_outer=lifetime_outer;
     pose_image=scene_image;pose_build_admit=[](){return true;};scene_vtable_read=pose_vtable;pose_native_call=pose_action;
     pose_calc_a={};pose_calc_b={};pose_render_a={};pose_render_b={};pose_input={};pose_stages.clear();pose_callback_replace=pose_callback_dirty=pose_allocate_mesh_serial=mesh_lookup_serial=false;pose_asset_reads=pose_mesh_serial=mesh_mutation=mesh_path_finds=0;mesh_mutation_done=false;
+    mesh_boundary_counting=false;mesh_boundary_resolves=mesh_boundary_mutate_at=0;
     vertex_mesh.name=814;vertex_mesh.cls=&vertex_mesh_class;vertex_mesh.outer=&path_package;source_package_name=&path_package_name;path_package_name=700;
     path_package={127,&meta};lifetime_objects.push_back(&path_package);
     for(size_t i=0;i<2;++i){Transform value{{static_cast<double>(i)+1,2,3},{0,0,0,1},{1,1,1}};pose_input[i]=engine(value);}
@@ -1265,6 +1270,25 @@ void pose_checks(HsmpReflect& reflect){
     pose_reset(reflect);admitted=mesh_binding(keep(&old_world),keep(&actor),requested_path,&result);pose_allocate_mesh_serial=true;
     mesh_admit(admitted,keep(&skeletal_first),requested_path,false,"mesh_set",&result);Mirror witnessed{keep(&old_world),keep(&actor),{}};Part retained{};retained.mesh=admitted;witnessed.parts.push_back(retained);
     {MeshWatch watch({&witnessed});vertex_mesh.name^=1;rejects([&]{check_guard();},"later component callback rechecks the earlier retained mesh path before continuing");vertex_mesh.name^=1;}
+    mesh_boundary_counting=true;mesh_boundary_resolves=0;mesh_bindings_final({&admitted});const auto unique_boundary_reads=mesh_boundary_resolves;
+    mesh_boundary_resolves=0;mesh_bindings_final({&admitted,&admitted,&admitted});
+    check(mesh_boundary_resolves==unique_boundary_reads+6,"shared original path/class reads occur once per fresh pass while every binding retains owner/Level/pin checks");
+    mesh_boundary_resolves=0;mesh_bindings_final({&admitted});
+    check(mesh_boundary_resolves==unique_boundary_reads,"the next guard rereads all original witnesses rather than retaining a validation ticket");
+    mesh_boundary_resolves=0;mesh_boundary_mutate_at=(unique_boundary_reads-3)/2+3;
+    rejects([&]{mesh_bindings_final({&admitted});},"a path mutation during the per-binding pure link checks is caught by the second fresh whole-set pass");
+    path_package.name^=1;mesh_boundary_mutate_at=0;mesh_boundary_counting=false;
+    for(uint32_t conflict=0;conflict<4;++conflict){auto other=admitted;
+        if(conflict==0)other.path[0].name^=1;
+        else if(conflict==1)other.pinned.weak=(uint64_t{10}<<32)|static_cast<uint32_t>(other.pinned.weak);
+        else if(conflict==2)other.world_node.class_name^=1;
+        else other.package^=1;
+        rejects([&]{mesh_bindings_final({&admitted,&other});},"disagreeing original name/positive serial/class/package witnesses refuse before shared validation");}
+    object_name=mesh_boundary_name;
+    for(auto* garbage:{&vertex_mesh_class,&vertex_mesh}){garbage->flags=0x40000000u;mesh_boundary_garbage_names=0;
+        rejects([&]{mesh_bindings_final({&admitted});},"shared class/object garbage refuses before metadata access");
+        check(mesh_boundary_garbage_names==0,"garbage class/object FName is never read before refusal");garbage->flags=0;}
+    object_name=lifetime_name;
     mirror_mutex.lock();mirrors.emplace(88,std::move(witnessed));mirror_mutex.unlock();vertex_mesh.outer=&actor;
     const uint64_t retained_handle=88;int context=1;const HsmpViewGuard retained_guard{&context,guard_check};
     check(finish_scene_sets(keep(&old_world),nullptr,0,&retained_handle,1,&retained_guard,&result)==-1,

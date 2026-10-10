@@ -1,5 +1,21 @@
 # Native authority bootstrap checkpoint
 
+## Actual ce46189f: input binding fixed, local warm apply exceeds freshness
+
+Normal010930-fe6500/fullG0/dev/all394, auth44716 clients30896/47056, original
+source88ef8f66-7062-42bc-ab65-38a870dabcad. Input_refused0/neutraldispatched170,
+activeboth0; firstframe273.289ms/provider255.232ms. Sixteen warmattempts all
+entryfresh1/exitfresh0 atpostapply, total998–1128ms/apply718–816/finish275–333ms.
+Prepare129–262us. This is local apply/verification delay, not proved network
+latency. Keep250ms/originalreceipt/sameSceneArc/allguards. Normalfalse; independent
+cleanupPASS4absent20savehashsame/nodumps/secondary. Next bounded per-invocation
+mesh guard witness dedup retains every original path/pin/link/callback/final proof.
+Candidate CPP+existing fixture retains standalone mesh_binding_final, fresh
+unique witness reads before/after all original per-binding checks and all guard
+calls; conflicts refuse. Focused checks and actual performance pending.
+Strict provider/fixture and1,729 checks pass; review closed with RF rejection
+retained before metadata access. Actual warm timing remains pending.
+
 ## Input-path fix and bounded warm-present diagnosis
 
 a54 repeat records one detailed forward/backward-axis refusal: its literal
