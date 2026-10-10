@@ -179,6 +179,12 @@ void record_present_profile(const char* stage,uint32_t complete,uint64_t value,u
     present_profile_records.push_back({value,attempt,complete,bucket,stage});
 }
 void present_profile_checks(HsmpReflect& reflect){
+    uint64_t warm_ns{},source_us{};for(uint32_t i=0;i<1000;++i){timer_accumulate(warm_ns,400,true);timer_accumulate(source_us,400,false);}
+    check(warm_ns/1000==400,"one thousand400ns warm contributions survive aggregate conversion to microseconds");
+    check(source_us==0,"existing source microsecond timer convention is unchanged by private warm precision");timer_accumulate(source_us,1500,false);
+    check(source_us==1,"source row continues to store microseconds rather than private nanoseconds");
+    uint64_t near_max=~uint64_t{}-200;timer_accumulate(near_max,400,true);
+    check(near_max==~uint64_t{},"private nanosecond totals saturate instead of wrapping on overflow");
     lifetime_reset(reflect);present_apply_profile_attempts=present_finish_profile_attempts=0;present_finish_pending=false;present_profile_records.clear();present_profile_outside=true;
     hsmp_presentation_set_create_log(nullptr);{PresentProviderTrace disabled;disabled.begin(true);check(!disabled.enabled&&present_apply_profile_attempts==0,"missing optional profiler logger consumes no bounded attempt");}
     hsmp_presentation_set_create_log(record_present_profile);
@@ -187,6 +193,7 @@ void present_profile_checks(HsmpReflect& reflect){
     for(uint32_t attempt=0;attempt<3;++attempt){
         try{PresentProviderTrace trace;const std::lock_guard lock(mirror_mutex);OperationScope scope(&guard,keep(&old_world));trace.begin(true);
             if(attempt<2){check(trace.enabled&&active_capture_trace==&trace.row,"warm profiler installs only its stack-owned counter row");
+                {HsmpNativeCaptureRow unrelated{};active_capture_trace=&unrelated;check(present_capture_nanoseconds(5)==nullptr,"unrelated source row retains its public microsecond storage during nested work");active_capture_trace=&trace.row;}
                 {PresentProviderTrace nested;nested.begin(true);check(!nested.enabled,"nested provider work cannot consume or replace the original profiler");}
                 profile_tick(0);profile_tick(2);profile_tick(3);trace.row.us[5]=123;
                 get(keep(&old_world));property(keep(&old_world),L"OwningGameInstance",L"ObjectProperty",8);
@@ -196,7 +203,7 @@ void present_profile_checks(HsmpReflect& reflect){
             }else check(!trace.enabled,"third warm application is outside the fixed two-attempt diagnostic budget");
         }catch(const Error&){}
         if(attempt<2){PresentProviderTrace finish(true);const std::lock_guard lock(mirror_mutex);OperationScope scope(&guard,keep(&old_world));finish.begin(true);check(finish.enabled,"pending warm application permits one matching aggregate finish profile");
-            check(finish.row.guards==0&&finish.row.finds==0&&finish.row.events==0&&finish.extra.count==std::array<uint64_t,3>{},"matching finish starts with fresh counters after success or failure unwind");finish.complete=true;}
+            check(finish.row.guards==0&&finish.row.finds==0&&finish.row.events==0&&finish.extra.count==std::array<uint64_t,3>{}&&finish.extra.ns==std::array<uint64_t,3>{}&&finish.extra.capture_ns==std::array<uint64_t,8>{},"matching finish starts with fresh counters after success or failure unwind");finish.complete=true;}
     }
     check(present_profile_records.size()==68&&present_apply_profile_attempts==2&&present_finish_profile_attempts==2,"two warm applies and matching finishes emit at most68 fixed copied scalar profile lines");
     check(present_profile_outside&&!present_provider_active&&!active_capture_trace,"all profile logging occurs after guard/cache/TLS and provider mutex unwind");

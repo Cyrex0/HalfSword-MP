@@ -1,5 +1,28 @@
 # Native full-scene encoding checkpoint
 
+## Actual65946a48: hot-path microsecond truncation invalidates internal attribution
+
+Normal015139-f6bbe0/fullG0/dev/all394, source18d63492-ec12-4fff-8e52-
+85cc39ae64b3/auth44736/c27192/18672. All warm exitstale; activeboth0. c1 first
+profiled operations are READY, c2LIVE; do not conflate states. Wholewarm totals
+are direct elapsed observations, but each inner timer truncates EACH call to
+microseconds before summing. c1 getidentity21us/144,764calls andmesh445us/
+185,143guards cannot establish negligible cost: submicrosecond work is lost.
+No property schema/identity cache optimization follows from those numbers.
+Next precision-only change accumulates private warm nanoseconds/ticks and
+converts once at copied emission, preserving existing source/public-row units,
+two-attempt/68linebound and every native check. CleanupPASS4absent/save20same/
+nodumps/unobservedchildren/bothsecondary. No gain or gameplay claim fromprobe.
+
+Precision candidate changes exact CPP implementation+fixture only. Warm buckets
+sum private nanoseconds and convert once to existing microsecond log labels;
+only the exact warm row uses private units, all other source/public rows retain
+their original convention. Deterministic400ns aggregate, source-unit isolation,
+TLS/unwind and68linebound assertions cover it. Actual accurate attribution pending.
+Strict provider/fixture1,762checks pass (six precision/source-unit/isolation/
+saturation assertions). Independent review closed; warm-only addition saturates
+without changing source arithmetic. Deterministic1000×400ns emits400us once.
+
 ## Actual6733e739: whole warm presentation roughly halves, still stale
 
 Exact fullG0/dev/all394 normal014140-46a600, source4ab96e5b-c850-4347-b94f-

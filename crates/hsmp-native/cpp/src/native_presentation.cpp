@@ -63,14 +63,20 @@ void lookup_trace_flush();
 bool mesh_serial_assignment(Obj original,Obj current);
 thread_local bool static_profile_trace{};
 thread_local HsmpNativeCaptureRow* active_capture_trace{};
+uint64_t* present_capture_nanoseconds(uint32_t index);
+void timer_accumulate(uint64_t& total,uint64_t nanoseconds,bool precise){
+    if(precise&&nanoseconds>~uint64_t{}-total)total=~uint64_t{};
+    else total+=precise?nanoseconds:nanoseconds/1000;
+}
 struct LookupNativeTrace {const wchar_t* path;HsmpNativeCaptureRow* row;uint64_t before;
     explicit LookupNativeTrace(const wchar_t* key):path(key),row(active_capture_trace),before(row?row->us[6]:0){}
     ~LookupNativeTrace(){lookup_trace_native(path,row?row->us[6]-before:0);}
 };
 struct CaptureTimer {
-    uint64_t* target{};std::chrono::steady_clock::time_point start{};
-    explicit CaptureTimer(uint32_t index,bool enabled=true){if(enabled&&active_capture_trace){target=&active_capture_trace->us[index];start=std::chrono::steady_clock::now();}}
-    ~CaptureTimer(){if(target)*target+=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());}
+    uint64_t* target{};bool precise{};std::chrono::steady_clock::time_point start{};
+    explicit CaptureTimer(uint32_t index,bool enabled=true){if(enabled&&active_capture_trace){target=present_capture_nanoseconds(index);precise=target!=nullptr;
+        if(!target)target=&active_capture_trace->us[index];start=std::chrono::steady_clock::now();}}
+    ~CaptureTimer(){if(target)timer_accumulate(*target,static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count()),precise);}
 };
 struct CaptureTrace {
     HsmpNativeCaptureRow row{};HsmpNativeCaptureRow* previous{active_capture_trace};bool enabled{hsmp_native_capture_profile_active()==1};
@@ -87,16 +93,17 @@ std::atomic<HsmpPresentationCreateLog> create_logger{};
 thread_local bool present_provider_active{};
 thread_local uint32_t present_apply_profile_attempts{},present_finish_profile_attempts{};
 thread_local bool present_finish_pending{};
-struct PresentExtraCounters {std::array<uint64_t,3> us{},count{};};
+struct PresentExtraCounters {std::array<uint64_t,3> ns{},count{};std::array<uint64_t,8> capture_ns{};HsmpNativeCaptureRow* row{};};
 thread_local PresentExtraCounters* present_extra{};
+uint64_t* present_capture_nanoseconds(uint32_t index){return present_provider_active&&present_extra&&present_extra->row==active_capture_trace?&present_extra->capture_ns[index]:nullptr;}
 struct PresentExtraTimer {
     PresentExtraCounters* owner{};uint32_t index{};bool enabled{};
     std::chrono::steady_clock::time_point start{};
-    explicit PresentExtraTimer(uint32_t bucket,bool activate=true):owner(present_provider_active?present_extra:nullptr),index(bucket){
+    explicit PresentExtraTimer(uint32_t bucket,bool activate=true):owner(present_provider_active&&present_extra&&present_extra->row==active_capture_trace?present_extra:nullptr),index(bucket){
         if(owner){start=std::chrono::steady_clock::now();if(activate)enable();}
     }
     void enable(){if(owner&&!enabled){enabled=true;++owner->count[index];}}
-    ~PresentExtraTimer(){if(enabled)owner->us[index]+=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());}
+    ~PresentExtraTimer(){if(enabled)timer_accumulate(owner->ns[index],static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count()),true);}
 };
 struct PresentProviderTrace {
     HsmpNativeCaptureRow row{};HsmpNativeCaptureRow* previous{};
@@ -109,12 +116,13 @@ struct PresentProviderTrace {
         auto& attempts=aggregate?present_finish_profile_attempts:present_apply_profile_attempts;
         if(attempts>=2||(aggregate&&!present_finish_pending))return;
         attempt=++attempts;enabled=true;start=std::chrono::steady_clock::now();previous=active_capture_trace;
-        active_capture_trace=&row;previous_extra=present_extra;present_extra=&extra;present_provider_active=true;
+        active_capture_trace=&row;extra.row=&row;previous_extra=present_extra;present_extra=&extra;present_provider_active=true;
         if(aggregate)present_finish_pending=false;else present_finish_pending=true;
     }
     ~PresentProviderTrace(){
         if(!enabled)return;
         row.us[0]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());
+        for(uint32_t bucket=1;bucket<8;++bucket)row.us[bucket]=extra.capture_ns[bucket]/1000;
         active_capture_trace=previous;present_extra=previous_extra;present_provider_active=false;
         // Declared before provider locks/scopes: only copied scalars remain here.
         if(const auto logger=create_logger.load()){
@@ -123,7 +131,7 @@ struct PresentProviderTrace {
             logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.guards,attempt,0,0,0,label);
             logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.finds,attempt,1,0,0,label);
             logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.events,attempt,2,0,0,label);
-            for(uint32_t bucket=0;bucket<3;++bucket){logger("present_extra_us",complete?1u:0u,extra.us[bucket],attempt,bucket,0,0,label);
+            for(uint32_t bucket=0;bucket<3;++bucket){logger("present_extra_us",complete?1u:0u,extra.ns[bucket]/1000,attempt,bucket,0,0,label);
                 logger("present_extra_count",complete?1u:0u,extra.count[bucket],attempt,bucket,0,0,label);}
         }
     }

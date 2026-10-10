@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Accumulate warm diagnostic timings at nanosecond precision and convert once
+  when reporting, retaining submicrosecond work across repeated calls.
 - Extend the bounded warm profile with actual property-metadata lookup,
   identity-read and cached-function-copy costs to locate remaining apply time.
 - Compile copied original mesh expectations once per warm operation, retaining

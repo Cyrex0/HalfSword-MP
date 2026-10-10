@@ -1,5 +1,18 @@
 # Native authority bootstrap checkpoint
 
+## Actual65946a48: fix timing precision before interpreting hot paths
+
+Normal015139-f6bbe0/auth44736/c27192/18672/fullG0/dev/all394: allwarmstale,
+activeboth0. Firstc1profileREADY/c2LIVE. Inner percallµs truncation loses tiny
+calls before sum (get21us/144764calls); cannot conclude costnegligible. Whole
+direct elapsed observations remain. Next privatewarmns/ticks accumulate then
+convertonce, source/publicµsunitschangeless/twoattempt68lines/allproofs retained.
+CleanupPASS4absent20savehashsame/nodumps/secondary. No speculative cachefix.
+Precisioncandidate exactCPP+fixture/privatewarmns→copiedµsemit; unrelated source
+rowunits unchanged. Deterministic400nsaggregate/isolation/unwind/bound covered.
+Strict provider/fixture1,762pass/reviewclosed; warm-onlysaturation retained,
+1000×400ns→400us. Accurate actual attribution next.
+
 ## Actual6733e739: warm total516–591ms, not yetLIVE
 
 Normal014140-46a600/fullG0/dev/all394/auth5040/c45832/46372: sixteen wholewarm
