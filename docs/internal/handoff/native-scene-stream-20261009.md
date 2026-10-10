@@ -2,6 +2,40 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actualb6b5f59c full G0 PASS (Lua77/Rust1378/79), dev pushed, RequireG0/all396
+deployed. Standard Gameplay141628-f867c7 BOTH reach LIVE with native source
+inputs104/84. Fresh page batching executes: client1 first native row31712us,
+image528/2368us, query1062/1711us, ws528/legacy0. This completes more work than
+prior first row; no normalized speedup claim. Permission bottleneck is removed
+in these samples without receipt/guard changes. Observation gate still FAILS:
+client2tick85 native_apply59574us passes, gear148175us (rows46839/101316us),
+original entry37539.4us and confirm3461us ends as exact result stale. Full gear
+readback is now the measured blocking stage; subleaf costs remain unmeasured.
+Next investigate complete local gear getter/validation cost, preserving ALL24
+armor/25weapon fields, seven aliases, original object/owner/schema/f64-f32 proofs
+and final callback closure; no cached successful gear check or250ms extension.
+Early secondary placement PASS; actual model/healthbar pixels were missed before
+the early observation failure, so no visual-body/fair-spawn claim. Independent
+cleanup PASS/four absent/save20 unchanged/no dumps or children. Full bounded
+cost/detail rows and successful/failing native/gear/confirm timings retained in
+native_operator_summary.json. Combat/body/dismemberment/co-op remain open.
+
+Gear diagnostic frozen and independently reviewed CLOSED: existing
+x_native_gameplay_timing rows now carry inclusive guard/current/weapon_guard,
+armor_read/weapon_read/recipe/compare counts and microseconds. Current includes
+all existing full-wrapper calls inside passport_env; weapon qualification nests
+those calls. Never add nested spans. No native UObject call/getter/guard/read
+was added or removed; only scalar QPC probes, counted separately. Gear probes
+cap32768 per sampled iteration and mark incomplete; overhead is not subtracted
+from elapsed time or original receipt. Clock failures/rollback drop observation
+only. First8 reports plus first later failure remain bounded; failure in first8
+does not consume the later slot. Original tuples/error objects and protected
+proof-before-reporting order retain exact behavior. Focused Lua713 assertions
+and syntax2 PASS. Initial private-D fixture wired a different dofile copy;
+corrected to actual private upvalue, retaining exact error-object assertion.
+Full G0/exact deployment/ONE actual gear-cost run remain required. No batch
+reader or cached successful gear verification has been introduced.
+
 Actual5ace4b76 full G0 PASS (Lua77/Rust1378/79), dev pushed, RequireG0/all396
 deployed. Standard Gameplay140015-c40761 still refuses whole-roster readiness
 as stale, inputs0/0, while individual native rows complete. The split-cost

@@ -49,14 +49,30 @@ function M.new(env)
         if not pawn then fail(reason or"native gameplay original pawn unavailable")end
         return pawn
     end
-    local function passport_env(row)
+    local function passport_env(row,timing,read_clock)
         local out={};local null_class
+        -- These copied, inclusive spans nest. They are not additive. The
+        -- clock crosses only the scalar QPC endpoint; its overhead is not
+        -- subtracted from either these spans or the original receipt age.
+        local function observe(key,fn)
+            if not timing then return fn end
+            return function(...)
+                local before=read_clock();if not before then return fn(...)end
+                timing[key.."_n"]=(timing[key.."_n"]or 0)+1
+                local result=table.pack(pcall(fn,...));local after=read_clock()
+                if after and after>=before then timing[key.."_us"]=(timing[key.."_us"]or 0)+after-before
+                else timing.timing_incomplete=true end
+                if not result[1]then error(result[2],0)end
+                return table.unpack(result,2,result.n)
+            end
+        end
+        local pawn_current=observe("current",function()return current(row)end)
         out.guard=function()
             local ok,reason=guarded(require_api("native_gameplay_current"),row.handle,true)
             if ok~=true then fail(reason or"native gameplay original pawn guard unavailable")end
             return true
         end
-        out.current=function()return current(row)end
+        out.current=pawn_current
         out.resolve_class=function(path)
             local o=guarded(env.find,path)
             if not o then fail("native gameplay passport class unavailable")end
@@ -83,7 +99,7 @@ function M.new(env)
         out.fname=function(value)return guarded(env.fname,value)end
         local weapons={}
         out.weapon_guard=function(actor,field,id)
-            local pawn=current(row);local original=guarded(function()return pawn[field]end)
+            local pawn=pawn_current();local original=guarded(function()return pawn[field]end)
             if not original then fail("native gameplay weapon field unavailable")end
             local function snapshot(o)
                 local address=guarded(function()return o:GetAddress()end)
@@ -104,10 +120,15 @@ function M.new(env)
                     value.class_name~=fresh.class_name then fail("native gameplay original weapon identity changed")end
             end
             -- Resolve the hard binding after all metadata/world callbacks.
-            local latest=current(row);local item=guarded(function()return latest[field]end)
+            local latest=pawn_current();local item=guarded(function()return latest[field]end)
             if not item or guarded(function()return item:GetAddress()end)~=fresh.address or
                 guarded(function()return item:GetFName()==fresh.name end)~=true then fail("native gameplay original weapon binding changed")end
             weapons[id]=old or fresh;return true
+        end
+        if timing then
+            out.guard=observe("guard",out.guard)
+            out.weapon_guard=observe("weapon_guard",out.weapon_guard)
+            out.timing=timing;out.now_us=read_clock
         end
         return out
     end
@@ -140,10 +161,13 @@ function M.new(env)
     end
     function self:apply(scene)
         local trace,started,phase_started,row_started,apply_returned
+        local gear_clock_reads,gear_clock_limit,last_clock=0,32768,nil
         local function clock()
             if type(env.now_us)~="function"then return nil end
             local ok,value=pcall(env.now_us)
-            if ok and math.type(value)=="integer"and value>=0 then return value end
+            if trace then trace.clock_reads=(trace.clock_reads or 0)+1 end
+            if ok and math.type(value)=="integer"and value>=0 and(not last_clock or value>=last_clock)then last_clock=value;return value end
+            trace=nil
         end
         local function phase(stage)
             if not trace then return end;local tick=clock();if not tick then trace=nil;return end
@@ -197,7 +221,8 @@ function M.new(env)
             if scene.state==2 and type(env.diagnostic)=="function"and(self.timing_reports<8 or not self.timing_failure)then
                 started=clock();if started then
                     phase_started=started;trace={epoch=scene.epoch,dir_seq=scene.dir_seq,frame_seq=scene.frame_seq,authority_tick=scene.authority_tick,
-                        received_age_entry_ms=scene.received_age_ms,stage="movement",rows={}}
+                        received_age_entry_ms=scene.received_age_ms,stage="movement",rows={},clock_reads=1,
+                        gear_clock_limit=gear_clock_limit,timing_inclusive=true,clock_overhead_subtracted=false}
                 end
             end
             -- Replay only source-acknowledged movement/Run through the cooked
@@ -236,7 +261,14 @@ function M.new(env)
                 if trace then row_started=clock();if not row_started then trace=nil else
                     trace.active_row=index;trace.rows[index]={id=original.id,incarnation=original.incarnation,us=0}
                 end end
-                local verified,why=Passport.verify_equipment(original.recipe,passport_env(original))
+                local detail=trace and trace.rows[index]
+                local function gear_clock()
+                    if not trace or detail.timing_incomplete then return nil end
+                    if gear_clock_reads>=gear_clock_limit then detail.timing_incomplete=true;return nil end
+                    gear_clock_reads=gear_clock_reads+1;detail.clock_reads=(detail.clock_reads or 0)+1
+                    return clock()
+                end
+                local verified,why=Passport.verify_equipment(original.recipe,passport_env(original,detail,gear_clock))
                 if verified~=true then fail(why or"native gameplay complete equipment readback failed")end
                 if trace then local tick=clock();if not tick then trace=nil else trace.rows[index].us=tick-row_started;trace.active_row=nil end end
             end
@@ -253,9 +285,10 @@ function M.new(env)
                 trace[trace.stage.."_us"]=tick-phase_started;trace.total_us=tick-started
                 if trace.active_row then trace.rows[trace.active_row].us=tick-row_started;trace.active_row=nil end
                 trace.ok=ok and result==true;trace.reason=(not ok and tostring(result)or type(reason)=="string"and reason or""):sub(1,256)
+                trace.gear_clock_reads=gear_clock_reads
                 if self.timing_reports<8 or(not trace.ok and not self.timing_failure)then
-                    if self.timing_reports<8 then self.timing_reports=self.timing_reports+1 end
-                    if not trace.ok then self.timing_failure=true end
+                    if self.timing_reports<8 then self.timing_reports=self.timing_reports+1
+                    elseif not trace.ok then self.timing_failure=true end
                     pcall(env.diagnostic,trace)
                 end
             end

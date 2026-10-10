@@ -165,6 +165,52 @@ local live={GetAddress=function()return 123 end,IsValid=function()return true en
 values["Weapon R"]=live;values["Weapon Slot Back"]=live
 ok,why=P.verify_equipment(recipe,env)
 T.check(ok==true,"live independent armor12/passport2 and aliased held/sheath native weapon verify: "..tostring(why))
+do
+    local function measured(enabled,clock)
+        local copied={};for key,value in pairs(env)do copied[key]=value end
+        local counts={guard=0,current=0,weapon_guard=0};local order={}
+        for _,key in ipairs({"guard","current","weapon_guard"})do local fn=copied[key]
+            copied[key]=function(...)
+                counts[key]=counts[key]+1;order[#order+1]=key
+                return fn(...)
+            end
+        end
+        if enabled then copied.timing={};copied.now_us=clock end
+        local result,reason=P.verify_equipment(recipe,copied)
+        return result,reason,counts,table.concat(order,","),copied.timing
+    end
+    local baseline,base_reason,base_counts,base_order=measured(false)
+    local ticks=0;local result,reason,counts,order,detail=measured(true,function()ticks=ticks+1;return ticks end)
+    T.check(baseline==true and result==true and reason==base_reason and counts.guard==base_counts.guard and
+        counts.current==base_counts.current and counts.weapon_guard==base_counts.weapon_guard and order==base_order,
+        "optional gear timers preserve every original access/guard and their complete order")
+    T.check(detail.recipe_n==2 and detail.armor_read_n==1 and detail.weapon_read_n==2 and detail.compare_n==5 and
+        detail.armor_read_us>0 and detail.weapon_read_us>0 and ticks==20,
+        "timing covers both complete aliased25-field reads, armor24-field read, strict recipe and exact comparisons")
+    local observe,private_descriptor
+    for index=1,20 do local key,value=debug.getupvalue(P.verify_equipment,index);if not key then break end
+        if key=="observed"then observe=value elseif key=="D"then private_descriptor=value end
+    end
+    assert(observe and private_descriptor,"actual diagnostic wrapper/descriptor missing")
+    local original_read=private_descriptor.read_passport;local original_error={reason="precise native tuple"}
+    private_descriptor.read_passport=function()return nil,original_error,"unconsumed native return"end
+    local failed,failed_reason=measured(false)
+    local timed_failed,timed_reason=measured(true,function()ticks=ticks+1;return ticks end)
+    private_descriptor.read_passport=original_read
+    T.check(failed==nil and timed_failed==nil and failed_reason==original_error and timed_reason==original_error,
+        "timed nil/read-error tuple retains the exact original error object")
+    local tuple_env={timing={},now_us=function()ticks=ticks+1;return ticks end}
+    local tuple=table.pack(observe(tuple_env,"tuple",function()return nil,false,nil,"original tail"end))
+    T.check(tuple.n==4 and tuple[1]==nil and tuple[2]==false and tuple[3]==nil and tuple[4]=="original tail",
+        "actual timer preserves false and both nil holes in complete proof-call tuple")
+    local threw,error_object=pcall(observe,tuple_env,"tuple",function()error(original_error,0)end)
+    T.check(not threw and error_object==original_error,"actual timer rethrows the exact original native error object")
+    for _,clock in ipairs({function()error("optional QPC unavailable",0)end,function()return -1 end})do
+        local valid,error_reason,_,_,partial=measured(true,clock)
+        T.check(valid==true and error_reason==nil and partial.timing_incomplete==true,
+            "optional failed clock disables detail without changing complete gear proof")
+    end
+end
 ok,why=P.after_finish(recipe,env)
 T.check(ok==true,"finish verification retains full source character passport alongside live equipment")
 local old_passport=values["Character Passport"]

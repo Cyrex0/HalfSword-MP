@@ -4,7 +4,7 @@ local n=0
 local function check(value,label)n=n+1;T.check(value,label);assert(value,label)end
 local function fixture()
     local f={world="w1",calls={},actions={},progress={},clears=0,forgot=0,equipment=0,armor=0,weapons=0,apply_count=0,confirmed=0,scalar_guards=0,wrappers=0,clock=0,timings={}}
-    local cls={GetAddress=function()return 100 end}
+    local cls={GetAddress=function()return 100 end,GetFName=function()return 101 end}
     local function pawn(id)
         local p={GetAddress=function()return id+1000 end,GetFName=function()return id end,GetClass=function()return cls end,HasAnyFlags=function()return false end}
         for _,name in ipairs({"InpAxisEvt_Move Forward / Backward_K2Node_InputAxisEvent_14","InpAxisEvt_Move Right / Left_K2Node_InputAxisEvent_19",
@@ -29,11 +29,13 @@ local function fixture()
     N.native_gameplay_current=function(handle,scalar)
         if f.expired then return nil,"original native weak expired"end
         if scalar==true then
+            if f.probe_detail then f.clock=f.clock+3 end
             f.scalar_guards=f.scalar_guards+1
             if f.scalar_error then return nil,f.scalar_error end
             if f.scalar_result~=nil then return f.scalar_result end
             return true
         end
+        if f.probe_detail then f.clock=f.clock+5 end
         f.wrappers=f.wrappers+1;return f.pawns[handle]
     end
     N.native_gameplay_construct=function(handle)f.calls[#f.calls+1]="construct"..handle;return true,f.pawns[handle]end
@@ -56,12 +58,22 @@ local function fixture()
         if f.weapon_error then return nil,f.weapon_error end;return true
     end,verify_equipment=function(recipe,env)
         f.equipment=f.equipment+1;check(env.guard()==true,"native gear checks remain guarded")
+        if f.probe_detail then
+            check(env.current()==f.pawns[recipe.passport.fixture_id],"timed current preserves actual original pawn output")
+            local actor=f.pawns[recipe.passport.fixture_id]["Weapon R"]
+            check(env.weapon_guard(actor,"Weapon R",1)==true,"timed weapon guard preserves original field qualification")
+        end
+        if f.exhaust_clock and env.now_us then for _=1,32770 do env.now_us()end end
         f.clock=f.clock+100
         f.calls[#f.calls+1]="gear"..recipe.passport.fixture_id
         if f.gear_error then return nil,f.gear_error end;return true
     end}
     f.game=Gameplay.new({native=N,passport=Passport,same=function(token)return token==f.world end,
-        now_us=function()if f.clock_error then error("diagnostic clock unavailable")end;return f.clock end,
+        now_us=function()
+            if f.clock_error then error("diagnostic clock unavailable")end
+            if f.clock_rollback and f.apply_count>f.clock_rollback then return 0 end
+            return f.clock
+        end,
         diagnostic=function(row)
             check(f.calls[#f.calls]=="confirm"or not row.ok,"timing emitted only after native proof or original refusal")
             f.timings[#f.timings+1]=row;if f.log_error then error("diagnostic sink refused")end
@@ -74,7 +86,31 @@ local function fixture()
     function f:bootstrap()
         for _=1,12 do local ok,why=self.game:apply(self.scene);check(ok==nil and why==Gameplay.PENDING,"every bootstrap stage yields pending without readiness")end
     end
+    function f:detail()
+        self.probe_detail=true
+        for _,p in ipairs(self.pawns)do p["Weapon R"]={GetAddress=function()return 500 end,GetFName=function()return 501 end,
+            GetClass=function()return cls end,IsValid=function()return true end,HasAnyFlags=function()return false end,
+            GetWorld=function()f.clock=f.clock+7;return{GetAddress=function()return 88 end}end}end
+    end
     return f
+end
+do
+    local f=fixture();f:bootstrap();f:detail();f.scene.state=2;f.scene.gameplay_proof=true
+    local ok=f.game:apply(f.scene);local trace=f.timings[1];local row=trace.rows[1]
+    check(ok==true and row.guard_n==1 and row.guard_us==3 and row.current_n==3 and row.current_us==15 and
+        row.weapon_guard_n==1 and row.weapon_guard_us==24 and row.us==132,
+        "inclusive guard/current/weapon attribution encloses only original calls and full gear still executes")
+    check(trace.timing_inclusive==true and trace.clock_overhead_subtracted==false and trace.gear_clock_reads==20 and
+        trace.clock_reads==29 and row.clock_reads==10,"QPC calls are counted separately and nested observer costs are never subtracted")
+    f.scalar_error="precise original current refusal";local result,reason=f.game:apply(f.scene)
+    check(result==nil and reason==f.scalar_error and f.timings[2].stage=="gear"and f.confirmed==1,
+        "timed guard preserves exact original throw and blocks later confirmation")
+end
+do
+    local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f.exhaust_clock=true
+    local ok=f.game:apply(f.scene);local row=f.timings[1]
+    check(ok==true and f.confirmed==1 and row.gear_clock_reads==32768 and row.gear_clock_limit==32768 and row.rows[1].timing_incomplete,
+        "detail clock exhaustion labels partial timing and leaves full gameplay proof and reporting intact")
 end
 do
     local f=fixture();f:bootstrap();check(#f.timings==0,"bootstrap and READY work do not emit per-LIVE timing")
@@ -100,6 +136,15 @@ do
     local ok,why=f.game:apply(f.scene)
     check(ok==nil and why==f.gear_error and f.timings[1].stage=="gear" and f.timings[1].rows[1].us==100 and f.confirmed==0,
         "failed gear row timing remains copied and prevents premature confirmation")
+    f.gear_error=nil;for _=1,8 do f.game:apply(f.scene)end
+    f.confirm_error="native gameplay result is stale";f.game:apply(f.scene)
+    check(#f.timings==9 and not f.timings[1].ok and not f.timings[9].ok and f.timings[9].stage=="confirm",
+        "early sampled failure cannot consume the independent first later failure report")
+end
+do
+    local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f.clock_rollback=f.apply_count
+    local ok=f.game:apply(f.scene)
+    check(ok==true and f.confirmed==1 and#f.timings==0,"clock rollback disables diagnostics while every native proof still executes")
 end
 for _,fault in ipairs({"clock_error","log_error"})do
     local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f[fault]=true

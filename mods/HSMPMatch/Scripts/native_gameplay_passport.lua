@@ -301,11 +301,24 @@ function M.before_finish(recipe,env)
 end
 -- FinishSpawn/Willie's own construction may already initialize gear. Verify first;
 -- never invoke a second setup with guessed ClearPrevious/NoCheckBlock controls.
+local function observed(env,key,fn,...)
+    if type(env)~="table"or type(env.timing)~="table"or type(env.now_us)~="function"or env.timing.timing_incomplete then return fn(...)end
+    -- The caller supplies only a bounded scalar clock. Clock refusal disables
+    -- observation, while the original proof call and exact tuple still run.
+    local timing=env.timing;local ok,before=pcall(env.now_us)
+    if not ok or math.type(before)~="integer"or before<0 then timing.timing_incomplete=true;return fn(...)end
+    timing[key.."_n"]=(timing[key.."_n"]or 0)+1
+    local result=table.pack(pcall(fn,...));local after_ok,after=pcall(env.now_us)
+    if after_ok and math.type(after)=="integer"and after>=before then timing[key.."_us"]=(timing[key.."_us"]or 0)+after-before
+    else timing.timing_incomplete=true end
+    if not result[1]then error(result[2],0)end
+    return table.unpack(result,2,result.n)
+end
 function M.verify_equipment(recipe,env)
     local ok,why=pcall(function()
-        local p=validate(recipe);local signature=D.signature(p);local r=reader(env)
-        local armor,reason=D.read_armor_map(function()return current(env)["Currently Equipped Armor"]end,r)
-        if not armor then fail(reason)end;armor_equal(armor,p.equipment.armor)
+        local p=observed(env,"recipe",validate,recipe);local signature=observed(env,"compare",D.signature,p);local r=reader(env)
+        local armor,reason=observed(env,"armor_read",D.read_armor_map,function()return current(env)["Currently Equipped Armor"]end,r)
+        if not armor then fail(reason)end;observed(env,"compare",armor_equal,armor,p.equipment.armor)
         local weapons,fields,addresses={},{},{}
         for _,w in ipairs(p.equipment.weapons)do weapons[w.id]=w end
         for _,h in ipairs(p.equipment.hands)do fields[h.slot==0 and "Weapon R" or "Weapon L"]=h.item end
@@ -326,13 +339,13 @@ function M.verify_equipment(recipe,env)
                     guard(env);return a
                 end
                 if class_path(env,checked(env,function()return fresh():GetClass()end))~=expected.actor_class then fail("native weapon actor class mismatch")end
-                local copied,error_reason=D.read_passport("weapon",function()return fresh()["Weapon Passport"]end,r)
-                if not copied then fail(error_reason)end;equal(copied,expected.passport,"native live weapon passport")
+                local copied,error_reason=observed(env,"weapon_read",D.read_passport,"weapon",function()return fresh()["Weapon Passport"]end,r)
+                if not copied then fail(error_reason)end;observed(env,"compare",equal,copied,expected.passport,"native live weapon passport")
                 fresh()
             end
         end
         for id in pairs(weapons)do if not addresses[id]then fail("native live weapon unbound")end end
-        if D.signature(validate(recipe))~=signature then fail("gameplay source recipe changed")end;guard(env)
+        if observed(env,"compare",D.signature,observed(env,"recipe",validate,recipe))~=signature then fail("gameplay source recipe changed")end;guard(env)
     end)
     if not ok then return nil,why end;return true
 end
