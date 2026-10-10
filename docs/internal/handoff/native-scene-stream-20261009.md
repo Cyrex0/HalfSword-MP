@@ -2,6 +2,37 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Latest actual f4f38fb8: full G0 PASS (Lua78/Rust1380/79,26 clippy warnings),
+pushed dev and RequireG0/all397 deployed. Standard200708-e4ea4c reaches native
+readiness. Both clients correctly report typed pre-mutation pending at their
+first finish (C1 28.435s, C2 28.494s), retaining loading. C2 own-first later
+refuses tick enabled at38.763s with unchanged generation and48.294ms receipt.
+The once-per-generation trace cannot distinguish later initialized from finish;
+both contain the same tick getter. No LIVE/inputs/weapon batch/model/HUD pixels.
+Secondary placement PASS, all four owned processes absent,20 save hashes
+unchanged, no dumps or children. Prior weapon retirement is still unverified.
+
+Local primary closes a concrete lifecycle route: Controller:Possess355B140
+calls3559F90; original controller slot7C8 selects PlayerController37D5E60.
+At37D5FFC pawn32&4 tests bStartWithTickEnabled, then37D6007 calls pawn slot480
+with DL1. Actor:SetActorTickEnabled34A99B5 uses that same slot. Exact primary
+windows and schema references are saved under test-results/
+native-initialization-proof-20261010/possession-tick-lifecycle.md. This proves
+the native route, not execution of that branch in the sampled failed run.
+
+The candidate closes final possession/HUD with the existing qualified false
+setter and fresh false readback before post-mutation count and gear metadata.
+Waiting queries remain getter-only and refuse unexpected reenable. No periodic
+suppression, policy-bit write, component tick/physics change or pending retry
+after partial finish. Existing Rust failure formatting adds static API context
+so the next refusal identifies initialized versus finish without extra reads or
+changed classification. Focused checks and independent review are pending.
+
+Candidate strict production provider/native presentation compile PASS;
+native2262 fixture checks and Rust20 focused tests PASS. Independent CPP and
+Rust pending/guard reviews CLOSED. Five tracked files are frozen for full G0,
+exact deployment and the next standard actual run. No live/parity claim.
+
 Actuald03e5ed3 full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
 deployed. Standard194743-073c65 reaches native readiness and both clients pass
 construction plus initialization-query admission. C1 (own entity2, first row

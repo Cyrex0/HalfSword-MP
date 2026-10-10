@@ -150,10 +150,16 @@ fn initialization_query(
     let mut result = ResultInfo::default();
     let ok = native(&mut pending, &mut result);
     if ok != 1 || result.complete != 1 {
-        return Err(failure.stage_error(&result.reason()));
+        return Err(format!(
+            "{}; api=initialized",
+            failure.stage_error(&result.reason())
+        ));
     }
     if !valid() {
-        return Err(failure.stage_error("native source/world operation guard changed"));
+        return Err(format!(
+            "{}; api=initialized",
+            failure.stage_error("native source/world operation guard changed")
+        ));
     }
     // The pinned native count is a bounded nonnegative int32. The untouched
     // caller sentinel is never an observed native count, even with complete=1.
@@ -173,10 +179,16 @@ fn finish_status(
 ) -> Result<bool, String> {
     let pending = ok == 0 && result.complete == 1 && result.reason() == INITIALIZATION_PENDING;
     if result.complete != 1 || (ok != 1 && !pending) {
-        return Err(failure.stage_error(&result.reason()));
+        return Err(format!(
+            "{}; api=finish",
+            failure.stage_error(&result.reason())
+        ));
     }
     if !valid() || (pending && failure.0.get().is_some()) {
-        return Err(failure.stage_error("native source/world operation guard changed"));
+        return Err(format!(
+            "{}; api=finish",
+            failure.stage_error("native source/world operation guard changed")
+        ));
     }
     // Status zero is the native pre-mutation observation only. It does not
     // finish the original pawn or publish any application/readiness proof.
@@ -1402,6 +1414,29 @@ mod tests {
         result
     }
     #[test]
+    fn setup_refusals_identify_api_without_changing_native_reason_or_guard_cause() {
+        let reason = "native gameplay actor tick remains enabled";
+        let failure = GuardFailureLatch::default();
+        let query = initialization_query(
+            true,
+            false,
+            &failure,
+            || true,
+            |_, result| {
+                *result = finish_result(0, reason);
+                -1
+            },
+        )
+        .unwrap_err();
+        let finish = finish_status(-1, &finish_result(0, reason), &failure, || {
+            panic!("native refusal cannot requalify")
+        })
+        .unwrap_err();
+        assert_eq!(query, format!("gameplay stage: {reason}; api=initialized"));
+        assert_eq!(finish, format!("gameplay stage: {reason}; api=finish"));
+        assert_eq!(failure.0.get(), None);
+    }
+    #[test]
     fn finish_pending_is_exact_complete_premutation_status_with_original_guard() {
         let scene = scene_fixture();
         let received = scene.received;
@@ -1471,7 +1506,10 @@ mod tests {
                     || { failure.refuse(first) }
                 )
                 .unwrap_err(),
-                failure.stage_error("native source/world operation guard changed")
+                format!(
+                    "{}; api=finish",
+                    failure.stage_error("native source/world operation guard changed")
+                )
             );
             assert_eq!(failure.0.get(), Some(first));
             assert!(
@@ -1656,7 +1694,10 @@ mod tests {
             );
             assert_eq!(
                 result.unwrap_err(),
-                failure.stage_error("native source/world operation guard changed")
+                format!(
+                    "{}; api=initialized",
+                    failure.stage_error("native source/world operation guard changed")
+                )
             );
             assert_eq!(failure.0.get(), Some(cause));
             assert_eq!(calls.get(), 2);

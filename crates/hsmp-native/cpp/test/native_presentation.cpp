@@ -919,6 +919,19 @@ void gameplay_tick_checks(HsmpReflect& reflect){
     check(gameplay_tick_calls==std::vector<uint32_t>{1},"preparation tick validation is a fresh getter without a second setter");
     gameplay_tick_enabled=true;gameplay_tick_calls.clear();rejects(verify,"native latent tick reenable refuses preparation");
     check(gameplay_tick_calls==std::vector<uint32_t>{1},"enabled preparation readback does not silently disable or grant readiness");
+    skeletal_reset(reflect);stop();gameplay_tick_calls.clear();
+    uint32_t finish_tick_stage=2;int finish_tick_counts{};bool finish_tick_metadata{};initialize_result(&result);
+    const auto finish_tick_mutation=[&]{gameplay_tick_enabled=true;finish_tick_stage=3;stop();};
+    check(gameplay_finish_initialization(finish_tick_stage,&result,[&]{++finish_tick_counts;return uint32_t{0};},[]{},finish_tick_mutation),
+        "finish lifecycle closes native possession tick reenable through the actual guarded shutdown helper");
+    finish_tick_metadata=true;
+    check(finish_tick_stage==3&&finish_tick_counts==2&&finish_tick_metadata&&!gameplay_tick_enabled&&gameplay_tick_calls==std::vector<uint32_t>({0,1})&&!result.complete,
+        "post-possession setter and fresh false readback precede metadata and cannot publish finish proof alone");
+    skeletal_reset(reflect);gameplay_tick_set_ignored=true;finish_tick_stage=2;finish_tick_counts=0;finish_tick_metadata=false;initialize_result(&result);
+    rejects([&]{if(gameplay_finish_initialization(finish_tick_stage,&result,[&]{++finish_tick_counts;return uint32_t{0};},[]{},finish_tick_mutation))finish_tick_metadata=true;},
+        "post-possession shutdown whose native false readback fails refuses finish");
+    check(finish_tick_stage==3&&finish_tick_counts==1&&!finish_tick_metadata&&!result.complete&&gameplay_tick_calls==std::vector<uint32_t>({0,1}),
+        "failed finish shutdown performs no metadata preparation or post-mutation count and stays incomplete");
     skeletal_reset(reflect);gameplay_tick_set_ignored=true;rejects(stop,"native tick setter whose readback stays enabled refuses");
     check(gameplay_tick_calls==std::vector<uint32_t>{0,1},"failed false readback still follows the original setter");
     skeletal_reset(reflect);skeletal_functions[static_cast<size_t>(SkeletalFnId::ActorTickRead)].fields[0].cls=name(L"ByteProperty");

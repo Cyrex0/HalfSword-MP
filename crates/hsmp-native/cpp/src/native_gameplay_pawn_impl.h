@@ -962,7 +962,9 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
         entry.stage=3;gameplay_local(entry,result);if(entry.own)gameplay_hud_ensure(entry,result);
         // Discover immutable gear metadata during generation-bound preparation.
         // Every application still captures and verifies its own fresh values.
-        gameplay_tick_disabled(entry.pawn,result);
+        // Native PlayerController possession reenables bStartWithTickEnabled.
+        // Close that lifecycle step after possession/HUD, then read back false.
+        gameplay_stop_tick(entry.pawn,result);
         }))return 0;
         gameplay_weapons_prepare(handle,result);lookup_finish();gameplay_pure(entry);
         if(entry.ui)gameplay_hud_binding_pure(entry,*entry.ui);result->complete=1;return 1;
