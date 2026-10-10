@@ -2,6 +2,38 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+The next candidate preserves the deliberate exact GameModeBase isolation instead
+of creating the solo UI_HUD. Cooked UI_HUD Tick reads Match Won through a failed
+HalfSword-mode cast, so a null cast is not a valid HUD profile. Native finish,
+apply and complete now retain the original mode, AuthorityGameMode158 and original
+Level/OwningWorldC0; AHUD proof and ABI4 weapon closure remain required. A passive
+HUD in the same Match Lua state consumes the exact confirmed Scene and owned row
+every successful frame after scope/input qualification. Numeric Health/Stamina
+have no guessed maxima. A separate timestamp captured before native confirmation
+anchors the returned original receipt age; delayed display and duplicate frames
+cannot renew its250ms lifetime. Waiting/loading/error hides stats, world drop
+forgets widgets, same-world cleanup removes only the helper's owned host.
+Strict CPP production build and native2187/weapon72 checks PASS. Focused Lua
+core/gameplay1046 and HUD38 assertions PASS; independent CPP/HUD/receipt reviews
+CLOSED. The mode GetLevel return is a scalar until the original mode/Outer path
+has been requalified and it equals the already retained original Level; poisoned
+foreign/changed returns refuse with zero raw-return adoption.
+Full G0, exact deployment and actual30s LIVE/pixel verification remain pending.
+
+Actualf1f3321c full G0 PASS (Lua77/Rust1380/79), pusheddev, RequireG0/all396
+deployed. Gameplay162123-fd37e9 FAILS at client2 finish tick10 with
+`native gameplay HUD exact game mode required`, before the new weapon batch or
+LIVE. Saved runtime isolation positively identifies BOTH clients' actual class
+as `/Script/Engine.GameModeBase`; director.native_client_travel deliberately
+selects that base mode to prevent a second local game-mode brain. The HUD's new
+solo-mode assumption conflicts with this intended isolation contract; no mode
+corruption/null is inferred. Keep isolation and authority ownership intact.
+Next inspect the native UI_HUD's cooked game-mode references/null-cast semantics
+before admitting the existing exact base-mode profile or selecting a properly
+bound client HUD. No guessed local-multiplayer field on GameModeBase. No weapon
+speedup, visible avatar/HUD, or parity claim. EarlysecondaryplacementPASS,
+cleanupPASS/fourabsent/save20unchanged/nodumps/children; summary saved in run.
+
 Current candidate adds private gameplay provider ABI4 with one caller-owned
 complete weapon batch per applied roster. Rust allocates the original source
 weapon count, copies all25 native fields and exact f64/f32/-0, publishes epoch

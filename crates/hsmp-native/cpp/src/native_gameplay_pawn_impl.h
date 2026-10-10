@@ -22,12 +22,13 @@ struct GameplayCurrent {
     HsmpProp level_world{},local{};uint64_t vtable{};
 };
 struct GameplayHud {
-    Obj widget{},widget_class{},mode{},instance{},player{};
+    Obj widget{},widget_class{},mode{},instance{},player{},mode_class{},mode_level{};
     LookupEntry widget_path,class_path,mode_path,instance_path,player_path,world_path,controller_path;
+    LookupEntry mode_level_path;
     std::vector<LookupEntry> api_paths;
-    HsmpProp world_instance{},players_field{},player_controller{},controller_player{},my_player{},widget_mode{},widget_instance{},local_multiplayer{};
+    HsmpProp world_instance{},players_field{},player_controller{},controller_player{},my_player{},widget_mode{},widget_instance{},local_multiplayer{},authority_mode{},mode_world{};
     Array players{};const void* context{};uint64_t table{},instance_table{};std::array<uint64_t,3> weak_context{};
-    bool created{},bound{};
+    bool created{},bound{},base{};
     GameplayCodeProfile code;
 };
 enum GameplayCurrentReason:uint32_t {GP_CURRENT_UNENTERED,GP_CURRENT_WORLD,GP_CURRENT_ABSENT,GP_CURRENT_SCHEMA,GP_CURRENT_CODE,GP_CURRENT_VTABLE,GP_CURRENT_TARGET,GP_CURRENT_ZERO,GP_CURRENT_HOT,GP_CURRENT_LEVEL};
@@ -663,7 +664,22 @@ template<class T>T gameplay_hud_copy(const void* object,size_t offset=0){
     T out{};SIZE_T copied{};require(ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address+offset),&out,sizeof(out),&copied)&&copied==sizeof(out),"native gameplay HUD storage unavailable");return out;
 }
 bool gameplay_hud_array_same(const Array& a,const Array& b){return a.data==b.data&&a.count==b.count&&a.capacity==b.capacity;}
+void gameplay_hud_base_pure(const GameplayPawn& entry,const GameplayHud& hud){
+    require(hud.base&&hud.authority_mode.offset==0x158&&hud.mode_world.offset==0xc0,"native gameplay isolated HUD mode schema changed");
+    for(const auto* path:{&hud.world_path,&hud.controller_path,&hud.mode_path,&hud.class_path,&hud.mode_level_path})lookup_entry_final(*path);
+    for(const auto& path:hud.api_paths)lookup_entry_final(path);
+    const auto* world=lookup_node_get(hud.world_path.pinned.front(),hud.world_path.zero_item);
+    const auto* mode=lookup_node_get(hud.mode_path.pinned.front(),hud.mode_path.zero_item);
+    const auto* level=lookup_node_get(hud.mode_level_path.pinned.front(),hud.mode_level_path.zero_item);
+    const auto* outer=source_outer(mode);
+    require(vt->class_of(const_cast<void*>(mode))==reinterpret_cast<void*>(hud.mode_class.address)&&
+        gameplay_hud_copy<void*>(world,hud.authority_mode.offset)==mode&&outer&&*outer==level&&
+        gameplay_hud_copy<void*>(level,hud.mode_world.offset)==reinterpret_cast<void*>(entry.world.address),"native gameplay original isolated HUD mode/world changed");
+    gameplay_pure(entry);
+    for(const auto* path:{&hud.world_path,&hud.controller_path,&hud.mode_path,&hud.class_path,&hud.mode_level_path})lookup_entry_final(*path);
+}
 void gameplay_hud_index_pure(const GameplayPawn& entry,const GameplayHud& hud){
+    if(hud.base){gameplay_hud_base_pure(entry,hud);return;}
     gameplay_code_validate_at(hud.code,gameplay_code_module());
     for(const auto* path:{&hud.world_path,&hud.controller_path,&hud.instance_path,&hud.mode_path,&hud.class_path})lookup_entry_final(*path);
     for(const auto& path:hud.api_paths)lookup_entry_final(path);
@@ -694,6 +710,7 @@ void gameplay_hud_index_pure(const GameplayPawn& entry,const GameplayHud& hud){
     for(const auto* path:{&hud.world_path,&hud.controller_path,&hud.instance_path,&hud.player_path,&hud.mode_path,&hud.class_path})lookup_entry_final(*path);
 }
 void gameplay_hud_binding_pure(const GameplayPawn& entry,const GameplayHud& hud){
+    if(hud.base){gameplay_hud_base_pure(entry,hud);return;}
     gameplay_hud_index_pure(entry,hud);lookup_entry_final(hud.widget_path);
     const auto* widget=lookup_node_get(hud.widget_path.pinned.front(),hud.widget_path.zero_item);
     require(gameplay_hud_copy<uint64_t>(widget)==hud.table&&gameplay_hud_copy<uint64_t>(reinterpret_cast<const void*>(hud.table),0x188)==hud.code.image+0x31b63d0&&
@@ -731,7 +748,7 @@ void gameplay_hud_player_capture(GameplayHud& hud,Obj player_class){
     require(gameplay_hud_array_same(players,gameplay_hud_copy<Array>(instance,hud.players_field.offset))&&gameplay_hud_copy<void*>(players.data)==player,"native gameplay HUD local player changed during cold capture");
     hud.players=players;hud.player={node.weak,node.address};hud.player_path=std::move(path);hud.player_controller.offset=0x30;
 }
-GameplayHud gameplay_hud_index(GameplayPawn& entry,HsmpViewResult* result){
+GameplayHud gameplay_hud_index(GameplayPawn& entry,HsmpViewResult* result,Obj original_mode,const LookupEntry& original_path){
     require(entry.own&&same(gameplay_hud_indexed(entry,L"/Script/Engine.GameplayStatics:GetPlayerController",result),entry.controller)&&
         same(gameplay_hud_indexed(entry,L"/Script/Engine.GameplayStatics:GetPlayerCharacter",result),entry.pawn),"native gameplay HUD requires original player zero possession");
     GameplayHud hud;hud.world_path=entry.world_path;hud.controller_path=entry.controller_path;
@@ -741,9 +758,9 @@ GameplayHud gameplay_hud_index(GameplayPawn& entry,HsmpViewResult* result){
     hud.players_field=property(hud.instance,L"LocalPlayers",L"ArrayProperty",16);hud.controller_player=property(entry.controller,L"Player",L"ObjectProperty",8);
     require(hud.players_field.offset==0x38&&hud.controller_player.offset==0x330,"native gameplay HUD indexed-player layout");
     const auto player_class=find(L"/Script/Engine.LocalPlayer");hud.api_paths.push_back(gameplay_path(player_class));
-    Function mode(L"/Script/Engine.GameplayStatics:GetGameMode");mode.object(L"WorldContextObject",entry.world);mode.call(find(L"/Script/Engine.Default__GameplayStatics"),result);hud.mode=mode.returned();
+    hud.mode=original_mode;hud.mode_path=original_path;lookup_entry_final(hud.mode_path);
     require(hud.mode.weak&&vt->class_of(get(hud.mode))==get(find(L"/Game/Blueprints/Utility/BP_HalfSwordGameMode.BP_HalfSwordGameMode_C")),"native gameplay HUD exact game mode required");
-    hud.mode_path=gameplay_path(hud.mode);hud.local_multiplayer=property(hud.mode,L"Local Multiplayer",L"BoolProperty",1);
+    hud.local_multiplayer=property(hud.mode,L"Local Multiplayer",L"BoolProperty",1);
     require(hud.local_multiplayer.offset==0x408&&hud.local_multiplayer.bool_offset==0&&hud.local_multiplayer.bool_mask==1&&!bool_property(hud.mode,L"Local Multiplayer"),"native gameplay HUD local-multiplayer policy");
     hud.context=gameplay_hud_copy<const void*>(get(hud.instance),0x30);
     hud.instance_table=gameplay_hud_copy<uint64_t>(get(hud.instance));
@@ -759,12 +776,36 @@ bool gameplay_hud_boolean(Obj widget,const wchar_t* function,HsmpViewResult* res
 void gameplay_hud_public(const GameplayPawn& entry,const GameplayHud& hud,HsmpViewResult* result){
     GameplayHudWatch watch(entry,hud);
     gameplay_hud_binding_pure(entry,hud);
+    if(hud.base)return;
     require(same(returned(hud.widget,L"/Script/UMG.Widget:GetOwningPlayer",result),entry.controller),"native gameplay HUD owning controller changed");gameplay_hud_binding_pure(entry,hud);
     require(gameplay_hud_boolean(hud.widget,L"/Script/UMG.Widget:IsInViewport",result),"native gameplay HUD is not in viewport");gameplay_hud_binding_pure(entry,hud);
     require(gameplay_hud_boolean(hud.widget,L"/Script/UMG.Widget:IsVisible",result),"native gameplay HUD is not visible");gameplay_hud_binding_pure(entry,hud);
 }
 void gameplay_hud_ensure(GameplayPawn& entry,HsmpViewResult* result){
-    require(!entry.ui,"native gameplay HUD already initialized");entry.ui.emplace(gameplay_hud_index(entry,result));auto& hud=*entry.ui;GameplayHudWatch watch(entry,hud);
+    require(!entry.ui,"native gameplay HUD already initialized");
+    Function mode(L"/Script/Engine.GameplayStatics:GetGameMode");mode.object(L"WorldContextObject",entry.world);mode.call(find(L"/Script/Engine.Default__GameplayStatics"),result);
+    const auto original_mode=mode.returned();require(original_mode.weak,"native gameplay HUD game mode unavailable");
+    const auto original_path=gameplay_path_native(reinterpret_cast<void*>(original_mode.address));const auto base_class=find(L"/Script/Engine.GameModeBase");
+    if(vt->class_of(get(original_mode))==get(base_class)){
+        // The isolated client deliberately uses exact GameModeBase. UI_HUD's
+        // cooked Tick dereferences the HalfSword cast; no null/default emulation
+        // or second mode brain is admitted here. The display-only client HUD
+        // consumes confirmed state separately; the AHUD proof stays unchanged.
+        GameplayHud isolated;isolated.base=true;isolated.world_path=entry.world_path;isolated.controller_path=entry.controller_path;
+        isolated.mode=original_mode;isolated.mode_class=base_class;isolated.mode_path=original_path;isolated.class_path=gameplay_path(base_class);
+        isolated.authority_mode=property(entry.world,L"AuthorityGameMode",L"ObjectProperty",8);require(isolated.authority_mode.offset==0x158,"native gameplay isolated game-mode layout");
+        Function level(L"/Script/Engine.Actor:GetLevel");const auto level_output=level.field(L"ReturnValue",L"ObjectProperty",8);
+        lookup_entry_final(original_path);require(original_path.pinned.size()>1&&original_path.pinned[1].weak,"native gameplay isolated original mode level unavailable");
+        const auto& retained_level=original_path.pinned[1];const Obj original_level{retained_level.weak,retained_level.address};
+        level.call(original_mode,result);void* raw_level{};std::memcpy(&raw_level,level.buf.data()+level_output.offset,8);
+        lookup_entry_final(original_path);require(raw_level==reinterpret_cast<void*>(original_level.address),"native gameplay isolated original mode level changed");
+        isolated.mode_level=original_level;require(is(isolated.mode_level,L"/Script/Engine.Level"),"native gameplay isolated mode level unavailable");
+        isolated.mode_world=property(isolated.mode_level,L"OwningWorld",L"ObjectProperty",8);require(isolated.mode_world.offset==0xc0,"native gameplay isolated mode world layout");
+        isolated.mode_level_path=gameplay_path(isolated.mode_level);isolated.api_paths.push_back(gameplay_path(mode.function));
+        isolated.api_paths.push_back(gameplay_path(level.function));
+        gameplay_hud_base_pure(entry,isolated);entry.ui.emplace(std::move(isolated));return;
+    }
+    entry.ui.emplace(gameplay_hud_index(entry,result,original_mode,original_path));auto& hud=*entry.ui;GameplayHudWatch watch(entry,hud);
     require(retirement_free,"native gameplay HUD array allocator unavailable");
     Function census(L"/Script/UMG.WidgetBlueprintLibrary:GetAllWidgetsOfClass");census.object(L"WorldContextObject",entry.world);census.object(L"WidgetClass",hud.widget_class,true);census.boolean(L"TopLevelOnly",true);
     const auto output=census.field(L"FoundWidgets",L"ArrayProperty",16);OwnedColorArray owned{retirement_free,census.buf.data()+output.offset};

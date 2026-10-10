@@ -50,6 +50,7 @@ local function fixture()
         return batch
     end
     N.native_gameplay_confirm=function(scene)
+        f.confirm_started=f.clock
         f.confirmed=f.confirmed+1;f.calls[#f.calls+1]="confirm";f.clock=f.clock+30;if f.confirm_error then return nil,f.confirm_error end;return true,scene
     end
     N.native_gameplay_clear=function(forget)f.clears=f.clears+1;if forget then f.forgot=f.forgot+1 end;return true end
@@ -111,7 +112,7 @@ do
         row.weapon_guard_n==1 and row.weapon_guard_us==24 and row.us==132,
         "inclusive guard/current/weapon attribution encloses only original calls and full gear still executes")
     check(trace.timing_inclusive==true and trace.clock_overhead_subtracted==false and trace.gear_clock_reads==20 and
-        trace.clock_reads==29 and row.clock_reads==10,"QPC calls are counted separately and nested observer costs are never subtracted")
+        trace.clock_reads==30 and row.clock_reads==10,"QPC calls including the conservative display anchor are counted separately and nested observer costs are never subtracted")
     f.scalar_error="precise original current refusal";local result,reason=f.game:apply(f.scene)
     check(result==nil and reason==f.scalar_error and f.timings[2].stage=="gear"and f.confirmed==1,
         "timed guard preserves exact original throw and blocks later confirmation")
@@ -126,9 +127,11 @@ do
     local f=fixture();f:bootstrap();check(#f.timings==0,"bootstrap and READY work do not emit per-LIVE timing")
     f.scene.state=2;f.scene.gameplay_proof=true;f.applied_scene={}
     for key,value in pairs(f.scene)do f.applied_scene[key]=value end;f.applied_scene.received_age_ms=17
-    local ok,actual=f.game:apply(f.scene);local row=f.timings[1]
+    local ok,actual,sampled_at=f.game:apply(f.scene);local row=f.timings[1]
     check(ok==true and actual==f.applied_scene and row.epoch==-7 and row.frame_seq==40 and row.authority_tick==40,
         "timing preserves original signed epoch and integer result provenance")
+    check(sampled_at==f.confirm_started/1000000 and sampled_at<f.clock/1000000 and actual.display_sampled_at==nil,
+        "display carries a separate pre-confirmation same-clock anchor without changing the native scene or renewing its receipt")
     check(row.received_age_entry_ms==4 and row.applied_received_age_ms==17 and row.applied_authority_tick==40 and
         row.elapsed_apply_return_to_confirm_us==200,"timing separates exact native returned original receipt age from elapsed gear time")
     check(row.native_apply_us==20 and row.gear_us==200 and row.confirm_us==30 and row.movement_us==12 and row.total_us==262 and

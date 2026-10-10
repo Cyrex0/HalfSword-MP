@@ -13,9 +13,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 - Read complete weapon passports and all hand/sheath bindings into caller-owned
   native batches during gameplay verification, preserving exact fields and
   original receipt checks. Recheck retained bindings after later gear callbacks.
-- Create or reuse the native player HUD after possession, verifying its original
-  player and world bindings and public visibility before gameplay confirmation.
-  In-game visibility verification is pending.
+- Preserve the deliberately isolated client game mode through possession and
+  gameplay confirmation. Display exact confirmed health/stamina in a passive
+  client HUD, hiding values when loading or when the original receipt expires.
+  In-game player and HUD visibility verification is pending.
 - Reduce repeated native validation allocations while retaining fresh generation,
   object, world, possession and equipment checks on every invocation.
 - Attribute complete local gear verification to fresh wrapper, guard, weapon

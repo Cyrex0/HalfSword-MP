@@ -1709,22 +1709,32 @@ void gameplay_current_checks(HsmpReflect& reflect){
     hsmp_presentation_set_create_log(nullptr);gameplay_current_attempts.store(0);
     lifetime_reset(reflect);
 }
-LifetimeObject *hud_fixture_world{},*hud_fixture_instance{},*hud_fixture_pawn{},*hud_fixture_widget{},*hud_fixture_remove{},*hud_fixture_viewport{};
-void** hud_fixture_player_slot{};bool hud_fixture_poison{},hud_fixture_visible{};int hud_fixture_calls{};
+LifetimeObject *hud_fixture_world{},*hud_fixture_instance{},*hud_fixture_pawn{},*hud_fixture_widget{},*hud_fixture_remove{},*hud_fixture_viewport{},*hud_fixture_mode{},*hud_fixture_mode_level{},*hud_fixture_get_mode{};
+void** hud_fixture_player_slot{};bool hud_fixture_poison{},hud_fixture_visible{};int hud_fixture_calls{},hud_fixture_umg_queries{},hud_fixture_local_queries{};
+uint32_t hud_fixture_level_poison{},hud_fixture_return_keeps{};bool hud_fixture_return_pending{};
+uint64_t (*hud_fixture_previous_weak)(void*){};
+uint64_t hud_fixture_return_weak(void* object){if(hud_fixture_return_pending&&(object==hud_fixture_mode_level||object==&foreign_level))++hud_fixture_return_keeps;return hud_fixture_previous_weak(object);}
 const void* hud_fixture_old_player{};int hud_fixture_old_player_reads{};
 const uint64_t* hud_fixture_name(const void* object){if(object==hud_fixture_old_player)++hud_fixture_old_player_reads;return lookup_name(object);}
 void* hud_fixture_world_of(const void* object){return object==hud_fixture_instance?hud_fixture_world:lifetime_world(object);}
 int32_t hud_fixture_property(void* object,const uint16_t* key,HsmpProp* out){
-    if(object==hud_fixture_world&&std::wstring(reinterpret_cast<const wchar_t*>(key))==L"OwningGameInstance"){
-        *out=object_field(L"OwningGameInstance",0x1d8);return 1;}return lifetime_prop(object,key,out);
+    const std::wstring field(reinterpret_cast<const wchar_t*>(key));if(field==L"Local Multiplayer")++hud_fixture_local_queries;
+    if(object==hud_fixture_world&&field==L"OwningGameInstance"){
+        *out=object_field(L"OwningGameInstance",0x1d8);return 1;}
+    if(object==hud_fixture_world&&field==L"AuthorityGameMode"){*out=object_field(L"AuthorityGameMode",0x158);return 1;}
+    if(object==hud_fixture_mode_level&&field==L"OwningWorld"){*out=object_field(L"OwningWorld",0xc0);return 1;}return lifetime_prop(object,key,out);
 }
 void* hud_fixture_find(const uint16_t* key){const std::wstring path(reinterpret_cast<const wchar_t*>(key));
+    if(path.starts_with(L"/Script/UMG.")||path.starts_with(L"/Game/UI/"))++hud_fixture_umg_queries;
+    if(path==L"/Script/Engine.GameModeBase")return &actor_class;
+    if(path==L"/Script/Engine.GameplayStatics:GetGameMode")return hud_fixture_get_mode;
     if(path==L"/Script/UMG.Widget")return &actor_class;
     if(path==L"/Script/UMG.Widget:RemoveFromParent")return hud_fixture_remove;
     if(path==L"/Script/UMG.Widget:IsInViewport")return hud_fixture_viewport;
     return lookup_native_find(key);
 }
 int32_t hud_fixture_properties(void* fn,HsmpProp* out,int32_t cap,int32_t* size){
+    if(fn==hud_fixture_get_mode&&cap>=2){*size=16;out[0]=object_field(L"WorldContextObject",0);out[1]=object_field(L"ReturnValue",8);return 2;}
     if(fn==hud_fixture_remove){*size=0;return 0;}
     if(fn==hud_fixture_viewport&&cap>0){*size=1;out[0]=object_field(L"ReturnValue",0);out[0].cls=lifetime_fname(u16(L"BoolProperty"),1);out[0].size=1;out[0].bool_mask=1;return 1;}
     return lifetime_props(fn,out,cap,size);
@@ -1737,24 +1747,29 @@ void hud_fixture_call(void* object,void* fn,void* params){
     if(object==hud_fixture_widget&&fn==hud_fixture_remove){hud_fixture_visible=false;return;}
     if(object==hud_fixture_widget&&fn==hud_fixture_viewport){*static_cast<uint8_t*>(params)=hud_fixture_visible?1:0;return;}
     if(object==hud_fixture_pawn&&fn==&get_level_fn){auto* original=&level;std::memcpy(params,&original,8);return;}
+    if(object==hud_fixture_mode&&fn==&get_level_fn){void* returned_level=hud_fixture_level_poison==2?static_cast<void*>(&foreign_level):hud_fixture_mode_level;
+        std::memcpy(params,&returned_level,8);if(hud_fixture_level_poison){hud_fixture_return_pending=true;if(hud_fixture_level_poison==1)hud_fixture_mode->outer=&foreign_level;}return;}
+    if(object==&statics&&fn==hud_fixture_get_mode){std::memcpy(static_cast<uint8_t*>(params)+8,&hud_fixture_mode,8);return;}
     lifetime_call(object,fn,params);
 }
 void gameplay_hud_checks(HsmpReflect& reflect){
     gameplay_boundary_invalidate();gameplay_pawns.clear();lookup_reset(reflect);
     struct Storage {LifetimeObject identity;std::array<uint8_t,0x500-sizeof(LifetimeObject)> bytes{};};
-    Storage world{},instance{},controller{},pawn{},player{},mode{},widget{};
+    Storage world{},instance{},controller{},pawn{},player{},mode{},widget{},mode_level{};
     std::array<uint64_t,0x300/8> instance_table{},widget_table{};std::array<uint8_t,0x2c8> context{};
     world.identity={3010,&world_class};instance.identity={reinterpret_cast<uint64_t>(instance_table.data()),&gi_class};
     controller.identity={3012,&actor_class};pawn.identity={3013,&actor_class};player.identity={3014,&actor_class};mode.identity={3015,&actor_class};
-    widget.identity={reinterpret_cast<uint64_t>(widget_table.data()),&actor_class};LifetimeObject remove{3017,&function_class},viewport{3018,&function_class};
-    for(auto* original:{&world.identity,&instance.identity,&controller.identity,&pawn.identity,&player.identity,&mode.identity,&widget.identity,&remove,&viewport})lifetime_objects.push_back(original);
-    world.identity.outer=instance.identity.outer=&path_package;controller.identity.outer=pawn.identity.outer=mode.identity.outer=&level;
+    widget.identity={reinterpret_cast<uint64_t>(widget_table.data()),&actor_class};mode_level.identity={3019,&level_class};LifetimeObject remove{3017,&function_class},viewport{3018,&function_class},get_mode{3020,&function_class};
+    for(auto* original:{&world.identity,&instance.identity,&controller.identity,&pawn.identity,&player.identity,&mode.identity,&widget.identity,&mode_level.identity,&remove,&viewport,&get_mode})lifetime_objects.push_back(original);
+    world.identity.outer=instance.identity.outer=mode_level.identity.outer=&path_package;controller.identity.outer=pawn.identity.outer=&level;mode.identity.outer=&mode_level.identity;
     player.identity.outer=&instance.identity;widget.identity.outer=&controller.identity;level.property=&world.identity;
     hud_fixture_world=&world.identity;hud_fixture_instance=&instance.identity;hud_fixture_pawn=&pawn.identity;hud_fixture_widget=&widget.identity;hud_fixture_remove=&remove;hud_fixture_viewport=&viewport;
+    hud_fixture_mode=&mode.identity;hud_fixture_mode_level=&mode_level.identity;hud_fixture_get_mode=&get_mode;
     reflect.obj_prop=hud_fixture_property;reflect.find=hud_fixture_find;reflect.props=hud_fixture_properties;reflect.is_a=hud_fixture_is_a;reflect.call=hud_fixture_call;object_world=hud_fixture_world_of;
     const auto store=[](auto& object,size_t offset,const auto& value){std::memcpy(reinterpret_cast<uint8_t*>(&object)+offset,&value,sizeof(value));};
     void* original_world=&world.identity;void* original_instance=&instance.identity;void* original_player=&player.identity;void* original_controller=&controller.identity;void* original_pawn=&pawn.identity;void* original_mode=&mode.identity;
     store(world,0x1d8,original_instance);const void* original_context=context.data();store(instance,0x30,original_context);store(context,0x2c0,original_world);
+    store(world,0x158,original_mode);store(mode_level,0xc0,original_world);
     std::array<void*,1> players{original_player};const Array player_array{players.data(),1,1};store(instance,0x38,player_array);
     store(player,0x30,original_controller);store(controller,0x330,original_player);controller.identity.property=&pawn.identity;pawn.identity.property=&controller.identity;
     const auto code_image=gameplay_code_module();instance_table[0x188/8]=code_image+0x35cf760;widget_table[0x188/8]=code_image+0x31b63d0;widget_table[0x2e0/8]=code_image+0x31b6170;
@@ -1776,7 +1791,7 @@ void gameplay_hud_checks(HsmpReflect& reflect){
         hud.my_player=object_field(L"My Player",0x390);hud.widget_mode=object_field(L"As BP Half Sword Game Mode",0x3a0);hud.widget_instance=object_field(L"GI Settings",0x398);
         store(widget,0x390,original_pawn);store(widget,0x398,original_instance);store(widget,0x3a0,original_mode);
         hud.table=reinterpret_cast<uint64_t>(widget_table.data());hud.weak_context={entry.controller.weak,entry.world.weak,entry.world.weak};hud.weak_context[0]=hud.player.weak;store(widget,0x2c8,hud.weak_context);hud.bound=true;
-        GameplayWatch gameplay(entry);GameplayHudWatch watched(entry,hud);gameplay_call_guard();check(gameplay_hud_active==&watched,"HUD indexed witness is installed at each original dispatch guard");
+        GameplayWatch gameplay(entry);{GameplayHudWatch watched(entry,hud);gameplay_call_guard();check(gameplay_hud_active==&watched,"HUD indexed witness is installed at each original dispatch guard");
         for(uint32_t change=0;change<8;++change){
             if(change==0)players[0]=&replacement;else if(change==1)store(context,0x2c0,original_pawn);else if(change==2)store(controller,0x330,original_pawn);
             else if(change==3)store(widget,0x390,original_controller);else if(change==4)widget.identity.flags^=1;else if(change==5)mode.bytes[0x408-sizeof(LifetimeObject)]=1;
@@ -1803,6 +1818,23 @@ void gameplay_hud_checks(HsmpReflect& reflect){
         check(hud_fixture_calls==before+2&&!hud_fixture_visible&&entry.ui->created&&entry.ui->widget_path.original.size()>0,"partial helper-created HUD retains original ownership and guarded cleanup removes only it");
         check(gameplay_provider.abi==4&&gameplay_provider.weapons==gameplay_weapons,"native HUD keeps canonical ABI4 weapon tail integration");
         gameplay_weapons_reset();const uint64_t missing=1;rejects([&]{gameplay_weapons_final(&missing,1);},"final confirmation requires a retained complete weapon snapshot");
+        }
+        entry.ui.reset();hud_fixture_umg_queries=hud_fixture_local_queries=0;
+        hud_fixture_previous_weak=reflect.weak;reflect.weak=hud_fixture_return_weak;
+        for(uint32_t poison=1;poison<=2;++poison){hud_fixture_level_poison=poison;hud_fixture_return_keeps=0;hud_fixture_return_pending=false;
+            rejects([&]{gameplay_hud_ensure(entry,nullptr);},"cold mode GetLevel refuses replaced original Outer or different raw return before admission");
+            check(hud_fixture_return_pending&&!hud_fixture_return_keeps&&!entry.ui,"cold mode return never keeps or adopts an unqualified raw Level");
+            mode.identity.outer=&mode_level.identity;hud_fixture_level_poison=0;hud_fixture_return_pending=false;}
+        reflect.weak=hud_fixture_previous_weak;gameplay_hud_ensure(entry,nullptr);
+        check(entry.ui&&entry.ui->base&&!entry.ui->widget.weak&&!entry.ui->created&&hud_fixture_umg_queries==0&&hud_fixture_local_queries==0,"exact isolated base mode performs no UI_HUD creation or absent Local Multiplayer access");
+        const auto native_calls=hud_fixture_calls;gameplay_hud_public(entry,*entry.ui,nullptr);gameplay_hud_binding_pure(entry,*entry.ui);
+        check(hud_fixture_calls==native_calls&&hud_fixture_umg_queries==0&&hud_fixture_local_queries==0,"base apply/complete HUD proof retains only original mode bindings without widget/default emulation");
+        for(uint32_t change=0;change<5;++change){
+            if(change==0)store(world,0x158,original_pawn);else if(change==1)store(mode_level,0xc0,original_pawn);else if(change==2)mode.identity.cls=&world_class;else if(change==3)mode.identity.flags^=1;else mode.identity.outer=&foreign_level;
+            rejects([&]{gameplay_hud_binding_pure(entry,*entry.ui);},"base mode proof refuses original authority/world/class/RF/Outer replacement after native callbacks");
+            if(change==0)store(world,0x158,original_mode);else if(change==1)store(mode_level,0xc0,original_world);else if(change==2)mode.identity.cls=&actor_class;else if(change==3)mode.identity.flags^=1;else mode.identity.outer=&mode_level.identity;
+        }
+        gameplay_hud_remove(entry,nullptr);check(hud_fixture_calls==native_calls,"base mode owns no native effects widget to remove");
     }
     check(!gameplay_hud_active&&!gameplay_active,"HUD and gameplay watches release all original references on unwind");lifetime_reset(reflect);hud_fixture_poison=false;hud_fixture_player_slot=nullptr;
 }

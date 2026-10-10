@@ -86,7 +86,7 @@ function M.new(env)
         if self.scope~=key then clear_scope();self.scope=key end
         self.binding={epoch=scene.epoch,dir_seq=scene.dir_seq,world=world.key}
         if scene.state==2 and scene.fresh~=true then return waiting("native applied scene is stale",scene,own)end
-        local applied,why=env.present(scene)
+        local applied,why,sampled_at=env.present(scene)
         if applied~=true and why=="client mirror generation"then clear_scope();return waiting(why)end
         if applied~=true and (why=="no complete current source scene"or why=="no coherent native scene"or why=="native applied scene is stale"or why=="native scene assets loading"or
             gameplay_expired(why)or(env.gameplay and (why=="native gameplay pawn preparing"or why=="native gameplay own native view target pending"or why=="native gameplay own camera manager pending")))then return waiting(why,scene,own)end
@@ -123,6 +123,9 @@ function M.new(env)
                 self:stop(reason or "input refused");return false
             end
         end
+        -- Display sinks receive this exact confirmed result every frame. Reporting
+        -- remains throttled and must never trigger a second native scene offer.
+        if env.confirmed then env.confirmed(scene,own,state,sampled_at)end
         if self.state~=state or env.now()-self.reported_at>=1 then report(state,nil,scene,own)end
         return true
     end

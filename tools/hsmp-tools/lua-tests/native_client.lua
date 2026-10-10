@@ -55,13 +55,15 @@ do
     local property=Input.mapping(settings,Arrays.each)
     check(property and table.concat(property.keys,",")==table.concat(copied.keys,","),"actual property mapping arrays preserve the same controls")
 end
-local observed,reported,frame
+local observed,reported,frame,displayed,display_owned,display_state,display_anchor
 local applied_scene={epoch=77,dir_seq=5,frame_seq=12,state=2,peer_id=9001,generation="generation5",fresh=true,entities=scene.entities}
 local race=Core.new({now=function()return 0 end,link=function()return{connected=true}end,directory=function()return directory end,world=function()return{ready=true,arena=directory.arena,key="world"}end,
-    isolated=function()return true end,scene=function()return scene end,present=function()return true,applied_scene end,
-    report=function(_,_,s)reported=s end,input=function(s)observed=s;return{0,0,0,0,0,0,0,0},0 end,
+    isolated=function()return true end,scene=function()return scene end,present=function()return true,applied_scene,.125 end,
+    report=function(_,_,s)reported=s end,confirmed=function(s,own,current,sampled_at)displayed=s;display_owned=own;display_state=current;display_anchor=sampled_at end,
+    input=function(s)observed=s;return{0,0,0,0,0,0,0,0},0 end,
     send=function(f)frame=f;return true end,clear=function()end,close=function()error("must not close")end})
 check(race:tick()and observed==applied_scene and reported==applied_scene and frame.incarnation==4,"input and metrics use the actual applied frame during network advancement")
+check(displayed==applied_scene and display_owned==applied_scene.entities[1]and display_state=="live"and display_anchor==.125,"display receives the same confirmed frame, owned row and original age anchor, without another scene offer")
 local refused=Core.new({now=function()return 0 end,link=function()return{connected=true}end,directory=function()return directory end,world=function()return{ready=true,arena=directory.arena,key="world"}end,
     isolated=function()return true end,scene=function()return scene end,present=function()return nil,"client mirror generation"end,
     report=function(s)state=s end,clear=function()end,close=function()error("generation race must wait")end})
@@ -76,7 +78,7 @@ check(not travel:tick()and travels==1,"pending travel cannot repeat against the 
 key="new";clean=true;check(travel:tick()and travels==1,"new isolated world can create mirrors")
 do
     local function fixture(gameplay)
-        local v={time=0,world="world1",epoch=77,dir_seq=4,dir_state=1,clears=0,closes=0,presents=0,inputs=0,sends=0,reports={}}
+        local v={time=0,world="world1",epoch=77,dir_seq=4,dir_state=1,clears=0,closes=0,presents=0,inputs=0,sends=0,reports={},confirmed={}}
         v.scene={epoch=77,dir_seq=4,frame_seq=10,state=1,peer_id=9001,generation="recipe4",fresh=true,
             entities={{epoch=77,id=1,incarnation=3,owner_peer=9001,kind=0},{epoch=77,id=2,incarnation=2,owner_peer=9002,kind=0}}}
         v.applied=v.scene
@@ -88,6 +90,7 @@ do
                 v.presents=v.presents+1;if v.on_present then return v.on_present()end;return true,v.applied
             end,clear=function()v.clears=v.clears+1 end,close=function()v.closes=v.closes+1 end,
             report=function(s,why,current,own)v.reports[#v.reports+1]={state=s,reason=why,scene=current,own=own}end,
+            confirmed=function(current,own,s)v.confirmed[#v.confirmed+1]={state=s,scene=current,own=own,sends=v.sends}end,
             input=function(current)v.inputs=v.inputs+1;v.input_scene=current;if v.input_refusal then return nil,v.input_refusal end;return{1,0,0,0,0,0,0,0},0 end,
             send=function(f)v.sends=v.sends+1;v.frame=f;if v.send_refusal then return nil,v.send_refusal end;return true end})
         return v
@@ -136,8 +139,12 @@ do
     check(v.core:tick()and v.sends==1 and v.input_scene==original,"still-fresh applied frame remains usable when newer same-generation frame arrived")
     v=fixture();v.scene.state=2;v.dir_state=2;v.send_refusal="native applied scene is stale"
     check(not v.core:tick()and not v.core.stopped and v.core.state=="wait_scene"and v.sends==1 and v.closes==0,"age expiry during legal input sampling is a freshness wait rather than fatal exit")
+    check(#v.confirmed==0,"input expiry cannot publish a ready display callback")
     clear_count=v.clears;v.send_refusal=nil
     check(v.core:tick()and v.frame.seq==2 and v.clears==clear_count,"fresh recovery never resends the expired input sequence or recreates current mirrors")
+    check(#v.confirmed==1 and v.confirmed[1].scene==v.applied and v.confirmed[1].sends==2,"display publication follows successful input send and exact applied scene qualification")
+    local report_count=#v.reports
+    check(v.core:tick()and#v.confirmed==2 and#v.reports==report_count,"every confirmed frame updates display even while lifecycle reports are throttled")
     v=fixture();v.scene.state=2;v.dir_state=2;v.input_refusal="native applied scene is stale"
     check(not v.core:tick()and not v.core.stopped and v.core.state=="wait_scene"and v.inputs==1 and v.sends==0 and v.closes==0,"freshness expiring at the input boundary keeps inert mirrors and withholds controls without fatal exit")
     v=fixture();v.core:tick();clear_count=v.clears;v.scene.state=2;v.dir_state=2

@@ -21,7 +21,8 @@ function M.start(opts)
     local gameplay_mode=os.getenv("HSMP_NATIVE_GAMEPLAY")=="1"
     local Gameplay=gameplay_mode and module("native_client_gameplay")
     local Passport=gameplay_mode and module("native_gameplay_passport")
-    if not Role or not Role.presentation()or not HW or not IPC or not SG or not D or not Core or not Input or not Isolation or not Suppression or not Arrays or not Loading or(not gameplay_mode and not Presentation)or not LoopInGameThreadWithDelay then print("[HSMPNativeClient] startup refused: client dependencies unavailable\n");return end
+    local Hud=gameplay_mode and module("native_client_hud")
+    if not Role or not Role.presentation()or not HW or not IPC or not SG or not D or not Core or not Input or not Isolation or not Suppression or not Arrays or not Loading or(gameplay_mode and not Hud)or(not gameplay_mode and not Presentation)or not LoopInGameThreadWithDelay then print("[HSMPNativeClient] startup refused: client dependencies unavailable\n");return end
     local UEH=require("UEHelpers")
     local state_dir=(os.getenv("HSMP_STATE_DIR")or"hsmp_state"):gsub("\\","/")
     local log=function(format,...)print(string.format("[HSMPNativeClient] "..format.."\n",...))end
@@ -35,6 +36,8 @@ function M.start(opts)
     local loading=Loading.new({WG=WG,find=StaticFindObject,construct=StaticConstructObject,
         name=function(name)return FName(name,FNAME_Add)end,text=FText,log=log,now=function()return N.now_us()/1000000 end,
         view_ready=gameplay_mode and function(scene)return gameplay and gameplay:view_ready(scene)==true end or opts and opts.view_ready})
+    local hud=Hud and Hud.new({WG=WG,find=StaticFindObject,construct=StaticConstructObject,
+        name=function(name)return FName(name,FNAME_Add)end,text=FText,log=log,now=function()return N.now_us()/1000000 end})
     local stop_file=os.getenv("HSMP_NATIVE_STOP_FILE")
     local identity=os.getenv("HSMP_NATIVE_IDENTITY_DIR")or state_dir
     local address=os.getenv("HSMP_NATIVE_SERVER")or"127.0.0.1:7777"
@@ -82,7 +85,7 @@ function M.start(opts)
     local suppress=Suppression.new({role=Role,WG=WG,UEHelpers=UEH,find=StaticFindObject,find_all=FindAllOf,FName=FName,each=each,
         retire_native=N.native_retire_actor,probe_native=N.native_probe_retirement,clear_native=N.native_forget_retirements,scope_native=N.native_actor_scope,
         owned=gameplay_mode and function(pawn)return gameplay:owned(pawn)end or nil})
-    WG.on_drop(function()mapping=nil;last_key=nil;phase_context=nil;phase_generation=nil;phase_seen={};loading:drop();suppress:drop();if view then view:drop()end;if gameplay then gameplay:drop()end;IPC.world_leaving()end,"native_client")
+    WG.on_drop(function()mapping=nil;last_key=nil;phase_context=nil;phase_generation=nil;phase_seen={};loading:drop();if hud then hud:drop()end;suppress:drop();if view then view:drop()end;if gameplay then gameplay:drop()end;IPC.world_leaving()end,"native_client")
     local env=D.make_ue_env({WG=WG,UEHelpers=UEH,log=log,SG=SG,state_dir=state_dir})
     local controller,isolation_token,isolation_at,isolation_report
     local function loading_tick()
@@ -132,10 +135,15 @@ function M.start(opts)
             for _,row in ipairs({{"Free Mode Activated",false},{"FreeMode Multiplayer",false},{"Progression Multiplayer",false},{"Free Mode Foes Amount",0}})do
                 if not env.gi_set(row[1],row[2])or env.gi_get(row[1])~=row[2]then return false end
             end
+            if hud then local cleared,why=hud:clear();if cleared~=true then error(why or"stats cleanup unavailable",0)end end
             if gameplay then gameplay:clear()else view:clear()end;return D.native_client_travel(env,arena)
         end,
         isolated=isolated,present=function(scene)if gameplay then return gameplay:apply(scene)end;return traced("presentation_apply",view.apply,view)end,
-        clear=function()if gameplay then gameplay:clear()else view:clear()end end,
+        clear=function()
+            if hud then local cleared,why=hud:clear();if cleared~=true then error(why or"stats cleanup unavailable",0)end end
+            if gameplay then gameplay:clear()else view:clear()end
+        end,
+        confirmed=function(scene,own,state,sampled_at)if hud then hud:status(state,scene,own,true,sampled_at)end end,
         close=function()N.host_stop()end,send=N.native_input,
         input=function(scene,own)
             if brain then if gameplay_mode then return Gameplay.intent(scene,own)end;return Input.ai(scene,own,now())end
@@ -151,6 +159,7 @@ function M.start(opts)
         end,
         report=function(state,reason,scene,own)
             loading:status(state,scene,own,reason)
+            if hud and state~="live"and state~="mirror_ready"then hud:status(state,scene,own,false)end
             log("state=%s reason=%s frame=%s",state,tostring(reason or""),tostring(scene and scene.frame_seq or 0))
             if HL then HL.event("x_native_client",{state=state,reason=reason or"",epoch=scene and scene.epoch or 0,dir_seq=scene and scene.dir_seq or 0,frame_seq=scene and scene.frame_seq or 0,own_entity=own and own.id or 0,own_incarnation=own and own.incarnation or 0,
                 gameplay=gameplay_mode,receipt_age_ms=scene and scene.received_age_ms,native_pawn=scene and scene.gameplay_proof,
@@ -177,8 +186,12 @@ function M.start(opts)
                 end
             end
             local covered=loading_tick()
-            if covered==true and not controller.stopped then controller:tick()end
+            if covered==true and not controller.stopped then
+                local confirmed=controller:tick()
+                if hud and confirmed~=true then hud:status(controller.state,nil,nil,false)end
+            elseif hud then hud:status(controller.state,nil,nil,false)end
             loading_tick()
+            if hud then local shown,why=hud:tick();if shown==nil and not controller.stopped then controller:stop(why or"stats view unavailable")end end
         end)
         if not passed then log("client stopped: %s",tostring(reason));controller:stop(tostring(reason))end
         return quit

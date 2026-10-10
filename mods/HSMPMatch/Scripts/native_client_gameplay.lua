@@ -166,7 +166,7 @@ function M.new(env)
         if self.key and type(scene)=="table" and scene.generation~=self.key then self:clear()end
     end
     function self:apply(scene)
-        local trace,started,phase_started,row_started,apply_returned
+        local trace,started,phase_started,row_started,apply_returned,display_sampled_at
         local gear_clock_reads,gear_clock_limit,last_clock=0,32768,nil
         local function clock()
             if type(env.now_us)~="function"then return nil end
@@ -290,6 +290,10 @@ function M.new(env)
             end
             local confirming=phase("confirm")
             if trace and confirming and apply_returned then trace.elapsed_apply_return_to_confirm_us=confirming-apply_returned end
+            -- Age in the returned native result was sampled during this call.
+            -- Keep an earlier same-clock anchor for passive display expiry.
+            local sampled_us=clock()
+            if sampled_us then display_sampled_at=sampled_us/1000000 end
             local confirmed,final=guarded(require_api("native_gameplay_confirm"),actual)
             if confirmed~=true then return nil,final end
             if type(final)~="table"or final.generation~=self.key or final.gameplay_proof~=true then fail("native gameplay final native proof unavailable")end
@@ -310,7 +314,7 @@ function M.new(env)
             end
         end
         if not ok then self.ready=false;return nil,tostring(result)end
-        return result,reason
+        return result,reason,result==true and display_sampled_at or nil
     end
     return self
 end
