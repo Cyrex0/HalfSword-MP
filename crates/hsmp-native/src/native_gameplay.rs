@@ -306,15 +306,12 @@ impl Context {
             if self.cleanup {
                 return true;
             }
-            let Some(scene) = n
+            if !n
                 .native_host
                 .client
                 .as_ref()
-                .and_then(|c| c.gameplay_scene())
-            else {
-                return self.failure.refuse(GuardFailure::Generation);
-            };
-            if !same_generation(&self.scene, &scene) {
+                .is_some_and(|c| c.gameplay_generation_matches(&self.scene))
+            {
                 return self.failure.refuse(GuardFailure::Generation);
             }
             if self.application && !self.scene.fresh() {

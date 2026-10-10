@@ -1114,6 +1114,44 @@ impl ClientHandle {
             received: s.gameplay_received?,
         })
     }
+    /// Fresh generation qualification without cloning an advertised result or
+    /// allocating a descriptor list. The original scene/receipt stays owned by
+    /// the caller; a newer same-generation result does not replace it.
+    pub fn gameplay_generation_matches(&self, original: &GameplayScene) -> bool {
+        let s = self.bridge.lock();
+        if !s.connected || !s.gameplay_client || s.gameplay_received.is_none() {
+            return false;
+        }
+        let (Some(directory), Some(result)) = (&s.directory, &s.gameplay) else {
+            return false;
+        };
+        if !result.matches(directory)
+            || original.peer_id != s.peer_id
+            || original.directory.epoch != directory.epoch
+            || original.directory.seq != directory.seq
+            || original.directory.entities != directory.entities
+            || original.descriptors.len() != directory.entities.len()
+        {
+            return false;
+        }
+        directory
+            .entities
+            .iter()
+            .zip(&original.descriptors)
+            .all(|(row, old)| {
+                s.gameplay_descriptors
+                    .get(&row.reference.id)
+                    .is_some_and(|current| {
+                        current.reference == row.reference
+                            && current.directory_seq == directory.seq
+                            && current.slot == row.slot
+                            && Arc::ptr_eq(old, current)
+                            && old.reference == current.reference
+                            && old.revision == current.revision
+                    })
+            })
+    }
+
     /// Only the native gameplay apply/readback endpoint may acknowledge this same immutable result.
     pub fn gameplay_applied(&self, scene: &GameplayScene) -> Result<(), &'static str> {
         if !scene.fresh() {
@@ -1835,6 +1873,178 @@ pub(crate) mod tests {
             },
         };
         (client, bridge)
+    }
+    fn two_row_gameplay_fixture() -> (ClientHandle, Arc<Bridge>) {
+        let (client, bridge) = gameplay_fixture();
+        let original = client.gameplay_scene().unwrap();
+        assert_eq!(original.directory.entities.len(), 1);
+        let mut directory = original.directory.clone();
+        directory.seq += 1;
+        let mut second = directory.entities[0].clone();
+        second.reference.id += 1;
+        second.slot += 1;
+        second.controller += 1;
+        second.owner_peer += 1;
+        directory.entities.push(second);
+        bridge.set_directory(directory.clone());
+        for row in &directory.entities {
+            let mut descriptor = (*original.descriptors[0]).clone();
+            descriptor.reference = row.reference;
+            descriptor.slot = row.slot;
+            descriptor.directory_seq = directory.seq;
+            bridge.publish_gameplay_descriptor(descriptor).unwrap();
+        }
+        let mut result = (*original.result).clone();
+        result.directory_seq = directory.seq;
+        result.entities = directory
+            .entities
+            .iter()
+            .map(|row| {
+                let mut entity = original.result.entities[0].clone();
+                entity.reference = row.reference;
+                entity
+            })
+            .collect();
+        bridge.publish_gameplay(result).unwrap();
+        assert_eq!(client.gameplay_scene().unwrap().descriptors.len(), 2);
+        (client, bridge)
+    }
+    fn allocated_gameplay_generation_matches(
+        client: &ClientHandle,
+        original: &GameplayScene,
+    ) -> bool {
+        client.gameplay_scene().is_some_and(|current| {
+            original.peer_id == current.peer_id
+                && original.directory.epoch == current.directory.epoch
+                && original.directory.seq == current.directory.seq
+                && original.directory.entities == current.directory.entities
+                && original.descriptors.len() == current.descriptors.len()
+                && original
+                    .descriptors
+                    .iter()
+                    .zip(&current.descriptors)
+                    .all(|(old, now)| {
+                        Arc::ptr_eq(old, now)
+                            && old.reference == now.reference
+                            && old.revision == now.revision
+                    })
+        })
+    }
+    #[test]
+    fn gameplay_generation_matches_retains_original_receipt_and_exact_duplicates() {
+        let (client, bridge) = gameplay_fixture();
+        let mut original = client.gameplay_scene().unwrap();
+        original.received = Instant::now()
+            .checked_sub(Duration::from_millis(300))
+            .unwrap();
+        let received = original.received;
+        let result = original.result.clone();
+        let descriptor = original.descriptors[0].clone();
+        bridge
+            .publish_gameplay_descriptor((*descriptor).clone())
+            .unwrap();
+        assert!(Arc::ptr_eq(
+            &descriptor,
+            bridge
+                .lock()
+                .gameplay_descriptors
+                .get(&descriptor.reference.id)
+                .unwrap()
+        ));
+        let mut next = (*original.result).clone();
+        next.authority_tick += 1;
+        next.entities[0].position[0] = 200.;
+        bridge.publish_gameplay(next).unwrap();
+        {
+            let mut s = bridge.lock();
+            let mut extra = (*descriptor).clone();
+            extra.reference.id = u32::MAX;
+            s.gameplay_descriptors
+                .insert(extra.reference.id, Arc::new(extra));
+            s.directory.as_mut().unwrap().state = w::LIVE;
+            s.directory.as_mut().unwrap().error = "not generation identity".into();
+        }
+        assert!(allocated_gameplay_generation_matches(&client, &original));
+        assert!(client.gameplay_generation_matches(&original));
+        assert!(!original.fresh());
+        assert_eq!(original.received, received);
+        assert!(Arc::ptr_eq(&original.result, &result));
+        assert!(bridge.lock().gameplay_applied.is_none());
+        assert!(bridge.lock().gameplay_control_out.is_empty());
+    }
+    #[test]
+    fn gameplay_generation_matches_refuses_original_binding_changes() {
+        let mutations: &[(&str, fn(&mut Shared))] = &[
+            ("disconnect", |s| s.connected = false),
+            ("wrong mode", |s| s.gameplay_client = false),
+            ("missing receipt", |s| s.gameplay_received = None),
+            ("missing directory", |s| s.directory = None),
+            ("missing result", |s| s.gameplay = None),
+            ("peer", |s| s.peer_id += 1),
+            ("epoch", |s| s.directory.as_mut().unwrap().epoch += 1),
+            ("directory sequence", |s| {
+                s.directory.as_mut().unwrap().seq += 1
+            }),
+            ("owner", |s| {
+                s.directory.as_mut().unwrap().entities[0].owner_peer += 1
+            }),
+            ("row order", |s| {
+                s.directory.as_mut().unwrap().entities.swap(0, 1)
+            }),
+            ("result reference", |s| {
+                Arc::make_mut(s.gameplay.as_mut().unwrap()).entities[0]
+                    .reference
+                    .incarnation += 1
+            }),
+            ("result count", |s| {
+                Arc::make_mut(s.gameplay.as_mut().unwrap()).entities.pop();
+            }),
+            ("missing descriptor", |s| {
+                let id = s.directory.as_ref().unwrap().entities[0].reference.id;
+                s.gameplay_descriptors.remove(&id);
+            }),
+            ("descriptor reference", |s| {
+                let id = s.directory.as_ref().unwrap().entities[0].reference.id;
+                Arc::make_mut(s.gameplay_descriptors.get_mut(&id).unwrap())
+                    .reference
+                    .incarnation += 1;
+            }),
+            ("descriptor revision", |s| {
+                let id = s.directory.as_ref().unwrap().entities[0].reference.id;
+                Arc::make_mut(s.gameplay_descriptors.get_mut(&id).unwrap()).revision += 1;
+            }),
+            ("descriptor directory", |s| {
+                let id = s.directory.as_ref().unwrap().entities[0].reference.id;
+                Arc::make_mut(s.gameplay_descriptors.get_mut(&id).unwrap()).directory_seq += 1;
+            }),
+            ("descriptor slot", |s| {
+                let id = s.directory.as_ref().unwrap().entities[0].reference.id;
+                Arc::make_mut(s.gameplay_descriptors.get_mut(&id).unwrap()).slot += 1;
+            }),
+            ("equal new Arc", |s| {
+                let id = s.directory.as_ref().unwrap().entities[0].reference.id;
+                let copy = (**s.gameplay_descriptors.get(&id).unwrap()).clone();
+                s.gameplay_descriptors.insert(id, Arc::new(copy));
+            }),
+        ];
+        for (label, mutate) in mutations {
+            let (client, bridge) = two_row_gameplay_fixture();
+            let original = client.gameplay_scene().unwrap();
+            mutate(&mut bridge.lock());
+            assert!(
+                !allocated_gameplay_generation_matches(&client, &original),
+                "{label}"
+            );
+            assert!(!client.gameplay_generation_matches(&original), "{label}");
+        }
+        let (client, _) = two_row_gameplay_fixture();
+        let mut incomplete_original = client.gameplay_scene().unwrap();
+        incomplete_original.descriptors.pop();
+        assert!(!allocated_gameplay_generation_matches(
+            &client,
+            &incomplete_original
+        ));
+        assert!(!client.gameplay_generation_matches(&incomplete_original));
     }
     #[test]
     fn gameplay_bootstrap_native_ack_is_separate_from_scene_assembly() {

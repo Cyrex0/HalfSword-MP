@@ -139,6 +139,10 @@ struct GameplayPawn {
 std::map<uint64_t,GameplayPawn> gameplay_pawns;
 std::mutex gameplay_mutex;
 uint64_t gameplay_next_handle=1;
+struct GameplayBoundaryPlan;
+std::shared_ptr<const GameplayBoundaryPlan> gameplay_boundary_plan;
+uint64_t gameplay_boundary_revision{1};
+void gameplay_boundary_invalidate(){gameplay_boundary_plan.reset();if(gameplay_boundary_revision)++gameplay_boundary_revision;}
 bool gameplay_layouts_verified{};
 void gameplay_owner_code(){
     const auto* image=reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr));require(image!=nullptr,"native gameplay shipping image unavailable");
@@ -209,45 +213,91 @@ void gameplay_current_paths(const GameplayPawn& entry){
     void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+profile.level_world.offset,8);
     require(reinterpret_cast<uint64_t>(world)==entry.world.address,"native gameplay original controller world changed");
 }
-// A current invocation owns copied expectations only. Every existing pure
-// boundary still reads all original metadata and hard links afresh.
+// Only copied configuration/expectations may survive current invocations.
+// Operation identity, rows and every native observation stay invocation-local.
 struct GameplayBoundaryRow {
     Obj world{},controller{},pawn{},level{},controller_level{};
     HsmpProp level_world{},controller_world{},controller_pawn{},pawn_controller{};
     uint32_t own{},stage{};bool current{};
 };
-struct GameplayBoundary {
-    LookupState* operation{active_lookup};std::optional<uint64_t> package;
+GameplayBoundaryRow gameplay_boundary_row(const GameplayPawn& entry){
+    GameplayBoundaryRow row{entry.world,entry.controller,entry.pawn,entry.level,{},entry.level_world,{},entry.controller_pawn,entry.pawn_controller,entry.own,entry.stage,false};
+    if(entry.current){row.controller_level=entry.current->controller_level;row.controller_world=entry.current->level_world;row.current=true;}return row;
+}
+bool gameplay_prop_equal(const HsmpProp& a,const HsmpProp& b){return a.name==b.name&&a.cls==b.cls&&a.sub==b.sub&&a.offset==b.offset&&a.size==b.size&&a.bool_offset==b.bool_offset&&a.bool_mask==b.bool_mask;}
+bool gameplay_row_equal(const GameplayBoundaryRow& a,const GameplayBoundaryRow& b){
+    return same(a.world,b.world)&&same(a.controller,b.controller)&&same(a.pawn,b.pawn)&&same(a.level,b.level)&&same(a.controller_level,b.controller_level)&&
+        gameplay_prop_equal(a.level_world,b.level_world)&&gameplay_prop_equal(a.controller_world,b.controller_world)&&gameplay_prop_equal(a.controller_pawn,b.controller_pawn)&&
+        gameplay_prop_equal(a.pawn_controller,b.pawn_controller)&&a.own==b.own&&a.stage==b.stage&&a.current==b.current;
+}
+bool gameplay_path_equal(const LookupEntry& a,const LookupEntry& b){
+    const auto nodes=[](const auto& x,const auto& y){if(x.size()!=y.size())return false;for(size_t i=0;i<x.size();++i){const auto& p=x[i];const auto& q=y[i];
+        if(p.weak!=q.weak||p.address!=q.address||p.name!=q.name||p.class_weak!=q.class_weak||p.class_address!=q.class_address||p.class_name!=q.class_name)return false;}return true;};
+    return a.package==b.package&&a.zero_item==b.zero_item&&a.flags==b.flags&&a.class_flags==b.class_flags&&nodes(a.original,b.original)&&nodes(a.pinned,b.pinned);
+}
+struct GameplayBoundarySource {
+    uint64_t handle{};GameplayBoundaryRow row;std::array<LookupEntry,6> paths;HsmpProp local{};uint64_t table{};
+    GameplayBoundarySource(uint64_t key,const GameplayPawn& entry):handle(key),row(gameplay_boundary_row(entry)),paths{entry.world_path,entry.controller_path,entry.pawn_path}{
+        if(entry.current){paths[3]=entry.current->level_path;paths[4]=entry.current->get_level_path;paths[5]=entry.current->local_path;local=entry.current->local;table=entry.current->vtable;}}
+    bool matches(const GameplayPawn& entry)const{
+        if(!gameplay_row_equal(row,gameplay_boundary_row(entry))||!gameplay_path_equal(paths[0],entry.world_path)||!gameplay_path_equal(paths[1],entry.controller_path)||!gameplay_path_equal(paths[2],entry.pawn_path))return false;
+        return !entry.current||(table==entry.current->vtable&&gameplay_prop_equal(local,entry.current->local)&&gameplay_path_equal(paths[3],entry.current->level_path)&&
+            gameplay_path_equal(paths[4],entry.current->get_level_path)&&gameplay_path_equal(paths[5],entry.current->local_path));
+    }
+};
+struct GameplayBoundaryPlan {
+    Obj world{};std::optional<uint64_t> package;
     std::vector<std::pair<uint64_t,LookupClassWitness>> classes;
     std::vector<std::pair<uint64_t,LookupObjectWitness>> objects;
-    std::vector<GameplayBoundaryRow> rows;
-    explicit GameplayBoundary(const GameplayPawn& active){
+    std::vector<GameplayBoundarySource> sources;
+    explicit GameplayBoundaryPlan(const GameplayPawn& active,bool retain_configuration=false):world(active.world){
         LookupState collected;
         struct RecordScope {LookupState* previous{active_lookup};explicit RecordScope(LookupState& state){active_lookup=&state;}~RecordScope(){active_lookup=previous;}} record(collected);
-        const auto add=[&](const GameplayPawn& entry){
+        uint32_t count{};const auto add=[&](uint64_t handle,const GameplayPawn& entry){
             lookup_record(entry.world_path);lookup_record(entry.controller_path);lookup_record(entry.pawn_path);
-            GameplayBoundaryRow row{entry.world,entry.controller,entry.pawn,entry.level,{},entry.level_world,{},entry.controller_pawn,entry.pawn_controller,entry.own,entry.stage,false};
             if(entry.current){const auto& current=*entry.current;
-                lookup_record(current.level_path);lookup_record(current.get_level_path);lookup_record(current.local_path);
-                row.controller_level=current.controller_level;row.controller_world=current.level_world;row.current=true;}
-            rows.push_back(row);
+                lookup_record(current.level_path);lookup_record(current.get_level_path);lookup_record(current.local_path);}
+            if(retain_configuration)sources.emplace_back(handle,entry);++count;
         };
         bool retained{};
-        for(const auto& [handle,entry]:gameplay_pawns){(void)handle;if(same(entry.world,active.world)){add(entry);retained=retained||&entry==&active;}}
-        if(!retained)add(active);
-        require(rows.size()<=32,"native gameplay original current roster bound");
+        for(const auto& [handle,entry]:gameplay_pawns){if(same(entry.world,active.world)){add(handle,entry);retained=retained||&entry==&active;}}
+        if(!retained)add(0,active);
+        require(count<=32,"native gameplay original current roster bound");
         package=collected.witnesses.package;
         classes.assign(collected.witnesses.classes.begin(),collected.witnesses.classes.end());
         objects.assign(collected.witnesses.objects.begin(),collected.witnesses.objects.end());
     }
+    bool matches()const{size_t index{};for(const auto& [handle,entry]:gameplay_pawns){if(!same(entry.world,world))continue;
+        if(index>=sources.size()||sources[index].handle!=handle||!sources[index].matches(entry))return false;++index;}return index==sources.size();}
+};
+bool gameplay_boundary_stable(const GameplayPawn& active){
+    if(!gameplay_boundary_revision)return false;bool retained{};uint32_t own{},count{};
+    for(const auto& [handle,entry]:gameplay_pawns){(void)handle;if(!same(entry.world,active.world))continue;++count;retained=retained||&entry==&active;
+        if(entry.stage!=3||!entry.current||entry.current_binding.reason!=GP_CURRENT_HOT||entry.current->local.offset!=0x6bc||entry.current->local.size!=1||
+            entry.current->local.bool_offset!=0||entry.current->local.bool_mask!=1)return false;own+=entry.own;}
+    return retained&&count<=32&&own==1;
+}
+struct GameplayBoundary {
+    LookupState* operation{active_lookup};uint64_t revision{};std::shared_ptr<const GameplayBoundaryPlan> plan;
+    std::vector<GameplayBoundaryRow> rows;
+    explicit GameplayBoundary(const GameplayPawn& active){
+        if(gameplay_boundary_stable(active)){
+            if(gameplay_boundary_plan&&same(gameplay_boundary_plan->world,active.world)){
+                require(gameplay_boundary_plan->matches(),"native gameplay original current configuration changed");plan=gameplay_boundary_plan;
+            }else{auto copied=std::make_shared<const GameplayBoundaryPlan>(active,true);require(copied->matches(),"native gameplay original current configuration changed");gameplay_boundary_plan=copied;plan=std::move(copied);}
+            revision=gameplay_boundary_revision;
+        }else plan=std::make_shared<const GameplayBoundaryPlan>(active);
+        bool retained{};for(const auto& [handle,entry]:gameplay_pawns){(void)handle;if(same(entry.world,active.world)){rows.push_back(gameplay_boundary_row(entry));retained=retained||&entry==&active;}}
+        if(!retained)rows.push_back(gameplay_boundary_row(active));
+    }
     void metadata()const{
         require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native gameplay shared metadata unavailable");
-        require(!package||*source_package_name==*package,"native gameplay shared package changed");
-        for(const auto& [address,saved]:classes){void* p=vt->resolve(saved.object.weak);
+        const auto& package=plan->package;require(!package||*source_package_name==*package,"native gameplay shared package changed");
+        for(const auto& [address,saved]:plan->classes){void* p=vt->resolve(saved.object.weak);
             require(saved.object.weak&&reinterpret_cast<uint64_t>(p)==address,"native gameplay shared class expired");
             const auto* flags=retirement_flags(p);require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0,"native gameplay shared class RF changed");
             const auto* n=object_name(p);require(n&&*n==saved.name&&(!saved.exact_serial||vt->weak(p)==saved.object.weak),"native gameplay shared class identity changed");}
-        for(const auto& [address,saved]:objects){const auto& node=saved.node;
+        for(const auto& [address,saved]:plan->objects){const auto& node=saved.node;
             void* p=node.weak?vt->resolve(node.weak):lookup_zero_object(saved.zero_item,address);
             require(reinterpret_cast<uint64_t>(p)==address,"native gameplay shared object expired");
             const auto* flags=retirement_flags(p);require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0,"native gameplay shared object RF changed");
@@ -257,6 +307,7 @@ struct GameplayBoundary {
         require(!package||*source_package_name==*package,"native gameplay shared package changed during proof");
     }
     void final()const{
+        require(!revision||revision==gameplay_boundary_revision,"native gameplay current roster changed during operation");
         metadata();
         for(const auto& row:rows){
             const auto* pawn=vt->resolve(row.pawn.weak);const auto* pc=vt->resolve(row.controller.weak);const auto* level=vt->resolve(row.level.weak);
@@ -275,6 +326,7 @@ struct GameplayBoundary {
                 require(reinterpret_cast<uint64_t>(owned)==row.pawn.address&&reinterpret_cast<uint64_t>(controller)==row.controller.address,"native gameplay original possession changed");}
         }
         metadata();
+        require(!revision||revision==gameplay_boundary_revision,"native gameplay current roster changed during operation");
     }
 };
 thread_local const GameplayBoundary* gameplay_boundary{};
@@ -325,6 +377,7 @@ bool gameplay_current_positive(const GameplayPawn& entry,bool code_supported,uin
     reason(positive?GP_CURRENT_HOT:GP_CURRENT_ZERO);return positive;
 }
 void gameplay_current_bind(GameplayPawn& entry,HsmpViewResult* result){
+    gameplay_boundary_invalidate();
     entry.current_binding.reason=GP_CURRENT_LEVEL;
     GameplayCurrent profile;profile.controller_level=returned(entry.controller,L"/Script/Engine.Actor:GetLevel",result);
     require(profile.controller_level.weak&&is(profile.controller_level,L"/Script/Engine.Level"),"native gameplay original controller level unavailable");
@@ -587,6 +640,7 @@ template<class Guard>void gameplay_absolute_run(const HsmpGameplayState& state,c
 int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Transform* initial,uint32_t own,
     const HsmpViewGuard* guard,uint64_t* handle,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);Obj created{};
+    gameplay_boundary_invalidate();
     try{initialize_result(result);thread();OperationScope scope(guard,world);layouts();
         require(initial&&handle&&pawn&&own<=1,"native gameplay begin arguments");*handle=0;*pawn={};
         require(gameplay_pawns.size()<32,"native gameplay pawn bound");
@@ -630,6 +684,7 @@ int32_t gameplay_current(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,Hs
 }
 int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
+    gameplay_boundary_invalidate();
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(pawn&&entry.stage==1,"native gameplay construction stage");gameplay_local(entry,result);
         Function finish(L"/Script/Engine.GameplayStatics:FinishSpawningActor");finish.object(L"Actor",entry.pawn);
@@ -640,6 +695,7 @@ int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,
 }
 int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
+    gameplay_boundary_invalidate();
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(entry.stage==2,"native gameplay initialization stage");gameplay_local(entry,result);
         if(entry.own){Function possess(L"/Script/Engine.Controller:Possess");possess.object(L"InPawn",entry.pawn);possess.call(entry.controller,result);
@@ -819,6 +875,7 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
 }
 int32_t gameplay_clear(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
+    gameplay_boundary_invalidate();
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);
         // Teardown starts only after the active construction/apply call unwinds.
         gameplay_local(entry,result);
@@ -828,7 +885,7 @@ int32_t gameplay_clear(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult
         destroy_actor(entry.world,entry.pawn);gameplay_pawns.erase(handle);result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
-void gameplay_discard(uint64_t handle){const std::lock_guard lock(gameplay_mutex);gameplay_pawns.erase(handle);}
+void gameplay_discard(uint64_t handle){const std::lock_guard lock(gameplay_mutex);gameplay_boundary_invalidate();gameplay_pawns.erase(handle);}
 int32_t gameplay_complete(const uint64_t* handles,uint32_t count,const HsmpViewGuard* guard,HsmpGameplayProof* proofs,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     try{initialize_result(result);thread();require(handles&&proofs&&count>0&&count<=32&&count==gameplay_pawns.size(),"native gameplay complete roster bound");

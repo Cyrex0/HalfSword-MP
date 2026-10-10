@@ -1620,10 +1620,23 @@ void gameplay_current_checks(HsmpReflect& reflect){
     entry.stage=3;entry.own=1;entry.controller_pawn=entry.pawn_controller=object_field(L"Pawn",static_cast<int32_t>(offsetof(LifetimeObject,property)));
     controller->property=&foreign_owner;foreign_owner.property=controller;
     actor.outer=&level;auto other=entry;other.pawn=keep(&actor);other.pawn_path=gameplay_path(other.pawn);other.own=0;
-    gameplay_pawns.emplace(71,entry);gameplay_pawns.emplace(72,other);const auto& retained=gameplay_pawns.at(71);
+    entry.current_binding.reason=other.current_binding.reason=GP_CURRENT_HOT;
+    gameplay_boundary_invalidate();gameplay_pawns.emplace(71,entry);gameplay_pawns.emplace(72,other);const auto& retained=gameplay_pawns.at(71);
     object_name=shared_name;shared_package_names=0;gameplay_call_guard();
+    std::vector<uint64_t> rebuilding_order,cached_order;
+    const auto previous_resolver=reflect.resolve;static decltype(reflect.resolve) actual_resolver;static std::vector<uint64_t>* resolve_order;
+    actual_resolver=previous_resolver;resolve_order=&rebuilding_order;
+    reflect.resolve=+[](uint64_t weak)->void*{resolve_order->push_back(weak);return actual_resolver(weak);};
+    gameplay_pawns.at(71).current_binding.reason=GP_CURRENT_CODE;
+    {GameplayBoundaryScope rebuilding(retained);GameplayWatch watch(retained);rebuilding_order.clear();gameplay_call_guard();
+        check(!rebuilding.boundary.revision&&rebuilding.boundary.plan->sources.empty()&&!gameplay_boundary_plan,"unsupported captured profile keeps the original uncached expectation construction");}
+    gameplay_pawns.at(71).current_binding.reason=GP_CURRENT_HOT;
+    resolve_order=&cached_order;
     {GameplayBoundaryScope boundary(retained);GameplayWatch watch(retained);
         check(gameplay_boundary_active()&&boundary.boundary.rows.size()==2,"current invocation compiles every original same-world pawn without duplicate active row");
+        const auto plan=boundary.boundary.plan;check(plan==gameplay_boundary_plan&&plan->sources.size()==2,"stable roster retains only its immutable copied expectation plan");
+        cached_order.clear();gameplay_call_guard();
+        check(cached_order==rebuilding_order,"reused plan preserves the complete original native resolve order and both metadata passes");
         shared_package_names=0;gameplay_call_guard();
         check(shared_package_names==2,"current guard reads a shared original Package exactly once per fresh metadata pass");
         shared_package_names=0;gameplay_call_guard();
@@ -1642,7 +1655,7 @@ void gameplay_current_checks(HsmpReflect& reflect){
         auto bad=retained;bad.pawn_path.flags[0]^=1;
         rejects([&]{GameplayBoundaryScope conflicting(bad);},"current plan refuses disagreeing copied original metadata before TLS publication");
         check(gameplay_boundary==&boundary.boundary,"failed current plan compilation restores the original scope and active boundary");
-        {GameplayBoundaryScope nested(retained);check(gameplay_boundary==&nested.boundary,"nested current boundary owns independent copied expectations");gameplay_call_guard();}
+        {GameplayBoundaryScope nested(retained);check(gameplay_boundary==&nested.boundary&&nested.boundary.plan==plan&&nested.boundary.operation==active_lookup,"nested current boundary owns independent TLS and shares only copied expectations");gameplay_call_guard();}
         check(gameplay_boundary==&boundary.boundary,"nested current boundary unwinds to the original plan");
         auto* lookup=active_lookup;LookupState unrelated;active_lookup=&unrelated;
         check(!gameplay_boundary_active(),"unrelated nested operation cannot reuse another current invocation's expectations");active_lookup=lookup;
@@ -1651,9 +1664,30 @@ void gameplay_current_checks(HsmpReflect& reflect){
         rejects([&]{gameplay_call_guard();},"second fresh metadata pass catches earlier class change during later raw link reads");
         changed=actor_class.flags!=0;actor_class.flags=0;source_outer=original_outer;
         check(changed,"raw link mutation fixture exercised the actual boundary instead of prechanging the original");
+        for(uint32_t mutation=0;mutation<5;++mutation){auto& original=gameplay_pawns.at(72);const auto saved=original;
+            if(mutation==0)original.pawn_path.flags[0]^=1;else if(mutation==1)original.pawn_path.pinned[0].weak^=uint64_t{1}<<32;
+            else if(mutation==2)original.pawn_path.original[0].class_name^=1;else if(mutation==3)original.current->vtable^=8;
+            else original.current->level_world.offset^=8;
+            rejects([&]{GameplayBoundaryScope changed_config(retained);},"retained plan refuses changed original RF/pin/class/schema/profile configuration before publication");
+            original=saved;check(gameplay_boundary==&boundary.boundary,"failed reused-plan configuration check leaves original TLS unchanged");}
+        gameplay_pawns.emplace(73,other);rejects([&]{GameplayBoundaryScope added(retained);},"added roster handle cannot reuse the old copied union without invalidation");gameplay_pawns.erase(73);
+        gameplay_pawns.erase(72);rejects([&]{GameplayBoundaryScope removed(retained);},"removed roster handle cannot reuse the old copied union without invalidation");gameplay_pawns.emplace(72,other);
+        actor.flags^=1;rejects([&]{GameplayBoundaryScope failed(retained);GameplayWatch failed_watch(retained);},"cached expectations still refuse actual native metadata on a later invocation");actor.flags^=1;
+        {GameplayBoundaryScope again(retained);GameplayWatch again_watch(retained);check(again.boundary.plan==plan,"failed admission stores no negative or positive ticket in the immutable plan");gameplay_call_guard();}
+        gameplay_boundary_invalidate();check(!gameplay_boundary_plan&&boundary.boundary.plan==plan,"invalidation releases cache ownership while live boundary retains its original copied plan");
+        rejects([&]{gameplay_call_guard();},"lifecycle invalidation inside a current boundary refuses its final original roster proof");
+        {GameplayBoundaryScope refreshed(retained);GameplayWatch refreshed_watch(retained);check(refreshed.boundary.plan!=plan,"next independently admitted current compiles after configuration invalidation");gameplay_call_guard();}
     }
+    reflect.resolve=previous_resolver;
     check(!gameplay_boundary&&!gameplay_active,"current-only expectation scope leaves no retained plan after unwind");
-    gameplay_pawns.clear();object_name=lookup_name;entry.stage=1;entry.own=0;controller->property=nullptr;foreign_owner.property=nullptr;
+    gameplay_boundary_invalidate();gameplay_pawns.at(72).current_binding.reason=GP_CURRENT_CODE;
+    {GameplayBoundaryScope unsupported(retained);check(!unsupported.boundary.revision&&unsupported.boundary.plan->sources.empty()&&!gameplay_boundary_plan,"unsupported captured profile keeps the original rebuilding path");}
+    gameplay_boundary_invalidate();gameplay_pawns.at(72).current_binding.reason=GP_CURRENT_HOT;
+    {GameplayBoundaryScope before_erase(retained);const auto held=before_erase.boundary.plan;
+        gameplay_discard(72);check(!gameplay_boundary_plan&&held->sources.size()==2,"actual discard invalidates before erasing without freeing a live scope's copied plan");
+        rejects([&]{before_erase.boundary.final();},"actual discard invalidation prevents an old invocation accepting an erased roster");
+        {GameplayBoundaryScope smaller(retained);check(smaller.boundary.rows.size()==1&&smaller.boundary.plan!=held,"post-discard original roster compiles its exact smaller union");smaller.boundary.final();}}
+    reflect.resolve=previous_resolver;gameplay_boundary_invalidate();gameplay_pawns.clear();object_name=lookup_name;entry.stage=1;entry.own=0;controller->property=nullptr;foreign_owner.property=nullptr;
     }
     gameplay_current_attempts.store(0);hsmp_presentation_set_create_log(nullptr);
     {GameplayCurrentTrace disabled;check(disabled.attempt==0&&gameplay_current_attempts.load()==0,"disabled current reporter consumes no bounded attempt");}

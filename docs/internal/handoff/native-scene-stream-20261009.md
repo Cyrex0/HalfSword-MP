@@ -2,6 +2,49 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Current allocation candidate: client generation qualification compares the live
+Bridge under one mutex without copying a temporary GameplayScene/descriptor list.
+It retains exact availability, result-directory matching, ordered original rows,
+peer and descriptor Arc/ref/revision checks. Original offered Scene/Instant and
+expiry/failure order remain unchanged. Focused server2/native12 PASS. Initial
+row-order fixture failed because its baseline had one row; repaired with two
+complete bootstrap/result rows and the same genuine swap/refusal assertion.
+CPP candidate reuses copied roster expectations only, with independent operation
+scope and fresh metadata/raw links/code/controller checks. Construction/config
+mutation invalidates reuse; unsupported/mutable rosters rebuild expectations.
+Strict production CPP compile and native fixture2152 PASS. Exact fresh resolve
+order matches rebuilding after correcting the recorder's candidate-entry pass
+polluting its baseline. Fixture metadata/RF/world/possession, copied config,
+roster mutation, second metadata pass, nested TLS and discard lifetime refusals
+remain active. Root caught/fixed the temporary recorder-vector lifetime too.
+Full G0, exact deployment and ONE actual game run remain pending. No measured
+timing or readiness improvement claim yet.
+
+Actual8d8bdec8 full G0 PASS (Lua77/Rust1378/79), dev pushed, RequireG0/all396
+deployed. Standard Gameplay143924-279598 BOTH LIVE, native inputs16/37, but
+observation FAILS on transient client2 expiry. The later client1 staged-current
+refusal occurred after cleanup had started; it is not an independent blocker.
+Client2tick61 complete gear105928us, rows55351/50569us: scalar guards632 calls
+25063/24183us, full wrapper current131 calls7783/6312us, weapon qualification41
+calls22199/19327us, armor11738/14905us, weapon read34770/28839us, compare2716/
+2450us, recipe645/418us. Nested spans are inclusive; never add them. Approximately
+1624 scalar clock probes per row are counted and their overhead not subtracted.
+Client1tick63 native_apply51461us passes, gear72541us aborts midway row2 with
+`gameplay staged generation changed` (native_gameplay.rs811). Both stop requests
+were written at wall1791639586751; this gear failure ended6758 and fatal event
+followed6764. Client2's initiating stale wait6493 recovered LIVE6705 before stop.
+The current/staged Context has application=false, gameplay_scene has no freshness
+filter, and exact duplicate bootstraps preserve their original descriptor Arc.
+Do not infer a pre-cleanup generation bug or relax the original generation guard.
+Next remove repeated copied expectation/snapshot allocation while retaining every
+fresh original admission and complete gear readback; actual timing decides benefit.
+Scalar guard cost is substantial; wrapper-only current is6–8ms per row, so
+wrapper reuse alone is not proved to close the complete worst-case budget.
+Early secondary placement PASS. Read-only observer found owned window objects
+but clients exited before pixels; no model/HUD claim. Cleanup PASS/four absent/
+save20 unchanged/no dumps or children. Full timing rows/phases/states/cleanup
+saved in native_operator_summary.json. No blind rerun or gameplay-parity claim.
+
 Actualb6b5f59c full G0 PASS (Lua77/Rust1378/79), dev pushed, RequireG0/all396
 deployed. Standard Gameplay141628-f867c7 BOTH reach LIVE with native source
 inputs104/84. Fresh page batching executes: client1 first native row31712us,

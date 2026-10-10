@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Reduce repeated native validation allocations while retaining fresh generation,
+  object, world, possession and equipment checks on every invocation.
 - Attribute complete local gear verification to fresh wrapper, guard, weapon
   qualification, field-read and comparison costs in bounded gameplay diagnostics.
 - Batch fresh permission checks for every pinned native code page, retaining
