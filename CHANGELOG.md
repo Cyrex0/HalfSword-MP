@@ -10,6 +10,12 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Measure the first eight warm native presentation attempts, recording original
+  receipt age and preparation, apply and finish time without changing gameplay
+  data, freshness limits or object verification.
+- Retain the original native lookup for input-event names containing a slash
+  inside the function name; the recorded forward/backward axis is covered by
+  the focused route check. Actual input recovery remains under verification.
 - Use UE4SS's qualified native hash path lookup for canonical object paths,
   retaining legacy lookup when its optional API or runtime hash is unavailable.
   Existing object and callback verification remains unchanged; actual timing

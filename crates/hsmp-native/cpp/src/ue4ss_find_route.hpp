@@ -10,9 +10,16 @@ using FindRouteLog = void (*)(uint32_t exports,uint32_t available,uint32_t canon
 struct FindRoute {
     SlowFind slow{};PathFind path{};HashAvailable available{};
     std::atomic<FindRouteLog> logger{};std::atomic<bool> reported{};
+    static bool canonical_path(const wchar_t* name){
+        if(!name||name[0]!=L'/')return false;
+        bool object{};for(const auto* p=name;*p;++p){if(*p==L'.'||*p==L':')object=true;else if(object&&*p==L'/')return false;}
+        return true;
+    }
     void* find(const wchar_t* name){
         const bool exports=path&&available;
-        const bool canonical=name&&name[0]==L'/';
+        // A slash within a member FName (the actual "Move Forward / Backward"
+        // axis event) is not an admitted package-path parser grammar.
+        const bool canonical=canonical_path(name);
         const bool ready=exports&&available();
         const bool hash=canonical&&ready;
         // This is the pinned StaticFindObjectByPath contract. A qualified null

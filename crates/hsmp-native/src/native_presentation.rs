@@ -243,6 +243,86 @@ impl Drop for CaptureDiagnostic {
         }
     }
 }
+const PRESENT_DIAGNOSTIC_LIMIT: u32 = 8;
+struct PresentDiagnostic {
+    trace: Option<CaptureTrace>,
+    started: Instant,
+    received: Option<Instant>,
+}
+impl PresentDiagnostic {
+    fn new() -> Self {
+        Self {
+            trace: None,
+            started: Instant::now(),
+            received: None,
+        }
+    }
+    fn begin(
+        &mut self,
+        attempts: &mut u32,
+        scene: &hsmp_server::native_service::Scene,
+        warm: bool,
+    ) {
+        if !warm
+            || *attempts >= PRESENT_DIAGNOSTIC_LIMIT
+            || CAPTURE_LOGGER.load(Ordering::Acquire).is_null()
+        {
+            return;
+        }
+        *attempts += 1;
+        self.received = Some(scene.received);
+        self.trace = Some(CaptureTrace {
+            epoch: scene.directory.epoch,
+            dir_seq: scene.directory.seq,
+            frame_seq: scene.frame.world.frame_seq,
+            kind: scene.directory.state as u32,
+            rows: *attempts,
+            component: 1,
+            us: [
+                0,
+                CaptureDiagnostic::elapsed(Some(scene.received)),
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ],
+            counters: [u64::from(scene.fresh()), 0, 0, 0],
+            ..CaptureTrace::default()
+        });
+    }
+    fn stage(&mut self, stage: u32) -> Option<Instant> {
+        self.trace.as_mut().map(|t| {
+            t.component = stage;
+            Instant::now()
+        })
+    }
+    fn add(&mut self, index: usize, start: Option<Instant>) {
+        if let Some(t) = self.trace.as_mut() {
+            t.us[index] += CaptureDiagnostic::elapsed(start);
+        }
+    }
+    fn finish(mut self, complete: bool) -> Option<CaptureTrace> {
+        let t = self.trace.as_mut()?;
+        t.complete = u32::from(complete);
+        t.us[0] = CaptureDiagnostic::elapsed(Some(self.started));
+        t.us[2] = CaptureDiagnostic::elapsed(self.received);
+        t.counters[1] = u64::from(t.us[2] < u64::from(w::INPUT_TIMEOUT_MS) * 1000);
+        self.trace
+    }
+}
+fn present_diagnostic_emit(trace: Option<CaptureTrace>) {
+    let logger = CAPTURE_LOGGER.load(Ordering::Acquire);
+    if let Some(trace) = trace.filter(|_| !logger.is_null()) {
+        // The operation closure and all native/provider work have returned;
+        // only copied scalars survive. No receipt or readiness state is changed.
+        let logger: CaptureLogger = unsafe { std::mem::transmute(logger) };
+        unsafe { logger(2, &trace) };
+    }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Object {
@@ -733,6 +813,7 @@ pub struct State {
     pub(crate) input: Option<crate::native_input_capture::Reader>,
     ready: Option<(u64, u32, Vec<(w::EntityRef, u32)>)>,
     capture_profile_attempted: bool,
+    present_diagnostic_attempts: u32,
 }
 impl State {
     fn drop_visuals(&mut self) {
@@ -3048,6 +3129,7 @@ impl Native {
     }
     pub unsafe fn native_present(&mut self, L: *mut lua_State) -> c_int {
         unsafe {
+            let mut diagnostic = PresentDiagnostic::new();
             let result = (|| -> Result<hsmp_server::native_service::Scene, String> {
                 if !self.native_host.is_client() || !self.sample.world_ok {
                     return Err("client role/world".into());
@@ -3063,9 +3145,27 @@ impl Native {
                     .as_ref()
                     .ok_or("not a native client")?;
                 let scene = client.scene().ok_or("no complete current source scene")?;
+                let warm = !scene.descriptors.is_empty()
+                    && scene.descriptors.iter().all(|d| {
+                        self.presentation
+                            .mirrors
+                            .get(&d.reference.id)
+                            .is_some_and(|m| {
+                                m.reference == d.reference
+                                    && m.revision == d.revision
+                                    && m.world.weak == world.weak
+                                    && m.world.address == world.address
+                            })
+                    });
+                diagnostic.begin(
+                    &mut self.presentation.present_diagnostic_attempts,
+                    &scene,
+                    warm,
+                );
                 if scene.directory.state == w::LIVE && !scene.fresh() {
                     return Err("native applied scene is stale".into());
                 }
+                let preparation_started = diagnostic.stage(2);
                 for desc in &scene.descriptors {
                     desc.recipe
                         .validate_mirror_profile()
@@ -3099,8 +3199,10 @@ impl Native {
                         }
                     }
                 }
+                diagnostic.add(3, preparation_started);
                 for desc in &scene.descriptors {
                     if !self.presentation.mirrors.contains_key(&desc.reference.id) {
+                        let create_started = diagnostic.stage(3);
                         let prepared = Prepared::new(&desc.recipe);
                         let recipes = &prepared.components;
                         let mut r = ResultInfo::default();
@@ -3130,7 +3232,9 @@ impl Native {
                                 prepared,
                             },
                         );
+                        diagnostic.add(4, create_started);
                     }
+                    let preparation_started = diagnostic.stage(2);
                     let source = scene
                         .frame
                         .entities
@@ -3204,6 +3308,8 @@ impl Native {
                         .get(&desc.reference.id)
                         .ok_or("mirror handle")?;
                     let mut r = ResultInfo::default();
+                    diagnostic.add(3, preparation_started);
+                    let apply_started = diagnostic.stage(4);
                     if !context.valid()
                         || (p.apply)(
                             world,
@@ -3219,7 +3325,9 @@ impl Native {
                     {
                         return Err(format!("mirror complete readback: {}", r.reason()));
                     }
+                    diagnostic.add(5, apply_started);
                 }
+                let finish_started = diagnostic.stage(5);
                 let handles = scene
                     .descriptors
                     .iter()
@@ -3247,6 +3355,8 @@ impl Native {
                 {
                     return Err(format!("mirror whole-set vertex proof: {}", r.reason()));
                 }
+                diagnostic.add(6, finish_started);
+                let ready_started = diagnostic.stage(6);
                 let ready = (scene.directory.epoch, scene.directory.seq, valid.clone());
                 client.native_applied(&scene).map_err(str::to_owned)?;
                 if self.presentation.ready.as_ref() != Some(&ready) {
@@ -3260,8 +3370,11 @@ impl Native {
                         .map_err(str::to_owned)?;
                     self.presentation.ready = Some(ready);
                 }
+                diagnostic.add(7, ready_started);
+                diagnostic.stage(7);
                 Ok(scene)
             })();
+            present_diagnostic_emit(diagnostic.finish(result.is_ok()));
             match result {
                 Ok(scene) => {
                     lua_pushboolean(L, 1);
@@ -4407,6 +4520,57 @@ mod presentation_binding_tests {
             assert_eq!(log.len(), 3);
             assert_eq!(log[2].1.complete, 0);
             assert_eq!(log[2].1.rows, 0);
+        }
+        let received = Instant::now()
+            .checked_sub(std::time::Duration::from_millis(300))
+            .unwrap();
+        let scene = hsmp_server::native_service::Scene {
+            directory: w::Directory {
+                epoch: 42,
+                seq: 7,
+                state: w::LIVE,
+                arena: String::new(),
+                error: String::new(),
+                entities: Vec::new(),
+            },
+            descriptors: Vec::new(),
+            frame: std::sync::Arc::new(w::RenderWorld {
+                world: world.clone(),
+                entities: Vec::new(),
+            }),
+            peer_id: 1,
+            received,
+        };
+        let mut attempts = 0;
+        let mut cold = PresentDiagnostic::new();
+        cold.begin(&mut attempts, &scene, false);
+        assert!(cold.finish(true).is_none());
+        assert_eq!(attempts, 0);
+        for attempt in 1..=PRESENT_DIAGNOSTIC_LIMIT + 1 {
+            let mut diagnostic = PresentDiagnostic::new();
+            diagnostic.begin(&mut attempts, &scene, true);
+            diagnostic.stage(if attempt == 1 { 1 } else { 7 });
+            let trace = diagnostic.finish(attempt != 1);
+            if attempt <= PRESENT_DIAGNOSTIC_LIMIT {
+                let t = trace.unwrap();
+                assert_eq!(
+                    (t.epoch, t.dir_seq, t.frame_seq, t.rows),
+                    (42, 7, 1, attempt)
+                );
+                assert_eq!(t.complete, u32::from(attempt != 1));
+                assert_eq!((t.counters[0], t.counters[1]), (0, 0));
+                assert!(t.us[1] >= 300_000 && t.us[2] >= t.us[1]);
+                present_diagnostic_emit(Some(t));
+            } else {
+                assert!(trace.is_none());
+            }
+        }
+        assert_eq!(scene.received, received);
+        assert_eq!(attempts, PRESENT_DIAGNOSTIC_LIMIT);
+        {
+            let log = CAPTURE_TEST_LOG.lock().unwrap();
+            assert_eq!(log.len(), 3 + PRESENT_DIAGNOSTIC_LIMIT as usize);
+            assert!(log[3..].iter().all(|row| row.0 == 2 && row.2 == 0));
         }
         hsmp_native_set_capture_logger(None);
     }

@@ -1,5 +1,51 @@
 # Native full-scene encoding checkpoint
 
+## Exact input-path regression fixed; warm-present delay measurement next
+
+The a54aa9e9 repeat logs one detailed controller1/entity2 refusal for
+Willie_BP_C:InpAxisEvt_Move Forward / Backward_K2Node_InputAxisEvent_14.
+Its literal slash is inside the member FName, outside the qualified hash-path
+grammar. Route qualification now retains original Slow lookup before any hash
+attempt for such names. Canonical paths and qualified-null behavior remain.
+Strict provider compilation and 35 focused route checks pass; independent
+review closed. Actual input recovery remains pending.
+
+Completed repeat audit: 55 source frames, frame1-to53 mean260.288ms (~3.84fps),
+reported capture durations200–282ms. Sparse endpoints cannot establish per-frame
+p50/p95. Both clients reach MirrorReady before stop, neither logs LIVE, then
+both refuse stale applied scenes. Input dispatched0; aggregate refusal108
+does not identify separate controller paths. Original receipt is correctly
+retained through apply and input; no renewal or tolerance change is justified.
+First presentation takes1363/1630ms. Warm duration/entry and exit receipt age are
+unmeasured; bounded diagnostics preserve the same SceneArc and every check.
+
+Warm diagnostic uses existing copied-scalar capture logger tag2 without an ABI
+change. At most eight warm native_present attempts report fixed rejection stage,
+entry/exit original receipt age, prepare/apply/finish/ready time and success/
+freshness booleans. It adds no engine call and cannot diagnose Lua prepeek/input
+boundaries. Cold exclusion, bounded attempts and retained stale original receipt
+are covered by the focused fixture. Actual measurements pending.
+
+## Actual a54aa9e9: qualified hash active; frame227ms, both models before deadline
+
+Exact fullG0/dev/all394 first run005121-9fc69d spends~58s before worker/client
+loops; NativeReady/hash qualification and partial recipe begin follow stop by
+~7s. No pre-stop lookup/provider failure. It cannot establish frame speed.
+Repeat of the SAME verified build005320-2543e6 (no rebuild/G0 repetition),
+source9d68aee9-5e25-415c-8616-cb525afbe97f, authority32616, clients38972/28952,
+records exports1/available1/canonical1/qualified_hash on allthree original games.
+First complete98-row frame226,809us/provider208,242us/CPP rows181,081us;
+rowfind284us/160calls, finish17,836us. This is an actual complete-frame gain
+from2.517s, not a normalized hardware benchmark or full gameplay claim.
+Both models verify BEFOREstop: client1MirrorReady55.307s/frame9; client2
+54.530s/frame7 and55.785s/frame14. Later appliedscene freshness fails; normal
+pass=false, complete source cadence/input/receipt audit underway. Preserve
+original250ms receipt, same applied SceneArc and all complete readback proofs.
+No ownedview or playable/headless/co-op release claim. Both runs independently
+PASS4originals absent/save20same/no dumps/unobservedchildren/bothsecondary.
+Deployment is warm: directCargo0.29s, CMake0.21s twice. Next exact applied-frame
+freshness cause; source-owned camera metadata remains unobserved.
+
 ## Native lookup route checkpoint
 
 Primary pinned DLL/source proof: reflection r_find always calls

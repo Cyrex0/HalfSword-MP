@@ -22,7 +22,9 @@ int main(){try{
     check(path_calls==4&&slow_calls==2&&logs==1,"optional readiness can become available without caching false or flooding logs");
     const int old_slow=slow_calls;missing=true;check(route.find(L"/Game/Missing.Missing")==nullptr&&slow_calls==old_slow,"qualified missing object remains null without a second replacement search");missing=false;
     check(route.find(L"Class /Game/Asset.Asset")==expected&&slow_calls==old_slow+1,"unproved unquoted type-prefix grammar keeps original route");
-    ready=false;check(route.find(L"/Game/Asset.Asset")==expected&&slow_calls==old_slow+2,"lost current availability is never treated as a retained hash admission");
+    const int old_path=path_calls;
+    check(route.find(L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C:InpAxisEvt_Move Forward / Backward_K2Node_InputAxisEvent_14")==expected&&slow_calls==old_slow+2&&path_calls==old_path,"actual slash-containing axis FName retains exact original slow lookup without attempting hash grammar");
+    ready=false;check(route.find(L"/Game/Asset.Asset")==expected&&slow_calls==old_slow+3,"lost current availability is never treated as a retained hash admission");
     hsmp_reflect::FindRoute first_fast;first_fast.slow=slow;first_fast.path=fast;first_fast.available=available;first_fast.logger.store(log);ready=true;first_fast.find(L"/Game/Asset.Asset");
     check(logs==2&&last_exports&&last_ready&&last_canonical&&last_hash,"first actual qualified use reports hash selection");
     std::cout<<checks<<" exact find route checks passed\n";return 0;

@@ -1,5 +1,32 @@
 # Native authority bootstrap checkpoint
 
+## Input-path fix and bounded warm-present diagnosis
+
+a54 repeat records one detailed forward/backward-axis refusal: its literal
+slash belongs to a member FName. Such paths now use the original lookup before
+hash parsing, retaining qualified-null behavior. Strict provider/35 route
+checks pass and review closed; actual input recovery pending. Source55frames,
+mean260.288ms/frame from sparse endpoints; no per-frame percentiles available.
+Both mirrors beforestop, no LIVE, applied scene stale and input dispatched0.
+Original receipt survives apply/input correctly. Measure bounded warm apply
+duration and original receipt age; keep250ms, sameSceneArc and all checks.
+Existing copied-scalar logger tag2 reports at most eight warm attempts, fixed
+stage and prepare/apply/finish/ready durations. No new ABI/engine call; Lua prepeek
+and input boundaries remain outside this observation. Actual timing pending.
+
+## Actual a54aa9e9: native hash qualified, both mirrors beforedeadline
+
+First005121-9fc69d starts worker/clientloops58s, nativeReady/hash afterstop;
+no pre-stop failure, no frame evidence. Same exact build repeat005320-2543e6
+auth32616/c38972/28952 qualifieshash onall3games. Firstcompleteframe226.809ms,
+provider208.242ms/rowfind0.284ms160,finish17.836ms; prebatchfind excluded.
+BothmodelsMirrorReady beforestop: c1t55.307/frame9,c2t54.530/frame7 then
+55.785/frame14. Later appliedreceiptfreshness fails; normalpassfalse, fullaudit
+underway. No receipt renewal/TTL loosening, no ownedview/playability claim.
+Both cleanupPASS4absent20hashsame/nodumps/secondary. DeployCargo0.29/0.21/0.21s.
+Net audits freshness; Host reuses primary scopedPC/PCM proof for bounded actual
+camera observation, no guessed camera/defaults/fullviewimplementation yet.
+
 ## Qualified hash-path reflection checkpoint
 
 Pinned current reflection always scans ForEachUObject through InternalSlow.
