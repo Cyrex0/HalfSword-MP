@@ -312,8 +312,13 @@ fn rotation_hash(bytes: &[u8]) -> u64 {
         (hash ^ u64::from(*b)).wrapping_mul(1099511628211)
     })
 }
-#[cfg(windows)]
+/// The pinned code regions cannot change inside one process: check them once.
 fn rotation_profile() -> Result<(), String> {
+    static PROFILE: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    PROFILE.get_or_init(rotation_profile_check).clone()
+}
+#[cfg(windows)]
+fn rotation_profile_check() -> Result<(), String> {
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn GetModuleHandleW(name: *const u16) -> *mut c_void;
@@ -364,7 +369,7 @@ fn rotation_profile() -> Result<(), String> {
     Ok(())
 }
 #[cfg(not(windows))]
-fn rotation_profile() -> Result<(), String> {
+fn rotation_profile_check() -> Result<(), String> {
     Err("gameplay native rotation cache profile unavailable".into())
 }
 #[derive(Clone, Copy)]
@@ -628,6 +633,9 @@ pub struct SampleState {
     pub(crate) input: crate::worker_input::WorkerInputState,
     native_guard: Option<NativeGuard>,
     native_sampling_active: bool,
+    /// Inside one read-only pose sample only the bound objects are re-resolved per call;
+    /// the full guard runs before and after the block.
+    light_guard: bool,
     gameplay_directory: Option<hsmp_server::native_wire::Directory>,
     gameplay_world_key: Option<Vec<u8>>,
     pub(crate) native_pending: Option<(hsmp_server::native_wire::World, Vec<u8>)>,
@@ -657,6 +665,7 @@ impl Default for SampleState {
             input: Default::default(),
             native_guard: None,
             native_sampling_active: false,
+            light_guard: false,
             gameplay_directory: None,
             gameplay_world_key: None,
             native_pending: None,
@@ -865,6 +874,11 @@ impl Native {
     }
     fn native_guard_with_profile(&self, vt: &HsmpReflect, supported:impl Fn()->bool) -> bool {
         if !self.sample.world_ok { return false; }
+        if self.sample.light_guard {
+            return self.sample.native_guard.as_ref().is_some_and(|g| unsafe {
+                reflect::get(vt, g.pawn) as usize == g.pawn_address && reflect::get(vt, g.mesh) as usize == g.mesh_address
+            });
+        }
         if self.sample.gameplay_world_key.as_ref().is_some_and(|original|self.world_key.as_ref()!=Some(original)){return false;}
         if self.sample.gameplay_directory.as_ref().is_some_and(|original|self.native_host.directory().as_ref()!=Some(original)){return false;}
         let Some(g) = &self.sample.native_guard else { return !self.sample.native_sampling_active; };
@@ -1993,6 +2007,7 @@ impl Native {
                         // The full physical pose clients display. A pawn whose bodies
                         // cannot be read this tick still publishes its root and stats.
                         let mut body = Vec::new();
+                        self.sample.light_guard = true;
                         let nobody = self.sample.cfg.as_ref().map(|config| config.nobody.clone()).unwrap_or_default();
                         if nobody.iter().enumerate().take(NBONES).all(|(bone, no_body)| self.sample_bone(vt, mesh, bone, *no_body)) {
                             let mut weapon_count = 0;
@@ -2022,6 +2037,7 @@ impl Native {
                                 body = pose.used().to_vec();
                             }
                         }
+                        self.sample.light_guard = false;
                         if !self.native_guard_ok(vt) {
                             return Err("gameplay pose sample changed".into());
                         }
@@ -2212,6 +2228,7 @@ impl Native {
                 })();
                 self.sample.native_guard = None;
                 self.sample.native_sampling_active = false;
+                self.sample.light_guard = false;
                 pop(L, 1);
                 match result {
                     Ok(Some(snapshot)) => output.entities.push(snapshot),
