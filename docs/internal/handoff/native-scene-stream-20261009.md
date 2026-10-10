@@ -1,5 +1,27 @@
 # Native full-scene encoding checkpoint
 
+## Actual027f48e9: mesh witness dedup does not resolve warm delay
+
+Exact fullG0/dev/all394 normal012036-e89ef9, source8fc797cb-0968-4767-9b79-
+779226430dd5/auth34216/c20476/31100. All16 warm attempts enterfresh and exitstale
+atpostapply. Total1,052,083–1,342,364us/apply813,006–1,062,520us/finish223,282–
+300,974us. No adequate complete-presentation improvement; do not claim gain
+from smaller isolated final times. Normalfalse/activeboth0. Independent cleanup
+PASS4absent/save20same/nodumps/unobservedchildren/bothsecondary. Next bounded
+actual attribution of apply/finish guard, lookup and engine-call time before
+another optimization. Keep originalreceipt/250ms/sameSceneArc/all proofs.
+
+Bounded attribution candidate changes native_presentation.cpp,
+native_scene_impl.h, dllmain.cpp and existing fixture. Firsttwo warm applies plus
+matching aggregate finishes use existing stack capture counters/timers. Fixed
+copied scalar diagnostics emit after operation scopes, TLS and mutex unwind;
+at most44 lines. Guard/proof buckets overlap and are explicitly nonadditive.
+No engine query, API/ABI, original check or freshness change. Fixture covers
+bound, nesting, success/failure reset and unlocked logging. Actual data pending.
+Strict provider/fixture compile and1,744 presentation checks pass (15 additional
+diagnostic bound/reset/nesting/unwind assertions). Independent review closed;
+logger arguments follow the existing stage/edge/value/marker signature.
+
 ## Actual ce46189f: input bindings recovered; warm apply is the live blocker
 
 Exact clean fullG0/dev/all394 normal run20261010-010930-fe6500-native-host,

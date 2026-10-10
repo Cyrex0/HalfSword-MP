@@ -68,7 +68,7 @@ struct LookupNativeTrace {const wchar_t* path;HsmpNativeCaptureRow* row;uint64_t
 };
 struct CaptureTimer {
     uint64_t* target{};std::chrono::steady_clock::time_point start{};
-    explicit CaptureTimer(uint32_t index){if(active_capture_trace){target=&active_capture_trace->us[index];start=std::chrono::steady_clock::now();}}
+    explicit CaptureTimer(uint32_t index,bool enabled=true){if(enabled&&active_capture_trace){target=&active_capture_trace->us[index];start=std::chrono::steady_clock::now();}}
     ~CaptureTimer(){if(target)*target+=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());}
 };
 struct CaptureTrace {
@@ -83,6 +83,36 @@ struct StaticProfileTraceScope {bool previous;StaticProfileTraceScope():previous
 void profile_phase(const char* stage,uint32_t edge){if(static_profile_trace)hsmp_native_profile_checkpoint(stage,edge);}
 void profile_tick(uint32_t counter){if(active_capture_trace){if(counter==0)++active_capture_trace->guards;else if(counter==2)++active_capture_trace->finds;else if(counter==3)++active_capture_trace->events;}if(static_profile_trace)hsmp_native_profile_tick(counter);}
 std::atomic<HsmpPresentationCreateLog> create_logger{};
+thread_local bool present_provider_active{};
+thread_local uint32_t present_apply_profile_attempts{},present_finish_profile_attempts{};
+thread_local bool present_finish_pending{};
+struct PresentProviderTrace {
+    HsmpNativeCaptureRow row{};HsmpNativeCaptureRow* previous{};
+    bool enabled{},complete{},aggregate{};uint32_t attempt{};
+    std::chrono::steady_clock::time_point start{};
+    explicit PresentProviderTrace(bool finish=false):aggregate(finish){}
+    void begin(bool warm){
+        if(!warm||active_capture_trace||present_provider_active||!create_logger.load())return;
+        auto& attempts=aggregate?present_finish_profile_attempts:present_apply_profile_attempts;
+        if(attempts>=2||(aggregate&&!present_finish_pending))return;
+        attempt=++attempts;enabled=true;start=std::chrono::steady_clock::now();previous=active_capture_trace;
+        active_capture_trace=&row;present_provider_active=true;
+        if(aggregate)present_finish_pending=false;else present_finish_pending=true;
+    }
+    ~PresentProviderTrace(){
+        if(!enabled)return;
+        row.us[0]=static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count());
+        active_capture_trace=previous;present_provider_active=false;
+        // Declared before provider locks/scopes: only copied scalars remain here.
+        if(const auto logger=create_logger.load()){
+            const auto label=aggregate?"finish":"apply";
+            for(uint32_t bucket=0;bucket<8;++bucket)logger(aggregate?"present_finish_us":"present_apply_us",complete?1u:0u,row.us[bucket],attempt,bucket,0,0,label);
+            logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.guards,attempt,0,0,0,label);
+            logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.finds,attempt,1,0,0,label);
+            logger(aggregate?"present_finish_count":"present_apply_count",complete?1u:0u,row.events,attempt,2,0,0,label);
+        }
+    }
+};
 struct LookupTraceCount {uint64_t raw{},us{};uint32_t cold{},hit{},bootstrap{},capacity{};};
 struct LookupTraceReport {bool attempted{},collecting{};uint32_t rows{},truncated{},pending{};LookupTraceCount total{};std::map<std::wstring,LookupTraceCount> paths;};
 thread_local LookupTraceReport lookup_trace_report;
@@ -695,7 +725,7 @@ void finish_component(Obj actor,Obj component,const Transform& relative,HsmpView
     f.put(L"RelativeTransform",L"StructProperty",engine(relative),L"Transform");f.call(actor,r);collision_off(component,r);
 }
 struct Part {uint32_t id{},kind{};Obj render{},leader{};std::vector<Obj> materials;Obj native_asset{};std::wstring arm_socket;HsmpViewSpringArmFrame arm{};std::optional<PoseBinding> pose;std::optional<MeshBinding> mesh;std::optional<ArmPublication> arm_publication;};
-struct Mirror {Obj world{},actor{};std::vector<Part> parts;};
+struct Mirror {Obj world{},actor{};std::vector<Part> parts;bool diagnostic_applied{};};
 struct MeshWatch;
 thread_local const MeshWatch* active_mesh_watch{};
 struct MeshWatch {
@@ -704,6 +734,7 @@ struct MeshWatch {
     ~MeshWatch(){active_mesh_watch=previous;}
 };
 void mesh_call_guard(){
+    CaptureTimer present_mesh_time(1,present_provider_active);
     if(!active_mesh_watch)return;
     std::vector<const MeshBinding*> bindings;
     for(auto* watch=active_mesh_watch;watch;watch=watch->previous){
@@ -902,8 +933,10 @@ template<class T> void material_set(Obj mat,const HsmpViewParameter& p,const T& 
     Function f(path);f.put(L"ParameterInfo",L"StructProperty",parameter(p),L"MaterialParameterInfo");f.put(L"Value",type,value,sub);f.call(mat,r);
 }
 int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpViewFrame* frames,uint32_t count,const HsmpViewGuard* guard,HsmpViewResult* r) {
+    PresentProviderTrace diagnostic;
     const std::lock_guard lock(mirror_mutex);
     try{initialize_result(r);thread();OperationScope scope(guard,world);get(world);auto it=mirrors.find(id);require(it!=mirrors.end(),"mirror handle missing");auto& mirror=it->second;
+        diagnostic.begin(mirror.diagnostic_applied);
         MeshWatch mesh_watch({&mirror});
         require(same(mirror.world,world)&&same(actor_world(mirror.actor,r),world)&&count==mirror.parts.size()&&pointers(recipes,count,64)&&pointers(frames,count,64),"mirror apply scope");
         const auto order=parent_order(recipes,count);
@@ -956,7 +989,7 @@ int32_t apply(Obj world,uint64_t id,const HsmpViewComponent* recipes,const HsmpV
         for(const auto& [index,published]:published_poses)pose_final(*mirror.parts[index].pose,published);
         for(const auto& part:mirror.parts)if(part.mesh)mesh_binding_final(*part.mesh);
         for(const auto& part:mirror.parts)if(part.arm_publication)arm_publication_final(*part.arm_publication);
-        lookup_finish();r->complete=1;return 1;
+        lookup_finish();r->complete=1;mirror.diagnostic_applied=true;diagnostic.complete=true;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 void destroy(Obj world,uint64_t id,const HsmpViewGuard* guard) {const std::lock_guard lock(mirror_mutex);try{thread();auto it=mirrors.find(id);if(it==mirrors.end())return;auto mirror=it->second;forget_mirror_materials(mirror);mirrors.erase(it);require(same(world,mirror.world),"mirror destroy scope");OperationScope scope(guard,world);destroy_actor(world,mirror.actor);lookup_finish();}catch(const std::exception&) {}}
@@ -1105,7 +1138,7 @@ void lookup_witness_finish(){
     }
     require(!witnesses.package||*source_package_name==*witnesses.package,"native shared package changed during pure boundary");
 }
-void lookup_finish(){if(!active_lookup)return;lookup_world_final(*active_lookup);lookup_witness_finish();capture_watch_links();lookup_witness_finish();lookup_world_final(*active_lookup);}
+void lookup_finish(){CaptureTimer present_lookup_time(2,present_provider_active);if(!active_lookup)return;lookup_world_final(*active_lookup);lookup_witness_finish();capture_watch_links();lookup_witness_finish();lookup_world_final(*active_lookup);}
 void lookup_remember(const HsmpNativePathNode& node){
     const Identity value{node.address,node.name,node.class_weak,node.class_address};const auto found=identities.find(node.weak);
     if(found==identities.end()){require(identities.size()<65536,"native lookup identity bound");identities.emplace(node.weak,value);}
@@ -1467,8 +1500,10 @@ int32_t describe_vertex_state(Obj world,Obj owner,Obj component,const HsmpViewGu
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t source_count,const uint64_t* handles,uint32_t mirror_count,const HsmpViewGuard* guard,HsmpViewResult* r){
+    PresentProviderTrace diagnostic(true);
     const std::lock_guard lock(mirror_mutex);
     try{initialize_result(r);thread();OperationScope scope(guard,world);
+        diagnostic.begin(mirror_count!=0&&source_count==0);
         require(pointers(source,source_count,32*64)&&pointers(handles,mirror_count,32)&&(!source_count||!mirror_count),"native vertex complete set arguments");
         std::vector<HsmpViewFinishTarget> targets;std::vector<const Mirror*> mesh_mirrors;if(source_count)targets.assign(source,source+source_count);
         for(uint32_t i=0;i<mirror_count;++i){
@@ -1481,7 +1516,7 @@ int32_t finish_scene_sets(Obj world,const HsmpViewFinishTarget* source,uint32_t 
         MeshWatch mesh_watch(mesh_mirrors);finish_scene_set(world,targets,r);
         for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.mesh){mesh_binding_final(*part.mesh);if(part.pose)pose_pure(*part.pose);}
         for(const auto* mirror:mesh_mirrors)for(const auto& part:mirror->parts)if(part.arm_publication)arm_publication_final(*part.arm_publication);
-        lookup_finish();r->complete=1;return 1;
+        lookup_finish();r->complete=1;diagnostic.complete=true;return 1;
     }catch(const std::exception& e){failure(r,e.what());return -1;}
 }
 #include "native_capture_impl.h"

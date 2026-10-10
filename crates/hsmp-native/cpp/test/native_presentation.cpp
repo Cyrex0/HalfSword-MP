@@ -171,6 +171,36 @@ struct CreateMarker {std::string stage,name;uint32_t edge,marker,component,kind,
 std::vector<CreateMarker> create_markers;
 void record_create(const char* stage,uint32_t edge,uint64_t operation,uint32_t marker,uint32_t component,
                    uint32_t kind,uint32_t function,const char* name){create_markers.push_back({stage,name,edge,marker,component,kind,function,operation});}
+struct PresentProfileRecord {uint64_t value{};uint32_t attempt{},complete{},bucket{};std::string stage;};
+std::vector<PresentProfileRecord> present_profile_records;bool present_profile_outside{};
+void record_present_profile(const char* stage,uint32_t complete,uint64_t value,uint32_t attempt,uint32_t bucket,uint32_t,uint32_t,const char*){
+    bool unlocked=mirror_mutex.try_lock();if(unlocked)mirror_mutex.unlock();
+    present_profile_outside=present_profile_outside&&unlocked&&!active_guard&&!active_lookup&&!active_capture_trace&&!present_provider_active;
+    present_profile_records.push_back({value,attempt,complete,bucket,stage});
+}
+void present_profile_checks(HsmpReflect& reflect){
+    lifetime_reset(reflect);present_apply_profile_attempts=present_finish_profile_attempts=0;present_finish_pending=false;present_profile_records.clear();present_profile_outside=true;
+    hsmp_presentation_set_create_log(nullptr);{PresentProviderTrace disabled;disabled.begin(true);check(!disabled.enabled&&present_apply_profile_attempts==0,"missing optional profiler logger consumes no bounded attempt");}
+    hsmp_presentation_set_create_log(record_present_profile);
+    {PresentProviderTrace cold;cold.begin(false);check(!cold.enabled,"cold mirror application does not consume warm profiling budget");}
+    int context=1;const HsmpViewGuard guard{&context,guard_check};
+    for(uint32_t attempt=0;attempt<3;++attempt){
+        try{PresentProviderTrace trace;const std::lock_guard lock(mirror_mutex);OperationScope scope(&guard,keep(&old_world));trace.begin(true);
+            if(attempt<2){check(trace.enabled&&active_capture_trace==&trace.row,"warm profiler installs only its stack-owned counter row");
+                {PresentProviderTrace nested;nested.begin(true);check(!nested.enabled,"nested provider work cannot consume or replace the original profiler");}
+                profile_tick(0);profile_tick(2);profile_tick(3);trace.row.us[5]=123;
+                if(attempt==1)throw Error("profile unwind");trace.complete=true;
+            }else check(!trace.enabled,"third warm application is outside the fixed two-attempt diagnostic budget");
+        }catch(const Error&){}
+        if(attempt<2){PresentProviderTrace finish(true);const std::lock_guard lock(mirror_mutex);OperationScope scope(&guard,keep(&old_world));finish.begin(true);check(finish.enabled,"pending warm application permits one matching aggregate finish profile");
+            check(finish.row.guards==0&&finish.row.finds==0&&finish.row.events==0,"matching finish starts with fresh counters after success or failure unwind");finish.complete=true;}
+    }
+    check(present_profile_records.size()==44&&present_apply_profile_attempts==2&&present_finish_profile_attempts==2,"two warm applies and matching finishes emit a fixed bounded copied profile");
+    check(present_profile_outside&&!present_provider_active&&!active_capture_trace,"all profile logging occurs after guard/cache/TLS and provider mutex unwind");
+    check(present_profile_records[0].complete==1&&present_profile_records[22].complete==0,"success and failure completion remain distinct in bounded profiler output");
+    check(present_profile_records[8].value==1&&present_profile_records[9].value==1&&present_profile_records[10].value==1,"existing guard/find/PE counter hooks populate the warm stack-owned record");
+    hsmp_presentation_set_create_log(nullptr);present_finish_pending=false;
+}
 void create_trace_checks(HsmpReflect& reflect){
     create_markers.reserve(128);hsmp_presentation_set_create_log(nullptr);
     {CreateTrace disabled;disabled.part(1,0);disabled.emit("fixture",0);disabled.terminal(1);}
@@ -1566,6 +1596,7 @@ int main() {
         skeletal_checks(reflect);
         batch_checks(reflect);
         pose_checks(reflect);
+        present_profile_checks(reflect);
         create_trace_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}

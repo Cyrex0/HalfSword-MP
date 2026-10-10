@@ -99,6 +99,11 @@ namespace
     void create_log(const char* stage,uint32_t edge,uint64_t operation,uint32_t marker,
                     uint32_t component,uint32_t kind,uint32_t function_id,const char* function_name)
     {
+        if(std::strcmp(stage,"present_apply_us")==0||std::strcmp(stage,"present_finish_us")==0){
+            const char* buckets[]={"instrumented_total","mesh_proof_inclusive","lookup_proof_inclusive","scene_prepare_inclusive","scene_final_inclusive","guard_inclusive","find","pe"};
+            logf("NATIVE_PRESENT_PROVIDER phase=%s attempt=%u complete=%u bucket=%s us=%llu inclusive_nonadditive=true diagnostic_only=true",function_name,marker,edge,component<8?buckets[component]:"unknown",static_cast<unsigned long long>(operation));return;}
+        if(std::strcmp(stage,"present_apply_count")==0||std::strcmp(stage,"present_finish_count")==0){
+            const char* counters[]={"guards","finds","pe"};logf("NATIVE_PRESENT_PROVIDER_COUNT phase=%s attempt=%u complete=%u counter=%s count=%llu diagnostic_only=true",function_name,marker,edge,component<3?counters[component]:"unknown",static_cast<unsigned long long>(operation));return;}
         if(std::strcmp(stage,"capture_lookup_counts")==0){logf("NATIVE_CAPTURE_LOOKUP path_hash=%u path=%.64s raw_finds=%llu cold=%u hit=%u bootstrap=%u capacity=%u diagnostic_only=true",function_id,function_name,static_cast<unsigned long long>(operation),marker,component,edge,kind);return;}
         if(std::strcmp(stage,"capture_lookup_time")==0){logf("NATIVE_CAPTURE_LOOKUP_TIME path_hash=%u path=%.64s find_us=%llu diagnostic_only=true",function_id,function_name,static_cast<unsigned long long>(operation));return;}
         if(std::strcmp(stage,"capture_lookup_summary")==0){logf("NATIVE_CAPTURE_LOOKUP_SUMMARY rows=%llu paths=%u untracked_events=%u status=%s diagnostic_only=true",static_cast<unsigned long long>(operation),marker,component,edge==1?"row_budget":edge==2?"cpp_failure":"next_frame_boundary");return;}

@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Attribute the first two warm native apply and finish operations to guard,
+  lookup, engine-call and proof time using bounded copied diagnostics after
+  operation scopes and locks unwind. Actual bottleneck measurements pending.
 - Share agreeing original mesh path and class witnesses within each native
   verification boundary, retaining fresh reads around all mesh ownership,
   world, flags and reference checks. Actual presentation timing is pending.

@@ -1,5 +1,18 @@
 # Native authority bootstrap checkpoint
 
+## Actual027f48e9: warm apply remains stale
+
+Normal012036-e89ef9/fullG0/dev/all394/auth34216/c20476/31100: all16warm attempts
+entryfresh/exitstale postapply; total1052–1342ms/apply813–1063/finish223–301ms.
+The per-boundary mesh dedup does not resolve whole presentation delay. Normal
+false/activeboth0; cleanupPASS4absent20savehashsame/nodumps/bothsecondary. Attribute
+actual apply/finish calls before another optimization; no tolerance/receipt change.
+Candidate firsttwo warm apply/finish profiles use existing stack counters;
+copied scalar logging after scope/TLS/mutex unwind, max44lines with inclusive
+nonadditive buckets. No new engine query/ABI/check/receipt change. Actual pending.
+Strict provider/fixture and1,744 checks pass; diagnostic review closed. Logger
+uses the existing stage/edge/value/marker signature; no public ABI change.
+
 ## Actual ce46189f: input binding fixed, local warm apply exceeds freshness
 
 Normal010930-fe6500/fullG0/dev/all394, auth44716 clients30896/47056, original
