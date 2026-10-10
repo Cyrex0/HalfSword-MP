@@ -668,7 +668,8 @@ function M.start()
                     if type(codec)=="table" and (codec.encode_samples or 0)>=8 then
                         codec_reported=true
                         log("compact codec: samples=%d raw_bytes=%d wire_bytes=%d encode_us=%d",codec.encode_samples,codec.raw_bytes,codec.wire_bytes,codec.encode_us)
-                        codec.state="native_compression";if HL then HL.event("x_native_worker",codec) end
+                        codec.state="native_compression";codec.reason="";codec.arena=arena
+                        if HL then HL.event("x_native_worker",codec) end
                     end
                 end
                 local rows, why = census()

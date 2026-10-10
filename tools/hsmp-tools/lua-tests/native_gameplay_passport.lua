@@ -31,6 +31,11 @@ local function class(path)
         IsValid=function()return path~=""end,GetFullName=function()return "BlueprintGeneratedClass "..path end}
 end
 local function name(value)return {ToString=function()return value end}end
+local function native_function(key,call)
+    return setmetatable({type=function()return "UFunction"end,IsValid=function()return true end,
+        GetFullName=function()return "Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:"..key end},
+        {__call=function(_,...)return call(...)end})
+end
 local equipment_fields={armor="ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358",
     sheaths="WeaponsinSlots_11_B42349384F5EF74DE78A7F870D89656A",hands="WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"}
 native=function(kind,value)
@@ -176,7 +181,7 @@ refused,reason=P.verify_equipment(recipe,env)
 T.check(refused==nil and reason:find("scope changed",1,true),"native held actor callback travel refuses verification")
 set_alive(true);env.weapon_guard=old_guard;values["Weapon R"]=nil;refused,reason=P.verify_equipment(recipe,env)
 T.check(refused==nil and reason:find("field unavailable",1,true),"unavailable wrapper is never inferred null")
-values["Weapon R"]=live;methods["Set Up Armor"]=function(_,clear,no_check)calls[#calls+1]={clear,no_check}end
+values["Weapon R"]=live;methods["Set Up Armor"]=native_function("Set Up Armor",function(_,clear,no_check)calls[#calls+1]={clear,no_check}end)
 refused,reason=P.setup_armor(recipe,env,{clear_previous=true})
 T.check(refused==nil and #calls==0,"missing native setup control refuses without invented boolean")
 ok,why=P.setup_armor(recipe,env,{clear_previous=false,no_check_block=true})
@@ -190,3 +195,49 @@ T.check(called[1]:GetFullName():match("^%S+%s+(.+)$")==weapon.class and called[1
 methods["Set Up Right Hand Weapon"]=function()live["Weapon Passport"][D.FIELDS.weapon[2][1]]=77 end
 refused,reason=P.setup_hand(recipe.equipment.weapons[1],0,env,{actor=live,dropped_with_no_damage=false,destroy_previous=true})
 T.check(refused==nil and reason:find("equipped hand passport differs",1,true),"native setup callback must produce the exact actual source weapon passport")
+do
+    local function restoring_environment()
+        local e,p,v,c,alive,_,m=environment(recipe)
+        assert(P.before_finish(recipe,e));v["Currently Equipped Armor"]=map({})
+        local reads={guard=e.guard,unwrap=function(x)return x:get()end,
+            class_path=function(x)return x:GetAddress()==0 and ""or x:GetFullName():match("^%S+%s+(.+)$")end}
+        local function character()return assert(D.read_passport("character",function()return v["Character Passport"]end,reads))end
+        local function construct()
+            local rows=assert(D.read_armor_map(function()return v["Character Passport"][D.FIELDS.character[7][1]][equipment_fields.armor]end,reads))
+            T.check(D.signature(rows)==D.signature(recipe.equipment.armor),"native update sees every captured live armor field through actual typed map")
+            local entries={};for _,r in ipairs(rows)do entries[r.slot]=native("armor",assert(P.marshal("armor",r.passport,e)))end
+            v["Currently Equipped Armor"]=map(entries)
+        end
+        m["Set Up Armor"]=native_function("Set Up Armor",function(_,clear,no_check)
+            c[#c+1]={clear,no_check};construct()
+        end)
+        return e,v,c,alive,m,character,construct
+    end
+    local e,v,c,alive,m,character,construct=restoring_environment()
+    local restored,error_reason=P.restore_live_armor(recipe,e)
+    T.check(restored==true and #c==1 and c[1][1]==false and c[1][2]==true,
+        "only a copied mismatch invokes proved native update(false,true) exactly once: "..tostring(error_reason))
+    T.check(D.signature(character())==D.signature(recipe.passport),"all captured construction fields/maps restored after live armor reconstruction")
+    restored,error_reason=P.restore_live_armor(recipe,e)
+    T.check(restored==true and #c==1,"exact existing live armor match never performs duplicate native gear initialization")
+    e,v,c,alive,m,character,construct=restoring_environment()
+    m["Set Up Armor"]=native_function("Set Up Armor",function()error("native armor update refused",0)end)
+    restored,error_reason=P.restore_live_armor(recipe,e)
+    T.check(restored==nil and error_reason:find("native armor update refused",1,true)and D.signature(character())==D.signature(recipe.passport),
+        "native update refusal preserves original error and restores complete construction passport")
+    e,v,c,alive,m,character,construct=restoring_environment()
+    m["Set Up Armor"]=native_function("Set Up Armor",function()
+        construct();v["Currently Equipped Armor"]:Find(12):get()[D.FIELDS.armor[4][1]]=77
+    end)
+    restored,error_reason=P.restore_live_armor(recipe,e)
+    T.check(restored==nil and error_reason:find("slot=12 field=module1",1,true)and error_reason:find("actual=77",1,true)
+        and D.signature(character())==D.signature(recipe.passport),"wrong native armor field gives precise copied diagnostic and still restores construction")
+    e,v,c,alive,m,character,construct=restoring_environment();v["Currently Equipped Armor"]=nil
+    restored,error_reason=P.restore_live_armor(recipe,e)
+    T.check(restored==nil and #c==0,"unavailable original armor map never triggers a guessed reconstruction")
+    e,v,c,alive,m,character,construct=restoring_environment()
+    m["Set Up Armor"]=native_function("Set Up Armor",function()alive(false)end)
+    restored,error_reason=P.restore_live_armor(recipe,e)
+    T.check(restored==nil and error_reason:find("scope changed",1,true)and error_reason:find("restoration refused",1,true),
+        "update callback world loss prevents old-pawn cleanup writes and reports failed restoration")
+end

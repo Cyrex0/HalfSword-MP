@@ -167,6 +167,42 @@ end
 local function equal(actual,expected,label)
     if D.signature(actual)~=D.signature(expected)then fail(label.." differs from source")end
 end
+local function diagnostic(value)
+    if type(value)=="number"then return math.type(value)=="integer"and tostring(value)or string.format("%a",value)end
+    if type(value)=="boolean"or value==nil then return tostring(value)end
+    if type(value)=="table"then return "table[count="..#value.."]"end
+    local quoted=string.format("%q",tostring(value));return #quoted>128 and quoted:sub(1,125).."..."or quoted
+end
+local function same_value(a,b)
+    if a==nil or b==nil then return a==b end
+    return D.signature(a)==D.signature(b)
+end
+local function armor_equal(actual,expected)
+    if D.signature(actual)==D.signature(expected)then return end
+    local detail="field=count expected="..#expected.." actual="..#actual
+    for i=1,math.max(#actual,#expected)do
+        local a,e=actual[i],expected[i]
+        if not a or not e or a.slot~=e.slot then
+            detail="field=slot expected="..diagnostic(e and e.slot).." actual="..diagnostic(a and a.slot)
+            break
+        end
+        local found=false
+        for _,field in ipairs(F.armor)do
+            local av,ev=a.passport[field[3]],e.passport[field[3]]
+            if D.signature(av)~=D.signature(ev)then
+                detail="slot="..e.slot.." field="..field[3].." expected="..diagnostic(ev).." actual="..diagnostic(av)
+                if type(av)=="table"and type(ev)=="table"then
+                    for n=1,math.max(#av,#ev)do if not same_value(av[n],ev[n])then
+                        detail=detail.." index="..n.." expected_element="..diagnostic(ev[n]).." actual_element="..diagnostic(av[n]);break
+                    end end
+                end
+                found=true;break
+            end
+        end
+        if found then break end
+    end
+    fail("native live armor differs from source: "..detail.." expected_count="..#expected.." actual_count="..#actual)
+end
 local function write(env,key,value)
     checked(env,function()current(env)[key]=value end)
 end
@@ -181,19 +217,13 @@ local function map_operation(env,getter,method,...)
         return value[method](value,table.unpack(args,1,args.n))
     end)
 end
-local function write_character(env,native)
-    local equipment_field
-    for _,field in ipairs(F.character)do
-        if field[2]=="equipment"then equipment_field=field[1]
-        else checked(env,function()current(env)["Character Passport"][field[1]]=native[field[1]]end)end
-    end
-    for _,key in ipairs({"armor","sheaths","hands"})do
+local function write_equipment_map(env,equipment_field,key,values)
         local map_field=equipment_fields[key]
         local function original_map()return current(env)["Character Passport"][equipment_field][map_field]end
         map_operation(env,original_map,"Empty")
-        local slots={};for slot in pairs(native[equipment_field][map_field])do slots[#slots+1]=slot end;table.sort(slots)
+        local slots={};for slot in pairs(values)do slots[#slots+1]=slot end;table.sort(slots)
         for _,slot in ipairs(slots)do
-            local value=native[equipment_field][map_field][slot]
+            local value=values[slot]
             local payload,flags,flags_field=value
             if key=="armor"then
                 payload={}
@@ -214,7 +244,14 @@ local function write_character(env,native)
                 for _,blocked_slot in ipairs(blocked)do map_operation(env,original_flags,"Add",blocked_slot,flags[blocked_slot])end
             end
         end
+end
+local function write_character(env,native)
+    local equipment_field
+    for _,field in ipairs(F.character)do
+        if field[2]=="equipment"then equipment_field=field[1]
+        else checked(env,function()current(env)["Character Passport"][field[1]]=native[field[1]]end)end
     end
+    for _,key in ipairs({"armor","sheaths","hands"})do write_equipment_map(env,equipment_field,key,native[equipment_field][equipment_fields[key]])end
 end
 function M.marshal(kind,record_value,env)
     local ok,value=pcall(function()validate_passport(kind,record_value);return marshal(kind,record_value,env)end)
@@ -268,7 +305,7 @@ function M.verify_equipment(recipe,env)
     local ok,why=pcall(function()
         local p=validate(recipe);local signature=D.signature(p);local r=reader(env)
         local armor,reason=D.read_armor_map(function()return current(env)["Currently Equipped Armor"]end,r)
-        if not armor then fail(reason)end;equal(armor,p.equipment.armor,"native live armor")
+        if not armor then fail(reason)end;armor_equal(armor,p.equipment.armor)
         local weapons,fields,addresses={},{},{}
         for _,w in ipairs(p.equipment.weapons)do weapons[w.id]=w end
         for _,h in ipairs(p.equipment.hands)do fields[h.slot==0 and "Weapon R" or "Weapon L"]=h.item end
@@ -312,16 +349,60 @@ function M.after_finish(recipe,env)
     end)
     if not ok then return nil,why end;return true
 end
+local function invoke_armor(env,clear_previous,no_check_block)
+    checked(env,function()
+        local pawn=current(env);local fn=pawn["Set Up Armor"]
+        if (type(fn)~="userdata"and type(fn)~="table")or fn:type()~="UFunction"or fn:IsValid()~=true or
+            fn:GetFullName()~="Function /Game/Character/Blueprints/Willie_BP.Willie_BP_C:Set Up Armor"then fail("native Set Up Armor unavailable")end
+        pawn=current(env);fn(pawn,clear_previous,no_check_block)
+    end)
+end
+-- Native armor update703 uses (false,true). Reconstruct only a successfully
+-- copied mismatch, with every source live passport; restore the original
+-- construction map before returning, including guarded error cleanup.
+function M.restore_live_armor(recipe,env)
+    local restore,original_signature
+    local ok,why=pcall(function()
+        local p=validate(recipe);original_signature=D.signature(p)
+        local armor,reason=D.read_armor_map(function()return current(env)["Currently Equipped Armor"]end,reader(env))
+        if not armor then fail(reason)end
+        if D.signature(armor)==D.signature(p.equipment.armor)then return end
+        local equipment_field=F.character[7][1]
+        local original,live={},{}
+        for _,row in ipairs(p.passport.equipment.armor)do original[row.slot]=marshal("armor",row.passport,env)end
+        for _,row in ipairs(p.equipment.armor)do live[row.slot]=marshal("armor",row.passport,env)end
+        local function read_character(expected)
+            local actual,error_reason=D.read_passport("character",function()return current(env)["Character Passport"]end,reader(env))
+            if not actual then fail(error_reason)end;equal(actual,expected,"native character passport")
+        end
+        read_character(p.passport)
+        local temporary={};for k,v in pairs(p.passport)do temporary[k]=v end
+        temporary.equipment={armor=p.equipment.armor,sheaths=p.passport.equipment.sheaths,hands=p.passport.equipment.hands}
+        restore=function()write_equipment_map(env,equipment_field,"armor",original);read_character(p.passport)end
+        write_equipment_map(env,equipment_field,"armor",live);read_character(temporary)
+        invoke_armor(env,false,true)
+        local actual,error_reason=D.read_armor_map(function()return current(env)["Currently Equipped Armor"]end,reader(env))
+        if not actual then fail(error_reason)end;armor_equal(actual,p.equipment.armor)
+        if D.signature(validate(recipe))~=original_signature then fail("gameplay source recipe changed")end
+    end)
+    local restored,restore_reason=true
+    if restore then restored,restore_reason=pcall(restore)end
+    if not ok then
+        if not restored then why=tostring(why).."; construction armor restoration refused: "..tostring(restore_reason)end
+        return nil,why
+    end
+    if not restored then return nil,"native construction armor restore failed: "..tostring(restore_reason)end
+    local stable,same=pcall(function()return D.signature(validate(recipe))==original_signature end)
+    if not stable or not same then return nil,"gameplay source recipe changed"end
+    return true
+end
 -- These controls are operation arguments, not captured passport fields. The
 -- caller must supply a proved native invocation; this helper supplies no defaults.
 function M.setup_armor(recipe,env,controls)
     local ok,why=pcall(function()
         validate(recipe);record(controls,{clear_previous=true,no_check_block=true},"native armor controls")
         if type(controls.clear_previous)~="boolean" or type(controls.no_check_block)~="boolean"then fail("native armor controls unsupported")end
-        checked(env,function()local pawn=current(env);local fn=pawn["Set Up Armor"]
-            if type(fn)~="function"then fail("native Set Up Armor unavailable")end
-            fn(pawn,controls.clear_previous,controls.no_check_block)
-        end)
+        invoke_armor(env,controls.clear_previous,controls.no_check_block)
     end)
     if not ok then return nil,why end;return M.verify_equipment(recipe,env)
 end

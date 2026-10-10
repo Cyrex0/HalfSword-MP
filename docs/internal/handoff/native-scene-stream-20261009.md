@@ -2,6 +2,33 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actuala6adc862 fullG0 passes Lua77/Rust1377/79, pusheddev/RequireG0/all396;
+standardGameplay040054-7fc376. First two source captures16204–16666 and16671–17109
+total905ms; later recapture700ms. Prior full render bootstrap28.382s, separate-run
+comparison. Two complete native recipes5603/5594 bytes. Eight actual gameplay
+encoder samples2568 raw application bytes→1258 compressed envelope bytes (51.01%
+smaller),22us aggregate encode; excludes UDP/auth overhead, no client decode timing
+emitted. Compression does not establish player capacity, combat or playability.
+Client1 native_beginPASS then passport stage refuses `native source/world operation
+guard changed`; client2 native_begin/constructPASS then live armor differs. No
+ready/full owned view/input/active dispatch0/0. Test stopped before independent
+secondary placement could observe visible originals; do not claim placementpass.
+CleanupPASS/four absent/save20 unchanged/nodumps. Evidence native_operator_summary
+at test-results/20261010-040054-7fc376-native-host. Fix codec diagnostic missing
+required arena/reason fields. Host stage guard and exact native live gear setup
+under investigation, no relaxed receipts/defaults or empty gear accepted.
+Primary stage code already separates bootstrap from250ms application receipt;
+no stage/freshness/guard semantics changed. Client2 armor error precedes client1
+guard refusal by53ms; first fix live gear before treating that second refusal as
+independent. Cooked native update703 calls Set Up Armor(false,true); initialization
+41256 calls(false,false), and no Clear Previous read exists in retained routine.
+Candidate stages exact captured live armor values in typed construction map,
+checks complete temporary passport, calls proved update(false,true), checks full
+live armor then restores/readbacks the full original construction passport even
+on qualified failure. Known matching gear skips update. Helper47/client121 Lua
+assertions PASS/syntax2 each; native retry pending. Early read-only identity-based
+window placement coordinator observes original test windows before fast failure.
+
 Actuale81c4868 fullG0/dev/RequireG0/all396 StandardGameplay033032-52d9ad
 passes client2 native_gameplay_begin (frame2/dir7), closing the Actor wrapper
 failure. Next native refusal is Character Passport's nested Equipment.ArmorinSlots

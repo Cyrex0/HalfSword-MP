@@ -159,6 +159,9 @@ function M.new(env)
                     local built,why=guarded(require_api("native_gameplay_construct"),row.handle)
                     if built~=true then fail(why or"native gameplay construction refused")end;row.stage="equipment"
                 elseif row.stage=="equipment"then
+                    if type(Passport.restore_live_armor)~="function"then fail("native gameplay live armor restoration unavailable")end
+                    local restored,restore_reason=Passport.restore_live_armor(row.recipe,passport_env(row))
+                    if restored~=true then fail(restore_reason or"native gameplay live armor restoration refused")end
                     local verified,why=Passport.verify_equipment(row.recipe,passport_env(row))
                     if verified~=true then fail(why or"native gameplay equipment differs from authority")end;row.stage="possess"
                 elseif row.stage=="possess"then
