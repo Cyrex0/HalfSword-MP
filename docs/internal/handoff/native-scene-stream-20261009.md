@@ -2,6 +2,35 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual ca155a21 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
+first Gameplay065719-bfde27 client travel begins~62s, startup deadlineFAIL with
+no gameplay. No visible UnrealWindow at early qualified placement; later pixels
+black startup only. Exact-build retry065951-f55e61 early secondaryPASS, both
+MirrorReady: client1 apply48241→48331ms then ready48348 (postapply17ms);
+client2 apply48225→48300 then ready48307 (postapply7ms). Separate run timings,
+not a normalized/live gear benchmark. First current samples hot/PE0,20–48us.
+Next scene13 is already stale at export: client1 age253.2867ms, client2 later
+575.0314ms. Neither reaches LIVE; source active input0/0. LIVE-only bounded
+timing does not cover this transition, so no successful live latency claim.
+Next fix READY→LIVE transient-gap lifecycle: refuse expired application/input/
+ACK while retaining original inert pawns and loading until genuinely fresh data.
+No receipt renewal, expiry relaxation, false readiness or world adoption.
+Both runs independent cleanupPASS/four absent/save20/no dumps/no unobserved
+children. Retry pixels show loading overlays only; no native model-pixel claim.
+Evidence both native_operator_summary.json. Observation gate still FAILS.
+Expiry lifecycle candidate frozen/review CLOSED: exact GP-only native result
+expiry waits at present/input/send; expired READY/LIVE results after cold pawn
+preparation refuse before movement/native apply/confirm. All unsuccessful
+protected applies revoke readiness; opaque loading retains original prepared
+pawns, with no physics-neutral/inert claim. Only a genuinely new fresh result
+can recover through unchanged full gear/apply/confirm. Unknown/prefixed/non-GP
+faults remain fatal; generation/world cleanup and original250ms receipt unchanged.
+Existing focused Lua client104/gameplay466 (570 total) and syntax4 PASS. Server
+ready-ACK read-only review found no defect: original proved tick11 remains valid
+when latest13 is in the same generation, without renewing/pinning the result.
+Actual ACK admission not logged; subsequent LIVE proof still required. FullG0/
+exact deployment/standard scenario next; no blind repeated loading retry.
+
 Actual aa7ad853 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
 standard Gameplay064450-95feb3 BOTH ready/live with native source input dispatch.
 Bounded timing closes first cause: client2 nativeapply17.004ms returns original

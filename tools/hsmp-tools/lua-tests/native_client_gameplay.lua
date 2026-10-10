@@ -103,6 +103,22 @@ for _,fault in ipairs({"clock_error","log_error"})do
     local ok,actual=f.game:apply(f.scene)
     check(ok==true and actual==f.scene and f.confirmed==1,"optional diagnostic failure never changes native readiness or original result")
 end
+for _,state in ipairs({1,2})do
+    local f=fixture();f:bootstrap();f.scene.state=state;f.scene.gameplay_proof=true
+    check(f.game:apply(f.scene)==true,"original fresh gameplay result establishes view proof")
+    local actions,applies,confirms,armor,weapons=#f.actions,f.apply_count,f.confirmed,f.armor,f.weapons
+    local original=f.scene;original.fresh=false
+    local ok,why=f.game:apply(original)
+    check(ok==nil and why=="native gameplay result is stale"and not f.game:view_ready(original)and#f.actions==actions and f.apply_count==applies and f.confirmed==confirms,
+        "completed stale READY/LIVE result clears view proof before movement, native application or confirmation")
+    f.scene={};for key,value in pairs(original)do f.scene[key]=value end
+    f.scene.fresh=true;f.scene.frame_seq=41;f.scene.authority_tick=41
+    local applied,actual=f.game:apply(f.scene)
+    check(applied==true and actual==f.scene and f.game:view_ready(actual)and f.armor==armor and f.weapons==weapons and original.fresh==false and original.frame_seq==40,
+        "new fresh gameplay result reuses prepared pawns and all full gear checks without renewing the old result")
+    f.confirm_error="native gameplay result is stale";ok,why=f.game:apply(f.scene)
+    check(ok==nil and why==f.confirm_error and not f.game:view_ready(f.scene),"expiry after full gear/native apply removes the previous positive view proof")
+end
 do
     local f=fixture();f:bootstrap()
     check(table.concat(f.calls,",")=="begin1,passport1,construct1,armor1,weapons1,gear1,possess1,gear1,begin2,passport2,construct2,armor2,weapons2,gear2,possess2,gear2","native construction/live armor/weapons/gear/possession order including post-possession proof")

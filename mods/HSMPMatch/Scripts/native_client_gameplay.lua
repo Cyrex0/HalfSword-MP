@@ -191,6 +191,7 @@ function M.new(env)
                 end
                 return nil,PENDING
             end
+            if scene.fresh~=true then return nil,"native gameplay result is stale"end
             if scene.state==2 and type(env.diagnostic)=="function"and(self.timing_reports<8 or not self.timing_failure)then
                 started=clock();if started then
                     phase_started=started;trace={epoch=scene.epoch,dir_seq=scene.dir_seq,frame_seq=scene.frame_seq,authority_tick=scene.authority_tick,
@@ -244,6 +245,7 @@ function M.new(env)
             if type(final)~="table"or final.generation~=self.key or final.gameplay_proof~=true then fail("native gameplay final native proof unavailable")end
             self.ready=true;return true,final
         end)
+        if not(ok and result==true)then self.ready=false end
         if trace then
             local tick=clock();if tick then
                 trace[trace.stage.."_us"]=tick-phase_started;trace.total_us=tick-started

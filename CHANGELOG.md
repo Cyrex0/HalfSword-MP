@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Wait for a genuinely fresh native gameplay result after transient expiry,
+  retaining prepared pawns under loading without new input or stale readiness.
 - Record bounded native gameplay timings after verification to identify live
   freshness failures without changing gear checks or receipt expiry.
 - Add negotiated lossless LZ4 blocks for native scene bootstrap and compact

@@ -75,12 +75,13 @@ check(not travel:tick()and travels==1,"same arena still travels to the isolated 
 check(not travel:tick()and travels==1,"pending travel cannot repeat against the old world")
 key="new";clean=true;check(travel:tick()and travels==1,"new isolated world can create mirrors")
 do
-    local function fixture()
+    local function fixture(gameplay)
         local v={time=0,world="world1",epoch=77,dir_seq=4,dir_state=1,clears=0,closes=0,presents=0,inputs=0,sends=0,reports={}}
         v.scene={epoch=77,dir_seq=4,frame_seq=10,state=1,peer_id=9001,generation="recipe4",fresh=true,
             entities={{epoch=77,id=1,incarnation=3,owner_peer=9001,kind=0},{epoch=77,id=2,incarnation=2,owner_peer=9002,kind=0}}}
         v.applied=v.scene
-        v.core=Core.new({now=function()return v.time end,link=function()return{connected=true}end,
+        v.scene.gameplay_proof=gameplay==true
+        v.core=Core.new({gameplay=gameplay,now=function()return v.time end,link=function()return{connected=true}end,
             directory=function()return{epoch=v.epoch,seq=v.dir_seq,state=v.dir_state,arena="Map_Arena_Yard"}end,
             world=function()return{ready=true,arena="Map_Arena_Yard",key=v.world}end,isolated=function()return true end,
             scene=function()return v.scene end,present=function()
@@ -159,6 +160,24 @@ do
     v.on_present=nil;check(v.core:tick()and v.core.state=="mirror_ready","completed assets recover into actual native presentation readiness")
     v=fixture();v.on_present=function()return nil,"native scene assets loading failed"end
     check(not v.core:tick()and v.core.stopped and v.closes==1,"arbitrary preparation errors retain existing fatal semantics")
+    v=fixture(true);v.core:tick();clear_count=v.clears;local expired=v.scene;expired.fresh=false
+    v.on_present=function()return nil,"native gameplay result is stale"end
+    check(not v.core:tick()and v.core.state=="wait_scene"and not v.core.stopped and v.clears==clear_count and v.closes==0 and v.inputs==0 and v.sends==0,
+        "expired gameplay READY result waits with original prepared pawns and no readiness or input")
+    v.scene={};for key,value in pairs(expired)do v.scene[key]=value end
+    v.scene.frame_seq=11;v.scene.state=2;v.scene.fresh=true;v.applied=v.scene;v.dir_state=2;v.on_present=nil
+    check(v.core:tick()and v.core.state=="live"and v.sends==1 and v.clears==clear_count and expired.fresh==false and expired.frame_seq==10,
+        "a genuinely fresh gameplay result recovers without recreating pawns or renewing the expired result")
+    for _,boundary in ipairs({"input","send"})do
+        v=fixture(true);v.scene.state=2;v.dir_state=2
+        if boundary=="input"then v.input_refusal="native gameplay result is stale"else v.send_refusal="native gameplay result is stale"end
+        check(not v.core:tick()and v.core.state=="wait_scene"and not v.core.stopped and v.closes==0 and(boundary~="input"or v.sends==0),
+            "exact gameplay expiry at "..boundary.." boundary waits without successful stale input")
+    end
+    v=fixture();v.on_present=function()return nil,"native gameplay result is stale"end
+    check(not v.core:tick()and v.core.stopped and v.closes==1,"gameplay-specific expiry is not a generic provider error escape")
+    v=fixture(true);v.on_present=function()return nil,"native gameplay result is stale: identity changed"end
+    check(not v.core:tick()and v.core.stopped and v.closes==1,"unknown gameplay failures remain fatal rather than matching an expiry prefix")
 end
 local Isolation=dofile("mods/HSMPMatch/Scripts/native_client_isolation.lua")
 do

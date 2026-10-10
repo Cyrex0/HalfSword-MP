@@ -14,6 +14,9 @@ function M.new(env)
         if self.state~="wait_scene" or env.now()-self.reported_at>=1 then report("wait_scene",reason,scene,own)end
         return false
     end
+    local function gameplay_expired(reason)
+        return env.gameplay and reason=="native gameplay result is stale"
+    end
     local function owned(scene)
         for _,entity in ipairs(scene.entities or {})do
             if entity.owner_peer==scene.peer_id and entity.kind==0 then return entity end
@@ -86,7 +89,7 @@ function M.new(env)
         local applied,why=env.present(scene)
         if applied~=true and why=="client mirror generation"then clear_scope();return waiting(why)end
         if applied~=true and (why=="no complete current source scene"or why=="no coherent native scene"or why=="native applied scene is stale"or why=="native scene assets loading"or
-            (env.gameplay and (why=="native gameplay pawn preparing"or why=="native gameplay own native view target pending"or why=="native gameplay own camera manager pending")))then return waiting(why,scene,own)end
+            gameplay_expired(why)or(env.gameplay and (why=="native gameplay pawn preparing"or why=="native gameplay own native view target pending"or why=="native gameplay own camera manager pending")))then return waiting(why,scene,own)end
         if applied~=true then report("error",why or "source-complete mirror refused",scene,own);self:stop(why or "mirror refused");return false end
         if type(why)~="table"then self:stop("native applied scene unavailable");return false end
         scene=why
@@ -109,14 +112,14 @@ function M.new(env)
             if scene.fresh~=true then return waiting("native applied scene is stale",scene,own)end
             local axes,buttons=env.input(scene,own)
             if not axes then
-                if buttons=="native applied scene is stale"or buttons=="native source or mirrors not ready"then return waiting(buttons,scene,own)end
+                if buttons=="native applied scene is stale"or buttons=="native source or mirrors not ready"or gameplay_expired(buttons)then return waiting(buttons,scene,own)end
                 self:stop(buttons or "input unavailable");return false
             end
             self.seq=self.seq+1
             if self.seq>0xffffffff then self:stop("input counter exhausted");return false end
             local sent,reason=env.send({epoch=own.epoch,id=own.id,incarnation=own.incarnation,seq=self.seq,axes=axes,buttons=buttons})
             if sent~=true then
-                if reason=="native applied scene is stale"or reason=="native source or mirrors not ready"then return waiting(reason,scene,own)end
+                if reason=="native applied scene is stale"or reason=="native source or mirrors not ready"or gameplay_expired(reason)then return waiting(reason,scene,own)end
                 self:stop(reason or "input refused");return false
             end
         end
