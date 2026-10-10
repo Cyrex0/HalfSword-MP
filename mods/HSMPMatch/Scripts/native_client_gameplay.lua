@@ -1,8 +1,18 @@
 -- Native pawn bootstrap. Receipt, construction and possession are separate.
 local M={}
 local PENDING="native gameplay pawn preparing"
+local BOOTSTRAP_KEYS={schema=true,actor_class=true,team=true,passport=true,construction=true,equipment=true}
 local function fail(reason)error(reason,0)end
 local function exact_integer(v)return math.type(v)=="integer" and v>=0 end
+local function bootstrap(recipe)
+    if type(recipe)~="table" or getmetatable(recipe)~=nil or recipe.schema~=1 then fail("native gameplay bootstrap schema unavailable")end
+    for key in pairs(recipe)do if not BOOTSTRAP_KEYS[key]then fail("native gameplay bootstrap field unsupported")end end
+    for key in pairs(BOOTSTRAP_KEYS)do if rawget(recipe,key)==nil then fail("native gameplay complete bootstrap unavailable")end end
+    if type(recipe.actor_class)~="string" or recipe.actor_class=="" or math.type(recipe.team)~="integer" or
+        type(recipe.passport)~="table" or type(recipe.construction)~="table" or type(recipe.equipment)~="table"then
+        fail("native gameplay bootstrap fields unavailable")
+    end
+end
 local function identity(scene)
     if type(scene)~="table" or type(scene.generation)~="string" or scene.generation=="" or
         math.type(scene.epoch)~="integer" or scene.epoch==0 or not exact_integer(scene.dir_seq)then fail("native gameplay scene generation unavailable")end
@@ -12,6 +22,7 @@ local function identity(scene)
         if type(row)~="table" or row.epoch~=scene.epoch or not exact_integer(row.id) or row.id==0 or
             not exact_integer(row.incarnation) or not exact_integer(row.revision) or row.revision==0 or
             type(row.recipe)~="table" or seen[row.id]then fail("native gameplay recipe binding unavailable")end
+        bootstrap(row.recipe)
         seen[row.id]=index
         if row.owner_peer==scene.peer_id and row.kind==0 then
             if own then fail("native gameplay ambiguous owned human")end;own=row

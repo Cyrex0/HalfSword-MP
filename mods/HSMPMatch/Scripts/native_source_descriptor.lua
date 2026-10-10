@@ -191,12 +191,42 @@ local function harvest(env)
     return {schema=M.SCHEMA,actor_class=actor_class,team=team,passport=passport,construction=construction,
         equipment=gear,components=render.components,topology=render.topology}
 end
-function M.capture(env)
+local function harvest_gameplay(env)
+    phase(env,"harvest","enter")
+    phase(env,"passport","enter",{getter="Willie.Character Passport"})
+    local passport=read_struct("character",env.character,env)
+    local actor_class=access(env,env.actor_class)
+    if not text(actor_class,512,false)then fail("source actor class unavailable")end
+    local team=access(env,env.team)
+    if not finite(team)or not math.tointeger(team)or team< -0x80000000 or team>0x7fffffff then fail("native team unavailable")end
+    phase(env,"passport","exit",{ok=true})
+    phase(env,"equipment","enter",{getter="Willie.Currently Equipped Armor/Weapon Passport"})
+    local armor,why=M.read_armor_map(env.current_armor,env);if not armor then fail(why)end
+    local construction=plain(access(env,env.construction),0,{n=0})
+    local gear=plain(access(env,env.live_weapons),0,{n=0})
+    if type(gear.weapons)~="table"or type(gear.hands)~="table"or type(gear.sheaths)~="table"then fail("source live weapons unavailable")end
+    for _,weapon in ipairs(gear.weapons)do
+        for key in pairs(weapon)do
+            if key~="id"and key~="actor_class"and key~="passport"then fail("gameplay source weapon field unsupported")end
+        end
+    end
+    gear.armor=armor
+    phase(env,"equipment","exit",{ok=true,count=#gear.weapons})
+    guard(env)
+    phase(env,"harvest","exit",{ok=true,count=#gear.weapons})
+    return {schema=1,actor_class=actor_class,team=team,passport=passport,construction=construction,equipment=gear}
+end
+local function capture(env,harvester)
     if type(env)~="table"then return nil,"source adapter unavailable"end
     env.pass=1
-    local ok,first=pcall(harvest,env);if not ok then phase(env,"harvest","exit",{ok=false,reason=tostring(first)});return nil,first end
+    local ok,first=pcall(harvester,env);if not ok then phase(env,"harvest","exit",{ok=false,reason=tostring(first)});return nil,first end
+    if env.after_first then
+        local bound,reason=pcall(env.after_first)
+        if not bound then return nil,reason end
+        if not pcall(guard,env)then return nil,"source scope changed"end
+    end
     env.pass=2
-    local again,second=pcall(harvest,env);if not again then phase(env,"harvest","exit",{ok=false,reason=tostring(second)});return nil,second end
+    local again,second=pcall(harvester,env);if not again then phase(env,"harvest","exit",{ok=false,reason=tostring(second)});return nil,second end
     phase(env,"signature","enter",{getter="SourceDescriptor.signature"})
     local compared,a,b=pcall(function()return M.signature(first),M.signature(second)end)
     phase(env,"signature","exit",{ok=compared and a==b})
@@ -204,4 +234,6 @@ function M.capture(env)
     local same=pcall(guard,env);if not same then return nil,"source scope changed"end
     return first
 end
+function M.capture(env)return capture(env,harvest)end
+function M.capture_gameplay(env)return capture(env,harvest_gameplay)end
 return M

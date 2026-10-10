@@ -2,7 +2,7 @@
 //! implicit field default, or network publication occurs in this parser.
 use crate::lua::*;
 use hsmp_server::native_descriptor::{
-    MAX_RECIPE_DEPTH, MAX_RECIPE_NODES, MAX_RECIPE_STRING_BYTES, SourceRecipe,
+    SourceRecipe, MAX_RECIPE_DEPTH, MAX_RECIPE_NODES, MAX_RECIPE_STRING_BYTES,
 };
 use serde_json::{Map, Number, Value};
 use std::ffi::c_int;
@@ -144,6 +144,23 @@ pub unsafe fn read_recipe(L: *mut lua_State, index: c_int) -> Result<SourceRecip
             recipe
                 .canonical_bytes()
                 .map_err(|reason| format!("{reason}: {}", stats.diagnostic()))?;
+            Ok(recipe)
+        })();
+        lua_settop(L, top);
+        result
+    }
+}
+pub unsafe fn read_gameplay_recipe(
+    L: *mut lua_State,
+    index: c_int,
+) -> Result<hsmp_server::native_gameplay_wire::Recipe, String> {
+    unsafe {
+        let top = lua_gettop(L);
+        let result = (|| {
+            let value = copied_value(L, index, 0, &mut 0, false)?;
+            let recipe: hsmp_server::native_gameplay_wire::Recipe =
+                serde_json::from_value(value).map_err(|_| "gameplay recipe schema")?;
+            recipe.validate().map_err(str::to_owned)?;
             Ok(recipe)
         })();
         lua_settop(L, top);

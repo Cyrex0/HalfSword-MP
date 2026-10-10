@@ -5,7 +5,7 @@ local source=(debug.getinfo(1,"S").source or ""):gsub("^@","")
 local directory=source:match("^(.*)[/\\]") or "."
 local D=dofile(directory.."/native_source_descriptor.lua")
 local F=D.FIELDS
-local M={}
+local M={SCHEMA=1}
 local equipment_fields={armor="ArmorinSlots_5_BD7AC6CB43FBB2FDB943E7864486F358",
     sheaths="WeaponsinSlots_11_B42349384F5EF74DE78A7F870D89656A",hands="WeaponinHands_23_B3FE643741AF91A6DFE51888205C0F05"}
 local condition_fields={"HeadHealth_2_61859BB444171EF8952E0FA5DD8628EE","NeckHealth_4_C658DC6A4BD1988C40F1A5B3C4F8F4EE",
@@ -71,7 +71,8 @@ validate_passport=function(kind,value)
     end
 end
 local function validate(recipe)
-    if type(recipe)~="table" or recipe.schema~=D.SCHEMA then fail("gameplay source recipe schema")end
+    if type(recipe)~="table" or recipe.schema~=M.SCHEMA then fail("gameplay source recipe schema")end
+    record(recipe,{schema=true,actor_class=true,team=true,passport=true,construction=true,equipment=true},"gameplay recipe")
     asset(recipe.actor_class,false);if not integer(recipe.team,-0x80000000,0x7fffffff)then fail("gameplay source team")end
     validate_passport("character",recipe.passport)
     local c=recipe.construction;local keys={start_body_condition=true,actor_scale=true}
@@ -88,11 +89,9 @@ local function validate(recipe)
     for _,row in ipairs(e.armor)do if row.passport.class==""then fail("live armor class")end end
     array(e.weapons,32,"live weapons");local ids={}
     for _,w in ipairs(e.weapons)do
-        record(w,{id=true,actor_class=true,passport=true,components=true},"live weapon")
+        record(w,{id=true,actor_class=true,passport=true},"live weapon")
         if not integer(w.id,1,32) or ids[w.id]then fail("live weapon id")end
         ids[w.id]=w;asset(w.actor_class,false);validate_passport("weapon",w.passport)
-        array(w.components,64,"weapon components")
-        local prior=0;for _,id in ipairs(w.components)do if not integer(id,1,64) or id<=prior then fail("weapon component id")end;prior=id end
     end
     array(e.hands,2,"live hands");local prior=-1
     for _,r in ipairs(e.hands)do record(r,{slot=true,item=true},"live hand")
@@ -171,6 +170,52 @@ end
 local function write(env,key,value)
     checked(env,function()current(env)[key]=value end)
 end
+-- The pinned nested table->TMap setter iterates stack slot1 instead of its
+-- supplied field index. Use actual typed maps, with no borrowed row surviving
+-- Empty/Add or an original-pawn qualification callback.
+local function map_operation(env,getter,method,...)
+    local args=table.pack(...)
+    return checked(env,function()
+        local value=getter()
+        if not value or value:type()~="TMap" then fail("native passport typed map unavailable")end
+        return value[method](value,table.unpack(args,1,args.n))
+    end)
+end
+local function write_character(env,native)
+    local equipment_field
+    for _,field in ipairs(F.character)do
+        if field[2]=="equipment"then equipment_field=field[1]
+        else checked(env,function()current(env)["Character Passport"][field[1]]=native[field[1]]end)end
+    end
+    for _,key in ipairs({"armor","sheaths","hands"})do
+        local map_field=equipment_fields[key]
+        local function original_map()return current(env)["Character Passport"][equipment_field][map_field]end
+        map_operation(env,original_map,"Empty")
+        local slots={};for slot in pairs(native[equipment_field][map_field])do slots[#slots+1]=slot end;table.sort(slots)
+        for _,slot in ipairs(slots)do
+            local value=native[equipment_field][map_field][slot]
+            local payload,flags,flags_field=value
+            if key=="armor"then
+                payload={}
+                for _,field in ipairs(F.armor)do
+                    if field[2]=="flags"then flags,flags_field=value[field[1]],field[1]
+                    else payload[field[1]]=value[field[1]]end
+                end
+            end
+            map_operation(env,original_map,"Add",slot,payload)
+            if flags_field then
+                local function original_flags()
+                    local entry=original_map():Find(slot):get()
+                    if not entry then fail("native passport map row unavailable")end
+                    return entry[flags_field]
+                end
+                map_operation(env,original_flags,"Empty")
+                local blocked={};for blocked_slot in pairs(flags)do blocked[#blocked+1]=blocked_slot end;table.sort(blocked)
+                for _,blocked_slot in ipairs(blocked)do map_operation(env,original_flags,"Add",blocked_slot,flags[blocked_slot])end
+            end
+        end
+    end
+end
 function M.marshal(kind,record_value,env)
     local ok,value=pcall(function()validate_passport(kind,record_value);return marshal(kind,record_value,env)end)
     if not ok then return nil,value end;return value
@@ -195,7 +240,7 @@ function M.before_finish(recipe,env)
         if class_path(env,actual)~=p.actor_class then fail("native deferred pawn class mismatch")end
         local native=marshal("character",p.passport,env)
         if D.signature(validate(recipe))~=signature then fail("gameplay source recipe changed")end
-        write(env,"Character Passport",native);write(env,"Team Int",p.team)
+        write_character(env,native);write(env,"Team Int",p.team)
         local condition={};for i,key in ipairs(condition_fields)do condition[key]=p.construction.start_body_condition[i]end
         write(env,"Start Body Condition",condition)
         for _,field in ipairs(construction_fields)do local v=p.construction[field[1]]
@@ -282,7 +327,8 @@ function M.setup_armor(recipe,env,controls)
 end
 function M.setup_hand(record_value,side,env,controls)
     local ok,why=pcall(function()
-        record(record_value,{id=true,actor_class=true,passport=true,components=true},"live weapon")
+        record(record_value,{id=true,actor_class=true,passport=true},"live weapon")
+        if not integer(record_value.id,1,32)then fail("live weapon id")end
         asset(record_value.actor_class,false);validate_passport("weapon",record_value.passport)
         if side~=0 and side~=1 then fail("native hand slot")end
         record(controls,{dropped_with_no_damage=true,destroy_previous=true,actor=true},"native hand controls")

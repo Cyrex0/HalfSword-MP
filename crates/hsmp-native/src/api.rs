@@ -33,7 +33,9 @@ enum CallerAdmission {
 }
 
 fn caller_admission_state(n: &Native) -> CallerAdmission {
-    if n.poisoned { return CallerAdmission::NativePoisoned; }
+    if n.poisoned {
+        return CallerAdmission::NativePoisoned;
+    }
     match n.game_thread {
         None => CallerAdmission::FrameThreadUnset,
         Some(t) if t == std::thread::current().id() => CallerAdmission::Allowed,
@@ -76,10 +78,17 @@ mod caller_guard_tests {
         assert!(!l.is_null());
         unsafe { ffi::lua_close(l) };
         let mut n = Native::new();
-        assert_eq!(caller_admission_state(&n), CallerAdmission::FrameThreadUnset);
+        assert_eq!(
+            caller_admission_state(&n),
+            CallerAdmission::FrameThreadUnset
+        );
         n.game_thread = Some(std::thread::current().id());
         assert_eq!(caller_admission_state(&n), CallerAdmission::Allowed);
-        n.game_thread = Some(std::thread::spawn(|| std::thread::current().id()).join().unwrap());
+        n.game_thread = Some(
+            std::thread::spawn(|| std::thread::current().id())
+                .join()
+                .unwrap(),
+        );
         assert_eq!(caller_admission_state(&n), CallerAdmission::WrongThread);
         n.game_thread = Some(std::thread::current().id());
         n.poisoned = true;
@@ -88,7 +97,10 @@ mod caller_guard_tests {
     #[test]
     fn caller_guard_busy_is_unavailable() {
         let _held = global().lock().unwrap();
-        assert_eq!(hsmp_native_caller_admission(), CallerAdmission::WouldBlock as c_int);
+        assert_eq!(
+            hsmp_native_caller_admission(),
+            CallerAdmission::WouldBlock as c_int
+        );
         assert_eq!(hsmp_native_caller_thread_ok(), 0);
     }
     #[test]
@@ -98,8 +110,13 @@ mod caller_guard_tests {
         assert!(std::thread::spawn(move || {
             let _held = worker.lock().unwrap();
             panic!("fixture poisons only its local mutex");
-        }).join().is_err());
-        assert_eq!(caller_admission_once(&native), CallerAdmission::MutexPoisoned);
+        })
+        .join()
+        .is_err());
+        assert_eq!(
+            caller_admission_once(&native),
+            CallerAdmission::MutexPoisoned
+        );
         assert!(native.is_poisoned());
     }
     #[test]
@@ -108,7 +125,10 @@ mod caller_guard_tests {
         n.game_thread = Some(std::thread::current().id());
         let native = Mutex::new(n);
         assert_eq!(catch_caller_admission(|| caller_admission_once(&native)), 0);
-        assert_eq!(catch_caller_admission(|| panic!("diagnostic boundary")), CallerAdmission::Panic as c_int);
+        assert_eq!(
+            catch_caller_admission(|| panic!("diagnostic boundary")),
+            CallerAdmission::Panic as c_int
+        );
     }
 }
 
@@ -232,6 +252,7 @@ entry! {
     l_native_gameplay_clear => Guard::GameThread, |n,L| n.native_gameplay_clear(L);
     l_native_inspect_component => Guard::GameThread, |n,L| n.native_inspect_component(L);
     l_host_describe => Guard::GameThread, |n,L| n.host_describe(L);
+    l_host_gameplay_describe => Guard::GameThread, |n,L| n.host_gameplay_describe(L);
     l_native_source_roster_facts => Guard::GameThread, |n,L| n.native_source_roster_facts(L);
     l_native_source_scope_begin => Guard::GameThread, |n,L| n.source_scope_begin(L);
     l_native_source_scope_keep => Guard::GameThread, |n,L| n.source_scope_keep(L);
@@ -321,36 +342,43 @@ const FUNCS: &[(&str, lua_CFunction)] = &[
     ("host_parent_alive", l_host_parent_alive),
     ("native_input", l_native_input),
     ("native_snapshot", l_native_snapshot),
-    ("native_gameplay_sample",l_native_gameplay_sample),
-    ("native_gameplay_scene",l_native_gameplay_scene),
-    ("native_gameplay_metrics",l_native_gameplay_metrics),
-    ("native_gameplay_begin",l_native_gameplay_begin),
-    ("native_gameplay_current",l_native_gameplay_current),
-    ("native_gameplay_construct",l_native_gameplay_construct),
-    ("native_gameplay_finish",l_native_gameplay_finish),
-    ("native_gameplay_apply",l_native_gameplay_apply),
-    ("native_gameplay_confirm",l_native_gameplay_confirm),
-    ("native_gameplay_clear",l_native_gameplay_clear),
-    ("native_inspect_component",l_native_inspect_component),
-    ("host_describe",l_host_describe),
-    ("native_source_roster_facts",l_native_source_roster_facts),
-    ("native_source_scope_begin",l_native_source_scope_begin),
-    ("native_source_scope_keep",l_native_source_scope_keep),
-    ("native_source_scope_resolve",l_native_source_scope_resolve),
-    ("native_source_scope_end",l_native_source_scope_end),
-    ("native_source_scope_spline_profile",l_native_source_scope_spline_profile),
-    ("native_source_scope_vertex_state",l_native_source_scope_vertex_state),
-    ("native_capture_render",l_native_capture_render),
-    ("native_scene",l_native_scene),
-    ("native_present",l_native_present),
-    ("native_clear_mirrors",l_native_clear_mirrors),
-    ("native_retire_actor",l_native_retire_actor),
-    ("native_actor_scope",l_native_actor_scope),
-    ("native_probe_retirement",l_native_probe_retirement),
-    ("native_forget_retirements",l_native_forget_retirements),
-    ("native_client_status",l_native_client_status),
-    ("native_key_state",l_native_key_state),
-    ("native_scene_assets",l_native_scene_assets),
+    ("native_gameplay_sample", l_native_gameplay_sample),
+    ("native_gameplay_scene", l_native_gameplay_scene),
+    ("native_gameplay_metrics", l_native_gameplay_metrics),
+    ("native_gameplay_begin", l_native_gameplay_begin),
+    ("native_gameplay_current", l_native_gameplay_current),
+    ("native_gameplay_construct", l_native_gameplay_construct),
+    ("native_gameplay_finish", l_native_gameplay_finish),
+    ("native_gameplay_apply", l_native_gameplay_apply),
+    ("native_gameplay_confirm", l_native_gameplay_confirm),
+    ("native_gameplay_clear", l_native_gameplay_clear),
+    ("native_inspect_component", l_native_inspect_component),
+    ("host_describe", l_host_describe),
+    ("host_gameplay_describe", l_host_gameplay_describe),
+    ("native_source_roster_facts", l_native_source_roster_facts),
+    ("native_source_scope_begin", l_native_source_scope_begin),
+    ("native_source_scope_keep", l_native_source_scope_keep),
+    ("native_source_scope_resolve", l_native_source_scope_resolve),
+    ("native_source_scope_end", l_native_source_scope_end),
+    (
+        "native_source_scope_spline_profile",
+        l_native_source_scope_spline_profile,
+    ),
+    (
+        "native_source_scope_vertex_state",
+        l_native_source_scope_vertex_state,
+    ),
+    ("native_capture_render", l_native_capture_render),
+    ("native_scene", l_native_scene),
+    ("native_present", l_native_present),
+    ("native_clear_mirrors", l_native_clear_mirrors),
+    ("native_retire_actor", l_native_retire_actor),
+    ("native_actor_scope", l_native_actor_scope),
+    ("native_probe_retirement", l_native_probe_retirement),
+    ("native_forget_retirements", l_native_forget_retirements),
+    ("native_client_status", l_native_client_status),
+    ("native_key_state", l_native_key_state),
+    ("native_scene_assets", l_native_scene_assets),
     ("servo_config", l_servo_config),
     ("servo_bodies", l_servo_bodies),
     ("servo_weapon", l_servo_weapon),
@@ -375,7 +403,12 @@ unsafe fn push_api(L: *mut lua_State, impl_tag: &str) {
         set_str(L, t, "_impl", impl_tag);
         set_str(L, t, "version", env!("CARGO_PKG_VERSION"));
         set_int(L, t, "ABI_MAJOR", hsmp_ipc::ABI_MAJOR as i64);
-        set_str(L, t, "LAYOUT_HASH", &format!("{:016x}", hsmp_ipc::LAYOUT_HASH));
+        set_str(
+            L,
+            t,
+            "LAYOUT_HASH",
+            &format!("{:016x}", hsmp_ipc::LAYOUT_HASH),
+        );
         let main = main_thread(L);
         if let Ok(mut n) = global().lock() {
             n.register_state(main);
@@ -390,7 +423,10 @@ unsafe fn push_api(L: *mut lua_State, impl_tag: &str) {
 /// # Safety
 /// `L` must be a valid Lua state of the same Lua 5.4.7 ABI; `mod_name` null or a C string.
 #[no_mangle]
-pub unsafe extern "C-unwind" fn hsmp_native_open(L: *mut lua_State, mod_name: *const c_char) -> c_int {
+pub unsafe extern "C-unwind" fn hsmp_native_open(
+    L: *mut lua_State,
+    mod_name: *const c_char,
+) -> c_int {
     let r = catch_unwind(AssertUnwindSafe(|| unsafe {
         let _ = IMPL.set("F");
         let top = lua_gettop(L);
@@ -447,7 +483,11 @@ fn pin_self() {
     #[cfg(windows)]
     unsafe {
         extern "system" {
-            fn GetModuleHandleExW(flags: u32, name: *const u16, module: *mut *mut core::ffi::c_void) -> i32;
+            fn GetModuleHandleExW(
+                flags: u32,
+                name: *const u16,
+                module: *mut *mut core::ffi::c_void,
+            ) -> i32;
         }
         const FROM_ADDRESS: u32 = 0x4;
         const PIN: u32 = 0x1;
@@ -469,7 +509,10 @@ pub fn reset_game_thread_for_tests() {
 /// segment, e.g. leaked `SeqSlot<Stamped<T>>`s). Used by `tests/records.rs` for shapes the
 /// real schema does not have yet (Str / Bool / struct rows / every slot form).
 #[doc(hidden)]
-pub fn register_test_schema(records: &'static [hsmp_ipc::schema::RecordInfo], slots: &'static [crate::records::TestSlot]) {
+pub fn register_test_schema(
+    records: &'static [hsmp_ipc::schema::RecordInfo],
+    slots: &'static [crate::records::TestSlot],
+) {
     if let Ok(mut n) = global().lock() {
         n.rec.set_test_schema(records, slots);
     }
@@ -481,9 +524,15 @@ mod source_vertex_api_tests {
 
     #[test]
     fn native_source_vertex_state_registers_exact_guarded_entry_once() {
-        let entries: Vec<_> = FUNCS.iter().filter(|(name, _)| *name == "native_source_scope_vertex_state").collect();
+        let entries: Vec<_> = FUNCS
+            .iter()
+            .filter(|(name, _)| *name == "native_source_scope_vertex_state")
+            .collect();
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].1 as usize, l_native_source_scope_vertex_state as *const () as usize);
+        assert_eq!(
+            entries[0].1 as usize,
+            l_native_source_scope_vertex_state as *const () as usize
+        );
     }
 }
 #[cfg(test)]
@@ -491,8 +540,14 @@ mod source_roster_api_tests {
     use super::*;
     #[test]
     fn source_roster_facts_registers_exact_guarded_entry_once() {
-        let entries:Vec<_>=FUNCS.iter().filter(|(name,_)|*name=="native_source_roster_facts").collect();
-        assert_eq!(entries.len(),1);
-        assert_eq!(entries[0].1 as usize,l_native_source_roster_facts as *const () as usize);
+        let entries: Vec<_> = FUNCS
+            .iter()
+            .filter(|(name, _)| *name == "native_source_roster_facts")
+            .collect();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].1 as usize,
+            l_native_source_roster_facts as *const () as usize
+        );
     }
 }

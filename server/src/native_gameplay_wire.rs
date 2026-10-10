@@ -1,10 +1,165 @@
 //! Compact authority gameplay messages. No UObject, callable name, or client-owned stat crosses this boundary.
+use crate::native_descriptor as d;
 use crate::native_wire::{self as w, Directory, EntityRef, InputFrame};
 use hsmp_net::net::wire::{Put, Reader};
+use serde::{Deserialize, Serialize};
 
 pub const CAP_NATIVE_GAMEPLAY: u64 = 1 << 28;
 pub const CAP_NATIVE_COMPRESSION: u64 = 1 << 29;
 pub const MAX_RESULT_BYTES: usize = 21 + w::MAX_ENTITIES * 160;
+pub const RECIPE_SCHEMA: u16 = 1;
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Weapon {
+    pub id: u32,
+    pub actor_class: String,
+    pub passport: d::WeaponPassport,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Equipment {
+    pub armor: Vec<d::ArmorInSlot>,
+    pub weapons: Vec<Weapon>,
+    pub hands: Vec<d::ItemSlot>,
+    pub sheaths: Vec<d::WeaponBinding>,
+}
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Recipe {
+    pub schema: u16,
+    pub actor_class: String,
+    pub team: i32,
+    pub passport: d::CharacterPassport,
+    pub construction: d::Construction,
+    pub equipment: Equipment,
+}
+impl Recipe {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.schema != RECIPE_SCHEMA || !d::asset(&self.actor_class, false) {
+            return Err("gameplay recipe schema/class");
+        }
+        self.passport.validate()?;
+        self.construction.validate()?;
+        d::armor_map(&self.equipment.armor, true)?;
+        let e = &self.equipment;
+        if e.weapons.len() > d::MAX_WEAPONS
+            || !d::sorted_slots(&e.hands, 2, |r| r.slot)
+            || e.sheaths.len() > 5
+        {
+            return Err("gameplay equipment bound");
+        }
+        let mut ids = std::collections::HashSet::new();
+        for weapon in &e.weapons {
+            if weapon.id == 0 || !ids.insert(weapon.id) || !d::asset(&weapon.actor_class, false) {
+                return Err("gameplay weapon identity");
+            }
+            weapon.passport.validate()?;
+        }
+        if e.hands.iter().any(|r| !ids.contains(&r.item)) {
+            return Err("gameplay hand binding");
+        }
+        let mut sheaths = std::collections::HashSet::new();
+        for row in &e.sheaths {
+            if !WEAPON_FIELDS[2..].contains(&row.field.as_str())
+                || !sheaths.insert(&row.field)
+                || !ids.contains(&row.item)
+            {
+                return Err("gameplay sheath binding");
+            }
+        }
+        Ok(())
+    }
+}
+pub const WEAPON_FIELDS: [&str; 7] = [
+    "Weapon R",
+    "Weapon L",
+    "Weapon Slot R 1",
+    "Weapon Slot R 2",
+    "Weapon Slot Back",
+    "Weapon Slot L 1",
+    "Weapon Slot L 2",
+];
+#[derive(Clone, Debug, PartialEq)]
+pub struct Bootstrap {
+    pub reference: EntityRef,
+    pub slot: u16,
+    pub directory_seq: u32,
+    pub revision: u32,
+    pub source_frame_seq: u32,
+    pub recipe: Recipe,
+}
+pub fn encode_bootstrap(v: &Bootstrap) -> Result<Vec<u8>, &'static str> {
+    if !v.reference.valid()
+        || v.slot as usize >= w::MAX_ENTITIES
+        || v.directory_seq == 0
+        || v.revision == 0
+        || v.source_frame_seq == 0
+    {
+        return Err("gameplay bootstrap identity");
+    }
+    v.recipe.validate()?;
+    let body = serde_json::to_vec(&v.recipe).map_err(|_| "gameplay recipe encoding")?;
+    if body.len() > d::MAX_RECIPE_BYTES {
+        return Err("gameplay recipe bound");
+    }
+    let mut out = Vec::with_capacity(30 + body.len());
+    out.put_u64(v.reference.epoch);
+    out.put_u32(v.reference.id);
+    out.put_u32(v.reference.incarnation);
+    out.put_u16(v.slot);
+    out.put_u32(v.directory_seq);
+    out.put_u32(v.revision);
+    out.put_u32(v.source_frame_seq);
+    out.extend(body);
+    Ok(out)
+}
+pub fn decode_bootstrap(bytes: &[u8]) -> Result<Bootstrap, &'static str> {
+    if bytes.len() < 30 || bytes.len() > d::MAX_RECIPE_BYTES + 30 {
+        return Err("gameplay bootstrap bound");
+    }
+    let mut r = Reader::new(bytes);
+    let reference = EntityRef {
+        epoch: r.u64().map_err(|_| "gameplay bootstrap epoch")?,
+        id: r.u32().map_err(|_| "gameplay bootstrap id")?,
+        incarnation: r.u32().map_err(|_| "gameplay bootstrap incarnation")?,
+    };
+    let v = Bootstrap {
+        reference,
+        slot: r.u16().map_err(|_| "gameplay bootstrap slot")?,
+        directory_seq: r.u32().map_err(|_| "gameplay bootstrap directory")?,
+        revision: r.u32().map_err(|_| "gameplay bootstrap revision")?,
+        source_frame_seq: r.u32().map_err(|_| "gameplay bootstrap frame")?,
+        recipe: serde_json::from_slice(&bytes[30..]).map_err(|_| "gameplay recipe schema")?,
+    };
+    encode_bootstrap(&v)?;
+    Ok(v)
+}
+#[cfg(test)]
+pub(crate) fn fixture_recipe() -> Recipe {
+    let source = d::fixture_recipe();
+    Recipe {
+        schema: RECIPE_SCHEMA,
+        actor_class: source.actor_class,
+        team: source.team,
+        passport: source.passport,
+        construction: source.construction,
+        equipment: Equipment {
+            armor: source.equipment.armor,
+            weapons: source
+                .equipment
+                .weapons
+                .into_iter()
+                .map(|w| Weapon {
+                    id: w.id,
+                    actor_class: w.actor_class,
+                    passport: w.passport,
+                })
+                .collect(),
+            hands: source.equipment.hands,
+            sheaths: source.equipment.sheaths,
+        },
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum NativeScalar {
@@ -238,6 +393,128 @@ pub fn decode_result(bytes: &[u8]) -> Result<ResultFrame, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gameplay_bootstrap_keeps_complete_passports_aliases_and_exact_float_bits() {
+        let mut recipe = fixture_recipe();
+        recipe.construction.height_rate = 1.0000000000000002;
+        recipe.construction.scale_mutation_inhibitor = -0.0;
+        recipe.passport.hair_length = 1.0000000000000002;
+        // Complete synthetic offline passport; this is codec evidence, not a
+        // claim about a native actor or its observed equipment.
+        let id = 1;
+        let weapon = d::WeaponPassport {
+            class: "/Game/Test/Weapon.Weapon_C".into(),
+            id: 42,
+            name: "Codec weapon".into(),
+            head_sub1: "/Game/Test/HeadSub1.HeadSub1".into(),
+            head_sub2: String::new(),
+            head: "/Game/Test/Head.Head".into(),
+            guard: "/Game/Test/Guard.Guard".into(),
+            pommel: "/Game/Test/Pommel.Pommel".into(),
+            grip: "/Game/Test/Grip.Grip".into(),
+            head_size: [1.0000000000000002, -0.0, 3.0],
+            guard_size: [4.0, 5.0, 6.0],
+            grip_size: [7.0, 8.0, 9.0],
+            pommel_size: [10.0, 11.0, 12.0],
+            mass_head: 13.0,
+            mass_guard: 14.0,
+            mass_grip: 15.0,
+            mass_pommel: 16.0,
+            mat_steel: 17,
+            mat_colored: 18,
+            mat_wood: 19,
+            mat_leather: 20,
+            color_wood: [0.1, 0.2, 0.3, 0.4],
+            color_leather: [0.5, 0.6, 0.7, 0.8],
+            price: 21.000000000000004,
+            tier: 22,
+        };
+        recipe.passport.equipment.hands = vec![d::WeaponInSlot {
+            slot: 0,
+            passport: weapon.clone(),
+        }];
+        recipe.equipment.weapons = vec![Weapon {
+            id,
+            actor_class: weapon.class.clone(),
+            passport: weapon,
+        }];
+        recipe.equipment.hands = vec![
+            d::ItemSlot { slot: 0, item: id },
+            d::ItemSlot { slot: 1, item: id },
+        ];
+        recipe.equipment.sheaths = WEAPON_FIELDS[2..]
+            .iter()
+            .map(|field| d::WeaponBinding {
+                field: (*field).into(),
+                item: id,
+            })
+            .collect();
+        let bootstrap = Bootstrap {
+            reference: EntityRef {
+                epoch: 1,
+                id: 1,
+                incarnation: 2,
+            },
+            slot: 0,
+            directory_seq: 3,
+            revision: 4,
+            source_frame_seq: 5,
+            recipe,
+        };
+        let bytes = encode_bootstrap(&bootstrap).unwrap();
+        let decoded = decode_bootstrap(&bytes).unwrap();
+        assert_eq!(decoded, bootstrap);
+        assert_eq!(
+            decoded.recipe.construction.height_rate.to_bits(),
+            bootstrap.recipe.construction.height_rate.to_bits()
+        );
+        assert_eq!(
+            decoded
+                .recipe
+                .construction
+                .scale_mutation_inhibitor
+                .to_bits(),
+            (-0.0f64).to_bits()
+        );
+        assert_eq!(
+            decoded.recipe.equipment.hands.len() + decoded.recipe.equipment.sheaths.len(),
+            7
+        );
+        assert_eq!(
+            decoded.recipe.equipment.weapons[0].passport.head_size[0].to_bits(),
+            bootstrap.recipe.equipment.weapons[0].passport.head_size[0].to_bits()
+        );
+        assert_eq!(
+            decoded.recipe.equipment.weapons[0].passport.head_size[1].to_bits(),
+            (-0.0f64).to_bits()
+        );
+        // Absent aliases encode observed native nulls independently of aliases
+        // that refer to the same retained weapon dictionary entry.
+        let mut nullable = bootstrap.clone();
+        nullable.recipe.equipment.hands.remove(1);
+        nullable
+            .recipe
+            .equipment
+            .sheaths
+            .retain(|r| r.field == "Weapon Slot R 1" || r.field == "Weapon Slot L 2");
+        assert_eq!(
+            decode_bootstrap(&encode_bootstrap(&nullable).unwrap()).unwrap(),
+            nullable
+        );
+        let original = serde_json::to_value(&bootstrap.recipe).unwrap();
+        for field in ["passport", "construction", "equipment"] {
+            let mut missing = original.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<Recipe>(missing).is_err());
+        }
+        let mut unknown = original;
+        unknown
+            .as_object_mut()
+            .unwrap()
+            .insert("components".into(), serde_json::json!([]));
+        assert!(serde_json::from_value::<Recipe>(unknown).is_err());
+        assert!(d::SourceRecipe::decode_recipe(&bytes[30..]).is_err());
+    }
     fn frame() -> ResultFrame {
         ResultFrame {
             epoch: 9,

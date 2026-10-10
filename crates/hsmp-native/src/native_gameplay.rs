@@ -96,7 +96,7 @@ fn provider() -> Result<&'static Provider, String> {
 struct Pawn {
     handle: u64,
     scene: GameplayScene,
-    descriptor: Arc<w::Descriptor>,
+    descriptor: Arc<gp::Bootstrap>,
     world: Object,
     controller: Object,
     own: bool,
@@ -533,7 +533,7 @@ impl Native {
                         cr * cp * sy - sr * sp * cy,
                         cr * cp * cy + sr * sp * sy,
                     ],
-                    scale: [1.; 3],
+                    scale: descriptor.recipe.construction.actor_scale,
                 };
                 let mut handle = 0;
                 let mut pawn = Object::default();

@@ -37,10 +37,11 @@ pub fn record_mode(kind: u16, peer: PeerId) -> Option<hsmp_net::net::SendMode> {
         0x0A80 => return Some(SendMode::Ordered),
         0x0A90 | 0x0A92 => return Some(SendMode::Ordered),
         0x0A91 => return Some(SendMode::ReliableLatest { key: key(0x98, 0) }),
+        0x0A93 => return Some(SendMode::Reliable),
         0x0AF0 => {
             return match peer {
                 0x0A91 => Some(SendMode::ReliableLatest { key: key(0x98, 0) }),
-                0x0AC2 => Some(SendMode::Reliable),
+                0x0AC2 | 0x0A93 => Some(SendMode::Reliable),
                 _ => None,
             }
         }

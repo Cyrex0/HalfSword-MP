@@ -113,13 +113,17 @@ impl NativeCore {
             .filter(|e| e.kind == w::HUMAN)
             .all(|e| {
                 e.owner_peer != 0
-                    && (if self.gameplay.get(&e.owner_peer)==Some(&true){self.bridge.gameplay_ready(e.owner_peer)}else{(self.diagnostic
+                    && (if self.gameplay.get(&e.owner_peer) == Some(&true) {
+                        self.bridge.gameplay_ready(e.owner_peer)
+                    } else {
+                        (self.diagnostic
                             && !self
                                 .presentation
                                 .get(&e.owner_peer)
                                 .copied()
                                 .unwrap_or(false))
-                        || self.bridge.mirror_ready(e.owner_peer)})
+                            || self.bridge.mirror_ready(e.owner_peer)
+                    })
             })
     }
     pub(super) fn admits_capabilities(&self, caps: u64) -> bool {
@@ -519,7 +523,17 @@ pub(super) fn tick(inner: &mut Inner, now: u64) {
         if let Ok(batch) = w::descriptor_stream::Batch::new(&descriptor) {
             let batch = Arc::new(batch);
             for (&peer, &presenting) in &n.presentation {
-                if presenting || n.gameplay.get(&peer) == Some(&true) {
+                if presenting {
+                    n.streams.entry(peer).or_default().metadata(batch.clone());
+                }
+            }
+        }
+    }
+    for descriptor in n.bridge.take_gameplay_descriptors() {
+        if let Ok(batch) = w::descriptor_stream::Batch::gameplay(&descriptor) {
+            let batch = Arc::new(batch);
+            for (&peer, &gameplay) in &n.gameplay {
+                if gameplay {
                     n.streams.entry(peer).or_default().metadata(batch.clone());
                 }
             }
@@ -705,7 +719,7 @@ pub(super) async fn flush_scene_stream(socket: &UdpSocket, state: &Arc<ServerSta
                             addr,
                             peer,
                             Some(metadata.token()),
-                            w::K_DESCRIPTOR_PART,
+                            metadata.batch.kind(),
                             metadata.ordinal(),
                             payload,
                         ));
@@ -757,7 +771,9 @@ pub(super) async fn flush_scene_stream(socket: &UdpSocket, state: &Arc<ServerSta
                     .as_ref()
                     .is_some_and(|n| n.compression.get(&peer) == Some(&true))
             };
-            let packed = if compress && kind == w::K_DESCRIPTOR_PART {
+            let packed = if compress
+                && matches!(kind, w::K_DESCRIPTOR_PART | w::K_GAMEPLAY_BOOTSTRAP_PART)
+            {
                 hsmp_net::net::compression::pack(kind, &payload)
             } else {
                 None
@@ -770,7 +786,7 @@ pub(super) async fn flush_scene_stream(socket: &UdpSocket, state: &Arc<ServerSta
             let mut inner = state.inner.lock().await;
             if let Some(stream) = inner.native.as_mut().and_then(|n| n.streams.get_mut(&peer)) {
                 stream.flushing = false;
-                if accepted && kind == w::K_DESCRIPTOR_PART {
+                if accepted && matches!(kind, w::K_DESCRIPTOR_PART | w::K_GAMEPLAY_BOOTSTRAP_PART) {
                     if let Some(metadata) = stream.metadata.front_mut() {
                         if Some(&metadata.token()) == token.as_ref() && metadata.ordinal() == index
                         {

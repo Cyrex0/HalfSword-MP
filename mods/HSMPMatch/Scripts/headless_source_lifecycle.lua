@@ -190,6 +190,10 @@ function M.new(env)
                     slot=row.slot,dir_seq=directory.seq,revision=revision,frame_seq=frame_seq}
                 if env.phase then env.phase(meta,"source_capture","enter") end
                 local recipe, bindings = env.capture(index,meta)
+                local function discard()
+                    if env.discard then env.discard(bindings)end
+                end
+                local completed,registration,registration_reason=pcall(function()
                 if env.phase then env.phase(meta,"source_capture","exit",{ok=recipe~=nil,reason=not recipe and tostring(bindings) or ""}) end
                 if not env.same(token) then env.invalidate(); return false, "world changed during source descriptor" end
                 if not valid(token, binding, index) then return false, "canonical incarnation changed" end
@@ -201,7 +205,7 @@ function M.new(env)
                 meta = {epoch=row.epoch,id=row.id,incarnation=row.incarnation,
                     slot=row.slot,dir_seq=directory.seq,revision=revision,frame_seq=frame_seq}
                 if env.phase then env.phase(meta,"native_bind","enter") end
-                local accepted, reason = env.describe(meta,recipe,bindings)
+                local accepted,reason=env.describe(meta,recipe,bindings)
                 if env.phase then env.phase(meta,"native_bind","exit",{ok=accepted==true,reason=tostring(reason or "")}) end
                 if not env.same(token) then env.invalidate(); return false, "world changed while registering source descriptor" end
                 if not valid(token, binding, index) then return false, "canonical incarnation changed" end
@@ -210,6 +214,12 @@ function M.new(env)
                 local identity = {}
                 for _, field in ipairs(fields) do identity[field] = binding[field] end
                 cached[reference], revisions[reference], retry_at[reference] = {binding=identity,dir_seq=directory.seq}, revision, nil
+                return true
+                end)
+                local released,release_reason=pcall(discard)
+                if not released then return false,"source descriptor scope cleanup: "..tostring(release_reason)end
+                if not completed then return false,"source descriptor registration: "..tostring(registration)end
+                if registration~=true then return registration,registration_reason end
             end
         end
         if not ack_valid(token)then roster=nil;return nil,"source roster changed before canonical sample"end

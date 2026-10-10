@@ -16,9 +16,11 @@ local function fixture()
         return p
     end
     f.pawns={pawn(1),pawn(2)}
+    local function recipe(id)return{schema=1,actor_class="/Game/Character/Blueprints/Willie_BP.Willie_BP_C",team=id,
+        passport={fixture_id=id},construction={},equipment={}}end
     f.scene={epoch=-7,dir_seq=8,generation="g8",peer_id=9,state=1,fresh=true,frame_seq=40,
-        entities={{epoch=-7,id=1,incarnation=2,revision=3,owner_peer=9,kind=0,recipe={id=1},buttons=1,axes={0.25,-0.5,0,0,0,0,0,0}},
-            {epoch=-7,id=2,incarnation=4,revision=5,owner_peer=10,kind=0,recipe={id=2},buttons=0,axes={0,0,0,0,0,0,0,0}}}}
+        entities={{epoch=-7,id=1,incarnation=2,revision=3,owner_peer=9,kind=0,recipe=recipe(1),buttons=1,axes={0.25,-0.5,0,0,0,0,0,0}},
+            {epoch=-7,id=2,incarnation=4,revision=5,owner_peer=10,kind=0,recipe=recipe(2),buttons=0,axes={0,0,0,0,0,0,0,0}}}}
     local N={}
     N.native_gameplay_begin=function(scene,world,pc,id)
         check(scene==f.scene and world==88 and pc==77,"begin uses exact current scene/world/controller")
@@ -33,11 +35,11 @@ local function fixture()
     end
     N.native_gameplay_clear=function(forget)f.clears=f.clears+1;if forget then f.forgot=f.forgot+1 end;return true end
     local Passport={before_finish=function(recipe,env)
-        check(env.guard()==true and env.current()==f.pawns[recipe.id],"passport writes only fresh original deferred pawn")
-        f.calls[#f.calls+1]="passport"..recipe.id;return true
+        check(env.guard()==true and env.current()==f.pawns[recipe.passport.fixture_id],"passport writes only fresh original deferred pawn")
+        f.calls[#f.calls+1]="passport"..recipe.passport.fixture_id;return true
     end,verify_equipment=function(recipe,env)
         f.equipment=f.equipment+1;check(env.guard()==true,"native gear checks remain guarded")
-        f.calls[#f.calls+1]="gear"..recipe.id
+        f.calls[#f.calls+1]="gear"..recipe.passport.fixture_id
         if f.gear_error then return nil,f.gear_error end;return true
     end}
     f.game=Gameplay.new({native=N,passport=Passport,same=function(token)return token==f.world end,
@@ -82,5 +84,10 @@ end
 do
     local closes=0;local core=Core.new({gameplay=true,now=function()return 0 end,clear=function()error("owned cleanup refused")end,close=function()closes=closes+1 end,report=function()end})
     core:stop("original failure");core:stop("repeat");check(closes==1 and core.stopped,"cleanup failure still closes endpoint once after stop latches")
+end
+for _,mutation in ipairs({function(r)r.schema=6 end,function(r)r.components={}end,function(r)r.equipment=nil end})do
+    local f=fixture();mutation(f.scene.entities[1].recipe)
+    local ok=f.game:apply(f.scene)
+    check(ok==nil and #f.calls==0,"wrong/full-render/incomplete bootstrap refuses before native spawn")
 end
 check(n>50,"focused staged gameplay coverage")

@@ -649,8 +649,22 @@ struct Scope {
     owners: HashMap<u64, Owner>,
     components: Vec<Component>,
     schema: Rc<RefCell<SchemaCache>>,
+    weapon_links: Vec<(String, u64)>,
 }
 impl Scope {
+    fn bootstrap_links(&self, links: &[(String, u64)], weapons: &[u64]) -> Result<(), String> {
+        if links != self.weapon_links
+            || weapons.len() + 1 != self.owners.len()
+            || weapons.iter().enumerate().any(|(i, address)| {
+                *address == self.pawn.address
+                    || !self.owners.contains_key(address)
+                    || weapons[..i].contains(address)
+            })
+        {
+            return Err("gameplay original complete weapon dictionary changed".into());
+        }
+        Ok(())
+    }
     fn finish_pure(&self, e: &impl Engine) -> Result<(), String> {
         e.admit()?;
         for id in [self.world, self.pawn, self.controller] {
@@ -660,6 +674,11 @@ impl Scope {
             || e.field(self.controller, "Pawn")? != self.pawn.address
         {
             return Err("source scope final pawn/controller link changed".into());
+        }
+        for (field, address) in &self.weapon_links {
+            if e.field(self.pawn, field)? != *address {
+                return Err("source scope final complete weapon/null binding changed".into());
+            }
         }
         for owner in self.owners.values() {
             e.verify(owner.object)?;
@@ -2046,6 +2065,7 @@ impl Native {
                 owners: HashMap::new(),
                 components: vec![],
                 schema: e.schema.clone(),
+                weapon_links: Vec::new(),
             };
             s.base(&e)?;
             let root = e.capture(e.field(pawn, "RootComponent")?)?;
@@ -2108,6 +2128,33 @@ impl Native {
                 {
                     pop(L, 1);
                     return Err("source scope duplicate owner".into());
+                }
+            }
+            pop(L, 1);
+            rawget_str(L, 2, "weapon_links");
+            if lua_type(L, -1) != LUA_TNIL {
+                if !is_table(L, -1) || lua_rawlen(L, -1) != 7 {
+                    pop(L, 1);
+                    return Err("source scope complete weapon links".into());
+                }
+                let links = lua_absindex(L, -1);
+                for (i, expected) in hsmp_server::native_gameplay_wire::WEAPON_FIELDS
+                    .iter()
+                    .enumerate()
+                {
+                    lua_rawgeti(L, links, i as i64 + 1);
+                    let row = lua_absindex(L, -1);
+                    let field = string(L, row, "field")?;
+                    let address = integer(L, row, "address")? as u64;
+                    pop(L, 1);
+                    if field != *expected
+                        || e.field(pawn, &field)? != address
+                        || (address != 0 && !s.owners.contains_key(&address))
+                    {
+                        pop(L, 1);
+                        return Err("source scope original complete weapon/null binding".into());
+                    }
+                    s.weapon_links.push((field, address));
                 }
             }
             pop(L, 1);
@@ -2370,6 +2417,129 @@ impl Native {
     }
 }
 
+pub(crate) struct BootstrapScope {
+    scope: Scope,
+    complete: bool,
+}
+impl BootstrapScope {
+    pub(crate) fn admit(&self, n: &Native) -> Result<(), String> {
+        if !STATE.with(|state| {
+            let state = state.borrow();
+            state.seq == self.scope.id && state.scope.is_none()
+        }) {
+            return Err("gameplay source scope reentry changed".into());
+        }
+        let vt = reflect::vt().ok_or("gameplay source scope reflection")?;
+        let engine = runtime(n, vt, exports()?, &self.scope);
+        self.scope
+            .finish_pure(&ProfileGuardEngine { runtime: &engine })
+    }
+    pub(crate) fn original_bindings(
+        &self,
+        n: &Native,
+        reference: EntityRef,
+        dir_seq: u32,
+        addresses: [u64; 3],
+    ) -> Result<[crate::native_presentation::Object; 3], String> {
+        let s = &self.scope;
+        if s.reference != reference
+            || s.dir_seq != dir_seq
+            || addresses != [s.world.address, s.pawn.address, s.controller.address]
+        {
+            return Err("gameplay original raw source bindings changed".into());
+        }
+        self.admit(n)?;
+        Ok(
+            [s.world, s.pawn, s.controller].map(|id| crate::native_presentation::Object {
+                weak: id.weak,
+                address: id.address,
+            }),
+        )
+    }
+    pub(crate) fn original_weapon(
+        &self,
+        n: &Native,
+        address: u64,
+    ) -> Result<crate::native_presentation::Object, String> {
+        let owner = self
+            .scope
+            .owners
+            .get(&address)
+            .filter(|_| address != self.scope.pawn.address)
+            .ok_or("gameplay original raw weapon binding changed")?;
+        self.admit(n)?;
+        Ok(crate::native_presentation::Object {
+            weak: owner.object.weak,
+            address: owner.object.address,
+        })
+    }
+    pub(crate) fn take(id: u64) -> Result<Self, String> {
+        let scope = STATE
+            .with(|s| s.borrow_mut().scope.take())
+            .ok_or("gameplay original source scope unavailable")?;
+        if scope.id != id
+            || !STATE.with(|state| {
+                let state = state.borrow();
+                state.seq == id && state.scope.is_none()
+            })
+        {
+            scope_cost_finish(false);
+            return Err("gameplay original source scope id changed".into());
+        }
+        Ok(Self {
+            scope,
+            complete: false,
+        })
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn validate(
+        &mut self,
+        n: &Native,
+        reference: EntityRef,
+        dir_seq: u32,
+        world: u64,
+        pawn: u64,
+        controller: u64,
+        links: &[(String, u64)],
+        weapons: &[u64],
+    ) -> Result<(), String> {
+        let s = &self.scope;
+        if !STATE.with(|state| {
+            let state = state.borrow();
+            state.seq == s.id && state.scope.is_none()
+        }) {
+            return Err("gameplay source scope reentry changed".into());
+        }
+        if s.reference != reference
+            || s.dir_seq != dir_seq
+            || s.world.address != world
+            || s.pawn.address != pawn
+            || s.controller.address != controller
+            || s.weapon_links.len() != 7
+            || !s.components.is_empty()
+        {
+            return Err("gameplay original source scope binding changed".into());
+        }
+        s.bootstrap_links(links, weapons)?;
+        let vt = reflect::vt().ok_or("gameplay source scope reflection")?;
+        let engine = runtime(n, vt, exports()?, s);
+        s.finish_pure(&ProfileGuardEngine { runtime: &engine })?;
+        if !STATE.with(|state| {
+            let state = state.borrow();
+            state.seq == s.id && state.scope.is_none()
+        }) {
+            return Err("gameplay source scope reentry changed".into());
+        }
+        self.complete = true;
+        Ok(())
+    }
+}
+impl Drop for BootstrapScope {
+    fn drop(&mut self) {
+        scope_cost_finish(self.complete);
+    }
+}
+
 #[cfg(test)]
 mod source_scope_tests {
     use super::*;
@@ -2539,6 +2709,7 @@ mod source_scope_tests {
         generation_on_owner: std::cell::Cell<u32>,
         field_calls: std::cell::Cell<u32>,
         generation_on_field: std::cell::Cell<u32>,
+        weapon_links: RefCell<HashMap<String, u64>>,
     }
     impl Mock {
         fn row(&self, id: Identity) -> Result<Row, String> {
@@ -2620,7 +2791,14 @@ mod source_scope_tests {
                 "Pawn" => Ok(2),
                 "RootComponent" => Ok(r.root),
                 "AttachParent" => Ok(r.parent),
-                "Weapon R" => Ok(5),
+                field if hsmp_server::native_gameplay_wire::WEAPON_FIELDS.contains(&field) => {
+                    Ok(self
+                        .weapon_links
+                        .borrow()
+                        .get(field)
+                        .copied()
+                        .unwrap_or(if field == "Weapon R" { 5 } else { 0 }))
+                }
                 _ => Err("fixture unknown field".into()),
             }
         }
@@ -2689,6 +2867,7 @@ mod source_scope_tests {
             generation_on_owner: std::cell::Cell::new(0),
             field_calls: std::cell::Cell::new(0),
             generation_on_field: std::cell::Cell::new(0),
+            weapon_links: RefCell::new(HashMap::new()),
         };
         let s = Scope {
             id: 1,
@@ -2719,6 +2898,7 @@ mod source_scope_tests {
             ]),
             components: vec![],
             schema: Rc::new(RefCell::new(SchemaCache::default())),
+            weapon_links: Vec::new(),
         };
         (s, mock)
     }
@@ -2739,6 +2919,38 @@ mod source_scope_tests {
         assert_eq!(s.components[h as usize - 1].owner, 5);
         assert_eq!(s.resolve(&e, h).unwrap(), 7);
         assert_eq!(s.components[0].parent.unwrap().object.address, 4);
+    }
+    #[test]
+    fn gameplay_source_scope_closes_all_original_weapon_null_aliases_and_copied_dictionary() {
+        let (mut scope, engine) = fixture();
+        scope.weapon_links = hsmp_server::native_gameplay_wire::WEAPON_FIELDS
+            .iter()
+            .map(|field| {
+                (
+                    (*field).to_owned(),
+                    if *field == "Weapon R" { 5 } else { 0 },
+                )
+            })
+            .collect();
+        scope.bootstrap_links(&scope.weapon_links, &[5]).unwrap();
+        scope.finish_pure(&engine).unwrap();
+        let mut changed = scope.weapon_links.clone();
+        changed[1].1 = 5;
+        assert!(scope.bootstrap_links(&changed, &[5]).is_err());
+        assert!(scope.bootstrap_links(&scope.weapon_links, &[6]).is_err());
+        engine
+            .weapon_links
+            .borrow_mut()
+            .insert("Weapon L".into(), 5);
+        assert!(scope.finish_pure(&engine).is_err());
+        engine.weapon_links.borrow_mut().clear();
+        engine
+            .weapon_links
+            .borrow_mut()
+            .insert("Weapon R".into(), 6);
+        assert!(scope.finish_pure(&engine).is_err());
+        engine.weapon_links.borrow_mut().clear();
+        scope.finish_pure(&engine).unwrap();
     }
     #[test]
     fn source_scope_retained_keep_uses_original_handle_without_cold_lookup() {
@@ -4442,6 +4654,7 @@ mod source_scope_tests {
                 owners: HashMap::new(),
                 components: vec![],
                 schema: e.schema.clone(),
+                weapon_links: Vec::new(),
             };
             let engine = runtime(e.n, e.vt, e.x, &scope);
             let context = SplineScopeGuard {
@@ -4476,6 +4689,7 @@ mod source_scope_tests {
                 owners: HashMap::new(),
                 components: vec![],
                 schema: engine.schema.clone(),
+                weapon_links: Vec::new(),
             };
             NAME_READS.with(|reads| reads.set(0));
             assert!(capture_static_vertex_state(

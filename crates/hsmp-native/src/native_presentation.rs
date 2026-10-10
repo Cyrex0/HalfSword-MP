@@ -798,6 +798,13 @@ struct Source {
     vertices: Vec<VertexTarget>,
     prepared: Prepared,
 }
+struct GameplaySource {
+    world: Object,
+    pawn: Object,
+    controller: Object,
+    pawn_controller: reflect::HsmpProp,
+    controller_pawn: reflect::HsmpProp,
+}
 struct Mirror {
     reference: w::EntityRef,
     revision: u32,
@@ -808,6 +815,7 @@ struct Mirror {
 #[derive(Default)]
 pub struct State {
     sources: HashMap<w::EntityRef, Source>,
+    gameplay_sources: HashMap<w::EntityRef, GameplaySource>,
     mirrors: HashMap<u32, Mirror>,
     pub(crate) pending: Option<w::RenderWorld>,
     pub(crate) input: Option<crate::native_input_capture::Reader>,
@@ -819,19 +827,68 @@ impl State {
     // Match only a previously admitted source binding. This is a copied input
     // identity seam, not a fresh address-to-entity lookup.
     pub(crate) unsafe fn input_reference(
-        &self, vt: &HsmpReflect, directory: &w::Directory, pawn: usize, controller: usize,
+        &self,
+        vt: &HsmpReflect,
+        directory: &w::Directory,
+        pawn: usize,
+        controller: usize,
     ) -> Option<w::EntityRef> {
         unsafe {
             let mut matched = None;
             for entity in &directory.entities {
-                if entity.kind != w::HUMAN { continue; }
-                let Some(source) = self.sources.get(&entity.reference) else { continue; };
-                if source.pawn.address != pawn as u64 || source.controller.address != controller as u64 { continue; }
-                if matched.is_some() || reflect::get(vt, source.world.weak) as u64 != source.world.address
-                    || reflect::get(vt, source.pawn.weak) as u64 != source.pawn.address
-                    || reflect::get(vt, source.controller.weak) as u64 != source.controller.address
-                    || read_object_property(vt, source.pawn, source.pawn_controller).ok() != Some(source.controller.address)
-                    || read_object_property(vt, source.controller, source.controller_pawn).ok() != Some(source.pawn.address) { return None; }
+                if entity.kind != w::HUMAN {
+                    continue;
+                }
+                let source = self
+                    .gameplay_sources
+                    .get(&entity.reference)
+                    .map(|s| {
+                        (
+                            s.world,
+                            s.pawn,
+                            s.controller,
+                            s.pawn_controller,
+                            s.controller_pawn,
+                        )
+                    })
+                    .or_else(|| {
+                        self.sources.get(&entity.reference).map(|s| {
+                            (
+                                s.world,
+                                s.pawn,
+                                s.controller,
+                                s.pawn_controller,
+                                s.controller_pawn,
+                            )
+                        })
+                    });
+                let Some((
+                    world,
+                    original_pawn,
+                    original_controller,
+                    pawn_controller,
+                    controller_pawn,
+                )) = source
+                else {
+                    continue;
+                };
+                if original_pawn.address != pawn as u64
+                    || original_controller.address != controller as u64
+                {
+                    continue;
+                }
+                if matched.is_some()
+                    || reflect::get(vt, world.weak) as u64 != world.address
+                    || reflect::get(vt, original_pawn.weak) as u64 != original_pawn.address
+                    || reflect::get(vt, original_controller.weak) as u64
+                        != original_controller.address
+                    || read_object_property(vt, original_pawn, pawn_controller).ok()
+                        != Some(original_controller.address)
+                    || read_object_property(vt, original_controller, controller_pawn).ok()
+                        != Some(original_pawn.address)
+                {
+                    return None;
+                }
                 matched = Some(entity.reference);
             }
             matched
@@ -844,6 +901,7 @@ impl State {
             }
         }
         self.sources.clear();
+        self.gameplay_sources.clear();
         self.mirrors.clear();
         self.pending = None;
         self.input = None;
@@ -2930,6 +2988,230 @@ impl Native {
                     2
                 }
                 Err(e) => nil_err(L, &e),
+            }
+        }
+    }
+    pub unsafe fn host_gameplay_describe(&mut self, L: *mut lua_State) -> c_int {
+        unsafe {
+            let result = (|| -> Result<String, String> {
+                if !self.native_host.is_host()
+                    || !self.sample.world_ok
+                    || !is_table(L, 1)
+                    || !is_table(L, 3)
+                {
+                    return Err("gameplay source role/world/bindings".into());
+                }
+                let scope_id = integer(L, 3, "scope_id")
+                    .and_then(|v| u64::try_from(v).ok())
+                    .ok_or("gameplay source scope id")?;
+                let mut scope = crate::native_source_scope::BootstrapScope::take(scope_id)?;
+                let recipe = crate::native_descriptor_binding::read_gameplay_recipe(L, 2)?;
+                let uint = |field| {
+                    integer(L, 1, field)
+                        .and_then(|v| u32::try_from(v).ok())
+                        .ok_or_else(|| format!("gameplay bootstrap {field}"))
+                };
+                let reference = w::EntityRef {
+                    epoch: integer(L, 1, "epoch").ok_or("gameplay bootstrap epoch")? as u64,
+                    id: uint("id")?,
+                    incarnation: uint("incarnation")?,
+                };
+                let descriptor = hsmp_server::native_gameplay_wire::Bootstrap {
+                    reference,
+                    slot: u16::try_from(uint("slot")?).map_err(|_| "gameplay bootstrap slot")?,
+                    directory_seq: uint("dir_seq")?,
+                    revision: uint("revision")?,
+                    source_frame_seq: uint("frame_seq")?,
+                    recipe,
+                };
+                let vt = reflect::vt().ok_or("gameplay source reflection")?;
+                let raw_address = |name| {
+                    integer(L, 3, name)
+                        .map(|v| v as u64)
+                        .ok_or_else(|| format!("gameplay raw source {name}"))
+                };
+                let [world, pawn, controller] = scope.original_bindings(
+                    self,
+                    reference,
+                    descriptor.directory_seq,
+                    [
+                        raw_address("world")?,
+                        raw_address("pawn")?,
+                        raw_address("controller")?,
+                    ],
+                )?;
+                let directory = self
+                    .native_host
+                    .directory()
+                    .ok_or("gameplay source directory")?;
+                let entity = directory
+                    .entities
+                    .iter()
+                    .find(|e| e.reference == reference && e.slot == descriptor.slot)
+                    .ok_or("gameplay source entity generation")?;
+                if descriptor.directory_seq != directory.seq || entity.kind != w::HUMAN {
+                    return Err("gameplay source directory/kind changed".into());
+                }
+                if let Some(old) = self.presentation.gameplay_sources.get(&reference) {
+                    if old.world.weak != world.weak
+                        || old.world.address != world.address
+                        || old.pawn.weak != pawn.weak
+                        || old.pawn.address != pawn.address
+                        || old.controller.weak != controller.weak
+                        || old.controller.address != controller.address
+                    {
+                        return Err("gameplay source original incarnation changed".into());
+                    }
+                }
+                let actor_class = (vt.find)(reflect::wide(&descriptor.recipe.actor_class).as_ptr());
+                scope.admit(self)?;
+                if actor_class.is_null()
+                    || (vt.class_of)(reflect::get(vt, pawn.weak)) != actor_class
+                {
+                    return Err("gameplay source original actor class mismatch".into());
+                }
+                rawget_str(L, 3, "weapons");
+                if !is_table(L, -1)
+                    || lua_rawlen(L, -1) as usize != descriptor.recipe.equipment.weapons.len()
+                {
+                    pop(L, 1);
+                    return Err("gameplay source weapon binding count".into());
+                }
+                let rows = lua_absindex(L, -1);
+                let mut weapons = HashMap::new();
+                for i in 1..=lua_rawlen(L, rows) {
+                    lua_rawgeti(L, rows, i as i64);
+                    let row = lua_absindex(L, -1);
+                    let id = integer(L, row, "id")
+                        .and_then(|v| u32::try_from(v).ok())
+                        .ok_or("gameplay source weapon id")?;
+                    let address = integer(L, row, "address")
+                        .ok_or("gameplay raw original weapon address")?
+                        as u64;
+                    let native = scope.original_weapon(self, address)?;
+                    let recipe = descriptor
+                        .recipe
+                        .equipment
+                        .weapons
+                        .iter()
+                        .find(|w| w.id == id)
+                        .ok_or("gameplay source weapon dictionary")?;
+                    let class = (vt.find)(reflect::wide(&recipe.actor_class).as_ptr());
+                    scope.admit(self)?;
+                    if weapons.insert(id, native.address).is_some()
+                        || class.is_null()
+                        || (vt.class_of)(reflect::get(vt, native.weak)) != class
+                    {
+                        return Err("gameplay source original weapon class mismatch".into());
+                    }
+                    pop(L, 1);
+                }
+                pop(L, 1);
+                rawget_str(L, 3, "weapon_links");
+                if !is_table(L, -1) || lua_rawlen(L, -1) != 7 {
+                    pop(L, 1);
+                    return Err("gameplay source complete weapon links".into());
+                }
+                let rows = lua_absindex(L, -1);
+                let mut original_links = Vec::with_capacity(7);
+                for (i, field) in hsmp_server::native_gameplay_wire::WEAPON_FIELDS
+                    .iter()
+                    .enumerate()
+                {
+                    lua_rawgeti(L, rows, i as i64 + 1);
+                    let row = lua_absindex(L, -1);
+                    rawget_str(L, row, "field");
+                    let key = arg_str(L, -1).map(str::to_owned);
+                    pop(L, 1);
+                    let address =
+                        integer(L, row, "address").ok_or("gameplay source weapon address")? as u64;
+                    let expected = if i < 2 {
+                        descriptor
+                            .recipe
+                            .equipment
+                            .hands
+                            .iter()
+                            .find(|r| r.slot as usize == i)
+                            .map(|r| r.item)
+                    } else {
+                        descriptor
+                            .recipe
+                            .equipment
+                            .sheaths
+                            .iter()
+                            .find(|r| r.field == *field)
+                            .map(|r| r.item)
+                    };
+                    if key.as_deref() != Some(*field)
+                        || address
+                            != expected
+                                .and_then(|id| weapons.get(&id).copied())
+                                .unwrap_or(0)
+                    {
+                        return Err("gameplay source exact weapon/null alias mismatch".into());
+                    }
+                    original_links.push(((*field).to_owned(), address));
+                    pop(L, 1);
+                }
+                pop(L, 1);
+                let pawn_controller = object_property(vt, pawn, "Controller")?;
+                let controller_pawn = object_property(vt, controller, "Pawn")?;
+                let x = roster_exports()?;
+                let original = RosterIdentity::capture(vt, x, pawn)?;
+                let team = roster_property(vt, x, original, "Team Int", "IntProperty", 4)?;
+                require_acknowledged_team(
+                    entity.team,
+                    descriptor.recipe.team,
+                    roster_read_i32(vt, x, original, team)?,
+                )?;
+                if assigned_controller(vt, world, entity.controller)? != controller.address {
+                    return Err("gameplay source original indexed controller changed".into());
+                }
+                require_acknowledged_team(
+                    entity.team,
+                    descriptor.recipe.team,
+                    roster_read_i32(vt, x, original, team)?,
+                )?;
+                scope.validate(
+                    self,
+                    reference,
+                    descriptor.directory_seq,
+                    world.address,
+                    pawn.address,
+                    controller.address,
+                    &original_links,
+                    &weapons.values().copied().collect::<Vec<_>>(),
+                )?;
+                let bytes = hsmp_server::native_gameplay_wire::encode_bootstrap(&descriptor)
+                    .map_err(str::to_owned)?
+                    .len();
+                self.native_host
+                    .host
+                    .as_ref()
+                    .ok_or("gameplay source host")?
+                    .publish_gameplay_descriptor(descriptor)
+                    .map_err(str::to_owned)?;
+                self.presentation.gameplay_sources.insert(
+                    reference,
+                    GameplaySource {
+                        world,
+                        pawn,
+                        controller,
+                        pawn_controller,
+                        controller_pawn,
+                    },
+                );
+                Ok(format!(
+                    "gameplay bootstrap bytes={bytes} components=not_applicable"
+                ))
+            })();
+            match result {
+                Ok(reason) => {
+                    lua_pushboolean(L, 1);
+                    lua_pushlstring(L, reason.as_ptr().cast(), reason.len());
+                    2
+                }
+                Err(reason) => nil_err(L, &reason),
             }
         }
     }

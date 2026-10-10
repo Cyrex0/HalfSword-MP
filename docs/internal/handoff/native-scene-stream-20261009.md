@@ -2,6 +2,39 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actuale81c4868 fullG0/dev/RequireG0/all396 StandardGameplay033032-52d9ad
+passes client2 native_gameplay_begin (frame2/dir7), closing the Actor wrapper
+failure. Next native refusal is Character Passport's nested Equipment.ArmorinSlots
+StructProperty table conversion. Pinned LuaUObject.cpp1287's table-to-map setter
+uses default stored_at_index1 for key AND value despite nested parent passing-1;
+actual stack index1 is Weight0.5, rather than the armor passport table. Correct
+typed gear assignment is under investigation; no defaults/guessed native map
+layout or empty-gear success. Dispatch0/0; no eight-sample codec metric yet.
+Independent cleanupPASS/four originals absent/save20 unchanged/no dumps/secondary.
+Evidence: test-results/20261010-033032-52d9ad-native-host/native_operator_summary.json.
+The actual28s cold recipe capture motivates a recipe-only gameplay bootstrap;
+full mirror/vertex metadata is unnecessary when local native assets construct it.
+Audit the exact source gear recipe and original generation checks before changing.
+
+Candidate GP-only schema1 omits only render/component/topology records; all native
+Character/Construction/Armor/Weapon fields and hand/sheath aliases remain strict.
+Source does two complete equal harvests and retains native original scope from
+first pass through describe's final owner/world/all-seven-weapon-null hardlinks.
+Captured scope cleanup covers pre-native dispatcher refusal and every postcapture
+phase/team/describe fault. Source353/worker397 Lua assertions PASS; source syntax6
+PASS; independent narrow review CLOSED. Typed passport Empty/Add/Find staging
+avoids broken nested table setter, complete readback retained; helper38 and client
+111 assertions PASS/syntax2 each; reviews CLOSED. Native Rust/server integration,
+fullG0/deploy and actual timing/model/movement/codec validation still pending.
+Rust focused server9 pass and corrected complete synthetic weapon roundtrip1
+pass; original fixture had no live weapon, so indexing it failed before encoding.
+No runtime/tolerance change in that correction. Native gameplay4 pass including
+all-seven original weapon/null dictionary closure. Separate GP multipart0x0A93
+retains authenticated compression hint/bounds and full exact original recipe.
+Host closed native lease address-before-dereference and final sequence/dictionary
+review. Source construction.actor_scale replaces the prior begin scale1 default.
+All candidate slices frozen; next fullG0/push/deploy then actual standard run.
+
 Actual816dd5bf fullG0 passes (Lua77 suites/Rust1375 tests79 binaries), pushed
 dev and RequireG0 deployed all396 hashes. StandardGameplay032237-23a5a1
 reaches authority native_ready16.927s; original two recipes capture17.111–45.493s.

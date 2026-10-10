@@ -85,15 +85,19 @@ function M.new(opts)
         end
         env.live_weapons=function()
             local out={weapons={},hands={},sheaths={}};local seen={};bindings.weapons={}
+            if opts.gameplay then bindings.weapon_links={}end
             local function add(field,hand)
-                local actor,identity=weapon(field);if not actor then return end
+                local actor,identity=weapon(field)
+                if opts.gameplay then bindings.weapon_links[#bindings.weapon_links+1]={field=field,address=actor and identity.address or 0}end
+                if not actor then return end
                 local id=seen[identity.address]
                 if not id then
                     id=#out.weapons+1;seen[identity.address]=id
                     local pass,why=Descriptor.read_passport("weapon",function()local latest=weapon(field,identity);return latest and latest["Weapon Passport"]end,env)
                     if not pass then error(why,0)end
                     local actor_class=read(function()local latest=weapon(field,identity);return class_path(latest:GetClass())end)
-                    out.weapons[id]={id=id,actor_class=actor_class,passport=pass,components={}}
+                    out.weapons[id]={id=id,actor_class=actor_class,passport=pass}
+                    if not opts.gameplay then out.weapons[id].components={}end
                     bindings.weapons[id]={id=id,address=identity.address,name=identity.name,field=field}
                 end
                 if hand~=nil then out.hands[#out.hands+1]={slot=hand,item=id}
@@ -102,6 +106,17 @@ function M.new(opts)
             add("Weapon R",0);add("Weapon L",1)
             for _,field in ipairs(sheath_fields)do add(field)end
             return out
+        end
+        if opts.gameplay then
+            env.after_first=function()
+                local scope=opts.source_scope
+                if not scope or type(scope.begin)~="function"or type(scope.finish)~="function"then error("native gameplay source identity scope unavailable",0)end
+                current()
+                local handle,why=scope.begin(context,bindings)
+                if not handle then error(why or "native gameplay source identity scope refused",0)end
+                lifetime.handle,lifetime.scope,lifetime.finish=handle,scope,scope.finish
+                current()
+            end
         end
         env.render=function()
             local fresh=current()
@@ -153,7 +168,8 @@ function M.new(opts)
             topology.parts,topology.dismembered_bones,topology.in_process=parts,bones,pawn_field("Dismemberment In Process")
             return {components=captured.components,topology=topology}
         end
-        local recipe,why=Descriptor.capture(env)
+        local recipe,why
+        if opts.gameplay then recipe,why=Descriptor.capture_gameplay(env)else recipe,why=Descriptor.capture(env)end
         if not recipe then return nil,why end
         if not pcall(current)then return nil,"source binding changed after descriptor capture"end
         -- Both harvests and their topology/equality callbacks are finished.
@@ -168,6 +184,10 @@ function M.new(opts)
             end
         end
         if not pcall(current)then return nil,"source binding changed after final native qualification"end
+        if opts.gameplay then
+            if not lifetime.handle then return nil,"native gameplay original source scope unavailable"end
+            bindings.scope_id=lifetime.handle -- native describe consumes it after its last callback
+        end
         return recipe,bindings
     end
     function api.capture(index,context)
@@ -184,7 +204,7 @@ function M.new(opts)
             phase("adapter_capture","enter",{getter="SourceAdapter.capture"})
             return capture(index,phase,context,lifetime)
         end)
-        if lifetime.handle then
+        if lifetime.handle and(not opts.gameplay or not ok or recipe==nil)then
             local closed,ended,end_reason=pcall(function()
                 if ok and recipe~=nil then return lifetime.finish(lifetime.handle,true)end
                 return lifetime.finish(lifetime.handle) -- failure/world-drop cleanup is scalar-only
@@ -196,10 +216,21 @@ function M.new(opts)
         end
         local completed,phase_reason=pcall(phase,"adapter_capture","exit",{ok=ok and recipe~=nil,
             reason=not ok and tostring(recipe) or recipe==nil and tostring(bindings) or nil})
+        if not completed and opts.gameplay and lifetime.handle then
+            pcall(lifetime.finish,lifetime.handle);lifetime.handle=nil
+        end
         if not ok then return nil,recipe end
         if recipe==nil then return nil,bindings end
         if not completed then return nil,phase_reason end
         return recipe,bindings
+    end
+    function api.discard(bindings)
+        if not opts.gameplay or type(bindings)~="table"or not bindings.scope_id then return end
+        local handle=bindings.scope_id;bindings.scope_id=nil
+        local scope=opts.source_scope
+        -- A dispatcher refusal can occur before native describe takes the scope.
+        -- Ending an already-consumed id refuses without native object reads.
+        if scope and type(scope.finish)=="function"then return scope.finish(handle)end
     end
     return api
 end

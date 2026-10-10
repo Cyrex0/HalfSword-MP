@@ -821,6 +821,26 @@ do
     T.check(f:ensure()==nil and f.queued==1 and f.captured==0,"possession change while waiting drops the pending batch before capture")
     f=fixture();f:ensure();f:ack();f.on_capture=function()f.pawns[2]=23 end
     T.check(f:ensure()==nil and f.described==0,"mutation of another original roster binding during capture blocks registration")
+    for _,failure in ipairs({"phase","team","describe"})do
+        f=fixture();f:ensure();f:ack()
+        local capture=f.env.capture;local released=0
+        f.env.capture=function(...)
+            local recipe,bindings=capture(...);bindings.scope_id=73
+            if failure=="team"then recipe.team=recipe.team+1 end
+            return recipe,bindings
+        end
+        f.env.discard=function(bindings)
+            T.check(bindings.scope_id==73,"refusal cleanup retains the original captured gameplay scope")
+            released=released+1;bindings.scope_id=nil
+        end
+        if failure=="phase"then f.env.phase=function(_,stage,edge)
+            if stage=="source_capture"and edge=="exit"then error("phase callback refused",0)end
+        end
+        elseif failure=="describe"then f.env.describe=function()error("native describe refused",0)end end
+        local result,why=f:ensure()
+        T.check(result~=true and released==1 and type(why)=="string",
+            "original gameplay scope releases exactly once on "..failure.." refusal before cache admission")
+    end
 end
 
 -- Exercise the actual worker and actual lifecycle, including the downstream

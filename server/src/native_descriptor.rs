@@ -201,7 +201,7 @@ pub enum VertexState {
 fn text(s: &str, max: usize, empty: bool) -> bool {
     (empty || !s.is_empty()) && s.len() <= max && !s.contains('\0')
 }
-fn asset(s: &str, nullable: bool) -> bool {
+pub(crate) fn asset(s: &str, nullable: bool) -> bool {
     (nullable && s.is_empty())
         || (text(s, 512, false)
             && (s.starts_with("/Game/") || s.starts_with("/Engine/") || s.starts_with("/Script/"))
@@ -216,7 +216,7 @@ fn finite(v: &[f64]) -> bool {
 fn finite32(v: &[f32]) -> bool {
     v.iter().all(|x| x.is_finite())
 }
-fn sorted_slots<T>(v: &[T], max: u8, slot: impl Fn(&T) -> u8) -> bool {
+pub(crate) fn sorted_slots<T>(v: &[T], max: u8, slot: impl Fn(&T) -> u8) -> bool {
     v.len() <= max as usize
         && v.iter().all(|x| slot(x) < max)
         && v.windows(2).all(|p| slot(&p[0]) < slot(&p[1]))
@@ -276,7 +276,7 @@ impl WeaponPassport {
         Ok(())
     }
 }
-fn armor_map(v: &[ArmorInSlot], live: bool) -> Result<(), &'static str> {
+pub(crate) fn armor_map(v: &[ArmorInSlot], live: bool) -> Result<(), &'static str> {
     if !sorted_slots(v, 17, |x| x.slot) {
         return Err("armor slots");
     }
@@ -795,6 +795,23 @@ impl SplineProfile {
         Ok(())
     }
 }
+impl Construction {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if !finite(&self.start_body_condition)
+            || !finite(&self.actor_scale)
+            || !finite(&self.character_scale)
+            || !finite(&[
+                self.scale_mutation_inhibitor,
+                self.height_rate,
+                self.muscle_rate,
+                self.mass_scale,
+            ])
+        {
+            return Err("source construction");
+        }
+        Ok(())
+    }
+}
 impl SourceRecipe {
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.schema != SCHEMA
@@ -805,19 +822,7 @@ impl SourceRecipe {
             return Err("source recipe");
         }
         self.passport.validate()?;
-        let c = &self.construction;
-        if !finite(&c.start_body_condition)
-            || !finite(&c.actor_scale)
-            || !finite(&c.character_scale)
-            || !finite(&[
-                c.scale_mutation_inhibitor,
-                c.height_rate,
-                c.muscle_rate,
-                c.mass_scale,
-            ])
-        {
-            return Err("source construction");
-        }
+        self.construction.validate()?;
         armor_map(&self.equipment.armor, true)?;
         if self.equipment.weapons.len() > MAX_WEAPONS
             || !sorted_slots(&self.equipment.hands, 2, |x| x.slot)
@@ -1258,19 +1263,15 @@ mod tests {
         recipe.components[1].materials[0].scalars.clear();
         recipe.components[1].materials[1].slot = 7;
         assert_eq!(recipe.validate(), Err("material slots"));
-        assert!(
-            recipe
-                .validation_diagnostic("material slots")
-                .contains("component_id=2 field=material_slot_order material_index=1 slot=7")
-        );
+        assert!(recipe
+            .validation_diagnostic("material slots")
+            .contains("component_id=2 field=material_slot_order material_index=1 slot=7"));
         recipe.components[1].materials[1].slot = 1;
         recipe.components[1].relative.rotation[3] = 2.0;
         assert_eq!(recipe.validate(), Err("render transform"));
-        assert!(
-            recipe
-                .validation_diagnostic("render transform")
-                .starts_with("render transform component_id=2")
-        );
+        assert!(recipe
+            .validation_diagnostic("render transform")
+            .starts_with("render transform component_id=2"));
         let escaped = diagnostic_quoted(&"\0\n\"\\界😀".repeat(128), 128);
         assert!(escaped.len() <= 128, "escaped output has a byte budget");
         assert!(escaped.starts_with('"') && escaped.ends_with('"'));
@@ -1882,12 +1883,10 @@ mod tests {
         );
         assert_eq!(decoded.passport.equipment.armor.len(), 2);
         assert_eq!(decoded.passport.equipment.armor[1].passport.pslot, 0);
-        assert!(
-            decoded.passport.equipment.armor[1]
-                .passport
-                .class
-                .is_empty()
-        );
+        assert!(decoded.passport.equipment.armor[1]
+            .passport
+            .class
+            .is_empty());
 
         recipe.passport.equipment.armor[1].passport.pslot = 17;
         assert_eq!(recipe.validate(), Err("armor passport"));
@@ -1896,11 +1895,9 @@ mod tests {
         recipe.passport.equipment.armor[1].passport.pslot = 0;
         recipe.passport.equipment.armor[1].slot = 0;
         assert_eq!(recipe.validate(), Err("armor slots"));
-        assert!(
-            recipe
-                .validation_diagnostic("armor slots")
-                .contains("row=1 slot=0 pslot=0")
-        );
+        assert!(recipe
+            .validation_diagnostic("armor slots")
+            .contains("row=1 slot=0 pslot=0"));
     }
     #[test]
     fn live_actor_slot_and_passport_slot_preserve_native_doublet_observations() {
@@ -1943,11 +1940,9 @@ mod tests {
         assert!(recipe.canonical_bytes().is_err());
         let copied = value_bytes(&serde_json::to_value(&recipe).unwrap());
         assert_eq!(decode_recipe(&copied).unwrap_err(), "armor slot binding");
-        assert!(
-            recipe
-                .validation_diagnostic("armor slot binding")
-                .ends_with("class=\"\"")
-        );
+        assert!(recipe
+            .validation_diagnostic("armor slot binding")
+            .ends_with("class=\"\""));
     }
     #[test]
     fn armor_sparse_false_and_double_precision_survive() {

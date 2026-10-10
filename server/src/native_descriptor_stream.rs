@@ -59,6 +59,7 @@ fn read_header(r: &mut Reader<'_>) -> Result<Header, &'static str> {
 pub struct Batch {
     header: Header,
     body: Arc<[u8]>,
+    gameplay: bool,
 }
 impl Batch {
     pub fn new(d: &Descriptor) -> Result<Self, &'static str> {
@@ -78,7 +79,35 @@ impl Batch {
         Ok(Self {
             header,
             body: body.into(),
+            gameplay: false,
         })
+    }
+    pub fn gameplay(d: &crate::native_gameplay_wire::Bootstrap) -> Result<Self, &'static str> {
+        let body = crate::native_gameplay_wire::encode_bootstrap(d)?;
+        let header = Header {
+            reference: d.reference,
+            slot: d.slot,
+            directory_seq: d.directory_seq,
+            revision: d.revision,
+            source_frame_seq: d.source_frame_seq,
+            bytes: u32::try_from(body.len()).map_err(|_| "gameplay bootstrap bytes")?,
+            digest: Sha256::digest(&body).into(),
+        };
+        if !header.valid() {
+            return Err("gameplay bootstrap batch bound");
+        }
+        Ok(Self {
+            header,
+            body: body.into(),
+            gameplay: true,
+        })
+    }
+    pub fn kind(&self) -> u16 {
+        if self.gameplay {
+            K_GAMEPLAY_BOOTSTRAP_PART
+        } else {
+            K_DESCRIPTOR_PART
+        }
     }
     pub fn reference(&self) -> EntityRef {
         self.header.reference
@@ -144,14 +173,22 @@ struct Pending {
     have: Vec<bool>,
     got: usize,
     ready: Option<Descriptor>,
+    gameplay_ready: Option<crate::native_gameplay_wire::Bootstrap>,
 }
 #[derive(Default)]
 pub struct Assembly {
     rows: HashMap<(u64, u16), Pending>,
     current: Option<(u64, u32)>,
     retired_epochs: std::collections::HashSet<u64>,
+    gameplay: bool,
 }
 impl Assembly {
+    pub fn gameplay() -> Self {
+        Self {
+            gameplay: true,
+            ..Self::default()
+        }
+    }
     pub fn part(&mut self, b: &[u8]) -> Result<(), &'static str> {
         if b.len() + hsmp_ipc::wire::HDR > hsmp_net::net::frag::MAX_MESSAGE {
             return Err("descriptor part bound");
@@ -211,6 +248,7 @@ impl Assembly {
                     header: h.clone(),
                     got: 0,
                     ready: None,
+                    gameplay_ready: None,
                 },
             );
         }
@@ -228,21 +266,78 @@ impl Assembly {
             if <[u8; 32]>::from(Sha256::digest(&p.body)) != h.digest {
                 return Err("descriptor digest mismatch");
             }
-            let d = decode_descriptor(&p.body)?;
-            if d.reference != h.reference
-                || d.slot != h.slot
-                || d.directory_seq != h.directory_seq
-                || d.revision != h.revision
-                || d.source_frame_seq != h.source_frame_seq
-            {
-                return Err("descriptor body header mismatch");
+            if self.gameplay {
+                let d = crate::native_gameplay_wire::decode_bootstrap(&p.body)?;
+                if d.reference != h.reference
+                    || d.slot != h.slot
+                    || d.directory_seq != h.directory_seq
+                    || d.revision != h.revision
+                    || d.source_frame_seq != h.source_frame_seq
+                {
+                    return Err("gameplay bootstrap body header mismatch");
+                }
+                p.gameplay_ready = Some(d);
+            } else {
+                let d = decode_descriptor(&p.body)?;
+                if d.reference != h.reference
+                    || d.slot != h.slot
+                    || d.directory_seq != h.directory_seq
+                    || d.revision != h.revision
+                    || d.source_frame_seq != h.source_frame_seq
+                {
+                    return Err("descriptor body header mismatch");
+                }
+                p.ready = Some(d);
             }
-            p.ready = Some(d);
         }
         Ok(())
     }
     /// Complete parts may precede their ordered directory. No partially decoded recipe is exposed.
     pub fn ready(&mut self, d: &Directory) -> Result<Vec<Descriptor>, &'static str> {
+        if self.gameplay {
+            return Err("gameplay bootstrap assembly requires typed admission");
+        }
+        self.admit_directory(d)?;
+        Ok(self
+            .rows
+            .values_mut()
+            .filter_map(|p| {
+                if Self::matches(&p.header, d) {
+                    p.ready.take()
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+    pub fn ready_gameplay(
+        &mut self,
+        d: &Directory,
+    ) -> Result<Vec<crate::native_gameplay_wire::Bootstrap>, &'static str> {
+        if !self.gameplay {
+            return Err("full recipe assembly requires typed admission");
+        }
+        self.admit_directory(d)?;
+        Ok(self
+            .rows
+            .values_mut()
+            .filter_map(|p| {
+                if Self::matches(&p.header, d) {
+                    p.gameplay_ready.take()
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+    fn matches(h: &Header, d: &Directory) -> bool {
+        h.directory_seq == d.seq
+            && h.reference.epoch == d.epoch
+            && d.entities
+                .iter()
+                .any(|e| e.slot == h.slot && e.reference == h.reference)
+    }
+    fn admit_directory(&mut self, d: &Directory) -> Result<(), &'static str> {
         if self.retired_epochs.contains(&d.epoch) {
             return Err("retired descriptor epoch directory");
         }
@@ -259,27 +354,41 @@ impl Assembly {
             !self.retired_epochs.contains(&p.header.reference.epoch)
                 && (p.header.reference.epoch != d.epoch || p.header.directory_seq >= d.seq)
         });
-        Ok(self
-            .rows
-            .values_mut()
-            .filter_map(|p| {
-                if p.header.directory_seq == d.seq
-                    && p.header.reference.epoch == d.epoch
-                    && d.entities
-                        .iter()
-                        .any(|e| e.slot == p.header.slot && e.reference == p.header.reference)
-                {
-                    p.ready.take()
-                } else {
-                    None
-                }
-            })
-            .collect())
+        Ok(())
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn gameplay_bootstrap_parts_are_typed_and_admit_only_complete_original_directory() {
+        let (directory, recipes, _) = scene_stream::tests::fixture();
+        let original = &recipes[0];
+        let bootstrap = crate::native_gameplay_wire::Bootstrap {
+            reference: original.reference,
+            slot: original.slot,
+            directory_seq: original.directory_seq,
+            revision: original.revision,
+            source_frame_seq: original.source_frame_seq,
+            recipe: crate::native_gameplay_wire::fixture_recipe(),
+        };
+        let batch = Batch::gameplay(&bootstrap).unwrap();
+        assert_eq!(batch.kind(), K_GAMEPLAY_BOOTSTRAP_PART);
+        let part = batch.part(0).unwrap();
+        let mut assembly = Assembly::gameplay();
+        assembly.part(&part).unwrap();
+        let mut wrong = directory.clone();
+        wrong.entities.clear();
+        assert!(assembly.ready_gameplay(&wrong).unwrap().is_empty());
+        assert_eq!(
+            assembly.ready_gameplay(&directory).unwrap(),
+            vec![bootstrap]
+        );
+        assert!(Assembly::default().part(&part).is_err());
+        assert!(Assembly::gameplay()
+            .part(&Batch::new(original).unwrap().part(0).unwrap())
+            .is_err());
+    }
     #[test]
     fn native_descriptor_parts_preserve_large_recipe_and_nulls_before_exposure() {
         let (directory, recipes, _) = scene_stream::tests::fixture();

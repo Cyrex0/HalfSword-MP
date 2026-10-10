@@ -15,6 +15,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 - Add ordered native movement requests and staged Willie pawn construction from
   complete source gear recipes. Actual gameplay and combat parity remain under
   verification; accept pinned UE4SS AActor wrappers during native pawn creation.
+- Bootstrap gameplay clients with complete native gear and construction recipes
+  without harvesting mirror geometry or vertex colours. Populate native passport
+  maps through typed operations to avoid UE4SS's nested table conversion error.
 - Match the actual canvas dimensions in the launcher resize fixture, avoiding
   false failures when generated folder names contain the same digits.
 - Store compiled warm mesh expectations in contiguous ordered arrays while

@@ -219,6 +219,39 @@ pawn.GetActorScale3D=prior;current_address=10
 scope=false
 T.check(adapter.capture(0)==nil,"actual adapter performs no source capture in dropped world")
 scope=true
+do
+    local render_calls,begun,closed=0,0,0
+    local options={WG=WG,gameplay=true,
+        resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Fixture",pawn=pawn,
+            world={GetAddress=function()return 1 end}}end,
+        capture_render=function()render_calls=render_calls+1;error("gameplay must construct local native assets",0)end,
+        source_scope={begin=function(context,original)
+            begun=begun+1
+            T.check(context==phase_context and original.world==1 and original.pawn==10 and original.controller==9,
+                "gameplay scope pins the original source binding after first complete harvest")
+            T.check(#original.weapon_links==7 and original.weapon_links[1].field=="Weapon R"and original.weapon_links[7].field=="Weapon Slot L 2",
+                "gameplay scope pins all seven original hard links including nulls")
+            for _,link in ipairs(original.weapon_links)do T.check(link.address==0,"actual null hard link remains explicit")end
+            return 73
+        end,finish=function(handle,qualified)
+            closed=closed+1;T.check(handle==73 and qualified==nil,"abandoned gameplay scope closes without native object reads")
+            return true
+        end}}
+    local gameplay_adapter=Adapter.new(options)
+    local compact,original=gameplay_adapter.capture(0,phase_context)
+    T.check(compact~=nil and compact.schema==1,"gameplay captures a distinct complete native recipe")
+    T.check(compact.components==nil and compact.topology==nil and render_calls==0,"gameplay bootstrap never harvests mirror or vertex records")
+    T.check(T.eq(compact.passport,actual.passport)and T.eq(compact.construction,actual.construction)and T.eq(compact.equipment,actual.equipment),
+        "all original passport/construction/armor observations remain exact")
+    T.check(original.scope_id==73 and begun==1 and closed==0,"original gameplay scope survives until native publication final tail")
+    gameplay_adapter.discard(original);gameplay_adapter.discard(original)
+    T.check(closed==1 and original.scope_id==nil,"early refusal consumes original scope exactly once")
+    options.phase=function(_,stage,edge,detail)
+        if stage=="harvest"and edge=="enter"and detail.pass==2 then scope=false end
+    end
+    T.check(Adapter.new(options).capture(0,phase_context)==nil and closed==2,"second-harvest world loss cleans original scope without publication")
+    scope=true
+end
 local broken=Adapter.new({WG=WG,resolve=function(index)return {index=index,world_key="fixture",pc_address=9,pc_name="PC",pawn_address=10,pawn_name="Fixture",pawn=pawn,
     world={GetAddress=function()scope=false;return 1 end}}end})
 local guarded,reason=broken.capture(0)

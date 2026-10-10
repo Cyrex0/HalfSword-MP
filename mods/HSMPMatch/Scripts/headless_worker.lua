@@ -478,20 +478,28 @@ function M.start()
         end
         local token, actors = WG.token(), {}
         if native_mode ~= "diagnostic" then
-            if not N.host_describe or (not gameplay and not N.native_capture_render) then return false, "native source/render APIs unavailable" end
-            for _,name in ipairs({"native_source_scope_begin","native_source_scope_keep","native_source_scope_resolve","native_source_scope_end","native_source_scope_spline_profile","native_source_scope_vertex_state","native_source_roster_facts"})do
+            local describe
+            if gameplay then describe=N.host_gameplay_describe else describe=N.host_describe end
+            if gameplay and type(N.host_gameplay_describe)~="function"then return false,"native gameplay bootstrap API unavailable"end
+            if type(describe)~="function"or(not gameplay and not N.native_capture_render)then return false,"native source/render APIs unavailable"end
+            local required={"native_source_scope_begin","native_source_scope_end","native_source_roster_facts"}
+            if not gameplay then
+                for _,name in ipairs({"native_source_scope_keep","native_source_scope_resolve","native_source_scope_spline_profile","native_source_scope_vertex_state"})do required[#required+1]=name end
+            end
+            for _,name in ipairs(required)do
                 if type(N[name])~="function"then return false,"native source identity API unavailable: "..name end
             end
             if not source_lifecycle then
                 local Adapter, Lifecycle = load_module("native_source_adapter"), load_module("headless_source_lifecycle")
                 if not Adapter or not Lifecycle then return false, "native source descriptor modules unavailable" end
-                local adapter = Adapter.new({ resolve=resolve, WG=WG, phase=source_phase,
+                local adapter = Adapter.new({ resolve=resolve, WG=WG, phase=source_phase,gameplay=gameplay,
                     source_scope={begin=N.native_source_scope_begin,keep=N.native_source_scope_keep,
                         resolve=N.native_source_scope_resolve,finish=N.native_source_scope_end,profile=N.native_source_scope_spline_profile,
                         vertex_state=N.native_source_scope_vertex_state} })
                 source_lifecycle = Lifecycle.new({ resolve=resolve,same=WG.same,now_ms=function()return os.clock()*1000 end,
                     index=function(row)return row.kind==0 and row.controller or first_ai_name end,
-                    capture=adapter.capture,describe=N.host_describe,phase=source_phase,
+                    capture=adapter.capture,discard=gameplay and adapter.discard or nil,
+                    describe=describe,phase=source_phase,
                     directory=N.host_directory,roster_facts=N.native_source_roster_facts,
                     addresses=function(binding)return {world=binding.world:GetAddress(),pawn=binding.pawn_address,controller=binding.pc_address}end,
                     invalidate=function()if hosted and N.host_world_changed then N.host_world_changed() end;IPC.world_leaving()end })
