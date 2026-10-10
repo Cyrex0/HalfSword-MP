@@ -1406,6 +1406,42 @@ void gameplay_readback_checks(){
         "gameplay failure fits the fixed result buffer with exact extreme doubles and complete ten-channel mask");
     check(profile_ffi_calls==calls,"gameplay copied readback diagnostics make no native or logger callback");
 }
+void gameplay_current_checks(HsmpReflect& reflect){
+    lookup_reset(reflect);std::array<uint64_t,0x7b0/8> table{};constexpr uintptr_t base=0x140000000;
+    struct ControllerFixture {LifetimeObject identity;std::array<uint8_t,0x700-sizeof(LifetimeObject)> storage{};};
+    static_assert(sizeof(ControllerFixture)==0x700);ControllerFixture memory{};auto* controller=&memory.identity;
+    controller->name=reinterpret_cast<uint64_t>(table.data());controller->cls=&actor_class;controller->outer=&level;lifetime_objects.push_back(controller);
+    table[0x7a8/8]=base+0x37d5060;
+    foreign_owner.outer=&level;level.outer=&path_package;get_level_fn.outer=&actor_class;owner_fn.outer=&actor_class;
+    actor_class.outer=&path_package;old_world.outer=&path_package;
+    auto* local=reinterpret_cast<uint8_t*>(&memory)+0x6bc;*local=1;
+    GameplayPawn entry;entry.world=keep(&old_world);entry.controller=keep(controller);entry.pawn=keep(&foreign_owner);
+    entry.actor_class=keep(&actor_class);entry.level=keep(&level);entry.stage=1;
+    entry.level_world=object_field(L"OwningWorld",static_cast<int32_t>(offsetof(LifetimeObject,property)));
+    {int admission=1;const HsmpViewGuard guard{&admission,guard_check};OperationScope scope(&guard,entry.world);
+    check(active_lookup!=nullptr,"current fixture retains the real operation-scoped world/GI lookup lifetime before path binding");
+    entry.world_path=gameplay_path(entry.world);
+    entry.controller_path=gameplay_path(entry.controller);
+    entry.pawn_path=gameplay_path(entry.pawn);
+    GameplayCurrent profile;profile.controller_level=entry.level;profile.level_world=entry.level_world;profile.level_path=gameplay_path(entry.level);
+    profile.get_level_path=gameplay_path(keep(&get_level_fn));profile.local_path=gameplay_path(keep(&owner_fn));
+    profile.local.offset=0x6bc;profile.local.size=1;profile.local.bool_mask=0xff;profile.vtable=reinterpret_cast<uint64_t>(table.data());entry.current=profile;
+    check(gameplay_current_positive(entry,true,base)&&level_calls==0,"qualified positive current branch uses fresh world/level/local facts without native PE");
+    *local=0;check(!gameplay_current_positive(entry,true,base),"zero local byte selects original native fallback rather than cached positive result");
+    *local=2;check(gameplay_current_positive(entry,true,base),"full native bool byte positive branch preserves non-one true values");
+    check(!gameplay_current_positive(entry,false,base),"unsupported native code selects unchanged legacy admission");
+    table[0x7a8/8]++;check(!gameplay_current_positive(entry,true,base),"unsupported current virtual target selects native fallback");table[0x7a8/8]--;
+    entry.current->local.bool_mask=1;check(!gameplay_current_positive(entry,true,base),"nonmatching native bool layout selects legacy admission");entry.current->local.bool_mask=0xff;
+    level.property=&new_world;rejects([&]{gameplay_current_positive(entry,true,base);},"fresh original level world change refuses hot current");level.property=&old_world;
+    controller->outer=&foreign_level;rejects([&]{gameplay_current_positive(entry,true,base);},"controller original hard level link cannot be rebound by hot current");controller->outer=&level;
+    controller->flags=0x40000000;rejects([&]{gameplay_current_positive(entry,true,base);},"original controller garbage refuses before local byte access");controller->flags=0;
+    owner_fn.name^=1;rejects([&]{gameplay_current_positive(entry,true,base);},"original native predicate function identity remains qualified");owner_fn.name^=1;
+    controller->cls=&world_class;rejects([&]{gameplay_current_positive(entry,true,base);},"original controller class replacement refuses hot current");controller->cls=&actor_class;
+    foreign_owner.alive=false;rejects([&]{gameplay_current_positive(entry,true,base);},"original pawn expiration refuses even with positive local controller");foreign_owner.alive=true;
+    check(gameplay_current_positive(entry,true,base)&&level_calls==0,"next invocation repeats original qualification without native PE or validation ticket");
+    }
+    lifetime_reset(reflect);
+}
 }
 int main() {
     try {
@@ -1655,6 +1691,7 @@ int main() {
         present_profile_checks(reflect);
         create_trace_checks(reflect);
         gameplay_readback_checks();
+        gameplay_current_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}
         const auto trace_calls=profile_ffi_calls;profile_tick(0);profile_phase("inactive",0);

@@ -8,11 +8,16 @@ struct GameplayApplied {
     HsmpProp root_field{},parent{},position{},rotation{},velocity{},health{},stamina{},mesh_field{},visible{},hidden{},skinned{},skeletal{};
     HsmpProp manager{},pc_owner{},view_target{},pending_target{},hud_field{},show_hud{};
 };
+struct GameplayCurrent {
+    Obj controller_level{};LookupEntry level_path,get_level_path,local_path;
+    HsmpProp level_world{},local{};uint64_t vtable{};
+};
 struct GameplayPawn {
     Obj world{},controller{},pawn{},actor_class{},level{};
     Transform initial{};uint32_t own{},stage{};
     LookupEntry world_path,controller_path,pawn_path;
     HsmpProp level_world{},controller_pawn{},pawn_controller{};
+    std::optional<GameplayCurrent> current;
     std::optional<GameplayApplied> applied;
 };
 std::map<uint64_t,GameplayPawn> gameplay_pawns;
@@ -40,6 +45,19 @@ void gameplay_transform_code(){
     require(pe->Signature==IMAGE_NT_SIGNATURE&&pe->FileHeader.Machine==IMAGE_FILE_MACHINE_AMD64&&pe->OptionalHeader.Magic==IMAGE_NT_OPTIONAL_HDR64_MAGIC&&
         pe->OptionalHeader.SizeOfImage>0x34a5990+bytes.size()&&std::memcmp(image+0x34a5990,bytes.data(),bytes.size())==0,"native gameplay original GetTransform code changed");
 }
+bool gameplay_current_code(uintptr_t& base){
+    const auto* image=reinterpret_cast<const uint8_t*>(GetModuleHandleW(nullptr));if(!image)return false;
+    const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);if(dos->e_magic!=IMAGE_DOS_SIGNATURE||dos->e_lfanew<=0||dos->e_lfanew>=65536)return false;
+    const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);
+    if(pe->Signature!=IMAGE_NT_SIGNATURE||pe->FileHeader.Machine!=IMAGE_FILE_MACHINE_AMD64||pe->OptionalHeader.Magic!=IMAGE_NT_OPTIONAL_HDR64_MAGIC||pe->OptionalHeader.SizeOfImage<=0x37d50a9)return false;
+    constexpr std::array<uint8_t,47> local_exec{0x40,0x53,0x48,0x83,0xec,0x20,0x48,0x8b,0x42,0x20,0x45,0x33,0xc9,0x48,0x85,0xc0,0x49,0x8b,0xd8,0x41,0x0f,0x95,0xc1,0x4c,0x03,0xc8,0x4c,0x89,0x4a,0x20,0x48,0x8b,0x01,0xff,0x90,0xa8,0x07,0x00,0x00,0x88,0x03,0x48,0x83,0xc4,0x20,0x5b,0xc3};
+    constexpr std::array<uint8_t,73> local_leaf{0x40,0x53,0x48,0x83,0xec,0x20,0x80,0xb9,0xbc,0x06,0x00,0x00,0x00,0x48,0x8b,0xd9,0x75,0x2f,0xe8,0xa9,0x4e,0xcc,0xff,0x83,0xf8,0x01,0x75,0x08,0x32,0xc0,0x48,0x83,0xc4,0x20,0x5b,0xc3,0x83,0xf8,0x03,0x74,0x11,0x85,0xc0,0x74,0x0d,0x0f,0xb6,0x83,0xbc,0x06,0x00,0x00,0x48,0x83,0xc4,0x20,0x5b,0xc3,0xc6,0x83,0xbc,0x06,0x00,0x00,0x01,0xb0,0x01,0x48,0x83,0xc4,0x20,0x5b,0xc3};
+    constexpr std::array<uint8_t,67> level_exec{0x48,0x89,0x5c,0x24,0x08,0x57,0x48,0x83,0xec,0x20,0x48,0x8b,0x42,0x20,0x45,0x33,0xc9,0x48,0x85,0xc0,0x49,0x8b,0xf8,0x48,0x8b,0xd9,0x41,0x0f,0x95,0xc1,0x4c,0x03,0xc8,0x4c,0x89,0x4a,0x20,0xe8,0xd6,0xa2,0x27,0x00,0x48,0x8b,0xd0,0x48,0x8b,0xcb,0xe8,0x5b,0x59,0x01,0xfe,0x48,0x8b,0x5c,0x24,0x30,0x48,0x89,0x07,0x48,0x83,0xc4,0x20,0x5f,0xc3};
+    constexpr std::array<uint8_t,81> typed_outer{0x48,0x89,0x5c,0x24,0x08,0x57,0x48,0x83,0xec,0x20,0x48,0x8b,0xfa,0x48,0x8b,0xd9,0xe8,0x6b,0x75,0xf8,0xff,0x48,0x8b,0x43,0x20,0x0f,0x1f,0x80,0x00,0x00,0x00,0x00,0x48,0x85,0xc0,0x74,0x21,0x48,0x8b,0x48,0x10,0x4c,0x8d,0x47,0x30,0x49,0x63,0x50,0x08,0x3b,0x51,0x38,0x7f,0x0a,0x48,0x8b,0x49,0x30,0x4c,0x39,0x04,0xd1,0x74,0x06,0x48,0x8b,0x40,0x20,0xeb,0xda,0x48,0x8b,0x5c,0x24,0x30,0x48,0x83,0xc4,0x20,0x5f,0xc3};
+    if(std::memcmp(image+0x355aea0,local_exec.data(),local_exec.size())||std::memcmp(image+0x37d5060,local_leaf.data(),local_leaf.size())||
+        std::memcmp(image+0x34a5200,level_exec.data(),level_exec.size())||std::memcmp(image+0x14bab90,typed_outer.data(),typed_outer.size()))return false;
+    base=reinterpret_cast<uintptr_t>(image);return true;
+}
 thread_local const GameplayPawn* gameplay_active{};
 void gameplay_enum_disabled(Obj pawn,const wchar_t* field);
 void gameplay_layouts(){
@@ -61,6 +79,15 @@ LookupEntry gameplay_path(Obj object){
     }
     path.pinned=path.original;lookup_pin(path);lookup_entry_final(path);return path;
 }
+void gameplay_current_paths(const GameplayPawn& entry){
+    if(!entry.current)return;const auto& profile=*entry.current;
+    lookup_entry_final(profile.level_path);lookup_entry_final(profile.get_level_path);lookup_entry_final(profile.local_path);
+    const auto* pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
+    const auto* level=lookup_node_get(profile.level_path.pinned.front(),profile.level_path.zero_item);
+    const auto* outer=source_outer(pc);require(outer&&reinterpret_cast<uint64_t>(*outer)==profile.controller_level.address,"native gameplay original controller level changed");
+    void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+profile.level_world.offset,8);
+    require(reinterpret_cast<uint64_t>(world)==entry.world.address,"native gameplay original controller world changed");
+}
 void gameplay_pure(const GameplayPawn& entry){
     lookup_entry_final(entry.world_path);lookup_entry_final(entry.controller_path);lookup_entry_final(entry.pawn_path);
     const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
@@ -68,6 +95,7 @@ void gameplay_pure(const GameplayPawn& entry){
     const auto* level=vt->resolve(entry.level.weak);require(level&&reinterpret_cast<uint64_t>(level)==entry.level.address,"native gameplay original level expired");
     void* world{};std::memcpy(&world,static_cast<const uint8_t*>(level)+entry.level_world.offset,8);
     require(reinterpret_cast<uint64_t>(world)==entry.world.address,"native gameplay original world changed");
+    gameplay_current_paths(entry);
     if(entry.stage>=3&&entry.own){
         const auto* pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
         void* owned{};void* controller{};
@@ -76,6 +104,40 @@ void gameplay_pure(const GameplayPawn& entry){
         require(reinterpret_cast<uint64_t>(owned)==entry.pawn.address&&reinterpret_cast<uint64_t>(controller)==entry.controller.address,
             "native gameplay original possession changed");
     }
+}
+bool gameplay_current_positive(const GameplayPawn& entry,bool code_supported,uintptr_t base){
+    gameplay_pure(entry);if(!entry.current||!code_supported)return false;const auto& profile=*entry.current;
+    if(profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=0xff)return false;
+    const auto* pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
+    uint64_t table{},target{};std::memcpy(&table,pc,8);if(!table||table!=profile.vtable)return false;
+    std::memcpy(&target,reinterpret_cast<const uint8_t*>(table)+0x7a8,8);if(target!=base+0x37d5060)return false;
+    const bool positive=static_cast<const uint8_t*>(pc)[profile.local.offset]!=0;
+    gameplay_pure(entry);
+    if(positive){const auto* final_pc=lookup_node_get(entry.controller_path.pinned.front(),entry.controller_path.zero_item);
+        uint64_t final_table{},final_target{};std::memcpy(&final_table,final_pc,8);
+        require(final_table==profile.vtable,"native gameplay original controller vtable changed");
+        std::memcpy(&final_target,reinterpret_cast<const uint8_t*>(final_table)+0x7a8,8);
+        require(final_target==base+0x37d5060&&static_cast<const uint8_t*>(final_pc)[profile.local.offset]!=0,"native gameplay local controller changed");}
+    return positive;
+}
+void gameplay_current_bind(GameplayPawn& entry,HsmpViewResult* result){
+    GameplayCurrent profile;profile.controller_level=returned(entry.controller,L"/Script/Engine.Actor:GetLevel",result);
+    require(profile.controller_level.weak&&is(profile.controller_level,L"/Script/Engine.Level"),"native gameplay original controller level unavailable");
+    const auto* pc_before=get(entry.controller);const auto* outer=source_outer(pc_before);const auto original_outer=outer?*outer:nullptr;get(entry.controller);
+    if(reinterpret_cast<uint64_t>(original_outer)!=profile.controller_level.address)return;
+    profile.level_world=property(profile.controller_level,L"OwningWorld",L"ObjectProperty",8);
+    require(profile.level_world.offset==0xc0,"native gameplay controller world schema changed");
+    auto* pc=get(entry.controller);const auto found=vt->obj_prop(pc,u16(L"bIsLocalPlayerController"),&profile.local);get(entry.controller);
+    if(found!=1||profile.local.cls!=name(L"BoolProperty")||profile.local.offset!=0x6bc||profile.local.size!=1||profile.local.bool_offset!=0||profile.local.bool_mask!=0xff)return;
+    uintptr_t image{};if(!gameplay_current_code(image))return;
+    std::memcpy(&profile.vtable,pc,8);
+    const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(image);const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(image+dos->e_lfanew);
+    if(profile.vtable<image||profile.vtable-image>pe->OptionalHeader.SizeOfImage-0x7b0)return;
+    uint64_t target{};std::memcpy(&target,reinterpret_cast<const uint8_t*>(profile.vtable)+0x7a8,8);if(target!=image+0x37d5060)return;
+    Function level_api(L"/Script/Engine.Actor:GetLevel");level_api.field(L"ReturnValue",L"ObjectProperty",8);
+    Function local_api(L"/Script/Engine.Controller:IsLocalController");local_api.field(L"ReturnValue",L"BoolProperty",1);
+    profile.level_path=gameplay_path(profile.controller_level);profile.get_level_path=gameplay_path(level_api.function);profile.local_path=gameplay_path(local_api.function);
+    entry.current=std::move(profile);gameplay_pure(entry);
 }
 void gameplay_call_guard(){
     if(!gameplay_active)return;
@@ -118,6 +180,7 @@ int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Tr
         entry.level=returned(created,L"/Script/Engine.Actor:GetLevel",result);entry.level_world=property(entry.level,L"OwningWorld",L"ObjectProperty",8);
         entry.controller_pawn=property(controller,L"Pawn",L"ObjectProperty",8);entry.pawn_controller=property(created,L"Controller",L"ObjectProperty",8);
         entry.world_path=gameplay_path(world);entry.controller_path=gameplay_path(controller);entry.pawn_path=gameplay_path(created);
+        gameplay_current_bind(entry,result);
         gameplay_pure(entry);lookup_finish();require(gameplay_next_handle!=0,"native gameplay handle exhausted");
         const auto key=gameplay_next_handle++;gameplay_pawns.emplace(key,std::move(entry));*handle=key;*pawn=created;result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());
@@ -129,7 +192,11 @@ int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Tr
 int32_t gameplay_current(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
-        require(pawn!=nullptr,"native gameplay pawn output missing");gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);*pawn=entry.pawn;result->complete=1;return 1;
+        require(pawn!=nullptr,"native gameplay pawn output missing");uintptr_t image{};
+        const bool code_supported=gameplay_current_code(image);const bool hot=gameplay_current_positive(entry,code_supported,image);
+        if(!hot)gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);
+        if(hot){uintptr_t final_image{};const bool final_code=gameplay_current_code(final_image);require(gameplay_current_positive(entry,final_code,final_image),"native gameplay local controller changed");}
+        *pawn=entry.pawn;result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
 int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){

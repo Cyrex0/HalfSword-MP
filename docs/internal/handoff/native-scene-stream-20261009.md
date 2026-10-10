@@ -2,6 +2,34 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual5510caf3 fullG0 Lua77/Rust1378/79, pusheddev/RequireG0/all396:
+standardGameplay054322-04a9e1 client2 nativeapply succeeds23215→23221ms; full
+gear then original result stale at23973ms, postapply752ms. Separate priorrun
+client1 postapply2012ms; no normalized speed benchmark claim. Still above250ms,
+no ready/input0; client1 later original-stage guard refusal is secondary. Early
+original windows secondaryPASS; selected Sky windows exit before capture.
+CleanupPASS/four absent/save20/nodumps. Evidence native_operator_summary.
+Next pin exact native current local-controller/world predicates and equivalent
+fresh raw original-field proof, retaining current admission/roster and all gear
+checks. No cached bool/oldproof or expiry renewal allowed.
+Primary current-path proof: actor_world uses Actor:GetLevel and Level.OwningWorld
+twice plus IsLocalController. GetLevel exec34A5200→GetTypedOuter14BAB90 returns
+first qualified Level via Outer20; immediate retained Outer==original qualified
+Level with fresh original OwningWorld supports exact world predicate. Controller
+IsLocalController exec355AEA0 uses actual receiver vtable+7A8; native PC table
+4755ADE8 cell4755B590 targets37D5060. Fresh nonzero byte6BC returns true without
+callback/write; zero follows NetMode/maywrite and needs legacy call. Candidate
+provider.current hot branch captures controller Level/class/path/schema and native
+code/dispatch witnesses, rechecks code/slot/positive byte plus original Outer,
+Level.OwningWorld/class/path/possession every call before/after. Zero/unsupported
+falls back; construct/apply/finish unchanged. No cached admission bool or newABI.
+Two-file current fast path frozen/review CLOSED. Strict production CPP compiles;
+focused fixture1786 PASS including13 fresh supported/fallback/mutation cases.
+Mock correction: independent byte-backed controller avoids fixed-object padding
+underflow; original path binding now uses live OperationScope as production does.
+Earlier isolated test AV was missing that scope, not an actual game crash; all
+temporary phase markers removed. FullG0/deploy and actual warm-current timing next.
+
 Actual9499cdd0 fullG0 Lua77/Rust1378/79, pusheddev/RequireG0/all396:
 standardGameplay052656-bf39a7 BOTH native provider apply succeed (client1
 33863→33871ms, client2 34127→34138ms). Exact native quaternion/position/velocity,
