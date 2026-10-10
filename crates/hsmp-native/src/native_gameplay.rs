@@ -30,6 +30,7 @@ pub struct NativeState {
     pub velocity: [f64; 3],
     pub health: Value,
     pub stamina: Value,
+    pub cache_rotation: [f64; 3],
 }
 #[repr(C)]
 #[derive(Default)]
@@ -78,7 +79,7 @@ pub struct Provider {
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_gameplay(p: *const Provider) {
-    let admitted = if !p.is_null() && unsafe { (*p).abi } == 2 {
+    let admitted = if !p.is_null() && unsafe { (*p).abi } == 3 {
         p.cast_mut()
     } else {
         std::ptr::null_mut()
@@ -382,6 +383,7 @@ fn native_state(state: &gp::State) -> NativeState {
         velocity: state.velocity,
         health: native_value(state.health),
         stamina: native_value(state.stamina),
+        cache_rotation: state.cache_rotation,
     }
 }
 unsafe fn push_scene(L: *mut lua_State, s: &GameplayScene, proved: bool) -> Result<(), String> {
@@ -448,6 +450,7 @@ unsafe fn push_scene(L: *mut lua_State, s: &GameplayScene, proved: bool) -> Resu
             array(L, r, "position", v.position);
             array(L, r, "rotation", v.rotation);
             array(L, r, "orientation", v.orientation);
+            array(L, r, "cache_rotation", v.cache_rotation);
             array(L, r, "velocity", v.velocity);
             for (name, value) in [("health", v.health), ("stamina", v.stamina)] {
                 lua_createtable(L, 0, 2);
@@ -1169,6 +1172,7 @@ mod tests {
                         f64::from_bits(0x3fe6_a09e_667f_3bcc),
                         f64::from_bits(0x3fe6_a09e_667f_3bcd),
                     ],
+                    cache_rotation: [-0., 90.00000000000001, 1.0000000000000002],
                     velocity: [1., 2., 3.],
                     health: gp::NativeScalar::F32(100f32.to_bits()),
                     stamina: gp::NativeScalar::F64(99f64.to_bits()),
@@ -1318,9 +1322,10 @@ mod tests {
     #[test]
     fn private_provider_layout() {
         assert_eq!(std::mem::size_of::<Value>(), 16);
-        assert_eq!(std::mem::size_of::<NativeState>(), 112);
+        assert_eq!(std::mem::size_of::<NativeState>(), 136);
         assert_eq!(std::mem::offset_of!(NativeState, orientation), 24);
         assert_eq!(std::mem::offset_of!(NativeState, velocity), 56);
+        assert_eq!(std::mem::offset_of!(NativeState, cache_rotation), 112);
         assert_eq!(std::mem::size_of::<Proof>(), 112);
         assert_eq!(std::mem::size_of::<Provider>(), 72);
         assert_eq!(std::mem::offset_of!(Provider, complete), 64);
@@ -1342,6 +1347,10 @@ mod tests {
             state.orientation.map(f64::to_bits),
             row.orientation.map(f64::to_bits)
         );
+        assert_eq!(
+            state.cache_rotation.map(f64::to_bits),
+            row.cache_rotation.map(f64::to_bits)
+        );
         assert_eq!(transform.scale, [0.75, 1.5, 2.]);
         assert_eq!(
             state.position.map(f64::to_bits),
@@ -1359,9 +1368,12 @@ mod tests {
             abi: u32,
             pad: u32,
         }
-        let old = OldHeader { abi: 1, pad: 0 };
-        unsafe {
-            hsmp_native_set_gameplay((&old as *const OldHeader).cast());
+        for abi in [1, 2] {
+            let old = OldHeader { abi, pad: 0 };
+            unsafe {
+                hsmp_native_set_gameplay((&old as *const OldHeader).cast());
+            }
+            assert!(PROVIDER.load(Ordering::Acquire).is_null());
         }
         assert!(PROVIDER.load(Ordering::Acquire).is_null());
         unsafe {

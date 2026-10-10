@@ -855,6 +855,7 @@ impl HostHandle {
                 | hsmp_net::net::caps::NATIVE_SCENE_STREAM
                 | gp::CAP_NATIVE_GAMEPLAY
                 | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
+                | gp::CAP_NATIVE_GAMEPLAY_CACHE
                 | gp::CAP_NATIVE_COMPRESSION,
         );
         let state = Arc::new(crate::server::ServerState::with_native_mode(
@@ -1001,6 +1002,7 @@ impl ClientHandle {
         if gameplay {
             cfg.caps |= gp::CAP_NATIVE_GAMEPLAY
                 | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
+                | gp::CAP_NATIVE_GAMEPLAY_CACHE
                 | gp::CAP_NATIVE_COMPRESSION;
         }
         if presentation {
@@ -1812,6 +1814,7 @@ pub(crate) mod tests {
                     rotation: [0.; 3],
                     velocity: [0.; 3],
                     orientation: [0., 0., 0., 1.],
+                    cache_rotation: [0.; 3],
                     health: gp::NativeScalar::F32(100f32.to_bits()),
                     stamina: gp::NativeScalar::F64(99f64.to_bits()),
                 })
@@ -1945,6 +1948,7 @@ pub(crate) mod tests {
                         rotation: [0.; 3],
                         velocity: [0.; 3],
                         orientation: [-0., 0.5000000000000001, -0.5, 0.7071067811865475],
+                        cache_rotation: [-0., 90.00000000000001, 1.0000000000000002],
                         health: gp::NativeScalar::F32(100.125f32.to_bits()),
                         stamina: gp::NativeScalar::F64(70.12345678901234f64.to_bits()),
                     })
@@ -1965,6 +1969,13 @@ pub(crate) mod tests {
                 .orientation
                 .into_iter()
                 .zip(result.entities[0].orientation)
+            {
+                assert_eq!(actual.to_bits(), expected.to_bits());
+            }
+            for (actual, expected) in first.result.entities[0]
+                .cache_rotation
+                .into_iter()
+                .zip(result.entities[0].cache_rotation)
             {
                 assert_eq!(actual.to_bits(), expected.to_bits());
             }

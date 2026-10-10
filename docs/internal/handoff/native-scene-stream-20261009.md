@@ -2,6 +2,82 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Owner explicitly resumed continuous multiplayer work on 2026-10-10. Sol6.1
+extra-high agents are implementing a bounded native-state candidate; no release
+or parity claim follows from compression or offline validation.
+Primary cache import3bf5ad0 has a proven 401-byte body. It takes root and a handle
+containing a cache pointer, compares Euler numerically, and can return without
+copying a different quaternion when those Euler values match. The supported
+candidate requires an already bit-identical 56-byte pair or a numerically
+different finite Euler axis, then exact post-import readback before application.
+Unsupported pairs refuse explicitly. The source must provide exact cache Euler
+and prove its cached quaternion equals the same admitted original root transform
+quaternion; neither Actor rotation nor RelativeRotation is a substitute.
+Wire candidate v3/cap31/bound216 per entity; private provider ABI3/State136,
+appending cache_rotation[3] at112. Original offered Arc/Instant remains unchanged.
+Publication analysis closed common3bf1970 -> 3bf7430 -> 3bf4370 -> native vslot528
+physics, render dirtiness and children. Matched Primitive3bd6ee0 forwards the
+original ComponentToWorld and teleport mode to BodyInstance. Non-scoped Capsule
+tail invokes3bf7f40 with the original empty overlap view/true/null semantics,
+which dispatches native530 overlap processing. Candidate freshly requires the
+original root vtable/native slots and scope count1b0==0 around every native call;
+scoped movement or unsupported native profiles refuse rather than omit work.
+No raw cache overwrite, tolerance change or guessed source state is authorized.
+Evidence: ignored test-results/native-transform-analysis-20261010. Candidate
+implementation is frozen and both independent CPP/source reviews are closed.
+Strict native production/fixture compilation passed; existing fixture reports
+1992 lifetime/rejection assertions. Focused Rust checks passed: server gameplay
+11, capability admission1, private gameplay10, source orientation/cache3 and
+original-world seam1. These are offline checks, not actual native acceptance.
+The exact dispatched overlap body3bda090 (4063 bytes) and dirty-cache helper
+22179d0 (478 bytes) are pinned as well as import/common/publication methods.
+Current cache, C2W and relative transform must be finite before native calls.
+The callback-capable final guard is followed by a fresh cache-pair check before
+import/common dispatch. Source reflected AttachParent must be null through the
+whole roster; retained earlier-row cache/owner/world mutations refuse export.
+Full G0, exact deployment and actual native gameplay verification are next.
+
+Actual 920fd459 passed full G0 (Lua 77 / Rust 1378 / 79 test binaries), was
+pushed to dev, and deployed with RequireG0 and all 396 file hashes verified.
+Standard Gameplay 20261010-075105-667d07 reached both MirrorReady/LIVE, with
+331/332 active native source dispatches. The observation gate still fails:
+client1 tick244 native apply refuses position X requested 1.0523740317784964
+(3ff0d686271a5f77), readback 1.0523740317784966 (3ff0d686271a5f78), mask001.
+Native apply took 18.310ms; original entry receipt age was 26.5745ms. This is
+not the earlier quaternion mismatch. Copied diagnostic attempt9 is available
+before and after: original root class FName 000000000002aee4, movement vslot
+RVA3bd53c0. After-setter world quaternion and native cached quaternion both
+exactly equal the incoming quaternion; before cache differs. These observations
+identify the actual target but do not alone prove which native cache branch ran.
+No tolerance, receipt, setter or raw cache change has been made.
+Codec samples: authority eight packets 3080 raw bytes -> 1496 envelope bytes,
+19us total encode; client eight packets 3080 -> 1525, 13us/9us decode. Samples
+exclude UDP/authentication overhead and do not establish a player capacity.
+Early owned-window secondary placement passed. No model pixels were observed.
+Independent cleanup passed: four original test processes absent, all 20 career
+saves unchanged, no new dumps or unobserved children. Full copied diagnostics,
+client phase/timing/state records and cleanup are in native_operator_summary.json.
+Next task is primary analysis of the actual root movement implementation and
+its exact position/quaternion application semantics, without guessed fixes.
+Read-only native analysis closed the mechanism: CapsuleComponent (ObjectDump
+26924, FName2aee4) uses actual vslot538 target3bd53c0. No-parent3bf4c60 subtracts
+old C2W XY/Z at3bf549b/54cf; target adds it back at3bd54da/54e1/54e8 before
+common3bf1970 at3bd56cd. The failing arithmetic was not reproduced because old
+position was not captured. Reflected RelativeTransform joins the same route,
+and direct relative-location leaf3bf5900 lacks complete publication work.
+Common3bf1970 stores supplied absolute position at3bf20a8/20af, but its quaternion
+cache miss normalizes and converts quaternion->Euler->quaternion. A direct call
+also needs the complete Capsule post-move publication contract. Source relative
+rotation alone is insufficient: Euler setter3bf5680 uses the TARGET cache only
+when its cached Euler matches; otherwise it computes a new quaternion and joins
+the same movement route. The actual before RelativeRotation/cacheEuler differ
+one ULP and cannot be treated as interchangeable. Candidate additional source
+provenance is the exact original cache pair (quaternion32 + Euler24) positively
+tied to original source root/C2W quaternion. Native engine-owned import3bf5ad0
+exists but its same-Euler/different-quaternion skip and complete Capsule tail
+remain unresolved. No safe replacement setter is selected; no production change
+or new source fields were added. Compression is separately live-verified.
+
 Actual43770ea2 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
 standard Gameplay071322-ff289d BOTH ready/LIVE, source active native input58/47.
 No earlier expiry shutdown; full gear samples79–175ms (variable, separate runs,
@@ -30,8 +106,8 @@ reads or executed-branch assertion. Strict CPP production/fixture1933 PASS;
 independent review CLOSED. Early failures inside first8 no longer consume the
 separate later-failure slot; targeted fixture exercises both and max99 lines.
 Compilation corrections: explicit void pointers for both locals; unsigned9u in
-existing logger-count fixture. FullG0/deploy and actual native branch evidence
-pending; no normalization/quantization/tolerance workaround justified.
+existing logger-count fixture. Full G0/deploy and actual native target evidence
+are recorded above; no normalization/quantization/tolerance workaround justified.
 
 Actual ca155a21 full G0 Lua77/Rust1378/79, pushed dev/RequireG0/all396:
 first Gameplay065719-bfde27 client travel begins~62s, startup deadlineFAIL with

@@ -1003,12 +1003,18 @@ mod tests {
             crate::native_mode::Mode::Pvp,
         );
         assert!(!pvp.admits_capabilities(caps | gp::CAP_NATIVE_GAMEPLAY));
-        assert!(pvp.admits_capabilities(
+        assert!(!pvp.admits_capabilities(
             caps | gp::CAP_NATIVE_GAMEPLAY | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
+        ));
+        assert!(pvp.admits_capabilities(
+            caps | gp::CAP_NATIVE_GAMEPLAY
+                | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
+                | gp::CAP_NATIVE_GAMEPLAY_CACHE
         ));
         assert!(!pvp.admits_capabilities(
             caps | gp::CAP_NATIVE_GAMEPLAY
                 | gp::CAP_NATIVE_GAMEPLAY_QUATERNION
+                | gp::CAP_NATIVE_GAMEPLAY_CACHE
                 | hsmp_net::net::caps::NATIVE_PRESENTATION
         ));
         assert!(!pvp.admits_capabilities(0));

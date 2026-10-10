@@ -1406,6 +1406,69 @@ void gameplay_readback_checks(){
         "gameplay failure fits the fixed result buffer with exact extreme doubles and complete ten-channel mask");
     check(profile_ffi_calls==calls,"gameplay copied readback diagnostics make no native or logger callback");
 }
+alignas(16) std::array<uint8_t,0x230> absolute_root{};
+alignas(16) std::array<uint8_t,0x1a8> absolute_pawn{};
+alignas(16) std::array<uint64_t,0x540/8> absolute_table{};
+GameplayCachePair absolute_cache{};GameplayNativeProof absolute_proof{};
+std::vector<uint32_t> absolute_calls;uint32_t absolute_mutation{};bool absolute_changed{true};
+void absolute_reset(){absolute_root={};absolute_pawn={};absolute_table={};absolute_cache={};absolute_calls.clear();absolute_mutation=0;absolute_changed=true;
+    const void* root=absolute_root.data();const void* pawn=absolute_pawn.data();const void* cache=&absolute_cache;const void* table=absolute_table.data();
+    std::memcpy(absolute_pawn.data()+0x1a0,&root,8);std::memcpy(absolute_root.data()+0x90,&pawn,8);std::memcpy(absolute_root.data()+0x1c0,&cache,8);std::memcpy(absolute_root.data(),&table,8);
+    absolute_root[0x88]=9;absolute_root[0x18a]=8;absolute_proof={};absolute_proof.image=0x140000000ULL;absolute_proof.table=reinterpret_cast<uint64_t>(table);absolute_proof.body_flags=9;absolute_proof.notification_flags=8;
+    absolute_table[0x528/8]=absolute_proof.image+0x3bd6ee0;absolute_table[0x530/8]=absolute_proof.image+0x3bda090;absolute_table[0x538/8]=absolute_proof.image+0x3bd53c0;
+}
+void absolute_import(void* root,const void* const* source){check(root==absolute_root.data()&&source&&*source,"native importer receives the original root and live local cache handle");
+    absolute_calls.push_back(1);std::memcpy(&absolute_cache,*source,56);if(absolute_mutation==1){const void* changed{};std::memcpy(absolute_root.data()+0x90,&changed,8);}}
+uint8_t absolute_update(void* root,const double* position,const double* q,uint8_t flags,uint8_t teleport){
+    check(root==absolute_root.data()&&flags==0&&teleport==1,"native absolute setter keeps the original no-skip-physics/teleport contract");absolute_calls.push_back(2);
+    std::memcpy(absolute_root.data()+0x1d0,q,32);std::memcpy(absolute_root.data()+0x1f0,position,24);
+    if(absolute_mutation==2)absolute_cache.q[0]=std::nextafter(absolute_cache.q[0],1.);
+    return absolute_changed?1u:0u;
+}
+uint8_t absolute_overlaps(void* root,const GameplayOverlapView* pending,uint8_t notify,const GameplayOverlapView* end){
+    check(root==absolute_root.data()&&pending&&!pending->data&&pending->count==0&&notify==1&&!end,"native overlap wrapper receives the original complete empty-pending/null-end contract");
+    absolute_calls.push_back(3);if(absolute_mutation==3){const int32_t active=1;std::memcpy(absolute_root.data()+0x1b0,&active,4);}return 0;
+}
+void gameplay_absolute_checks(){
+    HsmpGameplayState state{};state.position[0]=1.0523740317784964;state.position[1]=-0.;state.orientation[0]=-0.;state.orientation[3]=1.;state.cache_rotation[1]=90.;
+    const GameplayNativeCalls api{absolute_import,absolute_update,absolute_overlaps};
+    const auto guard=[](){gameplay_native_root_fields(absolute_root.data(),absolute_pawn.data(),absolute_pawn.data(),absolute_proof);return static_cast<void*>(absolute_root.data());};
+    absolute_reset();gameplay_absolute_run(state,api,guard);
+    check(absolute_calls==std::vector<uint32_t>({1,2,3}),"native import, absolute setter and overlap publication retain ordered guarded calls");
+    check(std::memcmp(absolute_root.data()+0x1f0,state.position,24)==0&&std::memcmp(absolute_root.data()+0x1d0,state.orientation,32)==0,
+        "actual one-ULP failure position and signed-zero quaternion reach native absolute inputs bit-for-bit");
+    absolute_calls.clear();gameplay_absolute_run(state,api,guard);check(absolute_calls==std::vector<uint32_t>({2,3}),"bit-identical complete cache uses the native no-op import condition");
+    absolute_calls.clear();absolute_changed=false;gameplay_absolute_run(state,api,guard);check(absolute_calls==std::vector<uint32_t>({2}),"native unchanged result preserves no-overlap-call semantics");
+    auto desired=absolute_cache;desired.q[0]=0.;rejects([&]{gameplay_cache_import_needed(absolute_cache,desired);},"equal numerical Euler with a different raw quaternion explicitly refuses");
+    desired=absolute_cache;desired.rotation[0]=-0.;rejects([&]{gameplay_cache_import_needed(absolute_cache,desired);},"equal numerical Euler signed-zero mismatch is not silently rewritten");
+    desired=absolute_cache;desired.rotation[2]=std::numeric_limits<double>::quiet_NaN();rejects([&]{gameplay_cache_import_needed(absolute_cache,desired);},"nonfinite source cache state refuses before dispatch");
+    for(uint32_t field=0;field<5;++field){absolute_reset();const double nonfinite=std::numeric_limits<double>::quiet_NaN();
+        if(field==0)absolute_cache.q[2]=nonfinite;
+        else if(field==1)absolute_cache.rotation[1]=nonfinite;
+        else std::memcpy(absolute_root.data()+(field==2?0x1d0:field==3?0x1f0:0x140),&nonfinite,8);
+        rejects([&]{gameplay_absolute_run(state,api,guard);},"nonfinite original cache/world/relative state refuses before native publication");
+        check(absolute_calls.empty(),"nonfinite original state dispatches no importer or transform call");}
+    absolute_reset();auto invalid=absolute_cache;invalid.rotation[0]=std::numeric_limits<double>::infinity();
+    rejects([&]{gameplay_cache_import_needed(invalid,desired);},"import admissibility independently rejects nonfinite current cache");
+    absolute_reset();uint32_t guards{};
+    const auto poison_before_absolute=[&](){++guards;if(guards==3)absolute_cache.q[1]=1.;return guard();};
+    rejects([&]{gameplay_absolute_run(state,api,poison_before_absolute);},"last callback guard cannot invalidate the exact cache before common dispatch");
+    check(absolute_calls==std::vector<uint32_t>({1}),"cache change in the pre-setter guard stops before absolute dispatch");
+    for(uint32_t mutation=1;mutation<=3;++mutation){absolute_reset();absolute_mutation=mutation;rejects([&]{gameplay_absolute_run(state,api,guard);},"native importer/setter/overlap mutations refuse at their immediate original postguard");
+        check(absolute_calls.size()==mutation,"a failed native postguard dispatches no subsequent engine call");}
+    for(uint32_t mutation=0;mutation<9;++mutation){absolute_reset();
+        if(mutation==0){const void* null{};std::memcpy(absolute_pawn.data()+0x1a0,&null,8);}
+        else if(mutation==1){const void* foreign=absolute_root.data();std::memcpy(absolute_root.data()+0x90,&foreign,8);}
+        else if(mutation==2){const void* parent=absolute_pawn.data();std::memcpy(absolute_root.data()+0xb0,&parent,8);}
+        else if(mutation==3){const int32_t scoped=1;std::memcpy(absolute_root.data()+0x1b0,&scoped,4);}
+        else if(mutation==4){absolute_root[0x88]=1;}
+        else if(mutation==5){absolute_root[0x18a]=0;}
+        else absolute_table[(0x528+8*(mutation-6))/8]^=1;
+        rejects([&]{gameplay_absolute_run(state,api,guard);},"changed original root/owner/parent/scope/body flags/native slots refuse before any engine dispatch");
+        check(absolute_calls.empty(),"unsupported native root profile has no partial import or application");}
+    absolute_reset();rejects([&]{gameplay_native_root_fields(absolute_root.data(),absolute_pawn.data(),absolute_root.data(),absolute_proof);},"original root Outer remains independent of OwnerPrivate");
+    rejects([]{gameplay_native_image();},"standalone fixture image cannot qualify shipping native code by address alone");
+}
 struct GameplayCurrentRecord {uint32_t attempt{},complete{},operations{},stage{},reason{};std::string label;};
 std::vector<GameplayCurrentRecord> gameplay_current_records;bool gameplay_current_log_outside{};
 int gameplay_boundary_outer_reads{};
@@ -1796,6 +1859,7 @@ int main() {
         present_profile_checks(reflect);
         create_trace_checks(reflect);
         gameplay_readback_checks();
+        gameplay_absolute_checks();
         gameplay_current_checks(reflect);
         gameplay_quat_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");

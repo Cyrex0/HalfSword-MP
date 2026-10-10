@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 pub const CAP_NATIVE_GAMEPLAY: u64 = 1 << 28;
 pub const CAP_NATIVE_COMPRESSION: u64 = 1 << 29;
 pub const CAP_NATIVE_GAMEPLAY_QUATERNION: u64 = 1 << 30;
-pub const RESULT_VERSION: u8 = 2;
-pub const MAX_RESULT_BYTES: usize = 21 + w::MAX_ENTITIES * 192;
+pub const CAP_NATIVE_GAMEPLAY_CACHE: u64 = 1 << 31;
+pub const RESULT_VERSION: u8 = 3;
+pub const MAX_RESULT_BYTES: usize = 21 + w::MAX_ENTITIES * 216;
 pub fn gameplay_capable(caps: u64) -> bool {
-    let required = CAP_NATIVE_GAMEPLAY | CAP_NATIVE_GAMEPLAY_QUATERNION;
+    let required = CAP_NATIVE_GAMEPLAY | CAP_NATIVE_GAMEPLAY_QUATERNION | CAP_NATIVE_GAMEPLAY_CACHE;
     caps & required == required
 }
 pub const RECIPE_SCHEMA: u16 = 1;
@@ -204,6 +205,8 @@ pub struct State {
     pub velocity: [f64; 3],
     /// Exact native quaternion in XYZW order. No Euler reconstruction.
     pub orientation: [f64; 4],
+    /// Exact Euler paired with orientation in the original native root cache.
+    pub cache_rotation: [f64; 3],
     pub health: NativeScalar,
     pub stamina: NativeScalar,
 }
@@ -249,6 +252,7 @@ impl ResultFrame {
                 .chain(&e.rotation)
                 .chain(&e.velocity)
                 .chain(&e.orientation)
+                .chain(&e.cache_rotation)
                 .any(|v| !v.is_finite())
             {
                 return Err("gameplay result transform");
@@ -333,6 +337,9 @@ pub fn encode_result(v: &ResultFrame) -> Result<Vec<u8>, &'static str> {
         for v in e.orientation {
             out.put_u64(v.to_bits());
         }
+        for v in e.cache_rotation {
+            out.put_u64(v.to_bits());
+        }
         scalar(&mut out, e.health);
         scalar(&mut out, e.stamina);
     }
@@ -380,6 +387,10 @@ pub fn decode_result(bytes: &[u8]) -> Result<ResultFrame, &'static str> {
         for v in &mut orientation {
             *v = f64::from_bits(read!(u64));
         }
+        let mut cache_rotation = [0.; 3];
+        for v in &mut cache_rotation {
+            *v = f64::from_bits(read!(u64));
+        }
         entities.push(State {
             reference,
             request_seq,
@@ -390,6 +401,7 @@ pub fn decode_result(bytes: &[u8]) -> Result<ResultFrame, &'static str> {
             rotation: p[1],
             velocity: p[2],
             orientation,
+            cache_rotation,
             health: read_scalar(&mut r)?,
             stamina: read_scalar(&mut r)?,
         });
@@ -551,6 +563,7 @@ mod tests {
                 rotation: [0.; 3],
                 velocity: [0.; 3],
                 orientation: [-0., 0.5000000000000001, -0.5, 0.7071067811865475],
+                cache_rotation: [-0., 90.00000000000001, 1.0000000000000002],
                 health: NativeScalar::F32(99.125f32.to_bits()),
                 stamina: NativeScalar::F64(77.12345678901234f64.to_bits()),
             }],
@@ -571,6 +584,20 @@ mod tests {
             assert_eq!(actual.to_bits(), expected.to_bits());
         }
         assert_eq!(bytes[0], RESULT_VERSION);
+        for (actual, expected) in got.entities[0]
+            .cache_rotation
+            .into_iter()
+            .zip(original.entities[0].cache_rotation)
+        {
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
+        let mut no_cache = bytes.clone();
+        let cache_offset = 21 + 16 + 12 + 32 + 72 + 32;
+        no_cache.drain(cache_offset..cache_offset + 24);
+        no_cache[0] = 2;
+        assert!(decode_result(&no_cache).is_err());
+        no_cache[0] = RESULT_VERSION;
+        assert!(decode_result(&no_cache).is_err());
         let mut legacy = bytes.clone();
         legacy[0] = 1;
         assert!(decode_result(&legacy).is_err());
@@ -602,13 +629,19 @@ mod tests {
         v = frame();
         v.entities[0].orientation[2] = f64::NAN;
         assert!(v.validate().is_err());
+        v = frame();
+        v.entities[0].cache_rotation[1] = f64::INFINITY;
+        assert!(v.validate().is_err());
     }
     #[test]
     fn gameplay_requires_exact_quaternion_capability() {
         assert!(!gameplay_capable(CAP_NATIVE_GAMEPLAY));
         assert!(!gameplay_capable(CAP_NATIVE_GAMEPLAY_QUATERNION));
-        assert!(gameplay_capable(
+        assert!(!gameplay_capable(
             CAP_NATIVE_GAMEPLAY | CAP_NATIVE_GAMEPLAY_QUATERNION
+        ));
+        assert!(gameplay_capable(
+            CAP_NATIVE_GAMEPLAY | CAP_NATIVE_GAMEPLAY_QUATERNION | CAP_NATIVE_GAMEPLAY_CACHE
         ));
     }
     #[test]

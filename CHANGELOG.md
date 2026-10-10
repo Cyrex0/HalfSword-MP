@@ -10,6 +10,9 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Preserve native rotation-cache provenance in gameplay updates and apply exact
+  absolute capsule state through qualified engine routines, retaining physics,
+  child-transform and overlap publication. Live verification is pending.
 - Wait for a genuinely fresh native gameplay result after transient expiry,
   retaining prepared pawns under loading without new input or stale readiness.
 - Record bounded native gameplay timings after verification to identify live

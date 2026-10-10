@@ -7,6 +7,7 @@ struct HsmpGameplayValue { uint32_t kind,pad; double value; }; // 1=f32, 2=f64
 struct HsmpGameplayState {
     double position[3],orientation[4],velocity[3];
     HsmpGameplayValue health,stamina;
+    double cache_rotation[3]; // original native conversion-cache Euler, not Actor rotation
 };
 enum HsmpGameplayProofFlags : uint32_t {
     HSMP_GAMEPLAY_STATE=1, HSMP_GAMEPLAY_VISIBLE_BODY=2,
@@ -32,9 +33,10 @@ struct HsmpGameplay {
 void hsmp_native_set_gameplay(const HsmpGameplay*);
 }
 static_assert(sizeof(HsmpGameplayValue)==16);
-static_assert(sizeof(HsmpGameplayState)==112);
+static_assert(sizeof(HsmpGameplayState)==136);
 static_assert(offsetof(HsmpGameplayState,orientation)==24);
 static_assert(offsetof(HsmpGameplayState,velocity)==56);
+static_assert(offsetof(HsmpGameplayState,cache_rotation)==112);
 static_assert(sizeof(HsmpGameplayProof)==112);
 static_assert(sizeof(HsmpGameplay)==72);
 static_assert(offsetof(HsmpGameplay,clear)==48);

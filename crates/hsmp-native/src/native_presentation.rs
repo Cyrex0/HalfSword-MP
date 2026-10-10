@@ -824,6 +824,18 @@ pub struct State {
     present_diagnostic_attempts: u32,
 }
 impl State {
+    /// Copies the world from the admitted gameplay source; never discovers a
+    /// new world or dereferences a caller-supplied address.
+    pub(crate) fn gameplay_source_world(
+        &self,
+        reference: w::EntityRef,
+        pawn: usize,
+        controller: usize,
+    ) -> Option<Object> {
+        let original = self.gameplay_sources.get(&reference)?;
+        (original.pawn.address == pawn as u64 && original.controller.address == controller as u64)
+            .then_some(original.world)
+    }
     // Match only a previously admitted source binding. This is a copied input
     // identity seam, not a fresh address-to-entity lookup.
     pub(crate) unsafe fn input_reference(
@@ -4328,6 +4340,70 @@ mod source_roster_native_tests {
 #[cfg(test)]
 mod presentation_binding_tests {
     use super::*;
+    #[test]
+    fn gameplay_source_world_is_original_binding_only() {
+        let reference = w::EntityRef {
+            epoch: 9,
+            id: 1,
+            incarnation: 5,
+        };
+        let world = Object {
+            weak: 7,
+            address: 100,
+        };
+        let mut state = State::default();
+        assert!(state.gameplay_source_world(reference, 200, 300).is_none());
+        state.gameplay_sources.insert(
+            reference,
+            GameplaySource {
+                world,
+                pawn: Object {
+                    weak: 8,
+                    address: 200,
+                },
+                controller: Object {
+                    weak: 9,
+                    address: 300,
+                },
+                pawn_controller: Default::default(),
+                controller_pawn: Default::default(),
+            },
+        );
+        let retained = state.gameplay_source_world(reference, 200, 300).unwrap();
+        assert_eq!(retained.weak, world.weak);
+        assert_eq!(retained.address, world.address);
+        for (pawn, controller) in [(201, 300), (200, 301)] {
+            assert!(
+                state
+                    .gameplay_source_world(reference, pawn, controller)
+                    .is_none()
+            );
+        }
+        assert!(
+            state
+                .gameplay_source_world(
+                    w::EntityRef {
+                        incarnation: 6,
+                        ..reference
+                    },
+                    200,
+                    300
+                )
+                .is_none()
+        );
+        state
+            .gameplay_sources
+            .get_mut(&reference)
+            .unwrap()
+            .pawn
+            .address = 201;
+        assert!(
+            state.gameplay_source_world(reference, 200, 300).is_none(),
+            "replacement binding cannot supply an old pawn's world"
+        );
+        state.gameplay_sources.remove(&reference);
+        assert!(state.gameplay_source_world(reference, 200, 300).is_none());
+    }
     #[repr(C, align(8))]
     struct ProviderHeader {
         abi: u32,
@@ -4599,9 +4675,11 @@ mod presentation_binding_tests {
                 .collect(),
         };
         assert!(original.valid(&directory, |id| descriptors.get(id as usize - 1).cloned()));
-        assert!(!original.valid(&directory, |id| descriptors
-            .get(id as usize - 1)
-            .map(|d| std::sync::Arc::new((**d).clone()))));
+        assert!(!original.valid(&directory, |id| {
+            descriptors
+                .get(id as usize - 1)
+                .map(|d| std::sync::Arc::new((**d).clone()))
+        }));
         for changed in 0..5 {
             let mut current = directory.clone();
             match changed {

@@ -1,5 +1,7 @@
 // Included inside native_presentation.cpp's private namespace. Real native
 // Willie construction is separate from the inert visual-mirror provider.
+struct GameplayNativeProof {LookupEntry root_path;uintptr_t image{};uint64_t table{};uint8_t body_flags{},notification_flags{};};
+void gameplay_native_guard();
 struct GameplayApplied {
     HsmpGameplayState expected{};HsmpGameplayProof proof{};
     Obj root{},movement{},mesh{},asset{};
@@ -7,6 +9,7 @@ struct GameplayApplied {
     std::array<double,3> relative_rotation{},scale{};
     HsmpProp root_field{},parent{},position{},rotation{},velocity{},health{},stamina{},mesh_field{},visible{},hidden{},skinned{},skeletal{};
     HsmpProp manager{},pc_owner{},view_target{},pending_target{},hud_field{},show_hud{};
+    GameplayNativeProof native;
 };
 struct GameplayCurrent {
     Obj controller_level{};LookupEntry level_path,get_level_path,local_path;
@@ -305,6 +308,7 @@ void gameplay_call_guard(){
     if(gameplay_boundary_active()){gameplay_boundary->final();return;}
     for(const auto& [handle,entry]:gameplay_pawns){(void)handle;if(same(entry.world,gameplay_active->world))gameplay_pure(entry);}
     gameplay_pure(*gameplay_active);
+    gameplay_native_guard();
 }
 struct GameplayWatch {
     const GameplayPawn* previous{gameplay_active};
@@ -336,6 +340,102 @@ void gameplay_quat_snapshot(GameplayQuatTrace& trace,const GameplayPawn& entry,O
         std::memcpy(&bound,static_cast<const uint8_t*>(pawn)+0x1a0,8);std::memcpy(&owner,static_cast<const uint8_t*>(object)+0x90,8);
         if(bound!=object||owner!=pawn||!final_outer||*final_outer!=pawn||*retirement_flags(object)!=flags||*retirement_flags(cls)!=class_flags){out.reason=6;return;}out.available=1;
     }catch(const std::exception&){out.available=0;out.reason=6;}
+}
+struct alignas(16) GameplayCachePair {double q[4],rotation[3];uint64_t padding{};};
+struct GameplayOverlapView {const void* data{};int32_t count{},padding{};};
+static_assert(sizeof(GameplayCachePair)==64&&offsetof(GameplayCachePair,rotation)==32);
+static_assert(sizeof(GameplayOverlapView)==16&&offsetof(GameplayOverlapView,count)==8);
+using GameplayImport=void(*)(void*,const void* const*);
+using GameplayAbsolute=uint8_t(*)(void*,const double*,const double*,uint8_t,uint8_t);
+using GameplayOverlaps=uint8_t(*)(void*,const GameplayOverlapView*,uint8_t,const GameplayOverlapView*);
+struct GameplayNativeCalls {GameplayImport import{};GameplayAbsolute absolute{};GameplayOverlaps overlaps{};};
+uintptr_t gameplay_native_image(){
+    uintptr_t image{};uint32_t size{};require(gameplay_quat_image(image,size),"native gameplay absolute image/code unavailable");
+    struct Window{uint32_t rva,bytes;uint64_t hash;};
+    constexpr Window windows[]{{0x3bf5ad0,401,0x9f9ffdef88936f35ULL},{0x3bf1970,2355,0x8a824d5b8f611ae4ULL},
+        {0x3bf7430,2757,0xda3cf6857a774fb7ULL},{0x3bf4370,577,0x1b93861411267304ULL},
+        {0x3bf7f40,125,0x2184e79ded3197a9ULL},{0x3bd6ee0,153,0x239a2ba825e91f19ULL},
+        {0x22179d0,478,0x563d60f52ee4b5deULL},{0x3bda090,4063,0x7954ddbdced44e04ULL}};
+    for(const auto& w:windows)require(w.rva<=size&&w.bytes<=size-w.rva&&gameplay_quat_readable(reinterpret_cast<const void*>(image+w.rva),w.bytes)&&
+        gameplay_quat_hash(reinterpret_cast<const uint8_t*>(image+w.rva),w.bytes)==w.hash,"native gameplay absolute code changed");
+    return image;
+}
+GameplayCachePair gameplay_cache_pair(const void* root){
+    const void* cache{};std::memcpy(&cache,static_cast<const uint8_t*>(root)+0x1c0,8);
+    require(cache&&reinterpret_cast<uintptr_t>(cache)%alignof(double)==0&&gameplay_quat_readable(cache,64),"native gameplay original rotation cache unavailable");
+    GameplayCachePair pair{};std::memcpy(&pair,cache,56);const void* final{};std::memcpy(&final,static_cast<const uint8_t*>(root)+0x1c0,8);
+    require(final==cache,"native gameplay original rotation cache changed");return pair;
+}
+bool gameplay_cache_import_needed(const GameplayCachePair& current,const GameplayCachePair& desired){
+    for(const auto value:current.q)require(std::isfinite(value),"native gameplay current cache quaternion nonfinite");
+    for(const auto value:current.rotation)require(std::isfinite(value),"native gameplay current cache rotation nonfinite");
+    for(const auto value:desired.q)require(std::isfinite(value),"native gameplay cache quaternion nonfinite");
+    for(const auto value:desired.rotation)require(std::isfinite(value),"native gameplay cache rotation nonfinite");
+    if(std::memcmp(&current,&desired,56)==0)return false;
+    bool differs{};for(size_t i=0;i<3;++i)differs=differs||current.rotation[i]!=desired.rotation[i];
+    require(differs,"native gameplay same-Euler different rotation cache unsupported");return true;
+}
+void gameplay_native_root_fields(const void* root,const void* pawn,const void* outer,const GameplayNativeProof& proof){
+    require(gameplay_quat_readable(root,0x1d0+96),"native gameplay original root storage unavailable");
+    void* bound{};void* owner{};void* parent{};uint64_t table{};int32_t scopes{};
+    std::memcpy(&bound,static_cast<const uint8_t*>(pawn)+0x1a0,8);std::memcpy(&owner,static_cast<const uint8_t*>(root)+0x90,8);
+    std::memcpy(&parent,static_cast<const uint8_t*>(root)+0xb0,8);std::memcpy(&scopes,static_cast<const uint8_t*>(root)+0x1b0,4);std::memcpy(&table,root,8);
+    require(bound==root&&owner==pawn&&outer==pawn&&!parent,"native gameplay original absolute root binding changed");
+    require(scopes==0,"native gameplay scoped root movement unsupported");
+    require(table&&table==proof.table&&gameplay_quat_readable(reinterpret_cast<const void*>(table),0x540),"native gameplay original root vtable changed");
+    for(const auto& [slot,target]:{std::pair<uint32_t,uint32_t>{0x528,0x3bd6ee0},{0x530,0x3bda090},{0x538,0x3bd53c0}}){uint64_t address{};std::memcpy(&address,reinterpret_cast<const uint8_t*>(table)+slot,8);
+        require(address==proof.image+target,"native gameplay root movement dispatch unsupported");}
+    const auto* bytes=static_cast<const uint8_t*>(root);
+    require((bytes[0x88]&9)==proof.body_flags&&(proof.body_flags&1)&&(bytes[0x18a]&8)==proof.notification_flags&&proof.notification_flags==8,
+        "native gameplay root body/notification flags changed");
+    // The importer may publish existing native state before copying the pair.
+    // Admit every interpreted original transform/cache value before dispatch.
+    for(const auto offset:{0x128u,0x140u,0x158u}){double values[3]{};std::memcpy(values,bytes+offset,24);
+        for(const auto value:values)require(std::isfinite(value),"native gameplay current relative transform nonfinite");}
+    EngineTransform world{};std::memcpy(&world,bytes+0x1d0,sizeof(world));
+    for(const auto value:world.q)require(std::isfinite(value),"native gameplay current world quaternion nonfinite");
+    for(const auto value:world.p)require(std::isfinite(value),"native gameplay current world position nonfinite");
+    for(const auto value:world.scale)require(std::isfinite(value),"native gameplay current world scale nonfinite");
+    const auto cache=gameplay_cache_pair(root);
+    for(const auto value:cache.q)require(std::isfinite(value),"native gameplay current cache quaternion nonfinite");
+    for(const auto value:cache.rotation)require(std::isfinite(value),"native gameplay current cache rotation nonfinite");
+}
+void gameplay_native_pure(const GameplayPawn& entry,const GameplayNativeProof& proof){
+    gameplay_pure(entry);lookup_entry_final(proof.root_path);require(proof.image&&gameplay_native_image()==proof.image,"native gameplay original absolute image changed");
+    const auto* root=lookup_node_get(proof.root_path.pinned.front(),proof.root_path.zero_item);const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
+    const auto* outer=source_outer(root);require(outer!=nullptr,"native gameplay original root Outer unavailable");gameplay_native_root_fields(root,pawn,*outer,proof);
+    lookup_entry_final(proof.root_path);gameplay_pure(entry);
+}
+struct GameplayNativeWatch;
+thread_local const GameplayNativeWatch* gameplay_native_active{};
+struct GameplayNativeWatch {
+    const GameplayNativeWatch* previous{gameplay_native_active};const GameplayPawn& entry;const GameplayNativeProof& proof;const void* operation{active_lookup};
+    GameplayNativeWatch(const GameplayPawn& e,const GameplayNativeProof& p):entry(e),proof(p){gameplay_native_pure(entry,proof);gameplay_native_active=this;}
+    ~GameplayNativeWatch(){gameplay_native_active=previous;}
+};
+void gameplay_native_guard(){if(!gameplay_native_active)return;require(active_lookup==gameplay_native_active->operation,"native gameplay absolute operation reentry");
+    gameplay_native_pure(gameplay_native_active->entry,gameplay_native_active->proof);}
+GameplayNativeProof gameplay_native_bind(const GameplayPawn& entry,Obj root){
+    GameplayNativeProof proof;proof.root_path=gameplay_path(root);proof.image=gameplay_native_image();
+    require(vt->class_of(get(root))==get(find(L"/Script/Engine.CapsuleComponent")),"native gameplay exact Capsule root required");
+    const auto position=property(root,L"RelativeLocation",L"StructProperty",24),rotation=property(root,L"RelativeRotation",L"StructProperty",24),scale=property(root,L"RelativeScale3D",L"StructProperty",24);
+    require(property(entry.pawn,L"RootComponent",L"ObjectProperty",8).offset==0x1a0&&property(root,L"AttachParent",L"ObjectProperty",8).offset==0xb0&&
+        position.offset==0x128&&position.sub==name(L"Vector")&&rotation.offset==0x140&&rotation.sub==name(L"Rotator")&&
+        scale.offset==0x158&&scale.sub==name(L"Vector"),"native gameplay absolute root schema changed");
+    const auto* bytes=static_cast<const uint8_t*>(get(root));std::memcpy(&proof.table,bytes,8);proof.body_flags=bytes[0x88]&9;proof.notification_flags=bytes[0x18a]&8;
+    gameplay_owner_code();gameplay_native_pure(entry,proof);return proof;
+}
+template<class Guard>void gameplay_absolute_run(const HsmpGameplayState& state,const GameplayNativeCalls& calls,Guard&& guard){
+    GameplayCachePair desired{};std::copy_n(state.orientation,4,desired.q);std::copy_n(state.cache_rotation,3,desired.rotation);
+    auto* root=guard();const auto before=gameplay_cache_pair(root);const bool needed=gameplay_cache_import_needed(before,desired);
+    if(needed){const void* source=&desired;calls.import(root,&source);root=guard();}
+    const auto exact=[&desired](const void* object){const auto current=gameplay_cache_pair(object);return std::memcmp(&current,&desired,56)==0;};
+    require(exact(root),"native gameplay exact rotation cache import failed");
+    root=guard();require(exact(root),"native gameplay rotation cache changed before absolute update");
+    const auto changed=calls.absolute(root,state.position,state.orientation,0,1);root=guard();
+    require(exact(root),"native gameplay native rotation cache changed during absolute update");
+    if(changed){const GameplayOverlapView empty{};root=guard();require(exact(root),"native gameplay rotation cache changed before overlap publication");calls.overlaps(root,&empty,1,nullptr);root=guard();}
+    require(exact(root),"native gameplay native rotation cache changed during overlap publication");
 }
 int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Transform* initial,uint32_t own,
     const HsmpViewGuard* guard,uint64_t* handle,Obj* pawn,HsmpViewResult* result){
@@ -446,6 +546,7 @@ void gameplay_enum_disabled(Obj pawn,const wchar_t* field){
 template<class T>T gameplay_raw(const void* object,const HsmpProp& prop){T value{};std::memcpy(&value,static_cast<const uint8_t*>(object)+prop.offset,sizeof(T));return value;}
 bool gameplay_raw_bool(const void* object,const HsmpProp& prop){require(prop.bool_mask!=0,"native gameplay bool mask missing");return (static_cast<const uint8_t*>(object)[prop.offset+prop.bool_offset]&prop.bool_mask)!=0;}
 void gameplay_state_pure(const GameplayPawn& entry,const GameplayApplied& frame){
+    gameplay_native_pure(entry,frame.native);
     gameplay_pure(entry);gameplay_owner_code();gameplay_transform_code();lookup_entry_final(frame.owner_api_path);lookup_entry_final(frame.transform_api_path);lookup_entry_final(frame.root_path);lookup_entry_final(frame.movement_path);lookup_entry_final(frame.mesh_path);lookup_entry_final(frame.asset_path);
     const auto* pawn=lookup_node_get(entry.pawn_path.pinned.front(),entry.pawn_path.zero_item);
     const auto* root=lookup_node_get(frame.root_path.pinned.front(),frame.root_path.zero_item);
@@ -458,6 +559,8 @@ void gameplay_state_pure(const GameplayPawn& entry,const GameplayApplied& frame)
     EngineTransform world{};std::memcpy(&world,static_cast<const uint8_t*>(root)+0x1d0,sizeof(world));
     require(std::memcmp(world.p,frame.expected.position,24)==0&&std::memcmp(world.q,frame.expected.orientation,32)==0&&
         std::memcmp(world.scale,frame.scale.data(),24)==0,"native gameplay final exact native transform changed");
+    const auto cache=gameplay_cache_pair(root);require(std::memcmp(cache.q,frame.expected.orientation,32)==0&&std::memcmp(cache.rotation,frame.expected.cache_rotation,24)==0,
+        "native gameplay final original rotation cache changed");
     require(std::memcmp(static_cast<const uint8_t*>(root)+frame.position.offset,frame.expected.position,24)==0&&
         std::memcmp(static_cast<const uint8_t*>(root)+frame.rotation.offset,frame.relative_rotation.data(),24)==0&&
         std::memcmp(static_cast<const uint8_t*>(movement)+frame.velocity.offset,frame.expected.velocity,24)==0,"native gameplay final root/velocity changed");
@@ -540,12 +643,13 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
         gameplay_layouts();
         gameplay_transform_code();const auto root=object_property(entry.pawn,L"RootComponent");require(root.weak&&is(root,L"/Script/Engine.SceneComponent"),"native gameplay native transform root unavailable");
         require(property(entry.pawn,L"RootComponent",L"ObjectProperty",8).offset==0x1a0&&!object_property(root,L"AttachParent").weak,"native gameplay native transform root layout/attachment");
-        Transform desired{};std::copy_n(state->position,3,desired.p);std::copy_n(state->orientation,4,desired.q);std::copy_n(entry.initial.scale,3,desired.scale);
         if(diagnostic.active)std::copy_n(state->orientation,4,diagnostic.requested.data());
-        Function transform(L"/Script/Engine.Actor:K2_SetActorTransform");
-        transform.put(L"NewTransform",L"StructProperty",engine(desired),L"Transform");transform.boolean(L"bSweep",false);transform.boolean(L"bTeleport",true);
-        gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.before);transform.call(entry.pawn,result);gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.after);
-        require(transform.value<uint8_t>(L"ReturnValue",L"BoolProperty")!=0,"native gameplay root setter refused");
+        auto native=gameplay_native_bind(entry,root);GameplayNativeWatch native_watch(entry,native);
+        const GameplayNativeCalls calls{reinterpret_cast<GameplayImport>(native.image+0x3bf5ad0),reinterpret_cast<GameplayAbsolute>(native.image+0x3bf1970),reinterpret_cast<GameplayOverlaps>(native.image+0x3bf7f40)};
+        const auto original=[&](){check_guard();lookup_finish();gameplay_native_pure(entry,native);return const_cast<void*>(lookup_node_get(native.root_path.pinned.front(),native.root_path.zero_item));};
+        gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.before);gameplay_absolute_run(*state,calls,original);
+        Function scale(L"/Script/Engine.SceneComponent:SetRelativeScale3D");scale.put(L"NewScale3D",L"StructProperty",GameplayVector{entry.initial.scale[0],entry.initial.scale[1],entry.initial.scale[2]},L"Vector");scale.call(root,result);
+        original();gameplay_quat_snapshot(diagnostic,entry,root,diagnostic.after);
         const auto movement=returned(entry.pawn,L"/Script/Engine.Pawn:GetMovementComponent",result);require(movement.weak&&is(movement,L"/Script/Engine.MovementComponent"),"native gameplay movement component unavailable");
         require(same(returned(movement,L"/Script/Engine.ActorComponent:GetOwner",result),entry.pawn),"native gameplay movement owner changed");
         const auto velocity=property(movement,L"Velocity",L"StructProperty",24);require(velocity.sub==name(L"Vector"),"native gameplay velocity layout");std::memcpy(static_cast<uint8_t*>(get(movement))+velocity.offset,state->velocity,24);get(movement);
@@ -562,6 +666,7 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
         gameplay_value_readback(entry.pawn,L"Health",state->health);gameplay_value_readback(entry.pawn,L"Stamina",state->stamina);
         gameplay_local(entry,result);proof->flags|=HSMP_GAMEPLAY_STATE;
         auto applied=gameplay_applied_snapshot(entry,*state,*proof,movement,root);
+        applied.native=native;
         lookup_finish();gameplay_call_guard();gameplay_state_pure(entry,applied);entry.applied=std::move(applied);result->complete=1;diagnostic.complete=1;return 1;
     }catch(const std::exception& error){if(proof)*proof={};failure(result,error.what());return -1;}
 }
@@ -589,4 +694,4 @@ int32_t gameplay_complete(const uint64_t* handles,uint32_t count,const HsmpViewG
         result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
-const HsmpGameplay gameplay_provider{2,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete};
+const HsmpGameplay gameplay_provider{3,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete};

@@ -198,6 +198,397 @@ struct NativeRootGuard {
     class: u64,
     class_address: usize,
     property: HsmpProp,
+    identity: Option<RotationRootIdentity>,
+    cache: Option<RotationCacheWitness>,
+}
+type CacheName = unsafe extern "C" fn(*const c_void) -> *const u64;
+type CacheFlags = unsafe extern "C" fn(*const c_void) -> *const u32;
+type CacheOuter = unsafe extern "C" fn(*const c_void) -> *const *mut c_void;
+#[derive(Clone, Copy)]
+struct RotationMetadata {
+    name: CacheName,
+    flags: CacheFlags,
+    outer: CacheOuter,
+}
+#[cfg(windows)]
+fn rotation_metadata() -> Result<RotationMetadata, String> {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> *mut c_void;
+        fn GetProcAddress(module: *mut c_void, name: *const i8) -> *mut c_void;
+    }
+    // SAFETY: exact previously pinned UE4SS metadata export signatures.
+    unsafe {
+        let module = GetModuleHandleW(wide("UE4SS.dll").as_ptr());
+        if module.is_null() {
+            return Err("gameplay cache metadata unavailable".into());
+        }
+        let get = |name: &std::ffi::CStr| {
+            let p = GetProcAddress(module, name.as_ptr());
+            if p.is_null() {
+                Err("gameplay cache metadata exports unavailable".to_owned())
+            } else {
+                Ok(p)
+            }
+        };
+        Ok(RotationMetadata {
+            name: std::mem::transmute::<*mut c_void, CacheName>(get(
+                c"?GetNamePrivate@UObjectBase@Unreal@RC@@QEBAAEBVFName@23@XZ",
+            )?),
+            flags: std::mem::transmute::<*mut c_void, CacheFlags>(get(
+                c"?GetObjectFlags@UObjectBase@Unreal@RC@@QEBAAEBW4EObjectFlags@23@XZ",
+            )?),
+            outer: std::mem::transmute::<*mut c_void, CacheOuter>(get(
+                c"?GetOuterPrivate@UObjectBase@Unreal@RC@@QEBAAEAPEBVUObject@23@XZ",
+            )?),
+        })
+    }
+}
+#[cfg(not(windows))]
+fn rotation_metadata() -> Result<RotationMetadata, String> {
+    Err("gameplay cache metadata unavailable".into())
+}
+#[cfg(windows)]
+fn rotation_readable(address: usize, bytes: usize) -> bool {
+    #[repr(C)]
+    struct Region {
+        base: usize,
+        allocation: usize,
+        allocation_protect: u32,
+        alignment: u32,
+        bytes: usize,
+        state: u32,
+        protect: u32,
+        kind: u32,
+        padding: u32,
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn VirtualQuery(address: *const c_void, region: *mut Region, size: usize) -> usize;
+    }
+    let Some(end) = address.checked_add(bytes) else {
+        return false;
+    };
+    if address == 0 || bytes == 0 {
+        return false;
+    }
+    let mut at = address;
+    while at < end {
+        let mut region = std::mem::MaybeUninit::<Region>::uninit();
+        // SAFETY: VirtualQuery copies Win64 MEMORY_BASIC_INFORMATION; no candidate is dereferenced.
+        if unsafe {
+            VirtualQuery(
+                at as *const c_void,
+                region.as_mut_ptr(),
+                std::mem::size_of::<Region>(),
+            )
+        } != std::mem::size_of::<Region>()
+        {
+            return false;
+        }
+        let region = unsafe { region.assume_init() };
+        if region.state != 0x1000
+            || region.protect & (0x100 | 1) != 0
+            || !matches!(region.protect & 0xff, 2 | 4 | 8 | 0x20 | 0x40 | 0x80)
+        {
+            return false;
+        }
+        let Some(next) = region.base.checked_add(region.bytes) else {
+            return false;
+        };
+        if next <= at {
+            return false;
+        }
+        at = next;
+    }
+    true
+}
+#[cfg(not(windows))]
+fn rotation_readable(_: usize, _: usize) -> bool {
+    false
+}
+fn rotation_hash(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(14695981039346656037u64, |hash, b| {
+        (hash ^ u64::from(*b)).wrapping_mul(1099511628211)
+    })
+}
+#[cfg(windows)]
+fn rotation_profile() -> Result<(), String> {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetModuleHandleW(name: *const u16) -> *mut c_void;
+    }
+    let image = unsafe { GetModuleHandleW(std::ptr::null()) } as usize;
+    if !rotation_readable(image, 64)
+        || unsafe { std::ptr::read_unaligned(image as *const u16) } != 0x5a4d
+    {
+        return Err("gameplay cache image unavailable".into());
+    }
+    let pe = unsafe { std::ptr::read_unaligned((image + 0x3c) as *const u32) } as usize;
+    if pe == 0 || pe >= 65536 || !rotation_readable(image + pe, 264) {
+        return Err("gameplay cache image invalid".into());
+    }
+    let read16 = |off| unsafe { std::ptr::read_unaligned((image + pe + off) as *const u16) };
+    let read32 = |off| unsafe { std::ptr::read_unaligned((image + pe + off) as *const u32) };
+    if read32(0) != 0x4550 || read16(4) != 0x8664 || read16(24) != 0x20b {
+        return Err("gameplay cache image invalid".into());
+    }
+    let size = read32(24 + 56) as usize;
+    for (rva, bytes, hash) in [
+        (0x22177d0usize, 149usize, 0x8d52cc5f8773eb8bu64),
+        (0x3bf1e1a, 245, 0x662bb9275bcf9788),
+        (0x3bf54ed, 7, 0x614130ebfc0c0c2a),
+        (0x34a5990, 101, 0x42f1505777714884),
+    ] {
+        if rva > size
+            || bytes > size - rva
+            || !rotation_readable(image + rva, bytes)
+            || rotation_hash(unsafe {
+                std::slice::from_raw_parts((image + rva) as *const u8, bytes)
+            }) != hash
+        {
+            return Err("gameplay native rotation cache profile unsupported".into());
+        }
+    }
+    const OWNER: [u8; 32] = [
+        0x48, 0x8b, 0x42, 0x20, 0x45, 0x33, 0xc9, 0x48, 0x85, 0xc0, 0x41, 0x0f, 0x95, 0xc1, 0x4c,
+        0x03, 0xc8, 0x4c, 0x89, 0x4a, 0x20, 0x48, 0x8b, 0x81, 0x90, 0, 0, 0, 0x49, 0x89, 0, 0xc3,
+    ];
+    let owner = image + 0x3b54190;
+    if 0x3b54190 + OWNER.len() > size
+        || !rotation_readable(owner, OWNER.len())
+        || unsafe { std::slice::from_raw_parts(owner as *const u8, OWNER.len()) } != OWNER
+    {
+        return Err("gameplay native cache owner profile unsupported".into());
+    }
+    Ok(())
+}
+#[cfg(not(windows))]
+fn rotation_profile() -> Result<(), String> {
+    Err("gameplay native rotation cache profile unavailable".into())
+}
+#[derive(Clone, Copy)]
+struct RotationObject {
+    weak: u64,
+    address: usize,
+    class: u64,
+    class_address: usize,
+    name: u64,
+    flags: u32,
+    class_name: u64,
+    class_flags: u32,
+    outer: usize,
+}
+impl RotationObject {
+    unsafe fn capture(
+        vt: &HsmpReflect,
+        x: RotationMetadata,
+        weak: u64,
+        address: usize,
+    ) -> Result<Self, String> {
+        unsafe {
+            let p = reflect::get(vt, weak);
+            if weak == 0 || p as usize != address {
+                return Err("gameplay cache original object unavailable".into());
+            }
+            let flags = (x.flags)(p)
+                .as_ref()
+                .copied()
+                .ok_or("gameplay cache flags unavailable")?;
+            if flags & 0x40000000 != 0 {
+                return Err("gameplay cache original object garbage".into());
+            }
+            let cp = (vt.class_of)(p);
+            if cp.is_null() {
+                return Err("gameplay cache original class unavailable".into());
+            }
+            let class = reflect::keep(vt, cp).ok_or("gameplay cache original class unavailable")?;
+            if reflect::get(vt, class) != cp {
+                return Err("gameplay cache original class changed".into());
+            }
+            let class_flags = (x.flags)(cp)
+                .as_ref()
+                .copied()
+                .ok_or("gameplay cache class flags unavailable")?;
+            if class_flags & 0x40000000 != 0 {
+                return Err("gameplay cache original class garbage".into());
+            }
+            let value = Self {
+                weak,
+                address,
+                class,
+                class_address: cp as usize,
+                flags,
+                class_flags,
+                name: (x.name)(p)
+                    .as_ref()
+                    .copied()
+                    .ok_or("gameplay cache name unavailable")?,
+                class_name: (x.name)(cp)
+                    .as_ref()
+                    .copied()
+                    .ok_or("gameplay cache class name unavailable")?,
+                outer: *(x.outer)(p)
+                    .as_ref()
+                    .ok_or("gameplay cache outer unavailable")? as usize,
+            };
+            if !value.valid(vt, x) {
+                return Err("gameplay cache original metadata changed".into());
+            }
+            Ok(value)
+        }
+    }
+    unsafe fn valid(&self, vt: &HsmpReflect, x: RotationMetadata) -> bool {
+        unsafe {
+            let p = reflect::get(vt, self.weak);
+            let c = reflect::get(vt, self.class);
+            if p as usize != self.address
+                || c as usize != self.class_address
+                || p.is_null()
+                || c.is_null()
+            {
+                return false;
+            }
+            let Some(flags) = (x.flags)(p).as_ref() else {
+                return false;
+            };
+            let Some(cf) = (x.flags)(c).as_ref() else {
+                return false;
+            };
+            if *flags != self.flags || *cf != self.class_flags || (*flags | *cf) & 0x40000000 != 0 {
+                return false;
+            }
+            if (vt.weak)(p) != self.weak || (vt.weak)(c) != self.class {
+                return false;
+            }
+            (vt.class_of)(p) == c
+                && (x.name)(p).as_ref() == Some(&self.name)
+                && (x.name)(c).as_ref() == Some(&self.class_name)
+                && (x.outer)(p)
+                    .as_ref()
+                    .is_some_and(|outer| *outer as usize == self.outer)
+        }
+    }
+}
+#[derive(Clone)]
+struct RotationRootIdentity {
+    api: RotationMetadata,
+    root: RotationObject,
+    pawn: RotationObject,
+    level: RotationObject,
+    world: RotationObject,
+    level_world: HsmpProp,
+    parent: HsmpProp,
+}
+impl RotationRootIdentity {
+    unsafe fn valid(&self, vt: &HsmpReflect) -> bool {
+        unsafe {
+            if ![self.root, self.pawn, self.level, self.world]
+                .iter()
+                .all(|n| n.valid(vt, self.api))
+            {
+                return false;
+            }
+            let owner = std::ptr::read_unaligned((self.root.address + 0x90) as *const usize);
+            owner == self.pawn.address
+                && self.pawn.outer == self.level.address
+                && self.level_world.offset == 0xc0
+                && std::ptr::read_unaligned(
+                    (self.level.address + self.level_world.offset as usize) as *const usize,
+                ) == self.world.address
+                && self.parent.offset == 0xb0
+                && std::ptr::read_unaligned(
+                    (self.root.address + self.parent.offset as usize) as *const usize,
+                ) == 0
+                && [self.root, self.pawn, self.level, self.world]
+                    .iter()
+                    .all(|n| n.valid(vt, self.api))
+        }
+    }
+}
+#[derive(Clone)]
+struct RotationCacheWitness {
+    pointer: usize,
+    quaternion: [u64; 4],
+    euler: [u64; 3],
+}
+impl RotationCacheWitness {
+    unsafe fn copy(
+        root: usize,
+        quaternion: [f64; 4],
+        readable: impl Fn(usize, usize) -> bool,
+    ) -> Result<Self, String> {
+        unsafe {
+            if !readable(root, 0x1f0) {
+                return Err("gameplay original cache root unreadable".into());
+            }
+            let pointer = std::ptr::read_unaligned((root + 0x1c0) as *const usize);
+            if pointer == 0 {
+                return Err("gameplay original rotation cache unavailable".into());
+            }
+            if pointer % 8 != 0 || !readable(pointer, 64) {
+                return Err("gameplay original rotation cache unreadable".into());
+            }
+            let q = std::ptr::read_unaligned(pointer as *const [u64; 4]);
+            let euler = std::ptr::read_unaligned((pointer + 0x20) as *const [u64; 3]);
+            if q != quaternion.map(f64::to_bits) {
+                return Err("gameplay source cache quaternion provenance differs".into());
+            }
+            if q.into_iter()
+                .chain(euler)
+                .any(|v| !f64::from_bits(v).is_finite())
+            {
+                return Err("gameplay source rotation cache nonfinite".into());
+            }
+            let witness = Self {
+                pointer,
+                quaternion: q,
+                euler,
+            };
+            if !witness.valid(root, &readable) {
+                return Err("gameplay original rotation cache changed during copy".into());
+            }
+            Ok(witness)
+        }
+    }
+    unsafe fn valid(&self, root: usize, readable: impl Fn(usize, usize) -> bool) -> bool {
+        unsafe {
+            readable(root, 0x1f0)
+                && std::ptr::read_unaligned((root + 0x1c0) as *const usize) == self.pointer
+                && self.pointer % 8 == 0
+                && readable(self.pointer, 64)
+                && std::ptr::read_unaligned(self.pointer as *const [u64; 4]) == self.quaternion
+                && std::ptr::read_unaligned((self.pointer + 0x20) as *const [u64; 3]) == self.euler
+                && std::ptr::read_unaligned((root + 0x1d0) as *const [u64; 4]) == self.quaternion
+                && std::ptr::read_unaligned((root + 0x1c0) as *const usize) == self.pointer
+        }
+    }
+}
+impl NativeRootGuard {
+    unsafe fn rotation_valid(
+        &self,
+        vt: &HsmpReflect,
+        supported: bool,
+        readable: impl Fn(usize, usize) -> bool,
+    ) -> bool {
+        unsafe {
+            if self.identity.is_none() {
+                return self.cache.is_none();
+            }
+            let identity = self.identity.as_ref().expect("checked identity");
+            supported
+                && identity.root.weak == self.weak
+                && identity.root.address == self.address
+                && identity.root.class == self.class
+                && identity.root.class_address == self.class_address
+                && identity.valid(vt)
+                && self
+                    .cache
+                    .as_ref()
+                    .is_none_or(|cache| cache.valid(self.address, &readable))
+                && identity.valid(vt)
+        }
+    }
 }
 struct NativeEntityBinding { pawn: u64, mesh: u64, pawn_address: usize, mesh_address: usize, name: String }
 
@@ -238,6 +629,7 @@ pub struct SampleState {
     native_guard: Option<NativeGuard>,
     native_sampling_active: bool,
     gameplay_directory: Option<hsmp_server::native_wire::Directory>,
+    gameplay_world_key: Option<Vec<u8>>,
     pub(crate) native_pending: Option<(hsmp_server::native_wire::World, Vec<u8>)>,
     native_bindings: HashMap<hsmp_server::native_wire::EntityRef, NativeEntityBinding>,
 }
@@ -266,6 +658,7 @@ impl Default for SampleState {
             native_guard: None,
             native_sampling_active: false,
             gameplay_directory: None,
+            gameplay_world_key: None,
             native_pending: None,
             native_bindings: HashMap::new(),
         }
@@ -468,7 +861,11 @@ pub(crate) unsafe fn call_fn(vt: &HsmpReflect, params: &mut Params, h: (u64, [i3
 
 impl Native {
     pub(crate) fn native_guard_ok(&self, vt: &HsmpReflect) -> bool {
+        self.native_guard_with_profile(vt,||rotation_profile().is_ok())
+    }
+    fn native_guard_with_profile(&self, vt: &HsmpReflect, supported:impl Fn()->bool) -> bool {
         if !self.sample.world_ok { return false; }
+        if self.sample.gameplay_world_key.as_ref().is_some_and(|original|self.world_key.as_ref()!=Some(original)){return false;}
         if self.sample.gameplay_directory.as_ref().is_some_and(|original|self.native_host.directory().as_ref()!=Some(original)){return false;}
         let Some(g) = &self.sample.native_guard else { return !self.sample.native_sampling_active; };
         unsafe {
@@ -487,6 +884,9 @@ impl Native {
                     || (vt.class_of)(root) != class || pointer(pawn, original.property) != original.address {
                     return false;
                 }
+                if !original.rotation_valid(vt,original.identity.is_none()||supported(),rotation_readable) {
+                    return false;
+                }
             }
             if g.controller_address != 0 {
                 let controller = reflect::get(vt, g.controller);
@@ -497,6 +897,26 @@ impl Native {
             }
         }
         true
+    }
+    fn finish_gameplay_roster(
+        &mut self,
+        vt: &HsmpReflect,
+        guards: &[NativeGuard],
+        key: &[u8],
+        supported: impl Fn() -> bool + Copy,
+    ) -> Result<(), &'static str> {
+        for original in guards {
+            self.sample.native_guard = Some(original.clone());
+            if !self.native_guard_with_profile(vt, supported) {
+                return Err("gameplay whole roster changed");
+            }
+        }
+        self.sample.native_guard = None;
+        if !self.native_guard_with_profile(vt, supported) || self.world_key.as_deref() != Some(key)
+        {
+            return Err("gameplay final generation changed");
+        }
+        Ok(())
     }
 
     pub(crate) fn sample_names(&mut self, vt: &HsmpReflect) -> Names {
@@ -668,6 +1088,150 @@ impl Native {
         if !self.native_guard_ok(vt) { return None; }
         let (_, orientation) = self.transform_at(offset[0] as usize);
         orientation.iter().all(|value| value.is_finite()).then_some(orientation)
+    }
+    unsafe fn rotation_root_identity(
+        &mut self,
+        vt: &HsmpReflect,
+        reference: hsmp_server::native_wire::EntityRef,
+    ) -> Result<(), String> {
+        unsafe {
+            rotation_profile()?;
+            if !self.native_guard_ok(vt) {
+                return Err("gameplay original cache admission changed".into());
+            }
+            let guard = self
+                .sample
+                .native_guard
+                .as_ref()
+                .ok_or("gameplay original cache guard unavailable")?
+                .clone();
+            let original = guard
+                .root
+                .as_ref()
+                .ok_or("gameplay original cache root unavailable")?;
+            let world = self
+                .presentation
+                .gameplay_source_world(reference, guard.pawn_address, guard.controller_address)
+                .ok_or("gameplay original source world unavailable")?;
+            let x = rotation_metadata()?;
+            let root = RotationObject::capture(vt, x, original.weak, original.address)?;
+            let pawn = RotationObject::capture(vt, x, guard.pawn, guard.pawn_address)?;
+            let world = RotationObject::capture(vt, x, world.weak, world.address as usize)?;
+            if pawn.outer == 0 {
+                return Err("gameplay original source level unavailable".into());
+            }
+            let level_pointer = pawn.outer as *mut c_void;
+            let level_weak = reflect::keep(vt, level_pointer)
+                .ok_or("gameplay original level weak unavailable")?;
+            let level = RotationObject::capture(vt, x, level_weak, pawn.outer)?;
+            let stable = |native: &Native| {
+                native.native_guard_ok(vt)
+                    && [root, pawn, level, world].iter().all(|n| n.valid(vt, x))
+            };
+            if !stable(self) {
+                return Err("gameplay original cache metadata changed".into());
+            }
+            let level_class = (vt.find)(wide("/Script/Engine.Level").as_ptr());
+            if level_class.is_null() || !stable(self) {
+                return Err("gameplay original level class unavailable".into());
+            }
+            let level_type = (vt.is_a)(level_pointer, level_class);
+            if level_type != 1 || !stable(self) {
+                return Err("gameplay original level class changed".into());
+            }
+            let mut level_world = HsmpProp::default();
+            let admitted = (vt.obj_prop)(
+                level_pointer,
+                wide("OwningWorld").as_ptr(),
+                &mut level_world,
+            );
+            let names = self
+                .sample
+                .names
+                .ok_or("gameplay original cache schema unavailable")?;
+            if !stable(self)
+                || admitted != 1
+                || level_world.cls != names.object_prop
+                || level_world.size != 8
+                || level_world.offset != 0xc0
+            {
+                return Err("gameplay original level world schema unavailable".into());
+            }
+            let mut parent = HsmpProp::default();
+            let admitted = (vt.obj_prop)(
+                root.address as *mut c_void,
+                wide("AttachParent").as_ptr(),
+                &mut parent,
+            );
+            if !stable(self)
+                || admitted != 1
+                || parent.cls != names.object_prop
+                || parent.size != 8
+                || parent.offset != 0xb0
+            {
+                return Err("gameplay original cache root attachment schema unavailable".into());
+            }
+            let identity = RotationRootIdentity {
+                api: x,
+                root,
+                pawn,
+                level,
+                world,
+                level_world,
+                parent,
+            };
+            if !identity.valid(vt) {
+                return Err("gameplay original cache root owner/world changed".into());
+            }
+            self.sample
+                .native_guard
+                .as_mut()
+                .ok_or("gameplay original cache guard unavailable")?
+                .root
+                .as_mut()
+                .ok_or("gameplay original cache root unavailable")?
+                .identity = Some(identity);
+            if !self.native_guard_ok(vt) {
+                return Err("gameplay original cache admission changed".into());
+            }
+            Ok(())
+        }
+    }
+    unsafe fn actor_rotation_cache(
+        &mut self,
+        vt: &HsmpReflect,
+        orientation: [f64; 4],
+    ) -> Result<[f64; 3], String> {
+        unsafe {
+            rotation_profile()?;
+            if !self.native_guard_ok(vt) {
+                return Err("gameplay original cache admission changed".into());
+            }
+            let root = self
+                .sample
+                .native_guard
+                .as_ref()
+                .and_then(|g| g.root.as_ref())
+                .ok_or("gameplay original cache root unavailable")?;
+            if root.identity.is_none() {
+                return Err("gameplay original cache metadata unavailable".into());
+            }
+            let cache = RotationCacheWitness::copy(root.address, orientation, rotation_readable)?;
+            if !self.native_guard_ok(vt) {
+                return Err("gameplay original cache admission changed during copy".into());
+            }
+            let euler = cache.euler.map(f64::from_bits);
+            self.sample
+                .native_guard
+                .as_mut()
+                .and_then(|g| g.root.as_mut())
+                .ok_or("gameplay original cache root unavailable")?
+                .cache = Some(cache);
+            if !self.native_guard_ok(vt) {
+                return Err("gameplay original cache final provenance changed".into());
+            }
+            Ok(euler)
+        }
     }
 
     /// The property names looked up on a pawn (control) or a weapon actor, in slot order.
@@ -1122,6 +1686,7 @@ impl Native {
     pub unsafe fn native_gameplay_sample(&mut self, L: *mut lua_State) -> c_int {
         let result = unsafe { self.native_sample_world_impl(L, true) };
         self.sample.gameplay_directory = None;
+        self.sample.gameplay_world_key = None;
         self.sample.native_guard = None;
         self.sample.native_sampling_active = false;
         result
@@ -1143,6 +1708,8 @@ impl Native {
             };
             if compact {
                 self.sample.gameplay_directory = Some(directory.clone());
+                let Some(key)=self.world_key.clone() else {return nil_err(L,"gameplay original world key unavailable");};
+                self.sample.gameplay_world_key=Some(key);
                 if self.sample.input.incomplete() {
                     return nil_err(L, "previous gameplay execution incomplete");
                 }
@@ -1369,6 +1936,8 @@ impl Native {
                             class: reflect::keep(vt, root_class).ok_or("gameplay original root class weak")?,
                             class_address: root_class as usize,
                             property: root_property,
+                            identity: None,
+                            cache: None,
                         };
                         if !self.native_guard_ok(vt)
                             || u64::from_le_bytes(Self::prop_bytes(pawn, &root_property).try_into().map_err(|_| "gameplay root bytes")?) as usize != root_address
@@ -1378,12 +1947,14 @@ impl Native {
                             return Err("gameplay original root admission changed".into());
                         }
                         self.sample.native_guard.as_mut().ok_or("gameplay native guard")?.root = Some(original_root);
+                        self.rotation_root_identity(vt,reference)?;
                     }
                     let (position, rotation, velocity) =
                         self.actor_state(vt, pawn).ok_or("actor root")?;
                     if compact {
                         use hsmp_server::native_gameplay_wire::{NativeScalar, State};
                         let orientation = self.actor_orientation(vt, pawn).ok_or("gameplay original root transform")?;
+                        let cache_rotation = self.actor_rotation_cache(vt,orientation)?;
                         let mut values = Vec::with_capacity(2);
                         for field in ["Health", "Stamina"] {
                             if !self.native_guard_ok(vt) {
@@ -1429,6 +2000,7 @@ impl Native {
                             rotation,
                             velocity,
                             orientation,
+                            cache_rotation,
                             health: values[0],
                             stamina: values[1],
                         });
@@ -1619,16 +2191,7 @@ impl Native {
                 return nil_err(L, "native world key");
             };
             if compact {
-                for original in compact_guards {
-                    self.sample.native_guard = Some(original);
-                    if !self.native_guard_ok(vt) {
-                        return nil_err(L, "gameplay whole roster changed");
-                    }
-                }
-                self.sample.native_guard = None;
-                if !self.native_guard_ok(vt) || self.world_key.as_ref() != Some(&world_key) {
-                    return nil_err(L, "gameplay final generation changed");
-                }
+                if let Err(reason)=self.finish_gameplay_roster(vt,&compact_guards,&world_key,||rotation_profile().is_ok()) {return nil_err(L,reason);}
                 let result = hsmp_server::native_gameplay_wire::ResultFrame {
                     epoch: directory.epoch,
                     directory_seq: directory.seq,
@@ -1785,6 +2348,8 @@ mod gameplay_orientation_tests {
             unsafe {
                 if MODE.get() == 1 { (*(objects[1] as *mut Object)).root = objects[6]; }
                 if MODE.get() == 3 { (*(objects[3] as *mut Object)).class = objects[6]; }
+                if MODE.get() == 4 { std::ptr::write_unaligned((objects[3]+0x90) as *mut usize,objects[6]); }
+                if MODE.get() == 5 { std::ptr::write_unaligned((objects[5]+0xc0) as *mut usize,objects[1]); }
             }
         });
     }
@@ -1811,7 +2376,7 @@ mod gameplay_orientation_tests {
         native.sample.native_guard = Some(NativeGuard {
             pawn: handle(1), mesh: handle(2), pawn_address: addresses[1], mesh_address: addresses[2],
             mesh_property: property(8), controller_property: property(16), controller: 0, controller_address: 0, controller_pawn: None,
-            root: Some(NativeRootGuard { weak: handle(3), address: addresses[3], class: handle(4), class_address: addresses[4], property: property(24) }),
+            root: Some(NativeRootGuard { weak: handle(3), address: addresses[3], class: handle(4), class_address: addresses[4], property: property(24),identity:None,cache:None }),
         });
         let mut fns = [(0, [0; 4], 0); NFNS]; fns[F::ActorTransform as usize] = (handle(5), [0; 4], 96);
         native.sample.world = Some(World { fns, classes: [0; 3], bones: Vec::new(), hand_l: 0, hand_r: 0, pawn_props: HashMap::new(), weapon_props: HashMap::new() });
@@ -1830,6 +2395,308 @@ mod gameplay_orientation_tests {
         assert!(sample(&mut native).is_none(), "nonfinite native quaternion is unavailable, never a unit default");
         native.sample.drop_world(true); let calls = CALLS.get();
         assert!(sample(&mut native).is_none()); assert_eq!(CALLS.get(), calls, "world drop cannot resolve or invoke the old root");
+        OBJECTS.set([0; 7]);
+    }
+    #[test]
+    fn mandatory_cache_pair_retains_bits_and_rejects_missing_or_changed_storage() {
+        #[repr(align(8))]
+        struct Root([u8; 0x200]);
+        let mut root = Root([0; 0x200]);
+        let address = root.0.as_mut_ptr() as usize;
+        let quaternion = [-0.0, 0.125, -0.75, f64::from_bits(0x3fe0000000000001)];
+        let euler = [-0.0, 90.00000000000001, 1.0000000000000002];
+        let mut cache = [0u64; 8];
+        cache[..4].copy_from_slice(&quaternion.map(f64::to_bits));
+        cache[4..7].copy_from_slice(&euler.map(f64::to_bits));
+        let pointer = cache.as_mut_ptr() as usize;
+        let readable =
+            |at, bytes| (at == address && bytes == 0x1f0) || (at == pointer && bytes == 64);
+        unsafe {
+            assert!(
+                RotationCacheWitness::copy(address, quaternion, readable).is_err(),
+                "absent cache never becomes actor Euler/default"
+            );
+            std::ptr::write_unaligned((address + 0x1c0) as *mut usize, pointer);
+            std::ptr::write_unaligned(
+                (address + 0x1d0) as *mut [u64; 4],
+                quaternion.map(f64::to_bits),
+            );
+            let witness = RotationCacheWitness::copy(address, quaternion, readable).unwrap();
+            assert_eq!(witness.euler, euler.map(f64::to_bits));
+            assert_eq!(witness.quaternion, quaternion.map(f64::to_bits));
+            assert!(witness.valid(address, readable));
+            cache[4] ^= 1;
+            assert!(
+                !witness.valid(address, readable),
+                "later-row cache Euler mutation refuses original frame"
+            );
+            cache[4] ^= 1;
+            cache[0] ^= 1;
+            assert!(!witness.valid(address, readable));
+            assert!(
+                RotationCacheWitness::copy(address, quaternion, readable).is_err(),
+                "cache q must equal same original GetTransform q"
+            );
+            cache[0] ^= 1;
+            std::ptr::write_unaligned((address + 0x1c0) as *mut usize, pointer + 8);
+            assert!(!witness.valid(address, readable));
+            std::ptr::write_unaligned((address + 0x1c0) as *mut usize, pointer + 1);
+            assert!(
+                RotationCacheWitness::copy(address, quaternion, |_, _| true).is_err(),
+                "misaligned cache refuses before read"
+            );
+            std::ptr::write_unaligned((address + 0x1c0) as *mut usize, pointer);
+            assert!(
+                RotationCacheWitness::copy(address, quaternion, |at, _| at == address).is_err(),
+                "unreadable cache refuses before read"
+            );
+            cache[5] = f64::NAN.to_bits();
+            assert!(RotationCacheWitness::copy(address, quaternion, readable).is_err());
+            cache[5] = euler[1].to_bits();
+            std::ptr::write_unaligned((address + 0x1d0) as *mut u64, 1);
+            assert!(
+                !witness.valid(address, readable),
+                "same root world quaternion cannot change after original getter"
+            );
+            std::ptr::write_unaligned(
+                (address + 0x1d0) as *mut [u64; 4],
+                quaternion.map(f64::to_bits),
+            );
+            assert!(witness.valid(address, readable));
+        }
+        assert_ne!(
+            rotation_hash(&[1, 2, 3]),
+            rotation_hash(&[1, 2, 4]),
+            "native byte profile mutations are not accepted"
+        );
+    }
+    #[repr(C, align(8))]
+    struct CacheObject {
+        class: usize,
+        name: u64,
+        flags: u32,
+        pad: u32,
+        outer: usize,
+        body: [u8; 0x200],
+    }
+    unsafe extern "C" fn cache_name(p: *const c_void) -> *const u64 {
+        unsafe { &(*(p as *const CacheObject)).name }
+    }
+    unsafe extern "C" fn cache_flags(p: *const c_void) -> *const u32 {
+        unsafe { &(*(p as *const CacheObject)).flags }
+    }
+    unsafe extern "C" fn cache_outer(p: *const c_void) -> *const *mut c_void {
+        unsafe { std::ptr::addr_of!((*(p as *const CacheObject)).outer).cast() }
+    }
+    unsafe extern "C" fn cache_weak(p: *mut c_void) -> u64 {
+        OBJECTS.with_borrow(|rows| {
+            rows.iter()
+                .position(|address| *address == p as usize)
+                .map_or(0, |index| (1u64 << 32) | index as u64)
+        })
+    }
+    #[test]
+    fn original_cache_boundary_closes_owner_parent_world_and_metadata_after_later_callbacks() {
+        let mut objects: [CacheObject; 7] = std::array::from_fn(|i| CacheObject {
+            class: 0,
+            name: (1u64 << 32) | i as u64,
+            flags: 1,
+            pad: 0,
+            outer: 0,
+            body: [0; 0x200],
+        });
+        let addresses: [usize; 7] =
+            std::array::from_fn(|i| &mut objects[i] as *mut CacheObject as usize);
+        for object in &mut objects {
+            object.class = addresses[4];
+        }
+        objects[1].outer = addresses[5];
+        objects[3].outer = addresses[1];
+        OBJECTS.set(addresses);
+        MODE.set(0);
+        let vt = HsmpReflect {
+            abi: 1,
+            _r: 0,
+            fname,
+            find,
+            is_a,
+            class_of,
+            props,
+            obj_prop,
+            call,
+            weak: cache_weak,
+            resolve,
+        };
+        let api = RotationMetadata {
+            name: cache_name,
+            flags: cache_flags,
+            outer: cache_outer,
+        };
+        let handle = |index| (1u64 << 32) | index;
+        unsafe {
+            std::ptr::write_unaligned((addresses[3] + 0x90) as *mut usize, addresses[1]);
+            std::ptr::write_unaligned((addresses[5] + 0xc0) as *mut usize, addresses[6]);
+            let capture = |index| {
+                RotationObject::capture(&vt, api, handle(index as u64), addresses[index]).unwrap()
+            };
+            let identity = RotationRootIdentity {
+                api,
+                root: capture(3),
+                pawn: capture(1),
+                level: capture(5),
+                world: capture(6),
+                level_world: HsmpProp {
+                    offset: 0xc0,
+                    size: 8,
+                    ..Default::default()
+                },
+                parent: HsmpProp {
+                    offset: 0xb0,
+                    size: 8,
+                    ..Default::default()
+                },
+            };
+            let guard = NativeRootGuard {
+                weak: handle(3),
+                address: addresses[3],
+                class: handle(4),
+                class_address: addresses[4],
+                property: Default::default(),
+                identity: Some(identity),
+                cache: None,
+            };
+            assert!(guard.rotation_valid(&vt, true, |_, _| true));
+            assert!(
+                !guard.rotation_valid(&vt, false, |_, _| true),
+                "unsupported pinned native profile refuses even unchanged bytes"
+            );
+            objects[3].name ^= 1;
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            objects[3].name ^= 1;
+            objects[3].flags ^= 2;
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            objects[3].flags ^= 2;
+            objects[4].name ^= 1;
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            objects[4].name ^= 1;
+            objects[4].flags |= 0x40000000;
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            objects[4].flags = 1;
+            objects[3].class = addresses[6];
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            objects[3].class = addresses[4];
+            objects[3].outer = addresses[5];
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            objects[3].outer = addresses[1];
+            std::ptr::write_unaligned((addresses[3] + 0x90) as *mut usize, addresses[6]);
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            std::ptr::write_unaligned((addresses[3] + 0x90) as *mut usize, addresses[1]);
+            std::ptr::write_unaligned((addresses[3] + 0xb0) as *mut usize, addresses[1]);
+            assert!(
+                !guard.rotation_valid(&vt, true, |_, _| true),
+                "later attachment cannot use the no-parent native branch"
+            );
+            std::ptr::write_unaligned((addresses[3] + 0xb0) as *mut usize, 0);
+            std::ptr::write_unaligned((addresses[5] + 0xc0) as *mut usize, addresses[1]);
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            std::ptr::write_unaligned((addresses[5] + 0xc0) as *mut usize, addresses[6]);
+            objects[1].outer = addresses[6];
+            assert!(!guard.rotation_valid(&vt, true, |_, _| true));
+            objects[1].outer = addresses[5];
+            assert!(guard.rotation_valid(&vt, true, |_, _| true));
+            let mut native = Native::new();
+            native.world_key = Some(vec![2]);
+            native.sample.gameplay_world_key = Some(vec![1]);
+            assert!(
+                !native.native_guard_ok(&vt),
+                "changed world key refuses before old cache/object reads"
+            );
+            // Both original rows are retained before the later native callback.
+            // The actual production final-roster helper must recheck the earlier
+            // row, not just the most recently dispatched receiver.
+            let property = |offset| HsmpProp {
+                offset,
+                size: 8,
+                ..Default::default()
+            };
+            for pawn in [addresses[1], addresses[0]] {
+                std::ptr::write_unaligned((pawn + 40) as *mut usize, addresses[2]);
+                std::ptr::write_unaligned((pawn + 48) as *mut usize, 0);
+            }
+            std::ptr::write_unaligned((addresses[1] + 56) as *mut usize, addresses[3]);
+            objects[0].outer = addresses[5];
+            objects[2].outer = addresses[0];
+            std::ptr::write_unaligned((addresses[0] + 56) as *mut usize, addresses[2]);
+            std::ptr::write_unaligned((addresses[2] + 0x90) as *mut usize, addresses[0]);
+            let second = NativeRootGuard {
+                weak: handle(2),
+                address: addresses[2],
+                class: handle(4),
+                class_address: addresses[4],
+                property: property(56),
+                identity: Some(RotationRootIdentity {
+                    api,
+                    root: capture(2),
+                    pawn: capture(0),
+                    level: capture(5),
+                    world: capture(6),
+                    level_world: property(0xc0),
+                    parent: property(0xb0),
+                }),
+                cache: None,
+            };
+            let first = NativeRootGuard {
+                property: property(56),
+                ..guard
+            };
+            let guards = [(1, first), (0, second)].map(|(pawn, root)| NativeGuard {
+                pawn: handle(pawn),
+                pawn_address: addresses[pawn as usize],
+                mesh: handle(2),
+                mesh_address: addresses[2],
+                mesh_property: property(40),
+                controller_property: property(48),
+                controller: 0,
+                controller_address: 0,
+                controller_pawn: None,
+                root: Some(root),
+            });
+            native.world_key = Some(vec![1]);
+            native.sample.native_sampling_active = false;
+            assert!(
+                native
+                    .finish_gameplay_roster(&vt, &guards, &[1], || true)
+                    .is_ok()
+            );
+            let mut params = [0u8; 96];
+            for mode in [4, 5] {
+                MODE.set(mode);
+                call(
+                    addresses[0] as *mut c_void,
+                    std::ptr::null_mut(),
+                    params.as_mut_ptr().cast(),
+                );
+                let mut publications = 0;
+                if native
+                    .finish_gameplay_roster(&vt, &guards, &[1], || true)
+                    .is_ok()
+                {
+                    publications += 1;
+                }
+                assert_eq!(
+                    publications, 0,
+                    "later-row native callback mode{mode} prevents publishing changed earlier owner/world"
+                );
+                std::ptr::write_unaligned((addresses[3] + 0x90) as *mut usize, addresses[1]);
+                std::ptr::write_unaligned((addresses[5] + 0xc0) as *mut usize, addresses[6]);
+            }
+            MODE.set(0);
+            assert!(
+                native
+                    .finish_gameplay_roster(&vt, &guards, &[1], || true)
+                    .is_ok()
+            );
+        }
         OBJECTS.set([0; 7]);
     }
 }
