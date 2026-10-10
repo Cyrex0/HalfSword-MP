@@ -7,6 +7,7 @@ struct GameplayCodeProfile {uintptr_t image{};uint32_t size{},header{},page_size
     GameplayWorkingSetQuery working_set{};std::vector<uintptr_t> pages;};
 const GameplayCodeProfile* gameplay_native_profile();
 void gameplay_native_guard();
+void gameplay_hud_guard();
 struct GameplayApplied {
     HsmpGameplayState expected{};HsmpGameplayProof proof{};
     Obj root{},movement{},mesh{},asset{};
@@ -19,6 +20,15 @@ struct GameplayApplied {
 struct GameplayCurrent {
     Obj controller_level{};LookupEntry level_path,get_level_path,local_path;
     HsmpProp level_world{},local{};uint64_t vtable{};
+};
+struct GameplayHud {
+    Obj widget{},widget_class{},mode{},instance{},player{};
+    LookupEntry widget_path,class_path,mode_path,instance_path,player_path,world_path,controller_path;
+    std::vector<LookupEntry> api_paths;
+    HsmpProp world_instance{},players_field{},player_controller{},controller_player{},my_player{},widget_mode{},widget_instance{},local_multiplayer{};
+    Array players{};const void* context{};uint64_t table{},instance_table{};std::array<uint64_t,3> weak_context{};
+    bool created{},bound{};
+    GameplayCodeProfile code;
 };
 enum GameplayCurrentReason:uint32_t {GP_CURRENT_UNENTERED,GP_CURRENT_WORLD,GP_CURRENT_ABSENT,GP_CURRENT_SCHEMA,GP_CURRENT_CODE,GP_CURRENT_VTABLE,GP_CURRENT_TARGET,GP_CURRENT_ZERO,GP_CURRENT_HOT,GP_CURRENT_LEVEL};
 struct GameplayCurrentObservation {uint32_t reason{GP_CURRENT_UNENTERED},code{},cold_code{},found{},type{},stage{},operations{},complete{};HsmpProp schema{};bool hot{};};
@@ -135,6 +145,7 @@ struct GameplayPawn {
     std::optional<GameplayCurrent> current;
     GameplayCurrentObservation current_binding;
     std::optional<GameplayApplied> applied;
+    std::optional<GameplayHud> ui;
 };
 std::map<uint64_t,GameplayPawn> gameplay_pawns;
 std::mutex gameplay_mutex;
@@ -191,9 +202,9 @@ void gameplay_layouts(){
     layout(L"/Script/Engine.TViewTarget",0x820,{{L"Target",L"ObjectProperty",0,8,nullptr}});gameplay_layouts_verified=true;
 }
 
-LookupEntry gameplay_path(Obj object){
+LookupEntry gameplay_path_native(void* object){
     LookupEntry path;require(source_package_name!=nullptr,"native gameplay package metadata unavailable");path.package=*source_package_name;
-    auto node=lookup_node(get(object),path,false,nullptr);
+    auto node=lookup_node(object,path,false,nullptr);
     for(;;){require(path.original.size()<64,"native gameplay original path bound");
         for(const auto& old:path.original)require(old.address!=node.address,"native gameplay original path cycle");
         path.original.push_back(node);const auto* pointer=lookup_node_get(node,path.zero_item);
@@ -204,6 +215,7 @@ LookupEntry gameplay_path(Obj object){
     }
     path.pinned=path.original;lookup_pin(path);lookup_entry_final(path);return path;
 }
+LookupEntry gameplay_path(Obj object){return gameplay_path_native(get(object));}
 void gameplay_current_paths(const GameplayPawn& entry){
     if(!entry.current)return;const auto& profile=*entry.current;
     lookup_entry_final(profile.level_path);lookup_entry_final(profile.get_level_path);lookup_entry_final(profile.local_path);
@@ -402,10 +414,12 @@ void gameplay_current_bind(GameplayPawn& entry,HsmpViewResult* result){
 }
 void gameplay_call_guard(){
     if(!gameplay_active)return;
-    if(gameplay_boundary_active()){gameplay_boundary->final();return;}
+    if(gameplay_boundary_active()){gameplay_boundary->final();gameplay_hud_guard();gameplay_weapons_guard();return;}
     for(const auto& [handle,entry]:gameplay_pawns){(void)handle;if(same(entry.world,gameplay_active->world))gameplay_pure(entry);}
     gameplay_pure(*gameplay_active);
     gameplay_native_guard();
+    gameplay_hud_guard();
+    gameplay_weapons_guard();
 }
 struct GameplayWatch {
     const GameplayPawn* previous{gameplay_active};
@@ -637,10 +651,167 @@ template<class Guard>void gameplay_absolute_run(const HsmpGameplayState& state,c
     if(changed){const GameplayOverlapView empty{};root=guard();require(exact(root),"native gameplay rotation cache changed before overlap publication");calls.overlaps(root,&empty,1,nullptr);root=guard();}
     require(exact(root),"native gameplay native rotation cache changed during overlap publication");
 }
+// Public widget observations run before the final UObject-binding tail. They
+// do not upgrade the existing AHUD flag to callback-free Slate visibility.
+constexpr std::array<GameplayCodePin,7> gameplay_hud_pins{{
+    {0x31b6170,46,0xf0511910c235479fULL},{0x31b63d0,173,0x7c522ff1173471e7ULL},
+    {0x35cf760,18,0x39a90ce9b1907ae9ULL},{0x11a1310,5,0x857c6411bf47b374ULL},
+    {0x39e6900,21,0x905bf2ee75febd23ULL},{0x374a170,71,0xfec5af3e4a7796f9ULL},
+    {0x374bc30,116,0x80ad98340a55685eULL}}};
+template<class T>T gameplay_hud_copy(const void* object,size_t offset=0){
+    const auto address=reinterpret_cast<uintptr_t>(object);require(address&&offset<=UINTPTR_MAX-address&&sizeof(T)<=UINTPTR_MAX-address-offset,"native gameplay HUD storage overflow");
+    T out{};SIZE_T copied{};require(ReadProcessMemory(GetCurrentProcess(),reinterpret_cast<const void*>(address+offset),&out,sizeof(out),&copied)&&copied==sizeof(out),"native gameplay HUD storage unavailable");return out;
+}
+bool gameplay_hud_array_same(const Array& a,const Array& b){return a.data==b.data&&a.count==b.count&&a.capacity==b.capacity;}
+void gameplay_hud_index_pure(const GameplayPawn& entry,const GameplayHud& hud){
+    gameplay_code_validate_at(hud.code,gameplay_code_module());
+    for(const auto* path:{&hud.world_path,&hud.controller_path,&hud.instance_path,&hud.mode_path,&hud.class_path})lookup_entry_final(*path);
+    for(const auto& path:hud.api_paths)lookup_entry_final(path);
+    const auto* world=lookup_node_get(hud.world_path.pinned.front(),hud.world_path.zero_item);
+    const auto* pc=lookup_node_get(hud.controller_path.pinned.front(),hud.controller_path.zero_item);
+    const auto* instance=lookup_node_get(hud.instance_path.pinned.front(),hud.instance_path.zero_item);
+    const auto* mode=lookup_node_get(hud.mode_path.pinned.front(),hud.mode_path.zero_item);
+    const auto instance_table=gameplay_hud_copy<uint64_t>(instance);
+    require(instance_table&&instance_table==hud.instance_table&&gameplay_hud_copy<uint64_t>(reinterpret_cast<const void*>(instance_table),0x188)==hud.code.image+0x35cf760,"native gameplay HUD game-instance world dispatch changed");
+    require(gameplay_hud_copy<void*>(world,hud.world_instance.offset)==instance&&gameplay_hud_copy<const void*>(instance,0x30)==hud.context&&
+        hud.context&&gameplay_hud_copy<void*>(hud.context,0x2c0)==world,"native gameplay HUD original game-instance world changed");
+    const auto players=gameplay_hud_copy<Array>(instance,hud.players_field.offset);
+    require(gameplay_hud_array_same(players,hud.players)&&players.count==1&&players.capacity>=1&&players.data&&gameplay_hud_copy<void*>(players.data)==reinterpret_cast<void*>(hud.player.address)&&
+        gameplay_hud_copy<void*>(pc,hud.controller_player.offset)==reinterpret_cast<void*>(hud.player.address),
+        "native gameplay HUD indexed player changed");
+    lookup_entry_final(hud.player_path);const auto* player=lookup_node_get(hud.player_path.pinned.front(),hud.player_path.zero_item);
+    require(gameplay_hud_copy<void*>(player,hud.player_controller.offset)==pc&&gameplay_hud_copy<void*>(pc,hud.controller_player.offset)==player&&
+        gameplay_hud_copy<void*>(pc,entry.controller_pawn.offset)==reinterpret_cast<void*>(entry.pawn.address)&&
+        gameplay_hud_copy<void*>(reinterpret_cast<void*>(entry.pawn.address),entry.pawn_controller.offset)==pc,"native gameplay HUD indexed possession changed");
+    require(hud.local_multiplayer.bool_mask&&(gameplay_hud_copy<uint8_t>(mode,static_cast<size_t>(hud.local_multiplayer.offset)+hud.local_multiplayer.bool_offset)&hud.local_multiplayer.bool_mask)==0,"native gameplay HUD local multiplayer unsupported");
+    // Native GetOwningPlayer selects the LP's controller from this current
+    // world weak-controller array. No old array allocation is retained here.
+    const auto controllers=gameplay_hud_copy<Array>(world,0x218);
+    require(controllers.count>=0&&controllers.count<=1024&&controllers.capacity>=controllers.count&&(!controllers.count||controllers.data),"native gameplay HUD controller census bounds");
+    bool listed{};for(int32_t i=0;i<controllers.count;++i){const auto weak=gameplay_hud_copy<uint64_t>(controllers.data,static_cast<size_t>(i)*8);
+        if(weak){const auto* controller=vt->resolve(weak);require(!controller||controller==pc,"native gameplay HUD multiple live controllers unsupported");if(controller==pc)listed=true;}}
+    require(listed&&gameplay_hud_array_same(controllers,gameplay_hud_copy<Array>(world,0x218)),"native gameplay HUD original controller left world");
+    for(const auto* path:{&hud.world_path,&hud.controller_path,&hud.instance_path,&hud.player_path,&hud.mode_path,&hud.class_path})lookup_entry_final(*path);
+}
+void gameplay_hud_binding_pure(const GameplayPawn& entry,const GameplayHud& hud){
+    gameplay_hud_index_pure(entry,hud);lookup_entry_final(hud.widget_path);
+    const auto* widget=lookup_node_get(hud.widget_path.pinned.front(),hud.widget_path.zero_item);
+    require(gameplay_hud_copy<uint64_t>(widget)==hud.table&&gameplay_hud_copy<uint64_t>(reinterpret_cast<const void*>(hud.table),0x188)==hud.code.image+0x31b63d0&&
+        gameplay_hud_copy<uint64_t>(reinterpret_cast<const void*>(hud.table),0x2e0)==hud.code.image+0x31b6170,"native gameplay HUD owner/world dispatch changed");
+    require(gameplay_hud_copy<void*>(widget,hud.my_player.offset)==reinterpret_cast<void*>(entry.pawn.address)&&
+        gameplay_hud_copy<void*>(widget,hud.widget_mode.offset)==reinterpret_cast<void*>(hud.mode.address)&&
+        gameplay_hud_copy<void*>(widget,hud.widget_instance.offset)==reinterpret_cast<void*>(hud.instance.address),"native gameplay HUD original pawn/mode/instance binding changed");
+    const auto context=gameplay_hud_copy<std::array<uint64_t,3>>(widget,0x2c8);
+    require(context==hud.weak_context&&context[0]&&context[1]&&context[2]&&vt->resolve(context[0])==reinterpret_cast<void*>(hud.player.address)&&
+        vt->resolve(context[1])==reinterpret_cast<void*>(entry.world.address)&&vt->resolve(context[2])==reinterpret_cast<void*>(entry.world.address),"native gameplay HUD original owner/world context changed");
+    lookup_entry_final(hud.widget_path);gameplay_hud_index_pure(entry,hud);
+}
+struct GameplayHudWatch;
+thread_local const GameplayHudWatch* gameplay_hud_active{};
+struct GameplayHudWatch {
+    const GameplayPawn& entry;const GameplayHud& hud;LookupState* operation{active_lookup};const GameplayHudWatch* previous{gameplay_hud_active};
+    const LookupEntry* candidate{};
+    GameplayHudWatch(const GameplayPawn& original,const GameplayHud& witness,const LookupEntry* receiver=nullptr):entry(original),hud(witness),candidate(receiver){final();gameplay_hud_active=this;}
+    void final()const{require(operation==active_lookup,"native gameplay HUD operation changed");
+        if(hud.bound)gameplay_hud_binding_pure(entry,hud);else{gameplay_hud_index_pure(entry,hud);if(!hud.widget_path.original.empty())lookup_entry_final(hud.widget_path);}if(candidate)lookup_entry_final(*candidate);}
+    ~GameplayHudWatch(){gameplay_hud_active=previous;}
+};
+void gameplay_hud_guard(){if(gameplay_hud_active&&gameplay_hud_active->operation==active_lookup)gameplay_hud_active->final();}
+Obj gameplay_hud_indexed(const GameplayPawn& entry,const wchar_t* function,HsmpViewResult* result){
+    Function get_player(function);get_player.object(L"WorldContextObject",entry.world);get_player.put(L"PlayerIndex",L"IntProperty",int32_t{0});
+    get_player.call(find(L"/Script/Engine.Default__GameplayStatics"),result);return get_player.returned();
+}
+void gameplay_hud_player_capture(GameplayHud& hud,Obj player_class){
+    lookup_entry_final(hud.instance_path);auto* instance=lookup_node_get(hud.instance_path.pinned.front(),hud.instance_path.zero_item);
+    const auto players=gameplay_hud_copy<Array>(instance,hud.players_field.offset);
+    require(players.count==1&&players.capacity>=1&&players.data,"native gameplay HUD single local player required");
+    auto* player=gameplay_hud_copy<void*>(players.data);require(player,"native gameplay HUD local player missing");
+    auto path=gameplay_path_native(player);const auto& node=path.pinned.front();
+    require(node.weak&&node.class_address==player_class.address,"native gameplay HUD exact local player class");
+    require(gameplay_hud_array_same(players,gameplay_hud_copy<Array>(instance,hud.players_field.offset))&&gameplay_hud_copy<void*>(players.data)==player,"native gameplay HUD local player changed during cold capture");
+    hud.players=players;hud.player={node.weak,node.address};hud.player_path=std::move(path);hud.player_controller.offset=0x30;
+}
+GameplayHud gameplay_hud_index(GameplayPawn& entry,HsmpViewResult* result){
+    require(entry.own&&same(gameplay_hud_indexed(entry,L"/Script/Engine.GameplayStatics:GetPlayerController",result),entry.controller)&&
+        same(gameplay_hud_indexed(entry,L"/Script/Engine.GameplayStatics:GetPlayerCharacter",result),entry.pawn),"native gameplay HUD requires original player zero possession");
+    GameplayHud hud;hud.world_path=entry.world_path;hud.controller_path=entry.controller_path;
+    hud.widget_class=find(L"/Game/UI/UI_HUD.UI_HUD_C");hud.class_path=gameplay_path(hud.widget_class);
+    hud.world_instance=property(entry.world,L"OwningGameInstance",L"ObjectProperty",8);require(hud.world_instance.offset==0x1d8,"native gameplay HUD world layout");
+    hud.instance=object_property(entry.world,L"OwningGameInstance");hud.instance_path=gameplay_path(hud.instance);
+    hud.players_field=property(hud.instance,L"LocalPlayers",L"ArrayProperty",16);hud.controller_player=property(entry.controller,L"Player",L"ObjectProperty",8);
+    require(hud.players_field.offset==0x38&&hud.controller_player.offset==0x330,"native gameplay HUD indexed-player layout");
+    const auto player_class=find(L"/Script/Engine.LocalPlayer");hud.api_paths.push_back(gameplay_path(player_class));
+    Function mode(L"/Script/Engine.GameplayStatics:GetGameMode");mode.object(L"WorldContextObject",entry.world);mode.call(find(L"/Script/Engine.Default__GameplayStatics"),result);hud.mode=mode.returned();
+    require(hud.mode.weak&&vt->class_of(get(hud.mode))==get(find(L"/Game/Blueprints/Utility/BP_HalfSwordGameMode.BP_HalfSwordGameMode_C")),"native gameplay HUD exact game mode required");
+    hud.mode_path=gameplay_path(hud.mode);hud.local_multiplayer=property(hud.mode,L"Local Multiplayer",L"BoolProperty",1);
+    require(hud.local_multiplayer.offset==0x408&&hud.local_multiplayer.bool_offset==0&&hud.local_multiplayer.bool_mask==1&&!bool_property(hud.mode,L"Local Multiplayer"),"native gameplay HUD local-multiplayer policy");
+    hud.context=gameplay_hud_copy<const void*>(get(hud.instance),0x30);
+    hud.instance_table=gameplay_hud_copy<uint64_t>(get(hud.instance));
+    SYSTEM_INFO system{};GetSystemInfo(&system);const auto kernel=GetModuleHandleW(L"kernel32.dll");const auto query=kernel?reinterpret_cast<GameplayWorkingSetQuery>(GetProcAddress(kernel,"K32QueryWorkingSetEx")):nullptr;
+    hud.code=gameplay_code_copy(gameplay_code_module(),gameplay_hud_pins,VirtualQuery,query,system.dwPageSize);
+    for(const auto* path:{L"/Script/Engine.GameplayStatics:GetPlayerController",L"/Script/Engine.GameplayStatics:GetPlayerCharacter",L"/Script/Engine.GameplayStatics:GetGameMode",
+        L"/Script/UMG.Widget:GetOwningPlayer",L"/Script/UMG.Widget:IsInViewport",L"/Script/UMG.Widget:IsVisible"}){Function api(path);hud.api_paths.push_back(gameplay_path(api.function));}
+    check_guard();gameplay_hud_player_capture(hud,player_class);GameplayHudWatch watch(entry,hud);
+    hud.player_controller=property(hud.player,L"PlayerController",L"ObjectProperty",8);require(hud.player_controller.offset==0x30,"native gameplay HUD player-controller layout");
+    watch.final();return hud;
+}
+bool gameplay_hud_boolean(Obj widget,const wchar_t* function,HsmpViewResult* result){Function f(function);f.call(widget,result);return f.value<uint8_t>(L"ReturnValue",L"BoolProperty")!=0;}
+void gameplay_hud_public(const GameplayPawn& entry,const GameplayHud& hud,HsmpViewResult* result){
+    GameplayHudWatch watch(entry,hud);
+    gameplay_hud_binding_pure(entry,hud);
+    require(same(returned(hud.widget,L"/Script/UMG.Widget:GetOwningPlayer",result),entry.controller),"native gameplay HUD owning controller changed");gameplay_hud_binding_pure(entry,hud);
+    require(gameplay_hud_boolean(hud.widget,L"/Script/UMG.Widget:IsInViewport",result),"native gameplay HUD is not in viewport");gameplay_hud_binding_pure(entry,hud);
+    require(gameplay_hud_boolean(hud.widget,L"/Script/UMG.Widget:IsVisible",result),"native gameplay HUD is not visible");gameplay_hud_binding_pure(entry,hud);
+}
+void gameplay_hud_ensure(GameplayPawn& entry,HsmpViewResult* result){
+    require(!entry.ui,"native gameplay HUD already initialized");entry.ui.emplace(gameplay_hud_index(entry,result));auto& hud=*entry.ui;GameplayHudWatch watch(entry,hud);
+    require(retirement_free,"native gameplay HUD array allocator unavailable");
+    Function census(L"/Script/UMG.WidgetBlueprintLibrary:GetAllWidgetsOfClass");census.object(L"WorldContextObject",entry.world);census.object(L"WidgetClass",hud.widget_class,true);census.boolean(L"TopLevelOnly",true);
+    const auto output=census.field(L"FoundWidgets",L"ArrayProperty",16);OwnedColorArray owned{retirement_free,census.buf.data()+output.offset};
+    gameplay_hud_index_pure(entry,hud);census.call(find(L"/Script/UMG.Default__WidgetBlueprintLibrary"),result);gameplay_hud_index_pure(entry,hud);
+    const auto widgets=census.value<Array>(L"FoundWidgets",L"ArrayProperty");require(widgets.count>=0&&widgets.count<=64&&widgets.capacity>=widgets.count&&(!widgets.count||widgets.data),"native gameplay HUD widget census bound");
+    for(int32_t i=0;i<widgets.count;++i){auto candidate=keep(gameplay_hud_copy<void*>(widgets.data,static_cast<size_t>(i)*8));
+        const auto candidate_path=gameplay_path_native(reinterpret_cast<void*>(candidate.address));
+        GameplayHudWatch candidate_watch(entry,hud,&candidate_path);
+        require(is(candidate,L"/Script/UMG.UserWidget"),"native gameplay HUD census receiver class");gameplay_hud_index_pure(entry,hud);
+        lookup_entry_final(candidate_path);const auto owner=returned(candidate,L"/Script/UMG.Widget:GetOwningPlayer",result);lookup_entry_final(candidate_path);gameplay_hud_index_pure(entry,hud);
+        if(!same(owner,entry.controller))continue;
+        require(vt->class_of(get(candidate))==get(hud.widget_class)&&same(object_property(candidate,L"My Player"),entry.pawn),"native gameplay existing owned HUD has stale pawn binding");
+        lookup_entry_final(candidate_path);require(!hud.widget.weak,"native gameplay existing owned HUD is ambiguous");hud.widget=candidate;hud.widget_path=candidate_path;
+    }
+    if(!hud.widget.weak){Function create(L"/Script/UMG.WidgetBlueprintLibrary:Create");create.object(L"WorldContextObject",entry.world);create.object(L"WidgetType",hud.widget_class,true);create.object(L"OwningPlayer",entry.controller);
+        const auto created_output=create.field(L"ReturnValue",L"ObjectProperty",8);
+        const auto retain=[&](){void* raw{};std::memcpy(&raw,create.buf.data()+created_output.offset,8);if(!raw)return;
+            check_guard();hud.widget=keep(raw);hud.created=true;hud.widget_path=gameplay_path_native(raw);};
+        gameplay_hud_index_pure(entry,hud);try{create.call(find(L"/Script/UMG.Default__WidgetBlueprintLibrary"),result);retain();}
+        catch(...){if(!hud.created){try{retain();}catch(...){}}throw;}
+        gameplay_hud_index_pure(entry,hud);require(hud.widget.weak&&vt->class_of(get(hud.widget))==get(hud.widget_class),"native gameplay HUD creation class/identity");
+        Function add(L"/Script/UMG.UserWidget:AddToViewport");add.put(L"ZOrder",L"IntProperty",int32_t{0});
+        gameplay_hud_index_pure(entry,hud);lookup_entry_final(hud.widget_path);add.call(hud.widget,result);lookup_entry_final(hud.widget_path);gameplay_hud_index_pure(entry,hud);
+    }
+    if(hud.widget_path.original.empty())hud.widget_path=gameplay_path(hud.widget);
+    require(same(returned(hud.widget,L"/Script/UMG.Widget:GetOwningPlayer",result),entry.controller)&&same(object_property(hud.widget,L"My Player"),entry.pawn)&&
+        gameplay_hud_boolean(hud.widget,L"/Script/UMG.Widget:IsInViewport",result)&&gameplay_hud_boolean(hud.widget,L"/Script/UMG.Widget:IsVisible",result),"native gameplay HUD initialized public readback failed");
+    hud.my_player=property(hud.widget,L"My Player",L"ObjectProperty",8);hud.widget_mode=property(hud.widget,L"As BP Half Sword Game Mode",L"ObjectProperty",8);hud.widget_instance=property(hud.widget,L"GI Settings",L"ObjectProperty",8);
+    require(hud.my_player.offset==0x390&&hud.widget_mode.offset==0x3a0&&hud.widget_instance.offset==0x398,"native gameplay HUD pawn/mode/instance field layout");
+    // Native widget context assignment may naturally allocate original serials.
+    // Strengthen only after the original complete path admission, never rebind.
+    for(auto* path:{&hud.widget_path,&hud.player_path,&hud.world_path,&hud.controller_path}){lookup_entry_final(*path);lookup_pin(*path);lookup_entry_final(*path);}
+    hud.table=gameplay_hud_copy<uint64_t>(get(hud.widget));hud.weak_context=gameplay_hud_copy<std::array<uint64_t,3>>(get(hud.widget),0x2c8);
+    hud.bound=true;
+    gameplay_hud_public(entry,hud,result);
+}
+void gameplay_hud_remove(const GameplayPawn& entry,HsmpViewResult* result){
+    if(!entry.ui||!entry.ui->created)return;const auto& hud=*entry.ui;GameplayWatch gameplay(entry);GameplayHudWatch watch(entry,hud);
+    require(hud.widget.weak&&!hud.widget_path.original.empty(),"native gameplay owned HUD cleanup identity unavailable");
+    Function remove(L"/Script/UMG.Widget:RemoveFromParent");remove.call(hud.widget,result);lookup_entry_final(hud.widget_path);
+    require(!gameplay_hud_boolean(hud.widget,L"/Script/UMG.Widget:IsInViewport",result),"native gameplay owned HUD cleanup viewport readback failed");watch.final();
+}
 int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Transform* initial,uint32_t own,
     const HsmpViewGuard* guard,uint64_t* handle,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);Obj created{};
     gameplay_boundary_invalidate();
+    gameplay_weapons_reset();
     try{initialize_result(result);thread();OperationScope scope(guard,world);layouts();
         require(initial&&handle&&pawn&&own<=1,"native gameplay begin arguments");*handle=0;*pawn={};
         require(gameplay_pawns.size()<32,"native gameplay pawn bound");
@@ -685,6 +856,7 @@ int32_t gameplay_current(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,Hs
 int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     gameplay_boundary_invalidate();
+    gameplay_weapons_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(pawn&&entry.stage==1,"native gameplay construction stage");gameplay_local(entry,result);
         Function finish(L"/Script/Engine.GameplayStatics:FinishSpawningActor");finish.object(L"Actor",entry.pawn);
@@ -696,6 +868,7 @@ int32_t gameplay_construct(uint64_t handle,const HsmpViewGuard* guard,Obj* pawn,
 int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     gameplay_boundary_invalidate();
+    gameplay_weapons_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(entry.stage==2,"native gameplay initialization stage");gameplay_local(entry,result);
         if(entry.own){Function possess(L"/Script/Engine.Controller:Possess");possess.object(L"InPawn",entry.pawn);possess.call(entry.controller,result);
@@ -706,7 +879,8 @@ int32_t gameplay_finish(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResul
         // unacknowledged damage. Accepted movement is replayed explicitly.
         if(entry.own){Function move(L"/Script/Engine.Controller:ResetIgnoreMoveInput");move.call(entry.controller,result);
             Function look(L"/Script/Engine.Controller:ResetIgnoreLookInput");look.call(entry.controller,result);}
-        entry.stage=3;gameplay_local(entry,result);lookup_finish();gameplay_pure(entry);result->complete=1;return 1;
+        entry.stage=3;gameplay_local(entry,result);if(entry.own)gameplay_hud_ensure(entry,result);lookup_finish();gameplay_pure(entry);
+        if(entry.ui)gameplay_hud_binding_pure(entry,*entry.ui);result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
 void gameplay_value(Obj pawn,const wchar_t* field,const HsmpGameplayValue& expected){
@@ -786,6 +960,7 @@ void gameplay_state_pure(const GameplayPawn& entry,const GameplayApplied& frame)
             reinterpret_cast<uint64_t>(gameplay_raw<void*>(camera,frame.view_target))==entry.pawn.address&&
             (!pending||reinterpret_cast<uint64_t>(pending)==entry.pawn.address),"native gameplay final owned view changed");
         require(reinterpret_cast<uint64_t>(gameplay_raw<void*>(pc,frame.hud_field))==frame.proof.hud.address&&gameplay_raw_bool(hud,frame.show_hud),"native gameplay final native HUD changed");
+        require(entry.ui.has_value(),"native gameplay owned UI HUD binding unavailable");gameplay_hud_binding_pure(entry,*entry.ui);
     }
     gameplay_pure(entry);
 }
@@ -837,10 +1012,12 @@ void gameplay_view(GameplayPawn& entry,HsmpGameplayProof& proof,HsmpViewResult* 
     Function fov(L"/Script/Engine.PlayerCameraManager:GetFOVAngle");fov.call(proof.camera_manager,result);const auto angle=fov.value<float>(L"ReturnValue",L"FloatProperty");require(std::isfinite(angle)&&angle>0,"native gameplay own camera POV unavailable");proof.flags|=HSMP_GAMEPLAY_CAMERA;
     proof.hud=returned(entry.controller,L"/Script/Engine.PlayerController:GetHUD",result);
     require(proof.hud.weak&&is(proof.hud,L"/Script/Engine.HUD")&&bool_property(proof.hud,L"bShowHUD"),"native gameplay native HUD unavailable");proof.flags|=HSMP_GAMEPLAY_HUD;
+    require(entry.ui.has_value(),"native gameplay owned UI HUD unavailable");gameplay_hud_public(entry,*entry.ui,result);
 }
 int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const HsmpViewGuard* guard,HsmpGameplayProof* proof,HsmpViewResult* result){
     GameplayQuatTrace diagnostic;
     const std::lock_guard lock(gameplay_mutex);
+    gameplay_weapons_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);GameplayWatch watch(entry);
         require(state&&proof&&entry.stage==3,"native gameplay apply stage");*proof={};gameplay_finite(state->position);for(const auto value:state->orientation)require(std::isfinite(value),"native gameplay orientation nonfinite");gameplay_finite(state->velocity);gameplay_local(entry,result);
         gameplay_layouts();
@@ -876,26 +1053,32 @@ int32_t gameplay_apply(uint64_t handle,const HsmpGameplayState* state,const Hsmp
 int32_t gameplay_clear(uint64_t handle,const HsmpViewGuard* guard,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
     gameplay_boundary_invalidate();
+    gameplay_weapons_discard(handle);
     try{initialize_result(result);thread();auto& entry=gameplay_entry(handle);OperationScope scope(guard,entry.world);
         // Teardown starts only after the active construction/apply call unwinds.
         gameplay_local(entry,result);
+        gameplay_hud_remove(entry,result);
         if(entry.own&&same(returned(entry.controller,L"/Script/Engine.Controller:K2_GetPawn",result),entry.pawn)){
             Function unpossess(L"/Script/Engine.Controller:UnPossess");unpossess.call(entry.controller,result);
             require(!returned(entry.controller,L"/Script/Engine.Controller:K2_GetPawn",result).weak,"native gameplay cleanup unpossess failed");}
         destroy_actor(entry.world,entry.pawn);gameplay_pawns.erase(handle);result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
-void gameplay_discard(uint64_t handle){const std::lock_guard lock(gameplay_mutex);gameplay_boundary_invalidate();gameplay_pawns.erase(handle);}
-int32_t gameplay_complete(const uint64_t* handles,uint32_t count,const HsmpViewGuard* guard,HsmpGameplayProof* proofs,HsmpViewResult* result){
+void gameplay_discard(uint64_t handle){const std::lock_guard lock(gameplay_mutex);gameplay_boundary_invalidate();gameplay_weapons_discard(handle);gameplay_pawns.erase(handle);}
+int32_t gameplay_complete(const uint64_t* handles,uint32_t count,uint32_t require_weapons,const HsmpViewGuard* guard,HsmpGameplayProof* proofs,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);
-    try{initialize_result(result);thread();require(handles&&proofs&&count>0&&count<=32&&count==gameplay_pawns.size(),"native gameplay complete roster bound");
+    try{initialize_result(result);thread();require(handles&&proofs&&count>0&&count<=32&&count==gameplay_pawns.size()&&require_weapons<=1,"native gameplay complete roster bound");
         auto& first=gameplay_entry(handles[0]);OperationScope scope(guard,first.world);GameplayWatch watch(first);uint32_t own{};
         for(uint32_t index=0;index<count;++index){require(std::find(handles,handles+index,handles[index])==handles+index,"native gameplay duplicate complete handle");
             auto& entry=gameplay_entry(handles[index]);require(entry.applied&&entry.stage==3&&same(entry.world,first.world)&&same(entry.controller,first.controller),"native gameplay complete original roster changed");own+=entry.own;}
-        require(own==1,"native gameplay complete owned human ambiguous");check_guard();lookup_finish();
+        require(own==1,"native gameplay complete owned human ambiguous");
+        for(uint32_t index=0;index<count;++index){const auto& entry=gameplay_entry(handles[index]);if(entry.own){require(entry.ui.has_value(),"native gameplay complete owned UI HUD unavailable");gameplay_hud_public(entry,*entry.ui,result);}}
+        check_guard();lookup_finish();
         // No callback, getter, wrapper factory or logger after this full-set pass.
-        for(uint32_t index=0;index<count;++index){const auto& entry=gameplay_entry(handles[index]);gameplay_state_pure(entry,*entry.applied);proofs[index]=entry.applied->proof;}
+        for(uint32_t index=0;index<count;++index){const auto& entry=gameplay_entry(handles[index]);gameplay_state_pure(entry,*entry.applied);}
+        if(require_weapons)gameplay_weapons_final(handles,count);
+        for(uint32_t index=0;index<count;++index)proofs[index]=gameplay_entry(handles[index]).applied->proof;
         result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
-const HsmpGameplay gameplay_provider{3,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete};
+const HsmpGameplay gameplay_provider{4,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete,gameplay_weapons};

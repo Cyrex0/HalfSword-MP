@@ -166,6 +166,53 @@ values["Weapon R"]=live;values["Weapon Slot Back"]=live
 ok,why=P.verify_equipment(recipe,env)
 T.check(ok==true,"live independent armor12/passport2 and aliased held/sheath native weapon verify: "..tostring(why))
 do
+    local function snapshot()
+        return{id=1,incarnation=4,aliases={17,0,0,0,17,0,0},weapons={{index=17,
+            actor_class=recipe.equipment.weapons[1].actor_class,passport=clone(weapon)}}}
+    end
+    local copied_env={};for key,value in pairs(env)do copied_env[key]=value end
+    copied_env.weapon_snapshot=snapshot();copied_env.weapon_guard=function()error("copied native row must not use borrowed Lua weapon getter",0)end
+    local saved=values["Weapon R"];values["Weapon R"]=nil
+    local result,reason=P.verify_equipment(recipe,copied_env)
+    T.check(result==true,"complete native copy verifies all25 fields and seven aliases without per-field borrowed weapon access: "..tostring(reason))
+    values["Weapon R"]=saved
+    for _,mutate in ipairs({function(s)s.aliases[5]=18 end,function(s)s.aliases[2]=17 end,
+        function(s)s.weapons[2]=clone(s.weapons[1]);s.weapons[2].index=18 end,
+        function(s)s.aliases[1]=0 end,function(s)s.aliases[8]=0 end,
+        function(s)s.weapons[1].passport.mass_head=3 end,function(s)s.weapons[1].passport.head=nil end,
+        function(s)s.weapons[1].actor_class="/Game/Wrong.Wrong_C"end})do
+        copied_env.weapon_snapshot=snapshot();mutate(copied_env.weapon_snapshot)
+        result,reason=P.verify_equipment(recipe,copied_env)
+        T.check(result==nil,"missing, extra, changed or malformed native copied weapon refuses without old getter fallback")
+    end
+    local signed=clone(recipe);signed.equipment.weapons[1].passport.price=-0.0
+    copied_env.weapon_snapshot=snapshot();copied_env.weapon_snapshot.weapons[1].passport.price=-0.0
+    T.check(P.verify_equipment(signed,copied_env)==true,"copied native weapon preserves signed zero exactly")
+    copied_env.weapon_snapshot.weapons[1].passport.price=0.0
+    result,reason=P.verify_equipment(signed,copied_env)
+    T.check(result==nil and reason:find("passport differs",1,true),"positive zero cannot replace original negative zero")
+    copied_env.weapon_snapshot=snapshot();local original_guard=env.guard
+    local changed=false;copied_env.guard=function()
+        if not changed then changed=true;copied_env.weapon_snapshot.weapons[1].passport.price=99 end
+        return original_guard()
+    end
+    result,reason=P.verify_equipment(recipe,copied_env)
+    T.check(result==nil,"later guarded armor callbacks cannot silently change copied weapon proof")
+    copied_env.guard=original_guard
+    local complete=clone(recipe);complete.equipment.weapons={};complete.equipment.hands={{slot=0,item=1},{slot=1,item=2}}
+    complete.equipment.sheaths={};copied_env.weapon_snapshot={id=1,incarnation=4,aliases={},weapons={}}
+    for index=1,7 do
+        local w=clone(recipe.equipment.weapons[1]);w.id=index;w.passport.id=index;complete.equipment.weapons[index]=w
+        copied_env.weapon_snapshot.aliases[index]=index+20
+        copied_env.weapon_snapshot.weapons[index]={index=index+20,actor_class=w.actor_class,passport=clone(w.passport)}
+        if index>2 then complete.equipment.sheaths[#complete.equipment.sheaths+1]={field=({"Weapon Slot R 1","Weapon Slot R 2","Weapon Slot Back","Weapon Slot L 1","Weapon Slot L 2"})[index-2],item=index}end
+    end
+    T.check(P.verify_equipment(complete,copied_env)==true,"two hands and all five sheaths bind seven distinct copied native weapons")
+    copied_env.weapon_snapshot.aliases[2]=21
+    result,reason=P.verify_equipment(complete,copied_env)
+    T.check(result==nil and reason:find("id collision",1,true),"different source weapon ids cannot share one actual native actor")
+end
+do
     local function measured(enabled,clock)
         local copied={};for key,value in pairs(env)do copied[key]=value end
         local counts={guard=0,current=0,weapon_guard=0};local order={}

@@ -71,6 +71,7 @@ function M.start(opts)
         end
         gameplay_native.native_gameplay_current=N.native_gameplay_current;gameplay_native.native_gameplay_clear=N.native_gameplay_clear
         gameplay_native.native_gameplay_confirm=N.native_gameplay_confirm
+        gameplay_native.native_gameplay_weapons=N.native_gameplay_weapons
         gameplay=Gameplay.new({native=gameplay_native,passport=Passport,same=WG.same,find=StaticFindObject,
             now_us=N.now_us,diagnostic=function(row)if HL then HL.event("x_native_gameplay_timing",row)end end,
             fname=function(value)return FName(value,FNAME_Add)end,

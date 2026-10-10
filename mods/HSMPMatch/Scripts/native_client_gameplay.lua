@@ -5,6 +5,12 @@ local preparation={begin="present",passport="character",construct="present",equi
 local BOOTSTRAP_KEYS={schema=true,actor_class=true,team=true,passport=true,construction=true,equipment=true}
 local function fail(reason)error(reason,0)end
 local function exact_integer(v)return math.type(v)=="integer" and v>=0 end
+local function dense(v,count)
+    if type(v)~="table"or getmetatable(v)~=nil or #v~=count then return false end
+    for key in pairs(v)do if not exact_integer(key)or key==0 or key>count then return false end end
+    for index=1,count do if rawget(v,index)==nil then return false end end
+    return true
+end
 local function bootstrap(recipe)
     if type(recipe)~="table" or getmetatable(recipe)~=nil or recipe.schema~=1 then fail("native gameplay bootstrap schema unavailable")end
     for key in pairs(recipe)do if not BOOTSTRAP_KEYS[key]then fail("native gameplay bootstrap field unsupported")end end
@@ -49,8 +55,8 @@ function M.new(env)
         if not pawn then fail(reason or"native gameplay original pawn unavailable")end
         return pawn
     end
-    local function passport_env(row,timing,read_clock)
-        local out={};local null_class
+    local function passport_env(row,timing,read_clock,weapon_snapshot)
+        local out={weapon_snapshot=weapon_snapshot};local null_class
         -- These copied, inclusive spans nest. They are not additive. The
         -- clock crosses only the scalar QPC endpoint; its overhead is not
         -- subtracted from either these spans or the original receipt age.
@@ -257,6 +263,16 @@ function M.new(env)
             if type(actual)~="table" or actual.generation~=self.key or actual.gameplay_proof~=true then fail("native gameplay complete native proof unavailable")end
             apply_returned=phase("gear")
             if trace then trace.applied_received_age_ms=actual.received_age_ms;trace.applied_authority_tick=actual.authority_tick;trace.applied_frame_seq=actual.frame_seq end
+            local weapon_batch,batch_reason=guarded(require_api("native_gameplay_weapons"),actual)
+            if not weapon_batch then fail(batch_reason or"native gameplay complete weapon readback unavailable")end
+            if type(weapon_batch)~="table"or getmetatable(weapon_batch)~=nil or weapon_batch.epoch~=actual.epoch or
+                weapon_batch.dir_seq~=actual.dir_seq or weapon_batch.authority_tick~=actual.authority_tick or
+                not dense(weapon_batch.entities,#self.rows)then fail("native gameplay weapon result changed")end
+            for index,original in ipairs(self.rows)do
+                local copied=weapon_batch.entities[index]
+                if type(copied)~="table"or getmetatable(copied)~=nil or copied.id~=original.id or
+                    copied.incarnation~=original.incarnation then fail("native gameplay weapon pawn changed")end
+            end
             for index,original in ipairs(self.rows)do
                 if trace then row_started=clock();if not row_started then trace=nil else
                     trace.active_row=index;trace.rows[index]={id=original.id,incarnation=original.incarnation,us=0}
@@ -268,7 +284,7 @@ function M.new(env)
                     gear_clock_reads=gear_clock_reads+1;detail.clock_reads=(detail.clock_reads or 0)+1
                     return clock()
                 end
-                local verified,why=Passport.verify_equipment(original.recipe,passport_env(original,detail,gear_clock))
+                local verified,why=Passport.verify_equipment(original.recipe,passport_env(original,detail,gear_clock,weapon_batch.entities[index]))
                 if verified~=true then fail(why or"native gameplay complete equipment readback failed")end
                 if trace then local tick=clock();if not tick then trace=nil else trace.rows[index].us=tick-row_started;trace.active_row=nil end end
             end

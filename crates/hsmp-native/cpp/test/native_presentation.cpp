@@ -1709,6 +1709,103 @@ void gameplay_current_checks(HsmpReflect& reflect){
     hsmp_presentation_set_create_log(nullptr);gameplay_current_attempts.store(0);
     lifetime_reset(reflect);
 }
+LifetimeObject *hud_fixture_world{},*hud_fixture_instance{},*hud_fixture_pawn{},*hud_fixture_widget{},*hud_fixture_remove{},*hud_fixture_viewport{};
+void** hud_fixture_player_slot{};bool hud_fixture_poison{},hud_fixture_visible{};int hud_fixture_calls{};
+const void* hud_fixture_old_player{};int hud_fixture_old_player_reads{};
+const uint64_t* hud_fixture_name(const void* object){if(object==hud_fixture_old_player)++hud_fixture_old_player_reads;return lookup_name(object);}
+void* hud_fixture_world_of(const void* object){return object==hud_fixture_instance?hud_fixture_world:lifetime_world(object);}
+int32_t hud_fixture_property(void* object,const uint16_t* key,HsmpProp* out){
+    if(object==hud_fixture_world&&std::wstring(reinterpret_cast<const wchar_t*>(key))==L"OwningGameInstance"){
+        *out=object_field(L"OwningGameInstance",0x1d8);return 1;}return lifetime_prop(object,key,out);
+}
+void* hud_fixture_find(const uint16_t* key){const std::wstring path(reinterpret_cast<const wchar_t*>(key));
+    if(path==L"/Script/UMG.Widget")return &actor_class;
+    if(path==L"/Script/UMG.Widget:RemoveFromParent")return hud_fixture_remove;
+    if(path==L"/Script/UMG.Widget:IsInViewport")return hud_fixture_viewport;
+    return lookup_native_find(key);
+}
+int32_t hud_fixture_properties(void* fn,HsmpProp* out,int32_t cap,int32_t* size){
+    if(fn==hud_fixture_remove){*size=0;return 0;}
+    if(fn==hud_fixture_viewport&&cap>0){*size=1;out[0]=object_field(L"ReturnValue",0);out[0].cls=lifetime_fname(u16(L"BoolProperty"),1);out[0].size=1;out[0].bool_mask=1;return 1;}
+    return lifetime_props(fn,out,cap,size);
+}
+int32_t hud_fixture_is_a(void* object,void* type){const auto result=lifetime_is_a(object,type);
+    if(object==hud_fixture_pawn&&hud_fixture_poison){hud_fixture_poison=false;*hud_fixture_player_slot=&replacement;}return result;
+}
+void hud_fixture_call(void* object,void* fn,void* params){
+    ++hud_fixture_calls;
+    if(object==hud_fixture_widget&&fn==hud_fixture_remove){hud_fixture_visible=false;return;}
+    if(object==hud_fixture_widget&&fn==hud_fixture_viewport){*static_cast<uint8_t*>(params)=hud_fixture_visible?1:0;return;}
+    if(object==hud_fixture_pawn&&fn==&get_level_fn){auto* original=&level;std::memcpy(params,&original,8);return;}
+    lifetime_call(object,fn,params);
+}
+void gameplay_hud_checks(HsmpReflect& reflect){
+    gameplay_boundary_invalidate();gameplay_pawns.clear();lookup_reset(reflect);
+    struct Storage {LifetimeObject identity;std::array<uint8_t,0x500-sizeof(LifetimeObject)> bytes{};};
+    Storage world{},instance{},controller{},pawn{},player{},mode{},widget{};
+    std::array<uint64_t,0x300/8> instance_table{},widget_table{};std::array<uint8_t,0x2c8> context{};
+    world.identity={3010,&world_class};instance.identity={reinterpret_cast<uint64_t>(instance_table.data()),&gi_class};
+    controller.identity={3012,&actor_class};pawn.identity={3013,&actor_class};player.identity={3014,&actor_class};mode.identity={3015,&actor_class};
+    widget.identity={reinterpret_cast<uint64_t>(widget_table.data()),&actor_class};LifetimeObject remove{3017,&function_class},viewport{3018,&function_class};
+    for(auto* original:{&world.identity,&instance.identity,&controller.identity,&pawn.identity,&player.identity,&mode.identity,&widget.identity,&remove,&viewport})lifetime_objects.push_back(original);
+    world.identity.outer=instance.identity.outer=&path_package;controller.identity.outer=pawn.identity.outer=mode.identity.outer=&level;
+    player.identity.outer=&instance.identity;widget.identity.outer=&controller.identity;level.property=&world.identity;
+    hud_fixture_world=&world.identity;hud_fixture_instance=&instance.identity;hud_fixture_pawn=&pawn.identity;hud_fixture_widget=&widget.identity;hud_fixture_remove=&remove;hud_fixture_viewport=&viewport;
+    reflect.obj_prop=hud_fixture_property;reflect.find=hud_fixture_find;reflect.props=hud_fixture_properties;reflect.is_a=hud_fixture_is_a;reflect.call=hud_fixture_call;object_world=hud_fixture_world_of;
+    const auto store=[](auto& object,size_t offset,const auto& value){std::memcpy(reinterpret_cast<uint8_t*>(&object)+offset,&value,sizeof(value));};
+    void* original_world=&world.identity;void* original_instance=&instance.identity;void* original_player=&player.identity;void* original_controller=&controller.identity;void* original_pawn=&pawn.identity;void* original_mode=&mode.identity;
+    store(world,0x1d8,original_instance);const void* original_context=context.data();store(instance,0x30,original_context);store(context,0x2c0,original_world);
+    std::array<void*,1> players{original_player};const Array player_array{players.data(),1,1};store(instance,0x38,player_array);
+    store(player,0x30,original_controller);store(controller,0x330,original_player);controller.identity.property=&pawn.identity;pawn.identity.property=&controller.identity;
+    const auto code_image=gameplay_code_module();instance_table[0x188/8]=code_image+0x35cf760;widget_table[0x188/8]=code_image+0x31b63d0;widget_table[0x2e0/8]=code_image+0x31b6170;
+    std::array<uint64_t,1> controllers{lifetime_weak(original_controller)};store(world,0x218,Array{controllers.data(),1,1});
+    GameplayPawn entry;entry.world=keep(original_world);entry.controller=keep(original_controller);entry.pawn=keep(original_pawn);entry.actor_class=keep(&actor_class);entry.level=keep(&level);entry.stage=3;entry.own=1;
+    entry.level_world=object_field(L"OwningWorld",static_cast<int32_t>(offsetof(LifetimeObject,property)));entry.controller_pawn=entry.pawn_controller=object_field(L"Pawn",static_cast<int32_t>(offsetof(LifetimeObject,property)));
+    int admitted=1;const HsmpViewGuard guard{&admitted,guard_check};
+    {OperationScope operation(&guard,entry.world);entry.world_path=gameplay_path(entry.world);entry.controller_path=gameplay_path(entry.controller);entry.pawn_path=gameplay_path(entry.pawn);
+        GameplayHud hud;hud.world_path=entry.world_path;hud.controller_path=entry.controller_path;hud.instance=keep(original_instance);hud.player=keep(original_player);hud.mode=keep(original_mode);hud.widget=keep(&widget.identity);hud.widget_class=keep(&actor_class);
+        hud.instance_path=gameplay_path(hud.instance);hud.player_path=gameplay_path(hud.player);hud.mode_path=gameplay_path(hud.mode);hud.class_path=gameplay_path(hud.widget_class);hud.widget_path=gameplay_path(hud.widget);
+        hud.world_instance=object_field(L"OwningGameInstance",0x1d8);hud.players_field=object_field(L"LocalPlayers",0x38);hud.player_controller=object_field(L"PlayerController",0x30);hud.controller_player=object_field(L"Player",0x330);
+        hud.players=player_array;hud.context=original_context;hud.instance_table=reinterpret_cast<uint64_t>(instance_table.data());hud.local_multiplayer=object_field(L"Local Multiplayer",0x408);hud.local_multiplayer.bool_mask=1;
+        // This fixture pins its own executable byte window to exercise fresh
+        // code qualification; it does not claim the game HUD bodies executed.
+        const auto* dos=reinterpret_cast<const IMAGE_DOS_HEADER*>(code_image);const auto* pe=reinterpret_cast<const IMAGE_NT_HEADERS64*>(code_image+dos->e_lfanew);const auto* sections=IMAGE_FIRST_SECTION(pe);uint32_t executable{};
+        for(size_t i=0;i<pe->FileHeader.NumberOfSections;++i)if((sections[i].Characteristics&IMAGE_SCN_MEM_EXECUTE)&&sections[i].Misc.VirtualSize>=16){executable=sections[i].VirtualAddress;break;}
+        check(executable!=0,"HUD fixture qualifies its own code profile without pretending native game parity");
+        const std::array<GameplayCodePin,1> pin{{{executable,16,gameplay_quat_hash(reinterpret_cast<const uint8_t*>(code_image+executable),16)}}};hud.code=gameplay_code_copy(code_image,pin);
+        hud.my_player=object_field(L"My Player",0x390);hud.widget_mode=object_field(L"As BP Half Sword Game Mode",0x3a0);hud.widget_instance=object_field(L"GI Settings",0x398);
+        store(widget,0x390,original_pawn);store(widget,0x398,original_instance);store(widget,0x3a0,original_mode);
+        hud.table=reinterpret_cast<uint64_t>(widget_table.data());hud.weak_context={entry.controller.weak,entry.world.weak,entry.world.weak};hud.weak_context[0]=hud.player.weak;store(widget,0x2c8,hud.weak_context);hud.bound=true;
+        GameplayWatch gameplay(entry);GameplayHudWatch watched(entry,hud);gameplay_call_guard();check(gameplay_hud_active==&watched,"HUD indexed witness is installed at each original dispatch guard");
+        for(uint32_t change=0;change<8;++change){
+            if(change==0)players[0]=&replacement;else if(change==1)store(context,0x2c0,original_pawn);else if(change==2)store(controller,0x330,original_pawn);
+            else if(change==3)store(widget,0x390,original_controller);else if(change==4)widget.identity.flags^=1;else if(change==5)mode.bytes[0x408-sizeof(LifetimeObject)]=1;
+            else if(change==6)controllers[0]=lifetime_weak(&foreign_owner);else widget_table[0x2e0/8]++;
+            rejects([]{gameplay_call_guard();},"HUD final guard refuses changed indexed/world/owner/pawn/flags/policy/dispatch facts");
+            if(change==0)players[0]=original_player;else if(change==1)store(context,0x2c0,original_world);else if(change==2)store(controller,0x330,original_player);
+            else if(change==3)store(widget,0x390,original_pawn);else if(change==4)widget.identity.flags^=1;else if(change==5)mode.bytes[0x408-sizeof(LifetimeObject)]=0;
+            else if(change==6)controllers[0]=entry.controller.weak;else widget_table[0x2e0/8]--;
+        }
+        {auto* old_slots=VirtualAlloc(nullptr,4096,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);check(old_slots!=nullptr,"cold HUD fixture owns its original player-slot allocation");
+            std::memcpy(old_slots,&original_player,8);store(instance,0x38,Array{old_slots,1,1});GameplayHud cold=hud;cold.bound=false;
+            gameplay_hud_player_capture(cold,entry.actor_class);GameplayHudWatch cold_watch(entry,cold);
+            store(instance,0x38,player_array);DWORD previous{};check(VirtualProtect(old_slots,4096,PAGE_NOACCESS,&previous)!=0,"cold HUD fixture retires only its old slot page");
+            const auto previous_name=object_name;hud_fixture_old_player=original_player;hud_fixture_old_player_reads=0;object_name=hud_fixture_name;
+            bool refused_header{};try{check_guard();}catch(const Error& error){refused_header=std::string(error.what()).find("indexed player changed")!=std::string::npos;}
+            object_name=previous_name;hud_fixture_old_player=nullptr;
+            check(refused_header&&hud_fixture_old_player_reads==0,"cold header replacement refuses before reading either the inaccessible old slot or old player object");
+            check(VirtualFree(old_slots,0,MEM_RELEASE)!=0,"cold HUD fixture releases its own retired allocation");}
+        {GameplayHudWatch nested(entry,hud);check(gameplay_hud_active==&nested,"nested HUD watch uses independent operation-local TLS");gameplay_call_guard();}check(gameplay_hud_active==&watched,"nested HUD watch restores original indexed witness");
+        Function get_level(L"/Script/Engine.Actor:GetLevel");hud_fixture_player_slot=players.data();hud_fixture_calls=0;hud_fixture_poison=true;
+        rejects([&]{get_level.call(entry.pawn);},"player-zero replacement after function metadata refuses before actual native dispatch");check(hud_fixture_calls==0&&!hud_fixture_poison,"pre-dispatch HUD fixture reaches the actual metadata seam with no PE afterward");players[0]=original_player;
+        entry.ui=hud;entry.ui->created=false;const auto before=hud_fixture_calls;gameplay_hud_remove(entry,nullptr);check(hud_fixture_calls==before,"reused HUD is never removed by helper cleanup");
+        entry.ui->created=true;entry.ui->bound=false;hud_fixture_visible=true;gameplay_hud_remove(entry,nullptr);
+        check(hud_fixture_calls==before+2&&!hud_fixture_visible&&entry.ui->created&&entry.ui->widget_path.original.size()>0,"partial helper-created HUD retains original ownership and guarded cleanup removes only it");
+        check(gameplay_provider.abi==4&&gameplay_provider.weapons==gameplay_weapons,"native HUD keeps canonical ABI4 weapon tail integration");
+        gameplay_weapons_reset();const uint64_t missing=1;rejects([&]{gameplay_weapons_final(&missing,1);},"final confirmation requires a retained complete weapon snapshot");
+    }
+    check(!gameplay_hud_active&&!gameplay_active,"HUD and gameplay watches release all original references on unwind");lifetime_reset(reflect);hud_fixture_poison=false;hud_fixture_player_slot=nullptr;
+}
 std::vector<uint32_t> gameplay_quat_records;bool gameplay_quat_outside{};bool gameplay_quat_bits{};std::vector<std::string> gameplay_cost_records,gameplay_image_records;
 void record_gameplay_quat(const char* stage,uint32_t edge,uint64_t,uint32_t attempt,uint32_t,uint32_t,uint32_t,const char* label){
     bool unlocked=gameplay_mutex.try_lock();if(unlocked)gameplay_mutex.unlock();
@@ -2011,6 +2108,7 @@ int main() {
         gameplay_absolute_checks();
         gameplay_code_checks();
         gameplay_current_checks(reflect);
+        gameplay_hud_checks(reflect);
         gameplay_quat_checks(reflect);
         check(profile_ffi_calls==0,"ordinary capture/guard/lifetime paths make no profile FFI calls");
         {StaticProfileTraceScope trace;profile_tick(0);profile_phase("fixture_profile",0);}

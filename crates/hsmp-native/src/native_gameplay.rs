@@ -15,6 +15,7 @@ use std::{
         Arc,
     },
 };
+mod weapons;
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -75,12 +76,16 @@ pub struct Provider {
     pub clear: unsafe extern "C" fn(u64, *const Guard, *mut ResultInfo) -> i32,
     pub discard: unsafe extern "C" fn(u64),
     pub complete:
-        unsafe extern "C" fn(*const u64, u32, *const Guard, *mut Proof, *mut ResultInfo) -> i32,
+        unsafe extern "C" fn(*const u64, u32, u32, *const Guard, *mut Proof, *mut ResultInfo) -> i32,
+    pub weapons: unsafe extern "C" fn(
+        *const u64, u32, *const Guard, *mut u32, *mut weapons::Passport,
+        u32, *mut u32, *mut ResultInfo,
+    ) -> i32,
 }
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_gameplay(p: *const Provider) {
-    let admitted = if !p.is_null() && unsafe { (*p).abi } == 3 {
+    let admitted = if !p.is_null() && unsafe { (*p).abi } == 4 {
         p.cast_mut()
     } else {
         std::ptr::null_mut()
@@ -955,6 +960,7 @@ impl Native {
                 if (p.complete)(
                     handles.as_ptr(),
                     handles.len() as u32,
+                    0,
                     &context.ffi(),
                     proofs.as_mut_ptr(),
                     &mut complete,
@@ -1066,6 +1072,7 @@ impl Native {
                 if (p.complete)(
                     handles.as_ptr(),
                     handles.len() as u32,
+                    1,
                     &context.ffi(),
                     proofs.as_mut_ptr(),
                     &mut r,
@@ -1314,7 +1321,7 @@ mod tests {
             "wrapper original changed"
         );
     }
-    fn scene_fixture() -> GameplayScene {
+    pub(super) fn scene_fixture() -> GameplayScene {
         let source =
             serde_json::from_slice::<hsmp_server::native_descriptor::SourceRecipe>(include_bytes!(
                 "../../../tools/hsmp-tools/lua-tests/fixtures/native_source_recipe.json"
@@ -1533,7 +1540,8 @@ mod tests {
         assert_eq!(std::mem::offset_of!(NativeState, velocity), 56);
         assert_eq!(std::mem::offset_of!(NativeState, cache_rotation), 112);
         assert_eq!(std::mem::size_of::<Proof>(), 112);
-        assert_eq!(std::mem::size_of::<Provider>(), 72);
+        assert_eq!(std::mem::size_of::<Provider>(), 80);
+        assert_eq!(std::mem::offset_of!(Provider, weapons), 72);
         assert_eq!(std::mem::offset_of!(Provider, complete), 64);
         assert_eq!(std::mem::offset_of!(Provider, clear), 48);
         assert_eq!(std::mem::offset_of!(Provider, discard), 56);
@@ -1574,7 +1582,7 @@ mod tests {
             abi: u32,
             pad: u32,
         }
-        for abi in [1, 2] {
+        for abi in [1, 2, 3] {
             let old = OldHeader { abi, pad: 0 };
             unsafe {
                 hsmp_native_set_gameplay((&old as *const OldHeader).cast());

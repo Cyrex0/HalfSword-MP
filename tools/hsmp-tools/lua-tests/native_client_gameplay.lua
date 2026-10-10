@@ -41,6 +41,14 @@ local function fixture()
     N.native_gameplay_construct=function(handle)f.calls[#f.calls+1]="construct"..handle;return true,f.pawns[handle]end
     N.native_gameplay_finish=function(handle)f.calls[#f.calls+1]="possess"..handle;return true end
     N.native_gameplay_apply=function(scene)f.apply_count=f.apply_count+1;f.calls[#f.calls+1]="apply";f.clock=f.clock+20;return true,f.applied_scene or scene end
+    N.native_gameplay_weapons=function(scene)
+        f.batch_count=(f.batch_count or 0)+1
+        if f.batch_error then return nil,f.batch_error end
+        local batch={epoch=scene.epoch,dir_seq=scene.dir_seq,authority_tick=scene.authority_tick,entities={}}
+        for index,row in ipairs(scene.entities)do batch.entities[index]={id=row.id,incarnation=row.incarnation,aliases={0,0,0,0,0,0,0},weapons={}}end
+        if f.mutate_batch then f.mutate_batch(batch)end
+        return batch
+    end
     N.native_gameplay_confirm=function(scene)
         f.confirmed=f.confirmed+1;f.calls[#f.calls+1]="confirm";f.clock=f.clock+30;if f.confirm_error then return nil,f.confirm_error end;return true,scene
     end
@@ -58,6 +66,8 @@ local function fixture()
         if f.weapon_error then return nil,f.weapon_error end;return true
     end,verify_equipment=function(recipe,env)
         f.equipment=f.equipment+1;check(env.guard()==true,"native gear checks remain guarded")
+        if f.apply_count>0 then check(env.weapon_snapshot and env.weapon_snapshot.id==recipe.passport.fixture_id,
+            "application consumes copied weapon row belonging to original pawn")end
         if f.probe_detail then
             check(env.current()==f.pawns[recipe.passport.fixture_id],"timed current preserves actual original pawn output")
             local actor=f.pawns[recipe.passport.fixture_id]["Weapon R"]
@@ -237,5 +247,18 @@ for _,mutation in ipairs({function(r)r.schema=6 end,function(r)r.components={}en
     local f=fixture();mutation(f.scene.entities[1].recipe)
     local ok=f.game:apply(f.scene)
     check(ok==nil and #f.calls==0,"wrong/full-render/incomplete bootstrap refuses before native spawn")
+end
+for _,mutate in ipairs({function(b)b.epoch=4 end,function(b)b.authority_tick=b.authority_tick+1 end,
+    function(b)b.entities[2].id=1 end,function(b)b.entities[1].incarnation=7 end,
+    function(b)b.entities[3]=b.entities[1]end,function(b)b.entities.extra=true end})do
+    local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.mutate_batch=mutate
+    local gear=f.equipment;local ok,reason=f.game:apply(f.scene)
+    check(ok==nil and reason:find("native gameplay weapon",1,true)and f.equipment==gear and f.confirmed==0,
+        "malformed or foreign copied weapon roster refuses before gear verification or acknowledgment")
+end
+do
+    local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.batch_error="original weapon receipt is stale"
+    local ok,reason=f.game:apply(f.scene)
+    check(ok==nil and reason==f.batch_error and f.confirmed==0,"copied weapon admission preserves original refusal without fallback")
 end
 check(n>50,"focused staged gameplay coverage")

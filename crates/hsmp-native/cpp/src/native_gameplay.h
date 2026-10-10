@@ -2,6 +2,7 @@
 #pragma once
 #include <cstddef>
 #include "native_presentation.h"
+#include "native_gameplay_weapons.h"
 extern "C" {
 struct HsmpGameplayValue { uint32_t kind,pad; double value; }; // 1=f32, 2=f64
 struct HsmpGameplayState {
@@ -28,7 +29,12 @@ struct HsmpGameplay {
     int32_t (*apply)(uint64_t handle,const HsmpGameplayState*,const HsmpViewGuard*,HsmpGameplayProof*,HsmpViewResult*);
     int32_t (*clear)(uint64_t handle,const HsmpViewGuard*,HsmpViewResult*);
     void (*discard)(uint64_t handle); // world-drop scalar cleanup; no engine access
-    int32_t (*complete)(const uint64_t* handles,uint32_t count,const HsmpViewGuard*,HsmpGameplayProof* proofs,HsmpViewResult*);
+    // require_weapons=0 is body precheck; final confirm must pass1.
+    int32_t (*complete)(const uint64_t* handles,uint32_t count,uint32_t require_weapons,const HsmpViewGuard*,HsmpGameplayProof* proofs,HsmpViewResult*);
+    // count*7 aliases: 0=observed null, positive=1-based global passport row.
+    // Only *written rows/aliases are usable after complete success.
+    int32_t (*weapons)(const uint64_t* handles,uint32_t count,const HsmpViewGuard*,
+        uint32_t* aliases,HsmpGameplayWeaponPassport* passports,uint32_t capacity,uint32_t* written,HsmpViewResult*);
 };
 void hsmp_native_set_gameplay(const HsmpGameplay*);
 }
@@ -38,7 +44,8 @@ static_assert(offsetof(HsmpGameplayState,orientation)==24);
 static_assert(offsetof(HsmpGameplayState,velocity)==56);
 static_assert(offsetof(HsmpGameplayState,cache_rotation)==112);
 static_assert(sizeof(HsmpGameplayProof)==112);
-static_assert(sizeof(HsmpGameplay)==72);
+static_assert(sizeof(HsmpGameplay)==80);
 static_assert(offsetof(HsmpGameplay,clear)==48);
 static_assert(offsetof(HsmpGameplay,discard)==56);
 static_assert(offsetof(HsmpGameplay,complete)==64);
+static_assert(offsetof(HsmpGameplay,weapons)==72);

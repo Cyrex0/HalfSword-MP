@@ -317,12 +317,41 @@ end
 function M.verify_equipment(recipe,env)
     local ok,why=pcall(function()
         local p=observed(env,"recipe",validate,recipe);local signature=observed(env,"compare",D.signature,p);local r=reader(env)
+        local snapshot=env.weapon_snapshot
+        local snapshot_signature=snapshot~=nil and D.signature(snapshot)or nil
         local armor,reason=observed(env,"armor_read",D.read_armor_map,function()return current(env)["Currently Equipped Armor"]end,r)
         if not armor then fail(reason)end;observed(env,"compare",armor_equal,armor,p.equipment.armor)
         local weapons,fields,addresses={},{},{}
         for _,w in ipairs(p.equipment.weapons)do weapons[w.id]=w end
         for _,h in ipairs(p.equipment.hands)do fields[h.slot==0 and "Weapon R" or "Weapon L"]=h.item end
         for _,s in ipairs(p.equipment.sheaths)do fields[s.field]=s.item end
+        if snapshot~=nil then
+            record(snapshot,{id=true,incarnation=true,aliases=true,weapons=true},"native weapon snapshot")
+            if not integer(snapshot.id,1,0xffffffff)or not integer(snapshot.incarnation,1,0xffffffff)then fail("native weapon snapshot identity")end
+            if array(snapshot.aliases,7,"native weapon aliases")~=7 then fail("native weapon alias width")end
+            array(snapshot.weapons,7,"native weapon rows")
+            local copied,used={},{}
+            for _,row in ipairs(snapshot.weapons)do
+                record(row,{index=true,actor_class=true,passport=true},"native weapon row")
+                if not integer(row.index,1,32*7)or copied[row.index]then fail("native weapon row index")end
+                asset(row.actor_class,false);validate_passport("weapon",row.passport);copied[row.index]=row
+            end
+            for index,key in ipairs({"Weapon R","Weapon L",table.unpack(sheath_fields)})do
+                local alias=snapshot.aliases[index];local id=fields[key]
+                if not integer(alias,0,32*7)then fail("native weapon alias index")end
+                if not id then if alias~=0 then fail("native unexpected weapon: "..key)end
+                else
+                    local row=copied[alias];if alias==0 or not row then fail("native missing weapon: "..key)end
+                    if addresses[id]and addresses[id]~=alias then fail("native weapon alias changed")end
+                    for other,value in pairs(addresses)do if other~=id and value==alias then fail("native weapon id collision")end end
+                    addresses[id]=alias;used[alias]=true
+                    local expected=weapons[id]
+                    if row.actor_class~=expected.actor_class then fail("native weapon actor class mismatch")end
+                    observed(env,"compare",equal,row.passport,expected.passport,"native live weapon passport")
+                end
+            end
+            for index in pairs(copied)do if not used[index]then fail("native weapon row unbound")end end
+        else
         for _,key in ipairs({"Weapon R","Weapon L",table.unpack(sheath_fields)})do
             local function actor()return checked(env,function()return current(env)[key]end)end
             local o=actor();if not o then fail("native weapon field unavailable: "..key)end
@@ -344,8 +373,10 @@ function M.verify_equipment(recipe,env)
                 fresh()
             end
         end
+        end
         for id in pairs(weapons)do if not addresses[id]then fail("native live weapon unbound")end end
         if observed(env,"compare",D.signature,observed(env,"recipe",validate,recipe))~=signature then fail("gameplay source recipe changed")end;guard(env)
+        if snapshot~=nil and D.signature(snapshot)~=snapshot_signature then fail("native weapon snapshot changed")end
     end)
     if not ok then return nil,why end;return true
 end

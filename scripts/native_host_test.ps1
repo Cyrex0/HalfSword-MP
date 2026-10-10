@@ -8,6 +8,7 @@ param(
     [string]$GamePath = "",
     [ValidateSet("null", "offscreen")][string]$Backend = "null",
     [ValidateRange(45, 180)][int]$Seconds = 100,
+    [ValidateRange(10, 60)][int]$ObservationSeconds = 10,
     [switch]$BootOnly,
     [switch]$ExerciseInput,
     [switch]$Gameplay,
@@ -338,7 +339,7 @@ try {
         if (-not $ready) { throw "Two normal native clients did not verify current source recipes and live source frames." }
         if ($clientEvidence[0].own_entity -eq $clientEvidence[1].own_entity) { throw "Native clients share a source pawn." }
         $firstClientEvidence = $clientEvidence
-        $observeDeadline = [DateTime]::UtcNow.AddSeconds(10)
+        $observeDeadline = [DateTime]::UtcNow.AddSeconds($ObservationSeconds)
         while ([DateTime]::UtcNow -lt $observeDeadline) {
             foreach ($client in $clients) {
                 Assert-NativeClientRunning $client "during observation"
@@ -352,7 +353,7 @@ try {
             if ($clientEvidence[$i].epoch -ne $firstClientEvidence[$i].epoch -or $clientEvidence[$i].own_entity -ne $firstClientEvidence[$i].own_entity -or
                 $clientEvidence[$i].frame_seq -le $firstClientEvidence[$i].frame_seq) { throw "Native client $($i+1) did not advance the same owned source scene." }
         }
-        Write-Json (Join-Path $Run "native_clients.json") @{ topology="two normal game clients plus one headless authority"; gameplay=[bool]$Gameplay; first=$firstClientEvidence; last=$clientEvidence }
+        Write-Json (Join-Path $Run "native_clients.json") @{ topology="two normal game clients plus one headless authority"; gameplay=[bool]$Gameplay; observation_seconds=$ObservationSeconds; first=$firstClientEvidence; last=$clientEvidence }
         if (-not (Stop-NativeClients)) { throw "A normal native client missed its graceful stop deadline." }
     }
     if (-not $supervisor.WaitForExit(($Seconds + 15) * 1000)) { throw "Native supervisor exceeded the bounded run deadline." }
@@ -397,7 +398,7 @@ finally {
         if (-not $DiagnosticProbeOnly -and -not $BootOnly -and @($activeDispatch | Where-Object { $_ -le 0 }).Count -and -not $failure) { $failure = "Both real clients were not proven to dispatch active native source input." }
         if ($newCrashes.Count -and -not $failure) { $failure = "Native game created a crash report." }
         if (-not $savesMatch -and -not $failure) { $failure = "A player save changed during the native run; retained for investigation." }
-        Write-Json (Join-Path $Run "native_test.json") @{source_commit=$sourceCommit;evidence_level=$(if ($DiagnosticProbeOnly -or $BootOnly) { "explicit diagnostic bootstrap/network only" } else { "two actual game clients plus one native authority; no combat parity claim" }); backend=$Backend; mode=$mode; gameplay=[bool]$Gameplay; boot_only=[bool]$BootOnly; diagnostic_probe_only=[bool]$DiagnosticProbeOnly; client_evidence=$clientEvidence; client_exit_records=@($clients | Where-Object { $_.exit_record } | ForEach-Object { $_.exit_record }); active_native_dispatch_by_controller=$activeDispatch;
+        Write-Json (Join-Path $Run "native_test.json") @{source_commit=$sourceCommit;evidence_level=$(if ($DiagnosticProbeOnly -or $BootOnly) { "explicit diagnostic bootstrap/network only" } else { "two actual game clients plus one native authority; no combat parity claim" }); backend=$Backend; mode=$mode; gameplay=[bool]$Gameplay; boot_only=[bool]$BootOnly; diagnostic_probe_only=[bool]$DiagnosticProbeOnly; observation_seconds=$ObservationSeconds; client_evidence=$clientEvidence; client_exit_records=@($clients | Where-Object { $_.exit_record } | ForEach-Object { $_.exit_record }); active_native_dispatch_by_controller=$activeDispatch;
             failure=$failure; own_saves_unchanged=$savesMatch; processes_stopped=$allStopped; unobserved_children=$unobservedChildren; new_crashes=$newCrashes;
             native_ready_observed=$readyObserved; pass=($null -eq $failure -and $allStopped -and $savesMatch -and $readyObserved -and $newCrashes.Count -eq 0)}
     }

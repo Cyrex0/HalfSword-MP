@@ -2,6 +2,57 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Current candidate adds private gameplay provider ABI4 with one caller-owned
+complete weapon batch per applied roster. Rust allocates the original source
+weapon count, copies all25 native fields and exact f64/f32/-0, publishes epoch
+as the existing signed Lua integer, and rejects cross-pawn/unbound aliases.
+Lua validates the same original applied epoch/dir/tick/entity order/id/incarnation
+and all7 bindings before native confirmation; armor maps remain on the existing
+guarded path. No API/malformed-batch fallback or receipt renewal. Focused native16
+and two Lua suites PASS; native CPP integration, final retained snapshot closure,
+strict build/G0/exact deployment and actual run remain pending. The first Rust
+publication fixture asserted in Lua because its test helper used negative stack
+indexes while pushing keys; absolute current indexes preserve the same exact
+large-epoch and signed-zero assertions. Independent review caught/corrected the
+CPP capacity contract to source count rather than count*7 before output copies.
+Native HUD work is limited to guarded creation/binding/public visible readback;
+numeric stats bars and callback-free final Slate visibility remain open.
+Integration distinguishes provider.complete(require_weapons=0) before the batch
+from final confirm(require_weapons=1), which requires the retained whole weapon
+snapshot. Every new apply discards prior weapon proof; confirmation cannot skip
+the batch. Review caught the unconditional first-apply snapshot requirement
+before native testing. Strict production CPP compile PASS after correcting a
+shadowed local in HUD creation. Final strict production CPP build and focused
+native presentation2175/weapon72 fixtures PASS. All CPP/Rust/API/Lua independent
+reviews CLOSED. Weapon fixture first failed because the new Owner-to-Level
+baseline changed an earlier operation's original Outer witness; it now creates
+an independent original lookup operation before capture, preserving all native
+refusal checks. Full G0/exact deployment and actual run remain pending.
+
+Actualc03d8896 full G0 PASS (Lua77/Rust1380/79), dev pushed, RequireG0/all396
+deployed. Standard Gameplay150912-cd7161 PASS: both clients sustain the original
+10s LIVE observation, first ticks44/42 to last220/221, same original own entities,
+source native inputs260/313. Successful bounded samples: c1 median total132666us,
+native51175/gear78423/confirm1831; c2 total179032us, native76450/gear99964/
+confirm1861. These are observational, not normalized benchmark comparisons.
+C2 sampled tick70 expired before the sustained observation and recovered; do not
+claim zero transient expiry. Full gear remains the largest measured local stage.
+Both stop requests wall1791641385096 precede c1 gear error5156/fatal5159 by60/63ms;
+this later empty stage reason is cleanup-contaminated. Early secondary placement
+PASS. Two actual screenshots show arena ground only. Initial logs before capture
+show wait_scene, but capture returned across the first LIVE transition without
+per-image timestamps; these images do not establish whether ground view persisted
+during LIVE or prove visible body/HUD acceptance. Independent
+cleanup PASS/four absent/save20 unchanged/no dumps/children. Full summary, bounded
+cost rows and original client records saved under the actual run.
+The next visual run can request a longer continuous observation (10–60s) via
+ObservationSeconds; default/minimum10s and every LIVE/frame/ownership/receipt
+condition remain unchanged. This strengthens the observation and records its
+duration; it never extends a gameplay receipt. PowerShell syntax PASS.
+Next close native UI_HUD binding after possession and capture LIVE player/body/
+HUD pixels, then ordered full8-axis/7-action execution and authoritative body/
+limb/dismemberment/gear parity. No headless/co-op release completion claim.
+
 Current allocation candidate: client generation qualification compares the live
 Bridge under one mutex without copying a temporary GameplayScene/descriptor list.
 It retains exact availability, result-directory matching, ordered original rows,
