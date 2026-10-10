@@ -1,5 +1,13 @@
 # Native authority bootstrap checkpoint
 
+## f1556483 not deployed: resize fixture false positive blocks fullG0
+
+FullG0Lua74/75fail resize1 matchingbare2883 anywhereinlogs (randompaths);
+Rust1364/79/clippy pass. No native launch. Focused repeat12526pass; corrected
+fixture injects/logs benign2883binpath, checks exactbadcanvas message, retains
+actualviewport/widget/lobbychecks. Focusedfixed12527pass/no runtime UI change.
+Newcleancombinedcommit/fullG0 required before actualflatplanmeasurement.
+
 ## Actual1cc1b96f: accurate fresh-mesh cost is dominant
 
 Normal020203-b03f9c/fullG0/dev/all394/auth18848/c32640/2260: c1apply181ms/

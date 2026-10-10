@@ -1,5 +1,17 @@
 # Native full-scene encoding checkpoint
 
+## f1556483 G0 blocked by unrelated resize fixture substring
+
+CPP contiguous-plan compile/review1,764 pass, but fullG0Lua74/75 failed
+menu_ui.resize1's global negative "2883" search; Rust1364/79 and clippy pass.
+No deployment/native run of this commit. Paths use random16hex state IDs and
+the menu logs them; matching bare digits does not identify a canvas regression.
+Unchanged target repeat12526 passes. Root fixture correction injects actualmock
+bin path C:/HSMP/2883/bin, verifies it is logged, and forbids exact canvas text
+"-> canvas 2883x1622" while retaining correct viewport/physical widget/lobby
+checks. Fixed focused suite12527 passes; no runtime UI or tolerance change.
+Need independent tiny review then new clean combined commit/fullG0/native.
+
 ## Actual1cc1b96f: accurate timing confirms fresh mesh proof dominates
 
 Normal020203-b03f9c/fullG0/dev/all394, source08be7971-abed-49be-9e50-

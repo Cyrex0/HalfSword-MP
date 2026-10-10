@@ -10,6 +10,8 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Match the actual canvas dimensions in the launcher resize fixture, avoiding
+  false failures when generated folder names contain the same digits.
 - Store compiled warm mesh expectations in contiguous ordered arrays while
   preserving the same native validation reads, order and original conflict checks.
 - Accumulate warm diagnostic timings at nanosecond precision and convert once

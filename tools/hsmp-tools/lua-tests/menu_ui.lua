@@ -3359,11 +3359,13 @@ local resize = {}
 -- code assumed 1920x1080 physical and built for a 2883x1622 canvas (1.5x too big, off screen).
 resize[1] = function(tag)
     boot_extra = { gvc_broken = true }
-    boot(1280, 720, 720 / 1080)
+    -- Paths and random fixture IDs can contain 2883 without describing a canvas.
+    boot(1280, 720, 720 / 1080, { HSMP_BIN_DIR = "C:/HSMP/2883/bin" })
     local logs = logtext()
     check(contains(logs, "viewport 1280x720 dpi 0.667 -> canvas 1920x1080 scale 1.00 [wll]"),
         tag .. ": the layout library gives the real viewport (" .. tostring(logs:match("viewport [^\n]*")) .. ")")
-    check(not contains(logs, "2883"), tag .. ": no 2883x1622 canvas (the old 1920x1080 assumption)")
+    check(contains(logs, "C:/HSMP/2883/bin"), tag .. ": unrelated path digits exercise the canvas check")
+    check(not contains(logs, "-> canvas 2883x1622"), tag .. ": no 2883x1622 canvas (the old 1920x1080 assumption)")
     ribbon_checks(tag .. " top", 1920, 1080)
     host_lobby()
     check(kit().cur and kit().cur.L.cw == 1920 and kit().cur.L.s == 1, tag .. ": lobby built for the 1920x1080 canvas")
