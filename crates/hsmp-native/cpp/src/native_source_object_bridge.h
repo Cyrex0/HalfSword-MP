@@ -26,7 +26,14 @@ inline thread_local Invocation* invocation = nullptr;
 inline bool object_userdata(lua_State* L) {
     if (lua_type(L, -1) != LUA_TUSERDATA || !lua_getmetatable(L, -1)) return false;
     luaL_getmetatable(L, "UObject");
-    const bool same = lua_type(L, -1) == LUA_TTABLE && lua_rawequal(L, -1, -2);
+    bool same = lua_type(L, -1) == LUA_TTABLE && lua_rawequal(L, -1, -2);
+    // The pinned auto_construct_object uses AActor::construct for pawns;
+    // ordinary components retain UObject. Accept only these registry identities.
+    if (!same) {
+        lua_pop(L, 1);
+        luaL_getmetatable(L, "AActor");
+        same = lua_type(L, -1) == LUA_TTABLE && lua_rawequal(L, -1, -2);
+    }
     lua_pop(L, 2);
     return same;
 }

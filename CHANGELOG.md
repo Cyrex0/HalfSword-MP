@@ -10,6 +10,11 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Add negotiated lossless LZ4 blocks for native scene bootstrap and compact
+  gameplay results, retaining raw packets when compression does not save space.
+- Add ordered native movement requests and staged Willie pawn construction from
+  complete source gear recipes. Actual gameplay and combat parity remain under
+  verification; accept pinned UE4SS AActor wrappers during native pawn creation.
 - Match the actual canvas dimensions in the launcher resize fixture, avoiding
   false failures when generated folder names contain the same digits.
 - Store compiled warm mesh expectations in contiguous ordered arrays while

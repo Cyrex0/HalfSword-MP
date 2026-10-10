@@ -2,6 +2,26 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual816dd5bf fullG0 passes (Lua77 suites/Rust1375 tests79 binaries), pushed
+dev and RequireG0 deployed all396 hashes. StandardGameplay032237-23a5a1
+reaches authority native_ready16.927s; original two recipes capture17.111–45.493s.
+Client2 receives compact frame2 fresh25.437ms, then native_gameplay_begin refuses
+`gameplay wrapper: source wrapper factory userdata/stack contract`. Both clients
+remain opaque loading views; native movement dispatch is0/0. No codec eight-sample
+metrics emitted yet, so no live byte/time gain or gameplay readiness is claimed.
+Independent cleanupPASS: four original processes absent, save20 hashes unchanged,
+no new dumps/unobserved children; both original windows physically on secondary.
+Evidence: test-results/20261010-032237-23a5a1-native-host/native_operator_summary.json.
+
+Pinned UE4SS LuaUObject.cpp377–379 constructs AActor userdata for actual Willie,
+while the shared protected factory checks only registry metatable UObject. Fix
+the exact remote-object metatable set to UObject/AActor, preserving current Lua
+coroutine, protected call, exact-one-result and all original object/generation
+checks. Add narrow bridge regression, independent review, fullG0/deploy and retry;
+do not infer readiness from transport or widen existing native bounds.
+Candidate bridge/current-coroutine/postcallback fixture163 assertions PASS;
+strict C++ bridge/provider object compile PASS. No native retry yet.
+
 First full G0 of3fd71545 blocked events (six undeclared client diagnostic fields)
 and the existing input fixture's exact `possession` spelling. Declare the explicit
 client/codec fields and retain the established reason with all fresh guards and

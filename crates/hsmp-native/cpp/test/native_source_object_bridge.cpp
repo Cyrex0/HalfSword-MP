@@ -14,7 +14,7 @@ lua_State* main_state = nullptr;
 lua_State* constructor_state = nullptr;
 uint64_t constructor_address = 0;
 int calls = 0, checks = 0;
-enum Mode { Normal, WrongState, Table, Light, WrongMeta, Zero, Two, LuaError, Exception, Reentry, PostWrongMeta, PostError };
+enum Mode { Normal, Actor, WrongState, Table, Light, WrongMeta, Zero, Two, LuaError, Exception, Reentry, PostWrongMeta, ActorPostWrongMeta, PostError };
 Mode mode = Normal;
 void check(bool value, const char* why) {
     ++checks;
@@ -27,7 +27,7 @@ int dispatch(lua_State* L) {
     const Context* c = mode == WrongState ? &contexts.at(main_state) : &it->second;
     const int count = registered(c);
     if (mode == PostError) return luaL_error(L, "offline postcallback error");
-    if (mode == PostWrongMeta && count == 1) {
+    if ((mode == PostWrongMeta || mode == ActorPostWrongMeta) && count == 1) {
         luaL_getmetatable(L, "Other");
         lua_setmetatable(L, -2);
     }
@@ -60,11 +60,13 @@ void constructor(const void* context, void* address) {
     }
     auto* copy = static_cast<uint64_t*>(lua_newuserdatauv(L, sizeof(uint64_t), 0));
     *copy = constructor_address;
-    luaL_getmetatable(L, mode == WrongMeta ? "Other" : "UObject");
+    luaL_getmetatable(L, mode == WrongMeta ? "Other" :
+        (mode == Actor || mode == ActorPostWrongMeta) ? "AActor" : "UObject");
     lua_setmetatable(L, -2);
 }
 void metatables(lua_State* L) {
     luaL_newmetatable(L, "UObject"); lua_pop(L, 1);
+    luaL_newmetatable(L, "AActor"); lua_pop(L, 1);
     luaL_newmetatable(L, "Other"); lua_pop(L, 1);
 }
 void attempt(lua_State* L, Mode wanted, bool success) {
@@ -79,6 +81,12 @@ void attempt(lua_State* L, Mode wanted, bool success) {
         check(lua_type(L, -1) == LUA_TUSERDATA, "full userdata result");
         check(*static_cast<uint64_t*>(lua_touserdata(L, -1)) == 0x12345678, "original scalar copied by factory");
         check(constructor_state == L, "constructor uses current coroutine stack");
+        if (wanted == Actor) {
+            check(lua_getmetatable(L, -1) == 1, "actor wrapper has native metatable");
+            luaL_getmetatable(L, "AActor");
+            check(lua_rawequal(L, -1, -2), "actor wrapper keeps exact AActor registry identity");
+            lua_pop(L, 2);
+        }
         lua_pop(L, 1);
     } else check(reason[0] != 0, "bounded explicit failure reason");
 }
@@ -95,7 +103,8 @@ int main() {
     lua_pop(main_state, 1);
     lua_pushinteger(main_state, 71);
     attempt(main_state, Normal, true);
-    for (Mode bad : {Table, Light, WrongMeta, Zero, Two, LuaError, Exception, Reentry, PostWrongMeta, PostError}) {
+    attempt(main_state, Actor, true);
+    for (Mode bad : {Table, Light, WrongMeta, Zero, Two, LuaError, Exception, Reentry, PostWrongMeta, ActorPostWrongMeta, PostError}) {
         attempt(main_state, bad, false);
         attempt(main_state, Normal, true);
     }
@@ -106,6 +115,7 @@ int main() {
     contexts.emplace(coroutine, Context{coroutine});
     lua_pushinteger(coroutine, 99);
     attempt(coroutine, Normal, true);
+    attempt(coroutine, Actor, true);
     check(lua_gettop(main_state) == main_top, "root stack untouched by coroutine wrapper");
     const int before_wrong_state = calls;
     attempt(coroutine, WrongState, false);
