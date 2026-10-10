@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Distinguish the weapon passport's native raw property size from its padded
+  storage extent, retaining exact layout checks and reporting mismatched values.
+- Report the original cause of staged gameplay guard failures without changing
+  validation or retry behavior.
 - Read complete weapon passports and all hand/sheath bindings into caller-owned
   native batches during gameplay verification, preserving exact fields and
   original receipt checks. Recheck retained bindings after later gear callbacks.

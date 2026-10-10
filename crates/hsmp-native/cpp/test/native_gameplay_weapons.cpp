@@ -97,9 +97,21 @@ void alias_capacity_cases(){
     rejects([&](){weapon_output_capacity(2,3,2,&output);},"extra native weapon exceeds source capacity");rejects([&](){weapon_output_capacity(2,0,1,nullptr);},"nonnull output required for nonzero capacity");
     rejects([&](){weapon_output_capacity(2,1,0,nullptr);},"native weapon cannot fit zero source capacity");rejects([&](){weapon_output_capacity(2,2,15,&output);},"source capacity cannot exceed hardfield census bound");
 }
+void schema_layout_cases(){
+    check(weapon_schema_layout("WeaponPassport",249,8,249,256,8)==256,"native raw249/alignment8 preserves padded256 extent");
+    check(weapon_schema_layout("Vector",24,8,24,24,8)==24,"Vector exact raw and padded24/alignment8");
+    check(weapon_schema_layout("LinearColor",16,4,16,16,4)==16,"LinearColor exact raw and padded16/alignment4");
+    rejects([&](){weapon_schema_layout("WeaponPassport",256,8,249,256,8);},"padded256 cannot replace original raw249");
+    rejects([&](){weapon_schema_layout("WeaponPassport",250,8,249,256,8);},"same padded extent does not admit changed semantic size");
+    rejects([&](){weapon_schema_layout("WeaponPassport",249,16,249,256,8);},"same padded extent does not admit changed native alignment");
+    rejects([&](){weapon_schema_layout("WeaponPassport",249,0,249,256,8);},"missing native alignment refuses");
+    rejects([&](){weapon_schema_layout("WeaponPassport",INT32_MAX,8,249,256,8);},"rounded extent cannot overflow int32");
+    try{weapon_schema_layout("WeaponPassport",256,8,249,256,8);throw Error("fixture expected schema refusal");}
+    catch(const Error& e){check(std::string(e.what())=="native weapon schema unsupported; schema=WeaponPassport raw=256/249 padded=256/256 align=8/8","schema refusal copies exact actual/expected scalars and fixed name");}
+}
 // Pure native metadata stand-ins for the production original-path helpers.
 // Retired addresses are trapped if any metadata reader touches them.
-struct ColdObject {uint64_t name{};ColdObject* cls{};const void* outer{};uint32_t flags{};void* head{};ColdObject* gi{};};
+struct ColdObject {uint64_t name{};ColdObject* cls{};const void* outer{};uint32_t flags{};void* head{};ColdObject* gi{};int32_t raw_size{249};int16_t alignment{8};};
 std::vector<ColdObject*> cold_objects;ColdObject* cold_retired{};void* cold_poisoned_field{};int cold_stale_reads{},cold_field_reads{};
 uint64_t cold_weak(void* p){for(size_t i=0;i<cold_objects.size();++i)if(cold_objects[i]==p)return p==cold_retired?0:(uint64_t(1)<<32)|(i+1);return 0;}
 void* cold_resolve(uint64_t w){const auto index=static_cast<uint32_t>(w);if((w>>32)!=1||index==0||index>cold_objects.size())return nullptr;auto* p=cold_objects[index-1];return p==cold_retired?nullptr:p;}
@@ -110,6 +122,8 @@ const uint32_t* cold_rf(const void* p){cold_live(p);return &static_cast<const Co
 const void* const* cold_outer(const void* p){cold_live(p);return &static_cast<const ColdObject*>(p)->outer;}
 int32_t cold_is_a(void* p,void* cls){cold_live(p);cold_live(cls);return static_cast<ColdObject*>(p)->cls==cls?1:0;}
 void** cold_children(void* p){cold_live(p);return &static_cast<ColdObject*>(p)->head;}
+int32_t* cold_size(void* p){cold_live(p);return &static_cast<ColdObject*>(p)->raw_size;}
+int16_t* cold_alignment(void* p){cold_live(p);return &static_cast<ColdObject*>(p)->alignment;}
 void* cold_next(void* p){if(p==cold_poisoned_field){++cold_field_reads;throw Error("fixture borrowed field touched");}return static_cast<MockProperty*>(p)->next;}
 void cold_path_cases(){
     ColdObject type{1},world{2},gi{3},owner{4},class_a{5},class_b{6};type.cls=&type;
@@ -145,8 +159,13 @@ void cold_path_cases(){
     owner.outer=&class_a;rejects([&](){weapon_level_return(owner_level_path,&class_b);},"GetLevel callback Owner Outer replacement refuses before returned metadata");owner.outer=&class_b;
     cold_retired=&class_b;cold_stale_reads=0;rejects([&](){weapon_level_return(owner_level_path,&class_b);},"GetLevel callback original Level retirement refuses");check(cold_stale_reads==0,"no retired GetLevel output metadata read");cold_retired=nullptr;
     rejects([&](){weapon_level_return(owner_level_path,&class_a);},"different raw Level return refuses without adoption");owner.outer=nullptr;
+    owner.head=nullptr;weapon_api.struct_size=cold_size;weapon_api.struct_alignment=cold_alignment;
+    WeaponSchema schema;schema.path=owner_path;schema.label="WeaponPassport";schema.size=249;schema.padded_size=256;schema.alignment=8;
+    weapon_schema_final(schema);check(true,"final schema rereads exact original raw/min/padded extent");
+    owner.raw_size=250;rejects([&](){weapon_schema_final(schema);},"later native raw size mutation refuses even when padded extent agrees");owner.raw_size=249;
+    owner.alignment=16;rejects([&](){weapon_schema_final(schema);},"later native minimum alignment mutation refuses even when padded extent agrees");owner.alignment=8;
     cold_poisoned_field=nullptr;active_lookup=nullptr;vt=nullptr;object_name=nullptr;retirement_flags=nullptr;source_outer=nullptr;source_package_name=nullptr;weapon_api={};identities.clear();cold_objects.clear();
 }
 }
-int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();cold_path_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==80&&offsetof(HsmpGameplay,weapons)==72,"ABI4 append/layout");
+int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==80&&offsetof(HsmpGameplay,weapons)==72,"ABI4 append/layout");
     std::cout<<"native_gameplay_weapons: "<<checks<<" checks passed\n";return 0;}catch(const std::exception& e){std::cerr<<"native_gameplay_weapons: "<<e.what()<<'\n';return 1;}}

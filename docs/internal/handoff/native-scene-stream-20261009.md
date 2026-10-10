@@ -2,6 +2,32 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Next candidate corrects the weapon raw/padded accessor semantics: exact raw249,
+min8, padded256, independently qualified containing-property extent and all25
+fields. Vector24/8/24 and Color16/4/16 remain exact. Pinned SDKGenerator1688 and
+2734..2738 plus DLL GetStructureSize2345D0 prove the distinction; local arithmetic
+uses copied exact scalars without new native dispatch. Final closure rereads raw,
+min and padded size. Bounded failure diagnostics include static schema name and
+actual/expected values. Strict production/native2187/weapons84 PASS; independent
+semantic review CLOSED. Root also exposes the existing first staged-guard cause
+only for known provider guard text. No predicate, fatal/retry classification,
+receipt or source ownership changes; focused Rust13 PASS and independent review
+CLOSED. Full G0/exact
+deployment and actual repeat remain pending.
+
+Actual4afd3280 full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
+deployed. Gameplay165024-e80987 FAILS before LIVE. BOTH clients' native finish
+now succeeds under exact BaseMode; c1 native apply tick18 also succeeds. Its next
+weapon batch refuses `native weapon passport size/alignment unsupported` because
+the reader compared raw UStruct.PropertiesSize with padded SDK struct size.
+Pinned generator/export semantics prove raw0xF9/alignment8 versus padded0x100;
+the exact semantic correction and bounded actual-values diagnostic are next.
+C2's source/world guard error wall3937 precedes c1's schema error3938 by1ms;
+it is independently unresolved, not cleanup contamination. No LIVE or HUD/model
+pixels, no weapon timing benefit claim. EarlysecondaryplacementPASS; independent
+cleanup4absent/save20unchanged/nodumps/children, summary saved. Continue correcting
+and rerun actual game evidence; this is not a completion checkpoint.
+
 The next candidate preserves the deliberate exact GameModeBase isolation instead
 of creating the solo UI_HUD. Cooked UI_HUD Tick reads Match Won through a failed
 HalfSword-mode cast, so a null cast is not a valid HUD profile. Native finish,

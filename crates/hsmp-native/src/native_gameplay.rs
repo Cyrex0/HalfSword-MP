@@ -186,6 +186,22 @@ impl GuardFailureLatch {
             fallback
         }
     }
+    fn stage_error(&self, reason: &str) -> String {
+        let fallback = format!("gameplay stage: {reason}");
+        if !known_guard_refusal(reason) {
+            return fallback;
+        }
+        // Report the predicate's first cause without another native check or
+        // changing whether the staged operation is admitted or retried.
+        let cause = match self.0.get() {
+            Some(GuardFailure::OriginalAdmission) => "original_admission",
+            Some(GuardFailure::Generation) => "generation",
+            Some(GuardFailure::ReceiptExpired) => "receipt_expired",
+            Some(GuardFailure::Panic) => "panic",
+            None => "unlatched",
+        };
+        format!("{fallback}; guard_cause={cause}")
+    }
 }
 fn known_guard_refusal(reason: &str) -> bool {
     const REFUSAL: &str = "native source/world operation guard changed";
@@ -821,7 +837,7 @@ impl Native {
                     _ => (p.finish)(handle, &context.ffi(), &mut r),
                 };
                 let admitted = if ok != 1 || r.complete != 1 || !context.valid() {
-                    Err(format!("gameplay stage: {}", r.reason()))
+                    Err(context.failure.stage_error(&r.reason()))
                 } else {
                     Ok(object)
                 };
@@ -1229,6 +1245,27 @@ mod tests {
                 "later expiry never overwrites original identity/generation/panic failure"
             );
         }
+    }
+    #[test]
+    fn staged_guard_failure_reports_first_cause_without_reclassification() {
+        let reason = "native source/world operation guard changed";
+        for (first, tag) in [
+            (GuardFailure::OriginalAdmission, "original_admission"),
+            (GuardFailure::Generation, "generation"),
+            (GuardFailure::ReceiptExpired, "receipt_expired"),
+            (GuardFailure::Panic, "panic"),
+        ] {
+            let failure = GuardFailureLatch::default();
+            assert!(!failure.refuse(first));
+            assert!(!failure.refuse(GuardFailure::ReceiptExpired));
+            assert_eq!(failure.stage_error(reason), format!("gameplay stage: {reason}; guard_cause={tag}"));
+            assert_eq!(failure.0.get(), Some(first));
+            assert_eq!(failure.stage_error("original native object changed"), "gameplay stage: original native object changed");
+        }
+        let failure = GuardFailureLatch::default();
+        assert_eq!(failure.stage_error(reason), format!("gameplay stage: {reason}; guard_cause=unlatched"));
+        assert_eq!(failure.0.get(), None);
+        assert_eq!(failure.stage_error(""), "gameplay stage: ");
     }
     #[test]
     fn guard_panic_and_incomplete_without_failed_predicate_are_never_expiry() {

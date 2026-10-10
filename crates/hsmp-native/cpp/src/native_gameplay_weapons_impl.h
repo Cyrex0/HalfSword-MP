@@ -115,7 +115,7 @@ struct WeaponField {
     WeaponVariant16 type{};WeaponKind kind_enum{};int32_t offset{},size{},dimension{},alignment{},alignment_slot{};
     uint64_t alignment_target{};std::array<uint8_t,32> alignment_code{};Obj declared{};LookupEntry declared_path;
 };
-struct WeaponSchema {Obj object{};LookupEntry path;int32_t size{};int16_t alignment{};std::vector<void*> chain;std::vector<WeaponField> fields;};
+struct WeaponSchema {Obj object{};LookupEntry path;const char* label{};int32_t size{},padded_size{};int16_t alignment{};std::vector<void*> chain;std::vector<WeaponField> fields;};
 WeaponField weapon_field_read(void* pointer,WeaponKind kind,bool cold){
     (void)cold;
     require(pointer&&gameplay_quat_readable(pointer,8),"native weapon property unavailable");WeaponField f;f.pointer=pointer;std::memcpy(&f.table,pointer,8);
@@ -150,17 +150,30 @@ void weapon_chain_final(const LookupEntry& path,const std::vector<void*>& chain,
     lookup_entry_final(path);auto* object=lookup_node_get(path.pinned.front(),path.zero_item);auto** head=weapon_api.children(object);require(head,"native weapon original field chain unavailable");void* field=*head;
     for(size_t i=0;i<chain.size();++i){require(field==chain[i],"native weapon original field storage changed");if(complete||i+1<chain.size())field=weapon_api.next(field);}if(complete)require(field==nullptr,"native weapon original field cardinality changed");lookup_entry_final(path);
 }
+int32_t weapon_schema_layout(const char* label,int32_t raw,int16_t alignment,int32_t expected_raw,int32_t expected_padded,int16_t expected_alignment){
+    // Pinned UStruct.GetStructureSize2345D0 aligns GetPropertiesSize to
+    // GetMinAlignment. The SDK records both values; raw is not padded extent.
+    int64_t padded=-1;
+    if(raw>0&&alignment>0&&(alignment&(alignment-1))==0)
+        padded=(int64_t(raw)+alignment-1)&-int64_t(alignment);
+    if(raw!=expected_raw||alignment!=expected_alignment||padded!=expected_padded||padded>INT32_MAX){
+        char reason[192]{};std::snprintf(reason,sizeof(reason),"native weapon schema unsupported; schema=%s raw=%d/%d padded=%lld/%d align=%d/%d",
+            label,raw,expected_raw,static_cast<long long>(padded),expected_padded,static_cast<int>(alignment),static_cast<int>(expected_alignment));throw Error(reason);
+    }
+    return static_cast<int32_t>(padded);
+}
 void weapon_schema_final(const WeaponSchema& s){
     lookup_entry_final(s.path);auto* object=lookup_node_get(s.path.pinned.front(),s.path.zero_item);
-    require(weapon_api.struct_size(object)&&*weapon_api.struct_size(object)==s.size&&weapon_api.struct_alignment(object)&&*weapon_api.struct_alignment(object)==s.alignment,"native weapon original struct size/alignment changed");
+    const auto* raw=weapon_api.struct_size(object);const auto* alignment=weapon_api.struct_alignment(object);require(raw&&alignment,"native weapon original struct metadata unavailable");
+    weapon_schema_layout(s.label,*raw,*alignment,s.size,s.padded_size,s.alignment);
     weapon_chain_final(s.path,s.chain,true);
     for(size_t i=0;i<s.fields.size();++i){const auto& f=s.fields[i];if(f.declared.weak)lookup_entry_final(f.declared_path);
         auto fresh=weapon_field_read(f.pointer,f.kind_enum,false);require(weapon_field_same(f,fresh),"native weapon original field metadata changed");weapon_alignment_final(f);}
     lookup_entry_final(s.path);
 }
-WeaponSchema weapon_schema_bind(Obj object,const WeaponFieldSpec* specs,size_t count,int32_t bytes,int16_t minimum){
+WeaponSchema weapon_schema_bind(Obj object,const WeaponFieldSpec* specs,size_t count,const char* label,int32_t raw_bytes,int32_t bytes,int16_t minimum){
     WeaponSchema s;s.object=object;s.path=gameplay_path(object);auto* p=get(object);auto* size=weapon_api.struct_size(p);auto* alignment=weapon_api.struct_alignment(p);
-    require(size&&alignment,"native weapon struct metadata unavailable");s.size=*size;s.alignment=*alignment;require(s.size==bytes&&s.alignment==minimum,"native weapon passport size/alignment unsupported");
+    require(size&&alignment,"native weapon struct metadata unavailable");s.label=label;s.size=*size;s.alignment=*alignment;s.padded_size=weapon_schema_layout(label,s.size,s.alignment,raw_bytes,bytes,minimum);
     auto** head=weapon_api.children(get(object));require(head,"native weapon passport field chain unavailable");
     for(void* field=*head;field;field=weapon_api.next(field)){require(s.chain.size()<count&&std::find(s.chain.begin(),s.chain.end(),field)==s.chain.end(),"native weapon passport field cardinality unsupported");s.chain.push_back(field);}
     require(s.chain.size()==count,"native weapon complete fields unavailable");
@@ -351,9 +364,9 @@ int32_t gameplay_weapons(const uint64_t* handles,uint32_t count,const HsmpViewGu
         auto snapshot=std::make_shared<WeaponRosterSnapshot>();
         constexpr WeaponFieldSpec vector_specs[]{{L"X",WeaponKind::Double,0,8,8,nullptr},{L"Y",WeaponKind::Double,8,8,8,nullptr},{L"Z",WeaponKind::Double,16,8,8,nullptr}};
         constexpr WeaponFieldSpec color_specs[]{{L"R",WeaponKind::Float,0,4,4,nullptr},{L"G",WeaponKind::Float,4,4,4,nullptr},{L"B",WeaponKind::Float,8,4,4,nullptr},{L"A",WeaponKind::Float,12,4,4,nullptr}};
-        snapshot->schema=weapon_schema_bind(find(weapon_struct_path),weapon_fields,std::size(weapon_fields),0x100,8);
-        snapshot->vector=weapon_schema_bind(find(L"/Script/CoreUObject.Vector"),vector_specs,std::size(vector_specs),24,8);
-        snapshot->color=weapon_schema_bind(find(L"/Script/CoreUObject.LinearColor"),color_specs,std::size(color_specs),16,4);
+        snapshot->schema=weapon_schema_bind(find(weapon_struct_path),weapon_fields,std::size(weapon_fields),"WeaponPassport",0xf9,0x100,8);
+        snapshot->vector=weapon_schema_bind(find(L"/Script/CoreUObject.Vector"),vector_specs,std::size(vector_specs),"Vector",24,24,8);
+        snapshot->color=weapon_schema_bind(find(L"/Script/CoreUObject.LinearColor"),color_specs,std::size(color_specs),"LinearColor",16,16,4);
         snapshot->pawns.reserve(count);uint32_t own{};
         for(uint32_t index=0;index<count;++index){require(std::find(handles,handles+index,handles[index])==handles+index,"native weapon duplicate gameplay handle");const auto& entry=gameplay_entry(handles[index]);
             require(entry.stage==3&&entry.applied&&same(entry.world,first.world)&&same(entry.controller,first.controller),"native weapon original applied roster changed");own+=entry.own;
