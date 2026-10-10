@@ -10,6 +10,11 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Consolidate agreeing shared weapon metadata checks within each native guard,
+  retaining fresh validation of all original actors, ownership, gear and fields.
+- Measure complete gameplay verification while clients are still preparing,
+  separating native weapon batches from later gear checks with the same bounded
+  diagnostics as live play and retaining original errors.
 - Use the existing gameplay validation scope for complete weapon readback and
   record bounded batch-stage timings to diagnose startup freshness failures.
 - Distinguish the weapon passport's native raw property size from its padded

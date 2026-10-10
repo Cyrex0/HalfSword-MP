@@ -112,7 +112,7 @@ do
         row.weapon_guard_n==1 and row.weapon_guard_us==24 and row.us==132,
         "inclusive guard/current/weapon attribution encloses only original calls and full gear still executes")
     check(trace.timing_inclusive==true and trace.clock_overhead_subtracted==false and trace.gear_clock_reads==20 and
-        trace.clock_reads==30 and row.clock_reads==10,"QPC calls including the conservative display anchor are counted separately and nested observer costs are never subtracted")
+        trace.clock_reads==31 and row.clock_reads==10,"QPC calls including the weapon phase edge and conservative display anchor are counted separately and nested observer costs are never subtracted")
     f.scalar_error="precise original current refusal";local result,reason=f.game:apply(f.scene)
     check(result==nil and reason==f.scalar_error and f.timings[2].stage=="gear"and f.confirmed==1,
         "timed guard preserves exact original throw and blocks later confirmation")
@@ -124,7 +124,7 @@ do
         "detail clock exhaustion labels partial timing and leaves full gameplay proof and reporting intact")
 end
 do
-    local f=fixture();f:bootstrap();check(#f.timings==0,"bootstrap and READY work do not emit per-LIVE timing")
+    local f=fixture();f:bootstrap();check(#f.timings==0,"yielded construction work does not consume complete-frame timing budget")
     f.scene.state=2;f.scene.gameplay_proof=true;f.applied_scene={}
     for key,value in pairs(f.scene)do f.applied_scene[key]=value end;f.applied_scene.received_age_ms=17
     local ok,actual,sampled_at=f.game:apply(f.scene);local row=f.timings[1]
@@ -134,15 +134,26 @@ do
         "display carries a separate pre-confirmation same-clock anchor without changing the native scene or renewing its receipt")
     check(row.received_age_entry_ms==4 and row.applied_received_age_ms==17 and row.applied_authority_tick==40 and
         row.elapsed_apply_return_to_confirm_us==200,"timing separates exact native returned original receipt age from elapsed gear time")
-    check(row.native_apply_us==20 and row.gear_us==200 and row.confirm_us==30 and row.movement_us==12 and row.total_us==262 and
+    check(row.native_apply_us==20 and row.weapon_batch_us==0 and row.gear_us==200 and row.confirm_us==30 and row.movement_us==12 and row.total_us==262 and
         row.rows[1].id==1 and row.rows[1].incarnation==2 and row.rows[1].us==100 and row.rows[2].id==2 and row.rows[2].us==100,
         "timing attributes every full original gear row and native stage without changing proof execution")
     for _=1,11 do f.game:apply(f.scene)end
-    check(#f.timings==8,"successful per-LIVE timing has a fixed first-eight emission bound")
+    check(#f.timings==8,"successful complete-frame timing has a fixed first-eight emission bound")
     f.confirm_error="native gameplay result is stale";local success,reason=f.game:apply(f.scene)
     check(success==nil and reason==f.confirm_error and #f.timings==9 and f.timings[9].stage=="confirm" and not f.timings[9].ok and
         f.timings[9].applied_received_age_ms==17,"first later refusal records its failing edge while preserving original stale reason and receipt")
     f.game:apply(f.scene);check(#f.timings==9,"later refusal retries cannot exceed the timing budget")
+end
+do
+    local f=fixture();f:bootstrap();f.scene.gameplay_proof=true;f.batch_error="native gameplay result is stale"
+    local ok,why=f.game:apply(f.scene);local row=f.timings[1]
+    check(ok==nil and why==f.batch_error and row.source_state==1 and row.stage=="weapon_batch"and not row.ok and f.confirmed==0,
+        "READY weapon refusal is measured before LIVE without changing readiness, original refusal or confirmation")
+    check(row.native_apply_us==20 and row.weapon_batch_us==0 and row.gear_us==nil and row.received_age_entry_ms==4 and row.rows[1]==nil,
+        "READY refusal retains original receipt and prior phase cost without inventing gear completion")
+    f.batch_error=nil;f.scene.state=2;for _=1,12 do f.game:apply(f.scene)end
+    check(#f.timings==8 and f.timings[8].source_state==2,
+        "READY and LIVE attempts share the same bounded first-eight diagnostic budget")
 end
 do
     local f=fixture();f:bootstrap();f.scene.state=2;f.scene.gameplay_proof=true;f.gear_error="original gear changed"

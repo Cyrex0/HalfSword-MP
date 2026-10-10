@@ -224,10 +224,10 @@ function M.new(env)
             end
             env.progress("sync")
             if scene.fresh~=true then return nil,"native gameplay result is stale"end
-            if scene.state==2 and type(env.diagnostic)=="function"and(self.timing_reports<8 or not self.timing_failure)then
+            if(scene.state==1 or scene.state==2)and type(env.diagnostic)=="function"and(self.timing_reports<8 or not self.timing_failure)then
                 started=clock();if started then
                     phase_started=started;trace={epoch=scene.epoch,dir_seq=scene.dir_seq,frame_seq=scene.frame_seq,authority_tick=scene.authority_tick,
-                        received_age_entry_ms=scene.received_age_ms,stage="movement",rows={},clock_reads=1,
+                        received_age_entry_ms=scene.received_age_ms,source_state=scene.state,stage="movement",rows={},clock_reads=1,
                         gear_clock_limit=gear_clock_limit,timing_inclusive=true,clock_overhead_subtracted=false}
                 end
             end
@@ -261,7 +261,7 @@ function M.new(env)
             local applied,actual=guarded(require_api("native_gameplay_apply"),scene)
             if applied~=true then return nil,actual end
             if type(actual)~="table" or actual.generation~=self.key or actual.gameplay_proof~=true then fail("native gameplay complete native proof unavailable")end
-            apply_returned=phase("gear")
+            apply_returned=phase("weapon_batch")
             if trace then trace.applied_received_age_ms=actual.received_age_ms;trace.applied_authority_tick=actual.authority_tick;trace.applied_frame_seq=actual.frame_seq end
             local weapon_batch,batch_reason=guarded(require_api("native_gameplay_weapons"),actual)
             if not weapon_batch then fail(batch_reason or"native gameplay complete weapon readback unavailable")end
@@ -273,6 +273,7 @@ function M.new(env)
                 if type(copied)~="table"or getmetatable(copied)~=nil or copied.id~=original.id or
                     copied.incarnation~=original.incarnation then fail("native gameplay weapon pawn changed")end
             end
+            phase("gear")
             for index,original in ipairs(self.rows)do
                 if trace then row_started=clock();if not row_started then trace=nil else
                     trace.active_row=index;trace.rows[index]={id=original.id,incarnation=original.incarnation,us=0}

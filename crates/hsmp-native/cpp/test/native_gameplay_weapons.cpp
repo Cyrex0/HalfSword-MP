@@ -111,7 +111,8 @@ void schema_layout_cases(){
 }
 // Pure native metadata stand-ins for the production original-path helpers.
 // Retired addresses are trapped if any metadata reader touches them.
-struct ColdObject {uint64_t name{};ColdObject* cls{};const void* outer{};uint32_t flags{};void* head{};ColdObject* gi{};int32_t raw_size{249};int16_t alignment{8};};
+struct ColdObject {uint64_t name{};ColdObject* cls{};const void* outer{};uint32_t flags{};void* head{};ColdObject* gi{};int32_t raw_size{249};int16_t alignment{8};uint16_t payload_padding{};std::array<uint8_t,256> payload{};};
+static_assert(offsetof(ColdObject,payload)%8==0,"synthetic passport payload preserves native alignment");
 std::vector<ColdObject*> cold_objects;ColdObject* cold_retired{};void* cold_poisoned_field{};int cold_stale_reads{},cold_field_reads{};
 uint64_t cold_weak(void* p){for(size_t i=0;i<cold_objects.size();++i)if(cold_objects[i]==p)return p==cold_retired?0:(uint64_t(1)<<32)|(i+1);return 0;}
 void* cold_resolve(uint64_t w){const auto index=static_cast<uint32_t>(w);if((w>>32)!=1||index==0||index>cold_objects.size())return nullptr;auto* p=cold_objects[index-1];return p==cold_retired?nullptr:p;}
@@ -160,10 +161,49 @@ void cold_path_cases(){
     cold_retired=&class_b;cold_stale_reads=0;rejects([&](){weapon_level_return(owner_level_path,&class_b);},"GetLevel callback original Level retirement refuses");check(cold_stale_reads==0,"no retired GetLevel output metadata read");cold_retired=nullptr;
     rejects([&](){weapon_level_return(owner_level_path,&class_a);},"different raw Level return refuses without adoption");owner.outer=nullptr;
     owner.head=nullptr;weapon_api.struct_size=cold_size;weapon_api.struct_alignment=cold_alignment;
-    WeaponSchema schema;schema.path=owner_path;schema.label="WeaponPassport";schema.size=249;schema.padded_size=256;schema.alignment=8;
+    WeaponSchema schema;schema.object={cold_weak(&owner),reinterpret_cast<uint64_t>(&owner)};schema.path=owner_path;schema.label="WeaponPassport";schema.size=249;schema.padded_size=256;schema.alignment=8;
     weapon_schema_final(schema);check(true,"final schema rereads exact original raw/min/padded extent");
     owner.raw_size=250;rejects([&](){weapon_schema_final(schema);},"later native raw size mutation refuses even when padded extent agrees");owner.raw_size=249;
     owner.alignment=16;rejects([&](){weapon_schema_final(schema);},"later native minimum alignment mutation refuses even when padded extent agrees");owner.alignment=8;
+    // Build the actual copied plan from an original typed field and repeatedly
+    // feed agreeing expectations. Native reads remain fresh and unique.
+    std::vector<uint8_t> image(HSMP_UE4SS_SIZE_OF_IMAGE);weapon_api.module=reinterpret_cast<HMODULE>(image.data());
+    std::array<uint8_t,32> code{};uint64_t table=reinterpret_cast<uint64_t>(code.data());MockProperty passport_field;passport_field.table=reinterpret_cast<uint64_t>(&table);
+    passport_field.owner=reinterpret_cast<uint64_t>(&owner);passport_field.declared=&type;owner.head=&passport_field;
+    weapon_api.field_name=mock_field_name;weapon_api.field_class=mock_field_class;weapon_api.variant_name=mock_variant_name;weapon_api.flags=mock_flags;weapon_api.field_flags=mock_field_flags;
+    weapon_api.offset=mock_offset;weapon_api.size=mock_size;weapon_api.dimension=mock_dimension;weapon_api.owner=mock_owner;weapon_api.owner_hash=mock_owner_hash;weapon_api.owner_object=mock_owner_object;weapon_api.meta_class=mock_declared;
+    auto bound=weapon_field_read(&passport_field,WeaponKind::Class,false);bound.alignment=8;bound.alignment_slot=0;bound.alignment_target=table;bound.alignment_code=code;bound.declared_path=class_path;
+    schema.chain={&passport_field};schema.fields={bound};WeaponBoundaryPlan plan;plan.schema(schema);plan.schema(schema);
+    check(plan.fields.size()==1&&plan.chains.size()==1&&plan.schemas.size()==1,"agreeing full metadata and chains are deduplicated without new observations");
+    field_name_reads=0;plan.validate();plan.validate();check(field_name_reads==2,"two fresh passes read each unique typed field once per pass");
+    rejects([&](){weapon_boundary_passes(plan,[&](){owner.name^=1;});},"actual second metadata pass catches original mutation during raw-link span");owner.name^=1;
+    passport_field.flags^=1;rejects([&](){plan.validate();},"next native boundary refuses a field flags mutation");passport_field.flags^=1;
+    passport_field.dimension=2;rejects([&](){plan.validate();},"next native boundary refuses original ArrayDim mutation");passport_field.dimension=1;
+    code[2]^=1;rejects([&](){plan.validate();},"next native boundary refuses exact alignment target code mutation");code[2]^=1;
+    auto conflict=bound;conflict.alignment_code[0]^=1;rejects([&](){plan.field(conflict);},"same field pointer with conflicting code expectation refuses");
+    conflict=bound;conflict.alignment=16;rejects([&](){plan.field(conflict);},"same field pointer with conflicting alignment expectation refuses");
+    auto wrong_schema=schema;wrong_schema.size=250;rejects([&](){plan.schema(wrong_schema);},"same schema with conflicting original raw extent refuses");
+    rejects([&](){plan.chain(owner_path,{&passport_field,&replacement},true);},"complete chain cardinality conflict refuses");
+    WeaponBoundaryPlan prefix;prefix.chain(owner_path,{&passport_field},false);prefix.chain(owner_path,{&passport_field,&replacement},false);
+    check(prefix.chains.begin()->second.fields.size()==2&&!prefix.chains.begin()->second.complete,"agreeing prefixes retain all original field dependencies");
+    auto changed_path=owner_path;changed_path.original.front().name^=uint64_t(1)<<32;rejects([&](){plan.path(changed_path);},"copied original FName Number conflict refuses");
+    changed_path=owner_path;changed_path.class_flags[0]^=1;rejects([&](){plan.path(changed_path);},"copied original class RF conflict refuses");
+    WeaponRosterSnapshot original_roster;original_roster.plan=std::make_shared<const WeaponBoundaryPlan>(plan);check(weapon_boundary_active(original_roster),"only original operation may use copied plan");
+    {LookupState nested;WeaponLookupScope nested_scope(nested);check(!weapon_boundary_active(original_roster),"nested operation cannot inherit a validated original plan");}
+    check(weapon_boundary_active(original_roster)&&active_lookup==&level_lookup,"nested scope restores original configuration without caching admission");
+    owner.name^=1;rejects([&](){original_roster.plan->validate();},"original proof after nested return remains fresh");owner.name^=1;
+    cold_retired=&owner;cold_stale_reads=0;rejects([&](){plan.validate();},"expired original metadata refuses before any field or raw link");check(cold_stale_reads==0,"expired original plan never reads stale object metadata");cold_retired=nullptr;
+    WeaponRosterSnapshot links;WeaponPawnSnapshot row;row.handle=11;row.world=lookup.world;row.pawn={cold_weak(&class_a),reinterpret_cast<uint64_t>(&class_a)};row.controller={cold_weak(&class_b),reinterpret_cast<uint64_t>(&class_b)};
+    for(size_t i=0;i<7;++i)row.properties[i].field.offset=static_cast<int32_t>(offsetof(ColdObject,payload)+8*i);links.pawns.push_back(row);
+    GameplayPawn entry;entry.stage=3;entry.world=row.world;entry.pawn=row.pawn;entry.controller=row.controller;entry.applied=GameplayApplied{};gameplay_pawns.emplace(row.handle,std::move(entry));
+    WeaponActor actor;actor.bound=true;actor.actor=schema.object;actor.level=row.controller;actor.owner={cold_weak(&gi),reinterpret_cast<uint64_t>(&gi)};actor.owner_address=actor.owner.address;actor.owner_level=actor.level;
+    actor.owner_field.field.offset=static_cast<int32_t>(offsetof(ColdObject,gi));actor.world_field.field.offset=actor.owner_field.field.offset;actor.owner_world_field.field.offset=actor.owner_field.field.offset;actor.passport.field.offset=static_cast<int32_t>(offsetof(ColdObject,payload));
+    owner.outer=&class_b;owner.gi=&gi;gi.outer=&class_b;class_b.gi=&world;links.actors.push_back(actor);weapon_roster_links(links);check(true,"dedup raw kernel preserves complete alias/owner/level/world/value closure");
+    uint64_t changed_alias=99;std::memcpy(class_a.payload.data()+48,&changed_alias,8);rejects([&](){weapon_roster_links(links);},"seventh original alias mutation refuses");class_a.payload.fill(0);
+    owner.gi=nullptr;rejects([&](){weapon_roster_links(links);},"original actor owner mutation refuses");owner.gi=&gi;
+    class_b.gi=&gi;rejects([&](){weapon_roster_links(links);},"original owning world mutation refuses");class_b.gi=&world;
+    owner.payload[0xf8]=1;rejects([&](){weapon_roster_links(links);},"last passport field Tier mutation refuses");owner.payload[0xf8]=0;
+    gameplay_pawns.erase(row.handle);owner.outer=nullptr;owner.gi=nullptr;gi.outer=nullptr;class_b.gi=nullptr;
     cold_poisoned_field=nullptr;active_lookup=nullptr;vt=nullptr;object_name=nullptr;retirement_flags=nullptr;source_outer=nullptr;source_package_name=nullptr;weapon_api={};identities.clear();cold_objects.clear();
 }
 struct TimingRow {uint32_t complete{},attempt{},phase{};uint64_t us{};std::string label;};

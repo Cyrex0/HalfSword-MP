@@ -2,6 +2,49 @@
 
 ## Current priority: compact native gameplay and lossless compression
 
+Actual64ba696a full G0 PASS (Lua78/Rust1380/79), pusheddev, RequireG0/all397
+deployed. Startup173042-408bec FAILS: C2 exits0xC0000374 at about12s, before
+native readiness, state events or gameplay APIs. Its last native startup record
+is HSMPHud Lua registration; that mod skips legacy HUD work for native clients.
+Registration ABI/lifetime review finds no provable fault. The heap cause remains
+open, not attributed to uncalled weapon code.
+
+Exception-only diagnostic174437-e4ad2e positively admits original C2 with zero
+software breakpoints, local PDBs and bounded owned-debugger-only -pd cleanup.
+No heap/AV/fastfail exception occurs. Both clients finish/apply, but repeatedly
+expire during weapon actor binding before conversion/final closure; no LIVE.
+Standard no-debug174653-aa31bf reproduces the same stale failure under original
+65s startup/250ms receipt. Eight bounded samples per client: C1 medians inus
+schema27512.5/aliases11952/actors125451/inclusive-total164809; C2
+schema30690/aliases14540/actors115688/total158136.5. All sixteen sampled batches
+fail in actors, conversion/final0. Inclusive totals are not additive to phases,
+and failed batches do not establish successful end-to-end cost or parity.
+Both independent cleanups confirm four original processes absent, all20 save
+hashes unchanged, no dumps/children, early smallest-secondary placementPASS.
+No model/HUD pixel acceptance. First diagnostic174307-b4038a refused its capture
+because command prompts were mistaken for breakpoint entries; owned CDB detached
+and later C2 exited3. Its output is not an admitted exception capture. The strict
+prompt allowlist and earlier attachment are independently reviewed CLOSED.
+
+Next candidate deduplicates agreeing copied weapon metadata expectations within
+each existing callback-free guard. Every boundary must still freshly validate
+the full original aliases, ownership/world links, all passport values/classes
+and metadata twice; no cached admission, replacement adoption or receipt change.
+READY complete-frame diagnostics now use the same first-eight/first-later-failure
+budget as LIVE, after preparation and original freshness only. This exposes
+failures before LIVE without changing native calls, readiness or expiry. A single
+extra phase-edge clock separates native/Rust weapon-batch and copied-row validation
+from later Lua armor/gear checks; overhead remains counted, never subtracted.
+Focused Lua gameplay/client1197 assertions and syntax2 PASS; independent READY
+diagnostic review CLOSED. CPP copied plan merges only agreeing complete metadata
+constraints, rebuilds when another original actor finishes binding, and refuses
+use in another nested operation. Existing conversion/final snapshot closure
+remains. Strict production/native2187/weapons123 PASS; independent CPP review
+CLOSED. Initial weapons fixture compilation refused /W4 /WX C4324 for implicit
+alignas padding; explicit fixture padding and an offset-alignment static assertion
+fix it without production changes or warning suppression. The next exact
+G0/deploy/actual repeat remains pending. Continue work; no completion/release claim.
+
 Next candidate adds the existing immutable-config GameplayBoundaryScope to the
 weapon batch, keeping all fresh two-pass original roster/metadata/link checks
 and the complete weapon closure. No admission/result cache or receipt change.

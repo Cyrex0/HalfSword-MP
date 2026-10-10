@@ -297,7 +297,71 @@ struct WeaponPawnSnapshot {
     uint64_t handle{};Obj world{},pawn{},controller{};LookupEntry world_path,pawn_path,controller_path;
     std::array<WeaponProperty,7> properties;std::array<uint64_t,7> addresses{};std::array<uint32_t,7> aliases{};
 };
-struct WeaponRosterSnapshot {WeaponSchema schema,vector,color;std::vector<WeaponPawnSnapshot> pawns;std::vector<WeaponActor> actors;std::vector<HsmpGameplayWeaponPassport> output;};
+struct WeaponBoundaryPlan;
+struct WeaponRosterSnapshot {WeaponSchema schema,vector,color;std::vector<WeaponPawnSnapshot> pawns;std::vector<WeaponActor> actors;std::vector<HsmpGameplayWeaponPassport> output;std::shared_ptr<const WeaponBoundaryPlan> plan;};
+struct WeaponLookupScope {LookupState* previous{active_lookup};explicit WeaponLookupScope(LookupState& state){active_lookup=&state;}~WeaponLookupScope(){active_lookup=previous;}};
+struct WeaponChain {LookupEntry owner;std::vector<void*> fields;bool complete{};};
+struct WeaponBoundaryPlan {
+    const LookupState* operation{active_lookup};
+    LookupState metadata;std::map<uint64_t,WeaponField> fields;std::map<uint64_t,WeaponChain> chains;std::map<uint64_t,WeaponSchema> schemas;bool owner_code{};
+    WeaponBoundaryPlan()=default;
+    void path(const LookupEntry& p){if(!p.original.empty()){WeaponLookupScope scope(metadata);lookup_record(p);}}
+    void chain(const LookupEntry& p,const std::vector<void*>& expected,bool complete){
+        path(p);require(!p.pinned.empty(),"native weapon original chain owner missing");const auto address=p.pinned.front().address;
+        auto [saved,inserted]=chains.emplace(address,WeaponChain{p,expected,complete});if(inserted)return;
+        auto& old=saved->second;const auto count=std::min(old.fields.size(),expected.size());
+        require(std::equal(old.fields.begin(),old.fields.begin()+count,expected.begin()),"native weapon original chain expectations disagree");
+        require((!old.complete||expected.size()<=old.fields.size())&&(!complete||old.fields.size()<=expected.size()),"native weapon original chain cardinality disagrees");
+        if(expected.size()>old.fields.size()){old.fields=expected;old.owner=p;}old.complete=old.complete||complete;
+    }
+    void field(const WeaponField& f){
+        path(f.declared_path);auto [saved,inserted]=fields.emplace(reinterpret_cast<uint64_t>(f.pointer),f);if(inserted)return;
+        const auto& old=saved->second;require(weapon_field_same(old,f)&&old.alignment==f.alignment&&old.alignment_slot==f.alignment_slot&&old.alignment_target==f.alignment_target&&old.alignment_code==f.alignment_code,"native weapon original field expectations disagree");
+    }
+    void property(const WeaponProperty& p){chain(p.owner_path,p.prefix,false);field(p.field);}
+    void schema(const WeaponSchema& s){
+        chain(s.path,s.chain,true);auto [saved,inserted]=schemas.emplace(s.object.address,s);if(!inserted)require(saved->second.size==s.size&&saved->second.padded_size==s.padded_size&&saved->second.alignment==s.alignment,"native weapon original schema expectations disagree");
+        for(const auto& f:s.fields)field(f);
+    }
+    explicit WeaponBoundaryPlan(const WeaponRosterSnapshot& snapshot){
+        schema(snapshot.schema);schema(snapshot.vector);schema(snapshot.color);
+        for(const auto& row:snapshot.pawns){path(row.world_path);path(row.pawn_path);path(row.controller_path);for(const auto& p:row.properties)property(p);}
+        for(const auto& a:snapshot.actors){path(a.path);if(!a.bound)continue;owner_code=true;path(a.level_path);path(a.actor_class_path);path(a.get_owner_path);
+            property(a.passport);property(a.owner_field);property(a.world_field);if(a.owner.weak){path(a.owner_path);path(a.owner_level_path);property(a.owner_world_field);}for(const auto& p:a.classes)path(p);}
+    }
+    void validate()const{
+        require(vt&&object_name&&retirement_flags&&source_outer&&source_package_name,"native weapon original metadata unavailable");const auto& witnesses=metadata.witnesses;
+        require(!witnesses.package||*source_package_name==*witnesses.package,"native weapon original package changed");
+        for(const auto& [address,saved]:witnesses.classes){auto* p=vt->resolve(saved.object.weak);require(saved.object.weak&&reinterpret_cast<uint64_t>(p)==address,"native weapon original class expired");
+            const auto* flags=retirement_flags(p);require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0,"native weapon original class RF changed");const auto* n=object_name(p);
+            require(n&&*n==saved.name&&(!saved.exact_serial||vt->weak(p)==saved.object.weak),"native weapon original class identity changed");}
+        for(const auto& [address,saved]:witnesses.objects){const auto& n=saved.node;auto* p=n.weak?vt->resolve(n.weak):lookup_zero_object(saved.zero_item,address);
+            require(reinterpret_cast<uint64_t>(p)==address,"native weapon original object expired");const auto* flags=retirement_flags(p);require(flags&&*flags==saved.flags&&(*flags&0x40000000u)==0,"native weapon original object RF changed");
+            const auto* name_value=object_name(p);const auto* outer=source_outer(p);require(name_value&&*name_value==n.name&&vt->class_of(p)==reinterpret_cast<void*>(n.class_address)&&outer&&reinterpret_cast<uint64_t>(*outer)==saved.outer,"native weapon original object path changed");
+            if(!n.weak)require(n.class_name==*source_package_name&&saved.outer==0&&lookup_zero_object(saved.zero_item,address)==p,"native weapon original zero Package changed");}
+        // Owner paths precede borrowed-chain reads; original pointer equality
+        // precedes every next/field accessor. No callback is permitted here.
+        for(const auto& [address,c]:chains){auto* owner=reinterpret_cast<void*>(address);auto** head=weapon_api.children(owner);require(head,"native weapon original field chain unavailable");auto* next=*head;
+            for(size_t i=0;i<c.fields.size();++i){require(next==c.fields[i],"native weapon original field storage changed");if(c.complete||i+1<c.fields.size())next=weapon_api.next(next);}if(c.complete)require(!next,"native weapon original field cardinality changed");}
+        for(const auto& [address,s]:schemas){auto* owner=reinterpret_cast<void*>(address);const auto* raw=weapon_api.struct_size(owner);const auto* alignment=weapon_api.struct_alignment(owner);require(raw&&alignment,"native weapon original struct metadata unavailable");weapon_schema_layout(s.label,*raw,*alignment,s.size,s.padded_size,s.alignment);}
+        for(const auto& [address,f]:fields){(void)address;require(chains.find(f.owner)!=chains.end(),"native weapon original field owner missing");const auto current=weapon_field_read(f.pointer,f.kind_enum,false);require(weapon_field_same(f,current),"native weapon original field metadata changed");weapon_alignment_final(f);}
+        if(owner_code)weapon_owner_code();require(!witnesses.package||*source_package_name==*witnesses.package,"native weapon original package changed during proof");
+    }
+};
+void weapon_roster_links(const WeaponRosterSnapshot& snapshot){
+    // Called only between two fresh plan passes; these addresses come from
+    // qualified original nodes, never from a fresh/replacement lookup.
+    for(const auto& row:snapshot.pawns){const auto& entry=gameplay_entry(row.handle);require(entry.stage==3&&entry.applied&&same(entry.world,row.world)&&same(entry.pawn,row.pawn)&&same(entry.controller,row.controller),"native weapon original gameplay binding changed");
+        auto* pawn=reinterpret_cast<const uint8_t*>(row.pawn.address);for(size_t i=0;i<7;++i){uint64_t address{};std::memcpy(&address,pawn+row.properties[i].field.offset,8);require(address==row.addresses[i],"native weapon original hard alias changed during callback");}}
+    for(const auto& a:snapshot.actors){if(!a.bound)continue;auto* actor=reinterpret_cast<const uint8_t*>(a.actor.address);auto* level=reinterpret_cast<const uint8_t*>(a.level.address);const auto* outer=source_outer(actor);uint64_t owner{},world{};
+        std::memcpy(&owner,actor+a.owner_field.field.offset,8);std::memcpy(&world,level+a.world_field.field.offset,8);require(outer&&reinterpret_cast<uint64_t>(*outer)==a.level.address&&owner==a.owner_address&&world==snapshot.pawns.front().world.address,"native weapon original owner/level/world changed");
+        if(a.owner.weak){const auto* owner_outer=source_outer(reinterpret_cast<void*>(a.owner.address));std::memcpy(&world,reinterpret_cast<const uint8_t*>(a.owner_level.address)+a.owner_world_field.field.offset,8);require(owner_outer&&reinterpret_cast<uint64_t>(*owner_outer)==a.owner_level.address&&world==snapshot.pawns.front().world.address,"native weapon original owner membership changed");}
+        const auto current=weapon_values(actor+a.passport.field.offset);require(weapon_values_same(a.values,current),"native weapon passport changed after native callback");for(size_t i=0;i<7;++i)if(a.values.classes[i])require(!a.classes[i].pinned.empty()&&a.classes[i].pinned.front().address==a.values.classes[i],"native weapon original class binding unavailable");
+    }
+}
+template<class Links>void weapon_boundary_passes(const WeaponBoundaryPlan& plan,Links links){plan.validate();links();plan.validate();}
+void weapon_boundary_final(const WeaponRosterSnapshot& snapshot){require(snapshot.plan!=nullptr,"native weapon original expectation plan missing");weapon_api_ok();weapon_boundary_passes(*snapshot.plan,[&](){weapon_roster_links(snapshot);});}
+bool weapon_boundary_active(const WeaponRosterSnapshot& snapshot){return snapshot.plan&&snapshot.plan->operation==active_lookup;}
 thread_local const WeaponRosterSnapshot* weapon_active_roster{};
 struct WeaponWatch {const WeaponRosterSnapshot* previous{weapon_active_roster};explicit WeaponWatch(const WeaponRosterSnapshot& roster){weapon_active_roster=&roster;}~WeaponWatch(){weapon_active_roster=previous;}};
 LookupEntry weapon_path_pure(void* object){
@@ -338,6 +402,7 @@ void weapon_roster_final(const WeaponRosterSnapshot& snapshot){
 }
 void gameplay_weapons_guard(){
     if(!weapon_active_roster)return;const auto& snapshot=*weapon_active_roster;
+    if(weapon_boundary_active(snapshot)){weapon_boundary_final(snapshot);return;}
     for(const auto& row:snapshot.pawns){lookup_entry_final(row.world_path);lookup_entry_final(row.pawn_path);lookup_entry_final(row.controller_path);auto* pawn=lookup_node_get(row.pawn_path.pinned.front(),row.pawn_path.zero_item);
         for(size_t i=0;i<7;++i){weapon_property_final(row.properties[i]);uint64_t address{};std::memcpy(&address,static_cast<const uint8_t*>(pawn)+row.properties[i].field.offset,8);require(address==row.addresses[i],"native weapon original hard alias changed during callback");}}
     for(const auto& actor:snapshot.actors){lookup_entry_final(actor.path);if(actor.bound)weapon_actor_final(actor,snapshot.schema,snapshot.pawns.front().world);}
@@ -409,8 +474,9 @@ int32_t gameplay_weapons(const uint64_t* handles,uint32_t count,const HsmpViewGu
                 row.aliases[i]=static_cast<uint32_t>(found+1);}}
         gameplay_weapons_guard();}
         WeaponWatch originals(*snapshot);
+        snapshot->plan=std::make_shared<const WeaponBoundaryPlan>(*snapshot);
         for(size_t i=0;i<snapshot->actors.size();++i){const auto original=snapshot->actors[i].path;const auto actor=snapshot->actors[i].actor;auto fresh=weapon_actor_bind(actor,snapshot->pawns[snapshot->output[i].pawn_index].world,snapshot->schema,result);
-            require(gameplay_path_equal(original,fresh.path),"native weapon original cold actor witness changed");snapshot->actors[i]=std::move(fresh);}
+            require(gameplay_path_equal(original,fresh.path),"native weapon original cold actor witness changed");snapshot->actors[i]=std::move(fresh);snapshot->plan=std::make_shared<const WeaponBoundaryPlan>(*snapshot);}
         weapon_output_capacity(count,snapshot->output.size(),capacity,output);check_guard();weapon_roster_final(*snapshot);
         timing.advance(3);
         for(size_t i=0;i<snapshot->actors.size();++i)weapon_convert(*snapshot,snapshot->actors[i],snapshot->output[i]);
