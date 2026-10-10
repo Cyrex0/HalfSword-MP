@@ -966,7 +966,18 @@ int32_t initialization_native_count(const void* manager,uint64_t weak){
     if(initialization_mutate)InitializationFixture::write(initialization_fixture->manager,0x34,int32_t{1});return initialization_answer;
 }
 void gameplay_initialization_checks(){
-    check(sizeof(HsmpGameplay)==88&&offsetof(HsmpGameplay,initialized)==80&&gameplay_provider.abi==5&&gameplay_provider.initialized==gameplay_initialized,"initializer is private ABI5 tail without moving existing providers");
+    check(sizeof(HsmpGameplay)==88&&offsetof(HsmpGameplay,initialized)==80&&gameplay_provider.abi==6&&gameplay_provider.initialized==gameplay_initialized&&gameplay_provider.begin==gameplay_begin,"ABI6 begin receives original roster count without moving initializer or existing providers");
+    const auto previous_begin_roster=std::move(gameplay_pawns);gameplay_pawns.clear();
+    const Obj begin_world{1,100},begin_controller{2,200};
+    rejects([&]{gameplay_begin_roster(begin_world,begin_controller,0);},"zero expected roster count refuses before any spawn");
+    rejects([&]{gameplay_begin_roster(begin_world,begin_controller,33);},"oversized expected roster count refuses before any spawn");
+    gameplay_begin_roster(begin_world,begin_controller,2);GameplayPawn begin_first;begin_first.world=begin_world;begin_first.controller=begin_controller;begin_first.roster_count=2;gameplay_pawns.emplace(1,begin_first);
+    gameplay_begin_roster(begin_world,begin_controller,2);check(gameplay_pawns.size()==1&&gameplay_pawns.at(1).roster_count==2,"same original partial roster admits its remaining spawn without changing the retained count");
+    rejects([&]{gameplay_begin_roster(begin_world,begin_controller,3);},"existing original count disagreement refuses before spawn");
+    rejects([&]{gameplay_begin_roster({begin_world.weak,begin_world.address+8},begin_controller,2);},"original roster world-address change refuses before spawn");
+    rejects([&]{gameplay_begin_roster(begin_world,{begin_controller.weak+1,begin_controller.address},2);},"original roster controller-weak change refuses before spawn");
+    gameplay_pawns.emplace(2,begin_first);rejects([&]{gameplay_begin_roster(begin_world,begin_controller,2);},"complete expected roster refuses overfill before spawn");
+    gameplay_pawns.clear();gameplay_pawns=previous_begin_roster;
     InitializationFixture storage;initialization_fixture=&storage;initialization_calls=0;initialization_answer=1;initialization_wrong_target=false;
     const auto query=[&]{return gameplay_initialization_query(storage.manager.data(),storage.weak,initialization_native_count,gameplay_quat_readable);};
     check(query()==1&&initialization_calls==1&&!initialization_wrong_target,"actual bounded query dispatch receives exact original positive callback weak and manager");
@@ -1956,7 +1967,7 @@ void gameplay_hud_checks(HsmpReflect& reflect){
         entry.ui=hud;entry.ui->created=false;const auto before=hud_fixture_calls;gameplay_hud_remove(entry,nullptr);check(hud_fixture_calls==before,"reused HUD is never removed by helper cleanup");
         entry.ui->created=true;entry.ui->bound=false;hud_fixture_visible=true;gameplay_hud_remove(entry,nullptr);
         check(hud_fixture_calls==before+2&&!hud_fixture_visible&&entry.ui->created&&entry.ui->widget_path.original.size()>0,"partial helper-created HUD retains original ownership and guarded cleanup removes only it");
-        check(gameplay_provider.abi==5&&gameplay_provider.weapons==gameplay_weapons,"native HUD keeps canonical weapon tail integration in ABI5");
+        check(gameplay_provider.abi==6&&gameplay_provider.weapons==gameplay_weapons,"native HUD keeps canonical weapon tail integration in ABI6");
         gameplay_weapons_reset();const uint64_t missing=1;rejects([&]{gameplay_weapons_final(&missing,1);},"final confirmation requires a retained complete weapon snapshot");
         }
         entry.ui.reset();hud_fixture_umg_queries=hud_fixture_local_queries=0;

@@ -254,8 +254,15 @@ void cold_path_cases(){
     check(warm.require_applied&&warm.actors[0].bound&&!warm.actors[0].values_bound&&warm.actors[0].values.tier==0&&warm.actors[0].classes[0].pinned.empty(),"prepared metadata excludes old values and class-leaf witnesses");
     check(warm.output[0].name.length==0&&!warm.plan,"prepared metadata excludes converted strings and prior operation plan");
     owner.payload[0xf8]=37;const uint64_t live_class=reinterpret_cast<uint64_t>(&class_a);std::memcpy(owner.payload.data(),&live_class,8);
-    current_plan.validate();weapon_roster_links(warm);weapon_capture_value_rows(warm);current_plan.validate();
+    field_name_reads=0;std::vector<int> capture_order;
+    weapon_boundary_passes(current_plan,[&]{capture_order.push_back(field_name_reads);weapon_roster_links(warm);weapon_capture_value_rows(warm);});
+    check(capture_order==std::vector<int>({1})&&field_name_reads==2,"shared capture boundary performs fresh metadata before and after census without a standalone alias pass");
     check(warm.actors[0].values_bound&&warm.actors[0].values.tier==37&&warm.actors[0].values.classes[0]==live_class&&warm.actors[0].classes[0].pinned.front().address==live_class,"warm row captures current all25 values and original live class rather than bootstrap values");
+    auto rejected_capture=weapon_configuration_snapshot(config,config_handles,1);uint64_t changed_before_capture=99;std::memcpy(class_a.payload.data()+48,&changed_before_capture,8);
+    rejects([&]{weapon_boundary_passes(current_plan,[&]{weapon_roster_links(rejected_capture);weapon_capture_value_rows(rejected_capture);});},"retained shared boundary rejects seventh alias mutation before passport capture");
+    check(!rejected_capture.actors[0].values_bound,"failed original alias proof cannot produce a fresh value census");class_a.payload.fill(0);
+    rejects([&]{weapon_boundary_passes(current_plan,[&]{weapon_roster_links(rejected_capture);weapon_capture_value_rows(rejected_capture);owner.name^=1;});},"actual shared second metadata pass rejects an original mutation after value capture");owner.name^=1;
+    check(rejected_capture.actors[0].values_bound&&!gameplay_weapon_snapshot,"failed postcapture closure publishes no successful passport snapshot");
     owner.payload[0xf8]=38;rejects([&](){weapon_roster_links(warm);},"later callback mutation refuses the new per-result passport");
     auto next=weapon_configuration_snapshot(config,config_handles,1);weapon_roster_links(next);weapon_capture_value_rows(next);
     check(next.actors[0].values.tier==38&&next.actors[0].classes[0].pinned.front().address==live_class,"next result recaptures changed values without metadata rebinding or old-value acceptance");
@@ -269,13 +276,23 @@ void cold_path_cases(){
 }
 void configuration_lifecycle_cases(){
     const auto previous_api=weapon_api;weapon_api={};LookupState operation;active_lookup=&operation;
-    GameplayPawn remote;remote.stage=3;remote.world={1,100};remote.controller={2,200};remote.pawn={3,300};gameplay_pawns.emplace(10,remote);
+    GameplayPawn remote;remote.stage=3;remote.roster_count=2;remote.world={1,100};remote.controller={2,200};remote.pawn={3,300};gameplay_pawns.emplace(10,remote);
     gameplay_weapon_configuration.reset();gameplay_weapon_snapshot.reset();
     gameplay_weapons_prepare(10,nullptr);
     check(!gameplay_weapon_configuration&&!gameplay_weapon_snapshot&&!weapon_api.module,"remote-first finish defers before metadata discovery or publishing configuration/result proof");
+    gameplay_entry(10).own=1;gameplay_weapons_prepare(10,nullptr);
+    check(!gameplay_weapon_configuration&&!gameplay_weapon_snapshot&&!weapon_api.module,"owned-first short roster also defers all metadata discovery and publication");gameplay_entry(10).own=0;
+    gameplay_entry(10).roster_count=0;rejects([&]{weapon_prepare_roster(gameplay_entry(10));},"missing original expected roster count refuses");
+    gameplay_entry(10).roster_count=33;rejects([&]{weapon_prepare_roster(gameplay_entry(10));},"original expected roster count above32 refuses");gameplay_entry(10).roster_count=2;
     GameplayPawn owned=remote;owned.own=1;owned.stage=2;owned.pawn={4,400};gameplay_pawns.emplace(20,owned);
     check(!weapon_prepare_roster(gameplay_entry(10)),"unfinished owned row keeps preparation deferred");gameplay_entry(20).stage=3;
     check(weapon_prepare_roster(gameplay_entry(10)),"complete same-original roster permits explicit bootstrap preparation");
+    gameplay_entry(10).stage=2;check(!weapon_prepare_roster(gameplay_entry(20)),"any unfinished original row defers complete-roster discovery");gameplay_entry(10).stage=3;
+    gameplay_entry(20).roster_count=1;rejects([&]{weapon_prepare_roster(gameplay_entry(10));},"different stored original roster count cannot be adopted");gameplay_entry(20).roster_count=2;
+    auto excess=remote;excess.pawn={5,500};gameplay_pawns.emplace(30,excess);rejects([&]{weapon_prepare_roster(gameplay_entry(10));},"actual roster exceeding original expected count refuses before discovery");gameplay_pawns.erase(30);
+    gameplay_entry(20).own=0;rejects([&]{weapon_prepare_roster(gameplay_entry(10));},"complete original roster without an owned pawn refuses instead of waiting forever");gameplay_entry(20).own=1;
+    gameplay_entry(10).roster_count=3;gameplay_entry(20).roster_count=3;gameplay_entry(10).own=1;
+    rejects([&]{weapon_prepare_roster(gameplay_entry(10));},"incomplete roster with multiple owned pawns retains immediate original refusal");gameplay_entry(10).own=0;gameplay_entry(10).roster_count=2;gameplay_entry(20).roster_count=2;
     WeaponConfiguration config;WeaponPawnSnapshot a;a.handle=10;a.world=remote.world;a.controller=remote.controller;a.pawn=remote.pawn;
     auto b=a;b.handle=20;b.pawn=owned.pawn;b.own=1;config.pawns={a,b};const uint64_t handles[]{10,20},reversed[]{20,10};
     const auto copied=weapon_configuration_snapshot(config,handles,2);check(copied.pawns[0].handle==10&&copied.pawns[1].handle==20&&copied.require_applied,"prepared original ordered handles retained for each new operation");
@@ -303,6 +320,7 @@ void timing_cases(){
     try{WeaponBatchTrace failed;const std::lock_guard lock(gameplay_mutex);failed.advance(2);throw Error("fixture batch failure");}catch(const Error&){}
     check(!weapon_batch_timing_active&&weapon_timing_rows.size()==6&&!weapon_timing_unsafe,"failed batch timing flushes once after mutex and TLS unwind");
     check(weapon_timing_rows[0].complete==2&&weapon_timing_rows[2].attempt==1&&weapon_timing_rows[2].phase==2,"failed profile retains original stage and explicit error edge");
+    check(weapon_timing_rows[1].phase==1&&weapon_timing_rows[1].us==0,"shared alias validation has no standalone phase duration when capture starts at phase2");
     for(uint32_t attempt=2;attempt<=8;++attempt){WeaponBatchTrace outer;const std::lock_guard lock(gameplay_mutex);
         {WeaponBatchTrace nested;check(!nested.enabled,"nested batch excluded from sample budget");}
         for(uint32_t phase=1;phase<5;++phase)outer.advance(phase);outer.complete=true;
@@ -316,5 +334,5 @@ void timing_cases(){
     check(weapon_timing_rows.size()==emitted,"excluded/disabled batches emit no rows");create_logger.store(previous);weapon_batch_attempts=0;weapon_batch_timing_active=false;
 }
 }
-int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();configuration_lifecycle_cases();timing_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==88&&offsetof(HsmpGameplay,weapons)==72&&offsetof(HsmpGameplay,initialized)==80,"ABI5 preserves weapon tail and appends initializer");
+int main(){try{metadata_cases();value_cases();text_cases();alignment_cases();alias_capacity_cases();schema_layout_cases();cold_path_cases();configuration_lifecycle_cases();timing_cases();check(std::size(weapon_fields)==25,"complete25 fields");check(sizeof(HsmpGameplay)==88&&offsetof(HsmpGameplay,weapons)==72&&offsetof(HsmpGameplay,initialized)==80&&gameplay_provider.abi==6,"ABI6 retains weapon/initializer offsets while qualifying original roster count");
     std::cout<<"native_gameplay_weapons: "<<checks<<" checks passed\n";return 0;}catch(const std::exception& e){std::cerr<<"native_gameplay_weapons: "<<e.what()<<'\n';return 1;}}

@@ -58,6 +58,7 @@ pub struct Provider {
         Text,
         *const Transform,
         u32,
+        u32,
         *const Guard,
         *mut u64,
         *mut Object,
@@ -98,7 +99,7 @@ pub struct Provider {
 static PROVIDER: AtomicPtr<Provider> = AtomicPtr::new(std::ptr::null_mut());
 #[no_mangle]
 pub unsafe extern "C" fn hsmp_native_set_gameplay(p: *const Provider) {
-    let admitted = if !p.is_null() && unsafe { (*p).abi } == 5 {
+    let admitted = if !p.is_null() && unsafe { (*p).abi } == 6 {
         p.cast_mut()
     } else {
         std::ptr::null_mut()
@@ -112,6 +113,16 @@ fn provider() -> Result<&'static Provider, String> {
             .as_ref()
             .ok_or_else(|| "native gameplay provider unavailable".into())
     }
+}
+fn original_roster_count(scene: &GameplayScene) -> Result<u32, String> {
+    // Only the retained source directory supplies this immutable construction
+    // bound. The caller's Lua table cannot narrow the original roster.
+    let count = u32::try_from(scene.directory.entities.len())
+        .map_err(|_| "native gameplay original roster bound")?;
+    if !(1..=32).contains(&count) {
+        return Err("native gameplay original roster bound".into());
+    }
+    Ok(count)
 }
 unsafe fn current_mode(L: *mut lua_State) -> Result<bool, String> {
     unsafe {
@@ -814,6 +825,7 @@ impl Native {
                 if !context.valid() {
                     return Err("gameplay original admission".into());
                 }
+                let roster_count = original_roster_count(&s)?;
                 let p = provider()?;
                 let class = reflect::wide(&descriptor.recipe.actor_class);
                 let text = Text {
@@ -832,6 +844,7 @@ impl Native {
                     text,
                     &transform,
                     own as u32,
+                    roster_count,
                     &context.ffi(),
                     &mut handle,
                     &mut pawn,
@@ -2001,6 +2014,23 @@ mod tests {
         assert_eq!(std::mem::offset_of!(Provider, discard), 56);
     }
     #[test]
+    fn original_roster_bound_includes_remote_rows_and_preserves_original_receipt() {
+        let mut scene = scene_fixture();
+        let received = scene.received;
+        let result = scene.result.clone();
+        assert_eq!(original_roster_count(&scene).unwrap(), 2);
+        assert_ne!(scene.directory.entities[1].owner_peer, scene.peer_id);
+        let original = scene.directory.entities[0].clone();
+        scene.directory.entities.clear();
+        assert!(original_roster_count(&scene).is_err());
+        scene.directory.entities.resize(32, original.clone());
+        assert_eq!(original_roster_count(&scene).unwrap(), 32);
+        scene.directory.entities.push(original);
+        assert!(original_roster_count(&scene).is_err());
+        assert_eq!(scene.received, received);
+        assert!(Arc::ptr_eq(&scene.result, &result));
+    }
+    #[test]
     fn native_quaternion_and_original_scale_reach_spawn_and_apply_without_euler_conversion() {
         let scene = scene_fixture();
         let mut row = scene.result.entities[0].clone();
@@ -2036,7 +2066,7 @@ mod tests {
             abi: u32,
             pad: u32,
         }
-        for abi in [1, 2, 3, 4] {
+        for abi in [1, 2, 3, 4, 5] {
             let old = OldHeader { abi, pad: 0 };
             unsafe {
                 hsmp_native_set_gameplay((&old as *const OldHeader).cast());

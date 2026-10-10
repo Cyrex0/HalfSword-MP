@@ -22,7 +22,7 @@ struct HsmpGameplayProof {
 struct HsmpGameplay {
     uint32_t abi,pad;
     int32_t (*begin)(HsmpViewObject world,HsmpViewObject controller,HsmpViewText actor_class,
-        const HsmpViewTransform*,uint32_t own,const HsmpViewGuard*,uint64_t* handle,HsmpViewObject* pawn,HsmpViewResult*);
+        const HsmpViewTransform*,uint32_t own,uint32_t roster_count,const HsmpViewGuard*,uint64_t* handle,HsmpViewObject* pawn,HsmpViewResult*);
     int32_t (*current)(uint64_t handle,const HsmpViewGuard*,HsmpViewObject* pawn,HsmpViewResult*);
     int32_t (*construct)(uint64_t handle,const HsmpViewGuard*,HsmpViewObject* pawn,HsmpViewResult*);
     int32_t (*finish)(uint64_t handle,const HsmpViewGuard*,HsmpViewResult*);

@@ -144,7 +144,7 @@ struct GameplayInitialization {
 };
 struct GameplayPawn {
     Obj world{},controller{},pawn{},actor_class{},level{};
-    Transform initial{};uint32_t own{},stage{};
+    Transform initial{};uint32_t own{},stage{},roster_count{}; // copied original begin count; never changed by later stages
     LookupEntry world_path,controller_path,pawn_path;
     HsmpProp level_world{},controller_pawn{},pawn_controller{};
     std::optional<GameplayCurrent> current;
@@ -236,17 +236,17 @@ void gameplay_current_paths(const GameplayPawn& entry){
 struct GameplayBoundaryRow {
     Obj world{},controller{},pawn{},level{},controller_level{};
     HsmpProp level_world{},controller_world{},controller_pawn{},pawn_controller{};
-    uint32_t own{},stage{};bool current{};
+    uint32_t own{},stage{},roster_count{};bool current{};
 };
 GameplayBoundaryRow gameplay_boundary_row(const GameplayPawn& entry){
-    GameplayBoundaryRow row{entry.world,entry.controller,entry.pawn,entry.level,{},entry.level_world,{},entry.controller_pawn,entry.pawn_controller,entry.own,entry.stage,false};
+    GameplayBoundaryRow row{entry.world,entry.controller,entry.pawn,entry.level,{},entry.level_world,{},entry.controller_pawn,entry.pawn_controller,entry.own,entry.stage,entry.roster_count,false};
     if(entry.current){row.controller_level=entry.current->controller_level;row.controller_world=entry.current->level_world;row.current=true;}return row;
 }
 bool gameplay_prop_equal(const HsmpProp& a,const HsmpProp& b){return a.name==b.name&&a.cls==b.cls&&a.sub==b.sub&&a.offset==b.offset&&a.size==b.size&&a.bool_offset==b.bool_offset&&a.bool_mask==b.bool_mask;}
 bool gameplay_row_equal(const GameplayBoundaryRow& a,const GameplayBoundaryRow& b){
     return same(a.world,b.world)&&same(a.controller,b.controller)&&same(a.pawn,b.pawn)&&same(a.level,b.level)&&same(a.controller_level,b.controller_level)&&
         gameplay_prop_equal(a.level_world,b.level_world)&&gameplay_prop_equal(a.controller_world,b.controller_world)&&gameplay_prop_equal(a.controller_pawn,b.controller_pawn)&&
-        gameplay_prop_equal(a.pawn_controller,b.pawn_controller)&&a.own==b.own&&a.stage==b.stage&&a.current==b.current;
+        gameplay_prop_equal(a.pawn_controller,b.pawn_controller)&&a.own==b.own&&a.stage==b.stage&&a.roster_count==b.roster_count&&a.current==b.current;
 }
 bool gameplay_path_equal(const LookupEntry& a,const LookupEntry& b){
     const auto nodes=[](const auto& x,const auto& y){if(x.size()!=y.size())return false;for(size_t i=0;i<x.size();++i){const auto& p=x[i];const auto& q=y[i];
@@ -853,14 +853,20 @@ void gameplay_hud_remove(const GameplayPawn& entry,HsmpViewResult* result){
     Function remove(L"/Script/UMG.Widget:RemoveFromParent");remove.call(hud.widget,result);lookup_entry_final(hud.widget_path);
     require(!gameplay_hud_boolean(hud.widget,L"/Script/UMG.Widget:IsInViewport",result),"native gameplay owned HUD cleanup viewport readback failed");watch.final();
 }
-int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Transform* initial,uint32_t own,
+void gameplay_begin_roster(Obj world,Obj controller,uint32_t roster_count){
+    require(roster_count>0&&roster_count<=32,"native gameplay original roster count bound");
+    require(gameplay_pawns.size()<roster_count,"native gameplay original roster already full");
+    for(const auto& [key,entry]:gameplay_pawns){(void)key;
+        require(entry.roster_count==roster_count&&same(entry.world,world)&&same(entry.controller,controller),"native gameplay original roster binding changed");}
+}
+int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Transform* initial,uint32_t own,uint32_t roster_count,
     const HsmpViewGuard* guard,uint64_t* handle,Obj* pawn,HsmpViewResult* result){
     const std::lock_guard lock(gameplay_mutex);Obj created{};
     gameplay_boundary_invalidate();
     gameplay_weapons_reset();
     try{initialize_result(result);thread();OperationScope scope(guard,world);layouts();
         require(initial&&handle&&pawn&&own<=1,"native gameplay begin arguments");*handle=0;*pawn={};
-        require(gameplay_pawns.size()<32,"native gameplay pawn bound");
+        gameplay_begin_roster(world,controller,roster_count);
         const auto path=text(class_path);require(path==L"/Game/Character/Blueprints/Willie_BP.Willie_BP_C","native gameplay exact Willie class required");
         auto cls=find(path.c_str());require(is(controller,L"/Script/Engine.PlayerController")&&same(actor_world(controller,result),world),"native gameplay controller qualification");
         Function local(L"/Script/Engine.Controller:IsLocalController");local.call(controller,result);
@@ -873,7 +879,7 @@ int32_t gameplay_begin(Obj world,Obj controller,HsmpViewText class_path,const Tr
         // These replicas have no native AI authority and do not steal a local
         // controller during construction; possession is a qualified later stage.
         gameplay_enum_disabled(created,L"AutoPossessAI");gameplay_enum_disabled(created,L"AutoPossessPlayer");
-        GameplayPawn entry;entry.world=world;entry.controller=controller;entry.pawn=created;entry.actor_class=cls;entry.initial=*initial;entry.own=own;entry.stage=1;
+        GameplayPawn entry;entry.world=world;entry.controller=controller;entry.pawn=created;entry.actor_class=cls;entry.initial=*initial;entry.own=own;entry.stage=1;entry.roster_count=roster_count;
         entry.level=returned(created,L"/Script/Engine.Actor:GetLevel",result);entry.level_world=property(entry.level,L"OwningWorld",L"ObjectProperty",8);
         entry.controller_pawn=property(controller,L"Pawn",L"ObjectProperty",8);entry.pawn_controller=property(created,L"Controller",L"ObjectProperty",8);
         entry.world_path=gameplay_path(world);entry.controller_path=gameplay_path(controller);entry.pawn_path=gameplay_path(created);
@@ -1169,4 +1175,4 @@ int32_t gameplay_complete(const uint64_t* handles,uint32_t count,uint32_t requir
         result->complete=1;return 1;
     }catch(const std::exception& error){failure(result,error.what());return -1;}
 }
-const HsmpGameplay gameplay_provider{5,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete,gameplay_weapons,gameplay_initialized};
+const HsmpGameplay gameplay_provider{6,0,gameplay_begin,gameplay_current,gameplay_construct,gameplay_finish,gameplay_apply,gameplay_clear,gameplay_discard,gameplay_complete,gameplay_weapons,gameplay_initialized};

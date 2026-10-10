@@ -1,8 +1,44 @@
 # Native full-scene encoding checkpoint
 
-## Current priority: compact native gameplay and lossless compression
+## Current priority: finish native client startup within acceptance bounds
 
-Latest actual f4f38fb8: full G0 PASS (Lua78/Rust1380/79,26 clippy warnings),
+The public PvP beta is released. The native authority plus two-client gameplay
+path still has no verified LIVE run. The next gate is complete, fresh gear
+verification on both clients within the unchanged65s startup and250ms receipt
+bounds. Body/limb injury, dismemberment and co-op acceptance remain open.
+
+Latest actual6de97731: full G0 PASS (Lua78/Rust1380/79,26 clippy warnings),
+pushed dev and RequireG0/all397 deployed. Standard202103-a842f2 passes the
+earlier tick failure on C1 (own-first): finish26.377-30.122s succeeds, first
+apply48.249-48.342s succeeds. Fresh weapon batches are reached but expire;
+eight failing prefixes total139.213-229.791ms, with no complete final phase.
+C2 (remote-first) first finish reports typed pending25.823s, remains preparing
+63.225s, then finish refuses generation at65.477s during the original startup
+deadline shutdown. No LIVE/inputs/model/HUD pixels or complete gear cost proof.
+Secondary placement PASS; all four owned processes absent,20 save hashes
+unchanged,no dumps or children. Prior weapon retirement is not yet resolved by
+complete live evidence. The current measured warm candidate removes only the
+25.117-37.089ms standalone alias proof directly before the identical fresh
+capture pre-proof, with no intervening callback/binding mutation. All guards,
+capture pre/post proofs, conversion and final snapshot checks remain required.
+
+The combined startup candidate passes the retained source directory's complete
+count through private ABI6 begin (size88 and existing pointer offsets unchanged).
+Each original Pawn retains immutable count1..32. Before spawn, disagreement or
+overfill refuses; preparation waits until the actual roster count is exact and
+all originals are stage3 with exactly one owner. Sequential Lua stages remain.
+No partial own-only configuration can be discovered and then discarded by the
+next begin. The observed3.745s finish is aggregate; cold savings are unmeasured.
+The warm change removes only the standalone alias pass; phase1 is zero and the
+same full aliases/owner/world proof still runs immediately before value reads.
+Focused checks and independent combined review are pending.
+
+Combined candidate is frozen: strict production provider/presentation/weapons
+compile PASS; native2269/weapons181 and Rust21 focused PASS. Independent
+cross-ABI/count/partial-roster/guard reviews CLOSED. Eight files await full G0,
+exact deployment and another standard actual run; no live or timing acceptance.
+
+Previous actual f4f38fb8: full G0 PASS (Lua78/Rust1380/79,26 clippy warnings),
 pushed dev and RequireG0/all397 deployed. Standard200708-e4ea4c reaches native
 readiness. Both clients correctly report typed pre-mutation pending at their
 first finish (C1 28.435s, C2 28.494s), retaining loading. C2 own-first later

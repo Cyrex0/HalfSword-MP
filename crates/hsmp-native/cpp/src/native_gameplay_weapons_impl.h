@@ -479,16 +479,17 @@ void weapon_capture_values(WeaponRosterSnapshot& snapshot){
     snapshot.plan=std::make_shared<const WeaponBoundaryPlan>(snapshot);weapon_boundary_final(snapshot);
 }
 bool weapon_prepare_roster(const GameplayPawn& first){
-    require(!gameplay_pawns.empty()&&gameplay_pawns.size()<=32,"native weapon configuration roster bound");uint32_t own{};bool complete=true;
-    for(const auto& [key,entry]:gameplay_pawns){(void)key;require(same(entry.world,first.world)&&same(entry.controller,first.controller),"native weapon configuration original roster changed");own+=entry.own;complete=complete&&entry.stage==3;}
-    require(own<=1,"native weapon configuration owned roster ambiguous");return complete&&own==1;
+    const auto expected=first.roster_count;
+    require(expected>0&&expected<=32&&!gameplay_pawns.empty()&&gameplay_pawns.size()<=expected,"native weapon configuration roster bound");uint32_t own{};bool complete=gameplay_pawns.size()==expected;
+    for(const auto& [key,entry]:gameplay_pawns){(void)key;require(entry.roster_count==expected&&same(entry.world,first.world)&&same(entry.controller,first.controller),"native weapon configuration original roster changed");own+=entry.own;complete=complete&&entry.stage==3;}
+    require(own<=1,"native weapon configuration owned roster ambiguous");if(!complete)return false;require(own==1,"native weapon configuration owned roster ambiguous");return true;
 }
 void gameplay_weapons_prepare(uint64_t handle,HsmpViewResult* result){
     // Called only by explicit bootstrap finish, under its existing mutex,
     // OperationScope and generation guard. Application never rebuilds this.
     const auto& first=gameplay_entry(handle);require(first.stage==3&&active_lookup,"native weapon configuration preparation stage unavailable");
-    // A remote may finish before the owned pawn is even spawned. Defer using
-    // copied scalar stage/ownership only; no metadata/proof is published.
+    // Either role may finish before the full original source roster is spawned.
+    // Defer using copied scalar count/stage only; no metadata/proof is published.
     if(!weapon_prepare_roster(first))return;
     GameplayBoundaryScope boundary(first);if(!weapon_api.module)weapon_api=weapon_load_api();weapon_api_ok();weapon_prewarm();
     auto snapshot=std::make_shared<WeaponRosterSnapshot>();snapshot->require_applied=false;
@@ -555,10 +556,12 @@ int32_t gameplay_weapons(const uint64_t* handles,uint32_t count,const HsmpViewGu
         auto& first=gameplay_entry(handles[0]);OperationScope operation(guard,first.world);GameplayBoundaryScope boundary(first);GameplayWatch watch(first);weapon_api_ok();
         const auto config=gameplay_weapon_configuration;require(config!=nullptr,"native weapon prepared configuration unavailable");
         auto snapshot=std::make_shared<WeaponRosterSnapshot>(weapon_configuration_snapshot(*config,handles,count));snapshot->plan=std::make_shared<const WeaponBoundaryPlan>(*snapshot);
-        WeaponWatch originals(*snapshot);check_guard();weapon_boundary_final(*snapshot);timing.advance(1);
+        WeaponWatch originals(*snapshot);check_guard();weapon_boundary_final(*snapshot);
         // The original alias topology is still read afresh inside this complete
-        // metadata/owner/world boundary, before any passport/class leaf read.
-        weapon_boundary_final(*snapshot);timing.advance(2);weapon_capture_values(*snapshot);
+        // capture pre/post boundary. No callback or configuration mutation
+        // separates it from the preceding proof, so no standalone alias pass
+        // is needed. Phase1 remains zero; its work is in the shared boundaries.
+        timing.advance(2);weapon_capture_values(*snapshot);
         weapon_output_capacity(count,snapshot->output.size(),capacity,output);check_guard();weapon_roster_final(*snapshot);
         timing.advance(3);
         for(size_t i=0;i<snapshot->actors.size();++i)weapon_convert(*snapshot,snapshot->actors[i],snapshot->output[i]);

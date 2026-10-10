@@ -10,6 +10,10 @@ game-to-sidecar IPC have their own versions (currently protocol 12, IPC ABI 2).
 
 ### In development
 
+- Wait for the server's complete original fighter roster before preparing gear
+  metadata, avoiding work on partial rosters that later spawning discards.
+- Remove a repeated gear boundary check directly before the same fresh capture
+  check, retaining all checks around game callbacks and final publication.
 - Disable client fighters' native Actor tick after construction and again after
   native possession, which can re-enable it. Verify the shutdown before gear
   preparation and retain strict tick checks while waiting for native setup.
